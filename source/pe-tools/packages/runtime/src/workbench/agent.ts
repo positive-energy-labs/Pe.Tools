@@ -1,58 +1,47 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import {
-  EventType,
-  RunAgentInputSchema,
-  type AgentCapabilities,
-  type BaseEvent,
-  type Context,
-  type Message,
-  type RunAgentInput,
-} from "@ag-ui/core";
-import type { PeWorkbenchUpdateMetadata } from "@pe/agent-contracts";
+import { randomUUID } from "node:crypto";
+import type { WorkbenchEvent, WorkbenchThreadInfo } from "@pe/agent-contracts";
 import { createRuntimeLocalTransportAuth, type RuntimeLocalTransportAuth } from "../transport.js";
-import {
-  createRuntimeAuthDescriptor,
-  logoutRuntimeAuth,
-  type RuntimeAuthDescriptor,
-  type RuntimeAuthProfile,
-} from "../auth/types.ts";
-import { toAgUiAuthCapabilities } from "../auth/protocol.ts";
+import { logoutRuntimeAuth, type RuntimeAuthProfile } from "../auth/types.ts";
 import type {
   RuntimeDescriptor,
   RuntimeFactory,
   RuntimeHandle,
   RuntimeHandleHarness,
   RuntimeHandleServices,
-  RuntimeLedgerEntry,
   RuntimeThreadMessage,
 } from "../runtime.ts";
-import { RuntimeInterruptCollector, toRuntimeResumeDecisions } from "../interrupts.ts";
-import { createRuntimePrompt, type RuntimePrompt, type RuntimePromptPart } from "../prompts.ts";
+import { createRuntimePrompt } from "../prompts.ts";
 import {
   RuntimeProtocolSessions,
   type RuntimeProtocolSessionInfo,
 } from "../session/protocol-sessions.ts";
-import { describeRuntimeProtocolStatus } from "../protocol-status.ts";
-import type { RuntimeResource } from "../resources.ts";
-import type {
-  RuntimeRawThreadDatabaseSnapshot,
-  RuntimeThreadIndex,
-} from "../storage/thread-index.ts";
-import { sanitizeJson } from "../events.ts";
-import { RuntimeToAgUiEvents } from "./events-map-runtime-agui.ts";
+import type { RuntimeThreadIndex } from "../storage/thread-index.ts";
+import {
+  RuntimeToWorkbenchEvents,
+  runtimeMessagesToWorkbenchEvents,
+} from "./events-map-runtime-workbench.ts";
+import {
+  buildContextBreakdown,
+  estimateTokens,
+  type ContextBreakdownMessage,
+  type ContextBreakdownSkill,
+  type ContextBreakdownTool,
+} from "../context-breakdown.ts";
+import type { WorkbenchSystemPromptSnapshot } from "@pe/agent-contracts";
 import { z } from "zod";
 
-export interface RuntimeAgUiRuntimeOptions<
+export interface RuntimeWorkbenchRuntimeOptions<
   TState extends Record<string, unknown> = Record<string, unknown>,
   TServices extends RuntimeHandleServices = RuntimeHandleServices,
 > {
-  factory: RuntimeFactory<TState, TServices>;
+  factory: RuntimeFactory<TState, TServices, RuntimeHandleHarness<TState>>;
   descriptor?: RuntimeDescriptor;
   auth?: RuntimeAuthProfile;
-  override?: RuntimeHandle<TState, TServices>;
+  override?: RuntimeHandle<TState, TServices, RuntimeHandleHarness<TState>>;
 }
 
-export interface RuntimeAgUiSessionOptions<
+export interface RuntimeWorkbenchSessionOptions<
   TState extends Record<string, unknown> = Record<string, unknown>,
   TServices extends RuntimeHandleServices = RuntimeHandleServices,
 > {
@@ -61,141 +50,141 @@ export interface RuntimeAgUiSessionOptions<
   threadIndex?: RuntimeThreadIndex;
 }
 
-export interface RuntimeAgUiTransportOptions {
+export interface RuntimeWorkbenchTransportOptions {
   port?: number;
   token?: string;
 }
 
-export interface RuntimeAgUiAgentOptions<
+export interface RuntimeWorkbenchAgentOptions<
   TState extends Record<string, unknown> = Record<string, unknown>,
   TServices extends RuntimeHandleServices = RuntimeHandleServices,
 > {
-  runtime?: RuntimeAgUiRuntimeOptions<TState, TServices>;
-  sessions?: RuntimeAgUiSessionOptions<TState, TServices>;
-  transport?: RuntimeAgUiTransportOptions;
+  runtime?: RuntimeWorkbenchRuntimeOptions<TState, TServices>;
+  sessions?: RuntimeWorkbenchSessionOptions<TState, TServices>;
+  transport?: RuntimeWorkbenchTransportOptions;
 }
 
-export interface RuntimeAgUiServerInfo {
-  runUrl: string;
-  statusUrl: string;
+export interface RuntimeWorkbenchServerInfo {
+  workbenchUrl: string;
   threadsUrl: string;
-  sessionsUrl: string;
-  eventsUrl: string;
-  messagesUrl: string;
-  threadRawUrl: string;
   logoutUrl: string;
   token: string;
   port: number;
 }
 
-export interface RuntimeAgUiRawThreadSnapshot {
-  generatedAt: string;
-  requestedThreadId: string;
-  session?: RuntimeProtocolSessionInfo;
-  messages: RuntimeThreadMessage[];
-  ledger: RuntimeLedgerEntry[];
-  history: unknown[];
-  database?: RuntimeRawThreadDatabaseSnapshot;
-  errors: string[];
-}
-
 const defaultPort = 43112;
 const loopbackHost = "127.0.0.1";
 
-export class RuntimeAgUiAgent<
+export class RuntimeWorkbenchAgent<
   TState extends Record<string, unknown> = Record<string, unknown>,
   TServices extends RuntimeHandleServices = RuntimeHandleServices,
 > {
   private readonly runtimeSessions: RuntimeProtocolSessions<TState, TServices>;
 
-  constructor(private readonly options: RuntimeAgUiAgentOptions<TState, TServices>) {
+  constructor(private readonly options: RuntimeWorkbenchAgentOptions<TState, TServices>) {
     this.runtimeSessions =
       options.sessions?.manager ??
       new RuntimeProtocolSessions({
         factory: runtimeFactory(options),
-        defaultCwd: defaultAgUiCwd(options),
+        defaultCwd: defaultWorkbenchCwd(options),
         threadIndex: options.sessions?.threadIndex,
       });
   }
 
-  async run(input: RunAgentInput, emit: (event: BaseEvent) => void): Promise<void> {
-    const parsed = RunAgentInputSchema.parse(input);
-    const runtimeScope = agUiRuntimeScope(parsed, defaultAgUiCwd(this.options));
+  async runWorkbench(body: WorkbenchRunBody, emit: (event: WorkbenchEvent) => void): Promise<void> {
     const session = await this.runtimeSessions.getOrCreateThreadSession({
+      // `protocol: "ag-ui"` is the durable libsql storage discriminator for these
+      // threads — NOT a live protocol. It stays for data compatibility with existing
+      // threads even though the ag-ui wire path is gone.
       protocol: "ag-ui",
-      externalThreadId: parsed.threadId,
-      cwd: runtimeScope.cwd,
-      additionalDirectories: runtimeScope.additionalDirectories,
-      title: `AG-UI ${parsed.threadId}`,
+      externalThreadId: body.threadId,
+      cwd: body.cwd ?? defaultWorkbenchCwd(this.options),
+      additionalDirectories: body.additionalDirectories ?? [],
+      title: `Workbench ${body.threadId}`,
     });
 
-    const translator = new RuntimeToAgUiEvents();
-    const interrupts = new RuntimeInterruptCollector();
-    let nextSequence = nextAgUiEventSequence(
-      await readRuntimeSessionHistory(this.runtimeSessions, session.id),
-    );
-    const emitEvent = (event: BaseEvent) => {
-      const sequencedEvent = {
-        ...event,
-        sequence: nextSequence++,
-      };
-      this.runtimeSessions.recordProtocolEvent(session.id, "ag-ui", sequencedEvent);
-      emit(sequencedEvent);
-    };
+    const timestamp = new Date().toISOString();
+    // `session_updated` (merge) NOT `session_started` (which wipes
+    // transcript/tools/plans) — every prompt opens a fresh SSE run on the same
+    // thread, so a wipe here would erase the prior turns in a multi-message thread.
+    emit({
+      type: "session_updated",
+      session: {
+        sessionId: session.id,
+        cwd: session.cwd,
+        additionalDirectories: session.additionalDirectories ?? [],
+        title: session.title,
+        updatedAt: timestamp,
+        metadata: { protocol: "workbench" },
+      },
+    });
+
+    // Echo the user's prompt into the transcript immediately. The RuntimeEvent
+    // stream starts at the assistant turn (the runtime persists the user message
+    // but does not re-emit it live), so without this the user's own message would
+    // not appear until a reload re-hydrated it.
+    emit({
+      type: "message_updated",
+      message: {
+        id: `user:${randomUUID()}`,
+        role: "user",
+        parts: [{ kind: "text", text: body.text }],
+        status: "complete",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+    });
+
+    const translator = new RuntimeToWorkbenchEvents({
+      sessionId: session.id,
+      threadId: body.threadId,
+    });
     const unsubscribe = this.runtimeSessions.subscribe(session.id, (event) => {
-      interrupts.observe(event);
-      for (const agUiEvent of translator.translate(event)) emitEvent(agUiEvent);
+      for (const workbenchEvent of translator.translate(event)) emit(workbenchEvent);
     });
-
-    emitEvent({
-      type: EventType.RUN_STARTED,
-      threadId: parsed.threadId,
-      runId: parsed.runId,
-      parentRunId: parsed.parentRunId,
-      input: parsed,
-    });
-    emitEvent({ type: EventType.STATE_SNAPSHOT, snapshot: parsed.state ?? {} });
-    emitEvent({ type: EventType.MESSAGES_SNAPSHOT, messages: parsed.messages });
-    for (const event of translator.translate({
-      type: "workbench_metadata_updated",
-      metadata: runtimeWorkbenchMetadata(session.runtime),
-    })) {
-      emitEvent(event);
-    }
 
     try {
-      const stopReason = await this.runtimeSessions.sendPrompt(session.id, agUiPrompt(parsed));
-      // Re-emit after the prompt resolves so a capture processor's snapshot
-      // (e.g. the resolved system prompt) reaches the client this same turn.
-      for (const event of translator.translate({
-        type: "workbench_metadata_updated",
-        metadata: runtimeWorkbenchMetadata(session.runtime),
-      })) {
-        emitEvent(event);
-      }
-      emitEvent({
-        type: EventType.RUN_FINISHED,
-        threadId: parsed.threadId,
-        runId: parsed.runId,
-        outcome: interrupts.outcome(),
-        rawEvent: { stopReason },
-      });
+      emit({ type: "run_status_changed", status: "running", timestamp });
+      await this.runtimeSessions.sendPrompt(session.id, createRuntimePrompt([{ text: body.text }]));
+      // The system-prompt capture + final-tool-list sink populate the live handle metadata
+      // during the run, so the breakdown is ready once sendPrompt resolves.
+      const inspector = await contextInspectorUpdate(session);
+      if (inspector) emit(inspector);
+      emit({ type: "run_status_changed", status: "idle", timestamp: new Date().toISOString() });
     } catch (error) {
-      emitEvent({
-        type: EventType.RUN_ERROR,
-        threadId: parsed.threadId,
-        runId: parsed.runId,
-        message: error instanceof Error ? error.message : String(error),
-      });
+      emit({ type: "error", message: errorMessage(error) });
+      emit({ type: "run_status_changed", status: "error", timestamp: new Date().toISOString() });
     } finally {
       unsubscribe();
     }
   }
 
+  async workbenchThreads(): Promise<WorkbenchThreadInfo[]> {
+    const sessions = await this.sessions();
+    return sessions.map((session) => ({
+      threadId: session.externalThreadId ?? session.threadId ?? session.id,
+      sessionId: session.id,
+      resourceId: session.resourceId,
+      title: session.title,
+      cwd: session.cwd,
+      updatedAt: session.updatedAt,
+    }));
+  }
+
+  async workbenchHydrate(threadId: string): Promise<WorkbenchEvent[]> {
+    const listedSession = await this.sessionForThread(threadId);
+    if (!listedSession) return [];
+    const messages = await readRuntimeSessionInfoMessages(this.runtimeSessions, listedSession);
+    return [
+      ...runtimeMessagesToWorkbenchEvents(messages),
+      { type: "run_status_changed", status: "idle" },
+    ];
+  }
+
   async sessions(): Promise<RuntimeProtocolSessionInfo[]> {
     const startedAt = performance.now();
     const sessions = await this.runtimeSessions.listSessions({ protocol: "ag-ui" });
-    logAgUiServerTiming("agent.sessions", startedAt, { sessions: sessions.length });
+    logWorkbenchServerTiming("agent.sessions", startedAt, { sessions: sessions.length });
     return sessions;
   }
 
@@ -223,136 +212,6 @@ export class RuntimeAgUiAgent<
     return true;
   }
 
-  async events(request: { threadId: string; afterSequence?: number }): Promise<BaseEvent[]> {
-    const startedAt = performance.now();
-    const listedSession = await this.sessionForThread(request.threadId);
-    if (!listedSession) {
-      logAgUiServerTiming("agent.events missing", startedAt, { threadId: request.threadId });
-      return [];
-    }
-    const afterSequence = request.afterSequence ?? 0;
-    if (afterSequence >= 0 && !listedSession.promptActive) {
-      logAgUiServerTiming("agent.events idle", startedAt, {
-        threadId: request.threadId,
-        afterSequence,
-      });
-      return [];
-    }
-
-    const session = await this.runtimeSessions.resumeSession(listedSession.id, {
-      cwd: listedSession.cwd,
-      additionalDirectories: listedSession.additionalDirectories,
-      protocol: listedSession.protocol,
-    });
-    const metadataEvents = runtimeWorkbenchMetadataEvents(session.runtime);
-    const history = await readRuntimeSessionInfoHistory(this.runtimeSessions, listedSession);
-    const protocolEvents = history
-      .filter(isAgUiProtocolHistoryEntry)
-      .flatMap((entry): BaseEvent[] => (isAgUiEvent(entry.payload) ? [entry.payload] : []));
-    if (protocolEvents.length > 0) {
-      const events = [...metadataEvents, ...protocolEvents].filter(
-        (event) => agUiEventSequence(event) > afterSequence,
-      );
-      logAgUiServerTiming("agent.events protocol", startedAt, {
-        threadId: request.threadId,
-        events: events.length,
-      });
-      return events;
-    }
-
-    const fallbackEvents = runtimeMessagesSnapshotEvents(
-      await readRuntimeSessionInfoMessages(this.runtimeSessions, listedSession),
-      listedSession,
-    );
-    const events = [...metadataEvents, ...fallbackEvents].filter(
-      (event) => agUiEventSequence(event) > afterSequence,
-    );
-    logAgUiServerTiming("agent.events fallback", startedAt, {
-      threadId: request.threadId,
-      events: events.length,
-    });
-    return events;
-  }
-
-  async messages(request: { threadId: string }): Promise<Message[]> {
-    const startedAt = performance.now();
-    const listedSession = await this.sessionForThread(request.threadId);
-    if (!listedSession) {
-      logAgUiServerTiming("agent.messages missing", startedAt, { threadId: request.threadId });
-      return [];
-    }
-    const messages = runtimeThreadMessagesToAgUiMessages(
-      await readRuntimeSessionInfoMessages(this.runtimeSessions, listedSession),
-    );
-    logAgUiServerTiming("agent.messages", startedAt, {
-      threadId: request.threadId,
-      messages: messages.length,
-    });
-    return messages;
-  }
-
-  async rawThread(request: { threadId: string }): Promise<RuntimeAgUiRawThreadSnapshot> {
-    const errors: string[] = [];
-    const listedSession = await this.sessionForThread(request.threadId);
-    if (!listedSession) {
-      return {
-        generatedAt: new Date().toISOString(),
-        requestedThreadId: request.threadId,
-        messages: [],
-        ledger: [],
-        history: [],
-        errors: [`Thread not found: ${request.threadId}`],
-      };
-    }
-
-    const messages = await readRuntimeSessionInfoMessages(
-      this.runtimeSessions,
-      listedSession,
-    ).catch((error: unknown) => {
-      errors.push(`messages: ${errorMessage(error)}`);
-      return [];
-    });
-    const ledger = await this.runtimeSessions
-      .readListedLedger(listedSession)
-      .catch((error: unknown) => {
-        errors.push(`ledger: ${errorMessage(error)}`);
-        return [];
-      });
-    const history = await readRuntimeSessionInfoHistory(this.runtimeSessions, listedSession).catch(
-      (error: unknown) => {
-        errors.push(`history: ${errorMessage(error)}`);
-        return [];
-      },
-    );
-    const database =
-      listedSession.threadId && this.options.sessions?.threadIndex?.readThreadDatabaseSnapshot
-        ? await this.options.sessions.threadIndex
-            .readThreadDatabaseSnapshot({
-              threadId: listedSession.threadId,
-              resourceId: listedSession.resourceId,
-            })
-            .catch((error: unknown) => {
-              errors.push(`database: ${errorMessage(error)}`);
-              return undefined;
-            })
-        : undefined;
-
-    return {
-      generatedAt: new Date().toISOString(),
-      requestedThreadId: request.threadId,
-      session: listedSession,
-      messages,
-      ledger,
-      history: sanitizeJson(history) as unknown[],
-      ...(database ? { database } : {}),
-      errors,
-    };
-  }
-
-  capabilities(): AgentCapabilities {
-    return agUiCapabilities(this.options);
-  }
-
   async logout(): Promise<void> {
     await logoutRuntimeAuth(runtimeAuthProfile(this.options));
   }
@@ -368,36 +227,176 @@ export class RuntimeAgUiAgent<
   }
 }
 
-function agUiTransport<
+interface WorkbenchRunBody {
+  threadId: string;
+  text: string;
+  cwd?: string;
+  additionalDirectories?: string[];
+}
+
+const defaultContextWindow = 200_000;
+
+/**
+ * Build the `inspector_updated` event that carries the context-window breakdown + system
+ * prompt for a thread. Reads the live capture refs the harness exposes on the runtime
+ * handle metadata (`workbench.systemPrompt`, the final-tool-list debug entries) plus the
+ * thread messages, then projects them with the core `buildContextBreakdown`.
+ */
+async function contextInspectorUpdate<
   TState extends Record<string, unknown>,
   TServices extends RuntimeHandleServices,
->(options: RuntimeAgUiAgentOptions<TState, TServices>): RuntimeAgUiTransportOptions {
+>(session: {
+  id: string;
+  runtime: RuntimeHandle<TState, TServices, RuntimeHandleHarness<TState>>;
+}): Promise<WorkbenchEvent | undefined> {
+  const workbench = readWorkbenchMetadata(session.runtime.metadata);
+  if (!workbench) return undefined;
+
+  const messages = await session.runtime.kernel.readSessionMessages(session.id).catch(() => []);
+  const breakdown = buildContextBreakdown({
+    contextWindow: numberOf(workbench.contextWindow) ?? defaultContextWindow,
+    systemPromptText: workbench.systemPrompt?.content,
+    tools: latestFinalToolList(workbench.debug),
+    messages: conversationMessages(messages),
+    skills: workbenchSkills(workbench.skills),
+    agents: stringArray(workbench.agents),
+    updatedAt: new Date().toISOString(),
+  });
+
+  return {
+    type: "inspector_updated",
+    inspector: {
+      contextBreakdown: breakdown,
+      ...(workbench.systemPrompt ? { systemPrompt: workbench.systemPrompt } : {}),
+    },
+  };
+}
+
+interface WorkbenchMetadataView {
+  systemPrompt?: WorkbenchSystemPromptSnapshot;
+  debug?: unknown;
+  skills?: unknown;
+  agents?: unknown;
+  contextWindow?: unknown;
+}
+
+function readWorkbenchMetadata(
+  metadata: Record<string, unknown> | undefined,
+): WorkbenchMetadataView | undefined {
+  const workbench = metadata?.workbench;
+  if (!isRecord(workbench)) return undefined;
+  const systemPrompt = isRecord(workbench.systemPrompt)
+    ? (workbench.systemPrompt as unknown as WorkbenchSystemPromptSnapshot)
+    : undefined;
+  return {
+    systemPrompt: typeof systemPrompt?.content === "string" ? systemPrompt : undefined,
+    debug: workbench.debug,
+    skills: workbench.skills,
+    agents: workbench.agents,
+    contextWindow: workbench.contextWindow,
+  };
+}
+
+function latestFinalToolList(debug: unknown): ContextBreakdownTool[] {
+  if (!Array.isArray(debug)) return [];
+  for (let index = debug.length - 1; index >= 0; index--) {
+    const entry = debug[index];
+    if (!isRecord(entry)) continue;
+    const payload = isRecord(entry.payload) ? entry.payload : undefined;
+    if (payload?.event !== "pe.runtime.final_model_tool_list") continue;
+    if (!Array.isArray(payload.tools)) return [];
+    return payload.tools.flatMap((tool) => {
+      if (!isRecord(tool) || typeof tool.name !== "string") return [];
+      return [{ name: tool.name, approxTokens: numberOf(tool.approxTokens) }];
+    });
+  }
+  return [];
+}
+
+function conversationMessages(messages: RuntimeThreadMessage[]): ContextBreakdownMessage[] {
+  return messages
+    .filter((message) => message.role !== "system")
+    .map((message) => ({ role: message.role, text: messageTokensText(message) }));
+}
+
+function messageTokensText(message: RuntimeThreadMessage): string {
+  if (message.text) return message.text;
+  return (message.parts ?? [])
+    .map((part) => {
+      if (part.type === "text" || part.type === "thinking") return part.text ?? "";
+      if (part.type === "tool-call") return JSON.stringify(part.args ?? {});
+      if (part.type === "tool-result") return JSON.stringify(part.result ?? {});
+      return "";
+    })
+    .join("");
+}
+
+function workbenchSkills(value: unknown): ContextBreakdownSkill[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((skill) => {
+    if (!isRecord(skill) || typeof skill.name !== "string") return [];
+    const approxTokens =
+      numberOf(skill.approxTokens) ??
+      (typeof skill.content === "string" ? estimateTokens(skill.content) : undefined);
+    return [{ name: skill.name, approxTokens }];
+  });
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function numberOf(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+const workbenchRunBodySchema = z.object({
+  threadId: z.string(),
+  text: z.string(),
+  cwd: z.string().optional(),
+  additionalDirectories: z.array(z.string()).optional(),
+});
+
+function readWorkbenchRunBody(value: unknown): WorkbenchRunBody {
+  return workbenchRunBodySchema.parse(value);
+}
+
+function workbenchTransport<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+>(options: RuntimeWorkbenchAgentOptions<TState, TServices>): RuntimeWorkbenchTransportOptions {
   return options.transport ?? {};
 }
 
-export class RuntimeAgUiHttpAgent<
+export class RuntimeWorkbenchHttpAgent<
   TState extends Record<string, unknown> = Record<string, unknown>,
   TServices extends RuntimeHandleServices = RuntimeHandleServices,
 > {
   private readonly auth: RuntimeLocalTransportAuth;
   private server: ReturnType<typeof createServer> | null = null;
-  private agent: RuntimeAgUiAgent<TState, TServices>;
+  private agent: RuntimeWorkbenchAgent<TState, TServices>;
 
-  constructor(private readonly options: RuntimeAgUiAgentOptions<TState, TServices>) {
+  constructor(private readonly options: RuntimeWorkbenchAgentOptions<TState, TServices>) {
     this.auth = createRuntimeLocalTransportAuth({
-      token: agUiTransport(options).token,
+      token: workbenchTransport(options).token,
       headerNames: [
         "x-runtime-local-token",
-        "x-runtime-agui-token",
+        "x-runtime-workbench-token",
         "x-pea-local-token",
-        "x-pea-agui-token",
+        "x-pea-workbench-token",
       ],
     });
-    this.agent = new RuntimeAgUiAgent(options);
+    this.agent = new RuntimeWorkbenchAgent(options);
   }
 
-  async start(): Promise<RuntimeAgUiServerInfo> {
-    const port = agUiTransport(this.options).port ?? defaultPort;
+  async start(): Promise<RuntimeWorkbenchServerInfo> {
+    const port = workbenchTransport(this.options).port ?? defaultPort;
     this.server = createServer((request, response) => {
       this.handle(request, response).catch((error) => writeError(response, error));
     });
@@ -417,6 +416,7 @@ export class RuntimeAgUiHttpAgent<
   private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const url = new URL(request.url ?? "/", `http://${loopbackHost}`);
     const startedAt = performance.now();
+    let timingThreadId: string | undefined;
     addCommonHeaders(response);
     try {
       if (request.method === "OPTIONS") {
@@ -430,31 +430,32 @@ export class RuntimeAgUiHttpAgent<
         return;
       }
 
-      if (url.pathname === "/agui/status") {
+      if (url.pathname === "/workbench/threads") {
         response.writeHead(200, { "Content-Type": "application/json" });
-        response.end(
-          JSON.stringify(
-            describeRuntimeProtocolStatus({
-              runtime: runtimeDescriptor(this.options),
-              protocol: "ag-ui",
-              transport: "http+sse",
-              auth: runtimeAuthDescriptor(this.options),
-              capabilities: this.agent.capabilities(),
-              sessions: (await this.agent.sessions()).length,
-            }),
-          ),
-        );
+        response.end(JSON.stringify({ threads: await this.agent.workbenchThreads() }));
         return;
       }
 
-      if (url.pathname === "/agui/threads" || url.pathname === "/agui/sessions") {
-        const threads = await this.agent.sessions();
+      if (url.pathname === "/workbench/sessions") {
+        const sessions = await this.agent.sessions();
         response.writeHead(200, { "Content-Type": "application/json" });
-        response.end(JSON.stringify({ threads, sessions: threads }));
+        response.end(JSON.stringify({ sessions }));
         return;
       }
 
-      const threadCloseMatch = /^\/agui\/(?:threads|sessions)\/([^/]+)\/close$/.exec(url.pathname);
+      if (url.pathname === "/workbench/hydrate") {
+        const threadId = url.searchParams.get("threadId");
+        if (!threadId) {
+          response.writeHead(400, { "Content-Type": "application/json" });
+          response.end(JSON.stringify({ error: "threadId is required" }));
+          return;
+        }
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ events: await this.agent.workbenchHydrate(threadId) }));
+        return;
+      }
+
+      const threadCloseMatch = /^\/workbench\/threads\/([^/]+)\/close$/.exec(url.pathname);
       if (threadCloseMatch && request.method === "POST") {
         const threadId = decodeURIComponent(threadCloseMatch[1]!);
         if (!(await this.agent.closeThread(threadId))) {
@@ -462,13 +463,12 @@ export class RuntimeAgUiHttpAgent<
           response.end(JSON.stringify({ error: "Thread not found" }));
           return;
         }
-
         response.writeHead(200, { "Content-Type": "application/json" });
         response.end(JSON.stringify({ ok: true }));
         return;
       }
 
-      const threadDeleteMatch = /^\/agui\/(?:threads|sessions)\/([^/]+)$/.exec(url.pathname);
+      const threadDeleteMatch = /^\/workbench\/threads\/([^/]+)$/.exec(url.pathname);
       if (threadDeleteMatch && request.method === "DELETE") {
         const threadId = decodeURIComponent(threadDeleteMatch[1]!);
         if (!(await this.agent.deleteThread(threadId))) {
@@ -476,85 +476,36 @@ export class RuntimeAgUiHttpAgent<
           response.end(JSON.stringify({ error: "Thread not found" }));
           return;
         }
-
         response.writeHead(200, { "Content-Type": "application/json" });
         response.end(JSON.stringify({ ok: true }));
         return;
       }
 
-      if (url.pathname === "/agui/events") {
-        const threadId = url.searchParams.get("threadId");
-        if (!threadId) {
-          response.writeHead(400, { "Content-Type": "application/json" });
-          response.end(JSON.stringify({ error: "threadId is required" }));
-          return;
-        }
-
-        const events = await this.agent.events({
-          threadId,
-          afterSequence: parseOptionalSequence(url.searchParams.get("afterSequence")),
-        });
-        response.writeHead(200, { "Content-Type": "application/json" });
-        response.end(JSON.stringify({ events }));
-        return;
-      }
-
-      if (url.pathname === "/agui/messages") {
-        const threadId = url.searchParams.get("threadId");
-        if (!threadId) {
-          response.writeHead(400, { "Content-Type": "application/json" });
-          response.end(JSON.stringify({ error: "threadId is required" }));
-          return;
-        }
-
-        const messages = await this.agent.messages({ threadId });
-        response.writeHead(200, { "Content-Type": "application/json" });
-        response.end(JSON.stringify({ messages }));
-        return;
-      }
-
-      if (url.pathname === "/agui/thread-raw") {
-        const threadId = url.searchParams.get("threadId");
-        if (!threadId) {
-          response.writeHead(400, { "Content-Type": "application/json" });
-          response.end(JSON.stringify({ error: "threadId is required" }));
-          return;
-        }
-
-        response.writeHead(200, { "Content-Type": "application/json" });
-        response.end(JSON.stringify(await this.agent.rawThread({ threadId })));
-        return;
-      }
-
-      if (url.pathname === "/agui/logout" && request.method === "POST") {
-        const logoutSupported =
-          this.agent.capabilities().custom?.["runtime.logoutSupported"] === true;
-        if (!logoutSupported) {
-          response.writeHead(400, { "Content-Type": "application/json" });
-          response.end(
-            JSON.stringify({
-              error: "Logout is not supported for this runtime.",
-            }),
-          );
-          return;
-        }
-
+      if (url.pathname === "/workbench/logout" && request.method === "POST") {
         await this.agent.logout();
         response.writeHead(200, { "Content-Type": "application/json" });
         response.end(JSON.stringify({ ok: true }));
         return;
       }
 
-      if (url.pathname === "/agui/run" && request.method === "POST") {
-        const input = RunAgentInputSchema.parse(await readJsonBody(request));
+      if (url.pathname === "/workbench/run" && request.method === "POST") {
+        const body = readWorkbenchRunBody(await readJsonBody(request));
+        timingThreadId = body.threadId;
         response.writeHead(200, {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-cache",
           Connection: "keep-alive",
         });
-        await this.agent.run(input, (event) =>
-          response.write(`data: ${JSON.stringify(event)}\n\n`),
-        );
+        try {
+          await this.agent.runWorkbench(body, (event) =>
+            response.write(`data: ${JSON.stringify(event)}\n\n`),
+          );
+        } catch (error) {
+          console.error("[workbench] run failed", error);
+          response.write(
+            `data: ${JSON.stringify({ type: "error", message: errorMessage(error) })}\n\n`,
+          );
+        }
         response.end();
         return;
       }
@@ -562,221 +513,41 @@ export class RuntimeAgUiHttpAgent<
       response.writeHead(404, { "Content-Type": "application/json" });
       response.end(JSON.stringify({ error: "Not found" }));
     } finally {
-      logAgUiServerTiming(`http ${request.method ?? "GET"} ${url.pathname}`, startedAt, {
+      logWorkbenchServerTiming(`http ${request.method ?? "GET"} ${url.pathname}`, startedAt, {
         statusCode: response.statusCode,
-        threadId: url.searchParams.get("threadId") ?? undefined,
+        threadId: url.searchParams.get("threadId") ?? timingThreadId,
       });
     }
   }
 
-  private startInfo(port: number): RuntimeAgUiServerInfo {
+  private startInfo(port: number): RuntimeWorkbenchServerInfo {
     const baseUrl = `http://${loopbackHost}:${port}`;
     const query = `token=${encodeURIComponent(this.auth.token)}`;
     return {
-      runUrl: `${baseUrl}/agui/run?${query}`,
-      statusUrl: `${baseUrl}/agui/status?${query}`,
-      threadsUrl: `${baseUrl}/agui/threads?${query}`,
-      sessionsUrl: `${baseUrl}/agui/sessions?${query}`,
-      eventsUrl: `${baseUrl}/agui/events?${query}`,
-      messagesUrl: `${baseUrl}/agui/messages?${query}`,
-      threadRawUrl: `${baseUrl}/agui/thread-raw?${query}`,
-      logoutUrl: `${baseUrl}/agui/logout?${query}`,
+      workbenchUrl: `${baseUrl}/workbench/run?${query}`,
+      threadsUrl: `${baseUrl}/workbench/threads?${query}`,
+      logoutUrl: `${baseUrl}/workbench/logout?${query}`,
       token: this.auth.token,
       port,
     };
   }
 }
 
-function agUiPrompt(input: RunAgentInput): RuntimePrompt {
-  const lastUserMessageIndex = findLastUserMessageIndex(input.messages);
-  const lastUserMessage =
-    lastUserMessageIndex >= 0 ? input.messages[lastUserMessageIndex] : undefined;
-  const priorMessages =
-    lastUserMessageIndex >= 0
-      ? input.messages.filter((_, index) => index !== lastUserMessageIndex)
-      : input.messages;
-  const parts: RuntimePromptPart[] = [
-    ...(lastUserMessage
-      ? messagePromptParts(lastUserMessage)
-      : input.messages.flatMap((message) => messagePromptParts(message))),
-    ...contextEntries(input.context).map((entry) => ({
-      contextDescription: entry.description,
-      contextValue: entry.value,
-    })),
-  ];
-
-  if (priorMessages.length > 0) {
-    parts.push({
-      contextDescription: "AG-UI conversation messages supplied by the client",
-      contextValue: priorMessages.map((message) => ({
-        id: message.id,
-        role: message.role,
-        text: messageText(message),
-      })),
-    });
-  }
-  if (isMeaningfulJson(input.state)) {
-    parts.push({
-      contextDescription: "AG-UI thread state supplied by the client",
-      contextValue: input.state,
-    });
-  }
-  if (input.tools.length > 0) {
-    parts.push({
-      contextDescription: "AG-UI client-provided tools visible to the frontend",
-      contextValue: input.tools,
-    });
-  }
-  const forwardedProps = stripRuntimeAgUiForwardedProps(input.forwardedProps);
-  if (isMeaningfulJson(forwardedProps)) {
-    parts.push({
-      contextDescription: "AG-UI forwarded properties supplied by the client",
-      contextValue: forwardedProps,
-    });
-  }
-
-  return {
-    ...createRuntimePrompt(parts),
-    resumeDecisions: toRuntimeResumeDecisions(input.resume),
-  };
-}
-
-interface RuntimeAgUiScope {
-  cwd: string;
-  additionalDirectories: string[];
-}
-
-function agUiRuntimeScope(input: RunAgentInput, defaultCwd: string): RuntimeAgUiScope {
-  const forwardedProps = isRecord(input.forwardedProps) ? input.forwardedProps : {};
-  const peaProps = isRecord(forwardedProps.pea) ? forwardedProps.pea : {};
-  return {
-    cwd: firstString(peaProps.cwd, forwardedProps.cwd) ?? defaultCwd,
-    additionalDirectories: stringArray(
-      peaProps.additionalDirectories ?? forwardedProps.additionalDirectories,
-    ),
-  };
-}
-
-function defaultAgUiCwd<
+function defaultWorkbenchCwd<
   TState extends Record<string, unknown>,
   TServices extends RuntimeHandleServices,
->(options: RuntimeAgUiAgentOptions<TState, TServices>): string {
+>(options: RuntimeWorkbenchAgentOptions<TState, TServices>): string {
   return options.sessions?.defaultCwd ?? runtimeOverride(options)?.workspace?.cwd ?? process.cwd();
-}
-
-function stripRuntimeAgUiForwardedProps(forwardedProps: unknown): unknown {
-  if (!isRecord(forwardedProps)) return forwardedProps;
-  const stripped = { ...forwardedProps };
-  delete stripped.pea;
-  delete stripped.cwd;
-  delete stripped.additionalDirectories;
-  return stripped;
-}
-
-function messagePromptParts(message: Message | undefined): RuntimePromptPart[] {
-  if (!message) return [];
-  const content = readRecord(message)?.content;
-  if (typeof content === "string") return [{ text: content }];
-  if (!Array.isArray(content)) return [{ text: messageText(message) }].filter((part) => part.text);
-
-  return content.map((part, index) => {
-    if (isRecord(part) && part.type === "text" && typeof part.text === "string") {
-      return { text: part.text };
-    }
-
-    const resource = agUiInputResource(message.id, index, part);
-    return {
-      text: `[AG-UI ${resource.title ?? resource.kind} input: ${resource.uri ?? resource.name ?? resource.id}]`,
-      resource,
-    };
-  });
-}
-
-function findLastUserMessageIndex(messages: Message[]): number {
-  for (let index = messages.length - 1; index >= 0; index--) {
-    if (messages[index]?.role === "user") return index;
-  }
-  return -1;
-}
-
-function messageText(message: Message | undefined): string {
-  if (!message) return "";
-  const content = readRecord(message)?.content;
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    return content
-      .map((part, index) => {
-        if (isRecord(part) && part.type === "text" && typeof part.text === "string")
-          return part.text;
-        const resource = agUiInputResource(message.id, index, part);
-        return `[AG-UI ${resource.title ?? resource.kind} input: ${resource.uri ?? resource.name ?? resource.id}]`;
-      })
-      .filter(Boolean)
-      .join("\n");
-  }
-  if ("toolCalls" in message || "activityType" in message)
-    return JSON.stringify(sanitizeJson(message));
-  return "";
-}
-
-function agUiInputResource(messageId: string, index: number, part: unknown): RuntimeResource {
-  const record = readRecord(part) ?? {};
-  const type = typeof record.type === "string" ? record.type : "input";
-  const source = isRecord(record.source) ? record.source : undefined;
-  const mimeType =
-    typeof record.mimeType === "string"
-      ? record.mimeType
-      : source && typeof source.mimeType === "string"
-        ? source.mimeType
-        : undefined;
-
-  if (type === "binary") {
-    const filename = typeof record.filename === "string" ? record.filename : undefined;
-    return {
-      id: `ag-ui:${messageId}:${index}`,
-      protocol: "ag-ui",
-      kind: "input",
-      uri: typeof record.url === "string" ? record.url : undefined,
-      name: filename ?? (typeof record.id === "string" ? record.id : undefined),
-      title: filename ?? "binary",
-      mimeType,
-      data: typeof record.data === "string" ? record.data : undefined,
-      source: sanitizeJson(record),
-    };
-  }
-
-  return {
-    id: `ag-ui:${messageId}:${index}`,
-    protocol: "ag-ui",
-    kind: "input",
-    uri:
-      source && source.type === "url" && typeof source.value === "string"
-        ? source.value
-        : undefined,
-    title: type,
-    mimeType,
-    data:
-      source && source.type === "data" && typeof source.value === "string"
-        ? source.value
-        : undefined,
-    source: sanitizeJson(record),
-    metadata: record.metadata === undefined ? undefined : sanitizeJson(record.metadata),
-  };
-}
-
-function contextEntries(context: Context[]): Context[] {
-  return context.map((entry) => ({
-    value: entry.value,
-    description: entry.description,
-  }));
 }
 
 function runtimeBaseFactory<
   TState extends Record<string, unknown>,
   TServices extends RuntimeHandleServices,
->(options: RuntimeAgUiAgentOptions<TState, TServices>): RuntimeFactory<TState, TServices> {
+>(
+  options: RuntimeWorkbenchAgentOptions<TState, TServices>,
+): RuntimeFactory<TState, TServices, RuntimeHandleHarness<TState>> {
   const factory = options.runtime?.factory;
-  if (!factory) throw new Error("Runtime AG-UI agent requires runtime.factory.");
+  if (!factory) throw new Error("Runtime workbench agent requires runtime.factory.");
   return factory;
 }
 
@@ -784,39 +555,31 @@ function runtimeOverride<
   TState extends Record<string, unknown>,
   TServices extends RuntimeHandleServices,
 >(
-  options: RuntimeAgUiAgentOptions<TState, TServices>,
-): RuntimeHandle<TState, TServices> | undefined {
+  options: RuntimeWorkbenchAgentOptions<TState, TServices>,
+): RuntimeHandle<TState, TServices, RuntimeHandleHarness<TState>> | undefined {
   return options.runtime?.override;
 }
 
 function runtimeDescriptor<
   TState extends Record<string, unknown>,
   TServices extends RuntimeHandleServices,
->(options: RuntimeAgUiAgentOptions<TState, TServices>): RuntimeDescriptor {
+>(options: RuntimeWorkbenchAgentOptions<TState, TServices>): RuntimeDescriptor {
   return options.runtime?.descriptor ?? runtimeBaseFactory(options).descriptor;
 }
 
 function runtimeAuthProfile<
   TState extends Record<string, unknown>,
   TServices extends RuntimeHandleServices,
->(options: RuntimeAgUiAgentOptions<TState, TServices>): RuntimeAuthProfile | undefined {
+>(options: RuntimeWorkbenchAgentOptions<TState, TServices>): RuntimeAuthProfile | undefined {
   return options.runtime?.auth ?? runtimeBaseFactory(options).auth;
-}
-
-function runtimeAuthDescriptor<
-  TState extends Record<string, unknown>,
-  TServices extends RuntimeHandleServices,
->(options: RuntimeAgUiAgentOptions<TState, TServices>): RuntimeAuthDescriptor {
-  return (
-    runtimeAuthProfile(options)?.descriptor ??
-    createRuntimeAuthDescriptor({ source: "none", methods: [] })
-  );
 }
 
 function runtimeFactory<
   TState extends Record<string, unknown>,
   TServices extends RuntimeHandleServices,
->(options: RuntimeAgUiAgentOptions<TState, TServices>): RuntimeFactory<TState, TServices> {
+>(
+  options: RuntimeWorkbenchAgentOptions<TState, TServices>,
+): RuntimeFactory<TState, TServices, RuntimeHandleHarness<TState>> {
   const override = runtimeOverride(options);
   if (!override) return runtimeBaseFactory(options);
 
@@ -827,110 +590,14 @@ function runtimeFactory<
   };
 }
 
-function agUiCapabilities<
+async function readRuntimeSessionInfoMessages<
   TState extends Record<string, unknown>,
   TServices extends RuntimeHandleServices,
->(options: RuntimeAgUiAgentOptions<TState, TServices>): AgentCapabilities {
-  const descriptor = runtimeDescriptor(options);
-  const auth = runtimeAuthDescriptor(options);
-  return {
-    identity: {
-      name: descriptor.title,
-      type: "mastra",
-      description: descriptor.description,
-      version: "0.1.0",
-      provider: "Positive Energy",
-    },
-    transport: {
-      streaming: true,
-      websocket: false,
-      resumable: true,
-    },
-    state: {
-      snapshots: true,
-      deltas: false,
-      memory: true,
-      persistentState: true,
-    },
-    tools: {
-      supported: true,
-      clientProvided: false,
-    },
-    humanInTheLoop: {
-      supported: true,
-      approvals: true,
-      interrupts: true,
-      approveWithEdits: false,
-    },
-    custom: {
-      "runtime.id": descriptor.id,
-      "runtime.sessionModel": "active-thread",
-      ...toAgUiAuthCapabilities(auth),
-    },
-  };
-}
-
-function runtimeWorkbenchMetadataEvents<
-  TState extends Record<string, unknown>,
-  TServices extends RuntimeHandleServices,
-  THarness extends RuntimeHandleHarness<TState>,
->(handle: RuntimeHandle<TState, TServices, THarness>): BaseEvent[] {
-  const metadata = runtimeWorkbenchMetadata(handle);
-  if (Object.keys(metadata).length === 0) return [];
-  return [
-    {
-      type: EventType.CUSTOM,
-      name: "runtime.workbench.metadata",
-      value: metadata,
-      sequence: 0,
-    } as BaseEvent,
-  ];
-}
-
-function runtimeWorkbenchMetadata<
-  TState extends Record<string, unknown>,
-  TServices extends RuntimeHandleServices,
-  THarness extends RuntimeHandleHarness<TState>,
->(handle: RuntimeHandle<TState, TServices, THarness>): PeWorkbenchUpdateMetadata {
-  const metadata: PeWorkbenchUpdateMetadata = {};
-  const configured = readRecord(handle.metadata?.workbench) ?? {};
-  const systemPrompt = readRecord(configured.systemPrompt);
-  const contextEntries = Array.isArray(configured.contextEntries)
-    ? configured.contextEntries
-    : undefined;
-  const rawMessages = Array.isArray(configured.rawMessages) ? configured.rawMessages : undefined;
-  const observationalMemory = configured.observationalMemory;
-
-  if (typeof systemPrompt?.content === "string") {
-    metadata.systemPrompt = {
-      content: systemPrompt.content,
-      source: typeof systemPrompt.source === "string" ? systemPrompt.source : "runtime metadata",
-      metadata: runtimeJsonObject(systemPrompt.metadata),
-    };
-  }
-  if (contextEntries)
-    metadata.contextEntries = sanitizeJson(
-      contextEntries,
-    ) as unknown as PeWorkbenchUpdateMetadata["contextEntries"];
-  if (rawMessages)
-    metadata.rawMessages = sanitizeJson(
-      rawMessages,
-    ) as unknown as PeWorkbenchUpdateMetadata["rawMessages"];
-  if (observationalMemory !== undefined)
-    metadata.observationalMemory = sanitizeJson(
-      observationalMemory,
-    ) as unknown as PeWorkbenchUpdateMetadata["observationalMemory"];
-
-  return metadata;
-}
-
-function runtimeJsonObject(value: unknown): PeWorkbenchUpdateMetadata["systemPrompt"] extends {
-  metadata?: infer T;
-}
-  ? T | undefined
-  : undefined {
-  const sanitized = sanitizeJson(value);
-  return readRecord(sanitized) as never;
+>(
+  manager: RuntimeProtocolSessions<TState, TServices>,
+  info: RuntimeProtocolSessionInfo,
+): Promise<RuntimeThreadMessage[]> {
+  return manager.readListedMessages(info);
 }
 
 async function readJsonBody(request: IncomingMessage): Promise<unknown> {
@@ -945,7 +612,7 @@ function addCommonHeaders(response: ServerResponse): void {
   response.setHeader("Access-Control-Allow-Origin", "*");
   response.setHeader(
     "Access-Control-Allow-Headers",
-    "content-type, authorization, x-runtime-local-token, x-runtime-agui-token, x-pea-local-token, x-pea-agui-token",
+    "content-type, authorization, x-runtime-local-token, x-runtime-workbench-token, x-pea-local-token, x-pea-workbench-token",
   );
   response.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
 }
@@ -955,7 +622,6 @@ function writeError(response: ServerResponse, error: unknown): void {
     response.end();
     return;
   }
-
   response.writeHead(500, { "Content-Type": "application/json" });
   response.end(
     JSON.stringify({
@@ -976,143 +642,18 @@ async function closeHttpServer(server: ReturnType<typeof createServer>): Promise
   await Promise.race([closed, timeout]);
 }
 
-function logAgUiServerTiming(
+function logWorkbenchServerTiming(
   label: string,
   startedAt: number,
   details: Record<string, unknown>,
 ): void {
   const elapsedMs = Math.round(performance.now() - startedAt);
   if (elapsedMs < 100) return;
-  console.info("[agui timing]", label, { elapsedMs, ...details });
-}
-
-function parseOptionalSequence(value: string | null): number | undefined {
-  if (value == null || value.trim().length === 0) return undefined;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function nextAgUiEventSequence(history: ReturnType<RuntimeProtocolSessions["history"]>): number {
-  const sequences = history
-    .filter(isAgUiProtocolHistoryEntry)
-    .map((entry) => agUiEventSequence(entry.payload));
-  return Math.max(0, ...sequences) + 1;
-}
-
-async function readRuntimeSessionHistory<
-  TState extends Record<string, unknown>,
-  TServices extends RuntimeHandleServices,
->(
-  manager: RuntimeProtocolSessions<TState, TServices>,
-  id: string,
-): Promise<ReturnType<RuntimeProtocolSessions["history"]>> {
-  return manager.readHistory(id);
-}
-
-async function readRuntimeSessionInfoHistory<
-  TState extends Record<string, unknown>,
-  TServices extends RuntimeHandleServices,
->(
-  manager: RuntimeProtocolSessions<TState, TServices>,
-  info: RuntimeProtocolSessionInfo,
-): Promise<ReturnType<RuntimeProtocolSessions["history"]>> {
-  return manager.readListedHistory(info);
-}
-
-async function readRuntimeSessionInfoMessages<
-  TState extends Record<string, unknown>,
-  TServices extends RuntimeHandleServices,
->(
-  manager: RuntimeProtocolSessions<TState, TServices>,
-  info: RuntimeProtocolSessionInfo,
-): Promise<RuntimeThreadMessage[]> {
-  return manager.readListedMessages(info);
-}
-
-function runtimeMessagesSnapshotEvents(
-  messages: RuntimeThreadMessage[],
-  session: RuntimeProtocolSessionInfo,
-): BaseEvent[] {
-  const agUiMessages = runtimeThreadMessagesToAgUiMessages(messages);
-  if (agUiMessages.length === 0) return [];
-  return [
-    {
-      type: EventType.MESSAGES_SNAPSHOT,
-      threadId: session.externalThreadId ?? session.threadId ?? session.id,
-      messages: agUiMessages,
-      sequence: 1,
-    } as BaseEvent,
-  ];
-}
-
-function runtimeThreadMessagesToAgUiMessages(messages: RuntimeThreadMessage[]): Message[] {
-  return messages.flatMap(runtimeThreadMessageToAgUiMessage);
-}
-
-function runtimeThreadMessageToAgUiMessage(message: RuntimeThreadMessage): Message[] {
-  if (message.role !== "user" && message.role !== "assistant" && message.role !== "system")
-    return [];
-  return [
-    {
-      id: message.id,
-      role: message.role,
-      content: message.text,
-    },
-  ];
-}
-
-function isAgUiProtocolHistoryEntry(
-  entry: ReturnType<RuntimeProtocolSessions["history"]>[number],
-): entry is Extract<
-  ReturnType<RuntimeProtocolSessions["history"]>[number],
-  { type: "protocol_event" }
-> {
-  return entry.type === "protocol_event" && entry.protocol === "ag-ui";
-}
-
-const agUiRecordSchema = z.record(z.string(), z.unknown());
-const agUiEventEnvelopeSchema = z.object({ type: z.string() }).passthrough();
-const agUiStringArraySchema = z.array(z.string());
-
-function isAgUiEvent(value: unknown): value is BaseEvent {
-  return agUiEventEnvelopeSchema.safeParse(value).success;
+  console.info("[workbench timing]", label, { elapsedMs, ...details });
 }
 
 function isUnknownSessionError(error: unknown): boolean {
   return error instanceof Error && error.message.startsWith("Unknown Runtime session:");
-}
-
-function agUiEventSequence(value: unknown): number {
-  const sequence = readRecord(value)?.sequence;
-  return typeof sequence === "number" && Number.isFinite(sequence) ? sequence : 0;
-}
-
-function isMeaningfulJson(value: unknown): boolean {
-  if (value === undefined || value === null) return false;
-  const sanitized = sanitizeJson(value);
-  if (Array.isArray(sanitized)) return sanitized.length > 0;
-  if (typeof sanitized === "object" && sanitized !== null) return Object.keys(sanitized).length > 0;
-  return true;
-}
-
-function readRecord(value: unknown): Record<string, unknown> | undefined {
-  const record = agUiRecordSchema.safeParse(value);
-  return record.success ? record.data : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return agUiRecordSchema.safeParse(value).success;
-}
-
-function firstString(...values: unknown[]): string | undefined {
-  return values.find(
-    (value): value is string => typeof value === "string" && value.trim().length > 0,
-  );
-}
-
-function stringArray(value: unknown): string[] {
-  const entries = agUiStringArraySchema.safeParse(value);
-  return entries.success ? entries.data.filter((entry) => entry.trim().length > 0) : [];
 }
 
 function errorMessage(value: unknown): string {

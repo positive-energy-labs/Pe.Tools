@@ -5,7 +5,6 @@ import path from "node:path";
 import { RequestContext } from "@mastra/core/request-context";
 import { createWorkspaceTools, LocalFilesystem } from "@mastra/core/workspace";
 import { expect, test } from "vite-plus/test";
-import { createRuntimeAgUiCliOptions } from "@pe/runtime";
 import {
   createPeCodeCliCommand,
   createPeCodeProtocolRuntimeFactory,
@@ -48,14 +47,8 @@ test("peco default profile includes Pea product and dev tool ids", () => {
 
 test("peco root command exposes runtime protocol flags", () => {
   expect(Object.keys(createPeCodeCliCommand().args ?? {})).toEqual(
-    expect.arrayContaining(["acp", "agUi", "agUiPort", "agUiToken", "modelId"]),
+    expect.arrayContaining(["acp", "modelId"]),
   );
-});
-
-test("peco AG-UI CLI values map to nested transport options", () => {
-  expect(
-    createRuntimeAgUiCliOptions({ agUi: true, agUiPort: "43112", agUiToken: "t" }, {}),
-  ).toEqual({ transport: { port: 43112, token: "t" } });
 });
 
 test(

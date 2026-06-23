@@ -3,16 +3,11 @@ import path from "node:path";
 import type { Harness } from "@mastra/core/harness";
 import { createMastraCode, type MastraCodeConfig } from "mastracode";
 import type { MastraTUIOptions } from "mastracode/tui";
-import { createInProcessAcpWorkbenchClient } from "@pe/acp-client";
-import type { WorkbenchAgentClient } from "@pe/workbench-core";
 import {
-  createRuntimeAcpAgent,
   createRuntimeDescriptor,
   createRuntimeFactory,
   createRuntimeKernel,
-  createRuntimeLibSqlThreadIndex,
   createRuntimeThreadLock,
-  getDefaultMastraCodeDatabasePath,
   resolveRuntimeThreadStateStore,
   type RuntimeCreateRequest,
   type RuntimeFactory,

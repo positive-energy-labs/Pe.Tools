@@ -104,6 +104,10 @@ Avoid returning full element tables, full parameter bags, all schedule rows, or 
 
 Current compact projections include context summaries, visible summaries, natural-reference resolution, schedule catalogs/details with budgets, loaded-family catalogs with summaries, project-parameter binding summaries, active-view/explicit-handle schedule coverage, exact-handle element electrical context, and bounded schedule/parameter coverage matrices.
 
+## Web Workbench Projection
+
+Pea/Peco web surfaces should stay thin projections over Mastra-backed thread data. Assistant UI can own chat composer/runtime churn, but MapDial, Chat, Trace, and Strata should render from one workbench projection over existing Mastra messages and runtime events. Do not add Pe-owned history tables, migrations, or shadow ledgers for UI state. Prefer Mastra's persisted structured message parts and public thread APIs; use direct SQLite reads only as a read-only fast path when the public API cannot meet old-thread latency.
+
 Likely next contracts should focus on compact projections for:
 
 - project-browser-like organization for views, sheets, schedules, and families

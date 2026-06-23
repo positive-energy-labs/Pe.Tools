@@ -30,6 +30,7 @@
     "build": "vp pack",
     "build:installed": "vp pack",
     "dev": "vp pack --watch",
+    "dev:web": "vp exec node --watch --import jiti/register src/main.ts web --workbench-port=43112 --workbench-token=dev-loopback --port=0",
     "test": "vp test",
     "check": "vp check",
     "prepublishOnly": "vp run build"

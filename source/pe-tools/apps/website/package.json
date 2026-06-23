@@ -6,22 +6,24 @@
   "scripts": {
     "dev": "vp dev --host 127.0.0.1",
     "build": "vp build",
+    "watch": "vp build --watch",
     "check": "vp check",
     "test": "vp test"
   },
   "dependencies": {
     "@pe/agent-contracts": "workspace:*",
-    "@pe/agent-projection": "workspace:*",
-    "@pe/workbench-transport": "workspace:*",
+    "lucide-react": "1.21.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.1.18",
     "@types/node": "^25.6.2",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@typescript/native-preview": "7.0.0-dev.20260509.2",
     "@vitejs/plugin-react": "^5.1.2",
+    "tailwindcss": "^4.1.18",
     "typescript": "^6.0.3",
     "vite-plus": "catalog:"
   }

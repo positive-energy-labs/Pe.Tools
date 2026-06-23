@@ -1,5 +1,4 @@
 import type { AuthMethod } from "@agentclientprotocol/sdk";
-import type { AgentCapabilities } from "@ag-ui/core";
 import type { RuntimeAuthDescriptor } from "./types.ts";
 
 export function toAcpAuthMethods(descriptor: RuntimeAuthDescriptor): AuthMethod[] {
@@ -27,18 +26,4 @@ export function toAcpAuthMethods(descriptor: RuntimeAuthDescriptor): AuthMethod[
       description: method.description,
     };
   });
-}
-
-export function toAgUiAuthCapabilities(
-  descriptor: RuntimeAuthDescriptor,
-): NonNullable<AgentCapabilities["custom"]> {
-  return {
-    "runtime.authSource": descriptor.source,
-    "runtime.logoutSupported": descriptor.logoutSupported,
-    "runtime.authMethods": descriptor.methods.map((method) => ({
-      id: method.id,
-      kind: method.kind,
-      name: method.name,
-    })),
-  };
 }

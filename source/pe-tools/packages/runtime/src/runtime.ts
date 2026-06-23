@@ -33,8 +33,24 @@ export interface RuntimeThreadMessage {
   role: "user" | "assistant" | "system" | "tool" | "signal";
   type?: string;
   text: string;
+  parts?: RuntimeThreadMessagePart[];
   createdAt?: string;
+  rawContent?: unknown;
 }
+
+export type RuntimeThreadMessagePart =
+  | { type: "text"; text: string }
+  | { type: "thinking"; text: string }
+  | { type: "tool-call"; toolCallId: string; toolName: string; args?: unknown }
+  | {
+      type: "tool-result";
+      toolCallId: string;
+      toolName?: string;
+      result?: unknown;
+      isError?: boolean;
+    }
+  | { type: "om-status"; data: unknown }
+  | { type: "raw"; raw: unknown };
 
 export type RuntimeKernelSessionStatus = "draft" | "materialized";
 export type RuntimeAccessLevel = "read-only" | "ask" | "trusted";

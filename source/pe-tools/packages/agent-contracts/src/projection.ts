@@ -32,7 +32,6 @@ import {
 } from "./contracts.ts";
 import { z } from "zod";
 
-export * from "./agui.ts";
 export * from "./raw-thread.ts";
 
 const maxDebugEvents = 500;
@@ -826,6 +825,7 @@ function mergeInspector(
 ): WorkbenchState["inspector"] {
   return {
     systemPrompt: update.systemPrompt ?? inspector.systemPrompt,
+    contextBreakdown: update.contextBreakdown ?? inspector.contextBreakdown,
     contextEntries: update.contextEntries ?? inspector.contextEntries,
     rawMessages: update.rawMessages ?? inspector.rawMessages,
     selectedEntryId: update.selectedEntryId ?? inspector.selectedEntryId,
