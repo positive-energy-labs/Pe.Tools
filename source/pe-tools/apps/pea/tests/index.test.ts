@@ -10,7 +10,6 @@ import {
 import { bundledPeaSkills, peaProductHomeEnvVar, peaStandardSkillsRoot } from "@pe/tools";
 import {
   createPeaCliCommand,
-  createPeaBetaTuiWorkbenchOptions,
   createPeaProtocolRuntimeFactory,
   defaultPeaRuntimeToolCatalog,
   defaultPeaRuntimeToolProfile,
@@ -24,7 +23,7 @@ import { createPeaRuntimeAuthProfile } from "../src/runtime.ts";
 const slowRuntimeTestTimeout = 30_000;
 
 test("pea composes product commands without dev", () => {
-  expect(getPeaCliCommandNames()).toEqual(expect.arrayContaining(["beta-tui", "host", "script"]));
+  expect(getPeaCliCommandNames()).toEqual(expect.arrayContaining(["host", "script"]));
   expect(getPeaCliCommandNames()).not.toContain("dev");
 });
 
@@ -149,16 +148,6 @@ test("pea context signal provider exposes a snapshot state processor", () => {
   expect(provider.getInputProcessors()).toEqual([
     expect.objectContaining({ id: "pea-context-state", stateId: "pea-workbench-context" }),
   ]);
-});
-
-test("pea beta TUI keeps line-mode fallback enabled", () => {
-  expect(createPeaBetaTuiWorkbenchOptions(createTestWorkbenchAgentClient(), "C:/repo")).toEqual(
-    expect.objectContaining({
-      cwd: "C:/repo",
-      title: "Pea beta TUI",
-      fallbackToLineMode: true,
-    }),
-  );
 });
 
 test("pea context state processor emits first runtime context snapshot", () => {
@@ -369,22 +358,6 @@ test(
   },
   slowRuntimeTestTimeout,
 );
-
-function createTestWorkbenchAgentClient(): Parameters<typeof createPeaBetaTuiWorkbenchOptions>[0] {
-  return {
-    subscribe: () => () => undefined,
-    initialize: async () => ({
-      name: "Test",
-      capabilities: {},
-    }),
-    newSession: async (request) => ({
-      sessionId: "test-session",
-      cwd: request.cwd,
-      additionalDirectories: request.additionalDirectories ?? [],
-    }),
-    sendPrompt: async () => ({ stopReason: "end_turn" }),
-  };
-}
 
 type RuntimeMastra = {
   getAgentById(id: string): unknown;

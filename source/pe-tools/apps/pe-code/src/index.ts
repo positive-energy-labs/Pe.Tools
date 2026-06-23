@@ -1,22 +1,11 @@
 import { define } from "gunshi";
 import { PeHostClient } from "@pe/host-client";
-import {
-  argsAcp,
-  argsAgui,
-  createRuntimeAgUiCliOptions,
-  parseOptionalPort,
-  parseTuiRenderer,
-  reexecWithNodeFfiIfNeeded,
-  runRuntimeAcpAgent,
-  runRuntimeAgUiFromCli,
-} from "@pe/runtime";
+import { argsAcp, parseOptionalPort, runRuntimeAcpAgent } from "@pe/runtime";
 import { createPeCodeProtocolRuntimeFactory, peCodeRuntimeToolProfile } from "./runtime.ts";
 
 export {
   createPeCodeProtocolRuntimeFactory,
-  createPeCodeBetaTuiWorkbenchOptions,
   createPeCodeTuiRuntime,
-  runPeCodeBetaTui,
   runPeCodeTui,
   defaultPeCodeRuntimeToolCatalog,
   defaultPeCodeRuntimeToolProfile,
@@ -36,7 +25,6 @@ export function createPeCodeCliCommand() {
     },
     examples: [
       "peco",
-      "peco beta-tui",
       "peco web",
       "peco --acp",
       "peco --ag-ui --ag-ui-port 43112",
@@ -69,21 +57,6 @@ export function createPeCodeCliSubCommands() {
   if (!subCommands) throw new Error("peco runtime tool profile does not define CLI subcommands.");
   return {
     ...subCommands,
-    "beta-tui": define({
-      name: "beta-tui",
-      description: "Run the beta Peco terminal workbench.",
-      toKebab: true,
-      args: betaTuiArgs,
-      run: async (ctx) => {
-        if (reexecWithNodeFfiIfNeeded()) return;
-        const { runPeCodeBetaTui } = await import("./runtime.ts");
-        await runPeCodeBetaTui({
-          workspaceRoot: ctx.values.workspaceRoot,
-          modelId: ctx.values.modelId,
-          renderer: parseTuiRenderer(ctx.values.renderer),
-        });
-      },
-    }),
     web: define({
       name: "web",
       description: "Run the local React peco workbench over HTTP/SSE.",
@@ -107,23 +80,6 @@ export function createPeCodeCliSubCommands() {
 export function getPeCodeCliCommandNames(): string[] {
   return Object.keys(createPeCodeCliSubCommands());
 }
-
-const betaTuiArgs = {
-  workspaceRoot: {
-    type: "string",
-    description:
-      "Peco workspace root. Defaults to the nearest repo/project root from the launch directory.",
-  },
-  modelId: {
-    type: "string",
-    description: "Optional model id to force for the runtime.",
-  },
-  renderer: {
-    type: "string",
-    description:
-      "Beta TUI renderer: opentui, charsm, glyph, rezi, or nberlette. Defaults to opentui.",
-  },
-} as const;
 
 const webArgs = {
   host: {

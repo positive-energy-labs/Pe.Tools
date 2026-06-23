@@ -1,6 +1,6 @@
 import { cli, define } from "gunshi";
 import { PeHostClient } from "@pe/host-client";
-import { parseOptionalPort, parseTuiRenderer, reexecWithNodeFfiIfNeeded } from "@pe/runtime";
+import { parseOptionalPort, runRuntimeAcpAgent } from "@pe/runtime";
 import { PeaCliCommands } from "@pe/tools";
 
 export async function runPeaMain(args = process.argv.slice(2)): Promise<void> {
@@ -70,22 +70,6 @@ export function createPeaCliCommand() {
 export function createPeaCliSubCommands() {
   return {
     ...new PeaCliCommands().commands(),
-    "beta-tui": define({
-      name: "beta-tui",
-      description: "Run the beta Pea terminal workbench.",
-      toKebab: true,
-      args: betaTuiArgs,
-      run: async (ctx) => {
-        if (reexecWithNodeFfiIfNeeded()) return;
-        debugBetaTuiCli("runtime import:start");
-        const { runPeaBetaTui } = await import("./runtime.ts");
-        debugBetaTuiCli("runtime import:ready");
-        await runPeaBetaTui({
-          workspaceRoot: ctx.values.workspaceRoot,
-          renderer: parseTuiRenderer(ctx.values.renderer),
-        });
-      },
-    }),
     web: define({
       name: "web",
       description: "Run the local React Pea workbench over HTTP/SSE.",
@@ -116,15 +100,6 @@ const workspaceArgs = {
     type: "string",
     description:
       "Pea product workspace root. Defaults to the directory where the Pea CLI is launched.",
-  },
-} as const;
-
-const betaTuiArgs = {
-  ...workspaceArgs,
-  renderer: {
-    type: "string",
-    description:
-      "Beta TUI renderer: opentui, charsm, glyph, rezi, or nberlette. Defaults to opentui.",
   },
 } as const;
 
@@ -184,8 +159,3 @@ const protocolArgs = {
   },
   ...workspaceArgs,
 } as const;
-
-function debugBetaTuiCli(label: string): void {
-  if (process.env.PE_TUI_DEBUG_START !== "1") return;
-  console.error(`[pea beta-tui cli] ${label}`);
-}
