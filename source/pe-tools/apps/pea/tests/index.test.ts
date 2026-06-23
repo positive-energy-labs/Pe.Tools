@@ -2,11 +2,7 @@ import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { expect, test } from "vite-plus/test";
-import {
-  createRuntimeAgUiCliOptions,
-  createRuntimeRequestContext,
-  resolveRuntimeThreadStateStore,
-} from "@pe/runtime";
+import { createRuntimeRequestContext, resolveRuntimeThreadStateStore } from "@pe/runtime";
 import { bundledPeaSkills, peaProductHomeEnvVar, peaStandardSkillsRoot } from "@pe/tools";
 import {
   createPeaCliCommand,
@@ -53,14 +49,8 @@ test("pea exports the product tool profile used by the default runtime", () => {
 
 test("pea root command exposes runtime protocol flags", () => {
   expect(Object.keys(createPeaCliCommand().args ?? {})).toEqual(
-    expect.arrayContaining(["acp", "agUi", "agUiPort", "agUiToken", "modelId", "workspaceRoot"]),
+    expect.arrayContaining(["acp", "modelId", "workspaceRoot"]),
   );
-});
-
-test("pea AG-UI CLI values map to nested transport options", () => {
-  expect(
-    createRuntimeAgUiCliOptions({ agUi: true, agUiPort: "43112", agUiToken: "t" }, {}),
-  ).toEqual({ transport: { port: 43112, token: "t" } });
 });
 
 test(

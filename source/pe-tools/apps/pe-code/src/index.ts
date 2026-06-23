@@ -21,28 +21,21 @@ export function createPeCodeCliCommand() {
     toKebab: true,
     args: {
       ...argsAcp,
-      ...argsAgui,
     },
     examples: [
       "peco",
       "peco web",
       "peco --acp",
-      "peco --ag-ui --ag-ui-port 43112",
       "peco live context",
       "peco live sync",
       'peco talk-to-pea --prompt "Review this operator flow"',
     ].join("\n"),
     run: async (ctx) => {
       if (ctx.values.acp) {
-        const factory = await createPeCodeProtocolRuntimeFactory({ modelId: ctx.values.modelId });
+        const factory = await createPeCodeProtocolRuntimeFactory({
+          modelId: ctx.values.modelId,
+        });
         await runRuntimeAcpAgent({ runtime: { factory } });
-        return;
-      }
-      if (ctx.values.agUi) {
-        const factory = await createPeCodeProtocolRuntimeFactory({ modelId: ctx.values.modelId });
-        await runRuntimeAgUiFromCli(
-          createRuntimeAgUiCliOptions(ctx.values, { runtime: { factory } }),
-        );
         return;
       }
       console.log("Run `peco --help` to list dev commands.");
@@ -69,8 +62,8 @@ export function createPeCodeCliSubCommands() {
           port: parseOptionalPort(ctx.values.port),
           staticDir: ctx.values.staticDir,
           modelId: ctx.values.modelId,
-          agUiPort: parseOptionalPort(ctx.values.agUiPort),
-          agUiToken: ctx.values.agUiToken,
+          workbenchPort: parseOptionalPort(ctx.values.workbenchPort),
+          workbenchToken: ctx.values.workbenchToken,
         });
       },
     }),
@@ -98,13 +91,13 @@ const webArgs = {
     type: "string",
     description: "Optional model id to force for the runtime.",
   },
-  agUiPort: {
+  workbenchPort: {
     type: "string",
     description:
-      "Port for the web workbench AG-UI agent. Defaults to an ephemeral port; use 0 for an ephemeral port.",
+      "Port for the web workbench HTTP/SSE agent. Defaults to an ephemeral port; use 0 for an ephemeral port.",
   },
-  agUiToken: {
+  workbenchToken: {
     type: "string",
-    description: "Bearer/query token for the web workbench AG-UI agent.",
+    description: "Bearer/query token for the web workbench HTTP/SSE agent.",
   },
 } as const;

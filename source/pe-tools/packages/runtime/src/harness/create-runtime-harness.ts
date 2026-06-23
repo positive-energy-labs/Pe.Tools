@@ -1,5 +1,8 @@
 import { Harness, type HarnessConfig } from "@mastra/core/harness";
-import { wrapModelForFinalToolListLogging } from "./final-tool-list-logging.ts";
+import {
+  wrapModelForFinalToolListLogging,
+  type FinalToolListLogEntry,
+} from "./final-tool-list-logging.ts";
 import { RuntimeHarness } from "./runtime-harness.ts";
 import { createRuntimeThreadLock } from "./thread-lock.ts";
 import {
@@ -92,11 +95,13 @@ export async function createRuntimeHarness<
   const request = options.request ?? defaultRuntimeCreateRequest;
   let config: HarnessConfig<TState> | RuntimeInjectedHarnessConfig;
   let harness: RuntimeHarness<TState> | THarness;
+  const finalToolListDebug = createFinalToolListDebugSink();
+  const metadata = mergeWorkbenchDebugMetadata(options.metadata, finalToolListDebug.events);
   if (hasInjectedRuntimeHarness(options)) {
     config = options.config;
     harness = options.harness;
   } else {
-    const resolvedConfig = await resolveRuntimeHarnessConfig(options, request);
+    const resolvedConfig = await resolveRuntimeHarnessConfig(options, request, finalToolListDebug);
     config = resolvedConfig;
     harness = new RuntimeHarness<TState>(resolvedConfig);
   }
@@ -118,7 +123,7 @@ export async function createRuntimeHarness<
     authStorage: options.authStorage,
     hookManager: options.hookManager,
     mcpManager: options.mcpManager,
-    metadata: options.metadata,
+    metadata,
     close: () => {
       closeTask ??= closeRuntimeHarness(harness, kernel, config.storage, config.threadLock);
       return closeTask;
@@ -186,6 +191,7 @@ async function resolveRuntimeHarnessConfig<
 >(
   options: CreateRuntimeHarnessOptions<TState, RuntimeHandleServices, THarness>,
   request: RuntimeCreateRequest,
+  finalToolListDebug: ReturnType<typeof createFinalToolListDebugSink>,
 ): Promise<HarnessConfig<TState>> {
   const storage =
     options.config.storage ??
@@ -213,7 +219,10 @@ async function resolveRuntimeHarnessConfig<
         : undefined;
   const configuredResolveModel = options.config.resolveModel;
   const resolveModel = configuredResolveModel
-    ? (modelId: string) => wrapModelForFinalToolListLogging(configuredResolveModel(modelId))
+    ? (modelId: string) =>
+        wrapModelForFinalToolListLogging(configuredResolveModel(modelId), (entry) =>
+          finalToolListDebug.push(entry),
+        )
     : undefined;
   const threadLock =
     options.config.threadLock ??
@@ -229,9 +238,52 @@ async function resolveRuntimeHarnessConfig<
   };
 }
 
+function createFinalToolListDebugSink() {
+  const events: Array<{
+    id: string;
+    source: "runtime";
+    type: string;
+    label: string;
+    timestamp: string;
+    payload: FinalToolListLogEntry;
+  }> = [];
+  return {
+    events,
+    push(entry: FinalToolListLogEntry) {
+      events.push({
+        id: `runtime:final-tool-list:${events.length + 1}`,
+        source: "runtime",
+        type: entry.event,
+        label: `final model tool list (${entry.toolCount})`,
+        timestamp: new Date().toISOString(),
+        payload: entry,
+      });
+      if (events.length > 20) events.splice(0, events.length - 20);
+    },
+  };
+}
+
+function mergeWorkbenchDebugMetadata(
+  metadata: Record<string, unknown> | undefined,
+  debugEvents: unknown[],
+): Record<string, unknown> {
+  const workbench = isRecord(metadata?.workbench) ? metadata.workbench : {};
+  return {
+    ...metadata,
+    workbench: {
+      ...workbench,
+      debug: debugEvents,
+    },
+  };
+}
+
 type InitializableStorage = { disableInit?: boolean; init?: () => Promise<void> | void };
 
 async function initializeRuntimeStorage(storage: InitializableStorage | undefined): Promise<void> {
   if (!storage || storage.disableInit) return;
   await storage.init?.();
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

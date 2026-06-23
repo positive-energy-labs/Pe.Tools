@@ -48,6 +48,31 @@ test("runtime history is empty for drafts and records the prompt once materializ
   );
 });
 
+test("external AG-UI thread resumes its active owning cwd", async () => {
+  const manager = new RuntimeProtocolSessions({
+    factory: createKernelRuntimeFactory(),
+    defaultCwd: path.join(testCwd(), "default"),
+  });
+  const ownerCwd = path.join(testCwd(), "thread-owner");
+  const requestCwd = path.join(testCwd(), "request-cwd");
+
+  const first = await manager.getOrCreateThreadSession({
+    protocol: "ag-ui",
+    externalThreadId: "external-thread",
+    cwd: ownerCwd,
+    title: "External thread",
+  });
+  const resumed = await manager.getOrCreateThreadSession({
+    protocol: "ag-ui",
+    externalThreadId: "external-thread",
+    cwd: requestCwd,
+    title: "External thread",
+  });
+
+  expect(resumed.id).toBe(first.id);
+  expect(resumed.cwd).toBe(first.cwd);
+});
+
 test("kernel ledger replays the same user and assistant transcript through ACP workbench snapshots", async () => {
   const updates: unknown[] = [];
   const factory = createKernelRuntimeFactory({

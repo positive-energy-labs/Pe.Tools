@@ -5,6 +5,11 @@ import type { RuntimeProtocol } from "../events.ts";
 import type { RuntimeThreadInfo, RuntimeThreadMessage } from "../runtime.ts";
 import { readRuntimeThreadLockInfo } from "../harness/thread-lock.ts";
 import {
+  normalizeRuntimeMessageParts,
+  parseRuntimeRawContent,
+  runtimeMessageText,
+} from "../message-parts.ts";
+import {
   getDefaultPeaProductDatabasePath,
   runtimeLibSqlLocalPragmas,
   type RuntimeStorageProfileKind,
@@ -244,7 +249,9 @@ class RuntimeLibSqlThreadIndex implements RuntimeThreadIndex {
       });
       return (result.rows ?? []).flatMap((row) => {
         const message = runtimeThreadMessageFromRow(row);
-        return message.text.length > 0 ? [message] : [];
+        return message.text.length > 0 || (message.parts ?? []).some(isRuntimeToolPart)
+          ? [message]
+          : [];
       });
     } catch (error) {
       if (isMissingMessagesTableError(error)) return [];
@@ -374,14 +381,22 @@ function runtimeThreadMessageFromRow(row: Record<string, unknown>): RuntimeThrea
   const role = runtimeMessageRole(row.role, row.type);
   const type = stringValue(row.type);
   const createdAt = timestampValue(row.createdAt);
-  const text = messageText(row.content);
+  const text = runtimeMessageText(row.content);
+  const parts = normalizeRuntimeMessageParts(row.content);
+  const rawContent = parseRuntimeRawContent(row.content);
   return {
     id: stringValue(row.id) ?? stableRuntimeMessageId({ role, type, text, createdAt }),
     role,
     ...(type ? { type } : {}),
     text,
+    ...(parts.length > 0 ? { parts } : {}),
     ...(createdAt ? { createdAt } : {}),
+    ...(rawContent !== undefined ? { rawContent } : {}),
   };
+}
+
+function isRuntimeToolPart(part: NonNullable<RuntimeThreadMessage["parts"]>[number]): boolean {
+  return part.type === "tool-call" || part.type === "tool-result";
 }
 
 function runtimeMessageRole(role: unknown, type: unknown): RuntimeThreadMessage["role"] {
@@ -389,38 +404,6 @@ function runtimeMessageRole(role: unknown, type: unknown): RuntimeThreadMessage[
   if (role === "user") return "user";
   if (role === "signal" && type === "user") return "user";
   return "signal";
-}
-
-function messageText(content: unknown): string {
-  if (typeof content !== "string") return messageTextFromValue(content);
-  const trimmed = content.trim();
-  if (!trimmed) return "";
-  if (
-    (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
-    (trimmed.startsWith("[") && trimmed.endsWith("]"))
-  ) {
-    try {
-      return messageTextFromValue(JSON.parse(trimmed));
-    } catch {
-      return content;
-    }
-  }
-  return content;
-}
-
-function messageTextFromValue(value: unknown): string {
-  if (typeof value === "string") return value;
-  const record = readRecord(value);
-  if (typeof record.content === "string") return record.content;
-  const parts = Array.isArray(record.parts) ? record.parts : [];
-  return parts.map(partText).filter(Boolean).join("\n");
-}
-
-function partText(part: unknown): string {
-  const record = readRecord(part);
-  if (typeof record.text === "string") return record.text;
-  if (typeof record.reasoning === "string") return record.reasoning;
-  return "";
 }
 
 function stableRuntimeMessageId(message: {

@@ -4,24 +4,19 @@ import type { MastraModelConfig } from "@mastra/core/llm";
 import type { InputProcessor } from "@mastra/core/processors";
 import { TaskSignalProvider } from "@mastra/core/signals";
 import type { MastraTUIOptions } from "mastracode/tui";
-import { createInProcessAcpWorkbenchClient } from "@pe/acp-client";
 import { PeHostClient } from "@pe/host-client";
-import type { WorkbenchAgentClient } from "@pe/workbench-core";
 import type { RequestContext } from "@mastra/core/request-context";
 import { LocalFilesystem, LocalSandbox, Workspace } from "@mastra/core/workspace";
 import {
   createMastraCodeAuthStorageContext,
   createPeaCloudGatewayRuntimeAuthProfile,
   createPeaProductStateStorageProfile,
-  createRuntimeAcpAgent,
   createRuntimeDescriptor,
   createRuntimeFactory,
   createRuntimeHarness,
-  createRuntimeLibSqlThreadIndex,
   createRuntimeMemoryProfile,
   createRuntimeMemoryOptions,
   createSystemPromptCapture,
-  getDefaultPeaProductDatabasePath,
   hasMastraCodeStoredAuth,
   resolveMastraCodeModel,
   type MastraCodeAuthStorage,
@@ -148,6 +143,12 @@ export function createPeaRuntimeFactory<
               content: peaAgentInstructions,
               source: "Pea agent instructions",
             },
+            contextWindow: 200_000,
+            agents: ["Pea Revit Agent"],
+            skills: bundledPeaSkills.map((skill) => ({
+              name: skill.name,
+              approxTokens: Math.ceil(skill.content.length / 4),
+            })),
             observationalMemory: {
               id: "pea-memory:observational-config",
               kind: "observation",

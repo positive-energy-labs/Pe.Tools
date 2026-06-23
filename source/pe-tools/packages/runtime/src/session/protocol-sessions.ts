@@ -239,6 +239,7 @@ export class RuntimeProtocolSessions<
       if (existing) {
         return this.resumeSession(existingId, {
           ...request,
+          cwd: existing.cwd,
           additionalDirectories: request.additionalDirectories ?? existing.additionalDirectories,
         });
       }
@@ -262,6 +263,13 @@ export class RuntimeProtocolSessions<
     const session = this.sessions.get(id) ?? this.activeSessionForId(id, undefined);
     if (!session) throw new Error(`Unknown Runtime session: ${id}`);
     return session;
+  }
+
+  activeSessionInfo(
+    id: string | undefined,
+    protocol?: RuntimeProtocol,
+  ): RuntimeProtocolSession<TState, TServices, THarness> | undefined {
+    return id ? (this.sessions.get(id) ?? this.activeSessionForId(id, protocol)) : undefined;
   }
 
   async resumeSession(
@@ -1351,7 +1359,7 @@ function logProtocolTiming(
 ): void {
   const elapsedMs = Math.round(performance.now() - startedAt);
   if (elapsedMs < 100) return;
-  console.info("[agui timing]", label, { elapsedMs, ...details });
+  console.info("[session timing]", label, { elapsedMs, ...details });
 }
 
 function mergeResumeDecisions(

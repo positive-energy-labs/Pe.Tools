@@ -7,14 +7,14 @@ type ToolCallArgs = {
 
 type ModelCall = (args: ToolCallArgs) => unknown;
 
-type FinalToolListLogEntry = {
+export type FinalToolListLogEntry = {
   event: "pe.runtime.final_model_tool_list";
   method: "doStream" | "doGenerate";
   provider?: string;
   modelId?: string;
   specificationVersion?: string;
   toolCount: number;
-  tools: Array<{ name?: string; type?: string; id?: string }>;
+  tools: Array<{ name?: string; type?: string; id?: string; approxTokens?: number }>;
   toolChoice?: unknown;
 };
 
@@ -25,7 +25,10 @@ const wrappedModels = new WeakMap<object, LanguageModel>();
  * `doStream`/`doGenerate` call is logged to stderr. v2 and v3 models share the
  * same proxy — the spec versions differ only in arg types we forward opaquely.
  */
-export function wrapModelForFinalToolListLogging(model: LanguageModel): LanguageModel {
+export function wrapModelForFinalToolListLogging(
+  model: LanguageModel,
+  onLog?: (entry: FinalToolListLogEntry) => void,
+): LanguageModel {
   if (typeof model !== "object" || model === null) return model;
   if (model.specificationVersion !== "v2" && model.specificationVersion !== "v3") return model;
 
@@ -38,7 +41,7 @@ export function wrapModelForFinalToolListLogging(model: LanguageModel): Language
         const method = property;
         const call = (target as unknown as Record<typeof method, ModelCall>)[method];
         return (args: ToolCallArgs) => {
-          logFinalToolList(target, method, args);
+          logFinalToolList(target, method, args, onLog);
           return call.call(target, args);
         };
       }
@@ -55,6 +58,7 @@ function logFinalToolList(
   model: LanguageModel,
   method: FinalToolListLogEntry["method"],
   args: ToolCallArgs,
+  onLog?: (entry: FinalToolListLogEntry) => void,
 ): void {
   const tools = summarizeTools(args.tools);
   const entry: FinalToolListLogEntry = {
@@ -67,6 +71,7 @@ function logFinalToolList(
     tools,
     toolChoice: args.toolChoice,
   };
+  onLog?.(entry);
   process.stderr.write(`${JSON.stringify(entry)}\n`);
 }
 
@@ -78,8 +83,19 @@ function summarizeTools(tools: unknown): FinalToolListLogEntry["tools"] {
       name: typeof record.name === "string" ? record.name : undefined,
       type: typeof record.type === "string" ? record.type : undefined,
       id: typeof record.id === "string" ? record.id : undefined,
+      // ponytail: char/4 estimate of the serialized tool def (name + description + schema)
+      // — the bytes that tool actually costs in the context window.
+      approxTokens: approxToolTokens(tool),
     };
   });
+}
+
+function approxToolTokens(tool: unknown): number | undefined {
+  try {
+    return Math.ceil(JSON.stringify(tool).length / 4);
+  } catch {
+    return undefined;
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

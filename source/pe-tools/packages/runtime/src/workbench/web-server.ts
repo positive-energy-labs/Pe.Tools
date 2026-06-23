@@ -3,13 +3,13 @@ import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import path from "node:path";
 import {
-  RuntimeAgUiHttpAgent,
-  type RuntimeAgUiAgentOptions,
-  type RuntimeAgUiServerInfo,
+  RuntimeWorkbenchHttpAgent,
+  type RuntimeWorkbenchAgentOptions,
+  type RuntimeWorkbenchServerInfo,
 } from "./agent.ts";
 import type { RuntimeHandleServices } from "../runtime.ts";
 
-export interface RuntimeAgUiWorkbenchStaticOptions {
+export interface RuntimeWorkbenchStaticOptions {
   host?: string;
   port?: number;
   staticDir?: string;
@@ -17,13 +17,13 @@ export interface RuntimeAgUiWorkbenchStaticOptions {
   searchRoots?: string[];
 }
 
-export interface RuntimeAgUiWebWorkbenchOptions<
+export interface RuntimeWorkbenchWebOptions<
   TState extends Record<string, unknown> = Record<string, unknown>,
   TServices extends RuntimeHandleServices = RuntimeHandleServices,
 > {
   label: string;
-  agent: RuntimeAgUiAgentOptions<TState, TServices>;
-  static?: RuntimeAgUiWorkbenchStaticOptions;
+  agent: RuntimeWorkbenchAgentOptions<TState, TServices>;
+  static?: RuntimeWorkbenchStaticOptions;
 }
 
 interface StaticServerHandle {
@@ -31,15 +31,15 @@ interface StaticServerHandle {
   close: () => Promise<void>;
 }
 
-export async function runRuntimeAgUiWebWorkbench<
+export async function runRuntimeWorkbenchWeb<
   TState extends Record<string, unknown> = Record<string, unknown>,
   TServices extends RuntimeHandleServices = RuntimeHandleServices,
->(options: RuntimeAgUiWebWorkbenchOptions<TState, TServices>): Promise<void> {
-  const agUiAgent = new RuntimeAgUiHttpAgent(options.agent);
-  const agUiInfo = await agUiAgent.start();
+>(options: RuntimeWorkbenchWebOptions<TState, TServices>): Promise<void> {
+  const workbenchAgent = new RuntimeWorkbenchHttpAgent(options.agent);
+  const workbenchInfo = await workbenchAgent.start();
   const staticDir = await resolveWorkbenchStaticDir(options.static);
   const staticHandle = staticDir
-    ? await startStaticServer(staticDir, options.static ?? {}, agUiInfo)
+    ? await startStaticServer(staticDir, options.static ?? {}, workbenchInfo)
     : undefined;
 
   if (staticHandle) {
@@ -50,19 +50,18 @@ export async function runRuntimeAgUiWebWorkbench<
       `${options.label} web workbench: not serving React app; run \`vp run website#build\` or pass \`--static-dir\`.`,
     );
   }
-  console.log(`${options.label} AG-UI run: ${agUiInfo.runUrl}`);
-  console.log(`${options.label} AG-UI events: ${agUiInfo.eventsUrl}`);
-  console.log(`${options.label} AG-UI threads: ${agUiInfo.threadsUrl}`);
+  console.log(`${options.label} workbench run: ${workbenchInfo.workbenchUrl}`);
+  console.log(`${options.label} workbench threads: ${workbenchInfo.threadsUrl}`);
 
   await waitForShutdown(async () => {
-    await Promise.all([staticHandle?.close() ?? Promise.resolve(), agUiAgent.close()]);
+    await Promise.all([staticHandle?.close() ?? Promise.resolve(), workbenchAgent.close()]);
   });
 }
 
 async function startStaticServer(
   staticDir: string,
-  options: RuntimeAgUiWorkbenchStaticOptions,
-  agUiInfo: RuntimeAgUiServerInfo,
+  options: RuntimeWorkbenchStaticOptions,
+  workbenchInfo: RuntimeWorkbenchServerInfo,
 ): Promise<StaticServerHandle> {
   const root = path.resolve(staticDir);
   const host = options.host ?? "127.0.0.1";
@@ -85,7 +84,7 @@ async function startStaticServer(
   const address = server.address();
   const actualPort = typeof address === "object" && address ? address.port : port;
   return {
-    url: webUrlWithAgUiParams(`http://${host}:${actualPort}/`, agUiInfo),
+    url: webUrlWithWorkbenchParams(`http://${host}:${actualPort}/`, workbenchInfo),
     close: () => closeStaticServer(server),
   };
 }
@@ -137,19 +136,17 @@ async function resolveStaticFile(root: string, pathname: string): Promise<string
   return (await hasIndexHtml(root)) ? indexPath : undefined;
 }
 
-function webUrlWithAgUiParams(baseUrl: string, agUiInfo: RuntimeAgUiServerInfo): string {
+function webUrlWithWorkbenchParams(
+  baseUrl: string,
+  workbenchInfo: RuntimeWorkbenchServerInfo,
+): string {
   const url = new URL(baseUrl);
-  url.searchParams.set("agui", agUiInfo.runUrl);
-  url.searchParams.set("events", agUiInfo.eventsUrl);
-  url.searchParams.set("messages", agUiInfo.messagesUrl);
-  url.searchParams.set("threadRaw", agUiInfo.threadRawUrl);
-  url.searchParams.set("threads", agUiInfo.threadsUrl);
-  url.searchParams.set("status", agUiInfo.statusUrl);
+  url.searchParams.set("workbench", workbenchInfo.workbenchUrl);
   return url.toString();
 }
 
 async function resolveWorkbenchStaticDir(
-  options: RuntimeAgUiWorkbenchStaticOptions | undefined,
+  options: RuntimeWorkbenchStaticOptions | undefined,
 ): Promise<string | undefined> {
   const configured =
     options?.staticDir ?? (options?.envVar ? process.env[options.envVar] : undefined);
@@ -169,7 +166,7 @@ async function resolveWorkbenchStaticDir(
 
 function staticDirCandidates(
   current: string,
-  options: RuntimeAgUiWorkbenchStaticOptions | undefined,
+  options: RuntimeWorkbenchStaticOptions | undefined,
 ): string[] {
   return [
     ...(options?.searchRoots ?? []),

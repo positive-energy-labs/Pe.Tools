@@ -28,36 +28,18 @@ export function createPeaCliCommand() {
       "pea",
       "pea web",
       "pea --acp",
-      "pea --ag-ui --ag-ui-port 43112",
       "pea host status",
       "pea script bootstrap",
       "pea script execute --source-path src\\SampleScript.cs",
     ].join("\n"),
     run: async (ctx) => {
       if (ctx.values.acp) {
-        const [{ runRuntimeAcpAgent }, { createPeaProtocolRuntimeFactory }] = await Promise.all([
-          import("@pe/runtime"),
-          import("./runtime.ts"),
-        ]);
+        const { createPeaProtocolRuntimeFactory } = await import("./runtime.ts");
         const factory = await createPeaProtocolRuntimeFactory({
           modelId: ctx.values.modelId,
           workspaceRoot: ctx.values.workspaceRoot,
         });
         await runRuntimeAcpAgent({ runtime: { factory } });
-        return;
-      }
-      if (ctx.values.agUi) {
-        const [
-          { createRuntimeAgUiCliOptions, runRuntimeAgUiFromCli },
-          { createPeaProtocolRuntimeFactory },
-        ] = await Promise.all([import("@pe/runtime"), import("./runtime.ts")]);
-        const factory = await createPeaProtocolRuntimeFactory({
-          modelId: ctx.values.modelId,
-          workspaceRoot: ctx.values.workspaceRoot,
-        });
-        await runRuntimeAgUiFromCli(
-          createRuntimeAgUiCliOptions(ctx.values, { runtime: { factory } }),
-        );
         return;
       }
       console.log("Run `pea --help` to list product commands.");
@@ -83,8 +65,8 @@ export function createPeaCliSubCommands() {
           staticDir: ctx.values.staticDir,
           modelId: ctx.values.modelId,
           workspaceRoot: ctx.values.workspaceRoot,
-          agUiPort: parseOptionalPort(ctx.values.agUiPort),
-          agUiToken: ctx.values.agUiToken,
+          workbenchPort: parseOptionalPort(ctx.values.workbenchPort),
+          workbenchToken: ctx.values.workbenchToken,
         });
       },
     }),
@@ -120,14 +102,14 @@ const webArgs = {
     type: "string",
     description: "Optional model id to force for the runtime.",
   },
-  agUiPort: {
+  workbenchPort: {
     type: "string",
     description:
-      "Port for the web workbench AG-UI agent. Defaults to 43112; use 0 for an ephemeral port.",
+      "Port for the web workbench HTTP/SSE agent. Defaults to 43112; use 0 for an ephemeral port.",
   },
-  agUiToken: {
+  workbenchToken: {
     type: "string",
-    description: "Bearer/query token for the web workbench AG-UI agent.",
+    description: "Bearer/query token for the web workbench HTTP/SSE agent.",
   },
   ...workspaceArgs,
 } as const;
@@ -137,21 +119,6 @@ const protocolArgs = {
     type: "boolean",
     description: "Run the runtime as an ACP agent over stdio.",
     default: false,
-  },
-  agUi: {
-    type: "boolean",
-    description: "Run the runtime as a native AG-UI HTTP/SSE agent.",
-    default: false,
-  },
-  agUiPort: {
-    type: "string",
-    description:
-      "Port for native AG-UI HTTP/SSE transport. Defaults to 43112; use 0 for an ephemeral port.",
-  },
-  agUiToken: {
-    type: "string",
-    description:
-      "Bearer/query token for native AG-UI HTTP/SSE transport. Defaults to no token for local development.",
   },
   modelId: {
     type: "string",

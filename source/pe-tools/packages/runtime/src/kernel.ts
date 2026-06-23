@@ -3,6 +3,11 @@ import type { HarnessEvent } from "@mastra/core/harness";
 import { createRuntimeRequestContext, setRuntimeThreadSettings } from "./context.ts";
 import { MastraHarnessToRuntimeEvents, sanitizeJson, type RuntimeEvent } from "./events.ts";
 import { readRuntimeThreadLockInfo } from "./harness/thread-lock.ts";
+import {
+  normalizeRuntimeMessageParts,
+  parseRuntimeRawContent,
+  runtimeMessageText,
+} from "./message-parts.ts";
 import type {
   RuntimeForkSessionOptions,
   RuntimeCreateDraftSessionOptions,
@@ -1008,7 +1013,9 @@ function runtimeThreadMessage(message: unknown): RuntimeThreadMessage {
   const record = readRecord(message);
   const role = runtimeMessageRole(record.role, record.type);
   const type = typeof record.type === "string" ? record.type : undefined;
-  const text = messageText(record.content);
+  const text = runtimeMessageText(record.content);
+  const parts = normalizeRuntimeMessageParts(record.content);
+  const rawContent = parseRuntimeRawContent(record.content);
   const createdAt = dateString(record.createdAt);
   return {
     id:
@@ -1018,6 +1025,8 @@ function runtimeThreadMessage(message: unknown): RuntimeThreadMessage {
     role,
     type,
     text,
+    ...(parts.length > 0 ? { parts } : {}),
+    ...(rawContent !== undefined ? { rawContent } : {}),
     createdAt,
   };
 }
@@ -1055,21 +1064,6 @@ function runtimeMessageRole(role: unknown, type: unknown): RuntimeThreadMessage[
   if (role === "user") return "user";
   if (role === "signal" && type === "user") return "user";
   return "signal";
-}
-
-function messageText(content: unknown): string {
-  if (typeof content === "string") return content;
-  const record = readRecord(content);
-  if (typeof record.content === "string") return record.content;
-  const parts = Array.isArray(record.parts) ? record.parts : [];
-  return parts.map(partText).filter(Boolean).join("\n");
-}
-
-function partText(part: unknown): string {
-  const record = readRecord(part);
-  if (typeof record.text === "string") return record.text;
-  if (typeof record.reasoning === "string") return record.reasoning;
-  return "";
 }
 
 function matchesThread(

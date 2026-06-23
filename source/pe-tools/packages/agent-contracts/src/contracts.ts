@@ -344,8 +344,27 @@ export interface WorkbenchInspectorEntry {
   updatedAt?: string;
 }
 
+/** One row of the context-window token breakdown (system prompt, tools, messages, …). */
+export interface WorkbenchContextSegment {
+  id: string;
+  label: string;
+  tokens: number;
+  /** Optional named contents, e.g. tool / skill / agent names, pre-formatted for display. */
+  items?: string[];
+}
+
+/** Token breakdown of what fills the model's context window for this thread. */
+export interface WorkbenchContextBreakdown {
+  /** Model context window size in tokens, if known (for the free-space bar). */
+  contextWindow?: number;
+  totalTokens: number;
+  segments: WorkbenchContextSegment[];
+  updatedAt?: string;
+}
+
 export interface WorkbenchInspectorState {
   systemPrompt?: WorkbenchSystemPromptSnapshot;
+  contextBreakdown?: WorkbenchContextBreakdown;
   contextEntries: WorkbenchInspectorEntry[];
   rawMessages: WorkbenchInspectorEntry[];
   selectedEntryId?: string;
@@ -456,6 +475,7 @@ export interface PeWorkbenchUpdateMetadata {
   debug?: WorkbenchDebugEvent | WorkbenchDebugEvent[];
   observationalMemory?: WorkbenchObservationMemoryEntry | WorkbenchObservationMemoryEntry[];
   systemPrompt?: WorkbenchSystemPromptSnapshot;
+  contextBreakdown?: WorkbenchContextBreakdown;
   contextEntries?: WorkbenchInspectorEntry[];
   rawMessages?: WorkbenchInspectorEntry[];
   model?: Partial<WorkbenchModelState>;
@@ -1016,6 +1036,23 @@ const systemPromptSnapshotSchema = z
   })
   .loose();
 const inspectorEntrySchema = z.object({ id: z.string(), title: z.string() }).loose();
+const contextBreakdownSchema = z
+  .object({
+    contextWindow: z.number().nullish(),
+    totalTokens: z.number(),
+    segments: z.array(
+      z
+        .object({
+          id: z.string(),
+          label: z.string(),
+          tokens: z.number(),
+          items: z.array(z.string()).nullish(),
+        })
+        .loose(),
+    ),
+    updatedAt: optString,
+  })
+  .loose();
 const runStateSchema = z
   .object({
     status: runStatusSchema,
@@ -1085,6 +1122,7 @@ const workbenchStateSchema = z
     inspector: z
       .object({
         systemPrompt: systemPromptSnapshotSchema.nullish(),
+        contextBreakdown: contextBreakdownSchema.nullish(),
         contextEntries: z.array(inspectorEntrySchema),
         rawMessages: z.array(inspectorEntrySchema),
         selectedEntryId: optString,

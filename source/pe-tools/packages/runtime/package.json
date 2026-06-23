@@ -33,7 +33,6 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@ag-ui/core": "0.0.57",
     "@agentclientprotocol/sdk": "^0.25.0",
     "@mastra/core": "1.42.0",
     "@mastra/libsql": "1.12.1",
