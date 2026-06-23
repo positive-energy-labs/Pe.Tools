@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
+  WorkbenchApprovalRequest,
   WorkbenchContextBreakdown,
+  WorkbenchDebugEvent,
+  WorkbenchMessagePart,
   WorkbenchState,
   WorkbenchToolCall,
 } from "@pe/agent-contracts";
+import { Check, ChevronRight, GitFork, X } from "lucide-react";
 import { buildRows, eventIds, messageText, type Row } from "./rows.ts";
 import { Markdown } from "./markdown.tsx";
 import { modeDepth, type Mode } from "./depth.ts";
+import { useWorkbench } from "./WorkbenchProvider.tsx";
 
 /**
  * The unified workbench view (one layout, one scroll). Modes don't swap UIs — they toggle
@@ -24,10 +29,8 @@ import { modeDepth, type Mode } from "./depth.ts";
  */
 
 const SCALE = 0.14; // chat px -> map px. Fixed, NOT fit-to-container: long threads overflow, short leave the gutter empty.
-const FOCAL = 0.6; // focal line, fraction down the gutter/viewport. Lower than center: history lives above the latest turn.
+const FOCAL = 0.5; // focal line, fraction down the gutter/viewport.
 const MIN_BAND = 3; // px floor so a one-line turn stays visible and clickable.
-const CARD_GAP = 12; // min px between trace cards when they de-overlap.
-const SHOW_ALL_LINKS = true; // ponytail: draw provenance wires for every visible card (demo default). Add a toggle if it reads noisy.
 
 interface Geom {
   key: string;
@@ -44,7 +47,6 @@ export function Lens({ state, mode }: { state: WorkbenchState; mode: Mode }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
   const traceInnerRef = useRef<HTMLDivElement>(null);
-  const wiresRef = useRef<SVGSVGElement>(null);
 
   // gutter / candlestick
   const stripRef = useRef<HTMLDivElement>(null);
@@ -85,7 +87,6 @@ export function Lens({ state, mode }: { state: WorkbenchState; mode: Mode }) {
     ? [...chatRows].reverse().find((row) => row.kind === "assistant")?.key
     : undefined;
   const detailRows = rows.filter((row) => row.kind === "tool" || row.kind === "memory");
-  const eventRows = rows.filter((row) => row.events.length > 0);
 
   // drag the gutter to scrub (gutter motion ÷ SCALE = chat motion); a tap centers the band.
   const onPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -123,86 +124,40 @@ export function Lens({ state, mode }: { state: WorkbenchState; mode: Mode }) {
 
     const detailKeys = new Set(detailRows.map((row) => row.key));
     let geom: Geom[] = [];
-    let geomByKey: Record<string, Geom> = {};
     let cards: { key: string; el: HTMLElement }[] = [];
-    let frameTop = 0;
-    let frameLeft = 0;
 
-    const wire = (x1: number, y1: number, x2: number, y2: number, cls: string) => {
-      const dx = (x2 - x1) * 0.5;
-      return `<path class="${cls}" d="M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}"/>`;
-    };
-    const hit = (x1: number, y1: number, x2: number, y2: number, key: string) => {
-      const dx = (x2 - x1) * 0.5;
-      return `<path class="hit" data-key="${key}" d="M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}"/>`;
-    };
-    const box = (el: HTMLElement | null) => {
-      if (!el || el.offsetParent === null) return null;
-      const r = el.getBoundingClientRect();
-      return { L: r.left - frameLeft, R: r.right - frameLeft, Y: r.top + r.height / 2 - frameTop };
-    };
-
-    // Cards track their owning stub's center; the focal card is pinned exactly to the focal
-    // axis (the hard requirement) and the rest de-overlap around it.
-    const positionPinned = (s: number, V: number, fk: string | null) => {
+    // Fisheye: non-focal cards collapse to their header strip; focal expands. The lane
+    // translates so the expanded card's center sits on the focal axis. A short rAF pump
+    // re-measures live during the max-height CSS transition so translation tracks smoothly.
+    let fisheyeAi = -1;
+    let fisheyeRaf = 0;
+    const positionFisheye = (s: number, V: number, fk: string | null) => {
       const fy = FOCAL * V;
-      const vis: { key: string; el: HTMLElement; center: number; h: number; top: number }[] = [];
-      for (const c of cards) {
-        const g = geomByKey[c.key];
-        const center = g ? g.top + g.height / 2 - s : Number.NaN;
-        if (!g || center < -80 || center > V + 80) {
-          c.el.style.display = "none";
-          continue;
-        }
-        c.el.style.display = "";
-        vis.push({ key: c.key, el: c.el, center, h: 0, top: 0 });
-      }
-      vis.sort((a, b) => a.center - b.center);
-      for (const c of vis) {
-        c.h = c.el.offsetHeight;
-        c.top = c.center - c.h / 2;
-      }
-      for (let i = 1; i < vis.length; i++) {
-        const prev = vis[i - 1];
-        vis[i].top = Math.max(vis[i].top, prev.top + prev.h + CARD_GAP);
-      }
-      const f = vis.find((c) => c.key === fk);
-      if (f) {
-        const delta = fy - f.h / 2 - f.top;
-        for (const c of vis) c.top += delta;
-      }
-      for (const c of vis) c.el.style.top = `${c.top}px`;
-      // ponytail: a dense cluster near the focal card can still slide a neighbour off its
-      // exact stub-y; the focal card itself stays pinned.
-    };
-
-    const drawWires = (fy: number, fk: string | null) => {
-      const wires = wiresRef.current;
-      if (!wires) return;
-      let p = "";
       const hoverKey = hoverKeyRef.current;
-      for (const c of cards) {
-        if (c.key === fk) continue;
-        const draw = SHOW_ALL_LINKS || c.key === hoverKey;
-        if (!draw) continue;
-        const stub = box(momentRefs.current.get(c.key) ?? null);
-        const card = box(c.el);
-        if (!stub || !card) continue;
-        const cls = c.key === hoverKey ? "hover" : "w";
-        p += wire(stub.R, stub.Y, card.L, card.Y, cls);
-        if (SHOW_ALL_LINKS) p += hit(stub.R, stub.Y, card.L, card.Y, c.key);
+      let focalCell: HTMLElement | null = null;
+      let newAi = -1;
+      for (let i = 0; i < cards.length; i++) {
+        const c = cards[i];
+        const on = c.key === fk;
+        c.el.style.maxHeight = on ? "400px" : "28px";
+        c.el.classList.toggle("focal", on);
+        c.el.classList.toggle("hover", c.key === hoverKey && !on);
+        if (on) { focalCell = c.el; newAi = i; }
       }
-      // the focal funnel: band -> stub (-> card, if the focal stub has one). Bright.
-      const band = fk ? box(bandRefs.current.get(fk) ?? null) : null;
-      const stub = fk ? box(momentRefs.current.get(fk) ?? null) : null;
-      const focalCard = cards.find((c) => c.key === fk);
-      const card = focalCard ? box(focalCard.el) : null;
-      if (band && stub) {
-        p += wire(band.R, band.Y, stub.L, fy, "f");
-        p += `<circle cx="${stub.L}" cy="${fy}" r="2.5"/>`;
+      const inner = traceInnerRef.current;
+      const doLayout = () => {
+        if (!inner) return;
+        const center = focalCell ? focalCell.offsetTop + focalCell.offsetHeight / 2 : 0;
+        inner.style.transform = `translateY(${fy - center}px)`;
+      };
+      doLayout();
+      if (newAi !== fisheyeAi) {
+        fisheyeAi = newAi;
+        cancelAnimationFrame(fisheyeRaf);
+        const end = performance.now() + 300;
+        const pump = () => { doLayout(); fisheyeRaf = performance.now() < end ? requestAnimationFrame(pump) : 0; };
+        fisheyeRaf = requestAnimationFrame(pump);
       }
-      if (stub && card) p += wire(stub.R, fy, card.L, card.Y, "f");
-      wires.innerHTML = p;
     };
 
     const sync = () => {
@@ -251,13 +206,7 @@ export function Lens({ state, mode }: { state: WorkbenchState; mode: Mode }) {
         }
       }
 
-      positionPinned(s, V, fk);
-      for (const c of cards) {
-        c.el.classList.toggle("focal", c.key === fk);
-        c.el.classList.toggle("hover", c.key === hoverKey && c.key !== fk);
-      }
-
-      drawWires(fy, fk);
+      positionFisheye(s, V, fk);
     };
 
     const measure = () => {
@@ -265,26 +214,19 @@ export function Lens({ state, mode }: { state: WorkbenchState; mode: Mode }) {
         const el = momentRefs.current.get(row.key);
         return el ? [{ key: row.key, top: el.offsetTop, height: el.offsetHeight }] : [];
       });
-      geomByKey = Object.fromEntries(geom.map((g) => [g.key, g]));
       geomRef.current = geom;
       cards = detailRows.flatMap((row) => {
         const el = cardRefs.current.get(row.key);
         return el ? [{ key: row.key, el }] : [];
       });
+      // Re-flow the de-overlap whenever a card's height changes (e.g. expand-in-place).
+      cardRo.disconnect();
+      for (const card of cards) cardRo.observe(card.el);
       for (const g of geom) {
         const band = bandRefs.current.get(g.key);
         if (!band) continue;
         band.style.top = `${g.top * SCALE}px`;
         band.style.height = `${Math.max(MIN_BAND, g.height * SCALE)}px`;
-      }
-      const fr = frame.getBoundingClientRect();
-      frameTop = fr.top;
-      frameLeft = fr.left;
-      const wires = wiresRef.current;
-      if (wires) {
-        wires.setAttribute("viewBox", `0 0 ${fr.width} ${fr.height}`);
-        wires.setAttribute("width", `${fr.width}`);
-        wires.setAttribute("height", `${fr.height}`);
       }
       sync();
     };
@@ -303,6 +245,7 @@ export function Lens({ state, mode }: { state: WorkbenchState; mode: Mode }) {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(sync);
     };
+    const cardRo = new ResizeObserver(() => schedule());
 
     measure();
     const ro = new ResizeObserver(measure);
@@ -312,31 +255,24 @@ export function Lens({ state, mode }: { state: WorkbenchState; mode: Mode }) {
 
     const chat = chatRef.current;
     const trace = traceInnerRef.current;
-    const wires = wiresRef.current;
     const onChatOver = (e: Event) => setHover(keyFrom(e, ".lens-moment"));
     const onChatLeave = () => setHover(null);
     const onTraceOver = (e: Event) => setHover(keyFrom(e, ".lens-cell"));
-    const onWiresOver = (e: Event) => setHover(keyFrom(e, ".hit"));
-    const onWiresOut = (e: Event) => {
-      if ((e.target as HTMLElement).closest(".hit")) setHover(null);
-    };
     chat?.addEventListener("mouseover", onChatOver);
     chat?.addEventListener("mouseleave", onChatLeave);
     trace?.addEventListener("mouseover", onTraceOver);
     trace?.addEventListener("mouseleave", onChatLeave);
-    wires?.addEventListener("mouseover", onWiresOver);
-    wires?.addEventListener("mouseout", onWiresOut);
 
     return () => {
       ro.disconnect();
+      cardRo.disconnect();
       scroller.removeEventListener("scroll", onScroll);
       cancelAnimationFrame(raf);
+      cancelAnimationFrame(fisheyeRaf);
       chat?.removeEventListener("mouseover", onChatOver);
       chat?.removeEventListener("mouseleave", onChatLeave);
       trace?.removeEventListener("mouseover", onTraceOver);
       trace?.removeEventListener("mouseleave", onChatLeave);
-      wires?.removeEventListener("mouseover", onWiresOver);
-      wires?.removeEventListener("mouseout", onWiresOut);
     };
     // chatRows/detailRows are fresh arrays each render; re-running re-measures geometry as the
     // thread (and streaming text heights) change. Hover survives via hoverKeyRef.
@@ -399,17 +335,14 @@ export function Lens({ state, mode }: { state: WorkbenchState; mode: Mode }) {
               <div className="lens-lane trace">
                 <div className="lens-pin" ref={traceInnerRef}>
                   {detailRows.map((row) => (
-                    <div
+                    <TraceCell
                       key={row.key}
-                      data-key={row.key}
-                      className="lens-cell"
-                      ref={(el) => {
+                      row={row}
+                      registerRef={(el) => {
                         if (el) cardRefs.current.set(row.key, el);
                         else cardRefs.current.delete(row.key);
                       }}
-                    >
-                      <TraceCell row={row} />
-                    </div>
+                    />
                   ))}
                 </div>
               </div>
@@ -417,17 +350,12 @@ export function Lens({ state, mode }: { state: WorkbenchState; mode: Mode }) {
 
             {mode === "strata" ? (
               <div className="lens-lane strata">
-                <div className="lens-inner">
-                  {eventRows.map((row) => (
-                    <StrataGroup key={row.key} row={row} />
-                  ))}
-                </div>
+                <DevtoolsLane events={state.debug.events} />
               </div>
             ) : null}
           </div>
         )}
       </div>
-      {rows.length > 0 ? <svg className="lens-wires" ref={wiresRef} aria-hidden="true" /> : null}
       {rows.length > 0 ? <div className="lens-scrim" aria-hidden="true" /> : null}
     </div>
   );
@@ -436,35 +364,15 @@ export function Lens({ state, mode }: { state: WorkbenchState; mode: Mode }) {
 function ChatSpine({ row, streaming }: { row: Row; streaming: boolean }) {
   switch (row.kind) {
     case "user":
-      return (
-        <>
-          <div className="lens-who you">you</div>
-          <div className="lens-bubble">{messageText(row.message)}</div>
-        </>
-      );
+      return <UserTurn text={messageText(row.message)} />;
     case "assistant":
       return (
         <>
           <div className="lens-who pea">pea</div>
           <div className="mg-prose" style={{ display: "grid", gap: "8px" }}>
-            {row.message?.parts.map((part, index) => {
-              if (part.kind === "text") return <Markdown key={index} text={part.text} />;
-              if (part.kind === "reasoning" || part.kind === "thought")
-                return (
-                  <div
-                    key={index}
-                    style={{
-                      borderLeft: "2px solid var(--kiln)",
-                      paddingLeft: "10px",
-                      color: "var(--lichen)",
-                      fontSize: "13px",
-                    }}
-                  >
-                    {part.text}
-                  </div>
-                );
-              return null;
-            })}
+            {(row.message?.parts ?? []).map((part, index) => (
+              <AssistantPart key={index} part={part} />
+            ))}
             {streaming ? <span className="mg-caret" aria-hidden="true" /> : null}
           </div>
         </>
@@ -494,17 +402,81 @@ function ChatSpine({ row, streaming }: { row: Row; streaming: boolean }) {
         </div>
       );
     case "approval":
-      return (
-        <div className="lens-marker active">
-          <span className="lens-mtag" style={{ color: "var(--clay-ink)" }}>
-            APPROVAL
-          </span>
-          <span style={{ fontSize: "13px" }}>{row.approval?.toolCall.title}</span>
-        </div>
-      );
+      return row.approval ? <ApprovalCard approval={row.approval} /> : null;
     default:
       return null;
   }
+}
+
+function UserTurn({ text }: { text: string }) {
+  const { forkThread } = useWorkbench();
+  return (
+    <>
+      <div className="lens-who you">
+        <span>you</span>
+        <button
+          className="lens-fork"
+          type="button"
+          title="Fork this conversation into a new thread"
+          onClick={() => void forkThread()}
+        >
+          <GitFork size={12} />
+        </button>
+      </div>
+      <div className="lens-bubble">{text}</div>
+    </>
+  );
+}
+
+function AssistantPart({ part }: { part: WorkbenchMessagePart }) {
+  if (part.kind === "text") return <Markdown text={part.text} />;
+  if (part.kind === "reasoning" || part.kind === "thought") return <Thinking text={part.text} />;
+  return null;
+}
+
+/** Collapsible chain-of-thought block (collapsed by default; the spine stays calm). */
+function Thinking({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  if (!text.trim()) return null;
+  return (
+    <div className={`lens-cot ${open ? "open" : ""}`}>
+      <button className="lens-cot-head" type="button" onClick={() => setOpen((value) => !value)}>
+        <ChevronRight size={12} className="lens-cot-caret" />
+        <span>Thought process</span>
+      </button>
+      {open ? <div className="lens-cot-body">{text}</div> : null}
+    </div>
+  );
+}
+
+function ApprovalCard({ approval }: { approval: WorkbenchApprovalRequest }) {
+  const { resolveApproval } = useWorkbench();
+  const target = toolTarget(approval.toolCall);
+  return (
+    <div className="lens-approval">
+      <div className="lens-approval-head">
+        <span className="lens-mtag approval">APPROVAL</span>
+        <span className="lens-approval-title">{approval.toolCall.title}</span>
+      </div>
+      {target ? <code className="lens-approval-target">{target}</code> : null}
+      <div className="lens-approval-actions">
+        {approval.options.map((option) => {
+          const allow = option.kind.startsWith("allow");
+          return (
+            <button
+              key={option.optionId}
+              type="button"
+              className={`lens-approval-btn ${allow ? "allow" : "deny"}`}
+              onClick={() => void resolveApproval(approval.requestId, option.optionId)}
+            >
+              {allow ? <Check size={13} /> : <X size={13} />}
+              {option.name}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function ContextStrip({
@@ -663,7 +635,21 @@ function fmt(tokens: number): string {
   return Math.round(tokens).toLocaleString();
 }
 
-function TraceCell({ row }: { row: Row }) {
+function TraceCell({
+  row,
+  registerRef,
+}: {
+  row: Row;
+  registerRef: (el: HTMLElement | null) => void;
+}) {
+  return (
+    <div data-key={row.key} className="lens-cell" ref={registerRef}>
+      <TraceCellBody row={row} />
+    </div>
+  );
+}
+
+function TraceCellBody({ row }: { row: Row }) {
   if (row.kind === "tool" && row.toolCall) {
     const call = row.toolCall;
     const output = call.rawOutput ?? call.content;
@@ -690,20 +676,52 @@ function TraceCell({ row }: { row: Row }) {
   return null;
 }
 
-function StrataGroup({ row }: { row: Row }) {
-  const shown = row.events.slice(0, 4);
+/**
+ * The strata gutter is a live DevTools panel over the canonical RuntimeEvent stream —
+ * sequence-numbered, typed, source-tagged, click-to-expand payloads. Pins to the viewport
+ * and scrolls itself (events are a flat stream, so they don't align to chat rows).
+ */
+function DevtoolsLane({ events }: { events: WorkbenchDebugEvent[] }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const atBottom = useRef(true);
+  useEffect(() => {
+    const el = ref.current;
+    if (el && atBottom.current) el.scrollTop = el.scrollHeight;
+  }, [events.length]);
+  const onScroll = () => {
+    const el = ref.current;
+    if (el) atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  };
   return (
-    <div>
-      {shown.map((event) => (
-        <div className="lens-ev" key={event.id} title={event.type}>
-          <b>#{eventIds(event).sequence ?? "—"}</b> {event.type}
-        </div>
-      ))}
-      {row.events.length > shown.length ? (
-        <div className="lens-ev" style={{ color: "var(--kiln)" }}>
-          +{row.events.length - shown.length}
-        </div>
-      ) : null}
+    <div className="lens-devtools" ref={ref} onScroll={onScroll}>
+      <div className="lens-devtools-head">
+        runtime events <span>{events.length}</span>
+      </div>
+      {events.length === 0 ? (
+        <p className="lens-devtools-empty">No events yet. Send a message to watch the stream.</p>
+      ) : (
+        events.map((event) => <DevtoolsEvent key={event.id} event={event} />)
+      )}
+    </div>
+  );
+}
+
+function DevtoolsEvent({ event }: { event: WorkbenchDebugEvent }) {
+  const [open, setOpen] = useState(false);
+  const sequence = eventIds(event).sequence;
+  const hasPayload = event.payload !== undefined && event.payload !== null;
+  return (
+    <div className={`lens-ev ${open ? "open" : ""}`}>
+      <button
+        type="button"
+        className="lens-ev-head"
+        onClick={() => hasPayload && setOpen((value) => !value)}
+      >
+        <span className="seq">{sequence ?? "—"}</span>
+        <span className="type">{event.type}</span>
+        <span className="src">{event.source}</span>
+      </button>
+      {open && hasPayload ? <pre className="lens-ev-body">{stringify(event.payload)}</pre> : null}
     </div>
   );
 }
