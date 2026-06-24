@@ -225,6 +225,27 @@ button {
   background: var(--paper-3);
 }
 
+/* another tab owns this thread — read-only here, with a takeover affordance */
+.mg-status.readonly {
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--clay-ink);
+  background: var(--clay-tint);
+}
+.mg-takeover {
+  border: 0.5px solid rgba(183, 141, 106, 0.6);
+  background: var(--paper);
+  color: var(--clay-ink);
+  border-radius: 6px;
+  padding: 2px 11px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.mg-takeover:hover {
+  background: var(--clay-tint);
+}
+
 /* mode switch — a tactile, camera-style selector. The track is recessed like a
    camera body; the active segment lifts on a warm clay "shutter" accent. */
 .mg-dial {
@@ -1024,11 +1045,21 @@ button {
   align-items: start;
 }
 /* all share row 1 — explicit grid-column alone bumps items into separate rows */
-.lens-grid > * { grid-row: 1; }
-.lens-grid .mapdial   { grid-column: 4; }
-.lens-grid .lens-chat { grid-column: 3; }
-.lens-grid .lens-lane.trace  { grid-column: 1; }
-.lens-grid .lens-lane.strata { grid-column: 2; }
+.lens-grid > * {
+  grid-row: 1;
+}
+.lens-grid .mapdial {
+  grid-column: 4;
+}
+.lens-grid .lens-chat {
+  grid-column: 3;
+}
+.lens-grid .lens-lane.trace {
+  grid-column: 1;
+}
+.lens-grid .lens-lane.strata {
+  grid-column: 2;
+}
 .lens-frame[data-mode="trace"] {
   --trace: 300px;
 }
@@ -1568,6 +1599,11 @@ button {
   white-space: pre-wrap;
   word-break: break-word;
 }
+/* inline tool part: collapsed marker + (when gated) the HITL approve/deny row */
+.lens-tool-part {
+  display: grid;
+  gap: 6px;
+}
 .lens-approval-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1696,7 +1732,6 @@ button {
   max-height: 240px;
   overflow: auto;
 }
-
 
 /* loading: a soft shimmer on the status strip while a thread hydrates */
 .mg-status.loading {

@@ -54,6 +54,7 @@ If a behavior is needed by both the web UI and any plausible future durable UI, 
 
 ## Implemented Transport Semantics
 
+- The localhost workbench server requires a local connection token. This is loopback transport plumbing, not WorkOS/Pea Cloud/user identity auth; served workbench URLs carry their per-launch token automatically, while Vite dev defaults to the fixed `dev-loopback` token used by `pea dev:web` / `peco dev:web`.
 - `GET /api/workbench/state` returns the current `WorkbenchState` snapshot.
 - `GET /api/workbench/events` streams `workbench-state` and `workbench-event` SSE records.
 - Command routes return `{ ok: true, state }` after routing through `WorkbenchController`.

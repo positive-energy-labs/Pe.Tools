@@ -6,6 +6,8 @@ packages:
 catalogMode: prefer
 
 catalog:
+  '@assistant-ui/react': ^0.14.23
+  '@assistant-ui/react-markdown': ^0.14.4
   "@types/node": ^24
   typescript: ^5
   vite: npm:@voidzero-dev/vite-plus-core@latest

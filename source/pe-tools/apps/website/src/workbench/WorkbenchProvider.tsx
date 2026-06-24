@@ -12,10 +12,13 @@ import {
   applyWorkbenchEvent,
   createWorkbenchState,
   isWorkbenchEvent,
+  selectPendingApprovals,
+  type WorkbenchAccessLevel,
   type WorkbenchEvent,
   type WorkbenchState,
 } from "@pe/agent-contracts";
 import { resolveWorkbenchConfig, workbenchUrl, type WorkbenchEndpointConfig } from "./config.ts";
+import { useThreadClaim } from "./claims.ts";
 
 export interface StoredThreadSummary {
   id: string;
@@ -27,6 +30,14 @@ export interface StoredThreadSummary {
   cwd?: string;
 }
 
+/** Composer attachment: text files carry `text`, binary/image carry base64 `data`. */
+export interface WorkbenchAttachment {
+  name?: string;
+  mimeType?: string;
+  text?: string;
+  data?: string;
+}
+
 interface WorkbenchContextValue {
   config: WorkbenchEndpointConfig;
   debug: { state: WorkbenchState; loading: boolean; error?: string };
@@ -35,11 +46,18 @@ interface WorkbenchContextValue {
   isRunning: boolean;
   operation?: string;
   operationError?: string;
-  sendPrompt: (text: string) => Promise<void>;
+  /** Another tab owns this thread — composing/sending is disabled here until takeover. */
+  readOnly: boolean;
+  takeOverThread: () => void;
+  sendPrompt: (text: string, attachments?: WorkbenchAttachment[]) => Promise<void>;
   cancel: () => void;
   newThread: () => void;
   switchThread: (threadId: string) => Promise<void>;
   deleteThread: (threadId: string) => Promise<void>;
+  resolveApproval: (requestId: string, optionId?: string) => Promise<void>;
+  setModel: (modelId: string) => Promise<void>;
+  setAccessLevel: (accessLevel: WorkbenchAccessLevel) => Promise<void>;
+  forkThread: () => Promise<void>;
   refreshProjection: () => void;
 }
 
@@ -48,6 +66,8 @@ const WorkbenchContext = createContext<WorkbenchContextValue | undefined>(undefi
 export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const config = useMemo(() => resolveWorkbenchConfig(), []);
   const [state, setState] = useState<WorkbenchState>(() => createWorkbenchState());
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const [threads, setThreads] = useState<StoredThreadSummary[]>([]);
   const [currentThreadId, setCurrentThreadId] = useState<string>(() => crypto.randomUUID());
   const [loading, setLoading] = useState(true);
@@ -55,6 +75,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string>();
   const abortRef = useRef<AbortController | null>(null);
   const initedRef = useRef(false);
+  const claim = useThreadClaim(currentThreadId);
 
   const refreshThreads = useCallback(async () => {
     try {
@@ -113,9 +134,15 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   }, [config, hydrate]);
 
   const sendPrompt = useCallback(
-    async (text: string) => {
+    async (text: string, attachments?: WorkbenchAttachment[]) => {
       const prompt = text.trim();
-      if (!prompt || abortRef.current) return;
+      if ((!prompt && !attachments?.length) || abortRef.current) return;
+      // Another tab owns this thread — block here so two tabs can't diverge its state. The
+      // server enforces the same guard independently; this is the proactive client check.
+      if (!claim.isOwner) {
+        setError("This thread is open in another tab — take over to send here.");
+        return;
+      }
       const controller = new AbortController();
       abortRef.current = controller;
       setIsRunning(true);
@@ -123,9 +150,19 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       try {
         await streamWorkbenchRun(
           workbenchUrl(config, "/workbench/run"),
-          { threadId: currentThreadId, text: prompt },
+          {
+            threadId: currentThreadId,
+            text: prompt,
+            clientId: claim.tabId,
+            ...(attachments?.length ? { attachments } : {}),
+          },
           controller.signal,
-          (event) => setState((previous) => applyWorkbenchEvent(previous, event)),
+          (event) => {
+            // Surface a streamed error (e.g. a thread lock) — it otherwise only flips the
+            // status dot red with no message. The run keeps streaming; this just shows why.
+            if (event.type === "error") setError(event.message);
+            setState((previous) => applyWorkbenchEvent(previous, event));
+          },
         );
         if (!controller.signal.aborted) void refreshThreads();
       } catch (caught) {
@@ -135,14 +172,23 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         setIsRunning(false);
       }
     },
-    [config, currentThreadId, refreshThreads],
+    [config, currentThreadId, refreshThreads, claim.isOwner, claim.tabId],
   );
 
   const cancel = useCallback(() => {
+    // Deny any pending approval so the backend run gate unblocks — otherwise the thread
+    // stays prompt-locked waiting on a decision the user just walked away from.
+    for (const approval of selectPendingApprovals(stateRef.current)) {
+      void postJson(workbenchUrl(config, "/workbench/approve"), {
+        threadId: currentThreadId,
+        requestId: approval.requestId,
+        optionId: "reject_once",
+      }).catch(() => undefined);
+    }
     abortRef.current?.abort();
     abortRef.current = null;
     setIsRunning(false);
-  }, []);
+  }, [config, currentThreadId]);
 
   const newThread = useCallback(() => {
     abortRef.current?.abort();
@@ -182,6 +228,82 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     [config, currentThreadId, newThread, refreshThreads],
   );
 
+  const applyEvents = useCallback((payload: unknown) => {
+    const events = readArray(readRecord(payload)?.events) ?? [];
+    setState((previous) =>
+      events.reduce<WorkbenchState>(
+        (next, event) => (isWorkbenchEvent(event) ? applyWorkbenchEvent(next, event) : next),
+        previous,
+      ),
+    );
+  }, []);
+
+  const resolveApproval = useCallback(
+    async (requestId: string, optionId?: string) => {
+      // Optimistically clear the card; the run stream confirms once the tool proceeds.
+      setState((previous) =>
+        applyWorkbenchEvent(previous, { type: "approval_resolved", requestId }),
+      );
+      try {
+        await postJson(workbenchUrl(config, "/workbench/approve"), {
+          threadId: currentThreadId,
+          requestId,
+          ...(optionId ? { optionId } : {}),
+        });
+      } catch (caught) {
+        setError(errorMessage(caught));
+      }
+    },
+    [config, currentThreadId],
+  );
+
+  const setModel = useCallback(
+    async (modelId: string) => {
+      try {
+        applyEvents(
+          await postJson(workbenchUrl(config, "/workbench/model"), {
+            threadId: currentThreadId,
+            modelId,
+          }),
+        );
+      } catch (caught) {
+        setError(errorMessage(caught));
+      }
+    },
+    [config, currentThreadId, applyEvents],
+  );
+
+  const setAccessLevel = useCallback(
+    async (accessLevel: WorkbenchAccessLevel) => {
+      try {
+        applyEvents(
+          await postJson(workbenchUrl(config, "/workbench/access"), {
+            threadId: currentThreadId,
+            accessLevel,
+          }),
+        );
+      } catch (caught) {
+        setError(errorMessage(caught));
+      }
+    },
+    [config, currentThreadId, applyEvents],
+  );
+
+  const forkThread = useCallback(async () => {
+    try {
+      const payload = await postJson(workbenchUrl(config, "/workbench/fork"), {
+        threadId: currentThreadId,
+      });
+      const newThreadId = readString(readRecord(payload)?.threadId);
+      if (newThreadId) {
+        await refreshThreads();
+        await switchThread(newThreadId);
+      }
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }, [config, currentThreadId, refreshThreads, switchThread]);
+
   const context = useMemo<WorkbenchContextValue>(
     () => ({
       config,
@@ -190,11 +312,17 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       currentThreadId,
       isRunning,
       operationError: error,
+      readOnly: !claim.isOwner,
+      takeOverThread: claim.takeOver,
       sendPrompt,
       cancel,
       newThread,
       switchThread,
       deleteThread,
+      resolveApproval,
+      setModel,
+      setAccessLevel,
+      forkThread,
       refreshProjection: () => void refreshThreads(),
     }),
     [
@@ -205,11 +333,17 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       threads,
       currentThreadId,
       isRunning,
+      claim.isOwner,
+      claim.takeOver,
       sendPrompt,
       cancel,
       newThread,
       switchThread,
       deleteThread,
+      resolveApproval,
+      setModel,
+      setAccessLevel,
+      forkThread,
       refreshThreads,
     ],
   );
@@ -225,7 +359,7 @@ export function useWorkbench(): WorkbenchContextValue {
 
 async function streamWorkbenchRun(
   runUrl: string,
-  body: { threadId: string; text: string },
+  body: { threadId: string; text: string; clientId?: string; attachments?: WorkbenchAttachment[] },
   signal: AbortSignal,
   onEvent: (event: WorkbenchEvent) => void,
 ): Promise<void> {
@@ -283,6 +417,16 @@ async function fetchJson(url: string): Promise<unknown> {
   const response = await fetch(url, { headers: { Accept: "application/json" } });
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}: ${url}`);
   return response.json();
+}
+
+async function postJson(url: string, body: unknown): Promise<unknown> {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}: ${url}`);
+  return response.json().catch(() => ({}));
 }
 
 function readRecord(value: unknown): Record<string, unknown> | undefined {

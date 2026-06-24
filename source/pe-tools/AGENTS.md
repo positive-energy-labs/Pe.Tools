@@ -133,7 +133,9 @@ The browser UI should be presentation/controller only:
 - display validation diagnostics and artifacts;
 - avoid owning Revit or settings semantics.
 
-Even without a full auth/session system, local UI should avoid accidental exposure. Bind to loopback by default and prefer a per-launch local token when exposing HTTP/SSE endpoints.
+Even without a full account/session system, local UI should avoid accidental exposure. Bind to loopback by default and require a local connection token when exposing HTTP/SSE endpoints. Treat that token as localhost plumbing, not Pea Cloud or user identity auth; product-served URLs should use per-launch tokens, while explicit dev loops may use a fixed token only for matching local proxy setup.
+
+Pea Cloud, WorkOS, Mastra Gateway, sponsored model access, and Gateway-backed observational memory remain product goals, but they must be lazy capabilities. Local workbench startup, thread browsing, local provider-key model access, and Revit/operator dev loops should not require cloud login; use explicit local-only/no-cloud-auth controls when cloud auth would add friction.
 
 ## Pea TUI Live Loop
 

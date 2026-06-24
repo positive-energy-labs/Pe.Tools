@@ -25,6 +25,10 @@ public class FFMigratorProfile : BaseProfile, IDesiredMigrationParameterProfile 
     [Description("Semantic solid authoring and serialization settings. Usually empty for Migrator; Manager is the primary solids shell today.")]
     public AuthoredParamDrivenSolidsSettings ParamDrivenSolids { get; init; } = new();
 
+    [Description("Optional room calculation point authoring for bulk room-aware family processing.")]
+    [Required]
+    public AddRoomDinglerSettings AddRoomDingler { get; init; } = new();
+
     [Description("Settings for cleaning the family document")]
     [Required]
     public CleanFamilyDocumentSettings CleanFamilyDocument { get; init; } = new();

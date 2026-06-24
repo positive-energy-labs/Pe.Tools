@@ -135,6 +135,70 @@ test("hydration from durable history restores transcript and completed tools", (
   expect(call?.parentMessageId).toBe("a1");
 });
 
+test("a tool needing approval surfaces a pending approval that clears once it proceeds", () => {
+  // accessLevel "ask" → the harness suspends the tool for approval before it runs.
+  const pendingState = project([
+    { type: "run_started" },
+    { type: "assistant_message_started", messageId: "a1" },
+    {
+      type: "tool_started",
+      toolCallId: "c1",
+      toolName: "write_file",
+      status: "pending_approval",
+      input: { path: "x.ts" },
+    },
+  ]);
+
+  const pending = pendingState.approvals.requests.filter((a) => a.status === "pending");
+  expect(pending).toHaveLength(1);
+  expect(pending[0]!.requestId).toBe("tool-approval:c1");
+  expect(pending[0]!.toolCall.title).toBe("write_file");
+  expect(pending[0]!.options.some((option) => option.kind === "allow_once")).toBe(true);
+  expect(pendingState.uiStatus.overall.status).toBe("waiting");
+
+  // Same stream continuing past approval: the tool finishes → the approval auto-clears.
+  const resolvedState = project([
+    { type: "run_started" },
+    { type: "assistant_message_started", messageId: "a1" },
+    {
+      type: "tool_started",
+      toolCallId: "c1",
+      toolName: "write_file",
+      status: "pending_approval",
+      input: { path: "x.ts" },
+    },
+    {
+      type: "tool_finished",
+      toolCallId: "c1",
+      toolName: "write_file",
+      isError: false,
+      result: "ok",
+    },
+  ]);
+  expect(resolvedState.approvals.requests.filter((a) => a.status === "pending")).toHaveLength(0);
+});
+
+test("every RuntimeEvent becomes a sequence-numbered devtools breadcrumb", () => {
+  const state = project(run1);
+
+  expect(state.debug.events.length).toBeGreaterThan(0);
+  expect(state.debug.events.every((event) => event.source === "runtime")).toBe(true);
+
+  const types = state.debug.events.map((event) => event.type);
+  expect(types).toContain("run_started");
+  expect(types).toContain("tool_finished");
+  // high-frequency deltas are intentionally skipped to keep the devtools log legible
+  expect(types).not.toContain("assistant_message_delta");
+
+  const sequences = state.debug.events.map(
+    (event) => (event.payload as { sequence?: number }).sequence,
+  );
+  expect(sequences.every((sequence) => typeof sequence === "number")).toBe(true);
+  // sequence numbers are monotonic in arrival order
+  const sorted = [...sequences].sort((left, right) => Number(left) - Number(right));
+  expect(sequences).toEqual(sorted);
+});
+
 function messageText(
   message: WorkbenchState["transcript"]["messages"][number] | undefined,
 ): string {

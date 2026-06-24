@@ -72,6 +72,7 @@ public static class FFManagerQueueBuilder {
             .Add(new SetKnownParams(formulaOnlyAssignments, knownParamPlan.Catalog))
             .Add(new MakeConstrainedExtrusions(compiledSolids.Extrusions))
             .Add(new MakeParamDrivenConnectors(compiledSolids.Connectors))
+            .Add(new AddRoomDingler(profile.AddRoomDingler))
             .Add(new MakeRefPlaneSubcategories(specs))
             .Add(new SortParams(profile.SortParams));
     }

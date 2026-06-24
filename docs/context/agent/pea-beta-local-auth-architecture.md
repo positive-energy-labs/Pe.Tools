@@ -33,8 +33,10 @@ Local Pea owns Revit/tool/stream lifecycle. Pea Cloud owns Gateway credentials, 
   - Why: Revit authority is local and stateful, while centralized model/OM control requires server-held Gateway credentials and stable thread/resource routing.
 - Gateway OM is a desired beta capability, not an afterthought.
   - Why: Pea already benefits from OM; Gateway OM adds centralized continuity and model-plane observability, but it must be scoped as memory over conversations, not source-of-truth Revit state.
-- Hosted auth is acceptable as a login broker.
-  - Why: OAuth/WorkOS is browser-native; using it once to mint local authorization is much simpler than making the browser proxy model traffic.
+- Local workbench transport auth is a local connection token, not account auth.
+  - Why: loopback HTTP/SSE can drive local tools, transcripts, approvals, and Revit actions; a local connection token protects against accidental browser access without implying user identity, WorkOS, Pea Cloud, or Gateway authorization. Product-served URLs should use per-launch tokens; dev proxy loops may use an explicit fixed token such as `dev-loopback`.
+- Hosted auth is acceptable as a lazy login broker when a cloud-backed capability is selected.
+  - Why: OAuth/WorkOS is browser-native; using it once to mint local authorization is much simpler than making the browser proxy model traffic, but local startup and local provider-key workflows should not block on it.
 - Use redirect/callback handoff rather than ongoing hosted-page-to-localhost API calls.
   - Why: avoids making CORS/browser lifetime part of runtime auth; localhost CORS is manageable but should not be the main integration seam.
 - Prefer `WorkOS callback -> Pea Cloud -> localhost callback`, not direct `WorkOS callback -> localhost`.
@@ -45,8 +47,8 @@ Local Pea owns Revit/tool/stream lifecycle. Pea Cloud owns Gateway credentials, 
   - Why: Gateway credentials are model, memory, and billing authority; compromise should not expose shared beta infrastructure.
 - Use a thin Pea Cloud Gateway proxy for the preferred beta.
   - Why: lets Pea sponsor model access, enforce kill switch/rate limits/model policy, and attach stable OM `resource`/`thread` IDs while keeping Gateway/provider secrets server-side.
-- Keep local user/provider key mode only as an escape hatch.
-  - Why: it avoids central billing/security work but weakens centralized model control and makes OM/routing behavior less product-consistent.
+- Keep local user/provider key mode as the default low-friction local/dev lane and as a product escape hatch.
+  - Why: it avoids central billing/security work and keeps local workbench development usable, while still weakening centralized model control and making OM/routing behavior less product-consistent than the Pea Cloud lane.
 
 ## Concrete beta auth flow
 
@@ -85,13 +87,13 @@ Installed local Pea + hosted WorkOS login + short-lived Pea token + Pea Cloud Ga
 Pros: no user provider-key burden; central model policy; kill switch/rate limits; consistent OM; closer to long-term cloud-backed auth.
 Cons: requires thin Pea Cloud, token issuance, proxy, rate limiting, outage handling, and clear OM disclosure.
 
-### B. Escape-hatch local-key beta
+### B. Local-only / local-key beta
 
 ```text
 Installed local Pea + hosted/static or local UI over localhost gateway + local/SDK memory + user-entered provider key
 ```
 
-Pros: fewest cloud moving pieces; easiest to debug during Pea Cloud outages.
+Pros: fewest cloud moving pieces; easiest to develop locally and debug during Pea Cloud outages; no WorkOS login required for startup.
 Cons: users must manage keys; weaker central model control; less consistent OM/routing telemetry.
 
 ## Deferred long-term architecture

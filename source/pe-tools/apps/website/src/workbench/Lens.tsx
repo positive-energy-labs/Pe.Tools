@@ -1,35 +1,31 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type {
-  WorkbenchApprovalRequest,
   WorkbenchContextBreakdown,
-  WorkbenchDebugEvent,
-  WorkbenchMessagePart,
+  WorkbenchObservationMemoryEntry,
   WorkbenchState,
   WorkbenchToolCall,
 } from "@pe/agent-contracts";
-import { Check, ChevronRight, GitFork, X } from "lucide-react";
-import { buildRows, eventIds, messageText, type Row } from "./rows.ts";
-import { Markdown } from "./markdown.tsx";
+import { ThreadPrimitive, type ThreadMessageLike } from "@assistant-ui/react";
 import { modeDepth, type Mode } from "./depth.ts";
-import { useWorkbench } from "./WorkbenchProvider.tsx";
+import { Moments, useThreadMessages } from "./aui.tsx";
 
 /**
- * The unified workbench view (one layout, one scroll). Modes don't swap UIs — they toggle
- * panes: `chat` shows chat + MapDial; `trace` adds the detail lane; `strata` adds the
- * events lane. The MapDial gutter, candlestick focal marker, and the funnel wires are
- * always present.
+ * The unified workbench view (one layout, one scroll). Modes toggle panes over a single
+ * parallax layout: `chat` shows chat + MapDial; `trace` adds the detail lane. The MapDial
+ * gutter and candlestick focal marker are always present.
  *
- * Ported 1:1 from `mapdial-demo.html` (the proven reference): a candlestick focal marker
- * (horizontal focal bar + viewport wick), proportional map bands that scroll under it at a
- * fixed SCALE, trace cards pinned to their chat stub's y (focal card pinned exactly to the
- * focal axis, the rest de-overlap around it), and bezier wires funneling band → stub → card.
- * One rAF scroll controller drives all three columns + the wires overlay — they share
- * geometry, so it cannot be cleanly split across components (the old separate MapDial.tsx
- * was folded in here).
+ * Provenance across lanes is shown by the focal point + the fisheye, NOT by wires: the
+ * message on the focal axis highlights, and its trace card expands in place. The chat
+ * column is rendered by assistant-ui (text/reasoning/tool parts via `MessagePrimitive.Parts`),
+ * but the LAYOUT — sticky MapDial, fisheye trace lane, single rAF scroll controller — stays
+ * ours. assistant-ui renders each message inside a `.lens-moment` section we own (ref +
+ * data-key), so the geometry controller measures it exactly as before. Moments are
+ * message-granular; tools are parts of their assistant message inline AND cards in the
+ * trace lane (linked to the focal message by parentMessageId).
  */
 
 const SCALE = 0.14; // chat px -> map px. Fixed, NOT fit-to-container: long threads overflow, short leave the gutter empty.
-const FOCAL = 0.5; // focal line, fraction down the gutter/viewport.
+const FOCAL = 0.6; // focal line, fraction down the gutter/viewport. Lower than center: history lives above the latest turn.
 const MIN_BAND = 3; // px floor so a one-line turn stays visible and clickable.
 
 interface Geom {
@@ -38,10 +34,24 @@ interface Geom {
   height: number;
 }
 
+interface Moment {
+  id: string;
+  role: "user" | "assistant" | "system";
+  createdAt?: Date;
+}
+
+interface TraceCell {
+  key: string;
+  kind: "tool" | "memory";
+  toolCall?: WorkbenchToolCall;
+  memory?: WorkbenchObservationMemoryEntry;
+  parentId?: string;
+}
+
 export function Lens({ state, mode }: { state: WorkbenchState; mode: Mode }) {
-  const rows = buildRows(state, "strata");
-  const runStatus = state.uiStatus.overall.status;
-  const isRunning = runStatus === "running" || runStatus === "starting";
+  const messages = useThreadMessages();
+  const moments = toMoments(messages);
+  const traceCells = buildTraceCells(state, mode);
 
   const frameRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -61,6 +71,13 @@ export function Lens({ state, mode }: { state: WorkbenchState; mode: Mode }) {
   const cardRefs = useRef(new Map<string, HTMLElement>());
   const geomRef = useRef<Geom[]>([]);
   const hoverKeyRef = useRef<string | null>(null);
+  // assistant-ui mounts the moment sections a tick after we render (and again on edits),
+  // without re-rendering the Lens — so the scroll controller's geometry would never see
+  // them. The register callback bumps this to force a Lens re-render, which re-runs the
+  // controller effect and its synchronous measure(). State+effect, NOT rAF: rAF is paused
+  // for background tabs, so an rAF-only re-measure can silently never fire.
+  const [, bumpMeasure] = useReducer((tick: number) => tick + 1, 0);
+  const bumpPending = useRef(false);
 
   // The --vp aperture height feeds the sticky gutter/lane heights. Kept as its own effect so
   // it fires from first paint even on the empty-state tree.
@@ -75,18 +92,28 @@ export function Lens({ state, mode }: { state: WorkbenchState; mode: Mode }) {
     return () => observer.disconnect();
   }, []);
 
-  const count = rows.length;
+  const count = moments.length;
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
     if (el.scrollHeight - el.scrollTop - el.clientHeight < 240) el.scrollTop = el.scrollHeight;
   }, [count]);
 
-  const chatRows = rows.filter((row) => row.kind !== "event");
-  const streamingKey = isRunning
-    ? [...chatRows].reverse().find((row) => row.kind === "assistant")?.key
-    : undefined;
-  const detailRows = rows.filter((row) => row.kind === "tool" || row.kind === "memory");
+  // Register each assistant-ui-rendered moment's DOM node so the scroll controller can
+  // measure it (bands, fisheye). Keyed by message id — aligned with `moments`. Each
+  // register/unregister schedules a re-measure so geometry tracks the async mount.
+  const registerMoment = useCallback((id: string, el: HTMLElement | null) => {
+    if (el) momentRefs.current.set(id, el);
+    else momentRefs.current.delete(id);
+    // Coalesce a burst of registers (one per moment) into a single re-render.
+    if (!bumpPending.current) {
+      bumpPending.current = true;
+      queueMicrotask(() => {
+        bumpPending.current = false;
+        bumpMeasure();
+      });
+    }
+  }, []);
 
   // drag the gutter to scrub (gutter motion ÷ SCALE = chat motion); a tap centers the band.
   const onPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -114,7 +141,7 @@ export function Lens({ state, mode }: { state: WorkbenchState; mode: Mode }) {
     window.addEventListener("pointerup", up);
   }, []);
 
-  // The single scroll controller: candlestick + bands + chat stubs + pinned cards + wires.
+  // The single scroll controller: candlestick + bands + chat stubs + pinned fisheye cards.
   // Mutates refs only (no per-frame React render). Re-measures on resize and on row changes.
   useEffect(() => {
     const scroller = scrollerRef.current;
@@ -122,27 +149,37 @@ export function Lens({ state, mode }: { state: WorkbenchState; mode: Mode }) {
     const strip = stripRef.current;
     if (!scroller || !frame || !strip) return;
 
-    const detailKeys = new Set(detailRows.map((row) => row.key));
+    const detailKeys = new Set(traceCells.map((cell) => cell.key));
+    // Hover link: a chat message highlights its first tool card.
+    const cardByParent = new Map<string, string>();
+    for (const cell of traceCells) {
+      if (cell.parentId && !cardByParent.has(cell.parentId)) {
+        cardByParent.set(cell.parentId, cell.key);
+      }
+    }
+
     let geom: Geom[] = [];
     let cards: { key: string; el: HTMLElement }[] = [];
+    // Each tool card is anchored to its inline marker's real doc-y in the chat (measured below).
+    // The focal card is the one whose anchor is nearest the focal axis — so scrolling walks the
+    // focal card to whatever tool is actually at the axis, one at a time, not the whole group.
+    let cardAnchors: { key: string; parent: string; anchor: number }[] = [];
 
-    // Fisheye: non-focal cards collapse to their header strip; focal expands. The lane
-    // translates so the expanded card's center sits on the focal axis. A short rAF pump
-    // re-measures live during the max-height CSS transition so translation tracks smoothly.
-    let fisheyeAi = -1;
+    // Fisheye: non-focal cards collapse to their header strip; the SINGLE focal card expands.
+    // The lane translates so that card's center sits on the focal axis. A short rAF pump
+    // re-measures live during the max-height CSS transition so the translation tracks smoothly.
+    let fisheyeKey: string | null = null;
     let fisheyeRaf = 0;
-    const positionFisheye = (s: number, V: number, fk: string | null) => {
+    const positionFisheye = (V: number, focalCardKey: string | null) => {
       const fy = FOCAL * V;
       const hoverKey = hoverKeyRef.current;
       let focalCell: HTMLElement | null = null;
-      let newAi = -1;
-      for (let i = 0; i < cards.length; i++) {
-        const c = cards[i];
-        const on = c.key === fk;
+      for (const c of cards) {
+        const on = c.key === focalCardKey;
         c.el.style.maxHeight = on ? "400px" : "28px";
         c.el.classList.toggle("focal", on);
         c.el.classList.toggle("hover", c.key === hoverKey && !on);
-        if (on) { focalCell = c.el; newAi = i; }
+        if (on) focalCell = c.el;
       }
       const inner = traceInnerRef.current;
       const doLayout = () => {
@@ -151,11 +188,14 @@ export function Lens({ state, mode }: { state: WorkbenchState; mode: Mode }) {
         inner.style.transform = `translateY(${fy - center}px)`;
       };
       doLayout();
-      if (newAi !== fisheyeAi) {
-        fisheyeAi = newAi;
+      if (focalCardKey !== fisheyeKey) {
+        fisheyeKey = focalCardKey;
         cancelAnimationFrame(fisheyeRaf);
         const end = performance.now() + 300;
-        const pump = () => { doLayout(); fisheyeRaf = performance.now() < end ? requestAnimationFrame(pump) : 0; };
+        const pump = () => {
+          doLayout();
+          fisheyeRaf = performance.now() < end ? requestAnimationFrame(pump) : 0;
+        };
         fisheyeRaf = requestAnimationFrame(pump);
       }
     };
@@ -190,7 +230,6 @@ export function Lens({ state, mode }: { state: WorkbenchState; mode: Mode }) {
         }
         if (g.top <= focalDoc) fk = g.key;
       }
-
       const hoverKey = hoverKeyRef.current;
       for (const g of geom) {
         const band = bandRefs.current.get(g.key);
@@ -206,18 +245,45 @@ export function Lens({ state, mode }: { state: WorkbenchState; mode: Mode }) {
         }
       }
 
-      positionFisheye(s, V, fk);
+      // The focal card = the card in the focal message's group whose anchor is nearest the
+      // focal axis. Scrolling within a long group advances it one tool at a time.
+      let focalCardKey: string | null = null;
+      let bestDistance = Infinity;
+      for (const card of cardAnchors) {
+        if (card.parent !== fk) continue;
+        const distance = Math.abs(card.anchor - focalDoc);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          focalCardKey = card.key;
+        }
+      }
+      positionFisheye(V, focalCardKey);
     };
 
     const measure = () => {
-      geom = chatRows.flatMap((row) => {
-        const el = momentRefs.current.get(row.key);
-        return el ? [{ key: row.key, top: el.offsetTop, height: el.offsetHeight }] : [];
+      geom = moments.flatMap((moment) => {
+        const el = momentRefs.current.get(moment.id);
+        return el ? [{ key: moment.id, top: el.offsetTop, height: el.offsetHeight }] : [];
       });
       geomRef.current = geom;
-      cards = detailRows.flatMap((row) => {
-        const el = cardRefs.current.get(row.key);
-        return el ? [{ key: row.key, el }] : [];
+      // Anchor each tool card to its inline marker's real doc-y in the chat scroll space, so the
+      // focal-card pick matches the tool the user sees at the focal axis. `parent` is the
+      // enclosing message id, so the focal-message filter in sync() stays consistent.
+      cardAnchors = [];
+      const chat = chatRef.current;
+      if (chat) {
+        const scrollerTop = scroller.getBoundingClientRect().top;
+        for (const marker of chat.querySelectorAll<HTMLElement>("[data-tool-id]")) {
+          const toolId = marker.dataset.toolId;
+          const parent = marker.closest<HTMLElement>(".lens-moment")?.dataset.key;
+          if (!toolId || !parent) continue;
+          const anchor = marker.getBoundingClientRect().top - scrollerTop + scroller.scrollTop;
+          cardAnchors.push({ key: `tool:${toolId}`, parent, anchor });
+        }
+      }
+      cards = traceCells.flatMap((cell) => {
+        const el = cardRefs.current.get(cell.key);
+        return el ? [{ key: cell.key, el }] : [];
       });
       // Re-flow the de-overlap whenever a card's height changes (e.g. expand-in-place).
       cardRo.disconnect();
@@ -255,7 +321,11 @@ export function Lens({ state, mode }: { state: WorkbenchState; mode: Mode }) {
 
     const chat = chatRef.current;
     const trace = traceInnerRef.current;
-    const onChatOver = (e: Event) => setHover(keyFrom(e, ".lens-moment"));
+    // Hovering a chat message highlights its first tool card; trace cells highlight directly.
+    const onChatOver = (e: Event) => {
+      const id = keyFrom(e, ".lens-moment");
+      setHover(id ? cardByParent.get(id) : undefined);
+    };
     const onChatLeave = () => setHover(null);
     const onTraceOver = (e: Event) => setHover(keyFrom(e, ".lens-cell"));
     chat?.addEventListener("mouseover", onChatOver);
@@ -274,9 +344,10 @@ export function Lens({ state, mode }: { state: WorkbenchState; mode: Mode }) {
       trace?.removeEventListener("mouseover", onTraceOver);
       trace?.removeEventListener("mouseleave", onChatLeave);
     };
-    // chatRows/detailRows are fresh arrays each render; re-running re-measures geometry as the
-    // thread (and streaming text heights) change. Hover survives via hoverKeyRef.
-  }, [rows, mode]); // eslint-disable-line react-hooks/exhaustive-deps
+    // moments/traceCells are fresh arrays each render; re-running re-measures geometry as the
+    // thread (and streaming text heights) change. The register callback re-measures once aui
+    // mounts the moment sections. Hover survives via hoverKeyRef.
+  }, [moments, traceCells, mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The scroller must always mount so the --vp ResizeObserver fires (it feeds the sticky
   // gutter/lane heights). Bailing to a different tree when empty left --vp unset, so on the
@@ -284,7 +355,7 @@ export function Lens({ state, mode }: { state: WorkbenchState; mode: Mode }) {
   return (
     <div className="lens-frame" ref={frameRef} data-mode={mode}>
       <div className="lens-scroller" ref={scrollerRef}>
-        {rows.length === 0 ? (
+        {moments.length === 0 ? (
           <div className="mg-empty">
             <h1>Pea</h1>
             <p>Ask anything to begin. Use the dial to reveal what's happening underneath.</p>
@@ -293,17 +364,17 @@ export function Lens({ state, mode }: { state: WorkbenchState; mode: Mode }) {
           <div className="lens-grid">
             <div className="mapdial" onPointerDown={onPointerDown} aria-label="Timeline">
               <div className="mapdial-strip" ref={stripRef}>
-                {chatRows.map((row, index) => (
+                {moments.map((moment, index) => (
                   <div
-                    key={row.key}
-                    data-key={row.key}
-                    className={`mapdial-band ${row.kind}`}
+                    key={moment.id}
+                    data-key={moment.id}
+                    className={`mapdial-band ${moment.role}`}
                     ref={(el) => {
-                      if (el) bandRefs.current.set(row.key, el);
-                      else bandRefs.current.delete(row.key);
+                      if (el) bandRefs.current.set(moment.id, el);
+                      else bandRefs.current.delete(moment.id);
                     }}
                   >
-                    <span className="num">{bandNumber(row, index)}</span>
+                    <span className="num">{bandNumber(moment, index)}</span>
                   </div>
                 ))}
               </div>
@@ -314,178 +385,40 @@ export function Lens({ state, mode }: { state: WorkbenchState; mode: Mode }) {
               <div className="caret" ref={caretRef} />
             </div>
 
-            <div className="lens-chat" ref={chatRef}>
-              <ContextStrip state={state} depth={modeDepth(mode)} />
-              {chatRows.map((row) => (
-                <section
-                  key={row.key}
-                  data-key={row.key}
-                  className="lens-moment"
-                  ref={(el) => {
-                    if (el) momentRefs.current.set(row.key, el);
-                    else momentRefs.current.delete(row.key);
-                  }}
-                >
-                  <ChatSpine row={row} streaming={row.key === streamingKey} />
-                </section>
-              ))}
-            </div>
+            {/* display:contents so the Root box vanishes from layout — `.lens-chat` stays the
+                grid item AND keeps our own ref (asChild would consume it, breaking re-measure). */}
+            <ThreadPrimitive.Root style={{ display: "contents" }}>
+              <div className="lens-chat" ref={chatRef}>
+                <ContextStrip state={state} depth={modeDepth(mode)} />
+                <Moments register={registerMoment} />
+              </div>
+            </ThreadPrimitive.Root>
 
             {mode !== "chat" ? (
               <div className="lens-lane trace">
                 <div className="lens-pin" ref={traceInnerRef}>
-                  {detailRows.map((row) => (
-                    <TraceCell
-                      key={row.key}
-                      row={row}
+                  {traceCells.map((cell) => (
+                    <TraceCellView
+                      key={cell.key}
+                      cell={cell}
                       registerRef={(el) => {
-                        if (el) cardRefs.current.set(row.key, el);
-                        else cardRefs.current.delete(row.key);
+                        if (el) cardRefs.current.set(cell.key, el);
+                        else cardRefs.current.delete(cell.key);
                       }}
                     />
                   ))}
                 </div>
               </div>
             ) : null}
-
-            {mode === "strata" ? (
-              <div className="lens-lane strata">
-                <DevtoolsLane events={state.debug.events} />
-              </div>
-            ) : null}
           </div>
         )}
       </div>
-      {rows.length > 0 ? <div className="lens-scrim" aria-hidden="true" /> : null}
+      {moments.length > 0 ? <div className="lens-scrim" aria-hidden="true" /> : null}
     </div>
   );
 }
 
-function ChatSpine({ row, streaming }: { row: Row; streaming: boolean }) {
-  switch (row.kind) {
-    case "user":
-      return <UserTurn text={messageText(row.message)} />;
-    case "assistant":
-      return (
-        <>
-          <div className="lens-who pea">pea</div>
-          <div className="mg-prose" style={{ display: "grid", gap: "8px" }}>
-            {(row.message?.parts ?? []).map((part, index) => (
-              <AssistantPart key={index} part={part} />
-            ))}
-            {streaming ? <span className="mg-caret" aria-hidden="true" /> : null}
-          </div>
-        </>
-      );
-    case "tool": {
-      const call = row.toolCall;
-      if (!call) return null;
-      const tone =
-        call.status === "failed" ? "failed" : call.status === "completed" ? "" : "active";
-      const target = toolTarget(call);
-      return (
-        <div className={`lens-marker tool ${tone}`}>
-          <span>⌗ {call.title}</span>
-          {target ? <code>{target}</code> : null}
-        </div>
-      );
-    }
-    case "memory":
-      return (
-        <div className="lens-marker memory">
-          <span className="lens-mtag">
-            {row.memory?.kind === "reflection" ? "REFLECTION" : "MEMORY"}
-          </span>
-          <span style={{ fontSize: "13px", color: "var(--lichen)" }}>
-            {row.memory?.summary ?? row.memory?.title ?? row.memory?.kind}
-          </span>
-        </div>
-      );
-    case "approval":
-      return row.approval ? <ApprovalCard approval={row.approval} /> : null;
-    default:
-      return null;
-  }
-}
-
-function UserTurn({ text }: { text: string }) {
-  const { forkThread } = useWorkbench();
-  return (
-    <>
-      <div className="lens-who you">
-        <span>you</span>
-        <button
-          className="lens-fork"
-          type="button"
-          title="Fork this conversation into a new thread"
-          onClick={() => void forkThread()}
-        >
-          <GitFork size={12} />
-        </button>
-      </div>
-      <div className="lens-bubble">{text}</div>
-    </>
-  );
-}
-
-function AssistantPart({ part }: { part: WorkbenchMessagePart }) {
-  if (part.kind === "text") return <Markdown text={part.text} />;
-  if (part.kind === "reasoning" || part.kind === "thought") return <Thinking text={part.text} />;
-  return null;
-}
-
-/** Collapsible chain-of-thought block (collapsed by default; the spine stays calm). */
-function Thinking({ text }: { text: string }) {
-  const [open, setOpen] = useState(false);
-  if (!text.trim()) return null;
-  return (
-    <div className={`lens-cot ${open ? "open" : ""}`}>
-      <button className="lens-cot-head" type="button" onClick={() => setOpen((value) => !value)}>
-        <ChevronRight size={12} className="lens-cot-caret" />
-        <span>Thought process</span>
-      </button>
-      {open ? <div className="lens-cot-body">{text}</div> : null}
-    </div>
-  );
-}
-
-function ApprovalCard({ approval }: { approval: WorkbenchApprovalRequest }) {
-  const { resolveApproval } = useWorkbench();
-  const target = toolTarget(approval.toolCall);
-  return (
-    <div className="lens-approval">
-      <div className="lens-approval-head">
-        <span className="lens-mtag approval">APPROVAL</span>
-        <span className="lens-approval-title">{approval.toolCall.title}</span>
-      </div>
-      {target ? <code className="lens-approval-target">{target}</code> : null}
-      <div className="lens-approval-actions">
-        {approval.options.map((option) => {
-          const allow = option.kind.startsWith("allow");
-          return (
-            <button
-              key={option.optionId}
-              type="button"
-              className={`lens-approval-btn ${allow ? "allow" : "deny"}`}
-              onClick={() => void resolveApproval(approval.requestId, option.optionId)}
-            >
-              {allow ? <Check size={13} /> : <X size={13} />}
-              {option.name}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function ContextStrip({
-  state,
-  depth,
-}: {
-  state: WorkbenchState;
-  depth: "read" | "trace" | "strata";
-}) {
+function ContextStrip({ state, depth }: { state: WorkbenchState; depth: "read" | "trace" }) {
   const [open, setOpen] = useState(false);
   const plan = state.plans.entries;
   const systemPrompt = state.inspector.systemPrompt;
@@ -635,23 +568,23 @@ function fmt(tokens: number): string {
   return Math.round(tokens).toLocaleString();
 }
 
-function TraceCell({
-  row,
+function TraceCellView({
+  cell,
   registerRef,
 }: {
-  row: Row;
+  cell: TraceCell;
   registerRef: (el: HTMLElement | null) => void;
 }) {
   return (
-    <div data-key={row.key} className="lens-cell" ref={registerRef}>
-      <TraceCellBody row={row} />
+    <div data-key={cell.key} className="lens-cell" ref={registerRef}>
+      <TraceCellBody cell={cell} />
     </div>
   );
 }
 
-function TraceCellBody({ row }: { row: Row }) {
-  if (row.kind === "tool" && row.toolCall) {
-    const call = row.toolCall;
+function TraceCellBody({ cell }: { cell: TraceCell }) {
+  if (cell.kind === "tool" && cell.toolCall) {
+    const call = cell.toolCall;
     const output = call.rawOutput ?? call.content;
     return (
       <>
@@ -662,8 +595,8 @@ function TraceCellBody({ row }: { row: Row }) {
       </>
     );
   }
-  if (row.kind === "memory" && row.memory) {
-    const entry = row.memory;
+  if (cell.kind === "memory" && cell.memory) {
+    const entry = cell.memory;
     return (
       <>
         <div className="h">
@@ -677,78 +610,55 @@ function TraceCellBody({ row }: { row: Row }) {
 }
 
 /**
- * The strata gutter is a live DevTools panel over the canonical RuntimeEvent stream —
- * sequence-numbered, typed, source-tagged, click-to-expand payloads. Pins to the viewport
- * and scrolls itself (events are a flat stream, so they don't align to chat rows).
+ * Chat moments derived from the shared `ThreadMessageLike[]` — the SAME array the runtime
+ * renders, so the MapDial bands (here) and the assistant-ui moments stay in lockstep.
  */
-function DevtoolsLane({ events }: { events: WorkbenchDebugEvent[] }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const atBottom = useRef(true);
-  useEffect(() => {
-    const el = ref.current;
-    if (el && atBottom.current) el.scrollTop = el.scrollHeight;
-  }, [events.length]);
-  const onScroll = () => {
-    const el = ref.current;
-    if (el) atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-  };
-  return (
-    <div className="lens-devtools" ref={ref} onScroll={onScroll}>
-      <div className="lens-devtools-head">
-        runtime events <span>{events.length}</span>
-      </div>
-      {events.length === 0 ? (
-        <p className="lens-devtools-empty">No events yet. Send a message to watch the stream.</p>
-      ) : (
-        events.map((event) => <DevtoolsEvent key={event.id} event={event} />)
-      )}
-    </div>
+function toMoments(messages: ThreadMessageLike[]): Moment[] {
+  return messages.map((message, index) => ({
+    id: message.id ?? `m:${index}`,
+    role: message.role,
+    createdAt: message.createdAt,
+  }));
+}
+
+/** Trace-lane cards: every tool call, plus timeline memory entries in trace depth. */
+function buildTraceCells(state: WorkbenchState, mode: Mode): TraceCell[] {
+  const lastAssistantId = [...state.transcript.messages]
+    .reverse()
+    .find((message) => message.role === "assistant")?.id;
+  const cells: TraceCell[] = state.tools.calls.map((call) => ({
+    key: `tool:${call.id}`,
+    kind: "tool",
+    toolCall: call,
+    parentId: call.parentMessageId ?? call.provenance?.messageId ?? lastAssistantId,
+  }));
+  if (mode !== "chat") {
+    for (const entry of state.memory.entries) {
+      if (!isTimelineMemoryEntry(entry)) continue;
+      cells.push({ key: `memory:${entry.id}`, kind: "memory", memory: entry });
+    }
+  }
+  return cells;
+}
+
+function isTimelineMemoryEntry(entry: WorkbenchObservationMemoryEntry): boolean {
+  if (entry.status !== "activated") return true;
+  const text = `${entry.id} ${entry.title ?? ""} ${entry.summary ?? ""}`.toLowerCase();
+  return !(
+    text.includes("config") ||
+    text.includes("configured") ||
+    text.includes("configuration")
   );
 }
 
-function DevtoolsEvent({ event }: { event: WorkbenchDebugEvent }) {
-  const [open, setOpen] = useState(false);
-  const sequence = eventIds(event).sequence;
-  const hasPayload = event.payload !== undefined && event.payload !== null;
-  return (
-    <div className={`lens-ev ${open ? "open" : ""}`}>
-      <button
-        type="button"
-        className="lens-ev-head"
-        onClick={() => hasPayload && setOpen((value) => !value)}
-      >
-        <span className="seq">{sequence ?? "—"}</span>
-        <span className="type">{event.type}</span>
-        <span className="src">{event.source}</span>
-      </button>
-      {open && hasPayload ? <pre className="lens-ev-body">{stringify(event.payload)}</pre> : null}
-    </div>
-  );
-}
-
-function bandNumber(row: Row, index: number): string {
-  const time = formatTime(row.message?.createdAt);
+function bandNumber(moment: Moment, index: number): string {
+  const time = formatTime(moment.createdAt);
   return time ?? `#${index + 1}`;
 }
 
-function formatTime(iso?: string): string | undefined {
-  if (!iso) return undefined;
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return undefined;
+function formatTime(date?: Date): string | undefined {
+  if (!date || Number.isNaN(date.getTime())) return undefined;
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
-function toolTarget(call: WorkbenchToolCall): string | undefined {
-  const location = call.locations?.[0]?.path;
-  if (location) return location;
-  const input = call.rawInput;
-  if (input && typeof input === "object" && !Array.isArray(input)) {
-    const record = input as Record<string, unknown>;
-    const candidate = record.path ?? record.file ?? record.query ?? record.command;
-    if (typeof candidate === "string") return candidate;
-  }
-  if (typeof input === "string" && input.length <= 64) return input;
-  return undefined;
 }
 
 function stringify(value: unknown): string {

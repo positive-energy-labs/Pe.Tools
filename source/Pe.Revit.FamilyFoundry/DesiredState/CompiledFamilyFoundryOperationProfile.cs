@@ -11,6 +11,7 @@ public sealed class CompiledFamilyFoundryOperationProfile {
     public AddFamilyParamsSettings AddFamilyParams { get; init; } = new() { Enabled = false };
     public SetKnownParamsSettings SetKnownParams { get; init; } = new() { Enabled = false };
     public MakeElecConnectorSettings MakeElectricalConnector { get; init; } = new() { Enabled = false };
+    public AddRoomDinglerSettings AddRoomDingler { get; init; } = new() { Enabled = false };
     public SortParamsSettings SortParams { get; init; } = new() { Enabled = false };
     public SetLookupTablesSettings SetLookupTables { get; init; } = new() { Enabled = false };
 }
