@@ -95,6 +95,7 @@ public static class FFMigratorQueueBuilder {
 
         return queue
             .Add(new MakeElecConnector(profileClone.MakeElectricalConnector))
+            .Add(new AddRoomDingler(profileClone.AddRoomDingler))
             .Add(new DeleteParams(profileClone.DeleteParams))
             .Add(new PurgeParams(profileClone.CleanFamilyDocument.ResolvedPurgeParamsSettings, apsAndAddedParamNames))
             .Add(new SortParams(profileClone.SortParams));

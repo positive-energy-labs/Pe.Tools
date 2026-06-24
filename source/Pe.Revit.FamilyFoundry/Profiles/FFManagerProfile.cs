@@ -1,4 +1,5 @@
 using Pe.Revit.FamilyFoundry.DesiredState;
+using Pe.Revit.FamilyFoundry.Operations;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
@@ -21,4 +22,8 @@ public class FFManagerProfile : BaseProfile, IDesiredParameterProfile {
     [Description("Semantic solid authoring and serialization settings.")]
     [Required]
     public AuthoredParamDrivenSolidsSettings ParamDrivenSolids { get; init; } = new();
+
+    [Description("Optional room calculation point authoring for bulk room-aware family processing.")]
+    [Required]
+    public AddRoomDinglerSettings AddRoomDingler { get; init; } = new();
 }

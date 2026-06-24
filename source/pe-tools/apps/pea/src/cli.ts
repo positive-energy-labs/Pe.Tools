@@ -2,6 +2,7 @@ import { cli, define } from "gunshi";
 import { PeHostClient } from "@pe/host-client";
 import { parseOptionalPort, runRuntimeAcpAgent } from "@pe/runtime";
 import { PeaCliCommands } from "@pe/tools";
+import type { PeaRuntimeAuthSource } from "./runtime.ts";
 
 export async function runPeaMain(args = process.argv.slice(2)): Promise<void> {
   if (args.length === 0) {
@@ -38,6 +39,8 @@ export function createPeaCliCommand() {
         const factory = await createPeaProtocolRuntimeFactory({
           modelId: ctx.values.modelId,
           workspaceRoot: ctx.values.workspaceRoot,
+          authSource: resolvePeaCliAuthSource(ctx.values.authSource),
+          noCloudAuth: ctx.values.noCloudAuth,
         });
         await runRuntimeAcpAgent({ runtime: { factory } });
         return;
@@ -65,6 +68,8 @@ export function createPeaCliSubCommands() {
           staticDir: ctx.values.staticDir,
           modelId: ctx.values.modelId,
           workspaceRoot: ctx.values.workspaceRoot,
+          authSource: resolvePeaCliAuthSource(ctx.values.authSource),
+          noCloudAuth: ctx.values.noCloudAuth,
           workbenchPort: parseOptionalPort(ctx.values.workbenchPort),
           workbenchToken: ctx.values.workbenchToken,
         });
@@ -77,11 +82,42 @@ export function getPeaCliCommandNames(): string[] {
   return Object.keys(createPeaCliSubCommands());
 }
 
+function resolvePeaCliAuthSource(value: string | undefined): PeaRuntimeAuthSource | undefined {
+  if (value == null || value.length === 0) return undefined;
+  if (isPeaRuntimeAuthSource(value)) return value;
+  throw new Error(
+    `Unsupported Pea auth source '${value}'. Use gateway, auto, api-key, oauth, or mastra-gateway.`,
+  );
+}
+
+function isPeaRuntimeAuthSource(value: string): value is PeaRuntimeAuthSource {
+  return (
+    value === "gateway" ||
+    value === "auto" ||
+    value === "api-key" ||
+    value === "oauth" ||
+    value === "mastra-gateway"
+  );
+}
+
 const workspaceArgs = {
   workspaceRoot: {
     type: "string",
     description:
       "Pea product workspace root. Defaults to the directory where the Pea CLI is launched.",
+  },
+} as const;
+
+const runtimeAuthArgs = {
+  authSource: {
+    type: "string",
+    description:
+      "Runtime auth source: gateway, auto, api-key, oauth, or mastra-gateway. Defaults to gateway.",
+  },
+  noCloudAuth: {
+    type: "boolean",
+    description: "Use local provider/API-key auth and do not advertise Pea Cloud Gateway auth.",
+    default: false,
   },
 } as const;
 
@@ -102,6 +138,7 @@ const webArgs = {
     type: "string",
     description: "Optional model id to force for the runtime.",
   },
+  ...runtimeAuthArgs,
   workbenchPort: {
     type: "string",
     description:
@@ -109,7 +146,7 @@ const webArgs = {
   },
   workbenchToken: {
     type: "string",
-    description: "Bearer/query token for the web workbench HTTP/SSE agent.",
+    description: "Local connection token for the workbench HTTP/SSE agent.",
   },
   ...workspaceArgs,
 } as const;
@@ -124,5 +161,6 @@ const protocolArgs = {
     type: "string",
     description: "Optional model id to force for the runtime.",
   },
+  ...runtimeAuthArgs,
   ...workspaceArgs,
 } as const;

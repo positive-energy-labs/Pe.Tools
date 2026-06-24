@@ -1,9 +1,17 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
-import type { WorkbenchEvent, WorkbenchThreadInfo } from "@pe/agent-contracts";
+import type {
+  WorkbenchAccessLevel,
+  WorkbenchAccessLevelInfo,
+  WorkbenchEvent,
+  WorkbenchJsonObject,
+  WorkbenchModelInfo,
+  WorkbenchThreadInfo,
+} from "@pe/agent-contracts";
 import { createRuntimeLocalTransportAuth, type RuntimeLocalTransportAuth } from "../transport.js";
 import { logoutRuntimeAuth, type RuntimeAuthProfile } from "../auth/types.ts";
 import type {
+  RuntimeAccessLevel,
   RuntimeDescriptor,
   RuntimeFactory,
   RuntimeHandle,
@@ -11,13 +19,19 @@ import type {
   RuntimeHandleServices,
   RuntimeThreadMessage,
 } from "../runtime.ts";
-import { createRuntimePrompt } from "../prompts.ts";
+import type { RuntimeResumeDecision } from "../interrupts.ts";
+import type { RuntimeResource } from "../resources.ts";
+import { createRuntimePrompt, type RuntimePromptPart } from "../prompts.ts";
 import {
   RuntimeProtocolSessions,
+  type RuntimeProtocolSession,
   type RuntimeProtocolSessionInfo,
 } from "../session/protocol-sessions.ts";
 import type { RuntimeThreadIndex } from "../storage/thread-index.ts";
+import type { RuntimeEvent } from "../events.ts";
 import {
+  approvalRequestId,
+  isApprovalOptionAllowed,
   RuntimeToWorkbenchEvents,
   runtimeMessagesToWorkbenchEvents,
 } from "./events-map-runtime-workbench.ts";
@@ -74,12 +88,26 @@ export interface RuntimeWorkbenchServerInfo {
 
 const defaultPort = 43112;
 const loopbackHost = "127.0.0.1";
+// A thread's run is "claimed" by the last client that ran it; a different client is blocked
+// while that run is active or for this long after it, so two browser tabs can't diverge one
+// thread. Cross-tab analogue of the cross-process file lock (which still guards other processes).
+const runClaimTtlMs = 30_000;
+
+const ACCESS_LEVELS: WorkbenchAccessLevelInfo[] = [
+  { id: "read-only", name: "Read only", description: "No edits or commands; read tools only." },
+  { id: "ask", name: "Ask", description: "Pause for approval before each tool runs." },
+  { id: "trusted", name: "Trusted", description: "Run tools without asking." },
+];
 
 export class RuntimeWorkbenchAgent<
   TState extends Record<string, unknown> = Record<string, unknown>,
   TServices extends RuntimeHandleServices = RuntimeHandleServices,
 > {
   private readonly runtimeSessions: RuntimeProtocolSessions<TState, TServices>;
+  /** `${threadId}:${requestId}` -> resolver for an in-flight tool-approval gate (mirrors ACP). */
+  private readonly approvalResolvers = new Map<string, (decision: RuntimeResumeDecision) => void>();
+  /** threadId -> the client currently allowed to run it (cross-tab guard). */
+  private readonly runClaims = new Map<string, { clientId: string; at: number; active: boolean }>();
 
   constructor(private readonly options: RuntimeWorkbenchAgentOptions<TState, TServices>) {
     this.runtimeSessions =
@@ -92,6 +120,47 @@ export class RuntimeWorkbenchAgent<
   }
 
   async runWorkbench(body: WorkbenchRunBody, emit: (event: WorkbenchEvent) => void): Promise<void> {
+    const clientId = body.clientId ?? "";
+    const blockedReason = this.claimRun(body.threadId, clientId);
+    if (blockedReason) {
+      emit({ type: "error", message: blockedReason });
+      emit({ type: "run_status_changed", status: "error", timestamp: new Date().toISOString() });
+      return;
+    }
+    try {
+      await this.runWorkbenchInner(body, emit);
+    } finally {
+      this.endRun(body.threadId, clientId);
+    }
+  }
+
+  /** Reserve this thread's run for `clientId`; returns a reason string if another client holds it. */
+  private claimRun(threadId: string, clientId: string): string | undefined {
+    const now = Date.now();
+    const existing = this.runClaims.get(threadId);
+    if (
+      existing &&
+      existing.clientId !== clientId &&
+      (existing.active || now - existing.at < runClaimTtlMs)
+    ) {
+      return "This thread is open in another tab or window. Send from there, or take over it here.";
+    }
+    this.runClaims.set(threadId, { clientId, at: now, active: true });
+    return undefined;
+  }
+
+  /** Mark the run finished; the claim lingers (idle) for `runClaimTtlMs` then frees. */
+  private endRun(threadId: string, clientId: string): void {
+    const existing = this.runClaims.get(threadId);
+    if (existing && existing.clientId === clientId) {
+      this.runClaims.set(threadId, { clientId, at: Date.now(), active: false });
+    }
+  }
+
+  private async runWorkbenchInner(
+    body: WorkbenchRunBody,
+    emit: (event: WorkbenchEvent) => void,
+  ): Promise<void> {
     const session = await this.runtimeSessions.getOrCreateThreadSession({
       // `protocol: "ag-ui"` is the durable libsql storage discriminator for these
       // threads — NOT a live protocol. It stays for data compatibility with existing
@@ -102,6 +171,8 @@ export class RuntimeWorkbenchAgent<
       additionalDirectories: body.additionalDirectories ?? [],
       title: `Workbench ${body.threadId}`,
     });
+
+    emit(this.agentInitializedEvent(session));
 
     const timestamp = new Date().toISOString();
     // `session_updated` (merge) NOT `session_started` (which wipes
@@ -141,22 +212,188 @@ export class RuntimeWorkbenchAgent<
     });
     const unsubscribe = this.runtimeSessions.subscribe(session.id, (event) => {
       for (const workbenchEvent of translator.translate(event)) emit(workbenchEvent);
+      // Mirror the ACP permission flow: a tool needing approval gates the run on a client
+      // decision delivered out-of-band via the /workbench/approve route.
+      if (event.type === "tool_started") this.gateToolApproval(session.id, body.threadId, event);
     });
 
     try {
       emit({ type: "run_status_changed", status: "running", timestamp });
-      await this.runtimeSessions.sendPrompt(session.id, createRuntimePrompt([{ text: body.text }]));
+      await this.runtimeSessions.sendPrompt(session.id, workbenchPrompt(body));
       // The system-prompt capture + final-tool-list sink populate the live handle metadata
       // during the run, so the breakdown is ready once sendPrompt resolves.
       const inspector = await contextInspectorUpdate(session);
       if (inspector) emit(inspector);
+      for (const controls of this.controlsEvents(session.id)) emit(controls);
       emit({ type: "run_status_changed", status: "idle", timestamp: new Date().toISOString() });
     } catch (error) {
       emit({ type: "error", message: errorMessage(error) });
       emit({ type: "run_status_changed", status: "error", timestamp: new Date().toISOString() });
     } finally {
       unsubscribe();
+      this.clearThreadApprovals(body.threadId, emit);
     }
+  }
+
+  /** Resolve a pending tool approval (from the /workbench/approve route). */
+  resolveApproval(threadId: string, requestId: string, optionId?: string): boolean {
+    const key = `${threadId}:${requestId}`;
+    const resolve = this.approvalResolvers.get(key);
+    if (!resolve) return false;
+    this.approvalResolvers.delete(key);
+    resolve({
+      interruptId: requestId,
+      status: isApprovalOptionAllowed(optionId) ? "resolved" : "cancelled",
+      ...(optionId ? { payload: { optionId } } : {}),
+    });
+    return true;
+  }
+
+  async setModel(threadId: string, modelId: string): Promise<WorkbenchEvent[]> {
+    const session = await this.ensureSession(threadId);
+    const controls = await this.runtimeSessions.setModel(session.id, modelId);
+    return [{ type: "model_state_updated", model: { currentModelId: controls.currentModelId } }];
+  }
+
+  async setAccessLevel(
+    threadId: string,
+    accessLevel: WorkbenchAccessLevel,
+  ): Promise<WorkbenchEvent[]> {
+    const session = await this.ensureSession(threadId);
+    const controls = await this.runtimeSessions.setAccessLevel(
+      session.id,
+      accessLevel as RuntimeAccessLevel,
+    );
+    return [
+      {
+        type: "access_level_updated",
+        access: { currentAccessLevel: controls.accessLevel, availableAccessLevels: ACCESS_LEVELS },
+      },
+    ];
+  }
+
+  /** Fork a thread into a fresh conversation; returns the new threadId to switch to. */
+  async forkThread(threadId: string): Promise<string | undefined> {
+    const source = await this.ensureSession(threadId);
+    const forked = await this.runtimeSessions.forkSession(source.id, {
+      cwd: source.cwd,
+      additionalDirectories: source.additionalDirectories,
+      title: `${source.title} (fork)`,
+    });
+    return forked.externalThreadId ?? forked.threadId ?? forked.id;
+  }
+
+  /** Static access-level catalog, surfaced on hydrate so the picker has options up front. */
+  accessLevelCatalog(): WorkbenchEvent {
+    return { type: "access_level_updated", access: { availableAccessLevels: ACCESS_LEVELS } };
+  }
+
+  private gateToolApproval(
+    sessionId: string,
+    threadId: string,
+    event: Extract<RuntimeEvent, { type: "tool_started" }>,
+  ): void {
+    if (event.status !== "pending_approval" && event.status !== "suspended") return;
+    const requestId = approvalRequestId(event.toolCallId, event.status === "suspended");
+    const key = `${threadId}:${requestId}`;
+    if (this.approvalResolvers.has(key)) return;
+
+    let resolveDecision!: (decision: RuntimeResumeDecision) => void;
+    const decision = new Promise<RuntimeResumeDecision>((resolve) => {
+      resolveDecision = resolve;
+    });
+    this.approvalResolvers.set(key, resolveDecision);
+    // Await the decision inside the session's emit queue (which sendPrompt awaits), then
+    // record it so the suspended run resumes — identical to ACP's enqueuePermissionRequest.
+    this.runtimeSessions.enqueue(sessionId, async () => {
+      this.runtimeSessions.recordResumeDecision(sessionId, await decision);
+      this.approvalResolvers.delete(key);
+    });
+  }
+
+  private clearThreadApprovals(threadId: string, emit: (event: WorkbenchEvent) => void): void {
+    const prefix = `${threadId}:`;
+    let cleared = false;
+    for (const [key, resolve] of this.approvalResolvers) {
+      if (!key.startsWith(prefix)) continue;
+      this.approvalResolvers.delete(key);
+      resolve({ interruptId: key.slice(prefix.length), status: "cancelled" });
+      cleared = true;
+    }
+    if (cleared) emit({ type: "approvals_cleared", reason: "run ended" });
+  }
+
+  private controlsEvents(sessionId: string): WorkbenchEvent[] {
+    let session: RuntimeProtocolSession<TState, TServices>;
+    try {
+      session = this.runtimeSessions.getSession(sessionId);
+    } catch {
+      return [];
+    }
+    const controls = session.runtime.kernel.readControls();
+    const workbench = readWorkbenchMetadata(session.runtime.metadata);
+    const availableModels = readModelList(workbench?.availableModels);
+    return [
+      {
+        type: "access_level_updated",
+        access: {
+          currentAccessLevel: controls.accessLevel,
+          availableAccessLevels: ACCESS_LEVELS,
+        },
+      },
+      {
+        type: "model_state_updated",
+        model: {
+          ...(controls.currentModelId ? { currentModelId: controls.currentModelId } : {}),
+          ...(availableModels.length ? { availableModels } : {}),
+        },
+      },
+    ];
+  }
+
+  /** Agent identity + slash-command catalog (skills), surfaced on run + hydrate. */
+  agentInitializedEvent(
+    session: RuntimeProtocolSession<TState, TServices> | RuntimeProtocolSessionInfo | undefined,
+  ): WorkbenchEvent {
+    const descriptor = runtimeDescriptor(this.options);
+    const metadata = session && "runtime" in session ? session.runtime.metadata : undefined;
+    const commands = readCommandList(readWorkbenchMetadata(metadata)?.skills);
+    return {
+      type: "agent_initialized",
+      agent: {
+        name: descriptor.agentName,
+        title: descriptor.title,
+        runtime: {
+          id: descriptor.id,
+          name: descriptor.agentName,
+          title: descriptor.title,
+          description: descriptor.description,
+        },
+        capabilities: {
+          threads: true,
+          toolCalls: true,
+          approvals: true,
+          plans: true,
+          rawToolIO: true,
+          modelSwitching: true,
+          sessionModes: true,
+          accessLevels: true,
+          observationalMemory: true,
+          systemPromptInspection: true,
+        },
+        ...(commands.length ? { metadata: { commands } } : {}),
+      },
+    };
+  }
+
+  private async ensureSession(
+    threadId: string,
+  ): Promise<RuntimeProtocolSession<TState, TServices>> {
+    return this.runtimeSessions.getOrCreateThreadSession({
+      protocol: "ag-ui",
+      externalThreadId: threadId,
+      cwd: defaultWorkbenchCwd(this.options),
+    });
   }
 
   async workbenchThreads(): Promise<WorkbenchThreadInfo[]> {
@@ -176,6 +413,8 @@ export class RuntimeWorkbenchAgent<
     if (!listedSession) return [];
     const messages = await readRuntimeSessionInfoMessages(this.runtimeSessions, listedSession);
     return [
+      this.agentInitializedEvent(listedSession),
+      this.accessLevelCatalog(),
       ...runtimeMessagesToWorkbenchEvents(messages),
       { type: "run_status_changed", status: "idle" },
     ];
@@ -227,11 +466,40 @@ export class RuntimeWorkbenchAgent<
   }
 }
 
+interface WorkbenchRunAttachment {
+  name?: string;
+  mimeType?: string;
+  text?: string;
+  data?: string;
+}
+
 interface WorkbenchRunBody {
   threadId: string;
   text: string;
+  /** Opaque per-tab id from the web client; gates concurrent runs of one thread (see runClaims). */
+  clientId?: string;
   cwd?: string;
   additionalDirectories?: string[];
+  attachments?: WorkbenchRunAttachment[];
+}
+
+/** Build the runtime prompt, mapping composer attachments to input resources. */
+function workbenchPrompt(body: WorkbenchRunBody) {
+  const parts: RuntimePromptPart[] = [{ text: body.text }];
+  for (const [index, attachment] of (body.attachments ?? []).entries()) {
+    const name = attachment.name ?? `attachment-${index + 1}`;
+    const resource: RuntimeResource = {
+      id: `workbench:${index}:${name}`,
+      kind: "input",
+      protocol: "ag-ui",
+      name,
+      ...(attachment.mimeType ? { mimeType: attachment.mimeType } : {}),
+      ...(attachment.text !== undefined ? { text: attachment.text } : {}),
+      ...(attachment.data !== undefined ? { data: attachment.data } : {}),
+    };
+    parts.push({ text: `[attachment: ${name}]`, resource });
+  }
+  return createRuntimePrompt(parts);
 }
 
 const defaultContextWindow = 200_000;
@@ -278,6 +546,7 @@ interface WorkbenchMetadataView {
   skills?: unknown;
   agents?: unknown;
   contextWindow?: unknown;
+  availableModels?: unknown;
 }
 
 function readWorkbenchMetadata(
@@ -294,7 +563,37 @@ function readWorkbenchMetadata(
     skills: workbench.skills,
     agents: workbench.agents,
     contextWindow: workbench.contextWindow,
+    availableModels: workbench.availableModels,
   };
+}
+
+/** Parse published model catalog entries from `metadata.workbench.availableModels`. */
+function readModelList(value: unknown): WorkbenchModelInfo[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!isRecord(entry) || typeof entry.id !== "string") return [];
+    return [
+      {
+        id: entry.id,
+        ...(typeof entry.displayName === "string" ? { displayName: entry.displayName } : {}),
+        ...(typeof entry.provider === "string" ? { provider: entry.provider } : {}),
+      },
+    ];
+  });
+}
+
+/** Parse the skill catalog into `{ name, description }` command entries for the slash menu. */
+function readCommandList(value: unknown): WorkbenchJsonObject[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!isRecord(entry) || typeof entry.name !== "string") return [];
+    return [
+      {
+        name: entry.name,
+        ...(typeof entry.description === "string" ? { description: entry.description } : {}),
+      } satisfies WorkbenchJsonObject,
+    ];
+  });
 }
 
 function latestFinalToolList(debug: unknown): ContextBreakdownTool[] {
@@ -356,16 +655,38 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+const workbenchAttachmentSchema = z.object({
+  name: z.string().optional(),
+  mimeType: z.string().optional(),
+  text: z.string().optional(),
+  data: z.string().optional(),
+});
+
 const workbenchRunBodySchema = z.object({
   threadId: z.string(),
   text: z.string(),
+  clientId: z.string().optional(),
   cwd: z.string().optional(),
   additionalDirectories: z.array(z.string()).optional(),
+  attachments: z.array(workbenchAttachmentSchema).optional(),
 });
 
 function readWorkbenchRunBody(value: unknown): WorkbenchRunBody {
   return workbenchRunBodySchema.parse(value);
 }
+
+const workbenchApproveBodySchema = z.object({
+  threadId: z.string(),
+  requestId: z.string(),
+  optionId: z.string().optional(),
+});
+
+const workbenchModelBodySchema = z.object({ threadId: z.string(), modelId: z.string() });
+const workbenchAccessBodySchema = z.object({
+  threadId: z.string(),
+  accessLevel: z.enum(["read-only", "ask", "trusted"]),
+});
+const workbenchForkBodySchema = z.object({ threadId: z.string() });
 
 function workbenchTransport<
   TState extends Record<string, unknown>,
@@ -485,6 +806,42 @@ export class RuntimeWorkbenchHttpAgent<
         await this.agent.logout();
         response.writeHead(200, { "Content-Type": "application/json" });
         response.end(JSON.stringify({ ok: true }));
+        return;
+      }
+
+      if (url.pathname === "/workbench/approve" && request.method === "POST") {
+        const body = workbenchApproveBodySchema.parse(await readJsonBody(request));
+        const resolved = this.agent.resolveApproval(body.threadId, body.requestId, body.optionId);
+        response.writeHead(resolved ? 200 : 404, { "Content-Type": "application/json" });
+        response.end(JSON.stringify(resolved ? { ok: true } : { error: "Approval not found" }));
+        return;
+      }
+
+      if (url.pathname === "/workbench/model" && request.method === "POST") {
+        const body = workbenchModelBodySchema.parse(await readJsonBody(request));
+        const events = await this.agent.setModel(body.threadId, body.modelId);
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ ok: true, events }));
+        return;
+      }
+
+      if (url.pathname === "/workbench/access" && request.method === "POST") {
+        const body = workbenchAccessBodySchema.parse(await readJsonBody(request));
+        const events = await this.agent.setAccessLevel(body.threadId, body.accessLevel);
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ ok: true, events }));
+        return;
+      }
+
+      if (url.pathname === "/workbench/fork" && request.method === "POST") {
+        const body = workbenchForkBodySchema.parse(await readJsonBody(request));
+        const newThreadId = await this.agent.forkThread(body.threadId);
+        response.writeHead(newThreadId ? 200 : 404, { "Content-Type": "application/json" });
+        response.end(
+          JSON.stringify(
+            newThreadId ? { ok: true, threadId: newThreadId } : { error: "Thread not found" },
+          ),
+        );
         return;
       }
 

@@ -28,6 +28,15 @@ test("pea defaults to Pea Cloud Gateway auth", () => {
 
   expect(auth.descriptor.source).toBe("gateway");
   expect(auth.descriptor.methods.map((method) => method.id)).toEqual(["pea-cloud-gateway"]);
+  expect(auth.descriptor.metadata).toEqual({ gateway: "mastra", gatewayAuthority: "pea-cloud" });
+});
+
+test("pea can opt out of cloud auth for local provider-key use", () => {
+  const auth = createPeaRuntimeAuthProfile({ noCloudAuth: true });
+
+  expect(auth.descriptor.source).toBe("api-key");
+  expect(auth.descriptor.methods.map((method) => method.id)).toEqual(["openai-api-key"]);
+  expect(auth.descriptor.metadata).toBeUndefined();
 });
 
 test("pea exports the product tool profile used by the default runtime", () => {
@@ -49,7 +58,7 @@ test("pea exports the product tool profile used by the default runtime", () => {
 
 test("pea root command exposes runtime protocol flags", () => {
   expect(Object.keys(createPeaCliCommand().args ?? {})).toEqual(
-    expect.arrayContaining(["acp", "modelId", "workspaceRoot"]),
+    expect.arrayContaining(["acp", "authSource", "modelId", "noCloudAuth", "workspaceRoot"]),
   );
 });
 

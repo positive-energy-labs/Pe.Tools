@@ -11,6 +11,8 @@
     "test": "vp test"
   },
   "dependencies": {
+    "@assistant-ui/react": "catalog:",
+    "@assistant-ui/react-markdown": "catalog:",
     "@pe/agent-contracts": "workspace:*",
     "lucide-react": "1.21.0",
     "react": "^19.2.3",

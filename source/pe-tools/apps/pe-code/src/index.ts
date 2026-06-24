@@ -98,6 +98,6 @@ const webArgs = {
   },
   workbenchToken: {
     type: "string",
-    description: "Bearer/query token for the web workbench HTTP/SSE agent.",
+    description: "Local connection token for the workbench HTTP/SSE agent.",
   },
 } as const;

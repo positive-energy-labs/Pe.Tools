@@ -17,6 +17,7 @@ public static class DesiredMigrationPlanLowerer {
         AddFamilyParams = BuildAddFamilyParams(plan.Parameters),
         SetKnownParams = BuildSetKnownParams(plan.Parameters),
         SetLookupTables = profile.SetLookupTables,
+        AddRoomDingler = profile.AddRoomDingler,
         SortParams = new SortParamsSettings()
     };
 
@@ -31,6 +32,7 @@ public static class DesiredMigrationPlanLowerer {
         AddFamilyParams = BuildAddFamilyParams(plan.Parameters),
         SetKnownParams = BuildSetKnownParams(plan.Parameters),
         MakeElectricalConnector = new MakeElecConnectorSettings { Enabled = false },
+        AddRoomDingler = profile.AddRoomDingler,
         SortParams = profile.SortParams
     };
 

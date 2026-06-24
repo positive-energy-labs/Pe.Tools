@@ -1,6 +1,8 @@
-import type { ToolCallStatus } from "@agentclientprotocol/sdk";
+import type { PermissionOptionKind, ToolCallStatus } from "@agentclientprotocol/sdk";
 import type {
   PeWorkbenchUpdateMetadata,
+  WorkbenchApprovalOption,
+  WorkbenchApprovalRequest,
   WorkbenchEvent,
   WorkbenchInspectorEntry,
   WorkbenchMessage,
@@ -13,6 +15,22 @@ import type {
 } from "@pe/agent-contracts";
 import type { RuntimeEvent, RuntimeJsonValue, RuntimeToolStatus } from "../events.ts";
 import type { RuntimeThreadMessage } from "../runtime.ts";
+
+/** Stable interrupt id a `tool_started` pending/suspended event maps to (matches the runtime collector). */
+export function approvalRequestId(toolCallId: string, suspended: boolean): string {
+  return `${suspended ? "tool-suspended" : "tool-approval"}:${toolCallId}`;
+}
+
+const APPROVAL_OPTIONS: WorkbenchApprovalOption[] = [
+  { optionId: "allow_once", name: "Approve", kind: "allow_once" as PermissionOptionKind },
+  { optionId: "allow_always", name: "Always", kind: "allow_always" as PermissionOptionKind },
+  { optionId: "reject_once", name: "Deny", kind: "reject_once" as PermissionOptionKind },
+];
+
+/** Resolve options expose `allow_*` as approval; the `/approve` route maps the rest to cancellation. */
+export function isApprovalOptionAllowed(optionId: string | undefined): boolean {
+  return optionId === undefined ? false : optionId.startsWith("allow");
+}
 
 export interface RuntimeToWorkbenchOptions {
   sessionId?: string;
@@ -30,11 +48,77 @@ export class RuntimeToWorkbenchEvents {
   private readonly messageText = new Map<string, string>();
   private readonly toolCalls = new Map<string, WorkbenchToolCall>();
   private readonly toolInputText = new Map<string, string>();
+  /** toolCallId -> open approval requestId, so we can resolve it once the tool proceeds. */
+  private readonly openApprovals = new Map<string, string>();
   private activeMessageId: string | undefined;
+  private sequence = 0;
 
   constructor(private readonly options: RuntimeToWorkbenchOptions = {}) {}
 
   translate(event: RuntimeEvent): WorkbenchEvent[] {
+    // Every RuntimeEvent also becomes a sequence-numbered devtools breadcrumb so the
+    // strata lane can show the canonical runtime stream. High-frequency deltas are
+    // skipped (derivable from the assembled message/tool) to keep the log legible.
+    const debug = this.debugEvent(event);
+    return debug ? [debug, ...this.translateCore(event)] : this.translateCore(event);
+  }
+
+  private debugEvent(event: RuntimeEvent): WorkbenchEvent | undefined {
+    if (
+      event.type === "assistant_message_delta" ||
+      event.type === "tool_input_delta" ||
+      event.type === "tool_shell_output"
+    ) {
+      return undefined;
+    }
+    const sequence = ++this.sequence;
+    return {
+      type: "debug_event_recorded",
+      debugEvent: {
+        id: `runtime:${sequence}:${event.type}`,
+        source: "runtime",
+        type: event.type,
+        label: event.type.replaceAll("_", " "),
+        timestamp: nowIso(),
+        payload: { sequence, ...(event as unknown as Record<string, unknown>) },
+      },
+    };
+  }
+
+  private approvalEvents(
+    event: Extract<RuntimeEvent, { type: "tool_started" }>,
+    timestamp: string,
+  ): WorkbenchEvent[] {
+    if (event.status !== "pending_approval" && event.status !== "suspended") return [];
+    if (this.openApprovals.has(event.toolCallId)) return [];
+    const requestId = approvalRequestId(event.toolCallId, event.status === "suspended");
+    this.openApprovals.set(event.toolCallId, requestId);
+    const approval: WorkbenchApprovalRequest = {
+      requestId,
+      sessionId: this.options.sessionId ?? "",
+      toolCall: {
+        id: event.toolCallId,
+        title: event.title ?? event.toolName,
+        status: "pending",
+        rawInput: event.input,
+      },
+      options: APPROVAL_OPTIONS,
+      status: "pending",
+      defaultOptionId: "allow_once",
+      createdAt: timestamp,
+    };
+    return [{ type: "approval_requested", approval }];
+  }
+
+  /** Once a tool moves past pending (resolved out-of-band), clear its approval card. */
+  private resolveApprovalEvents(toolCallId: string, timestamp: string): WorkbenchEvent[] {
+    const requestId = this.openApprovals.get(toolCallId);
+    if (!requestId) return [];
+    this.openApprovals.delete(toolCallId);
+    return [{ type: "approval_resolved", requestId, resolution: { resolvedAt: timestamp } }];
+  }
+
+  private translateCore(event: RuntimeEvent): WorkbenchEvent[] {
     const timestamp = nowIso();
     switch (event.type) {
       case "run_started":
@@ -88,6 +172,7 @@ export class RuntimeToWorkbenchEvents {
             startedAt: timestamp,
             updatedAt: timestamp,
           }),
+          ...this.approvalEvents(event, timestamp),
         ];
       case "tool_input_delta": {
         const next = (this.toolInputText.get(event.toolCallId) ?? "") + event.delta;
@@ -105,6 +190,7 @@ export class RuntimeToWorkbenchEvents {
         return [];
       case "tool_updated":
         return [
+          ...this.resolveApprovalEvents(event.toolCallId, timestamp),
           this.toolCallEvent(event.toolCallId, {
             rawOutput: event.partialResult,
             content: preview(event.partialResult),
@@ -124,6 +210,7 @@ export class RuntimeToWorkbenchEvents {
       }
       case "tool_finished":
         return [
+          ...this.resolveApprovalEvents(event.toolCallId, timestamp),
           this.toolCallEvent(event.toolCallId, {
             title: event.title ?? event.toolName,
             status: event.isError ? "failed" : "completed",

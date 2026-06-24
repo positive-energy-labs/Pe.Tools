@@ -5,7 +5,7 @@ import {
   runRuntimeWorkbenchWeb,
 } from "@pe/runtime";
 import { resolvePeaProductHomePath } from "@pe/tools";
-import { createPeaProtocolRuntimeFactory } from "./runtime.ts";
+import { createPeaProtocolRuntimeFactory, type PeaRuntimeAuthSource } from "./runtime.ts";
 
 export interface PeaWebRuntimeOptions {
   cwd?: string;
@@ -14,6 +14,8 @@ export interface PeaWebRuntimeOptions {
   port?: number;
   staticDir?: string;
   modelId?: string;
+  authSource?: PeaRuntimeAuthSource;
+  noCloudAuth?: boolean;
   workbenchPort?: number;
   workbenchToken?: string;
 }
@@ -24,6 +26,8 @@ export async function runPeaWeb(options: PeaWebRuntimeOptions = {}): Promise<voi
   const factory = await createPeaProtocolRuntimeFactory({
     workspaceRoot,
     modelId: options.modelId,
+    authSource: options.authSource,
+    noCloudAuth: options.noCloudAuth,
   });
 
   await runRuntimeWorkbenchWeb({

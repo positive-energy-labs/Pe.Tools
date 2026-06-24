@@ -82,12 +82,16 @@ export type PeaRuntimeHandle<TState extends Record<string, unknown> = Record<str
 export type PeaRuntimeFactory<TState extends Record<string, unknown> = Record<string, unknown>> =
   RuntimeFactory<TState, PeaRuntimeServices, RuntimeHarness<TState>>;
 
+export type PeaRuntimeAuthSource = "gateway" | "auto" | "api-key" | "oauth" | "mastra-gateway";
+
 export interface PeaTuiRuntimeOptions {
   cwd?: string;
   workspaceRoot?: string;
   hostBaseUrl?: string;
   workspaceKey?: string;
   modelId?: string;
+  authSource?: PeaRuntimeAuthSource;
+  noCloudAuth?: boolean;
 }
 
 export function createPeaRuntimeFactory<
@@ -145,8 +149,22 @@ export function createPeaRuntimeFactory<
             },
             contextWindow: 200_000,
             agents: ["Pea Revit Agent"],
+            availableModels: [
+              { id: defaultPeaAgentModelId, displayName: "GPT-5.4", provider: "openai" },
+              {
+                id: "anthropic/claude-opus-4-8",
+                displayName: "Claude Opus 4.8",
+                provider: "anthropic",
+              },
+              {
+                id: "anthropic/claude-sonnet-4-6",
+                displayName: "Claude Sonnet 4.6",
+                provider: "anthropic",
+              },
+            ],
             skills: bundledPeaSkills.map((skill) => ({
               name: skill.name,
+              description: peaSkillDescription(skill.content),
               approxTokens: Math.ceil(skill.content.length / 4),
             })),
             observationalMemory: {
@@ -172,6 +190,12 @@ function peaRuntimeHarnessConfig<TState extends Record<string, unknown>>(
   return typeof config === "function" ? config(request) : config;
 }
 
+/** Pull the one-line `description:` from a bundled skill's frontmatter for the command menu. */
+function peaSkillDescription(content: string): string | undefined {
+  const match = /^description:\s*(.+)$/m.exec(content);
+  return match?.[1]?.trim();
+}
+
 export async function createPeaProtocolRuntimeFactory(
   options: PeaTuiRuntimeOptions = {},
 ): Promise<PeaRuntimeFactory> {
@@ -189,8 +213,13 @@ export async function createPeaProtocolRuntimeFactory(
     content: peaAgentInstructions,
     source: "Pea agent instructions",
   });
+  const auth = createPeaRuntimeAuthProfile({
+    source: options.authSource,
+    noCloudAuth: options.noCloudAuth,
+  });
 
   return createPeaRuntimeFactory<Record<string, unknown>>({
+    auth,
     systemPrompt: promptCapture.snapshot,
     config: () => ({
       id: "pea",
@@ -220,6 +249,8 @@ export async function createPeaProtocolRuntimeFactory(
     }),
     authStorage,
     metadata: {
+      authSource: auth.descriptor.source,
+      noCloudAuth: auth.descriptor.source === "api-key",
       authStorageSource: authStorageContext.source,
       authStorageApiKeyProviders: Object.keys(authStorageContext.apiKeyEnvVars),
     },
@@ -289,14 +320,21 @@ export async function runPeaTui(options: PeaTuiRuntimeOptions = {}): Promise<voi
 
 export function createPeaRuntimeAuthProfile(
   options: {
-    source?: string;
+    source?: PeaRuntimeAuthSource;
+    noCloudAuth?: boolean;
     allowOauthBetaAuth?: boolean;
     logout?: () => Promise<void>;
   } = {},
 ): RuntimeAuthProfile {
+  const { noCloudAuth, ...profileOptions } = options;
+  const source = noCloudAuth === true ? "api-key" : profileOptions.source;
   return createPeaCloudGatewayRuntimeAuthProfile({
-    ...options,
-    apiKeyDescription: "Use OPENAI_API_KEY only as a local Pea model-access escape hatch.",
+    ...profileOptions,
+    source,
+    apiKeyDescription:
+      source === "api-key"
+        ? "Use local OPENAI_API_KEY or stored API-key credentials for Pea model access."
+        : "Use OPENAI_API_KEY only as a local Pea model-access escape hatch.",
   });
 }
 

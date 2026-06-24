@@ -4,19 +4,53 @@
     {
       "name": "website",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["-C", "source/pe-tools", "--filter", "website", "run", "dev"],
+      "runtimeArgs": [
+        "-C",
+        "source/pe-tools",
+        "--filter",
+        "website",
+        "run",
+        "dev"
+      ],
       "port": 5173
     },
     {
       "name": "website-preview",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["-C", "source/pe-tools", "--filter", "website", "exec", "vp", "preview", "--port", "4180", "--host", "127.0.0.1"],
+      "runtimeArgs": [
+        "-C",
+        "source/pe-tools",
+        "--filter",
+        "website",
+        "exec",
+        "vp",
+        "preview",
+        "--port",
+        "4180",
+        "--host",
+        "127.0.0.1"
+      ],
       "port": 4180
     },
     {
       "name": "pea-web",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["-C", "source/pe-tools", "--filter", "@pe/pea", "run", "pea", "--", "web", "--port", "5599", "--ag-ui-port", "43199", "--ag-ui-token", "dev"],
+      "runtimeArgs": [
+        "-C",
+        "source/pe-tools",
+        "--filter",
+        "@pe/pea",
+        "run",
+        "pea",
+        "--",
+        "web",
+        "--port",
+        "5599",
+        "--workbench-port",
+        "43199",
+        "--workbench-token",
+        "dev"
+      ],
       "port": 5599
     }
   ]

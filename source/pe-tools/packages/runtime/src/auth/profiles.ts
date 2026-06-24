@@ -40,10 +40,7 @@ export function createPeaCloudGatewayRuntimeAuthProfile(
       source,
       methods: peaGatewayAuthMethods(source, options),
       logoutSupported: Boolean(options.logout),
-      metadata: {
-        gateway: "mastra",
-        gatewayAuthority: "pea-cloud",
-      },
+      metadata: peaGatewayAuthMetadata(source),
     }),
     logout: options.logout,
   };
@@ -70,6 +67,22 @@ function openAiAuthMethods(
     default:
       return [];
   }
+}
+
+function peaGatewayAuthMetadata(source: string): Record<string, unknown> | undefined {
+  if (source === "gateway" || source === "auto") {
+    return {
+      gateway: "mastra",
+      gatewayAuthority: "pea-cloud",
+    };
+  }
+  if (source === "mastra-gateway") {
+    return {
+      gateway: "mastra",
+      gatewayAuthority: "local-api-key",
+    };
+  }
+  return undefined;
 }
 
 function peaGatewayAuthMethods(

@@ -28,8 +28,14 @@
         --map: 80px;
         --detail: 250px;
       }
-      * { box-sizing: border-box; }
-      html, body { height: 100%; margin: 0; }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
       body {
         background: var(--paper);
         color: var(--basalt);
@@ -38,134 +44,373 @@
         line-height: 1.5;
         -webkit-font-smoothing: antialiased;
       }
-      .app { position: fixed; inset: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); }
+      .app {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+      }
 
       header {
-        display: flex; align-items: center; gap: 14px;
-        padding: 9px 18px; border-bottom: 0.5px solid var(--line); flex-wrap: wrap;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 9px 18px;
+        border-bottom: 0.5px solid var(--line);
+        flex-wrap: wrap;
       }
-      .brand { font-family: var(--font-display); font-weight: 600; color: var(--pe-blue); font-size: 16px; }
-      .dial { display: flex; gap: 2px; padding: 2px; background: var(--mist); border-radius: 8px; }
+      .brand {
+        font-family: var(--font-display);
+        font-weight: 600;
+        color: var(--pe-blue);
+        font-size: 16px;
+      }
+      .dial {
+        display: flex;
+        gap: 2px;
+        padding: 2px;
+        background: var(--mist);
+        border-radius: 8px;
+      }
       .dial button {
-        border: none; background: transparent; color: var(--slate);
-        font: inherit; font-size: 12px; font-weight: 600; padding: 4px 11px;
-        border-radius: 6px; cursor: pointer;
+        border: none;
+        background: transparent;
+        color: var(--slate);
+        font: inherit;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 4px 11px;
+        border-radius: 6px;
+        cursor: pointer;
       }
       .dial button[aria-pressed="true"] {
-        background: var(--paper); color: var(--pe-blue);
+        background: var(--paper);
+        color: var(--pe-blue);
         box-shadow: 0 0 0 0.5px rgba(0, 86, 149, 0.32);
       }
       .snap-toggle {
-        display: flex; align-items: center; gap: 6px; font-size: 12px;
-        font-weight: 600; color: var(--slate); cursor: pointer; user-select: none;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--slate);
+        cursor: pointer;
+        user-select: none;
       }
-      .snap-toggle input { accent-color: var(--pe-blue); }
+      .snap-toggle input {
+        accent-color: var(--pe-blue);
+      }
 
-      .body { display: grid; grid-template-columns: 300px minmax(0, 1fr); min-height: 0; }
+      .body {
+        display: grid;
+        grid-template-columns: 300px minmax(0, 1fr);
+        min-height: 0;
+      }
 
       /* ---- explanation sidebar ---- */
       .explain {
-        border-right: 0.5px solid var(--line); padding: 18px 18px 40px;
-        overflow-y: auto; background: var(--paper-2);
+        border-right: 0.5px solid var(--line);
+        padding: 18px 18px 40px;
+        overflow-y: auto;
+        background: var(--paper-2);
       }
-      .explain h2 { font-family: var(--font-display); font-size: 18px; margin: 0 0 4px; color: var(--pe-blue); }
-      .explain .tagline { font-size: 12px; color: var(--muted); font-family: var(--font-mono); margin-bottom: 14px; }
-      .explain p { font-size: 13px; line-height: 1.6; margin: 0 0 12px; }
-      .explain .verdict { display: flex; gap: 8px; font-size: 12.5px; margin-bottom: 8px; }
-      .explain .verdict b { min-width: 38px; }
-      .explain .good b { color: var(--pe-green); }
-      .explain .cost b { color: var(--clay-ink); }
+      .explain h2 {
+        font-family: var(--font-display);
+        font-size: 18px;
+        margin: 0 0 4px;
+        color: var(--pe-blue);
+      }
+      .explain .tagline {
+        font-size: 12px;
+        color: var(--muted);
+        font-family: var(--font-mono);
+        margin-bottom: 14px;
+      }
+      .explain p {
+        font-size: 13px;
+        line-height: 1.6;
+        margin: 0 0 12px;
+      }
+      .explain .verdict {
+        display: flex;
+        gap: 8px;
+        font-size: 12.5px;
+        margin-bottom: 8px;
+      }
+      .explain .verdict b {
+        min-width: 38px;
+      }
+      .explain .good b {
+        color: var(--pe-green);
+      }
+      .explain .cost b {
+        color: var(--clay-ink);
+      }
       .explain .aligned {
-        margin-top: 10px; padding: 8px 10px; border-radius: 6px;
-        font-size: 12px; background: rgba(0, 86, 149, 0.06); color: var(--slate);
+        margin-top: 10px;
+        padding: 8px 10px;
+        border-radius: 6px;
+        font-size: 12px;
+        background: rgba(0, 86, 149, 0.06);
+        color: var(--slate);
       }
 
       /* ---- the scroll surface ---- */
-      .frame { position: relative; min-height: 0; }
-      .scroller { height: 100%; overflow-y: auto; overflow-x: hidden; scroll-behavior: smooth; }
-      .scroller.snap { scroll-snap-type: y proximity; scroll-padding-top: 60%; }
-      .scroller.snap .moment.tool-stub { scroll-snap-align: start; }
-      .grid { display: grid; grid-template-columns: var(--map) minmax(0, 1fr) var(--detail); align-items: start; }
+      .frame {
+        position: relative;
+        min-height: 0;
+      }
+      .scroller {
+        height: 100%;
+        overflow-y: auto;
+        overflow-x: hidden;
+        scroll-behavior: smooth;
+      }
+      .scroller.snap {
+        scroll-snap-type: y proximity;
+        scroll-padding-top: 60%;
+      }
+      .scroller.snap .moment.tool-stub {
+        scroll-snap-align: start;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: var(--map) minmax(0, 1fr) var(--detail);
+        align-items: start;
+      }
 
       /* ---- slim mapdial ---- */
       .mapdial {
-        position: sticky; top: 0; height: var(--vp, 720px); overflow: hidden;
-        border-right: 0.5px solid var(--line); background: var(--paper-3);
-        touch-action: none; user-select: none; cursor: ns-resize;
+        position: sticky;
+        top: 0;
+        height: var(--vp, 720px);
+        overflow: hidden;
+        border-right: 0.5px solid var(--line);
+        background: var(--paper-3);
+        touch-action: none;
+        user-select: none;
+        cursor: ns-resize;
       }
-      .mapdial-strip { position: absolute; inset: 0 0 auto 0; will-change: transform; }
-      .band { position: absolute; left: 26px; width: 12px; border-radius: 2px; opacity: 0.4; transition: opacity 0.14s, left 0.14s, width 0.14s; }
-      .band.in-view { opacity: 0.8; }
-      .band.focal { opacity: 1; left: 22px; width: 20px; box-shadow: 0 0 0 2px var(--paper-3), 0 0 0 3px rgba(0,86,149,0.35); }
-      .band.user { background: var(--pe-green); }
-      .band.assistant { background: var(--pe-blue); }
-      .band.tool { background: transparent; box-shadow: inset 0 0 0 1.25px var(--pe-blue); }
-      .band.memory { background: var(--clay); }
-      .cs-focal { position: absolute; left: 0; right: 0; height: 0; border-top: 1.5px solid rgba(0,86,149,0.6); pointer-events: none; z-index: 4; }
-      .cs-wick { position: absolute; left: 50%; width: 0; border-left: 1px solid rgba(0,86,149,0.3); transform: translateX(-50%); pointer-events: none; }
+      .mapdial-strip {
+        position: absolute;
+        inset: 0 0 auto 0;
+        will-change: transform;
+      }
+      .band {
+        position: absolute;
+        left: 26px;
+        width: 12px;
+        border-radius: 2px;
+        opacity: 0.4;
+        transition:
+          opacity 0.14s,
+          left 0.14s,
+          width 0.14s;
+      }
+      .band.in-view {
+        opacity: 0.8;
+      }
+      .band.focal {
+        opacity: 1;
+        left: 22px;
+        width: 20px;
+        box-shadow:
+          0 0 0 2px var(--paper-3),
+          0 0 0 3px rgba(0, 86, 149, 0.35);
+      }
+      .band.user {
+        background: var(--pe-green);
+      }
+      .band.assistant {
+        background: var(--pe-blue);
+      }
+      .band.tool {
+        background: transparent;
+        box-shadow: inset 0 0 0 1.25px var(--pe-blue);
+      }
+      .band.memory {
+        background: var(--clay);
+      }
+      .cs-focal {
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: 0;
+        border-top: 1.5px solid rgba(0, 86, 149, 0.6);
+        pointer-events: none;
+        z-index: 4;
+      }
+      .cs-wick {
+        position: absolute;
+        left: 50%;
+        width: 0;
+        border-left: 1px solid rgba(0, 86, 149, 0.3);
+        transform: translateX(-50%);
+        pointer-events: none;
+      }
       .caret {
-        position: absolute; right: -1px; width: 0; height: 0;
-        border-top: 6px solid transparent; border-bottom: 6px solid transparent;
-        border-right: 7px solid var(--pe-blue); transform: translateY(-50%); pointer-events: none; z-index: 5;
+        position: absolute;
+        right: -1px;
+        width: 0;
+        height: 0;
+        border-top: 6px solid transparent;
+        border-bottom: 6px solid transparent;
+        border-right: 7px solid var(--pe-blue);
+        transform: translateY(-50%);
+        pointer-events: none;
+        z-index: 5;
       }
 
       /* ---- chat ---- */
-      .chat { padding: 16px 22px 60vh; }
-      .moment { padding: 13px 0; }
-      .who { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; margin-bottom: 5px; }
-      .who.user { color: var(--pe-green); }
-      .who.assistant { color: var(--pe-blue); }
+      .chat {
+        padding: 16px 22px 60vh;
+      }
+      .moment {
+        padding: 13px 0;
+      }
+      .who {
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        font-weight: 600;
+        margin-bottom: 5px;
+      }
+      .who.user {
+        color: var(--pe-green);
+      }
+      .who.assistant {
+        color: var(--pe-blue);
+      }
       .bubble {
-        background: var(--user-tint); border: 0.5px solid var(--user-line);
-        border-radius: 12px 12px 2px 12px; padding: 8px 12px; max-width: 80%;
-        margin-left: auto; width: fit-content;
+        background: var(--user-tint);
+        border: 0.5px solid var(--user-line);
+        border-radius: 12px 12px 2px 12px;
+        padding: 8px 12px;
+        max-width: 80%;
+        margin-left: auto;
+        width: fit-content;
       }
-      .prose { font-size: 14px; line-height: 1.6; }
+      .prose {
+        font-size: 14px;
+        line-height: 1.6;
+      }
       .marker {
-        display: inline-flex; align-items: center; gap: 8px;
-        border-left: 2px solid var(--pe-blue); padding: 2px 8px 2px 10px;
-        border-radius: 0 4px 4px 0; font-size: 13px; color: var(--slate);
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border-left: 2px solid var(--pe-blue);
+        padding: 2px 8px 2px 10px;
+        border-radius: 0 4px 4px 0;
+        font-size: 13px;
+        color: var(--slate);
       }
-      .marker.tool { border-left-style: dashed; }
-      .marker.memory { border-left-color: var(--clay); }
-      .marker code { font-family: var(--font-mono); font-size: 12px; color: var(--lichen); }
-      .moment.focal .marker { border-left-width: 3px; background: rgba(0,86,149,0.06); }
-      .tag { font-size: 10px; letter-spacing: 0.08em; border-radius: 4px; padding: 1px 6px; border: 0.5px solid rgba(183,141,106,0.5); color: var(--clay-ink); }
+      .marker.tool {
+        border-left-style: dashed;
+      }
+      .marker.memory {
+        border-left-color: var(--clay);
+      }
+      .marker code {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--lichen);
+      }
+      .moment.focal .marker {
+        border-left-width: 3px;
+        background: rgba(0, 86, 149, 0.06);
+      }
+      .tag {
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        border-radius: 4px;
+        padding: 1px 6px;
+        border: 0.5px solid rgba(183, 141, 106, 0.5);
+        color: var(--clay-ink);
+      }
 
       /* ---- detail lane ---- */
       .lane {
-        position: sticky; top: 0; height: var(--vp, 720px); overflow: hidden;
-        border-left: 0.5px solid var(--line); background: var(--paper-3);
+        position: sticky;
+        top: 0;
+        height: var(--vp, 720px);
+        overflow: hidden;
+        border-left: 0.5px solid var(--line);
+        background: var(--paper-3);
       }
-      .lane-inner { position: absolute; inset: 0 0 auto 0; height: 100%; will-change: transform; }
+      .lane-inner {
+        position: absolute;
+        inset: 0 0 auto 0;
+        height: 100%;
+        will-change: transform;
+      }
       .cell {
-        left: 12px; right: 12px; border: 0.5px solid var(--line); border-radius: 6px;
-        overflow: hidden; background: var(--paper); opacity: 0.62;
-        transition: opacity 0.16s, border-color 0.16s, box-shadow 0.16s;
+        left: 12px;
+        right: 12px;
+        border: 0.5px solid var(--line);
+        border-radius: 6px;
+        overflow: hidden;
+        background: var(--paper);
+        opacity: 0.62;
+        transition:
+          opacity 0.16s,
+          border-color 0.16s,
+          box-shadow 0.16s;
       }
       .cell .h {
-        font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--slate);
-        background: var(--paper-2); padding: 5px 8px; white-space: nowrap;
+        font-size: 9px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--slate);
+        background: var(--paper-2);
+        padding: 5px 8px;
+        white-space: nowrap;
       }
       .cell pre {
-        margin: 0; padding: 7px 8px; font-family: var(--font-mono); font-size: 11px;
-        line-height: 1.5; color: #5a5f5b; white-space: pre-wrap; word-break: break-word;
-        max-height: 90px; overflow: hidden;
+        margin: 0;
+        padding: 7px 8px;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        line-height: 1.5;
+        color: #5a5f5b;
+        white-space: pre-wrap;
+        word-break: break-word;
+        max-height: 90px;
+        overflow: hidden;
       }
       .cell.focal {
-        opacity: 1; border-color: rgba(0,86,149,0.55);
-        box-shadow: 0 1px 0 rgba(0,86,149,0.08), 0 6px 18px rgba(0,86,149,0.14);
+        opacity: 1;
+        border-color: rgba(0, 86, 149, 0.55);
+        box-shadow:
+          0 1px 0 rgba(0, 86, 149, 0.08),
+          0 6px 18px rgba(0, 86, 149, 0.14);
       }
 
       /* focal line across chat+detail */
-      .focal-line { position: absolute; left: var(--map); right: 0; height: 0; border-top: 1px dashed rgba(0,86,149,0.16); pointer-events: none; z-index: 4; }
+      .focal-line {
+        position: absolute;
+        left: var(--map);
+        right: 0;
+        height: 0;
+        border-top: 1px dashed rgba(0, 86, 149, 0.16);
+        pointer-events: none;
+        z-index: 4;
+      }
 
       .scrim {
-        position: absolute; inset: 0; pointer-events: none; z-index: 6;
-        background: linear-gradient(to bottom,
-          rgba(251,250,247,0.45) 0%, rgba(251,250,247,0.1) 20%,
-          rgba(251,250,247,0) 36%, rgba(251,250,247,0) 84%,
-          rgba(251,250,247,0.4) 93%, rgba(251,250,247,0.5) 100%);
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: 6;
+        background: linear-gradient(
+          to bottom,
+          rgba(251, 250, 247, 0.45) 0%,
+          rgba(251, 250, 247, 0.1) 20%,
+          rgba(251, 250, 247, 0) 36%,
+          rgba(251, 250, 247, 0) 84%,
+          rgba(251, 250, 247, 0.4) 93%,
+          rgba(251, 250, 247, 0.5) 100%
+        );
       }
     </style>
   </head>
@@ -203,21 +448,31 @@
     </div>
 
     <script>
-      const L = (n) => Array.from({ length: n }, () => "Lorem ipsum dolor sit amet consectetur. ").join("");
+      const L = (n) =>
+        Array.from({ length: n }, () => "Lorem ipsum dolor sit amet consectetur. ").join("");
       // Deliberately includes a tight tool cluster (Edit/Edit/Write) — the worst case for overlap.
       const DATA = [
         { role: "user", t: "Can you refactor the auth module to use the new token store?" },
-        { role: "assistant", t: "Sure. Let me look at the current implementation first.\n\n" + L(2) },
+        {
+          role: "assistant",
+          t: "Sure. Let me look at the current implementation first.\n\n" + L(2),
+        },
         { role: "tool", title: "Grep", target: "auth/**/*.ts" },
         { role: "tool", title: "Read", target: "auth/token-store.ts" },
-        { role: "assistant", t: "Found three call sites. The legacy store is referenced in two places.\n\n" + L(4) },
+        {
+          role: "assistant",
+          t: "Found three call sites. The legacy store is referenced in two places.\n\n" + L(4),
+        },
         { role: "memory", summary: "User prefers token store over session cookies" },
         { role: "user", t: "Yeah go ahead, and add a test." },
         { role: "assistant", t: "Working on it.\n\n" + L(1) },
         { role: "tool", title: "Edit", target: "auth/login.ts" },
         { role: "tool", title: "Edit", target: "auth/refresh.ts" },
         { role: "tool", title: "Write", target: "auth/token-store.test.ts" },
-        { role: "assistant", t: "Done. Migrated both call sites and added a round-trip test.\n\n" + L(6) },
+        {
+          role: "assistant",
+          t: "Done. Migrated both call sites and added a round-trip test.\n\n" + L(6),
+        },
         { role: "user", t: "Does this handle the expiry edge case?" },
         { role: "assistant", t: "Good catch — it didn't. Let me patch it.\n\n" + L(3) },
         { role: "tool", title: "Edit", target: "auth/token-store.ts" },
@@ -255,10 +510,14 @@
         const m = document.createElement("div");
         m.className = "moment" + (isCard(d) ? " tool-stub" : "");
         m.dataset.key = String(i);
-        if (d.role === "user") m.innerHTML = `<div class="who user">you</div><div class="bubble">${d.t}</div>`;
-        else if (d.role === "assistant") m.innerHTML = `<div class="who assistant">pea</div><div class="prose">${d.t.replace(/\n\n/g, "<br><br>")}</div>`;
-        else if (d.role === "tool") m.innerHTML = `<div class="marker tool">⌗ ${d.title} <code>${d.target}</code></div>`;
-        else if (d.role === "memory") m.innerHTML = `<div class="marker memory"><span class="tag">MEMORY</span> ${d.summary}</div>`;
+        if (d.role === "user")
+          m.innerHTML = `<div class="who user">you</div><div class="bubble">${d.t}</div>`;
+        else if (d.role === "assistant")
+          m.innerHTML = `<div class="who assistant">pea</div><div class="prose">${d.t.replace(/\n\n/g, "<br><br>")}</div>`;
+        else if (d.role === "tool")
+          m.innerHTML = `<div class="marker tool">⌗ ${d.title} <code>${d.target}</code></div>`;
+        else if (d.role === "memory")
+          m.innerHTML = `<div class="marker memory"><span class="tag">MEMORY</span> ${d.summary}</div>`;
         chat.appendChild(m);
       });
 
@@ -266,11 +525,15 @@
       const tools = DATA.map((d, i) => ({ key: i, d })).filter((x) => isCard(x.d));
 
       // ---- geometry ----
-      let geom = [], geomByKey = {};
+      let geom = [],
+        geomByKey = {};
       function measure() {
         document.getElementById("grid").style.setProperty("--vp", scroller.clientHeight + "px");
         geom = [...chat.querySelectorAll(".moment")].map((el) => ({
-          key: el.dataset.key, role: DATA[+el.dataset.key].role, top: el.offsetTop, height: el.offsetHeight,
+          key: el.dataset.key,
+          role: DATA[+el.dataset.key].role,
+          top: el.offsetTop,
+          height: el.offsetHeight,
         }));
         geomByKey = Object.fromEntries(geom.map((g) => [g.key, g]));
         strip.innerHTML = "";
@@ -301,21 +564,28 @@
           bands[i].classList.toggle("in-view", g.top + g.height > s && g.top < s + V);
           bands[i].classList.toggle("focal", +g.key === focalKey);
         });
-        chat.querySelectorAll(".moment").forEach((el) => el.classList.toggle("focal", +el.dataset.key === focalKey));
+        chat
+          .querySelectorAll(".moment")
+          .forEach((el) => el.classList.toggle("focal", +el.dataset.key === focalKey));
       }
 
       // active tool = last tool whose stub has crossed the focal axis
       function focalState(s, V) {
         const focalDoc = s + FOCAL * V;
         let focalKey = -1;
-        for (const g of geom) { if (g.top <= focalDoc) focalKey = +g.key; if (g.top <= focalDoc && focalDoc < g.top + g.height) break; }
+        for (const g of geom) {
+          if (g.top <= focalDoc) focalKey = +g.key;
+          if (g.top <= focalDoc && focalDoc < g.top + g.height) break;
+        }
         let activeIdx = -1;
-        for (let i = 0; i < tools.length; i++) if (geomByKey[tools[i].key].top <= focalDoc) activeIdx = i;
+        for (let i = 0; i < tools.length; i++)
+          if (geomByKey[tools[i].key].top <= focalDoc) activeIdx = i;
         return { focalDoc, focalKey, activeIdx };
       }
 
       function sync() {
-        const s = scroller.scrollTop, V = scroller.clientHeight;
+        const s = scroller.scrollTop,
+          V = scroller.clientHeight;
         const st = focalState(s, V);
         paintShared(s, V, st.focalKey);
         approach.update(s, V, st);
@@ -341,22 +611,47 @@
       const APPROACHES = {
         // 0 — the problem: pin focal, shove the rest. Watch the stack lurch on every handoff.
         pinshove: {
-          setup() { buildAllCells({ position: "absolute" }); },
+          setup() {
+            buildAllCells({ position: "absolute" });
+          },
           update(s, V, st) {
-            const fy = FOCAL * V, gap = 12;
+            const fy = FOCAL * V,
+              gap = 12;
             const vis = [];
             tools.forEach((t) => {
-              const g = geomByKey[t.key], center = g.top + g.height / 2 - s, el = cells.get(t.key);
-              if (center < -80 || center > V + 80) { el.style.display = "none"; return; }
-              el.style.display = ""; el._c = center; vis.push(t.key);
+              const g = geomByKey[t.key],
+                center = g.top + g.height / 2 - s,
+                el = cells.get(t.key);
+              if (center < -80 || center > V + 80) {
+                el.style.display = "none";
+                return;
+              }
+              el.style.display = "";
+              el._c = center;
+              vis.push(t.key);
             });
-            vis.sort((a, b) => (geomByKey[a].top - geomByKey[b].top));
+            vis.sort((a, b) => geomByKey[a].top - geomByKey[b].top);
             const tops = {};
-            vis.forEach((k, i) => { const el = cells.get(k); el._h = el.offsetHeight; tops[k] = cells.get(k)._c - el._h / 2; });
-            for (let i = 1; i < vis.length; i++) { const p = cells.get(vis[i - 1]); tops[vis[i]] = Math.max(tops[vis[i]], tops[vis[i - 1]] + p._h + gap); }
+            vis.forEach((k, i) => {
+              const el = cells.get(k);
+              el._h = el.offsetHeight;
+              tops[k] = cells.get(k)._c - el._h / 2;
+            });
+            for (let i = 1; i < vis.length; i++) {
+              const p = cells.get(vis[i - 1]);
+              tops[vis[i]] = Math.max(tops[vis[i]], tops[vis[i - 1]] + p._h + gap);
+            }
             const f = vis.find((k) => k === st.focalKey);
-            if (f != null) { const el = cells.get(f); const delta = fy - el._h / 2 - tops[f]; vis.forEach((k) => (tops[k] += delta)); }
-            vis.forEach((k) => { const el = cells.get(k); el.style.top = tops[k] + "px"; el.classList.toggle("focal", k === st.focalKey); });
+            if (f != null) {
+              const el = cells.get(f);
+              const delta = fy - el._h / 2 - tops[f];
+              vis.forEach((k) => (tops[k] += delta));
+            }
+            vis.forEach((k) => {
+              const el = cells.get(k);
+              el.style.top = tops[k] + "px";
+              el.classList.toggle("focal", k === st.focalKey);
+            });
           },
         },
 
@@ -379,17 +674,23 @@
             const t = st.activeIdx >= 0 ? tools[st.activeIdx] : null;
             const key = t ? t.key : -1;
             c.style.display = t ? "" : "none";
-            if (key !== this._cur) { this._cur = key; if (t) c.innerHTML = cardHTML(t.d); }
+            if (key !== this._cur) {
+              this._cur = key;
+              if (t) c.innerHTML = cardHTML(t.d);
+            }
           },
         },
 
         // 2 — handoff (sticky-scroll): current card stays on the axis until the next
         // tool arrives from below and pushes it up — like sticky table headers.
         handoff: {
-          setup() { buildAllCells({ position: "absolute" }); },
+          setup() {
+            buildAllCells({ position: "absolute" });
+          },
           update(s, V, st) {
             const fy = FOCAL * V;
-            const i = st.activeIdx, j = i + 1;
+            const i = st.activeIdx,
+              j = i + 1;
             tools.forEach((t, idx) => {
               const el = cells.get(t.key);
               const show = idx === i || idx === j;
@@ -405,16 +706,18 @@
             let incTop = Infinity;
             if (inc) {
               const startC = V + inc._h / 2 + 24;
-              const incCenter = startC - p * (startC - fy);   // rises from below to the axis
+              const incCenter = startC - p * (startC - fy); // rises from below to the axis
               inc.style.top = incCenter - inc._h / 2 + "px";
               incTop = incCenter - inc._h / 2;
             }
             if (cur) {
-              const pushed = incTop - 12 - cur._h / 2;         // only moves once the next arrives
+              const pushed = incTop - 12 - cur._h / 2; // only moves once the next arrives
               cur.style.top = Math.min(fy, pushed) - cur._h / 2 + "px";
             }
-            const incOnAxis = inc && incTop <= fy;             // next has covered the axis
-            tools.forEach((t, idx) => cells.get(t.key).classList.toggle("focal", idx === (incOnAxis ? j : i)));
+            const incOnAxis = inc && incTop <= fy; // next has covered the axis
+            tools.forEach((t, idx) =>
+              cells.get(t.key).classList.toggle("focal", idx === (incOnAxis ? j : i)),
+            );
           },
         },
 
@@ -432,13 +735,14 @@
               el.style.transition = "max-height 0.24s cubic-bezier(0.4,0,0.2,1), opacity 0.16s";
             });
             lane.style.paddingTop = "10px";
-            this._ai = -1; this._raf = 0;
+            this._ai = -1;
+            this._raf = 0;
           },
           update(s, V, st) {
             const ai = st.activeIdx;
             tools.forEach((t, idx) => {
               const el = cells.get(t.key);
-              el.style.maxHeight = (idx === ai) ? "240px" : "22px";
+              el.style.maxHeight = idx === ai ? "240px" : "22px";
               el.classList.toggle("focal", idx === ai);
             });
             // measure live so the transform tracks the animation each frame
@@ -451,7 +755,10 @@
               this._ai = ai;
               cancelAnimationFrame(this._raf);
               const end = performance.now() + 300;
-              const pump = () => { go(); this._raf = performance.now() < end ? requestAnimationFrame(pump) : 0; };
+              const pump = () => {
+                go();
+                this._raf = performance.now() < end ? requestAnimationFrame(pump) : 0;
+              };
               this._raf = requestAnimationFrame(pump);
             }
           },
@@ -511,28 +818,45 @@
       }
 
       let raf = 0;
-      const schedule = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(sync); };
+      const schedule = () => {
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(sync);
+      };
       scroller.addEventListener("scroll", schedule, { passive: true });
       new ResizeObserver(measure).observe(scroller);
 
       document.getElementById("dial").addEventListener("click", (e) => {
         const id = e.target.dataset.id;
         if (!id) return;
-        [...e.currentTarget.children].forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.id === id)));
+        [...e.currentTarget.children].forEach((b) =>
+          b.setAttribute("aria-pressed", String(b.dataset.id === id)),
+        );
         setApproach(id);
       });
-      document.getElementById("snap").addEventListener("change", (e) => scroller.classList.toggle("snap", e.target.checked));
+      document
+        .getElementById("snap")
+        .addEventListener("change", (e) => scroller.classList.toggle("snap", e.target.checked));
 
       mapdial.addEventListener("pointerdown", (e) => {
-        const startY = e.clientY, startScroll = scroller.scrollTop;
+        const startY = e.clientY,
+          startScroll = scroller.scrollTop;
         const key = e.target.closest(".band")?.dataset.key;
         let dragged = false;
-        const move = (ev) => { if (Math.abs(ev.clientY - startY) > 3) dragged = true; if (dragged) scroller.scrollTop = startScroll + (ev.clientY - startY) / SCALE; };
-        const up = () => {
-          window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
-          if (!dragged && key != null) { const g = geomByKey[key]; if (g) scroller.scrollTo({ top: g.top - FOCAL * scroller.clientHeight, behavior: "smooth" }); }
+        const move = (ev) => {
+          if (Math.abs(ev.clientY - startY) > 3) dragged = true;
+          if (dragged) scroller.scrollTop = startScroll + (ev.clientY - startY) / SCALE;
         };
-        window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+        const up = () => {
+          window.removeEventListener("pointermove", move);
+          window.removeEventListener("pointerup", up);
+          if (!dragged && key != null) {
+            const g = geomByKey[key];
+            if (g)
+              scroller.scrollTo({ top: g.top - FOCAL * scroller.clientHeight, behavior: "smooth" });
+          }
+        };
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", up);
       });
 
       renderExplain("pinshove");
