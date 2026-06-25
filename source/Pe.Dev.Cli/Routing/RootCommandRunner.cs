@@ -2,15 +2,14 @@ using Pe.Dev.Cli.Codegen;
 
 namespace Pe.Dev.Cli;
 
-internal static class RootCommandRunner
-{
+internal static class RootCommandRunner {
     public static Task<int> RunAsync(DevCliOptions options, CancellationToken cancellationToken) =>
-        options.CommandKind switch
-        {
+        options.CommandKind switch {
             DevCommandKind.BootstrapPath => Task.FromResult(BootstrapPathCommand.Run(options.CommandArguments, options.RepoRoot)),
             DevCommandKind.Test => RevitCommandRunner.RunFreshTestCommandAsync(options.RepoRoot, options.CommandArguments, cancellationToken),
             DevCommandKind.SelfTest => Task.FromResult(VerifySelfTestCommand.Run(options.CommandArguments)),
             DevCommandKind.PeaLinkDev => Task.FromResult(PeaLinkDevCommand.Run(options.CommandArguments, options.RepoRoot)),
+            DevCommandKind.Web => DevWebCommand.RunAsync(options.CommandArguments, options.RepoRoot, cancellationToken),
             DevCommandKind.Automation => AutomationCommandRunner.RunAsync(options.CommandArguments, options.RepoRoot, cancellationToken),
             DevCommandKind.Codegen => CodegenCommandRunner.RunAsync(options.CommandArguments, options.RepoRoot, cancellationToken),
             DevCommandKind.InternalApproveWorker => RevitCommandRunner.RunApproveWorkerCommandAsync(options.CommandArguments, cancellationToken),

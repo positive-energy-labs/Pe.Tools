@@ -1,8 +1,8 @@
 namespace Pe.Shared.Product;
 
 public static class PeaLauncherContent {
-    public static string Create(string commandName = "pea") =>
-        $$"""
+  public static string Create(string commandName = "pea") =>
+      $$"""
         @echo off
         setlocal EnableExtensions EnableDelayedExpansion
         set "PEA_ROOT=%~dp0"
@@ -26,6 +26,7 @@ public static class PeaLauncherContent {
           shift /1
         )
 
+        set "PEA_FIRST_ARG=%~1"
         set "PEA_ARGS="
         :collect_args
         if "%~1"=="" goto args_done
@@ -48,12 +49,21 @@ public static class PeaLauncherContent {
         exit /b 1
 
         :dev
+        >&2 echo %PEA_COMMAND% source-linked dev lane: not running installed payload. Use %PEA_COMMAND% --installed ... for installed-lane proof.
         set "PEA_DEV_SOURCE=%PEA_ROOT%dev-source.txt"
         if exist "!PEA_DEV_SOURCE!" (
           set /p PEA_REPO_ROOT=<"!PEA_DEV_SOURCE!"
           set "PEA_TOOLS_ROOT=!PEA_REPO_ROOT!\source\pe-tools"
           set "PEA_APP_MAIN=!PEA_TOOLS_ROOT!\apps\pea\src\main.ts"
           set "PECO_APP_MAIN=!PEA_TOOLS_ROOT!\apps\pe-code\src\main.ts"
+          set "PEA_DEV_WEB_MAIN=!PEA_TOOLS_ROOT!\tools\dev-web\src\main.ts"
+          if /i "!PEA_FIRST_ARG!"=="web" (
+            if exist "!PEA_DEV_WEB_MAIN!" (
+              cd /d "!PEA_TOOLS_ROOT!"
+              "!PEA_PNPM!" --dir "!PEA_TOOLS_ROOT!" exec node --import jiti/register "!PEA_DEV_WEB_MAIN!" "%PEA_COMMAND%" !PEA_ARGS!
+              exit /b !ERRORLEVEL!
+            )
+          )
           if /i "%PEA_COMMAND%"=="peco" (
             if exist "!PECO_APP_MAIN!" (
               cd /d "!PEA_TOOLS_ROOT!"
@@ -84,6 +94,11 @@ public static class PeaLauncherContent {
           exit /b 1
         )
         set /p PEA_VERSION=<"%PEA_CURRENT%"
+        if /i "%PEA_VERSION%"=="dev" (
+          >&2 echo pea installed lane is selected, but current.txt still points at the removed dev payload.
+          >&2 echo Run installer/package-lane setup to configure an installed payload, or use pea --dev ... for source-linked development.
+          exit /b 1
+        )
         set "PEA_VERSION_ROOT=%PEA_ROOT%versions\%PEA_VERSION%"
         set "PEA_EXE=%PEA_VERSION_ROOT%\app\pea.exe"
         if not exist "%PEA_EXE%" (

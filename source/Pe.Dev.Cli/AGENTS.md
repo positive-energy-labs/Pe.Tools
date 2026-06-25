@@ -2,7 +2,7 @@
 
 ## Scope
 
-Owns the dev-facing `pe-dev` CLI surface for fresh Revit proof runs, `pea` source linking, codegen, and APS Design Automation operator workflows.
+Owns the dev-facing `pe-dev` CLI surface for fresh Revit proof runs, `pea` source linking, source web dev supervision, codegen, and APS Design Automation operator workflows.
 
 Attached RRD/live-loop diagnostics and hot reload are no longer public `pe-dev` command groups. Keep those surfaces in the TypeScript Peco tools (`live_loop_context`, `live_rrd_sync`, `live_rrd_restart`) and the deployed `pea` CLI where appropriate.
 
@@ -16,8 +16,9 @@ Attached RRD/live-loop diagnostics and hot reload are no longer public `pe-dev` 
 
 - `Program.cs` - `pe-dev` entrypoint.
 - `DevCliProgram.cs` - top-level usage/help and command dispatch.
-- `Routing/RootCommandRunner.cs` - top-level `bootstrap-path`, `test`, `self-test`, `pea`, `automation`, `codegen`, and internal dispatch.
+- `Routing/RootCommandRunner.cs` - top-level `bootstrap-path`, `test`, `self-test`, `pea`, `web`, `automation`, `codegen`, and internal dispatch.
 - `Commands/BootstrapPathCommand.cs` - personal PATH bootstrap to the current build output.
+- `Commands/Pea/DevWebCommand.cs` - explicit `pe-dev web pea|peco` entrypoint into the source-linked web dev supervisor.
 - `RevitCommandRunner.cs` - FreshRevitProcess test routing plus internal unsigned add-in approval watcher launch.
 - `Commands/Automation/AutomationCommandRunner.cs` - top-level `automation ...` command routing.
 - `Commands/Codegen/CodegenCommandRunner.cs` - generated build contracts, programmatic Host TypeGen DTOs, and TypeScript Host client check/sync routing.
@@ -65,7 +66,7 @@ Keep `Pe.Dev.Cli` focused on stable command naming, parse/print behavior, and or
 | ----------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | **dev CLI**             | The repo-local developer/operator surface is `pe-dev`                      | Avoid reviving `pe-script` or separate automation executables               |
 | **FreshRevitProcess**   | The dedicated fresh-owned Revit proof lane exposed as `pe-dev test`        | Prefer this when current RRD document/session state is irrelevant           |
-| **live-loop context**   | The TypeScript Peco decision packet exposed as `live_loop_context`    | Prefer this over reviving `pe-dev doctor`, `status`, `env`, or `sync`       |
+| **live-loop context**   | The TypeScript Peco decision packet exposed as `live_loop_context`         | Prefer this over reviving `pe-dev doctor`, `status`, `env`, or `sync`       |
 | **automation workflow** | `pe-dev automation ...` Design Automation workflows                        | Prefer this over nesting DA under desktop Revit                             |
 | **browse workflow**     | Sticky-context ACC discovery commands under `pe-dev automation browse ...` | Prefer this over copy-pasting ids through one-off list commands             |
 | **status workflow**     | `automation inspect receipt` and `automation inspect workitem`             | Prefer inspection over rerunning jobs when you already have a receipt or id |
@@ -73,7 +74,7 @@ Keep `Pe.Dev.Cli` focused on stable command naming, parse/print behavior, and or
 
 ## Living Memory
 
-- `Pe.Dev.Cli` is the repo-local CLI for dev/operator workflows that still belong in C# orchestration: PATH bootstrap, FreshRevitProcess tests, `pea` source linking, codegen, and Design Automation.
+- `Pe.Dev.Cli` is the repo-local CLI for dev/operator workflows that still belong in C# orchestration: PATH bootstrap, FreshRevitProcess tests, `pea` source linking, source web dev supervision, codegen, and Design Automation.
 - `bootstrap-path` is the supported personal setup path for `pe-dev`; it points PATH at the current invocation's build output. Do not restore MSI ownership, local runtime mirroring, or a `pe-dev-cli-bootstrap` installer slice.
 - `pe-dev pea link-dev` is the dev Pea setup path. Do not restore dev payload install commands that rewrite `bin\pea\versions\dev` or `current.txt`; that makes installed-lane validation ambiguous.
 - `doctor`, `status`, `sync`, `env`, `revit`, and `verify` are intentionally removed from the public CLI surface. Do not reintroduce them for live-loop context.

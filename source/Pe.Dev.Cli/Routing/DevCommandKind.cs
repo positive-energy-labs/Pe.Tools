@@ -6,6 +6,7 @@ internal enum DevCommandKind {
     Test,
     SelfTest,
     PeaLinkDev,
+    Web,
     Automation,
     Codegen,
     InternalApproveWorker
