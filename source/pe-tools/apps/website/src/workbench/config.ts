@@ -4,19 +4,23 @@ export interface WorkbenchEndpointConfig {
 }
 
 /**
- * Resolves the workbench server origin + token. The static SPA is served from a
- * different port than the runtime HTTP server, so we recover the server origin
- * (and token) from the `workbench` run-url param the static server appends to the
- * URL (`agui` is still accepted as a legacy fallback for old bookmarks).
+ * Resolves the workbench server origin + token. Dev URLs use short query params:
+ * `w` for workbench port and `t` for token.
  */
 export function resolveWorkbenchConfig(): WorkbenchEndpointConfig {
   const params = new URL(window.location.href).searchParams;
   const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {};
-  const seed =
-    firstParam(params, "workbench", "runUrl", "agui") ?? env.VITE_PE_WORKBENCH_RUN_URL ?? undefined;
+  const injected = (window as Window & { __PE_WORKBENCH_URL__?: string }).__PE_WORKBENCH_URL__;
 
   let origin = window.location.origin;
-  let token = params.get("token") ?? undefined;
+  let token = firstParam(params, "t", "token");
+  const workbenchPort = params.get("w");
+  if (workbenchPort && /^\d+$/.test(workbenchPort)) {
+    origin = `${window.location.protocol}//${window.location.hostname}:${workbenchPort}`;
+    return { origin, token: token ?? "dev-loopback" };
+  }
+
+  const seed = injected ?? env.VITE_PE_WORKBENCH_RUN_URL ?? undefined;
   if (seed) {
     try {
       const url = new URL(seed, window.location.origin);

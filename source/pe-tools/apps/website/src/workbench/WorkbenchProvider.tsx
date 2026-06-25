@@ -9,12 +9,10 @@ import {
   type ReactNode,
 } from "react";
 import {
-  applyWorkbenchEvent,
   createWorkbenchState,
-  isWorkbenchEvent,
+  isWorkbenchState,
   selectPendingApprovals,
   type WorkbenchAccessLevel,
-  type WorkbenchEvent,
   type WorkbenchState,
 } from "@pe/agent-contracts";
 import { resolveWorkbenchConfig, workbenchUrl, type WorkbenchEndpointConfig } from "./config.ts";
@@ -46,7 +44,7 @@ interface WorkbenchContextValue {
   isRunning: boolean;
   operation?: string;
   operationError?: string;
-  /** Another tab owns this thread — composing/sending is disabled here until takeover. */
+  /** Another tab owns this thread - composing/sending is disabled here until takeover. */
   readOnly: boolean;
   takeOverThread: () => void;
   sendPrompt: (text: string, attachments?: WorkbenchAttachment[]) => Promise<void>;
@@ -57,7 +55,7 @@ interface WorkbenchContextValue {
   resolveApproval: (requestId: string, optionId?: string) => Promise<void>;
   setModel: (modelId: string) => Promise<void>;
   setAccessLevel: (accessLevel: WorkbenchAccessLevel) => Promise<void>;
-  forkThread: () => Promise<void>;
+  forkThread: (messageId?: string) => Promise<void>;
   refreshProjection: () => void;
 }
 
@@ -69,13 +67,24 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const stateRef = useRef(state);
   stateRef.current = state;
   const [threads, setThreads] = useState<StoredThreadSummary[]>([]);
-  const [currentThreadId, setCurrentThreadId] = useState<string>(() => crypto.randomUUID());
+  const [currentThreadId, setCurrentThreadId] = useState("");
   const [loading, setLoading] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string>();
   const abortRef = useRef<AbortController | null>(null);
   const initedRef = useRef(false);
-  const claim = useThreadClaim(currentThreadId);
+  const claim = useThreadClaim(currentThreadId || "draft");
+
+  const applyStatePayload = useCallback((payload: unknown): WorkbenchState | undefined => {
+    const next = readState(payload);
+    if (!next) return undefined;
+    setState(next);
+    setIsRunning(
+      next.uiStatus.overall.status === "running" || next.uiStatus.overall.status === "waiting",
+    );
+    setError(next.uiStatus.errors[0]);
+    return next;
+  }, []);
 
   const refreshThreads = useCallback(async () => {
     try {
@@ -89,21 +98,32 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const hydrate = useCallback(
     async (threadId: string) => {
       try {
-        const payload = await fetchJson(workbenchUrl(config, "/workbench/hydrate", { threadId }));
-        const events = readArray(readRecord(payload)?.events) ?? [];
-        let next = createWorkbenchState();
-        for (const event of events) {
-          if (isWorkbenchEvent(event)) next = applyWorkbenchEvent(next, event);
+        const payload = await fetchJson(workbenchUrl(config, "/workbench/state", { threadId }));
+        // The server can answer 200 with `{ error }` and no `state` (e.g. a thread it can't
+        // open). applyStatePayload returns undefined then — surface the error instead of
+        // silently rendering nothing.
+        if (!applyStatePayload(payload)) {
+          setError(readString(readRecord(payload)?.error) ?? "Could not open this thread.");
         }
-        setState(next);
       } catch (caught) {
         setError(errorMessage(caught));
       } finally {
         setLoading(false);
       }
     },
-    [config],
+    [config, applyStatePayload],
   );
+
+  const createThread = useCallback(async (): Promise<string> => {
+    const payload = await postJson(workbenchUrl(config, "/workbench/threads"), {});
+    const threadId = readString(readRecord(payload)?.threadId);
+    if (!threadId) throw new Error("Workbench server did not return a thread id.");
+    setCurrentThreadId(threadId);
+    applyStatePayload(payload);
+    setLoading(false);
+    await refreshThreads();
+    return threadId;
+  }, [config, applyStatePayload, refreshThreads]);
 
   useEffect(() => {
     if (initedRef.current) return;
@@ -120,7 +140,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
           setCurrentThreadId(latest.id);
           await hydrate(latest.id);
         } else {
-          setLoading(false);
+          await createThread();
         }
       } catch (caught) {
         if (cancelled) return;
@@ -131,18 +151,18 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [config, hydrate]);
+  }, [config, hydrate, createThread]);
 
   const sendPrompt = useCallback(
     async (text: string, attachments?: WorkbenchAttachment[]) => {
       const prompt = text.trim();
       if ((!prompt && !attachments?.length) || abortRef.current) return;
-      // Another tab owns this thread — block here so two tabs can't diverge its state. The
-      // server enforces the same guard independently; this is the proactive client check.
-      if (!claim.isOwner) {
-        setError("This thread is open in another tab — take over to send here.");
+      if (currentThreadId && !claim.isOwner) {
+        setError("This thread is open in another tab - take over to send here.");
         return;
       }
+
+      const threadId = currentThreadId || (await createThread());
       const controller = new AbortController();
       abortRef.current = controller;
       setIsRunning(true);
@@ -151,17 +171,16 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         await streamWorkbenchRun(
           workbenchUrl(config, "/workbench/run"),
           {
-            threadId: currentThreadId,
+            threadId,
             text: prompt,
             clientId: claim.tabId,
             ...(attachments?.length ? { attachments } : {}),
           },
           controller.signal,
-          (event) => {
-            // Surface a streamed error (e.g. a thread lock) — it otherwise only flips the
-            // status dot red with no message. The run keeps streaming; this just shows why.
-            if (event.type === "error") setError(event.message);
-            setState((previous) => applyWorkbenchEvent(previous, event));
+          (payload) => {
+            const next = applyStatePayload(payload);
+            const message = readString(readRecord(payload)?.error);
+            if (!next && message) setError(message);
           },
         );
         if (!controller.signal.aborted) void refreshThreads();
@@ -172,12 +191,18 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         setIsRunning(false);
       }
     },
-    [config, currentThreadId, refreshThreads, claim.isOwner, claim.tabId],
+    [
+      config,
+      currentThreadId,
+      createThread,
+      refreshThreads,
+      claim.isOwner,
+      claim.tabId,
+      applyStatePayload,
+    ],
   );
 
   const cancel = useCallback(() => {
-    // Deny any pending approval so the backend run gate unblocks — otherwise the thread
-    // stays prompt-locked waiting on a decision the user just walked away from.
     for (const approval of selectPendingApprovals(stateRef.current)) {
       void postJson(workbenchUrl(config, "/workbench/approve"), {
         threadId: currentThreadId,
@@ -193,11 +218,13 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const newThread = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
-    setCurrentThreadId(crypto.randomUUID());
-    setState(createWorkbenchState());
-    setLoading(false);
+    setLoading(true);
     setIsRunning(false);
-  }, []);
+    void createThread().catch((caught) => {
+      setLoading(false);
+      setError(errorMessage(caught));
+    });
+  }, [createThread]);
 
   const switchThread = useCallback(
     async (threadId: string) => {
@@ -228,39 +255,37 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     [config, currentThreadId, newThread, refreshThreads],
   );
 
-  const applyEvents = useCallback((payload: unknown) => {
-    const events = readArray(readRecord(payload)?.events) ?? [];
-    setState((previous) =>
-      events.reduce<WorkbenchState>(
-        (next, event) => (isWorkbenchEvent(event) ? applyWorkbenchEvent(next, event) : next),
-        previous,
-      ),
-    );
-  }, []);
-
   const resolveApproval = useCallback(
     async (requestId: string, optionId?: string) => {
-      // Optimistically clear the card; the run stream confirms once the tool proceeds.
-      setState((previous) =>
-        applyWorkbenchEvent(previous, { type: "approval_resolved", requestId }),
-      );
+      setState((previous) => ({
+        ...previous,
+        approvals: {
+          requests: previous.approvals.requests.map((request) =>
+            request.requestId === requestId
+              ? { ...request, status: "resolved", selectedOptionId: optionId }
+              : request,
+          ),
+        },
+      }));
       try {
-        await postJson(workbenchUrl(config, "/workbench/approve"), {
-          threadId: currentThreadId,
-          requestId,
-          ...(optionId ? { optionId } : {}),
-        });
+        applyStatePayload(
+          await postJson(workbenchUrl(config, "/workbench/approve"), {
+            threadId: currentThreadId,
+            requestId,
+            ...(optionId ? { optionId } : {}),
+          }),
+        );
       } catch (caught) {
         setError(errorMessage(caught));
       }
     },
-    [config, currentThreadId],
+    [config, currentThreadId, applyStatePayload],
   );
 
   const setModel = useCallback(
     async (modelId: string) => {
       try {
-        applyEvents(
+        applyStatePayload(
           await postJson(workbenchUrl(config, "/workbench/model"), {
             threadId: currentThreadId,
             modelId,
@@ -270,13 +295,13 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         setError(errorMessage(caught));
       }
     },
-    [config, currentThreadId, applyEvents],
+    [config, currentThreadId, applyStatePayload],
   );
 
   const setAccessLevel = useCallback(
     async (accessLevel: WorkbenchAccessLevel) => {
       try {
-        applyEvents(
+        applyStatePayload(
           await postJson(workbenchUrl(config, "/workbench/access"), {
             threadId: currentThreadId,
             accessLevel,
@@ -286,23 +311,32 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         setError(errorMessage(caught));
       }
     },
-    [config, currentThreadId, applyEvents],
+    [config, currentThreadId, applyStatePayload],
   );
 
-  const forkThread = useCallback(async () => {
-    try {
-      const payload = await postJson(workbenchUrl(config, "/workbench/fork"), {
-        threadId: currentThreadId,
-      });
-      const newThreadId = readString(readRecord(payload)?.threadId);
-      if (newThreadId) {
-        await refreshThreads();
-        await switchThread(newThreadId);
+  const forkThread = useCallback(
+    async (messageId?: string) => {
+      try {
+        const payload = await postJson(workbenchUrl(config, "/workbench/fork"), {
+          threadId: currentThreadId,
+          ...(messageId ? { messageId } : {}),
+        });
+        const newThreadId = readString(readRecord(payload)?.threadId);
+        if (newThreadId) {
+          await refreshThreads();
+          await switchThread(newThreadId);
+        }
+      } catch (caught) {
+        setError(errorMessage(caught));
       }
-    } catch (caught) {
-      setError(errorMessage(caught));
-    }
-  }, [config, currentThreadId, refreshThreads, switchThread]);
+    },
+    [config, currentThreadId, refreshThreads, switchThread],
+  );
+
+  const refreshProjection = useCallback(() => {
+    void refreshThreads();
+    if (currentThreadId) void hydrate(currentThreadId);
+  }, [currentThreadId, hydrate, refreshThreads]);
 
   const context = useMemo<WorkbenchContextValue>(
     () => ({
@@ -312,7 +346,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       currentThreadId,
       isRunning,
       operationError: error,
-      readOnly: !claim.isOwner,
+      readOnly: Boolean(currentThreadId) && !claim.isOwner,
       takeOverThread: claim.takeOver,
       sendPrompt,
       cancel,
@@ -323,7 +357,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       setModel,
       setAccessLevel,
       forkThread,
-      refreshProjection: () => void refreshThreads(),
+      refreshProjection,
     }),
     [
       config,
@@ -344,7 +378,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       setModel,
       setAccessLevel,
       forkThread,
-      refreshThreads,
+      refreshProjection,
     ],
   );
 
@@ -361,7 +395,7 @@ async function streamWorkbenchRun(
   runUrl: string,
   body: { threadId: string; text: string; clientId?: string; attachments?: WorkbenchAttachment[] },
   signal: AbortSignal,
-  onEvent: (event: WorkbenchEvent) => void,
+  onPayload: (payload: unknown) => void,
 ): Promise<void> {
   const response = await fetch(runUrl, {
     method: "POST",
@@ -378,8 +412,7 @@ async function streamWorkbenchRun(
   const emit = (block: string) => {
     const line = block.split("\n").find((entry) => entry.startsWith("data: "));
     if (!line) return;
-    const parsed = JSON.parse(line.slice("data: ".length)) as unknown;
-    if (isWorkbenchEvent(parsed)) onEvent(parsed);
+    onPayload(JSON.parse(line.slice("data: ".length)) as unknown);
   };
 
   while (true) {
@@ -394,6 +427,11 @@ async function streamWorkbenchRun(
   if (buffer.trim()) emit(buffer);
 }
 
+function readState(payload: unknown): WorkbenchState | undefined {
+  const state = readRecord(payload)?.state;
+  return isWorkbenchState(state) ? state : undefined;
+}
+
 function toSummaries(threads: unknown[]): StoredThreadSummary[] {
   const summaries = threads.flatMap((thread): StoredThreadSummary[] => {
     const record = readRecord(thread);
@@ -404,8 +442,9 @@ function toSummaries(threads: unknown[]): StoredThreadSummary[] {
         id,
         title: readString(record.title) ?? shortId(id),
         updatedAt: readString(record.updatedAt) ?? new Date(0).toISOString(),
-        messageCount: 0,
+        messageCount: typeof record.messageCount === "number" ? record.messageCount : 0,
         persisted: true,
+        promptActive: typeof record.promptActive === "boolean" ? record.promptActive : undefined,
         cwd: readString(record.cwd),
       },
     ];

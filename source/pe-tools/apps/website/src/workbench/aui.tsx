@@ -120,8 +120,8 @@ function UserMoment() {
         <button
           className="lens-fork"
           type="button"
-          title="Fork this conversation into a new thread"
-          onClick={() => void forkThread()}
+          title="Fork the conversation from this turn into a new thread"
+          onClick={() => void forkThread(id)}
         >
           <GitFork size={12} />
         </button>

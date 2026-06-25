@@ -119,7 +119,7 @@ function Surface() {
         ) : null}
       </div>
 
-      <Lens state={debug.state} mode={mode} />
+      <Lens state={debug.state} mode={mode} onOpenWorld={() => setMode("world")} />
 
       <div className="mg-composer-wrap">
         <Composer setMode={setMode} />
@@ -260,6 +260,7 @@ const BUILTIN_COMMANDS: SlashCommand[] = [
   { name: "fork", description: "Fork this conversation into a new thread", kind: "builtin" },
   { name: "chat", description: "Hide the gutters", kind: "builtin" },
   { name: "trace", description: "Show the trace gutter", kind: "builtin" },
+  { name: "world", description: "Show the context world inspector", kind: "builtin" },
 ];
 
 function Composer({ setMode }: { setMode: (mode: Mode) => void }) {
@@ -294,6 +295,7 @@ function Composer({ setMode }: { setMode: (mode: Mode) => void }) {
         return true;
       case "chat":
       case "trace":
+      case "world":
         setMode(name as Mode);
         return true;
       default:

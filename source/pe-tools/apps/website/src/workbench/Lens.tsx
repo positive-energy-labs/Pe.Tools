@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type {
-  WorkbenchContextBreakdown,
   WorkbenchObservationMemoryEntry,
   WorkbenchState,
   WorkbenchToolCall,
@@ -8,6 +7,7 @@ import type {
 import { ThreadPrimitive, type ThreadMessageLike } from "@assistant-ui/react";
 import { modeDepth, type Mode } from "./depth.ts";
 import { Moments, useThreadMessages } from "./aui.tsx";
+import { ContextGutter, useCacheView, WorldLane } from "./world.tsx";
 
 /**
  * The unified workbench view (one layout, one scroll). Modes toggle panes over a single
@@ -48,10 +48,24 @@ interface TraceCell {
   parentId?: string;
 }
 
-export function Lens({ state, mode }: { state: WorkbenchState; mode: Mode }) {
+export function Lens({
+  state,
+  mode,
+  onOpenWorld,
+}: {
+  state: WorkbenchState;
+  mode: Mode;
+  onOpenWorld?: () => void;
+}) {
   const messages = useThreadMessages();
   const moments = toMoments(messages);
   const traceCells = buildTraceCells(state, mode);
+  const breakdown = state.inspector.contextBreakdown;
+  const userTurns = moments.reduce(
+    (count, moment) => (moment.role === "user" ? count + 1 : count),
+    0,
+  );
+  const cache = useCacheView(breakdown, userTurns);
 
   const frameRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -363,12 +377,15 @@ export function Lens({ state, mode }: { state: WorkbenchState; mode: Mode }) {
         ) : (
           <div className="lens-grid">
             <div className="mapdial" onPointerDown={onPointerDown} aria-label="Timeline">
+              <ContextGutter breakdown={breakdown} cache={cache} onOpenWorld={onOpenWorld} />
               <div className="mapdial-strip" ref={stripRef}>
                 {moments.map((moment, index) => (
                   <div
                     key={moment.id}
                     data-key={moment.id}
-                    className={`mapdial-band ${moment.role}`}
+                    className={`mapdial-band ${moment.role}${
+                      cache.changed.size > 0 && index === moments.length - 1 ? " delta" : ""
+                    }`}
                     ref={(el) => {
                       if (el) bandRefs.current.set(moment.id, el);
                       else bandRefs.current.delete(moment.id);
@@ -394,7 +411,7 @@ export function Lens({ state, mode }: { state: WorkbenchState; mode: Mode }) {
               </div>
             </ThreadPrimitive.Root>
 
-            {mode !== "chat" ? (
+            {mode === "trace" ? (
               <div className="lens-lane trace">
                 <div className="lens-pin" ref={traceInnerRef}>
                   {traceCells.map((cell) => (
@@ -409,6 +426,10 @@ export function Lens({ state, mode }: { state: WorkbenchState; mode: Mode }) {
                   ))}
                 </div>
               </div>
+            ) : mode === "world" ? (
+              <div className="lens-lane world">
+                <WorldLane breakdown={breakdown} cache={cache} sendNumber={userTurns} />
+              </div>
             ) : null}
           </div>
         )}
@@ -422,12 +443,12 @@ function ContextStrip({ state, depth }: { state: WorkbenchState; depth: "read" |
   const [open, setOpen] = useState(false);
   const plan = state.plans.entries;
   const systemPrompt = state.inspector.systemPrompt;
-  const breakdown = state.inspector.contextBreakdown;
   const showContext = depth !== "read";
 
+  // The context-window breakdown moved to the World lane (single home). This strip keeps the
+  // plan, the resolved system prompt, and injected-context entries.
   if (
     plan.length === 0 &&
-    !breakdown &&
     !(showContext && (systemPrompt || state.inspector.contextEntries.length))
   ) {
     return null;
@@ -435,8 +456,6 @@ function ContextStrip({ state, depth }: { state: WorkbenchState; depth: "read" |
 
   return (
     <div className="mg-context">
-      {breakdown ? <ContextMeter breakdown={breakdown} /> : null}
-
       {plan.length > 0 ? (
         <div className="mg-block">
           <div className="mg-block-head">Plan</div>
@@ -484,88 +503,6 @@ function ContextStrip({ state, depth }: { state: WorkbenchState; depth: "read" |
       ) : null}
     </div>
   );
-}
-
-const SEGMENT_TONES: Record<string, string> = {
-  messages: "var(--pe-blue)",
-  "system-prompt": "var(--pe-green)",
-  tools: "var(--clay-ink, #b07a4f)",
-  memory: "var(--clay, #c89b6a)",
-  free: "var(--mist, #d8dde2)",
-};
-
-/**
- * The context-window token meter — a thin projection of `inspector.contextBreakdown`.
- * One stacked bar over the whole window, then a labelled row per segment with its token
- * count, share, and (collapsible) named contents.
- */
-function ContextMeter({ breakdown }: { breakdown: WorkbenchContextBreakdown }) {
-  const [open, setOpen] = useState(true);
-  const window = breakdown.contextWindow;
-  const denom = window && window > 0 ? window : Math.max(breakdown.totalTokens, 1);
-  const pct = (tokens: number) => (tokens / denom) * 100;
-  const usedPct = window ? Math.round((breakdown.totalTokens / window) * 100) : undefined;
-  const tone = (id: string) => SEGMENT_TONES[id] ?? "var(--slate, #8a9199)";
-
-  return (
-    <div className="mg-block mg-meter">
-      <button
-        className="mg-block-head"
-        type="button"
-        style={{ width: "100%", border: "none", cursor: "pointer" }}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <span>
-          Context window
-          {window ? (
-            <span className="mg-meter-sum">
-              {" · "}
-              {fmt(breakdown.totalTokens)} / {fmt(window)}
-              {usedPct !== undefined ? ` (${usedPct}%)` : ""}
-            </span>
-          ) : (
-            <span className="mg-meter-sum"> · {fmt(breakdown.totalTokens)} tok</span>
-          )}
-        </span>
-        <span style={{ color: "var(--pe-blue)" }}>{open ? "hide" : "show"}</span>
-      </button>
-
-      <div className="mg-meter-bar" role="img" aria-label="Context window usage">
-        {breakdown.segments.map((segment) => (
-          <span
-            key={segment.id}
-            className="mg-meter-fill"
-            title={`${segment.label} · ${fmt(segment.tokens)} tok`}
-            style={{ width: `${pct(segment.tokens)}%`, background: tone(segment.id) }}
-          />
-        ))}
-      </div>
-
-      {open ? (
-        <div className="mg-meter-rows">
-          {breakdown.segments.map((segment) => (
-            <div className="mg-meter-row" key={segment.id}>
-              <span className="mg-meter-dot" style={{ background: tone(segment.id) }} />
-              <span className="mg-meter-label">{segment.label}</span>
-              <span className="mg-meter-tokens">{fmt(segment.tokens)}</span>
-              <span className="mg-meter-pct">{pct(segment.tokens).toFixed(1)}%</span>
-              {segment.items && segment.items.length > 0 ? (
-                <ul className="mg-meter-items">
-                  {segment.items.map((item, index) => (
-                    <li key={index}>{item}</li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function fmt(tokens: number): string {
-  return Math.round(tokens).toLocaleString();
 }
 
 function TraceCellView({

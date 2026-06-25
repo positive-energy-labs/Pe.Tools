@@ -1128,6 +1128,20 @@ button {
     0 0 0 2px var(--paper-3),
     0 0 0 3px rgba(0, 86, 149, 0.35);
 }
+/* delta = the newest band when context changed this send */
+.mapdial-band.delta {
+  opacity: 0.95;
+}
+.mapdial-band.delta::after {
+  content: "";
+  position: absolute;
+  right: 100%;
+  margin-right: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 3px solid transparent;
+  border-right-color: var(--clay-ink, #8a5e3b);
+}
 .mapdial-band.focal .num {
   opacity: 1;
 }
@@ -1766,4 +1780,746 @@ button {
   .lens-cell {
     transition: none;
   }
+  .mg-gut.pulse .mg-gut-stack {
+    animation: none;
+  }
+}
+
+/* ===== World inspector — what Pea actually sent the model (request-ordered) ===== */
+.lens-frame[data-mode="world"] {
+  --trace: 392px;
+}
+.lens-grid .lens-lane.world {
+  grid-column: 1;
+}
+.lens-lane.world {
+  overflow-y: auto;
+  background-image: none;
+  background-color: var(--paper-3);
+}
+
+.mg-world {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  font-variant-numeric: tabular-nums;
+}
+.mg-world-empty {
+  padding: 20px 16px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.mg-world-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px 10px;
+  background: var(--paper-3);
+  border-bottom: 0.5px solid var(--line);
+}
+.mg-world-title {
+  margin: 0;
+  font-family: var(--font-display, Georgia, serif);
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--ink, #2b333a);
+}
+.mg-world-controls {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.mg-world-dial {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--paper-2);
+  border: 0.5px solid var(--line-2, rgba(62, 67, 64, 0.2));
+  border-radius: 8px;
+}
+.mg-world-dial button {
+  border: 0.5px solid transparent;
+  background: transparent;
+  color: var(--slate);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.mg-world-dial button[aria-pressed="true"] {
+  background: var(--paper);
+  color: var(--clay-ink, #8a5e3b);
+  border-color: rgba(183, 141, 106, 0.5);
+  box-shadow: 0 1px 1px rgba(138, 94, 59, 0.15);
+}
+.mg-world-diff {
+  width: 26px;
+  height: 24px;
+  border: 0.5px solid var(--line-2, rgba(62, 67, 64, 0.2));
+  background: var(--paper);
+  border-radius: 7px;
+  color: var(--slate);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.mg-world-diff[aria-pressed="true"] {
+  background: var(--clay-tint, #f3eae0);
+  border-color: rgba(183, 141, 106, 0.5);
+  color: var(--clay-ink, #8a5e3b);
+}
+.mg-world-diff:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.mg-world-bar {
+  position: relative;
+  display: flex;
+  height: 9px;
+  margin: 12px 14px 0;
+  border: 0.5px solid var(--line);
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--paper-2);
+}
+.mg-world-fill {
+  height: 100%;
+  min-width: 1px;
+  border-right: 1px solid var(--paper);
+}
+.mg-world-fill:last-child {
+  border-right: none;
+}
+.mg-world-fill.reproc {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(255, 255, 255, 0.4) 0 3px,
+    transparent 3px 6px
+  );
+}
+.mg-world-horizon {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 0;
+  border-left: 1.5px dashed var(--clay-ink, #8a5e3b);
+}
+.mg-world-note {
+  margin: 7px 14px 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--clay-ink, #8a5e3b);
+}
+.mg-world-note b {
+  font-weight: 600;
+}
+
+.mg-world-layers {
+  margin-top: 10px;
+  border-top: 0.5px solid var(--line-soft);
+}
+.mg-world-layer {
+  border-bottom: 0.5px solid var(--line-soft);
+}
+.mg-world-layer.delta {
+  background: linear-gradient(var(--paper-3), var(--clay-tint, #f3eae0));
+}
+.mg-world-row {
+  display: grid;
+  grid-template-columns: 9px 1fr auto auto auto auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 9px 14px;
+  cursor: pointer;
+  font: inherit;
+}
+.mg-world-row:hover {
+  background: var(--paper-2);
+}
+.mg-world-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+.mg-world-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink, #2b333a);
+}
+.mg-world-pos {
+  margin-left: 6px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.mg-world-tok {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--slate);
+}
+.mg-world-pct {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+  min-width: 30px;
+  text-align: right;
+}
+.mg-world-car {
+  color: var(--muted);
+  font-size: 11px;
+  transition: transform 0.16s;
+}
+.mg-world-layer.open .mg-world-car {
+  transform: rotate(90deg);
+}
+.mg-world-body {
+  padding: 0 14px 11px 31px;
+}
+.mg-world-cap {
+  margin: 0 0 6px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--slate);
+}
+.mg-world-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 5px;
+}
+.mg-world-foot {
+  padding: 11px 14px 16px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* snapshot subheader — send number + provider-boundary note */
+.mg-world-sub {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  padding: 7px 14px 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+}
+.mg-world-snap {
+  color: var(--clay-ink, #8a5e3b);
+  background: var(--clay-tint, #f3eae0);
+  border: 0.5px solid rgba(183, 141, 106, 0.4);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+/* cache readout — cached vs reprocessed token sums (≈ inferred) */
+.mg-cacheout {
+  display: grid;
+  gap: 6px;
+  margin: 10px 14px 0;
+  padding: 10px 12px;
+  border: 0.5px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  font-size: 11px;
+}
+.mg-cacheout-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-variant-numeric: tabular-nums;
+}
+.mg-cacheout-row .k {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: none;
+}
+.mg-cacheout-row .k.read {
+  background: var(--pe-green, #72c6a2);
+}
+.mg-cacheout-row .k.rep {
+  background: #c08a5a;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(255, 255, 255, 0.4) 0 2px,
+    transparent 2px 4px
+  );
+}
+.mg-cacheout-row .v {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  color: var(--slate);
+}
+.mg-cacheout-why {
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--clay-ink, #8a5e3b);
+  background: var(--clay-tint, #f3eae0);
+  border: 0.5px solid rgba(183, 141, 106, 0.4);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+/* drift note inside an expanded changed layer */
+.mg-world-drift {
+  margin: 0 0 6px;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--clay-ink, #8a5e3b);
+  font-family: var(--font-mono);
+}
+
+/* individual item cards — tools, prompt sections, skills */
+.mg-item {
+  border: 0.5px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--paper);
+}
+.mg-world-layer.delta .mg-item {
+  border-color: rgba(183, 141, 106, 0.45);
+}
+.mg-item-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 6px 9px;
+  cursor: pointer;
+  font: inherit;
+}
+.mg-item-head:disabled {
+  cursor: default;
+}
+.mg-item-head:not(:disabled):hover {
+  background: var(--paper-2);
+}
+.mg-item-main {
+  min-width: 0;
+  flex: 1;
+}
+.mg-item-name {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink, #2b333a);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mg-item-src {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--lichen, #7c8b6b);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mg-item-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.mg-item-tok {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--muted);
+}
+.mg-item-car {
+  color: var(--muted);
+  font-size: 10px;
+  transition: transform 0.16s;
+}
+.mg-item.open .mg-item-car {
+  transform: rotate(90deg);
+}
+.mg-item-body {
+  margin: 0;
+  padding: 8px 9px;
+  border-top: 0.5px solid var(--line);
+  background: var(--paper-2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: #5a5f5b;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 220px;
+  overflow: auto;
+}
+
+/* pill — item load state */
+.mg-pill {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.02em;
+  border-radius: 4px;
+  padding: 1px 5px;
+  border: 0.5px solid;
+  white-space: nowrap;
+}
+.mg-pill.in {
+  color: var(--pe-blue, #005695);
+  border-color: rgba(0, 86, 149, 0.4);
+  background: rgba(0, 86, 149, 0.05);
+}
+.mg-pill.on-demand {
+  color: var(--clay-ink, #8a5e3b);
+  border-color: rgba(183, 141, 106, 0.5);
+  border-style: dashed;
+}
+.mg-pill.off {
+  color: var(--muted);
+  border-color: var(--line-2, rgba(62, 67, 64, 0.2));
+}
+
+/* blast radius — shown on delta items */
+.mg-blast {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  border-radius: 3px;
+  padding: 0 4px;
+  border: 0.5px solid;
+  white-space: nowrap;
+}
+.mg-blast.prefix {
+  color: #a23b3b;
+  border-color: rgba(162, 59, 59, 0.5);
+  background: rgba(162, 59, 59, 0.08);
+}
+.mg-blast.system {
+  color: var(--clay-ink, #8a5e3b);
+  border-color: rgba(183, 141, 106, 0.55);
+  background: var(--clay-tint, #f3eae0);
+}
+.mg-blast.free {
+  color: var(--lichen, #7c8b6b);
+  border-color: rgba(124, 139, 107, 0.5);
+  background: rgba(114, 198, 162, 0.1);
+}
+
+/* cache badges — frontend inference, marked ≈ */
+.mg-cache {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.02em;
+  border-radius: 3px;
+  padding: 1px 5px;
+  border: 0.5px solid;
+  white-space: nowrap;
+}
+.mg-cache.cached {
+  color: var(--lichen, #7c8b6b);
+  border-color: rgba(124, 139, 107, 0.5);
+  background: rgba(114, 198, 162, 0.12);
+}
+.mg-cache.reprocessed,
+.mg-cache.reproc {
+  color: var(--clay-ink, #8a5e3b);
+  border-color: rgba(183, 141, 106, 0.55);
+  background: var(--clay-tint, #f3eae0);
+}
+
+/* Plain density — hide dev chrome, keep the capability sentences */
+.mg-world[data-density="plain"] .mg-world-tok,
+.mg-world[data-density="plain"] .mg-world-pct,
+.mg-world[data-density="plain"] .mg-world-pos,
+.mg-world[data-density="plain"] .mg-cache,
+.mg-world[data-density="plain"] .mg-world-items,
+.mg-world[data-density="plain"] .mg-world-foot,
+.mg-world[data-density="plain"] .mg-world-note,
+.mg-world[data-density="plain"] .mg-cacheout,
+.mg-world[data-density="plain"] .mg-world-drift,
+.mg-world[data-density="plain"] .mg-world-sub {
+  display: none;
+}
+.mg-world[data-density="plain"] .mg-world-row {
+  grid-template-columns: 9px 1fr auto;
+}
+
+/* ===== Context budget bar — categories folded onto the OM windows ===== */
+.mg-budget {
+  margin: 12px 14px 0;
+}
+.mg-budget-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 6px;
+}
+.mg-budget-head b {
+  color: var(--basalt);
+  font-weight: 600;
+}
+.mg-budget-bar {
+  position: relative;
+  display: flex;
+  height: 11px;
+  border: 0.5px solid var(--line);
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--paper-2);
+}
+.mg-budget-bar.over {
+  box-shadow: 0 0 0 1.5px #a23b3b;
+}
+.mg-bud-seg {
+  height: 100%;
+  min-width: 0;
+}
+.mg-bud-region {
+  position: relative;
+  height: 100%;
+  min-width: 0;
+  border-left: 0.5px solid var(--paper);
+  background: repeating-linear-gradient(45deg, var(--paper-2) 0 5px, var(--paper-3) 5px 10px);
+}
+.mg-bud-rfill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  min-width: 1px;
+  transition: width 0.35s ease;
+}
+.mg-bud-rfill.active {
+  animation: mg-bud-pulse 1.5s ease-in-out infinite;
+}
+@keyframes mg-bud-pulse {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.2);
+  }
+}
+.mg-bud-floor {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  width: 0;
+  border-left: 1.5px dashed var(--clay-ink, #8a5e3b);
+  z-index: 2;
+}
+.mg-budget-ticks {
+  position: relative;
+  height: 13px;
+  margin-top: 1px;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  color: var(--clay-ink, #8a5e3b);
+}
+.mg-budget-ticks span {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.mg-budget-rows {
+  display: grid;
+  gap: 2px;
+  margin-top: 9px;
+}
+.mg-budget-row {
+  display: grid;
+  grid-template-columns: 10px 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+}
+.mg-budget-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+.mg-budget-flag {
+  margin-left: 6px;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  color: var(--clay-ink, #8a5e3b);
+}
+.mg-budget-rtok {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--slate);
+}
+.mg-budget-rpct {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+  min-width: 34px;
+  text-align: right;
+}
+.mg-world[data-density="plain"] .mg-budget {
+  display: none;
+}
+
+/* ===== Context gutter — the MapDial's at-a-glance context stack ===== */
+.mg-gut {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+.mg-gut-cols {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+.mg-gut-stack {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 14px;
+  height: 64px;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 0.5px solid var(--line-2, rgba(62, 67, 64, 0.2));
+  box-shadow: 0 1px 3px rgba(62, 67, 64, 0.18);
+}
+.mg-gut-seg {
+  width: 100%;
+  min-height: 1px;
+}
+.mg-gut-horizon {
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  height: 0;
+  border-top: 1.5px dashed var(--clay-ink, #8a5e3b);
+}
+.mg-gut.pulse .mg-gut-stack {
+  animation: mg-gut-pulse 1.8s ease-in-out infinite;
+}
+@keyframes mg-gut-pulse {
+  0%,
+  100% {
+    box-shadow: 0 1px 3px rgba(62, 67, 64, 0.18);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px rgba(183, 141, 106, 0.45),
+      0 1px 3px rgba(62, 67, 64, 0.18);
+  }
+}
+.mg-gut-pop {
+  position: absolute;
+  top: 0;
+  right: calc(100% + 8px);
+  display: none;
+  flex-direction: column;
+  gap: 3px;
+  width: max-content;
+  max-width: 220px;
+  padding: 8px 10px;
+  background: var(--paper);
+  border: 0.5px solid var(--line-2, rgba(62, 67, 64, 0.2));
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(62, 67, 64, 0.16);
+  font-size: 11px;
+  color: var(--slate);
+}
+.mg-gut:hover .mg-gut-pop,
+.mg-gut:focus-visible .mg-gut-pop {
+  display: flex;
+}
+.mg-gut-poprow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.mg-gut-popdot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: none;
+}
+.mg-gut-poptok {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+}
+.mg-gut-pophint {
+  margin-top: 2px;
+  font-size: 9.5px;
+  color: var(--muted);
+}
+
+/* memory strata column beside the layer stack */
+.mg-gut-strata {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 12px;
+  height: 64px;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 0.5px solid var(--line-2, rgba(62, 67, 64, 0.2));
+  box-shadow: 0 1px 3px rgba(62, 67, 64, 0.18);
+}
+.mg-gut-region {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  background: repeating-linear-gradient(45deg, var(--paper-2) 0 4px, var(--paper-3) 4px 8px);
+}
+.mg-gut-region.obs {
+  border-bottom: 1px dashed var(--clay-ink, #8a5e3b);
+}
+.mg-gut-rfill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  transition: height 0.35s ease;
+}
+.mg-gut-rfill.active {
+  animation: mg-bud-pulse 1.5s ease-in-out infinite;
+}
+.mg-gut-floor {
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  height: 0;
+  border-top: 1px dashed var(--clay-ink, #8a5e3b);
+  z-index: 2;
+}
+.mg-gut.pulse .mg-gut-strata.reflecting {
+  animation: mg-gut-pulse 1.8s ease-in-out infinite;
 }
