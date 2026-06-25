@@ -19,7 +19,7 @@ Docs are local at `node_modules/vite-plus/docs` or online at https://viteplus.de
 
 ## Decision
 
-`source/pe-tools` is the TypeScript workspace for Pe.Tools product-adjacent surfaces: user-facing `pea`, dev-only `peco`, local web/profile UI, protocol adapters, generated Host contracts, and small TypeScript libraries that make agent/UI/TUI work possible.
+`source/pe-tools` is the TypeScript workspace for Pe.Tools product-adjacent surfaces: user-facing `pea`, dev-only `peco`, generated Host contracts, and small TypeScript libraries that make agent/TUI work possible.
 
 This workspace should use:
 
@@ -48,17 +48,17 @@ This is a private-product monorepo posture, not a public npm package ecosystem p
 
 Names may change, but the authority boundaries should not blur.
 
-`pea` is the user product entrypoint. It may serve local protocols and standardized event/data formats for frontends, TUIs, and agents. It is not the semantic authority for Revit behavior, settings semantics, JSON schema generation, product layout, or Host operation contracts.
+`pea` is the user product entrypoint. It owns product policy over a MastraCode `Session` and TUI shell. It is not the semantic authority for Revit behavior, settings semantics, JSON schema generation, product layout, or Host operation contracts.
 
 `peco` is private developer tooling. It can chain very specific Revit development workflows, RRD/live-loop checks, repo verification, and black-box Pea feedback. These commands should move out of the user-facing `pea` surface over time.
 
-`@pe/runtime` is the shared protocol/runtime seam below both apps. It may expose generic `RuntimeFactory`, auth, session, event, ACP, and AG-UI contracts, but it should not dispatch on Pea-vs-`peco` product identity.
+`@pe/runtime` is the thin shared runtime helper package below Pea and tooling. Keep it limited to storage, memory, auth profile, tool metadata, request-context, and Harness construction helpers that still need Pe-owned policy. Do not rebuild MastraCode protocol, run-control, event-bus, model/mode, thread, or ACP surfaces here.
 
 Pea's Mastra workspace root and product home are the same directory. By default this is the directory where the Pea CLI is launched; `--workspace-root` may override it. Pea should operate inside that product workspace, while scripting tools can continue to default to the Host/Revit scripting workspace key such as `workspaces/default`.
 
 ## Authority Model
 
-TypeScript is the bridge and presentation/runtime layer for things that are impractical in C#: agent runtimes, protocol adapters, browser UI, TUI, and local frontend orchestration.
+TypeScript is the bridge and presentation/runtime layer for things that are impractical in C#: agent runtimes, TUI, generated Host wrappers, and local orchestration.
 
 Semantic authority remains in the existing Pe.Tools layers:
 
@@ -71,7 +71,7 @@ Semantic authority remains in the existing Pe.Tools layers:
 The intended flow is:
 
 ```text
-UI / TUI / agent / CLI
+TUI / agent / CLI
   -> pea or peco TypeScript runtime
   -> local wrappers over generated Host contracts
   -> Pe.Host public operations
@@ -121,21 +121,11 @@ app code
 
 Avoid spreading generated import paths across runtime, UI, and tool code. Generated code should be easy to delete and regenerate without changing product code that only cares about stable local concepts.
 
-## Pea And Local UI Posture
+## Pea UI Posture
 
-`pea` may serve localhost browser UI and protocol endpoints. For now, localhost-only UI is preferred over hosted UI because it reduces version/contract drift while the Host contracts and schema/UI contracts are still evolving.
+The old Pe-owned local browser workbench and ACP/web protocol stack were deleted during the MastraCode 0.25 session migration. Reintroduce a browser UI only on top of a current Mastra-native session/transport instead of restoring the deleted Pe protocol adapters.
 
-The browser UI should be presentation/controller only:
-
-- render schemas and field metadata;
-- call local `pea`/Host-backed operations;
-- read/write profiles through local authority;
-- display validation diagnostics and artifacts;
-- avoid owning Revit or settings semantics.
-
-Even without a full account/session system, local UI should avoid accidental exposure. Bind to loopback by default and require a local connection token when exposing HTTP/SSE endpoints. Treat that token as localhost plumbing, not Pea Cloud or user identity auth; product-served URLs should use per-launch tokens, while explicit dev loops may use a fixed token only for matching local proxy setup.
-
-Pea Cloud, WorkOS, Mastra Gateway, sponsored model access, and Gateway-backed observational memory remain product goals, but they must be lazy capabilities. Local workbench startup, thread browsing, local provider-key model access, and Revit/operator dev loops should not require cloud login; use explicit local-only/no-cloud-auth controls when cloud auth would add friction.
+Pea Cloud, WorkOS, Mastra Gateway, sponsored model access, and Gateway-backed observational memory remain product goals, but they must be lazy capabilities. Local TUI startup, thread browsing, local provider-key model access, and Revit/operator dev loops should not require cloud login; use explicit local-only/no-cloud-auth controls when cloud auth would add friction.
 
 ## Pea TUI Live Loop
 

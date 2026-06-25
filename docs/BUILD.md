@@ -223,6 +223,7 @@ The clean source-linked CLI model is:
 - Bare `pea` launches the Pea Revit/operator agent TUI from `source/pe-tools/apps/pea/src/main.ts`.
 - Bare `peco` launches the Peco repo coding-agent TUI from `source/pe-tools/apps/pe-code/src/main.ts`.
 - Source-linked `pea` / `peco` package scripts use `vp exec jiti src/main.ts`. This keeps the runtime under Vite+'s managed Node while letting `jiti` handle the repo's TypeScript/NodeNext source graph. Raw `vp exec node src/main.ts` is not enough for this source graph because Node's built-in TypeScript support is still strip/transform limited and does not resolve the repo's `.js` source specifiers back to `.ts`.
+- Source-linked `pea web` / `peco web` route through `source/pe-tools/tools/dev-web`. That helper owns the two-process dev web model: a watched backend workbench API plus the Vite website dev server.
 - `pea <subcommand> ...` stays available for product/operator commands such as `host` and `script`.
 - `peco <subcommand> ...` stays available for repo/dev commands such as `live`, `script`, and `talk-to-pea`.
 - `pea --installed ...` is the explicit installed-lane selector. Use it in installed-lane validation and scripts where ambiguity would be expensive.
@@ -246,15 +247,33 @@ This asymmetry is deliberate: Host needs a dev-only root to avoid installed-runt
 
 - `pea` starts the source-linked Pea Revit/operator workbench TUI; `pea host` and `pea script` expose product command subgroups.
 - `peco` starts the MastraCode-based repo coding agent; `peco live`, `peco script`, and `peco talk-to-pea` expose repo/dev command subgroups.
-- `pe-dev` is the narrow C# source/dev CLI for PATH bootstrap, source linking, codegen, FreshRevitProcess tests, and automation commands.
+- `pe-dev` is the narrow C# source/dev CLI for PATH bootstrap, source linking, web dev supervision, codegen, FreshRevitProcess tests, and automation commands.
+
+### Source-linked web dev
+
+Source-linked web dev is intentionally one user command over two local processes:
+
+- `pea web` or `peco web` from a source-linked launcher starts the repo-owned `tools/dev-web` supervisor.
+- `pe-dev web pea` and `pe-dev web peco` run the same supervisor explicitly when debugging the dev lane.
+- The supervisor starts the selected backend workbench API with `node --watch --import jiti/register src/main.ts web ...` and starts the Vite website dev server.
+- Default local ports are fixed: website `http://127.0.0.1:5173`, workbench API `http://127.0.0.1:43112`, token `dev-loopback`.
+- The supervisor takes over those two ports by default on Windows. Pass `--no-takeover` when a smoke test or manual session should fail instead of killing the port owner.
+- Pass `--no-watch` to disable backend Node watch during smoke tests or debugger-driven sessions.
+
+The website Vite proxy is part of this dev lane. It forwards `/workbench` to `PE_WORKBENCH_AGENT_URL` or `http://127.0.0.1:43112`, adding `PE_WORKBENCH_DEV_TOKEN` or `dev-loopback`. If the backend is not on the default port, visit the website with a `?workbench=<encoded backend url>` query or set the proxy environment variables before starting Vite.
+
+Installed/product web behavior is separate. `pea --installed web ...` runs the packaged Pea CLI path; source-linked `pea web` is a dev supervisor convenience, not installed-lane proof.
 
 Useful dev-lane refresh commands:
 
 ```powershell
 pe-dev bootstrap-path
 pe-dev pea link-dev
+pe-dev web pea
 pea
 peco
+pea web
+peco web
 pea --dev --help
 pea --installed --help
 ```
@@ -324,21 +343,22 @@ The automation shell is `Pe.Dev.RevitAutomation.Worker`, not desktop `Pe.App`. D
 
 ## Compact command index
 
-| Goal                              | Use                                                                                                                                   |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Safe source compile               | `dotnet build .\source\<Package>\<Package>.csproj -c Debug.R25`                                                                       |
-| Recover poisoned dotnet sandbox   | `.\tools\dotnet-sandbox-safe.ps1 <dotnet args>`                                                                                       |
-| Fresh Revit proof                 | `pe-dev test --filter "Name~..." --timeout-seconds 900`                                                                               |
-| Fresh proof planning              | `pe-dev test --plan --json --filter "Name~..."`                                                                                       |
+| Goal                              | Use                                                                                                                              |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Safe source compile               | `dotnet build .\source\<Package>\<Package>.csproj -c Debug.R25`                                                                  |
+| Recover poisoned dotnet sandbox   | `.\tools\dotnet-sandbox-safe.ps1 <dotnet args>`                                                                                  |
+| Fresh Revit proof                 | `pe-dev test --filter "Name~..." --timeout-seconds 900`                                                                          |
+| Fresh proof planning              | `pe-dev test --plan --json --filter "Name~..."`                                                                                  |
 | Attached RRD proof                | Use Peco attached-runtime verification wrappers/skills, then prove with an attached operation/script/test/log/Pea product probe. |
-| Product host/log/script check     | `pea host ...`, `pea script ...`                                                                                                      |
-| Package artifacts/MSI             | `dotnet run --project .\build\Build.csproj -c Release -- pack`                                                                        |
-| Package one year                  | `dotnet run --project .\build\Build.csproj -c Release -- pack --configuration Release.R25`                                            |
-| Package desktop bundle only       | `dotnet run --project .\build\Build.csproj -c Release -- pack desktop --configuration Release.R25`                                    |
-| Package Pea payload only          | `dotnet run --project .\build\Build.csproj -c Release -- pack pea`                                                                    |
-| Package installer only            | `dotnet run --project .\build\Build.csproj -c Release -- pack installer --configuration Release.R25`                                  |
-| Package automation appbundle only | `dotnet run --project .\build\Build.csproj -c Release -- pack automation`                                                             |
-| Publish GitHub release artifacts  | `dotnet run --project .\build\Build.csproj -c Release -- pack publish`                                                                |
-| Link source `pea` dev lane        | `pe-dev pea link-dev`, then `peco` or `pea --dev ...`                                                                              |
-| Validate installed `pea` lane     | `pea --installed ...`                                                                                                                 |
-| Generated contract update         | `pe-dev codegen sync --target <target>`                                                                                               |
+| Product host/log/script check     | `pea host ...`, `pea script ...`                                                                                                 |
+| Package artifacts/MSI             | `dotnet run --project .\build\Build.csproj -c Release -- pack`                                                                   |
+| Package one year                  | `dotnet run --project .\build\Build.csproj -c Release -- pack --configuration Release.R25`                                       |
+| Package desktop bundle only       | `dotnet run --project .\build\Build.csproj -c Release -- pack desktop --configuration Release.R25`                               |
+| Package Pea payload only          | `dotnet run --project .\build\Build.csproj -c Release -- pack pea`                                                               |
+| Package installer only            | `dotnet run --project .\build\Build.csproj -c Release -- pack installer --configuration Release.R25`                             |
+| Package automation appbundle only | `dotnet run --project .\build\Build.csproj -c Release -- pack automation`                                                        |
+| Publish GitHub release artifacts  | `dotnet run --project .\build\Build.csproj -c Release -- pack publish`                                                           |
+| Link source `pea` dev lane        | `pe-dev pea link-dev`, then `pea`, `peco`, `pea web`, or `peco web`                                                              |
+| Run source web dev explicitly     | `pe-dev web pea` or `pe-dev web peco`                                                                                            |
+| Validate installed `pea` lane     | `pea --installed ...`                                                                                                            |
+| Generated contract update         | `pe-dev codegen sync --target <target>`                                                                                          |

@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>pea — the world panel</title>
+<!-- Marginalia tokens, lifted verbatim from apps/website/src/styles.css so this reads as the real product. -->
+<style>
+:root{
+  --pe-blue:#005695; --pe-blue-soft:#1f6fa8; --pe-green:#72c6a2; --slate:#4f6473;
+  --lichen:#7c8b6b; --clay:#b78d6a; --clay-tint:#f3eae0; --clay-ink:#8a5e3b; --kiln:#c8bdaf;
+  --basalt:#3e4340; --mist:#e8e4dd; --paper:#fbfaf7; --paper-2:#f4f1ea; --paper-3:#f7f4ed;
+  --muted:#8a9088; --line:rgba(62,67,64,.12); --line-2:rgba(62,67,64,.2); --line-soft:rgba(62,67,64,.07);
+  --user-tint:rgba(114,198,162,.13); --user-line:rgba(114,198,162,.32);
+  --font-body:"Open Sans",system-ui,-apple-system,sans-serif;
+  --font-display:"Spectral",Georgia,serif;
+  --font-mono:ui-monospace,"SF Mono","Cascadia Code",Menlo,monospace;
+  /* per-category accents for the world layers */
+  --c-system:#005695; --c-skills:#8a5e3b; --c-agents:#7c8b6b; --c-tools:#1f6fa8; --c-mcp:#b07a9a; --c-memory:#b78d6a; --c-messages:#8a9088;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--paper);color:var(--basalt);font-family:var(--font-body);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+
+/* ---- shell ---- */
+.app{position:fixed;inset:0;display:grid;grid-template-rows:auto minmax(0,1fr)}
+header{display:flex;align-items:center;gap:14px;padding:10px 18px;border-bottom:.5px solid var(--line);background:var(--paper);position:relative;z-index:20}
+.brand{font-family:var(--font-display);font-weight:600;color:var(--pe-blue);font-size:17px}
+.thread-title{font-size:14px;font-weight:600;color:var(--basalt);white-space:nowrap}
+.chiprow{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--slate)}
+.chip{display:inline-flex;align-items:center;gap:6px;border:.5px solid var(--line-2);border-radius:6px;padding:3px 9px;background:var(--paper);color:var(--slate);white-space:nowrap;cursor:pointer}
+.chip:hover{background:var(--paper-2)}
+.chip .dot{width:7px;height:7px;border-radius:50%;background:var(--pe-blue)}
+.chip.world{font-weight:600}
+.chip.world.on{background:var(--clay-tint);border-color:rgba(183,141,106,.5);color:var(--clay-ink)}
+.spacer{margin-left:auto}
+/* density dial (camera-style, from .mg-dial) */
+.dial{display:flex;gap:3px;padding:3px;background:linear-gradient(var(--paper-2),var(--mist));border:.5px solid var(--line-2);border-radius:10px;box-shadow:inset 0 1px 2px rgba(62,67,64,.13)}
+.seg{position:relative;border:.5px solid transparent;background:transparent;color:var(--slate);font-size:12px;font-weight:600;padding:4px 13px;border-radius:7px;transition:background .16s,box-shadow .16s,transform .08s}
+.seg:hover:not([aria-pressed=true]){color:var(--basalt);background:rgba(255,255,255,.5)}
+.seg[aria-pressed=true]{color:var(--clay-ink);background:linear-gradient(var(--paper),var(--clay-tint));border-color:rgba(183,141,106,.5);box-shadow:0 1px 2px rgba(138,94,59,.2),inset 0 1px 0 rgba(255,255,255,.75)}
+.seg[aria-pressed=true]::after{content:"";position:absolute;left:50%;bottom:3px;width:13px;height:2px;border-radius:2px;background:var(--clay);transform:translateX(-50%)}
+
+/* ---- body: chat backdrop + world panel ---- */
+.body{position:relative;min-height:0;display:grid;grid-template-columns:minmax(0,1fr)}
+.app[data-arr="lane"] .body{grid-template-columns:var(--lanew,420px) minmax(0,1fr)}
+.scroll{min-height:0;overflow-y:auto;padding:20px 26px 40vh}
+.app[data-arr="lane"] .scroll{grid-column:2}
+
+/* faded chat behind, just to set the stage */
+.moment{padding:13px 0;max-width:680px}
+.who{font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;margin-bottom:5px}
+.who.you{color:var(--pe-green)} .who.pea{color:var(--pe-blue)}
+.bubble{background:var(--user-tint);border:.5px solid var(--user-line);border-radius:12px 12px 2px 12px;padding:8px 12px;width:fit-content;margin-left:auto;max-width:80%}
+.prose{font-size:14px;line-height:1.62}
+.mk{display:inline-flex;align-items:center;gap:9px;border-left:2px solid var(--pe-blue);border-left-style:dashed;padding:2px 8px 2px 11px;font-size:13px;color:var(--slate)}
+.mk code{font-family:var(--font-mono);font-size:12px;color:var(--lichen)}
+
+/* ===== THE WORLD PANEL ===== */
+/* drawer arrangement: slide-over from the right, over the thread */
+.world{background:var(--paper-3);border-left:.5px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.app[data-arr="drawer"] .world{position:absolute;top:0;right:0;bottom:0;width:min(440px,92vw);box-shadow:-18px 0 40px rgba(62,67,64,.12);transform:translateX(100%);transition:transform .22s cubic-bezier(.4,0,.2,1);z-index:15}
+.app[data-arr="drawer"][data-open="1"] .world{transform:none}
+/* lane arrangement: a real grid column (the "ground" the thread stands on), left side */
+.app[data-arr="lane"] .world{grid-column:1;grid-row:1;border-left:none;border-right:.5px solid var(--line)}
+.app[data-arr="lane"] .world{position:relative;transform:none;box-shadow:none}
+
+.w-head{padding:14px 16px 10px;border-bottom:.5px solid var(--line)}
+.w-title{font-family:var(--font-display);font-weight:600;font-size:16px;color:var(--basalt);margin:0}
+.w-sub{font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-top:3px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.w-snap{color:var(--clay-ink);background:var(--clay-tint);border-radius:4px;padding:1px 6px;border:.5px solid rgba(183,141,106,.4)}
+.w-driftbtn{margin-left:auto;border:.5px solid var(--line-2);background:var(--paper);border-radius:5px;padding:2px 8px;font-size:10.5px;color:var(--slate);font-family:var(--font-mono);cursor:pointer}
+.w-driftbtn.on{background:var(--clay-tint);border-color:rgba(183,141,106,.5);color:var(--clay-ink)}
+.w-scroll{overflow-y:auto;padding:0 0 24px}
+
+/* --- budget meter (user demystification) --- */
+.meter{padding:14px 16px 16px;border-bottom:.5px solid var(--line)}
+.meter-sum{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;margin-bottom:7px;display:flex;justify-content:space-between}
+.meter-sum b{color:var(--basalt);font-weight:600}
+.meter-bar{display:flex;height:10px;width:100%;background:var(--paper-2);border-radius:3px;overflow:hidden;border:.5px solid var(--line)}
+.meter-fill{height:100%;min-width:2px;cursor:pointer;transition:filter .12s}
+.meter-fill:hover{filter:brightness(1.08) saturate(1.2)}
+.meter-fill.free{background:repeating-linear-gradient(45deg,var(--paper-2) 0 4px,var(--paper-3) 4px 8px);cursor:default}
+.meter-legend{display:flex;flex-wrap:wrap;gap:5px 12px;margin-top:9px}
+.meter-leg{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--slate);cursor:pointer;font-variant-numeric:tabular-nums}
+.meter-leg .sw{width:9px;height:9px;border-radius:2px}
+.meter-leg .tk{color:var(--muted);font-family:var(--font-mono);font-size:10.5px}
+.meter-leg.dim{opacity:.4}
+
+/* --- layered inspector (dev transparency) --- */
+.layer{border-bottom:.5px solid var(--line-soft)}
+.layer-head{display:grid;grid-template-columns:10px 1fr auto auto;align-items:center;gap:9px;width:100%;text-align:left;border:none;background:transparent;padding:11px 16px;cursor:pointer}
+.layer-head:hover{background:var(--paper-2)}
+.layer-dot{width:9px;height:9px;border-radius:2px}
+.layer-name{font-size:13px;font-weight:600;color:var(--basalt)}
+.layer-name .cap{display:block;font-weight:400;font-size:11.5px;color:var(--muted);margin-top:1px}
+.layer-ct{font-size:10.5px;color:var(--muted);font-family:var(--font-mono)}
+.layer-tok{font-size:10.5px;color:var(--slate);font-family:var(--font-mono);font-variant-numeric:tabular-nums;min-width:46px;text-align:right}
+.layer-car{transition:transform .16s;color:var(--muted)}
+.layer.open .layer-car{transform:rotate(90deg)}
+.layer-items{display:none;padding:0 16px 12px}
+.layer.open .layer-items{display:block}
+
+/* an item = a provenance card, echoing .mg-payload */
+.item{border:.5px solid var(--line);border-radius:6px;overflow:hidden;margin-bottom:7px;background:var(--paper)}
+.item.drift{border-color:rgba(183,141,106,.55);background:linear-gradient(var(--paper),var(--clay-tint))}
+.item-head{display:flex;align-items:center;gap:9px;padding:8px 10px;cursor:pointer}
+.item-head:hover{background:var(--paper-2)}
+.item-main{min-width:0}
+.item-name{font-size:12.5px;font-weight:600;color:var(--basalt)}
+.item-src{font-family:var(--font-mono);font-size:10.5px;color:var(--lichen);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item-right{margin-left:auto;display:flex;align-items:center;gap:7px;white-space:nowrap}
+.pill{font-size:9.5px;letter-spacing:.04em;border-radius:4px;padding:1px 6px;border:.5px solid;font-family:var(--font-mono)}
+.pill.in{color:var(--pe-blue);border-color:rgba(0,86,149,.4);background:rgba(0,86,149,.05)}
+.pill.demand{color:var(--clay-ink);border-color:rgba(183,141,106,.5);border-style:dashed}
+.pill.off{color:var(--muted);border-color:var(--line-2)}
+.item-tok{font-size:10px;color:var(--muted);font-family:var(--font-mono)}
+.item-body{display:none;border-top:.5px solid var(--line)}
+.item.open .item-body{display:block}
+.item-body pre{margin:0;padding:9px 10px;font-family:var(--font-mono);font-size:11px;line-height:1.5;color:#5a5f5b;white-space:pre-wrap;word-break:break-word;max-height:200px;overflow:auto;background:var(--paper-2)}
+
+/* PLAIN density: hide the dev chrome, show capability sentences */
+.app[data-density="plain"] .layer-tok,
+.app[data-density="plain"] .layer-ct,
+.app[data-density="plain"] .item-src,
+.app[data-density="plain"] .item-tok,
+.app[data-density="plain"] .item-body,
+.app[data-density="plain"] .meter-sum .tech{display:none}
+.app[data-density="plain"] .item-head{cursor:default}
+.app[data-density="plain"] .layer-head{grid-template-columns:10px 1fr auto}
+.plain-cap{display:none}
+.app[data-density="plain"] .plain-cap{display:block;font-size:12px;color:var(--slate);padding:0 16px 12px;line-height:1.5}
+.app[data-density="plain"] .layer.open .layer-items{display:block}
+.app[data-density="plain"] .item{cursor:default}
+
+/* drift hidden unless toggled */
+.app:not([data-drift="1"]) .item.drift{border-color:var(--line);background:var(--paper)}
+.driftnote{display:none}
+.app[data-drift="1"] .item.drift .driftnote{display:block;font-size:10.5px;color:var(--clay-ink);padding:2px 10px 8px;font-family:var(--font-mono)}
+</style>
+</head>
+<body>
+<div class="app" id="app" data-arr="drawer" data-open="1" data-density="inspect" data-drift="0">
+  <header>
+    <span class="brand">pea</span>
+    <span class="thread-title">refactor auth → token store</span>
+    <span class="spacer"></span>
+    <div class="chiprow">
+      <span class="chip"><span class="dot"></span>opus 4.8</span>
+      <span class="chip">trusted</span>
+      <span class="chip world on" id="worldChip">◔ world</span>
+    </div>
+  </header>
+
+  <div class="body">
+    <!-- world panel: budget on top (users), layered provenance below (devs) -->
+    <aside class="world" id="world">
+      <div class="w-head">
+        <div style="display:flex;align-items:center;gap:10px">
+          <h2 class="w-title">What pea is working with</h2>
+          <div class="dial" style="margin-left:auto" role="group" aria-label="density">
+            <button class="seg" id="dPlain" aria-pressed="false">Plain</button>
+            <button class="seg" id="dInspect" aria-pressed="true">Inspect</button>
+          </div>
+        </div>
+        <div class="w-sub">
+          <span class="w-snap">snapshot @ send #12</span>
+          <span class="tech">captured at provider boundary · 39.4k / 200k tokens</span>
+          <button class="w-driftbtn" id="driftBtn">Δ since #11</button>
+        </div>
+      </div>
+
+      <div class="w-scroll">
+        <!-- BUDGET METER -->
+        <div class="meter">
+          <div class="meter-sum"><b>Context window</b><span class="tech">39,420 used · 160,580 free</span></div>
+          <div class="meter-bar" id="bar"></div>
+          <div class="meter-legend" id="legend"></div>
+        </div>
+        <!-- LAYERED INSPECTOR -->
+        <div id="layers"></div>
+      </div>
+    </aside>
+
+    <!-- chat backdrop -->
+    <div class="scroll">
+      <div class="moment"><div class="who you">you</div><div class="bubble">Refactor the auth module to use the new token store.</div></div>
+      <div class="moment"><div class="who pea">pea</div><div class="prose">Looking at the current implementation first.</div></div>
+      <div class="moment"><div class="mk">⌗ Grep <code>auth/**/*.ts</code></div></div>
+      <div class="moment"><div class="mk">⌗ Read <code>auth/token-store.ts</code></div></div>
+      <div class="moment"><div class="who pea">pea</div><div class="prose">Found three call sites. Migrating both legacy references now.</div></div>
+      <div class="moment"><div class="who you">you</div><div class="bubble">Does this handle the expiry edge case?</div></div>
+      <div class="moment"><div class="who pea">pea</div><div class="prose">Good catch — patching it to refresh 30s before expiry.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- arrangement switcher (demo-only chrome, not part of the product) -->
+<div style="position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:50;display:flex;gap:6px;align-items:center;background:var(--paper);border:.5px solid var(--line-2);border-radius:10px;padding:6px 10px;box-shadow:0 8px 24px rgba(62,67,64,.16);font-size:12px;color:var(--slate)">
+  <span style="font-family:var(--font-mono);font-size:10.5px;color:var(--muted)">arrangement:</span>
+  <button class="seg" id="aDrawer" aria-pressed="true" style="border:.5px solid var(--line-2)">Drawer</button>
+  <button class="seg" id="aLane" aria-pressed="false" style="border:.5px solid var(--line-2)">Ground lane</button>
+  <span style="opacity:.4">·</span>
+  <span style="font-family:var(--font-mono);font-size:10.5px;color:var(--muted)">demo controls — not product chrome</span>
+</div>
+
+<script>
+const app=document.getElementById("app");
+const CW=200000;
+// segments mirror buildContextBreakdown: messages, system, tools, skills, mcp, memory
+const segs=[
+  {id:"messages",label:"Messages",tok:18420,color:"var(--c-messages)"},
+  {id:"system",  label:"System prompt",tok:9100,color:"var(--c-system)"},
+  {id:"tools",   label:"Tools",tok:5200,color:"var(--c-tools)"},
+  {id:"mcp",     label:"MCP tools",tok:3400,color:"var(--c-mcp)"},
+  {id:"memory",  label:"Memory",tok:2100,color:"var(--c-memory)"},
+  {id:"skills",  label:"Skills",tok:1200,color:"var(--c-skills)"},
+];
+const used=segs.reduce((s,x)=>s+x.tok,0), free=CW-used;
+
+// budget bar + legend
+const bar=document.getElementById("bar"), legend=document.getElementById("legend");
+segs.forEach(s=>{const d=document.createElement("div");d.className="meter-fill";d.style.flex=s.tok;d.style.background=s.color;d.title=`${s.label}: ${s.tok.toLocaleString()} tok`;d.onclick=()=>openLayer(s.id);bar.appendChild(d);});
+const f=document.createElement("div");f.className="meter-fill free";f.style.flex=free;f.title=`free: ${free.toLocaleString()}`;bar.appendChild(f);
+segs.forEach(s=>{const l=document.createElement("div");l.className="meter-leg";l.innerHTML=`<span class="sw" style="background:${s.color}"></span>${s.label} <span class="tk">${(s.tok/1000).toFixed(1)}k</span>`;l.onclick=()=>openLayer(s.id);legend.appendChild(l);});
+const lf=document.createElement("div");lf.className="meter-leg";lf.innerHTML=`<span class="sw" style="background:var(--kiln)"></span>free <span class="tk">${(free/1000).toFixed(0)}k</span>`;legend.appendChild(lf);
+
+// layers — the part that ends "why isn't pea using X" sessions
+const LAYERS=[
+  {id:"system",color:"var(--c-system)",name:"System prompt",cap:"The base rules pea always follows.",tok:9100,
+   plain:"Pea's core identity, your environment, and the project rules it was started with.",
+   items:[
+     {name:"Base identity + harness",src:"runtime/prompts.ts · createRuntimePrompt",pill:"in",tok:"6.2k",body:"You are pea, an interactive agent…\n# Harness\n - Output rendered as markdown\n - Tools run behind a permission mode"},
+     {name:"Environment",src:"injected at run",pill:"in",tok:"1.4k",body:"cwd: C:/…/Pe.Tools\nplatform: win32\nmodel: claude-opus-4-8\naccess: trusted"},
+     {name:"ponytail (SessionStart hook)",src:"plugin:ponytail · hooks/SessionStart",pill:"in",tok:"1.5k",body:"PONYTAIL MODE ACTIVE — level: full\nYou are a lazy senior developer…"},
+   ]},
+  {id:"agents",color:"var(--c-agents)",name:"AGENTS.md",cap:"Project instructions pea read off disk.",tok:0,
+   plain:"Pea read 2 project instruction files. A third exists but wasn't loaded (outside this folder).",
+   note:"folded into system prompt tokens",
+   items:[
+     {name:"AGENTS.md (repo root)",src:"./AGENTS.md",pill:"in",tok:"—",body:"# Pe.Tools\npnpm workspace · kernel-only sessions\nRun tests with `vp test`."},
+     {name:"AGENTS.md (apps/pea)",src:"apps/pea/AGENTS.md",pill:"in",tok:"—",body:"pea CLI. cli.ts is the entrypoint; runtime.ts builds the harness."},
+     {name:"AGENTS.md (apps/pe-code)",src:"apps/pe-code/AGENTS.md",pill:"off",tok:"—",drift:true,driftnote:"+ present on disk, NOT loaded (outside cwd subtree)",body:"Not in context this send. Loads if you cd into apps/pe-code."},
+   ]},
+  {id:"skills",color:"var(--c-skills)",name:"Skills",cap:"Slash-commands pea can run.",tok:1200,
+   plain:"11 commands available. One (deep-research) is fully loaded because you invoked it; the rest are name-only until called.",
+   items:[
+     {name:"deep-research",src:".claude/skills/deep-research",pill:"in",tok:"0.9k",body:"Full body injected (invoked). Fan-out web search → verify → cited report."},
+     {name:"code-review",src:".claude/skills/code-review",pill:"demand",tok:"40",body:"Catalog entry only (name + description). Body loads on invoke."},
+     {name:"verify · run · simplify · +6",src:".claude/skills/*",pill:"demand",tok:"260",body:"Name + one-line description each. ~260 tok total for the catalog."},
+   ]},
+  {id:"tools",color:"var(--c-tools)",name:"Tools",cap:"Actions pea can take.",tok:5200,
+   plain:"26 built-in tools — reading and searching files, editing, running commands (commands pause for your OK).",
+   items:[
+     {name:"read · grep · glob",src:"runtime/tools · read-only",pill:"in",tok:"0.7k",body:"Read-only file + search tools. Always allowed."},
+     {name:"edit · write",src:"runtime/tools",pill:"in",tok:"0.5k",body:"Mutating tools. Allowed under access=trusted."},
+     {name:"bash",src:"runtime/tools · gated",pill:"in",tok:"0.2k",body:"Shell. Pauses for approval under access=ask; runs under trusted."},
+     {name:"+ 21 more",src:"runtime/tools",pill:"in",tok:"3.8k",body:"task, schedule, web_fetch, … 21 more tool schemas."},
+   ]},
+  {id:"mcp",color:"var(--c-mcp)",name:"MCP servers",cap:"Connected outside tools.",tok:3400,
+   plain:"Filesystem tools are connected and ready. GitHub is configured but its server is offline — so pea can't use it right now.",
+   items:[
+     {name:"filesystem (8 tools)",src:"stdio · server-filesystem",pill:"in",tok:"2.1k",body:"copy_file, create_file, read_file_content, search_files … 8 tools."},
+     {name:"mcp-registry (3 tools)",src:"http · registry",pill:"in",tok:"1.3k",body:"list_connectors, search_mcp_registry, suggest_connectors"},
+     {name:"github",src:"configured · server not connected",pill:"off",tok:"0",drift:true,driftnote:"+ in mcp.json, 0 tools in context — server offline",body:"Configured but not connected this session → contributes nothing. This is usually the answer to 'why won't pea touch GitHub'."},
+   ]},
+  {id:"memory",color:"var(--c-memory)",name:"Memory",cap:"What pea remembers about you.",tok:2100,
+   plain:"8 saved facts about you and this project (your name, preferences, past decisions).",
+   items:[
+     {name:"MEMORY.md index",src:"~/.claude/…/memory/MEMORY.md",pill:"in",tok:"2.1k",body:"8 facts indexed: zod migration, web rearchitect, thread locking, …"},
+   ]},
+];
+const layersEl=document.getElementById("layers");
+layersEl.innerHTML=LAYERS.map(L=>`
+  <div class="layer" id="layer-${L.id}">
+    <button class="layer-head">
+      <span class="layer-dot" style="background:${L.color}"></span>
+      <span class="layer-name">${L.name}<span class="cap">${L.cap}</span></span>
+      <span class="layer-ct">${L.items.length}</span>
+      <span class="layer-tok">${L.tok?(L.tok/1000).toFixed(1)+"k":(L.note?"·":"0")}</span>
+      <span class="layer-car">▸</span>
+    </button>
+    <div class="plain-cap">${L.plain}</div>
+    <div class="layer-items">
+      ${L.items.map(it=>`
+        <div class="item ${it.drift?"drift":""}">
+          <div class="item-head">
+            <span class="item-main">
+              <div class="item-name">${it.name}</div>
+              <div class="item-src">${it.src}</div>
+            </span>
+            <span class="item-right">
+              <span class="pill ${it.pill}">${it.pill==="in"?"in context":it.pill==="demand"?"on demand":"not loaded"}</span>
+              <span class="item-tok">${it.tok}</span>
+            </span>
+          </div>
+          ${it.driftnote?`<div class="driftnote">${it.driftnote}</div>`:""}
+          <div class="item-body"><pre>${it.body.replace(/</g,"&lt;")}</pre></div>
+        </div>`).join("")}
+    </div>
+  </div>`).join("");
+
+// interactions
+layersEl.querySelectorAll(".layer-head").forEach(h=>h.onclick=()=>h.parentElement.classList.toggle("open"));
+layersEl.querySelectorAll(".item-head").forEach(h=>h.onclick=()=>{if(app.dataset.density!=="plain")h.parentElement.classList.toggle("open")});
+function openLayer(id){const el=document.getElementById("layer-"+id);if(el){el.classList.add("open");el.scrollIntoView({behavior:"smooth",block:"center"});}}
+document.getElementById("layer-system").classList.add("open");
+
+// density dial
+const dPlain=document.getElementById("dPlain"),dInspect=document.getElementById("dInspect");
+function setDensity(d){app.dataset.density=d;dPlain.setAttribute("aria-pressed",d==="plain");dInspect.setAttribute("aria-pressed",d==="inspect");}
+dPlain.onclick=()=>setDensity("plain");dInspect.onclick=()=>setDensity("inspect");
+
+// drift toggle (frontend-only delta between snapshots)
+const driftBtn=document.getElementById("driftBtn");
+driftBtn.onclick=()=>{const on=app.dataset.drift==="1";app.dataset.drift=on?"0":"1";driftBtn.classList.toggle("on",!on);};
+
+// arrangement
+const aDrawer=document.getElementById("aDrawer"),aLane=document.getElementById("aLane");
+function setArr(a){app.dataset.arr=a;app.dataset.open="1";aDrawer.setAttribute("aria-pressed",a==="drawer");aLane.setAttribute("aria-pressed",a==="lane");}
+aDrawer.onclick=()=>setArr("drawer");aLane.onclick=()=>setArr("lane");
+
+// world chip toggles the drawer
+document.getElementById("worldChip").onclick=()=>{if(app.dataset.arr!=="drawer")return;const on=app.dataset.open==="1";app.dataset.open=on?"0":"1";document.getElementById("worldChip").classList.toggle("on",!on);};
+</script>
+</body>
+</html>
