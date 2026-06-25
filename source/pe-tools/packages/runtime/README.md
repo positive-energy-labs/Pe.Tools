@@ -1,30 +1,28 @@
 # @pe/runtime
 
-`@pe/runtime` owns the protocol-neutral runtime seam used by Pe.Tools agent transports. It should not know whether the caller is the user-facing Pea product or the private `peco` development agent.
+`@pe/runtime` is the thin shared helper package under Pe.Tools agent runtimes. It should not rebuild MastraCode protocol/session surfaces, and it should not know whether the caller is the user-facing Pea product or the private `peco` development agent.
 
 This package owns:
 
-- generic runtime factory/handle contracts;
-- generic auth descriptors and protocol auth projections;
-- runtime session identity and protocol session lifecycle helpers;
-- runtime event contracts and ACP / AG-UI event mapping;
-- protocol-neutral tool metadata contracts used by app-owned catalog projections;
-- local protocol transport helpers for ACP and AG-UI servers.
+- runtime handle contracts for app-owned Harness sessions;
+- generic auth descriptors and Pe auth profiles;
+- storage and memory profile helpers;
+- request-context and system-prompt capture helpers;
+- protocol-neutral tool metadata contracts used by app-owned tool catalogs.
 
 This package does **not** own:
 
 - Pea product auth policy, Host workspace bootstrap, product skills, or product tools;
 - `peco` repo-root discovery, Peco model defaults, repo skills, or live-loop policy;
-- app CLI identity or Gunshi root command wiring.
+- app CLI identity or Gunshi root command wiring;
+- ACP, AG-UI, browser workbench servers, or compatibility adapters over MastraCode sessions.
 
-App packages own product policy over native Harness configuration:
+App packages own product policy over native Mastra/Harness configuration:
 
-- `source/pe-tools/apps/pea/src/runtime.ts` builds the Pea runtime factory.
-- `source/pe-tools/apps/pe-code/src/runtime.ts` builds the `peco` runtime factory.
+- `source/pe-tools/apps/pea/src/runtime.ts` creates the Pea runtime/session.
+- `source/pe-tools/apps/pe-code/src/runtime.ts` creates the `peco` MastraCode runtime/session.
 
-Tool packages own product-specific tool IDs and catalogs. Runtime factories may seed a `RuntimeToolCatalog` into `createRuntimeHarness`; runtime events carry the resolved metadata for protocol adapters. ACP uses that metadata before fallback name buckets. AG-UI stays on its existing event names and does not receive a raw Mastra event side-channel in this slice.
-
-Protocol adapters should receive an app-owned `RuntimeFactory` instead of dispatching on `"pea" | "peco"` themselves. Use the generic `Runtime*` names for protocol-neutral surfaces. If a factory supplies a custom `createHandle`, it must construct sessions with the same tool catalog when it wants event enrichment.
+Tool packages own product-specific tool IDs and catalogs. Runtime helpers may seed a `RuntimeToolCatalog` into `createRuntimeHarness` only when Pe-owned access policy or metadata is still needed.
 
 ## Development
 

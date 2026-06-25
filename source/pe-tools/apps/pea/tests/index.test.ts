@@ -6,7 +6,7 @@ import { createRuntimeRequestContext, resolveRuntimeThreadStateStore } from "@pe
 import { bundledPeaSkills, peaProductHomeEnvVar, peaStandardSkillsRoot } from "@pe/tools";
 import {
   createPeaCliCommand,
-  createPeaProtocolRuntimeFactory,
+  createPeaRuntime,
   defaultPeaRuntimeToolCatalog,
   defaultPeaRuntimeToolProfile,
   getPeaCliCommandNames,
@@ -19,7 +19,7 @@ import { createPeaRuntimeAuthProfile } from "../src/runtime.ts";
 const slowRuntimeTestTimeout = 30_000;
 
 test("pea composes product commands without dev", () => {
-  expect(getPeaCliCommandNames()).toEqual(expect.arrayContaining(["host", "script"]));
+  expect(getPeaCliCommandNames()).toEqual(expect.arrayContaining(["host", "script", "web"]));
   expect(getPeaCliCommandNames()).not.toContain("dev");
 });
 
@@ -56,14 +56,15 @@ test("pea exports the product tool profile used by the default runtime", () => {
   ]);
 });
 
-test("pea root command exposes runtime protocol flags", () => {
+test("pea root command exposes ACP stdio mode without the old protocol stack", () => {
   expect(Object.keys(createPeaCliCommand().args ?? {})).toEqual(
-    expect.arrayContaining(["acp", "authSource", "modelId", "noCloudAuth", "workspaceRoot"]),
+    expect.arrayContaining(["acp", "modelId", "workspaceRoot"]),
   );
+  expect(Object.keys(createPeaCliCommand().args ?? {})).not.toContain("protocol");
 });
 
 test(
-  "pea uses product home as its workspace root and bundled skill root",
+  "pea uses the explicit workspace root and product home bundled skill root",
   async () => {
     const launchCwd = await mkdtemp(path.join(os.tmpdir(), "pea-launch-cwd-"));
     const productHomePath = await mkdtemp(path.join(os.tmpdir(), "pea-product-home-"));
@@ -75,19 +76,13 @@ test(
     const launchCwdSkillPath = path.join(launchCwd, peaStandardSkillsRoot, skill.name, "SKILL.md");
 
     try {
-      const runtime = await (
-        await createPeaProtocolRuntimeFactory({ workspaceRoot: launchCwd })
-      ).create({
-        protocol: "tui",
-        cwd: launchCwd,
-        workspaceRoot: launchCwd,
-      });
+      const runtime = await createPeaRuntime({ workspaceRoot: launchCwd });
 
       try {
-        expect(runtime.workspace).toEqual({ cwd: productHomePath, root: productHomePath });
-        expect(runtime.harness.getState()).toEqual(
+        expect(runtime.workspace).toEqual({ cwd: launchCwd, root: launchCwd });
+        expect(runtime.session?.state.get()).toEqual(
           expect.objectContaining({
-            projectPath: productHomePath,
+            projectPath: launchCwd,
             productHomePath,
           }),
         );
@@ -98,7 +93,8 @@ test(
       }
 
       await writeFile(skillPath, "tampered\n", "utf-8");
-      await createPeaProtocolRuntimeFactory({ workspaceRoot: launchCwd });
+      const rematerializedRuntime = await createPeaRuntime({ workspaceRoot: launchCwd });
+      await rematerializedRuntime.close?.();
       expect(await readFile(skillPath, "utf-8")).toBe(`${skill.content.trimEnd()}\n`);
       await expect(access(launchCwdSkillPath)).rejects.toThrow();
     } finally {
@@ -115,16 +111,11 @@ test(
   "pea runtime agent exposes task tools through TaskSignalProvider",
   async () => {
     const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-runtime-"));
-    const runtime = await (
-      await createPeaProtocolRuntimeFactory({ workspaceRoot })
-    ).create({
-      protocol: "tui",
-      cwd: workspaceRoot,
-      workspaceRoot,
-    });
+    const runtime = await createPeaRuntime({ workspaceRoot });
 
     try {
-      const tools = await getRuntimeHarnessAgent(runtime.harness).listTools();
+      const agent = getRuntimeAgent(runtime.harness.getMastra(), "pea-agent");
+      const tools = await agent.listTools();
       expect(tools).toEqual(
         expect.objectContaining({
           task_write: expect.any(Object),
@@ -221,19 +212,13 @@ test("pea context state processor emits on changed or missing active snapshot", 
 });
 
 test(
-  "pea protocol runtime starts in yolo mode so tool approvals are auto-allowed",
+  "pea runtime starts in yolo mode so tool approvals are auto-allowed",
   async () => {
     const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-yolo-"));
-    const runtime = await (
-      await createPeaProtocolRuntimeFactory({ workspaceRoot })
-    ).create({
-      protocol: "tui",
-      cwd: workspaceRoot,
-      workspaceRoot,
-    });
+    const runtime = await createPeaRuntime({ workspaceRoot });
 
     try {
-      expect(runtime.harness.getState()).toEqual(expect.objectContaining({ yolo: true }));
+      expect(runtime.session?.state.get()).toEqual(expect.objectContaining({ yolo: true }));
     } finally {
       await runtime.close?.();
       await rm(workspaceRoot, { recursive: true, force: true });
@@ -243,46 +228,16 @@ test(
 );
 
 test(
-  "pea protocol runtime does not preselect a startup thread",
-  async () => {
-    const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-no-startup-thread-"));
-    const runtime = await (
-      await createPeaProtocolRuntimeFactory({ workspaceRoot })
-    ).create({
-      protocol: "tui",
-      cwd: workspaceRoot,
-      workspaceRoot,
-    });
-
-    try {
-      expect(runtime.harness.getCurrentThreadId() ?? undefined).toBeUndefined();
-    } finally {
-      await runtime.close?.();
-      await rm(workspaceRoot, { recursive: true, force: true });
-    }
-  },
-  slowRuntimeTestTimeout,
-);
-
-test(
-  "pea protocol runtime honors configured startup model",
+  "pea runtime honors configured startup model",
   async () => {
     const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-model-"));
-    const runtime = await (
-      await createPeaProtocolRuntimeFactory({
-        workspaceRoot,
-        modelId: "openai/gpt-5.5",
-      })
-    ).create({
-      protocol: "acp",
-      cwd: workspaceRoot,
+    const runtime = await createPeaRuntime({
       workspaceRoot,
+      modelId: "openai/gpt-5.5",
     });
 
     try {
-      expect(runtime.harness.getState()).toEqual(
-        expect.objectContaining({ currentModelId: "openai/gpt-5.5" }),
-      );
+      expect(runtime.session?.model.get()).toBe("openai/gpt-5.5");
     } finally {
       await runtime.close?.();
       await rm(workspaceRoot, { recursive: true, force: true });
@@ -295,16 +250,12 @@ test(
   "pea task tools keep memory context when durable execution passes sparse context",
   async () => {
     const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-task-context-"));
-    const runtime = await (
-      await createPeaProtocolRuntimeFactory({ workspaceRoot })
-    ).create({
-      protocol: "tui",
-      cwd: workspaceRoot,
-      workspaceRoot,
-    });
+    const runtime = await createPeaRuntime({ workspaceRoot });
 
     try {
-      const session = await runtime.kernel.createThreadSession({ title: "Task Context" });
+      const threadId = runtime.session?.thread.getId();
+      const resourceId = runtime.session?.identity.getResourceId();
+      if (!threadId || !resourceId) throw new Error("Expected Pea runtime session thread.");
       const mastra = runtime.harness.getMastra();
       if (!mastra) throw new Error("Expected Pea runtime harness to expose Mastra.");
       const agent = getRuntimeAgent(mastra, "pea-agent");
@@ -313,11 +264,11 @@ test(
 
       const requestContext = createRuntimeRequestContext({
         protocol: "tui",
-        resourceId: session.resourceId,
+        resourceId,
       });
       const tools = await agent.getToolsForExecution({
-        threadId: session.threadId,
-        resourceId: session.resourceId,
+        threadId,
+        resourceId,
         requestContext,
       });
 
@@ -338,7 +289,7 @@ test(
         { toolCallId: "call-2", messages: [], requestContext },
       );
       const taskState = await resolveRuntimeThreadStateStore(mastra)?.getState({
-        threadId: session.threadId,
+        threadId,
         type: "task",
       });
 
@@ -380,21 +331,6 @@ function getRuntimeAgent(mastra: RuntimeMastra | undefined, id: string): Runtime
   const agent = mastra?.getAgentById(id);
   if (!isRuntimeAgent(agent)) throw new Error(`Expected runtime agent '${id}'.`);
   return agent;
-}
-
-type RuntimeHarnessWithCurrentAgent = {
-  getCurrentAgent(): unknown;
-};
-
-function getRuntimeHarnessAgent(harness: unknown): RuntimeAgent {
-  if (!hasCurrentAgent(harness)) throw new Error("Expected runtime harness current agent access.");
-  const agent = harness.getCurrentAgent();
-  if (!isRuntimeAgent(agent)) throw new Error("Expected runtime harness current agent.");
-  return agent;
-}
-
-function hasCurrentAgent(value: unknown): value is RuntimeHarnessWithCurrentAgent {
-  return isRecord(value) && typeof value.getCurrentAgent === "function";
 }
 
 function isRuntimeAgent(value: unknown): value is RuntimeAgent {

@@ -495,11 +495,6 @@ function workbenchLaunchCommands(): WorkbenchCommandHint[] {
       description: "Open the Pea operator workbench in the current repo.",
     },
     {
-      id: "web",
-      command: "pea web",
-      description: "Serve the browser workbench over the shared runtime transport.",
-    },
-    {
       id: "peco",
       command: "peco",
       description: "Use the developer coding workbench for Pe.Tools repo tasks.",

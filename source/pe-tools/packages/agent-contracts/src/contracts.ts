@@ -344,13 +344,50 @@ export interface WorkbenchInspectorEntry {
   updatedAt?: string;
 }
 
+/** One named constituent of a context segment — a tool, a prompt section, a skill. */
+export interface WorkbenchContextItem {
+  /** Display name (tool name, prompt-section heading, `skill · name`). */
+  name: string;
+  /** Provenance line, mono (e.g. "runtime/tools", "mcp · server-x", ".claude/skills"). */
+  src?: string;
+  /** Approx tokens this item costs in-context. */
+  tokens?: number;
+  /** Expandable content preview (tool description, prompt section body, skill description). */
+  body?: string;
+  /** Load state: in-context, catalog-only (loads on demand), or configured-but-off. */
+  state?: "in" | "on-demand" | "off";
+}
+
 /** One row of the context-window token breakdown (system prompt, tools, messages, …). */
 export interface WorkbenchContextSegment {
   id: string;
   label: string;
   tokens: number;
-  /** Optional named contents, e.g. tool / skill / agent names, pre-formatted for display. */
-  items?: string[];
+  /** Named contents — tools, prompt sections, skills — structured for the World inspector. */
+  items?: WorkbenchContextItem[];
+}
+
+/**
+ * The two observational-memory windows that govern the messages + memory categories.
+ * `messages` fill toward `observationThreshold` then observe (compact into observations);
+ * observations fill toward `reflectionThreshold` then reflect (compress in place down to a
+ * floor). Sourced from the harness `omProgress` — config-derived, not hardcoded.
+ */
+export interface WorkbenchMemoryWindows {
+  /** Messages window: conversation tokens awaiting observation. */
+  messageTokens: number;
+  /** Messages compact (observe) at this token count. */
+  observationThreshold: number;
+  /** Observations window: durable memory tokens currently in context. */
+  observationTokens: number;
+  /** Observations compress (reflect) at this token count. */
+  reflectionThreshold: number;
+  /** Post-reflect low-water (buffered reflection output), if a reflection has run. */
+  reflectionFloor?: number;
+  /** An observe cycle (messages → observations) is in flight. */
+  observing?: boolean;
+  /** A reflect cycle (observations compressed in place) is in flight. */
+  reflecting?: boolean;
 }
 
 /** Token breakdown of what fills the model's context window for this thread. */
@@ -359,6 +396,8 @@ export interface WorkbenchContextBreakdown {
   contextWindow?: number;
   totalTokens: number;
   segments: WorkbenchContextSegment[];
+  /** OM windows for the messages + memory categories, when the runtime reports them. */
+  memoryWindows?: WorkbenchMemoryWindows;
   updatedAt?: string;
 }
 
@@ -1036,6 +1075,15 @@ const systemPromptSnapshotSchema = z
   })
   .loose();
 const inspectorEntrySchema = z.object({ id: z.string(), title: z.string() }).loose();
+const contextItemSchema = z
+  .object({
+    name: z.string(),
+    src: optString,
+    tokens: z.number().nullish(),
+    body: optString,
+    state: z.enum(["in", "on-demand", "off"]).nullish(),
+  })
+  .loose();
 const contextBreakdownSchema = z
   .object({
     contextWindow: z.number().nullish(),
@@ -1046,10 +1094,22 @@ const contextBreakdownSchema = z
           id: z.string(),
           label: z.string(),
           tokens: z.number(),
-          items: z.array(z.string()).nullish(),
+          items: z.array(contextItemSchema).nullish(),
         })
         .loose(),
     ),
+    memoryWindows: z
+      .object({
+        messageTokens: z.number(),
+        observationThreshold: z.number(),
+        observationTokens: z.number(),
+        reflectionThreshold: z.number(),
+        reflectionFloor: z.number().nullish(),
+        observing: z.boolean().nullish(),
+        reflecting: z.boolean().nullish(),
+      })
+      .loose()
+      .nullish(),
     updatedAt: optString,
   })
   .loose();

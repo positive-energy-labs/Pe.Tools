@@ -1,26 +1,14 @@
-import { Harness, type HarnessConfig } from "@mastra/core/harness";
-import {
-  wrapModelForFinalToolListLogging,
-  type FinalToolListLogEntry,
-} from "./final-tool-list-logging.ts";
-import { RuntimeHarness } from "./runtime-harness.ts";
+import { Harness, type HarnessConfig, type Session } from "@mastra/core/harness";
 import { createRuntimeThreadLock } from "./thread-lock.ts";
-import {
-  createRuntimeKernel,
-  type RuntimeKernelHarness,
-  type RuntimeKernelOptions,
-} from "../kernel.ts";
 import type { RuntimeAuthProfile } from "../auth/types.ts";
 import type { RuntimeMemoryProfile } from "../memory/profiles.ts";
 import type {
   RuntimeCreateRequest,
   RuntimeHandle,
   RuntimeHandleServices,
-  RuntimeKernel,
   RuntimeWorkspaceInfo,
 } from "../runtime.ts";
 import type { RuntimeStorageProfile } from "../storage/profiles.ts";
-import { resolveRuntimeThreadStateStore } from "../storage/thread-state.ts";
 import type { RuntimeToolProfile, RuntimeToolSource } from "../tool-metadata.ts";
 import { guardRuntimeToolsForAccessPolicy } from "../tools/access-policy.ts";
 
@@ -39,12 +27,11 @@ export interface RuntimeInjectedHarnessConfig {
 export interface CreateRuntimeHarnessOptions<
   TState extends Record<string, unknown> = Record<string, unknown>,
   TServices extends RuntimeHandleServices = RuntimeHandleServices,
-  THarness extends RuntimeKernelHarness<TState> = Harness<TState>,
+  THarness extends object = Harness<TState>,
 > {
   config: HarnessConfig<TState>;
   request?: RuntimeCreateRequest;
   harness?: THarness;
-  sessionOptions?: RuntimeKernelOptions;
   storageProfile?: RuntimeStorageProfile;
   memoryProfile?: RuntimeMemoryProfile<TState>;
   toolProfile?: RuntimeToolProfile;
@@ -60,7 +47,7 @@ export interface CreateRuntimeHarnessOptions<
 export interface CreateInjectedRuntimeHarnessOptions<
   TState extends Record<string, unknown> = Record<string, unknown>,
   TServices extends RuntimeHandleServices = RuntimeHandleServices,
-  THarness extends RuntimeKernelHarness<TState> = RuntimeKernelHarness<TState>,
+  THarness extends object = object,
 > extends Omit<CreateRuntimeHarnessOptions<TState, TServices, THarness>, "config" | "harness"> {
   config: RuntimeInjectedHarnessConfig;
   harness: THarness;
@@ -70,62 +57,58 @@ export async function createRuntimeHarness<
   TState extends Record<string, unknown> = Record<string, unknown>,
   TServices extends RuntimeHandleServices = RuntimeHandleServices,
 >(
-  options: CreateRuntimeHarnessOptions<TState, TServices, RuntimeHarness<TState>> & {
+  options: CreateRuntimeHarnessOptions<TState, TServices, Harness<TState>> & {
     harness?: undefined;
   },
-): Promise<RuntimeHandle<TState, TServices, RuntimeHarness<TState>>>;
+): Promise<RuntimeHandle<TState, TServices, Harness<TState>>>;
 export async function createRuntimeHarness<
   TState extends Record<string, unknown> = Record<string, unknown>,
   TServices extends RuntimeHandleServices = RuntimeHandleServices,
-  THarness extends RuntimeKernelHarness<TState> = RuntimeKernelHarness<TState>,
+  THarness extends object = object,
 >(
   options: CreateInjectedRuntimeHarnessOptions<TState, TServices, THarness>,
 ): Promise<RuntimeHandle<TState, TServices, THarness>>;
 export async function createRuntimeHarness<
   TState extends Record<string, unknown> = Record<string, unknown>,
   TServices extends RuntimeHandleServices = RuntimeHandleServices,
-  THarness extends RuntimeKernelHarness<TState> = RuntimeKernelHarness<TState>,
+  THarness extends object = object,
 >(
   options:
-    | (CreateRuntimeHarnessOptions<TState, TServices, RuntimeHarness<TState>> & {
+    | (CreateRuntimeHarnessOptions<TState, TServices, Harness<TState>> & {
         harness?: undefined;
       })
     | CreateInjectedRuntimeHarnessOptions<TState, TServices, THarness>,
-): Promise<RuntimeHandle<TState, TServices, RuntimeHarness<TState> | THarness>> {
+): Promise<RuntimeHandle<TState, TServices, Harness<TState> | THarness>> {
   const request = options.request ?? defaultRuntimeCreateRequest;
   let config: HarnessConfig<TState> | RuntimeInjectedHarnessConfig;
-  let harness: RuntimeHarness<TState> | THarness;
-  const finalToolListDebug = createFinalToolListDebugSink();
-  const metadata = mergeWorkbenchDebugMetadata(options.metadata, finalToolListDebug.events);
+  let harness: Harness<TState> | THarness;
+  let session: Session<TState> | undefined;
+  let memory: HarnessConfig<TState>["memory"];
   if (hasInjectedRuntimeHarness(options)) {
     config = options.config;
     harness = options.harness;
   } else {
-    const resolvedConfig = await resolveRuntimeHarnessConfig(options, request, finalToolListDebug);
+    const resolvedConfig = await resolveRuntimeHarnessConfig(options, request);
     config = resolvedConfig;
-    harness = new RuntimeHarness<TState>(resolvedConfig);
+    memory = resolvedConfig.memory;
+    harness = new Harness<TState>(resolvedConfig);
+    await harness.init();
+    session = await harness.createSession(createRuntimeSessionIdentity(resolvedConfig, request));
   }
-  const kernel = createRuntimeKernel(harness, {
-    ...options.sessionOptions,
-    threadStateStore:
-      options.sessionOptions?.threadStateStore ?? resolveRuntimeThreadStateStore(config.storage),
-    storageProfileKind: options.storageProfile?.kind,
-    toolCatalog:
-      options.toolCatalog ?? options.toolProfile?.catalog ?? options.sessionOptions?.toolCatalog,
-  });
   let closeTask: Promise<void> | null = null;
 
   return {
     harness,
-    kernel,
+    session,
+    memory,
     workspace: options.workspace,
     auth: options.auth,
     authStorage: options.authStorage,
     hookManager: options.hookManager,
     mcpManager: options.mcpManager,
-    metadata,
+    metadata: options.metadata,
     close: () => {
-      closeTask ??= closeRuntimeHarness(harness, kernel, config.storage, config.threadLock);
+      closeTask ??= closeRuntimeHarness(harness, session, config.storage);
       return closeTask;
     },
   };
@@ -136,10 +119,10 @@ const defaultRuntimeCreateRequest: RuntimeCreateRequest = { protocol: "tui" };
 function hasInjectedRuntimeHarness<
   TState extends Record<string, unknown>,
   TServices extends RuntimeHandleServices,
-  THarness extends RuntimeKernelHarness<TState>,
+  THarness extends object,
 >(
   options:
-    | (CreateRuntimeHarnessOptions<TState, TServices, RuntimeHarness<TState>> & {
+    | (CreateRuntimeHarnessOptions<TState, TServices, Harness<TState>> & {
         harness?: undefined;
       })
     | CreateInjectedRuntimeHarnessOptions<TState, TServices, THarness>,
@@ -148,31 +131,15 @@ function hasInjectedRuntimeHarness<
 }
 
 async function closeRuntimeHarness<TState extends Record<string, unknown>>(
-  harness: RuntimeKernelHarness<TState>,
-  kernel: RuntimeKernel,
+  harness: Harness<TState> | object,
+  session: Session<TState> | undefined,
   storage: ClosableStorage | undefined,
-  threadLock: RuntimeInjectedHarnessConfig["threadLock"] | undefined,
 ): Promise<void> {
-  harness.abort();
-  const currentThreadId = harness.getCurrentThreadId();
-  let flushError: unknown;
-  try {
-    await kernel.flushLedger();
-  } catch (error) {
-    flushError = error;
-  } finally {
-    const releaseThreadLock = threadLock?.release;
-    if (currentThreadId && releaseThreadLock) {
-      try {
-        await releaseThreadLock(currentThreadId);
-      } catch {
-        // Best-effort cleanup only.
-      }
-    }
-  }
+  session?.abort();
+  await session?.thread.clearAndReleaseLock();
   let closeError: unknown;
   try {
-    const mastra = harness.getMastra?.();
+    const mastra = harness instanceof Harness ? harness.getMastra() : undefined;
     if (mastra?.shutdown) {
       await mastra.shutdown();
     } else {
@@ -181,17 +148,15 @@ async function closeRuntimeHarness<TState extends Record<string, unknown>>(
   } catch (error) {
     closeError = error;
   }
-  if (flushError) throw flushError;
   if (closeError) throw closeError;
 }
 
 async function resolveRuntimeHarnessConfig<
   TState extends Record<string, unknown> = Record<string, unknown>,
-  THarness extends RuntimeKernelHarness<TState> = RuntimeKernelHarness<TState>,
+  THarness extends object = object,
 >(
   options: CreateRuntimeHarnessOptions<TState, RuntimeHandleServices, THarness>,
   request: RuntimeCreateRequest,
-  finalToolListDebug: ReturnType<typeof createFinalToolListDebugSink>,
 ): Promise<HarnessConfig<TState>> {
   const storage =
     options.config.storage ??
@@ -209,21 +174,13 @@ async function resolveRuntimeHarnessConfig<
       : undefined);
 
   const tools = options.config.tools ?? options.toolProfile?.tools;
-  const toolCatalog =
-    options.toolCatalog ?? options.toolProfile?.catalog ?? options.sessionOptions?.toolCatalog;
+  const toolCatalog = options.toolCatalog ?? options.toolProfile?.catalog;
   const guardedTools =
     typeof tools === "function"
       ? tools
       : tools
         ? guardRuntimeToolsForAccessPolicy(tools, toolCatalog)
         : undefined;
-  const configuredResolveModel = options.config.resolveModel;
-  const resolveModel = configuredResolveModel
-    ? (modelId: string) =>
-        wrapModelForFinalToolListLogging(configuredResolveModel(modelId), (entry) =>
-          finalToolListDebug.push(entry),
-        )
-    : undefined;
   const threadLock =
     options.config.threadLock ??
     createRuntimeThreadLock({ storageProfileKind: options.storageProfile?.kind });
@@ -233,47 +190,7 @@ async function resolveRuntimeHarnessConfig<
     ...(storage ? { storage } : {}),
     ...(memory ? { memory } : {}),
     ...(guardedTools ? { tools: guardedTools } : {}),
-    ...(resolveModel ? { resolveModel } : {}),
     threadLock,
-  };
-}
-
-function createFinalToolListDebugSink() {
-  const events: Array<{
-    id: string;
-    source: "runtime";
-    type: string;
-    label: string;
-    timestamp: string;
-    payload: FinalToolListLogEntry;
-  }> = [];
-  return {
-    events,
-    push(entry: FinalToolListLogEntry) {
-      events.push({
-        id: `runtime:final-tool-list:${events.length + 1}`,
-        source: "runtime",
-        type: entry.event,
-        label: `final model tool list (${entry.toolCount})`,
-        timestamp: new Date().toISOString(),
-        payload: entry,
-      });
-      if (events.length > 20) events.splice(0, events.length - 20);
-    },
-  };
-}
-
-function mergeWorkbenchDebugMetadata(
-  metadata: Record<string, unknown> | undefined,
-  debugEvents: unknown[],
-): Record<string, unknown> {
-  const workbench = isRecord(metadata?.workbench) ? metadata.workbench : {};
-  return {
-    ...metadata,
-    workbench: {
-      ...workbench,
-      debug: debugEvents,
-    },
   };
 }
 
@@ -284,6 +201,14 @@ async function initializeRuntimeStorage(storage: InitializableStorage | undefine
   await storage.init?.();
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function createRuntimeSessionIdentity<TState extends Record<string, unknown>>(
+  config: HarnessConfig<TState>,
+  request: RuntimeCreateRequest,
+): { id: string; ownerId: string; resourceId?: string } {
+  const resourceId = config.resourceId ?? config.id;
+  return {
+    id: `${resourceId}:${request.protocol}`,
+    ownerId: process.env.COMPUTERNAME ?? process.env.USERNAME ?? "local",
+    resourceId,
+  };
 }

@@ -1,48 +1,37 @@
-import path from "node:path";
+import { runRuntimeWorkbenchWeb } from "@pe/runtime";
 import {
-  createRuntimeLibSqlThreadIndex,
-  getDefaultMastraCodeDatabasePath,
-  runRuntimeWorkbenchWeb,
-} from "@pe/runtime";
-import { createPeCodeProtocolRuntimeFactory } from "./runtime.ts";
+  closePeCodeRuntime,
+  createPeCodeRuntime,
+  type PeCodeTuiRuntimeOptions,
+} from "./runtime.ts";
 
-export interface PeCodeWebRuntimeOptions {
-  cwd?: string;
-  workspaceRoot?: string;
+export interface PeCodeWebOptions extends PeCodeTuiRuntimeOptions {
   host?: string;
   port?: number;
-  modelId?: string;
   staticDir?: string;
   workbenchPort?: number;
   workbenchToken?: string;
 }
 
-export async function runPeCodeWeb(options: PeCodeWebRuntimeOptions = {}): Promise<void> {
-  const startPath = path.resolve(options.workspaceRoot ?? options.cwd ?? process.cwd());
-  const factory = await createPeCodeProtocolRuntimeFactory({
-    cwd: startPath,
+export async function runPeCodeWeb(options: PeCodeWebOptions = {}): Promise<void> {
+  const runtimeOptions: PeCodeTuiRuntimeOptions = {
+    cwd: options.cwd,
     workspaceRoot: options.workspaceRoot,
     modelId: options.modelId,
-  });
-
-  await runRuntimeWorkbenchWeb({
+    additionalDirectories: options.additionalDirectories,
+  };
+  await runRuntimeWorkbenchWeb<PeCodeTuiRuntimeOptions>({
     label: "peco",
-    agent: {
-      runtime: { factory },
-      sessions: {
-        defaultCwd: startPath,
-        threadIndex: createRuntimeLibSqlThreadIndex({
-          databasePath: getDefaultMastraCodeDatabasePath(),
-          storageProfileKind: "mastracode-compatible",
-        }),
-      },
-      transport: { port: options.workbenchPort ?? 0, token: options.workbenchToken },
+    title: "Peco",
+    createRuntime: async (runtimeOptions: PeCodeTuiRuntimeOptions) => {
+      const runtime = await createPeCodeRuntime(runtimeOptions);
+      return { ...runtime, close: () => closePeCodeRuntime(runtime) };
     },
-    static: {
-      host: options.host,
-      port: options.port,
-      staticDir: options.staticDir,
-      envVar: "PE_WORKBENCH_STATIC_DIR",
-    },
+    runtimeOptions,
+    host: options.host,
+    port: options.port,
+    staticDir: options.staticDir,
+    workbenchPort: options.workbenchPort ?? 0,
+    workbenchToken: options.workbenchToken,
   });
 }
