@@ -29,20 +29,17 @@
     "peco": "vp exec jiti src/main.ts",
     "build": "vp pack",
     "dev": "vp pack --watch",
-    "dev:web": "vp exec node --watch --import jiti/register src/main.ts web --workbench-port=43112 --workbench-token=dev-loopback --port=0",
     "test": "vp test",
     "check": "vp check",
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@mastra/core": "1.42.0",
-    "@pe/acp-client": "workspace:*",
+    "@mastra/core": "1.46.1-alpha.1",
     "@pe/host-client": "workspace:*",
     "@pe/runtime": "workspace:*",
     "@pe/tools": "workspace:*",
-    "@pe/workbench-core": "workspace:*",
     "gunshi": "^0.29.5",
-    "mastracode": "^0.22.3"
+    "mastracode": "0.25.1-alpha.1"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",

@@ -33,13 +33,11 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@agentclientprotocol/sdk": "^0.25.0",
-    "@mastra/core": "1.42.0",
-    "@mastra/libsql": "1.12.1",
-    "@mastra/memory": "1.20.2",
-    "@pe/agent-contracts": "workspace:*",
-    "@pe/host-client": "workspace:*",
-    "mastracode": "^0.22.3",
+    "@agentclientprotocol/sdk": "^0.21.0",
+    "@mastra/core": "1.46.1-alpha.1",
+    "@mastra/libsql": "1.14.1",
+    "@mastra/memory": "1.21.2-alpha.0",
+    "mastracode": "0.25.1-alpha.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {

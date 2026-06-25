@@ -3,6 +3,7 @@ import { hostname } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Agent } from "@mastra/core/agent";
+import type { HarnessMessage } from "@mastra/core/harness";
 import type { MastraModelConfig } from "@mastra/core/llm";
 import type { RequestContext } from "@mastra/core/request-context";
 import { LocalFilesystem, LocalSandbox, Workspace } from "@mastra/core/workspace";
@@ -31,20 +32,21 @@ const peaConfigDir = ".pea";
 const runtimeCloseTimeoutMs = 5000;
 
 type PeaWorkerRuntime = {
-  harness: {
-    switchThread(request: { threadId: string }): Promise<void>;
-    createThread(request: { title: string }): Promise<{ id: string }>;
-    listMessagesForThread(request: {
-      threadId: string;
-      limit: number;
-    }): Promise<Array<{ role: string; content: Array<unknown> }>>;
-    sendMessage(request: { content: string }): Promise<void>;
-    listMessages(options?: {
-      limit?: number;
-    }): Promise<Array<{ id?: string; role: string; content: Array<unknown> }>>;
-    abort(): void;
-  };
+  session: PeaWorkerSession;
   close?: () => Promise<void> | void;
+};
+
+type PeaWorkerMessage = Pick<HarnessMessage, "id" | "role" | "content">;
+
+type PeaWorkerSession = {
+  thread: {
+    switch(request: { threadId: string }): Promise<void>;
+    create(request: { title: string }): Promise<{ id: string }>;
+    listMessages(request: { threadId: string; limit: number }): Promise<PeaWorkerMessage[]>;
+    listActiveMessages(request?: { limit?: number }): Promise<PeaWorkerMessage[]>;
+  };
+  sendMessage(request: { content: string }): Promise<void>;
+  abort(): void;
 };
 
 export type TalkToPeaFrame = "operator" | "feedback" | "collaborate";
@@ -87,29 +89,29 @@ export async function runTalkToPeaWorker(
   const runtime = await createPeaWorkerRuntime();
   try {
     const thread = request.threadId
-      ? (await runtime.harness.switchThread({ threadId: request.threadId }),
+      ? (await runtime.session.thread.switch({ threadId: request.threadId }),
         { id: request.threadId })
-      : await runtime.harness.createThread({
+      : await runtime.session.thread.create({
           title: `Pea ${request.frame} review`,
         });
 
-    const beforeMessages = await runtime.harness.listMessagesForThread({
+    const beforeMessages = await runtime.session.thread.listMessages({
       threadId: thread.id,
       limit: request.maxMessages,
     });
     const primaryResponse = await sendPeaMessageWithTimeout(
-      runtime.harness,
+      runtime.session,
       buildTalkToPeaPrompt(request.frame, request.prompt, request.reviewFrame),
       request.timeoutSeconds,
     );
     const feedbackResponse = request.feedbackPrompt
       ? await sendPeaMessageWithTimeout(
-          runtime.harness,
+          runtime.session,
           buildTalkToPeaPrompt("feedback", request.feedbackPrompt, request.reviewFrame),
           request.timeoutSeconds,
         )
       : null;
-    const messages = await runtime.harness.listMessagesForThread({
+    const messages = await runtime.session.thread.listMessages({
       threadId: thread.id,
       limit: request.maxMessages,
     });
@@ -135,7 +137,7 @@ async function closeRuntimeBestEffort(runtime: PeaWorkerRuntime): Promise<void> 
   try {
     await withTimeout(runtime.close(), runtimeCloseTimeoutMs);
   } catch {
-    runtime.harness.abort();
+    runtime.session.abort();
   }
 }
 
@@ -192,7 +194,6 @@ async function createPeaWorkerRuntime(): Promise<PeaWorkerRuntime> {
           name: "Agent",
           default: true,
           defaultModelId: defaultPeaAgentModelId,
-          color: "#22c55e",
           agent,
         },
       ],
@@ -202,7 +203,7 @@ async function createPeaWorkerRuntime(): Promise<PeaWorkerRuntime> {
         productHomePath,
         configDir: peaConfigDir,
       },
-      modelAuthChecker: (provider) =>
+      modelAuthChecker: (provider: string) =>
         hasMastraCodeStoredAuth(authStorage, provider) ? true : undefined,
     },
     storageProfile: createPeaProductStateStorageProfile({
@@ -220,8 +221,8 @@ async function createPeaWorkerRuntime(): Promise<PeaWorkerRuntime> {
     },
   });
 
-  await handle.harness.init();
-  return handle;
+  if (!handle.session) throw new Error("Expected Pea worker runtime session.");
+  return { session: handle.session, close: handle.close };
 }
 
 const peaWorkerInstructions = `You are Positive Energy Agent, Pea: the deployed Revit/operator workbench for MEP, BIM, and architecture practitioners.
@@ -248,8 +249,14 @@ function resolveCurrentModel(
   requestContext: RequestContext,
   fallbackModelId: string,
 ): Promise<MastraModelConfig> {
-  const harness = readStateHarness(requestContext.get("harness"));
-  const state = harness?.getState?.();
+  const harnessContext = readRecord(requestContext.get("harness"));
+  const session = readRecord(harnessContext?.session);
+  const stateAccess = readRecord(session?.state);
+  const get = stateAccess?.get;
+  const state =
+    typeof get === "function"
+      ? readRecord(get.call(stateAccess))
+      : readRecord(harnessContext?.state);
   const modelId =
     typeof state?.currentModelId === "string" && state.currentModelId.length > 0
       ? state.currentModelId
@@ -319,17 +326,11 @@ function buildTalkToPeaPrompt(
 }
 
 async function sendPeaMessageWithTimeout(
-  harness: {
-    sendMessage(request: { content: string }): Promise<void>;
-    listMessages(options?: {
-      limit?: number;
-    }): Promise<Array<{ id?: string; role: string; content: Array<unknown> }>>;
-    abort(): void;
-  },
+  session: PeaWorkerSession,
   content: string,
   timeoutSeconds: number,
 ) {
-  const beforeMessages = await harness.listMessages({ limit: 80 });
+  const beforeMessages = await session.thread.listActiveMessages({ limit: 80 });
   const beforeIds = new Set(beforeMessages.flatMap((message) => (message.id ? [message.id] : [])));
   const deadline = Date.now() + timeoutSeconds * 1000;
   let timedOut = false;
@@ -337,14 +338,14 @@ async function sendPeaMessageWithTimeout(
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
       timedOut = true;
-      harness.abort();
+      session.abort();
       reject(new Error(`Pea did not finish within ${timeoutSeconds} seconds.`));
     }, timeoutSeconds * 1000);
   });
 
   try {
-    await Promise.race([harness.sendMessage({ content }), timeout]);
-    const latestAssistantText = await waitForNewAssistantText(harness, beforeIds, deadline);
+    await Promise.race([session.sendMessage({ content }), timeout]);
+    const latestAssistantText = await waitForNewAssistantText(session, beforeIds, deadline);
     if (!latestAssistantText) {
       return {
         ok: false,
@@ -366,16 +367,12 @@ async function sendPeaMessageWithTimeout(
 }
 
 async function waitForNewAssistantText(
-  harness: {
-    listMessages(options?: {
-      limit?: number;
-    }): Promise<Array<{ id?: string; role: string; content: Array<unknown> }>>;
-  },
+  session: PeaWorkerSession,
   beforeIds: Set<string>,
   deadline: number,
 ): Promise<string> {
   while (Date.now() < deadline) {
-    const messages = await harness.listMessages({ limit: 80 });
+    const messages = await session.thread.listActiveMessages({ limit: 80 });
     const newAssistantText = latestAssistantText(
       messages.filter((message) => !message.id || !beforeIds.has(message.id)),
     );
@@ -387,7 +384,7 @@ async function waitForNewAssistantText(
   return "";
 }
 
-function transcriptTail(messages: Array<{ role: string; content: Array<unknown> }>) {
+function transcriptTail(messages: readonly PeaWorkerMessage[]) {
   return messages
     .filter((message) => message.role === "user" || message.role === "assistant")
     .map((message) => ({
@@ -397,7 +394,7 @@ function transcriptTail(messages: Array<{ role: string; content: Array<unknown> 
     .filter((message) => message.text.length > 0);
 }
 
-function latestAssistantText(messages: Array<{ role: string; content: Array<unknown> }>): string {
+function latestAssistantText(messages: readonly PeaWorkerMessage[]): string {
   for (const message of [...messages].reverse()) {
     if (message.role !== "assistant") continue;
 
@@ -408,7 +405,7 @@ function latestAssistantText(messages: Array<{ role: string; content: Array<unkn
   return "";
 }
 
-function textFromMessage(message: { content: Array<unknown> }): string {
+function textFromMessage(message: { content: readonly unknown[] }): string {
   return message.content
     .map((part) => {
       const typedPart = readRecord(part);
@@ -420,8 +417,8 @@ function textFromMessage(message: { content: Array<unknown> }): string {
 }
 
 function toolTraceSince(
-  beforeMessages: Array<{ id?: string; content: Array<unknown> }>,
-  messages: Array<{ id?: string; content: Array<unknown> }>,
+  beforeMessages: readonly PeaWorkerMessage[],
+  messages: readonly PeaWorkerMessage[],
 ) {
   const beforeIds = new Set(beforeMessages.map((message) => message.id).filter(Boolean));
   return messages
@@ -493,12 +490,6 @@ function readTalkToPeaReviewFrame(value: unknown): TalkToPeaWorkerRequest["revie
 
 function isTalkToPeaFrame(value: unknown): value is TalkToPeaFrame {
   return value === "operator" || value === "feedback" || value === "collaborate";
-}
-
-function readStateHarness(
-  value: unknown,
-): { getState?: () => Record<string, unknown> } | undefined {
-  return isRecord(value) && typeof value.getState === "function" ? value : undefined;
 }
 
 function readRecord(value: unknown): Record<string, unknown> | undefined {

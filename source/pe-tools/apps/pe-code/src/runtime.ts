@@ -1,27 +1,12 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
-import type { Harness } from "@mastra/core/harness";
 import { createMastraCode, type MastraCodeConfig } from "mastracode";
 import type { MastraTUIOptions } from "mastracode/tui";
-import {
-  createRuntimeDescriptor,
-  createRuntimeFactory,
-  createRuntimeKernel,
-  createRuntimeThreadLock,
-  resolveRuntimeThreadStateStore,
-  type RuntimeCreateRequest,
-  type RuntimeFactory,
-  type RuntimeHandle,
-  type RuntimeHandleServices,
-  type RuntimeKernelHarness,
-  type RuntimeKernel,
-  type RuntimeToolsInput,
-  type RuntimeToolProfile,
-} from "@pe/runtime";
+import { runRuntimeAcpAgent } from "@pe/runtime";
 import { peCodeRuntimeToolProfile as peCodeToolsRuntimeToolProfile } from "@pe/tools";
 
 export const peCodeRuntimeToolProfile = peCodeToolsRuntimeToolProfile;
-export const defaultPeCodeRuntimeToolProfile: RuntimeToolProfile = peCodeRuntimeToolProfile;
+export const defaultPeCodeRuntimeToolProfile = peCodeRuntimeToolProfile;
 export const defaultPeCodeRuntimeToolCatalog = peCodeRuntimeToolProfile.catalog;
 export const defaultPeCodeSandboxAllowedPath = "C:/Users/kaitp/source/repos";
 
@@ -29,49 +14,29 @@ export interface PeCodeTuiRuntimeOptions {
   cwd?: string;
   workspaceRoot?: string;
   modelId?: string;
+  additionalDirectories?: string[];
 }
 
 type PeCodeRuntime = Awaited<ReturnType<typeof createMastraCode>>;
-type PeCodeHarness = PeCodeRuntime["harness"];
-type PeCodeState = PeCodeHarness extends Harness<infer TState> ? TState : Record<string, unknown>;
-type PeCodeRuntimeServices = RuntimeHandleServices &
-  Pick<PeCodeRuntime, "authStorage" | "hookManager" | "mcpManager">;
-type PeCodeRuntimeHandle = RuntimeHandle<PeCodeState, PeCodeRuntimeServices, PeCodeHarness>;
-type PeCodeRuntimeFactory = RuntimeFactory<PeCodeState, PeCodeRuntimeServices, PeCodeHarness>;
+type PeCodeSession = NonNullable<PeCodeRuntime["session"]>;
+type PeCodeRuntimeWithSession = PeCodeRuntime & {
+  session: PeCodeSession;
+};
 type MastraCodeStaticExtraTools = Extract<
   NonNullable<MastraCodeConfig["extraTools"]>,
   Record<string, unknown>
 >;
 type MastraCodeExtraTool = MastraCodeStaticExtraTools[string];
-
-export async function createPeCodeProtocolRuntimeFactory(
-  options: PeCodeTuiRuntimeOptions = {},
-): Promise<PeCodeRuntimeFactory> {
-  const descriptor = createRuntimeDescriptor("peco", {
-    modeName: "Build",
-    agentName: "Pe.Tools Dev Agent",
-    title: "peco",
-    description: "Pe.Tools repo coding agent.",
-  });
-
-  return createRuntimeFactory<PeCodeState, PeCodeRuntimeServices, PeCodeHarness>(
-    descriptor,
-    (request) => createPeCodeRuntimeHandle(options, request),
-  );
-}
+type PeCodeTool =
+  (typeof peCodeRuntimeToolProfile.tools)[keyof typeof peCodeRuntimeToolProfile.tools];
 
 export async function createPeCodeTuiRuntime(
   options: PeCodeTuiRuntimeOptions = {},
-): Promise<PeCodeRuntimeHandle> {
+): Promise<PeCodeRuntimeWithSession> {
   const startPath = path.resolve(options.workspaceRoot ?? options.cwd ?? process.cwd());
   const cwd = await resolveDevAgentProjectRoot(startPath);
-  const factory = await createPeCodeProtocolRuntimeFactory({
+  return createPeCodeRuntime({
     ...options,
-    cwd,
-    workspaceRoot: cwd,
-  });
-  return factory.create({
-    protocol: "tui",
     cwd,
     workspaceRoot: cwd,
   });
@@ -88,6 +53,7 @@ export async function runPeCodeTui(options: PeCodeTuiRuntimeOptions = {}): Promi
   const { MastraTUI } = await import("mastracode/tui");
   const tuiOptions: MastraTUIOptions = {
     harness: runtime.harness,
+    session: runtime.session,
     authStorage: runtime.authStorage,
     hookManager: runtime.hookManager,
     mcpManager: runtime.mcpManager,
@@ -95,20 +61,31 @@ export async function runPeCodeTui(options: PeCodeTuiRuntimeOptions = {}): Promi
     version: "0.1.0",
   };
   const tui = new MastraTUI(tuiOptions);
-  await tui.run();
+  try {
+    await tui.run();
+  } finally {
+    await closePeCodeRuntime(runtime);
+  }
 }
 
-async function createPeCodeRuntimeHandle(
-  options: PeCodeTuiRuntimeOptions,
-  request: RuntimeCreateRequest,
-): Promise<PeCodeRuntimeHandle> {
-  const startPath = path.resolve(
-    request.workspaceRoot ?? request.cwd ?? options.workspaceRoot ?? options.cwd ?? process.cwd(),
-  );
+export async function runPeCodeAcp(options: PeCodeTuiRuntimeOptions = {}): Promise<void> {
+  const runtime = await createPeCodeRuntime(options);
+  await runRuntimeAcpAgent({
+    harness: runtime.harness,
+    session: runtime.session,
+    modes: runtime.harness.listModes(),
+    cleanup: () => closePeCodeRuntime(runtime),
+  });
+}
+
+export async function createPeCodeRuntime(
+  options: PeCodeTuiRuntimeOptions = {},
+): Promise<PeCodeRuntimeWithSession> {
+  const startPath = path.resolve(options.workspaceRoot ?? options.cwd ?? process.cwd());
   const cwd = await resolveDevAgentProjectRoot(startPath);
   process.chdir(cwd);
 
-  const sandboxAllowedPaths = mergeSandboxAllowedPaths(request.additionalDirectories ?? []);
+  const sandboxAllowedPaths = mergeSandboxAllowedPaths(options.additionalDirectories ?? []);
   const runtime = await createMastraCode({
     cwd,
     // default is configDir: ".mastracode",
@@ -120,53 +97,7 @@ async function createPeCodeRuntimeHandle(
       yolo: true,
     },
   });
-  const harness = runtime.harness;
-  const kernel = createRuntimeKernel(harness, {
-    threadStateStore: resolveRuntimeThreadStateStore(harness),
-    toolCatalog: peCodeRuntimeToolProfile.catalog,
-  });
-
-  return {
-    harness,
-    kernel,
-    workspace: { cwd, root: cwd },
-    authStorage: runtime.authStorage,
-    hookManager: runtime.hookManager,
-    mcpManager: runtime.mcpManager,
-    metadata: {
-      runtimeId: "peco",
-      protocol: request.protocol,
-      cwd: request.cwd,
-      workspaceRoot: request.workspaceRoot,
-      workbench: {
-        contextEntries: [
-          {
-            id: "peco-system-prompt-availability",
-            title: "System prompt availability",
-            content:
-              "peco's agent is owned by stock createMastraCode, which exposes no inputProcessors hook, so the @pe/runtime system-prompt capture processor (used by pea) cannot be attached yet. The resolved prompt will be inspectable once peco moves to a custom agent.",
-            source: "peco runtime",
-          },
-          {
-            id: "peco-memory-authority",
-            title: "Observational memory authority",
-            content:
-              "peco delegates memory and observational-memory behavior to MastraCode. Exact live OM entries are not exposed through current runtime hooks.",
-            source: "peco runtime",
-          },
-        ],
-        observationalMemory: {
-          id: "peco-memory:mastracode",
-          kind: "observation",
-          status: "activated",
-          title: "MastraCode memory",
-          summary: "MastraCode owns peco memory and OM configuration.",
-          raw: { owner: "mastracode" },
-        },
-      },
-    },
-    close: () => closePeCodeRuntime(harness, kernel),
-  };
+  return requirePeCodeSession(runtime);
 }
 
 const peCodeExtraTools = createMastraCodeExtraTools(
@@ -175,7 +106,7 @@ const peCodeExtraTools = createMastraCodeExtraTools(
 );
 
 function createMastraCodeExtraTools(
-  tools: RuntimeToolsInput,
+  tools: typeof peCodeRuntimeToolProfile.tools,
   omittedToolName: string,
 ): Record<string, MastraCodeExtraTool> {
   const extraTools: Record<string, MastraCodeExtraTool> = {};
@@ -186,7 +117,7 @@ function createMastraCodeExtraTools(
   return extraTools;
 }
 
-function adaptMastraCodeExtraTool(tool: RuntimeToolsInput[string]): MastraCodeExtraTool {
+function adaptMastraCodeExtraTool(tool: PeCodeTool): MastraCodeExtraTool {
   const adapted: MastraCodeExtraTool = {};
   Object.setPrototypeOf(adapted, Object.getPrototypeOf(tool));
   Object.defineProperties(adapted, Object.getOwnPropertyDescriptors(tool));
@@ -240,25 +171,13 @@ async function readDirectoryEntries(directory: string) {
   }
 }
 
-async function closePeCodeRuntime(
-  harness: RuntimeKernelHarness<PeCodeState>,
-  kernel: RuntimeKernel,
-): Promise<void> {
-  const currentThreadId = harness.getCurrentThreadId();
-  harness.abort();
-  try {
-    await kernel.flushLedger();
-  } finally {
-    releasePeCodeThreadLock(currentThreadId);
-    await harness.getMastra?.()?.shutdown?.();
-  }
+export async function closePeCodeRuntime(runtime: PeCodeRuntimeWithSession): Promise<void> {
+  runtime.session.abort();
+  await runtime.session.thread.clearAndReleaseLock();
+  await runtime.harness.getMastra()?.shutdown?.();
 }
 
-function releasePeCodeThreadLock(threadId: string | null | undefined): void {
-  if (!threadId) return;
-  try {
-    createRuntimeThreadLock({ storageProfileKind: "mastracode-compatible" }).release(threadId);
-  } catch {
-    // Best-effort cleanup mirrors the generic runtime harness close path.
-  }
+function requirePeCodeSession(runtime: PeCodeRuntime): PeCodeRuntimeWithSession {
+  if (!runtime.session) throw new Error("Expected Peco runtime session.");
+  return runtime as PeCodeRuntimeWithSession;
 }

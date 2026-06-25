@@ -12,83 +12,48 @@ export type MastraCodeModelResolver = (
   options?: MastraCodeModelResolveOptions,
 ) => MastraModelConfig | Promise<MastraModelConfig>;
 
-let resolverTask: Promise<MastraCodeModelResolver> | undefined;
+type MastraCodeRuntime = Awaited<ReturnType<typeof import("mastracode").createMastraCode>>;
 
-interface MastraCodeResolverRuntimeConfig {
-  cwd?: string;
-  disableHooks?: boolean;
-  disableMcp?: boolean;
-}
-
-type MastraCodeModule = {
-  createMastraCode?: (config?: MastraCodeResolverRuntimeConfig) => Promise<{
-    resolveModel?: MastraCodeModelResolver;
-  }>;
-  resolveModel?: MastraCodeModelResolver;
-};
+// ponytail: one resolver runtime is enough until per-workspace model settings need isolation.
+let runtimeTask: Promise<MastraCodeRuntime> | undefined;
 
 export async function resolveMastraCodeModel(
   modelId: string,
   options?: MastraCodeModelResolveOptions,
 ): Promise<MastraModelConfig> {
-  const resolveModel = await loadMastraCodeModelResolver(options);
-  return resolveModel(modelId, options);
+  const runtime = await loadMastraCodeRuntime(options);
+  return runtime.resolveModel(modelId, options);
 }
 
-async function loadMastraCodeModelResolver(
+async function loadMastraCodeRuntime(
   options?: MastraCodeModelResolveOptions,
-): Promise<MastraCodeModelResolver> {
-  resolverTask ??= (async () => {
-    const rootModule = readMastraCodeModule(await import("mastracode"));
-    if (rootModule.resolveModel) return rootModule.resolveModel;
-
-    if (!rootModule.createMastraCode) {
-      throw new Error("MastraCode model resolver is unavailable from the public package API.");
-    }
-
-    const runtime = await rootModule.createMastraCode({
+): Promise<MastraCodeRuntime> {
+  runtimeTask ??= (async () => {
+    const { createMastraCode } = await import("mastracode");
+    return createMastraCode({
       cwd: resolveMastraCodeRuntimeCwd(options?.requestContext),
       disableHooks: true,
       disableMcp: true,
     });
-    if (!runtime.resolveModel) {
-      throw new Error("MastraCode runtime did not expose a model resolver.");
-    }
-    return runtime.resolveModel;
   })();
 
-  return resolverTask;
+  return runtimeTask;
 }
 
 function resolveMastraCodeRuntimeCwd(requestContext: RequestContext | undefined): string {
   const harness = readRecord(requestContext?.get("harness"));
-  const getState = harness.getState;
-  const state = typeof getState === "function" ? readRecord(getState.call(harness)) : {};
+  const session = readRecord(harness.session);
+  const stateAccess = readRecord(session.state);
+  const getState = stateAccess.get;
+  const state =
+    typeof getState === "function"
+      ? readRecord(getState.call(stateAccess))
+      : readRecord(harness.state);
   for (const key of ["productHomePath", "projectPath", "workspaceRoot", "cwd"]) {
     const value = state[key];
     if (typeof value === "string" && value.length > 0) return value;
   }
   return process.cwd();
-}
-
-function readMastraCodeModule(value: unknown): MastraCodeModule {
-  const record = readRecord(value);
-  return {
-    createMastraCode: isMastraCodeRuntimeFactory(record.createMastraCode)
-      ? record.createMastraCode
-      : undefined,
-    resolveModel: isMastraCodeModelResolver(record.resolveModel) ? record.resolveModel : undefined,
-  };
-}
-
-function isMastraCodeRuntimeFactory(
-  value: unknown,
-): value is NonNullable<MastraCodeModule["createMastraCode"]> {
-  return typeof value === "function";
-}
-
-function isMastraCodeModelResolver(value: unknown): value is MastraCodeModelResolver {
-  return typeof value === "function";
 }
 
 function readRecord(value: unknown): Record<string, unknown> {

@@ -1,7 +1,11 @@
 import type { InputProcessor } from "@mastra/core/processors";
-import type { WorkbenchSystemPromptSnapshot } from "@pe/agent-contracts";
 
-export type { WorkbenchSystemPromptSnapshot } from "@pe/agent-contracts";
+export interface WorkbenchSystemPromptSnapshot {
+  content: string;
+  source?: string;
+  updatedAt?: string;
+  metadata?: Record<string, unknown>;
+}
 
 export interface SystemPromptCapture {
   /**

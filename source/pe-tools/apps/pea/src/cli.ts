@@ -1,6 +1,6 @@
 import { cli, define } from "gunshi";
 import { PeHostClient } from "@pe/host-client";
-import { parseOptionalPort, runRuntimeAcpAgent } from "@pe/runtime";
+import { parseOptionalPort } from "@pe/runtime";
 import { PeaCliCommands } from "@pe/tools";
 import type { PeaRuntimeAuthSource } from "./runtime.ts";
 
@@ -8,6 +8,18 @@ export async function runPeaMain(args = process.argv.slice(2)): Promise<void> {
   if (args.length === 0) {
     const { runPeaTui } = await import("./runtime.ts");
     await runPeaTui({ workspaceRoot: process.cwd() });
+    return;
+  }
+
+  if (isRootAcpInvocation(args)) {
+    const { runPeaAcp } = await import("./runtime.ts");
+    const options = parsePeaRootAcpOptions(args);
+    await runPeaAcp({
+      modelId: options.modelId,
+      workspaceRoot: options.workspaceRoot ?? process.cwd(),
+      authSource: resolvePeaCliAuthSource(options.authSource),
+      noCloudAuth: options.noCloudAuth,
+    });
     return;
   }
 
@@ -24,27 +36,27 @@ export function createPeaCliCommand() {
     name: "pea",
     description: "Pea product/operator CLI.",
     toKebab: true,
-    args: protocolArgs,
     examples: [
       "pea",
-      "pea web",
       "pea --acp",
+      "pea web",
       "pea host status",
       "pea script bootstrap",
       "pea script execute --source-path src\\SampleScript.cs",
     ].join("\n"),
+    args: protocolArgs,
     run: async (ctx) => {
       if (ctx.values.acp) {
-        const { createPeaProtocolRuntimeFactory } = await import("./runtime.ts");
-        const factory = await createPeaProtocolRuntimeFactory({
+        const { runPeaAcp } = await import("./runtime.ts");
+        await runPeaAcp({
           modelId: ctx.values.modelId,
           workspaceRoot: ctx.values.workspaceRoot,
           authSource: resolvePeaCliAuthSource(ctx.values.authSource),
           noCloudAuth: ctx.values.noCloudAuth,
         });
-        await runRuntimeAcpAgent({ runtime: { factory } });
         return;
       }
+
       console.log("Run `pea --help` to list product commands.");
       console.log(`host      ${PeHostClient.resolveHostBaseUrl()}`);
       console.log(`workspace ${PeHostClient.resolveWorkspaceKey()}`);
@@ -90,6 +102,69 @@ function resolvePeaCliAuthSource(value: string | undefined): PeaRuntimeAuthSourc
   );
 }
 
+function isRootAcpInvocation(args: string[]): boolean {
+  return args.includes("--acp") && !args.some((arg) => arg === "--help" || arg === "-h");
+}
+
+function parsePeaRootAcpOptions(args: string[]): {
+  modelId?: string;
+  workspaceRoot?: string;
+  authSource?: string;
+  noCloudAuth?: boolean;
+} {
+  const consumed = new Set<number>();
+  const modelId = parseStringArg(args, consumed, "--model-id", "--modelId");
+  const workspaceRoot = parseStringArg(args, consumed, "--workspace-root", "--workspaceRoot");
+  const authSource = parseStringArg(args, consumed, "--auth-source", "--authSource");
+  const noCloudAuth = parseBooleanArg(args, consumed, "--no-cloud-auth", "--noCloudAuth");
+  parseBooleanArg(args, consumed, "--acp");
+
+  const unexpected = args.filter((_, index) => !consumed.has(index));
+  if (unexpected.length > 0) {
+    throw new Error(`Unsupported Pea ACP option: ${unexpected.join(" ")}`);
+  }
+
+  return { modelId, workspaceRoot, authSource, noCloudAuth };
+}
+
+function parseStringArg(
+  args: string[],
+  consumed: Set<number>,
+  ...names: string[]
+): string | undefined {
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index]!;
+    for (const name of names) {
+      if (arg === name) {
+        const value = args[index + 1];
+        if (!value || value.startsWith("-")) throw new Error(`Missing value for ${name}.`);
+        consumed.add(index);
+        consumed.add(index + 1);
+        return value;
+      }
+
+      const prefix = `${name}=`;
+      if (arg.startsWith(prefix)) {
+        consumed.add(index);
+        return arg.slice(prefix.length);
+      }
+    }
+  }
+  return undefined;
+}
+
+function parseBooleanArg(args: string[], consumed: Set<number>, ...names: string[]): boolean {
+  let found = false;
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index]!;
+    if (names.includes(arg)) {
+      consumed.add(index);
+      found = true;
+    }
+  }
+  return found;
+}
+
 function isPeaRuntimeAuthSource(value: string): value is PeaRuntimeAuthSource {
   return (
     value === "gateway" ||
@@ -121,6 +196,20 @@ const runtimeAuthArgs = {
   },
 } as const;
 
+const protocolArgs = {
+  acp: {
+    type: "boolean",
+    description: "Run Pea as an ACP agent over stdio.",
+    default: false,
+  },
+  modelId: {
+    type: "string",
+    description: "Optional model id to force for the runtime.",
+  },
+  ...runtimeAuthArgs,
+  ...workspaceArgs,
+} as const;
+
 const webArgs = {
   host: {
     type: "string",
@@ -128,11 +217,11 @@ const webArgs = {
   },
   port: {
     type: "string",
-    description: "Port for the web workbench server. Defaults to an ephemeral port.",
+    description: "Port for the static website server. Defaults to an ephemeral port.",
   },
   staticDir: {
     type: "string",
-    description: "Optional built website directory to serve from the workbench server.",
+    description: "Optional built website directory to serve.",
   },
   modelId: {
     type: "string",
@@ -142,25 +231,11 @@ const webArgs = {
   workbenchPort: {
     type: "string",
     description:
-      "Port for the web workbench HTTP/SSE agent. Defaults to 43112; use 0 for an ephemeral port.",
+      "Port for the workbench HTTP/SSE API. Defaults to 43112; use 0 for an ephemeral port.",
   },
   workbenchToken: {
     type: "string",
-    description: "Local connection token for the workbench HTTP/SSE agent.",
+    description: "Local connection token for the workbench HTTP/SSE API.",
   },
-  ...workspaceArgs,
-} as const;
-
-const protocolArgs = {
-  acp: {
-    type: "boolean",
-    description: "Run the runtime as an ACP agent over stdio.",
-    default: false,
-  },
-  modelId: {
-    type: "string",
-    description: "Optional model id to force for the runtime.",
-  },
-  ...runtimeAuthArgs,
   ...workspaceArgs,
 } as const;

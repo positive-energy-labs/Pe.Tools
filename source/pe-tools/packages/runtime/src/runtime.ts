@@ -1,13 +1,6 @@
-import type { Harness } from "@mastra/core/harness";
+import type { Harness, HarnessConfig, Session } from "@mastra/core/harness";
 import type { RuntimeAuthProfile } from "./auth/types.ts";
-import type { RuntimeContextEntry } from "./context.ts";
-import type { RuntimeEvent, RuntimeJsonValue, RuntimeProtocol } from "./events.ts";
-import {
-  openMostRecentUnlockedRuntimeThread,
-  type RuntimeHarnessThreadSelector,
-  type RuntimeStartupThreadSelection,
-} from "./harness/thread-selection.ts";
-import type { RuntimeResumeDecision } from "./interrupts.ts";
+import type { RuntimeProtocol } from "./events.ts";
 
 export interface RuntimeThreadSession {
   threadId: string;
@@ -52,232 +45,12 @@ export type RuntimeThreadMessagePart =
   | { type: "om-status"; data: unknown }
   | { type: "raw"; raw: unknown };
 
-export type RuntimeKernelSessionStatus = "draft" | "materialized";
 export type RuntimeAccessLevel = "read-only" | "ask" | "trusted";
-
-export interface RuntimeSessionControls {
-  currentModelId?: string;
-  accessLevel: RuntimeAccessLevel;
-}
-
-export type RuntimeQueueDecision = "queued_follow_up" | "sent_immediately";
-
-export interface RuntimeKernelSession {
-  sessionId: string;
-  status: RuntimeKernelSessionStatus;
-  title?: string;
-  protocol?: RuntimeProtocol;
-  externalThreadId?: string;
-  threadId?: string;
-  resourceId?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface RuntimeCreateDraftSessionOptions {
-  title?: string;
-  protocol?: RuntimeProtocol;
-  externalThreadId?: string;
-}
-
-export interface RuntimeResumeThreadSessionOptions {
-  sessionId: string;
-  threadId: string;
-  resourceId?: string;
-  title?: string;
-  protocol?: RuntimeProtocol;
-  externalThreadId?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export interface RuntimeForkSessionOptions {
-  sourceThreadId: string;
-  resourceId?: string;
-  title?: string;
-}
-
-export interface RuntimeLedgerBaseEntry {
-  sequence: number;
-  createdAt: string;
-  threadId?: string;
-  resourceId?: string;
-}
-
-export type RuntimeLedgerEntry =
-  | (RuntimeLedgerBaseEntry & {
-      type: "session_identity";
-      sessionId: string;
-      status: RuntimeKernelSessionStatus;
-      title?: string;
-      protocol?: RuntimeProtocol;
-      externalThreadId?: string;
-      provenance: {
-        source: "kernel";
-      };
-    })
-  | (RuntimeLedgerBaseEntry & {
-      type: "raw_mastra_event";
-      rawEventType?: string;
-      rawEvent: RuntimeJsonValue;
-    })
-  | (RuntimeLedgerBaseEntry & {
-      type: "runtime_event";
-      event: RuntimeEvent;
-      provenance: {
-        source: "mastra";
-        rawEventSequence?: number;
-        rawEventType?: string;
-      };
-    })
-  | (RuntimeLedgerBaseEntry & {
-      type: "thread_message";
-      message: RuntimeThreadMessage;
-      provenance: {
-        source: "memory";
-      };
-    })
-  | (RuntimeLedgerBaseEntry & {
-      type: "user_prompt";
-      content: string;
-      protocol?: RuntimeProtocol;
-      protocolSessionId?: string;
-      provenance: {
-        source: "kernel";
-      };
-    })
-  | (RuntimeLedgerBaseEntry & {
-      type: "queue_event";
-      decision: RuntimeQueueDecision;
-      content: string;
-      protocol?: RuntimeProtocol;
-      protocolSessionId?: string;
-      provenance: {
-        source: "kernel";
-      };
-    })
-  | (RuntimeLedgerBaseEntry & {
-      type: "protocol_event";
-      protocol: RuntimeProtocol;
-      payload: RuntimeJsonValue;
-      projection?: {
-        id?: string;
-        sourceSequence?: number;
-      };
-      provenance: {
-        source: "projection";
-      };
-    });
-
-export interface RuntimeSendMessageOptions {
-  content: string;
-  context?: RuntimeContextEntry[];
-  resumeDecisions?: RuntimeResumeDecision[];
-  protocol?: RuntimeProtocol;
-  protocolSessionId?: string;
-  resourceId?: string;
-  threadId?: string;
-}
-
-export interface RuntimeQueueMessageResult {
-  queued: boolean;
-}
-
-export interface RuntimeQueueSessionMessageResult extends RuntimeQueueMessageResult {
-  session: RuntimeKernelSession;
-}
-
-export interface RuntimeReadThreadRequest {
-  threadId: string;
-  resourceId?: string;
-}
-
-export interface RuntimeRecordProtocolEventRequest {
-  threadId?: string;
-  resourceId?: string;
-  protocol: RuntimeProtocol;
-  payload: unknown;
-  projection?: {
-    id?: string;
-    sourceSequence?: number;
-  };
-}
-
-export interface RuntimeKernel {
-  initialize(): Promise<void>;
-  createDraftSession(options?: RuntimeCreateDraftSessionOptions): RuntimeKernelSession;
-  readSession(sessionId: string): RuntimeKernelSession | undefined;
-  readThreadSession(options: { threadId: string }): RuntimeKernelSession | undefined;
-  listSessions(): RuntimeKernelSession[];
-  materializeSession(
-    sessionId: string,
-    options?: { title?: string },
-  ): Promise<RuntimeKernelSession>;
-  forkSession(sessionId: string, options: RuntimeForkSessionOptions): Promise<RuntimeKernelSession>;
-  resumeThreadSession(options: RuntimeResumeThreadSessionOptions): Promise<RuntimeKernelSession>;
-  cancelSession(sessionId: string): void;
-  closeSession(sessionId: string): Promise<void>;
-  sendSessionMessage(
-    sessionId: string,
-    options: RuntimeSendMessageOptions,
-  ): Promise<RuntimeKernelSession>;
-  queueSessionMessage(
-    sessionId: string,
-    options: RuntimeSendMessageOptions,
-  ): Promise<RuntimeQueueSessionMessageResult>;
-  createThreadSession(options?: { title?: string }): Promise<RuntimeThreadSession>;
-  cloneThreadSession(options: RuntimeForkSessionOptions): Promise<RuntimeThreadSession>;
-  switchThread(options: { threadId: string }): Promise<void>;
-  listThreadSessions(): Promise<RuntimeThreadInfo[]>;
-  readThreadMessages(options: RuntimeReadThreadRequest): Promise<RuntimeThreadMessage[]>;
-  readThreadLedger(options: RuntimeReadThreadRequest): Promise<RuntimeLedgerEntry[]>;
-  readSessionMessages(sessionId: string): Promise<RuntimeThreadMessage[]>;
-  readSessionLedger(sessionId: string): Promise<RuntimeLedgerEntry[]>;
-  deleteThreadSession(options: { threadId: string }): Promise<void>;
-  getResourceId(): string;
-  readControls(): RuntimeSessionControls;
-  setModel(options: { modelId: string }): Promise<RuntimeSessionControls>;
-  setAccessLevel(options: { accessLevel: RuntimeAccessLevel }): Promise<RuntimeSessionControls>;
-  recordProtocolEvent(options: RuntimeRecordProtocolEventRequest): RuntimeLedgerEntry;
-  recordSessionProtocolEvent(
-    sessionId: string,
-    options: Pick<RuntimeRecordProtocolEventRequest, "protocol" | "payload" | "projection">,
-  ): RuntimeLedgerEntry;
-  snapshotSessionLedger(sessionId: string): RuntimeLedgerEntry[];
-  snapshotLedger(options?: { threadId?: string; resourceId?: string }): RuntimeLedgerEntry[];
-  flushLedger(): Promise<void>;
-  sendMessage(options: RuntimeSendMessageOptions): Promise<void>;
-  queueMessage(options: RuntimeSendMessageOptions): Promise<RuntimeQueueMessageResult>;
-  abort(): void;
-  subscribe(listener: (event: RuntimeEvent) => void | Promise<void>): () => void;
-}
 
 export interface RuntimeWorkspaceInfo {
   cwd?: string;
   root?: string;
   [key: string]: unknown;
-}
-
-export interface RuntimeDescriptor {
-  id: string;
-  modeName: string;
-  agentName: string;
-  title: string;
-  description: string;
-}
-
-export function createRuntimeDescriptor(
-  id: string,
-  overrides: Partial<Omit<RuntimeDescriptor, "id">> = {},
-): RuntimeDescriptor {
-  const title = overrides.title ?? id;
-  return {
-    id,
-    modeName: overrides.modeName ?? title,
-    agentName: overrides.agentName ?? title,
-    title,
-    description: overrides.description ?? `${title} runtime`,
-  };
 }
 
 export interface RuntimeHandleServices {
@@ -286,13 +59,7 @@ export interface RuntimeHandleServices {
   mcpManager?: unknown;
 }
 
-export interface RuntimeHandleHarness<
-  TState extends Record<string, unknown>,
-> extends RuntimeHarnessThreadSelector<TState> {
-  getState(): Partial<TState>;
-  setState(state: Partial<TState>): Promise<void> | void;
-  setThreadSetting?: (options: { key: string; value: unknown }) => Promise<void> | void;
-}
+export type RuntimeHandleHarness<_TState extends Record<string, unknown>> = object;
 
 export interface RuntimeHandle<
   TState extends Record<string, unknown> = Record<string, unknown>,
@@ -300,7 +67,10 @@ export interface RuntimeHandle<
   THarness extends RuntimeHandleHarness<TState> = Harness<TState>,
 > {
   harness: THarness;
-  kernel: RuntimeKernel;
+  session?: Session<TState>;
+  /** The harness's configured memory, surfaced so transports can do partial thread
+   *  clones (forking) that still remap observational memory. */
+  memory?: HarnessConfig<TState>["memory"];
   workspace?: RuntimeWorkspaceInfo;
   auth?: RuntimeAuthProfile;
   authStorage?: TServices["authStorage"];
@@ -316,93 +86,4 @@ export interface RuntimeCreateRequest {
   workspaceRoot?: string;
   additionalDirectories?: string[];
   metadata?: Record<string, unknown>;
-}
-
-export interface RuntimeStartupThreadPolicy<
-  TState extends Record<string, unknown>,
-  TServices extends RuntimeHandleServices = RuntimeHandleServices,
-  THarness extends RuntimeHandleHarness<TState> = Harness<TState>,
-> {
-  createTitle?: string;
-  enabled?: boolean | ((request: RuntimeCreateRequest) => boolean);
-  onThreadOpened?: (context: {
-    request: RuntimeCreateRequest;
-    handle: RuntimeHandle<TState, TServices, THarness>;
-    selection: RuntimeStartupThreadSelection;
-  }) => Promise<void> | void;
-}
-
-export interface RuntimeFactoryOptions<
-  TState extends Record<string, unknown>,
-  TServices extends RuntimeHandleServices = RuntimeHandleServices,
-  THarness extends RuntimeHandleHarness<TState> = Harness<TState>,
-> {
-  auth?: RuntimeAuthProfile;
-  startupThread?: false | RuntimeStartupThreadPolicy<TState, TServices, THarness>;
-}
-
-export interface RuntimeFactory<
-  TState extends Record<string, unknown> = Record<string, unknown>,
-  TServices extends RuntimeHandleServices = RuntimeHandleServices,
-  THarness extends RuntimeHandleHarness<TState> = Harness<TState>,
-> {
-  descriptor: RuntimeDescriptor;
-  auth?: RuntimeAuthProfile;
-  create(request: RuntimeCreateRequest): Promise<RuntimeHandle<TState, TServices, THarness>>;
-}
-
-export function createRuntimeFactory<
-  TState extends Record<string, unknown>,
-  TServices extends RuntimeHandleServices = RuntimeHandleServices,
-  THarness extends RuntimeHandleHarness<TState> = Harness<TState>,
->(
-  descriptor: RuntimeDescriptor,
-  create: (request: RuntimeCreateRequest) => Promise<RuntimeHandle<TState, TServices, THarness>>,
-  authOrOptions?: RuntimeAuthProfile | RuntimeFactoryOptions<TState, TServices, THarness>,
-): RuntimeFactory<TState, TServices, THarness> {
-  const options = resolveRuntimeFactoryOptions(authOrOptions);
-  return {
-    descriptor,
-    auth: options.auth,
-    create: async (request) => {
-      const handle = await create(request);
-      await applyRuntimeStartupThreadPolicy(handle, request, options.startupThread);
-      return handle;
-    },
-  };
-}
-
-function resolveRuntimeFactoryOptions<
-  TState extends Record<string, unknown>,
-  TServices extends RuntimeHandleServices,
-  THarness extends RuntimeHandleHarness<TState>,
->(
-  authOrOptions:
-    | RuntimeAuthProfile
-    | RuntimeFactoryOptions<TState, TServices, THarness>
-    | undefined,
-): RuntimeFactoryOptions<TState, TServices, THarness> {
-  if (!authOrOptions) return {};
-  if ("descriptor" in authOrOptions) return { auth: authOrOptions };
-  return authOrOptions;
-}
-
-async function applyRuntimeStartupThreadPolicy<
-  TState extends Record<string, unknown>,
-  TServices extends RuntimeHandleServices,
-  THarness extends RuntimeHandleHarness<TState>,
->(
-  handle: RuntimeHandle<TState, TServices, THarness>,
-  request: RuntimeCreateRequest,
-  policy: RuntimeFactoryOptions<TState, TServices, THarness>["startupThread"],
-): Promise<void> {
-  if (policy === false) return;
-
-  const enabled = typeof policy?.enabled === "function" ? policy.enabled(request) : policy?.enabled;
-  if (enabled !== true) return;
-
-  const selection = await openMostRecentUnlockedRuntimeThread(handle.harness, {
-    createTitle: policy?.createTitle ?? "New thread",
-  });
-  await policy?.onThreadOpened?.({ request, handle, selection });
 }

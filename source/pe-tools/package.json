@@ -19,7 +19,8 @@
   "scripts": {
     "ready": "vp check && vp run -r test -- --passWithNoTests && vp run -r build",
     "test": "vp run -r test -- --passWithNoTests",
-    "dev": "vp run website#dev"
+    "dev:pea-web": "pe-dev web pea",
+    "dev:peco-web": "pe-dev web peco"
   },
   "devDependencies": {
     "jiti": "^2.7.0",

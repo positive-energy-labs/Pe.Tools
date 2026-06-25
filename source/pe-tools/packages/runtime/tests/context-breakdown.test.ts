@@ -14,7 +14,7 @@ test("buildContextBreakdown partitions the window and lists named contents", () 
       { role: "assistant", text: "z".repeat(80) }, // 20 tok
     ],
     skills: [{ name: "audit", approxTokens: 420 }],
-    agents: ["Pea"],
+    agents: [{ name: "Pea", description: "Test agent." }],
   });
 
   const byId = Object.fromEntries(breakdown.segments.map((s) => [s.id, s]));
@@ -26,8 +26,29 @@ test("buildContextBreakdown partitions the window and lists named contents", () 
   expect(breakdown.totalTokens).toBe(180);
 
   // skills/agents annotate the system prompt (not summed into the total).
-  expect(byId["system-prompt"].items).toContain("agent · Pea");
-  expect(byId.tools.items).toContain("pe_status · ~30 tok");
+  const agentItem = byId["system-prompt"].items?.find((i) => i.name === "agent · Pea");
+  expect(agentItem?.body).toBe("Test agent."); // description is the expandable identity card
+  // tools are listed individually, structured (name + src + tokens + state).
+  const peStatus = byId.tools.items?.find((i) => i.name === "pe_status");
+  expect(peStatus).toMatchObject({
+    name: "pe_status",
+    src: "runtime/tools",
+    tokens: 30,
+    state: "in",
+  });
+  // skills are their own segment, listed as on-demand cards.
+  expect(byId.skills.items?.find((i) => i.name === "audit")?.state).toBe("on-demand");
+});
+
+test("splitSystemPrompt breaks the resolved prompt into section cards", () => {
+  const breakdown = buildContextBreakdown({
+    systemPromptText:
+      "You are Pea.\n# Harness\nTools run behind permissions.\n# Environment\ncwd: /x",
+  });
+  const names = breakdown.segments.find((s) => s.id === "system-prompt")?.items?.map((i) => i.name);
+  expect(names).toContain("Base identity");
+  expect(names).toContain("Harness");
+  expect(names).toContain("Environment");
 });
 
 test("estimateTokens is char/4, rounded up", () => {
