@@ -66,9 +66,9 @@ export function workbenchToThreadMessages(state: WorkbenchState): ThreadMessageL
 
 function textContent(message: WorkbenchMessage): LikePart[] {
   const parts = message.parts.flatMap((part): LikePart[] => {
-    if (part.kind === "text") return [{ type: "text", text: part.text }];
+    if (part.kind === "text") return [{ type: "text", text: part.text ?? "" }];
     if (part.kind === "reasoning" || part.kind === "thought")
-      return [{ type: "reasoning", text: part.text }];
+      return [{ type: "reasoning", text: part.text ?? "" }];
     return [];
   });
   // A user turn with no text part still needs a content entry to render.

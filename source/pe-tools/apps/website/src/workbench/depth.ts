@@ -6,13 +6,15 @@ import { useCallback, useState } from "react";
  * conversation only (tool calls collapse to one inline line); `trace` adds the detail lane
  * with tool input/output, reasoning, memory, and context.
  */
-export type Mode = "chat" | "trace";
+export type Mode = "chat" | "trace" | "world";
 
-export const MODES: Mode[] = ["chat", "trace"];
+export const MODES: Mode[] = ["chat", "trace", "world"];
 
 export const MODE_HINT: Record<Mode, string> = {
   chat: "Just the conversation. Tool calls collapse to one line.",
   trace: "Adds the detail lane: tool input/output, reasoning, memory, context.",
+  world:
+    "The world inspector: what Pea actually sent the model, ordered by request position, with cache state.",
 };
 
 /** Depth drives the ContextStrip reveal (system prompt / injected context). */
