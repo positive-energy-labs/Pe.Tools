@@ -1,0 +1,120 @@
+import { Plus, X } from "lucide-react";
+import {
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "#/components/ui/command";
+import type { StoredThreadSummary } from "#/workbench/provider";
+
+/** Thread picker — shadcn Command palette (Ctrl/Cmd-K). Replaces the hand-rolled ThreadPalette. */
+export function ThreadPalette({
+  threads,
+  currentThreadId,
+  open,
+  onOpenChange,
+  onSelect,
+  onNew,
+  onDelete,
+}: {
+  threads: StoredThreadSummary[];
+  currentThreadId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSelect: (id: string) => void;
+  onNew: () => void;
+  onDelete: (id: string) => void;
+}) {
+  return (
+    <CommandDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Threads"
+      description="Search threads"
+      className="max-w-xl"
+    >
+      <CommandInput placeholder="Search threads…" />
+      <CommandList className="max-h-[60vh]">
+        <CommandEmpty>No threads</CommandEmpty>
+        <CommandGroup>
+          <CommandItem
+            value="__new__ new thread"
+            onSelect={() => {
+              onNew();
+              onOpenChange(false);
+            }}
+            className="gap-2 text-primary data-selected:text-primary"
+          >
+            <Plus className="size-4" />
+            <span className="font-medium">New thread</span>
+            <kbd className="ml-auto rounded border border-border bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+              ⌘K
+            </kbd>
+          </CommandItem>
+        </CommandGroup>
+        <CommandGroup heading="Recent">
+          {threads.map((thread) => {
+            const active = thread.id === currentThreadId;
+            return (
+              <CommandItem
+                key={thread.id}
+                // cmdk filters on value text — include title + cwd so search matches both.
+                value={`${thread.title} ${thread.cwd ?? ""} ${thread.id}`}
+                onSelect={() => {
+                  onSelect(thread.id);
+                  onOpenChange(false);
+                }}
+                className="group/row gap-2.5"
+              >
+                <span
+                  aria-hidden
+                  className={`size-1.5 shrink-0 rounded-full ${
+                    thread.promptActive
+                      ? "animate-pulse bg-primary"
+                      : active
+                        ? "bg-accent-foreground"
+                        : "bg-border"
+                  }`}
+                />
+                <span className={`truncate ${active ? "font-semibold text-foreground" : ""}`}>
+                  {thread.title}
+                </span>
+                {thread.promptActive ? (
+                  <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                    running
+                  </span>
+                ) : null}
+                <span className="ml-auto flex items-center gap-2">
+                  {thread.cwd ? (
+                    <span className="hidden truncate font-mono text-[11px] text-muted-foreground sm:inline">
+                      {basename(thread.cwd)}
+                    </span>
+                  ) : null}
+                  <button
+                    type="button"
+                    title="Delete thread"
+                    className="rounded p-0.5 text-muted-foreground opacity-0 transition-opacity group-hover/row:opacity-100 hover:bg-muted hover:text-destructive data-selected:opacity-100"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onDelete(thread.id);
+                    }}
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </span>
+              </CommandItem>
+            );
+          })}
+        </CommandGroup>
+      </CommandList>
+    </CommandDialog>
+  );
+}
+
+/** Last path segment of a cwd, for a compact right-aligned hint. */
+function basename(path: string): string {
+  const parts = path.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] ?? path;
+}

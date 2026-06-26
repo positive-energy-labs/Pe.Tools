@@ -1,0 +1,1504 @@
+/*
+ * Ported Lens/World/Moment styles from apps/website. The signature geometry (parallax MapDial,
+ * candlestick focal marker, fisheye trace lane) is irreducibly JS-driven CSS — the "keep CSS"
+ * rung of the port ladder.
+ *
+ * The Lens is a self-contained Marginalia design system, so its palette uses the EXACT v0
+ * literals, scoped to .lens-frame. This is deliberate, not a remap to shadcn tokens: the two
+ * collide on `--muted` (a fill in shadcn, gray TEXT here) and `--paper-*` (warm tints with no
+ * clean shadcn equivalent). An earlier alias attempt set `--paper-2: var(--muted)` while also
+ * shadowing `--muted`, so `--paper-2` resolved to Slate — code pills and trace-card labels went
+ * slate-on-slate (invisible). Literals keep v0 fidelity AND avoid the collision. The Tailwind
+ * ChatShell chrome still uses shadcn tokens; only the Lens internals live here.
+ * ponytail: the app-shell classes further down (mg-app/header/dial/chip/picker/composer/palette
+ * /status) are now dead — replaced by the Tailwind ChatShell. Left for this pass; purge next.
+ */
+.lens-frame {
+  --pe-blue: #005695;
+  --pe-blue-soft: #1f6fa8;
+  --pe-green: #72c6a2;
+  --slate: #4f6473;
+  --lichen: #7c8b6b;
+  --clay: #b78d6a;
+  --clay-tint: #f3eae0;
+  --clay-ink: #8a5e3b;
+  --kiln: #c8bdaf;
+  --basalt: #3e4340;
+  --mist: #e8e4dd;
+  --paper: #fbfaf7;
+  --paper-2: #f4f1ea;
+  --paper-3: #f7f4ed;
+  --muted: #8a9088;
+  --line: rgba(62, 67, 64, 0.12);
+  --line-2: rgba(62, 67, 64, 0.2);
+  --line-soft: rgba(62, 67, 64, 0.07);
+  --font-body: var(--font-pe, "Open Sans", system-ui, sans-serif);
+  --font-display: var(--font-pe-display, "Spectral", Georgia, serif);
+  --font-mono: var(--font-pe-mono, ui-monospace, "SF Mono", Menlo, monospace);
+  font-family: var(--font-body);
+  color: var(--basalt);
+  background: var(--paper);
+}
+.mg-prose {
+  font-size: 14px;
+  line-height: 1.62;
+  color: var(--basalt);
+}
+.mg-prose p {
+  margin: 0 0 0.6em;
+}
+.mg-prose p:last-child {
+  margin-bottom: 0;
+}
+.mg-prose h2,
+.mg-prose h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--basalt);
+  margin: 0.6em 0 0.3em;
+  line-height: 1.25;
+}
+.mg-prose h2 {
+  font-size: 17px;
+}
+.mg-prose h3 {
+  font-size: 15px;
+}
+.mg-prose ul {
+  margin: 0.3em 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 3px;
+}
+.mg-prose li {
+  list-style: disc;
+}
+.mg-prose a {
+  color: var(--pe-blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.mg-prose code {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  background: var(--paper-2);
+  border: 0.5px solid var(--line);
+  border-radius: 4px;
+  padding: 0.5px 5px;
+}
+.mg-prose pre {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--paper-2);
+  border: 0.5px solid var(--line);
+  border-radius: 7px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.mg-tag {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  border-radius: 4px;
+  padding: 1px 6px;
+  border: 0.5px solid;
+}
+.mg-tag.mem {
+  color: var(--clay-ink);
+  border-color: rgba(183, 141, 106, 0.5);
+}
+.mg-tag.ctx {
+  color: var(--pe-blue);
+  border-color: rgba(0, 86, 149, 0.4);
+}
+.mg-pre {
+  margin: 0;
+  padding: 8px 9px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #5a5f5b;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.mg-block {
+  border: 0.5px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.mg-block-head {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--slate);
+  text-transform: uppercase;
+  padding: 7px 12px;
+  background: var(--paper-2);
+  border-bottom: 0.5px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.mg-plan-item {
+  display: flex;
+  gap: 9px;
+  padding: 6px 12px;
+  font-size: 13px;
+  border-bottom: 0.5px solid var(--line-soft);
+}
+.mg-plan-item:last-child {
+  border-bottom: none;
+}
+.mg-plan-item.done {
+  color: var(--slate);
+}
+.mg-plan-item.pending {
+  color: var(--muted);
+}
+.mg-plan-mark.done {
+  color: var(--pe-green);
+}
+.mg-plan-mark.in_progress {
+  color: var(--pe-blue);
+}
+.mg-plan-mark.pending {
+  color: var(--kiln);
+}
+
+/* ---- system prompt / context pinned at top -------------------------- */
+.mg-context {
+  margin: 14px 24px 0 34px;
+  display: grid;
+  gap: 8px;
+}
+
+/* ---- Empty state ----------------------------------------------------- */
+.mg-empty {
+  height: 100%;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 6px;
+  color: var(--muted);
+  padding: 0 24px;
+}
+.mg-empty h1 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 30px;
+  color: var(--pe-blue);
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mg-scroll {
+    scroll-behavior: auto;
+  }
+}
+
+/* ===== Lens view: parallax focal planes ============================== */
+/* --vp (the scroll aperture height) is fed in px by a ResizeObserver. The
+   trace/strata lanes drift via pure CSS scroll-timeline; the map-dial gutter
+   uses a small rAF scroll handler (it needs measured pixel heights). */
+.lens-frame {
+  min-height: 0;
+  height: 100%; /* fill the ChatShell main row (was a grid child in apps/website) */
+  position: relative;
+}
+.lens-scroller {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+  scroll-timeline: --lens block;
+}
+/* one layout; modes only toggle which lane columns have width.
+   column order: trace | strata | chat | mapdial */
+.lens-grid {
+  display: grid;
+  grid-template-columns: var(--trace, 0px) var(--strata, 0px) minmax(0, 1fr) var(--map, 104px);
+  align-items: start;
+}
+/* all share row 1 — explicit grid-column alone bumps items into separate rows */
+.lens-grid > * {
+  grid-row: 1;
+}
+.lens-grid .mapdial {
+  grid-column: 4;
+}
+.lens-grid .lens-chat {
+  grid-column: 3;
+}
+.lens-grid .lens-lane.trace {
+  grid-column: 1;
+}
+.lens-grid .lens-lane.strata {
+  grid-column: 2;
+}
+.lens-frame[data-mode="trace"] {
+  --trace: 300px;
+}
+.lens-frame[data-mode="strata"] {
+  --trace: 248px;
+  --strata: 264px;
+}
+
+/* ---- Map-dial: proportional minimap + viewport reticle ---------------- */
+.mapdial {
+  position: sticky;
+  top: 0;
+  height: var(--vp, 560px);
+  overflow: hidden;
+  border-left: 0.5px solid var(--line);
+  background: var(--paper-3);
+  touch-action: none;
+  user-select: none;
+  cursor: ns-resize;
+}
+.mapdial-strip {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 100%;
+  will-change: transform;
+}
+.mapdial-band {
+  position: absolute;
+  right: 16px;
+  width: 14px;
+  border-radius: 2px;
+  opacity: 0.4;
+  transition:
+    right 0.14s ease,
+    width 0.14s ease,
+    opacity 0.14s ease,
+    transform 0.14s ease;
+}
+/* number rides on the band — shown only on the focal band, sits to the left of the band */
+.mapdial-band .num {
+  position: absolute;
+  right: 26px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--slate);
+  white-space: nowrap;
+  text-align: right;
+  opacity: 0;
+  transition: opacity 0.14s ease;
+  pointer-events: none;
+}
+/* on screen = inside the candlestick's viewport range */
+.mapdial-band.in-reticle {
+  opacity: 0.85;
+}
+/* focal = the single band sitting on the focal axis */
+.mapdial-band.focal {
+  opacity: 1;
+  right: 12px;
+  width: 24px;
+  transform: scaleX(1.06);
+  transform-origin: right;
+  box-shadow:
+    0 0 0 2px var(--paper-3),
+    0 0 0 3px rgba(0, 86, 149, 0.35);
+}
+/* delta = the newest band when context changed this send */
+.mapdial-band.delta {
+  opacity: 0.95;
+}
+.mapdial-band.delta::after {
+  content: "";
+  position: absolute;
+  right: 100%;
+  margin-right: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 3px solid transparent;
+  border-right-color: var(--clay-ink, #8a5e3b);
+}
+.mapdial-band.focal .num {
+  opacity: 1;
+}
+.mapdial-band.user {
+  background: var(--pe-green);
+}
+.mapdial-band.assistant {
+  background: var(--pe-blue);
+}
+/* tool = pea acting → hollow blue (palette A) */
+.mapdial-band.tool {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.25px var(--pe-blue);
+}
+.mapdial-band.tool.focal {
+  box-shadow:
+    inset 0 0 0 1.5px var(--pe-blue),
+    0 0 0 2px var(--paper-3),
+    0 0 0 3px rgba(0, 86, 149, 0.35);
+}
+.mapdial-band.memory {
+  background: var(--clay);
+}
+.mapdial-band.approval {
+  background: var(--clay-ink);
+}
+.mapdial-band.event {
+  background: var(--kiln);
+  opacity: 0.55;
+}
+.mapdial-band.user .num {
+  color: var(--pe-green);
+}
+.mapdial-band.assistant .num {
+  color: var(--pe-blue);
+}
+
+/* ---- candlestick focal marker (replaces the reticle box) ----
+   horizontal bar = the focal point in the thread;
+   vertical wick + caps = the chat's active viewport, extending up/down. */
+.cs-focal {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1.5px solid rgba(0, 86, 149, 0.6);
+  pointer-events: none;
+  z-index: 4;
+}
+.cs-wick {
+  position: absolute;
+  left: 50%;
+  width: 0;
+  border-left: 1px solid rgba(0, 86, 149, 0.32);
+  pointer-events: none;
+  z-index: 3;
+}
+.cs-cap {
+  position: absolute;
+  left: calc(50% - 8px);
+  width: 16px;
+  height: 0;
+  border-top: 1px solid rgba(0, 86, 149, 0.32);
+  pointer-events: none;
+  z-index: 3;
+}
+.mapdial .caret {
+  position: absolute;
+  left: -1px;
+  width: 0;
+  height: 0;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-left: 7px solid var(--pe-blue);
+  transform: translateY(-50%);
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* chat — near plane, the real scroll */
+.lens-chat {
+  padding: 14px 20px;
+}
+.lens-moment {
+  padding: 18px 0;
+  scroll-margin-top: 12px;
+}
+.lens-who {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--slate);
+  margin-bottom: 5px;
+  font-weight: 600;
+}
+.lens-who.you {
+  color: var(--pe-green);
+}
+.lens-who.pea {
+  color: var(--pe-blue);
+}
+.lens-bubble {
+  background: var(--user-tint);
+  border: 0.5px solid var(--user-line);
+  border-radius: 12px 12px 2px 12px;
+  padding: 8px 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  margin-left: auto;
+  max-width: 80%;
+  width: fit-content;
+}
+.lens-marker {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  border-left: 2px solid var(--pe-blue);
+  padding: 2px 8px 2px 11px;
+  border-radius: 0 4px 4px 0;
+  font-size: 13px;
+  color: var(--slate);
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease,
+    border-width 0.14s ease;
+}
+/* tool = pea acting → dashed blue rail (palette A); memory = clay */
+.lens-marker.tool {
+  border-left-style: dashed;
+}
+.lens-marker.memory {
+  border-left-color: var(--clay);
+}
+.lens-marker.active {
+  border-left-color: var(--pe-blue);
+}
+.lens-marker.failed {
+  border-left-color: #b4524f;
+}
+/* focal/hover stub → heavier rail + tint to match its highlighted detail card (no dimming
+   of the others) */
+.lens-moment.focal .lens-marker {
+  border-left-width: 3px;
+}
+.lens-moment.focal .lens-marker,
+.lens-moment.hover .lens-marker {
+  background: rgba(0, 86, 149, 0.06);
+}
+.lens-marker code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--lichen);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* trace + strata — focal planes that drift at their own (compressed) speed */
+.lens-lane {
+  position: sticky;
+  top: 0;
+  height: var(--vp, 560px);
+  overflow: hidden;
+  border-right: 0.5px solid var(--line);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0 27px,
+    rgba(62, 67, 64, 0.05) 27px 28px
+  );
+}
+.lens-lane.trace {
+  background-color: var(--paper-3);
+}
+.lens-lane.strata {
+  background-color: var(--paper-2);
+}
+@keyframes lens-drift {
+  to {
+    transform: translateY(min(0px, calc(var(--vp, 560px) - 100%)));
+  }
+}
+/* trace lane: fisheye — all cards flow; non-focal collapse to a header strip,
+   focal expands; the lane translates so the expanded card sits on the focal axis. */
+.lens-pin {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  padding-top: 8px;
+  will-change: transform;
+}
+.lens-cell {
+  margin: 0 12px 6px;
+  max-height: 28px;
+  border: 0.5px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--paper);
+  opacity: 0.62;
+  transition:
+    max-height 0.24s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.16s ease,
+    border-color 0.16s ease,
+    opacity 0.16s ease;
+}
+.lens-cell.hover {
+  opacity: 1;
+  border-color: rgba(0, 86, 149, 0.4);
+}
+.lens-cell.focal {
+  opacity: 1;
+  border-color: rgba(0, 86, 149, 0.55);
+  box-shadow:
+    0 1px 0 rgba(0, 86, 149, 0.08),
+    0 6px 18px rgba(0, 86, 149, 0.14);
+}
+.lens-cell.focal pre {
+  max-height: 160px;
+  overflow: auto;
+}
+.lens-cell .h {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--slate);
+  background: var(--paper-2);
+  padding: 4px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lens-cell pre {
+  margin: 0;
+  padding: 7px 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: #5a5f5b;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 96px;
+  overflow: hidden;
+}
+
+/* the focal scrim — top vignette only */
+.lens-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+  background: linear-gradient(
+    to bottom,
+    rgba(251, 250, 247, 0.55) 0%,
+    rgba(251, 250, 247, 0.15) 20%,
+    rgba(251, 250, 247, 0) 35%
+  );
+}
+
+/* ===== Loading / streaming / pending — baked into the elements ======== */
+/* streaming caret: a blinking bar tailing the live assistant turn */
+.mg-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  vertical-align: text-bottom;
+  background: var(--pe-blue);
+  border-radius: 1px;
+  animation: mg-blink 1s steps(2, start) infinite;
+}
+@keyframes mg-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* active tool: a slow blue sheen sweeps the marker while it runs */
+.mg-marker.active,
+.lens-marker.active {
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0, 86, 149, 0.09) 50%,
+    transparent 100%
+  );
+  background-size: 45% 100%;
+  background-repeat: no-repeat;
+  animation: mg-sheen 2.2s linear infinite;
+}
+@keyframes mg-sheen {
+  0% {
+    background-position: -60% 0;
+  }
+  100% {
+    background-position: 160% 0;
+  }
+}
+@keyframes mg-await {
+  0%,
+  100% {
+    border-left-color: var(--clay);
+  }
+  50% {
+    border-left-color: var(--clay-ink);
+  }
+}
+@keyframes mg-scan {
+  0% {
+    background-position: -40% 0;
+  }
+  100% {
+    background-position: 140% 0;
+  }
+}
+
+/* ===== Capability UI: fork · chain-of-thought · approvals · devtools === */
+
+/* fork affordance on user turns */
+.lens-who.you {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.lens-fork {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  opacity: 0;
+  transition:
+    opacity 0.14s ease,
+    background 0.12s,
+    color 0.12s;
+}
+.lens-moment:hover .lens-fork {
+  opacity: 1;
+}
+.lens-fork:hover {
+  background: var(--user-tint);
+  color: var(--pe-green);
+}
+
+/* chain-of-thought — collapsed by default so the spine stays calm */
+.lens-cot {
+  border-left: 2px solid var(--kiln);
+}
+.lens-cot-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  background: transparent;
+  color: var(--lichen);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 1px 6px;
+}
+.lens-cot-head:hover {
+  color: var(--clay-ink);
+}
+.lens-cot-caret {
+  transition: transform 0.14s ease;
+}
+.lens-cot.open .lens-cot-caret {
+  transform: rotate(90deg);
+}
+.lens-cot-body {
+  margin: 4px 0 2px 8px;
+  padding-left: 9px;
+  border-left: 1px solid var(--line-2);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--lichen);
+  white-space: pre-wrap;
+}
+/* inline tool part: collapsed marker + (when gated) the HITL approve/deny row */
+.lens-tool-part {
+  display: grid;
+  gap: 6px;
+}
+.lens-approval-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.lens-approval-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 7px;
+  padding: 5px 11px;
+  border: 0.5px solid var(--line-2);
+  background: var(--paper);
+  color: var(--slate);
+  transition:
+    background 0.12s,
+    color 0.12s,
+    border-color 0.12s,
+    transform 0.08s;
+}
+.lens-approval-btn:active {
+  transform: translateY(0.5px);
+}
+.lens-approval-btn.allow {
+  background: var(--pe-blue);
+  border-color: var(--pe-blue);
+  color: #fff;
+}
+.lens-approval-btn.allow:hover {
+  background: var(--pe-blue-soft);
+}
+.lens-approval-btn.deny:hover {
+  background: #fdf1ef;
+  border-color: #d8a59f;
+  color: #8f3434;
+}
+
+/* devtools lane — a flat RuntimeEvent console (replaces the drifting events lane) */
+.lens-lane.strata {
+  background-image: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lens-scroller {
+    scroll-behavior: auto;
+  }
+  .lens-marker.active {
+    animation: none;
+  }
+  .mg-caret {
+    animation: none;
+    opacity: 0.6;
+  }
+  .lens-cell {
+    transition: none;
+  }
+  .mg-gut.pulse .mg-gut-stack {
+    animation: none;
+  }
+}
+
+/* ===== World inspector — what Pea actually sent the model (request-ordered) ===== */
+.lens-frame[data-mode="world"] {
+  --trace: 392px;
+}
+.lens-grid .lens-lane.world {
+  grid-column: 1;
+}
+.lens-lane.world {
+  overflow-y: auto;
+  background-image: none;
+  background-color: var(--paper-3);
+}
+
+.mg-world {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  font-variant-numeric: tabular-nums;
+}
+.mg-world-empty {
+  padding: 20px 16px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.mg-world-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px 10px;
+  background: var(--paper-3);
+  border-bottom: 0.5px solid var(--line);
+}
+.mg-world-title {
+  margin: 0;
+  font-family: var(--font-display, Georgia, serif);
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--ink, #2b333a);
+}
+.mg-world-controls {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.mg-world-dial {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--paper-2);
+  border: 0.5px solid var(--line-2, rgba(62, 67, 64, 0.2));
+  border-radius: 8px;
+}
+.mg-world-dial button {
+  border: 0.5px solid transparent;
+  background: transparent;
+  color: var(--slate);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.mg-world-dial button[aria-pressed="true"] {
+  background: var(--paper);
+  color: var(--clay-ink, #8a5e3b);
+  border-color: rgba(183, 141, 106, 0.5);
+  box-shadow: 0 1px 1px rgba(138, 94, 59, 0.15);
+}
+.mg-world-diff {
+  width: 26px;
+  height: 24px;
+  border: 0.5px solid var(--line-2, rgba(62, 67, 64, 0.2));
+  background: var(--paper);
+  border-radius: 7px;
+  color: var(--slate);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.mg-world-diff[aria-pressed="true"] {
+  background: var(--clay-tint, #f3eae0);
+  border-color: rgba(183, 141, 106, 0.5);
+  color: var(--clay-ink, #8a5e3b);
+}
+.mg-world-diff:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.mg-world-bar {
+  position: relative;
+  display: flex;
+  height: 9px;
+  margin: 12px 14px 0;
+  border: 0.5px solid var(--line);
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--paper-2);
+}
+.mg-world-fill {
+  height: 100%;
+  min-width: 1px;
+  border-right: 1px solid var(--paper);
+}
+.mg-world-fill:last-child {
+  border-right: none;
+}
+.mg-world-fill.reproc {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(255, 255, 255, 0.4) 0 3px,
+    transparent 3px 6px
+  );
+}
+.mg-world-horizon {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 0;
+  border-left: 1.5px dashed var(--clay-ink, #8a5e3b);
+}
+.mg-world-note {
+  margin: 7px 14px 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--clay-ink, #8a5e3b);
+}
+.mg-world-note b {
+  font-weight: 600;
+}
+
+.mg-world-layers {
+  margin-top: 10px;
+  border-top: 0.5px solid var(--line-soft);
+}
+.mg-world-layer {
+  border-bottom: 0.5px solid var(--line-soft);
+}
+.mg-world-layer.delta {
+  background: linear-gradient(var(--paper-3), var(--clay-tint, #f3eae0));
+}
+.mg-world-row {
+  display: grid;
+  grid-template-columns: 9px 1fr auto auto auto auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 9px 14px;
+  cursor: pointer;
+  font: inherit;
+}
+.mg-world-row:hover {
+  background: var(--paper-2);
+}
+.mg-world-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+.mg-world-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink, #2b333a);
+}
+.mg-world-pos {
+  margin-left: 6px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.mg-world-tok {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--slate);
+}
+.mg-world-pct {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+  min-width: 30px;
+  text-align: right;
+}
+.mg-world-car {
+  color: var(--muted);
+  font-size: 11px;
+  transition: transform 0.16s;
+}
+.mg-world-layer.open .mg-world-car {
+  transform: rotate(90deg);
+}
+.mg-world-body {
+  padding: 0 14px 11px 31px;
+}
+.mg-world-cap {
+  margin: 0 0 6px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--slate);
+}
+.mg-world-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 5px;
+}
+.mg-world-foot {
+  padding: 11px 14px 16px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* snapshot subheader — send number + provider-boundary note */
+.mg-world-sub {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  padding: 7px 14px 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+}
+.mg-world-snap {
+  color: var(--clay-ink, #8a5e3b);
+  background: var(--clay-tint, #f3eae0);
+  border: 0.5px solid rgba(183, 141, 106, 0.4);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+/* cache readout — cached vs reprocessed token sums (≈ inferred) */
+.mg-cacheout {
+  display: grid;
+  gap: 6px;
+  margin: 10px 14px 0;
+  padding: 10px 12px;
+  border: 0.5px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  font-size: 11px;
+}
+.mg-cacheout-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-variant-numeric: tabular-nums;
+}
+.mg-cacheout-row .k {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: none;
+}
+.mg-cacheout-row .k.read {
+  background: var(--pe-green, #72c6a2);
+}
+.mg-cacheout-row .k.rep {
+  background: #c08a5a;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(255, 255, 255, 0.4) 0 2px,
+    transparent 2px 4px
+  );
+}
+.mg-cacheout-row .v {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  color: var(--slate);
+}
+.mg-cacheout-why {
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--clay-ink, #8a5e3b);
+  background: var(--clay-tint, #f3eae0);
+  border: 0.5px solid rgba(183, 141, 106, 0.4);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+/* drift note inside an expanded changed layer */
+.mg-world-drift {
+  margin: 0 0 6px;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--clay-ink, #8a5e3b);
+  font-family: var(--font-mono);
+}
+
+/* individual item cards — tools, prompt sections, skills */
+.mg-item {
+  border: 0.5px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--paper);
+}
+.mg-world-layer.delta .mg-item {
+  border-color: rgba(183, 141, 106, 0.45);
+}
+.mg-item-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 6px 9px;
+  cursor: pointer;
+  font: inherit;
+}
+.mg-item-head:disabled {
+  cursor: default;
+}
+.mg-item-head:not(:disabled):hover {
+  background: var(--paper-2);
+}
+.mg-item-main {
+  min-width: 0;
+  flex: 1;
+}
+.mg-item-name {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink, #2b333a);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mg-item-src {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--lichen, #7c8b6b);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mg-item-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.mg-item-tok {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--muted);
+}
+.mg-item-car {
+  color: var(--muted);
+  font-size: 10px;
+  transition: transform 0.16s;
+}
+.mg-item.open .mg-item-car {
+  transform: rotate(90deg);
+}
+.mg-item-body {
+  margin: 0;
+  padding: 8px 9px;
+  border-top: 0.5px solid var(--line);
+  background: var(--paper-2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: #5a5f5b;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 220px;
+  overflow: auto;
+}
+
+/* pill — item load state */
+.mg-pill {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.02em;
+  border-radius: 4px;
+  padding: 1px 5px;
+  border: 0.5px solid;
+  white-space: nowrap;
+}
+.mg-pill.in {
+  color: var(--pe-blue, #005695);
+  border-color: rgba(0, 86, 149, 0.4);
+  background: rgba(0, 86, 149, 0.05);
+}
+.mg-pill.on-demand {
+  color: var(--clay-ink, #8a5e3b);
+  border-color: rgba(183, 141, 106, 0.5);
+  border-style: dashed;
+}
+.mg-pill.off {
+  color: var(--muted);
+  border-color: var(--line-2, rgba(62, 67, 64, 0.2));
+}
+
+/* blast radius — shown on delta items */
+.mg-blast {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  border-radius: 3px;
+  padding: 0 4px;
+  border: 0.5px solid;
+  white-space: nowrap;
+}
+.mg-blast.prefix {
+  color: #a23b3b;
+  border-color: rgba(162, 59, 59, 0.5);
+  background: rgba(162, 59, 59, 0.08);
+}
+.mg-blast.system {
+  color: var(--clay-ink, #8a5e3b);
+  border-color: rgba(183, 141, 106, 0.55);
+  background: var(--clay-tint, #f3eae0);
+}
+.mg-blast.free {
+  color: var(--lichen, #7c8b6b);
+  border-color: rgba(124, 139, 107, 0.5);
+  background: rgba(114, 198, 162, 0.1);
+}
+
+/* cache badges — frontend inference, marked ≈ */
+.mg-cache {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.02em;
+  border-radius: 3px;
+  padding: 1px 5px;
+  border: 0.5px solid;
+  white-space: nowrap;
+}
+.mg-cache.cached {
+  color: var(--lichen, #7c8b6b);
+  border-color: rgba(124, 139, 107, 0.5);
+  background: rgba(114, 198, 162, 0.12);
+}
+.mg-cache.reprocessed,
+.mg-cache.reproc {
+  color: var(--clay-ink, #8a5e3b);
+  border-color: rgba(183, 141, 106, 0.55);
+  background: var(--clay-tint, #f3eae0);
+}
+
+/* Plain density — hide dev chrome, keep the capability sentences */
+.mg-world[data-density="plain"] .mg-world-tok,
+.mg-world[data-density="plain"] .mg-world-pct,
+.mg-world[data-density="plain"] .mg-world-pos,
+.mg-world[data-density="plain"] .mg-cache,
+.mg-world[data-density="plain"] .mg-world-items,
+.mg-world[data-density="plain"] .mg-world-foot,
+.mg-world[data-density="plain"] .mg-world-note,
+.mg-world[data-density="plain"] .mg-cacheout,
+.mg-world[data-density="plain"] .mg-world-drift,
+.mg-world[data-density="plain"] .mg-world-sub {
+  display: none;
+}
+.mg-world[data-density="plain"] .mg-world-row {
+  grid-template-columns: 9px 1fr auto;
+}
+
+/* ===== Context budget bar — categories folded onto the OM windows ===== */
+.mg-budget {
+  margin: 12px 14px 0;
+}
+.mg-budget-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 6px;
+}
+.mg-budget-head b {
+  color: var(--basalt);
+  font-weight: 600;
+}
+.mg-budget-bar {
+  position: relative;
+  display: flex;
+  height: 11px;
+  border: 0.5px solid var(--line);
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--paper-2);
+}
+.mg-budget-bar.over {
+  box-shadow: 0 0 0 1.5px #a23b3b;
+}
+.mg-bud-seg {
+  height: 100%;
+  min-width: 0;
+}
+.mg-bud-region {
+  position: relative;
+  height: 100%;
+  min-width: 0;
+  border-left: 0.5px solid var(--paper);
+  background: repeating-linear-gradient(45deg, var(--paper-2) 0 5px, var(--paper-3) 5px 10px);
+}
+.mg-bud-rfill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  min-width: 1px;
+  transition: width 0.35s ease;
+}
+.mg-bud-rfill.active {
+  animation: mg-bud-pulse 1.5s ease-in-out infinite;
+}
+@keyframes mg-bud-pulse {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.2);
+  }
+}
+.mg-bud-floor {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  width: 0;
+  border-left: 1.5px dashed var(--clay-ink, #8a5e3b);
+  z-index: 2;
+}
+.mg-budget-ticks {
+  position: relative;
+  height: 13px;
+  margin-top: 1px;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  color: var(--clay-ink, #8a5e3b);
+}
+.mg-budget-ticks span {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.mg-budget-rows {
+  display: grid;
+  gap: 2px;
+  margin-top: 9px;
+}
+.mg-budget-row {
+  display: grid;
+  grid-template-columns: 10px 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+}
+.mg-budget-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+.mg-budget-flag {
+  margin-left: 6px;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  color: var(--clay-ink, #8a5e3b);
+}
+.mg-budget-rtok {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--slate);
+}
+.mg-budget-rpct {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+  min-width: 34px;
+  text-align: right;
+}
+.mg-world[data-density="plain"] .mg-budget {
+  display: none;
+}
+
+/* ===== Context gutter — the MapDial's at-a-glance context stack ===== */
+.mg-gut {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+.mg-gut-cols {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+.mg-gut-stack {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 14px;
+  height: 64px;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 0.5px solid var(--line-2, rgba(62, 67, 64, 0.2));
+  box-shadow: 0 1px 3px rgba(62, 67, 64, 0.18);
+}
+.mg-gut-seg {
+  width: 100%;
+  min-height: 1px;
+}
+.mg-gut-horizon {
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  height: 0;
+  border-top: 1.5px dashed var(--clay-ink, #8a5e3b);
+}
+.mg-gut.pulse .mg-gut-stack {
+  animation: mg-gut-pulse 1.8s ease-in-out infinite;
+}
+@keyframes mg-gut-pulse {
+  0%,
+  100% {
+    box-shadow: 0 1px 3px rgba(62, 67, 64, 0.18);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px rgba(183, 141, 106, 0.45),
+      0 1px 3px rgba(62, 67, 64, 0.18);
+  }
+}
+.mg-gut-pop {
+  position: absolute;
+  top: 0;
+  right: calc(100% + 8px);
+  display: none;
+  flex-direction: column;
+  gap: 3px;
+  width: max-content;
+  max-width: 220px;
+  padding: 8px 10px;
+  background: var(--paper);
+  border: 0.5px solid var(--line-2, rgba(62, 67, 64, 0.2));
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(62, 67, 64, 0.16);
+  font-size: 11px;
+  color: var(--slate);
+}
+.mg-gut:hover .mg-gut-pop,
+.mg-gut:focus-visible .mg-gut-pop {
+  display: flex;
+}
+.mg-gut-poprow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.mg-gut-popdot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: none;
+}
+.mg-gut-poptok {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+}
+.mg-gut-pophint {
+  margin-top: 2px;
+  font-size: 9.5px;
+  color: var(--muted);
+}
+
+/* memory strata column beside the layer stack */
+.mg-gut-strata {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 12px;
+  height: 64px;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 0.5px solid var(--line-2, rgba(62, 67, 64, 0.2));
+  box-shadow: 0 1px 3px rgba(62, 67, 64, 0.18);
+}
+.mg-gut-region {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  background: repeating-linear-gradient(45deg, var(--paper-2) 0 4px, var(--paper-3) 4px 8px);
+}
+.mg-gut-region.obs {
+  border-bottom: 1px dashed var(--clay-ink, #8a5e3b);
+}
+.mg-gut-rfill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  transition: height 0.35s ease;
+}
+.mg-gut-rfill.active {
+  animation: mg-bud-pulse 1.5s ease-in-out infinite;
+}
+.mg-gut-floor {
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  height: 0;
+  border-top: 1px dashed var(--clay-ink, #8a5e3b);
+  z-index: 2;
+}
+.mg-gut.pulse .mg-gut-strata.reflecting {
+  animation: mg-gut-pulse 1.8s ease-in-out infinite;
+}
