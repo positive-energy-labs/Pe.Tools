@@ -84,13 +84,16 @@ function toolCallPart(
   const argsObject = isRecord(call.rawInput)
     ? (call.rawInput as Record<string, unknown>)
     : undefined;
+  // rawInput/rawOutput are no longer streamed (fetched on demand for the trace card), so the
+  // inline marker falls back to the small `target` label the server still sends.
+  const args = argsObject ?? (call.target ? { path: call.target } : undefined);
   // Built as a plain record then cast once at this boundary — the tool-call part's
   // `args`/`result` are JSON-typed and our WorkbenchToolCall fields are `unknown`.
   const part: Record<string, unknown> = {
     type: "tool-call",
     toolCallId: call.id,
     toolName: call.title,
-    ...(argsObject ? { args: argsObject } : { argsText: stringifyArgs(call.rawInput) }),
+    ...(args ? { args } : { argsText: stringifyArgs(call.rawInput) }),
     ...(result !== undefined ? { result } : {}),
     ...(call.status === "failed" ? { isError: true } : {}),
     ...(approval

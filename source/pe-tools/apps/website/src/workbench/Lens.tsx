@@ -8,6 +8,7 @@ import { ThreadPrimitive, type ThreadMessageLike } from "@assistant-ui/react";
 import { modeDepth, type Mode } from "./depth.ts";
 import { Moments, useThreadMessages } from "./aui.tsx";
 import { ContextGutter, useCacheView, WorldLane } from "./world.tsx";
+import { useToolIo } from "./tool-io.ts";
 
 /**
  * The unified workbench view (one layout, one scroll). Modes toggle panes over a single
@@ -521,16 +522,7 @@ function TraceCellView({
 
 function TraceCellBody({ cell }: { cell: TraceCell }) {
   if (cell.kind === "tool" && cell.toolCall) {
-    const call = cell.toolCall;
-    const output = call.rawOutput ?? call.content;
-    return (
-      <>
-        <div className="h">{call.title}</div>
-        {call.rawInput !== undefined ? <pre>{stringify(call.rawInput)}</pre> : null}
-        {output !== undefined ? <pre>{stringify(output)}</pre> : null}
-        {call.error ? <pre>{call.error}</pre> : null}
-      </>
-    );
+    return <ToolCellBody call={cell.toolCall} />;
   }
   if (cell.kind === "memory" && cell.memory) {
     const entry = cell.memory;
@@ -544,6 +536,22 @@ function TraceCellBody({ cell }: { cell: TraceCell }) {
     );
   }
   return null;
+}
+
+/** Tool trace card. Raw I/O is fetched on demand (see useToolIo) rather than streamed per frame. */
+function ToolCellBody({ call }: { call: WorkbenchToolCall }) {
+  const io = useToolIo(call);
+  const input = io?.rawInput ?? call.rawInput;
+  const output = io?.rawOutput ?? call.rawOutput ?? call.content;
+  const error = io?.error ?? call.error;
+  return (
+    <>
+      <div className="h">{call.title}</div>
+      {input !== undefined ? <pre>{stringify(input)}</pre> : null}
+      {output !== undefined ? <pre>{stringify(output)}</pre> : null}
+      {error ? <pre>{error}</pre> : null}
+    </>
+  );
 }
 
 /**
