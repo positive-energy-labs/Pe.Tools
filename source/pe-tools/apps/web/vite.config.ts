@@ -19,7 +19,38 @@ const config = defineConfig({
     tailwindcss() as never,
     devtools() as never,
   ],
+  // Dev proxy to the workbench agent server (apps/pea), mirroring apps/website. The dev-web
+  // supervisor sets PE_WORKBENCH_AGENT_URL / PE_WORKBENCH_DEV_TOKEN; provider fetches hit
+  // `${origin}/workbench/*` and are forwarded here with the loopback token.
+  server: {
+    proxy: {
+      "/workbench": {
+        target: process.env.PE_WORKBENCH_AGENT_URL ?? "http://127.0.0.1:43112",
+        changeOrigin: true,
+        headers: {
+          "x-runtime-workbench-token": process.env.PE_WORKBENCH_DEV_TOKEN ?? "dev-loopback",
+        },
+      },
+      "/api/workbench": {
+        target: process.env.PE_WORKBENCH_API_URL ?? "http://127.0.0.1:43113",
+        changeOrigin: true,
+      },
+    },
+  },
   resolve: { tsconfigPaths: true, dedupe: ["react", "react-dom"] },
+  // assistant-ui ships React-Compiler output (`useMemoCache`); under TanStack Start's
+  // multi-environment optimizer it can bind to a different React prebundle than react-dom's
+  // active dispatcher → "Cannot read properties of null (reading 'useMemoCache')". Forcing these
+  // into one optimize pass keeps a single React instance. ponytail: drop if the optimizer stops splitting.
+  optimizeDeps: {
+    include: [
+      "react",
+      "react-dom",
+      "react/jsx-runtime",
+      "@assistant-ui/react",
+      "@assistant-ui/react-markdown",
+    ],
+  },
   lint: {
     options: {
       typeAware: true,

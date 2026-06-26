@@ -4,8 +4,11 @@ import path from "node:path";
 
 type AgentName = "pea" | "peco";
 
+type FrontendName = "website" | "web";
+
 interface DevWebOptions {
   agent: AgentName;
+  frontend: FrontendName;
   host: string;
   frontendPort: number;
   workbenchPort: number;
@@ -45,6 +48,7 @@ function parseArgs(args: string[]): DevWebOptions {
   if (args[0] === "web") args.shift();
 
   const forwardedArgs: string[] = ["web"];
+  let frontend: FrontendName = "website";
   let host = "127.0.0.1";
   let frontendPort = 5173;
   let workbenchPort = 43112;
@@ -59,6 +63,11 @@ function parseArgs(args: string[]): DevWebOptions {
       forwardedArgs.push(arg, host);
     } else if (arg === "--port") {
       frontendPort = readPort(readValue(args, ++index, arg), arg);
+    } else if (arg === "--frontend") {
+      const value = readValue(args, ++index, arg);
+      if (value !== "website" && value !== "web")
+        throw new Error("--frontend must be 'website' or 'web'.");
+      frontend = value;
     } else if (arg === "--workbench-port") {
       workbenchPort = readPort(readValue(args, ++index, arg), arg);
     } else if (arg === "--workbench-token") {
@@ -77,7 +86,17 @@ function parseArgs(args: string[]): DevWebOptions {
   forwardedArgs.push("--host", host);
   forwardedArgs.push("--workbench-port", String(workbenchPort));
   forwardedArgs.push("--workbench-token", token);
-  return { agent, host, frontendPort, workbenchPort, token, takeover, watch, forwardedArgs };
+  return {
+    agent,
+    frontend,
+    host,
+    frontendPort,
+    workbenchPort,
+    token,
+    takeover,
+    watch,
+    forwardedArgs,
+  };
 }
 
 function readValue(args: string[], index: number, name: string): string {
@@ -113,6 +132,7 @@ function startBackend(options: DevWebOptions): ChildProcess {
 }
 
 function startFrontend(options: DevWebOptions): ChildProcess {
+  const filter = options.frontend === "web" ? "@pe/web" : "website";
   return spawnLogged(
     "web",
     "pnpm",
@@ -120,7 +140,7 @@ function startFrontend(options: DevWebOptions): ChildProcess {
       "--dir",
       repoPeToolsRoot,
       "--filter",
-      "website",
+      filter,
       "exec",
       "vp",
       "dev",

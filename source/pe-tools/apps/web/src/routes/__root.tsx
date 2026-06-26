@@ -1,4 +1,9 @@
-import { HeadContent, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
+import {
+  HeadContent,
+  Scripts,
+  createRootRouteWithContext,
+  useRouterState,
+} from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { TanStackDevtools } from "@tanstack/react-devtools";
 import Footer from "../components/Footer";
@@ -41,6 +46,9 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 });
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  // The chat workbench is a full-screen app — hide the marketing Header/Footer there.
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const chrome = !pathname.startsWith("/chat");
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -48,9 +56,9 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body className="font-sans antialiased [overflow-wrap:anywhere] selection:bg-[rgba(79,184,178,0.24)]">
-        <Header />
+        {chrome ? <Header /> : null}
         {children}
-        <Footer />
+        {chrome ? <Footer /> : null}
         <TanStackDevtools
           config={{
             position: "bottom-right",
