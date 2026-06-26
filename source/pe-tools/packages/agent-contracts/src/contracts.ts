@@ -206,6 +206,9 @@ export interface WorkbenchToolCall {
   title: string;
   kind?: ToolKind;
   status?: ToolCallStatus;
+  /** Small label (path/file/query/command) for the inline marker. Cheap to stream; the heavy
+   *  rawInput/rawOutput are fetched on demand via GET /workbench/tool and may be absent here. */
+  target?: string;
   rawInput?: unknown;
   rawOutput?: unknown;
   content?: string;

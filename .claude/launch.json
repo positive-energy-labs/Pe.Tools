@@ -5,13 +5,15 @@
       "name": "pea-web",
       "runtimeExecutable": "pe-dev",
       "runtimeArgs": ["web", "pea"],
-      "port": 5173
+      "port": 5173,
+      "autoPort": false
     },
     {
       "name": "peco-web",
       "runtimeExecutable": "pe-dev",
       "runtimeArgs": ["web", "peco"],
-      "port": 5173
+      "port": 5173,
+      "autoPort": false
     }
   ]
 }
