@@ -92,6 +92,25 @@ const PILL_LABEL: Record<NonNullable<WorkbenchContextItem["state"]>, string> = {
   off: "not loaded",
 };
 
+// Density segmented-control button — the Plain / Inspect toggle.
+const WORLD_DIAL_BTN =
+  "cursor-pointer rounded-md border-[0.5px] border-transparent bg-transparent px-[9px] py-[3px] text-[11px] font-semibold whitespace-nowrap text-[var(--slate)] aria-pressed:border-[rgba(183,141,106,0.5)] aria-pressed:bg-[var(--paper)] aria-pressed:text-[var(--clay-ink)] aria-pressed:shadow-[0_1px_1px_rgba(138,94,59,0.15)]";
+
+// Item load-state pill + delta blast badge (ported; standalone, not part of any cascade).
+const PILL_BASE =
+  "rounded border-[0.5px] px-[5px] py-px font-mono text-[8.5px] tracking-[0.02em] whitespace-nowrap";
+const PILL_TONE: Record<NonNullable<WorkbenchContextItem["state"]>, string> = {
+  in: "text-[var(--pe-blue)] border-[rgba(0,86,149,0.4)] bg-[rgba(0,86,149,0.05)]",
+  "on-demand": "text-[var(--clay-ink)] border-dashed border-[rgba(183,141,106,0.5)]",
+  off: "text-[var(--muted)] border-[var(--line-2)]",
+};
+const BLAST_BASE = "rounded-[3px] border-[0.5px] px-1 font-mono text-[8.5px] whitespace-nowrap";
+const BLAST_TONE: Record<Blast, string> = {
+  prefix: "text-[#a23b3b] border-[rgba(162,59,59,0.5)] bg-[rgba(162,59,59,0.08)]",
+  system: "text-[var(--clay-ink)] border-[rgba(183,141,106,0.55)] bg-[var(--clay-tint)]",
+  free: "text-[var(--lichen)] border-[rgba(124,139,107,0.5)] bg-[rgba(114,198,162,0.1)]",
+};
+
 export function WorldLane({
   breakdown,
   cache,
@@ -113,7 +132,7 @@ export function WorldLane({
   if (layers.length === 0) {
     return (
       <div className="mg-world" data-density={density}>
-        <div className="mg-world-empty">
+        <div className="px-4 py-5 text-[13px] leading-normal text-[var(--muted)]">
           Nothing sent yet. Ask Pea something to populate the context.
         </div>
       </div>
@@ -145,13 +164,25 @@ export function WorldLane({
     });
 
   return (
-    <div className="mg-world" data-density={density} data-diff={diff ? "1" : "0"}>
-      <div className="mg-world-head">
-        <h2 className="mg-world-title">What the agent sends the model</h2>
-        <div className="mg-world-controls">
-          <div className="mg-world-dial" role="group" aria-label="density">
+    // `mg-world` class kept: it's the density-state hook for the `[data-density=plain]` rules.
+    <div
+      className="mg-world flex min-h-0 flex-col [font-variant-numeric:tabular-nums]"
+      data-density={density}
+      data-diff={diff ? "1" : "0"}
+    >
+      <div className="sticky top-0 z-[2] flex items-center gap-2.5 border-b-[0.5px] border-[var(--line)] bg-[var(--paper-3)] px-3.5 pt-3 pb-2.5">
+        <h2 className="m-0 font-[var(--font-display)] text-[15px] font-semibold text-[#2b333a]">
+          What the agent sends the model
+        </h2>
+        <div className="ml-auto flex items-center gap-1.5">
+          <div
+            className="flex gap-0.5 rounded-lg border-[0.5px] border-[var(--line-2)] bg-[var(--paper-2)] p-0.5"
+            role="group"
+            aria-label="density"
+          >
             <button
               type="button"
+              className={WORLD_DIAL_BTN}
               aria-pressed={density === "plain"}
               onClick={() => setDensity("plain")}
             >
@@ -159,6 +190,7 @@ export function WorldLane({
             </button>
             <button
               type="button"
+              className={WORLD_DIAL_BTN}
               aria-pressed={density === "inspect"}
               onClick={() => setDensity("inspect")}
             >
@@ -167,7 +199,7 @@ export function WorldLane({
           </div>
           <button
             type="button"
-            className="mg-world-diff"
+            className="h-6 w-[26px] cursor-pointer rounded-[7px] border-[0.5px] border-[var(--line-2)] bg-[var(--paper)] font-bold text-[var(--slate)] aria-pressed:border-[rgba(183,141,106,0.5)] aria-pressed:bg-[var(--clay-tint)] aria-pressed:text-[var(--clay-ink)] disabled:cursor-default disabled:opacity-40"
             aria-pressed={diff}
             onClick={() => setDiff((value) => !value)}
             title={
@@ -317,9 +349,13 @@ function ItemRow({
           {item.src ? <span className="mg-item-src">{item.src}</span> : null}
         </span>
         <span className="mg-item-right">
-          {blast ? <span className={`mg-blast ${blast}`}>{BLAST_LABEL[blast]}</span> : null}
+          {blast ? (
+            <span className={`${BLAST_BASE} ${BLAST_TONE[blast]}`}>{BLAST_LABEL[blast]}</span>
+          ) : null}
           {item.state ? (
-            <span className={`mg-pill ${item.state}`}>{PILL_LABEL[item.state]}</span>
+            <span className={`${PILL_BASE} ${PILL_TONE[item.state]}`}>
+              {PILL_LABEL[item.state]}
+            </span>
           ) : null}
           {item.tokens != null ? <span className="mg-item-tok">{fmtTok(item.tokens)}</span> : null}
           {hasBody ? <span className="mg-item-car">▸</span> : null}
@@ -473,8 +509,15 @@ function BudgetRow({
 }
 
 /**
- * The gutter companion: a tiny request-ordered stack pinned at the top of the MapDial, with a
- * cache-horizon tick and a delta pulse. Hover reveals the layer list; click opens World mode.
+ * The unified context head of the MapDial axis. The conversation strip below is the `messages`
+ * layer (scroll-space — there are no per-message tokens to size it by, so it stays a navigation
+ * minimap, never a token bar). This cap is the part we CAN draw in token space honestly: the
+ * fixed prefix (tools → system → memory), each slab proportional to its real token estimate, in
+ * request order. `messages` is the strip, not a slab here — drawing it twice would lie about
+ * where the conversation's weight lives. The OM gauges ride alongside as the kept at-a-glance
+ * meters. Cache horizon is the inferred rank boundary: inside the cap for a prefix break, at the
+ * cap→conversation seam (bottom) for a messages-only break. Hover reveals the full split; click
+ * opens World.
  */
 export function ContextGutter({
   breakdown,
@@ -487,16 +530,25 @@ export function ContextGutter({
 }) {
   const layers = orderedLayers(breakdown);
   if (layers.length === 0) return null;
-  const used = layers.reduce((sum, layer) => sum + layer.tokens, 0) || 1;
+  // Prefix = everything ahead of the conversation in request order (ranks 0–1). Proportions are
+  // taken within the prefix, since the messages layer is the strip below, not a cap slab.
+  const prefix = layers.filter((layer) => layer.rank <= 1 && layer.tokens > 0);
+  const prefixUsed = prefix.reduce((sum, layer) => sum + layer.tokens, 0) || 1;
   const pulsing = cache.changed.size > 0;
   const mw = breakdown?.memoryWindows;
 
-  let horizonPct: number | null = null;
+  // Cache horizon, honest: a prefix break (rank 0/1) falls between cap slabs; a messages-only
+  // break (rank ≥ 2) means the whole prefix stayed warm — the seam sits at the cap's bottom.
+  let capHorizon: number | null = null;
   if (cache.hasBaseline && cache.horizonRank !== null) {
-    horizonPct = 0;
-    for (const layer of layers) {
-      if (layer.rank >= cache.horizonRank) break;
-      horizonPct += (layer.tokens / used) * 100;
+    if (cache.horizonRank >= 2) {
+      capHorizon = 100;
+    } else {
+      capHorizon = 0;
+      for (const layer of prefix) {
+        if (layer.rank >= cache.horizonRank) break;
+        capHorizon += (layer.tokens / prefixUsed) * 100;
+      }
     }
   }
 
@@ -508,20 +560,19 @@ export function ContextGutter({
       title="What Pea sent the model — click to open"
       aria-label="Context composition"
     >
-      <span className="mg-gut-cols">
-        <span className="mg-gut-stack">
-          {layers.map((layer) => (
-            <span
-              key={layer.id}
-              className="mg-gut-seg"
-              style={{ height: `${(layer.tokens / used) * 100}%`, background: tone(layer.id) }}
-            />
-          ))}
-          {horizonPct !== null ? (
-            <span className="mg-gut-horizon" style={{ top: `${horizonPct}%` }} />
-          ) : null}
-        </span>
-        {mw ? <GutterStrata mw={mw} /> : null}
+      {mw ? <GutterStrata mw={mw} /> : null}
+      <span className="mg-cap" title="Fixed prefix — request order, ≈ token-proportional">
+        {prefix.map((layer) => (
+          <span
+            key={layer.id}
+            className="mg-cap-seg"
+            style={{ height: `${(layer.tokens / prefixUsed) * 100}%`, background: tone(layer.id) }}
+          />
+        ))}
+        {capHorizon !== null ? (
+          <span className="mg-cap-horizon" style={{ top: `${capHorizon}%` }} />
+        ) : null}
+        <span className="mg-cap-seam" />
       </span>
       <span className="mg-gut-pop">
         {layers.map((layer) => (
@@ -531,7 +582,7 @@ export function ContextGutter({
             <span className="mg-gut-poptok">{fmtTok(layer.tokens)}</span>
           </span>
         ))}
-        <span className="mg-gut-pophint">click to inspect</span>
+        <span className="mg-gut-pophint">prefix = cap · messages = strip below</span>
       </span>
     </button>
   );

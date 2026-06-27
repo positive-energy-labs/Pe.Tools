@@ -12,19 +12,36 @@ import { useMode } from "#/workbench/use-mode";
 import { MODES } from "#/workbench/depth";
 import { WorkbenchRuntimeProvider } from "#/workbench/aui";
 import { Lens } from "#/workbench/Lens";
+import { ContextGutter, useCacheView } from "#/workbench/world";
 import "#/workbench/lens.css";
 
-export function ChatShell({ promptSeed }: { promptSeed?: string }) {
+export function ChatShell({
+  initialTurn,
+  onTurnChange,
+  promptSeed,
+}: {
+  initialTurn?: number;
+  onTurnChange?: (turn: number | undefined) => void;
+  promptSeed?: string;
+}) {
   return (
     <HotkeysProvider>
       <WorkbenchRuntimeProvider>
-        <Surface promptSeed={promptSeed} />
+        <Surface initialTurn={initialTurn} promptSeed={promptSeed} onTurnChange={onTurnChange} />
       </WorkbenchRuntimeProvider>
     </HotkeysProvider>
   );
 }
 
-function Surface({ promptSeed }: { promptSeed?: string }) {
+function Surface({
+  initialTurn,
+  onTurnChange,
+  promptSeed,
+}: {
+  initialTurn?: number;
+  onTurnChange?: (turn: number | undefined) => void;
+  promptSeed?: string;
+}) {
   const {
     debug,
     threads,
@@ -40,6 +57,18 @@ function Surface({ promptSeed }: { promptSeed?: string }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   const chrome = useMemo(() => selectWorkbenchChrome(debug.state), [debug.state]);
+  // Context gauges (cap + OM meters) ride beside the composer now, so the cache view is derived
+  // here instead of inside the Lens. userTurns gates the diff baseline (advances on each send).
+  const breakdown = debug.state.inspector.contextBreakdown;
+  const userTurns = useMemo(
+    () =>
+      debug.state.transcript.messages.reduce(
+        (count, message) => (message.role === "user" ? count + 1 : count),
+        0,
+      ),
+    [debug.state.transcript.messages],
+  );
+  const cache = useCacheView(breakdown, userTurns);
 
   useHotkeys([
     { hotkey: "Mod+K", callback: () => setPaletteOpen((open) => !open) },
@@ -55,7 +84,7 @@ function Surface({ promptSeed }: { promptSeed?: string }) {
       : (debug.error ?? operationError);
 
   return (
-    <main data-mode={mode} className="fixed inset-0 bg-background font-pe text-foreground">
+    <main data-mode={mode} className="pe-light fixed inset-0 bg-background font-pe text-foreground">
       {/* Inner grid holds exactly the 3 rows; ThreadPalette stays OUT of the grid (its sr-only
           dialog header would otherwise absorb the 1fr lens row via auto-placement). */}
       <div className="grid h-full grid-rows-[auto_auto_minmax(0,1fr)]">
@@ -118,10 +147,28 @@ function Surface({ promptSeed }: { promptSeed?: string }) {
 
         <div className="relative min-h-0">
           {/* The Lens owns the scroller + MapDial geometry; the composer floats over its chat lane. */}
-          <Lens state={debug.state} mode={mode} onOpenWorld={() => setMode("world")} />
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center px-4 pb-4">
-            <div className="pointer-events-auto w-full max-w-2xl">
-              <Composer setMode={setMode} promptSeed={promptSeed} />
+          <Lens
+            state={debug.state}
+            mode={mode}
+            initialTurn={initialTurn}
+            scrollKey={currentThreadId}
+            onTurnChange={onTurnChange}
+          />
+          {/* The composer + context gauges float over the CHAT lane only (pe-composer-lane clears
+              the side lanes + mapdial), and resize with it. items-stretch keeps the gauges the
+              same height as the input box. */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 pb-4">
+            <div className="pe-composer-lane px-4">
+              <div className="pointer-events-auto flex items-stretch gap-2">
+                <ContextGutter
+                  breakdown={breakdown}
+                  cache={cache}
+                  onOpenWorld={() => setMode("world")}
+                />
+                <div className="min-w-0 flex-1">
+                  <Composer setMode={setMode} promptSeed={promptSeed} />
+                </div>
+              </div>
             </div>
           </div>
         </div>

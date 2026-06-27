@@ -48,7 +48,7 @@ function parseArgs(args: string[]): DevWebOptions {
   if (args[0] === "web") args.shift();
 
   const forwardedArgs: string[] = ["web"];
-  let frontend: FrontendName = "website";
+  let frontend: FrontendName = "web";
   let host = "127.0.0.1";
   let frontendPort = 5173;
   let workbenchPort = 43112;

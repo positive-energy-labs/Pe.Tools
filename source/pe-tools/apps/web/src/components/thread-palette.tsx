@@ -9,7 +9,7 @@ import {
 } from "#/components/ui/command";
 import type { StoredThreadSummary } from "#/workbench/provider";
 
-/** Thread picker — shadcn Command palette (Ctrl/Cmd-K). Replaces the hand-rolled ThreadPalette. */
+/** Thread picker — shadcn Command palette (Ctrl/Cmd-K). */
 export function ThreadPalette({
   threads,
   currentThreadId,
@@ -33,27 +33,25 @@ export function ThreadPalette({
       onOpenChange={onOpenChange}
       title="Threads"
       description="Search threads"
-      className="max-w-xl"
+      className="sm:max-w-lg"
     >
       <CommandInput placeholder="Search threads…" />
-      <CommandList className="max-h-[60vh]">
+      <CommandList className="max-h-[55vh]">
         <CommandEmpty>No threads</CommandEmpty>
-        <CommandGroup>
-          <CommandItem
-            value="__new__ new thread"
-            onSelect={() => {
-              onNew();
-              onOpenChange(false);
-            }}
-            className="gap-2 text-primary data-selected:text-primary"
-          >
-            <Plus className="size-4" />
-            <span className="font-medium">New thread</span>
-            <kbd className="ml-auto rounded border border-border bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-              ⌘K
-            </kbd>
-          </CommandItem>
-        </CommandGroup>
+        <CommandItem
+          value="__new__ new thread"
+          onSelect={() => {
+            onNew();
+            onOpenChange(false);
+          }}
+          className="m-1 gap-2 text-primary data-selected:text-primary"
+        >
+          <Plus className="size-4" />
+          <span className="flex-1 font-medium">New thread</span>
+          <kbd className="rounded border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+            ⌘K
+          </kbd>
+        </CommandItem>
         <CommandGroup heading="Recent">
           {threads.map((thread) => {
             const active = thread.id === currentThreadId;
@@ -66,7 +64,7 @@ export function ThreadPalette({
                   onSelect(thread.id);
                   onOpenChange(false);
                 }}
-                className="group/row gap-2.5"
+                className="group/row gap-2"
               >
                 <span
                   aria-hidden
@@ -78,32 +76,30 @@ export function ThreadPalette({
                         : "bg-border"
                   }`}
                 />
-                <span className={`truncate ${active ? "font-semibold text-foreground" : ""}`}>
+                <span className={`flex-1 truncate ${active ? "font-medium text-foreground" : ""}`}>
                   {thread.title}
                 </span>
                 {thread.promptActive ? (
-                  <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                  <span className="shrink-0 rounded bg-primary/10 px-1.5 text-[10px] font-medium text-primary">
                     running
                   </span>
                 ) : null}
-                <span className="ml-auto flex items-center gap-2">
-                  {thread.cwd ? (
-                    <span className="hidden truncate font-mono text-[11px] text-muted-foreground sm:inline">
-                      {basename(thread.cwd)}
-                    </span>
-                  ) : null}
-                  <button
-                    type="button"
-                    title="Delete thread"
-                    className="rounded p-0.5 text-muted-foreground opacity-0 transition-opacity group-hover/row:opacity-100 hover:bg-muted hover:text-destructive data-selected:opacity-100"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onDelete(thread.id);
-                    }}
-                  >
-                    <X className="size-3.5" />
-                  </button>
-                </span>
+                {thread.cwd ? (
+                  <span className="hidden max-w-[35%] shrink-0 truncate font-mono text-[11px] text-muted-foreground sm:inline">
+                    {basename(thread.cwd)}
+                  </span>
+                ) : null}
+                <button
+                  type="button"
+                  title="Delete thread"
+                  className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity group-hover/row:opacity-100 hover:bg-background hover:text-destructive data-selected:opacity-100"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onDelete(thread.id);
+                  }}
+                >
+                  <X className="size-3.5" />
+                </button>
               </CommandItem>
             );
           })}

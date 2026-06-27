@@ -7,8 +7,15 @@ import type {
 import { ThreadPrimitive, type ThreadMessageLike } from "@assistant-ui/react";
 import { modeDepth, type Mode } from "./depth";
 import { Moments, useThreadMessages } from "./aui";
-import { ContextGutter, useCacheView, WorldLane } from "./world";
+import { useCacheView, WorldLane } from "./world";
 import { useToolIo } from "./tool-io";
+import {
+  lensScrollIntent,
+  nextTailFollowState,
+  scrollTopForIntent,
+  turnAtFocalPoint,
+  type TailFollowState,
+} from "./model";
 
 /**
  * The unified workbench view (one layout, one scroll). Modes toggle panes over a single
@@ -31,12 +38,14 @@ const MIN_BAND = 3; // px floor so a one-line turn stays visible and clickable.
 
 interface Geom {
   key: string;
+  turn: number;
   top: number;
   height: number;
 }
 
 interface Moment {
   id: string;
+  turn: number;
   role: "user" | "assistant" | "system";
   createdAt?: Date;
 }
@@ -52,11 +61,15 @@ interface TraceCell {
 export function Lens({
   state,
   mode,
-  onOpenWorld,
+  initialTurn,
+  scrollKey = "",
+  onTurnChange,
 }: {
   state: WorkbenchState;
   mode: Mode;
-  onOpenWorld?: () => void;
+  initialTurn?: number;
+  scrollKey?: string;
+  onTurnChange?: (turn: number | undefined) => void;
 }) {
   const messages = useThreadMessages();
   const moments = toMoments(messages);
@@ -86,6 +99,10 @@ export function Lens({
   const cardRefs = useRef(new Map<string, HTMLElement>());
   const geomRef = useRef<Geom[]>([]);
   const hoverKeyRef = useRef<string | null>(null);
+  const turnRef = useRef<number | undefined>(initialTurn);
+  const tailFollowRef = useRef<TailFollowState>(initialTurn ? "detached" : "following");
+  const scrollTopRef = useRef(0);
+  const initialScrollRef = useRef({ key: "", done: false });
   // assistant-ui mounts the moment sections a tick after we render (and again on edits),
   // without re-rendering the Lens — so the scroll controller's geometry would never see
   // them. The register callback bumps this to force a Lens re-render, which re-runs the
@@ -93,6 +110,13 @@ export function Lens({
   // for background tabs, so an rAF-only re-measure can silently never fire.
   const [, bumpMeasure] = useReducer((tick: number) => tick + 1, 0);
   const bumpPending = useRef(false);
+  const initialScrollKey = scrollKey;
+  if (initialScrollRef.current.key !== initialScrollKey) {
+    initialScrollRef.current = { key: initialScrollKey, done: false };
+    turnRef.current = initialTurn;
+    tailFollowRef.current = initialTurn ? "detached" : "following";
+    scrollTopRef.current = 0;
+  }
 
   // The --vp aperture height feeds the sticky gutter/lane heights. Kept as its own effect so
   // it fires from first paint even on the empty-state tree.
@@ -106,13 +130,6 @@ export function Lens({
     observer.observe(scroller);
     return () => observer.disconnect();
   }, []);
-
-  const count = moments.length;
-  useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    if (el.scrollHeight - el.scrollTop - el.clientHeight < 240) el.scrollTop = el.scrollHeight;
-  }, [count]);
 
   // Register each assistant-ui-rendered moment's DOM node so the scroll controller can
   // measure it (bands, fisheye). Keyed by message id — aligned with `moments`. Each
@@ -233,6 +250,14 @@ export function Lens({
       if (csFocalRef.current) csFocalRef.current.style.top = `${fy}px`;
       if (caretRef.current) caretRef.current.style.top = `${fy}px`;
 
+      const metrics = { scrollTop: s, scrollHeight: scroller.scrollHeight, clientHeight: V };
+      const nextTurn =
+        tailFollowRef.current === "following" ? undefined : turnAtFocalPoint(geom, metrics, FOCAL);
+      if (nextTurn !== turnRef.current) {
+        turnRef.current = nextTurn;
+        onTurnChange?.(nextTurn);
+      }
+
       strip.style.transform = `translateY(${focalG - SCALE * (s + FOCAL * V)}px)`;
 
       // which stub sits on the focal axis?
@@ -278,7 +303,16 @@ export function Lens({
     const measure = () => {
       geom = moments.flatMap((moment) => {
         const el = momentRefs.current.get(moment.id);
-        return el ? [{ key: moment.id, top: el.offsetTop, height: el.offsetHeight }] : [];
+        return el
+          ? [
+              {
+                key: moment.id,
+                turn: moment.turn,
+                top: el.offsetTop,
+                height: el.offsetHeight,
+              },
+            ]
+          : [];
       });
       geomRef.current = geom;
       // Anchor each tool card to its inline marker's real doc-y in the chat scroll space, so the
@@ -309,6 +343,23 @@ export function Lens({
         band.style.top = `${g.top * SCALE}px`;
         band.style.height = `${Math.max(MIN_BAND, g.height * SCALE)}px`;
       }
+      const metrics = {
+        scrollTop: scroller.scrollTop,
+        scrollHeight: scroller.scrollHeight,
+        clientHeight: scroller.clientHeight,
+      };
+      if (!initialScrollRef.current.done) {
+        scroller.scrollTop = scrollTopForIntent(
+          lensScrollIntent(initialTurn),
+          geom,
+          metrics,
+          FOCAL,
+        );
+        initialScrollRef.current.done = true;
+      } else if (tailFollowRef.current === "following") {
+        scroller.scrollTop = scrollTopForIntent({ kind: "tail" }, geom, metrics, FOCAL);
+      }
+      scrollTopRef.current = scroller.scrollTop;
       sync();
     };
 
@@ -331,7 +382,20 @@ export function Lens({
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(scroller);
-    const onScroll = () => schedule();
+    const onScroll = () => {
+      const metrics = {
+        scrollTop: scroller.scrollTop,
+        scrollHeight: scroller.scrollHeight,
+        clientHeight: scroller.clientHeight,
+      };
+      tailFollowRef.current = nextTailFollowState(
+        tailFollowRef.current,
+        metrics,
+        scrollTopRef.current,
+      );
+      scrollTopRef.current = scroller.scrollTop;
+      schedule();
+    };
     scroller.addEventListener("scroll", onScroll, { passive: true });
 
     const chat = chatRef.current;
@@ -362,7 +426,7 @@ export function Lens({
     // moments/traceCells are fresh arrays each render; re-running re-measures geometry as the
     // thread (and streaming text heights) change. The register callback re-measures once aui
     // mounts the moment sections. Hover survives via hoverKeyRef.
-  }, [moments, traceCells, mode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [moments, traceCells, mode, initialTurn, onTurnChange]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The scroller must always mount so the --vp ResizeObserver fires (it feeds the sticky
   // gutter/lane heights). Bailing to a different tree when empty left --vp unset, so on the
@@ -371,14 +435,15 @@ export function Lens({
     <div className="lens-frame" ref={frameRef} data-mode={mode}>
       <div className="lens-scroller" ref={scrollerRef}>
         {moments.length === 0 ? (
-          <div className="mg-empty">
-            <h1>Pea</h1>
+          <div className="grid h-full place-content-center justify-items-center gap-1.5 px-6 text-[var(--muted)]">
+            <h1 className="m-0 font-[var(--font-display)] text-[30px] font-semibold text-[var(--pe-blue)]">
+              Pea
+            </h1>
             <p>Ask anything to begin. Use the dial to reveal what's happening underneath.</p>
           </div>
         ) : (
           <div className="lens-grid">
             <div className="mapdial" onPointerDown={onPointerDown} aria-label="Timeline">
-              <ContextGutter breakdown={breakdown} cache={cache} onOpenWorld={onOpenWorld} />
               <div className="mapdial-strip" ref={stripRef}>
                 {moments.map((moment, index) => (
                   <div
@@ -456,17 +521,29 @@ function ContextStrip({ state, depth }: { state: WorkbenchState; depth: "read" |
   }
 
   return (
-    <div className="mg-context">
+    <div className="mt-[14px] mr-6 ml-[34px] grid gap-2">
       {plan.length > 0 ? (
-        <div className="mg-block">
-          <div className="mg-block-head">Plan</div>
+        <div className={BLOCK}>
+          <div className={BLOCK_HEAD}>Plan</div>
           {plan.map((entry) => (
             <div
-              className={`mg-plan-item ${entry.status === "completed" ? "done" : entry.status}`}
+              className={`${PLAN_ITEM} ${
+                entry.status === "completed"
+                  ? "text-[var(--slate)]"
+                  : entry.status === "pending"
+                    ? "text-[var(--muted)]"
+                    : ""
+              }`}
               key={entry.id}
             >
               <span
-                className={`mg-plan-mark ${entry.status === "completed" ? "done" : entry.status}`}
+                className={
+                  entry.status === "completed"
+                    ? "text-[var(--pe-green)]"
+                    : entry.status === "in_progress"
+                      ? "text-[var(--pe-blue)]"
+                      : "text-[var(--kiln)]"
+                }
               >
                 {entry.status === "completed" ? "✓" : entry.status === "in_progress" ? "▸" : "○"}
               </span>
@@ -477,26 +554,31 @@ function ContextStrip({ state, depth }: { state: WorkbenchState; depth: "read" |
       ) : null}
 
       {showContext && systemPrompt ? (
-        <div className="mg-block">
+        <div className={BLOCK}>
           <button
-            className="mg-block-head"
+            className={`${BLOCK_HEAD} w-full cursor-pointer border-0`}
             type="button"
-            style={{ width: "100%", border: "none", cursor: "pointer" }}
             onClick={() => setOpen((value) => !value)}
           >
             <span>System prompt{systemPrompt.source ? ` · ${systemPrompt.source}` : ""}</span>
-            <span style={{ color: "var(--pe-blue)" }}>{open ? "hide" : "show"}</span>
+            <span className="text-[var(--pe-blue)]">{open ? "hide" : "show"}</span>
           </button>
-          {open ? <pre className="mg-pre">{systemPrompt.content}</pre> : null}
+          {open ? (
+            <pre className="m-0 px-[9px] py-2 font-mono text-[11.5px] leading-[1.5] break-words whitespace-pre-wrap text-[#5a5f5b]">
+              {systemPrompt.content}
+            </pre>
+          ) : null}
         </div>
       ) : null}
 
       {showContext && state.inspector.contextEntries.length > 0 ? (
-        <div className="mg-block">
-          <div className="mg-block-head">Context injected</div>
+        <div className={BLOCK}>
+          <div className={BLOCK_HEAD}>Context injected</div>
           {state.inspector.contextEntries.map((entry) => (
-            <div className="mg-plan-item" key={entry.id} style={{ color: "var(--slate)" }}>
-              <span className="mg-tag ctx">CTX</span>
+            <div className={`${PLAN_ITEM} text-[var(--slate)]`} key={entry.id}>
+              <span className="rounded border-[0.5px] border-[rgba(0,86,149,0.4)] px-1.5 py-px text-[10px] tracking-[0.08em] text-[var(--pe-blue)]">
+                CTX
+              </span>
               <span>{entry.title}</span>
             </div>
           ))}
@@ -505,6 +587,13 @@ function ContextStrip({ state, depth }: { state: WorkbenchState; depth: "read" |
     </div>
   );
 }
+
+// Shared ContextStrip chrome: bordered block, uppercase block head, plan/context row.
+const BLOCK = "overflow-hidden rounded-lg border-[0.5px] border-[var(--line)]";
+const BLOCK_HEAD =
+  "flex items-center justify-between border-b-[0.5px] border-[var(--line)] bg-[var(--paper-2)] px-3 py-[7px] text-[10px] tracking-[0.12em] uppercase text-[var(--slate)]";
+const PLAN_ITEM =
+  "flex gap-[9px] border-b-[0.5px] border-[var(--line-soft)] px-3 py-1.5 text-[13px] last:border-b-0";
 
 function TraceCellView({
   cell,
@@ -559,11 +648,16 @@ function ToolCellBody({ call }: { call: WorkbenchToolCall }) {
  * renders, so the MapDial bands (here) and the assistant-ui moments stay in lockstep.
  */
 function toMoments(messages: ThreadMessageLike[]): Moment[] {
-  return messages.map((message, index) => ({
-    id: message.id ?? `m:${index}`,
-    role: message.role,
-    createdAt: message.createdAt,
-  }));
+  let turn = 0;
+  return messages.map((message, index) => {
+    if (message.role === "user") turn += 1;
+    return {
+      id: message.id ?? `m:${index}`,
+      turn: Math.max(1, turn),
+      role: message.role,
+      createdAt: message.createdAt,
+    };
+  });
 }
 
 /** Trace-lane cards: every tool call, plus timeline memory entries in trace depth. */
