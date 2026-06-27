@@ -19,6 +19,7 @@
     "@assistant-ui/react-markdown": "catalog:",
     "@base-ui/react": "catalog:",
     "@pe/agent-contracts": "workspace:*",
+    "@pe/host-generated": "workspace:*",
     "@t3-oss/env-core": "^0.13.10",
     "@tanstack/react-devtools": "latest",
     "@tanstack/react-hotkeys": "catalog:",

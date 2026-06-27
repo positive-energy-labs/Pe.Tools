@@ -10,8 +10,13 @@
  * shadowing `--muted`, so `--paper-2` resolved to Slate — code pills and trace-card labels went
  * slate-on-slate (invisible). Literals keep v0 fidelity AND avoid the collision. The Tailwind
  * ChatShell chrome still uses shadcn tokens; only the Lens internals live here.
- * ponytail: the app-shell classes further down (mg-app/header/dial/chip/picker/composer/palette
- * /status) are now dead — replaced by the Tailwind ChatShell. Left for this pass; purge next.
+ *
+ * What's left after purging the dead app-shell and porting the chat/prose/context chrome to
+ * Tailwind is the irreducible core: (1) the JS-driven geometry — map-dial, candlestick, fisheye
+ * trace lane, parallax grid — positioned by inline styles the rAF controller sets per frame; and
+ * (2) the World inspector + gutter data-viz (proportional bars, cache horizons, OM budget meter),
+ * whose Tailwind equivalent would be arbitrary-value soup. Animations (caret blink, gutter pulse)
+ * stay too. This is the keep-as-CSS zone.
  */
 .lens-frame {
   --pe-blue: #005695;
@@ -38,157 +43,6 @@
   font-family: var(--font-body);
   color: var(--basalt);
   background: var(--paper);
-}
-.mg-prose {
-  font-size: 14px;
-  line-height: 1.62;
-  color: var(--basalt);
-}
-.mg-prose p {
-  margin: 0 0 0.6em;
-}
-.mg-prose p:last-child {
-  margin-bottom: 0;
-}
-.mg-prose h2,
-.mg-prose h3 {
-  font-family: var(--font-display);
-  font-weight: 600;
-  color: var(--basalt);
-  margin: 0.6em 0 0.3em;
-  line-height: 1.25;
-}
-.mg-prose h2 {
-  font-size: 17px;
-}
-.mg-prose h3 {
-  font-size: 15px;
-}
-.mg-prose ul {
-  margin: 0.3em 0;
-  padding-left: 18px;
-  display: grid;
-  gap: 3px;
-}
-.mg-prose li {
-  list-style: disc;
-}
-.mg-prose a {
-  color: var(--pe-blue);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-.mg-prose code {
-  font-family: var(--font-mono);
-  font-size: 12.5px;
-  background: var(--paper-2);
-  border: 0.5px solid var(--line);
-  border-radius: 4px;
-  padding: 0.5px 5px;
-}
-.mg-prose pre {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.5;
-  background: var(--paper-2);
-  border: 0.5px solid var(--line);
-  border-radius: 7px;
-  padding: 10px 12px;
-  overflow-x: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.mg-tag {
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  border-radius: 4px;
-  padding: 1px 6px;
-  border: 0.5px solid;
-}
-.mg-tag.mem {
-  color: var(--clay-ink);
-  border-color: rgba(183, 141, 106, 0.5);
-}
-.mg-tag.ctx {
-  color: var(--pe-blue);
-  border-color: rgba(0, 86, 149, 0.4);
-}
-.mg-pre {
-  margin: 0;
-  padding: 8px 9px;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: #5a5f5b;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.mg-block {
-  border: 0.5px solid var(--line);
-  border-radius: 8px;
-  overflow: hidden;
-}
-.mg-block-head {
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  color: var(--slate);
-  text-transform: uppercase;
-  padding: 7px 12px;
-  background: var(--paper-2);
-  border-bottom: 0.5px solid var(--line);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.mg-plan-item {
-  display: flex;
-  gap: 9px;
-  padding: 6px 12px;
-  font-size: 13px;
-  border-bottom: 0.5px solid var(--line-soft);
-}
-.mg-plan-item:last-child {
-  border-bottom: none;
-}
-.mg-plan-item.done {
-  color: var(--slate);
-}
-.mg-plan-item.pending {
-  color: var(--muted);
-}
-.mg-plan-mark.done {
-  color: var(--pe-green);
-}
-.mg-plan-mark.in_progress {
-  color: var(--pe-blue);
-}
-.mg-plan-mark.pending {
-  color: var(--kiln);
-}
-
-/* ---- system prompt / context pinned at top -------------------------- */
-.mg-context {
-  margin: 14px 24px 0 34px;
-  display: grid;
-  gap: 8px;
-}
-
-/* ---- Empty state ----------------------------------------------------- */
-.mg-empty {
-  height: 100%;
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: 6px;
-  color: var(--muted);
-  padding: 0 24px;
-}
-.mg-empty h1 {
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 30px;
-  color: var(--pe-blue);
-  margin: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -236,12 +90,19 @@
 .lens-grid .lens-lane.strata {
   grid-column: 2;
 }
-.lens-frame[data-mode="trace"] {
+/* lane widths live on [data-mode] (set on both <main> and .lens-frame) so the composer — a
+   sibling of the Lens — can read the same values and align to the chat lane (grid-column 3). */
+[data-mode="trace"] {
   --trace: 300px;
 }
-.lens-frame[data-mode="strata"] {
+[data-mode="strata"] {
   --trace: 248px;
   --strata: 264px;
+}
+/* the composer floats over the chat lane: clear the left lanes + the right mapdial. */
+.pe-composer-lane {
+  margin-left: calc(var(--trace, 0px) + var(--strata, 0px));
+  margin-right: var(--map, 104px);
 }
 
 /* ---- Map-dial: proportional minimap + viewport reticle ---------------- */
@@ -404,31 +265,6 @@
 .lens-moment {
   padding: 18px 0;
   scroll-margin-top: 12px;
-}
-.lens-who {
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--slate);
-  margin-bottom: 5px;
-  font-weight: 600;
-}
-.lens-who.you {
-  color: var(--pe-green);
-}
-.lens-who.pea {
-  color: var(--pe-blue);
-}
-.lens-bubble {
-  background: var(--user-tint);
-  border: 0.5px solid var(--user-line);
-  border-radius: 12px 12px 2px 12px;
-  padding: 8px 12px;
-  font-size: 14px;
-  line-height: 1.5;
-  margin-left: auto;
-  max-width: 80%;
-  width: fit-content;
 }
 .lens-marker {
   display: inline-flex;
@@ -631,15 +467,6 @@
     background-position: 140% 0;
   }
 }
-
-/* ===== Capability UI: fork · chain-of-thought · approvals · devtools === */
-
-/* fork affordance on user turns */
-.lens-who.you {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-}
 .lens-fork {
   display: inline-grid;
   place-items: center;
@@ -663,83 +490,6 @@
   color: var(--pe-green);
 }
 
-/* chain-of-thought — collapsed by default so the spine stays calm */
-.lens-cot {
-  border-left: 2px solid var(--kiln);
-}
-.lens-cot-head {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  border: none;
-  background: transparent;
-  color: var(--lichen);
-  font-size: 12px;
-  font-weight: 600;
-  padding: 1px 6px;
-}
-.lens-cot-head:hover {
-  color: var(--clay-ink);
-}
-.lens-cot-caret {
-  transition: transform 0.14s ease;
-}
-.lens-cot.open .lens-cot-caret {
-  transform: rotate(90deg);
-}
-.lens-cot-body {
-  margin: 4px 0 2px 8px;
-  padding-left: 9px;
-  border-left: 1px solid var(--line-2);
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--lichen);
-  white-space: pre-wrap;
-}
-/* inline tool part: collapsed marker + (when gated) the HITL approve/deny row */
-.lens-tool-part {
-  display: grid;
-  gap: 6px;
-}
-.lens-approval-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-.lens-approval-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 12.5px;
-  font-weight: 600;
-  border-radius: 7px;
-  padding: 5px 11px;
-  border: 0.5px solid var(--line-2);
-  background: var(--paper);
-  color: var(--slate);
-  transition:
-    background 0.12s,
-    color 0.12s,
-    border-color 0.12s,
-    transform 0.08s;
-}
-.lens-approval-btn:active {
-  transform: translateY(0.5px);
-}
-.lens-approval-btn.allow {
-  background: var(--pe-blue);
-  border-color: var(--pe-blue);
-  color: #fff;
-}
-.lens-approval-btn.allow:hover {
-  background: var(--pe-blue-soft);
-}
-.lens-approval-btn.deny:hover {
-  background: #fdf1ef;
-  border-color: #d8a59f;
-  color: #8f3434;
-}
-
 /* devtools lane — a flat RuntimeEvent console (replaces the drifting events lane) */
 .lens-lane.strata {
   background-image: none;
@@ -759,13 +509,13 @@
   .lens-cell {
     transition: none;
   }
-  .mg-gut.pulse .mg-gut-stack {
+  .mg-gut.pulse .mg-cap {
     animation: none;
   }
 }
 
 /* ===== World inspector — what Pea actually sent the model (request-ordered) ===== */
-.lens-frame[data-mode="world"] {
+[data-mode="world"] {
   --trace: 392px;
 }
 .lens-grid .lens-lane.world {
@@ -782,81 +532,6 @@
   flex-direction: column;
   min-height: 0;
   font-variant-numeric: tabular-nums;
-}
-.mg-world-empty {
-  padding: 20px 16px;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.5;
-}
-.mg-world-head {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px 10px;
-  background: var(--paper-3);
-  border-bottom: 0.5px solid var(--line);
-}
-.mg-world-title {
-  margin: 0;
-  font-family: var(--font-display, Georgia, serif);
-  font-weight: 600;
-  font-size: 15px;
-  color: var(--ink, #2b333a);
-}
-.mg-world-controls {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.mg-world-dial {
-  display: flex;
-  gap: 2px;
-  padding: 2px;
-  background: var(--paper-2);
-  border: 0.5px solid var(--line-2, rgba(62, 67, 64, 0.2));
-  border-radius: 8px;
-}
-.mg-world-dial button {
-  border: 0.5px solid transparent;
-  background: transparent;
-  color: var(--slate);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 3px 9px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.mg-world-dial button[aria-pressed="true"] {
-  background: var(--paper);
-  color: var(--clay-ink, #8a5e3b);
-  border-color: rgba(183, 141, 106, 0.5);
-  box-shadow: 0 1px 1px rgba(138, 94, 59, 0.15);
-}
-.mg-world-diff {
-  width: 26px;
-  height: 24px;
-  border: 0.5px solid var(--line-2, rgba(62, 67, 64, 0.2));
-  background: var(--paper);
-  border-radius: 7px;
-  color: var(--slate);
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-}
-.mg-world-diff[aria-pressed="true"] {
-  background: var(--clay-tint, #f3eae0);
-  border-color: rgba(183, 141, 106, 0.5);
-  color: var(--clay-ink, #8a5e3b);
-}
-.mg-world-diff:disabled {
-  opacity: 0.4;
-  cursor: default;
 }
 
 .mg-world-bar {
@@ -1150,56 +825,6 @@
   overflow: auto;
 }
 
-/* pill — item load state */
-.mg-pill {
-  font-family: var(--font-mono);
-  font-size: 8.5px;
-  letter-spacing: 0.02em;
-  border-radius: 4px;
-  padding: 1px 5px;
-  border: 0.5px solid;
-  white-space: nowrap;
-}
-.mg-pill.in {
-  color: var(--pe-blue, #005695);
-  border-color: rgba(0, 86, 149, 0.4);
-  background: rgba(0, 86, 149, 0.05);
-}
-.mg-pill.on-demand {
-  color: var(--clay-ink, #8a5e3b);
-  border-color: rgba(183, 141, 106, 0.5);
-  border-style: dashed;
-}
-.mg-pill.off {
-  color: var(--muted);
-  border-color: var(--line-2, rgba(62, 67, 64, 0.2));
-}
-
-/* blast radius — shown on delta items */
-.mg-blast {
-  font-family: var(--font-mono);
-  font-size: 8.5px;
-  border-radius: 3px;
-  padding: 0 4px;
-  border: 0.5px solid;
-  white-space: nowrap;
-}
-.mg-blast.prefix {
-  color: #a23b3b;
-  border-color: rgba(162, 59, 59, 0.5);
-  background: rgba(162, 59, 59, 0.08);
-}
-.mg-blast.system {
-  color: var(--clay-ink, #8a5e3b);
-  border-color: rgba(183, 141, 106, 0.55);
-  background: var(--clay-tint, #f3eae0);
-}
-.mg-blast.free {
-  color: var(--lichen, #7c8b6b);
-  border-color: rgba(124, 139, 107, 0.5);
-  background: rgba(114, 198, 162, 0.1);
-}
-
 /* cache badges — frontend inference, marked ≈ */
 .mg-cache {
   font-family: var(--font-mono);
@@ -1359,49 +984,54 @@
 }
 
 /* ===== Context gutter — the MapDial's at-a-glance context stack ===== */
+/* The context gauges, docked beside the composer. An inline cluster (prefix cap + OM meters)
+   that stretches to the composer's height via the flex row's align-items: stretch. */
 .mg-gut {
-  position: absolute;
-  top: 8px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 6;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: auto;
-  padding: 0;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-}
-.mg-gut-cols {
-  display: flex;
-  align-items: stretch;
-  gap: 4px;
-}
-.mg-gut-stack {
   position: relative;
   display: flex;
+  align-items: stretch;
+  gap: 6px;
+  padding: 7px 9px;
+  border: 0.5px solid var(--line-2, rgba(62, 67, 64, 0.2));
+  border-radius: 16px;
+  background: var(--paper);
+  box-shadow: 0 4px 14px rgba(62, 67, 64, 0.08);
+  cursor: pointer;
+}
+/* prefix cap: request-ordered token slabs (tools → system → memory), stretched to row height. */
+.mg-cap {
+  position: relative;
+  order: 2;
+  display: flex;
   flex-direction: column;
-  width: 14px;
-  height: 64px;
+  width: 16px;
   border-radius: 3px;
   overflow: hidden;
   border: 0.5px solid var(--line-2, rgba(62, 67, 64, 0.2));
-  box-shadow: 0 1px 3px rgba(62, 67, 64, 0.18);
 }
-.mg-gut-seg {
+.mg-cap-seg {
   width: 100%;
   min-height: 1px;
 }
-.mg-gut-horizon {
+.mg-cap-horizon {
   position: absolute;
   left: -1px;
   right: -1px;
   height: 0;
   border-top: 1.5px dashed var(--clay-ink, #8a5e3b);
 }
-.mg-gut.pulse .mg-gut-stack {
+/* the cap → conversation seam: a hairline at the bottom edge marking where the prefix ends and
+   the strip (messages) begins — the boundary the whole axis pivots on. */
+.mg-cap-seam {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0;
+  border-bottom: 1px solid var(--pe-blue);
+  opacity: 0.5;
+}
+.mg-gut.pulse .mg-cap {
   animation: mg-gut-pulse 1.8s ease-in-out infinite;
 }
 @keyframes mg-gut-pulse {
@@ -1417,8 +1047,8 @@
 }
 .mg-gut-pop {
   position: absolute;
-  top: 0;
-  right: calc(100% + 8px);
+  bottom: calc(100% + 8px);
+  left: 0;
   display: none;
   flex-direction: column;
   gap: 3px;
@@ -1460,17 +1090,16 @@
   color: var(--muted);
 }
 
-/* memory strata column beside the layer stack */
+/* the OM gauges (kept at-a-glance pills) — the two memory windows, beside the prefix cap */
 .mg-gut-strata {
   position: relative;
+  order: 1;
   display: flex;
   flex-direction: column;
   width: 12px;
-  height: 64px;
   border-radius: 3px;
   overflow: hidden;
   border: 0.5px solid var(--line-2, rgba(62, 67, 64, 0.2));
-  box-shadow: 0 1px 3px rgba(62, 67, 64, 0.18);
 }
 .mg-gut-region {
   position: relative;

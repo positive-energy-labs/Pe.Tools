@@ -115,8 +115,9 @@ function UserMoment() {
   );
   return (
     <MomentSection id={id} role="user">
-      <div className="lens-who you">
+      <div className="mb-1.5 inline-flex items-center gap-[7px] text-[10px] font-semibold tracking-[0.1em] uppercase text-[var(--pe-green)]">
         <span>you</span>
+        {/* lens-fork kept as CSS: visibility is driven by `.lens-moment:hover` (geometry element) */}
         <button
           className="lens-fork"
           type="button"
@@ -126,7 +127,9 @@ function UserMoment() {
           <GitFork size={12} />
         </button>
       </div>
-      <div className="lens-bubble">{text}</div>
+      <div className="ml-auto w-fit max-w-[80%] rounded-[12px_12px_2px_12px] border-[0.5px] border-[var(--user-line)] bg-[var(--user-tint)] px-3 py-2 text-sm leading-normal">
+        {text}
+      </div>
     </MomentSection>
   );
 }
@@ -136,9 +139,12 @@ function AssistantMoment() {
   const running = useMessage((message) => message.status?.type === "running");
   return (
     <MomentSection id={id} role="assistant">
-      <div className="lens-who pea">pea</div>
-      <div className="mg-prose" style={{ display: "grid", gap: "8px" }}>
+      <div className="mb-1.5 text-[10px] font-semibold tracking-[0.1em] uppercase text-[var(--pe-blue)]">
+        pea
+      </div>
+      <div className="grid gap-2">
         <AssistantParts />
+        {/* mg-caret kept as CSS: it's a keyframes blink animation (the user asked to keep those) */}
         {running ? <span className="mg-caret" aria-hidden="true" /> : null}
       </div>
     </MomentSection>
@@ -170,25 +176,50 @@ class PartsBoundary extends Component<{ children: ReactNode }, { error?: string 
     console.error("[workbench] message-part render failed", error, info.componentStack);
   }
   render(): ReactNode {
-    if (this.state.error) return <div className="lens-part-error">{this.state.error}</div>;
+    if (this.state.error)
+      return <div className="text-[13px] text-[#b4524f]">{this.state.error}</div>;
     return this.props.children;
   }
 }
 
-/** Assistant text → assistant-ui markdown, styled with our existing prose rules. */
-const MarkdownText: TextMessagePartComponent = () => <MarkdownTextPrimitive className="mg-prose" />;
+/**
+ * Assistant text → assistant-ui markdown. assistant-ui renders the markdown to HTML but doesn't
+ * style it, so we use the Tailwind typography plugin (`prose`) tuned to the PE look: serif
+ * headings, PE-blue links, and inline-code pills on paper-2 with the backtick pseudo-content
+ * stripped. Replaces the hand-written prose descendant CSS.
+ */
+const PROSE_CLASS = [
+  "prose prose-sm max-w-none leading-relaxed text-[var(--basalt)]",
+  "prose-p:my-0 prose-p:mb-[0.6em] last:prose-p:mb-0",
+  "prose-headings:font-[var(--font-display)] prose-headings:font-semibold prose-headings:text-[var(--basalt)]",
+  "prose-a:text-[var(--pe-blue)] prose-a:underline prose-a:underline-offset-2",
+  "prose-code:rounded prose-code:border-[0.5px] prose-code:border-[var(--line)] prose-code:bg-[var(--paper-2)] prose-code:px-[5px] prose-code:py-px prose-code:text-[12.5px] prose-code:font-normal",
+  "prose-code:before:content-none prose-code:after:content-none",
+  "prose-pre:rounded-[7px] prose-pre:border-[0.5px] prose-pre:border-[var(--line)] prose-pre:bg-[var(--paper-2)] prose-pre:text-[var(--basalt)]",
+].join(" ");
+const MarkdownText: TextMessagePartComponent = () => (
+  <MarkdownTextPrimitive className={PROSE_CLASS} />
+);
 
 /** Collapsible chain-of-thought (collapsed by default so the spine stays calm). */
 const ReasoningPart: ReasoningMessagePartComponent = ({ text }) => {
   const [open, setOpen] = useState(false);
   if (!text.trim()) return null;
   return (
-    <div className={`lens-cot ${open ? "open" : ""}`}>
-      <button className="lens-cot-head" type="button" onClick={() => setOpen((value) => !value)}>
-        <ChevronRight size={12} className="lens-cot-caret" />
+    <div className="border-l-2 border-[var(--kiln)]">
+      <button
+        className="inline-flex items-center gap-[5px] bg-transparent px-1.5 py-px text-xs font-semibold text-[var(--lichen)] hover:text-[var(--clay-ink)]"
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+      >
+        <ChevronRight size={12} className={`transition-transform ${open ? "rotate-90" : ""}`} />
         <span>Thought process</span>
       </button>
-      {open ? <div className="lens-cot-body">{text}</div> : null}
+      {open ? (
+        <div className="mt-1 mb-0.5 ml-2 border-l border-[var(--line-2)] pl-[9px] text-[13px] leading-[1.55] whitespace-pre-wrap text-[var(--lichen)]">
+          {text}
+        </div>
+      ) : null}
     </div>
   );
 };
@@ -219,20 +250,25 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
   return (
     // data-tool-id lets the Lens anchor this tool's trace card to the marker's real chat
     // position, so the focal card tracks the tool actually at the focal axis.
-    <div className="lens-tool-part" data-tool-id={toolCallId}>
+    <div className="grid gap-1.5" data-tool-id={toolCallId}>
+      {/* lens-marker kept as CSS: focal/hover emphasis is driven by `.lens-moment.focal` (geometry) */}
       <div className={`lens-marker tool ${tone}`}>
         <span>⌗ {toolName}</span>
         {target ? <code>{target}</code> : null}
       </div>
       {pending ? (
-        <div className="lens-approval-actions">
+        <div className="flex flex-wrap gap-[7px]">
           {(approval.options ?? DEFAULT_APPROVAL_OPTIONS).map((option) => {
             const allow = option.kind.startsWith("allow");
             return (
               <button
                 key={option.id}
                 type="button"
-                className={`lens-approval-btn ${allow ? "allow" : "deny"}`}
+                className={`inline-flex items-center gap-[5px] rounded-[7px] border-[0.5px] px-[11px] py-[5px] text-[12.5px] font-semibold transition-colors active:translate-y-[0.5px] ${
+                  allow
+                    ? "border-[var(--pe-blue)] bg-[var(--pe-blue)] text-white hover:bg-[var(--pe-blue-soft)]"
+                    : "border-[var(--line-2)] bg-[var(--paper)] text-[var(--slate)] hover:border-[#d8a59f] hover:bg-[#fdf1ef] hover:text-[#8f3434]"
+                }`}
                 onClick={() => void resolveApproval(approval.id, option.id)}
               >
                 {allow ? <Check size={13} /> : <X size={13} />}

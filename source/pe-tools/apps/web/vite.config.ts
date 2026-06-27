@@ -35,6 +35,13 @@ const config = defineConfig({
         target: process.env.PE_WORKBENCH_API_URL ?? "http://127.0.0.1:43113",
         changeOrigin: true,
       },
+      // ponytail: dev-only passthrough to Pe.Host for the /ops host-op playground. Strips the
+      // `/pe-host` prefix so the browser can hit op.route (e.g. /api/revit/...) cross-origin-free.
+      "/pe-host": {
+        target: process.env.PE_TOOLS_HOST_BASE_URL ?? "http://localhost:5180",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/pe-host/, ""),
+      },
     },
   },
   resolve: { tsconfigPaths: true, dedupe: ["react", "react-dom"] },

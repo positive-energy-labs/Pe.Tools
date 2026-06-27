@@ -9,19 +9,19 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from "./routes/__root";
+import { Route as OpsRouteImport } from "./routes/ops";
 import { Route as ChatRouteImport } from "./routes/chat";
-import { Route as AboutRouteImport } from "./routes/about";
 import { Route as IndexRouteImport } from "./routes/index";
 import { Route as DemoTanstackQueryRouteImport } from "./routes/demo/tanstack-query";
 
+const OpsRoute = OpsRouteImport.update({
+  id: "/ops",
+  path: "/ops",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const ChatRoute = ChatRouteImport.update({
   id: "/chat",
   path: "/chat",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const AboutRoute = AboutRouteImport.update({
-  id: "/about",
-  path: "/about",
   getParentRoute: () => rootRouteImport,
 } as any);
 const IndexRoute = IndexRouteImport.update({
@@ -37,52 +37,52 @@ const DemoTanstackQueryRoute = DemoTanstackQueryRouteImport.update({
 
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
-  "/about": typeof AboutRoute;
   "/chat": typeof ChatRoute;
+  "/ops": typeof OpsRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute;
-  "/about": typeof AboutRoute;
   "/chat": typeof ChatRoute;
+  "/ops": typeof OpsRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
   "/": typeof IndexRoute;
-  "/about": typeof AboutRoute;
   "/chat": typeof ChatRoute;
+  "/ops": typeof OpsRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
-  fullPaths: "/" | "/about" | "/chat" | "/demo/tanstack-query";
+  fullPaths: "/" | "/chat" | "/ops" | "/demo/tanstack-query";
   fileRoutesByTo: FileRoutesByTo;
-  to: "/" | "/about" | "/chat" | "/demo/tanstack-query";
-  id: "__root__" | "/" | "/about" | "/chat" | "/demo/tanstack-query";
+  to: "/" | "/chat" | "/ops" | "/demo/tanstack-query";
+  id: "__root__" | "/" | "/chat" | "/ops" | "/demo/tanstack-query";
   fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute;
-  AboutRoute: typeof AboutRoute;
   ChatRoute: typeof ChatRoute;
+  OpsRoute: typeof OpsRoute;
   DemoTanstackQueryRoute: typeof DemoTanstackQueryRoute;
 }
 
 declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
+    "/ops": {
+      id: "/ops";
+      path: "/ops";
+      fullPath: "/ops";
+      preLoaderRoute: typeof OpsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/chat": {
       id: "/chat";
       path: "/chat";
       fullPath: "/chat";
       preLoaderRoute: typeof ChatRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/about": {
-      id: "/about";
-      path: "/about";
-      fullPath: "/about";
-      preLoaderRoute: typeof AboutRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/": {
@@ -104,8 +104,8 @@ declare module "@tanstack/react-router" {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AboutRoute: AboutRoute,
   ChatRoute: ChatRoute,
+  OpsRoute: OpsRoute,
   DemoTanstackQueryRoute: DemoTanstackQueryRoute,
 };
 export const routeTree = rootRouteImport
