@@ -1,5 +1,8 @@
+using TypeGen.Core.TypeAnnotations;
+
 namespace Pe.Shared.ApsAuth;
 
+[ExportTsInterface]
 public sealed record ApsTokenRequest {
     public ApsAuthFlowKind FlowKind { get; init; } = ApsAuthFlowKind.ThreeLeggedConfidential;
     public ApsScopeProfile ScopeProfile { get; init; } = ApsScopeProfile.ParameterService;

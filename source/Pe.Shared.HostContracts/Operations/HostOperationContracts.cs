@@ -62,6 +62,16 @@ public enum HostOperationRelationKind {
     Alternative
 }
 
+// Machine-readable failure classification the host emits in problem.extensions.kind,
+// so callers classify errors from a C#-owned taxonomy instead of regexing messages.
+public enum HostErrorKind {
+    Disconnected,
+    BridgeBusy,
+    InvalidRequest,
+    Conflict,
+    HostFailure
+}
+
 public sealed record HostOperationRequestExample(
     string Name,
     string Description,

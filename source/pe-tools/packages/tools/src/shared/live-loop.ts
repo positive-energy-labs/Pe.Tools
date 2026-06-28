@@ -168,7 +168,7 @@ export async function readPeaHostLogTails(
     const hostBaseUrl = PeHostClient.resolveHostBaseUrl(options.hostBaseUrl);
     const response = await new PeHostClient({
       baseUrl: hostBaseUrl,
-    }).host.getLogs({
+    }).call("host.logs", {
       target: parseHostLogTarget(target),
       tailLineCount,
     });

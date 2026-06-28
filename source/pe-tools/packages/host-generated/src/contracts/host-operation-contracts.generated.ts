@@ -11,12 +11,12 @@ export type RevitActiveDocumentKind = "Project" | "Family";
 export type HostOperationCostTier = "Cheap" | "Bounded" | "Expensive" | "Mutation";
 export type HostOperationVisibility = "DefaultVisible" | "EscalationVisible" | "ExpertOnly";
 export type HostOperationRelationKind = "Preflight" | "DrillDown" | "Fallback" | "Alternative";
-
-export interface HostTypeShapeField {
-  name: string;
-  type: string;
-  required: boolean;
-}
+export type HostErrorKind =
+  | "Disconnected"
+  | "BridgeBusy"
+  | "InvalidRequest"
+  | "Conflict"
+  | "HostFailure";
 
 export interface HostOperationRequestExample {
   name: string;
@@ -38,8 +38,6 @@ export interface HostOperationDefinition {
   exposure?: HostOperationExposure;
   requestTypeName?: string;
   responseTypeName?: string;
-  requestShape?: readonly HostTypeShapeField[];
-  responseShape?: readonly HostTypeShapeField[];
   displayName?: string;
   domain?: string;
   description?: string;

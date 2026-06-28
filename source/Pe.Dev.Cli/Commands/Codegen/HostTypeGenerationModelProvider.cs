@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Pe.Shared.ApsAuth;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.RevitData;
 using Pe.Shared.StorageRuntime;
@@ -12,10 +13,6 @@ internal static class HostTypeGenerationModelProvider {
     private const string Configuration = "Debug.R25";
     private static readonly Regex RelativeModuleSpecifierPattern = new(
         "(?<prefix>\\bfrom\\s+|export\\s+\\*\\s+from\\s+)(?<quote>[\"'])(?<path>\\.{1,2}/[^\"']+?)(?<quote2>[\"'])",
-        RegexOptions.Compiled
-    );
-    private static readonly Regex ExportedTypeDeclarationPattern = new(
-        "\\bexport\\s+(?:interface|class|enum)\\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)",
         RegexOptions.Compiled
     );
 
@@ -44,123 +41,53 @@ internal static class HostTypeGenerationModelProvider {
         var sourceAssemblies = LoadSourceAssemblies();
         generator.Generate(sourceAssemblies);
 
-        var prunedFiles = PruneToTypeScriptClientSlice(generatedFiles);
-        var includedTypeNames = prunedFiles
-            .Select(file => TryGetExportedTypeName(file.Content))
-            .Where(typeName => typeName != null)
-            .ToHashSet(StringComparer.Ordinal);
+        // Only enums ship as TS types. Object types are inferred from the generated
+        // zod schemas (z.infer in host-zod.generated.ts), so interface files would
+        // only duplicate them — and lossily (zod captures nullability TypeGen drops).
+        var enumFiles = generatedFiles
+            .Where(file => !IsIndexFile(file.Path)
+                           && file.Content.Contains("export enum", StringComparison.Ordinal))
+            .OrderBy(file => file.Path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var indexFile = CreateEnumIndexFile(generatedFiles, enumFiles);
+
+        // Open generic definitions have no concrete wire shape, so zod can't emit a
+        // schema for them. Operations expose concrete DTOs; exclude any annotated
+        // generic from the schema/type surface.
         var exportedTypes = sourceAssemblies
             .SelectMany(assembly => assembly.GetTypes())
             .Where(IsTypeScriptExportedType)
             .Where(type => !string.IsNullOrWhiteSpace(type.FullName))
-            .Where(type => includedTypeNames.Contains(type.Name))
-            .ToDictionary(type => type.FullName!, type => type.Name, StringComparer.Ordinal);
+            .Where(type => !type.IsGenericTypeDefinition && !type.ContainsGenericParameters)
+            .GroupBy(type => type.FullName!, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First().Name, StringComparer.Ordinal);
 
         return new GeneratedHostTypeModel(
-            prunedFiles
-                .OrderBy(file => file.Path, StringComparer.OrdinalIgnoreCase)
-                .ToArray(),
+            enumFiles.Append(indexFile).ToArray(),
             exportedTypes
         );
     }
 
-    private static IReadOnlyList<GeneratedProjectionFile> PruneToTypeScriptClientSlice(
-        IReadOnlyList<GeneratedProjectionFile> generatedFiles
-    ) {
-        var indexFile = generatedFiles.Single(file =>
-            string.Equals(Path.GetFileName(file.Path), "index.ts", StringComparison.OrdinalIgnoreCase));
-        var filesByPath = generatedFiles
-            .Where(file => !string.Equals(file.Path, indexFile.Path, StringComparison.OrdinalIgnoreCase))
-            .ToDictionary(file => file.Path, StringComparer.OrdinalIgnoreCase);
-        var filesByTypeName = filesByPath.Values
-            .Select(file => new { File = file, TypeName = TryGetExportedTypeName(file.Content) })
-            .Where(entry => entry.TypeName != null)
-            .ToDictionary(entry => entry.TypeName!, entry => entry.File, StringComparer.Ordinal);
-        var rootTypeNames = GetTypeScriptClientRootTypes()
-            .Select(type => type.Name)
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(typeName => typeName, StringComparer.Ordinal)
-            .ToArray();
-        var missingRoots = rootTypeNames
-            .Where(typeName => !filesByTypeName.ContainsKey(typeName))
-            .ToArray();
-        if (missingRoots.Length != 0)
-            throw new InvalidOperationException(
-                $"Generated host-types are missing client root types: {string.Join(", ", missingRoots)}"
-            );
-
-        var includedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var rootTypeName in rootTypeNames)
-            IncludeFile(filesByTypeName[rootTypeName], filesByPath, includedPaths);
-
-        var prunedIndex = CreatePrunedIndexFile(indexFile, includedPaths);
-        return generatedFiles
-            .Where(file => includedPaths.Contains(file.Path))
-            .Append(prunedIndex)
-            .ToArray();
-    }
-
-    private static IReadOnlyList<Type> GetTypeScriptClientRootTypes() => HostOperationsCatalog.TypeScriptClient.Groups
-        .SelectMany(group => group.Operations)
-        .SelectMany(operation => new[] { operation.Definition.RequestType, operation.Definition.ResponseType })
-        .Concat(HostOperationsCatalog.TypeScriptClientExtraTypeRoots)
-        .Where(type => type != typeof(NoRequest))
+    public static IReadOnlyList<Type> ResolveExportedTypes(
+        IReadOnlyDictionary<string, string> exportedTypeNames
+    ) => LoadSourceAssemblies()
+        .SelectMany(assembly => assembly.GetTypes())
+        .Where(IsTypeScriptExportedType)
+        .Where(type => type.FullName != null && exportedTypeNames.ContainsKey(type.FullName))
         .ToArray();
 
-    private static string? TryGetExportedTypeName(string content) {
-        var match = ExportedTypeDeclarationPattern.Match(content);
-        return match.Success ? match.Groups["name"].Value : null;
-    }
+    private static bool IsIndexFile(string path) =>
+        string.Equals(Path.GetFileName(path), "index.ts", StringComparison.OrdinalIgnoreCase);
 
-    private static void IncludeFile(
-        GeneratedProjectionFile file,
-        IReadOnlyDictionary<string, GeneratedProjectionFile> filesByPath,
-        HashSet<string> includedPaths
+    private static GeneratedProjectionFile CreateEnumIndexFile(
+        IReadOnlyList<GeneratedProjectionFile> generatedFiles,
+        IReadOnlyList<GeneratedProjectionFile> enumFiles
     ) {
-        if (!includedPaths.Add(file.Path))
-            return;
-
-        foreach (var dependencyPath in GetGeneratedFileDependencies(file)) {
-            if (filesByPath.TryGetValue(dependencyPath, out var dependency))
-                IncludeFile(dependency, filesByPath, includedPaths);
-        }
-    }
-
-    private static IEnumerable<string> GetGeneratedFileDependencies(GeneratedProjectionFile file) {
-        var baseDirectory = Path.GetDirectoryName(file.Path)!;
-        foreach (Match match in RelativeModuleSpecifierPattern.Matches(file.Content)) {
-            var relativePath = match.Groups["path"].Value;
-            if (!relativePath.StartsWith("./", StringComparison.Ordinal))
-                continue;
-
-            var generatedRelativePath = Path.ChangeExtension(
-                relativePath.Replace('/', Path.DirectorySeparatorChar),
-                ".ts"
-            );
-            yield return Path.GetFullPath(Path.Combine(baseDirectory, generatedRelativePath));
-        }
-    }
-
-    private static GeneratedProjectionFile CreatePrunedIndexFile(
-        GeneratedProjectionFile indexFile,
-        IReadOnlySet<string> includedPaths
-    ) {
-        var includedSpecifiers = includedPaths
-            .Select(path => $"./{Path.GetFileNameWithoutExtension(path)}.js")
-            .ToHashSet(StringComparer.Ordinal);
-        var lines = indexFile.Content.Split(["\r\n", "\n"], StringSplitOptions.None);
-        var prunedLines = lines
-            .Where(line => !line.StartsWith("export *", StringComparison.Ordinal)
-                           || ShouldKeepIndexExport(line, includedSpecifiers))
-            .ToArray();
-        return indexFile with {
-            Content = string.Join("\n", prunedLines).TrimEnd() + "\n"
-        };
-    }
-
-    private static bool ShouldKeepIndexExport(string line, IReadOnlySet<string> includedSpecifiers) {
-        var match = RelativeModuleSpecifierPattern.Match(line);
-        return match.Success && includedSpecifiers.Contains(match.Groups["path"].Value);
+        var indexFile = generatedFiles.Single(file => IsIndexFile(file.Path));
+        var lines = enumFiles
+            .Select(file => $"export * from \"./{Path.GetFileNameWithoutExtension(file.Path)}.js\";")
+            .OrderBy(line => line, StringComparer.Ordinal);
+        return indexFile with { Content = string.Join("\n", lines).TrimEnd() + "\n" };
     }
 
     private static GeneratorOptions CreateOptions(string outputDirectory) {
@@ -181,6 +108,7 @@ internal static class HostTypeGenerationModelProvider {
 
     private static IEnumerable<System.Reflection.Assembly> LoadSourceAssemblies() => [
         typeof(HostOperationsCatalog).Assembly,
+        typeof(ApsTokenRequest).Assembly,
         typeof(GlobalStorage).Assembly,
         typeof(RevitDataIssue).Assembly
     ];

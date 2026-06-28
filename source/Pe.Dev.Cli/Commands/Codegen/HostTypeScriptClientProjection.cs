@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using Pe.Shared.HostContracts.Operations;
@@ -12,7 +11,6 @@ internal static class HostTypeScriptClientProjection {
     };
 
     public static async Task<int> RunAsync(
-        bool check,
         CodegenPaths paths,
         CancellationToken cancellationToken
     ) {
@@ -36,9 +34,6 @@ internal static class HostTypeScriptClientProjection {
             return 1;
         }
 
-        if (check)
-            return await CheckAsync(paths, generatedFiles, cancellationToken);
-
         foreach (var extraFile in EnumerateCommittedGeneratedFiles(paths).Where(path => generatedFiles.All(file => !string.Equals(file.Path, path, StringComparison.OrdinalIgnoreCase)))) {
             File.Delete(extraFile);
             Console.WriteLine($"Deleted {Path.GetRelativePath(paths.RepoRoot, extraFile)}");
@@ -51,40 +46,6 @@ internal static class HostTypeScriptClientProjection {
         }
 
         return 0;
-    }
-
-    private static async Task<int> CheckAsync(
-        CodegenPaths paths,
-        IReadOnlyList<GeneratedProjectionFile> generatedFiles,
-        CancellationToken cancellationToken
-    ) {
-        var staleFiles = new List<string>();
-        var expectedPaths = generatedFiles.Select(file => Path.GetFullPath(file.Path)).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var generatedFile in generatedFiles) {
-            var relativePath = Path.GetRelativePath(paths.RepoRoot, generatedFile.Path);
-            if (!File.Exists(generatedFile.Path)) {
-                staleFiles.Add($"{relativePath} (missing)");
-                continue;
-            }
-
-            var existingContent = await File.ReadAllTextAsync(generatedFile.Path, cancellationToken);
-            if (!string.Equals(existingContent, generatedFile.Content, StringComparison.Ordinal))
-                staleFiles.Add(relativePath);
-        }
-
-        foreach (var extraFile in EnumerateCommittedGeneratedFiles(paths).Where(path => !expectedPaths.Contains(path)))
-            staleFiles.Add($"{Path.GetRelativePath(paths.RepoRoot, extraFile)} (extra)");
-
-        if (staleFiles.Count == 0) {
-            Console.WriteLine("Generated Host TypeScript contracts are current.");
-            return 0;
-        }
-
-        Console.Error.WriteLine("Generated Host TypeScript contracts are stale:");
-        foreach (var staleFile in staleFiles)
-            Console.Error.WriteLine($"  {staleFile}");
-        Console.Error.WriteLine("Run `pe-dev codegen sync --target host-contracts` to update them.");
-        return 1;
     }
 
     private static GeneratedProjectionFile[] GenerateFiles(
@@ -109,8 +70,68 @@ internal static class HostTypeScriptClientProjection {
             new GeneratedProjectionFile(
                 Path.Combine(generatedDirectory, "index.ts"),
                 NormalizeLineEndings(GenerateContractsIndex())
+            ),
+            new GeneratedProjectionFile(
+                Path.Combine(paths.HostZodDirectory, "host-zod.generated.ts"),
+                NormalizeLineEndings(HostZodProjection.Generate(
+                    HostTypeGenerationModelProvider.ResolveExportedTypes(generatedHostTypeModel.ExportedTypeNames)
+                ))
+            ),
+            new GeneratedProjectionFile(
+                Path.Combine(paths.HostZodDirectory, "host-op-schemas.generated.ts"),
+                NormalizeLineEndings(GenerateHostOpSchemaRegistry(generatedHostTypeModel.ExportedTypeNames))
             )
         ];
+    }
+
+    private static string GenerateHostOpSchemaRegistry(IReadOnlyDictionary<string, string> exportedTypeNames) {
+        string? SchemaRef(
+            HostOperationDefinition operation,
+            Type type,
+            string side
+        ) {
+            if (type == typeof(NoRequest))
+                return null;
+            if (string.IsNullOrWhiteSpace(type.FullName)
+                || !exportedTypeNames.TryGetValue(type.FullName!, out var exportedName))
+                throw new InvalidOperationException(
+                    $"Public operation '{operation.Key}' {side} type '{type.FullName ?? type.Name}' is not generated. Mark the DTO with [ExportTsInterface]/[ExportTsEnum]."
+                );
+            return $"schemas.{ToCamelCase(exportedName)}Schema";
+        }
+
+        var builder = new StringBuilder();
+        foreach (var operation in HostOperationsCatalog.PublicHttp.OrderBy(definition => definition.Key, StringComparer.Ordinal)) {
+            var request = SchemaRef(operation, operation.RequestType, "request");
+            var response = SchemaRef(operation, operation.ResponseType, "response");
+
+            var parts = new List<string>();
+            if (request != null)
+                parts.Add($"request: {request}");
+            if (response != null)
+                parts.Add($"response: {response}");
+            _ = builder.AppendLine($"  {ToJsonString(operation.Key)}: {{ {string.Join(", ", parts)} }},");
+        }
+
+        return $$"""
+            // <auto-generated />
+            // Generated by `pe-dev codegen sync --target host-contracts` from HostOperationsCatalog.PublicHttp.
+            // Maps each public operation key to its generated request/response zod schemas
+            // so callers infer types from the key alone — no hand-passed schema argument.
+
+            import type { z } from "zod";
+            import type { HostOperationKey } from "../contracts/host-operations.generated.js";
+            import * as schemas from "./host-zod.generated.js";
+
+            export interface HostOperationSchemaEntry {
+              request?: z.ZodType;
+              response?: z.ZodType;
+            }
+
+            export const hostOperationSchemas = {
+            {{builder.ToString().TrimEnd()}}
+            } as const satisfies Record<HostOperationKey, HostOperationSchemaEntry>;
+            """;
     }
 
     private static string GenerateHostOperationContracts() => $$"""
@@ -127,12 +148,7 @@ internal static class HostTypeScriptClientProjection {
         export type HostOperationCostTier = {{RenderStringUnion<HostOperationCostTier>()}};
         export type HostOperationVisibility = {{RenderStringUnion<HostOperationVisibility>()}};
         export type HostOperationRelationKind = {{RenderStringUnion<HostOperationRelationKind>()}};
-
-        export interface HostTypeShapeField {
-          name: string;
-          type: string;
-          required: boolean;
-        }
+        export type HostErrorKind = {{RenderStringUnion<HostErrorKind>()}};
 
         export interface HostOperationRequestExample {
           name: string;
@@ -154,8 +170,6 @@ internal static class HostTypeScriptClientProjection {
           exposure?: HostOperationExposure;
           requestTypeName?: string;
           responseTypeName?: string;
-          requestShape?: readonly HostTypeShapeField[];
-          responseShape?: readonly HostTypeShapeField[];
           displayName?: string;
           domain?: string;
           description?: string;
@@ -455,8 +469,6 @@ internal static class HostTypeScriptClientProjection {
     ) {
         _ = builder.AppendLine($"    requestTypeName: {ToJsonString(GetOperationTypeName(operation.RequestType, exportedTypeNames, true))},");
         _ = builder.AppendLine($"    responseTypeName: {ToJsonString(GetOperationTypeName(operation.ResponseType, exportedTypeNames, false))},");
-        _ = builder.AppendLine($"    requestShape: {ToTsTypeShapeFields(CreateShape(operation.RequestType, exportedTypeNames))},");
-        _ = builder.AppendLine($"    responseShape: {ToTsTypeShapeFields(CreateShape(operation.ResponseType, exportedTypeNames))},");
     }
 
     private static string GetOperationTypeName(
@@ -475,112 +487,13 @@ internal static class HostTypeScriptClientProjection {
         return type.Name;
     }
 
-    private static IReadOnlyList<TypeShapeField> CreateShape(
-        Type type,
-        IReadOnlyDictionary<string, string>? exportedTypeNames
-    ) {
-        if (type == typeof(NoRequest) || type.IsPrimitive || type == typeof(string) || type.IsEnum)
-            return [];
-
-        var nullability = new NullabilityInfoContext();
-        var defaultInstance = type.GetConstructor(Type.EmptyTypes) == null ? null : Activator.CreateInstance(type);
-        return type
-            .GetProperties(BindingFlags.Instance | BindingFlags.Public)
-            .Where(property => property.GetIndexParameters().Length == 0)
-            .OrderBy(property => property.Name, StringComparer.Ordinal)
-            .Select(property => new TypeShapeField(
-                ToCamelCase(property.Name),
-                FormatShapeType(property.PropertyType, exportedTypeNames),
-                IsRequired(property, nullability, defaultInstance)
-            ))
-            .ToArray();
-    }
-
-    private static bool IsRequired(PropertyInfo property, NullabilityInfoContext nullability, object? defaultInstance) {
-        if (defaultInstance != null && property.GetValue(defaultInstance) != null)
-            return false;
-
-        var type = property.PropertyType;
-        if (Nullable.GetUnderlyingType(type) != null)
-            return false;
-        if (type.IsValueType)
-            return true;
-
-        return nullability.Create(property).WriteState is not NullabilityState.Nullable;
-    }
-
-    private static string FormatShapeType(Type type, IReadOnlyDictionary<string, string>? exportedTypeNames) {
-        var nullableType = Nullable.GetUnderlyingType(type);
-        if (nullableType != null)
-            return $"{FormatShapeType(nullableType, exportedTypeNames)} | null";
-
-        if (type == typeof(string) || type == typeof(Guid) || type == typeof(DateTime) || type == typeof(DateTimeOffset))
-            return "string";
-        if (type == typeof(bool))
-            return "boolean";
-        if (type.IsEnum)
-            return $"enum:{type.Name}";
-        if (IsNumericType(type))
-            return "number";
-        if (type.IsArray)
-            return $"array<{FormatShapeType(type.GetElementType()!, exportedTypeNames)}>";
-        if (TryGetDictionaryValueType(type, out var valueType))
-            return $"record<{FormatShapeType(valueType, exportedTypeNames)}>";
-        if (TryGetEnumerableElementType(type, out var elementType))
-            return $"array<{FormatShapeType(elementType, exportedTypeNames)}>";
-
-        return GetOperationTypeName(type, exportedTypeNames, false);
-    }
-
-    private static bool IsNumericType(Type type) => type == typeof(byte)
-        || type == typeof(sbyte)
-        || type == typeof(short)
-        || type == typeof(ushort)
-        || type == typeof(int)
-        || type == typeof(uint)
-        || type == typeof(long)
-        || type == typeof(ulong)
-        || type == typeof(float)
-        || type == typeof(double)
-        || type == typeof(decimal);
-
-    private static bool TryGetEnumerableElementType(Type type, out Type elementType) {
-        elementType = typeof(object);
-        if (type == typeof(string))
-            return false;
-
-        var enumerable = type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IEnumerable<>)
-            ? type
-            : type.GetInterfaces().FirstOrDefault(candidate =>
-                candidate.IsGenericType && candidate.GetGenericTypeDefinition() == typeof(IEnumerable<>));
-        if (enumerable == null)
-            return false;
-
-        elementType = enumerable.GetGenericArguments()[0];
-        return true;
-    }
-
-    private static bool TryGetDictionaryValueType(Type type, out Type valueType) {
-        valueType = typeof(object);
-        var dictionary = type.GetInterfaces()
-            .Append(type)
-            .FirstOrDefault(candidate =>
-                candidate.IsGenericType && candidate.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>));
-        if (dictionary == null)
-            return false;
-
-        valueType = dictionary.GetGenericArguments()[1];
-        return true;
-    }
-
     private static string ToCamelCase(string value) => string.IsNullOrEmpty(value)
         ? value
         : char.ToLowerInvariant(value[0]) + value[1..];
 
     private static void ValidateProjectedTypeSymbols(IReadOnlyDictionary<string, string> exportedTypeNames) {
-        var missingTypes = HostOperationsCatalog.TypeScriptClient.Groups
-            .SelectMany(group => group.Operations)
-            .SelectMany(operation => new[] { operation.Definition.RequestType, operation.Definition.ResponseType })
+        var missingTypes = HostOperationsCatalog.PublicHttp
+            .SelectMany(operation => new[] { operation.RequestType, operation.ResponseType })
             .Where(type => type != typeof(NoRequest))
             .Where(type => string.IsNullOrWhiteSpace(type.FullName) || !exportedTypeNames.ContainsKey(type.FullName!))
             .Select(type => type.FullName ?? type.Name)
@@ -589,7 +502,7 @@ internal static class HostTypeScriptClientProjection {
             .ToArray();
         if (missingTypes.Length != 0)
             throw new InvalidOperationException(
-                $"TypeScript client projection references types missing from host-types exports: {string.Join(", ", missingTypes)}"
+                $"Public host operation projection references types missing from host-types exports: {string.Join(", ", missingTypes)}. Mark each DTO with [ExportTsInterface]/[ExportTsEnum]."
             );
     }
 
@@ -630,23 +543,6 @@ internal static class HostTypeScriptClientProjection {
     private static string ToTsStringArray(IReadOnlyList<string> values) =>
         values.Count == 0 ? "[]" : $"[{string.Join(", ", values.Select(ToJsonString))}]";
 
-    private static string ToTsTypeShapeFields(IReadOnlyList<TypeShapeField> fields) {
-        if (fields.Count == 0)
-            return "[]";
-
-        var builder = new StringBuilder();
-        _ = builder.AppendLine("[");
-        foreach (var field in fields) {
-            _ = builder.AppendLine("      {");
-            _ = builder.AppendLine($"        name: {ToJsonString(field.Name)},");
-            _ = builder.AppendLine($"        type: {ToJsonString(field.Type)},");
-            _ = builder.AppendLine($"        required: {ToJsonBool(field.Required)},");
-            _ = builder.AppendLine("      },");
-        }
-        _ = builder.Append("    ]");
-        return builder.ToString();
-    }
-
     private static void AppendCapabilityMapStringProperty(
         StringBuilder builder,
         string name,
@@ -672,8 +568,6 @@ internal static class HostTypeScriptClientProjection {
         var normalized = content.Replace("\r\n", "\n").Replace("\r", "\n");
         return normalized.EndsWith('\n') ? normalized : normalized + "\n";
     }
-
-    private sealed record TypeShapeField(string Name, string Type, bool Required);
 
     private sealed record HostCapabilitySectionProjection(
         string Id,

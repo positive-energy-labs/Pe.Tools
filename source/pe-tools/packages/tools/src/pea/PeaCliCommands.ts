@@ -1,15 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { define } from "gunshi";
 import { HostLogTarget, PeHostClient } from "@pe/host-client";
-import type {
-  ExecuteRevitScriptData,
-  HostLogsData,
-  HostProbeData,
-  HostSessionSummaryData,
-  ScriptPodExportData,
-  ScriptPodImportData,
-  ScriptWorkspaceBootstrapData,
-} from "@pe/host-client";
+import type { HostOpResponse } from "@pe/host-client";
 import { ScriptingTools } from "../shared/scripting.ts";
 import type { ScriptExecuteInput } from "../shared/scripting.ts";
 
@@ -81,8 +73,8 @@ export class PeaCliCommands {
       },
       run: async (ctx) => {
         const client = this.createHostClient(ctx.values.host);
-        const probe = await client.host.getProbe();
-        const session = await client.host.getSessionSummary();
+        const probe = await client.call("settings.host-probe");
+        const session = await client.call("settings.session-summary");
         writeHostStatus(session, probe);
       },
     });
@@ -107,7 +99,7 @@ export class PeaCliCommands {
       },
       examples: ["pea host logs", "pea host logs --target revit --tail 50"].join("\n"),
       run: async (ctx) => {
-        const logs = await this.createHostClient(ctx.values.host).host.getLogs({
+        const logs = await this.createHostClient(ctx.values.host).call("host.logs", {
           target: parseLogTarget(ctx.values.target),
           tailLineCount: ctx.values.tail,
         });
@@ -382,7 +374,10 @@ function readStdin(): Promise<string> {
   });
 }
 
-function writeHostStatus(session: HostSessionSummaryData, probe: HostProbeData) {
+function writeHostStatus(
+  session: HostOpResponse<"settings.session-summary">,
+  probe: HostOpResponse<"settings.host-probe">,
+) {
   console.log(`host      ${probe.runtimeIdentity}`);
   console.log(`bridge    ${probe.bridgeIsConnected ? "connected" : "disconnected"}`);
   console.log(`session   ${session.sessionId ?? "none"}`);
@@ -391,7 +386,7 @@ function writeHostStatus(session: HostSessionSummaryData, probe: HostProbeData) 
   if (session.activeDocument) console.log(`active    ${session.activeDocument.title}`);
 }
 
-function writeLogs(logs: HostLogsData) {
+function writeLogs(logs: HostOpResponse<"host.logs">) {
   for (const file of logs.files) {
     console.log(`== ${file.label} ==`);
     console.log(file.filePath);
@@ -399,7 +394,7 @@ function writeLogs(logs: HostLogsData) {
   }
 }
 
-function writeScriptExecution(result: ExecuteRevitScriptData) {
+function writeScriptExecution(result: HostOpResponse<"scripting.execute">) {
   console.log(`status    ${result.status}`);
   console.log(`execution ${result.executionId}`);
   console.log(`revit     ${result.revitVersion}`);
@@ -409,7 +404,7 @@ function writeScriptExecution(result: ExecuteRevitScriptData) {
     console.error(`${diagnostic.severity} ${diagnostic.stage}: ${diagnostic.message}`);
 }
 
-function writeScriptBootstrap(result: ScriptWorkspaceBootstrapData) {
+function writeScriptBootstrap(result: HostOpResponse<"scripting.workspace.bootstrap">) {
   console.log(`workspace key ${result.workspaceKey}`);
   console.log(`product home ${result.productHomePath}`);
   console.log(`workspace    ${result.workspaceRootPath}`);
@@ -417,7 +412,7 @@ function writeScriptBootstrap(result: ScriptWorkspaceBootstrapData) {
   console.log(`sample       ${result.sampleScriptPath}`);
 }
 
-function writeScriptPodImport(result: ScriptPodImportData) {
+function writeScriptPodImport(result: HostOpResponse<"scripting.pod.import">) {
   console.log(`status    ${result.status}`);
   console.log(`workspace ${result.workspaceKey ?? "unknown"}`);
   console.log(`root      ${result.workspaceRootPath ?? "unknown"}`);
@@ -425,7 +420,7 @@ function writeScriptPodImport(result: ScriptPodImportData) {
   console.log(`entries   ${result.archiveEntries.length}`);
 }
 
-function writeScriptPodExport(result: ScriptPodExportData) {
+function writeScriptPodExport(result: HostOpResponse<"scripting.pod.export">) {
   console.log(`status    ${result.status}`);
   console.log(`workspace ${result.workspaceKey ?? "unknown"}`);
   console.log(`archive   ${result.archivePath}`);

@@ -22,6 +22,18 @@
     "./types/*": {
       "types": "./src/types/*.ts",
       "import": "./src/types/*.ts"
+    },
+    "./zod": {
+      "types": "./src/zod/host-zod.generated.ts",
+      "import": "./src/zod/host-zod.generated.ts"
+    },
+    "./zod/registry": {
+      "types": "./src/zod/host-op-schemas.generated.ts",
+      "import": "./src/zod/host-op-schemas.generated.ts"
+    },
+    "./json-schema": {
+      "types": "./src/json-schema/index.ts",
+      "import": "./src/json-schema/index.ts"
     }
   },
   "publishConfig": {
@@ -33,6 +45,9 @@
     "test": "vp test",
     "check": "vp check",
     "prepublishOnly": "vp run build"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",

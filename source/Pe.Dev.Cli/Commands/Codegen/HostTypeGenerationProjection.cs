@@ -1,7 +1,10 @@
 namespace Pe.Dev.Cli.Codegen;
 
 internal static class HostTypeGenerationProjection {
-    public static async Task<int> RunAsync(bool check, CodegenPaths paths, CancellationToken cancellationToken) {
+    public static async Task<int> RunAsync(
+        CodegenPaths paths,
+        CancellationToken cancellationToken
+    ) {
         var buildExit = await HostTypeGenerationModelProvider.EnsureFreshBuildAsync(paths, cancellationToken);
         if (buildExit != 0)
             return buildExit;
@@ -14,43 +17,7 @@ internal static class HostTypeGenerationProjection {
             return 1;
         }
 
-        return check
-            ? await CheckAsync(paths, generatedModel.Files, cancellationToken)
-            : await SyncAsync(paths, generatedModel.Files, cancellationToken);
-    }
-
-    private static async Task<int> CheckAsync(
-        CodegenPaths paths,
-        IReadOnlyList<HostTypeGenerationModelProvider.GeneratedProjectionFile> generatedFiles,
-        CancellationToken cancellationToken
-    ) {
-        var staleFiles = new List<string>();
-        var expectedPaths = generatedFiles.Select(file => file.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var generatedFile in generatedFiles) {
-            var relativePath = Path.GetRelativePath(paths.RepoRoot, generatedFile.Path);
-            if (!File.Exists(generatedFile.Path)) {
-                staleFiles.Add($"{relativePath} (missing)");
-                continue;
-            }
-
-            var existingContent = await File.ReadAllTextAsync(generatedFile.Path, cancellationToken);
-            if (!string.Equals(existingContent, generatedFile.Content, StringComparison.Ordinal))
-                staleFiles.Add(relativePath);
-        }
-
-        foreach (var extraFile in EnumerateCommittedHostTypeFiles(paths).Where(path => !expectedPaths.Contains(path)))
-            staleFiles.Add($"{Path.GetRelativePath(paths.RepoRoot, extraFile)} (extra)");
-
-        if (staleFiles.Count == 0) {
-            Console.WriteLine("Generated Host TypeScript types are current.");
-            return 0;
-        }
-
-        Console.Error.WriteLine("Generated Host TypeScript types are stale:");
-        foreach (var staleFile in staleFiles)
-            Console.Error.WriteLine($"  {staleFile}");
-        Console.Error.WriteLine("Run `pe-dev codegen sync --target host-types` to update them.");
-        return 1;
+        return await SyncAsync(paths, generatedModel.Files, cancellationToken);
     }
 
     private static async Task<int> SyncAsync(

@@ -40,10 +40,10 @@ internal static class CodegenCommandRunner {
         var targets = target == "all" ? AllTargets : [target];
         foreach (var currentTarget in targets) {
             var exitCode = currentTarget switch {
-                "build" => await BuildGeneratedProjection.RunAsync(false, paths, cancellationToken),
-                "product" => await ProductTypeScriptProjection.RunAsync(false, paths, cancellationToken),
-                "host-types" => await HostTypeGenerationProjection.RunAsync(false, paths, cancellationToken),
-                "host-contracts" => await HostTypeScriptClientProjection.RunAsync(false, paths, cancellationToken),
+                "build" => await BuildGeneratedProjection.RunAsync(paths, cancellationToken),
+                "product" => await ProductTypeScriptProjection.RunAsync(paths, cancellationToken),
+                "host-types" => await HostTypeGenerationProjection.RunAsync(paths, cancellationToken),
+                "host-contracts" => await HostTypeScriptClientProjection.RunAsync(paths, cancellationToken),
                 _ => 10
             };
             if (exitCode != 0)
@@ -93,9 +93,10 @@ internal static class CodegenCommandRunner {
             }
         }
 
-        return target == "all" || AllTargets.Contains(target, StringComparer.Ordinal)
-            ? target
-            : throw new ArgumentException($"Unknown codegen target '{target}'. Expected all, {string.Join(", ", AllTargets)}.");
+        if (target != "all" && !AllTargets.Contains(target, StringComparer.Ordinal))
+            throw new ArgumentException($"Unknown codegen target '{target}'. Expected all, {string.Join(", ", AllTargets)}.");
+
+        return target;
     }
 
     private static void WriteUsage() => Console.Error.WriteLine(

@@ -120,16 +120,6 @@ public static class HostOperationsCatalog {
         ])
     );
 
-    public static IReadOnlyList<HostOperationDefinition> TypeScriptClientSlice { get; } = TypeScriptClient.Groups
-        .SelectMany(group => group.Operations)
-        .Select(operation => operation.Definition)
-        .ToArray();
-
-    public static IReadOnlyList<Type> TypeScriptClientExtraTypeRoots { get; } = [
-        typeof(RevitAgentContextSummaryData),
-        typeof(RevitAgentVisibleCategorySummary)
-    ];
-
     private static IReadOnlyList<HostOperationDefinition> Validate(
         IReadOnlyList<HostOperationDefinition> definitions
     ) {

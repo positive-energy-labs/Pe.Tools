@@ -1,5 +1,8 @@
+using TypeGen.Core.TypeAnnotations;
+
 namespace Pe.Shared.ApsAuth;
 
+[ExportTsEnum]
 public enum ApsAuthFlowKind {
     TwoLegged,
     ThreeLeggedConfidential

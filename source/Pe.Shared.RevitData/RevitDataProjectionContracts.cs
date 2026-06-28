@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using TypeGen.Core.TypeAnnotations;
@@ -15,32 +16,16 @@ public enum RevitDataResultView {
 
 
 [ExportTsInterface]
-public record RevitDataRequestEnvelope<TFilter, TScope, TReference, TOptions> {
-    public TFilter? Filter { get; init; }
-    public TScope? Scope { get; init; }
-    public List<TReference> References { get; init; } = [];
-    public RevitDataProjectionRequest? Projection { get; init; }
-    public RevitDataOutputBudget? Budget { get; init; }
-    public TOptions? Options { get; init; }
-}
-
-[ExportTsInterface]
-public record RevitDataNoFilter;
-
-[ExportTsInterface]
-public record RevitDataNoScope;
-
-[ExportTsInterface]
-public record RevitDataNoReference;
-
-[ExportTsInterface]
-public record RevitDataNoOptions;
-
-[ExportTsInterface]
 public record RevitDataOutputBudget {
+    [Range(1, 100000)]
     public int? MaxEntries { get; init; }
+
+    [Range(1, 10000)]
     public int? MaxRowsPerEntry { get; init; }
+
+    [Range(1, 10000)]
     public int? MaxSamplesPerEntry { get; init; }
+
     public bool IncludeDiagnostics { get; init; } = true;
 }
 
