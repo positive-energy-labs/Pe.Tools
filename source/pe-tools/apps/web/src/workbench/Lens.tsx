@@ -435,7 +435,7 @@ export function Lens({
     <div className="lens-frame" ref={frameRef} data-mode={mode}>
       <div className="lens-scroller" ref={scrollerRef}>
         {moments.length === 0 ? (
-          <div className="grid h-full place-content-center justify-items-center gap-1.5 px-6 text-[var(--muted)]">
+          <div className="grid h-full place-content-center justify-items-center gap-1.5 px-6 text-muted-foreground">
             <h1 className="m-0 font-[var(--font-display)] text-[30px] font-semibold text-[var(--pe-blue)]">
               Pea
             </h1>
@@ -531,7 +531,7 @@ function ContextStrip({ state, depth }: { state: WorkbenchState; depth: "read" |
                 entry.status === "completed"
                   ? "text-[var(--slate)]"
                   : entry.status === "pending"
-                    ? "text-[var(--muted)]"
+                    ? "text-muted-foreground"
                     : ""
               }`}
               key={entry.id}
@@ -564,7 +564,7 @@ function ContextStrip({ state, depth }: { state: WorkbenchState; depth: "read" |
             <span className="text-[var(--pe-blue)]">{open ? "hide" : "show"}</span>
           </button>
           {open ? (
-            <pre className="m-0 px-[9px] py-2 font-mono text-[11.5px] leading-[1.5] break-words whitespace-pre-wrap text-[#5a5f5b]">
+            <pre className="m-0 px-[9px] py-2 font-mono text-[11.5px] leading-[1.5] break-words whitespace-pre-wrap text-[var(--lens-ink-2)]">
               {systemPrompt.content}
             </pre>
           ) : null}

@@ -134,3 +134,35 @@ export function cacheTotals(
   }
   return { cached, reprocessed };
 }
+
+type MemoryWindows = NonNullable<WorkbenchContextBreakdown["memoryWindows"]>;
+
+/** Fill width (%) of a window, clamped to [0,100]. cap<=0 → 0 (avoids divide-by-zero). */
+export function budgetFillPct(value: number, cap: number): number {
+  return Math.max(0, Math.min(100, cap > 0 ? (value / cap) * 100 : 0));
+}
+
+/**
+ * Geometry for the one budget bar (composer ribbon + World inspector). The bar is one linear
+ * token scale in request/cache order: tools → system → observations window → messages window.
+ * obsCap/msgCap are the window capacities (threshold-wide); horizon is the cache-break position
+ * as a % of total, mapped from the inferred rank: 0/before tools, after tools (rank 1 = system
+ * adjacent), or after the observations window (rank ≥ 2 = messages-only break). Pure — tested.
+ */
+export function budgetBarModel(
+  tools: number,
+  system: number,
+  mw: MemoryWindows,
+  cache: Pick<CacheView, "hasBaseline" | "horizonRank">,
+): { obsCap: number; msgCap: number; total: number; horizon: number | null } {
+  const obsCap = mw.reflectionThreshold;
+  const msgCap = mw.observationThreshold;
+  const total = tools + system + obsCap + msgCap || 1;
+  const horizon =
+    cache.hasBaseline && cache.horizonRank !== null
+      ? ((cache.horizonRank <= 0 ? 0 : cache.horizonRank === 1 ? tools : tools + system + obsCap) /
+          total) *
+        100
+      : null;
+  return { obsCap, msgCap, total, horizon };
+}

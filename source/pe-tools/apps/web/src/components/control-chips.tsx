@@ -1,4 +1,5 @@
 import { ChevronDown } from "lucide-react";
+import { Button } from "#/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -80,14 +81,14 @@ function Picker({
     <DropdownMenu>
       <DropdownMenuTrigger
         title={title}
-        className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+        render={<Button variant="outline" size="sm" className="text-muted-foreground" />}
       >
         {label}
-        <ChevronDown className="size-3 opacity-60" />
+        <ChevronDown className="opacity-60" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="max-w-80 min-w-52">
-        <DropdownMenuLabel>{title}</DropdownMenuLabel>
         <DropdownMenuRadioGroup value={activeId ?? ""} onValueChange={onPick}>
+          <DropdownMenuLabel>{title}</DropdownMenuLabel>
           {options.map((option) => (
             <DropdownMenuRadioItem
               key={option.id}

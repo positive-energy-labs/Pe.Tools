@@ -1,18 +1,14 @@
 import { useEffect, useState } from "react";
+import { Monitor, Moon, Sun } from "lucide-react";
+
+import { Button } from "#/components/ui/button";
 
 type ThemeMode = "light" | "dark" | "auto";
 
 function getInitialMode(): ThemeMode {
-  if (typeof window === "undefined") {
-    return "auto";
-  }
-
+  if (typeof window === "undefined") return "auto";
   const stored = window.localStorage.getItem("theme");
-  if (stored === "light" || stored === "dark" || stored === "auto") {
-    return stored;
-  }
-
-  return "auto";
+  return stored === "light" || stored === "dark" || stored === "auto" ? stored : "auto";
 }
 
 function applyThemeMode(mode: ThemeMode) {
@@ -27,54 +23,54 @@ function applyThemeMode(mode: ThemeMode) {
   } else {
     document.documentElement.setAttribute("data-theme", mode);
   }
-
   document.documentElement.style.colorScheme = resolved;
 }
 
-export default function ThemeToggle() {
+const NEXT: Record<ThemeMode, ThemeMode> = { light: "dark", dark: "auto", auto: "light" };
+const ICON = { light: Sun, dark: Moon, auto: Monitor } as const;
+const LABEL = { light: "Light", dark: "Dark", auto: "Auto" } as const;
+
+export function ThemeToggle({ className }: { className?: string }) {
   const [mode, setMode] = useState<ThemeMode>("auto");
 
+  // Sync to whatever the inline root script already applied (avoids a flash / mismatch).
   useEffect(() => {
-    const initialMode = getInitialMode();
-    setMode(initialMode);
-    applyThemeMode(initialMode);
+    setMode(getInitialMode());
   }, []);
 
+  // Track the system theme only while in auto.
   useEffect(() => {
-    if (mode !== "auto") {
-      return;
-    }
-
+    if (mode !== "auto") return;
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const onChange = () => applyThemeMode("auto");
-
     media.addEventListener("change", onChange);
-    return () => {
-      media.removeEventListener("change", onChange);
-    };
+    return () => media.removeEventListener("change", onChange);
   }, [mode]);
 
-  function toggleMode() {
-    const nextMode: ThemeMode = mode === "light" ? "dark" : mode === "dark" ? "auto" : "light";
-    setMode(nextMode);
-    applyThemeMode(nextMode);
-    window.localStorage.setItem("theme", nextMode);
+  function cycle() {
+    const next = NEXT[mode];
+    setMode(next);
+    applyThemeMode(next);
+    window.localStorage.setItem("theme", next);
   }
 
-  const label =
-    mode === "auto"
-      ? "Theme mode: auto (system). Click to switch to light mode."
-      : `Theme mode: ${mode}. Click to switch mode.`;
+  const Icon = ICON[mode];
+  const label = `Theme: ${LABEL[mode]}${mode === "auto" ? " (system)" : ""}. Click to change.`;
 
   return (
-    <button
+    <Button
       type="button"
-      onClick={toggleMode}
+      variant="outline"
+      size="sm"
+      onClick={cycle}
       aria-label={label}
       title={label}
-      className="rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] px-3 py-1.5 text-sm font-semibold text-[var(--sea-ink)] shadow-[0_8px_22px_rgba(30,90,72,0.08)] transition hover:-translate-y-0.5"
+      className={className}
     >
-      {mode === "auto" ? "Auto" : mode === "dark" ? "Dark" : "Light"}
-    </button>
+      <Icon className="size-3.5" />
+      {LABEL[mode]}
+    </Button>
   );
 }
+
+export default ThemeToggle;

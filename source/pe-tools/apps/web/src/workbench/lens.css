@@ -1,48 +1,20 @@
 /*
- * Ported Lens/World/Moment styles from apps/website. The signature geometry (parallax MapDial,
- * candlestick focal marker, fisheye trace lane) is irreducibly JS-driven CSS — the "keep CSS"
- * rung of the port ladder.
+ * Lens/World/Moment styles. The palette is NOT defined here anymore — the Lens vocabulary
+ * (--paper, --basalt, --pe-blue, --slate, --line, …) is aliased onto the one shadcn base in
+ * styles.css, so colors live in a single place and flip with the global theme for free. The
+ * old `--muted` collision (a fill in shadcn, dim TEXT in the Lens) is gone: Lens dim text now
+ * uses --muted-foreground directly.
  *
- * The Lens is a self-contained Marginalia design system, so its palette uses the EXACT v0
- * literals, scoped to .lens-frame. This is deliberate, not a remap to shadcn tokens: the two
- * collide on `--muted` (a fill in shadcn, gray TEXT here) and `--paper-*` (warm tints with no
- * clean shadcn equivalent). An earlier alias attempt set `--paper-2: var(--muted)` while also
- * shadowing `--muted`, so `--paper-2` resolved to Slate — code pills and trace-card labels went
- * slate-on-slate (invisible). Literals keep v0 fidelity AND avoid the collision. The Tailwind
- * ChatShell chrome still uses shadcn tokens; only the Lens internals live here.
- *
- * What's left after purging the dead app-shell and porting the chat/prose/context chrome to
- * Tailwind is the irreducible core: (1) the JS-driven geometry — map-dial, candlestick, fisheye
- * trace lane, parallax grid — positioned by inline styles the rAF controller sets per frame; and
- * (2) the World inspector + gutter data-viz (proportional bars, cache horizons, OM budget meter),
- * whose Tailwind equivalent would be arbitrary-value soup. Animations (caret blink, gutter pulse)
- * stay too. This is the keep-as-CSS zone.
+ * What remains here is the keep-as-CSS zone — the stuff a Tailwind class genuinely can't express:
+ * (1) JS-driven geometry — map-dial, candlestick, fisheye trace lane, parallax grid — positioned
+ * by inline styles the rAF/scroll controller sets per frame; (2) scroll-timeline + [data-mode]
+ * lane widths; (3) pseudo-elements, descendant/state selectors, and keyframe animations (caret
+ * blink, sheen, pulse). Flat single-element styling has moved to Tailwind on the elements.
  */
 .lens-frame {
-  --pe-blue: #005695;
-  --pe-blue-soft: #1f6fa8;
-  --pe-green: #72c6a2;
-  --slate: #4f6473;
-  --lichen: #7c8b6b;
-  --clay: #b78d6a;
-  --clay-tint: #f3eae0;
-  --clay-ink: #8a5e3b;
-  --kiln: #c8bdaf;
-  --basalt: #3e4340;
-  --mist: #e8e4dd;
-  --paper: #fbfaf7;
-  --paper-2: #f4f1ea;
-  --paper-3: #f7f4ed;
-  --muted: #8a9088;
-  --line: rgba(62, 67, 64, 0.12);
-  --line-2: rgba(62, 67, 64, 0.2);
-  --line-soft: rgba(62, 67, 64, 0.07);
-  --font-body: var(--font-pe, "Open Sans", system-ui, sans-serif);
-  --font-display: var(--font-pe-display, "Spectral", Georgia, serif);
-  --font-mono: var(--font-pe-mono, ui-monospace, "SF Mono", Menlo, monospace);
   font-family: var(--font-body);
-  color: var(--basalt);
-  background: var(--paper);
+  color: var(--foreground);
+  background: var(--background);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -163,7 +135,7 @@
   transform-origin: right;
   box-shadow:
     0 0 0 2px var(--paper-3),
-    0 0 0 3px rgba(0, 86, 149, 0.35);
+    0 0 0 3px color-mix(in srgb, var(--pe-blue) 35%, transparent);
 }
 /* delta = the newest band when context changed this send */
 .mapdial-band.delta {
@@ -197,7 +169,7 @@
   box-shadow:
     inset 0 0 0 1.5px var(--pe-blue),
     0 0 0 2px var(--paper-3),
-    0 0 0 3px rgba(0, 86, 149, 0.35);
+    0 0 0 3px color-mix(in srgb, var(--pe-blue) 35%, transparent);
 }
 .mapdial-band.memory {
   background: var(--clay);
@@ -224,7 +196,7 @@
   left: 0;
   right: 0;
   height: 0;
-  border-top: 1.5px solid rgba(0, 86, 149, 0.6);
+  border-top: 1.5px solid color-mix(in srgb, var(--pe-blue) 60%, transparent);
   pointer-events: none;
   z-index: 4;
 }
@@ -232,7 +204,7 @@
   position: absolute;
   left: 50%;
   width: 0;
-  border-left: 1px solid rgba(0, 86, 149, 0.32);
+  border-left: 1px solid color-mix(in srgb, var(--pe-blue) 32%, transparent);
   pointer-events: none;
   z-index: 3;
 }
@@ -241,7 +213,7 @@
   left: calc(50% - 8px);
   width: 16px;
   height: 0;
-  border-top: 1px solid rgba(0, 86, 149, 0.32);
+  border-top: 1px solid color-mix(in srgb, var(--pe-blue) 32%, transparent);
   pointer-events: none;
   z-index: 3;
 }
@@ -291,7 +263,7 @@
   border-left-color: var(--pe-blue);
 }
 .lens-marker.failed {
-  border-left-color: #b4524f;
+  border-left-color: var(--fail);
 }
 /* focal/hover stub → heavier rail + tint to match its highlighted detail card (no dimming
    of the others) */
@@ -300,12 +272,17 @@
 }
 .lens-moment.focal .lens-marker,
 .lens-moment.hover .lens-marker {
-  background: rgba(0, 86, 149, 0.06);
+  background: color-mix(in srgb, var(--pe-blue) 6%, transparent);
 }
 .lens-marker code {
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--lichen);
+  /* Reset the global `code` pill (border + muted fill) — the marker target is inline. */
+  background: transparent;
+  border: 0;
+  padding: 0;
+  border-radius: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -321,7 +298,7 @@
   background-image: repeating-linear-gradient(
     to bottom,
     transparent 0 27px,
-    rgba(62, 67, 64, 0.05) 27px 28px
+    color-mix(in srgb, var(--basalt) 5%, transparent) 27px 28px
   );
 }
 .lens-lane.trace {
@@ -361,14 +338,14 @@
 }
 .lens-cell.hover {
   opacity: 1;
-  border-color: rgba(0, 86, 149, 0.4);
+  border-color: color-mix(in srgb, var(--pe-blue) 40%, transparent);
 }
 .lens-cell.focal {
   opacity: 1;
-  border-color: rgba(0, 86, 149, 0.55);
+  border-color: color-mix(in srgb, var(--pe-blue) 55%, transparent);
   box-shadow:
-    0 1px 0 rgba(0, 86, 149, 0.08),
-    0 6px 18px rgba(0, 86, 149, 0.14);
+    0 1px 0 color-mix(in srgb, var(--pe-blue) 8%, transparent),
+    0 6px 18px color-mix(in srgb, var(--pe-blue) 14%, transparent);
 }
 .lens-cell.focal pre {
   max-height: 160px;
@@ -391,7 +368,7 @@
   font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.5;
-  color: #5a5f5b;
+  color: var(--lens-ink-2);
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 96px;
@@ -406,9 +383,9 @@
   z-index: 6;
   background: linear-gradient(
     to bottom,
-    rgba(251, 250, 247, 0.55) 0%,
-    rgba(251, 250, 247, 0.15) 20%,
-    rgba(251, 250, 247, 0) 35%
+    color-mix(in srgb, var(--paper) 55%, transparent) 0%,
+    color-mix(in srgb, var(--paper) 15%, transparent) 20%,
+    transparent 35%
   );
 }
 
@@ -435,7 +412,7 @@
   background-image: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(0, 86, 149, 0.09) 50%,
+    color-mix(in srgb, var(--pe-blue) 9%, transparent) 50%,
     transparent 100%
   );
   background-size: 45% 100%;
@@ -475,7 +452,7 @@
   border: none;
   border-radius: 5px;
   background: transparent;
-  color: var(--muted);
+  color: var(--muted-foreground);
   opacity: 0;
   transition:
     opacity 0.14s ease,
@@ -509,12 +486,9 @@
   .lens-cell {
     transition: none;
   }
-  .mg-gut.pulse .mg-cap {
-    animation: none;
-  }
 }
 
-/* ===== World inspector — what Pea actually sent the model (request-ordered) ===== */
+/* ===== World inspector lane — layout only (the panel's styling is Tailwind in world.tsx) ===== */
 [data-mode="world"] {
   --trace: 392px;
 }
@@ -527,393 +501,7 @@
   background-color: var(--paper-3);
 }
 
-.mg-world {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  font-variant-numeric: tabular-nums;
-}
-
-.mg-world-bar {
-  position: relative;
-  display: flex;
-  height: 9px;
-  margin: 12px 14px 0;
-  border: 0.5px solid var(--line);
-  border-radius: 3px;
-  overflow: hidden;
-  background: var(--paper-2);
-}
-.mg-world-fill {
-  height: 100%;
-  min-width: 1px;
-  border-right: 1px solid var(--paper);
-}
-.mg-world-fill:last-child {
-  border-right: none;
-}
-.mg-world-fill.reproc {
-  background-image: repeating-linear-gradient(
-    -45deg,
-    rgba(255, 255, 255, 0.4) 0 3px,
-    transparent 3px 6px
-  );
-}
-.mg-world-horizon {
-  position: absolute;
-  top: -2px;
-  bottom: -2px;
-  width: 0;
-  border-left: 1.5px dashed var(--clay-ink, #8a5e3b);
-}
-.mg-world-note {
-  margin: 7px 14px 0;
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--clay-ink, #8a5e3b);
-}
-.mg-world-note b {
-  font-weight: 600;
-}
-
-.mg-world-layers {
-  margin-top: 10px;
-  border-top: 0.5px solid var(--line-soft);
-}
-.mg-world-layer {
-  border-bottom: 0.5px solid var(--line-soft);
-}
-.mg-world-layer.delta {
-  background: linear-gradient(var(--paper-3), var(--clay-tint, #f3eae0));
-}
-.mg-world-row {
-  display: grid;
-  grid-template-columns: 9px 1fr auto auto auto auto;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  text-align: left;
-  border: none;
-  background: transparent;
-  padding: 9px 14px;
-  cursor: pointer;
-  font: inherit;
-}
-.mg-world-row:hover {
-  background: var(--paper-2);
-}
-.mg-world-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 2px;
-}
-.mg-world-name {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--ink, #2b333a);
-}
-.mg-world-pos {
-  margin-left: 6px;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 400;
-  color: var(--muted);
-}
-.mg-world-tok {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--slate);
-}
-.mg-world-pct {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--muted);
-  min-width: 30px;
-  text-align: right;
-}
-.mg-world-car {
-  color: var(--muted);
-  font-size: 11px;
-  transition: transform 0.16s;
-}
-.mg-world-layer.open .mg-world-car {
-  transform: rotate(90deg);
-}
-.mg-world-body {
-  padding: 0 14px 11px 31px;
-}
-.mg-world-cap {
-  margin: 0 0 6px;
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: var(--slate);
-}
-.mg-world-items {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 5px;
-}
-.mg-world-foot {
-  padding: 11px 14px 16px;
-  font-size: 10.5px;
-  line-height: 1.5;
-  color: var(--muted);
-}
-
-/* snapshot subheader — send number + provider-boundary note */
-.mg-world-sub {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  flex-wrap: wrap;
-  padding: 7px 14px 0;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--muted);
-}
-.mg-world-snap {
-  color: var(--clay-ink, #8a5e3b);
-  background: var(--clay-tint, #f3eae0);
-  border: 0.5px solid rgba(183, 141, 106, 0.4);
-  border-radius: 4px;
-  padding: 1px 6px;
-}
-
-/* cache readout — cached vs reprocessed token sums (≈ inferred) */
-.mg-cacheout {
-  display: grid;
-  gap: 6px;
-  margin: 10px 14px 0;
-  padding: 10px 12px;
-  border: 0.5px solid var(--line);
-  border-radius: 8px;
-  background: var(--paper);
-  font-size: 11px;
-}
-.mg-cacheout-row {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-variant-numeric: tabular-nums;
-}
-.mg-cacheout-row .k {
-  width: 9px;
-  height: 9px;
-  border-radius: 2px;
-  flex: none;
-}
-.mg-cacheout-row .k.read {
-  background: var(--pe-green, #72c6a2);
-}
-.mg-cacheout-row .k.rep {
-  background: #c08a5a;
-  background-image: repeating-linear-gradient(
-    -45deg,
-    rgba(255, 255, 255, 0.4) 0 2px,
-    transparent 2px 4px
-  );
-}
-.mg-cacheout-row .v {
-  margin-left: auto;
-  font-family: var(--font-mono);
-  color: var(--slate);
-}
-.mg-cacheout-why {
-  font-size: 10.5px;
-  line-height: 1.45;
-  color: var(--clay-ink, #8a5e3b);
-  background: var(--clay-tint, #f3eae0);
-  border: 0.5px solid rgba(183, 141, 106, 0.4);
-  border-radius: 6px;
-  padding: 6px 8px;
-}
-
-/* drift note inside an expanded changed layer */
-.mg-world-drift {
-  margin: 0 0 6px;
-  font-size: 10.5px;
-  line-height: 1.45;
-  color: var(--clay-ink, #8a5e3b);
-  font-family: var(--font-mono);
-}
-
-/* individual item cards — tools, prompt sections, skills */
-.mg-item {
-  border: 0.5px solid var(--line);
-  border-radius: 6px;
-  overflow: hidden;
-  background: var(--paper);
-}
-.mg-world-layer.delta .mg-item {
-  border-color: rgba(183, 141, 106, 0.45);
-}
-.mg-item-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  text-align: left;
-  border: none;
-  background: transparent;
-  padding: 6px 9px;
-  cursor: pointer;
-  font: inherit;
-}
-.mg-item-head:disabled {
-  cursor: default;
-}
-.mg-item-head:not(:disabled):hover {
-  background: var(--paper-2);
-}
-.mg-item-main {
-  min-width: 0;
-  flex: 1;
-}
-.mg-item-name {
-  display: block;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ink, #2b333a);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.mg-item-src {
-  display: block;
-  margin-top: 2px;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  color: var(--lichen, #7c8b6b);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.mg-item-right {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-}
-.mg-item-tok {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  color: var(--muted);
-}
-.mg-item-car {
-  color: var(--muted);
-  font-size: 10px;
-  transition: transform 0.16s;
-}
-.mg-item.open .mg-item-car {
-  transform: rotate(90deg);
-}
-.mg-item-body {
-  margin: 0;
-  padding: 8px 9px;
-  border-top: 0.5px solid var(--line);
-  background: var(--paper-2);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  line-height: 1.5;
-  color: #5a5f5b;
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 220px;
-  overflow: auto;
-}
-
-/* cache badges — frontend inference, marked ≈ */
-.mg-cache {
-  font-family: var(--font-mono);
-  font-size: 8.5px;
-  letter-spacing: 0.02em;
-  border-radius: 3px;
-  padding: 1px 5px;
-  border: 0.5px solid;
-  white-space: nowrap;
-}
-.mg-cache.cached {
-  color: var(--lichen, #7c8b6b);
-  border-color: rgba(124, 139, 107, 0.5);
-  background: rgba(114, 198, 162, 0.12);
-}
-.mg-cache.reprocessed,
-.mg-cache.reproc {
-  color: var(--clay-ink, #8a5e3b);
-  border-color: rgba(183, 141, 106, 0.55);
-  background: var(--clay-tint, #f3eae0);
-}
-
-/* Plain density — hide dev chrome, keep the capability sentences */
-.mg-world[data-density="plain"] .mg-world-tok,
-.mg-world[data-density="plain"] .mg-world-pct,
-.mg-world[data-density="plain"] .mg-world-pos,
-.mg-world[data-density="plain"] .mg-cache,
-.mg-world[data-density="plain"] .mg-world-items,
-.mg-world[data-density="plain"] .mg-world-foot,
-.mg-world[data-density="plain"] .mg-world-note,
-.mg-world[data-density="plain"] .mg-cacheout,
-.mg-world[data-density="plain"] .mg-world-drift,
-.mg-world[data-density="plain"] .mg-world-sub {
-  display: none;
-}
-.mg-world[data-density="plain"] .mg-world-row {
-  grid-template-columns: 9px 1fr auto;
-}
-
-/* ===== Context budget bar — categories folded onto the OM windows ===== */
-.mg-budget {
-  margin: 12px 14px 0;
-}
-.mg-budget-head {
-  display: flex;
-  justify-content: space-between;
-  font-size: 11px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-  margin-bottom: 6px;
-}
-.mg-budget-head b {
-  color: var(--basalt);
-  font-weight: 600;
-}
-.mg-budget-bar {
-  position: relative;
-  display: flex;
-  height: 11px;
-  border: 0.5px solid var(--line);
-  border-radius: 3px;
-  overflow: hidden;
-  background: var(--paper-2);
-}
-.mg-budget-bar.over {
-  box-shadow: 0 0 0 1.5px #a23b3b;
-}
-.mg-bud-seg {
-  height: 100%;
-  min-width: 0;
-}
-.mg-bud-region {
-  position: relative;
-  height: 100%;
-  min-width: 0;
-  border-left: 0.5px solid var(--paper);
-  background: repeating-linear-gradient(45deg, var(--paper-2) 0 5px, var(--paper-3) 5px 10px);
-}
-.mg-bud-rfill {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  min-width: 1px;
-  transition: width 0.35s ease;
-}
-.mg-bud-rfill.active {
-  animation: mg-bud-pulse 1.5s ease-in-out infinite;
-}
+/* Active OM-window fill pulse — referenced by world.tsx via animate-[mg-bud-pulse_…]. */
 @keyframes mg-bud-pulse {
   0%,
   100% {
@@ -922,212 +510,4 @@
   50% {
     filter: brightness(1.2);
   }
-}
-.mg-bud-floor {
-  position: absolute;
-  top: -1px;
-  bottom: -1px;
-  width: 0;
-  border-left: 1.5px dashed var(--clay-ink, #8a5e3b);
-  z-index: 2;
-}
-.mg-budget-ticks {
-  position: relative;
-  height: 13px;
-  margin-top: 1px;
-  font-family: var(--font-mono);
-  font-size: 8px;
-  color: var(--clay-ink, #8a5e3b);
-}
-.mg-budget-ticks span {
-  position: absolute;
-  transform: translateX(-50%);
-  white-space: nowrap;
-}
-.mg-budget-rows {
-  display: grid;
-  gap: 2px;
-  margin-top: 9px;
-}
-.mg-budget-row {
-  display: grid;
-  grid-template-columns: 10px 1fr auto auto;
-  align-items: center;
-  gap: 8px;
-  font-size: 11.5px;
-}
-.mg-budget-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 2px;
-}
-.mg-budget-flag {
-  margin-left: 6px;
-  font-family: var(--font-mono);
-  font-size: 8.5px;
-  color: var(--clay-ink, #8a5e3b);
-}
-.mg-budget-rtok {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--slate);
-}
-.mg-budget-rpct {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--muted);
-  min-width: 34px;
-  text-align: right;
-}
-.mg-world[data-density="plain"] .mg-budget {
-  display: none;
-}
-
-/* ===== Context gutter — the MapDial's at-a-glance context stack ===== */
-/* The context gauges, docked beside the composer. An inline cluster (prefix cap + OM meters)
-   that stretches to the composer's height via the flex row's align-items: stretch. */
-.mg-gut {
-  position: relative;
-  display: flex;
-  align-items: stretch;
-  gap: 6px;
-  padding: 7px 9px;
-  border: 0.5px solid var(--line-2, rgba(62, 67, 64, 0.2));
-  border-radius: 16px;
-  background: var(--paper);
-  box-shadow: 0 4px 14px rgba(62, 67, 64, 0.08);
-  cursor: pointer;
-}
-/* prefix cap: request-ordered token slabs (tools → system → memory), stretched to row height. */
-.mg-cap {
-  position: relative;
-  order: 2;
-  display: flex;
-  flex-direction: column;
-  width: 16px;
-  border-radius: 3px;
-  overflow: hidden;
-  border: 0.5px solid var(--line-2, rgba(62, 67, 64, 0.2));
-}
-.mg-cap-seg {
-  width: 100%;
-  min-height: 1px;
-}
-.mg-cap-horizon {
-  position: absolute;
-  left: -1px;
-  right: -1px;
-  height: 0;
-  border-top: 1.5px dashed var(--clay-ink, #8a5e3b);
-}
-/* the cap → conversation seam: a hairline at the bottom edge marking where the prefix ends and
-   the strip (messages) begins — the boundary the whole axis pivots on. */
-.mg-cap-seam {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 0;
-  border-bottom: 1px solid var(--pe-blue);
-  opacity: 0.5;
-}
-.mg-gut.pulse .mg-cap {
-  animation: mg-gut-pulse 1.8s ease-in-out infinite;
-}
-@keyframes mg-gut-pulse {
-  0%,
-  100% {
-    box-shadow: 0 1px 3px rgba(62, 67, 64, 0.18);
-  }
-  50% {
-    box-shadow:
-      0 0 0 2px rgba(183, 141, 106, 0.45),
-      0 1px 3px rgba(62, 67, 64, 0.18);
-  }
-}
-.mg-gut-pop {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 0;
-  display: none;
-  flex-direction: column;
-  gap: 3px;
-  width: max-content;
-  max-width: 220px;
-  padding: 8px 10px;
-  background: var(--paper);
-  border: 0.5px solid var(--line-2, rgba(62, 67, 64, 0.2));
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(62, 67, 64, 0.16);
-  font-size: 11px;
-  color: var(--slate);
-}
-.mg-gut:hover .mg-gut-pop,
-.mg-gut:focus-visible .mg-gut-pop {
-  display: flex;
-}
-.mg-gut-poprow {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-}
-.mg-gut-popdot {
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  flex: none;
-}
-.mg-gut-poptok {
-  margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--muted);
-}
-.mg-gut-pophint {
-  margin-top: 2px;
-  font-size: 9.5px;
-  color: var(--muted);
-}
-
-/* the OM gauges (kept at-a-glance pills) — the two memory windows, beside the prefix cap */
-.mg-gut-strata {
-  position: relative;
-  order: 1;
-  display: flex;
-  flex-direction: column;
-  width: 12px;
-  border-radius: 3px;
-  overflow: hidden;
-  border: 0.5px solid var(--line-2, rgba(62, 67, 64, 0.2));
-}
-.mg-gut-region {
-  position: relative;
-  width: 100%;
-  overflow: hidden;
-  background: repeating-linear-gradient(45deg, var(--paper-2) 0 4px, var(--paper-3) 4px 8px);
-}
-.mg-gut-region.obs {
-  border-bottom: 1px dashed var(--clay-ink, #8a5e3b);
-}
-.mg-gut-rfill {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  transition: height 0.35s ease;
-}
-.mg-gut-rfill.active {
-  animation: mg-bud-pulse 1.5s ease-in-out infinite;
-}
-.mg-gut-floor {
-  position: absolute;
-  left: -1px;
-  right: -1px;
-  height: 0;
-  border-top: 1px dashed var(--clay-ink, #8a5e3b);
-  z-index: 2;
-}
-.mg-gut.pulse .mg-gut-strata.reflecting {
-  animation: mg-gut-pulse 1.8s ease-in-out infinite;
 }

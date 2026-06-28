@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from "./routes/__root";
 import { Route as OpsRouteImport } from "./routes/ops";
+import { Route as DesignSystemRouteImport } from "./routes/design-system";
 import { Route as ChatRouteImport } from "./routes/chat";
 import { Route as IndexRouteImport } from "./routes/index";
 import { Route as DemoTanstackQueryRouteImport } from "./routes/demo/tanstack-query";
@@ -17,6 +18,11 @@ import { Route as DemoTanstackQueryRouteImport } from "./routes/demo/tanstack-qu
 const OpsRoute = OpsRouteImport.update({
   id: "/ops",
   path: "/ops",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const DesignSystemRoute = DesignSystemRouteImport.update({
+  id: "/design-system",
+  path: "/design-system",
   getParentRoute: () => rootRouteImport,
 } as any);
 const ChatRoute = ChatRouteImport.update({
@@ -38,12 +44,14 @@ const DemoTanstackQueryRoute = DemoTanstackQueryRouteImport.update({
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
   "/chat": typeof ChatRoute;
+  "/design-system": typeof DesignSystemRoute;
   "/ops": typeof OpsRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute;
   "/chat": typeof ChatRoute;
+  "/design-system": typeof DesignSystemRoute;
   "/ops": typeof OpsRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
 }
@@ -51,20 +59,28 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport;
   "/": typeof IndexRoute;
   "/chat": typeof ChatRoute;
+  "/design-system": typeof DesignSystemRoute;
   "/ops": typeof OpsRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
-  fullPaths: "/" | "/chat" | "/ops" | "/demo/tanstack-query";
+  fullPaths: "/" | "/chat" | "/design-system" | "/ops" | "/demo/tanstack-query";
   fileRoutesByTo: FileRoutesByTo;
-  to: "/" | "/chat" | "/ops" | "/demo/tanstack-query";
-  id: "__root__" | "/" | "/chat" | "/ops" | "/demo/tanstack-query";
+  to: "/" | "/chat" | "/design-system" | "/ops" | "/demo/tanstack-query";
+  id:
+    | "__root__"
+    | "/"
+    | "/chat"
+    | "/design-system"
+    | "/ops"
+    | "/demo/tanstack-query";
   fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute;
   ChatRoute: typeof ChatRoute;
+  DesignSystemRoute: typeof DesignSystemRoute;
   OpsRoute: typeof OpsRoute;
   DemoTanstackQueryRoute: typeof DemoTanstackQueryRoute;
 }
@@ -76,6 +92,13 @@ declare module "@tanstack/react-router" {
       path: "/ops";
       fullPath: "/ops";
       preLoaderRoute: typeof OpsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/design-system": {
+      id: "/design-system";
+      path: "/design-system";
+      fullPath: "/design-system";
+      preLoaderRoute: typeof DesignSystemRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/chat": {
@@ -105,6 +128,7 @@ declare module "@tanstack/react-router" {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ChatRoute: ChatRoute,
+  DesignSystemRoute: DesignSystemRoute,
   OpsRoute: OpsRoute,
   DemoTanstackQueryRoute: DemoTanstackQueryRoute,
 };
