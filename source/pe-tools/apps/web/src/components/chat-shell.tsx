@@ -12,7 +12,7 @@ import { useMode } from "#/workbench/use-mode";
 import { MODES } from "#/workbench/depth";
 import { WorkbenchRuntimeProvider } from "#/workbench/aui";
 import { Lens } from "#/workbench/Lens";
-import { ContextGutter, useCacheView } from "#/workbench/world";
+import { ContextRibbon, useCacheView } from "#/workbench/world";
 import "#/workbench/lens.css";
 
 export function ChatShell({
@@ -84,7 +84,7 @@ function Surface({
       : (debug.error ?? operationError);
 
   return (
-    <main data-mode={mode} className="pe-light fixed inset-0 bg-background font-pe text-foreground">
+    <main data-mode={mode} className="fixed inset-0 bg-background font-pe text-foreground">
       {/* Inner grid holds exactly the 3 rows; ThreadPalette stays OUT of the grid (its sr-only
           dialog header would otherwise absorb the 1fr lens row via auto-placement). */}
       <div className="grid h-full grid-rows-[auto_auto_minmax(0,1fr)]">
@@ -154,20 +154,18 @@ function Surface({
             scrollKey={currentThreadId}
             onTurnChange={onTurnChange}
           />
-          {/* The composer + context gauges float over the CHAT lane only (pe-composer-lane clears
-              the side lanes + mapdial), and resize with it. items-stretch keeps the gauges the
-              same height as the input box. */}
+          {/* The context ribbon + composer float over the CHAT lane only (pe-composer-lane clears
+              the side lanes + mapdial) and resize with it. The ribbon is the unified request-
+              ordered token budget bar, spanning the input width directly above it. */}
           <div className="pointer-events-none absolute inset-x-0 bottom-0 pb-4">
             <div className="pe-composer-lane px-4">
-              <div className="pointer-events-auto flex items-stretch gap-2">
-                <ContextGutter
+              <div className="pointer-events-auto flex flex-col gap-2">
+                <ContextRibbon
                   breakdown={breakdown}
                   cache={cache}
                   onOpenWorld={() => setMode("world")}
                 />
-                <div className="min-w-0 flex-1">
-                  <Composer setMode={setMode} promptSeed={promptSeed} />
-                </div>
+                <Composer setMode={setMode} promptSeed={promptSeed} />
               </div>
             </div>
           </div>

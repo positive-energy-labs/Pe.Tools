@@ -22,6 +22,7 @@ import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import { Check, ChevronRight, GitFork, X } from "lucide-react";
 import { useWorkbench } from "./provider";
 import { workbenchToThreadMessages } from "./aui-adapter";
+import { PROSE_CLASS } from "./prose";
 
 /**
  * assistant-ui mounted as a pure render-from view over WorkbenchState. The runtime
@@ -177,26 +178,15 @@ class PartsBoundary extends Component<{ children: ReactNode }, { error?: string 
   }
   render(): ReactNode {
     if (this.state.error)
-      return <div className="text-[13px] text-[#b4524f]">{this.state.error}</div>;
+      return <div className="text-[13px] text-[var(--fail)]">{this.state.error}</div>;
     return this.props.children;
   }
 }
 
 /**
- * Assistant text → assistant-ui markdown. assistant-ui renders the markdown to HTML but doesn't
- * style it, so we use the Tailwind typography plugin (`prose`) tuned to the PE look: serif
- * headings, PE-blue links, and inline-code pills on paper-2 with the backtick pseudo-content
- * stripped. Replaces the hand-written prose descendant CSS.
+ * Assistant text → assistant-ui markdown, styled via the shared {@link PROSE_CLASS}
+ * (Tailwind typography plugin tuned to the Lens palette). See ./prose.
  */
-const PROSE_CLASS = [
-  "prose prose-sm max-w-none leading-relaxed text-[var(--basalt)]",
-  "prose-p:my-0 prose-p:mb-[0.6em] last:prose-p:mb-0",
-  "prose-headings:font-[var(--font-display)] prose-headings:font-semibold prose-headings:text-[var(--basalt)]",
-  "prose-a:text-[var(--pe-blue)] prose-a:underline prose-a:underline-offset-2",
-  "prose-code:rounded prose-code:border-[0.5px] prose-code:border-[var(--line)] prose-code:bg-[var(--paper-2)] prose-code:px-[5px] prose-code:py-px prose-code:text-[12.5px] prose-code:font-normal",
-  "prose-code:before:content-none prose-code:after:content-none",
-  "prose-pre:rounded-[7px] prose-pre:border-[0.5px] prose-pre:border-[var(--line)] prose-pre:bg-[var(--paper-2)] prose-pre:text-[var(--basalt)]",
-].join(" ");
 const MarkdownText: TextMessagePartComponent = () => (
   <MarkdownTextPrimitive className={PROSE_CLASS} />
 );
@@ -267,7 +257,7 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
                 className={`inline-flex items-center gap-[5px] rounded-[7px] border-[0.5px] px-[11px] py-[5px] text-[12.5px] font-semibold transition-colors active:translate-y-[0.5px] ${
                   allow
                     ? "border-[var(--pe-blue)] bg-[var(--pe-blue)] text-white hover:bg-[var(--pe-blue-soft)]"
-                    : "border-[var(--line-2)] bg-[var(--paper)] text-[var(--slate)] hover:border-[#d8a59f] hover:bg-[#fdf1ef] hover:text-[#8f3434]"
+                    : "border-[var(--line-2)] bg-[var(--paper)] text-[var(--slate)] hover:border-[color-mix(in_srgb,var(--fail)_45%,transparent)] hover:bg-[color-mix(in_srgb,var(--fail)_12%,transparent)] hover:text-[var(--fail)]"
                 }`}
                 onClick={() => void resolveApproval(approval.id, option.id)}
               >
