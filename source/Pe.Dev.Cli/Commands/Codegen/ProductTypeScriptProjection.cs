@@ -5,40 +5,12 @@ using Pe.Shared.Product;
 namespace Pe.Dev.Cli.Codegen;
 
 internal static class ProductTypeScriptProjection {
-    public static async Task<int> RunAsync(bool check, CodegenPaths paths, CancellationToken cancellationToken) {
+    public static async Task<int> RunAsync(CodegenPaths paths, CancellationToken cancellationToken) {
         var generatedFile = GenerateFile(paths);
-        if (check)
-            return await CheckAsync(paths, generatedFile, cancellationToken);
-
         Directory.CreateDirectory(Path.GetDirectoryName(generatedFile.Path)!);
         await File.WriteAllTextAsync(generatedFile.Path, generatedFile.Content, cancellationToken);
         Console.WriteLine($"Generated {Path.GetRelativePath(paths.RepoRoot, generatedFile.Path)}");
         return 0;
-    }
-
-    private static async Task<int> CheckAsync(
-        CodegenPaths paths,
-        GeneratedProjectionFile generatedFile,
-        CancellationToken cancellationToken
-    ) {
-        var relativePath = Path.GetRelativePath(paths.RepoRoot, generatedFile.Path);
-        if (!File.Exists(generatedFile.Path)) {
-            Console.Error.WriteLine("Generated Product TypeScript projection is stale:");
-            Console.Error.WriteLine($"  {relativePath} (missing)");
-            Console.Error.WriteLine("Run `pe-dev codegen sync --target product` to update it.");
-            return 1;
-        }
-
-        var existingContent = await File.ReadAllTextAsync(generatedFile.Path, cancellationToken);
-        if (string.Equals(existingContent, generatedFile.Content, StringComparison.Ordinal)) {
-            Console.WriteLine("Generated Product TypeScript projection is current.");
-            return 0;
-        }
-
-        Console.Error.WriteLine("Generated Product TypeScript projection is stale:");
-        Console.Error.WriteLine($"  {relativePath}");
-        Console.Error.WriteLine("Run `pe-dev codegen sync --target product` to update it.");
-        return 1;
     }
 
     private static GeneratedProjectionFile GenerateFile(CodegenPaths paths) => new(

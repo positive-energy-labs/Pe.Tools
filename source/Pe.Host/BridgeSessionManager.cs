@@ -29,7 +29,11 @@ public sealed class BridgeSessionManager {
             var detail = string.IsNullOrWhiteSpace(this._lastDisconnectReason)
                 ? "No connected Revit bridge session."
                 : $"No connected Revit bridge session. Last disconnect reason: {this._lastDisconnectReason}";
-            throw new HostOperationException(StatusCodes.Status503ServiceUnavailable, detail);
+            throw new HostOperationException(
+                StatusCodes.Status503ServiceUnavailable,
+                detail,
+                bridgePrecondition: "Connect the Revit bridge before calling this operation."
+            );
         }
     }
 

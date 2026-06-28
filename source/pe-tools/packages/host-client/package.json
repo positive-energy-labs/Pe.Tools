@@ -1,7 +1,7 @@
 {
   "name": "@pe/host-client",
   "version": "0.0.0",
-  "description": "A starter for creating a TypeScript package.",
+  "description": "Hand-maintained, generated-adjacent client for Pe.Host operations.",
   "homepage": "https://github.com/author/library#readme",
   "bugs": {
     "url": "https://github.com/author/library/issues"
@@ -20,6 +20,10 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
+    },
+    "./call": {
+      "types": "./src/call.ts",
+      "import": "./src/call.ts"
     }
   },
   "publishConfig": {

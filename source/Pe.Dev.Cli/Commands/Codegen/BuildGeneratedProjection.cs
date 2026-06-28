@@ -3,8 +3,8 @@ using Pe.Dev.RevitAutomation;
 namespace Pe.Dev.Cli.Codegen;
 
 internal static class BuildGeneratedProjection {
-    public static async Task<int> RunAsync(bool check, CodegenPaths paths, CancellationToken cancellationToken) {
-        var args = new List<string> {
+    public static async Task<int> RunAsync(CodegenPaths paths, CancellationToken cancellationToken) {
+        string[] args = [
             "run",
             "--project",
             paths.BuildProjectPath,
@@ -14,12 +14,10 @@ internal static class BuildGeneratedProjection {
             "/p:WarningsNotAsErrors=ConsoleUse",
             "--",
             "sync-contracts"
-        };
-        if (check)
-            args.Add("--check");
+        ];
 
         return await ForegroundProcessRunner.RunAsync(
-            SafeDotNetProcess.Create(paths.RepoRoot, args.ToArray()),
+            SafeDotNetProcess.Create(paths.RepoRoot, args),
             cancellationToken
         );
     }

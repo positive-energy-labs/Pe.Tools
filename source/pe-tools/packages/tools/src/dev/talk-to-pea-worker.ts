@@ -232,7 +232,7 @@ async function resolvePeaWorkerCwd(hostBaseUrl: string, workspaceKey: string): P
   const client = new PeHostClient({ baseUrl: hostBaseUrl });
   try {
     await client.ensurePeHostRunning(hostBaseUrl);
-    const bootstrap = await client.scripting.bootstrapWorkspace({
+    const bootstrap = await client.call("scripting.workspace.bootstrap", {
       workspaceKey,
       createSampleScript: true,
     });

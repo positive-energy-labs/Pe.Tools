@@ -1,10 +1,4 @@
 import { PeHostClient, ScriptExecutionSourceKind, ScriptPermissionMode } from "@pe/host-client";
-import type {
-  ExecuteRevitScriptData,
-  ScriptPodExportData,
-  ScriptPodImportData,
-  ScriptWorkspaceBootstrapData,
-} from "@pe/host-client";
 import z from "zod";
 
 export const scriptExecuteInputSchema = z.object({
@@ -88,8 +82,8 @@ export class ScriptingTools {
     private readonly context: Pick<ScriptRuntimeContext, "workspaceKey">,
   ) {}
 
-  execute(input: ScriptExecuteInput): Promise<ExecuteRevitScriptData> {
-    return this.client.scripting.execute({
+  execute(input: ScriptExecuteInput) {
+    return this.client.call("scripting.execute", {
       scriptContent: input.scriptContent,
       sourceKind:
         (input.sourceKind ?? "InlineSnippet") === "WorkspacePath"
@@ -105,22 +99,22 @@ export class ScriptingTools {
     });
   }
 
-  bootstrap(input: ScriptBootstrapInput): Promise<ScriptWorkspaceBootstrapData> {
-    return this.client.scripting.bootstrapWorkspace({
+  bootstrap(input: ScriptBootstrapInput) {
+    return this.client.call("scripting.workspace.bootstrap", {
       workspaceKey: input.workspaceKey ?? this.context.workspaceKey,
       createSampleScript: input.createSampleScript ?? true,
     });
   }
 
-  importPod(input: ScriptPodImportInput): Promise<ScriptPodImportData> {
-    return this.client.scripting.importPod({
+  importPod(input: ScriptPodImportInput) {
+    return this.client.call("scripting.pod.import", {
       archivePath: input.archivePath,
       workspaceKey: input.workspaceKey,
     });
   }
 
-  exportPod(input: ScriptPodExportInput): Promise<ScriptPodExportData> {
-    return this.client.scripting.exportPod({
+  exportPod(input: ScriptPodExportInput) {
+    return this.client.call("scripting.pod.export", {
       workspaceKey: input.workspaceKey ?? this.context.workspaceKey,
       archivePath: input.archivePath,
     });
@@ -133,31 +127,22 @@ export class ScriptingTools {
   }
 }
 
-export function executeScriptViaHost(
-  input: ScriptExecuteInput,
-  context: ScriptRuntimeContext,
-): Promise<ExecuteRevitScriptData> {
+export function executeScriptViaHost(input: ScriptExecuteInput, context: ScriptRuntimeContext) {
   return ScriptingTools.fromContext(context).execute(input);
 }
 
 export function bootstrapScriptWorkspace(
   input: ScriptBootstrapInput,
   context: ScriptRuntimeContext,
-): Promise<ScriptWorkspaceBootstrapData> {
+) {
   return ScriptingTools.fromContext(context).bootstrap(input);
 }
 
-export function importScriptPod(
-  input: ScriptPodImportInput,
-  context: ScriptRuntimeContext,
-): Promise<ScriptPodImportData> {
+export function importScriptPod(input: ScriptPodImportInput, context: ScriptRuntimeContext) {
   return ScriptingTools.fromContext(context).importPod(input);
 }
 
-export function exportScriptPod(
-  input: ScriptPodExportInput,
-  context: ScriptRuntimeContext,
-): Promise<ScriptPodExportData> {
+export function exportScriptPod(input: ScriptPodExportInput, context: ScriptRuntimeContext) {
   return ScriptingTools.fromContext(context).exportPod(input);
 }
 

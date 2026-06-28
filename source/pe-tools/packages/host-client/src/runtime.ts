@@ -1,4 +1,4 @@
-import { sendJson, PeHostClientError, type PeHostClientOptions } from "./index.ts";
+import { sendHostRequest, HostCallError, type HostCallOptions } from "./call.ts";
 import {
   hostCapabilityMap,
   hostOperations,
@@ -12,9 +12,10 @@ import {
   type HostOperationRelatedOperation,
   type HostOperationRequestExample,
   type HostOperationVisibility,
-  type HostTypeShapeField,
   type RevitActiveDocumentKind,
 } from "@pe/host-generated/contracts";
+import { hostOperationSchemas } from "@pe/host-generated/zod/registry";
+import type { z } from "zod";
 
 export type HostOperationVerbosity = "compact" | "hints" | "full";
 export type HostOperationSearchProjection = "matches" | "capability-map";
@@ -65,8 +66,6 @@ export interface HostOperationHintResult extends HostOperationCompactResult {
 export interface HostOperationFullResult extends HostOperationHintResult {
   verb: string;
   route: string;
-  requestShape: readonly HostTypeShapeField[];
-  responseShape: readonly HostTypeShapeField[];
 }
 
 export type HostOperationSearchResult =
@@ -165,7 +164,7 @@ export function searchHostOperationMatches(
 }
 
 export async function callHostOperation(
-  options: PeHostClientOptions,
+  options: HostCallOptions,
   key: string,
   request?: unknown,
   verbosity: HostOperationVerbosity = "compact",
@@ -198,11 +197,11 @@ export async function callHostOperation(
   try {
     const response = await runWithSingleFlight(operation, async () => {
       runStartedAt.value = Date.now();
-      return sendJson<unknown>(
-        { ...options, requestId },
-        operation,
-        normalizeRequest(operation, request),
-      );
+      const result = await sendHostRequest(operation, normalizeRequest(operation, request), {
+        ...options,
+        requestId,
+      });
+      return result.rawBody;
     });
     const elapsedMs = Date.now() - startedAt;
     const queuedMs = Math.max(0, runStartedAt.value - startedAt);
@@ -219,7 +218,7 @@ export async function callHostOperation(
     const elapsedMs = Date.now() - startedAt;
     const queuedMs = Math.max(0, runStartedAt.value - startedAt);
     const searchResult = toFullSearchResult(operation);
-    if (error instanceof PeHostClientError) {
+    if (error instanceof HostCallError) {
       return {
         ok: false,
         key: operation.key,
@@ -478,18 +477,25 @@ function getSingleFlightGroup(operation: HostOperationDefinition): string | unde
     : undefined;
 }
 
+// Single pre-send request gate for every caller: validate against the generated
+// zod schema for the op before hitting the bridge, so malformed requests fail
+// fast client-side with field-level detail instead of round-tripping.
 function createLocalRequestProblem(
   operation: HostOperationDefinition,
   request: unknown,
 ): string | undefined {
-  if (operation.key !== "revit.resolve.references" || !isRecord(request)) return undefined;
+  const schema = (hostOperationSchemas as Record<string, { request?: z.ZodType }>)[operation.key]
+    ?.request;
+  if (!schema || request == null) return undefined;
 
-  if ("phrases" in request)
-    return "revit.resolve.references accepts one referenceText string, not phrases[].";
-  if (!("referenceText" in request) && !("ReferenceText" in request))
-    return "revit.resolve.references requires referenceText. Use operation metadata for optional filters and examples.";
+  const parsed = schema.safeParse(request);
+  if (parsed.success) return undefined;
 
-  return undefined;
+  const summary = parsed.error.issues
+    .slice(0, 4)
+    .map((issue) => `${issue.path.join(".") || "$"}: ${issue.message}`)
+    .join("; ");
+  return `${operation.key} request failed validation: ${summary}`;
 }
 
 function normalizeRequest(operation: HostOperationDefinition, request: unknown): unknown {
@@ -511,7 +517,7 @@ function isAbortError(error: unknown): boolean {
 
 function createFailureNextSteps(operation: HostOperationDefinition, error: unknown): string[] {
   const hints = [...createPreflightHints(operation)];
-  if (!(error instanceof PeHostClientError)) {
+  if (!(error instanceof HostCallError)) {
     if (isAbortError(error)) {
       hints.unshift(
         "The host operation timed out client-side. Do not immediately retry broad bridge work; use pe_logs to find the request id and check whether Revit is still finishing it.",
@@ -852,8 +858,6 @@ function toFullSearchResult(operation: HostOperationDefinition): HostOperationFu
     ...toHintSearchResult(operation),
     verb: operation.verb,
     route: operation.route,
-    requestShape: operation.requestShape ?? [],
-    responseShape: operation.responseShape ?? [],
   };
 }
 
@@ -877,10 +881,7 @@ function createRequestHint(operation: HostOperationDefinition): string {
   if (operation.safeDefaultRequestJson)
     return `${operation.requestTypeName ?? "request object"}; safe default ${operation.safeDefaultRequestJson}`;
 
-  const fields = formatShape(operation.requestShape ?? []);
-  return fields.length === 0
-    ? `${operation.requestTypeName ?? "request object"} JSON object`
-    : `${operation.requestTypeName ?? "request object"} { ${fields} }`;
+  return `${operation.requestTypeName ?? "request object"} JSON object`;
 }
 
 function createUsageHint(
@@ -935,16 +936,6 @@ function createPreflightHints(operation: HostOperationDefinition): string[] {
   return hints;
 }
 
-function formatShape(fields: readonly HostTypeShapeField[]): string {
-  return fields
-    .map((field) => `${field.name}${field.required ? "" : "?"}: ${field.type}`)
-    .join(", ");
-}
-
 function unique(values: readonly string[]): string[] {
   return [...new Set(values.filter((value) => value.trim().length > 0))];
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

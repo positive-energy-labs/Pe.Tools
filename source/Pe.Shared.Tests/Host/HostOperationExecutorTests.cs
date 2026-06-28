@@ -44,7 +44,9 @@ public sealed class HostOperationExecutorTests {
                         "No active document.",
                         "Open a Revit document and retry."
                     )
-                ]
+                ],
+                retryHint: "Open a Revit document and retry.",
+                bridgePrecondition: "An active Revit document is required."
             )
         );
 
@@ -54,6 +56,12 @@ public sealed class HostOperationExecutorTests {
         Assert.That(response.StatusCode, Is.EqualTo(StatusCodes.Status409Conflict));
         Assert.That(response.Json.RootElement.GetProperty("detail").GetString(), Is.EqualTo("No active document."));
         Assert.That(response.Json.RootElement.GetProperty("status").GetInt32(), Is.EqualTo(StatusCodes.Status409Conflict));
+        Assert.That(response.Json.RootElement.GetProperty("operationKey").GetString(),
+            Is.EqualTo(GetFieldOptionsOperationContract.Definition.Key));
+        Assert.That(response.Json.RootElement.GetProperty("retryHint").GetString(),
+            Is.EqualTo("Open a Revit document and retry."));
+        Assert.That(response.Json.RootElement.GetProperty("bridgePrecondition").GetString(),
+            Is.EqualTo("An active Revit document is required."));
         var issues = response.Json.RootElement.GetProperty("issues");
         Assert.That(issues.GetArrayLength(), Is.EqualTo(1));
         Assert.That(issues[0].GetProperty("code").GetString(), Is.EqualTo("NoActiveDocument"));

@@ -83,7 +83,8 @@ public sealed class BridgeServer(
                 throw new HostOperationException(
                     response.StatusCode ?? StatusCodes.Status500InternalServerError,
                     response.ErrorMessage ?? "Bridge request failed.",
-                    response.Issues
+                    response.Issues,
+                    activeOperation: method
                 );
             }
 

@@ -6,8 +6,12 @@ import {
   readRuntimeAccessLevelFromToolContext,
 } from "@pe/runtime";
 import { HostLogTarget } from "@pe/host-client";
-import type { HostActiveDocumentSummary } from "@pe/host-client";
+import type { HostOpResponse } from "@pe/host-client";
 import { PeHostClient } from "@pe/host-client";
+
+type ActiveDocumentSummary = NonNullable<
+  HostOpResponse<"settings.session-summary">["activeDocument"]
+>;
 import {
   ScriptingTools,
   scriptBootstrapInputSchema,
@@ -109,8 +113,8 @@ export const peStatus = createTool({
   }),
   execute: async (input) => {
     const hostClient = createCurrentHostClient();
-    const probe = await hostClient.host.getProbe();
-    const sessionSummary = await hostClient.host.getSessionSummary();
+    const probe = await hostClient.call("settings.host-probe");
+    const sessionSummary = await hostClient.call("settings.session-summary");
     if (input.verbosity === "full") return { probe, sessionSummary };
 
     return {
@@ -148,7 +152,7 @@ export const peLogs = createTool({
     tailLineCount: z.number().min(1).max(1000).default(200),
   }),
   execute: async (input) =>
-    createCurrentHostClient().host.getLogs({
+    createCurrentHostClient().call("host.logs", {
       target: parseHostLogTarget(input.target ?? "all"),
       tailLineCount: input.tailLineCount ?? 200,
     }),
@@ -268,7 +272,7 @@ function createCurrentScriptingTools() {
   });
 }
 
-function summarizeActiveDocument(activeDocument: HostActiveDocumentSummary) {
+function summarizeActiveDocument(activeDocument: ActiveDocumentSummary) {
   return {
     title: activeDocument.title,
     key: activeDocument.key,

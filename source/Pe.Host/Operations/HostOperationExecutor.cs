@@ -1,6 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
 using Pe.Shared.HostContracts.Operations;
-using Pe.Shared.HostContracts.SettingsStorage;
 using System.Diagnostics;
 
 namespace Pe.Host.Operations;
@@ -45,7 +43,14 @@ internal sealed class HostOperationExecutor(
                 operation.Definition.RequestType.Name,
                 stopwatch.ElapsedMilliseconds
             );
-            return CreateProblemResult(ex.StatusCode, ex.Message, context.RequestId, ex.Issues);
+            return HostProblemResult.Create(
+                ex.StatusCode,
+                ex.Message,
+                context.RequestId,
+                operation.Definition.Key,
+                ex.Issues,
+                ex
+            );
         } catch (Exception ex) {
             this._logger.LogError(
                 ex,
@@ -57,24 +62,12 @@ internal sealed class HostOperationExecutor(
                 operation.Definition.RequestType.Name,
                 stopwatch.ElapsedMilliseconds
             );
-            return CreateProblemResult(StatusCodes.Status500InternalServerError, ex.Message, context.RequestId, null);
+            return HostProblemResult.Create(
+                StatusCodes.Status500InternalServerError,
+                ex.Message,
+                context.RequestId,
+                operation.Definition.Key
+            );
         }
-    }
-
-    private static IResult CreateProblemResult(
-        int statusCode,
-        string detail,
-        string requestId,
-        IReadOnlyList<ValidationIssue>? issues
-    ) {
-        var problem = new ProblemDetails {
-            Detail = detail,
-            Status = statusCode
-        };
-        problem.Extensions["requestId"] = requestId;
-        if (issues is { Count: > 0 })
-            problem.Extensions["issues"] = issues;
-
-        return Results.Problem(problem);
     }
 }

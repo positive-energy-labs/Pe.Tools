@@ -1,6 +1,10 @@
-import { PeHostClient, type HostActiveDocumentSummary } from "@pe/host-client";
+import { PeHostClient, type HostOpResponse } from "@pe/host-client";
 
 const defaultHostContextTimeoutMs = 5_000;
+
+type ActiveDocumentSummary = NonNullable<
+  HostOpResponse<"settings.session-summary">["activeDocument"]
+>;
 
 export async function collectHostContext(
   options: { hostBaseUrl?: string; timeoutMs?: number } = {},
@@ -11,8 +15,8 @@ export async function collectHostContext(
     timeoutMs: options.timeoutMs ?? defaultHostContextTimeoutMs,
   });
   const [probeResult, sessionResult] = await Promise.allSettled([
-    hostClient.host.getProbe(),
-    hostClient.host.getSessionSummary(),
+    hostClient.call("settings.host-probe"),
+    hostClient.call("settings.session-summary"),
   ]);
 
   return {
@@ -46,7 +50,7 @@ export async function collectHostContext(
   };
 }
 
-function summarizeActiveDocument(activeDocument: HostActiveDocumentSummary) {
+function summarizeActiveDocument(activeDocument: ActiveDocumentSummary) {
   return {
     title: activeDocument.title,
     key: activeDocument.key,

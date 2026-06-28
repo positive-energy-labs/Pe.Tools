@@ -1,5 +1,8 @@
+using TypeGen.Core.TypeAnnotations;
+
 namespace Pe.Shared.StorageRuntime.Capabilities;
 
+[ExportTsEnum]
 public enum SettingsRuntimeMode {
     HostOnly = 0,
     LiveDocument = 1

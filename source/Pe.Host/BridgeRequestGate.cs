@@ -76,7 +76,8 @@ public sealed class BridgeRequestGate {
                 _ = completion.Completion.TrySetException(
                     new HostOperationException(
                         StatusCodes.Status503ServiceUnavailable,
-                        $"Revit bridge disconnected: {reason}"
+                        $"Revit bridge disconnected: {reason}",
+                        bridgePrecondition: "Connect the Revit bridge before retrying."
                     )
                 );
             }
@@ -106,7 +107,10 @@ public sealed class BridgeRequestGate {
                     $"The Revit bridge is already executing '{request.Method}'.",
                     "Retry after the current operation completes."
                 )
-            ]
+            ],
+            activeOperation: request.Method,
+            retryHint: "Retry after the current operation completes.",
+            bridgePrecondition: "Only one Revit bridge request can execute at a time."
         );
     }
 

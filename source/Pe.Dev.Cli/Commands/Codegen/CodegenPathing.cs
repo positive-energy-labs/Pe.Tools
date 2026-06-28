@@ -12,4 +12,6 @@ internal sealed record CodegenPaths(string RepoRoot) {
     public string HostTypeGenDirectory => Path.Combine(HostGeneratedPackageDirectory, "src", "types");
 
     public string HostContractsDirectory => Path.Combine(HostGeneratedPackageDirectory, "src", "contracts");
+
+    public string HostZodDirectory => Path.Combine(HostGeneratedPackageDirectory, "src", "zod");
 }

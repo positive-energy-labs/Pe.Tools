@@ -284,16 +284,35 @@ Do not use a dev command to rewrite the installed-shaped `pea` payload selection
 
 ## Generated contract decisions
 
-Generated contracts are projections, not hand-maintained source.
+Generated contracts are projections, not hand-maintained source. The C# types are the authority; the TypeScript types and zod schemas are emitted from them.
 
 ```powershell
-pe-dev codegen sync --target build
-pe-dev codegen sync --target host-types
-pe-dev codegen sync --target host-client
+pe-dev codegen sync --target host-types      # src/types/*.ts   (enums only)
+pe-dev codegen sync --target host-contracts  # src/contracts/* + src/zod/* (schemas + inferred types)
 pe-dev codegen sync --target product
+pe-dev codegen sync --target build
+pe-dev codegen sync --target all             # every target above
 ```
 
+The valid `--target` values are `all`, `build`, `product`, `host-types`, and `host-contracts` (verified: any other value exits non-zero with `Unknown codegen target`). There is no `host-client` target; the hand-maintained .NET client lives in `source/pe-tools/packages/host-client` and is not a codegen output. Codegen always rebuilds the contract assemblies first — there is no `--no-build` escape hatch (it only risked generating from stale assemblies).
+
 `sync` updates generated projections and formats affected TypeScript packages. Host DTO TypeScript is generated through `pe-dev`/TypeGen and normalized for NodeNext `.js` imports; do not run `dotnet-typegen` or maintain `tgconfig.json` by hand.
+
+### What lands in `@pe/host-generated`
+
+- `src/types/` — one TypeScript **enum** per exported C# enum (`[ExportTsEnum]`), written by `host-types`. Object types are **not** emitted here; they are inferred from the zod schemas.
+- `src/contracts/` — the `hostOperations` catalog, capability map, and operation-definition types, written by `host-contracts`.
+- `src/zod/host-zod.generated.ts` — a zod schema per exported object type, written by `host-contracts`. Exposed at `@pe/host-generated/zod`; **this is the single source of truth for object types** — each schema also exports `type X = z.infer<typeof xSchema>`, so consumers import object types from `/zod`, not `/types`.
+- `src/zod/host-op-schemas.generated.ts` — maps each public operation key to its request/response schemas. Exposed at `@pe/host-generated/zod/registry`; callers resolve the schema from the key, so they don't hand-pass schemas.
+- `src/json-schema/index.ts` — **hand-written, not generated.** Derives request JSON Schema from the zod registry via `z.toJSONSchema` for generic form rendering (`/ops`). Keeps JSON Schema from drifting off the zod SOT.
+
+The emitted type set is exactly what's annotated: every `[ExportTsInterface]`/`[ExportTsEnum]` type gets a zod schema (enums also get a TS enum). There is no reachability pruning — to drop a type from the surface, remove its attribute. Open generic definitions have no concrete wire shape and are skipped. Every `HostOperationsCatalog.PublicHttp` request/response type must be annotated, or `host-contracts` fails fast.
+
+The zod emitter reflects the C# types directly, so it captures nullability a TypeScript interface would lose — which is why object types are sourced from zod, not regenerated interfaces. Verified example: `Dictionary<string, string?>` becomes `z.record(z.string(), z.string().nullable())`; the wire sends null values, so the schema is the faithful boundary. Enums bind with `z.enum(TsEnum)` (imported from `src/types`) so a schema's inferred type is the nominal enum. Recursive types (e.g. `SettingsDirectoryNode`) emit zod-v4 getters. Browser + Node callers share one caller (`@pe/host-client/call`) that validates request and response with these schemas.
+
+**Validation rules travel too.** The zod emitter reads standard `System.ComponentModel.DataAnnotations` and maps them to refinements — `[Range(1,100000)]` → `.min(1).max(100000)`, `[MaxLength]`/`[StringLength]` → `.max(n)`, `[RegularExpression]` → `.regex(...)`, `[Required]` → non-optional (verified on `RevitDataOutputBudget.MaxEntries`). Because the request-form JSON Schema is now derived from these zod schemas, the refinements flow into it too — DataAnnotations are the single validation source of truth.
+
+Because the generated zod imports its enums from `src/types`, regenerate both together when a C# contract changes: run `--target host-types` then `--target host-contracts`, or `--target all`.
 
 The build tool also exposes:
 

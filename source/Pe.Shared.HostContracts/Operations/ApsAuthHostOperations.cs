@@ -1,4 +1,5 @@
 using Pe.Shared.ApsAuth;
+using TypeGen.Core.TypeAnnotations;
 
 namespace Pe.Shared.HostContracts.Operations;
 
@@ -68,4 +69,5 @@ public static class AcquireApsAccessTokenOperationContract {
         );
 }
 
+[ExportTsInterface]
 public sealed record ApsLogoutResult(bool LoggedOut);

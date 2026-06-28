@@ -12,50 +12,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "ApsTokenRequest",
     responseTypeName: "ApsPersistedTokenStatus",
-    requestShape: [
-      {
-        name: "explicitScopes",
-        type: "array\u003Cstring\u003E",
-        required: false,
-      },
-      {
-        name: "flowKind",
-        type: "enum:ApsAuthFlowKind",
-        required: false,
-      },
-      {
-        name: "scopeProfile",
-        type: "enum:ApsScopeProfile",
-        required: false,
-      },
-    ],
-    responseShape: [
-      {
-        name: "exists",
-        type: "boolean",
-        required: true,
-      },
-      {
-        name: "expiresAtUtc",
-        type: "string | null",
-        required: false,
-      },
-      {
-        name: "flowKind",
-        type: "enum:ApsAuthFlowKind",
-        required: true,
-      },
-      {
-        name: "hasRefreshToken",
-        type: "boolean",
-        required: true,
-      },
-      {
-        name: "scopeProfile",
-        type: "enum:ApsScopeProfile",
-        required: true,
-      },
-    ],
     displayName: "Login APS",
     domain: "aps",
     description: "Start or complete Autodesk Platform Services authentication.",
@@ -84,14 +40,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "NoRequest",
     responseTypeName: "ApsLogoutResult",
-    requestShape: [],
-    responseShape: [
-      {
-        name: "loggedOut",
-        type: "boolean",
-        required: true,
-      },
-    ],
     displayName: "Logout APS",
     domain: "aps",
     description: "Clear persisted Autodesk Platform Services authentication state.",
@@ -120,50 +68,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "ApsTokenRequest",
     responseTypeName: "ApsPersistedTokenStatus",
-    requestShape: [
-      {
-        name: "explicitScopes",
-        type: "array\u003Cstring\u003E",
-        required: false,
-      },
-      {
-        name: "flowKind",
-        type: "enum:ApsAuthFlowKind",
-        required: false,
-      },
-      {
-        name: "scopeProfile",
-        type: "enum:ApsScopeProfile",
-        required: false,
-      },
-    ],
-    responseShape: [
-      {
-        name: "exists",
-        type: "boolean",
-        required: true,
-      },
-      {
-        name: "expiresAtUtc",
-        type: "string | null",
-        required: false,
-      },
-      {
-        name: "flowKind",
-        type: "enum:ApsAuthFlowKind",
-        required: true,
-      },
-      {
-        name: "hasRefreshToken",
-        type: "boolean",
-        required: true,
-      },
-      {
-        name: "scopeProfile",
-        type: "enum:ApsScopeProfile",
-        required: true,
-      },
-    ],
     displayName: "Get APS Auth Status",
     domain: "aps",
     description: "Read persisted Autodesk Platform Services authentication status.",
@@ -192,50 +96,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "ApsTokenRequest",
     responseTypeName: "ApsTokenResult",
-    requestShape: [
-      {
-        name: "explicitScopes",
-        type: "array\u003Cstring\u003E",
-        required: false,
-      },
-      {
-        name: "flowKind",
-        type: "enum:ApsAuthFlowKind",
-        required: false,
-      },
-      {
-        name: "scopeProfile",
-        type: "enum:ApsScopeProfile",
-        required: false,
-      },
-    ],
-    responseShape: [
-      {
-        name: "accessToken",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "expiresAtUtc",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "flowKind",
-        type: "enum:ApsAuthFlowKind",
-        required: true,
-      },
-      {
-        name: "refreshToken",
-        type: "string",
-        required: false,
-      },
-      {
-        name: "scopeProfile",
-        type: "enum:ApsScopeProfile",
-        required: true,
-      },
-    ],
     displayName: "Acquire APS Access Token",
     domain: "aps",
     description: "Acquire an Autodesk Platform Services access token for authenticated operations.",
@@ -264,25 +124,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "HostLogsRequest",
     responseTypeName: "HostLogsData",
-    requestShape: [
-      {
-        name: "tailLineCount",
-        type: "number",
-        required: true,
-      },
-      {
-        name: "target",
-        type: "enum:HostLogTarget",
-        required: true,
-      },
-    ],
-    responseShape: [
-      {
-        name: "files",
-        type: "array\u003CHostLogFileData\u003E",
-        required: true,
-      },
-    ],
     displayName: "Get Host Logs",
     domain: "host",
     description: "Read bounded host and Revit log tails for diagnosis.",
@@ -311,25 +152,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "OpenRevitDocumentRequest",
     responseTypeName: "OpenRevitDocumentData",
-    requestShape: [
-      {
-        name: "path",
-        type: "string",
-        required: true,
-      },
-    ],
-    responseShape: [
-      {
-        name: "document",
-        type: "RevitDocumentSummary",
-        required: true,
-      },
-      {
-        name: "session",
-        type: "RevitDocumentSessionContextData",
-        required: true,
-      },
-    ],
     displayName: "Open Revit Document",
     domain: "revit",
     description: "Open and activate a local Revit document in the connected Revit session.",
@@ -367,65 +189,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "ConceptEvidenceRequest",
     responseTypeName: "ConceptEvidenceData",
-    requestShape: [
-      {
-        name: "budget",
-        type: "RevitDataOutputBudget",
-        required: false,
-      },
-      {
-        name: "conceptHints",
-        type: "array\u003Cstring\u003E",
-        required: false,
-      },
-      {
-        name: "includeBindings",
-        type: "boolean",
-        required: false,
-      },
-      {
-        name: "includeSchedules",
-        type: "boolean",
-        required: false,
-      },
-      {
-        name: "query",
-        type: "string",
-        required: false,
-      },
-      {
-        name: "subjectHints",
-        type: "array\u003Cstring\u003E",
-        required: false,
-      },
-    ],
-    responseShape: [
-      {
-        name: "concepts",
-        type: "array\u003CConceptEvidenceCard\u003E",
-        required: true,
-      },
-      {
-        name: "evidenceCollectedAtUtc",
-        type: "string",
-        required: false,
-      },
-      {
-        name: "issues",
-        type: "array\u003CRevitDataIssue\u003E",
-        required: true,
-      },
-      {
-        name: "page",
-        type: "RevitDataResultPage",
-        required: false,
-      },
-      {
-        name: "primitiveCacheHit",
-        type: "boolean | null",
-        required: false,
-      },
-    ],
     displayName: "Get Concept Evidence",
     domain: "revit",
     description:
@@ -473,35 +236,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "ElectricalCircuitsCatalogRequest",
     responseTypeName: "ElectricalCircuitsCatalogData",
-    requestShape: [
-      {
-        name: "filter",
-        type: "ElectricalCircuitFilter",
-        required: false,
-      },
-      {
-        name: "options",
-        type: "ElectricalCircuitsCatalogOptions",
-        required: false,
-      },
-    ],
-    responseShape: [
-      {
-        name: "entries",
-        type: "array\u003CElectricalCircuitCatalogEntry\u003E",
-        required: true,
-      },
-      {
-        name: "filterReport",
-        type: "ElectricalCatalogFilterReport",
-        required: false,
-      },
-      {
-        name: "issues",
-        type: "array\u003CRevitDataIssue\u003E",
-        required: true,
-      },
-    ],
     displayName: "Get Electrical Circuits Catalog",
     domain: "revit",
     description:
@@ -557,25 +291,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "ElectricalLoadClassificationsCatalogRequest",
     responseTypeName: "ElectricalLoadClassificationsCatalogData",
-    requestShape: [
-      {
-        name: "filter",
-        type: "ElectricalLoadClassificationFilter",
-        required: false,
-      },
-    ],
-    responseShape: [
-      {
-        name: "entries",
-        type: "array\u003CElectricalLoadClassificationCatalogEntry\u003E",
-        required: true,
-      },
-      {
-        name: "issues",
-        type: "array\u003CRevitDataIssue\u003E",
-        required: true,
-      },
-    ],
     displayName: "Get Electrical Load Classifications Catalog",
     domain: "revit",
     description: "Read electrical load classification facts from the active Revit document.",
@@ -604,30 +319,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "ElectricalPanelsCatalogRequest",
     responseTypeName: "ElectricalPanelsCatalogData",
-    requestShape: [
-      {
-        name: "filter",
-        type: "ElectricalPanelFilter",
-        required: false,
-      },
-    ],
-    responseShape: [
-      {
-        name: "entries",
-        type: "array\u003CElectricalPanelCatalogEntry\u003E",
-        required: true,
-      },
-      {
-        name: "filterReport",
-        type: "ElectricalCatalogFilterReport",
-        required: false,
-      },
-      {
-        name: "issues",
-        type: "array\u003CRevitDataIssue\u003E",
-        required: true,
-      },
-    ],
     displayName: "Get Electrical Panels Catalog",
     domain: "revit",
     description:
@@ -681,45 +372,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "LoadedFamiliesCatalogRequest",
     responseTypeName: "LoadedFamiliesCatalogData",
-    requestShape: [
-      {
-        name: "budget",
-        type: "RevitDataOutputBudget",
-        required: false,
-      },
-      {
-        name: "filter",
-        type: "LoadedFamiliesFilter",
-        required: false,
-      },
-      {
-        name: "projection",
-        type: "RevitDataProjectionRequest",
-        required: false,
-      },
-    ],
-    responseShape: [
-      {
-        name: "families",
-        type: "array\u003CLoadedFamilyCatalogEntry\u003E",
-        required: true,
-      },
-      {
-        name: "issues",
-        type: "array\u003CRevitDataIssue\u003E",
-        required: true,
-      },
-      {
-        name: "page",
-        type: "RevitDataResultPage",
-        required: false,
-      },
-      {
-        name: "summary",
-        type: "LoadedFamiliesCatalogSummary",
-        required: true,
-      },
-    ],
     displayName: "Get Loaded Families Catalog",
     domain: "revit",
     description: "Read loaded family and type facts from the active document.",
@@ -763,45 +415,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "LoadedFamiliesFilterFieldOptionsRequest",
     responseTypeName: "FieldOptionsData",
-    requestShape: [
-      {
-        name: "contextValues",
-        type: "record\u003Cstring\u003E",
-        required: false,
-      },
-      {
-        name: "propertyPath",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "sourceKey",
-        type: "string",
-        required: true,
-      },
-    ],
-    responseShape: [
-      {
-        name: "allowsCustomValue",
-        type: "boolean",
-        required: true,
-      },
-      {
-        name: "items",
-        type: "array\u003CFieldOptionItem\u003E",
-        required: true,
-      },
-      {
-        name: "mode",
-        type: "enum:FieldOptionsMode",
-        required: true,
-      },
-      {
-        name: "sourceKey",
-        type: "string",
-        required: true,
-      },
-    ],
     displayName: "Get Loaded Families Filter Field Options",
     domain: "revit",
     description: "Read document-specific option values for loaded-family query filters.",
@@ -830,19 +443,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "NoRequest",
     responseTypeName: "SchemaData",
-    requestShape: [],
-    responseShape: [
-      {
-        name: "fragmentSchemaJson",
-        type: "string",
-        required: false,
-      },
-      {
-        name: "schemaJson",
-        type: "string",
-        required: true,
-      },
-    ],
     displayName: "Get Loaded Families Filter Schema",
     domain: "revit",
     description: "Read the filter schema for loaded-family catalog and matrix queries.",
@@ -871,50 +471,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "ProjectParameterBindingsRequest",
     responseTypeName: "ProjectParameterBindingsData",
-    requestShape: [
-      {
-        name: "bindingFilter",
-        type: "ProjectParameterBindingsFilter",
-        required: false,
-      },
-      {
-        name: "budget",
-        type: "RevitDataOutputBudget",
-        required: false,
-      },
-      {
-        name: "filter",
-        type: "LoadedFamiliesFilter",
-        required: false,
-      },
-      {
-        name: "projection",
-        type: "RevitDataProjectionRequest",
-        required: false,
-      },
-    ],
-    responseShape: [
-      {
-        name: "entries",
-        type: "array\u003CProjectParameterBindingEntry\u003E",
-        required: true,
-      },
-      {
-        name: "issues",
-        type: "array\u003CRevitDataIssue\u003E",
-        required: true,
-      },
-      {
-        name: "page",
-        type: "RevitDataResultPage",
-        required: false,
-      },
-      {
-        name: "summary",
-        type: "ProjectParameterBindingsSummary",
-        required: true,
-      },
-    ],
     displayName: "Get Project Parameter Bindings",
     domain: "revit",
     description:
@@ -968,95 +524,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "ParameterEvidenceRequest",
     responseTypeName: "ParameterEvidenceData",
-    requestShape: [
-      {
-        name: "budget",
-        type: "RevitDataOutputBudget",
-        required: false,
-      },
-      {
-        name: "candidateParameters",
-        type: "array\u003CParameterReference\u003E",
-        required: false,
-      },
-      {
-        name: "categoryNames",
-        type: "array\u003Cstring\u003E",
-        required: false,
-      },
-      {
-        name: "elementIds",
-        type: "array\u003Cnumber\u003E",
-        required: false,
-      },
-      {
-        name: "elementUniqueIds",
-        type: "array\u003Cstring\u003E",
-        required: false,
-      },
-      {
-        name: "rankingMode",
-        type: "enum:ParameterEvidenceRankingMode",
-        required: false,
-      },
-      {
-        name: "scheduleIds",
-        type: "array\u003Cnumber\u003E",
-        required: false,
-      },
-      {
-        name: "scheduleNames",
-        type: "array\u003Cstring\u003E",
-        required: false,
-      },
-      {
-        name: "scheduleUniqueIds",
-        type: "array\u003Cstring\u003E",
-        required: false,
-      },
-      {
-        name: "scope",
-        type: "enum:RevitElementScope",
-        required: false,
-      },
-      {
-        name: "taskText",
-        type: "string",
-        required: false,
-      },
-      {
-        name: "useCache",
-        type: "boolean",
-        required: false,
-      },
-    ],
-    responseShape: [
-      {
-        name: "candidates",
-        type: "array\u003CParameterEvidenceCandidate\u003E",
-        required: true,
-      },
-      {
-        name: "evidenceCollectedAtUtc",
-        type: "string",
-        required: false,
-      },
-      {
-        name: "issues",
-        type: "array\u003CRevitDataIssue\u003E",
-        required: true,
-      },
-      {
-        name: "page",
-        type: "RevitDataResultPage",
-        required: false,
-      },
-      {
-        name: "primitiveCacheHit",
-        type: "boolean | null",
-        required: false,
-      },
-    ],
     displayName: "Get Parameter Evidence",
     domain: "revit",
     description:
@@ -1110,70 +577,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "ProjectBrowserRequest",
     responseTypeName: "ProjectBrowserData",
-    requestShape: [
-      {
-        name: "browserSnapshotId",
-        type: "string",
-        required: false,
-      },
-      {
-        name: "budget",
-        type: "RevitDataOutputBudget",
-        required: false,
-      },
-      {
-        name: "filter",
-        type: "ProjectBrowserFilter",
-        required: false,
-      },
-      {
-        name: "sections",
-        type: "array\u003Cenum:ProjectBrowserSection\u003E",
-        required: false,
-      },
-      {
-        name: "view",
-        type: "enum:ProjectBrowserResultView",
-        required: false,
-      },
-    ],
-    responseShape: [
-      {
-        name: "browserSnapshotId",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "issues",
-        type: "array\u003CRevitDataIssue\u003E",
-        required: true,
-      },
-      {
-        name: "items",
-        type: "array\u003CProjectBrowserItem\u003E",
-        required: true,
-      },
-      {
-        name: "nearestMatches",
-        type: "array\u003CProjectBrowserNearestMatch\u003E",
-        required: true,
-      },
-      {
-        name: "organizations",
-        type: "array\u003CProjectBrowserOrganizationSummary\u003E",
-        required: true,
-      },
-      {
-        name: "page",
-        type: "RevitDataResultPage",
-        required: false,
-      },
-      {
-        name: "view",
-        type: "enum:ProjectBrowserResultView",
-        required: true,
-      },
-    ],
     displayName: "Get Project Browser",
     domain: "revit",
     description:
@@ -1228,145 +631,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "ProjectIndexRequest",
     responseTypeName: "ProjectIndexData",
-    requestShape: [
-      {
-        name: "browserFilter",
-        type: "ProjectBrowserFilter",
-        required: false,
-      },
-      {
-        name: "browserSections",
-        type: "array\u003Cenum:ProjectBrowserSection\u003E",
-        required: false,
-      },
-      {
-        name: "budget",
-        type: "RevitDataOutputBudget",
-        required: false,
-      },
-      {
-        name: "categoryNames",
-        type: "array\u003Cstring\u003E",
-        required: false,
-      },
-      {
-        name: "familyNameContains",
-        type: "array\u003Cstring\u003E",
-        required: false,
-      },
-      {
-        name: "includeBrowserProvenance",
-        type: "boolean",
-        required: false,
-      },
-      {
-        name: "includeModelContext",
-        type: "boolean",
-        required: false,
-      },
-      {
-        name: "includeUnplacedSchedules",
-        type: "boolean",
-        required: false,
-      },
-      {
-        name: "includeUnplacedViews",
-        type: "boolean",
-        required: false,
-      },
-      {
-        name: "levelNames",
-        type: "array\u003Cstring\u003E",
-        required: false,
-      },
-      {
-        name: "projection",
-        type: "RevitDataProjectionRequest",
-        required: false,
-      },
-      {
-        name: "scheduleNameContains",
-        type: "array\u003Cstring\u003E",
-        required: false,
-      },
-      {
-        name: "searchText",
-        type: "string",
-        required: false,
-      },
-      {
-        name: "sections",
-        type: "array\u003Cenum:ProjectIndexSection\u003E",
-        required: false,
-      },
-      {
-        name: "sheetNameContains",
-        type: "array\u003Cstring\u003E",
-        required: false,
-      },
-      {
-        name: "sheetNumberContains",
-        type: "array\u003Cstring\u003E",
-        required: false,
-      },
-    ],
-    responseShape: [
-      {
-        name: "browserOrganizations",
-        type: "array\u003CProjectBrowserOrganizationSummary\u003E",
-        required: true,
-      },
-      {
-        name: "categories",
-        type: "array\u003CProjectIndexCategoryEntry\u003E",
-        required: true,
-      },
-      {
-        name: "families",
-        type: "array\u003CProjectIndexFamilyEntry\u003E",
-        required: true,
-      },
-      {
-        name: "issues",
-        type: "array\u003CRevitDataIssue\u003E",
-        required: true,
-      },
-      {
-        name: "levels",
-        type: "array\u003CProjectIndexLevelEntry\u003E",
-        required: true,
-      },
-      {
-        name: "modelContext",
-        type: "ProjectIndexModelContext",
-        required: false,
-      },
-      {
-        name: "page",
-        type: "RevitDataResultPage",
-        required: false,
-      },
-      {
-        name: "schedules",
-        type: "array\u003CProjectIndexScheduleEntry\u003E",
-        required: true,
-      },
-      {
-        name: "sheets",
-        type: "array\u003CProjectIndexSheetEntry\u003E",
-        required: true,
-      },
-      {
-        name: "summary",
-        type: "ProjectIndexSummary",
-        required: true,
-      },
-      {
-        name: "views",
-        type: "array\u003CProjectIndexViewEntry\u003E",
-        required: true,
-      },
-    ],
     displayName: "Get Project Index",
     domain: "revit",
     description:
@@ -1423,30 +687,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "RevitRecentDocumentsRequest",
     responseTypeName: "RevitRecentDocumentsData",
-    requestShape: [
-      {
-        name: "includeRegistryMru",
-        type: "boolean",
-        required: true,
-      },
-      {
-        name: "localFilesOnly",
-        type: "boolean",
-        required: true,
-      },
-      {
-        name: "revitYear",
-        type: "string",
-        required: false,
-      },
-    ],
-    responseShape: [
-      {
-        name: "documents",
-        type: "array\u003CRevitRecentDocumentEntry\u003E",
-        required: true,
-      },
-    ],
     displayName: "Get Revit Recent Documents",
     domain: "revit",
     description:
@@ -1485,95 +725,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "ScheduleCatalogRequest",
     responseTypeName: "ScheduleCatalogData",
-    requestShape: [
-      {
-        name: "browserFilter",
-        type: "ProjectBrowserFilter",
-        required: false,
-      },
-      {
-        name: "budget",
-        type: "RevitDataOutputBudget",
-        required: false,
-      },
-      {
-        name: "categoryNames",
-        type: "array\u003Cstring\u003E",
-        required: false,
-      },
-      {
-        name: "customParameterFilters",
-        type: "array\u003CScheduleCustomParameterFilter\u003E",
-        required: false,
-      },
-      {
-        name: "includeTemplates",
-        type: "boolean",
-        required: false,
-      },
-      {
-        name: "isEmpty",
-        type: "boolean | null",
-        required: false,
-      },
-      {
-        name: "placementScope",
-        type: "enum:SchedulePlacementScope",
-        required: false,
-      },
-      {
-        name: "projection",
-        type: "ScheduleCatalogProjection",
-        required: false,
-      },
-      {
-        name: "scheduleNameContains",
-        type: "string",
-        required: false,
-      },
-      {
-        name: "scheduleNamePrefix",
-        type: "string",
-        required: false,
-      },
-      {
-        name: "scheduleNames",
-        type: "array\u003Cstring\u003E",
-        required: false,
-      },
-      {
-        name: "sheetNameContains",
-        type: "string",
-        required: false,
-      },
-      {
-        name: "sheetNumberContains",
-        type: "string",
-        required: false,
-      },
-    ],
-    responseShape: [
-      {
-        name: "entries",
-        type: "array\u003CScheduleCatalogEntry\u003E",
-        required: true,
-      },
-      {
-        name: "issues",
-        type: "array\u003CRevitDataIssue\u003E",
-        required: true,
-      },
-      {
-        name: "page",
-        type: "RevitDataResultPage",
-        required: false,
-      },
-      {
-        name: "summary",
-        type: "ScheduleCatalogSummary",
-        required: false,
-      },
-    ],
     displayName: "Get Schedule Catalog",
     domain: "revit",
     description:
@@ -1627,29 +778,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "NoRequest",
     responseTypeName: "RevitDocumentSessionContextData",
-    requestShape: [],
-    responseShape: [
-      {
-        name: "activeDocument",
-        type: "RevitDocumentSummary",
-        required: false,
-      },
-      {
-        name: "hasActiveDocument",
-        type: "boolean",
-        required: true,
-      },
-      {
-        name: "openDocumentCount",
-        type: "number",
-        required: true,
-      },
-      {
-        name: "openDocuments",
-        type: "array\u003CRevitDocumentSummary\u003E",
-        required: true,
-      },
-    ],
     displayName: "Get Revit Document Session Context",
     domain: "revit",
     description: "Read open, active, and selected document session context from connected Revit.",
@@ -1678,34 +806,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "NoRequest",
     responseTypeName: "RevitAgentContextSummaryData",
-    requestShape: [],
-    responseShape: [
-      {
-        name: "activeView",
-        type: "RevitAgentActiveViewContext",
-        required: false,
-      },
-      {
-        name: "browser",
-        type: "RevitAgentBrowserSummary",
-        required: true,
-      },
-      {
-        name: "documents",
-        type: "RevitDocumentSessionContextData",
-        required: true,
-      },
-      {
-        name: "selection",
-        type: "RevitAgentSelectionContext",
-        required: true,
-      },
-      {
-        name: "visibleCategories",
-        type: "array\u003CRevitAgentVisibleCategorySummary\u003E",
-        required: true,
-      },
-    ],
     displayName: "Get Revit Agent Context Summary",
     domain: "revit",
     description:
@@ -1735,85 +835,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "RevitAgentViewRenderingStateRequest",
     responseTypeName: "RevitAgentViewRenderingStateData",
-    requestShape: [
-      {
-        name: "maxFiltersPerView",
-        type: "number",
-        required: true,
-      },
-      {
-        name: "maxHiddenCategoriesPerView",
-        type: "number",
-        required: true,
-      },
-      {
-        name: "maxLinksPerView",
-        type: "number",
-        required: true,
-      },
-      {
-        name: "maxViews",
-        type: "number",
-        required: true,
-      },
-      {
-        name: "maxWorksetsPerView",
-        type: "number",
-        required: true,
-      },
-      {
-        name: "scope",
-        type: "enum:RevitAgentViewRenderingScope",
-        required: true,
-      },
-      {
-        name: "viewIds",
-        type: "array\u003Cnumber\u003E",
-        required: false,
-      },
-      {
-        name: "viewUniqueIds",
-        type: "array\u003Cstring\u003E",
-        required: false,
-      },
-    ],
-    responseShape: [
-      {
-        name: "activeView",
-        type: "RevitAgentContextHandle",
-        required: false,
-      },
-      {
-        name: "apiLimitations",
-        type: "array\u003Cstring\u003E",
-        required: true,
-      },
-      {
-        name: "confidenceWarnings",
-        type: "array\u003Cstring\u003E",
-        required: true,
-      },
-      {
-        name: "issues",
-        type: "array\u003CRevitDataIssue\u003E",
-        required: true,
-      },
-      {
-        name: "likelyInspectionNextSteps",
-        type: "array\u003Cstring\u003E",
-        required: true,
-      },
-      {
-        name: "notInspected",
-        type: "array\u003Cstring\u003E",
-        required: true,
-      },
-      {
-        name: "observedState",
-        type: "array\u003CRevitAgentObservedViewState\u003E",
-        required: true,
-      },
-    ],
     displayName: "Get Revit Agent View Rendering State",
     domain: "revit",
     description:
@@ -1882,85 +903,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "RevitAgentVisibleContextRequest",
     responseTypeName: "RevitAgentVisibleContextData",
-    requestShape: [
-      {
-        name: "categoryNames",
-        type: "array\u003Cstring\u003E",
-        required: false,
-      },
-      {
-        name: "maxCategories",
-        type: "number",
-        required: true,
-      },
-      {
-        name: "maxElementHandlesPerCategory",
-        type: "number",
-        required: true,
-      },
-      {
-        name: "maxSampleElementsPerCategory",
-        type: "number",
-        required: true,
-      },
-      {
-        name: "maxViews",
-        type: "number",
-        required: true,
-      },
-      {
-        name: "projection",
-        type: "enum:RevitAgentVisibleProjection",
-        required: true,
-      },
-      {
-        name: "returnElementHandlesOnly",
-        type: "boolean",
-        required: true,
-      },
-      {
-        name: "scope",
-        type: "enum:RevitAgentVisibleContextScope",
-        required: true,
-      },
-      {
-        name: "viewIds",
-        type: "array\u003Cnumber\u003E",
-        required: false,
-      },
-      {
-        name: "viewUniqueIds",
-        type: "array\u003Cstring\u003E",
-        required: false,
-      },
-    ],
-    responseShape: [
-      {
-        name: "activeView",
-        type: "RevitAgentContextHandle",
-        required: false,
-      },
-      {
-        name: "categories",
-        type: "array\u003CRevitAgentVisibleCategorySummary\u003E",
-        required: true,
-      },
-      {
-        name: "issues",
-        type: "array\u003CRevitDataIssue\u003E",
-        required: true,
-      },
-      {
-        name: "totalVisibleElementCount",
-        type: "number",
-        required: true,
-      },
-      {
-        name: "views",
-        type: "array\u003CRevitAgentVisibleViewSummary\u003E",
-        required: false,
-      },
-    ],
     displayName: "Get Revit Agent Visible Context Summary",
     domain: "revit",
     description:
@@ -2015,45 +957,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "ElectricalPanelSchedulesQueryRequest",
     responseTypeName: "ElectricalPanelSchedulesQueryData",
-    requestShape: [
-      {
-        name: "query",
-        type: "ElectricalPanelSchedulesQuery",
-        required: false,
-      },
-    ],
-    responseShape: [
-      {
-        name: "documentTitle",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "entries",
-        type: "array\u003CElectricalPanelScheduleProjection\u003E",
-        required: true,
-      },
-      {
-        name: "issues",
-        type: "array\u003CRevitDataIssue\u003E",
-        required: true,
-      },
-      {
-        name: "queryKind",
-        type: "enum:ElectricalPanelSchedulesQueryKind",
-        required: true,
-      },
-      {
-        name: "requestedScheduleCount",
-        type: "number",
-        required: true,
-      },
-      {
-        name: "resolvedScheduleCount",
-        type: "number",
-        required: true,
-      },
-    ],
     displayName: "Get Electrical Panel Schedules Query",
     domain: "revit",
     description:
@@ -2109,50 +1012,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "ElementContextQueryRequest",
     responseTypeName: "ElementContextQueryData",
-    requestShape: [
-      {
-        name: "query",
-        type: "ElementContextQuery",
-        required: false,
-      },
-    ],
-    responseShape: [
-      {
-        name: "documentTitle",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "entries",
-        type: "array\u003CElementContextEntry\u003E",
-        required: true,
-      },
-      {
-        name: "isFamilyDocument",
-        type: "boolean",
-        required: true,
-      },
-      {
-        name: "issues",
-        type: "array\u003CRevitDataIssue\u003E",
-        required: true,
-      },
-      {
-        name: "queryKind",
-        type: "enum:ElementContextQueryKind",
-        required: true,
-      },
-      {
-        name: "requestedElementCount",
-        type: "number",
-        required: true,
-      },
-      {
-        name: "resolvedElementCount",
-        type: "number",
-        required: true,
-      },
-    ],
     displayName: "Get Element Context Query",
     domain: "revit",
     description:
@@ -2213,50 +1072,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "ScheduleQueryRequest",
     responseTypeName: "ScheduleQueryData",
-    requestShape: [
-      {
-        name: "query",
-        type: "ScheduleQuery",
-        required: false,
-      },
-    ],
-    responseShape: [
-      {
-        name: "documentTitle",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "entries",
-        type: "array\u003CScheduleRenderedScheduleEntry\u003E",
-        required: true,
-      },
-      {
-        name: "issues",
-        type: "array\u003CRevitDataIssue\u003E",
-        required: true,
-      },
-      {
-        name: "page",
-        type: "RevitDataResultPage",
-        required: false,
-      },
-      {
-        name: "queryKind",
-        type: "enum:ScheduleQueryKind",
-        required: true,
-      },
-      {
-        name: "requestedScheduleCount",
-        type: "number",
-        required: true,
-      },
-      {
-        name: "resolvedScheduleCount",
-        type: "number",
-        required: true,
-      },
-    ],
     displayName: "Get Schedule Query",
     domain: "revit",
     description: "Read schedule rows and field values from the active document.",
@@ -2301,40 +1116,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "SheetDetailRequest",
     responseTypeName: "SheetDetailData",
-    requestShape: [
-      {
-        name: "budget",
-        type: "RevitDataOutputBudget",
-        required: false,
-      },
-      {
-        name: "projection",
-        type: "SheetDetailProjection",
-        required: false,
-      },
-      {
-        name: "references",
-        type: "SheetReferenceRequest",
-        required: false,
-      },
-    ],
-    responseShape: [
-      {
-        name: "issues",
-        type: "array\u003CRevitDataIssue\u003E",
-        required: true,
-      },
-      {
-        name: "page",
-        type: "RevitDataResultPage",
-        required: true,
-      },
-      {
-        name: "sheets",
-        type: "array\u003CSheetDetailEntry\u003E",
-        required: true,
-      },
-    ],
     displayName: "Get Sheet Details",
     domain: "revit",
     description:
@@ -2389,35 +1170,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "LoadedFamiliesMatrixRequest",
     responseTypeName: "LoadedFamiliesMatrixData",
-    requestShape: [
-      {
-        name: "budget",
-        type: "RevitDataOutputBudget",
-        required: false,
-      },
-      {
-        name: "filter",
-        type: "LoadedFamiliesFilter",
-        required: false,
-      },
-    ],
-    responseShape: [
-      {
-        name: "families",
-        type: "array\u003CLoadedFamilyMatrixFamily\u003E",
-        required: true,
-      },
-      {
-        name: "issues",
-        type: "array\u003CRevitDataIssue\u003E",
-        required: true,
-      },
-      {
-        name: "page",
-        type: "RevitDataResultPage",
-        required: false,
-      },
-    ],
     displayName: "Get Loaded Families Matrix",
     domain: "revit",
     description: "Read a matrix projection of loaded family/type facts from the active document.",
@@ -2456,75 +1208,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "ParameterCoverageRequest",
     responseTypeName: "ParameterCoverageData",
-    requestShape: [
-      {
-        name: "budget",
-        type: "RevitDataOutputBudget",
-        required: false,
-      },
-      {
-        name: "categoryNames",
-        type: "array\u003Cstring\u003E",
-        required: false,
-      },
-      {
-        name: "defaultValues",
-        type: "array\u003Cstring\u003E",
-        required: false,
-      },
-      {
-        name: "elementIds",
-        type: "array\u003Cnumber\u003E",
-        required: false,
-      },
-      {
-        name: "elementUniqueIds",
-        type: "array\u003Cstring\u003E",
-        required: false,
-      },
-      {
-        name: "lookupPreference",
-        type: "enum:RevitParameterLookupPreference",
-        required: false,
-      },
-      {
-        name: "parameters",
-        type: "array\u003CParameterReference\u003E",
-        required: false,
-      },
-      {
-        name: "scope",
-        type: "enum:RevitElementScope",
-        required: false,
-      },
-      {
-        name: "treatWhitespaceAsBlank",
-        type: "boolean",
-        required: false,
-      },
-    ],
-    responseShape: [
-      {
-        name: "issues",
-        type: "array\u003CRevitDataIssue\u003E",
-        required: true,
-      },
-      {
-        name: "page",
-        type: "RevitDataResultPage",
-        required: false,
-      },
-      {
-        name: "parameters",
-        type: "array\u003CParameterCoverageParameterEntry\u003E",
-        required: true,
-      },
-      {
-        name: "totalElements",
-        type: "number",
-        required: true,
-      },
-    ],
     displayName: "Get Parameter Coverage Matrix",
     domain: "revit",
     description:
@@ -2564,120 +1247,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "ScheduleCoverageRequest",
     responseTypeName: "ScheduleCoverageData",
-    requestShape: [
-      {
-        name: "budget",
-        type: "RevitDataOutputBudget",
-        required: false,
-      },
-      {
-        name: "categoryNames",
-        type: "array\u003Cstring\u003E",
-        required: false,
-      },
-      {
-        name: "elementIds",
-        type: "array\u003Cnumber\u003E",
-        required: false,
-      },
-      {
-        name: "elementUniqueIds",
-        type: "array\u003Cstring\u003E",
-        required: false,
-      },
-      {
-        name: "includeElementSamples",
-        type: "boolean",
-        required: false,
-      },
-      {
-        name: "includeMatchedScheduleNames",
-        type: "boolean",
-        required: false,
-      },
-      {
-        name: "includeMissingElementHandles",
-        type: "boolean",
-        required: false,
-      },
-      {
-        name: "scheduleFilter",
-        type: "ScheduleCatalogRequest",
-        required: false,
-      },
-      {
-        name: "scheduleRoleScope",
-        type: "enum:ScheduleRoleScope",
-        required: false,
-      },
-      {
-        name: "scope",
-        type: "enum:RevitElementScope",
-        required: false,
-      },
-      {
-        name: "viewIds",
-        type: "array\u003Cnumber\u003E",
-        required: false,
-      },
-      {
-        name: "viewUniqueIds",
-        type: "array\u003Cstring\u003E",
-        required: false,
-      },
-    ],
-    responseShape: [
-      {
-        name: "coveredElements",
-        type: "number",
-        required: true,
-      },
-      {
-        name: "elements",
-        type: "array\u003CScheduleCoverageElementEntry\u003E",
-        required: true,
-      },
-      {
-        name: "issues",
-        type: "array\u003CRevitDataIssue\u003E",
-        required: true,
-      },
-      {
-        name: "matchedScheduleNames",
-        type: "array\u003Cstring\u003E",
-        required: false,
-      },
-      {
-        name: "missingElements",
-        type: "number",
-        required: true,
-      },
-      {
-        name: "missingHandles",
-        type: "array\u003CRevitElementHandle\u003E",
-        required: false,
-      },
-      {
-        name: "page",
-        type: "RevitDataResultPage",
-        required: false,
-      },
-      {
-        name: "roleSummaries",
-        type: "array\u003CScheduleCoverageRoleSummary\u003E",
-        required: false,
-      },
-      {
-        name: "scheduleCount",
-        type: "number",
-        required: true,
-      },
-      {
-        name: "totalElements",
-        type: "number",
-        required: true,
-      },
-    ],
     displayName: "Get Schedule Coverage Matrix",
     domain: "revit",
     description:
@@ -2734,45 +1303,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "ScheduleProfilesQueryRequest",
     responseTypeName: "ScheduleProfilesQueryData",
-    requestShape: [
-      {
-        name: "query",
-        type: "ScheduleProfilesQuery",
-        required: false,
-      },
-    ],
-    responseShape: [
-      {
-        name: "documentTitle",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "entries",
-        type: "array\u003CScheduleProfileQueryEntry\u003E",
-        required: true,
-      },
-      {
-        name: "issues",
-        type: "array\u003CRevitDataIssue\u003E",
-        required: true,
-      },
-      {
-        name: "queryKind",
-        type: "enum:ScheduleProfilesQueryKind",
-        required: true,
-      },
-      {
-        name: "requestedScheduleCount",
-        type: "number",
-        required: true,
-      },
-      {
-        name: "resolvedScheduleCount",
-        type: "number",
-        required: true,
-      },
-    ],
     displayName: "Get Schedule Profiles Query",
     domain: "revit",
     description: "Read schedule profile projections from the active document.",
@@ -2816,60 +1346,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "RevitAgentContextResolveRequest",
     responseTypeName: "RevitAgentContextResolveData",
-    requestShape: [
-      {
-        name: "compact",
-        type: "boolean",
-        required: true,
-      },
-      {
-        name: "handleKinds",
-        type: "array\u003Cenum:RevitAgentContextHandleKind\u003E",
-        required: false,
-      },
-      {
-        name: "maxPerHandleKind",
-        type: "number | null",
-        required: false,
-      },
-      {
-        name: "maxResults",
-        type: "number",
-        required: true,
-      },
-      {
-        name: "referenceText",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "requirePrintedContext",
-        type: "boolean",
-        required: true,
-      },
-    ],
-    responseShape: [
-      {
-        name: "candidateCount",
-        type: "number",
-        required: true,
-      },
-      {
-        name: "candidates",
-        type: "array\u003CRevitAgentContextCandidate\u003E",
-        required: true,
-      },
-      {
-        name: "issues",
-        type: "array\u003CRevitDataIssue\u003E",
-        required: true,
-      },
-      {
-        name: "referenceText",
-        type: "string",
-        required: true,
-      },
-    ],
     displayName: "Resolve Revit Agent Context Reference",
     domain: "revit",
     description:
@@ -2917,85 +1393,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "ExecuteRevitScriptRequest",
     responseTypeName: "ExecuteRevitScriptData",
-    requestShape: [
-      {
-        name: "artifactRunName",
-        type: "string",
-        required: false,
-      },
-      {
-        name: "permissionMode",
-        type: "enum:ScriptPermissionMode",
-        required: true,
-      },
-      {
-        name: "scriptContent",
-        type: "string",
-        required: false,
-      },
-      {
-        name: "sourceKind",
-        type: "enum:ScriptExecutionSourceKind",
-        required: true,
-      },
-      {
-        name: "sourceName",
-        type: "string",
-        required: false,
-      },
-      {
-        name: "sourcePath",
-        type: "string",
-        required: false,
-      },
-      {
-        name: "workspaceKey",
-        type: "string",
-        required: true,
-      },
-    ],
-    responseShape: [
-      {
-        name: "artifacts",
-        type: "array\u003CScriptArtifactData\u003E",
-        required: false,
-      },
-      {
-        name: "containerTypeName",
-        type: "string",
-        required: false,
-      },
-      {
-        name: "diagnostics",
-        type: "array\u003CScriptDiagnostic\u003E",
-        required: true,
-      },
-      {
-        name: "executionId",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "output",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "revitVersion",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "status",
-        type: "enum:ScriptExecutionStatus",
-        required: true,
-      },
-      {
-        name: "targetFramework",
-        type: "string",
-        required: true,
-      },
-    ],
     displayName: "Execute Revit Script",
     domain: "scripting",
     description:
@@ -3025,55 +1422,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "ScriptPodExportRequest",
     responseTypeName: "ScriptPodExportData",
-    requestShape: [
-      {
-        name: "archivePath",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "workspaceKey",
-        type: "string",
-        required: true,
-      },
-    ],
-    responseShape: [
-      {
-        name: "archiveEntries",
-        type: "array\u003Cstring\u003E",
-        required: true,
-      },
-      {
-        name: "archivePath",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "diagnostics",
-        type: "array\u003CScriptDiagnostic\u003E",
-        required: true,
-      },
-      {
-        name: "manifest",
-        type: "ScriptPodManifestSummaryData",
-        required: false,
-      },
-      {
-        name: "status",
-        type: "enum:ScriptPodTransferStatus",
-        required: true,
-      },
-      {
-        name: "workspaceKey",
-        type: "string",
-        required: false,
-      },
-      {
-        name: "workspaceRootPath",
-        type: "string",
-        required: false,
-      },
-    ],
     displayName: "Export Script Pod",
     domain: "scripting",
     description:
@@ -3103,60 +1451,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "ScriptPodImportRequest",
     responseTypeName: "ScriptPodImportData",
-    requestShape: [
-      {
-        name: "archivePath",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "workspaceKey",
-        type: "string",
-        required: false,
-      },
-    ],
-    responseShape: [
-      {
-        name: "archiveEntries",
-        type: "array\u003Cstring\u003E",
-        required: true,
-      },
-      {
-        name: "archivePath",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "diagnostics",
-        type: "array\u003CScriptDiagnostic\u003E",
-        required: true,
-      },
-      {
-        name: "generatedFiles",
-        type: "array\u003Cstring\u003E",
-        required: true,
-      },
-      {
-        name: "manifest",
-        type: "ScriptPodManifestSummaryData",
-        required: false,
-      },
-      {
-        name: "status",
-        type: "enum:ScriptPodTransferStatus",
-        required: true,
-      },
-      {
-        name: "workspaceKey",
-        type: "string",
-        required: false,
-      },
-      {
-        name: "workspaceRootPath",
-        type: "string",
-        required: false,
-      },
-    ],
     displayName: "Import Script Pod",
     domain: "scripting",
     description:
@@ -3186,85 +1480,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "ScriptWorkspaceBootstrapRequest",
     responseTypeName: "ScriptWorkspaceBootstrapData",
-    requestShape: [
-      {
-        name: "createSampleScript",
-        type: "boolean",
-        required: true,
-      },
-      {
-        name: "workspaceKey",
-        type: "string",
-        required: true,
-      },
-    ],
-    responseShape: [
-      {
-        name: "generatedFiles",
-        type: "array\u003Cstring\u003E",
-        required: true,
-      },
-      {
-        name: "productAgentsPath",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "productHomePath",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "productReadmePath",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "projectFilePath",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "revitVersion",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "runtimeAssemblyPath",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "sampleScriptPath",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "targetFramework",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "workspaceAgentsPath",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "workspaceKey",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "workspaceReadmePath",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "workspaceRootPath",
-        type: "string",
-        required: true,
-      },
-    ],
     displayName: "Bootstrap Script Workspace",
     domain: "scripting",
     description: "Create or update the host-owned C# Revit scripting workspace files.",
@@ -3293,50 +1508,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "OpenSettingsDocumentRequest",
     responseTypeName: "SettingsDocumentSnapshot",
-    requestShape: [
-      {
-        name: "documentId",
-        type: "SettingsDocumentId",
-        required: true,
-      },
-      {
-        name: "includeComposedContent",
-        type: "boolean",
-        required: true,
-      },
-    ],
-    responseShape: [
-      {
-        name: "capabilityHints",
-        type: "record\u003Cstring\u003E",
-        required: true,
-      },
-      {
-        name: "composedContent",
-        type: "string",
-        required: false,
-      },
-      {
-        name: "dependencies",
-        type: "array\u003CSettingsDocumentDependency\u003E",
-        required: true,
-      },
-      {
-        name: "metadata",
-        type: "SettingsDocumentMetadata",
-        required: true,
-      },
-      {
-        name: "rawContent",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "validation",
-        type: "SettingsValidationResult",
-        required: true,
-      },
-    ],
     displayName: "Open Settings Document",
     domain: "settings",
     description: "Read a settings document snapshot from the local settings workspace.",
@@ -3373,50 +1544,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "SaveSettingsDocumentRequest",
     responseTypeName: "SaveSettingsDocumentResult",
-    requestShape: [
-      {
-        name: "documentId",
-        type: "SettingsDocumentId",
-        required: true,
-      },
-      {
-        name: "expectedVersionToken",
-        type: "SettingsVersionToken",
-        required: false,
-      },
-      {
-        name: "rawContent",
-        type: "string",
-        required: true,
-      },
-    ],
-    responseShape: [
-      {
-        name: "conflictDetected",
-        type: "boolean",
-        required: true,
-      },
-      {
-        name: "conflictMessage",
-        type: "string",
-        required: false,
-      },
-      {
-        name: "metadata",
-        type: "SettingsDocumentMetadata",
-        required: true,
-      },
-      {
-        name: "validation",
-        type: "SettingsValidationResult",
-        required: true,
-      },
-      {
-        name: "writeApplied",
-        type: "boolean",
-        required: true,
-      },
-    ],
     displayName: "Save Settings Document",
     domain: "settings",
     description: "Write a settings document to the local settings workspace.",
@@ -3445,30 +1572,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "ValidateSettingsDocumentRequest",
     responseTypeName: "SettingsValidationResult",
-    requestShape: [
-      {
-        name: "documentId",
-        type: "SettingsDocumentId",
-        required: true,
-      },
-      {
-        name: "rawContent",
-        type: "string",
-        required: true,
-      },
-    ],
-    responseShape: [
-      {
-        name: "isValid",
-        type: "boolean",
-        required: true,
-      },
-      {
-        name: "issues",
-        type: "array\u003CSettingsValidationIssue\u003E",
-        required: true,
-      },
-    ],
     displayName: "Validate Settings Document",
     domain: "settings",
     description: "Validate a settings document and return diagnostics without saving it.",
@@ -3506,55 +1609,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "FieldOptionsRequest",
     responseTypeName: "FieldOptionsData",
-    requestShape: [
-      {
-        name: "contextValues",
-        type: "record\u003Cstring\u003E",
-        required: false,
-      },
-      {
-        name: "moduleKey",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "propertyPath",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "rootKey",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "sourceKey",
-        type: "string",
-        required: true,
-      },
-    ],
-    responseShape: [
-      {
-        name: "allowsCustomValue",
-        type: "boolean",
-        required: true,
-      },
-      {
-        name: "items",
-        type: "array\u003CFieldOptionItem\u003E",
-        required: true,
-      },
-      {
-        name: "mode",
-        type: "enum:FieldOptionsMode",
-        required: true,
-      },
-      {
-        name: "sourceKey",
-        type: "string",
-        required: true,
-      },
-    ],
     displayName: "Get Field Options",
     domain: "settings",
     description: "Read document-specific field option values for a settings module.",
@@ -3584,39 +1638,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "NoRequest",
     responseTypeName: "HostProbeData",
-    requestShape: [],
-    responseShape: [
-      {
-        name: "bridgeContractVersion",
-        type: "number",
-        required: true,
-      },
-      {
-        name: "bridgeIsConnected",
-        type: "boolean",
-        required: true,
-      },
-      {
-        name: "bridgePath",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "disconnectReason",
-        type: "string",
-        required: false,
-      },
-      {
-        name: "hostContractVersion",
-        type: "number",
-        required: true,
-      },
-      {
-        name: "runtimeIdentity",
-        type: "string",
-        required: true,
-      },
-    ],
     displayName: "Get Host Probe",
     domain: "host",
     description: "Read Pe.Host health, version, and compatibility facts.",
@@ -3645,35 +1666,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "ParameterCatalogRequest",
     responseTypeName: "ParameterCatalogData",
-    requestShape: [
-      {
-        name: "contextValues",
-        type: "record\u003Cstring\u003E",
-        required: false,
-      },
-      {
-        name: "moduleKey",
-        type: "string",
-        required: true,
-      },
-    ],
-    responseShape: [
-      {
-        name: "entries",
-        type: "array\u003CParameterCatalogEntry\u003E",
-        required: true,
-      },
-      {
-        name: "familyCount",
-        type: "number",
-        required: true,
-      },
-      {
-        name: "typeCount",
-        type: "number",
-        required: true,
-      },
-    ],
     displayName: "Get Parameter Catalog",
     domain: "settings",
     description:
@@ -3704,30 +1696,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "SchemaRequest",
     responseTypeName: "SchemaData",
-    requestShape: [
-      {
-        name: "moduleKey",
-        type: "string",
-        required: true,
-      },
-      {
-        name: "rootKey",
-        type: "string",
-        required: true,
-      },
-    ],
-    responseShape: [
-      {
-        name: "fragmentSchemaJson",
-        type: "string",
-        required: false,
-      },
-      {
-        name: "schemaJson",
-        type: "string",
-        required: true,
-      },
-    ],
     displayName: "Get Schema",
     domain: "settings",
     description: "Read a settings schema from the connected Revit runtime.",
@@ -3757,59 +1725,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "NoRequest",
     responseTypeName: "HostSessionSummaryData",
-    requestShape: [],
-    responseShape: [
-      {
-        name: "activeDocument",
-        type: "HostActiveDocumentSummary",
-        required: false,
-      },
-      {
-        name: "availableModules",
-        type: "array\u003CHostModuleDescriptor\u003E",
-        required: true,
-      },
-      {
-        name: "bridgeIsConnected",
-        type: "boolean",
-        required: true,
-      },
-      {
-        name: "openDocumentCount",
-        type: "number",
-        required: true,
-      },
-      {
-        name: "processId",
-        type: "number | null",
-        required: false,
-      },
-      {
-        name: "revitVersion",
-        type: "string",
-        required: false,
-      },
-      {
-        name: "runtimeAssemblies",
-        type: "array\u003CHostRuntimeAssemblyData\u003E",
-        required: true,
-      },
-      {
-        name: "runtimeFramework",
-        type: "string",
-        required: false,
-      },
-      {
-        name: "sessionId",
-        type: "string",
-        required: false,
-      },
-      {
-        name: "workbenchResources",
-        type: "HostWorkbenchResourcesData",
-        required: true,
-      },
-    ],
     displayName: "Get Host Session Summary",
     domain: "host",
     description:
@@ -3839,50 +1754,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "SettingsTreeRequest",
     responseTypeName: "SettingsDiscoveryResult",
-    requestShape: [
-      {
-        name: "includeFragments",
-        type: "boolean",
-        required: false,
-      },
-      {
-        name: "includeSchemas",
-        type: "boolean",
-        required: false,
-      },
-      {
-        name: "moduleKey",
-        type: "string",
-        required: false,
-      },
-      {
-        name: "recursive",
-        type: "boolean",
-        required: false,
-      },
-      {
-        name: "rootKey",
-        type: "string",
-        required: false,
-      },
-      {
-        name: "subDirectory",
-        type: "string",
-        required: false,
-      },
-    ],
-    responseShape: [
-      {
-        name: "files",
-        type: "array\u003CSettingsFileEntry\u003E",
-        required: true,
-      },
-      {
-        name: "root",
-        type: "SettingsDirectoryNode",
-        required: true,
-      },
-    ],
     displayName: "Discover Settings Tree",
     domain: "settings",
     description: "Read the local settings tree for profiles, modules, and documents.",
@@ -3911,14 +1782,6 @@ export const hostOperations = {
     exposure: "PublicHttp",
     requestTypeName: "GetSettingsWorkspacesRequest",
     responseTypeName: "SettingsWorkspacesData",
-    requestShape: [],
-    responseShape: [
-      {
-        name: "workspaces",
-        type: "array\u003CSettingsWorkspaceDescriptor\u003E",
-        required: true,
-      },
-    ],
     displayName: "Get Workspaces",
     domain: "settings",
     description: "Read available settings workspaces and storage roots.",

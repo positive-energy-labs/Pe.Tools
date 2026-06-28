@@ -48,7 +48,14 @@ internal static class HostEndpointMapper {
                 cancellationToken
             );
         } catch (HostOperationException ex) {
-            return CreateProblemResult(ex.StatusCode, ex.Message, ResolveRequestId(httpContext), ex.Issues);
+            return HostProblemResult.Create(
+                ex.StatusCode,
+                ex.Message,
+                ResolveRequestId(httpContext),
+                operation.Definition.Key,
+                ex.Issues,
+                ex
+            );
         }
     }
 
@@ -324,23 +331,6 @@ internal static class HostEndpointMapper {
                 $"Use one of: {expected}."
             )).ToList()
         );
-    }
-
-    private static IResult CreateProblemResult(
-        int statusCode,
-        string detail,
-        string requestId,
-        IReadOnlyList<ValidationIssue>? issues
-    ) {
-        var problem = new Microsoft.AspNetCore.Mvc.ProblemDetails {
-            Detail = detail,
-            Status = statusCode
-        };
-        problem.Extensions["requestId"] = requestId;
-        if (issues is { Count: > 0 })
-            problem.Extensions["issues"] = issues;
-
-        return Results.Problem(problem);
     }
 
     private static string ToCamelCase(string value) => char.ToLowerInvariant(value[0]) + value[1..];
