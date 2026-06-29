@@ -24,6 +24,10 @@
     "./call": {
       "types": "./src/call.ts",
       "import": "./src/call.ts"
+    },
+    "./settings-validation": {
+      "types": "./src/settings-validation.ts",
+      "import": "./src/settings-validation.ts"
     }
   },
   "publishConfig": {
@@ -38,6 +42,7 @@
   },
   "dependencies": {
     "@pe/host-generated": "workspace:*",
+    "ajv": "^8.17.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {

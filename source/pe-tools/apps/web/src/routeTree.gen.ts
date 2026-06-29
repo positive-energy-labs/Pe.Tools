@@ -9,15 +9,27 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from "./routes/__root";
+import { Route as SettingsPrototypeRouteImport } from "./routes/settings-prototype";
 import { Route as OpsRouteImport } from "./routes/ops";
+import { Route as FamilyMatrixRouteImport } from "./routes/family-matrix";
 import { Route as DesignSystemRouteImport } from "./routes/design-system";
 import { Route as ChatRouteImport } from "./routes/chat";
 import { Route as IndexRouteImport } from "./routes/index";
 import { Route as DemoTanstackQueryRouteImport } from "./routes/demo/tanstack-query";
 
+const SettingsPrototypeRoute = SettingsPrototypeRouteImport.update({
+  id: "/settings-prototype",
+  path: "/settings-prototype",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const OpsRoute = OpsRouteImport.update({
   id: "/ops",
   path: "/ops",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const FamilyMatrixRoute = FamilyMatrixRouteImport.update({
+  id: "/family-matrix",
+  path: "/family-matrix",
   getParentRoute: () => rootRouteImport,
 } as any);
 const DesignSystemRoute = DesignSystemRouteImport.update({
@@ -45,14 +57,18 @@ export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
   "/chat": typeof ChatRoute;
   "/design-system": typeof DesignSystemRoute;
+  "/family-matrix": typeof FamilyMatrixRoute;
   "/ops": typeof OpsRoute;
+  "/settings-prototype": typeof SettingsPrototypeRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute;
   "/chat": typeof ChatRoute;
   "/design-system": typeof DesignSystemRoute;
+  "/family-matrix": typeof FamilyMatrixRoute;
   "/ops": typeof OpsRoute;
+  "/settings-prototype": typeof SettingsPrototypeRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
 }
 export interface FileRoutesById {
@@ -60,20 +76,38 @@ export interface FileRoutesById {
   "/": typeof IndexRoute;
   "/chat": typeof ChatRoute;
   "/design-system": typeof DesignSystemRoute;
+  "/family-matrix": typeof FamilyMatrixRoute;
   "/ops": typeof OpsRoute;
+  "/settings-prototype": typeof SettingsPrototypeRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
-  fullPaths: "/" | "/chat" | "/design-system" | "/ops" | "/demo/tanstack-query";
+  fullPaths:
+    | "/"
+    | "/chat"
+    | "/design-system"
+    | "/family-matrix"
+    | "/ops"
+    | "/settings-prototype"
+    | "/demo/tanstack-query";
   fileRoutesByTo: FileRoutesByTo;
-  to: "/" | "/chat" | "/design-system" | "/ops" | "/demo/tanstack-query";
+  to:
+    | "/"
+    | "/chat"
+    | "/design-system"
+    | "/family-matrix"
+    | "/ops"
+    | "/settings-prototype"
+    | "/demo/tanstack-query";
   id:
     | "__root__"
     | "/"
     | "/chat"
     | "/design-system"
+    | "/family-matrix"
     | "/ops"
+    | "/settings-prototype"
     | "/demo/tanstack-query";
   fileRoutesById: FileRoutesById;
 }
@@ -81,17 +115,33 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute;
   ChatRoute: typeof ChatRoute;
   DesignSystemRoute: typeof DesignSystemRoute;
+  FamilyMatrixRoute: typeof FamilyMatrixRoute;
   OpsRoute: typeof OpsRoute;
+  SettingsPrototypeRoute: typeof SettingsPrototypeRoute;
   DemoTanstackQueryRoute: typeof DemoTanstackQueryRoute;
 }
 
 declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
+    "/settings-prototype": {
+      id: "/settings-prototype";
+      path: "/settings-prototype";
+      fullPath: "/settings-prototype";
+      preLoaderRoute: typeof SettingsPrototypeRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/ops": {
       id: "/ops";
       path: "/ops";
       fullPath: "/ops";
       preLoaderRoute: typeof OpsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/family-matrix": {
+      id: "/family-matrix";
+      path: "/family-matrix";
+      fullPath: "/family-matrix";
+      preLoaderRoute: typeof FamilyMatrixRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/design-system": {
@@ -129,7 +179,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ChatRoute: ChatRoute,
   DesignSystemRoute: DesignSystemRoute,
+  FamilyMatrixRoute: FamilyMatrixRoute,
   OpsRoute: OpsRoute,
+  SettingsPrototypeRoute: SettingsPrototypeRoute,
   DemoTanstackQueryRoute: DemoTanstackQueryRoute,
 };
 export const routeTree = rootRouteImport
