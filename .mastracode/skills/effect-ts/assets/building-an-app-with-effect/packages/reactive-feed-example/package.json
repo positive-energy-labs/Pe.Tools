@@ -1,0 +1,23 @@
+{
+  "name": "@example/reactive-feed-example",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@effect-atom/atom-react": "^0.1.15",
+    "effect": "^3.17.9",
+    "@vitejs/plugin-react": "latest",
+    "vite": "latest",
+    "typescript": "^5.8.2",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "latest",
+    "@types/react-dom": "latest"
+  }
+}
