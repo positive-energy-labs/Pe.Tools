@@ -1,4 +1,4 @@
-import { runRuntimeWorkbenchWeb } from "@pe/runtime";
+import { runRuntimeAgentControllerWeb } from "@pe/runtime";
 import {
   closePeCodeRuntime,
   createPeCodeRuntime,
@@ -20,7 +20,7 @@ export async function runPeCodeWeb(options: PeCodeWebOptions = {}): Promise<void
     modelId: options.modelId,
     additionalDirectories: options.additionalDirectories,
   };
-  await runRuntimeWorkbenchWeb<PeCodeTuiRuntimeOptions>({
+  await runRuntimeAgentControllerWeb<PeCodeTuiRuntimeOptions>({
     label: "peco",
     title: "Peco",
     createRuntime: async (runtimeOptions: PeCodeTuiRuntimeOptions) => {

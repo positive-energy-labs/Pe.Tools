@@ -114,7 +114,7 @@ test(
     const runtime = await createPeaRuntime({ workspaceRoot });
 
     try {
-      const agent = getRuntimeAgent(runtime.harness.getMastra(), "pea-agent");
+      const agent = getRuntimeAgent(runtime.controller.getMastra(), "pea-agent");
       const tools = await agent.listTools();
       expect(tools).toEqual(
         expect.objectContaining({
@@ -256,8 +256,8 @@ test(
       const threadId = runtime.session?.thread.getId();
       const resourceId = runtime.session?.identity.getResourceId();
       if (!threadId || !resourceId) throw new Error("Expected Pea runtime session thread.");
-      const mastra = runtime.harness.getMastra();
-      if (!mastra) throw new Error("Expected Pea runtime harness to expose Mastra.");
+      const mastra = runtime.controller.getMastra();
+      if (!mastra) throw new Error("Expected Pea runtime controller to expose Mastra.");
       const agent = getRuntimeAgent(mastra, "pea-agent");
       expect(agent.getMastraInstance()).toBe(mastra);
       expect(mastra.getAgentById("pea-agent")).toBe(agent);

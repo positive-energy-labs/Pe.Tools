@@ -1,7 +1,7 @@
 import path from "node:path";
 import { Agent } from "@mastra/core/agent";
-import type { Harness } from "@mastra/core/harness";
-import type { MastraModelConfig } from "@mastra/core/llm";
+import type { AgentController, AgentControllerRequestContext } from "@mastra/core/agent-controller";
+import { defaultGateways, type MastraModelConfig } from "@mastra/core/llm";
 import type { InputProcessor } from "@mastra/core/processors";
 import type { RequestContext } from "@mastra/core/request-context";
 import { TaskSignalProvider } from "@mastra/core/signals";
@@ -12,13 +12,12 @@ import {
   createMastraCodeAuthStorageContext,
   createPeaCloudGatewayRuntimeAuthProfile,
   createPeaProductStateStorageProfile,
-  createRuntimeHarness,
+  createRuntimeController,
   createRuntimeMemoryProfile,
   createRuntimeMemoryOptions,
   createSystemPromptCapture,
   createToolListCapture,
-  hasMastraCodeStoredAuth,
-  resolveMastraCodeModel,
+  resolveRuntimeModel,
   runRuntimeAcpAgent,
   type MastraCodeAuthStorage,
   type RuntimeCreateRequest,
@@ -54,7 +53,7 @@ export type PeaRuntimeServices = RuntimeHandleServices & {
 };
 
 export type PeaRuntimeHandle<TState extends Record<string, unknown> = Record<string, unknown>> =
-  RuntimeHandle<TState, PeaRuntimeServices, Harness<TState>>;
+  RuntimeHandle<TState, PeaRuntimeServices, AgentController<TState>>;
 
 export type PeaRuntimeAuthSource = "gateway" | "auto" | "api-key" | "oauth" | "mastra-gateway";
 
@@ -73,7 +72,7 @@ export async function createPeaRuntime(
   options: PeaTuiRuntimeOptions = {},
 ): Promise<PeaRuntimeHandle> {
   const productHomePath = resolvePeaProductHomePath();
-  const workspaceRoot = path.resolve(options.workspaceRoot ?? options.cwd ?? productHomePath);
+  const workspaceRoot = path.resolve(options.workspaceRoot ?? productHomePath);
   const hostBaseUrl = PeHostClient.resolveHostBaseUrl(options.hostBaseUrl);
   const workspaceKey = PeHostClient.resolveWorkspaceKey(options.workspaceKey);
   configurePeaProductToolContext({ hostBaseUrl, workspaceKey });
@@ -103,7 +102,7 @@ export async function createPeaRuntime(
     workspaceRoot,
   };
 
-  return createRuntimeHarness<Record<string, unknown>, PeaRuntimeServices>({
+  return createRuntimeController<Record<string, unknown>, PeaRuntimeServices>({
     request,
     config: {
       id: "pea",
@@ -118,6 +117,7 @@ export async function createPeaRuntime(
           agent: createPeaAgent(promptCapture.processor, toolCapture.wrap),
         },
       ],
+      gateways: defaultGateways,
       tools: peaProductTools,
       initialState: {
         currentModelId: options.modelId ?? defaultPeaAgentModelId,
@@ -127,8 +127,6 @@ export async function createPeaRuntime(
         bundledSkillCount: bundledPeaSkills.length,
         yolo: true,
       },
-      modelAuthChecker: (provider) =>
-        hasMastraCodeStoredAuth(authStorage, provider) ? true : undefined,
     },
     auth,
     authStorage,
@@ -243,7 +241,7 @@ export async function runPeaTui(options: PeaTuiRuntimeOptions = {}): Promise<voi
   if (!runtime.session) throw new Error("Expected Pea runtime session.");
   const { MastraTUI } = await import("mastracode/tui");
   const tuiOptions: MastraTUIOptions = {
-    harness: runtime.harness,
+    controller: runtime.controller,
     session: runtime.session,
     authStorage: runtime.authStorage,
     hookManager: runtime.hookManager,
@@ -259,9 +257,9 @@ export async function runPeaAcp(options: PeaTuiRuntimeOptions = {}): Promise<voi
   const runtime = await createPeaRuntime({ ...options, protocol: "acp" });
   if (!runtime.session) throw new Error("Expected Pea runtime session.");
   await runRuntimeAcpAgent({
-    harness: runtime.harness,
+    controller: runtime.controller,
     session: runtime.session,
-    modes: runtime.harness.listModes(),
+    modes: runtime.controller.listModes(),
     cleanup: () => runtime.close?.(),
   });
 }
@@ -290,52 +288,16 @@ function resolveCurrentModel(
   requestContext: RequestContext,
   fallbackModelId: string,
 ): Promise<MastraModelConfig> {
-  const harnessContext = readRecord(requestContext.get("harness"));
-  const session = readRecord(harnessContext.session);
-  const state = readHarnessSessionState(harnessContext);
-  const model = readRecord(session.model);
-  const getModel = model.get;
-  const selectedModelId = typeof getModel === "function" ? getModel.call(model) : undefined;
+  const controller = requestContext.get("controller") as
+    | AgentControllerRequestContext<{ currentModelId?: string }>
+    | undefined;
+  // session.modelId is the live selection ('' when none); getState().currentModelId is the
+  // initial/stored value. Prefer the selection, then stored, then the hard default.
   const modelId =
-    typeof selectedModelId === "string" && selectedModelId.length > 0
-      ? selectedModelId
-      : typeof state.currentModelId === "string" && state.currentModelId.length > 0
-        ? state.currentModelId
-        : fallbackModelId;
-  const thinkingLevel = state.thinkingLevel;
-
-  return resolveMastraCodeModel(modelId, {
-    thinkingLevel: isThinkingLevel(thinkingLevel) ? thinkingLevel : undefined,
-    remapForCodexOAuth: true,
-    requestContext,
-  });
-}
-
-function readHarnessSessionState(harnessContext: Record<string, unknown>): Record<string, unknown> {
-  const session = readRecord(harnessContext.session);
-  const state = readRecord(session.state);
-  const get = state.get;
-  return typeof get === "function" ? readRecord(get.call(state)) : readRecord(harnessContext.state);
-}
-
-function isThinkingLevel(value: unknown): value is "off" | "low" | "medium" | "high" | "xhigh" {
-  return (
-    value === "off" ||
-    value === "low" ||
-    value === "medium" ||
-    value === "high" ||
-    value === "xhigh"
-  );
+    controller?.session.modelId || controller?.getState().currentModelId || fallbackModelId;
+  return resolveRuntimeModel(modelId, requestContext);
 }
 
 function createLocalResourceId(runtimeId: string, cwd: string): string {
   return `${runtimeId}:${Buffer.from(cwd).toString("base64url")}`;
-}
-
-function readRecord(value: unknown): Record<string, unknown> {
-  return isRecord(value) ? value : {};
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

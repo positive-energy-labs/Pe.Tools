@@ -1,4 +1,5 @@
-import type { Harness, HarnessConfig, Session } from "@mastra/core/harness";
+import type { AgentController, AgentControllerConfig, Session } from "@mastra/core/agent-controller";
+import type { Mastra } from "@mastra/core/mastra";
 import type { RuntimeAuthProfile } from "./auth/types.ts";
 import type { RuntimeProtocol } from "./events.ts";
 
@@ -59,18 +60,21 @@ export interface RuntimeHandleServices {
   mcpManager?: unknown;
 }
 
-export type RuntimeHandleHarness<_TState extends Record<string, unknown>> = object;
+export type RuntimeHandleController<_TState extends Record<string, unknown>> = object;
 
 export interface RuntimeHandle<
   TState extends Record<string, unknown> = Record<string, unknown>,
   TServices extends RuntimeHandleServices = RuntimeHandleServices,
-  THarness extends RuntimeHandleHarness<TState> = Harness<TState>,
+  TController extends RuntimeHandleController<TState> = AgentController<TState>,
 > {
-  harness: THarness;
+  controller: TController;
+  /** The Mastra the controller is registered on (keyed by config.id), for serving
+   *  the native agent-controller HTTP routes via @mastra/server. */
+  mastra?: Mastra;
   session?: Session<TState>;
-  /** The harness's configured memory, surfaced so transports can do partial thread
+  /** The controller's configured memory, surfaced so transports can do partial thread
    *  clones (forking) that still remap observational memory. */
-  memory?: HarnessConfig<TState>["memory"];
+  memory?: AgentControllerConfig<TState>["memory"];
   workspace?: RuntimeWorkspaceInfo;
   auth?: RuntimeAuthProfile;
   authStorage?: TServices["authStorage"];

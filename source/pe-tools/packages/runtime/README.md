@@ -4,7 +4,7 @@
 
 This package owns:
 
-- runtime handle contracts for app-owned Harness sessions;
+- runtime handle contracts for app-owned AgentController sessions;
 - generic auth descriptors and Pe auth profiles;
 - storage and memory profile helpers;
 - request-context and system-prompt capture helpers;
@@ -17,12 +17,12 @@ This package does **not** own:
 - app CLI identity or Gunshi root command wiring;
 - ACP, AG-UI, browser workbench servers, or compatibility adapters over MastraCode sessions.
 
-App packages own product policy over native Mastra/Harness configuration:
+App packages own product policy over native Mastra/AgentController configuration:
 
 - `source/pe-tools/apps/pea/src/runtime.ts` creates the Pea runtime/session.
 - `source/pe-tools/apps/pe-code/src/runtime.ts` creates the `peco` MastraCode runtime/session.
 
-Tool packages own product-specific tool IDs and catalogs. Runtime helpers may seed a `RuntimeToolCatalog` into `createRuntimeHarness` only when Pe-owned access policy or metadata is still needed.
+Tool packages own product-specific tool IDs and catalogs. Runtime helpers may seed a `RuntimeToolCatalog` into `createRuntimeController` only when Pe-owned access policy or metadata is still needed.
 
 ## Development
 

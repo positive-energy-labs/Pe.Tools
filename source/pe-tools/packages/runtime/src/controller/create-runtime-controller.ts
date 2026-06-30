@@ -1,5 +1,10 @@
-import { Harness, type HarnessConfig, type Session } from "@mastra/core/harness";
-import { createRuntimeThreadLock } from "./thread-lock.ts";
+import {
+  AgentController,
+  type AgentControllerConfig,
+  type Session,
+} from "@mastra/core/agent-controller";
+import { Mastra } from "@mastra/core/mastra";
+import { createRuntimeThreadLock } from "../thread-lock.ts";
 import type { RuntimeAuthProfile } from "../auth/types.ts";
 import type { RuntimeMemoryProfile } from "../memory/profiles.ts";
 import type {
@@ -12,26 +17,27 @@ import type { RuntimeStorageProfile } from "../storage/profiles.ts";
 import type { RuntimeToolProfile, RuntimeToolSource } from "../tool-metadata.ts";
 import { guardRuntimeToolsForAccessPolicy } from "../tools/access-policy.ts";
 
-export type RuntimeHarnessConfig<TState extends Record<string, unknown> = Record<string, unknown>> =
-  HarnessConfig<TState>;
+export type RuntimeControllerConfig<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+> = AgentControllerConfig<TState>;
 
 type ClosableStorage = { close?: () => Promise<void> | void };
 
-export interface RuntimeInjectedHarnessConfig {
+export interface RuntimeInjectedControllerConfig {
   storage?: ClosableStorage;
   threadLock?: {
     release?: (threadId: string) => Promise<void> | void;
   };
 }
 
-export interface CreateRuntimeHarnessOptions<
+export interface CreateRuntimeControllerOptions<
   TState extends Record<string, unknown> = Record<string, unknown>,
   TServices extends RuntimeHandleServices = RuntimeHandleServices,
-  THarness extends object = Harness<TState>,
+  TController extends object = AgentController<TState>,
 > {
-  config: HarnessConfig<TState>;
+  config: AgentControllerConfig<TState>;
   request?: RuntimeCreateRequest;
-  harness?: THarness;
+  controller?: TController;
   storageProfile?: RuntimeStorageProfile;
   memoryProfile?: RuntimeMemoryProfile<TState>;
   toolProfile?: RuntimeToolProfile;
@@ -44,61 +50,81 @@ export interface CreateRuntimeHarnessOptions<
   metadata?: Record<string, unknown>;
 }
 
-export interface CreateInjectedRuntimeHarnessOptions<
+export interface CreateInjectedRuntimeControllerOptions<
   TState extends Record<string, unknown> = Record<string, unknown>,
   TServices extends RuntimeHandleServices = RuntimeHandleServices,
-  THarness extends object = object,
-> extends Omit<CreateRuntimeHarnessOptions<TState, TServices, THarness>, "config" | "harness"> {
-  config: RuntimeInjectedHarnessConfig;
-  harness: THarness;
+  TController extends object = object,
+> extends Omit<
+  CreateRuntimeControllerOptions<TState, TServices, TController>,
+  "config" | "controller"
+> {
+  config: RuntimeInjectedControllerConfig;
+  controller: TController;
 }
 
-export async function createRuntimeHarness<
+export async function createRuntimeController<
   TState extends Record<string, unknown> = Record<string, unknown>,
   TServices extends RuntimeHandleServices = RuntimeHandleServices,
 >(
-  options: CreateRuntimeHarnessOptions<TState, TServices, Harness<TState>> & {
-    harness?: undefined;
+  options: CreateRuntimeControllerOptions<TState, TServices, AgentController<TState>> & {
+    controller?: undefined;
   },
-): Promise<RuntimeHandle<TState, TServices, Harness<TState>>>;
-export async function createRuntimeHarness<
+): Promise<RuntimeHandle<TState, TServices, AgentController<TState>>>;
+export async function createRuntimeController<
   TState extends Record<string, unknown> = Record<string, unknown>,
   TServices extends RuntimeHandleServices = RuntimeHandleServices,
-  THarness extends object = object,
+  TController extends object = object,
 >(
-  options: CreateInjectedRuntimeHarnessOptions<TState, TServices, THarness>,
-): Promise<RuntimeHandle<TState, TServices, THarness>>;
-export async function createRuntimeHarness<
+  options: CreateInjectedRuntimeControllerOptions<TState, TServices, TController>,
+): Promise<RuntimeHandle<TState, TServices, TController>>;
+export async function createRuntimeController<
   TState extends Record<string, unknown> = Record<string, unknown>,
   TServices extends RuntimeHandleServices = RuntimeHandleServices,
-  THarness extends object = object,
+  TController extends object = object,
 >(
   options:
-    | (CreateRuntimeHarnessOptions<TState, TServices, Harness<TState>> & {
-        harness?: undefined;
+    | (CreateRuntimeControllerOptions<TState, TServices, AgentController<TState>> & {
+        controller?: undefined;
       })
-    | CreateInjectedRuntimeHarnessOptions<TState, TServices, THarness>,
-): Promise<RuntimeHandle<TState, TServices, Harness<TState> | THarness>> {
+    | CreateInjectedRuntimeControllerOptions<TState, TServices, TController>,
+): Promise<RuntimeHandle<TState, TServices, AgentController<TState> | TController>> {
   const request = options.request ?? defaultRuntimeCreateRequest;
-  let config: HarnessConfig<TState> | RuntimeInjectedHarnessConfig;
-  let harness: Harness<TState> | THarness;
+  let config: AgentControllerConfig<TState> | RuntimeInjectedControllerConfig;
+  let controller: AgentController<TState> | TController;
   let session: Session<TState> | undefined;
-  let memory: HarnessConfig<TState>["memory"];
-  if (hasInjectedRuntimeHarness(options)) {
+  let memory: AgentControllerConfig<TState>["memory"];
+  let mastra: Mastra | undefined;
+  if (hasInjectedRuntimeController(options)) {
     config = options.config;
-    harness = options.harness;
+    controller = options.controller;
+    mastra = controller instanceof AgentController ? controller.getMastra() : undefined;
   } else {
-    const resolvedConfig = await resolveRuntimeHarnessConfig(options, request);
+    const createOptions = options as CreateRuntimeControllerOptions<
+      TState,
+      RuntimeHandleServices,
+      AgentController<TState>
+    >;
+    const resolvedConfig = await resolveRuntimeControllerConfig(createOptions, request);
     config = resolvedConfig;
     memory = resolvedConfig.memory;
-    harness = new Harness<TState>(resolvedConfig);
-    await harness.init();
-    session = await harness.createSession(createRuntimeSessionIdentity(resolvedConfig, request));
+    const built = new AgentController<TState>(resolvedConfig);
+    // Register on an explicit Mastra (keyed by config.id) BEFORE init so the
+    // controller inherits it instead of spinning up an internal one. This is the
+    // handle @mastra/server mounts to expose the native agent-controller routes.
+    // Share the controller's storage so durability is configured in one place.
+    mastra = new Mastra({
+      agentControllers: { [resolvedConfig.id]: built },
+      ...(resolvedConfig.storage ? { storage: resolvedConfig.storage } : {}),
+    });
+    await built.init();
+    session = await built.createSession(createRuntimeSessionIdentity(resolvedConfig, request));
+    controller = built;
   }
   let closeTask: Promise<void> | null = null;
 
   return {
-    harness,
+    controller,
+    mastra,
     session,
     memory,
     workspace: options.workspace,
@@ -108,7 +134,7 @@ export async function createRuntimeHarness<
     mcpManager: options.mcpManager,
     metadata: options.metadata,
     close: () => {
-      closeTask ??= closeRuntimeHarness(harness, session, config.storage);
+      closeTask ??= closeRuntimeController(controller, session, config.storage);
       return closeTask;
     },
   };
@@ -116,22 +142,22 @@ export async function createRuntimeHarness<
 
 const defaultRuntimeCreateRequest: RuntimeCreateRequest = { protocol: "tui" };
 
-function hasInjectedRuntimeHarness<
+function hasInjectedRuntimeController<
   TState extends Record<string, unknown>,
   TServices extends RuntimeHandleServices,
-  THarness extends object,
+  TController extends object,
 >(
   options:
-    | (CreateRuntimeHarnessOptions<TState, TServices, Harness<TState>> & {
-        harness?: undefined;
+    | (CreateRuntimeControllerOptions<TState, TServices, AgentController<TState>> & {
+        controller?: undefined;
       })
-    | CreateInjectedRuntimeHarnessOptions<TState, TServices, THarness>,
-): options is CreateInjectedRuntimeHarnessOptions<TState, TServices, THarness> {
-  return options.harness !== undefined;
+    | CreateInjectedRuntimeControllerOptions<TState, TServices, TController>,
+): options is CreateInjectedRuntimeControllerOptions<TState, TServices, TController> {
+  return options.controller !== undefined;
 }
 
-async function closeRuntimeHarness<TState extends Record<string, unknown>>(
-  harness: Harness<TState> | object,
+async function closeRuntimeController<TState extends Record<string, unknown>>(
+  controller: AgentController<TState> | object,
   session: Session<TState> | undefined,
   storage: ClosableStorage | undefined,
 ): Promise<void> {
@@ -139,9 +165,8 @@ async function closeRuntimeHarness<TState extends Record<string, unknown>>(
   await session?.thread.clearAndReleaseLock();
   let closeError: unknown;
   try {
-    const mastra = harness instanceof Harness ? harness.getMastra() : undefined;
-    if (mastra?.shutdown) {
-      await mastra.shutdown();
+    if (controller instanceof AgentController) {
+      await controller.destroy();
     } else {
       await storage?.close?.();
     }
@@ -151,13 +176,13 @@ async function closeRuntimeHarness<TState extends Record<string, unknown>>(
   if (closeError) throw closeError;
 }
 
-async function resolveRuntimeHarnessConfig<
+async function resolveRuntimeControllerConfig<
   TState extends Record<string, unknown> = Record<string, unknown>,
-  THarness extends object = object,
+  TController extends object = object,
 >(
-  options: CreateRuntimeHarnessOptions<TState, RuntimeHandleServices, THarness>,
+  options: CreateRuntimeControllerOptions<TState, RuntimeHandleServices, TController>,
   request: RuntimeCreateRequest,
-): Promise<HarnessConfig<TState>> {
+): Promise<AgentControllerConfig<TState>> {
   const storage =
     options.config.storage ??
     (options.storageProfile ? await options.storageProfile.createStore(request) : undefined);
@@ -202,13 +227,14 @@ async function initializeRuntimeStorage(storage: InitializableStorage | undefine
 }
 
 function createRuntimeSessionIdentity<TState extends Record<string, unknown>>(
-  config: HarnessConfig<TState>,
+  config: AgentControllerConfig<TState>,
   request: RuntimeCreateRequest,
-): { id: string; ownerId: string; resourceId?: string } {
+): { id: string; ownerId: string; resourceId?: string; tags?: Record<string, string> } {
   const resourceId = config.resourceId ?? config.id;
   return {
     id: `${resourceId}:${request.protocol}`,
     ownerId: process.env.COMPUTERNAME ?? process.env.USERNAME ?? "local",
     resourceId,
+    ...(request.workspaceRoot ? { tags: { projectPath: request.workspaceRoot } } : {}),
   };
 }

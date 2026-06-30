@@ -3,19 +3,21 @@ import { hostname } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Agent } from "@mastra/core/agent";
-import type { HarnessMessage } from "@mastra/core/harness";
-import type { MastraModelConfig } from "@mastra/core/llm";
+import type {
+  AgentControllerMessage,
+  AgentControllerRequestContext,
+} from "@mastra/core/agent-controller";
+import { defaultGateways, type MastraModelConfig } from "@mastra/core/llm";
 import type { RequestContext } from "@mastra/core/request-context";
 import { LocalFilesystem, LocalSandbox, Workspace } from "@mastra/core/workspace";
 import { PeHostClient } from "@pe/host-client";
 import {
   createMastraCodeAuthStorage,
   createPeaProductStateStorageProfile,
-  createRuntimeHarness,
+  createRuntimeController,
   createRuntimeMemoryProfile,
-  hasMastraCodeStoredAuth,
   loadStoredMastraCodeApiKeysIntoEnv,
-  resolveMastraCodeModel,
+  resolveRuntimeModel,
 } from "@pe/runtime";
 import {
   configurePeaProductToolContext,
@@ -36,7 +38,7 @@ type PeaWorkerRuntime = {
   close?: () => Promise<void> | void;
 };
 
-type PeaWorkerMessage = Pick<HarnessMessage, "id" | "role" | "content">;
+type PeaWorkerMessage = Pick<AgentControllerMessage, "id" | "role" | "content">;
 
 type PeaWorkerSession = {
   thread: {
@@ -182,7 +184,7 @@ async function createPeaWorkerRuntime(): Promise<PeaWorkerRuntime> {
     sandbox: new LocalSandbox({ workingDirectory: cwd, env: process.env }),
     skills: resolvePeaSkillPaths({ productHomePath }),
   });
-  const handle = await createRuntimeHarness({
+  const handle = await createRuntimeController({
     request: { protocol: "test", cwd, workspaceRoot: cwd },
     config: {
       id: "pea",
@@ -197,14 +199,13 @@ async function createPeaWorkerRuntime(): Promise<PeaWorkerRuntime> {
           agent,
         },
       ],
+      gateways: defaultGateways,
       tools: peaProductTools,
       initialState: {
         currentModelId: defaultPeaAgentModelId,
         productHomePath,
         configDir: peaConfigDir,
       },
-      modelAuthChecker: (provider: string) =>
-        hasMastraCodeStoredAuth(authStorage, provider) ? true : undefined,
     },
     storageProfile: createPeaProductStateStorageProfile({
       stateDirectory: path.join(cwd, peaConfigDir),
@@ -249,25 +250,12 @@ function resolveCurrentModel(
   requestContext: RequestContext,
   fallbackModelId: string,
 ): Promise<MastraModelConfig> {
-  const harnessContext = readRecord(requestContext.get("harness"));
-  const session = readRecord(harnessContext?.session);
-  const stateAccess = readRecord(session?.state);
-  const get = stateAccess?.get;
-  const state =
-    typeof get === "function"
-      ? readRecord(get.call(stateAccess))
-      : readRecord(harnessContext?.state);
+  const controller = requestContext.get("controller") as
+    | AgentControllerRequestContext<{ currentModelId?: string }>
+    | undefined;
   const modelId =
-    typeof state?.currentModelId === "string" && state.currentModelId.length > 0
-      ? state.currentModelId
-      : fallbackModelId;
-  const thinkingLevel = state?.thinkingLevel;
-
-  return resolveMastraCodeModel(normalizePeaModelId(modelId), {
-    thinkingLevel: isThinkingLevel(thinkingLevel) ? thinkingLevel : undefined,
-    remapForCodexOAuth: true,
-    requestContext,
-  });
+    controller?.session.modelId || controller?.getState().currentModelId || fallbackModelId;
+  return resolveRuntimeModel(normalizePeaModelId(modelId), requestContext);
 }
 
 function normalizePeaModelId(modelId: string): string {
@@ -278,16 +266,6 @@ function normalizePeaModelId(modelId: string): string {
     default:
       return modelId;
   }
-}
-
-function isThinkingLevel(value: unknown): value is "off" | "low" | "medium" | "high" | "xhigh" {
-  return (
-    value === "off" ||
-    value === "low" ||
-    value === "medium" ||
-    value === "high" ||
-    value === "xhigh"
-  );
 }
 
 function createLocalResourceId(cwd: string): string {

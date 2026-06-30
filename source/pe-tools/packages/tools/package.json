@@ -33,7 +33,7 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@mastra/core": "1.46.1-alpha.1",
+    "@mastra/core": "1.48.0-alpha.4",
     "@pe/host-client": "workspace:*",
     "@pe/host-generated": "workspace:*",
     "@pe/runtime": "workspace:*",

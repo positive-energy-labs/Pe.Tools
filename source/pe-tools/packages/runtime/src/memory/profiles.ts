@@ -1,15 +1,20 @@
 import { Memory } from "@mastra/memory";
-import type { HarnessConfig } from "@mastra/core/harness";
+import type { AgentControllerConfig } from "@mastra/core/agent-controller";
 import type { MemoryConfigInternal, SharedMemoryConfig } from "@mastra/core/memory";
 import type { MastraCompositeStore } from "@mastra/core/storage";
 import type { RuntimeCreateRequest } from "../runtime.ts";
 
+// OM observer/reflector model. Resolved through the controller's gateways like any other model, so
+// it needs a gateway-resolvable credential (API key / gateway token). It does NOT ride the operator's
+// OAuth — that path is only available to the mode agent's explicit `model` fn, not gateway-resolved
+// roles like OM. If pea runs OAuth-only with no key, disable OM rather than expecting it to resolve.
 const defaultRuntimeOmModelId = "openai/gpt-5.4-mini";
 const defaultRuntimeObservationThreshold = 75_000;
 const defaultRuntimeReflectionThreshold = 15_000;
 
-export type RuntimeHarnessMemory<TState extends Record<string, unknown> = Record<string, unknown>> =
-  NonNullable<HarnessConfig<TState>["memory"]>;
+export type RuntimeControllerMemory<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+> = NonNullable<AgentControllerConfig<TState>["memory"]>;
 export type RuntimeObservationalMemoryConfig = Exclude<
   NonNullable<MemoryConfigInternal["observationalMemory"]>,
   boolean
@@ -20,7 +25,7 @@ export interface RuntimeMemoryProfileCreateInput<
 > {
   storage: MastraCompositeStore;
   request: RuntimeCreateRequest;
-  config: HarnessConfig<TState>;
+  config: AgentControllerConfig<TState>;
 }
 
 export interface RuntimeMemoryProfile<
@@ -29,7 +34,7 @@ export interface RuntimeMemoryProfile<
   id: string;
   createMemory(
     input: RuntimeMemoryProfileCreateInput<TState>,
-  ): RuntimeHarnessMemory<TState> | Promise<RuntimeHarnessMemory<TState>>;
+  ): RuntimeControllerMemory<TState> | Promise<RuntimeControllerMemory<TState>>;
 }
 
 export interface RuntimeMastraMemoryProfileOptions {

@@ -1,4 +1,4 @@
-import { runRuntimeWorkbenchWeb } from "@pe/runtime";
+import { runRuntimeAgentControllerWeb } from "@pe/runtime";
 import { createPeaRuntime, type PeaTuiRuntimeOptions } from "./runtime.ts";
 
 export interface PeaWebOptions extends PeaTuiRuntimeOptions {
@@ -14,7 +14,7 @@ export async function runPeaWeb(options: PeaWebOptions = {}): Promise<void> {
     ...options,
     workspaceRoot: options.workspaceRoot ?? options.cwd ?? process.cwd(),
   };
-  await runRuntimeWorkbenchWeb<PeaTuiRuntimeOptions>({
+  await runRuntimeAgentControllerWeb<PeaTuiRuntimeOptions>({
     label: "pea",
     title: "Pea",
     createRuntime: createPeaRuntime,

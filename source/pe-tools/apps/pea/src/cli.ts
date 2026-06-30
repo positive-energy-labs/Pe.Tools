@@ -5,18 +5,12 @@ import { PeaCliCommands } from "@pe/tools";
 import type { PeaRuntimeAuthSource } from "./runtime.ts";
 
 export async function runPeaMain(args = process.argv.slice(2)): Promise<void> {
-  if (args.length === 0) {
-    const { runPeaTui } = await import("./runtime.ts");
-    await runPeaTui({ workspaceRoot: process.cwd() });
-    return;
-  }
-
   if (isRootAcpInvocation(args)) {
     const { runPeaAcp } = await import("./runtime.ts");
     const options = parsePeaRootAcpOptions(args);
     await runPeaAcp({
       modelId: options.modelId,
-      workspaceRoot: options.workspaceRoot ?? process.cwd(),
+      workspaceRoot: options.workspaceRoot,
       authSource: resolvePeaCliAuthSource(options.authSource),
       noCloudAuth: options.noCloudAuth,
     });
@@ -28,6 +22,7 @@ export async function runPeaMain(args = process.argv.slice(2)): Promise<void> {
     version: "0.1.0",
     description: "Pea product/operator CLI. Dev workflows live in peco.",
     subCommands: createPeaCliSubCommands(),
+    fallbackToEntry: true,
   });
 }
 
@@ -56,6 +51,14 @@ export function createPeaCliCommand() {
         });
         return;
       }
+
+      const { runPeaTui } = await import("./runtime.ts");
+      await runPeaTui({
+        modelId: ctx.values.modelId,
+        workspaceRoot: ctx.values.workspaceRoot,
+        authSource: resolvePeaCliAuthSource(ctx.values.authSource),
+        noCloudAuth: ctx.values.noCloudAuth,
+      });
 
       console.log("Run `pea --help` to list product commands.");
       console.log(`host      ${PeHostClient.resolveHostBaseUrl()}`);
@@ -178,8 +181,7 @@ function isPeaRuntimeAuthSource(value: string): value is PeaRuntimeAuthSource {
 const workspaceArgs = {
   workspaceRoot: {
     type: "string",
-    description:
-      "Pea product workspace root. Defaults to the directory where the Pea CLI is launched.",
+    description: "Pea product workspace root. Defaults to ~/Documents/Pe.Tools.",
   },
 } as const;
 

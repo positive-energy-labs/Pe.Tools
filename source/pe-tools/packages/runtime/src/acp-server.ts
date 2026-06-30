@@ -1,12 +1,16 @@
 import { Readable, Writable } from "node:stream";
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
-import type { Harness, HarnessMode, Session } from "@mastra/core/harness";
+import type {
+  AgentController,
+  AgentControllerMode,
+  Session,
+} from "@mastra/core/agent-controller";
 import { MastraCodeAcpAgent } from "mastracode/acp";
 
 export interface RunRuntimeAcpAgentOptions {
-  harness: Harness;
+  controller: AgentController;
   session: Session;
-  modes: HarnessMode[];
+  modes: AgentControllerMode[];
   cleanup?: () => Promise<void> | void;
 }
 
@@ -21,7 +25,7 @@ export async function runRuntimeAcpAgent(options: RunRuntimeAcpAgentOptions): Pr
   try {
     const stream = ndJsonStream(Writable.toWeb(process.stdout), Readable.toWeb(process.stdin));
     const connection = new AgentSideConnection((conn) => {
-      agent = new MastraCodeAcpAgent(conn, options.harness, options.session, options.modes);
+      agent = new MastraCodeAcpAgent(conn, options.controller, options.session, options.modes);
       return agent;
     }, stream);
 

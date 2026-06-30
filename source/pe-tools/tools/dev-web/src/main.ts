@@ -4,11 +4,8 @@ import path from "node:path";
 
 type AgentName = "pea" | "peco";
 
-type FrontendName = "website" | "web";
-
 interface DevWebOptions {
   agent: AgentName;
-  frontend: FrontendName;
   host: string;
   frontendPort: number;
   workbenchPort: number;
@@ -32,7 +29,7 @@ async function main(args: string[]): Promise<void> {
 
   const backend = startBackend(options);
   const workbenchUrl = `http://${options.host}:${options.workbenchPort}`;
-  await waitForWorkbenchApi(backend, workbenchUrl, options.token);
+  await waitForWorkbenchApi(backend, workbenchUrl);
   const frontend = startFrontend(options);
   const children = [backend, frontend];
   console.log(`${options.agent} web dev ${frontendUrl(options)}`);
@@ -48,7 +45,6 @@ function parseArgs(args: string[]): DevWebOptions {
   if (args[0] === "web") args.shift();
 
   const forwardedArgs: string[] = ["web"];
-  let frontend: FrontendName = "web";
   let host = "127.0.0.1";
   let frontendPort = 5173;
   let workbenchPort = 43112;
@@ -63,11 +59,6 @@ function parseArgs(args: string[]): DevWebOptions {
       forwardedArgs.push(arg, host);
     } else if (arg === "--port") {
       frontendPort = readPort(readValue(args, ++index, arg), arg);
-    } else if (arg === "--frontend") {
-      const value = readValue(args, ++index, arg);
-      if (value !== "website" && value !== "web")
-        throw new Error("--frontend must be 'website' or 'web'.");
-      frontend = value;
     } else if (arg === "--workbench-port") {
       workbenchPort = readPort(readValue(args, ++index, arg), arg);
     } else if (arg === "--workbench-token") {
@@ -88,7 +79,6 @@ function parseArgs(args: string[]): DevWebOptions {
   forwardedArgs.push("--workbench-token", token);
   return {
     agent,
-    frontend,
     host,
     frontendPort,
     workbenchPort,
@@ -132,7 +122,6 @@ function startBackend(options: DevWebOptions): ChildProcess {
 }
 
 function startFrontend(options: DevWebOptions): ChildProcess {
-  const filter = options.frontend === "web" ? "@pe/web" : "website";
   return spawnLogged(
     "web",
     "pnpm",
@@ -140,7 +129,7 @@ function startFrontend(options: DevWebOptions): ChildProcess {
       "--dir",
       repoPeToolsRoot,
       "--filter",
-      filter,
+      "@pe/web",
       "exec",
       "vp",
       "dev",
@@ -168,12 +157,8 @@ function frontendUrl(options: DevWebOptions): string {
   return url.toString();
 }
 
-async function waitForWorkbenchApi(
-  backend: ChildProcess,
-  workbenchUrl: string,
-  token: string,
-): Promise<void> {
-  const url = `${workbenchUrl}/workbench/threads?token=${encodeURIComponent(token)}`;
+async function waitForWorkbenchApi(backend: ChildProcess, workbenchUrl: string): Promise<void> {
+  const url = `${workbenchUrl}/pe/info`;
   const started = Date.now();
   while (Date.now() - started < 20_000) {
     if (backend.exitCode !== null)

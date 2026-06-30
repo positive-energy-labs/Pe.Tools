@@ -35,12 +35,12 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@mastra/core": "1.46.1-alpha.1",
+    "@mastra/core": "1.48.0-alpha.4",
     "@pe/host-client": "workspace:*",
     "@pe/runtime": "workspace:*",
     "@pe/tools": "workspace:*",
     "gunshi": "^0.29.5",
-    "mastracode": "0.25.1-alpha.1"
+    "mastracode": "0.27.0-alpha.4"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",

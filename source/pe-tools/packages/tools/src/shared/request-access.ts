@@ -14,7 +14,7 @@ interface RuntimeThreadSettingsContext {
   setThreadSetting: (options: { key: string; value: unknown }) => Promise<void> | void;
 }
 
-interface RequestAccessHarnessContext {
+interface RequestAccessControllerContext {
   state?: PeaSandboxState;
   getState?: () => PeaSandboxState;
   setState?: (updates: Partial<PeaSandboxState>) => Promise<void> | void;
@@ -53,7 +53,7 @@ export const requestAccess = createTool({
       }
 
       await grantWorkspaceAccess({
-        harnessCtx: access.harnessCtx,
+        controllerCtx: access.controllerCtx,
         localFilesystem: access.localFilesystem,
         threadSettings: access.threadSettings,
         absolutePath: access.absolutePath,
@@ -81,7 +81,7 @@ export function requestAccessRequiresApproval(
 }
 
 export function grantWorkspaceAccess(options: {
-  harnessCtx?: RequestAccessHarnessContext;
+  controllerCtx?: RequestAccessControllerContext;
   localFilesystem?: LocalFilesystem;
   threadSettings?: RuntimeThreadSettingsContext;
   absolutePath: string;
@@ -90,15 +90,15 @@ export function grantWorkspaceAccess(options: {
 }
 
 async function grantWorkspaceAccessAsync(options: {
-  harnessCtx?: RequestAccessHarnessContext;
+  controllerCtx?: RequestAccessControllerContext;
   localFilesystem?: LocalFilesystem;
   threadSettings?: RuntimeThreadSettingsContext;
   absolutePath: string;
 }): Promise<void> {
   let allowedPaths: string[] | undefined;
 
-  if (options.harnessCtx?.updateState) {
-    allowedPaths = await options.harnessCtx.updateState((state) => {
+  if (options.controllerCtx?.updateState) {
+    allowedPaths = await options.controllerCtx.updateState((state) => {
       const currentAllowed = state.sandboxAllowedPaths ?? [];
       const nextAllowed = currentAllowed.includes(options.absolutePath)
         ? currentAllowed
@@ -109,12 +109,12 @@ async function grantWorkspaceAccessAsync(options: {
       };
     });
   } else {
-    const currentAllowed = options.harnessCtx?.getState?.()?.sandboxAllowedPaths ?? [];
+    const currentAllowed = options.controllerCtx?.getState?.()?.sandboxAllowedPaths ?? [];
     allowedPaths = currentAllowed.includes(options.absolutePath)
       ? currentAllowed
       : [...currentAllowed, options.absolutePath];
     if (allowedPaths !== currentAllowed) {
-      await options.harnessCtx?.setState?.({
+      await options.controllerCtx?.setState?.({
         sandboxAllowedPaths: allowedPaths,
       });
     }
@@ -148,10 +148,10 @@ export function isPathAllowed(
 }
 
 function resolveRequestAccessContext(requestedPath: string, toolContext: unknown) {
-  const harnessCtx = readRequestAccessHarnessContext(
-    readToolRequestContextValue(toolContext, "harness"),
+  const controllerCtx = readRequestAccessControllerContext(
+    readToolRequestContextValue(toolContext, "controller"),
   );
-  const filesystem = readToolContextFilesystem(toolContext) ?? harnessCtx?.workspace?.filesystem;
+  const filesystem = readToolContextFilesystem(toolContext) ?? controllerCtx?.workspace?.filesystem;
   const localFilesystem = filesystem instanceof LocalFilesystem ? filesystem : undefined;
   const threadSettings = readRuntimeThreadSettingsContext(
     readToolRequestContextValue(toolContext, runtimeThreadSettingsKey),
@@ -159,17 +159,17 @@ function resolveRequestAccessContext(requestedPath: string, toolContext: unknown
   const absolutePath = resolveRequestedPath(requestedPath, localFilesystem?.basePath);
   const projectRoot = localFilesystem?.basePath ?? process.cwd();
   const allowedPaths = getAllowedPathsFromContext(toolContext, localFilesystem);
-  return { harnessCtx, localFilesystem, threadSettings, absolutePath, projectRoot, allowedPaths };
+  return { controllerCtx, localFilesystem, threadSettings, absolutePath, projectRoot, allowedPaths };
 }
 
 function getAllowedPathsFromContext(
   toolContext: unknown,
   localFilesystem: LocalFilesystem | undefined,
 ): string[] {
-  const harnessCtx = readRequestAccessHarnessContext(
-    readToolRequestContextValue(toolContext, "harness"),
+  const controllerCtx = readRequestAccessControllerContext(
+    readToolRequestContextValue(toolContext, "controller"),
   );
-  const state = harnessCtx?.getState?.() ?? harnessCtx?.state;
+  const state = controllerCtx?.getState?.() ?? controllerCtx?.state;
   return [...(localFilesystem?.allowedPaths ?? []), ...(state?.sandboxAllowedPaths ?? [])];
 }
 
@@ -190,12 +190,12 @@ function readToolContextFilesystem(toolContext: unknown): unknown {
   return workspace.filesystem;
 }
 
-function readRequestAccessHarnessContext(value: unknown): RequestAccessHarnessContext | undefined {
-  if (!isRequestAccessHarnessContext(value)) return undefined;
+function readRequestAccessControllerContext(value: unknown): RequestAccessControllerContext | undefined {
+  if (!isRequestAccessControllerContext(value)) return undefined;
   return value;
 }
 
-function isRequestAccessHarnessContext(value: unknown): value is RequestAccessHarnessContext {
+function isRequestAccessControllerContext(value: unknown): value is RequestAccessControllerContext {
   if (!isRecord(value)) return false;
   return (
     (value.state == null || isPeaSandboxState(value.state)) &&

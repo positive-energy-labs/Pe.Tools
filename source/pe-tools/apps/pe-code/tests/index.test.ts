@@ -114,7 +114,7 @@ test(
 
       try {
         if (!runtime.session) throw new Error("Expected Peco runtime session.");
-        const workspace = await runtime.harness.resolveWorkspace({ session: runtime.session });
+        const workspace = await runtime.controller.resolveWorkspace({ session: runtime.session });
         const tools = await createWorkspaceTools(workspace!);
         const filesystem = workspace?.filesystem;
         if (!(filesystem instanceof LocalFilesystem)) {
