@@ -52,7 +52,7 @@ export async function runPeCodeTui(options: PeCodeTuiRuntimeOptions = {}): Promi
   });
   const { MastraTUI } = await import("mastracode/tui");
   const tuiOptions: MastraTUIOptions = {
-    harness: runtime.harness,
+    controller: runtime.controller,
     session: runtime.session,
     authStorage: runtime.authStorage,
     hookManager: runtime.hookManager,
@@ -71,9 +71,9 @@ export async function runPeCodeTui(options: PeCodeTuiRuntimeOptions = {}): Promi
 export async function runPeCodeAcp(options: PeCodeTuiRuntimeOptions = {}): Promise<void> {
   const runtime = await createPeCodeRuntime(options);
   await runRuntimeAcpAgent({
-    harness: runtime.harness,
+    controller: runtime.controller,
     session: runtime.session,
-    modes: runtime.harness.listModes(),
+    modes: runtime.controller.listModes(),
     cleanup: () => closePeCodeRuntime(runtime),
   });
 }
@@ -174,7 +174,15 @@ async function readDirectoryEntries(directory: string) {
 export async function closePeCodeRuntime(runtime: PeCodeRuntimeWithSession): Promise<void> {
   runtime.session.abort();
   await runtime.session.thread.clearAndReleaseLock();
-  await runtime.harness.getMastra()?.shutdown?.();
+  await runtime.mcpManager?.disconnect?.();
+  await runtime.controller.getMastra()?.stopWorkers?.();
+  await runtime.controller.stopHeartbeats();
+  await closeSignalsPubSub(runtime.signalsPubSub);
+}
+
+async function closeSignalsPubSub(pubSub: unknown): Promise<void> {
+  const close = (pubSub as { close?: () => Promise<void> | void } | undefined)?.close;
+  await close?.();
 }
 
 function requirePeCodeSession(runtime: PeCodeRuntime): PeCodeRuntimeWithSession {

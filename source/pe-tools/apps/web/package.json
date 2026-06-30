@@ -18,6 +18,7 @@
     "@assistant-ui/react": "catalog:",
     "@assistant-ui/react-markdown": "catalog:",
     "@base-ui/react": "catalog:",
+    "@mastra/client-js": "1.28.0",
     "@pe/agent-contracts": "workspace:*",
     "@pe/host-client": "workspace:*",
     "@pe/host-generated": "workspace:*",

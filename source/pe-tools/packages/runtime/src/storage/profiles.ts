@@ -4,7 +4,6 @@ import path, { dirname } from "node:path";
 import { LibSQLStore, type LibSQLConfig, type LibSQLLocalPragmaOptions } from "@mastra/libsql";
 import type { MastraCompositeStore } from "@mastra/core/storage";
 import type { RuntimeCreateRequest } from "../runtime.ts";
-import { createRuntimeLibSqlThreadStateStore } from "./thread-state.ts";
 
 export type RuntimeStorageProfileKind = "libsql" | "mastracode-compatible" | "pea-product-state";
 export type RuntimePathResolver = string | ((request: RuntimeCreateRequest) => string);
@@ -59,16 +58,8 @@ export async function createRuntimeLibSqlStorage(
   const localPath = localFilePathFromLibSqlUrl(config.url);
   if (localPath) await mkdir(dirname(localPath), { recursive: true });
 
-  const store = new LibSQLStore(config);
-  const client = readRecord(store).client;
-  if (isLibSqlClient(client)) {
-    store.stores = {
-      ...store.stores,
-      threadState: createRuntimeLibSqlThreadStateStore(client),
-    };
-  }
-
-  return store;
+  // LibSQLStore builds stores.threadState (ThreadStateLibSQL) by default.
+  return new LibSQLStore(config);
 }
 
 export function createMastraCodeStorageProfile(
@@ -137,20 +128,6 @@ export function getDefaultPeaProductStateDirectory(): string {
 
 export function getDefaultPeaProductDatabasePath(): string {
   return path.join(getDefaultPeaProductStateDirectory(), "mastra.db");
-}
-
-function isLibSqlClient(
-  value: unknown,
-): value is Parameters<typeof createRuntimeLibSqlThreadStateStore>[0] {
-  return typeof readRecord(value).execute === "function";
-}
-
-function readRecord(value: unknown): Record<string, unknown> {
-  return isRecord(value) ? value : {};
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function resolveRuntimeLibSqlConfig(

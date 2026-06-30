@@ -17,22 +17,24 @@ const config = defineConfig({
     tanstackStartVite8DevMiddleware() as never,
     react() as never,
     tailwindcss() as never,
-    devtools() as never,
+    devtools({
+      injectSource: { enabled: false },
+      consolePiping: { enabled: false },
+    }) as never,
   ],
-  // Dev proxy to the workbench agent server (apps/pea), mirroring apps/website. The dev-web
-  // supervisor sets PE_WORKBENCH_AGENT_URL / PE_WORKBENCH_DEV_TOKEN; provider fetches hit
-  // `${origin}/workbench/*` and are forwarded here with the loopback token.
+  // Dev proxy to the workbench agent server (apps/pea/pe-code). `pe-dev web` also
+  // passes ?w=<port>, but these keep plain `vp dev` usable against the default backend.
   server: {
     proxy: {
-      "/workbench": {
+      "/pe": {
         target: process.env.PE_WORKBENCH_AGENT_URL ?? "http://127.0.0.1:43112",
         changeOrigin: true,
         headers: {
           "x-runtime-workbench-token": process.env.PE_WORKBENCH_DEV_TOKEN ?? "dev-loopback",
         },
       },
-      "/api/workbench": {
-        target: process.env.PE_WORKBENCH_API_URL ?? "http://127.0.0.1:43113",
+      "/api/agent-controller": {
+        target: process.env.PE_WORKBENCH_AGENT_URL ?? "http://127.0.0.1:43112",
         changeOrigin: true,
       },
       // ponytail: dev-only passthrough to Pe.Host for the /ops host-op playground. Strips the

@@ -34,10 +34,13 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.21.0",
-    "@mastra/core": "1.46.1-alpha.1",
-    "@mastra/libsql": "1.14.1",
-    "@mastra/memory": "1.21.2-alpha.0",
-    "mastracode": "0.25.1-alpha.1",
+    "@hono/node-server": "^1.19.14",
+    "@mastra/core": "1.48.0-alpha.4",
+    "@mastra/hono": "1.5.3-alpha.4",
+    "@mastra/libsql": "1.14.2",
+    "@mastra/memory": "1.21.3-alpha.0",
+    "hono": "^4.12.24",
+    "mastracode": "0.27.0-alpha.4",
     "zod": "^4.4.3"
   },
   "devDependencies": {

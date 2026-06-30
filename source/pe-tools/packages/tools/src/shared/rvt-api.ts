@@ -1,8 +1,6 @@
 import { extractRvtDocsText } from "./rvt-api/extractDocs.js";
 import { searchWrapper } from "./rvt-api/searchDocs.ts";
 import {
-  defaultRevitApiDocsYear,
-  defaultRevitApiMaxResults,
   toolInputArgSchemas,
   toolOutputSchemas,
   revitApiQueryInputSchema,
@@ -17,13 +15,7 @@ export const revitApiSearch = createTool({
   inputSchema: revitApiQueryInputSchema,
   outputSchema: toolOutputSchemas.searchResultsSchema,
   execute: async (input) => {
-    const {
-      queryString,
-      queryTypes,
-      year = defaultRevitApiDocsYear,
-      maxResults = defaultRevitApiMaxResults,
-      extractFirstResult = false,
-    } = input;
+    const { queryString, queryTypes, year, maxResults, extractFirstResult } = input;
     const results = await searchWrapper(queryString, year, maxResults, queryTypes);
     if (!extractFirstResult || results.length === 0) return results;
 

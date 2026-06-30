@@ -4,8 +4,8 @@ import {
   getDefaultMastraCodeAppDataDir,
   getDefaultPeaProductStateDirectory,
   type RuntimeStorageProfileKind,
-} from "../storage/profiles.ts";
-import type { RuntimeThreadLockInfo } from "../runtime.ts";
+} from "./storage/profiles.ts";
+import type { RuntimeThreadLockInfo } from "./runtime.ts";
 
 export class ThreadLockError extends Error {
   readonly threadId: string;

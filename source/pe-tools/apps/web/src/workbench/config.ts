@@ -37,6 +37,12 @@ export function resolveWorkbenchConfig(): WorkbenchEndpointConfig {
   return { origin, token };
 }
 
+/**
+ * Build a URL against the workbench origin. Native @mastra/server routes live under `/api`
+ * (`/api/agent-controller/...`); the Pe handshake + transparency endpoints under `/pe`. A dev
+ * `token` (loopback) is appended as a query param — the native routes ignore it, but it keeps the
+ * URL identical to what the launcher seeds.
+ */
 export function workbenchUrl(
   config: WorkbenchEndpointConfig,
   path: string,
@@ -46,6 +52,12 @@ export function workbenchUrl(
   if (config.token) url.searchParams.set("token", config.token);
   for (const [name, value] of Object.entries(query)) url.searchParams.set(name, value);
   return url.toString();
+}
+
+/** Pe handshake / transparency / send endpoints: `/pe/info`, `/pe/inspect`, `/pe/messages`. The
+ * native @mastra/server routes are driven by `@mastra/client-js` (MastraClient), not these helpers. */
+export function peUrl(config: WorkbenchEndpointConfig, path: string): string {
+  return workbenchUrl(config, `/pe${path}`);
 }
 
 function firstParam(params: URLSearchParams, ...names: string[]): string | undefined {

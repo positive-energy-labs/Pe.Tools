@@ -1,22 +1,11 @@
-import { ThreadStateStorage } from "@mastra/core/storage";
-
-const tableName = "mastra_thread_state";
-
-type LibSqlClient = {
-  execute(statement: {
-    sql: string;
-    args?: unknown[];
-  }): Promise<{ rows?: Record<string, unknown>[] }>;
-};
+// Resolver for the native thread-state store. The custom LibSQL implementation
+// was deleted: @mastra/libsql ships ThreadStateLibSQL and LibSQLStore builds
+// `stores.threadState` by default. This only locates that native store.
 
 export interface RuntimeThreadStateStore {
   getState(args: { threadId: string; type: string }): Promise<unknown>;
   setState<T = unknown>(args: { threadId: string; type: string; value: T }): Promise<void> | void;
   deleteState?(args: { threadId: string; type: string }): Promise<void> | void;
-}
-
-export function createRuntimeLibSqlThreadStateStore(client: LibSqlClient) {
-  return new RuntimeLibSqlThreadStateStore(client);
 }
 
 export function resolveRuntimeThreadStateStore(
@@ -69,58 +58,4 @@ function readRecord(value: unknown): Record<string, unknown> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-class RuntimeLibSqlThreadStateStore extends ThreadStateStorage {
-  constructor(private readonly client: LibSqlClient) {
-    super();
-  }
-
-  async init(): Promise<void> {
-    await this.client.execute({
-      sql: `CREATE TABLE IF NOT EXISTS ${tableName} (
-        thread_id TEXT NOT NULL,
-        type TEXT NOT NULL,
-        value TEXT NOT NULL,
-        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (thread_id, type)
-      )`,
-    });
-  }
-
-  async getState<T = unknown>(args: { threadId: string; type: string }): Promise<T | undefined> {
-    await this.init();
-    const result = await this.client.execute({
-      sql: `SELECT value FROM ${tableName} WHERE thread_id = ? AND type = ?`,
-      args: [args.threadId, args.type],
-    });
-    const value = result.rows?.[0]?.value;
-    if (typeof value !== "string") return undefined;
-    return JSON.parse(value);
-  }
-
-  async setState<T = unknown>(args: { threadId: string; type: string; value: T }): Promise<void> {
-    await this.init();
-    await this.client.execute({
-      sql: `INSERT INTO ${tableName} (thread_id, type, value, updated_at)
-        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(thread_id, type) DO UPDATE SET
-          value = excluded.value,
-          updated_at = excluded.updated_at`,
-      args: [args.threadId, args.type, JSON.stringify(args.value)],
-    });
-  }
-
-  async deleteState(args: { threadId: string; type: string }): Promise<void> {
-    await this.init();
-    await this.client.execute({
-      sql: `DELETE FROM ${tableName} WHERE thread_id = ? AND type = ?`,
-      args: [args.threadId, args.type],
-    });
-  }
-
-  async dangerouslyClearAll(): Promise<void> {
-    await this.init();
-    await this.client.execute({ sql: `DELETE FROM ${tableName}` });
-  }
 }

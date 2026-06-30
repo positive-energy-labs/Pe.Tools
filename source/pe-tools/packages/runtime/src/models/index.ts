@@ -1,1 +1,1 @@
-export * from "./mastra-gateway.ts";
+export * from "./resolve.ts";

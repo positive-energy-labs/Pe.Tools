@@ -1,3 +1,4 @@
+import type { AgentControllerRequestContext } from "@mastra/core/agent-controller";
 import type { RuntimeAccessLevel } from "../runtime.ts";
 import {
   resolveRuntimeToolMetadata,
@@ -80,10 +81,14 @@ function guardRuntimeToolForAccessPolicy(
 export function readRuntimeAccessLevelFromToolContext(
   context: unknown,
 ): RuntimeAccessLevel | undefined {
-  const contextRecord = readRecord(context);
-  const requestContext = readRequestContext(contextRecord.requestContext);
-  const harness = readRecord(contextRecord.harness ?? requestContext?.get("harness"));
-  return readAccessLevelFromState(readHarnessState(harness));
+  const requestContext = readRequestContext(readRecord(context).requestContext);
+  const controller = requestContext?.get("controller") as
+    | AgentControllerRequestContext<{ accessLevel?: unknown; yolo?: unknown }>
+    | undefined;
+  if (!controller) return undefined;
+  const state =
+    typeof controller.getState === "function" ? controller.getState() : controller.state;
+  return readAccessLevelFromState(state);
 }
 
 function readAccessLevelFromState(state: unknown): RuntimeAccessLevel | undefined {
@@ -95,12 +100,6 @@ function readAccessLevelFromState(state: unknown): RuntimeAccessLevel | undefine
   if (stateRecord.yolo === true) return "trusted";
   if (stateRecord.yolo === false) return "ask";
   return undefined;
-}
-
-function readHarnessState(harness: Record<string, unknown>): unknown {
-  const getState = harness.getState;
-  if (typeof getState === "function") return getState.call(harness);
-  return harness.state;
 }
 
 function readRequestContext(value: unknown): { get: (key: string) => unknown } | undefined {

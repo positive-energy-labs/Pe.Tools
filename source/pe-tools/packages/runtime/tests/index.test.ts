@@ -1,18 +1,18 @@
 import { expect, test } from "vite-plus/test";
-import { createRuntimeHarness, type RuntimeInjectedHarnessConfig } from "../src/index.ts";
+import { createRuntimeController, type RuntimeInjectedControllerConfig } from "../src/index.ts";
 
-test("runtime harness close closes injected storage", async () => {
+test("runtime controller close closes injected storage", async () => {
   let storageClosed = false;
-  const config: RuntimeInjectedHarnessConfig = {
+  const config: RuntimeInjectedControllerConfig = {
     storage: {
       close: async () => {
         storageClosed = true;
       },
     },
   };
-  const runtime = await createRuntimeHarness({
+  const runtime = await createRuntimeController({
     config,
-    harness: {},
+    controller: {},
   });
 
   expect(runtime.session).toBeUndefined();
