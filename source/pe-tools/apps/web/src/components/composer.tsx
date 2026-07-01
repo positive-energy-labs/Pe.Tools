@@ -5,6 +5,7 @@ import {
   useState,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
 } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { ArrowUp, Paperclip, Square, X } from "lucide-react";
@@ -32,10 +33,13 @@ const BUILTIN_COMMANDS: SlashCommand[] = [
 export function Composer({
   setMode,
   promptSeed,
+  topBar,
 }: {
   setMode: (mode: Mode) => void;
   /** Initial draft from the URL `prompt` param (read once on mount, then cleared from the URL). */
   promptSeed?: string;
+  /** Rendered flush at the top edge of the box — the inline budget/progress bar. */
+  topBar?: ReactNode;
 }) {
   const { debug, sendPrompt, cancel, isRunning, operationError, readOnly, newThread, forkThread } =
     useWorkbench();
@@ -61,7 +65,7 @@ export function Composer({
         search: (prev) => ({ ...prev, prompt: keep ? next : undefined }),
         replace: true,
       });
-    }, 400);
+    }, 1500);
     return () => window.clearTimeout(id);
   }, [text, attachments.length, navigate]);
 
@@ -149,10 +153,7 @@ export function Composer({
   };
 
   return (
-    <form
-      onSubmit={submit}
-      className="relative w-full rounded-2xl border border-border bg-card/95 shadow-lg shadow-black/5 backdrop-blur"
-    >
+    <form onSubmit={submit} className="relative w-full">
       {showMenu ? (
         <div
           role="listbox"
@@ -172,6 +173,11 @@ export function Composer({
           ))}
         </div>
       ) : null}
+
+      {/* The card clips its own children, so the budget bar is a plain flush rectangle inlaid under
+          the rounded boundary — the border does the corner-clipping, the bar needs no rounding. */}
+      <div className="overflow-hidden rounded-2xl border border-border bg-card/95 shadow-lg shadow-black/5 backdrop-blur">
+        {topBar}
 
       {attachments.length > 0 ? (
         <div className="flex flex-wrap gap-1.5 px-3 pt-3">
@@ -195,7 +201,7 @@ export function Composer({
         </div>
       ) : null}
 
-      <div className="flex items-end gap-1 p-2">
+      <div className="flex items-center gap-1 p-2">
         <Button
           type="button"
           variant="ghost"
@@ -232,9 +238,10 @@ export function Composer({
           </Button>
         )}
       </div>
-      {operationError ? (
-        <span className="block px-3 pb-2 text-xs text-destructive">{operationError}</span>
-      ) : null}
+        {operationError ? (
+          <span className="block px-3 pb-2 text-xs text-destructive">{operationError}</span>
+        ) : null}
+      </div>
     </form>
   );
 }

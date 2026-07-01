@@ -28,11 +28,13 @@
   --border: #e3ded5;
   --input: #e3ded5;
   --ring: #005695; /* PE Blue focus ring */
-  /* provenance: you=green, pea=blue — identity/state across the workbench */
-  --user-tint: rgba(114, 198, 162, 0.13);
-  --user-line: rgba(114, 198, 162, 0.32);
-  --pea-tint: rgba(0, 86, 149, 0.07);
-  --pea-line: rgba(0, 86, 149, 0.32);
+  /* provenance: you=kiln (slate in dark), pea+tools=green — identity/state across the workbench.
+     One `--user` hue; tint/line derive from it so a theme only re-points `--user`. */
+  --user: var(--kiln);
+  --user-tint: color-mix(in srgb, var(--user) 14%, transparent);
+  --user-line: color-mix(in srgb, var(--user) 36%, transparent);
+  --pea-tint: color-mix(in srgb, var(--pe-green) 12%, transparent);
+  --pea-line: color-mix(in srgb, var(--pe-green) 32%, transparent);
   /* PE data palette — categorical colors for badges/cells/legends (family-matrix, status chips).
      One hue per category; consumers tint it (`/12` bg, `/25` border) and use the full hue as text.
      Light values are dark enough to read on their own faint tint; .dark lightens them to match. */
@@ -112,10 +114,7 @@
   --border: #2b3732;
   --input: #2b3732;
   --ring: #4ea3d6;
-  --user-tint: rgba(114, 198, 162, 0.12);
-  --user-line: rgba(114, 198, 162, 0.3);
-  --pea-tint: rgba(74, 159, 212, 0.12);
-  --pea-line: rgba(74, 159, 212, 0.34);
+  --user: var(--cat-slate); /* dark "you" reads slate, not kiln; tint/line derive from :root */
   /* PE data palette, lightened for legibility on dark tints. */
   --cat-blue: #6fb4e0;
   --cat-green: #82d0a8;

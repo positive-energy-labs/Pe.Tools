@@ -135,6 +135,14 @@ export type WorkbenchMessagePart =
       provenance?: WorkbenchProvenance;
     }
   | {
+      kind: "image";
+      /** Ready-to-render source: a `data:` URL or a remote/blob URL. */
+      url: string;
+      mimeType?: string;
+      filename?: string;
+      provenance?: WorkbenchProvenance;
+    }
+  | {
       kind: "tool_call_ref";
       toolCallId: string;
       label?: string;
@@ -887,6 +895,15 @@ const messagePartSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("text"), text: z.string(), ...messagePartProvenance }).loose(),
   z.object({ kind: z.literal("reasoning"), text: z.string(), ...messagePartProvenance }).loose(),
   z.object({ kind: z.literal("thought"), text: z.string(), ...messagePartProvenance }).loose(),
+  z
+    .object({
+      kind: z.literal("image"),
+      url: z.string(),
+      mimeType: optString,
+      filename: optString,
+      ...messagePartProvenance,
+    })
+    .loose(),
   z
     .object({
       kind: z.literal("tool_call_ref"),

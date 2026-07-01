@@ -453,9 +453,12 @@ const BAR_TRIG = "absolute -inset-y-px right-0 w-0 border-r-[1.5px] border-[var(
 function BudgetBar({
   breakdown,
   cache,
+  className = BAR,
 }: {
   breakdown: WorkbenchContextBreakdown;
   cache: CacheView;
+  /** Override the bar shell — composer ribbon passes a flush, thin progress-bar shape. */
+  className?: string;
 }) {
   const mw = breakdown.memoryWindows;
   if (!mw) return null;
@@ -468,7 +471,7 @@ function BudgetBar({
   const pulse = "animate-[mg-bud-pulse_1.5s_ease-in-out_infinite]";
 
   return (
-    <span className={BAR}>
+    <span className={className}>
       <span className="min-w-px" style={{ flexGrow: tools, background: tone("tools") }} />
       <span className="min-w-px" style={{ flexGrow: system, background: tone("system-prompt") }} />
       <span className={BAR_WIN} style={{ flexGrow: obsCap }}>
@@ -611,7 +614,11 @@ export function ContextRibbon({
       title="What the agent sends the model — request order, token budget. Click to inspect."
       aria-label="Context budget"
     >
-      <BudgetBar breakdown={breakdown} cache={cache} />
+      <BudgetBar
+        breakdown={breakdown}
+        cache={cache}
+        className="relative flex h-1.5 items-stretch overflow-hidden bg-[var(--paper-2)]"
+      />
       <span className="absolute bottom-[calc(100%+8px)] left-0 hidden w-max max-w-[220px] flex-col gap-[3px] rounded-lg border-[0.5px] border-[var(--line-2)] bg-[var(--paper)] px-2.5 py-2 text-[11px] text-muted-foreground shadow-[0_8px_24px_color-mix(in_srgb,var(--foreground)_16%,transparent)] group-hover/ribbon:flex group-focus-visible/ribbon:flex">
         {rows.map((row) => (
           <span className="flex items-center gap-1.5 whitespace-nowrap" key={row.id}>

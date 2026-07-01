@@ -14,9 +14,9 @@
  * self-contained and theme-aware anywhere, no `.lens-frame` ancestor required.
  */
 export const PROSE_CLASS = [
-  "prose prose-sm max-w-none leading-relaxed text-[var(--basalt)]",
+  "prose prose-sm max-w-none leading-normal text-[var(--basalt)]",
   "[--tw-prose-body:var(--basalt)] [--tw-prose-headings:var(--basalt)] [--tw-prose-bold:var(--basalt)] [--tw-prose-links:var(--pe-blue)] [--tw-prose-bullets:var(--slate)] [--tw-prose-counters:var(--slate)] [--tw-prose-quotes:var(--slate)] [--tw-prose-quote-borders:var(--line-2)] [--tw-prose-hr:var(--line-2)] [--tw-prose-captions:var(--muted-foreground)] [--tw-prose-code:var(--basalt)] [--tw-prose-th-borders:var(--line-2)] [--tw-prose-td-borders:var(--line)]",
-  "prose-p:my-0 prose-p:mb-[0.6em] last:prose-p:mb-0",
+  "prose-p:my-0 prose-p:mb-[0.45em] last:prose-p:mb-0",
   "prose-headings:font-[var(--font-display)] prose-headings:font-semibold prose-headings:text-[var(--basalt)]",
   "prose-a:text-[var(--pe-blue)] prose-a:underline prose-a:underline-offset-2",
   "prose-code:rounded prose-code:border-[0.5px] prose-code:border-[var(--line)] prose-code:bg-[var(--paper-2)] prose-code:px-[5px] prose-code:py-px prose-code:text-[12.5px] prose-code:font-normal",

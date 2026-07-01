@@ -32,6 +32,19 @@ const toolResultContent = z.object({
   isError: z.boolean().optional().default(false),
   providerMetadata: z.record(z.string(), z.unknown()).optional(),
 });
+// Image/file content. Provider shapes vary (AI SDK `image`, mastra `file`), so accept the source
+// under any of image/data/url and the mime under mimeType/mediaType — loose, normalized downstream.
+const imageContent = z
+  .object({
+    type: z.enum(["image", "file"]),
+    image: z.string().optional(),
+    data: z.string().optional(),
+    url: z.string().optional(),
+    mimeType: z.string().optional(),
+    mediaType: z.string().optional(),
+    filename: z.string().optional(),
+  })
+  .loose();
 const signalContent = z.object({
   type: z.enum([
     "system_reminder",
@@ -44,13 +57,14 @@ const signalContent = z.object({
 });
 
 /** Only the content kinds the reducer projects. No bare `{ type: string }` member — that would
- * poison discriminated narrowing in the reducer's switch. Unknown parts (image/file/…) are dropped
- * by `wireContentArray` below instead. */
+ * poison discriminated narrowing in the reducer's switch. Unknown parts are dropped by
+ * `wireContentArray` below instead. */
 const wireMessageContentSchema = z.union([
   textContent,
   thinkingContent,
   toolCallContent,
   toolResultContent,
+  imageContent,
   signalContent,
 ]);
 

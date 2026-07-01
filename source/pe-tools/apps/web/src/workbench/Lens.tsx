@@ -100,6 +100,10 @@ export function Lens({
   const geomRef = useRef<Geom[]>([]);
   const hoverKeyRef = useRef<string | null>(null);
   const turnRef = useRef<number | undefined>(initialTurn);
+  // Read by the controller's initial snap only; kept off the effect deps so the debounced turn→URL
+  // write (which updates the `initialTurn` prop) never re-runs/re-measures the controller mid-scroll.
+  const initialTurnRef = useRef(initialTurn);
+  initialTurnRef.current = initialTurn;
   const tailFollowRef = useRef<TailFollowState>(initialTurn ? "detached" : "following");
   const scrollTopRef = useRef(0);
   const initialScrollRef = useRef({ key: "", done: false });
@@ -196,40 +200,58 @@ export function Lens({
     // The focal card is the one whose anchor is nearest the focal axis — so scrolling walks the
     // focal card to whatever tool is actually at the axis, one at a time, not the whole group.
     let cardAnchors: { key: string; parent: string; anchor: number }[] = [];
+    // The inline chat marker for each tool key, so only the single focal tool's rail lights up.
+    let markerByKey = new Map<string, HTMLElement>();
 
-    // Fisheye: non-focal cards collapse to their header strip; the SINGLE focal card expands.
-    // The lane translates so that card's center sits on the focal axis. A short rAF pump
-    // re-measures live during the max-height CSS transition so the translation tracks smoothly.
-    let fisheyeKey: string | null = null;
+    // Fisheye, two speeds. POSITION tracks continuously: the lane translates every frame so the
+    // nearest card's center rides the focal axis (parallax follow, never dumped to the bottom).
+    // EXPANSION is debounced: a card only blooms to full height after the scroll settles (~180ms),
+    // and everything collapses the instant you move again — so cards stop flickering open mid-scroll.
+    let committedKey: string | null = null; // the currently-expanded card
+    let pendingKey: string | null = null; // the last focal target seen (drives the settle timer)
+    let expandTimer = 0;
     let fisheyeRaf = 0;
-    const positionFisheye = (V: number, focalCardKey: string | null) => {
-      const fy = FOCAL * V;
+    const laneCenterOf = (key: string | null): number => {
+      const cell = key ? cards.find((c) => c.key === key)?.el : undefined;
+      return cell ? cell.offsetTop + cell.offsetHeight / 2 : 0;
+    };
+    const layoutLane = (V: number, anchorKey: string | null) => {
+      const inner = traceInnerRef.current;
+      if (inner) inner.style.transform = `translateY(${FOCAL * V - laneCenterOf(anchorKey)}px)`;
+    };
+    const applyExpansion = (key: string | null) => {
       const hoverKey = hoverKeyRef.current;
-      let focalCell: HTMLElement | null = null;
       for (const c of cards) {
-        const on = c.key === focalCardKey;
+        const on = c.key === key;
         c.el.style.maxHeight = on ? "400px" : "28px";
         c.el.classList.toggle("focal", on);
         c.el.classList.toggle("hover", c.key === hoverKey && !on);
-        if (on) focalCell = c.el;
       }
-      const inner = traceInnerRef.current;
-      const doLayout = () => {
-        if (!inner) return;
-        const center = focalCell ? focalCell.offsetTop + focalCell.offsetHeight / 2 : 0;
-        inner.style.transform = `translateY(${fy - center}px)`;
-      };
-      doLayout();
-      if (focalCardKey !== fisheyeKey) {
-        fisheyeKey = focalCardKey;
+    };
+    const positionFisheye = (V: number, focalCardKey: string | null) => {
+      layoutLane(V, focalCardKey); // continuous tracking, every frame
+      const hoverKey = hoverKeyRef.current; // hover is live (not gated by the expansion debounce)
+      for (const c of cards) c.el.classList.toggle("hover", c.key === hoverKey && c.key !== committedKey);
+      if (focalCardKey === pendingKey) return;
+      pendingKey = focalCardKey;
+      // Moving again → collapse the previously bloomed card immediately so nothing lingers open.
+      if (committedKey !== null) {
+        committedKey = null;
+        applyExpansion(null);
+      }
+      window.clearTimeout(expandTimer);
+      expandTimer = window.setTimeout(() => {
+        committedKey = focalCardKey;
+        applyExpansion(committedKey);
+        // re-center as the card grows (max-height transition) so the bloom lands on the axis
         cancelAnimationFrame(fisheyeRaf);
         const end = performance.now() + 300;
         const pump = () => {
-          doLayout();
+          layoutLane(scroller.clientHeight, committedKey);
           fisheyeRaf = performance.now() < end ? requestAnimationFrame(pump) : 0;
         };
         fisheyeRaf = requestAnimationFrame(pump);
-      }
+      }, 180);
     };
 
     const sync = () => {
@@ -285,18 +307,20 @@ export function Lens({
         }
       }
 
-      // The focal card = the card in the focal message's group whose anchor is nearest the
-      // focal axis. Scrolling within a long group advances it one tool at a time.
+      // The focal card = the tool whose inline marker is nearest the focal axis, ANYWHERE in the
+      // thread (not just the focal message's group) — so the trace lane always has an anchor to
+      // track and never collapses to the bottom when the focal message has no tools.
       let focalCardKey: string | null = null;
       let bestDistance = Infinity;
       for (const card of cardAnchors) {
-        if (card.parent !== fk) continue;
         const distance = Math.abs(card.anchor - focalDoc);
         if (distance < bestDistance) {
           bestDistance = distance;
           focalCardKey = card.key;
         }
       }
+      // Light up only that single tool's chat rail (not the whole message's tool group).
+      for (const [key, rail] of markerByKey) rail.classList.toggle("tool-focal", key === focalCardKey);
       positionFisheye(V, focalCardKey);
     };
 
@@ -319,6 +343,7 @@ export function Lens({
       // focal-card pick matches the tool the user sees at the focal axis. `parent` is the
       // enclosing message id, so the focal-message filter in sync() stays consistent.
       cardAnchors = [];
+      markerByKey = new Map();
       const chat = chatRef.current;
       if (chat) {
         const scrollerTop = scroller.getBoundingClientRect().top;
@@ -327,7 +352,10 @@ export function Lens({
           const parent = marker.closest<HTMLElement>(".lens-moment")?.dataset.key;
           if (!toolId || !parent) continue;
           const anchor = marker.getBoundingClientRect().top - scrollerTop + scroller.scrollTop;
-          cardAnchors.push({ key: `tool:${toolId}`, parent, anchor });
+          const key = `tool:${toolId}`;
+          cardAnchors.push({ key, parent, anchor });
+          const rail = marker.querySelector<HTMLElement>(".lens-marker");
+          if (rail) markerByKey.set(key, rail);
         }
       }
       cards = traceCells.flatMap((cell) => {
@@ -350,7 +378,7 @@ export function Lens({
       };
       if (!initialScrollRef.current.done) {
         scroller.scrollTop = scrollTopForIntent(
-          lensScrollIntent(initialTurn),
+          lensScrollIntent(initialTurnRef.current),
           geom,
           metrics,
           FOCAL,
@@ -418,6 +446,7 @@ export function Lens({
       scroller.removeEventListener("scroll", onScroll);
       cancelAnimationFrame(raf);
       cancelAnimationFrame(fisheyeRaf);
+      window.clearTimeout(expandTimer);
       chat?.removeEventListener("mouseover", onChatOver);
       chat?.removeEventListener("mouseleave", onChatLeave);
       trace?.removeEventListener("mouseover", onTraceOver);
@@ -426,7 +455,7 @@ export function Lens({
     // moments/traceCells are fresh arrays each render; re-running re-measures geometry as the
     // thread (and streaming text heights) change. The register callback re-measures once aui
     // mounts the moment sections. Hover survives via hoverKeyRef.
-  }, [moments, traceCells, mode, initialTurn, onTurnChange]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [moments, traceCells, mode, onTurnChange]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The scroller must always mount so the --vp ResizeObserver fires (it feeds the sticky
   // gutter/lane heights). Bailing to a different tree when empty left --vp unset, so on the

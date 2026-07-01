@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createFileRoute,
   retainSearchParams,
@@ -41,12 +41,20 @@ export const Route = createFileRoute("/chat")({
 function RouteComponent() {
   const { prompt, turn } = Route.useSearch();
   const navigate = useNavigate({ from: "/chat" });
+  // Debounce the scroll-driven turn → URL write: scrolling fires turn changes every frame, and each
+  // navigate re-renders the route. ~1s lag keeps the shareable URL fresh without thrashing the router
+  // (and the Lens reads `turn` only for the initial snap, so a lagging URL never re-scrolls the view).
+  const turnTimer = useRef<number>(0);
   const setTurn = useCallback(
     (next: number | undefined) => {
-      void navigate({ search: (prev) => ({ ...prev, turn: next }), replace: true });
+      window.clearTimeout(turnTimer.current);
+      turnTimer.current = window.setTimeout(() => {
+        void navigate({ search: (prev) => ({ ...prev, turn: next }), replace: true });
+      }, 1000);
     },
     [navigate],
   );
+  useEffect(() => () => window.clearTimeout(turnTimer.current), []);
   // The workbench is a browser-only app (local server fetch + SSE streaming + hotkeys/localStorage).
   // Mount client-only to keep it out of SSR/hydration entirely.
   const [mounted, setMounted] = useState(false);

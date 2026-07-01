@@ -114,9 +114,20 @@ function UserMoment() {
       .join("")
       .trim(),
   );
+  // Image parts ride the user turn (composer attachments). Select a stable joined STRING — a fresh
+  // array from the selector compares unequal every render and loops setState ("max update depth").
+  // "|" never appears in a data: URL (base64 is alphanumeric + "+/="), so it's a safe delimiter.
+  const imageBlob = useMessage((message) =>
+    message.content
+      .flatMap((part) =>
+        part.type === "image" && typeof part.image === "string" ? [part.image] : [],
+      )
+      .join("|"),
+  );
+  const images = imageBlob ? imageBlob.split("|") : [];
   return (
     <MomentSection id={id} role="user">
-      <div className="mb-1.5 inline-flex items-center gap-[7px] text-[10px] font-semibold tracking-[0.1em] uppercase text-[var(--pe-green)]">
+      <div className="mb-1.5 inline-flex items-center gap-[7px] text-[10px] font-semibold tracking-[0.1em] uppercase text-[var(--user)]">
         <span>you</span>
         {/* lens-fork kept as CSS: visibility is driven by `.lens-moment:hover` (geometry element) */}
         <button
@@ -128,8 +139,20 @@ function UserMoment() {
           <GitFork size={12} />
         </button>
       </div>
-      <div className="ml-auto w-fit max-w-[80%] rounded-[12px_12px_2px_12px] border-[0.5px] border-[var(--user-line)] bg-[var(--user-tint)] px-3 py-2 text-sm leading-normal">
-        {text}
+      <div className="ml-auto flex w-fit max-w-[80%] flex-col items-end gap-1.5">
+        {images.map((src) => (
+          <img
+            key={src}
+            src={src}
+            alt="attachment"
+            className="max-h-64 rounded-[12px] border-[0.5px] border-[var(--user-line)] object-contain"
+          />
+        ))}
+        {text ? (
+          <div className="rounded-[12px_12px_2px_12px] border-[0.5px] border-[var(--user-line)] bg-[var(--user-tint)] px-3 py-2 text-sm leading-normal">
+            {text}
+          </div>
+        ) : null}
       </div>
     </MomentSection>
   );
@@ -140,10 +163,10 @@ function AssistantMoment() {
   const running = useMessage((message) => message.status?.type === "running");
   return (
     <MomentSection id={id} role="assistant">
-      <div className="mb-1.5 text-[10px] font-semibold tracking-[0.1em] uppercase text-[var(--pe-blue)]">
+      <div className="mb-1.5 text-[10px] font-semibold tracking-[0.1em] uppercase text-[var(--pe-green)]">
         pea
       </div>
-      <div className="grid gap-2">
+      <div className="grid gap-1">
         <AssistantParts />
         {/* mg-caret kept as CSS: it's a keyframes blink animation (the user asked to keep those) */}
         {running ? <span className="mg-caret" aria-hidden="true" /> : null}
@@ -240,7 +263,7 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
   return (
     // data-tool-id lets the Lens anchor this tool's trace card to the marker's real chat
     // position, so the focal card tracks the tool actually at the focal axis.
-    <div className="grid gap-1.5" data-tool-id={toolCallId}>
+    <div className="grid gap-1" data-tool-id={toolCallId}>
       {/* lens-marker kept as CSS: focal/hover emphasis is driven by `.lens-moment.focal` (geometry) */}
       <div className={`lens-marker tool ${tone}`}>
         <span>⌗ {toolName}</span>
