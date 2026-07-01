@@ -71,10 +71,15 @@
   --trace: 248px;
   --strata: 264px;
 }
-/* the composer floats over the chat lane: clear the left lanes + the right mapdial. */
+/* the composer floats over the chat lane: clear the left lanes + the right mapdial, then inset by
+   equal 20px gutters so it lines up with the chat text column (.lens-chat padding: 0 20px). The
+   lane floats OUTSIDE the scroller, so it isn't pushed in by the scrollbar like .lens-chat is — the
+   extra 15px on the right makes up for it. ponytail: 15px = classic scrollbar; harmless if 0 (overlay). */
 .pe-composer-lane {
   margin-left: calc(var(--trace, 0px) + var(--strata, 0px));
   margin-right: var(--map, 104px);
+  padding-left: 20px;
+  padding-right: 35px;
 }
 
 /* ---- Map-dial: proportional minimap + viewport reticle ---------------- */
@@ -155,21 +160,21 @@
   opacity: 1;
 }
 .mapdial-band.user {
-  background: var(--pe-green);
+  background: var(--user);
 }
 .mapdial-band.assistant {
-  background: var(--pe-blue);
+  background: var(--pe-green);
 }
-/* tool = pea acting → hollow blue (palette A) */
+/* tool = pea acting → hollow green (matches the pea provenance color) */
 .mapdial-band.tool {
   background: transparent;
-  box-shadow: inset 0 0 0 1.25px var(--pe-blue);
+  box-shadow: inset 0 0 0 1.25px var(--pe-green);
 }
 .mapdial-band.tool.focal {
   box-shadow:
-    inset 0 0 0 1.5px var(--pe-blue),
+    inset 0 0 0 1.5px var(--pe-green),
     0 0 0 2px var(--paper-3),
-    0 0 0 3px color-mix(in srgb, var(--pe-blue) 35%, transparent);
+    0 0 0 3px color-mix(in srgb, var(--pe-green) 35%, transparent);
 }
 .mapdial-band.memory {
   background: var(--clay);
@@ -182,10 +187,10 @@
   opacity: 0.55;
 }
 .mapdial-band.user .num {
-  color: var(--pe-green);
+  color: var(--user);
 }
 .mapdial-band.assistant .num {
-  color: var(--pe-blue);
+  color: var(--pe-green);
 }
 
 /* ---- candlestick focal marker (replaces the reticle box) ----
@@ -230,29 +235,40 @@
   z-index: 5;
 }
 
-/* chat — near plane, the real scroll */
+/* chat — near plane, the real scroll. The composer floats over the bottom; pad the tail by its
+   live height (+ the pb-4 gap below it) so the last turn always clears the input box. */
 .lens-chat {
   padding: 14px 20px;
+  padding-bottom: calc(var(--composer-h, 96px) + 24px);
 }
 .lens-moment {
-  padding: 18px 0;
+  padding: 11px 0;
   scroll-margin-top: 12px;
 }
 .lens-marker {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
-  border-left: 2px solid var(--pe-blue);
-  padding: 2px 8px 2px 11px;
+  gap: 7px;
+  /* The marker is a grid item; min-width:0 lets its track shrink to the lane (default `auto`
+     grows the track to the long target's min-content) so the target can ellipsis-truncate. */
+  min-width: 0;
+  max-width: 100%;
+  border-left: 2px solid var(--pe-green);
+  padding: 1px 7px 1px 9px;
   border-radius: 0 4px 4px 0;
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1.3;
   color: var(--slate);
   transition:
     background 0.14s ease,
     border-color 0.14s ease,
     border-width 0.14s ease;
 }
-/* tool = pea acting → dashed blue rail (palette A); memory = clay */
+/* the tool name never shrinks; only the target arg truncates */
+.lens-marker > span {
+  flex: none;
+}
+/* tool = pea acting → dashed green rail (matches the pea provenance color); memory = clay */
 .lens-marker.tool {
   border-left-style: dashed;
 }
@@ -260,21 +276,24 @@
   border-left-color: var(--clay);
 }
 .lens-marker.active {
-  border-left-color: var(--pe-blue);
+  border-left-color: var(--pe-green);
 }
 .lens-marker.failed {
   border-left-color: var(--fail);
 }
-/* focal/hover stub → heavier rail + tint to match its highlighted detail card (no dimming
-   of the others) */
-.lens-moment.focal .lens-marker {
+/* focal stub → heavier rail + tint, but ONLY the single tool at the focal point (`.tool-focal`,
+   set per-marker by the scroll controller), not the whole message's tool group. Hover still tints
+   the whole hovered message's markers (a separate, coarser affordance). */
+.lens-marker.tool-focal {
   border-left-width: 3px;
 }
-.lens-moment.focal .lens-marker,
+.lens-marker.tool-focal,
 .lens-moment.hover .lens-marker {
-  background: color-mix(in srgb, var(--pe-blue) 6%, transparent);
+  background: color-mix(in srgb, var(--pe-green) 6%, transparent);
 }
 .lens-marker code {
+  flex: 0 1 auto;
+  min-width: 0; /* allow the ellipsis (the marker is a flex row) */
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--lichen);
@@ -323,8 +342,8 @@
   will-change: transform;
 }
 .lens-cell {
-  margin: 0 12px 6px;
-  max-height: 28px;
+  margin: 0 12px 4px;
+  max-height: 24px;
   border: 0.5px solid var(--line);
   border-radius: 6px;
   overflow: hidden;
@@ -338,14 +357,14 @@
 }
 .lens-cell.hover {
   opacity: 1;
-  border-color: color-mix(in srgb, var(--pe-blue) 40%, transparent);
+  border-color: color-mix(in srgb, var(--pe-green) 40%, transparent);
 }
 .lens-cell.focal {
   opacity: 1;
-  border-color: color-mix(in srgb, var(--pe-blue) 55%, transparent);
+  border-color: color-mix(in srgb, var(--pe-green) 55%, transparent);
   box-shadow:
-    0 1px 0 color-mix(in srgb, var(--pe-blue) 8%, transparent),
-    0 6px 18px color-mix(in srgb, var(--pe-blue) 14%, transparent);
+    0 1px 0 color-mix(in srgb, var(--pe-green) 8%, transparent),
+    0 6px 18px color-mix(in srgb, var(--pe-green) 14%, transparent);
 }
 .lens-cell.focal pre {
   max-height: 160px;
@@ -357,17 +376,17 @@
   text-transform: uppercase;
   color: var(--slate);
   background: var(--paper-2);
-  padding: 4px 8px;
+  padding: 3px 8px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .lens-cell pre {
   margin: 0;
-  padding: 7px 8px;
+  padding: 5px 8px;
   font-family: var(--font-mono);
   font-size: 11px;
-  line-height: 1.5;
+  line-height: 1.4;
   color: var(--lens-ink-2);
   white-space: pre-wrap;
   word-break: break-word;
@@ -406,13 +425,13 @@
   }
 }
 
-/* active tool: a slow blue sheen sweeps the marker while it runs */
+/* active tool: a slow green sheen sweeps the marker while it runs */
 .mg-marker.active,
 .lens-marker.active {
   background-image: linear-gradient(
     90deg,
     transparent 0%,
-    color-mix(in srgb, var(--pe-blue) 9%, transparent) 50%,
+    color-mix(in srgb, var(--pe-green) 9%, transparent) 50%,
     transparent 100%
   );
   background-size: 45% 100%;

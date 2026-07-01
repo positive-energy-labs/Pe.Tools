@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { HotkeysProvider, useHotkeys } from "@tanstack/react-hotkeys";
 import { Plus, Search } from "lucide-react";
 import { selectWorkbenchChrome } from "@pe/agent-contracts";
@@ -70,6 +70,21 @@ function Surface({
   );
   const cache = useCacheView(breakdown, userTurns);
 
+  // The composer floats over the chat lane; publish its live height as --composer-h so the chat
+  // can pad its tail by exactly the input box (which grows as the textarea expands).
+  const mainRef = useRef<HTMLElement>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const main = mainRef.current;
+    const box = composerRef.current;
+    if (!main || !box) return;
+    const apply = () => main.style.setProperty("--composer-h", `${box.offsetHeight}px`);
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, []);
+
   useHotkeys([
     { hotkey: "Mod+K", callback: () => setPaletteOpen((open) => !open) },
     { hotkey: "Mod+1", callback: () => setMode(MODES[0]!) },
@@ -84,7 +99,11 @@ function Surface({
       : (debug.error ?? operationError);
 
   return (
-    <main data-mode={mode} className="fixed inset-0 bg-background font-pe text-foreground">
+    <main
+      ref={mainRef}
+      data-mode={mode}
+      className="fixed inset-0 bg-background font-pe text-foreground"
+    >
       {/* Inner grid holds exactly the 3 rows; ThreadPalette stays OUT of the grid (its sr-only
           dialog header would otherwise absorb the 1fr lens row via auto-placement). */}
       <div className="grid h-full grid-rows-[auto_auto_minmax(0,1fr)]">
@@ -158,14 +177,19 @@ function Surface({
               the side lanes + mapdial) and resize with it. The ribbon is the unified request-
               ordered token budget bar, spanning the input width directly above it. */}
           <div className="pointer-events-none absolute inset-x-0 bottom-0 pb-4">
-            <div className="pe-composer-lane px-4">
-              <div className="pointer-events-auto flex flex-col gap-2">
-                <ContextRibbon
-                  breakdown={breakdown}
-                  cache={cache}
-                  onOpenWorld={() => setMode("world")}
+            <div className="pe-composer-lane">
+              <div ref={composerRef} className="pointer-events-auto">
+                <Composer
+                  setMode={setMode}
+                  promptSeed={promptSeed}
+                  topBar={
+                    <ContextRibbon
+                      breakdown={breakdown}
+                      cache={cache}
+                      onOpenWorld={() => setMode("world")}
+                    />
+                  }
                 />
-                <Composer setMode={setMode} promptSeed={promptSeed} />
               </div>
             </div>
           </div>

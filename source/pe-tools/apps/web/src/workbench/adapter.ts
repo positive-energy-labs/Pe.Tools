@@ -324,6 +324,16 @@ function messagePart(content: WireMessageContent): WorkbenchMessagePart[] {
       return [{ kind: "text", text: content.text }];
     case "thinking":
       return [{ kind: "reasoning", text: content.thinking }];
+    case "image":
+    case "file": {
+      const mime = content.mimeType ?? content.mediaType;
+      const url = imageSource(content.url ?? content.image, content.data, mime);
+      if (!url) return [];
+      // Non-image files have no inline render — show the filename as a small text part instead.
+      if (mime && !mime.startsWith("image/"))
+        return [{ kind: "text", text: `📎 ${content.filename ?? "file"}` }];
+      return [{ kind: "image", url, mimeType: mime, filename: content.filename }];
+    }
     case "tool_call":
       return [{ kind: "tool_call_ref", toolCallId: content.id, label: content.name }];
     case "tool_result":
@@ -337,6 +347,19 @@ function messagePart(content: WireMessageContent): WorkbenchMessagePart[] {
     default:
       return [];
   }
+}
+
+/** Normalize a provider image part to a render-ready URL: pass through data:/http/blob, else
+ * wrap raw base64 in a data URL. */
+function imageSource(
+  direct: string | undefined,
+  data: string | undefined,
+  mime: string | undefined,
+): string | undefined {
+  if (direct && /^(data:|https?:|blob:)/.test(direct)) return direct;
+  const raw = data ?? (direct && !direct.includes("/") ? direct : undefined);
+  if (raw) return `data:${mime ?? "image/png"};base64,${raw}`;
+  return direct;
 }
 
 function upsertMessage(messages: WorkbenchMessage[], next: WorkbenchMessage): WorkbenchMessage[] {

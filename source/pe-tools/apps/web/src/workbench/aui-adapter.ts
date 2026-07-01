@@ -41,7 +41,7 @@ export function workbenchToThreadMessages(state: WorkbenchState): ThreadMessageL
     else toolsByParent.set(parent, [call]);
   }
 
-  return chat.map((message): ThreadMessageLike => {
+  const projected = chat.map((message): ThreadMessageLike => {
     if (message.role === "user") {
       return { role: "user", id: message.id, content: textContent(message), ...createdAt(message) };
     }
@@ -62,6 +62,19 @@ export function workbenchToThreadMessages(state: WorkbenchState): ThreadMessageL
       ...createdAt(message),
     };
   });
+  // Drop empty turns (no text/image/tool) so the spine doesn't show blank "you"/"pea" rows. A
+  // running assistant with nothing yet is kept — it's the live streaming turn (caret).
+  return projected.filter(isRenderable);
+}
+
+/** A message worth a row: has visible text, an image, a tool call, or is the live streaming turn. */
+function isRenderable(message: ThreadMessageLike): boolean {
+  const parts = Array.isArray(message.content) ? message.content : [];
+  const hasText = parts.some((part) => part.type === "text" && part.text.trim().length > 0);
+  const hasImage = parts.some((part) => part.type === "image");
+  const hasTool = parts.some((part) => part.type === "tool-call");
+  const running = message.role === "assistant" && message.status?.type === "running";
+  return hasText || hasImage || hasTool || running;
 }
 
 function textContent(message: WorkbenchMessage): LikePart[] {
@@ -69,6 +82,7 @@ function textContent(message: WorkbenchMessage): LikePart[] {
     if (part.kind === "text") return [{ type: "text", text: part.text ?? "" }];
     if (part.kind === "reasoning" || part.kind === "thought")
       return [{ type: "reasoning", text: part.text ?? "" }];
+    if (part.kind === "image") return [{ type: "image", image: part.url }];
     return [];
   });
   // A user turn with no text part still needs a content entry to render.

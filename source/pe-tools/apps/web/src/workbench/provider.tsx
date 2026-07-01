@@ -19,7 +19,7 @@ import {
 } from "@pe/agent-contracts";
 import { peUrl, resolveWorkbenchConfig, type WorkbenchEndpointConfig } from "./config";
 import { applyWireEvent, hydrateWorkbenchState, type PeInspect } from "./adapter";
-import { parseWireEvent, parseWireMessages } from "./wire";
+import { parseWireEvent, parseWireMessages, type WireMessageContent } from "./wire";
 import { useThreadClaim } from "./claims";
 
 export interface StoredThreadSummary {
@@ -273,7 +273,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const sendPrompt = useCallback(
     async (text: string, attachments?: WorkbenchAttachment[]) => {
       const prompt = text.trim();
-      if (!prompt || !api) return;
+      // An image-only send (empty text) is valid — guard on "nothing to send", not "no text".
+      if ((!prompt && !attachments?.length) || !api) return;
       if (currentThreadId && !claim.isOwner) {
         setError("This thread is open in another tab - take over to send here.");
         return;
@@ -285,14 +286,19 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         gotoThread(threadId, true);
         await api.session.switchThread(threadId).catch(() => undefined);
       }
-      // Optimistically show the user's turn + running state; the stream confirms via agent_start.
+      // Optimistically show the user's turn (text + any attached images) + running state; the
+      // stream confirms via agent_start. Images render from the in-hand base64, no server echo needed.
+      const optimisticContent: WireMessageContent[] = [
+        ...(prompt ? [{ type: "text" as const, text: prompt }] : []),
+        ...attachmentsToContent(attachments),
+      ];
       setState((previous) => ({
         ...applyWireEvent(previous, {
           type: "message_start",
           message: {
             id: `local-user-${Date.now()}`,
             role: "user",
-            content: [{ type: "text", text: prompt }],
+            content: optimisticContent,
           },
         }),
         uiStatus: {
@@ -524,6 +530,24 @@ async function rejectApproval(session: SessionClient, requestId: string): Promis
   await session.approveTool(
     requestId.startsWith("tool-approval:") ? requestId.slice("tool-approval:".length) : requestId,
     false,
+  );
+}
+
+/** Composer attachments → optimistic wire content. Binary (images) carry base64 `data`; everything
+ * else shows as a filename chip. Mirrors the `messagePart` image/file branch in adapter.ts. */
+function attachmentsToContent(
+  attachments: WorkbenchAttachment[] | undefined,
+): WireMessageContent[] {
+  if (!attachments?.length) return [];
+  return attachments.map((attachment) =>
+    attachment.data
+      ? {
+          type: "image" as const,
+          data: attachment.data,
+          mimeType: attachment.mimeType,
+          filename: attachment.name,
+        }
+      : { type: "text" as const, text: `📎 ${attachment.name ?? "attachment"}` },
   );
 }
 
