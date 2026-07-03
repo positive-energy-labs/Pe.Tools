@@ -42,16 +42,13 @@ public sealed record BridgeStateSnapshot(
 
 public sealed record BridgeRegistrationRequest(
     int ContractVersion,
-    string SessionId,
     int ProcessId,
     BridgeStateSnapshot State
 );
 
 public sealed record BridgeRegistrationAck(
     bool Accepted,
-    string? ErrorMessage = null,
-    string? ExistingSessionId = null,
-    int? ExistingProcessId = null
+    string? ErrorMessage = null
 );
 
 public sealed record BridgeStateSync(
@@ -60,10 +57,8 @@ public sealed record BridgeStateSync(
 
 public sealed record BridgeRequest(
     string RequestId,
-    string Method,
-    string PayloadJson,
-    long SentAtUnixMs,
-    int PayloadBytes
+    string OperationKey,
+    string PayloadJson
 );
 
 public sealed record BridgeResponse(

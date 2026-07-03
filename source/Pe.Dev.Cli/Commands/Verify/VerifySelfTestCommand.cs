@@ -31,6 +31,7 @@ internal static class VerifySelfTestCommand {
             CheckRemovedRoute("status removed", ["status"]),
             CheckRemovedRoute("sync removed", ["sync"]),
             CheckUsageText("usage advertises minimal surface", ["pe-dev bootstrap-path", "pe-dev test", "pe-dev self-test", "pe-dev automation", "pe-dev codegen"]),
+            CheckUsageTextAbsent("usage does not advertise removed codegen check", ["pe-dev codegen <check|sync>"]),
             CheckUsageText("usage advertises fresh safety options", ["--plan", "--timeout-seconds", "--json"]),
             CheckGuidanceText("fresh guidance distinguishes proof and attached lanes", writer => AgentGuidanceWriter.WriteFreshOwnedLane(writer, 2025), ["FreshOwnedRevit", "proof-grade", "AttachedRrd scripting"])
         };
@@ -95,6 +96,15 @@ internal static class VerifySelfTestCommand {
 
     private static VerifySelfTestCheck CheckUsageText(string name, IReadOnlyList<string> expectedSnippets) =>
         CheckTextContains(name, DevCliProgram.UsageText, expectedSnippets);
+
+    private static VerifySelfTestCheck CheckUsageTextAbsent(string name, IReadOnlyList<string> forbiddenSnippets) {
+        var present = forbiddenSnippets
+            .Where(snippet => DevCliProgram.UsageText.Contains(snippet, StringComparison.Ordinal))
+            .ToArray();
+        return present.Length == 0
+            ? new VerifySelfTestCheck(name, true, null)
+            : new VerifySelfTestCheck(name, false, $"found forbidden text: {string.Join(", ", present)}");
+    }
 
     private static VerifySelfTestCheck CheckGuidanceText(
         string name,

@@ -40,16 +40,58 @@ internal static class BuildContractSync {
         ];
     }
 
-    public static IReadOnlyList<string> CheckAll(string repositoryRoot) => RenderAll(repositoryRoot)
-        .Where(file => !File.Exists(file.Path) || !string.Equals(File.ReadAllText(file.Path), file.Content, StringComparison.Ordinal))
-        .Select(file => file.Path)
-        .ToArray();
+    public static IReadOnlyList<string> CheckAll(string repositoryRoot) {
+        var files = RenderAll(repositoryRoot);
+        return files
+            .Where(file => !File.Exists(file.Path) || !string.Equals(File.ReadAllText(file.Path), file.Content, StringComparison.Ordinal))
+            .Select(file => file.Path)
+            .Concat(EnumerateExtraGeneratedFiles(repositoryRoot, files.Select(file => file.Path)))
+            .ToArray();
+    }
 
     public static IReadOnlyList<string> SyncAll(string repositoryRoot) {
-        var generatedFiles = new List<string>();
-        foreach (var file in RenderAll(repositoryRoot))
-            WriteIfChanged(file.Path, file.Content, generatedFiles);
-        return generatedFiles;
+        var files = RenderAll(repositoryRoot);
+        var changedFiles = new List<string>();
+        foreach (var extraFile in EnumerateExtraGeneratedFiles(repositoryRoot, files.Select(file => file.Path))) {
+            File.Delete(extraFile);
+            changedFiles.Add(extraFile);
+        }
+        DeleteEmptyGeneratedDirectories(repositoryRoot, changedFiles);
+
+        foreach (var file in files)
+            WriteIfChanged(file.Path, file.Content, changedFiles);
+        return changedFiles;
+    }
+
+    private static IEnumerable<string> EnumerateExtraGeneratedFiles(string repositoryRoot, IEnumerable<string> expectedPaths) {
+        var generatedDirectory = Path.Combine(repositoryRoot, BuildGeneratedContractPaths.GeneratedDirectoryPath);
+        if (!Directory.Exists(generatedDirectory))
+            return [];
+
+        var expected = expectedPaths
+            .Select(Path.GetFullPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return Directory.EnumerateFiles(generatedDirectory, "*", SearchOption.AllDirectories)
+            .Select(Path.GetFullPath)
+            .Where(path => !expected.Contains(path))
+            .ToArray();
+    }
+
+    private static void DeleteEmptyGeneratedDirectories(string repositoryRoot, ICollection<string> changedFiles) {
+        var generatedDirectory = Path.Combine(repositoryRoot, BuildGeneratedContractPaths.GeneratedDirectoryPath);
+        if (!Directory.Exists(generatedDirectory))
+            return;
+
+        foreach (var directory in Directory
+                     .EnumerateDirectories(generatedDirectory, "*", SearchOption.AllDirectories)
+                     .OrderByDescending(path => path.Length)) {
+            if (Directory.EnumerateFileSystemEntries(directory).Any())
+                continue;
+
+            Directory.Delete(directory);
+            changedFiles.Add(directory);
+        }
     }
 
     private static string NormalizeContent(string content) {
@@ -255,7 +297,6 @@ internal static class BuildContractSync {
             ["PeRuntimeBinRelativePath"] = layout.Runtime.Binaries.RootRelativePath,
             ["PeRuntimeHostDirectoryRelativePath"] = layout.Runtime.Binaries.HostDirectoryRelativePath,
             ["PeRuntimeHostExecutableRelativePath"] = layout.Runtime.Binaries.HostExecutableRelativePath,
-            ["PeRuntimeHostDllRelativePath"] = layout.Runtime.Binaries.HostDllRelativePath,
             ["PeRuntimePeaDirectoryRelativePath"] = layout.Runtime.Binaries.PeaDirectoryRelativePath,
             ["PeRuntimePeaLauncherRelativePath"] = layout.Runtime.Binaries.PeaLauncherRelativePath,
             ["PeRuntimePeaCurrentVersionRelativePath"] = layout.Runtime.Binaries.PeaCurrentVersionRelativePath,
@@ -268,7 +309,6 @@ internal static class BuildContractSync {
             ["PeDevRuntimeBinRelativePath"] = layout.DevelopmentRuntime.Binaries.RootRelativePath,
             ["PeDevRuntimeHostDirectoryRelativePath"] = layout.DevelopmentRuntime.Binaries.HostDirectoryRelativePath,
             ["PeDevRuntimeHostExecutableRelativePath"] = layout.DevelopmentRuntime.Binaries.HostExecutableRelativePath,
-            ["PeDevRuntimeHostDllRelativePath"] = layout.DevelopmentRuntime.Binaries.HostDllRelativePath,
             ["PeUserContentRootRelativePath"] = layout.UserContent.RootRelativePath,
             ["PeUserSettingsRelativePath"] = layout.UserContent.SettingsRelativePath,
             ["PeUserWorkspacesRelativePath"] = layout.UserContent.WorkspacesRelativePath,

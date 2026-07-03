@@ -7,10 +7,6 @@
     <RootNamespace>Pe.Dev.Cli</RootNamespace>
   </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="TypeGen" Version="7.0.0" />
-  </ItemGroup>
-
     <ItemGroup>
         <ProjectReference Include="..\Pe.Aps\Pe.Aps.csproj" />
         <ProjectReference Include="..\Pe.Dev.RevitAutomation\Pe.Dev.RevitAutomation.csproj" />

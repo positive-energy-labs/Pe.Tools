@@ -1,26 +1,26 @@
-using TypeGen.Core.TypeAnnotations;
+using Pe.Shared.Codegen;
 
 namespace Pe.Shared.StorageRuntime.Capabilities;
 
-[ExportTsEnum]
+[ExportTsSchema]
 public enum SettingsOptionsResolverKind {
     Remote,
     Dataset
 }
 
-[ExportTsEnum]
+[ExportTsSchema]
 public enum SettingsOptionsMode {
     Suggestion,
     Constraint
 }
 
-[ExportTsEnum]
+[ExportTsSchema]
 public enum SettingsOptionsDependencyScope {
     Sibling,
     Context
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public sealed record SettingsOptionsDependency(
     string Key,
     SettingsOptionsDependencyScope Scope
@@ -31,7 +31,7 @@ public sealed record SettingsOptionsDependency(
 // except RequiredRuntimeMode, which the writer emits separately under
 // x-runtime-capabilities; the browser reads x-options loosely, so the extra
 // field is harmless.
-[ExportTsInterface]
+[ExportTsSchema]
 public sealed record SettingsValueDomainDescriptor(
     string Key,
     SettingsOptionsResolverKind Resolver,

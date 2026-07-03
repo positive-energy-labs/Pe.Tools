@@ -7,6 +7,12 @@ namespace Pe.Dev.Cli.Codegen;
 internal static class ProductTypeScriptProjection {
     public static async Task<int> RunAsync(CodegenPaths paths, CancellationToken cancellationToken) {
         var generatedFile = GenerateFile(paths);
+        GeneratedProjectionSync.DeleteStaleFiles(
+            paths.RepoRoot,
+            [generatedFile.Path],
+            EnumerateProductGeneratedFiles(paths)
+        );
+
         Directory.CreateDirectory(Path.GetDirectoryName(generatedFile.Path)!);
         await File.WriteAllTextAsync(generatedFile.Path, generatedFile.Content, cancellationToken);
         Console.WriteLine($"Generated {Path.GetRelativePath(paths.RepoRoot, generatedFile.Path)}");
@@ -76,6 +82,9 @@ internal static class ProductTypeScriptProjection {
         var normalized = content.Replace("\r\n", "\n").Replace("\r", "\n");
         return normalized.EndsWith('\n') ? normalized : normalized + "\n";
     }
+
+    private static IEnumerable<string> EnumerateProductGeneratedFiles(CodegenPaths paths) =>
+        GeneratedProjectionSync.EnumerateFiles(paths.HostContractsDirectory, "product*.generated.ts", SearchOption.TopDirectoryOnly);
 
     private sealed record GeneratedProjectionFile(string Path, string Content);
 }

@@ -2,24 +2,24 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
-using TypeGen.Core.TypeAnnotations;
+using Pe.Shared.Codegen;
 
 namespace Pe.Shared.RevitData;
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum AuthoredParameterAssignmentKind {
     Value,
     Formula
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public sealed record AuthoredParameterAssignment(
     AuthoredParameterAssignmentKind Kind,
     string Value
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public abstract class AuthoredParameterDeclaration {
     [Description("Parameter name. Authored parameter declarations are name-first and resolve richer identity only after collection or compilation.")]
     [Required]
@@ -50,10 +50,10 @@ public abstract class AuthoredParameterDeclaration {
     }
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public class AuthoredSharedParameterDeclaration : AuthoredParameterDeclaration;
 
-[ExportTsInterface]
+[ExportTsSchema]
 public class AuthoredFamilyParameterDeclaration : AuthoredParameterDeclaration {
     [Description("Optional family-parameter datatype label or Forge type id used when creating a missing family parameter. Existing family parameter datatype changes are intentionally not migrated.")]
     public string? DataType { get; init; }

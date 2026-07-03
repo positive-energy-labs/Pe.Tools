@@ -1,31 +1,31 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using TypeGen.Core.TypeAnnotations;
+using Pe.Shared.Codegen;
 
 namespace Pe.Shared.RevitData;
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ElementIdentitySource {
     None,
     RequestedParameter,
     Mark
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record RequestedParameterQuery {
     public List<ParameterReference> Parameters { get; init; } = [];
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum RequestedParameterValueSource {
     None,
     Instance,
     Type
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record RequestedElementParameterValue(
     ParameterDefinitionDescriptor Definition,
     bool Found,

@@ -1,11 +1,11 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using TypeGen.Core.TypeAnnotations;
+using Pe.Shared.Codegen;
 
 namespace Pe.Shared.RevitData;
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum SheetDetailView {
     Summary,
     Anchors,
@@ -13,7 +13,7 @@ public enum SheetDetailView {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum SheetAnchorKind {
     TitleBlock,
     Viewport,
@@ -24,7 +24,7 @@ public enum SheetAnchorKind {
     ImportInstance
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record SheetReferenceRequest {
     public List<string> SheetNumbers { get; init; } = [];
     public List<string> SheetNumberContains { get; init; } = [];
@@ -33,7 +33,7 @@ public record SheetReferenceRequest {
     public bool CurrentActiveSheet { get; init; } = false;
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record SheetDetailProjection {
     public SheetDetailView View { get; init; } = SheetDetailView.Summary;
     public bool IncludeTitleBlocks { get; init; } = true;
@@ -45,17 +45,17 @@ public record SheetDetailProjection {
     public bool IncludeTitleBlockParameters { get; init; } = false;
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record SheetDetailRequest {
     public SheetReferenceRequest? References { get; init; }
     public SheetDetailProjection? Projection { get; init; }
     public RevitDataOutputBudget? Budget { get; init; }
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record SheetBounds(double MinX, double MinY, double MaxX, double MaxY);
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record SheetAnchor(
     SheetAnchorKind Kind,
     RevitAgentContextHandle Handle,
@@ -67,7 +67,7 @@ public record SheetAnchor(
     List<RevitAgentContextProvenance> Provenance
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record SheetSummary(
     RevitAgentContextHandle Handle,
     string SheetNumber,
@@ -82,14 +82,14 @@ public record SheetSummary(
     List<ProjectBrowserPath> BrowserPaths
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record SheetDetailEntry(
     SheetSummary Summary,
     List<SheetAnchor> Anchors,
     List<RevitDataIssue> Issues
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record SheetDetailData(
     List<SheetDetailEntry> Sheets,
     RevitDataResultPage Page,

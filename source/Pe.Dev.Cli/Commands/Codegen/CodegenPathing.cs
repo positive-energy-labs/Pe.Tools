@@ -7,11 +7,15 @@ internal sealed record CodegenPaths(string RepoRoot) {
 
     public string PeToolsDirectory => Path.Combine(RepoRoot, "source", "pe-tools");
 
-    public string HostGeneratedPackageDirectory => Path.Combine(PeToolsDirectory, "packages", "host-generated");
+    public string HostContractsPackageDirectory => Path.Combine(PeToolsDirectory, "packages", "host-contracts");
 
-    public string HostTypeGenDirectory => Path.Combine(HostGeneratedPackageDirectory, "src", "types");
+    public string HostContractsDirectory => Path.Combine(HostContractsPackageDirectory, "src", "contracts");
 
-    public string HostContractsDirectory => Path.Combine(HostGeneratedPackageDirectory, "src", "contracts");
+    public string HostEffectDirectory => Path.Combine(HostContractsPackageDirectory, "src", "effect");
 
-    public string HostZodDirectory => Path.Combine(HostGeneratedPackageDirectory, "src", "zod");
+    public IReadOnlyList<string> LegacyHostProjectionDirectories => [
+        Path.Combine(HostContractsPackageDirectory, "src", "types"),
+        Path.Combine(HostContractsPackageDirectory, "src", "json-schema"),
+        Path.Combine(HostContractsPackageDirectory, "src", "zod")
+    ];
 }

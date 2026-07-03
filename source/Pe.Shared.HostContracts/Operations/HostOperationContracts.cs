@@ -1,45 +1,8 @@
 namespace Pe.Shared.HostContracts.Operations;
 
-public enum HostExecutionMode {
-    Local,
-    Bridge
-}
-
-public enum HostOperationExposure {
-    PublicHttp,
-    InternalHostOnly
-}
-
-public enum HostHttpVerb {
-    Get,
-    Post
-}
-
 public enum HostOperationIntent {
     Read,
     Mutate
-}
-
-public enum HostOperationFamily {
-    Host,
-    Settings,
-    Script,
-    Revit,
-    Aps
-}
-
-public enum RevitOperationLayer {
-    Context,
-    Catalog,
-    Matrix,
-    Detail,
-    Resolve,
-    Apply
-}
-
-public enum RevitActiveDocumentKind {
-    Project,
-    Family
 }
 
 public enum HostOperationCostTier {
@@ -53,13 +16,6 @@ public enum HostOperationVisibility {
     DefaultVisible,
     EscalationVisible,
     ExpertOnly
-}
-
-public enum HostOperationRelationKind {
-    Preflight,
-    DrillDown,
-    Fallback,
-    Alternative
 }
 
 // Machine-readable failure classification the host emits in problem.extensions.kind,
@@ -78,157 +34,85 @@ public sealed record HostOperationRequestExample(
     string Json
 );
 
-public sealed record HostOperationRelatedOperation(
-    string Key,
-    HostOperationRelationKind Kind,
-    string? Note = null
-);
-
 public sealed record HostOperationAgentMetadata(
-    string Domain,
     string Description,
     IReadOnlyList<string> SearchTerms,
     HostOperationIntent Intent,
-    bool RequiresBridge,
     bool RequiresActiveDocument,
-    IReadOnlyList<RevitActiveDocumentKind> SupportedActiveDocumentKinds,
-    HostOperationFamily Family,
-    RevitOperationLayer? RevitLayer,
-    string DomainNoun,
     HostOperationCostTier CostTier,
     HostOperationVisibility Visibility,
-    string? SingleFlightGroup,
     IReadOnlyList<HostOperationRequestExample> RequestExamples,
     string? SafeDefaultRequestJson,
-    IReadOnlyList<string> CallGuidance,
-    IReadOnlyList<HostOperationRelatedOperation> RelatedOperations,
-    bool StrictRequestValidation
+    IReadOnlyList<string> CallGuidance
 ) {
     public static HostOperationAgentMetadata Create(
-        string domain,
         string description,
         IReadOnlyList<string>? searchTerms = null,
         HostOperationIntent intent = HostOperationIntent.Read,
-        bool requiresBridge = false,
         bool requiresActiveDocument = false,
-        IReadOnlyList<RevitActiveDocumentKind>? supportedActiveDocumentKinds = null,
-        HostOperationFamily? family = null,
-        RevitOperationLayer? revitLayer = null,
-        string? domainNoun = null,
         HostOperationCostTier? costTier = null,
         HostOperationVisibility? visibility = null,
-        string? singleFlightGroup = null,
         IReadOnlyList<HostOperationRequestExample>? requestExamples = null,
         string? safeDefaultRequestJson = null,
-        IReadOnlyList<string>? callGuidance = null,
-        IReadOnlyList<HostOperationRelatedOperation>? relatedOperations = null,
-        bool strictRequestValidation = true
+        IReadOnlyList<string>? callGuidance = null
     ) => new(
-        domain,
         description,
         searchTerms ?? Array.Empty<string>(),
         intent,
-        requiresBridge,
         requiresActiveDocument,
-        supportedActiveDocumentKinds ?? Array.Empty<RevitActiveDocumentKind>(),
-        family ?? InferFamily(domain),
-        revitLayer,
-        domainNoun ?? domain,
-        costTier ?? InferCostTier(intent, requiresBridge),
+        costTier ?? InferCostTier(intent),
         visibility ?? HostOperationVisibility.EscalationVisible,
-        singleFlightGroup ?? (requiresBridge ? "revit" : null),
         requestExamples ?? Array.Empty<HostOperationRequestExample>(),
         safeDefaultRequestJson,
-        callGuidance ?? Array.Empty<string>(),
-        relatedOperations ?? Array.Empty<HostOperationRelatedOperation>(),
-        strictRequestValidation
+        callGuidance ?? Array.Empty<string>()
     );
 
-    private static HostOperationFamily InferFamily(string domain) => domain switch {
-        "host" => HostOperationFamily.Host,
-        "settings" => HostOperationFamily.Settings,
-        "script" or "scripting" => HostOperationFamily.Script,
-        "revit" or "revit-data" or "electrical" => HostOperationFamily.Revit,
-        "aps" => HostOperationFamily.Aps,
-        _ => HostOperationFamily.Host
-    };
-
-    private static HostOperationCostTier InferCostTier(
-        HostOperationIntent intent,
-        bool requiresBridge
-    ) {
+    private static HostOperationCostTier InferCostTier(HostOperationIntent intent) {
         if (intent == HostOperationIntent.Mutate)
             return HostOperationCostTier.Mutation;
 
-        return requiresBridge ? HostOperationCostTier.Bounded : HostOperationCostTier.Cheap;
+        return HostOperationCostTier.Cheap;
     }
 }
 
-public sealed record HostHttpOperationDescriptor(
-    HostHttpVerb Verb,
-    string Route
-);
-
 public sealed record HostOperationDefinition(
     string Key,
-    HostExecutionMode ExecutionMode,
-    HostOperationExposure Exposure,
     Type RequestType,
     Type ResponseType,
-    HostHttpOperationDescriptor? Http = null,
+    bool IsPublic = true,
     string? DisplayName = null,
     HostOperationAgentMetadata? Metadata = null
 ) {
-    public HostHttpVerb Verb =>
-        this.Http?.Verb
-        ?? throw new InvalidOperationException($"Host operation '{this.Key}' is not publicly routable.");
-
-    public string Route =>
-        this.Http?.Route
-        ?? throw new InvalidOperationException($"Host operation '{this.Key}' is not publicly routable.");
-
-    public bool IsPublicHttp => this.Exposure == HostOperationExposure.PublicHttp;
-
     public HostOperationAgentMetadata AgentMetadata => EnrichMetadata(
         this.Key,
         this.RequestType,
         this.Metadata ?? HostOperationAgentMetadata.Create(
-            GetDefaultDomain(this.Key),
-            this.DisplayName ?? this.Key,
-            requiresBridge: this.ExecutionMode == HostExecutionMode.Bridge
+            this.DisplayName ?? this.Key
         )
     );
 
     public static HostOperationDefinition Create<TRequest, TResponse>(
         string key,
-        HostHttpVerb verb,
-        string route,
-        HostExecutionMode executionMode,
         string? displayName = null,
         HostOperationAgentMetadata? metadata = null
     ) => new(
         key,
-        executionMode,
-        HostOperationExposure.PublicHttp,
         typeof(TRequest),
         typeof(TResponse),
-        new HostHttpOperationDescriptor(verb, route),
+        true,
         displayName,
         metadata
     );
 
     public static HostOperationDefinition CreateInternal<TRequest, TResponse>(
         string key,
-        HostExecutionMode executionMode,
         string? displayName = null,
         HostOperationAgentMetadata? metadata = null
     ) => new(
         key,
-        executionMode,
-        HostOperationExposure.InternalHostOnly,
         typeof(TRequest),
         typeof(TResponse),
-        null,
+        false,
         displayName,
         metadata
     );
@@ -238,16 +122,10 @@ public sealed record HostOperationDefinition(
         Type requestType,
         HostOperationAgentMetadata metadata
     ) {
-        var family = InferFamilyFromKey(key, metadata.Family);
         return metadata with {
-            Family = family,
-            SupportedActiveDocumentKinds = DefaultIfEmpty(metadata.SupportedActiveDocumentKinds, InferSupportedActiveDocumentKinds(key, family, metadata.RequiresActiveDocument)),
-            RevitLayer = metadata.RevitLayer ?? InferRevitLayerFromKey(key),
-            DomainNoun = InferDomainNounFromKey(key, metadata.DomainNoun, metadata.Domain),
             CostTier = InferCostTierFromKey(key, metadata.CostTier, metadata.Intent),
-            SingleFlightGroup = metadata.SingleFlightGroup ?? (metadata.RequiresBridge ? "revit" : null),
             Visibility = InferVisibilityFromKey(key, metadata.Visibility),
-            SearchTerms = DefaultIfEmpty(metadata.SearchTerms, InferSearchTermsFromKey(key, metadata.Description, metadata.Domain)),
+            SearchTerms = DefaultIfEmpty(metadata.SearchTerms, InferSearchTermsFromKey(key, metadata.Description)),
             SafeDefaultRequestJson = metadata.SafeDefaultRequestJson ?? InferSafeDefaultRequestJson(key, requestType)
         };
     }
@@ -255,56 +133,14 @@ public sealed record HostOperationDefinition(
     private static IReadOnlyList<string> DefaultIfEmpty(IReadOnlyList<string> current, IReadOnlyList<string> fallback) =>
         current.Count == 0 ? fallback : current;
 
-    private static IReadOnlyList<RevitActiveDocumentKind> DefaultIfEmpty(
-        IReadOnlyList<RevitActiveDocumentKind> current,
-        IReadOnlyList<RevitActiveDocumentKind> fallback
-    ) => current.Count == 0 ? fallback : current;
-
-    private static IReadOnlyList<RevitActiveDocumentKind> InferSupportedActiveDocumentKinds(
-        string key,
-        HostOperationFamily family,
-        bool requiresActiveDocument
-    ) {
-        if (family != HostOperationFamily.Revit || !requiresActiveDocument)
-            return [];
-
-        return key switch {
-            "revit.context.summary" => [RevitActiveDocumentKind.Project, RevitActiveDocumentKind.Family],
-            "revit.catalog.loaded-families.filter-schema" => [RevitActiveDocumentKind.Project],
-            "revit.catalog.loaded-families.filter-field-options" => [RevitActiveDocumentKind.Project],
-            "revit.catalog.schedules" => [RevitActiveDocumentKind.Project],
-            "revit.catalog.project-browser" => [RevitActiveDocumentKind.Project],
-            "revit.detail.sheets" => [RevitActiveDocumentKind.Project],
-            "revit.catalog.project-index" => [RevitActiveDocumentKind.Project],
-            "revit.matrix.schedule-profiles" => [RevitActiveDocumentKind.Project],
-            "revit.detail.schedules" => [RevitActiveDocumentKind.Project],
-            "revit.catalog.loaded-families" => [RevitActiveDocumentKind.Project],
-            "revit.matrix.loaded-families" => [RevitActiveDocumentKind.Project],
-            "revit.matrix.schedule-coverage" => [RevitActiveDocumentKind.Project],
-            "revit.matrix.parameter-coverage" => [RevitActiveDocumentKind.Project],
-            "revit.catalog.concept-evidence" => [RevitActiveDocumentKind.Project],
-            "revit.catalog.parameter-evidence" => [RevitActiveDocumentKind.Project],
-            "revit.catalog.parameter-bindings" => [RevitActiveDocumentKind.Project],
-            "revit.resolve.references" => [RevitActiveDocumentKind.Project],
-            "revit.context.visible-summary" => [RevitActiveDocumentKind.Project],
-            "revit.detail.elements" => [RevitActiveDocumentKind.Project],
-            "revit.catalog.electrical-panels" => [RevitActiveDocumentKind.Project],
-            "revit.catalog.electrical-circuits" => [RevitActiveDocumentKind.Project],
-            "revit.catalog.electrical-load-classifications" => [RevitActiveDocumentKind.Project],
-            "revit.detail.electrical-panel-schedules" => [RevitActiveDocumentKind.Project],
-            _ => [RevitActiveDocumentKind.Project]
-        };
-    }
-
     private static IReadOnlyList<string> InferSearchTermsFromKey(
         string key,
-        string description,
-        string domain
+        string description
     ) {
         var terms = new List<string>();
         AddSplitTerms(terms, key);
         AddSplitTerms(terms, description);
-        AddSplitTerms(terms, domain);
+        AddSplitTerms(terms, GetDefaultDomain(key));
         return terms
             .Where(term => term.Length > 1)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -340,54 +176,6 @@ public sealed record HostOperationDefinition(
             "settings.parameter-catalog" => """{ "moduleKey": "CmdFFManager", "contextValues": {} }""",
             _ => "{}"
         };
-    }
-
-    private static HostOperationFamily InferFamilyFromKey(
-        string key,
-        HostOperationFamily fallback
-    ) {
-        if (key.StartsWith("revit.", StringComparison.Ordinal))
-            return HostOperationFamily.Revit;
-        if (key.StartsWith("settings.", StringComparison.Ordinal))
-            return HostOperationFamily.Settings;
-        if (key.StartsWith("script.", StringComparison.Ordinal))
-            return HostOperationFamily.Script;
-        if (key.StartsWith("host.", StringComparison.Ordinal))
-            return HostOperationFamily.Host;
-        if (key.StartsWith("aps.", StringComparison.Ordinal))
-            return HostOperationFamily.Aps;
-
-        return fallback;
-    }
-
-    private static RevitOperationLayer? InferRevitLayerFromKey(string key) {
-        var parts = key.Split('.');
-        if (parts.Length < 3 || !string.Equals(parts[0], "revit", StringComparison.Ordinal))
-            return null;
-
-        return parts[1] switch {
-            "context" => RevitOperationLayer.Context,
-            "catalog" => RevitOperationLayer.Catalog,
-            "matrix" => RevitOperationLayer.Matrix,
-            "detail" => RevitOperationLayer.Detail,
-            "resolve" => RevitOperationLayer.Resolve,
-            "apply" => RevitOperationLayer.Apply,
-            _ => null
-        };
-    }
-
-    private static string InferDomainNounFromKey(
-        string key,
-        string fallback,
-        string legacyDomain
-    ) {
-        var parts = key.Split('.');
-        if (parts.Length >= 3 && string.Equals(parts[0], "revit", StringComparison.Ordinal))
-            return parts[2];
-
-        return string.Equals(fallback, legacyDomain, StringComparison.Ordinal)
-            ? GetDefaultDomain(key)
-            : fallback;
     }
 
     private static HostOperationVisibility InferVisibilityFromKey(

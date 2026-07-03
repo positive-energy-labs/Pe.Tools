@@ -1,18 +1,18 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using TypeGen.Core.TypeAnnotations;
+using Pe.Shared.Codegen;
 
 namespace Pe.Shared.RevitData;
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ConceptEvidenceConfidence {
     Low,
     Medium,
     High
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ConceptEvidenceRequest {
     public string? Query { get; init; }
     public List<string> ConceptHints { get; init; } = [];
@@ -22,7 +22,7 @@ public record ConceptEvidenceRequest {
     public RevitDataOutputBudget? Budget { get; init; }
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ConceptEvidenceFacts(
     int BindingCount,
     List<string> BindingCategories,
@@ -33,7 +33,7 @@ public record ConceptEvidenceFacts(
     List<string> SampleSchedules
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ConceptEvidenceCandidate(
     ParameterDefinitionDescriptor Definition,
     double Score,
@@ -44,14 +44,14 @@ public record ConceptEvidenceCandidate(
     public ParameterIdentity Identity => this.Definition.Identity;
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ConceptEvidenceCard(
     string Concept,
     List<ConceptEvidenceCandidate> Candidates,
     List<string> EvidenceNotes
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ConceptEvidenceData(
     List<ConceptEvidenceCard> Concepts,
     List<RevitDataIssue> Issues,

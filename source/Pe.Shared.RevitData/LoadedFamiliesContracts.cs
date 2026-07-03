@@ -1,11 +1,11 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using TypeGen.Core.TypeAnnotations;
+using Pe.Shared.Codegen;
 
 namespace Pe.Shared.RevitData;
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum LoadedFamilyPlacementScope {
     AllLoaded,
     PlacedOnly,
@@ -13,7 +13,7 @@ public enum LoadedFamilyPlacementScope {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum FormulaState {
     None,
     Present,
@@ -22,7 +22,7 @@ public enum FormulaState {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum LoadedFamilyParameterKind {
     Unknown,
     FamilyParameter,
@@ -32,7 +32,7 @@ public enum LoadedFamilyParameterKind {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum LoadedFamilyParameterPresence {
     Unresolved,
     Family,
@@ -41,33 +41,33 @@ public enum LoadedFamilyParameterPresence {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ExcludedParameterReason {
     UnresolvedClassification,
     ProjectObservedBuiltIn
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record LoadedFamiliesFilterFieldOptionsRequest(
     string PropertyPath,
     string SourceKey,
     Dictionary<string, string>? ContextValues
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record LoadedFamiliesCatalogRequest(
     LoadedFamiliesFilter? Filter,
     RevitDataProjectionRequest? Projection = null,
     RevitDataOutputBudget? Budget = null
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record LoadedFamiliesMatrixRequest(
     LoadedFamiliesFilter? Filter,
     RevitDataOutputBudget? Budget = null
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record LoadedFamiliesFilter {
     public List<string> FamilyNames { get; init; } = [];
     public string? FamilyNameContains { get; init; }
@@ -76,12 +76,12 @@ public record LoadedFamiliesFilter {
     public LoadedFamilyPlacementScope PlacementScope { get; init; } = LoadedFamilyPlacementScope.AllLoaded;
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record LoadedFamilyTypeEntry(
     string TypeName
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record LoadedFamilyCatalogEntry(
     long FamilyId,
     string FamilyUniqueId,
@@ -92,7 +92,7 @@ public record LoadedFamilyCatalogEntry(
     List<LoadedFamilyTypeEntry> Types
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record LoadedFamiliesCatalogSummary(
     int TotalFamilies,
     int PlacedFamilies,
@@ -102,7 +102,7 @@ public record LoadedFamiliesCatalogSummary(
     bool Truncated
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record LoadedFamiliesCatalogData(
     LoadedFamiliesCatalogSummary Summary,
     List<LoadedFamilyCatalogEntry> Families,
@@ -110,7 +110,7 @@ public record LoadedFamiliesCatalogData(
     RevitDataResultPage? Page = null
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record LoadedFamilyVisibleParameterEntry(
     ParameterDefinitionDescriptor Definition,
     LoadedFamilyParameterKind Kind,
@@ -121,7 +121,7 @@ public record LoadedFamilyVisibleParameterEntry(
     Dictionary<string, string?> ValuesByType
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record LoadedFamilyExcludedParameterEntry(
     ParameterDefinitionDescriptor Definition,
     LoadedFamilyParameterKind Kind,
@@ -131,7 +131,7 @@ public record LoadedFamilyExcludedParameterEntry(
     string? Formula
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record LoadedFamilyMatrixFamily(
     long FamilyId,
     string FamilyUniqueId,
@@ -145,7 +145,7 @@ public record LoadedFamilyMatrixFamily(
     List<RevitDataIssue> Issues
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record LoadedFamiliesMatrixData(
     List<LoadedFamilyMatrixFamily> Families,
     List<RevitDataIssue> Issues,

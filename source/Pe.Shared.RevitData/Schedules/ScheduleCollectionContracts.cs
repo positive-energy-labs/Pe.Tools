@@ -1,14 +1,14 @@
-using TypeGen.Core.TypeAnnotations;
+using Pe.Shared.Codegen;
 
 namespace Pe.Shared.RevitData.Schedules;
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleCollectionRequest(
     ScheduleCatalogRequest? PrimaryCatalogRequest = null,
     ScheduleCatalogRequest? FallbackCatalogRequest = null
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleCollectionArtifact(
     string RunId,
     string Engine,

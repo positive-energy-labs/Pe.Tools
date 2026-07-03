@@ -1,11 +1,11 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using TypeGen.Core.TypeAnnotations;
+using Pe.Shared.Codegen;
 
 namespace Pe.Shared.RevitData;
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ParameterIdentityKind {
     SharedGuid,
     BuiltInParameter,
@@ -13,13 +13,13 @@ public enum ParameterIdentityKind {
     NameFallback
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ParameterCatalogRequest(
     string ModuleKey,
     Dictionary<string, string>? ContextValues
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ParameterIdentity(
     string Key,
     ParameterIdentityKind Kind,
@@ -29,7 +29,7 @@ public record ParameterIdentity(
     long? ParameterElementId
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ParameterReference {
     public ParameterIdentity? Identity { get; init; }
     public string? Name { get; init; }
@@ -40,7 +40,7 @@ public record ParameterReference {
     public static ParameterReference FromSharedGuid(string sharedGuid) => new() { SharedGuid = sharedGuid };
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ParameterDefinitionDescriptor(
     ParameterIdentity Identity,
     bool? IsInstance,
@@ -50,7 +50,7 @@ public record ParameterDefinitionDescriptor(
     string? GroupTypeLabel
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ParameterCatalogEntry(
     ParameterDefinitionDescriptor Definition,
     string StorageType,
@@ -59,7 +59,7 @@ public record ParameterCatalogEntry(
     List<string> TypeNames
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ParameterCatalogData(
     List<ParameterCatalogEntry> Entries,
     int FamilyCount,

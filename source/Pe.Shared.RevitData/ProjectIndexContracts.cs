@@ -1,11 +1,11 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using TypeGen.Core.TypeAnnotations;
+using Pe.Shared.Codegen;
 
 namespace Pe.Shared.RevitData;
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ProjectIndexSection {
     Levels,
     Sheets,
@@ -15,7 +15,7 @@ public enum ProjectIndexSection {
     Families
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ProjectIndexRequest {
     public List<ProjectIndexSection> Sections { get; init; } = [];
     public string? SearchText { get; init; }
@@ -35,7 +35,7 @@ public record ProjectIndexRequest {
     public RevitDataOutputBudget? Budget { get; init; }
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ProjectIndexSummary(
     int LevelCount,
     int SheetCount,
@@ -46,7 +46,7 @@ public record ProjectIndexSummary(
     bool Truncated
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ProjectIndexLevelEntry(
     RevitAgentContextHandle Handle,
     string Name,
@@ -60,7 +60,7 @@ public record ProjectIndexLevelEntry(
     List<RevitAgentContextProvenance> Provenance
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ProjectIndexSheetEntry(
     RevitAgentContextHandle Handle,
     string SheetNumber,
@@ -74,7 +74,7 @@ public record ProjectIndexSheetEntry(
     List<RevitAgentContextProvenance> Provenance
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ProjectIndexViewEntry(
     RevitAgentContextHandle Handle,
     string Name,
@@ -88,7 +88,7 @@ public record ProjectIndexViewEntry(
     List<RevitAgentContextProvenance> Provenance
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ProjectIndexScheduleEntry(
     RevitAgentContextHandle Handle,
     string Name,
@@ -105,7 +105,7 @@ public record ProjectIndexScheduleEntry(
     List<RevitAgentContextProvenance> Provenance
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ProjectIndexCategoryEntry(
     RevitAgentContextHandle Handle,
     string CategoryName,
@@ -116,7 +116,7 @@ public record ProjectIndexCategoryEntry(
     List<RevitAgentContextProvenance> Provenance
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ProjectIndexFamilyEntry(
     RevitAgentContextHandle Handle,
     string FamilyName,
@@ -128,13 +128,13 @@ public record ProjectIndexFamilyEntry(
     List<RevitAgentContextProvenance> Provenance
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ProjectIndexModelCategoryCount(
     string CategoryName,
     int ElementCount
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ProjectIndexModelContext(
     int LinkCount,
     int RoomCount,
@@ -143,7 +143,7 @@ public record ProjectIndexModelContext(
     List<ProjectIndexModelCategoryCount> MajorCategoryCounts
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ProjectIndexData(
     ProjectIndexSummary Summary,
     List<ProjectIndexLevelEntry> Levels,

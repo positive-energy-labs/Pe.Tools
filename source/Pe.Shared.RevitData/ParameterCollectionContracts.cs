@@ -1,13 +1,13 @@
-using TypeGen.Core.TypeAnnotations;
+using Pe.Shared.Codegen;
 
 namespace Pe.Shared.RevitData;
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ParameterCollectionRequest(
     LoadedFamiliesFilter? Filter = null
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ParameterCollectionArtifact(
     string RunId,
     string Engine,

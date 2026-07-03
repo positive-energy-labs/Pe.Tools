@@ -1,14 +1,14 @@
-using TypeGen.Core.TypeAnnotations;
+using Pe.Shared.Codegen;
 
 namespace Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
 
-[ExportTsClass]
+[ExportTsSchema]
 public static class SchemaDatasetIds {
     public const string ParameterCatalog = "parameterCatalog";
     public const string LoadedFamiliesCatalog = "loadedFamiliesCatalog";
 }
 
-[ExportTsClass]
+[ExportTsSchema]
 public static class SchemaProjectionKeys {
     public const string FamilyParameterNames = "familyParameterNames";
     public const string FamilyNames = "familyNames";

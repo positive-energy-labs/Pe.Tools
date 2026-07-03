@@ -1,16 +1,16 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using TypeGen.Core.TypeAnnotations;
+using Pe.Shared.Codegen;
 
 namespace Pe.Shared.HostContracts.Scripting;
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScriptWorkspaceBootstrapRequest(
     string WorkspaceKey = "default",
     bool CreateSampleScript = true
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScriptWorkspaceBootstrapData(
     string WorkspaceKey,
     string ProductHomePath,
@@ -27,7 +27,7 @@ public record ScriptWorkspaceBootstrapData(
     List<string> GeneratedFiles
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ExecuteRevitScriptRequest(
     string? ScriptContent = null,
     ScriptExecutionSourceKind SourceKind = ScriptExecutionSourceKind.InlineSnippet,
@@ -38,7 +38,7 @@ public record ExecuteRevitScriptRequest(
     ScriptPermissionMode PermissionMode = ScriptPermissionMode.ReadOnly
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScriptArtifactData(
     string Name,
     string RelativePath,
@@ -47,7 +47,7 @@ public record ScriptArtifactData(
     long SizeBytes
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ExecuteRevitScriptData(
     ScriptExecutionStatus Status,
     string Output,
@@ -59,19 +59,19 @@ public record ExecuteRevitScriptData(
     List<ScriptArtifactData>? Artifacts = null
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScriptPodImportRequest(
     string ArchivePath,
     string? WorkspaceKey = null
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScriptPodExportRequest(
     string WorkspaceKey,
     string ArchivePath
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScriptPodManifestSummaryData(
     int SchemaVersion,
     string Id,
@@ -82,19 +82,19 @@ public record ScriptPodManifestSummaryData(
     List<ScriptPodEntrypointData> Entrypoints
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScriptPodOriginData(
     string Path
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScriptPodEntrypointData(
     string Id,
     string SourcePath,
     string? Name = null
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScriptPodImportData(
     ScriptPodTransferStatus Status,
     string? WorkspaceKey,
@@ -106,7 +106,7 @@ public record ScriptPodImportData(
     List<ScriptDiagnostic> Diagnostics
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScriptPodExportData(
     ScriptPodTransferStatus Status,
     string? WorkspaceKey,
@@ -118,14 +118,14 @@ public record ScriptPodExportData(
 );
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ScriptPodTransferStatus {
     Succeeded,
     Rejected
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ScriptExecutionStatus {
     Succeeded,
     ReferenceResolutionFailed,
@@ -136,14 +136,14 @@ public enum ScriptExecutionStatus {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ScriptPermissionMode {
     ReadOnly,
     WriteTransaction
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ScriptDiagnosticSeverity {
     Info,
     Warning,
@@ -151,13 +151,13 @@ public enum ScriptDiagnosticSeverity {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ScriptExecutionSourceKind {
     InlineSnippet,
     WorkspacePath
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScriptDiagnostic(
     string Stage,
     ScriptDiagnosticSeverity Severity,
