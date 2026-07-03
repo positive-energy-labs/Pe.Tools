@@ -1,7 +1,6 @@
 ﻿using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Pe.Revit.Scripting.Storage;
-using Pe.Shared.HostContracts;
 
 namespace Pe.Revit.Scripting.Context;
 
@@ -13,7 +12,6 @@ public abstract class PeScriptContainer {
     protected Document? doc => this.Context.Document;
     protected IReadOnlyList<ElementId> selection => this.Context.Selection;
     protected string revitVersion => this.Context.RevitVersion;
-    protected PeHostClient Host => this.Context.Host;
     protected ScriptArtifactWriter Artifacts => this.Context.Artifacts;
 
     protected void Notify(string message) => this.Context.Notify(message);

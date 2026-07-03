@@ -281,8 +281,42 @@ public static class RevitAgentContextCollector {
 
     private static RevitAgentLinkRenderingState CreateLinkState(Document document, View view, RevitLinkInstance link) {
         var typeId = link.GetTypeId();
+#if REVIT2023
+        return new RevitAgentLinkRenderingState(
+            CreateHandle(document, link, RevitAgentContextHandleKind.Element, link.Name),
+            TryRead(() => link.IsHidden(view)),
+            TryRead(() => RevitLinkType.IsLoaded(document, typeId)),
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+        );
+#else
         using var overrides = TryRead(() => view.GetLinkOverrides(link.Id));
         var linkedViewId = overrides?.LinkedViewId;
+#if REVIT2024
+        return new RevitAgentLinkRenderingState(
+            CreateHandle(document, link, RevitAgentContextHandleKind.Element, link.Name),
+            TryRead(() => link.IsHidden(view)),
+            TryRead(() => RevitLinkType.IsLoaded(document, typeId)),
+            overrides?.LinkVisibilityType.ToString(),
+            linkedViewId != null && linkedViewId != ElementId.InvalidElementId ? document.GetElement(linkedViewId)?.Name : null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+        );
+#else
         return new RevitAgentLinkRenderingState(
             CreateHandle(document, link, RevitAgentContextHandleKind.Element, link.Name),
             TryRead(() => link.IsHidden(view)),
@@ -298,6 +332,8 @@ public static class RevitAgentContextCollector {
             TryRead(() => overrides?.GetViewDetailLevel().ToString()),
             TryRead(() => overrides?.GetDiscipline().ToString())
         );
+#endif
+#endif
     }
 
     private static List<RevitAgentWorksetVisibilityState> CreateWorksetStates(Document document, View view, int maxWorksets, List<RevitDataIssue> issues) {

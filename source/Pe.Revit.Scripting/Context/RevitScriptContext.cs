@@ -1,7 +1,6 @@
 ﻿using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Pe.Revit.Scripting.Storage;
-using Pe.Shared.HostContracts;
 
 namespace Pe.Revit.Scripting.Context;
 
@@ -17,7 +16,6 @@ public sealed class RevitScriptContext(
 ) {
     private readonly Action<string>? _notificationSink = notificationSink;
     private readonly Action<string>? _outputWriter = outputWriter;
-    private PeHostClient? _host;
 
     public UIApplication App { get; } = app;
     public UIDocument? UiDocument { get; } = uidoc;
@@ -25,7 +23,6 @@ public sealed class RevitScriptContext(
     public IReadOnlyList<ElementId> Selection { get; } = selection;
     public string RevitVersion { get; } = revitVersion;
     public ScriptArtifactWriter Artifacts { get; } = artifacts;
-    public PeHostClient Host => this._host ??= new PeHostClient();
 
     public void Notify(string message) {
         if (!string.IsNullOrWhiteSpace(message))

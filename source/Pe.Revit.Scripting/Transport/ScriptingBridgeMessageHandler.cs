@@ -3,13 +3,14 @@ using Pe.Revit.Scripting.Bootstrap;
 using Pe.Revit.Scripting.Execution;
 using Pe.Revit.Scripting.Pods;
 using Pe.Revit.Scripting.References;
+using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.Scripting.Execution;
 using Serilog;
 
 namespace Pe.Revit.Scripting.Transport;
 
-public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisposable {
+public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IScriptingBridgeService, IDisposable {
     private readonly ScriptWorkspaceBootstrapService _bootstrapService;
     private readonly ScriptPodArchiveService _podArchiveService;
     private readonly RevitScriptExecutionService _executionService;
