@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowUp, ChevronDown, Copy, GitFork, Paperclip, Settings2, Sparkles } from "lucide-react";
 
 import { ThemeToggle } from "#/components/ThemeToggle";
@@ -56,6 +56,9 @@ import { Switch } from "#/components/ui/switch";
 import { Textarea } from "#/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
 import { Tooltip, UiTooltipProvider } from "#/components/ui/tooltip";
+import { GroundedDocView } from "#/grounded-doc/GroundedDocView";
+import { useGroundedDoc } from "#/grounded-doc/engine";
+import { SAMPLE_DOC } from "#/grounded-doc/sample";
 import type { Mode } from "#/workbench/depth";
 import { PROSE_CLASS } from "#/workbench/prose";
 import "#/workbench/lens.css";
@@ -115,6 +118,7 @@ function DesignSystem() {
           <Surfaces />
           <Overlays />
           <ChatRegister />
+          <GroundedDoc />
         </main>
       </div>
     </UiTooltipProvider>
@@ -580,6 +584,25 @@ function Picker({
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+function GroundedDoc() {
+  const engine = useGroundedDoc();
+  // Seed with the synthetic doc so the block renders without a parse/API key.
+  useEffect(() => {
+    if (!engine.doc) engine.setDoc(SAMPLE_DOC);
+  }, [engine]);
+
+  return (
+    <Section
+      title="Grounded Document"
+      hint="Reusable <GroundedDocView> over useGroundedDoc() — hover a markdown block or a page box to link the two. Drop it anywhere a parsed PDF needs to stay traceable. Full harness at /doc-lab."
+    >
+      <div className="h-[520px] overflow-hidden rounded-xl border border-border">
+        <GroundedDocView engine={engine} className="h-full" />
+      </div>
+    </Section>
   );
 }
 

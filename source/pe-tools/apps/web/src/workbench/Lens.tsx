@@ -231,7 +231,8 @@ export function Lens({
     const positionFisheye = (V: number, focalCardKey: string | null) => {
       layoutLane(V, focalCardKey); // continuous tracking, every frame
       const hoverKey = hoverKeyRef.current; // hover is live (not gated by the expansion debounce)
-      for (const c of cards) c.el.classList.toggle("hover", c.key === hoverKey && c.key !== committedKey);
+      for (const c of cards)
+        c.el.classList.toggle("hover", c.key === hoverKey && c.key !== committedKey);
       if (focalCardKey === pendingKey) return;
       pendingKey = focalCardKey;
       // Moving again → collapse the previously bloomed card immediately so nothing lingers open.
@@ -320,7 +321,8 @@ export function Lens({
         }
       }
       // Light up only that single tool's chat rail (not the whole message's tool group).
-      for (const [key, rail] of markerByKey) rail.classList.toggle("tool-focal", key === focalCardKey);
+      for (const [key, rail] of markerByKey)
+        rail.classList.toggle("tool-focal", key === focalCardKey);
       positionFisheye(V, focalCardKey);
     };
 

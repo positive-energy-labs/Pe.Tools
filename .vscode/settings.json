@@ -8,5 +8,8 @@
   "editor.codeActionsOnSave": {
     "source.format.oxc": "always", // run formatter first
     "source.fixAll.oxc": "always" // run lint fixes after
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "vscode.typescript-language-features"
   }
 }

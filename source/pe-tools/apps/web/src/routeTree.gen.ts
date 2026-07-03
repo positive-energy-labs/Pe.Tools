@@ -12,10 +12,15 @@ import { Route as rootRouteImport } from "./routes/__root";
 import { Route as SettingsPrototypeRouteImport } from "./routes/settings-prototype";
 import { Route as OpsRouteImport } from "./routes/ops";
 import { Route as FamilyMatrixRouteImport } from "./routes/family-matrix";
+import { Route as FamilyDocRouteImport } from "./routes/family-doc";
+import { Route as FamilyAuditRouteImport } from "./routes/family-audit";
+import { Route as DocLabRouteImport } from "./routes/doc-lab";
 import { Route as DesignSystemRouteImport } from "./routes/design-system";
 import { Route as ChatRouteImport } from "./routes/chat";
 import { Route as IndexRouteImport } from "./routes/index";
 import { Route as DemoTanstackQueryRouteImport } from "./routes/demo/tanstack-query";
+import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
+import { Route as ApiPdfAuditMapRouteImport } from "./routes/api/pdf-audit/map";
 
 const SettingsPrototypeRoute = SettingsPrototypeRouteImport.update({
   id: "/settings-prototype",
@@ -30,6 +35,21 @@ const OpsRoute = OpsRouteImport.update({
 const FamilyMatrixRoute = FamilyMatrixRouteImport.update({
   id: "/family-matrix",
   path: "/family-matrix",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const FamilyDocRoute = FamilyDocRouteImport.update({
+  id: "/family-doc",
+  path: "/family-doc",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const FamilyAuditRoute = FamilyAuditRouteImport.update({
+  id: "/family-audit",
+  path: "/family-audit",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const DocLabRoute = DocLabRouteImport.update({
+  id: "/doc-lab",
+  path: "/doc-lab",
   getParentRoute: () => rootRouteImport,
 } as any);
 const DesignSystemRoute = DesignSystemRouteImport.update({
@@ -52,34 +72,59 @@ const DemoTanstackQueryRoute = DemoTanstackQueryRouteImport.update({
   path: "/demo/tanstack-query",
   getParentRoute: () => rootRouteImport,
 } as any);
+const ApiPdfAuditParseRoute = ApiPdfAuditParseRouteImport.update({
+  id: "/api/pdf-audit/parse",
+  path: "/api/pdf-audit/parse",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const ApiPdfAuditMapRoute = ApiPdfAuditMapRouteImport.update({
+  id: "/api/pdf-audit/map",
+  path: "/api/pdf-audit/map",
+  getParentRoute: () => rootRouteImport,
+} as any);
 
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
   "/chat": typeof ChatRoute;
   "/design-system": typeof DesignSystemRoute;
+  "/doc-lab": typeof DocLabRoute;
+  "/family-audit": typeof FamilyAuditRoute;
+  "/family-doc": typeof FamilyDocRoute;
   "/family-matrix": typeof FamilyMatrixRoute;
   "/ops": typeof OpsRoute;
   "/settings-prototype": typeof SettingsPrototypeRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
+  "/api/pdf-audit/map": typeof ApiPdfAuditMapRoute;
+  "/api/pdf-audit/parse": typeof ApiPdfAuditParseRoute;
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute;
   "/chat": typeof ChatRoute;
   "/design-system": typeof DesignSystemRoute;
+  "/doc-lab": typeof DocLabRoute;
+  "/family-audit": typeof FamilyAuditRoute;
+  "/family-doc": typeof FamilyDocRoute;
   "/family-matrix": typeof FamilyMatrixRoute;
   "/ops": typeof OpsRoute;
   "/settings-prototype": typeof SettingsPrototypeRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
+  "/api/pdf-audit/map": typeof ApiPdfAuditMapRoute;
+  "/api/pdf-audit/parse": typeof ApiPdfAuditParseRoute;
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
   "/": typeof IndexRoute;
   "/chat": typeof ChatRoute;
   "/design-system": typeof DesignSystemRoute;
+  "/doc-lab": typeof DocLabRoute;
+  "/family-audit": typeof FamilyAuditRoute;
+  "/family-doc": typeof FamilyDocRoute;
   "/family-matrix": typeof FamilyMatrixRoute;
   "/ops": typeof OpsRoute;
   "/settings-prototype": typeof SettingsPrototypeRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
+  "/api/pdf-audit/map": typeof ApiPdfAuditMapRoute;
+  "/api/pdf-audit/parse": typeof ApiPdfAuditParseRoute;
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
@@ -87,38 +132,58 @@ export interface FileRouteTypes {
     | "/"
     | "/chat"
     | "/design-system"
+    | "/doc-lab"
+    | "/family-audit"
+    | "/family-doc"
     | "/family-matrix"
     | "/ops"
     | "/settings-prototype"
-    | "/demo/tanstack-query";
+    | "/demo/tanstack-query"
+    | "/api/pdf-audit/map"
+    | "/api/pdf-audit/parse";
   fileRoutesByTo: FileRoutesByTo;
   to:
     | "/"
     | "/chat"
     | "/design-system"
+    | "/doc-lab"
+    | "/family-audit"
+    | "/family-doc"
     | "/family-matrix"
     | "/ops"
     | "/settings-prototype"
-    | "/demo/tanstack-query";
+    | "/demo/tanstack-query"
+    | "/api/pdf-audit/map"
+    | "/api/pdf-audit/parse";
   id:
     | "__root__"
     | "/"
     | "/chat"
     | "/design-system"
+    | "/doc-lab"
+    | "/family-audit"
+    | "/family-doc"
     | "/family-matrix"
     | "/ops"
     | "/settings-prototype"
-    | "/demo/tanstack-query";
+    | "/demo/tanstack-query"
+    | "/api/pdf-audit/map"
+    | "/api/pdf-audit/parse";
   fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute;
   ChatRoute: typeof ChatRoute;
   DesignSystemRoute: typeof DesignSystemRoute;
+  DocLabRoute: typeof DocLabRoute;
+  FamilyAuditRoute: typeof FamilyAuditRoute;
+  FamilyDocRoute: typeof FamilyDocRoute;
   FamilyMatrixRoute: typeof FamilyMatrixRoute;
   OpsRoute: typeof OpsRoute;
   SettingsPrototypeRoute: typeof SettingsPrototypeRoute;
   DemoTanstackQueryRoute: typeof DemoTanstackQueryRoute;
+  ApiPdfAuditMapRoute: typeof ApiPdfAuditMapRoute;
+  ApiPdfAuditParseRoute: typeof ApiPdfAuditParseRoute;
 }
 
 declare module "@tanstack/react-router" {
@@ -142,6 +207,27 @@ declare module "@tanstack/react-router" {
       path: "/family-matrix";
       fullPath: "/family-matrix";
       preLoaderRoute: typeof FamilyMatrixRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/family-doc": {
+      id: "/family-doc";
+      path: "/family-doc";
+      fullPath: "/family-doc";
+      preLoaderRoute: typeof FamilyDocRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/family-audit": {
+      id: "/family-audit";
+      path: "/family-audit";
+      fullPath: "/family-audit";
+      preLoaderRoute: typeof FamilyAuditRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/doc-lab": {
+      id: "/doc-lab";
+      path: "/doc-lab";
+      fullPath: "/doc-lab";
+      preLoaderRoute: typeof DocLabRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/design-system": {
@@ -172,6 +258,20 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof DemoTanstackQueryRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/api/pdf-audit/parse": {
+      id: "/api/pdf-audit/parse";
+      path: "/api/pdf-audit/parse";
+      fullPath: "/api/pdf-audit/parse";
+      preLoaderRoute: typeof ApiPdfAuditParseRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/api/pdf-audit/map": {
+      id: "/api/pdf-audit/map";
+      path: "/api/pdf-audit/map";
+      fullPath: "/api/pdf-audit/map";
+      preLoaderRoute: typeof ApiPdfAuditMapRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
   }
 }
 
@@ -179,10 +279,15 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ChatRoute: ChatRoute,
   DesignSystemRoute: DesignSystemRoute,
+  DocLabRoute: DocLabRoute,
+  FamilyAuditRoute: FamilyAuditRoute,
+  FamilyDocRoute: FamilyDocRoute,
   FamilyMatrixRoute: FamilyMatrixRoute,
   OpsRoute: OpsRoute,
   SettingsPrototypeRoute: SettingsPrototypeRoute,
   DemoTanstackQueryRoute: DemoTanstackQueryRoute,
+  ApiPdfAuditMapRoute: ApiPdfAuditMapRoute,
+  ApiPdfAuditParseRoute: ApiPdfAuditParseRoute,
 };
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

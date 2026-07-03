@@ -62,13 +62,15 @@ export function workbenchToThreadMessages(state: WorkbenchState): ThreadMessageL
       ...createdAt(message),
     };
   });
-  // Drop empty turns (no text/image/tool) so the spine doesn't show blank "you"/"pea" rows. A
-  // running assistant with nothing yet is kept — it's the live streaming turn (caret).
-  return projected.filter(isRenderable);
+  // Return EVERY user/assistant turn — assistant-ui's ExternalStore keys mounted message
+  // components to array indices and breaks ("Index N out of bounds") if membership shrinks under
+  // it. Blank-row suppression is a render-layer concern (moment components return null); the Lens
+  // geometry filters with `isRenderable` for its own bands. Do NOT filter the runtime array here.
+  return projected;
 }
 
 /** A message worth a row: has visible text, an image, a tool call, or is the live streaming turn. */
-function isRenderable(message: ThreadMessageLike): boolean {
+export function isRenderable(message: ThreadMessageLike): boolean {
   const parts = Array.isArray(message.content) ? message.content : [];
   const hasText = parts.some((part) => part.type === "text" && part.text.trim().length > 0);
   const hasImage = parts.some((part) => part.type === "image");

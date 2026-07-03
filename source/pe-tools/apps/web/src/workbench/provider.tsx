@@ -214,6 +214,18 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         onEvent: (raw) => {
           const event = parseWireEvent(raw);
           if (!event) return; // unmodeled event type — dropped at the boundary
+          // TEMP diagnostic — remove once the request_access jitter is root-caused.
+          console.info(
+            "[wire-diag]",
+            event.type,
+            "reason" in event ? `reason=${event.reason}` : "",
+            "toolName" in event ? `name=${event.toolName}` : "",
+            "message" in event ? `msg=${event.message.id} role=${event.message.role}` : "",
+            "toolCallId" in event ? `tool=${event.toolCallId}` : "",
+            event.type === "tool_end"
+              ? `isError=${event.isError} result=${stringifyShort(event.result)}`
+              : "",
+          );
           setState((previous) => applyWireEvent(previous, event));
           if (
             event.type === "thread_created" ||
@@ -222,7 +234,16 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
           ) {
             void refreshThreadsRef.current();
           }
-          if (event.type === "agent_end" && currentThreadIdRef.current) {
+          // Re-hydrate the canonical transcript when a run truly ends — but NOT when it merely
+          // SUSPENDED for a HITL approval (request_access). A suspended run stays active server-side;
+          // hydrate's `switchThread` re-attaches and REPLAYS it, emitting another agent_end(suspended)
+          // → hydrate → replay … a full-history flood (~165 events/s) that jitters the UI until it
+          // dies. The streamed state already holds the pending approval; leave it be.
+          if (
+            event.type === "agent_end" &&
+            event.reason !== "suspended" &&
+            currentThreadIdRef.current
+          ) {
             void hydrateRef.current(currentThreadIdRef.current, { silent: true });
           }
         },
@@ -647,4 +668,13 @@ function shortId(value: string): string {
 
 function errorMessage(value: unknown): string {
   return value instanceof Error ? value.message : String(value);
+}
+
+// TEMP diagnostic helper — remove with the wire-diag logging.
+function stringifyShort(value: unknown): string {
+  try {
+    return JSON.stringify(value)?.slice(0, 120) ?? String(value);
+  } catch {
+    return String(value);
+  }
 }

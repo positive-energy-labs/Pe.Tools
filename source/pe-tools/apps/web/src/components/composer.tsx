@@ -179,65 +179,73 @@ export function Composer({
       <div className="overflow-hidden rounded-2xl border border-border bg-card/95 shadow-lg shadow-black/5 backdrop-blur">
         {topBar}
 
-      {attachments.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5 px-3 pt-3">
-          {attachments.map((attachment, index) => (
-            <span
-              key={index}
-              className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground"
-            >
-              {attachment.name ?? "attachment"}
-              <button
-                type="button"
-                title="Remove"
-                onClick={() =>
-                  setAttachments((previous) => previous.filter((_, position) => position !== index))
-                }
+        {attachments.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5 px-3 pt-3">
+            {attachments.map((attachment, index) => (
+              <span
+                key={index}
+                className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground"
               >
-                <X className="size-3" />
-              </button>
-            </span>
-          ))}
-        </div>
-      ) : null}
+                {attachment.name ?? "attachment"}
+                <button
+                  type="button"
+                  title="Remove"
+                  onClick={() =>
+                    setAttachments((previous) =>
+                      previous.filter((_, position) => position !== index),
+                    )
+                  }
+                >
+                  <X className="size-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        ) : null}
 
-      <div className="flex items-center gap-1 p-2">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          title="Attach files"
-          onClick={() => fileRef.current?.click()}
-        >
-          <Paperclip className="size-4" />
-        </Button>
-        <input
-          ref={fileRef}
-          type="file"
-          multiple
-          hidden
-          onChange={(event) => void onFiles(event.currentTarget.files)}
-        />
-        <Textarea
-          name="input"
-          placeholder="Ask Pea…  ( / for commands )"
-          rows={1}
-          autoFocus
-          value={text}
-          onChange={(event) => setText(event.currentTarget.value)}
-          onKeyDown={onKeyDown}
-          className="max-h-48 min-h-9 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
-        />
-        {isRunning ? (
-          <Button type="button" size="icon" title="Stop" onClick={cancel}>
-            <Square className="size-3.5" />
+        <div className="flex items-center gap-1 p-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            title="Attach files"
+            onClick={() => fileRef.current?.click()}
+          >
+            <Paperclip className="size-4" />
           </Button>
-        ) : (
-          <Button type="button" size="icon" title="Send" disabled={!canSend} onClick={sendCurrent}>
-            <ArrowUp className="size-4" />
-          </Button>
-        )}
-      </div>
+          <input
+            ref={fileRef}
+            type="file"
+            multiple
+            hidden
+            onChange={(event) => void onFiles(event.currentTarget.files)}
+          />
+          <Textarea
+            name="input"
+            placeholder="Ask Pea…  ( / for commands )"
+            rows={1}
+            autoFocus
+            value={text}
+            onChange={(event) => setText(event.currentTarget.value)}
+            onKeyDown={onKeyDown}
+            className="max-h-48 min-h-9 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
+          />
+          {isRunning ? (
+            <Button type="button" size="icon" title="Stop" onClick={cancel}>
+              <Square className="size-3.5" />
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="icon"
+              title="Send"
+              disabled={!canSend}
+              onClick={sendCurrent}
+            >
+              <ArrowUp className="size-4" />
+            </Button>
+          )}
+        </div>
         {operationError ? (
           <span className="block px-3 pb-2 text-xs text-destructive">{operationError}</span>
         ) : null}
