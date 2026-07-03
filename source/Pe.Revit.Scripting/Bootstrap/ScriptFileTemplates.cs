@@ -20,7 +20,6 @@ internal static class ScriptFileTemplates {
         "Autodesk.Revit.UI",
         "Pe.Revit.Scripting",
         "Pe.Revit.Scripting.Context",
-        "Pe.Shared.HostContracts",
         "Pe.Shared.RevitData",
         "Pe.Shared.RevitData.Schedules"
     ];
@@ -78,22 +77,21 @@ internal static class ScriptFileTemplates {
 
         - workspace-path scripts under `src/`
         - inline snippets, saved visibly in the product `inline-scripts/` folder
-        - synchronous execution through `Pe.Host`
+        - synchronous execution through the Pe.Tools Revit bridge
 
         Authoring contract:
 
         - Put durable scripts under `src/` as normal C# files with exactly one non-abstract `PeScriptContainer` entrypoint.
         - Run a workspace script with `pea script execute --source-path src\MyScript.cs`.
         - Inline snippets may be Execute-body statements with optional leading `using` directives, or a full `PeScriptContainer` class.
-        - Inside `Execute()`, use `doc`, `uidoc`, `app`, `selection`, `revitVersion`, `Host`, `Artifacts`, and `WriteLine(...)`.
+        - Inside `Execute()`, use `doc`, `uidoc`, `app`, `selection`, `revitVersion`, `Artifacts`, and `WriteLine(...)`.
         - Pod mode uses root `pod.json`; the requested declared entrypoint source must resolve to exactly one non-abstract `PeScriptContainer`, while helper `src/**/*.cs` files may compile but are not entrypoints.
         - Pod manifests require a top-level `version`. Shared-drive Pods may include `origin.path` pointing to an absolute local folder or `pod.json`; version mismatch rejects import/export/execution until the Pod is reimported.
         - `ReadOnly` opens no host transaction, applies static mutation guardrails, and reports document-change detection as a dirty-document tripwire. It is not a rollback guarantee.
         - Add local DLL refs and `PackageReference` items in `PeScripts.csproj`.
         - Use `WriteLine(...)` for short returned output.
         - Use `Artifacts.WriteJson(...)`, `WriteCsv(...)`, or `WriteText(...)` for durable output.
-        - `PeHostClient` is available through `Host` when a host call is the right shape.
-        - `JOIN_GUIDE.md` and C# hover on `PeHostClient` provide capability orientation.
+        - Use host/agent tools outside the script to discover operation shapes; scripts should do direct bounded Revit API work.
 
         Non-goals for this workspace:
 
@@ -104,18 +102,15 @@ internal static class ScriptFileTemplates {
 
     public static string CreateJoinGuide() =>
         """
-        # Pe Host Client Orientation
+        # Revit Script Orientation
 
-        `PeHostClient` is available to scripts through `Host`. Its XML docs are shipped beside the referenced DLLs so normal C# hover can describe stable host capabilities.
+        Scripts execute inside Revit through the Pe.Tools bridge.
 
-        Use this file as orientation only. Prefer the live tool schemas, generated operation metadata, XML docs, compiler diagnostics, and runtime results over memorized workflows.
+        Use this file as orientation only. Prefer the live tool schemas, generated operation metadata, compiler diagnostics, and runtime results over memorized workflows.
 
         ## Surfaces
 
-        - `Host.Host` reports host/session/log-oriented facts.
-        - `Host.Scripting` owns workspace bootstrap and execution contracts.
-        - `Host.Revit` groups typed Revit host operations when a public host capability fits the task.
-        - Direct Revit API access is available inside this Revit-hosted script for local document work and API gaps.
+        - Direct Revit API access is available inside this Revit-hosted script for bounded document work and API gaps.
         - `Artifacts` writes durable CSV/JSON/text output under product output.
 
         ## Boundaries
@@ -147,14 +142,14 @@ internal static class ScriptFileTemplates {
         - `src/SampleScript.cs` - minimal executable example.
         - `.vscode/settings.json` - generated editor hint.
         - `README.md` - human-facing bootstrap notes.
-        - `JOIN_GUIDE.md` - host-client orientation.
+        - `JOIN_GUIDE.md` - Revit script orientation.
 
         ## Contract
 
         - Execute scripts from `src/` with `pea script execute --source-path src\YourScript.cs`.
         - Workspace files are normal C# files and the selected entrypoint source must resolve to exactly one non-abstract `PeScriptContainer`.
         - Inline snippets may be Execute-body statements with optional leading `using` directives, or a full `PeScriptContainer` class.
-        - Inside `Execute()`, use `doc`, `uidoc`, `app`, `selection`, `revitVersion`, `Host`, `Artifacts`, and `WriteLine(...)`.
+        - Inside `Execute()`, use `doc`, `uidoc`, `app`, `selection`, `revitVersion`, `Artifacts`, and `WriteLine(...)`.
         - Pod mode validates root `pod.json`, compiles all `src/**/*.cs`, and executes only the requested declared entrypoint source.
         - Pod manifests require `version`; optional local `origin.path` is checked for version mismatch before import/export/execution.
         - Pod entrypoint source must resolve to exactly one non-abstract `PeScriptContainer`; helper `src` files are compiled but are not entrypoints.
@@ -167,8 +162,8 @@ internal static class ScriptFileTemplates {
         - Inline snippets are traceable probes, not the primary durable authoring surface.
         - `ReadOnly` opens no host transaction and is guarded by static policy plus dirty-document detection, not rollback.
         - The generated project preserves supported user references across bootstrap regeneration.
-        - `PeHostClient` is available through `Host`; use XML docs, metadata, and diagnostics to decide whether it fits.
-        - This workspace runs inside Revit through `Pe.Host`; runtime behavior depends on the loaded Revit-side assemblies.
+        - Use host/agent tools outside the script to discover operation shapes; keep scripts focused on direct Revit API work.
+        - This workspace runs inside Revit through the Pe.Tools bridge; runtime behavior depends on the loaded Revit-side assemblies.
         """;
 
     public static string CreateVscodeSettings() =>
@@ -195,9 +190,6 @@ internal static class ScriptFileTemplates {
             public override void Execute()
             {
                 WriteLine($"Running in Revit {revitVersion}.");
-
-                var hostProbe = Host.Host.GetProbeAsync().GetAwaiter().GetResult();
-                WriteLine($"Host contract: {hostProbe.HostContractVersion}.");
 
                 if (doc == null)
                 {

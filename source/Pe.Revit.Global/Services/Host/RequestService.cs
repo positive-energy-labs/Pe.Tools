@@ -4,6 +4,7 @@ using Pe.Revit.SettingsRuntime.Json;
 using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
 using Pe.Revit.SettingsRuntime.Json.SchemaProviders;
+using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.RevitData;
 using Pe.Shared.StorageRuntime.Capabilities;
@@ -18,7 +19,7 @@ namespace Pe.Revit.Global.Services.Host;
 /// <summary>
 ///     Revit-aware host operations served through the bridge.
 /// </summary>
-public class RequestService {
+public class RequestService : ISettingsBridgeService {
     private static readonly TimeSpan FieldOptionsThrottleWindow = TimeSpan.FromMilliseconds(350);
     private static readonly TimeSpan ParameterCatalogThrottleWindow = TimeSpan.FromMilliseconds(750);
 
@@ -145,9 +146,7 @@ public class RequestService {
             }
         });
 
-    public Task<GetSettingsModuleCatalogBridgeResponse> GetSettingsModuleCatalogAsync(
-        GetSettingsModuleCatalogBridgeRequest request
-    ) => this.EnqueueAsync(() => {
+    public Task<GetSettingsModuleCatalogBridgeResponse> GetSettingsModuleCatalogAsync() => this.EnqueueAsync(() => {
         var activeDocument = RevitUiSession.CurrentUIApplication.GetActiveDocument();
         var modules = this._moduleRegistry.GetModules()
             .Where(SettingsModuleAvailability.IsBridgeDiscoverable)

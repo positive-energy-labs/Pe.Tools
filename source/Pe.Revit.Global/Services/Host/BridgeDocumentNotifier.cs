@@ -1,5 +1,6 @@
-﻿using Autodesk.Revit.DB.Events;
+using Autodesk.Revit.DB.Events;
 using Autodesk.Revit.UI.Events;
+using Pe.Shared.HostContracts.Bridge;
 using Pe.Shared.HostContracts.Protocol;
 using Serilog;
 
@@ -10,6 +11,7 @@ namespace Pe.Revit.Global.Services.Host;
 /// </summary>
 internal sealed class BridgeDocumentNotifier : IDisposable {
     private static readonly TimeSpan DocumentChangedMinInterval = TimeSpan.FromMilliseconds(750);
+    private readonly Func<BridgeStateSnapshot> _snapshot;
     private readonly Func<DocumentInvalidationEvent, Task> _publishAsync;
     private readonly object _sync = new();
     private bool _disposed;
@@ -18,8 +20,13 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
     private DateTime _lastDocumentChangedNotificationUtc = DateTime.MinValue;
     private bool _lastHasActiveDocument;
 
-    public BridgeDocumentNotifier(Func<DocumentInvalidationEvent, Task> publishAsync) =>
+    public BridgeDocumentNotifier(
+        Func<BridgeStateSnapshot> snapshot,
+        Func<DocumentInvalidationEvent, Task> publishAsync
+    ) {
+        this._snapshot = snapshot;
         this._publishAsync = publishAsync;
+    }
 
     public void Dispose() {
         lock (this._sync) {
@@ -95,28 +102,22 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
     }
 
     private DocumentInvalidationEvent BuildCurrentPayload(DocumentInvalidationReason reason) {
-        var uiApp = RevitUiSession.CurrentUIApplication;
-        var activeDocument = uiApp.GetActiveDocument();
-        var activeDocumentKey = activeDocument == null ? null : activeDocument.GetDocumentKey();
-        var activeDocumentPath = activeDocument == null ? null : activeDocument.GetDocumentPath();
-        var activeDocumentCloudProjectGuid = activeDocument == null ? null : activeDocument.GetCloudProjectGuid();
-        var activeDocumentCloudModelGuid = activeDocument == null ? null : activeDocument.GetCloudModelGuid();
-        var activeDocumentCloudModelUrn = activeDocument == null ? null : activeDocument.GetCloudModelUrn();
-        var openDocumentCount = uiApp.GetOpenDocuments().Count();
+        var snapshot = this._snapshot();
         return new DocumentInvalidationEvent(
             reason,
-            activeDocument?.Title,
-            activeDocumentKey,
-            activeDocumentPath,
-            activeDocument?.IsFamilyDocument ?? false,
-            activeDocument?.IsWorkshared ?? false,
-            activeDocument?.IsModelInCloud ?? false,
-            activeDocumentCloudProjectGuid,
-            activeDocumentCloudModelGuid,
-            activeDocumentCloudModelUrn,
-            activeDocument != null,
-            openDocumentCount,
-            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+            snapshot.ActiveDocumentTitle,
+            snapshot.ActiveDocumentKey,
+            snapshot.ActiveDocumentPath,
+            snapshot.ActiveDocumentIsFamilyDocument,
+            snapshot.ActiveDocumentIsWorkshared,
+            snapshot.ActiveDocumentIsModelInCloud,
+            snapshot.ActiveDocumentCloudProjectGuid,
+            snapshot.ActiveDocumentCloudModelGuid,
+            snapshot.ActiveDocumentCloudModelUrn,
+            snapshot.HasActiveDocument,
+            snapshot.OpenDocumentCount,
+            snapshot.ActiveDocumentObservedAtUnixMs,
+            RevitVersion: snapshot.RevitVersion
         );
     }
 

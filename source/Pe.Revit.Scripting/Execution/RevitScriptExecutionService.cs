@@ -40,7 +40,7 @@ public sealed class RevitScriptExecutionService(
     private readonly ScriptReferenceResolver _referenceResolver = referenceResolver;
     private readonly Func<UIApplication?> _uiApplicationAccessor = uiApplicationAccessor;
 
-    private const string AuthoringShapeHint = "Inline scriptContent accepts Execute-body statements such as WriteLine(\"...\"), with optional leading using directives, or a full container class: public sealed class Script : PeScriptContainer { public override void Execute() { WriteLine(\"...\"); } }. Execute() returns void. WorkspacePath scripts are normal C# files with one PeScriptContainer. Inside Execute(), use doc, uidoc, app, selection, revitVersion, Host, Artifacts, and WriteLine(...).";
+    private const string AuthoringShapeHint = "Inline scriptContent accepts Execute-body statements such as WriteLine(\"...\"), with optional leading using directives, or a full container class: public sealed class Script : PeScriptContainer { public override void Execute() { WriteLine(\"...\"); } }. Execute() returns void. WorkspacePath scripts are normal C# files with one PeScriptContainer. Inside Execute(), use doc, uidoc, app, selection, revitVersion, Artifacts, and WriteLine(...).";
 
     public ExecuteRevitScriptData Execute(
         ExecuteRevitScriptRequest request,

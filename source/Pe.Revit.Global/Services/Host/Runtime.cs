@@ -1,5 +1,4 @@
 using Pe.Shared.HostContracts.Bridge;
-using Pe.Shared.HostContracts;
 using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.StorageRuntime.Modules;
 using ricaun.Revit.UI.Tasks;
@@ -17,7 +16,6 @@ public record RuntimeStatus(
     bool IsInitialized,
     bool IsConnected,
     string BridgeUri,
-    string SessionId,
     int ProcessId,
     bool HasActiveDocument,
     string? ActiveDocumentTitle,
@@ -33,7 +31,7 @@ public record RuntimeStatus(
 public static class HostRuntime {
     private static readonly object Sync = new();
     private static BridgeAgent? _agent;
-    private static HostConnectionOptions _connectionOptions = HostConnectionOptions.FromEnvironment();
+    private static BridgeConnectionOptions _connectionOptions = BridgeConnectionOptions.FromEnvironment();
     private static SettingsRuntimeRegistry? _moduleRegistry;
     private static RevitTaskService? _revitTaskService;
     private static Action<string?>? _onDisconnected;
@@ -46,7 +44,7 @@ public static class HostRuntime {
     ) {
         lock (Sync) {
             Log.Information("Host runtime initializing.");
-            _connectionOptions = HostConnectionOptions.FromEnvironment();
+            _connectionOptions = BridgeConnectionOptions.FromEnvironment();
             var registry = new SettingsRuntimeRegistry();
             configureModules?.Invoke(registry);
             _moduleRegistry = registry;
@@ -54,9 +52,8 @@ public static class HostRuntime {
             _onDisconnected = onDisconnected;
             _lastError = null;
             Log.Information(
-                "Host runtime initialized: BridgeUri={BridgeUri}, SessionId={SessionId}, ConnectTimeoutMs={ConnectTimeoutMs}, Modules={ModuleCount}",
+                "Host runtime initialized: BridgeUri={BridgeUri}, ConnectTimeoutMs={ConnectTimeoutMs}, Modules={ModuleCount}",
                 _connectionOptions.BridgeUri,
-                _connectionOptions.SessionId,
                 _connectionOptions.ConnectTimeoutMs,
                 registry.GetModules().Count()
             );
@@ -66,7 +63,7 @@ public static class HostRuntime {
     public static RuntimeActionResult Connect() {
         SettingsRuntimeRegistry? moduleRegistry;
         RevitTaskService? revitTaskService;
-        HostConnectionOptions connectionOptions;
+        BridgeConnectionOptions connectionOptions;
         BridgeAgent? previousAgent;
 
         lock (Sync) {
@@ -88,9 +85,8 @@ public static class HostRuntime {
 
         var connectStopwatch = Stopwatch.StartNew();
         Log.Information(
-            "Host runtime connect starting: BridgeUri={BridgeUri}, SessionId={SessionId}, ConnectTimeoutMs={ConnectTimeoutMs}, Modules={ModuleCount}, ActiveDocument={ActiveDocumentTitle}",
+            "Host runtime connect starting: BridgeUri={BridgeUri}, ConnectTimeoutMs={ConnectTimeoutMs}, Modules={ModuleCount}, ActiveDocument={ActiveDocumentTitle}",
             connectionOptions.BridgeUri,
-            connectionOptions.SessionId,
             connectionOptions.ConnectTimeoutMs,
             moduleRegistry.GetModules().Count(),
             RevitUiSession.CurrentUIApplication.GetActiveDocument()?.Title
@@ -106,14 +102,6 @@ public static class HostRuntime {
         BridgeAgent? newAgent = null;
 
         try {
-            var compatibilityResult = VerifyHostCompatibility(connectionOptions);
-            if (!compatibilityResult.Success) {
-                lock (Sync)
-                    _lastError = compatibilityResult.Message;
-
-                return compatibilityResult;
-            }
-
             var createStopwatch = Stopwatch.StartNew();
             newAgent = new BridgeAgent(moduleRegistry, connectionOptions, revitTaskService, OnAgentDisconnected);
 
@@ -193,7 +181,6 @@ public static class HostRuntime {
                 return _agent.GetStatus() with {
                     IsInitialized = _moduleRegistry != null,
                     BridgeUri = _connectionOptions.BridgeUri.ToString(),
-                    SessionId = _connectionOptions.SessionId,
                     ProcessId = _connectionOptions.ProcessId,
                     LastError = _lastError ?? _agent.LastError
                 };
@@ -204,7 +191,6 @@ public static class HostRuntime {
                 _moduleRegistry != null,
                 false,
                 _connectionOptions.BridgeUri.ToString(),
-                _connectionOptions.SessionId,
                 _connectionOptions.ProcessId,
                 activeDocument != null,
                 activeDocument?.Title,
@@ -214,28 +200,5 @@ public static class HostRuntime {
                 _lastError
             );
         }
-    }
-
-    private static RuntimeActionResult VerifyHostCompatibility(HostConnectionOptions connectionOptions) {
-        if (!HostReachability.TryGetProbe(
-                connectionOptions.HostBaseUrl,
-                out var probe,
-                out var errorMessage,
-                HostRuntimeDefaults.DefaultHostProbeTimeoutMs
-            )) {
-            return new RuntimeActionResult(
-                false,
-                errorMessage ?? $"Could not reach the host at '{connectionOptions.HostBaseUrl}'."
-            );
-        }
-
-        if (!HostProbeCompatibility.IsCompatible(probe)) {
-            return new RuntimeActionResult(
-                false,
-                $"The running host on '{connectionOptions.HostBaseUrl}' is not compatible with this Revit bridge runtime."
-            );
-        }
-
-        return new RuntimeActionResult(true, "Host compatibility verified.");
     }
 }
