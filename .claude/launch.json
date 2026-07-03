@@ -14,6 +14,13 @@
       "runtimeArgs": ["web", "peco"],
       "port": 5173,
       "autoPort": false
+    },
+    {
+      "name": "web-only",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@pe/web", "exec", "vp", "dev", "--port", "3010"],
+      "port": 3010,
+      "autoPort": false
     }
   ]
 }

@@ -149,6 +149,10 @@ export function applyWireEvent(state: WorkbenchState, event: WireEvent): Workben
     case "agent_start":
       return withRunStatus(state, "running");
     case "agent_end":
+      // A suspended run is PAUSED for a HITL approval, not finished — keep the pending approval and
+      // the "waiting" status that tool_suspended just set. endRun would cancel the approval (→ the
+      // approve/deny buttons vanish the instant they appear) and flip to idle.
+      if (event.reason === "suspended") return state;
       return event.reason === "error" ? endRunWithError(state, "Run failed.") : endRun(state);
     case "message_start":
     case "message_update":
@@ -364,8 +368,32 @@ function imageSource(
 
 function upsertMessage(messages: WorkbenchMessage[], next: WorkbenchMessage): WorkbenchMessage[] {
   const index = messages.findIndex((message) => message.id === next.id);
-  if (index < 0) return [...messages, next];
-  return messages.map((message, position) => (position === index ? next : message));
+  if (index >= 0) return messages.map((message, position) => (position === index ? next : message));
+  // Reconcile the optimistic user echo: sendPrompt inserts a `local-user-*` turn immediately, then
+  // the server streams the same turn back with ITS canonical id. Match the local twin by role+text
+  // and adopt the server id IN PLACE — appending would render the user's message twice AND churn the
+  // assistant-ui message array (id count changes under mounted rows). ponytail: text-equality twin
+  // match; if a user ever sends two identical turns before the first echoes, worst case is one twin
+  // collapse — replaced messages lose the `local-user-` prefix so the next echo finds the next twin.
+  if (next.role === "user") {
+    const twin = messages.findIndex(
+      (message) =>
+        message.id.startsWith("local-user-") &&
+        message.role === "user" &&
+        userText(message) === userText(next),
+    );
+    if (twin >= 0) return messages.map((message, position) => (position === twin ? next : message));
+  }
+  return [...messages, next];
+}
+
+/** Joined, trimmed text of a message's text parts — the key for optimistic-echo twin matching. */
+function userText(message: WorkbenchMessage): string {
+  return message.parts
+    .filter((part) => part.kind === "text")
+    .map((part) => part.text ?? "")
+    .join("")
+    .trim();
 }
 
 /** Fold a message's tool_call / tool_result content into the id-keyed tool collection. */

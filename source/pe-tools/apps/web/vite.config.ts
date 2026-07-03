@@ -2,70 +2,88 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { devtools } from "@tanstack/devtools-vite";
 import type { Plugin } from "vite-plus";
-import { defineConfig } from "vite-plus";
+import { defineConfig, loadEnv } from "vite-plus";
 
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 
-const config = defineConfig({
-  plugins: [
-    tanstackStart({
-      router: {
-        quoteStyle: "double",
-        semicolons: true,
-      },
-    }) as never,
-    tanstackStartVite8DevMiddleware() as never,
-    react() as never,
-    tailwindcss() as never,
-    devtools({
-      injectSource: { enabled: false },
-      consolePiping: { enabled: false },
-    }) as never,
-  ],
-  // Dev proxy to the workbench agent server (apps/pea/pe-code). `pe-dev web` also
-  // passes ?w=<port>, but these keep plain `vp dev` usable against the default backend.
-  server: {
-    proxy: {
-      "/pe": {
-        target: process.env.PE_WORKBENCH_AGENT_URL ?? "http://127.0.0.1:43112",
-        changeOrigin: true,
-        headers: {
-          "x-runtime-workbench-token": process.env.PE_WORKBENCH_DEV_TOKEN ?? "dev-loopback",
+const config = defineConfig(({ mode }) => {
+  // Server-only secrets (LLAMA_CLOUD_API_KEY, ANTHROPIC_API_KEY) live in the
+  // workspace-root .env, one level above apps/web. Vite only surfaces
+  // VITE_-prefixed vars to import.meta.env, so lift the ones our API route
+  // handlers read into process.env for the dev/SSR server process.
+  const rootEnv = loadEnv(mode, `${import.meta.dirname}/../..`, "");
+  const serverKeys = [
+    "LLAMA_CLOUD_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "PE_PDF_AUDIT_MODEL",
+    "PE_PDF_AUDIT_TIER",
+  ];
+  for (const key of serverKeys) {
+    if (rootEnv[key] && !process.env[key]) process.env[key] = rootEnv[key];
+  }
+
+  return {
+    plugins: [
+      tanstackStart({
+        router: {
+          quoteStyle: "double",
+          semicolons: true,
+        },
+      }) as never,
+      tanstackStartVite8DevMiddleware() as never,
+      react() as never,
+      tailwindcss() as never,
+      devtools({
+        injectSource: { enabled: false },
+        consolePiping: { enabled: false },
+      }) as never,
+    ],
+    // Dev proxy to the workbench agent server (apps/pea/pe-code). `pe-dev web` also
+    // passes ?w=<port>, but these keep plain `vp dev` usable against the default backend.
+    server: {
+      proxy: {
+        // ponytail: dev-only passthrough so browser RPC calls to /pe-host/rpc reach the TS host.
+        // Keep this before the broader /pe workbench proxy.
+        "/pe-host": {
+          target: process.env.PE_TOOLS_HOST_BASE_URL ?? "http://localhost:5180",
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/pe-host/, ""),
+        },
+        "/pe": {
+          target: process.env.PE_WORKBENCH_AGENT_URL ?? "http://127.0.0.1:43112",
+          changeOrigin: true,
+          headers: {
+            "x-runtime-workbench-token": process.env.PE_WORKBENCH_DEV_TOKEN ?? "dev-loopback",
+          },
+        },
+        "/api/agent-controller": {
+          target: process.env.PE_WORKBENCH_AGENT_URL ?? "http://127.0.0.1:43112",
+          changeOrigin: true,
         },
       },
-      "/api/agent-controller": {
-        target: process.env.PE_WORKBENCH_AGENT_URL ?? "http://127.0.0.1:43112",
-        changeOrigin: true,
-      },
-      // ponytail: dev-only passthrough so browser RPC calls to /pe-host/rpc reach the TS host.
-      "/pe-host": {
-        target: process.env.PE_TOOLS_HOST_BASE_URL ?? "http://localhost:5180",
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/pe-host/, ""),
+    },
+    resolve: { tsconfigPaths: true, dedupe: ["react", "react-dom"] },
+    // assistant-ui ships React-Compiler output (`useMemoCache`); under TanStack Start's
+    // multi-environment optimizer it can bind to a different React prebundle than react-dom's
+    // active dispatcher → "Cannot read properties of null (reading 'useMemoCache')". Forcing these
+    // into one optimize pass keeps a single React instance. ponytail: drop if the optimizer stops splitting.
+    optimizeDeps: {
+      include: [
+        "react",
+        "react-dom",
+        "react/jsx-runtime",
+        "@assistant-ui/react",
+        "@assistant-ui/react-markdown",
+      ],
+    },
+    lint: {
+      options: {
+        typeAware: true,
+        typeCheck: true,
       },
     },
-  },
-  resolve: { tsconfigPaths: true, dedupe: ["react", "react-dom"] },
-  // assistant-ui ships React-Compiler output (`useMemoCache`); under TanStack Start's
-  // multi-environment optimizer it can bind to a different React prebundle than react-dom's
-  // active dispatcher → "Cannot read properties of null (reading 'useMemoCache')". Forcing these
-  // into one optimize pass keeps a single React instance. ponytail: drop if the optimizer stops splitting.
-  optimizeDeps: {
-    include: [
-      "react",
-      "react-dom",
-      "react/jsx-runtime",
-      "@assistant-ui/react",
-      "@assistant-ui/react-markdown",
-    ],
-  },
-  lint: {
-    options: {
-      typeAware: true,
-      typeCheck: true,
-    },
-  },
-  fmt: {},
+    fmt: {},
+  };
 });
 
 export default config;

@@ -1,5 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowUpRight, MessageSquare, Settings2, Table2, Terminal } from "lucide-react";
+import {
+  ArrowUpRight,
+  FileScan,
+  MessageSquare,
+  PencilRuler,
+  Settings2,
+  Table2,
+  Terminal,
+} from "lucide-react";
 
 import { ThemeToggle } from "#/components/ThemeToggle";
 import { Card } from "#/components/ui/card";
@@ -27,6 +35,30 @@ const TOOLS = [
     label: "Host pipeline",
     icon: Settings2,
     description: "Schema-driven authoring forms validated and saved through the host.",
+  },
+  {
+    to: "/doc-lab",
+    title: "Doc Lab",
+    label: "Experimental",
+    icon: FileScan,
+    description:
+      "The grounded-document engine in isolation — parsed markdown beside the PDF pages, hover either side to link them.",
+  },
+  {
+    to: "/family-audit",
+    title: "Family Audit",
+    label: "Experimental",
+    icon: FileScan,
+    description:
+      "Audit one loaded family against a PDF — hover any mapped cell to see where in the document it came from.",
+  },
+  {
+    to: "/family-doc",
+    title: "Family Doc Audit",
+    label: "Experimental",
+    icon: PencilRuler,
+    description:
+      "Read and edit the open family document's parameters, with PDF-grounded value proposals applied via the scripting lane.",
   },
   {
     to: "/ops",

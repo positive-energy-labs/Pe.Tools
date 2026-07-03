@@ -69,6 +69,45 @@ test("tool_approval_required gates the run; tool_end clears it", () => {
   expect(resolved.uiStatus.overall.status).toBe("running");
 });
 
+test("a suspended agent_end keeps the pending approval (does NOT end the run)", () => {
+  // request_access suspends the run for HITL. The server then emits agent_end(reason:"suspended");
+  // that must NOT cancel the approval or flip to idle — else the approve/deny buttons vanish AND the
+  // provider's re-hydrate replays the still-active run in a loop.
+  const state = reduce([
+    { type: "agent_start" },
+    {
+      type: "tool_suspended",
+      toolCallId: "t9",
+      toolName: "request_access",
+      args: {},
+      suspendPayload: {},
+    },
+    { type: "agent_end", reason: "suspended" },
+  ]);
+  expect(state.approvals.requests[0]?.status).toBe("pending");
+  expect(state.approvals.requests[0]?.requestId).toBe("tool-suspended:t9");
+  expect(state.uiStatus.overall.status).toBe("waiting");
+});
+
+test("the optimistic user echo reconciles in place — no duplicate turn", () => {
+  // sendPrompt inserts a `local-user-*` turn, then the server streams the same turn back with its
+  // own id. The reducer must adopt the server id in place, not append a second "you" bubble.
+  const state = reduce([
+    { type: "agent_start" },
+    {
+      type: "message_start",
+      message: { id: "local-user-123", role: "user", content: [{ type: "text", text: "hi" }] },
+    },
+    {
+      type: "message_start",
+      message: { id: "server-abc", role: "user", content: [{ type: "text", text: "hi" }] },
+    },
+  ]);
+  const users = state.transcript.messages.filter((m) => m.role === "user");
+  expect(users.length).toBe(1);
+  expect(users[0]?.id).toBe("server-abc");
+});
+
 test("run errors surface message error text", () => {
   const state = reduce([
     { type: "agent_start" },

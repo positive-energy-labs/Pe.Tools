@@ -1,7 +1,7 @@
 # Mastra Upstream Candidates
 
 > Note: `mastra` is cloned locally for **reference only** — not a Pe.Tools-owned repo and not a
-> contribution target. These are candidates we'd *want* upstream; until they land in a published
+> contribution target. These are candidates we'd _want_ upstream; until they land in a published
 > `mastracode`, Pe.Tools must use the public-API fallback, never deep-imports or dist scanning.
 
 ## Export a small public model resolver surface

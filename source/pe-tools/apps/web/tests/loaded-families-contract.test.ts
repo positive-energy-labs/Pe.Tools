@@ -1,10 +1,10 @@
 import { expect, test } from "vite-plus/test";
-import { flattenMatrix } from "../src/host/contracts";
+import { flattenMatrix } from "../src/host/loaded-families-view";
 
-// Captured verbatim from a live Pe.Host matrix response. The host nests parameter
+// Captured verbatim from a live host matrix response. The host nests parameter
 // fields under `definition`, uses `presence` (not `scope`), and emits null cells.
-// The generated zod schema (reflected from C#) parses this faithfully; the flatten
-// adapter shapes it for the table UI. This fixture guards both.
+// The generated Effect schema parses this faithfully; the flatten adapter shapes
+// it for the table UI. This fixture guards both.
 const realMatrixResponse = {
   families: [
     {
