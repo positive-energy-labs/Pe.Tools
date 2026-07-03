@@ -1,4 +1,8 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Pe.Revit.Sdk">
+
+    <PropertyGroup>
+        <PeProjectKind>Shared</PeProjectKind>
+    </PropertyGroup>
 
     <PropertyGroup>
         <ImplicitUsings>enable</ImplicitUsings>

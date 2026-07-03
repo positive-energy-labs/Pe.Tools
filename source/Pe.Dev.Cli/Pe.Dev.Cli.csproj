@@ -1,4 +1,8 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Pe.Revit.Sdk">
+
+    <PropertyGroup>
+        <PeProjectKind>Tool</PeProjectKind>
+    </PropertyGroup>
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <Nullable>enable</Nullable>

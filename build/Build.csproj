@@ -1,4 +1,8 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Pe.Revit.Sdk">
+
+    <PropertyGroup>
+        <PeProjectKind>Explicit</PeProjectKind>
+    </PropertyGroup>
 
     <PropertyGroup>
         <Nullable>enable</Nullable>

@@ -1,4 +1,8 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Pe.Revit.Sdk">
+
+    <PropertyGroup>
+        <PeProjectKind>AutomationWorker</PeProjectKind>
+    </PropertyGroup>
     <PropertyGroup>
         <LangVersion>latest</LangVersion>
         <Nullable>enable</Nullable>
@@ -12,7 +16,6 @@
         <PackageReference Include="Autodesk.Forge.DesignAutomation.Revit" Version="2024.0.2" Condition="'$(RevitVersion)' == '2024'"/>
         <PackageReference Include="Autodesk.Forge.DesignAutomation.Revit" Version="2025.0.1" Condition="'$(RevitVersion)' == '2025' or '$(RevitVersion)' == ''"/>
         <PackageReference Include="Autodesk.Forge.DesignAutomation.Revit" Version="2026.0.0" Condition="'$(RevitVersion)' == '2026'"/>
-        <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="$(RevitVersion).*"/>
         <PackageReference Include="Newtonsoft.Json" Version="13.0.3"/>
     </ItemGroup>
 

@@ -1,4 +1,8 @@
-<Project Sdk="Nice3point.Revit.Sdk/6.2.1">
+<Project Sdk="Pe.Revit.Sdk">
+
+    <PropertyGroup>
+        <PeProjectKind>RevitLibrary</PeProjectKind>
+    </PropertyGroup>
 
     <ItemGroup>
         <!-- Revit Platform -->
@@ -6,8 +10,6 @@
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
-        <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="$(RevitVersion).*"/>
-        <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="$(RevitVersion).*"/>
         <PackageReference Include="Nice3point.Revit.Api.UIFramework" Version="$(RevitVersion).*" PrivateAssets="all"/>
         <PackageReference Include="Nice3point.Revit.Api.UIFrameworkServices" Version="$(RevitVersion).*" PrivateAssets="all"/>
         <PackageReference Include="Nice3point.Revit.Extensions" Version="$(RevitVersion).*"/>

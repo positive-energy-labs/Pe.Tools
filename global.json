@@ -3,5 +3,8 @@
     "version": "10.0.100",
     "rollForward": "latestMinor",
     "allowPrerelease": true
+  },
+  "msbuild-sdks": {
+    "Pe.Revit.Sdk": "0.1.0-dev.3"
   }
 }

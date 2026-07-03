@@ -1,125 +1,43 @@
 <Project>
-    <Import Project="build\generated\BuildMatrix.Configuration.props" />
-    <Import Project="build\generated\BuildTaxonomy.Evaluator.props" />
-    <Import Project="build\generated\ProductLayout.props" />
-
+    <!-- Repo-wide knobs; everything else derives from each project's PeProjectKind (Pe.Revit.Sdk).
+         The taxonomy/generated-props tier this file used to import is retired by the SDK. -->
     <PropertyGroup>
-        <PeWindowsDotnetEnvironmentRequired Condition="$([MSBuild]::IsOSPlatform('Windows')) and '$(PeSkipWindowsDotnetEnvironmentGuard)' != 'true'">true</PeWindowsDotnetEnvironmentRequired>
-        <PeProgramFiles>$([System.Environment]::GetEnvironmentVariable('ProgramFiles'))</PeProgramFiles>
-        <PeProgramFilesX86>$([System.Environment]::GetEnvironmentVariable('ProgramFiles(x86)'))</PeProgramFilesX86>
-        <PeAppData>$([System.Environment]::GetEnvironmentVariable('APPDATA'))</PeAppData>
-        <PeLocalAppData>$([System.Environment]::GetEnvironmentVariable('LOCALAPPDATA'))</PeLocalAppData>
-        <PeUserProfile>$([System.Environment]::GetEnvironmentVariable('USERPROFILE'))</PeUserProfile>
-        <PeSystemRoot>$([System.Environment]::GetEnvironmentVariable('SystemRoot'))</PeSystemRoot>
-        <PeComSpec>$([System.Environment]::GetEnvironmentVariable('ComSpec'))</PeComSpec>
-        <PeWindowsDotnetEnvironmentUnsafe Condition="'$(PeWindowsDotnetEnvironmentRequired)' == 'true' and ('$(PeProgramFiles)' == '' or '$(PeProgramFilesX86)' == '' or '$(PeAppData)' == '' or '$(PeLocalAppData)' == '' or '$(PeUserProfile)' == '' or '$(PeSystemRoot)' == '' or '$(PeComSpec)' == '')">true</PeWindowsDotnetEnvironmentUnsafe>
+        <PeRevitYears>2023;2024;2025;2026</PeRevitYears>
+        <PeDefaultRevitYear>2025</PeDefaultRevitYear>
+        <PeProductVendorName>Positive Energy</PeProductVendorName>
+        <PeProductName>Pe.Tools</PeProductName>
 
-        <Configurations>$(PeRevitDebugConfigurations);$(PeRevitReleaseConfigurations)</Configurations>
-        <Configurations Condition="'$(EnableRevitTestConfigurations)' == 'true'">$(Configurations);$(PeRevitTestConfigurations)</Configurations>
-        <DefaultItemExcludes>$(DefaultItemExcludes);bin\**;obj\**</DefaultItemExcludes>
+        <!-- Short-year configuration names preserved (Rider muscle memory + Pe.RiderBridge
+             solution-config selection). The SDK parses .R25 and .R2025 alike; declaring the list
+             explicitly suppresses the SDK-generated full-year one. -->
+        <Configurations>Debug.R23;Debug.R24;Debug.R25;Debug.R26;Release.R23;Release.R24;Release.R25;Release.R26</Configurations>
+        <Configurations Condition="'$(EnableRevitTestConfigurations)' == 'true'">$(Configurations);Debug.R23.Tests;Debug.R24.Tests;Debug.R25.Tests;Debug.R26.Tests;Release.R23.Tests;Release.R24.Tests;Release.R25.Tests;Release.R26.Tests</Configurations>
+    </PropertyGroup>
 
-        <PeRepositoryRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)'))</PeRepositoryRoot>
-        <PeArtifactsRoot>$([System.IO.Path]::GetFullPath('$(PeRepositoryRoot).artifacts\'))</PeArtifactsRoot>
-        <PeBuildArtifactsRoot>$([System.IO.Path]::GetFullPath('$(PeArtifactsRoot)build\'))</PeBuildArtifactsRoot>
-        <PePublishArtifactsRoot>$([System.IO.Path]::GetFullPath('$(PeArtifactsRoot)publish\'))</PePublishArtifactsRoot>
+    <!-- obj/ isolation must live in consumer props: Microsoft.Common.props derives
+         MSBuildProjectExtensionsPath from BaseIntermediateOutputPath before the SDK's props load,
+         so the SDK can only redirect bin/. Lane detection is duplicated inline for the same reason.
+         The $(Configuration) segment is load-bearing: this repo's years span net48 AND net8, so
+         restore assets must not be shared across configurations — which also requires defaulting
+         Configuration here, before it is used in a path. -->
+    <PropertyGroup>
+        <Configuration Condition="'$(Configuration)' == ''">Debug.R25</Configuration>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(BuildingInsideVisualStudio)' != 'true' AND '$(BuildingByReSharper)' != 'true' AND '$(PeIsolatedBuild)' != 'false'">
+        <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory).artifacts\obj\$(MSBuildProjectName)\$(Configuration)\</BaseIntermediateOutputPath>
+        <!-- Base already carries the configuration; stock MSBuild would append it again -->
+        <IntermediateOutputPath>$(BaseIntermediateOutputPath)</IntermediateOutputPath>
+    </PropertyGroup>
 
-        <PeStableCliRelativePath Condition="'$(PeStableCliRelativePath)' == ''">source\Pe.Dev.Cli\bin\$(PeStableCliConfiguration)\net8.0-windows\pe-dev.dll</PeStableCliRelativePath>
-        <PeStableCliArtifactsRelativePath Condition="'$(PeStableCliArtifactsRelativePath)' == ''">.artifacts\build\Pe.Dev.Cli\$(PeStableCliConfiguration)\bin\$(PeStableCliConfiguration)\net8.0-windows\pe-dev.dll</PeStableCliArtifactsRelativePath>
-        <PeDevelopmentHostExecutablePath Condition="'$(PeDevelopmentHostExecutablePath)' == ''">$([System.IO.Path]::Combine($([System.Environment]::GetFolderPath(System.Environment+SpecialFolder.LocalApplicationData)), '$(PeDevRuntimeHostExecutableRelativePath)'))</PeDevelopmentHostExecutablePath>
-        <PeInstalledHostExecutablePath Condition="'$(PeInstalledHostExecutablePath)' == ''">$([System.IO.Path]::Combine($([System.Environment]::GetFolderPath(System.Environment+SpecialFolder.LocalApplicationData)), '$(PeRuntimeHostExecutableRelativePath)'))</PeInstalledHostExecutablePath>
-        <PeInstalledPeaLauncherPath Condition="'$(PeInstalledPeaLauncherPath)' == ''">$([System.IO.Path]::Combine($([System.Environment]::GetFolderPath(System.Environment+SpecialFolder.LocalApplicationData)), '$(PeRuntimePeaLauncherRelativePath)'))</PeInstalledPeaLauncherPath>
-        <PeStableCliInteractivePath Condition="'$(PeStableCliInteractivePath)' == ''">$([System.IO.Path]::GetFullPath('$(PeRepositoryRoot)$(PeStableCliRelativePath)'))</PeStableCliInteractivePath>
-        <PeStableCliArtifactsPath Condition="'$(PeStableCliArtifactsPath)' == ''">$([System.IO.Path]::GetFullPath('$(PeRepositoryRoot)$(PeStableCliArtifactsRelativePath)'))</PeStableCliArtifactsPath>
-        <PeStableCliPath Condition="'$(PeStableCliPath)' == '' and Exists('$(PeStableCliInteractivePath)')">$(PeStableCliInteractivePath)</PeStableCliPath>
-        <PeStableCliPath Condition="'$(PeStableCliPath)' == '' and Exists('$(PeStableCliArtifactsPath)')">$(PeStableCliArtifactsPath)</PeStableCliPath>
+    <!-- Product layout names (Pe.App descriptor target, installer) and the stable pe-dev CLI
+         location (Pe.App approval watcher) — kept from the legacy build system. -->
+    <PropertyGroup>
+        <PeRevitAddinManifestFileName>Pe.App.addin</PeRevitAddinManifestFileName>
+        <PeRevitRuntimeDescriptorFileName>Pe.App.runtime.json</PeRevitRuntimeDescriptorFileName>
+        <PeStableCliConfiguration Condition="'$(PeStableCliConfiguration)' == ''">Debug.R25</PeStableCliConfiguration>
+        <PeStableCliInteractivePath Condition="'$(PeStableCliInteractivePath)' == ''">$(MSBuildThisFileDirectory)source\Pe.Dev.Cli\bin\$(PeStableCliConfiguration)\net8.0-windows\pe-dev.dll</PeStableCliInteractivePath>
+        <PeStableCliArtifactsPath Condition="'$(PeStableCliArtifactsPath)' == ''">$(MSBuildThisFileDirectory).artifacts\build\Pe.Dev.Cli\$(PeStableCliConfiguration)\net8.0-windows\pe-dev.dll</PeStableCliArtifactsPath>
+        <PeStableCliPath Condition="'$(PeStableCliPath)' == '' AND Exists('$(PeStableCliInteractivePath)')">$(PeStableCliInteractivePath)</PeStableCliPath>
         <PeStableCliPath Condition="'$(PeStableCliPath)' == ''">$(PeStableCliArtifactsPath)</PeStableCliPath>
-
-        <PeIsIdeBuild Condition="'$(PeIsIdeBuild)' == '' and '$(BuildingByReSharper)' == 'true'">true</PeIsIdeBuild>
-        <PeIsIdeBuild Condition="'$(PeIsIdeBuild)' == '' and '$(BuildingByReSharper)' == 'True'">true</PeIsIdeBuild>
-        <PeIsIdeBuild Condition="'$(PeIsIdeBuild)' == '' and '$(BuildingInsideVisualStudio)' == 'true'">true</PeIsIdeBuild>
-        <PeIsIdeBuild Condition="'$(PeIsIdeBuild)' == '' and '$(BuildingInsideVisualStudio)' == 'True'">true</PeIsIdeBuild>
-        <PeIsIdeBuild Condition="'$(PeIsIdeBuild)' == ''">false</PeIsIdeBuild>
-
-        <PeIsolatedBuild Condition="'$(PeIsolatedBuild)' == '' and '$(PeIsIdeBuild)' == 'true'">false</PeIsolatedBuild>
-        <PeIsolatedBuild Condition="'$(PeIsolatedBuild)' == '' and '$(PeIsIdeBuild)' != 'true'">true</PeIsolatedBuild>
-
-        <PeRuntimeLane Condition="'$(PeRuntimeLane)' == '' and '$(PeIsolatedBuild)' != 'true'">Dev</PeRuntimeLane>
-        <PeRuntimeLane Condition="'$(PeRuntimeLane)' == ''">Installed</PeRuntimeLane>
-        <PeMirrorRuntimeToLocalBin Condition="'$(PeMirrorRuntimeToLocalBin)' == ''">false</PeMirrorRuntimeToLocalBin>
     </PropertyGroup>
-
-    <PropertyGroup>
-        <PeHasProjectTaxonomy Condition="'$(PeHasProjectTaxonomy)' == '' and '$(PeModuleClass)' != ''">true</PeHasProjectTaxonomy>
-        <PeHasProjectTaxonomy Condition="'$(PeHasProjectTaxonomy)' == ''">false</PeHasProjectTaxonomy>
-
-        <PeWorkflow Condition="'$(PeWorkflow)' == '' and '$(PublishAddin)' == 'true' and ('$(DeployAddin)' != 'true' or '$(PeIsolatedBuild)' == 'true')">Package</PeWorkflow>
-        <PeWorkflow Condition="'$(PeWorkflow)' == '' and '$(PeVerifyTarget)' != ''">Verify</PeWorkflow>
-        <PeWorkflow Condition="'$(PeWorkflow)' == ''">Build</PeWorkflow>
-        <PeExecutionPolicy Condition="'$(PeExecutionPolicy)' == '' and '$(PeVerifyTarget)' == 'AttachedRrd'">RrdRequired</PeExecutionPolicy>
-        <PeExecutionPolicy Condition="'$(PeExecutionPolicy)' == ''">NoRrdContact</PeExecutionPolicy>
-    </PropertyGroup>
-
-    <PropertyGroup>
-        <IsBuildOrInstallerProject Condition="'$(PeModuleClass)' == 'BuildTool' or '$(PeModuleClass)' == 'InstallerTool'">true</IsBuildOrInstallerProject>
-        <IsBuildOrInstallerProject Condition="'$(IsBuildOrInstallerProject)' == ''">false</IsBuildOrInstallerProject>
-
-        <IsSharedNeutralProject Condition="'$(IsSharedNeutralProject)' == '' and '$(PeModuleClass)' == 'SharedNeutral'">true</IsSharedNeutralProject>
-        <IsSharedNeutralProject Condition="'$(IsSharedNeutralProject)' == ''">false</IsSharedNeutralProject>
-    </PropertyGroup>
-
-    <PropertyGroup Condition="'$(IsBuildOrInstallerProject)' == 'true'">
-        <DeployAddin>false</DeployAddin>
-    </PropertyGroup>
-
-    <PropertyGroup Condition="'$(IsBuildOrInstallerProject)' != 'true'">
-        <Configuration Condition="'$(Configuration)' == ''">$(PeDefaultRevitConfiguration)</Configuration>
-
-        <_PeRevitConfigurationVersion Condition="'$(PeSupportsRevitYear)' == 'true' and ('$(RevitVersion)' == '' or '$(RevitVersion)' == '-1')">$([System.Text.RegularExpressions.Regex]::Match('$(Configuration)', '.*\.R(\d{2}|\d{4})(?:\.|$)').Groups[1].Value)</_PeRevitConfigurationVersion>
-        <RevitVersion Condition="'$(PeSupportsRevitYear)' == 'true' and ('$(RevitVersion)' == '' or '$(RevitVersion)' == '-1') and '$(_PeRevitConfigurationVersion.Length)' == '4'">$(_PeRevitConfigurationVersion)</RevitVersion>
-        <RevitVersion Condition="'$(PeSupportsRevitYear)' == 'true' and ('$(RevitVersion)' == '' or '$(RevitVersion)' == '-1') and '$(_PeRevitConfigurationVersion.Length)' == '2'">20$(_PeRevitConfigurationVersion)</RevitVersion>
-        <_PeUsesDefaultRevitYear Condition="'$(PeSupportsRevitYear)' == 'true' and ('$(RevitVersion)' == '' or '$(RevitVersion)' == '-1')">true</_PeUsesDefaultRevitYear>
-        <RevitVersion Condition="'$(PeSupportsRevitYear)' == 'true' and '$(_PeUsesDefaultRevitYear)' == 'true'">$(PeDefaultRevitYear)</RevitVersion>
-    </PropertyGroup>
-
-    <Import Project="build\generated\BuildMatrix.TargetFramework.props" />
-
-    <PropertyGroup Condition="'$(PeIsolatedBuild)' == 'true' and '$(IsBuildOrInstallerProject)' != 'true' and '$(Configuration)' != '' and !$([System.String]::Copy('$(MSBuildProjectName)').EndsWith('_wpftmp'))">
-        <BaseOutputPath>$(PeBuildArtifactsRoot)$(MSBuildProjectName)\$(Configuration)\bin\</BaseOutputPath>
-        <BaseIntermediateOutputPath>$(PeBuildArtifactsRoot)$(MSBuildProjectName)\$(Configuration)\obj\</BaseIntermediateOutputPath>
-        <IntermediateOutputPath>$(BaseIntermediateOutputPath)</IntermediateOutputPath>
-        <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
-        <DeployAddin>false</DeployAddin>
-        <LaunchRevit>false</LaunchRevit>
-    </PropertyGroup>
-
-    <PropertyGroup Condition="'$(PeIsolatedBuild)' != 'true' and '$(Configuration)' != ''">
-        <BaseIntermediateOutputPath>obj\$(Configuration)\</BaseIntermediateOutputPath>
-        <IntermediateOutputPath>$(BaseIntermediateOutputPath)</IntermediateOutputPath>
-    </PropertyGroup>
-
-    <PropertyGroup Condition="'$(PeIsolatedBuild)' == 'true' and '$(MSBuildProjectName)' == 'Pe.App' and '$(Configuration)' != ''">
-        <AddinPublishDir>$(PePublishArtifactsRoot)revit\$(Configuration)\</AddinPublishDir>
-        <PublishAddin Condition="'$(PublishAddin)' == ''">false</PublishAddin>
-    </PropertyGroup>
-
-    <PropertyGroup Condition="'$(IsBuildOrInstallerProject)' != 'true' and '$(Configuration)' != ''">
-        <IsRepackable>false</IsRepackable>
-    </PropertyGroup>
-
-    <PropertyGroup Condition="'$(PeIsolatedBuild)' != 'true' and '$(Configuration)' != '' and $([System.String]::Copy('$(Configuration)').Contains('.R')) == 'True'">
-        <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
-    </PropertyGroup>
-
-    <PropertyGroup Condition="'$(PeIsolatedBuild)' != 'true' and '$(Configuration)' != '' and $([System.String]::Copy('$(Configuration)').Contains('.Tests')) == 'True'">
-        <BaseOutputPath>$(PeArtifactsRoot)tests\bin\</BaseOutputPath>
-    </PropertyGroup>
-
-    <PropertyGroup Condition="'$(IsBuildOrInstallerProject)' != 'true' and '$(Configuration)' != '' and !$([System.String]::Copy('$(Configuration)').Contains('Release'))">
-        <AssemblyVersion>1.0.0.0</AssemblyVersion>
-        <FileVersion>1.0.0.0</FileVersion>
-        <InformationalVersion>dev</InformationalVersion>
-        <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
-    </PropertyGroup>
-
-    <Import Project="build\generated\PackagePolicy.props" />
 </Project>
