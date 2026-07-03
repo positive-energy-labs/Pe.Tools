@@ -1,43 +1,36 @@
 /**
  * Loaded-families boundary, now sourced from C#-authored generated artifacts:
- *   - validation schemas from `@pe/host-generated/zod` (reflected from C#)
- *   - value enums from `@pe/host-generated/types` (TypeGen interfaces/enums)
+ *   - validation schemas, inferred types, and value constants from `@pe/host-contracts/effect`
  *
  * The generated matrix schema is faithful to the wire (parameters nested under
  * `definition`, `presence` not `scope`, null cells). The table UI wants a flat
- * model, so the ONE hand-maintained thing here is the flatten adapter — a view
+ * model, so the one hand-maintained thing here is the flatten adapter: a view
  * mapper, not a contract. If the C# changes, the generated schema/types move
  * and this adapter fails to compile, surfacing drift immediately.
  */
+import { loadedFamiliesMatrixDataSchema } from "@pe/host-contracts/effect";
 import {
   type LoadedFamilyMatrixFamily as GenMatrixFamily,
   type LoadedFamiliesMatrixData as GenMatrixData,
-  type LoadedFamiliesFilter,
+  type LoadedFamilyExcludedParameterEntry as GenExcludedParameter,
+  type LoadedFamilyVisibleParameterEntry as GenVisibleParameter,
+  type LoadedFamiliesCatalogRequest,
+  type LoadedFamiliesMatrixRequest,
   type ParameterIdentity,
-  type RevitDataOutputBudget,
-  loadedFamiliesMatrixDataSchema,
-} from "@pe/host-generated/zod";
-import type {
-  ExcludedParameterReason,
-  FormulaState,
-  LoadedFamilyParameterKind,
-  LoadedFamilyParameterPresence,
-} from "@pe/host-generated/types";
+} from "@pe/host-contracts/effect";
+import { Schema } from "effect";
 
 // Re-exports so the route imports a single boundary module.
-export {
-  hostProbeDataSchema,
-  hostSessionSummaryDataSchema as sessionSummaryDataSchema,
-  loadedFamiliesCatalogDataSchema,
-} from "@pe/host-generated/zod";
 export type {
-  HostProbeData,
-  HostSessionSummaryData as SessionSummaryData,
   LoadedFamiliesCatalogData,
   LoadedFamilyCatalogEntry,
   LoadedFamiliesFilter,
-} from "@pe/host-generated/zod";
-// Value enums (usable as `.Member`). C# calls it presence; the UI calls it scope.
+} from "@pe/host-contracts/effect";
+export type {
+  HostProbeData,
+  HostSessionSummaryData as SessionSummaryData,
+} from "@pe/host-contracts/operation-types";
+// Value constants (usable as `.Member`). C# calls it presence; the UI calls it scope.
 export {
   ExcludedParameterReason,
   FormulaState,
@@ -45,56 +38,53 @@ export {
   LoadedFamilyParameterPresence as LoadedFamilyParameterScope,
   LoadedFamilyPlacementScope,
   ParameterIdentityKind,
-} from "@pe/host-generated/types";
+} from "@pe/host-contracts/effect";
 
-export interface LoadedFamiliesRequest {
-  filter?: LoadedFamiliesFilter;
-  budget?: RevitDataOutputBudget;
-}
+export type LoadedFamiliesRequest = LoadedFamiliesCatalogRequest | LoadedFamiliesMatrixRequest;
 
 // ---- flat view model the table components consume -------------------------
 
-export interface LoadedFamilyVisibleParameterEntry {
+export type LoadedFamilyVisibleParameterEntry = {
   identity: ParameterIdentity;
   isInstance: boolean;
   dataTypeId: string;
   dataTypeLabel: string;
   groupTypeId: string;
   groupTypeLabel: string;
-  kind: LoadedFamilyParameterKind;
-  scope: LoadedFamilyParameterPresence;
+  kind: GenVisibleParameter["kind"];
+  scope: GenVisibleParameter["presence"];
   storageType: string;
-  formulaState: FormulaState;
+  formulaState: GenVisibleParameter["formulaState"];
   formula: string;
   valuesByType: Record<string, string>;
-}
+};
 
-export interface LoadedFamilyExcludedParameterEntry {
+export type LoadedFamilyExcludedParameterEntry = {
   identity: ParameterIdentity;
   isInstance: boolean;
-  kind: LoadedFamilyParameterKind;
-  scope: LoadedFamilyParameterPresence;
-  excludedReason: ExcludedParameterReason;
-  formulaState: FormulaState;
+  kind: GenExcludedParameter["kind"];
+  scope: GenExcludedParameter["presence"];
+  excludedReason: GenExcludedParameter["excludedReason"];
+  formulaState: GenExcludedParameter["formulaState"];
   formula: string;
-}
+};
 
-export interface LoadedFamilyMatrixFamily {
+export type LoadedFamilyMatrixFamily = {
   familyId: number;
   familyUniqueId: string;
   familyName: string;
   categoryName: string;
   placedInstanceCount: number;
-  types: Array<{ typeName: string }>;
-  scheduleNames: string[];
+  types: GenMatrixFamily["types"];
+  scheduleNames: GenMatrixFamily["scheduleNames"];
   visibleParameters: LoadedFamilyVisibleParameterEntry[];
   excludedParameters: LoadedFamilyExcludedParameterEntry[];
-}
+};
 
-export interface LoadedFamiliesMatrixView {
+export type LoadedFamiliesMatrixView = {
   families: LoadedFamilyMatrixFamily[];
   issues: GenMatrixData["issues"];
-}
+};
 
 function flattenValues(values: Record<string, string | null>): Record<string, string> {
   const out: Record<string, string> = {};
@@ -144,7 +134,5 @@ export function flattenMatrixData(data: GenMatrixData): LoadedFamiliesMatrixView
 
 /** Parse a raw matrix payload (generated schema) then flatten. Used by tests. */
 export function flattenMatrix(raw: unknown): LoadedFamiliesMatrixView {
-  return flattenMatrixData(loadedFamiliesMatrixDataSchema.parse(raw));
+  return flattenMatrixData(Schema.decodeUnknownSync(loadedFamiliesMatrixDataSchema)(raw));
 }
-
-export { loadedFamiliesMatrixDataSchema };

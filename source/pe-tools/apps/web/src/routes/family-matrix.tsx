@@ -23,21 +23,17 @@ import {
 } from "#/components/ui/select";
 import { Tooltip, UiTooltipProvider } from "#/components/ui/tooltip";
 import {
-  ExcludedParameterReason,
-  FormulaState,
   type LoadedFamiliesRequest,
   type LoadedFamilyMatrixFamily,
-  LoadedFamilyParameterKind,
-  LoadedFamilyParameterScope,
   LoadedFamilyPlacementScope,
   type LoadedFamilyVisibleParameterEntry,
-  ParameterIdentityKind,
-} from "#/host/contracts";
+} from "#/host/loaded-families-view";
 import {
-  useHostProbeQuery,
+  useBridgeSessionsListQuery,
+  useBridgeSessionSummaryQuery,
+  useHostStatusQuery,
   useLoadedFamiliesCatalogQuery,
   useLoadedFamiliesMatrixQuery,
-  useSessionSummaryQuery,
 } from "#/host/queries";
 import { HostConnectionPill, HostIssuePanel, toHostIssue } from "#/host/issues";
 import { cn } from "#/lib/utils";
@@ -50,6 +46,7 @@ type ViewMode = "spreadsheet" | "grouped";
 type GroupByMode = "none" | "group" | "kind" | "scope";
 type SortDirection = "asc" | "desc";
 type ColumnSortMode = "clustered" | "custom";
+const DEFAULT_SESSION_VALUE = "__host_default__";
 
 interface SortLayer {
   columnKey: string;
@@ -62,10 +59,10 @@ interface MasterTableRow {
   categoryName: string;
   typeName: string;
   rowKey: string;
-  scheduleNames: string[];
+  scheduleNames: readonly string[];
   valuesByParam: Record<string, string>;
-  scopeByParam: Record<string, LoadedFamilyParameterScope>;
-  formulaStateByParam: Record<string, FormulaState>;
+  scopeByParam: Record<string, LoadedFamilyVisibleParameterEntry["scope"]>;
+  formulaStateByParam: Record<string, LoadedFamilyVisibleParameterEntry["formulaState"]>;
   isFirstInFamily: boolean;
   familyTypeCount: number;
 }
@@ -73,10 +70,10 @@ interface MasterTableRow {
 interface ParameterColumnDef {
   key: string;
   name: string;
-  kind: LoadedFamilyParameterKind;
+  kind: LoadedFamilyVisibleParameterEntry["kind"];
   isInstance: boolean;
-  formulaState: FormulaState;
-  identityKind: ParameterIdentityKind;
+  formulaState: LoadedFamilyVisibleParameterEntry["formulaState"];
+  identityKind: LoadedFamilyVisibleParameterEntry["identity"]["kind"];
   familyCount: number;
   totalOccurrences: number;
 }
@@ -84,7 +81,7 @@ interface ParameterColumnDef {
 type ParameterGroup = "builtin" | "common" | "uncommon";
 
 function getParameterGroup(col: ParameterColumnDef, totalFamilies: number): ParameterGroup {
-  if (col.identityKind === ParameterIdentityKind.BuiltInParameter) {
+  if (col.identityKind === "BuiltInParameter") {
     return "builtin";
   }
   const commonThreshold = Math.max(2, totalFamilies * 0.3);
@@ -106,7 +103,7 @@ function getParameterGroupOrder(group: ParameterGroup): number {
 }
 
 function isProjectOnlyParameterColumn(col: ParameterColumnDef): boolean {
-  return col.kind === LoadedFamilyParameterKind.ProjectParameter;
+  return col.kind === "ProjectParameter";
 }
 
 function sortColumnsClusteredMode(
@@ -135,37 +132,34 @@ function sortColumnsClusteredMode(
 }
 
 function getCellStatusClass(
-  scope: LoadedFamilyParameterScope | undefined,
-  formulaState: FormulaState | undefined,
+  scope: LoadedFamilyVisibleParameterEntry["scope"] | undefined,
+  formulaState: LoadedFamilyVisibleParameterEntry["formulaState"] | undefined,
   hasValue: boolean,
 ): string {
-  if (!scope || scope === LoadedFamilyParameterScope.Unresolved) {
+  if (!scope || scope === "Unresolved") {
     return "bg-[var(--cat-kiln)]/10";
   }
 
-  if (scope === LoadedFamilyParameterScope.ProjectBindingOnly) {
+  if (scope === "ProjectBindingOnly") {
     return "bg-[var(--cat-clay)]/10";
   }
 
-  if (formulaState === FormulaState.Present) {
+  if (formulaState === "Present") {
     return "bg-[var(--cat-lichen)]/12";
   }
 
-  if (
-    scope === LoadedFamilyParameterScope.Family ||
-    scope === LoadedFamilyParameterScope.FamilyAndProjectBinding
-  ) {
+  if (scope === "Family" || scope === "FamilyAndProjectBinding") {
     return hasValue ? "bg-[var(--cat-green)]/10" : "";
   }
 
   return "";
 }
 
-function getCellBorderClass(scope: LoadedFamilyParameterScope | undefined): string {
-  if (!scope || scope === LoadedFamilyParameterScope.Unresolved) {
+function getCellBorderClass(scope: LoadedFamilyVisibleParameterEntry["scope"] | undefined): string {
+  if (!scope || scope === "Unresolved") {
     return "border-l-2 border-l-[var(--cat-kiln)]/40";
   }
-  if (scope === LoadedFamilyParameterScope.ProjectBindingOnly) {
+  if (scope === "ProjectBindingOnly") {
     return "border-l-2 border-l-[var(--cat-clay)]/45";
   }
   return "";
@@ -177,30 +171,30 @@ function getParameterDisplayName(
   return param.identity.name;
 }
 
-function getKindLabel(kind: LoadedFamilyParameterKind): string {
+function getKindLabel(kind: LoadedFamilyVisibleParameterEntry["kind"]): string {
   switch (kind) {
-    case LoadedFamilyParameterKind.FamilyParameter:
+    case "FamilyParameter":
       return "Family";
-    case LoadedFamilyParameterKind.SharedParameter:
+    case "SharedParameter":
       return "Shared";
-    case LoadedFamilyParameterKind.ProjectParameter:
+    case "ProjectParameter":
       return "Project";
-    case LoadedFamilyParameterKind.ProjectSharedParameter:
+    case "ProjectSharedParameter":
       return "Proj+Shared";
     default:
       return kind;
   }
 }
 
-function getKindBadgeClass(kind: LoadedFamilyParameterKind): string {
+function getKindBadgeClass(kind: LoadedFamilyVisibleParameterEntry["kind"]): string {
   switch (kind) {
-    case LoadedFamilyParameterKind.FamilyParameter:
+    case "FamilyParameter":
       return "bg-[var(--cat-blue)]/12 text-[var(--cat-blue)] border-[var(--cat-blue)]/25";
-    case LoadedFamilyParameterKind.SharedParameter:
+    case "SharedParameter":
       return "bg-[var(--cat-lichen)]/12 text-[var(--cat-lichen)] border-[var(--cat-lichen)]/25";
-    case LoadedFamilyParameterKind.ProjectParameter:
+    case "ProjectParameter":
       return "bg-[var(--cat-clay)]/12 text-[var(--cat-clay)] border-[var(--cat-clay)]/25";
-    case LoadedFamilyParameterKind.ProjectSharedParameter:
+    case "ProjectSharedParameter":
       return "bg-[var(--cat-green)]/12 text-[var(--cat-green)] border-[var(--cat-green)]/25";
     default:
       return "bg-muted text-muted-foreground border-border";
@@ -217,19 +211,27 @@ function getScopeBadgeClass(isInstance: boolean): string {
     : "bg-[var(--cat-kiln)]/12 text-[var(--cat-kiln)] border-[var(--cat-kiln)]/25";
 }
 
-function getExcludedReasonLabel(reason: ExcludedParameterReason): string {
+function getExcludedReasonLabel(
+  reason: LoadedFamilyMatrixFamily["excludedParameters"][number]["excludedReason"],
+): string {
   switch (reason) {
-    case ExcludedParameterReason.ProjectObservedBuiltIn:
+    case "ProjectObservedBuiltIn":
       return "Project-observed built-in";
-    case ExcludedParameterReason.UnresolvedClassification:
+    case "UnresolvedClassification":
       return "Unresolved";
     default:
       return reason;
   }
 }
 
-function FormulaIndicator({ state, formula }: { state: FormulaState; formula: string }) {
-  if (state === FormulaState.None || state === FormulaState.NotApplicable) {
+function FormulaIndicator({
+  state,
+  formula,
+}: {
+  state: LoadedFamilyVisibleParameterEntry["formulaState"];
+  formula: string;
+}) {
+  if (state === "None" || state === "NotApplicable") {
     return null;
   }
 
@@ -281,8 +283,11 @@ function MasterSpreadsheetTable({ families }: { families: LoadedFamilyMatrixFami
       for (let typeIndex = 0; typeIndex < family.types.length; typeIndex++) {
         const type = family.types[typeIndex];
         const valuesByParam: Record<string, string> = {};
-        const scopeByParam: Record<string, LoadedFamilyParameterScope> = {};
-        const formulaStateByParam: Record<string, FormulaState> = {};
+        const scopeByParam: Record<string, LoadedFamilyVisibleParameterEntry["scope"]> = {};
+        const formulaStateByParam: Record<
+          string,
+          LoadedFamilyVisibleParameterEntry["formulaState"]
+        > = {};
 
         for (const param of family.visibleParameters) {
           valuesByParam[param.identity.key] = param.valuesByType[type.typeName] ?? "";
@@ -644,8 +649,7 @@ function MasterSpreadsheetTable({ families }: { families: LoadedFamilyMatrixFami
                       const scope = row.scopeByParam[col.key];
                       const formulaState = row.formulaStateByParam[col.key];
                       const isEmpty = !value.trim();
-                      const isUnresolved =
-                        !scope || scope === LoadedFamilyParameterScope.Unresolved;
+                      const isUnresolved = !scope || scope === "Unresolved";
 
                       return (
                         <td
@@ -659,9 +663,9 @@ function MasterSpreadsheetTable({ families }: { families: LoadedFamilyMatrixFami
                           title={
                             isUnresolved
                               ? "Parameter not available on this family"
-                              : scope === LoadedFamilyParameterScope.ProjectBindingOnly
+                              : scope === "ProjectBindingOnly"
                                 ? `Project parameter only: ${value}`
-                                : formulaState === FormulaState.Present
+                                : formulaState === "Present"
                                   ? `Formula-driven: ${value}`
                                   : value
                           }
@@ -969,6 +973,7 @@ function FamilyCard({
 
 function FamilyMatrixRoute() {
   const [viewMode, setViewMode] = useState<ViewMode>("spreadsheet");
+  const [bridgeSessionId, setBridgeSessionId] = useState<string | undefined>();
   const [placementScope, setPlacementScope] = useState<LoadedFamilyPlacementScope>(
     LoadedFamilyPlacementScope.AllLoaded,
   );
@@ -982,10 +987,12 @@ function FamilyMatrixRoute() {
   } | null>(null);
   const [shouldAutoSelectFamilies, setShouldAutoSelectFamilies] = useState(false);
   const [expandedFamilies, setExpandedFamilies] = useState<Set<string>>(new Set());
+  const hostQueryOptions = bridgeSessionId ? { bridgeSessionId } : undefined;
 
-  const probeQuery = useHostProbeQuery();
-  const sessionQuery = useSessionSummaryQuery();
-  const bridgeConnected = probeQuery.data?.bridgeIsConnected ?? false;
+  const sessionsQuery = useBridgeSessionsListQuery();
+  const hostStatusQuery = useHostStatusQuery(hostQueryOptions);
+  const sessionQuery = useBridgeSessionSummaryQuery(hostQueryOptions);
+  const bridgeConnected = hostStatusQuery.data?.bridgeIsConnected ?? false;
   const activeDocumentTitle = sessionQuery.data?.activeDocument?.title;
   const revitVersion = sessionQuery.data?.revitVersion;
 
@@ -997,7 +1004,7 @@ function FamilyMatrixRoute() {
       filter: { placementScope: LoadedFamilyPlacementScope.AllLoaded },
       budget: { maxEntries: 5000 },
     },
-    { enabled: bridgeConnected },
+    { ...hostQueryOptions, enabled: bridgeConnected },
   );
   const availableCategories = useMemo(() => {
     const families = categoryCatalogQuery.data?.families ?? [];
@@ -1018,6 +1025,7 @@ function FamilyMatrixRoute() {
     [selectedCategories, placementScope],
   );
   const selectedFamilyCatalogQuery = useLoadedFamiliesCatalogQuery(selectedFamilyCatalogRequest, {
+    ...hostQueryOptions,
     enabled: bridgeConnected && selectedCategories.length > 0,
   });
   const availableFamilyNames = useMemo(() => {
@@ -1049,6 +1057,7 @@ function FamilyMatrixRoute() {
     [appliedMatrixFilter],
   );
   const matrixQuery = useLoadedFamiliesMatrixQuery(matrixRequest, {
+    ...hostQueryOptions,
     enabled: bridgeConnected && matrixRequest !== undefined,
   });
   const categoryCatalogIssue = categoryCatalogQuery.isError
@@ -1181,6 +1190,15 @@ function FamilyMatrixRoute() {
     }
   };
 
+  const handleBridgeSessionChange = (value: string | undefined) => {
+    setBridgeSessionId(value);
+    setExpandedFamilies(new Set());
+    setSelectedCategories([]);
+    setSelectedFamilyNames([]);
+    setShouldAutoSelectFamilies(false);
+    setAppliedMatrixFilter(null);
+  };
+
   const handleApplyMatrixSelection = () => {
     if (!hasSelectedCategories || !hasSelectedFamilies) {
       return;
@@ -1232,12 +1250,33 @@ function FamilyMatrixRoute() {
                 ? `Bridge connected${revitVersion ? ` · Revit ${revitVersion}` : ""}${
                     activeDocumentTitle ? ` · ${activeDocumentTitle}` : " · no active document"
                   }`
-                : "Bridge disconnected — open Revit and connect Pe.Host to load matrices."}
+                : "Bridge disconnected - open Revit and connect the TS host to load matrices."}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <HostConnectionPill connected={bridgeConnected} />
+
+            <Select
+              value={bridgeSessionId ?? DEFAULT_SESSION_VALUE}
+              onValueChange={(value: string | null) =>
+                handleBridgeSessionChange(
+                  !value || value === DEFAULT_SESSION_VALUE ? undefined : value,
+                )
+              }
+            >
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="Host default" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={DEFAULT_SESSION_VALUE}>Host default</SelectItem>
+                {(sessionsQuery.data?.sessions ?? []).map((session) => (
+                  <SelectItem key={session.sessionId} value={session.sessionId}>
+                    {session.activeDocumentTitle || `Revit ${session.processId ?? ""}`.trim()}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
             <div className="flex rounded-md border border-border/60 bg-muted/30 p-0.5">
               <Button

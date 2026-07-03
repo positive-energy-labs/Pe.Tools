@@ -1,20 +1,31 @@
 /**
- * TanStack Query hooks over the Revit host. Each hook calls a generated
- * operation by key; `callHostOp` infers the response type from the generated
- * schema registry and validates at the boundary — no hand-passed schemas.
+ * TanStack Query hooks over the Revit host RPC. Literal operation keys infer
+ * response types from the generated/TS-owned operation contract boundary.
  */
 import { useQuery } from "@tanstack/react-query";
 
-import { callHostOp } from "#/host/client";
-import { type LoadedFamiliesRequest, flattenMatrixData } from "#/host/contracts";
+import { callHostRpc } from "#/host/client";
+import { type LoadedFamiliesRequest, flattenMatrixData } from "#/host/loaded-families-view";
 import type {
   FieldOptionsRequest,
   ParameterCatalogRequest,
   SchemaRequest,
-  SettingsTreeRequest,
-} from "#/host/settings-contracts";
+} from "@pe/host-contracts/effect";
+import type { HostSessionScope, SettingsTreeRequest } from "@pe/host-contracts/operation-types";
 
 const KEY = ["pe-host"] as const;
+
+type HostQueryOptions = HostSessionScope & {
+  readonly enabled?: boolean;
+};
+
+function sessionKey(options: HostQueryOptions | undefined): string {
+  return options?.bridgeSessionId ?? "";
+}
+
+function callOptions(options: HostQueryOptions | undefined) {
+  return options?.bridgeSessionId ? { bridgeSessionId: options.bridgeSessionId } : undefined;
+}
 
 function stableSerialize(input: Record<string, string> | undefined | null): string {
   if (!input) return "{}";
@@ -38,33 +49,43 @@ function filterKey(request: LoadedFamiliesRequest | undefined): string {
   ].join("|");
 }
 
-export function useHostProbeQuery(options?: { enabled?: boolean }) {
+export function useHostStatusQuery(options?: HostQueryOptions) {
   return useQuery({
-    queryKey: [...KEY, "host-probe"],
-    queryFn: () => callHostOp("settings.host-probe"),
+    queryKey: [...KEY, sessionKey(options), "host-status"],
+    queryFn: () => callHostRpc("host.status", undefined, callOptions(options)),
     enabled: options?.enabled ?? true,
     staleTime: 15_000,
     refetchOnWindowFocus: false,
   });
 }
 
-export function useSessionSummaryQuery(options?: { enabled?: boolean }) {
+export function useBridgeSessionSummaryQuery(options?: HostQueryOptions) {
   return useQuery({
-    queryKey: [...KEY, "session-summary"],
-    queryFn: () => callHostOp("settings.session-summary"),
+    queryKey: [...KEY, sessionKey(options), "bridge-session-summary"],
+    queryFn: () => callHostRpc("bridge.sessions.summary", undefined, callOptions(options)),
     enabled: options?.enabled ?? true,
     staleTime: 15_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useBridgeSessionsListQuery(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: [...KEY, "bridge-sessions-list"],
+    queryFn: () => callHostRpc("bridge.sessions.list"),
+    enabled: options?.enabled ?? true,
+    staleTime: 5_000,
     refetchOnWindowFocus: false,
   });
 }
 
 export function useLoadedFamiliesCatalogQuery(
   request: LoadedFamiliesRequest,
-  options?: { enabled?: boolean },
+  options?: HostQueryOptions,
 ) {
   return useQuery({
-    queryKey: [...KEY, "loaded-families-catalog", filterKey(request)],
-    queryFn: () => callHostOp("revit.catalog.loaded-families", request),
+    queryKey: [...KEY, sessionKey(options), "loaded-families-catalog", filterKey(request)],
+    queryFn: () => callHostRpc("revit.catalog.loaded-families", request, callOptions(options)),
     enabled: options?.enabled ?? true,
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
@@ -76,13 +97,15 @@ export function useLoadedFamiliesCatalogQuery(
 
 export function useLoadedFamiliesMatrixQuery(
   request: LoadedFamiliesRequest | undefined,
-  options?: { enabled?: boolean },
+  options?: HostQueryOptions,
 ) {
   return useQuery({
-    queryKey: [...KEY, "loaded-families-matrix", filterKey(request)],
+    queryKey: [...KEY, sessionKey(options), "loaded-families-matrix", filterKey(request)],
     queryFn: async () => {
       if (!request) throw new Error("Loaded families matrix request is required.");
-      return flattenMatrixData(await callHostOp("revit.matrix.loaded-families", request));
+      return flattenMatrixData(
+        await callHostRpc("revit.matrix.loaded-families", request, callOptions(options)),
+      );
     },
     enabled: (options?.enabled ?? true) && Boolean(request),
     staleTime: 10_000,
@@ -95,23 +118,21 @@ export function useLoadedFamiliesMatrixQuery(
 
 // --- settings -------------------------------------------------------------
 
-export function useWorkspacesQuery(options?: { enabled?: boolean }) {
+export function useWorkspacesQuery(options?: HostQueryOptions) {
   return useQuery({
-    queryKey: [...KEY, "workspaces"],
-    queryFn: () => callHostOp("settings.workspaces", {}),
+    queryKey: [...KEY, sessionKey(options), "workspaces"],
+    queryFn: () => callHostRpc("settings.workspaces", undefined, callOptions(options)),
     enabled: options?.enabled ?? true,
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 }
 
-export function useTreeQuery(
-  request: SettingsTreeRequest | undefined,
-  options?: { enabled?: boolean },
-) {
+export function useTreeQuery(request: SettingsTreeRequest | undefined, options?: HostQueryOptions) {
   return useQuery({
     queryKey: [
       ...KEY,
+      sessionKey(options),
       "tree",
       request?.moduleKey ?? "",
       request?.rootKey ?? "",
@@ -119,7 +140,7 @@ export function useTreeQuery(
     ],
     queryFn: () => {
       if (!request) throw new Error("Tree request is required.");
-      return callHostOp("settings.tree", request);
+      return callHostRpc("settings.tree", request, callOptions(options));
     },
     enabled: (options?.enabled ?? true) && Boolean(request?.moduleKey && request?.rootKey),
     staleTime: 60_000,
@@ -127,15 +148,18 @@ export function useTreeQuery(
   });
 }
 
-export function useSchemaQuery(
-  request: SchemaRequest | undefined,
-  options?: { enabled?: boolean },
-) {
+export function useSchemaQuery(request: SchemaRequest | undefined, options?: HostQueryOptions) {
   return useQuery({
-    queryKey: [...KEY, "schema", request?.moduleKey ?? "", request?.rootKey ?? ""],
+    queryKey: [
+      ...KEY,
+      sessionKey(options),
+      "schema",
+      request?.moduleKey ?? "",
+      request?.rootKey ?? "",
+    ],
     queryFn: () => {
       if (!request) throw new Error("Schema request is required.");
-      return callHostOp("settings.schema", request);
+      return callHostRpc("settings.schema", request, callOptions(options));
     },
     enabled: (options?.enabled ?? true) && Boolean(request?.moduleKey && request?.rootKey),
     staleTime: 5 * 60 * 1000,
@@ -143,13 +167,11 @@ export function useSchemaQuery(
   });
 }
 
-export function useFieldOptionsQuery(
-  request: FieldOptionsRequest,
-  options?: { enabled?: boolean },
-) {
+export function useFieldOptionsQuery(request: FieldOptionsRequest, options?: HostQueryOptions) {
   return useQuery({
     queryKey: [
       ...KEY,
+      sessionKey(options),
       "field-options",
       request.moduleKey,
       request.rootKey,
@@ -157,7 +179,7 @@ export function useFieldOptionsQuery(
       request.sourceKey,
       stableSerialize(request.contextValues),
     ],
-    queryFn: () => callHostOp("settings.field-options", request),
+    queryFn: () => callHostRpc("settings.field-options", request, callOptions(options)),
     enabled:
       (options?.enabled ?? true) &&
       Boolean(request.moduleKey && request.propertyPath && request.sourceKey),
@@ -170,16 +192,17 @@ export function useFieldOptionsQuery(
 
 export function useParameterCatalogQuery(
   request: ParameterCatalogRequest,
-  options?: { enabled?: boolean },
+  options?: HostQueryOptions,
 ) {
   return useQuery({
     queryKey: [
       ...KEY,
+      sessionKey(options),
       "parameter-catalog",
       request.moduleKey,
       stableSerialize(request.contextValues),
     ],
-    queryFn: () => callHostOp("settings.parameter-catalog", request),
+    queryFn: () => callHostRpc("settings.parameter-catalog", request, callOptions(options)),
     enabled: (options?.enabled ?? true) && Boolean(request.moduleKey),
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,

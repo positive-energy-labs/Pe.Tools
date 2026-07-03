@@ -1,13 +1,13 @@
 /**
  * Settings-prototype route store. Centralizes the document edit loop
- * (selection → open → validate → save) and connection-independent workflow
+ * (selection -> open -> validate -> save) and connection-independent workflow
  * state. Ported from the demo's `@legendapp/state` store to a plain
- * `useSyncExternalStore` store — no new dependency, matches the codebase's
+ * `useSyncExternalStore` store: no new dependency, matches the codebase's
  * store philosophy. One snapshot per change; the route reads it whole.
  */
 import { useSyncExternalStore } from "react";
 
-import { callHostOp } from "#/host/client";
+import { callHostRpc } from "#/host/client";
 import { type HostIssue, toHostIssue } from "#/host/issues";
 import type {
   SaveSettingsDocumentResult,
@@ -16,14 +16,15 @@ import type {
   SettingsDocumentSnapshot,
   SettingsModuleWorkspaceDescriptor,
   SettingsRootDescriptor,
+  HostSessionScope,
   SettingsValidationResult,
   SettingsWorkspaceDescriptor,
-} from "#/host/settings-contracts";
+} from "@pe/host-contracts/operation-types";
 
 type AsyncStatus = "idle" | "loading" | "ready" | "error";
 type SaveStatus = "idle" | "saving" | "ready" | "conflict" | "error";
 
-interface InternalState {
+type InternalState = {
   selection: {
     workspaceKey?: string;
     moduleKey?: string;
@@ -56,17 +57,17 @@ interface InternalState {
     lastSavedAt?: string;
     lastConflictMessage?: string;
   };
-}
+};
 
 /** Derived, read-only snapshot the route consumes. */
-export interface SettingsSnapshot extends InternalState {
+export type SettingsSnapshot = InternalState & {
   documentId?: SettingsDocumentId;
   parsedRaw?: unknown;
   rawParseStatus: "parsed" | "error";
   rawParseError?: string;
   isDirty: boolean;
   dependencySummary: { total: number };
-}
+};
 
 function emptyState(): InternalState {
   return {
@@ -148,7 +149,7 @@ class SettingsStore {
 
   // --- selection ----------------------------------------------------------
 
-  ensureWorkspaceSelection(workspaces: SettingsWorkspaceDescriptor[]) {
+  ensureWorkspaceSelection(workspaces: readonly SettingsWorkspaceDescriptor[]) {
     if (this.state.selection.workspaceKey || workspaces.length === 0) return;
     this.selectWorkspace(workspaces[0]);
   }
@@ -182,17 +183,17 @@ class SettingsStore {
     });
   }
 
-  selectFile(relativePath?: string) {
+  selectFile(relativePath?: string, scope?: HostSessionScope) {
     this.commit((s) => {
       s.selection.selectedFilePath = relativePath;
       resetDoc(s);
     });
-    if (relativePath) void this.openSelectedDocument();
+    if (relativePath) void this.openSelectedDocument(scope);
   }
 
   // --- document lifecycle -------------------------------------------------
 
-  async openSelectedDocument() {
+  async openSelectedDocument(scope?: HostSessionScope) {
     const documentId = this.snapshot.documentId;
     if (!documentId) return;
 
@@ -203,10 +204,14 @@ class SettingsStore {
     });
 
     try {
-      const snapshot = await callHostOp("settings.document.open", {
-        documentId,
-        includeComposedContent: true,
-      });
+      const snapshot = await callHostRpc(
+        "settings.document.open",
+        {
+          documentId,
+          includeComposedContent: true,
+        },
+        scope,
+      );
       this.applySnapshot(snapshot);
     } catch (error) {
       const issue = toHostIssue(error, "Open document failed");
@@ -218,8 +223,8 @@ class SettingsStore {
     }
   }
 
-  refreshCurrentDocument() {
-    return this.openSelectedDocument();
+  refreshCurrentDocument(scope?: HostSessionScope) {
+    return this.openSelectedDocument(scope);
   }
 
   private applySnapshot(snapshot: SettingsDocumentSnapshot) {
@@ -229,7 +234,7 @@ class SettingsStore {
       s.document.rawContent = snapshot.rawContent;
       s.document.baselineRawContent = snapshot.rawContent;
       s.document.composedContent = snapshot.composedContent ?? "";
-      s.document.dependencies = snapshot.dependencies;
+      s.document.dependencies = [...snapshot.dependencies];
       s.document.versionToken = snapshot.metadata.versionToken?.value ?? "";
       s.document.lastOpenedAt = nowIso();
       s.document.isStale = false;
@@ -240,7 +245,10 @@ class SettingsStore {
     });
   }
 
-  async validateDraft(rawContent: string): Promise<SettingsValidationResult | undefined> {
+  async validateDraft(
+    rawContent: string,
+    scope?: HostSessionScope,
+  ): Promise<SettingsValidationResult | undefined> {
     const documentId = this.snapshot.documentId;
     if (!documentId) return undefined;
 
@@ -251,7 +259,11 @@ class SettingsStore {
     });
 
     try {
-      const result = await callHostOp("settings.document.validate", { documentId, rawContent });
+      const result = await callHostRpc(
+        "settings.document.validate",
+        { documentId, rawContent },
+        scope,
+      );
       this.commit((s) => {
         s.validation = { status: "ready", result, issue: undefined };
       });
@@ -267,7 +279,7 @@ class SettingsStore {
     }
   }
 
-  async saveDraft(values: Record<string, unknown>) {
+  async saveDraft(values: Record<string, unknown>, scope?: HostSessionScope) {
     const documentId = this.snapshot.documentId;
     if (!documentId) return;
 
@@ -278,11 +290,15 @@ class SettingsStore {
     });
 
     try {
-      const result = await callHostOp("settings.document.save", {
-        documentId,
-        rawContent,
-        expectedVersionToken: { value: this.snapshot.document.versionToken ?? "" },
-      });
+      const result = await callHostRpc(
+        "settings.document.save",
+        {
+          documentId,
+          rawContent,
+          expectedVersionToken: { value: this.snapshot.document.versionToken ?? "" },
+        },
+        scope,
+      );
       this.applySaveResult(result, rawContent);
     } catch (error) {
       const issue = toHostIssue(error, "Save failed");

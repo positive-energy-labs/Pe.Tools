@@ -1,6 +1,6 @@
 import { useForm, useStore } from "@tanstack/react-form";
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
@@ -22,19 +22,20 @@ import {
 } from "#/components/ui/select";
 import { Textarea } from "#/components/ui/textarea";
 import {
-  useHostProbeQuery,
+  useBridgeSessionsListQuery,
+  useBridgeSessionSummaryQuery,
+  useHostStatusQuery,
   useSchemaQuery,
-  useSessionSummaryQuery,
   useTreeQuery,
   useWorkspacesQuery,
 } from "#/host/queries";
 import {
-  type SettingsFileEntry,
   SettingsFileKind,
+  type SettingsFileEntry,
   type SettingsValidationResult,
-} from "#/host/settings-contracts";
+} from "@pe/host-contracts/operation-types";
 import { settingsStore, useSettingsSnapshot } from "#/host/settings-store";
-import { validateSettingsDocument } from "@pe/host-client/settings-validation";
+import { validateSettingsDocument } from "#/host/settings-validation";
 import { HostConnectionPill, HostIssuePanel } from "#/host/issues";
 import { SchemaToFieldRender } from "#/lib/schema-to-field-render";
 import {
@@ -235,13 +236,16 @@ function SettingsForm({
 function SettingsPrototypeRoute() {
   const snapshot = useSettingsSnapshot();
   const { selection, document, validation, save } = snapshot;
+  const [bridgeSessionId, setBridgeSessionId] = useState<string | undefined>();
+  const hostQueryOptions = bridgeSessionId ? { bridgeSessionId } : undefined;
 
-  const probeQuery = useHostProbeQuery();
-  const sessionQuery = useSessionSummaryQuery();
-  const bridgeConnected = probeQuery.data?.bridgeIsConnected ?? false;
+  const sessionsQuery = useBridgeSessionsListQuery();
+  const hostStatusQuery = useHostStatusQuery(hostQueryOptions);
+  const sessionQuery = useBridgeSessionSummaryQuery(hostQueryOptions);
+  const bridgeConnected = hostStatusQuery.data?.bridgeIsConnected ?? false;
   const activeDocumentTitle = sessionQuery.data?.activeDocument?.title;
 
-  const workspacesQuery = useWorkspacesQuery();
+  const workspacesQuery = useWorkspacesQuery(hostQueryOptions);
   const workspaces = workspacesQuery.data?.workspaces ?? [];
 
   useEffect(() => {
@@ -267,7 +271,10 @@ function SettingsPrototypeRoute() {
         : undefined,
     [selection.moduleKey, selection.rootKey],
   );
-  const treeQuery = useTreeQuery(treeRequest, { enabled: Boolean(treeRequest) });
+  const treeQuery = useTreeQuery(treeRequest, {
+    ...hostQueryOptions,
+    enabled: Boolean(treeRequest),
+  });
   const candidateFiles = useMemo(
     () => (treeQuery.data?.files ?? []).filter(isAuthoringFile),
     [treeQuery.data?.files],
@@ -280,7 +287,10 @@ function SettingsPrototypeRoute() {
         : undefined,
     [selection.moduleKey, selection.rootKey],
   );
-  const schemaQuery = useSchemaQuery(schemaRequest, { enabled: Boolean(schemaRequest) });
+  const schemaQuery = useSchemaQuery(schemaRequest, {
+    ...hostQueryOptions,
+    enabled: Boolean(schemaRequest),
+  });
   const renderSchema = useMemo(
     () => (schemaQuery.data?.schemaJson ? parseSchema(schemaQuery.data.schemaJson) : undefined),
     [schemaQuery.data?.schemaJson],
@@ -308,7 +318,7 @@ function SettingsPrototypeRoute() {
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
             Pick a workspace, module, root, and authoring file. The schema drives the form; validate
-            and save run through the host over HTTP.
+            and save run through the host RPC path.
           </p>
         </div>
         <HostConnectionPill connected={bridgeConnected} label={activeDocumentTitle ?? undefined} />
@@ -316,7 +326,7 @@ function SettingsPrototypeRoute() {
 
       <SectionCard
         title="Selection"
-        description="Workspace → module → root → authoring file."
+        description="Workspace -> module -> root -> authoring file."
         actions={
           <Button
             variant="outline"
@@ -330,7 +340,24 @@ function SettingsPrototypeRoute() {
           </Button>
         }
       >
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <LabeledSelect
+            id="bridge-session"
+            label="Bridge session"
+            value={bridgeSessionId}
+            placeholder="Host default"
+            onChange={(value) => {
+              setBridgeSessionId(value);
+              settingsStore.selectWorkspace(undefined);
+            }}
+          >
+            {(sessionsQuery.data?.sessions ?? []).map((session) => (
+              <SelectItem key={session.sessionId} value={session.sessionId}>
+                {session.activeDocumentTitle || `Revit ${session.processId ?? ""}`.trim()}
+              </SelectItem>
+            ))}
+          </LabeledSelect>
+
           <LabeledSelect
             id="workspace"
             label="Workspace"
@@ -383,7 +410,7 @@ function SettingsPrototypeRoute() {
             value={selection.selectedFilePath}
             placeholder="Choose a JSON file"
             disabled={candidateFiles.length === 0}
-            onChange={(v) => settingsStore.selectFile(v)}
+            onChange={(v) => settingsStore.selectFile(v, hostQueryOptions)}
           >
             {candidateFiles.map((entry) => (
               <SelectItem key={entry.path || entry.relativePath} value={entry.relativePath}>
@@ -409,7 +436,7 @@ function SettingsPrototypeRoute() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => void settingsStore.refreshCurrentDocument()}
+              onClick={() => void settingsStore.refreshCurrentDocument(hostQueryOptions)}
               disabled={!selection.selectedFilePath}
             >
               Refresh document
@@ -519,7 +546,7 @@ function SettingsPrototypeRoute() {
               initialValues={formBaseline}
               validationResult={validation.result}
               isSaving={save.status === "saving"}
-              onSave={(values) => settingsStore.saveDraft(values)}
+              onSave={(values) => settingsStore.saveDraft(values, hostQueryOptions)}
             />
           ) : (
             <div className="rounded-xl border border-dashed border-border p-6 text-sm text-muted-foreground">
