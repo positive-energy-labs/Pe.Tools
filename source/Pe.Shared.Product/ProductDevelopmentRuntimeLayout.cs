@@ -18,8 +18,7 @@ public sealed record ProductDevelopmentRuntimeLayout(
             new ProductDevelopmentRuntimeBinaryLayout(
                 developmentBinRootPath,
                 Path.Combine(developmentBinRootPath, HostProcessIdentity.DirectoryName),
-                Path.Combine(developmentBinRootPath, HostProcessIdentity.DirectoryName, HostProcessIdentity.ExecutableName),
-                Path.Combine(developmentBinRootPath, HostProcessIdentity.DirectoryName, HostProcessIdentity.DllName)
+                Path.Combine(developmentBinRootPath, HostProcessIdentity.DirectoryName, HostProcessIdentity.ExecutableName)
             )
         );
     }
@@ -28,6 +27,5 @@ public sealed record ProductDevelopmentRuntimeLayout(
 public sealed record ProductDevelopmentRuntimeBinaryLayout(
     string RootPath,
     string HostDirectoryPath,
-    string HostExecutablePath,
-    string HostDllPath
+    string HostExecutablePath
 );

@@ -4,11 +4,11 @@ using Microsoft.Extensions.Options;
 using ModularPipelines.Attributes;
 using ModularPipelines.Context;
 using ModularPipelines.FileSystem;
+using ModularPipelines.Git.Extensions;
 using ModularPipelines.Modules;
 using Pe.Shared.HostContracts;
 using Pe.Shared.Product;
 using Shouldly;
-using Sourcy.DotNet;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
 using File = ModularPipelines.FileSystem.File;
@@ -32,8 +32,9 @@ public sealed partial class CreateBundleModule(
         var versioning = versioningResult.ValueOrDefault!;
         var matrix = matrixResult.ValueOrDefault!;
         var layout = layoutResult.ValueOrDefault!;
+        var rootDirectory = context.Git().RootDirectory;
 
-        var bundleTarget = new File(Projects.Pe_App.FullName);
+        var bundleTarget = rootDirectory.GetFolder("source").GetFolder("Pe.App").GetFile("Pe.App.csproj");
         var targetDirectories = matrix.ResolveConfigurations(BuildConfigurationGroup.Pack, buildOptions.Value.Configuration)
             .Select(layout.GetRevitPublishDirectory)
             .Select(path => new Folder(path))

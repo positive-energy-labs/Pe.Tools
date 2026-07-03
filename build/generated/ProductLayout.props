@@ -7,7 +7,6 @@
     <PeRuntimeBinRelativePath>Positive Energy\Pe.Tools\bin</PeRuntimeBinRelativePath>
     <PeRuntimeHostDirectoryRelativePath>Positive Energy\Pe.Tools\bin\host</PeRuntimeHostDirectoryRelativePath>
     <PeRuntimeHostExecutableRelativePath>Positive Energy\Pe.Tools\bin\host\Pe.Host.exe</PeRuntimeHostExecutableRelativePath>
-    <PeRuntimeHostDllRelativePath>Positive Energy\Pe.Tools\bin\host\Pe.Host.dll</PeRuntimeHostDllRelativePath>
     <PeRuntimePeaDirectoryRelativePath>Positive Energy\Pe.Tools\bin\pea</PeRuntimePeaDirectoryRelativePath>
     <PeRuntimePeaLauncherRelativePath>Positive Energy\Pe.Tools\bin\pea\pea.cmd</PeRuntimePeaLauncherRelativePath>
     <PeRuntimePeaCurrentVersionRelativePath>Positive Energy\Pe.Tools\bin\pea\current.txt</PeRuntimePeaCurrentVersionRelativePath>
@@ -20,7 +19,6 @@
     <PeDevRuntimeBinRelativePath>Positive Energy\Pe.Tools\dev\bin</PeDevRuntimeBinRelativePath>
     <PeDevRuntimeHostDirectoryRelativePath>Positive Energy\Pe.Tools\dev\bin\host</PeDevRuntimeHostDirectoryRelativePath>
     <PeDevRuntimeHostExecutableRelativePath>Positive Energy\Pe.Tools\dev\bin\host\Pe.Host.exe</PeDevRuntimeHostExecutableRelativePath>
-    <PeDevRuntimeHostDllRelativePath>Positive Energy\Pe.Tools\dev\bin\host\Pe.Host.dll</PeDevRuntimeHostDllRelativePath>
     <PeUserContentRootRelativePath>Pe.Tools</PeUserContentRootRelativePath>
     <PeUserSettingsRelativePath>Pe.Tools\settings</PeUserSettingsRelativePath>
     <PeUserWorkspacesRelativePath>Pe.Tools\workspaces</PeUserWorkspacesRelativePath>

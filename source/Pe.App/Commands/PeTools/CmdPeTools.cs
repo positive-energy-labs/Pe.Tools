@@ -26,10 +26,9 @@ public class CmdPeTools : IExternalCommand {
             var connectAttempt = EnsureConnectedForButtonOpen(status);
             status = HostRuntime.GetStatus();
             Log.Information(
-                "Pe Tools command opened!!!!!!!!!!!!!!!: IsConnected={IsConnected}, BridgeUri={BridgeUri}, SessionId={SessionId}, Modules={ModuleCount}, ActiveDocument={ActiveDocumentTitle}, ConnectAttempted={ConnectAttempted}, ConnectSuccess={ConnectSuccess}, ConnectMessage={ConnectMessage}",
+                "Pe Tools command opened: IsConnected={IsConnected}, BridgeUri={BridgeUri}, Modules={ModuleCount}, ActiveDocument={ActiveDocumentTitle}, ConnectAttempted={ConnectAttempted}, ConnectSuccess={ConnectSuccess}, ConnectMessage={ConnectMessage}",
                 status.IsConnected,
                 status.BridgeUri,
-                status.SessionId,
                 status.AvailableModuleCount,
                 status.ActiveDocumentTitle,
                 connectAttempt != null,
@@ -44,7 +43,7 @@ public class CmdPeTools : IExternalCommand {
                 CommonButtons = TaskDialogCommonButtons.Close,
                 FooterText = status.IsConnected
                     ? "The bridge is maintained automatically while Revit is running."
-                    : "Opening Pe Tools attempts to start Pe.Host and reconnect the bridge automatically."
+                    : "Opening Pe Tools attempts to start the TS host and reconnect the bridge automatically."
             };
 
             if (status.IsConnected) {
@@ -77,7 +76,7 @@ public class CmdPeTools : IExternalCommand {
                 _ = PeaTerminalLauncher.LaunchAgent();
                 break;
             case TaskDialogResult.CommandLink3:
-                ShowActionResult("Pe Tools Browser", OpenPeToolsBrowser(status.SessionId));
+                ShowActionResult("Pe Tools Browser", OpenPeToolsBrowser());
                 break;
             }
 
@@ -170,13 +169,13 @@ public class CmdPeTools : IExternalCommand {
 
 
 
-    private static RuntimeActionResult OpenPeToolsBrowser(string sessionId) {
+    private static RuntimeActionResult OpenPeToolsBrowser() {
         Log.Information("Pe Tools command selected action: Open Pe Tools Browser");
         var connectResult = HostBridgeConnector.EnsureConnected();
         if (!connectResult.Success)
             return connectResult.RuntimeActionResult;
 
-        var launched = PeToolsBrowser.TryLaunch(sessionId: sessionId);
+        var launched = PeToolsBrowser.TryLaunch();
         Log.Information("Pe Tools browser launch result: Success={Success}", launched);
         return new RuntimeActionResult(
             launched,
@@ -202,7 +201,6 @@ public class CmdPeTools : IExternalCommand {
             _ = sb.AppendLine($"Status: {connectAttempt?.Message ?? status.LastError ?? "Connection attempt is pending."}");
 
         _ = sb.AppendLine($"Bridge: {status.BridgeUri}");
-        _ = sb.AppendLine($"Session: {status.SessionId}");
         _ = sb.AppendLine($"Process: {status.ProcessId}");
         _ = sb.AppendLine($"Modules: {status.AvailableModuleCount}");
         _ = sb.AppendLine($"Revit: {status.RevitVersion ?? "Unknown"}");

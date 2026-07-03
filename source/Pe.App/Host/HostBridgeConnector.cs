@@ -5,7 +5,7 @@ namespace Pe.App.Host;
 internal sealed record HostBridgeConnectResult(
     bool Success,
     bool AlreadyConnected,
-    PeHostLaunchResult HostLaunchResult,
+    TsHostLaunchResult HostLaunchResult,
     RuntimeActionResult RuntimeActionResult
 );
 
@@ -16,12 +16,12 @@ internal static class HostBridgeConnector {
             return new HostBridgeConnectResult(
                 true,
                 true,
-                new PeHostLaunchResult(true, true, false, "Bridge is connected."),
+                new TsHostLaunchResult(true, true, false, "Bridge is connected."),
                 new RuntimeActionResult(true, "Bridge is already connected.")
             );
         }
 
-        var hostLaunchResult = EnsureHostRunning();
+        var hostLaunchResult = EnsureTsHostRunning();
         if (!hostLaunchResult.Success) {
             return new HostBridgeConnectResult(
                 false,
@@ -40,7 +40,7 @@ internal static class HostBridgeConnector {
         );
     }
 
-    public static PeHostLaunchResult EnsureHostRunning() => PeHostLauncher.EnsureRunning();
+    public static TsHostLaunchResult EnsureTsHostRunning() => TsHostLauncher.EnsureRunning();
 
     public static RuntimeActionResult ConnectRuntime() => HostRuntime.Connect();
 }

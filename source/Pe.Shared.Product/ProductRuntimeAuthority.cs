@@ -3,7 +3,6 @@ namespace Pe.Shared.Product;
 public sealed record ProductRuntimeResolution(
     ProductRuntimeLane RuntimeLane,
     string HostExecutablePath,
-    string HostDllPath,
     string PeaLauncherPath,
     string? DescriptorPath,
     string Source
@@ -22,14 +21,10 @@ public static class ProductRuntimeAuthority {
         var hostExecutablePath = runtimeLane == ProductRuntimeLane.Dev
             ? developmentRuntime.Binaries.HostExecutablePath
             : installedRuntime.Binaries.HostExecutablePath;
-        var hostDllPath = runtimeLane == ProductRuntimeLane.Dev
-            ? developmentRuntime.Binaries.HostDllPath
-            : installedRuntime.Binaries.HostDllPath;
 
         return new ProductRuntimeResolution(
             runtimeLane,
             hostExecutablePath,
-            hostDllPath,
             installedRuntime.Binaries.PeaLauncherPath,
             descriptorPath,
             source ?? "explicit"

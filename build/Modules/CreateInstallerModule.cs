@@ -11,7 +11,6 @@ using ModularPipelines.Modules;
 using ModularPipelines.Options;
 using Pe.Shared.Product;
 using Shouldly;
-using Sourcy.DotNet;
 using File = ModularPipelines.FileSystem.File;
 using InstallerOptions = Build.Options.InstallerOptions;
 
@@ -39,8 +38,8 @@ public sealed class CreateInstallerModule(
         var peaPayload = peaPayloadResult.ValueOrDefault!;
         var rootDirectory = context.Git().RootDirectory;
 
-        var hostProject = rootDirectory.GetFolder("source").GetFolder("Pe.Host").GetFile("Pe.Host.csproj");
-        var wixInstaller = new File(Projects.Installer.FullName);
+        var hostPackageDirectory = rootDirectory.GetFolder("source").GetFolder("pe-tools").GetFolder("apps").GetFolder("host");
+        var wixInstaller = rootDirectory.GetFolder("install").GetFile("Installer.csproj");
         context.Logger.LogInformation("Preparing WiX toolchain for installer packaging.");
         var wixToolFolder = await InstallWixAsync(context, layout, cancellationToken);
 
@@ -79,7 +78,7 @@ public sealed class CreateInstallerModule(
 
         var runtimePublishDirectory = await PublishRuntimeAsync(
             context,
-            hostProject,
+            hostPackageDirectory,
             layout,
             cancellationToken
         );
@@ -129,7 +128,7 @@ public sealed class CreateInstallerModule(
 
     private static async Task<Folder> PublishRuntimeAsync(
         IModuleContext context,
-        File hostProject,
+        Folder hostPackageDirectory,
         ProductLayoutAuthority layout,
         CancellationToken cancellationToken
     ) {
@@ -139,31 +138,30 @@ public sealed class CreateInstallerModule(
         Directory.CreateDirectory(layout.GetHostPublishDirectory("Release"));
         var runtimePublishDirectory = new Folder(layout.GetHostPublishDirectory("Release"));
 
-        context.Logger.LogInformation("Publishing Pe.Host runtime for installer packaging: {Output}", runtimePublishDirectory.Path);
-        await BuildDotNetCli.PublishQuietAsync(
-            context,
-            hostProject.Path,
-            "Release",
-            [
-                "-r",
-                "win-x64",
-                "--self-contained",
-                "false",
-                "-o",
-                runtimePublishDirectory.Path
-            ],
-            [("PeIsolatedBuild", "true")],
+        context.Logger.LogInformation("Building TS host runtime for installer packaging: {Output}", runtimePublishDirectory.Path);
+        await context.Shell.Command.ExecuteCommandLineTool(
+            new GenericCommandLineToolOptions("vp") { Arguments = ["pack"] },
+            new CommandExecutionOptions { WorkingDirectory = hostPackageDirectory.Path },
             cancellationToken
+        );
+
+        var builtHostExecutable = Path.Combine(hostPackageDirectory.Path, "dist-installed", HostProcessIdentity.ExecutableName);
+        System.IO.File.Exists(builtHostExecutable)
+            .ShouldBeTrue($"TS host executable build did not create {builtHostExecutable}");
+        System.IO.File.Copy(
+            builtHostExecutable,
+            runtimePublishDirectory.GetFile(HostProcessIdentity.ExecutableName).Path,
+            true
         );
 
         runtimePublishDirectory.GetFiles(file => file.Exists)
             .ShouldNotBeEmpty("Failed to publish the shared runtime for installer packaging.");
         runtimePublishDirectory.GetFile(HostProcessIdentity.ExecutableName).Exists
-            .ShouldBeTrue("Failed to publish Pe.Host for installer packaging.");
+            .ShouldBeTrue("Failed to publish TS host for installer packaging.");
         runtimePublishDirectory.GetFile(PeDevCliIdentity.ExecutableName).Exists
             .ShouldBeFalse("Installer runtime publish should not include pe-dev.");
 
-        context.Logger.LogInformation("Finished publishing Pe.Host runtime for installer packaging.");
+        context.Logger.LogInformation("Finished publishing TS host runtime for installer packaging.");
         return runtimePublishDirectory;
     }
 

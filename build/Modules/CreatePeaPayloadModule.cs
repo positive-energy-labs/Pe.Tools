@@ -120,12 +120,6 @@ public sealed class CreatePeaPayloadModule : Module<PeaPayloadArtifacts> {
         // explicit so any future compatibility cost is visible in packaging and docs.
         CopyPackageSidecar(
             pnpmStoreDirectory,
-            "@opentui+core-win32-x64@*",
-            Path.Combine("node_modules", "@opentui", "core-win32-x64"),
-            Path.Combine(payloadDirectory, "node_modules", "@opentui", "core-win32-x64")
-        );
-        CopyPackageSidecar(
-            pnpmStoreDirectory,
             "@duckdb+node-bindings-win32-x64@*",
             Path.Combine("node_modules", "@duckdb", "node-bindings-win32-x64"),
             Path.Combine(payloadDirectory, "node_modules", "@duckdb", "node-bindings-win32-x64")
@@ -188,8 +182,6 @@ public sealed class CreatePeaPayloadModule : Module<PeaPayloadArtifacts> {
                 PeaCliIdentity.InstalledExecutableName
             ))
             .ShouldBeTrue("pea payload is missing app/pea.exe.");
-        Directory.Exists(Path.Combine(payloadDirectory, "node_modules", "@opentui", "core-win32-x64"))
-            .ShouldBeTrue("pea payload is missing OpenTUI win32-x64 native sidecar.");
         Directory.Exists(Path.Combine(payloadDirectory, "node_modules", "@duckdb", "node-bindings-win32-x64"))
             .ShouldBeTrue("pea payload is missing DuckDB win32-x64 native sidecar.");
         Directory.Exists(Path.Combine(payloadDirectory, "node_modules", "@anush008", "tokenizers-win32-x64-msvc"))

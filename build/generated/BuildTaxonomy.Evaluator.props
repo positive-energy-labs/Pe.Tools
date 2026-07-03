@@ -78,17 +78,6 @@
         <PeSupportsFreshRevitProcess>false</PeSupportsFreshRevitProcess>
       </PropertyGroup>
     </When>
-    <When Condition="'$(MSBuildProjectName)' == 'Pe.Host'">
-      <PropertyGroup>
-        <PeModuleClass>HostService</PeModuleClass>
-        <PeProductClass>HostRuntime</PeProductClass>
-        <PeTargetFrameworkClass>OutOfProcNet8</PeTargetFrameworkClass>
-        <PeIsRevitAwareProject>false</PeIsRevitAwareProject>
-        <PeSupportsRevitYear>false</PeSupportsRevitYear>
-        <PeSupportsAttachedRrd>false</PeSupportsAttachedRrd>
-        <PeSupportsFreshRevitProcess>false</PeSupportsFreshRevitProcess>
-      </PropertyGroup>
-    </When>
     <When Condition="'$(MSBuildProjectName)' == 'Pe.Revit'">
       <PropertyGroup>
         <PeModuleClass>RevitRuntime</PeModuleClass>

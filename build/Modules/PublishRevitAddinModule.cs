@@ -3,8 +3,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ModularPipelines.Attributes;
 using ModularPipelines.Context;
+using ModularPipelines.Git.Extensions;
 using ModularPipelines.Modules;
-using Sourcy.DotNet;
 
 namespace Build.Modules;
 
@@ -21,24 +21,33 @@ public sealed class PublishRevitAddinModule(IOptions<BuildOptions> buildOptions)
         var versioning = versioningResult.ValueOrDefault!;
         var matrix = matrixResult.ValueOrDefault!;
         var taxonomy = taxonomyResult.ValueOrDefault!;
+        var rootDirectory = context.Git().RootDirectory;
+        var appProjectPath = rootDirectory.GetFolder("source").GetFolder("Pe.App").GetFile("Pe.App.csproj").Path;
         taxonomy.RequireProductClass("Pe.App", ProductClass.DesktopAddin);
         var configurations = matrix.ResolveConfigurations(BuildConfigurationGroup.Pack, buildOptions.Value.Configuration);
 
         foreach (var configuration in configurations)
             await context.SubModule(configuration, async () => {
                 context.Logger.LogInformation("Publishing Revit add-in for {Configuration}.", configuration);
-                await PublishAsync(context, versioning, configuration, cancellationToken);
+                await PublishAsync(
+                    context,
+                    versioning,
+                    appProjectPath,
+                    configuration,
+                    cancellationToken
+                );
             });
     }
 
     private static Task PublishAsync(
         IModuleContext context,
         ResolveVersioningResult versioning,
+        string projectPath,
         string configuration,
         CancellationToken cancellationToken
     ) => BuildDotNetCli.BuildQuietAsync(
         context,
-        Projects.Pe_App.FullName,
+        projectPath,
         configuration,
         [
             ("PeIsolatedBuild", "true"),
