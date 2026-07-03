@@ -1,5 +1,11 @@
-import { PeHostClient, ScriptExecutionSourceKind, ScriptPermissionMode } from "@pe/host-client";
 import z from "zod";
+import type { HostSessionScope } from "@pe/host-contracts/operation-types";
+import { HostRpcCaller } from "./host-rpc-caller.js";
+
+const bridgeSessionIdInputSchema = z
+  .string()
+  .optional()
+  .describe("Optional TS host bridge session id to target a specific connected Revit process.");
 
 export const scriptExecuteInputSchema = z.object({
   scriptContent: z
@@ -34,6 +40,7 @@ export const scriptExecuteInputSchema = z.object({
     .describe(
       "Defaults to ReadOnly. Use WriteTransaction only for explicit mutations; the host owns the transaction.",
     ),
+  bridgeSessionId: bridgeSessionIdInputSchema,
 });
 
 export const scriptBootstrapInputSchema = z.object({
@@ -45,6 +52,7 @@ export const scriptBootstrapInputSchema = z.object({
     .boolean()
     .default(true)
     .describe("Create the sample script file when it does not already exist."),
+  bridgeSessionId: bridgeSessionIdInputSchema,
 });
 
 export const scriptPodImportInputSchema = z.object({
@@ -55,6 +63,7 @@ export const scriptPodImportInputSchema = z.object({
     .string()
     .optional()
     .describe("Optional target workspace slug. Omit to use the pod.json id."),
+  bridgeSessionId: bridgeSessionIdInputSchema,
 });
 
 export const scriptPodExportInputSchema = z.object({
@@ -63,13 +72,14 @@ export const scriptPodExportInputSchema = z.object({
     .optional()
     .describe("Pod workspace slug to export. Defaults to the runtime workspace."),
   archivePath: z.string().describe("Output path for the exported Pod zip archive."),
+  bridgeSessionId: bridgeSessionIdInputSchema,
 });
 
-export interface ScriptRuntimeContext {
+export type ScriptRuntimeContext = HostSessionScope & {
   hostBaseUrl: string;
   workspaceKey: string;
   timeoutSeconds?: number;
-}
+};
 
 export type ScriptExecuteInput = z.input<typeof scriptExecuteInputSchema>;
 export type ScriptBootstrapInput = z.input<typeof scriptBootstrapInputSchema>;
@@ -78,7 +88,7 @@ export type ScriptPodExportInput = z.input<typeof scriptPodExportInputSchema>;
 
 export class ScriptingTools {
   constructor(
-    private readonly client: PeHostClient,
+    private readonly client: HostRpcCaller,
     private readonly context: Pick<ScriptRuntimeContext, "workspaceKey">,
   ) {}
 
@@ -87,15 +97,12 @@ export class ScriptingTools {
       scriptContent: input.scriptContent,
       sourceKind:
         (input.sourceKind ?? "InlineSnippet") === "WorkspacePath"
-          ? ScriptExecutionSourceKind.WorkspacePath
-          : ScriptExecutionSourceKind.InlineSnippet,
+          ? "WorkspacePath"
+          : "InlineSnippet",
       sourcePath: input.sourcePath,
       workspaceKey: input.workspaceKey ?? this.context.workspaceKey,
       sourceName: input.sourceName ?? "AgentSnippet.cs",
-      permissionMode:
-        input.permissionMode === "WriteTransaction"
-          ? ScriptPermissionMode.WriteTransaction
-          : ScriptPermissionMode.ReadOnly,
+      permissionMode: input.permissionMode === "WriteTransaction" ? "WriteTransaction" : "ReadOnly",
     });
   }
 
@@ -146,9 +153,10 @@ export function exportScriptPod(input: ScriptPodExportInput, context: ScriptRunt
   return ScriptingTools.fromContext(context).exportPod(input);
 }
 
-function createScriptingClient(context: ScriptRuntimeContext): PeHostClient {
-  return new PeHostClient({
-    baseUrl: context.hostBaseUrl,
+function createScriptingClient(context: ScriptRuntimeContext): HostRpcCaller {
+  return new HostRpcCaller({
+    hostBaseUrl: context.hostBaseUrl,
+    bridgeSessionId: context.bridgeSessionId,
     timeoutMs: Math.max(context.timeoutSeconds ?? 300, 1) * 1000,
   });
 }

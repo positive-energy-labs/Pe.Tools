@@ -7,7 +7,6 @@ import type { RequestContext } from "@mastra/core/request-context";
 import { TaskSignalProvider } from "@mastra/core/signals";
 import { LocalFilesystem, LocalSandbox, Workspace } from "@mastra/core/workspace";
 import type { MastraTUIOptions } from "mastracode/tui";
-import { PeHostClient } from "@pe/host-client";
 import {
   createMastraCodeAuthStorageContext,
   createPeaCloudGatewayRuntimeAuthProfile,
@@ -33,8 +32,10 @@ import {
   materializeBundledPeaSkills,
   peaProductToolProfile,
   peaProductTools,
+  resolveHostBaseUrl,
   resolvePeaProductHomePath,
   resolvePeaSkillPaths,
+  resolveWorkspaceKey,
 } from "@pe/tools";
 import { PeaContextSignalProvider } from "./context-signals.ts";
 import { peaAgentInstructions } from "./instructions.ts";
@@ -73,8 +74,8 @@ export async function createPeaRuntime(
 ): Promise<PeaRuntimeHandle> {
   const productHomePath = resolvePeaProductHomePath();
   const workspaceRoot = path.resolve(options.workspaceRoot ?? productHomePath);
-  const hostBaseUrl = PeHostClient.resolveHostBaseUrl(options.hostBaseUrl);
-  const workspaceKey = PeHostClient.resolveWorkspaceKey(options.workspaceKey);
+  const hostBaseUrl = resolveHostBaseUrl(options.hostBaseUrl);
+  const workspaceKey = resolveWorkspaceKey(options.workspaceKey);
   configurePeaProductToolContext({ hostBaseUrl, workspaceKey });
 
   const authStorageContext = await createMastraCodeAuthStorageContext();

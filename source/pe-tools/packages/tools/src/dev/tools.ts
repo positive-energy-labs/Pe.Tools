@@ -10,7 +10,8 @@ import {
 } from "../shared/live-loop.ts";
 import { runAttachedRrdTest, runPeDevWorkflow } from "./pe-dev-workflow/index.js";
 
-import { PeHostClient } from "@pe/host-client";
+import { HostRpcCaller } from "../shared/host-rpc-caller.js";
+import { resolveHostBaseUrl, resolveWorkspaceKey } from "../shared/host-config.js";
 import { talkToPeaHarness } from "./talk-to-pea.js";
 import { talkToPecoPsmux, talkToPecoZellij } from "./talk-to-peco-mux.ts";
 import { ScriptingTools, scriptExecuteInputSchema } from "../shared/scripting.ts";
@@ -233,7 +234,7 @@ export const talkToPecoPsmuxTool = createTool({
 export const scriptExecuteWithSync = createTool({
   id: "script_execute",
   description:
-    "Execute a C# Revit script through the Pe.Host scripting contract after first attempting direct Pe.RiderBridge sync. Sync failure is a loud warning, not a script blocker.",
+    "Execute a C# Revit script through the TS host scripting contract after first attempting direct Pe.RiderBridge sync. Sync failure is a loud warning, not a script blocker.",
   inputSchema: repoCommandInputSchema.merge(scriptExecuteInputSchema),
   execute: async (input) => {
     const timeoutSeconds = input.timeoutSeconds ?? defaultTimeoutSeconds;
@@ -245,11 +246,11 @@ export const scriptExecuteWithSync = createTool({
       },
       () =>
         new ScriptingTools(
-          new PeHostClient({
-            baseUrl: PeHostClient.resolveHostBaseUrl(),
+          new HostRpcCaller({
+            hostBaseUrl: resolveHostBaseUrl(),
             timeoutMs: Math.max(timeoutSeconds, 1) * 1000,
           }),
-          { workspaceKey: PeHostClient.resolveWorkspaceKey() },
+          { workspaceKey: resolveWorkspaceKey() },
         ).execute(input),
     );
 

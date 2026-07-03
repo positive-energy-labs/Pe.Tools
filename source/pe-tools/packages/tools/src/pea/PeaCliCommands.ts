@@ -1,9 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { define } from "gunshi";
-import { HostLogTarget, PeHostClient } from "@pe/host-client";
-import type { HostOpResponse } from "@pe/host-client";
+import { HostLogTarget, type HostOpResponse } from "@pe/host-contracts/operation-types";
+import { HostRpcCaller } from "../shared/host-rpc-caller.js";
 import { ScriptingTools } from "../shared/scripting.ts";
 import type { ScriptExecuteInput } from "../shared/scripting.ts";
+import { resolveHostBaseUrl, resolveWorkspaceKey } from "../shared/host-config.ts";
+import { asOptionalString, firstNonBlank } from "../shared/cli-values.ts";
 
 export interface PeaCliCommandOptions {
   hostBaseUrl?: string;
@@ -23,7 +25,7 @@ export class PeaCliCommands {
   hostCommand() {
     return define({
       name: "host",
-      description: "Inspect Pe.Host status, logs, and generated operation contracts.",
+      description: "Inspect host status, logs, and generated operation contracts.",
       examples: [
         "pea host status",
         "pea host logs --target revit --tail 50",
@@ -45,7 +47,7 @@ export class PeaCliCommands {
     return define({
       name: "script",
       description:
-        "Bootstrap, execute, import, and export Pe.Revit scripting workspaces and Pods through Pe.Host.",
+        "Bootstrap, execute, import, and export Pe.Revit scripting workspaces and Pods through the host.",
       examples: [
         "pea script bootstrap",
         "pea script execute --source-path src\\SampleScript.cs",
@@ -67,14 +69,15 @@ export class PeaCliCommands {
   private hostStatusCommand() {
     return define({
       name: "status",
-      description: "Print Pe.Host and Revit session status.",
+      description: "Print host and Revit session status.",
       args: {
         host: commonArgs.host,
+        bridgeSessionId: commonArgs.bridgeSessionId,
       },
       run: async (ctx) => {
-        const client = this.createHostClient(ctx.values.host);
-        const probe = await client.call("settings.host-probe");
-        const session = await client.call("settings.session-summary");
+        const client = this.createHostRpcCaller(ctx.values);
+        const probe = await client.call("host.status");
+        const session = await client.call("bridge.sessions.summary");
         writeHostStatus(session, probe);
       },
     });
@@ -83,7 +86,7 @@ export class PeaCliCommands {
   private hostLogsCommand() {
     return define({
       name: "logs",
-      description: "Print Pe.Host/Revit log tails.",
+      description: "Print host/Revit log tails.",
       args: {
         host: commonArgs.host,
         target: {
@@ -99,7 +102,7 @@ export class PeaCliCommands {
       },
       examples: ["pea host logs", "pea host logs --target revit --tail 50"].join("\n"),
       run: async (ctx) => {
-        const logs = await this.createHostClient(ctx.values.host).call("host.logs", {
+        const logs = await this.createHostRpcCaller(ctx.values).call("logs.tail", {
           target: parseLogTarget(ctx.values.target),
           tailLineCount: ctx.values.tail,
         });
@@ -111,7 +114,7 @@ export class PeaCliCommands {
   private hostOperationsCommand() {
     return define({
       name: "operations",
-      description: "Search and call generated public Pe.Host operations.",
+      description: "Search and call generated public host operations.",
       subCommands: {
         search: this.hostOperationSearchCommand(),
         call: this.hostOperationCallCommand(),
@@ -125,9 +128,8 @@ export class PeaCliCommands {
   private hostOperationSearchCommand() {
     return define({
       name: "search",
-      description: "Search generated public Pe.Host operations by capability and filters.",
+      description: "Search generated public host operations by capability and filters.",
       args: {
-        host: commonArgs.host,
         query: { type: "string", description: "Optional search query." },
         domain: { type: "string", description: "Optional top-level domain filter." },
         intent: { type: "string", description: "Optional intent filter: Read or Mutate." },
@@ -139,7 +141,7 @@ export class PeaCliCommands {
         },
       },
       run: (ctx) => {
-        const results = this.createHostClient(ctx.values.host).general.searchOperations({
+        const results = new HostRpcCaller().searchOperations({
           query: firstNonBlank(ctx.values.query),
           domain: firstNonBlank(ctx.values.domain),
           intent: parseOperationIntent(ctx.values.intent),
@@ -162,10 +164,10 @@ export class PeaCliCommands {
   private hostOperationCallCommand() {
     return define({
       name: "call",
-      description:
-        "Call a generated public Pe.Host operation by key with an optional JSON request.",
+      description: "Call a generated public host operation by key with an optional JSON request.",
       args: {
         host: commonArgs.host,
+        bridgeSessionId: commonArgs.bridgeSessionId,
         key: { type: "string", description: "Operation key returned by host operations search." },
         request: {
           type: "string",
@@ -181,7 +183,7 @@ export class PeaCliCommands {
         const key = firstNonBlank(ctx.values.key);
         if (!key) throw new Error("Provide --key <operation.key>.");
         const request = parseOptionalJson(ctx.values.request);
-        const result = await this.createHostClient(ctx.values.host).general.callOperation(
+        const result = await this.createHostRpcCaller(ctx.values).callOperation(
           key,
           request,
           parseOperationVerbosity(ctx.values.verbosity),
@@ -195,7 +197,7 @@ export class PeaCliCommands {
     return define({
       name: "execute",
       description:
-        "Execute a C# Revit script through Pe.Host from inline content, stdin, a file, or a workspace source path.",
+        "Execute a C# Revit script through the host from inline content, stdin, a file, or a workspace source path.",
       args: {
         ...commonArgs,
         file: { type: "string", description: "Read inline script content from a local file." },
@@ -248,7 +250,7 @@ export class PeaCliCommands {
   private scriptBootstrapCommand() {
     return define({
       name: "bootstrap",
-      description: "Create or update a Pe scripting workspace through Pe.Host.",
+      description: "Create or update a Pe scripting workspace through the host.",
       args: {
         ...commonArgs,
         noSample: {
@@ -278,6 +280,7 @@ export class PeaCliCommands {
       description: "Import a pod.json-backed scripting workspace from a Pod zip archive.",
       args: {
         host: commonArgs.host,
+        bridgeSessionId: commonArgs.bridgeSessionId,
         archive: { type: "string", description: "Path to the Pod zip archive to import." },
         workspace: {
           type: "string",
@@ -319,35 +322,42 @@ export class PeaCliCommands {
   }
 
   private createScriptingTools(values: Record<string, unknown>): ScriptingTools {
-    return new ScriptingTools(this.createHostClient(values.host), {
+    return new ScriptingTools(this.createHostRpcCaller(values), {
       workspaceKey: this.resolveWorkspaceKey(values.workspace),
     });
   }
 
-  private createHostClient(hostValue?: unknown): PeHostClient {
-    return new PeHostClient({ baseUrl: this.resolveHostBaseUrl(hostValue) });
+  private createHostRpcCaller(values: Record<string, unknown>): HostRpcCaller {
+    return new HostRpcCaller({
+      hostBaseUrl: this.resolveHostBaseUrl(values.host),
+      bridgeSessionId: asOptionalString(values.bridgeSessionId),
+    });
   }
 
   private resolveHostBaseUrl(value?: unknown): string {
-    return PeHostClient.resolveHostBaseUrl(asOptionalString(value) ?? this.options.hostBaseUrl);
+    return resolveHostBaseUrl(asOptionalString(value) ?? this.options.hostBaseUrl);
   }
 
   private resolveWorkspaceKey(value?: unknown): string {
-    return PeHostClient.resolveWorkspaceKey(asOptionalString(value) ?? this.options.workspaceKey);
+    return resolveWorkspaceKey(asOptionalString(value) ?? this.options.workspaceKey);
   }
 }
 
 const commonArgs = {
   host: {
     type: "string",
-    description: "Pe.Host base URL.",
-    default: PeHostClient.resolveHostBaseUrl(),
+    description: "Host base URL.",
+    default: resolveHostBaseUrl(),
+  },
+  bridgeSessionId: {
+    type: "string",
+    description: "Optional TS host bridge session id.",
   },
   workspace: {
     type: "string",
     short: "w",
     description: "Pe scripting workspace or Pod name.",
-    default: PeHostClient.resolveWorkspaceKey(),
+    default: resolveWorkspaceKey(),
   },
 } as const;
 
@@ -375,8 +385,8 @@ function readStdin(): Promise<string> {
 }
 
 function writeHostStatus(
-  session: HostOpResponse<"settings.session-summary">,
-  probe: HostOpResponse<"settings.host-probe">,
+  session: HostOpResponse<"bridge.sessions.summary">,
+  probe: HostOpResponse<"host.status">,
 ) {
   console.log(`host      ${probe.runtimeIdentity}`);
   console.log(`bridge    ${probe.bridgeIsConnected ? "connected" : "disconnected"}`);
@@ -386,7 +396,7 @@ function writeHostStatus(
   if (session.activeDocument) console.log(`active    ${session.activeDocument.title}`);
 }
 
-function writeLogs(logs: HostOpResponse<"host.logs">) {
+function writeLogs(logs: HostOpResponse<"logs.tail">) {
   for (const file of logs.files) {
     console.log(`== ${file.label} ==`);
     console.log(file.filePath);
@@ -480,15 +490,4 @@ function parseOptionalJson(value: unknown): unknown {
   const text = firstNonBlank(value);
   if (!text) return undefined;
   return JSON.parse(text);
-}
-
-function firstNonBlank(...values: unknown[]): string | undefined {
-  return values
-    .map(asOptionalString)
-    .find((value) => value != null && value.trim().length > 0)
-    ?.trim();
-}
-
-function asOptionalString(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined;
 }

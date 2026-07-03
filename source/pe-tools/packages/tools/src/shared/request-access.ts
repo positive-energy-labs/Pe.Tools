@@ -159,7 +159,14 @@ function resolveRequestAccessContext(requestedPath: string, toolContext: unknown
   const absolutePath = resolveRequestedPath(requestedPath, localFilesystem?.basePath);
   const projectRoot = localFilesystem?.basePath ?? process.cwd();
   const allowedPaths = getAllowedPathsFromContext(toolContext, localFilesystem);
-  return { controllerCtx, localFilesystem, threadSettings, absolutePath, projectRoot, allowedPaths };
+  return {
+    controllerCtx,
+    localFilesystem,
+    threadSettings,
+    absolutePath,
+    projectRoot,
+    allowedPaths,
+  };
 }
 
 function getAllowedPathsFromContext(
@@ -190,7 +197,9 @@ function readToolContextFilesystem(toolContext: unknown): unknown {
   return workspace.filesystem;
 }
 
-function readRequestAccessControllerContext(value: unknown): RequestAccessControllerContext | undefined {
+function readRequestAccessControllerContext(
+  value: unknown,
+): RequestAccessControllerContext | undefined {
   if (!isRequestAccessControllerContext(value)) return undefined;
   return value;
 }

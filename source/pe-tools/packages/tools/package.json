@@ -33,10 +33,11 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
+    "@effect/platform-node": "4.0.0-beta.92",
     "@mastra/core": "1.48.0-alpha.4",
-    "@pe/host-client": "workspace:*",
-    "@pe/host-generated": "workspace:*",
+    "@pe/host-contracts": "workspace:*",
     "@pe/runtime": "workspace:*",
+    "effect": "4.0.0-beta.92",
     "gunshi": "^0.29.5",
     "parse5": "^8.0.1",
     "zod": "^4.4.3"

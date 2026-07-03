@@ -363,7 +363,7 @@ export async function runRiderBridgeRestartRrdHelper(
               "Pe.RiderBridge did not report a successful restart/debug action",
             ),
         nextStep: ok
-          ? "Poll Pe.Host until the expected Revit bridge/session is reachable, then run an attached behavior/log proof."
+          ? "Poll the TS host until the expected Revit bridge/session is reachable, then run an attached behavior/log proof."
           : "Check Rider, plugin install, selected debug configuration, and action availability.",
       },
       proof: proofForRiderBridgeOperation("restart_rrd", ok, false, restart),
@@ -708,7 +708,7 @@ async function ensureRiderProjectsOpenInNewWindow(): Promise<RiderProjectOpenPol
   for (const entry of entries) {
     if (!entry.isDirectory() || !/^Rider\d/.test(entry.name)) continue;
 
-    const settingsPath = join(jetBrainsOptionsRoot, entry.name, "options", "ide.general.xml");
+    const settingsPath = join(jetBrainsOptionsRoot, entry.name, "options", "ide.xml");
     inspectedFiles.push(settingsPath);
 
     let original: string;
@@ -1026,7 +1026,7 @@ function proofForRiderBridgeOperation(
         : "Does not compare loaded assembly fingerprints or prove every source delta was applied; use an attached operation, Revit logs, or FreshRevitProcess when proof-grade behavior validation is needed.",
     nextStep: ok
       ? workflow === "restart_rrd"
-        ? "Poll Pe.Host until the Revit bridge reconnects, then run an attached behavior/log proof."
+        ? "Poll the TS host until the Revit bridge reconnects, then run an attached behavior/log proof."
         : "Run the attached Revit operation/script/test that needed sync and inspect behavior or logs."
       : "Check Rider, plugin install, project/debug context, then retry live_rrd_sync or restart RRD before attached proof.",
   };
