@@ -55,9 +55,9 @@ Write artifacts to `.artifacts/`. Most often `.artifacts/tmp` for python/typescr
 
 - `source/Pe.App/Application.cs` - desktop Revit add-in startup, host bridge bootstrap, ribbon/task initialization.
 - `source/Pe.App/ButtonRegistry.cs` - top-level desktop command and ribbon exposure.
-- `source/Pe.Host/Program.cs` - external settings host, HTTP/SSE entrypoint.
+- `source/pe-tools/apps/host/src/index.ts` - TS-built `Pe.Host.exe` HTTP/RPC/WebSocket host entrypoint.
 - `source/pea/app/` - TypeScript Pea CLI/runtime surface. `pea agent` is the deployed Revit/operator workbench; `peco` starts Peco, the MastraCode-based repo coding agent with Pea black-box feedback tools.
-- `source/Pe.Shared.StorageRuntime/` - schema generation, field options, module registration, storage/document validation.
+- `source/Pe.Shared.StorageRuntime/` - C# storage roots, module/document identity, runtime state/output/log files, APS settings lookup, and small settings metadata contracts.
 - `source/Pe.Revit.Global/` - document-owned Revit helpers, APS contracts, and DA-safe collector seams that both shells can share.
 - `source/Pe.Revit/Extensions/` - strong primitives such as `FamilyDocument`, value coercion helpers, formula helpers, and parameter lookup helpers.
 - `source/Pe.Revit.FamilyFoundry/OperationProcessor.cs` - main Family Foundry execution orchestrator.
@@ -83,7 +83,7 @@ Write artifacts to `.artifacts/`. Most often `.artifacts/tmp` for python/typescr
 | **FreshRevitProcess** | Verification in a new dedicated Revit process that must not reuse `RRD`                  | Prefer this over vague `isolated tests` phrasing when freshness and process ownership matter |
 | **package**           | A repo-local code unit such as `Pe.Host` or `Pe.Revit.FamilyFoundry`                     | Prefer this over `project` when discussing one code area                                     |
 | **app**               | `Pe.App`, the in-proc desktop Revit add-in runtime                                       | Avoid using `app` to mean the whole repo or product                                          |
-| **host**              | `Pe.Host`, the out-of-proc HTTP/SSE backend                                              | Avoid using `host` for the Revit add-in bridge or product identity                           |
+| **host**              | `Pe.Host`, the out-of-proc TS-built HTTP/RPC/WebSocket backend                           | Avoid using `host` for the Revit add-in bridge or product identity                           |
 | **bridge**            | The private Host/Revit WebSocket connection                                              | Avoid calling HTTP endpoints the bridge                                                      |
 | **automation shell**  | The headless DA runtime rooted in `Pe.Dev.RevitAutomation.Worker`                        | Prefer this over implying `Pe.App` itself runs in DA                                         |
 | **document-owned**    | Behavior that can be derived from a specific `Document` without needing UI session state | Prefer `Document` extensions for this                                                        |

@@ -21,7 +21,7 @@ Attached RRD/live-loop diagnostics and hot reload are no longer public `pe-dev` 
 - `Commands/Pea/DevWebCommand.cs` - explicit `pe-dev web pea|peco` entrypoint into the source-linked web dev supervisor.
 - `RevitCommandRunner.cs` - FreshRevitProcess test routing plus internal unsigned add-in approval watcher launch.
 - `Commands/Automation/AutomationCommandRunner.cs` - top-level `automation ...` command routing.
-- `Commands/Codegen/CodegenCommandRunner.cs` - generated build contracts, programmatic Host TypeGen DTOs, and TypeScript Host client check/sync routing.
+- `Commands/Codegen/CodegenCommandRunner.cs` - generated build contracts, schema-backed Host contracts, and TypeScript Host check/sync routing.
 - `../Pe.Aps/Auth/ApsAuthService.cs` - persisted APS auth status, login, logout, and token acquisition flow.
 - `../Pe.Dev.RevitAutomation/AutomationBrowseService.cs` - sticky browse context plus repo-local cache-backed ACC discovery.
 - `../Pe.Dev.RevitAutomation/AutomationManifestService.cs` - human-readable schedule manifest create/update/validate flow.

@@ -2,29 +2,30 @@
 
 ## Scope
 
-Owns shared storage/runtime infrastructure over the product layout: structural module descriptors, root bindings, settings document IO and validation, runtime state stores, user output stores, JSON composition, schema generation, type/schema bindings, and field-options/provider plumbing.
+Owns shared storage/runtime infrastructure over the product layout: structural module descriptors, root bindings, storage path composition, runtime state stores, user output stores, global settings/log storage, APS credential lookup, and small schema metadata contracts exported to host contracts.
 
 ## Purpose
 
-This package is the shared backbone for settings authoring, runtime state, user output, and validation. It should provide explicit, type-safe storage and schema infrastructure that both host and Revit-side consumers can compose, while keeping capability boundaries clear between authored settings, runtime state, user output, and live-document behavior.
+This package is the shared backbone for C# storage identity and product-root composition. It should provide explicit, type-safe storage contracts that Revit-side consumers can compose while keeping authored settings, runtime state, user output, and live-document behavior distinct.
 
 ## Critical Entry Points
 
 - `Modules/SettingsRuntimeContracts.cs` and `Modules/SettingsModuleContracts.cs` - structural module + root-binding contract surface.
 - `Modules/SettingsRuntimeRegistry.cs` - central structural-module/root-binding registration and duplicate-key guard.
-- `Json/JsonSchemaFactory.cs` - authoring/editor/fragment schema generation pipeline.
-- `Json/SchemaDefinitions/` - explicit schema-definition augmentation model.
-- `Documents/LocalDiskSettingsStorageBackend.cs` - filesystem-backed authored settings document IO.
 - `ModuleStorage.cs` and `GlobalStorage.cs` - composition over settings, runtime state, and user output roots.
+- `ModuleDocumentStorage.cs` - C# storage identity for authored settings documents.
 - `StateStorage.cs` and `OutputStorage.cs` - filesystem-backed runtime state and user output stores.
-- `Validation/SchemaBackedSettingsDocumentValidator.cs` - structural validation path.
-- `Json/JsonTypeSchemaBindingRegistry.cs` - type binding and conversion registration.
+- `SettingsPathing.cs` and `SettingsDiscovery*.cs` - authored settings path discovery and bounded path normalization.
+- `Json/` - JSON/CSV file wrappers plus directive marker attributes consumed by settings schema/runtime code.
+- `Capabilities/` - small schema metadata contracts that are exported through host contract codegen.
+
+Authored settings document open/save/validate/composition is TS-owned in `source/pe-tools/apps/host/src/settings.ts`. Revit schema generation, schema definitions, validation, type bindings, and field options live in `source/Pe.Revit.SettingsRuntime`.
 
 ## Validation
 
-- Read the owning schema definition and binding registry before adding new metadata; there is already a strong explicit pattern here.
-- Verify whether a change is structural, semantic, or live-document before choosing where to implement it.
-- Keep schema/provider wiring testable through generated schema output when possible, not only through UI behavior.
+- Verify whether a change is storage layout, structural settings metadata, semantic schema behavior, or live-document behavior before choosing where to implement it.
+- Keep filesystem/path behavior covered through narrow storage/path tests.
+- Keep schema/provider behavior in `Pe.Revit.SettingsRuntime`; this package should not grow new schema pipelines.
 
 ## Shared Language
 
@@ -39,8 +40,7 @@ This package is the shared backbone for settings authoring, runtime state, user 
 
 ## Living Memory
 
-- Prefer explicit schema definitions over scattering metadata assumptions across settings types.
-- `JsonSchemaFactory` is the main pipeline truth: one-of handling, type bindings, includes/presets, then schema definitions.
+- Prefer explicit metadata contracts over scattering storage and schema assumptions across settings types.
 - `SettingsRuntimeRegistry` is intentionally idempotent only when a structural module or `(moduleKey, rootKey)` pair maps to the same contract. Reusing a key for a different contract should fail fast.
 - Host structural schemas and live-document field options are different concerns. Keep those seams obvious.
 - `ModuleStorage` deliberately splits roots: authored settings under `Documents\Pe.Tools\settings`, runtime state under LocalAppData, and user output under `Documents\Pe.Tools\output`.

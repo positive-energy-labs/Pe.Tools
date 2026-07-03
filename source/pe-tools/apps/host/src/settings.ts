@@ -1,9 +1,7 @@
 import { createHash } from "node:crypto";
-import { homedir } from "node:os";
 import { basename, join, win32 } from "node:path";
 import { Ajv, type ErrorObject, type ValidateFunction } from "ajv";
 import { Effect, FileSystem, Option } from "effect";
-import { productIdentity, productPathNames } from "@pe/host-contracts/contracts";
 import {
   SettingsDirectiveScope,
   SettingsDocumentDependencyKind,
@@ -23,6 +21,7 @@ import {
   type ValidateSettingsDocumentRequest,
 } from "@pe/host-contracts/operation-types";
 import { LocalOpError } from "./local-error.ts";
+import { productSettingsRootPath } from "./product-paths.ts";
 import {
   makeDirectory,
   readDirectoryEntriesOrEmpty,
@@ -129,13 +128,7 @@ export function saveSettingsDocument(
 }
 
 function defaultSettingsBasePath(): string {
-  return join(
-    process.env.USERPROFILE
-      ? join(process.env.USERPROFILE, "Documents")
-      : join(homedir(), "Documents"),
-    productIdentity.productName,
-    productPathNames.settingsDirectoryName,
-  );
+  return productSettingsRootPath();
 }
 
 function normalizeSettingsTreeRequest(input: SettingsTreeRequest): Required<SettingsTreeRequest> {
@@ -995,7 +988,7 @@ const createSettingsVersionToken = Effect.fnUntraced(function* (
 const resolveLocalPath = Effect.fnUntraced(function* <A>(operationKey: string, resolve: () => A) {
   return yield* Effect.try({
     try: resolve,
-    catch: (error) => newLocalOpError(operationKey, errorMessage(error)),
+    catch: (error) => newLocalOpError(operationKey, errorMessage(error), 400),
   });
 });
 
@@ -1112,6 +1105,6 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function newLocalOpError(key: string, note: string): LocalOpError {
-  return new LocalOpError(key, note);
+function newLocalOpError(key: string, note: string, statusCode?: number): LocalOpError {
+  return new LocalOpError(key, note, statusCode);
 }

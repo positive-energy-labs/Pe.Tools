@@ -1,4 +1,3 @@
-import { homedir } from "node:os";
 import { basename, join, win32 } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
@@ -29,9 +28,11 @@ import {
 import type { BridgeSessionView } from "./bridge.ts";
 import { readDirectoryEntriesOrEmpty, readFileStringOrEmpty, statOrNull } from "./files/index.ts";
 import { hostOwnership } from "./host-ownership.ts";
+import { productSettingsRootPath } from "./product-paths.ts";
 export {
   discoverSettingsTree,
   openSettingsDocument,
+  openSettingsDocumentWithModule,
   saveSettingsDocument,
   validateSettingsDocument,
 } from "./settings.ts";
@@ -254,13 +255,7 @@ function mergeSettingsModules(
 }
 
 function defaultSettingsBasePath(): string {
-  return join(
-    process.env.USERPROFILE
-      ? join(process.env.USERPROFILE, "Documents")
-      : join(homedir(), "Documents"),
-    productIdentity.productName,
-    productPathNames.settingsDirectoryName,
-  );
+  return productSettingsRootPath();
 }
 
 export const collectRecentDocuments = Effect.fnUntraced(function* (

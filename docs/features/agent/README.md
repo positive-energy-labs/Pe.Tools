@@ -14,7 +14,7 @@ Current building blocks:
 - `source/Pe.Shared.RevitData/DocumentSessionContextContracts.cs` defines active/open document summaries.
 - `source/Pe.Shared.RevitData/SelectionContracts.cs` defines selection and explicit element context queries.
 - `source/Pe.Revit.DocumentData/Selection/ElementContextCollector.cs` resolves current selection or element references into identity, level, electrical, connector, circuit, panel, wire, schedule, load-classification, and requested-parameter facts.
-- `source/Pe.Host` maps public host operations to local or bridge-backed behavior.
+- `source/pe-tools/apps/host` maps public host operations to local TS-owned behavior or the private Revit bridge.
 - `source/pea/app` consumes generated host-operation metadata through `host_operation_search` and `host_operation_call`.
 
 Current layer-first operations cover the progressive context ladder:

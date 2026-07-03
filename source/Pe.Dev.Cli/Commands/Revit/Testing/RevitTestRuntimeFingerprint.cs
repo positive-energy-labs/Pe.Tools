@@ -37,8 +37,7 @@ internal static class RevitTestRuntimeFingerprint {
         string[] excludedPrefixes = [
             "Pe.Revit.Tests",
             "Pe.Dev.Cli",
-            "Pe.Dev.RevitAutomation",
-            "Pe.Host"
+            "Pe.Dev.RevitAutomation"
         ];
 
         if (excludedPrefixes.Any(prefix => fileName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))

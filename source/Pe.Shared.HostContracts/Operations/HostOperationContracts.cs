@@ -205,7 +205,7 @@ public sealed record HostOperationDefinition(
         if (intent == HostOperationIntent.Mutate)
             return HostOperationCostTier.Mutation;
         if (key.StartsWith("revit.matrix.", StringComparison.Ordinal)
-            || key.Contains("matrix", StringComparison.Ordinal))
+            || key.IndexOf("matrix", StringComparison.Ordinal) >= 0)
             return HostOperationCostTier.Expensive;
         if (key.StartsWith("revit.detail.", StringComparison.Ordinal)
             || key.StartsWith("revit.resolve.", StringComparison.Ordinal))

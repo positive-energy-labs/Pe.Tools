@@ -27,7 +27,7 @@ This workspace should use:
 - Vite+ / `vp` for TypeScript app/package tasks, root lint/fmt/test policy, task graph execution, and bundle/package outputs.
 - source exports for private internal workspace packages by default.
 - dist outputs only at artifact boundaries: installed CLIs, frontend bundles, packaged runtime payloads, and any package that later becomes independently publishable.
-- generated packages as generated projections from C# authority, with hand-maintained wrappers shielding app code from generated churn.
+- generated packages as generated projections from C# authority, with app-local callers or generated RPC surfaces shielding app code from generated churn.
 
 The default internal package shape is:
 
@@ -58,13 +58,14 @@ Pea's Mastra workspace root and product home are the same directory. By default 
 
 ## Authority Model
 
-TypeScript is the bridge and presentation/runtime layer for things that are impractical in C#: agent runtimes, TUI, generated Host wrappers, and local orchestration.
+TypeScript is the bridge and presentation/runtime layer for things that are impractical in C#: agent runtimes, TUI, generated Host RPC surfaces, and local orchestration.
 
 Semantic authority remains in the existing Pe.Tools layers:
 
 - `Pe.Shared.HostContracts` owns public Host operation contracts, DTOs, operation metadata, and generated projections.
-- `Pe.Host` owns the local HTTP/SSE operation surface and process/lifecycle bridge to local product capabilities.
-- `Pe.Shared.StorageRuntime` owns settings storage, JSON schema generation, schema definitions, validation, field options, and authored document behavior.
+- the TypeScript Host owns the local Effect RPC operation surface and process/lifecycle bridge to local product capabilities.
+- `Pe.Shared.StorageRuntime` owns C# storage roots, module/document identity, runtime state/output/log files, APS settings lookup, and small settings metadata contracts.
+- `Pe.Revit.SettingsRuntime` owns Revit-authored JSON schema generation, schema definitions, validation, field options, and typed settings reads over the TS host document runtime.
 - `Pe.Revit.*` packages own Revit document/session behavior and live Revit semantics.
 - generated TypeScript packages are projections from those authorities, not independent source truth.
 
@@ -73,8 +74,8 @@ The intended flow is:
 ```text
 TUI / agent / CLI
   -> pea or peco TypeScript runtime
-  -> local wrappers over generated Host contracts
-  -> Pe.Host public operations
+  -> app-local callers or generated Host RPCs over generated Host contracts
+  -> TypeScript Host public operations
   -> shared C# contracts / Revit packages / storage runtime
 ```
 
@@ -106,20 +107,20 @@ When non-source exports are needed, use custom export conditions instead of `tsc
 
 Generated TypeScript is a projection from C# authority.
 
-`host-generated` or equivalent should contain generated DTOs, operation catalogs, and typed client slices. App code should avoid importing generated shapes directly unless there is no useful wrapper yet.
+`host-contracts` or equivalent should contain generated DTOs, operation catalogs, schemas, and eventually typed RPC surfaces. App code may import generated contracts directly at operation/UI boundaries when that is the simplest way to keep type coupling explicit.
 
-Hand-maintained wrappers belong in a separate normal source package, such as `host-client`, and should absorb generated contract churn behind stable local calls.
+Do not reintroduce a hand-maintained Host wrapper package. Temporary app-local or tools-local callers are acceptable until generated Effect RPC surfaces replace them.
 
 Preferred app dependency direction:
 
 ```text
 app code
-  -> host-client wrappers
-  -> host-generated projections
-  -> Pe.Host operations
+  -> generated Host RPCs or app-local callers
+  -> host-contracts projections
+  -> TypeScript Host operations
 ```
 
-Avoid spreading generated import paths across runtime, UI, and tool code. Generated code should be easy to delete and regenerate without changing product code that only cares about stable local concepts.
+Avoid spreading generated import paths into unrelated runtime policy. Generated code should be easy to delete and regenerate without leaving stale files behind.
 
 ## Pea UI Posture
 

@@ -46,5 +46,5 @@ Owns the Revit-side scripting runtime: workspace bootstrap, source normalization
 - Script-authored `new Transaction(...)`, `new SubTransaction(...)`, and `new TransactionGroup(...)` are rejected by policy in both permission modes.
 - `WriteLine(...)` is the short diagnostic path. `Artifacts.WriteJson(...)`, `WriteCsv(...)`, and `WriteText(...)` are for durable output.
 - Inline snippets should stay isolated from broken workspace files and keep writing trace files for visibility.
-- Keep generated workspace docs orienting. Specific operation guidance should come from `PeHostClient` XML docs, operation metadata, diagnostics, and examples.
+- Keep generated workspace docs orienting. Specific operation guidance should come from operation metadata, diagnostics, and examples.
 - Keep host concerns out of this package. HTTP routes, session gating, and host process management belong elsewhere.

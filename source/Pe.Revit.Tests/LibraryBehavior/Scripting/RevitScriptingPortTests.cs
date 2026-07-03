@@ -162,7 +162,7 @@ public sealed class RevitScriptingPortTests {
     }
 
     [Test]
-    public void Generated_project_includes_default_host_client_references_and_usings() {
+    public void Generated_project_includes_runtime_support_references_without_host_client_using() {
         var runtimeAssemblyPath = typeof(PeScriptContainer).Assembly.Location;
         var generator = CreateProjectGenerator();
 
@@ -176,7 +176,7 @@ public sealed class RevitScriptingPortTests {
 
         Assert.That(generated, Does.Contain("""<Reference Include="Pe.Shared.HostContracts">"""));
         Assert.That(generated, Does.Contain("""<Reference Include="Pe.Shared.Product">"""));
-        Assert.That(generated, Does.Contain("""<Using Include="Pe.Shared.HostContracts" />"""));
+        Assert.That(generated, Does.Not.Contain("""<Using Include="Pe.Shared.HostContracts" />"""));
     }
 
     [Test]

@@ -17,9 +17,11 @@ import {
   hostLogsDataSchema,
   hostLogsRequestSchema,
   hostProbeDataSchema,
+  HOST_RPC_BRIDGE_SESSION_HEADER,
   hostSessionSummaryDataSchema,
   isHostOperationKey,
   openSettingsDocumentRequestSchema,
+  openSettingsDocumentWithModuleRequestSchema,
   revitRecentDocumentsDataSchema,
   revitRecentDocumentsRequestSchema,
   saveSettingsDocumentRequestSchema,
@@ -42,24 +44,19 @@ export class HostCall extends Rpc.make("host.call", {
   payload: {
     key: anyOperationKeySchema,
     request: Schema.optional(Schema.Unknown),
-    bridgeSessionId: Schema.optional(Schema.String),
   },
   success: Schema.Unknown,
   error: HostRpcError,
 }) {}
 
 export class HostStatus extends Rpc.make("host.status", {
-  payload: {
-    bridgeSessionId: Schema.optional(Schema.String),
-  },
+  payload: {},
   success: hostProbeDataSchema,
   error: HostRpcError,
 }) {}
 
 export class BridgeSessionsSummary extends Rpc.make("bridge.sessions.summary", {
-  payload: {
-    bridgeSessionId: Schema.optional(Schema.String),
-  },
+  payload: {},
   success: hostSessionSummaryDataSchema,
   error: HostRpcError,
 }) {}
@@ -77,9 +74,7 @@ export class LogsTail extends Rpc.make("logs.tail", {
 }) {}
 
 export class SettingsWorkspaces extends Rpc.make("settings.workspaces", {
-  payload: {
-    bridgeSessionId: Schema.optional(Schema.String),
-  },
+  payload: {},
   success: settingsWorkspacesDataSchema,
   error: HostRpcError,
 }) {}
@@ -92,6 +87,12 @@ export class SettingsTree extends Rpc.make("settings.tree", {
 
 export class SettingsDocumentOpen extends Rpc.make("settings.document.open", {
   payload: openSettingsDocumentRequestSchema,
+  success: settingsDocumentSnapshotSchema,
+  error: HostRpcError,
+}) {}
+
+export class SettingsDocumentOpenWithModule extends Rpc.make("settings.document.open-with-module", {
+  payload: openSettingsDocumentWithModuleRequestSchema,
   success: settingsDocumentSnapshotSchema,
   error: HostRpcError,
 }) {}
@@ -148,6 +149,7 @@ export const HostRpcs = RpcGroup.make(
   SettingsWorkspaces,
   SettingsTree,
   SettingsDocumentOpen,
+  SettingsDocumentOpenWithModule,
   SettingsDocumentValidate,
   SettingsDocumentSave,
   RevitRecentDocuments,
@@ -164,59 +166,79 @@ export const callHostRpcMember = Effect.fnUntraced(function* (
 ) {
   const bridgeSessionId = scope?.bridgeSessionId;
   const client = yield* RpcClient.make(HostRpcs, { flatten: true });
+  const scopedOptions = rpcScopeOptions(bridgeSessionId);
   if (isHostOperationKey(key))
-    return yield* callBridgeOperationRpcMember(client, key, request, bridgeSessionId);
+    return bridgeSessionId
+      ? yield* client("host.call", { key, request }, scopedOptions)
+      : yield* callBridgeOperationRpcMember(client, key, request);
   switch (key) {
     case "host.status":
-      return yield* client("host.status", { bridgeSessionId });
+      return yield* client("host.status", {}, scopedOptions);
     case "bridge.sessions.summary":
-      return yield* client("bridge.sessions.summary", { bridgeSessionId });
+      return yield* client("bridge.sessions.summary", {}, scopedOptions);
     case "bridge.sessions.list":
       return yield* client("bridge.sessions.list", {});
     case "logs.tail":
       return yield* client("logs.tail", yield* decodeRpcPayload(hostLogsRequestSchema, request));
     case "settings.workspaces":
-      return yield* client("settings.workspaces", { bridgeSessionId });
+      return yield* client("settings.workspaces", {}, scopedOptions);
     case "settings.tree":
       return bridgeSessionId
-        ? yield* client("host.call", {
-            key,
-            request: yield* decodeRpcPayload(settingsTreeRequestSchema, request),
-            bridgeSessionId,
-          })
+        ? yield* client(
+            "host.call",
+            {
+              key,
+              request: yield* decodeRpcPayload(settingsTreeRequestSchema, request),
+            },
+            scopedOptions,
+          )
         : yield* client(
             "settings.tree",
             yield* decodeRpcPayload(settingsTreeRequestSchema, request),
           );
     case "settings.document.open":
       return bridgeSessionId
-        ? yield* client("host.call", {
-            key,
-            request: yield* decodeRpcPayload(openSettingsDocumentRequestSchema, request),
-            bridgeSessionId,
-          })
+        ? yield* client(
+            "host.call",
+            {
+              key,
+              request: yield* decodeRpcPayload(openSettingsDocumentRequestSchema, request),
+            },
+            scopedOptions,
+          )
         : yield* client(
             "settings.document.open",
             yield* decodeRpcPayload(openSettingsDocumentRequestSchema, request),
           );
+    case "settings.document.open-with-module":
+      return yield* client(
+        "settings.document.open-with-module",
+        yield* decodeRpcPayload(openSettingsDocumentWithModuleRequestSchema, request),
+      );
     case "settings.document.validate":
       return bridgeSessionId
-        ? yield* client("host.call", {
-            key,
-            request: yield* decodeRpcPayload(validateSettingsDocumentRequestSchema, request),
-            bridgeSessionId,
-          })
+        ? yield* client(
+            "host.call",
+            {
+              key,
+              request: yield* decodeRpcPayload(validateSettingsDocumentRequestSchema, request),
+            },
+            scopedOptions,
+          )
         : yield* client(
             "settings.document.validate",
             yield* decodeRpcPayload(validateSettingsDocumentRequestSchema, request),
           );
     case "settings.document.save":
       return bridgeSessionId
-        ? yield* client("host.call", {
-            key,
-            request: yield* decodeRpcPayload(saveSettingsDocumentRequestSchema, request),
-            bridgeSessionId,
-          })
+        ? yield* client(
+            "host.call",
+            {
+              key,
+              request: yield* decodeRpcPayload(saveSettingsDocumentRequestSchema, request),
+            },
+            scopedOptions,
+          )
         : yield* client(
             "settings.document.save",
             yield* decodeRpcPayload(saveSettingsDocumentRequestSchema, request),
@@ -248,4 +270,10 @@ export const callHostRpcMember = Effect.fnUntraced(function* (
 
 function decodeRpcPayload<A>(schema: Schema.Codec<A>, request: unknown) {
   return Schema.decodeUnknownEffect(schema)(request ?? {});
+}
+
+function rpcScopeOptions(bridgeSessionId: string | undefined) {
+  return bridgeSessionId
+    ? { headers: { [HOST_RPC_BRIDGE_SESSION_HEADER]: bridgeSessionId } }
+    : undefined;
 }

@@ -1,5 +1,4 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using Newtonsoft.Json;
 
 namespace Pe.Shared.Product;
 
@@ -11,14 +10,12 @@ public sealed record PeAppRuntimeDeploymentDescriptor(
 ) {
     public const int CurrentSchemaVersion = 1;
 
-    private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
-
     public static PeAppRuntimeDeploymentDescriptor Create(ProductRuntimeLane runtimeLane, string? configuration) =>
         new(CurrentSchemaVersion, ProductIdentity.ProductName, runtimeLane, configuration);
 
     public static PeAppRuntimeDeploymentDescriptor Load(string descriptorPath) {
         var json = File.ReadAllText(descriptorPath);
-        var descriptor = JsonSerializer.Deserialize<PeAppRuntimeDeploymentDescriptor>(json, JsonOptions)
+        var descriptor = JsonConvert.DeserializeObject<PeAppRuntimeDeploymentDescriptor>(json)
                          ?? throw new InvalidOperationException(
                              $"Runtime deployment descriptor '{descriptorPath}' could not be deserialized."
                          );
@@ -52,9 +49,4 @@ public sealed record PeAppRuntimeDeploymentDescriptor(
         }
     }
 
-    private static JsonSerializerOptions CreateJsonOptions() {
-        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-        options.Converters.Add(new JsonStringEnumConverter());
-        return options;
-    }
 }

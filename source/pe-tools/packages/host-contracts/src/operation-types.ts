@@ -18,6 +18,8 @@ import { Schema } from "effect";
 type NoRequest = Record<string, never> | undefined;
 type SchemaType<T extends Schema.Schema<any>> = Schema.Schema.Type<T>;
 
+export const HOST_RPC_BRIDGE_SESSION_HEADER = "x-pe-bridge-session-id";
+
 export const hostSessionScopeSchema = Schema.Struct({
   bridgeSessionId: Schema.optional(Schema.String),
 });
@@ -254,10 +256,26 @@ export type SettingsModuleWorkspaceDescriptor = Schema.Schema.Type<
   typeof settingsModuleWorkspaceDescriptorSchema
 >;
 
+export const settingsStorageOptionsSchema = Schema.Struct({
+  includeRoots: Schema.optional(Schema.Array(Schema.String)),
+  presetRoots: Schema.optional(Schema.Array(Schema.String)),
+});
+
 export const settingsModuleWorkspaceDescriptorSchema = Schema.Struct({
   defaultRootKey: Schema.String,
   moduleKey: Schema.String,
   roots: Schema.Array(settingsRootDescriptorSchema),
+  storageOptions: Schema.optional(settingsStorageOptionsSchema),
+});
+
+export type OpenSettingsDocumentWithModuleRequest = Schema.Schema.Type<
+  typeof openSettingsDocumentWithModuleRequestSchema
+>;
+
+export const openSettingsDocumentWithModuleRequestSchema = Schema.Struct({
+  module: settingsModuleWorkspaceDescriptorSchema,
+  request: openSettingsDocumentRequestSchema,
+  schemaJson: Schema.optional(Schema.String),
 });
 
 export type SettingsWorkspaceDescriptor = Schema.Schema.Type<
@@ -464,6 +482,10 @@ export const tsOnlyOperationSchemas = {
   },
   "settings.document.open": {
     request: openSettingsDocumentRequestSchema,
+    response: settingsDocumentSnapshotSchema,
+  },
+  "settings.document.open-with-module": {
+    request: openSettingsDocumentWithModuleRequestSchema,
     response: settingsDocumentSnapshotSchema,
   },
   "settings.document.save": {
