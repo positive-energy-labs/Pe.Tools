@@ -1,0 +1,56 @@
+{
+  "name": "@pe/host-contracts",
+  "version": "0.0.0",
+  "description": "Generated Pe host Effect schemas and RPC contracts.",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    "./contracts": {
+      "types": "./src/contracts/index.ts",
+      "import": "./src/contracts/index.ts",
+      "default": "./src/contracts/index.ts"
+    },
+    "./effect": {
+      "types": "./src/effect/host-effect.generated.ts",
+      "import": "./src/effect/host-effect.generated.ts",
+      "default": "./src/effect/host-effect.generated.ts"
+    },
+    "./effect/registry": {
+      "types": "./src/effect/host-op-schemas.generated.ts",
+      "import": "./src/effect/host-op-schemas.generated.ts",
+      "default": "./src/effect/host-op-schemas.generated.ts"
+    },
+    "./operation-types": {
+      "types": "./src/operation-types.ts",
+      "import": "./src/operation-types.ts",
+      "default": "./src/operation-types.ts"
+    },
+    "./rpc": {
+      "types": "./src/rpc.ts",
+      "import": "./src/rpc.ts",
+      "default": "./src/rpc.ts"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vp pack",
+    "dev": "vp pack --watch",
+    "test": "vp test",
+    "check": "vp check",
+    "prepublishOnly": "vp run build"
+  },
+  "dependencies": {
+    "effect": "4.0.0-beta.92"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "@typescript/native-preview": "7.0.0-dev.20260509.2",
+    "bumpp": "^11.1.0",
+    "typescript": "^6.0.3",
+    "vite-plus": "catalog:"
+  }
+}
