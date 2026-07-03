@@ -89,7 +89,7 @@ internal sealed class BridgeConnectionSupervisor : IDisposable {
     private async Task<RuntimeActionResult> TryConnectAsync(string reason, CancellationToken cancellationToken) {
         Log.Information("Host bridge supervisor connect requested: Reason={Reason}", reason);
 
-        var hostLaunchResult = HostBridgeConnector.EnsureHostRunning();
+        var hostLaunchResult = HostBridgeConnector.EnsureTsHostRunning();
         if (!hostLaunchResult.Success)
             return new RuntimeActionResult(false, hostLaunchResult.Message);
 

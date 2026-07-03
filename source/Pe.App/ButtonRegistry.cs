@@ -177,7 +177,7 @@ public sealed class ButtonRegistry {
             SmallImage = "id-card16.png",
             LargeImage = "id-card32.png",
             ToolTip =
-                "Authenticate to Autodesk Platform Services through Pe.Host using the shared persisted token flow.",
+                "Authenticate to Autodesk Platform Services through the legacy persisted token flow.",
             Container = new ButtonContainer.PullDown("General", "Manage")
         }),
         Register(new ButtonRegistration<CmdCacheParametersService> {

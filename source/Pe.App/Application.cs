@@ -16,7 +16,6 @@ using Pe.Revit.Ui.Core;
 using Pe.Shared.HostContracts;
 using Pe.Shared.Product;
 using Pe.Shared.StorageRuntime;
-using Pe.Shared.StorageRuntime.Modules;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
 using Serilog.Core;
@@ -59,7 +58,6 @@ public class Application : ExternalApplication {
         HostRuntime.Initialize(
             revitTaskService,
             registry => {
-                registry.RegisterModules(StorageRuntimeStructuralModules.All);
                 registry.RegisterModules(RevitSettingsRuntimeRegistration.StructuralModules);
                 registry.RegisterRootBindings(RevitSettingsRuntimeRegistration.RootBindings);
                 registry.RegisterModules(FamilyFoundrySettingsRegistration.StructuralModules);

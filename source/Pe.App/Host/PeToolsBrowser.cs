@@ -7,8 +7,7 @@ internal static class PeToolsBrowser {
     public static bool TryLaunch(
         string? moduleKey = null,
         string? rootKey = null,
-        string? relativePath = null,
-        string? sessionId = null
+        string? relativePath = null
     ) {
         try {
             var baseUrl = HostProcessIdentity.ResolveFrontendBaseUrl();
@@ -22,9 +21,6 @@ internal static class PeToolsBrowser {
 
             if (!string.IsNullOrWhiteSpace(relativePath))
                 query.Add($"relativePath={Uri.EscapeDataString(relativePath)}");
-
-            if (!string.IsNullOrWhiteSpace(sessionId))
-                query.Add($"sessionId={Uri.EscapeDataString(sessionId)}");
 
             var targetUrl = query.Count == 0
                 ? baseUrl.TrimEnd('/')

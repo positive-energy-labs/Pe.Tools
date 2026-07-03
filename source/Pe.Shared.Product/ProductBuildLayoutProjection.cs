@@ -40,7 +40,6 @@ public sealed record ProductBuildLayoutProjection(
                     runtimeBinRelativePath,
                     hostDirectoryRelativePath,
                     Path.Combine(hostDirectoryRelativePath, HostProcessIdentity.ExecutableName),
-                    Path.Combine(hostDirectoryRelativePath, HostProcessIdentity.DllName),
                     peaDirectoryRelativePath,
                     Path.Combine(peaDirectoryRelativePath, PeaCliIdentity.LauncherName),
                     Path.Combine(peaDirectoryRelativePath, PeaCliIdentity.CurrentVersionFileName),
@@ -56,8 +55,7 @@ public sealed record ProductBuildLayoutProjection(
                 new ProductBuildDevelopmentBinaryProjection(
                     developmentRuntimeBinRelativePath,
                     developmentHostDirectoryRelativePath,
-                    Path.Combine(developmentHostDirectoryRelativePath, HostProcessIdentity.ExecutableName),
-                    Path.Combine(developmentHostDirectoryRelativePath, HostProcessIdentity.DllName)
+                    Path.Combine(developmentHostDirectoryRelativePath, HostProcessIdentity.ExecutableName)
                 )
             ),
             new ProductBuildUserContentProjection(
@@ -92,7 +90,6 @@ public sealed record ProductBuildBinaryProjection(
     string RootRelativePath,
     string HostDirectoryRelativePath,
     string HostExecutableRelativePath,
-    string HostDllRelativePath,
     string PeaDirectoryRelativePath,
     string PeaLauncherRelativePath,
     string PeaCurrentVersionRelativePath,
@@ -103,8 +100,7 @@ public sealed record ProductBuildBinaryProjection(
 public sealed record ProductBuildDevelopmentBinaryProjection(
     string RootRelativePath,
     string HostDirectoryRelativePath,
-    string HostExecutableRelativePath,
-    string HostDllRelativePath
+    string HostExecutableRelativePath
 );
 
 public sealed record ProductBuildUserContentProjection(

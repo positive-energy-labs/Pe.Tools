@@ -1,0 +1,28 @@
+{
+  "name": "@pe/host",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Effect TS host: serves the Revit bridge WebSocket and Effect RPC endpoint.",
+  "type": "module",
+  "imports": {
+    "#/*": "./src/*"
+  },
+  "scripts": {
+    "start": "vp exec jiti src/index.ts",
+    "dev": "vp exec jiti --watch src/index.ts",
+    "build": "vp pack",
+    "test": "vp test",
+    "check": "vp check"
+  },
+  "dependencies": {
+    "@effect/platform-node": "4.0.0-beta.92",
+    "@pe/host-contracts": "workspace:*",
+    "ajv": "catalog:",
+    "effect": "4.0.0-beta.92"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "typescript": "^6.0.3",
+    "vite-plus": "catalog:"
+  }
+}

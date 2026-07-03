@@ -24,7 +24,6 @@ public sealed record ProductRuntimeLayout(
                 binRootPath,
                 Path.Combine(binRootPath, HostProcessIdentity.DirectoryName),
                 Path.Combine(binRootPath, HostProcessIdentity.DirectoryName, HostProcessIdentity.ExecutableName),
-                Path.Combine(binRootPath, HostProcessIdentity.DirectoryName, HostProcessIdentity.DllName),
                 Path.Combine(binRootPath, PeaCliIdentity.DirectoryName),
                 Path.Combine(binRootPath, PeaCliIdentity.DirectoryName, PeaCliIdentity.LauncherName),
                 Path.Combine(binRootPath, PeaCliIdentity.DirectoryName, PeaCliIdentity.CurrentVersionFileName),
@@ -42,7 +41,6 @@ public sealed record ProductRuntimeBinaryLayout(
     string RootPath,
     string HostDirectoryPath,
     string HostExecutablePath,
-    string HostDllPath,
     string PeaDirectoryPath,
     string PeaLauncherPath,
     string PeaCurrentVersionPath,
@@ -83,9 +81,9 @@ public sealed record ProductRuntimeStateLayout(string RootPath) {
 }
 
 public sealed record ProductRuntimeLogLayout(string RootPath) {
-    public string HostLogPath => Path.Combine(this.RootPath, "host.log.txt");
-    public string RevitAppLogPath => Path.Combine(this.RootPath, "revit.log.txt");
-    public string RevitApprovalWatcherLogPath => Path.Combine(this.RootPath, "revit-approval-watcher.log.txt");
+    public string HostLogPath => Path.Combine(this.RootPath, ProductPathNames.HostLogFileName);
+    public string RevitAppLogPath => Path.Combine(this.RootPath, ProductPathNames.RevitAppLogFileName);
+    public string RevitApprovalWatcherLogPath => Path.Combine(this.RootPath, ProductPathNames.RevitApprovalWatcherLogFileName);
 }
 
 public sealed record ProductRuntimeCacheLayout(string RootPath) {

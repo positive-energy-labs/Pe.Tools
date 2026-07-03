@@ -64,7 +64,6 @@
         />
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\Pe.Shared.ApsAuth\Pe.Shared.ApsAuth.csproj"/>
         <ProjectReference Include="..\Pe.Revit.FamilyFoundry\Pe.Revit.FamilyFoundry.csproj"/>
         <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj"/>
         <ProjectReference Include="..\Pe.Revit.Global\Pe.Revit.Global.csproj"/>
@@ -74,7 +73,9 @@
         <ProjectReference Include="..\Pe.Revit.Ui\Pe.Revit.Ui.csproj"/>
     </ItemGroup>
     <ItemGroup>
-        <PeInteractiveRuntimeCompanionProject Include="..\Pe.Host\Pe.Host.csproj"/>
+        <!-- Pe.Host retired: the Revit add-in now launches the TS @pe/host (see TsHostLauncher /
+             HostBridgeConnector; repoint to spawn the TS host package, mirroring the
+             TS-side ensurePeHostRunning repoint). No Pe.Host code coupling in Pe.App. -->
         <PeInteractiveRuntimeCompanionProject Include="..\Pe.Dev.Cli\Pe.Dev.Cli.csproj"/>
     </ItemGroup>
     <Target
