@@ -28,12 +28,6 @@ public record SettingsDocumentSnapshot(
     IReadOnlyDictionary<string, string> CapabilityHints
 );
 
-public record DiscoverSettingsDocumentsRequest(
-    string ModuleKey,
-    string RootKey,
-    SettingsDiscoveryOptions? Options = null
-);
-
 public record OpenSettingsDocumentRequest(
     SettingsDocumentId DocumentId,
     bool IncludeComposedContent = false
@@ -91,21 +85,4 @@ public record SettingsValidationResult(
 public record SettingsRootDescriptor(
     string RootKey,
     string DisplayName
-);
-
-public record SettingsModuleWorkspaceDescriptor(
-    string ModuleKey,
-    string DefaultRootKey,
-    IReadOnlyList<SettingsRootDescriptor> Roots
-);
-
-public record SettingsWorkspaceDescriptor(
-    string WorkspaceKey,
-    string DisplayName,
-    string BasePath,
-    IReadOnlyList<SettingsModuleWorkspaceDescriptor> Modules
-);
-
-public record SettingsWorkspacesData(
-    IReadOnlyList<SettingsWorkspaceDescriptor> Workspaces
 );

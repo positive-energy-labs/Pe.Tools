@@ -27,9 +27,11 @@ public sealed class ModuleSettingsStorage<TSettings>(
 
     public TSettings ReadRequired(string relativePath, string? rootKey = null) {
         var resolvedRootKey = rootKey ?? this._documents.DefaultRootKey;
-        this.EnsureSynchronized(relativePath, resolvedRootKey);
-
-        var snapshot = this._documents.OpenAsync(relativePath, true, resolvedRootKey).GetAwaiter().GetResult();
+        var snapshot = TsSettingsDocumentClient.OpenRequired<TSettings>(
+            this._documents,
+            relativePath,
+            resolvedRootKey
+        );
         if (!snapshot.Validation.IsValid) {
             throw new JsonValidationException(this._documents.ResolveDocumentPath(relativePath, resolvedRootKey),
                 snapshot.Validation.Issues.Select(issue => $"{issue.Path}: {issue.Message}")
@@ -52,18 +54,6 @@ public sealed class ModuleSettingsStorage<TSettings>(
         this._documents.ResolveDocumentPath(relativePath, rootKey);
 
     public ModuleDocumentStorage Documents() => this._documents;
-
-    private void EnsureSynchronized(string relativePath, string rootKey) {
-        var syncService =
-            new SettingsDocumentSchemaSyncService(this._documents.RuntimeMode);
-        var documentPath = this._documents.ResolveDocumentPath(relativePath, rootKey);
-        var rootDirectory = this._documents.ResolveRootDirectory(rootKey);
-
-        _ = syncService.EnsureSynchronized(typeof(TSettings), this._documents.StorageOptions,
-            documentPath,
-            rootDirectory
-        );
-    }
 
     private static TSettings CreateDefaultValue() {
         var serializerSettings = RevitJsonFormatting.CreateRevitIndentedSettings();

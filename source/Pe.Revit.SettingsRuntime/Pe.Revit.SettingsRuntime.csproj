@@ -11,7 +11,6 @@
         <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
         <PackageReference Include="NJsonSchema.NewtonsoftJson" Version="11.5.2" />
         <PackageReference Include="System.ComponentModel.Annotations" Version="5.0.0" />
-        <PackageReference Include="TypeGen" Version="5.0.0" />
         <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="$(RevitVersion).*" />
         <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="$(RevitVersion).*" />
         <PackageReference Include="Nice3point.Revit.Extensions" Version="$(RevitVersion).*" />
@@ -20,6 +19,7 @@
     <ItemGroup>
         <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj" />
         <ProjectReference Include="..\Pe.Revit.DocumentData\Pe.Revit.DocumentData.csproj" />
+        <ProjectReference Include="..\Pe.Shared.Product\Pe.Shared.Product.csproj" />
         <ProjectReference Include="..\Pe.Shared.StorageRuntime\Pe.Shared.StorageRuntime.csproj" />
         <ProjectReference Include="..\Pe.Shared.RevitData\Pe.Shared.RevitData.csproj" />
     </ItemGroup>

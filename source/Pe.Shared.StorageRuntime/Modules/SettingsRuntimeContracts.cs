@@ -1,4 +1,3 @@
-using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Documents;
 using Pe.Shared.StorageRuntime.Json;
 
@@ -29,15 +28,13 @@ public interface ISettingsRootBinding {
     StructuralSettingsModuleDescriptor Module { get; }
     string RootKey { get; }
     Type SettingsType { get; }
-    ISettingsDocumentValidator? CreateValidator(SettingsRuntimeMode runtimeMode);
 }
 
 public interface ISettingsRootBinding<TSettings> : ISettingsRootBinding where TSettings : class;
 
 public sealed class SettingsRootBinding<TSettings>(
     StructuralSettingsModuleDescriptor module,
-    string rootKey,
-    Func<SettingsRuntimeMode, ISettingsDocumentValidator?>? validatorFactory = null
+    string rootKey
 ) : ISettingsRootBinding<TSettings> where TSettings : class {
     public StructuralSettingsModuleDescriptor Module { get; } = module ?? throw new ArgumentNullException(nameof(module));
 
@@ -46,9 +43,6 @@ public sealed class SettingsRootBinding<TSettings>(
         : rootKey;
 
     public Type SettingsType => typeof(TSettings);
-
-    public ISettingsDocumentValidator? CreateValidator(SettingsRuntimeMode runtimeMode) =>
-        validatorFactory?.Invoke(runtimeMode);
 }
 
 public static class SettingsStorageProfiles {

@@ -9,34 +9,22 @@ public readonly record struct SettingsCompositionArtifact(
     string SchemaContextDirectory
 );
 
-public interface ISettingsCompositionSchemaSynchronizer {
-    void EnsureFragmentSchema(SettingsCompositionArtifact artifact);
-
-    void EnsurePresetSchema(SettingsCompositionArtifact artifact);
-}
-
 public sealed class JsonCompositionPipeline {
     private readonly string? _globalFragmentsDirectory;
     private readonly HashSet<string> _knownIncludeRoots;
     private readonly HashSet<string> _knownPresetRoots;
     private readonly string _schemaDirectory;
-    private readonly ISettingsCompositionSchemaSynchronizer? _schemaSynchronizer;
 
     public JsonCompositionPipeline(
         string schemaDirectory,
         IEnumerable<string> knownIncludeRoots,
-        IEnumerable<string> knownPresetRoots,
-        ISettingsCompositionSchemaSynchronizer? schemaSynchronizer = null
+        IEnumerable<string> knownPresetRoots
     ) {
         this._schemaDirectory = schemaDirectory;
         this._globalFragmentsDirectory = SettingsPathing.TryResolveGlobalFragmentsDirectory(schemaDirectory);
         this._knownIncludeRoots = SettingsPathing.NormalizeAllowedRoots(knownIncludeRoots);
         this._knownPresetRoots = SettingsPathing.NormalizeAllowedRoots(knownPresetRoots);
-        this._schemaSynchronizer = schemaSynchronizer;
     }
-
-    public JObject ComposeForRead(JObject root) =>
-        this.ComposeForRead(root, null, null);
 
     public JObject ComposeForRead(
         JObject root,
@@ -74,7 +62,6 @@ public sealed class JsonCompositionPipeline {
             this._schemaDirectory
         );
 
-        this._schemaSynchronizer?.EnsureFragmentSchema(artifact);
         onFragmentResolved?.Invoke(artifact);
     }
 
@@ -91,7 +78,6 @@ public sealed class JsonCompositionPipeline {
             this._schemaDirectory
         );
 
-        this._schemaSynchronizer?.EnsurePresetSchema(artifact);
         onPresetResolved?.Invoke(artifact);
     }
 

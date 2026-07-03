@@ -1,5 +1,3 @@
-using Pe.Revit.SettingsRuntime.Validation;
-using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Documents;
 using Pe.Shared.StorageRuntime.Modules;
 
@@ -17,15 +15,9 @@ public static class AutoTagSettingsRegistration {
 
     public static ISettingsRootBinding<AutoTagSettings> Root { get; } = new SettingsRootBinding<AutoTagSettings>(
         Module,
-        "autotag",
-        CreateValidator
+        "autotag"
     );
 
     public static IReadOnlyList<StructuralSettingsModuleDescriptor> StructuralModules { get; } = [Module];
     public static IReadOnlyList<ISettingsRootBinding> RootBindings { get; } = [Root];
-
-    private static ISettingsDocumentValidator? CreateValidator(SettingsRuntimeMode runtimeMode) =>
-        runtimeMode == SettingsRuntimeMode.LiveDocument
-            ? new SchemaBackedSettingsDocumentValidator(typeof(AutoTagSettings), runtimeMode)
-            : null;
 }

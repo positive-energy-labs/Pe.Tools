@@ -5,7 +5,6 @@ using Pe.Shared.StorageRuntime.Modules;
 namespace Pe.Shared.StorageRuntime;
 
 public sealed class ModuleDocumentStorage {
-    private readonly LocalDiskSettingsStorageBackend _backend;
     private readonly string _basePath;
 
     public ModuleDocumentStorage(
@@ -13,8 +12,7 @@ public sealed class ModuleDocumentStorage {
         string defaultRootKey,
         SettingsStorageModuleOptions storageOptions,
         SettingsRuntimeMode runtimeMode = SettingsRuntimeMode.HostOnly,
-        string? basePath = null,
-        IReadOnlyDictionary<string, SettingsStorageModuleRuntimeDefinition>? moduleDefinitionsByModuleKey = null
+        string? basePath = null
     ) {
         this.ModuleKey = string.IsNullOrWhiteSpace(moduleKey)
             ? throw new ArgumentException("Module key is required.", nameof(moduleKey))
@@ -27,15 +25,6 @@ public sealed class ModuleDocumentStorage {
         this._basePath = string.IsNullOrWhiteSpace(basePath)
             ? StorageClient.BasePath
             : Path.GetFullPath(basePath);
-        this._backend = new LocalDiskSettingsStorageBackend(
-            this._basePath,
-            runtimeMode,
-            moduleDefinitionsByModuleKey ?? CreateDefaultModuleDefinitions(
-                this.ModuleKey,
-                this.DefaultRootKey,
-                this.StorageOptions
-            )
-        );
     }
 
     public string ModuleKey { get; }
@@ -47,53 +36,50 @@ public sealed class ModuleDocumentStorage {
         SettingsDiscoveryOptions? options = null,
         string? rootKey = null,
         CancellationToken cancellationToken = default
-    ) => this._backend.DiscoverAsync(
-        this.ModuleKey,
-        rootKey ?? this.DefaultRootKey,
-        options ?? new SettingsDiscoveryOptions(),
-        cancellationToken
-    );
+    ) {
+        cancellationToken.ThrowIfCancellationRequested();
 
-    public Task<SettingsDocumentSnapshot> OpenAsync(
-        string relativePath,
-        bool includeComposedContent = false,
-        string? rootKey = null,
-        CancellationToken cancellationToken = default
-    ) => this._backend.OpenAsync(
-        new OpenSettingsDocumentRequest(
-            this.CreateDocumentId(relativePath, rootKey),
-            includeComposedContent
-        ),
-        cancellationToken
-    );
+        options ??= new SettingsDiscoveryOptions();
+        var resolvedRootKey = rootKey ?? this.DefaultRootKey;
+        var rootDirectory = this.ResolveRootDirectory(resolvedRootKey);
+        var discoveryRootPath = SettingsPathing.ResolveSafeSubDirectoryPath(
+            rootDirectory,
+            options.SubDirectory,
+            nameof(options.SubDirectory)
+        );
+        var normalizedRootRelativePath = SettingsPathing.NormalizeRelativePath(
+            options.SubDirectory,
+            nameof(options.SubDirectory)
+        );
+        var rootName = string.IsNullOrWhiteSpace(normalizedRootRelativePath)
+            ? resolvedRootKey
+            : normalizedRootRelativePath.Split('/').Last();
 
-    public Task<SaveSettingsDocumentResult> SaveAsync(
-        string relativePath,
-        string rawContent,
-        SettingsVersionToken? expectedVersionToken = null,
-        string? rootKey = null,
-        CancellationToken cancellationToken = default
-    ) => this._backend.SaveAsync(
-        new SaveSettingsDocumentRequest(
-            this.CreateDocumentId(relativePath, rootKey),
-            rawContent,
-            expectedVersionToken
-        ),
-        cancellationToken
-    );
+        if (!Directory.Exists(discoveryRootPath))
+            _ = Directory.CreateDirectory(discoveryRootPath);
 
-    public Task<SettingsValidationResult> ValidateAsync(
-        string relativePath,
-        string rawContent,
-        string? rootKey = null,
-        CancellationToken cancellationToken = default
-    ) => this._backend.ValidateAsync(
-        new ValidateSettingsDocumentRequest(
-            this.CreateDocumentId(relativePath, rootKey),
-            rawContent
-        ),
-        cancellationToken
-    );
+        var searchOption = options.Recursive
+            ? SearchOption.AllDirectories
+            : SearchOption.TopDirectoryOnly;
+        var directories = Directory.EnumerateDirectories(discoveryRootPath, "*", searchOption)
+            .Select(path => BclExtensions.GetRelativePath(rootDirectory, path).Replace('\\', '/'))
+            .ToList();
+        var files = Directory.EnumerateFiles(discoveryRootPath, "*.json", searchOption)
+            .Select(path => SettingsDiscoveryBuilder.CreateSettingsFileEntry(path, rootDirectory))
+            .Where(entry => options.IncludeFragments || !entry.IsFragment)
+            .Where(entry => options.IncludeSchemas || !entry.IsSchema)
+            .OrderByDescending(entry => entry.ModifiedUtc)
+            .ToList();
+
+        var tree = SettingsDiscoveryBuilder.BuildDirectoryTree(
+            rootName,
+            normalizedRootRelativePath,
+            files,
+            directories
+        );
+
+        return Task.FromResult(new SettingsDiscoveryResult(files, tree));
+    }
 
     public SettingsDocumentId CreateDocumentId(string relativePath, string? rootKey = null) =>
         new(this.ModuleKey, rootKey ?? this.DefaultRootKey, relativePath);
@@ -112,11 +98,4 @@ public sealed class ModuleDocumentStorage {
             nameof(relativePath)
         );
 
-    private static IReadOnlyDictionary<string, SettingsStorageModuleRuntimeDefinition> CreateDefaultModuleDefinitions(
-        string moduleKey,
-        string defaultRootKey,
-        SettingsStorageModuleOptions storageOptions
-    ) => new Dictionary<string, SettingsStorageModuleRuntimeDefinition>(StringComparer.OrdinalIgnoreCase) {
-        [moduleKey] = SettingsStorageModuleRuntimeDefinition.CreateSingleRoot(defaultRootKey, storageOptions)
-    };
 }
