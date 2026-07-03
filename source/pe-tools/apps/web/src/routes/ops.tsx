@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { hostOperations } from "@pe/host-generated/contracts";
-import type { HostOperationDefinition, HostOperationKey } from "@pe/host-generated/contracts";
-import { requestJsonSchema, type HostOperationJsonSchema } from "@pe/host-generated/json-schema";
+import { hostOperations } from "@pe/host-contracts/contracts";
+import type { HostOperationDefinition, HostOperationKey } from "@pe/host-contracts/contracts";
+import { hostEffectOperationSchemas } from "@pe/host-contracts/effect/registry";
+import { Schema } from "effect";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
@@ -16,13 +17,17 @@ import {
 } from "#/components/ui/select";
 import { Switch } from "#/components/ui/switch";
 import { Textarea } from "#/components/ui/textarea";
-import { callHostOpDetailed } from "#/host/client";
+import { callHostRpc } from "#/host/client";
 import { type HostIssue, HostIssuePanel, toHostIssue } from "#/host/issues";
+import { useBridgeSessionsListQuery } from "#/host/queries";
 import { cn } from "#/lib/utils";
 
 export const Route = createFileRoute("/ops")({ component: OpsPlayground });
 
-const OPS = Object.values(hostOperations) as HostOperationDefinition[];
+type HostOperationCatalogEntry = HostOperationDefinition & { key: HostOperationKey };
+const OPS = Object.values(hostOperations) as HostOperationCatalogEntry[];
+type HostOperationJsonSchema = Record<string, unknown>;
+const DEFAULT_SESSION_VALUE = "__host_default__";
 
 interface RunResult {
   status: number;
@@ -33,14 +38,16 @@ interface RunResult {
 
 function OpsPlayground() {
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<HostOperationDefinition | undefined>();
+  const [selected, setSelected] = useState<HostOperationCatalogEntry | undefined>();
   const [args, setArgs] = useState("{}");
   const [mode, setMode] = useState<"form" | "raw">("raw");
   const [formValues, setFormValues] = useState<Record<string, unknown>>({});
+  const [bridgeSessionId, setBridgeSessionId] = useState<string | undefined>();
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<RunResult | undefined>();
   const [issue, setIssue] = useState<HostIssue | undefined>();
-  const requestSchema = selected ? requestJsonSchema(selected.key as HostOperationKey) : undefined;
+  const requestSchema = selected ? requestJsonSchema(selected.key) : undefined;
+  const sessionsQuery = useBridgeSessionsListQuery();
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -55,8 +62,8 @@ function OpsPlayground() {
     return [...ops].sort((a, b) => a.key.localeCompare(b.key));
   }, [query]);
 
-  function select(op: HostOperationDefinition) {
-    const nextSchema = requestJsonSchema(op.key as HostOperationKey);
+  function select(op: HostOperationCatalogEntry) {
+    const nextSchema = requestJsonSchema(op.key);
     const nextArgs = op.requestExamples?.[0]?.json ?? op.safeDefaultRequestJson ?? "{}";
     setSelected(op);
     setRequestSeed(nextArgs, nextSchema);
@@ -75,6 +82,7 @@ function OpsPlayground() {
     setRunning(true);
     setIssue(undefined);
     setResult(undefined);
+    const started = performance.now();
     try {
       const parsed =
         mode === "form" && requestSchema
@@ -82,7 +90,13 @@ function OpsPlayground() {
           : args.trim()
             ? JSON.parse(args)
             : undefined;
-      setResult(await callHostOpDetailed(selected.key as HostOperationKey, parsed));
+      const data = await callHostRpc(selected.key, parsed, { bridgeSessionId });
+      setResult({
+        status: 200,
+        elapsedMs: Math.round(performance.now() - started),
+        rawBody: data,
+        data,
+      });
     } catch (err) {
       setIssue(toHostIssue(err, "Operation failed"));
     } finally {
@@ -128,7 +142,7 @@ function OpsPlayground() {
       <section className="min-h-0 overflow-y-auto p-4">
         {!selected ? (
           <p className="text-sm text-muted-foreground">
-            Pick a host op. Calls proxy to Pe.Host via <code>/pe-host</code> (default{" "}
+            Pick a host op. Calls the TS host via <code>/pe-host/rpc</code> (default{" "}
             <code>localhost:5180</code>). Start the host if requests 502.
           </p>
         ) : (
@@ -136,16 +150,35 @@ function OpsPlayground() {
             <header>
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-semibold">{selected.displayName ?? selected.key}</h1>
-                <Badge variant="blue">{selected.verb}</Badge>
                 {selected.intent && <Badge variant="secondary">{selected.intent}</Badge>}
                 {selected.costTier && <Badge variant="secondary">{selected.costTier}</Badge>}
-                {selected.requiresBridge && <Badge variant="clay">bridge</Badge>}
               </div>
-              <p className="mt-1 font-mono text-xs text-muted-foreground">{selected.route}</p>
               {selected.description && (
                 <p className="mt-1 text-sm text-muted-foreground">{selected.description}</p>
               )}
             </header>
+
+            <div className="grid max-w-sm gap-1.5">
+              <Label htmlFor="bridge-session">Bridge session</Label>
+              <Select
+                value={bridgeSessionId ?? DEFAULT_SESSION_VALUE}
+                onValueChange={(value) =>
+                  setBridgeSessionId(!value || value === DEFAULT_SESSION_VALUE ? undefined : value)
+                }
+              >
+                <SelectTrigger id="bridge-session">
+                  <SelectValue placeholder="Host default" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={DEFAULT_SESSION_VALUE}>Host default</SelectItem>
+                  {(sessionsQuery.data?.sessions ?? []).map((session) => (
+                    <SelectItem key={session.sessionId} value={session.sessionId}>
+                      {session.activeDocumentTitle || `Revit ${session.processId ?? ""}`.trim()}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
             <div>
               <div className="mb-1 flex items-center justify-between">
@@ -191,7 +224,7 @@ function OpsPlayground() {
 
             <div className="flex items-center gap-3">
               <Button onClick={run} disabled={running}>
-                {running ? "Running..." : `Run ${selected.verb}`}
+                {running ? "Running..." : "Run"}
               </Button>
               {result && (
                 <span className="text-xs text-muted-foreground">
@@ -215,6 +248,20 @@ function OpsPlayground() {
       </section>
     </main>
   );
+}
+
+function requestJsonSchema(
+  key: HostOperationCatalogEntry["key"],
+): HostOperationJsonSchema | undefined {
+  const schemas = hostEffectOperationSchemas[key];
+  const schema = "request" in schemas ? schemas.request : undefined;
+  if (!schema) return undefined;
+  try {
+    return Schema.toJsonSchemaDocument(schema, { additionalProperties: true })
+      .schema as HostOperationJsonSchema;
+  } catch {
+    return undefined;
+  }
 }
 
 function JsonSchemaForm({

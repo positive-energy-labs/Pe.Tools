@@ -4,8 +4,8 @@ import type {
   FieldOptionItem,
   FieldOptionsRequest,
   ParameterCatalogEntry,
-  SettingsValidationResult,
-} from "#/host/settings-contracts";
+} from "@pe/host-contracts/effect";
+import type { SettingsValidationResult } from "@pe/host-contracts/operation-types";
 import { useFieldOptionsQuery, useParameterCatalogQuery } from "#/host/queries";
 import type {
   NormalizedRenderFieldOptionDependency,
@@ -76,7 +76,7 @@ export interface FieldOptionDependencyState extends NormalizedRenderFieldOptionD
 }
 
 export interface FieldOptionState {
-  items: FieldOptionItem[];
+  items: readonly FieldOptionItem[];
   mode: "suggestion" | "constraint";
   allowsCustomValue: boolean;
   isLoading: boolean;
@@ -339,7 +339,7 @@ function parseDelimitedContextValues(value: string | undefined): string[] {
 }
 
 function projectFamilyParameterCatalogValues(
-  entries: ParameterCatalogEntry[],
+  entries: readonly ParameterCatalogEntry[],
   contextValues: Record<string, string>,
 ): string[] {
   const selectedFamilyNames = parseDelimitedContextValues(contextValues.SelectedFamilyNames);
@@ -354,7 +354,7 @@ function projectFamilyParameterCatalogValues(
 }
 
 function projectParameterCatalogItems(
-  entries: ParameterCatalogEntry[],
+  entries: readonly ParameterCatalogEntry[],
   sourceKey: string,
   contextValues: Record<string, string>,
 ): FieldOptionItem[] {

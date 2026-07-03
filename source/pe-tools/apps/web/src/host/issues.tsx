@@ -1,9 +1,9 @@
 import { AlertTriangle } from "lucide-react";
 import type { ReactNode } from "react";
 
-import type { HostErrorKind } from "@pe/host-generated/contracts";
+import type { HostErrorKind } from "@pe/host-contracts/contracts";
+import { HostCallError } from "@pe/host-contracts/operation-types";
 import { cn } from "#/lib/utils";
-import { HostCallError } from "./client";
 
 export type HostIssueKind =
   | "disconnected"
@@ -14,25 +14,24 @@ export type HostIssueKind =
   | "host_failure"
   | "unknown";
 
-export interface HostIssue {
+export type HostIssue = {
   kind: HostIssueKind;
   title: string;
   message: string;
   status?: number;
-  requestId?: string;
   operationKey?: string;
   activeOperation?: string;
   retryHint?: string;
   bridgePrecondition?: string;
   fieldIssues?: HostIssueFieldIssue[];
   raw?: unknown;
-}
+};
 
-export interface HostIssueFieldIssue {
+export type HostIssueFieldIssue = {
   path: string;
   message: string;
   code?: string;
-}
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -119,7 +118,6 @@ export function toHostIssue(error: unknown, fallbackTitle = "Host failure"): Hos
       title: readString(detail, "title") ?? defaultTitle(kind),
       message: readString(detail, "detail") ?? error.message,
       status: error.status || readNumber(detail, "status"),
-      requestId: readString(detail, "requestId"),
       operationKey: readString(detail, "operationKey"),
       activeOperation: readString(detail, "activeOperation"),
       retryHint: readString(detail, "retryHint"),
@@ -184,7 +182,6 @@ export function HostIssuePanel({
       </div>
       <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] opacity-80">
         {issue.status ? <HostIssueMeta>status {issue.status}</HostIssueMeta> : null}
-        {issue.requestId ? <HostIssueMeta>request {issue.requestId}</HostIssueMeta> : null}
         {issue.operationKey ? <HostIssueMeta>{issue.operationKey}</HostIssueMeta> : null}
         {issue.activeOperation ? (
           <HostIssueMeta>active {issue.activeOperation}</HostIssueMeta>

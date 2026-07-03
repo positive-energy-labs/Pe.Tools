@@ -1,4 +1,7 @@
-import type { SettingsValidationIssue, SettingsValidationResult } from "#/host/settings-contracts";
+import type {
+  SettingsValidationIssue,
+  SettingsValidationResult,
+} from "@pe/host-contracts/operation-types";
 import type { SchemaDocument } from "@pe/schema-core";
 
 export interface FieldChangeSummary {
