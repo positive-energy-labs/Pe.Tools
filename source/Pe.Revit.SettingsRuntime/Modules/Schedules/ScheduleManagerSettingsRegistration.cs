@@ -1,6 +1,4 @@
-using Pe.Revit.SettingsRuntime.Validation;
 using Pe.Shared.RevitData.Schedules;
-using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Documents;
 using Pe.Shared.StorageRuntime.Modules;
 
@@ -24,15 +22,13 @@ public static class ScheduleManagerSettingsRegistration {
     public static ISettingsRootBinding<ScheduleProfile> Profiles { get; } =
         new SettingsRootBinding<ScheduleProfile>(
             Module,
-            RootKeys.Schedules,
-            CreateProfileValidator
+            RootKeys.Schedules
         );
 
     public static ISettingsRootBinding<BatchScheduleSettings> Batch { get; } =
         new SettingsRootBinding<BatchScheduleSettings>(
             Module,
-            RootKeys.Batch,
-            CreateBatchValidator
+            RootKeys.Batch
         );
 
     public static IReadOnlyList<StructuralSettingsModuleDescriptor> StructuralModules { get; } = [Module];
@@ -43,13 +39,4 @@ public static class ScheduleManagerSettingsRegistration {
         public const string Batch = "batch";
     }
 
-    private static ISettingsDocumentValidator? CreateProfileValidator(SettingsRuntimeMode runtimeMode) =>
-        runtimeMode == SettingsRuntimeMode.LiveDocument
-            ? new SchemaBackedSettingsDocumentValidator(typeof(ScheduleProfile), runtimeMode)
-            : null;
-
-    private static ISettingsDocumentValidator? CreateBatchValidator(SettingsRuntimeMode runtimeMode) =>
-        runtimeMode == SettingsRuntimeMode.LiveDocument
-            ? new SchemaBackedSettingsDocumentValidator(typeof(BatchScheduleSettings), runtimeMode)
-            : null;
 }

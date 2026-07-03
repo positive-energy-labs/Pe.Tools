@@ -10,8 +10,6 @@ public interface IStorageModule<TSettings> where TSettings : class {
     string DefaultRootKey { get; }
     Type SettingsType { get; }
     SettingsStorageModuleOptions StorageOptions { get; }
-
-    SettingsStorageModuleRuntimeDefinition CreateStorageDefinition(SettingsRuntimeMode runtimeMode);
 }
 
 public sealed class ModuleStorage(string moduleKey, string basePath) {
@@ -55,8 +53,7 @@ public sealed class ModuleStorage<TSettings> where TSettings : class {
         string defaultRootKey,
         SettingsStorageModuleOptions storageOptions,
         SettingsRuntimeMode runtimeMode = SettingsRuntimeMode.HostOnly,
-        string? basePath = null,
-        IReadOnlyDictionary<string, SettingsStorageModuleRuntimeDefinition>? moduleDefinitionsByModuleKey = null
+        string? basePath = null
     ) {
         var resolvedBasePath = string.IsNullOrWhiteSpace(basePath)
             ? StorageClient.BasePath
@@ -67,8 +64,7 @@ public sealed class ModuleStorage<TSettings> where TSettings : class {
             defaultRootKey,
             storageOptions,
             runtimeMode,
-            resolvedBasePath,
-            moduleDefinitionsByModuleKey
+            resolvedBasePath
         );
     }
 

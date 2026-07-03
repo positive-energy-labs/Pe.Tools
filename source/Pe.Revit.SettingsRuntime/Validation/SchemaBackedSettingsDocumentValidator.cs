@@ -15,7 +15,7 @@ namespace Pe.Revit.SettingsRuntime.Validation;
 
 public sealed class SchemaBackedSettingsDocumentValidator(
     Type settingsType,
-    SettingsRuntimeMode runtimeMode = SettingsRuntimeMode.HostOnly) : ISettingsDocumentValidator {
+    SettingsRuntimeMode runtimeMode = SettingsRuntimeMode.HostOnly) {
     private readonly Lazy<JsonSchema> _schema = new(() => CreateSchema(
         settingsType,
         runtimeMode
@@ -39,14 +39,14 @@ public sealed class SchemaBackedSettingsDocumentValidator(
                 issues
             );
         } catch (JsonReaderException ex) {
-            return SettingsValidationResults.Error(
+            return ValidationError(
                 "$",
                 "JsonParseError",
                 ex.Message,
                 "Fix the JSON syntax and retry."
             );
         } catch (Exception ex) {
-            return SettingsValidationResults.Error(
+            return ValidationError(
                 "$",
                 "SchemaValidationFailure",
                 ex.Message,
@@ -54,6 +54,13 @@ public sealed class SchemaBackedSettingsDocumentValidator(
             );
         }
     }
+
+    private static SettingsValidationResult ValidationError(
+        string path,
+        string code,
+        string message,
+        string? suggestion = null
+    ) => new(false, [new SettingsValidationIssue(path, code, "error", message, suggestion)]);
 
     private static JsonSchema CreateSchema(
         Type settingsType,

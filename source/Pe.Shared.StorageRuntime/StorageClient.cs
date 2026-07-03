@@ -4,18 +4,20 @@ using Pe.Shared.StorageRuntime.Modules;
 namespace Pe.Shared.StorageRuntime;
 
 public sealed class StorageClient {
-    private readonly IStorageSource _source;
+    private readonly string _basePath;
 
-    public StorageClient() : this(new LocalDiskStorageSource(BasePath)) { }
+    public StorageClient() : this(BasePath) { }
 
-    internal StorageClient(IStorageSource source) =>
-        this._source = source ?? throw new ArgumentNullException(nameof(source));
+    private StorageClient(string basePath) =>
+        this._basePath = string.IsNullOrWhiteSpace(basePath)
+            ? throw new ArgumentException("Base path is required.", nameof(basePath))
+            : Path.GetFullPath(basePath);
 
     public static StorageClient Default { get; } = new();
 
     public static string BasePath => SettingsStorageLocations.GetDefaultBasePath();
 
-    public ModuleStorage Module(string moduleKey) => this._source.CreateModule(moduleKey);
+    public ModuleStorage Module(string moduleKey) => new(moduleKey, this._basePath);
 
     public ModuleStorage<TSettings> Root<TSettings>(ISettingsRootBinding<TSettings> binding) where TSettings : class {
         if (binding == null)
@@ -26,15 +28,7 @@ public sealed class StorageClient {
             binding.RootKey,
             binding.Module.StorageOptions,
             SettingsRuntimeMode.LiveDocument,
-            BasePath,
-            new Dictionary<string, SettingsStorageModuleRuntimeDefinition>(StringComparer.OrdinalIgnoreCase) {
-                [binding.Module.ModuleKey] = SettingsStorageModuleRuntimeDefinition.CreateSingleRoot(
-                    binding.RootKey,
-                    binding.Module.StorageOptions,
-                    binding.CreateValidator(SettingsRuntimeMode.LiveDocument),
-                    SettingsRootBootstrapDocument.Create<TSettings>()
-                )
-            }
+            this._basePath
         );
     }
 
@@ -47,27 +41,9 @@ public sealed class StorageClient {
             module.DefaultRootKey,
             module.StorageOptions,
             SettingsRuntimeMode.LiveDocument,
-            BasePath,
-            new Dictionary<string, SettingsStorageModuleRuntimeDefinition>(StringComparer.OrdinalIgnoreCase) {
-                [module.ModuleKey] = module.CreateStorageDefinition(SettingsRuntimeMode.LiveDocument)
-            }
+            this._basePath
         );
     }
 
-    public GlobalStorage Global() => this._source.CreateGlobal();
-}
-
-internal interface IStorageSource {
-    ModuleStorage CreateModule(string moduleKey);
-    GlobalStorage CreateGlobal();
-}
-
-internal sealed class LocalDiskStorageSource(string basePath) : IStorageSource {
-    private readonly string _basePath = string.IsNullOrWhiteSpace(basePath)
-        ? throw new ArgumentException("Base path is required.", nameof(basePath))
-        : Path.GetFullPath(basePath);
-
-    public ModuleStorage CreateModule(string moduleKey) => new(moduleKey, this._basePath);
-
-    public GlobalStorage CreateGlobal() => new(this._basePath);
+    public GlobalStorage Global() => new(this._basePath);
 }
