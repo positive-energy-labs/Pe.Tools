@@ -1,4 +1,8 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Pe.Revit.Sdk">
+
+    <PropertyGroup>
+        <PeProjectKind>Tool</PeProjectKind>
+    </PropertyGroup>
     <PropertyGroup>
         <UseWPF>true</UseWPF>
         <Nullable>enable</Nullable>

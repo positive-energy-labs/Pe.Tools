@@ -1,8 +1,14 @@
-<Project Sdk="Nice3point.Revit.Sdk/6.2.1">
+<Project Sdk="Pe.Revit.Sdk">
+
+    <PropertyGroup>
+        <PeProjectKind>RevitAddin</PeProjectKind>
+    </PropertyGroup>
     <PropertyGroup>
         <UseWPF>true</UseWPF>
-        <DeployAddin Condition="'$(DeployAddin)' == ''">true</DeployAddin>
-        <LaunchRevit Condition="'$(LaunchRevit)' == ''">true</LaunchRevit>
+        <!-- Dev-lane default only: the SDK's lane guard makes DeployAddin=true a hard error in
+             isolated (terminal/agent) builds, so the default must be lane-conditioned. -->
+        <DeployAddin Condition="'$(DeployAddin)' == '' AND '$(PeIsolatedBuild)' != 'true'">true</DeployAddin>
+        <LaunchRevit Condition="'$(LaunchRevit)' == '' AND '$(PeIsolatedBuild)' != 'true'">true</LaunchRevit>
         <DisableFastUpToDateCheck>true</DisableFastUpToDateCheck>
         <EnableRevitTestConfigurations>true</EnableRevitTestConfigurations>
         <ProduceReferenceAssembly>true</ProduceReferenceAssembly>
@@ -24,8 +30,6 @@
         <PackageReference Include="JetBrains.Annotations" Version="2025.2.4"/>
         <PackageReference Include="Nice3point.Revit.Toolkit" Version="$(RevitVersion).*"/>
         <PackageReference Include="Nice3point.Revit.Extensions" Version="$(RevitVersion).*"/>
-        <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="$(RevitVersion).*"/>
-        <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="$(RevitVersion).*"/>
         <PackageReference Include="RevitExplorer.API" Version="2.6.0"/>
         <PackageReference Include="ricaun.Revit.UI.Tasks" Version="1.*"/>
         <!-- Build -->

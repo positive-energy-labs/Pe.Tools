@@ -28,22 +28,19 @@
         <File Path="Readme.md" />
     </Folder>
     <Folder Name="/source/">
-        <Project Path="source/Pe.Revit.DocumentData/Pe.Revit.DocumentData.csproj">
-            <BuildType Solution="Debug.R23.Tests|*" Project="Debug.R23" />
-            <BuildType Solution="Debug.R24.Tests|*" Project="Debug.R23" />
-            <BuildType Solution="Debug.R25.Tests|*" Project="Debug.R23" />
-            <BuildType Solution="Debug.R26.Tests|*" Project="Debug.R23" />
-            <BuildType Solution="Release.R23.Tests|*" Project="Debug.R23" />
-            <BuildType Solution="Release.R24.Tests|*" Project="Debug.R23" />
-            <BuildType Solution="Release.R25.Tests|*" Project="Debug.R23" />
-            <BuildType Solution="Release.R26.Tests|*" Project="Debug.R23" />
-        </Project>
+        <!-- Legacy .Tests->Debug.R23 remap removed with the SDK migration: the SDK parses the
+             year straight from Debug.R##.Tests, so the remap only produced net48/net8 conflicts. -->
+        <Project Path="source/Pe.Revit.DocumentData/Pe.Revit.DocumentData.csproj" />
     </Folder>
     <Project Path="source/Pe.App/Pe.App.csproj" />
     <Project Path="source/Pe.Aps/Pe.Aps.csproj" />
     <Project Path="source/Pe.Dev.Cli/Pe.Dev.Cli.csproj" />
     <Project Path="source/Pe.Dev.RevitAutomation/Pe.Dev.RevitAutomation.csproj" />
-    <Project Path="source/Pe.Dev.RevitAutomation.Worker/Pe.Dev.RevitAutomation.Worker.csproj" />
+    <Project Path="source/Pe.Dev.RevitAutomation.Worker/Pe.Dev.RevitAutomation.Worker.csproj">
+        <!-- Design Automation supports 2024+ only (no Forge DA package for R23); build the floor year instead -->
+        <BuildType Solution="Debug.R23|*" Project="Debug.R24" />
+        <BuildType Solution="Release.R23|*" Project="Release.R24" />
+    </Project>
     <!-- Pe.Host retired: replaced by the Effectified TS host at source/pe-tools/apps/host (@pe/host). -->
     <Project Path="source/Pe.Revit/Pe.Revit.csproj" />
     <Project Path="source/Pe.Revit.FamilyFoundry/Pe.Revit.FamilyFoundry.csproj" />
