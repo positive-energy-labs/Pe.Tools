@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { hostname } from "node:os";
 import path from "node:path";
@@ -10,7 +11,6 @@ import type {
 import { defaultGateways, type MastraModelConfig } from "@mastra/core/llm";
 import type { RequestContext } from "@mastra/core/request-context";
 import { LocalFilesystem, LocalSandbox, Workspace } from "@mastra/core/workspace";
-import { PeHostClient } from "@pe/host-client";
 import {
   createMastraCodeAuthStorage,
   createPeaProductStateStorageProfile,
@@ -28,6 +28,9 @@ import {
   resolvePeaProductHomePath,
   resolvePeaSkillPaths,
 } from "../pea/index.ts";
+import { HostRpcCaller } from "../shared/host-rpc-caller.js";
+import { resolveHostBaseUrl, resolveWorkspaceKey } from "../shared/host-config.ts";
+import { HostCallError } from "@pe/host-contracts/operation-types";
 
 const resultPrefix = "__PEA_TALK_WORKER_RESULT__";
 const peaConfigDir = ".pea";
@@ -155,8 +158,8 @@ function withTimeout<T>(task: Promise<T> | T, timeoutMs: number): Promise<T> {
 }
 
 async function createPeaWorkerRuntime(): Promise<PeaWorkerRuntime> {
-  const hostBaseUrl = PeHostClient.resolveHostBaseUrl();
-  const workspaceKey = PeHostClient.resolveWorkspaceKey();
+  const hostBaseUrl = resolveHostBaseUrl();
+  const workspaceKey = resolveWorkspaceKey();
   configurePeaProductToolContext({ hostBaseUrl, workspaceKey });
 
   const cwd = await resolvePeaWorkerCwd(hostBaseUrl, workspaceKey);
@@ -230,9 +233,9 @@ const peaWorkerInstructions = `You are Positive Energy Agent, Pea: the deployed 
 Use Pea product tools to inspect host/Revit state, run approved scripts, and produce operator-facing answers. Stay inside the deployed product posture: do not inspect repo source, discuss Peco implementation, or present build/Rider/RRD internals as user-facing facts. Prefer small observable steps, say what you verified, and be explicit when live Revit evidence is unavailable.`;
 
 async function resolvePeaWorkerCwd(hostBaseUrl: string, workspaceKey: string): Promise<string> {
-  const client = new PeHostClient({ baseUrl: hostBaseUrl });
+  const client = new HostRpcCaller({ hostBaseUrl: hostBaseUrl });
   try {
-    await client.ensurePeHostRunning(hostBaseUrl);
+    await ensureTsHostRunning(client, hostBaseUrl);
     const bootstrap = await client.call("scripting.workspace.bootstrap", {
       workspaceKey,
       createSampleScript: true,
@@ -241,9 +244,49 @@ async function resolvePeaWorkerCwd(hostBaseUrl: string, workspaceKey: string): P
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     throw new Error(
-      `Unable to resolve Pe.Tools product home through Pe.Host at ${hostBaseUrl}: ${detail}`,
+      `Unable to resolve Pe.Tools product home through the TS host at ${hostBaseUrl}: ${detail}`,
     );
   }
+}
+
+async function ensureTsHostRunning(client: HostRpcCaller, hostBaseUrl: string): Promise<void> {
+  try {
+    await client.call("host.status");
+    return;
+  } catch (error) {
+    if (error instanceof HostCallError) return;
+  }
+
+  const cwd = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
+  const override = process.env.PE_TOOLS_HOST_LAUNCH_COMMAND?.trim();
+  const command = override ?? "vp";
+  const args = override ? [] : ["run", "@pe/host#start"];
+  const child = spawn(command, args, {
+    cwd,
+    detached: true,
+    shell: true,
+    stdio: "ignore",
+    windowsHide: true,
+  });
+  child.unref();
+
+  const deadline = Date.now() + 12_000;
+  let lastError: unknown;
+  while (Date.now() < deadline) {
+    await delay(250);
+    try {
+      await client.call("host.status");
+      return;
+    } catch (error) {
+      lastError = error;
+      if (error instanceof HostCallError) return;
+    }
+  }
+
+  const detail = lastError instanceof Error ? lastError.message : "unknown error";
+  throw new Error(
+    `Started @pe/host via \`${command} ${args.join(" ")}\`, but it did not become reachable at ${hostBaseUrl} within 12 seconds. Last probe error: ${detail}`,
+  );
 }
 
 function resolveCurrentModel(

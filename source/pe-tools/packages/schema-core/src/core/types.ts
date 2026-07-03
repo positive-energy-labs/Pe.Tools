@@ -1,9 +1,3 @@
-import type {
-  SchemaUiMetadata,
-  SettingsOptionsDependency as FieldOptionsDependencySchema,
-  SettingsValueDomainDescriptor as FieldOptionsSourceSchema,
-} from "@pe/host-generated/zod";
-
 export interface FieldHint {
   label?: string;
   order?: number;
@@ -11,8 +5,36 @@ export interface FieldHint {
   placeholder?: string;
 }
 
-export type RenderFieldOptionDependency = FieldOptionsDependencySchema;
-export type RenderFieldOptionSource = FieldOptionsSourceSchema;
+export interface RenderUiMetadata {
+  renderer?: string | null;
+  layout?: {
+    section?: string | null;
+    advanced?: boolean;
+  } | null;
+  behavior?: {
+    fixedColumns?: string[] | null;
+    dynamicColumnsFromAdditionalProperties?: boolean;
+    missingValue?: string | null;
+    dynamicColumnOrder?: {
+      source?: string | null;
+      values?: string[] | null;
+    } | null;
+  } | null;
+}
+
+export interface RenderFieldOptionDependency {
+  key: string;
+  scope: string;
+}
+
+export interface RenderFieldOptionSource {
+  key: string;
+  resolver: string;
+  dataset?: string | null;
+  mode: string;
+  allowsCustomValue: boolean;
+  dependsOn: RenderFieldOptionDependency[];
+}
 export type NormalizedFieldOptionMode = "suggestion" | "constraint";
 export type NormalizedFieldOptionResolver = "remote" | "dataset";
 export type NormalizedFieldOptionDataset = string;
@@ -92,7 +114,7 @@ export interface RenderSchemaNode {
   $defs?: Record<string, RenderSchemaNode>;
   additionalProperties?: boolean | RenderSchemaNode;
   "x-display-name"?: string;
-  "x-ui"?: SchemaUiMetadata;
+  "x-ui"?: RenderUiMetadata;
   "x-options"?: RenderFieldOptionSource;
   [key: `x-${string}`]: unknown;
 }

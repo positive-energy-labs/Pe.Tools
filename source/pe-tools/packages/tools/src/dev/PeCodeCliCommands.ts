@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { define } from "gunshi";
-import { PeHostClient } from "@pe/host-client";
+import { HostRpcCaller } from "../shared/host-rpc-caller.js";
 import {
   collectRuntimeLoopContext,
   defaultLiveLoopTimeoutSeconds,
@@ -9,6 +9,8 @@ import {
   syncLiveRrd,
   type LiveRrdRestartReadinessLevel,
 } from "../shared/live-loop.ts";
+import { resolveHostBaseUrl, resolveWorkspaceKey } from "../shared/host-config.ts";
+import { asOptionalString, firstNonBlank } from "../shared/cli-values.ts";
 import { ScriptingTools } from "../shared/scripting.ts";
 import type { ScriptExecuteInput } from "../shared/scripting.ts";
 import { talkToPeaHarness } from "./talk-to-pea.ts";
@@ -51,7 +53,7 @@ export class PeCodeCliCommands {
   scriptCommand() {
     return define({
       name: "script",
-      description: "Run peco scripting tools through Pe.Host with a live RRD sync preflight.",
+      description: "Run peco scripting tools through the TS host with a live RRD sync preflight.",
       subCommands: {
         execute: this.scriptExecuteCommand(),
       },
@@ -226,7 +228,7 @@ export class PeCodeCliCommands {
     return define({
       name: "execute",
       description:
-        "Sync the live RRD loop, then execute a C# Revit script through Pe.Host from inline content, stdin, a file, or a workspace source path.",
+        "Sync the live RRD loop, then execute a C# Revit script through the TS host from inline content, stdin, a file, or a workspace source path.",
       args: {
         host: commonArgs.host,
         workspace: commonArgs.workspace,
@@ -269,8 +271,8 @@ export class PeCodeCliCommands {
         const timeoutSeconds = ctx.values.timeoutSeconds ?? defaultLiveLoopTimeoutSeconds;
         const sync = await syncLiveRrd({ timeoutSeconds });
         const script = await new ScriptingTools(
-          new PeHostClient({
-            baseUrl: this.resolveHostBaseUrl(ctx.values.host),
+          new HostRpcCaller({
+            hostBaseUrl: this.resolveHostBaseUrl(ctx.values.host),
             timeoutMs: Math.max(timeoutSeconds, 1) * 1000,
           }),
           { workspaceKey: this.resolveWorkspaceKey(ctx.values.workspace) },
@@ -294,11 +296,11 @@ export class PeCodeCliCommands {
   }
 
   private resolveHostBaseUrl(value?: unknown): string {
-    return PeHostClient.resolveHostBaseUrl(asOptionalString(value) ?? this.options.hostBaseUrl);
+    return resolveHostBaseUrl(asOptionalString(value) ?? this.options.hostBaseUrl);
   }
 
   private resolveWorkspaceKey(value?: unknown): string {
-    return PeHostClient.resolveWorkspaceKey(asOptionalString(value) ?? this.options.workspaceKey);
+    return resolveWorkspaceKey(asOptionalString(value) ?? this.options.workspaceKey);
   }
 }
 
@@ -346,14 +348,14 @@ const pecoMuxArgs = {
 const commonArgs = {
   host: {
     type: "string",
-    description: "Pe.Host base URL.",
-    default: PeHostClient.resolveHostBaseUrl(),
+    description: "TS host base URL.",
+    default: resolveHostBaseUrl(),
   },
   workspace: {
     type: "string",
     short: "w",
     description: "Pe scripting workspace or Pod name.",
-    default: PeHostClient.resolveWorkspaceKey(),
+    default: resolveWorkspaceKey(),
   },
   timeoutSeconds: {
     type: "number",
@@ -456,17 +458,6 @@ function parseTalkToPeaFrame(value: unknown): "operator" | "feedback" | "collabo
 
 function writeObject(value: unknown) {
   console.log(JSON.stringify(value, null, 2));
-}
-
-function firstNonBlank(...values: unknown[]): string | undefined {
-  return values
-    .map(asOptionalString)
-    .find((value) => value != null && value.trim().length > 0)
-    ?.trim();
-}
-
-function asOptionalString(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined;
 }
 
 function asOptionalNumber(value: unknown): number | undefined {

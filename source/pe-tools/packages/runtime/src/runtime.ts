@@ -1,4 +1,8 @@
-import type { AgentController, AgentControllerConfig, Session } from "@mastra/core/agent-controller";
+import type {
+  AgentController,
+  AgentControllerConfig,
+  Session,
+} from "@mastra/core/agent-controller";
 import type { Mastra } from "@mastra/core/mastra";
 import type { RuntimeAuthProfile } from "./auth/types.ts";
 import type { RuntimeProtocol } from "./events.ts";

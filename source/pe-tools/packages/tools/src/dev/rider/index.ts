@@ -7,7 +7,7 @@ import {
   runRiderBridgeSyncHelper,
 } from "./bridge.js";
 import { collectHostContext } from "../../shared/host-context.js";
-import { PeHostClient } from "@pe/host-client";
+import { HostRpcCaller } from "../../shared/host-rpc-caller.js";
 
 export { defaultRiderBridgeBaseUrl } from "./bridge.js";
 
@@ -184,9 +184,9 @@ export async function runRiderBridgeRestartRrd(request: {
           .join("\n"),
     guidance: ok
       ? resolvedOpenDocument.path == null
-        ? "RRD restart action invoked and Pe.Host reports a connected Revit bridge/session. Run an attached script/test/log proof next."
+        ? "RRD restart action invoked and the TS host reports a connected Revit bridge/session. Run an attached script/test/log proof next."
         : "RRD restart action invoked, Revit bridge connected, and requested/default document was opened. Run an attached script/test/log proof next."
-      : "RiderBridge restart was requested, but Pe.Host bridge readiness or document-open proof was not completed before timeout.",
+      : "RiderBridge restart was requested, but TS host bridge readiness or document-open proof was not completed before timeout.",
   };
 }
 
@@ -327,7 +327,7 @@ async function findRecentDocument(selector: OpenDocumentSelector): Promise<{
   reason: string;
   matches: unknown[];
 }> {
-  const result = await new PeHostClient().general.callOperation(
+  const result = await new HostRpcCaller().callOperation(
     "revit.catalog.recent-documents",
     {
       revitYear: selector.revitYear ?? "2025",
@@ -406,7 +406,7 @@ async function openRevitDocument(request: { path: string; timeoutSeconds: number
   }
 
   try {
-    const result = await new PeHostClient().general.callOperation(
+    const result = await new HostRpcCaller().callOperation(
       "revit.apply.document.open",
       { path: request.path },
       "compact",
@@ -470,7 +470,7 @@ async function pollHostBridgeReadiness(options: {
       return {
         ok: true,
         attempts,
-        reason: `Pe.Host reports RRD ready at ${options.readinessLevel}.`,
+        reason: `The TS host reports RRD ready at ${options.readinessLevel}.`,
         checks,
         previousProcessId: options.previousProcessId,
         previousSessionId: options.previousSessionId,

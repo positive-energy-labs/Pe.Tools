@@ -1,10 +1,6 @@
 import { Readable, Writable } from "node:stream";
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
-import type {
-  AgentController,
-  AgentControllerMode,
-  Session,
-} from "@mastra/core/agent-controller";
+import type { AgentController, AgentControllerMode, Session } from "@mastra/core/agent-controller";
 import { MastraCodeAcpAgent } from "mastracode/acp";
 
 export interface RunRuntimeAcpAgentOptions {

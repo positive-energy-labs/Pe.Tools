@@ -36,7 +36,6 @@
   },
   "dependencies": {
     "@mastra/core": "1.48.0-alpha.4",
-    "@pe/host-client": "workspace:*",
     "@pe/runtime": "workspace:*",
     "@pe/tools": "workspace:*",
     "gunshi": "^0.29.5",

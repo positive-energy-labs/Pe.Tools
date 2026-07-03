@@ -1,0 +1,23 @@
+diff --git a/dist/define-config-DJUehepE.js b/dist/define-config-DJUehepE.js
+index 1b39690..dbe1122 100644
+--- a/dist/define-config-DJUehepE.js
++++ b/dist/define-config-DJUehepE.js
+@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
+ import path from "node:path";
+ import { readFileSync } from "node:fs";
+ import { fileURLToPath } from "node:url";
+-import { defineConfig, defineProject } from "vite-plus";
++import { defineConfig, defineProject } from "vitest/config";
+ //#region ../../node_modules/.pnpm/tsdown@0.22.3_@arethetypeswrong+core@0.18.2_@tsdown+css@0.22.3_@tsdown+exe@0.22.3_@type_701dbb346589e2d965113664da5ac600/node_modules/tsdown/esm-shims.js
+ const getFilename = () => fileURLToPath(import.meta.url);
+ const getDirname = () => path.dirname(getFilename());
+diff --git a/dist/index.js b/dist/index.js
+index b2d9399..626c244 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1,4 +1,4 @@
+ import { a as defineConfig, c as lazyPlugins, o as defineProject } from "./define-config-DJUehepE.js";
+-import { configDefaults, coverageConfigDefaults, defaultBrowserPort, defaultExclude, defaultInclude } from "vite-plus";
++import { configDefaults, coverageConfigDefaults, defaultBrowserPort, defaultExclude, defaultInclude } from "vitest/config";
+ export * from "@voidzero-dev/vite-plus-core";
+ export { configDefaults, coverageConfigDefaults, defaultBrowserPort, defaultExclude, defaultInclude, defineConfig, defineProject, lazyPlugins };

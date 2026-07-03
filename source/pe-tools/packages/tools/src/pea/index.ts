@@ -5,12 +5,11 @@ import {
   createRuntimeToolProfile,
   readRuntimeAccessLevelFromToolContext,
 } from "@pe/runtime";
-import { HostLogTarget } from "@pe/host-client";
-import type { HostOpResponse } from "@pe/host-client";
-import { PeHostClient } from "@pe/host-client";
+import { HostLogTarget, type HostOpResponse } from "@pe/host-contracts/operation-types";
+import { HostRpcCaller } from "../shared/host-rpc-caller.js";
 
 type ActiveDocumentSummary = NonNullable<
-  HostOpResponse<"settings.session-summary">["activeDocument"]
+  HostOpResponse<"bridge.sessions.summary">["activeDocument"]
 >;
 import {
   ScriptingTools,
@@ -20,6 +19,7 @@ import {
   scriptPodImportInputSchema,
 } from "../shared/scripting.ts";
 import { requestAccess } from "../shared/request-access.ts";
+import { resolveHostBaseUrl, resolveWorkspaceKey } from "../shared/host-config.ts";
 import { peaProductToolCatalog } from "../tool-metadata.ts";
 import { PeaCliCommands, type PeaCliCommandOptions } from "./PeaCliCommands.ts";
 export { peaProductToolCatalog } from "../tool-metadata.ts";
@@ -37,21 +37,22 @@ export {
 
 export const defaultPeaAgentModelId = "openai/gpt-5.4";
 
-interface PeaProductToolContext {
+type PeaProductToolContext = {
   hostBaseUrl?: string;
   workspaceKey?: string;
-}
+};
 
 let peaProductToolContext: PeaProductToolContext = {};
 
 export function configurePeaProductToolContext(context: PeaProductToolContext): void {
-  peaProductToolContext = {
-    hostBaseUrl: firstNonBlank(context.hostBaseUrl),
-    workspaceKey: firstNonBlank(context.workspaceKey),
-  };
+  peaProductToolContext = context;
 }
 
 const toolVerbositySchema = z.enum(["compact", "hints", "full"]);
+const bridgeSessionIdSchema = z
+  .string()
+  .optional()
+  .describe("Optional TS host bridge session id to target a specific connected Revit process.");
 
 const hostOperationSearchInputSchema = z.object({
   query: z
@@ -61,18 +62,14 @@ const hostOperationSearchInputSchema = z.object({
   domain: z
     .string()
     .optional()
-    .describe(
-      "Optional exact top-level domain filter, such as revit, host, settings, script, or aps.",
-    ),
-  executionMode: z.enum(["Local", "Bridge"]).optional(),
+    .describe("Optional exact top-level domain filter, such as revit, settings, or scripting."),
   intent: z.enum(["Read", "Mutate"]).optional(),
-  requiresBridge: z.boolean().optional(),
   requiresActiveDocument: z.boolean().optional(),
   limit: z.number().min(1).max(50).default(8),
   verbosity: toolVerbositySchema
     .default("compact")
     .describe(
-      "Output size for projection=matches. Use compact by default; use hints for examples/expansion hints; use full only when you need route and full request/response shapes.",
+      "Output size for projection=matches. Use compact by default; use hints for examples/expansion hints; use full only when you need metadata and full request/response shapes.",
     ),
   projection: z
     .enum(["matches", "capability-map"])
@@ -107,14 +104,15 @@ const scriptWorkspaceBootstrapDataSchema = z.object({
 export const peStatus = createTool({
   id: "pe_status",
   description:
-    "Read fresh Pe.Host status: host, bridge/session, active document, workspace, and log-location facts. Use compact for orientation and full for the raw probe/session DTOs.",
+    "Read fresh host status: host, bridge/session, active document, workspace, and log-location facts. Use compact for orientation and full for the raw probe/session DTOs.",
   inputSchema: z.object({
     verbosity: z.enum(["compact", "full"]).default("compact"),
+    bridgeSessionId: bridgeSessionIdSchema,
   }),
   execute: async (input) => {
-    const hostClient = createCurrentHostClient();
-    const probe = await hostClient.call("settings.host-probe");
-    const sessionSummary = await hostClient.call("settings.session-summary");
+    const hostRpcCaller = createCurrentHostRpcCaller(input.bridgeSessionId);
+    const probe = await hostRpcCaller.call("host.status");
+    const sessionSummary = await hostRpcCaller.call("bridge.sessions.summary");
     if (input.verbosity === "full") return { probe, sessionSummary };
 
     return {
@@ -146,13 +144,13 @@ export const peStatus = createTool({
 export const peLogs = createTool({
   id: "pe_logs",
   description:
-    "Read bounded Pe.Host and/or Revit log tails after status or execution indicates a host/Revit failure.",
+    "Read bounded host and/or Revit log tails after status or execution indicates a host/Revit failure.",
   inputSchema: z.object({
     target: z.enum(["host", "revit", "all"]).default("all"),
     tailLineCount: z.number().min(1).max(1000).default(200),
   }),
   execute: async (input) =>
-    createCurrentHostClient().call("host.logs", {
+    createCurrentHostRpcCaller().call("logs.tail", {
       target: parseHostLogTarget(input.target ?? "all"),
       tailLineCount: input.tailLineCount ?? 200,
     }),
@@ -161,20 +159,20 @@ export const peLogs = createTool({
 export const hostOperationSearch = createTool({
   id: "host_operation_search",
   description:
-    "Search generated public Pe.Host operations by capability and filters. Use projection=capability-map for broad orientation, compact matches for discovery, hints for examples/call guidance, and full for routes plus request/response shapes. Results are compact: operation keys carry taxonomy; generic bridge, active-document, validation, cost, and mutation safety are summarized rather than repeated as preflight prose.",
+    "Search generated user-facing host operations by capability and filters. Use projection=capability-map for broad orientation, compact matches for discovery, hints for examples/call guidance, and full for metadata plus request/response shapes. Direct host admin calls such as status, sessions, and logs use dedicated tools instead of this search surface.",
   inputSchema: hostOperationSearchInputSchema,
-  execute: async (input) => new PeHostClient().general.searchOperations(input),
+  execute: async (input) => new HostRpcCaller().searchOperations(input),
 });
 
 export const hostOperationCall = createTool({
   id: "host_operation_call",
   description:
-    "Call a generated public Pe.Host operation by key with a JSON request object. Omit request for NoRequest operations. Compact successes return the response plus request timing; hints/full add metadata. Bridge-backed operations are serialized when metadata assigns a single-flight group; Revit bridge calls may require an active document, strict request validation rejects unknown/nonsensical fields, expensive/mutating calls should stay bounded, and failures include targeted next steps.",
+    "Call a generated user-facing host operation by key with a JSON request object. Omit request for NoRequest operations. Compact successes return the response plus request timing; hints/full add metadata. Revit bridge calls may require an active document, requests/responses are validated by generated schemas, expensive/mutating calls should stay bounded, and failures include targeted next steps.",
   inputSchema: z.object({
     key: z
       .string()
       .describe(
-        "Operation key returned by host_operation_search, such as revit.context.summary, revit.resolve.references, revit.catalog.loaded-families, or settings.document.validate.",
+        "Operation key returned by host_operation_search, such as revit.context.summary, revit.resolve.references, or revit.catalog.loaded-families.",
       ),
     request: z
       .unknown()
@@ -193,30 +191,37 @@ export const hostOperationCall = createTool({
       .max(900)
       .default(300)
       .describe("Client-side timeout for this host call, in seconds."),
+    bridgeSessionId: bridgeSessionIdSchema,
   }),
   execute: async (input, context) => {
-    const hostClient = new PeHostClient();
-    const operation = hostClient.general.getOperation(input.key);
+    const hostRpcCaller = createCurrentHostRpcCaller(
+      input.bridgeSessionId,
+      input.timeoutSeconds * 1000,
+    );
+    const operation = hostRpcCaller.getOperation(input.key);
     assertHostOperationCallAccess(operation, input.key, context);
-    return hostClient.general.callOperation(input.key, input.request, input.verbosity);
+    return hostRpcCaller.callOperation(input.key, input.request, input.verbosity);
   },
 });
 
 export const scriptExecute = createTool({
   id: "script_execute",
   description:
-    "Execute a C# Revit script through the Pe.Host scripting contract. For InlineSnippet, prefer Execute-body statements like WriteLine(...); a full PeScriptContainer class with public override void Execute() is also allowed. Use workspace .cs files for durable work. Loose workspaces compile only the requested file; pod.json workspaces compile all src and require a declared entrypoint.",
+    "Execute a C# Revit script through the host scripting contract. For InlineSnippet, prefer Execute-body statements like WriteLine(...); a full PeScriptContainer class with public override void Execute() is also allowed. Use workspace .cs files for durable work. Loose workspaces compile only the requested file; pod.json workspaces compile all src and require a declared entrypoint.",
   inputSchema: scriptExecuteInputSchema,
-  execute: async (input) => createCurrentScriptingTools().execute(input),
+  execute: async (input) => createCurrentScriptingTools(input.bridgeSessionId).execute(input),
 });
 
 export const scriptBootstrap = createTool({
   id: "script_bootstrap",
   description:
-    "Create or update a Pe.Revit scripting workspace through Pe.Host and return host-owned paths/references. Preserves user-authored files and writes only Pe.Host-owned workspace files.",
+    "Create or update a Pe.Revit scripting workspace through the host and return host-owned paths/references. Preserves user-authored files and writes only host-owned workspace files.",
   inputSchema: scriptBootstrapInputSchema,
   outputSchema: scriptWorkspaceBootstrapDataSchema,
-  execute: async (input) => createCurrentScriptingTools().bootstrap(input),
+  execute: async (input, _context) => {
+    const result = await createCurrentScriptingTools(input.bridgeSessionId).bootstrap(input);
+    return { ...result, generatedFiles: [...result.generatedFiles] };
+  },
 });
 
 export const scriptPodImport = createTool({
@@ -224,7 +229,7 @@ export const scriptPodImport = createTool({
   description:
     "Import a pod.json-backed Revit scripting workspace from a conservative zip archive. Import hard-fails if the target workspace slug already exists.",
   inputSchema: scriptPodImportInputSchema,
-  execute: async (input) => createCurrentScriptingTools().importPod(input),
+  execute: async (input) => createCurrentScriptingTools(input.bridgeSessionId).importPod(input),
 });
 
 export const scriptPodExport = createTool({
@@ -232,7 +237,7 @@ export const scriptPodExport = createTool({
   description:
     "Export an existing pod.json-backed Revit scripting workspace as a portable source-first zip archive. Generated/runtime folders and DLL payloads are excluded.",
   inputSchema: scriptPodExportInputSchema,
-  execute: async (input) => createCurrentScriptingTools().exportPod(input),
+  execute: async (input) => createCurrentScriptingTools(input.bridgeSessionId).exportPod(input),
 });
 
 export const peaProductTools = {
@@ -260,15 +265,17 @@ export const peaProductToolProfile = createRuntimeToolProfile({
   },
 });
 
-function createCurrentHostClient() {
-  return new PeHostClient({
-    baseUrl: PeHostClient.resolveHostBaseUrl(peaProductToolContext.hostBaseUrl),
+function createCurrentHostRpcCaller(bridgeSessionId?: string, timeoutMs?: number) {
+  return new HostRpcCaller({
+    hostBaseUrl: resolveHostBaseUrl(peaProductToolContext.hostBaseUrl),
+    bridgeSessionId,
+    timeoutMs,
   });
 }
 
-function createCurrentScriptingTools() {
-  return new ScriptingTools(createCurrentHostClient(), {
-    workspaceKey: PeHostClient.resolveWorkspaceKey(peaProductToolContext.workspaceKey),
+function createCurrentScriptingTools(bridgeSessionId?: string) {
+  return new ScriptingTools(createCurrentHostRpcCaller(bridgeSessionId), {
+    workspaceKey: resolveWorkspaceKey(peaProductToolContext.workspaceKey),
   });
 }
 
@@ -303,11 +310,7 @@ function parseHostLogTarget(target: "host" | "revit" | "all"): HostLogTarget {
   }
 }
 
-function firstNonBlank(...values: Array<string | undefined>): string | undefined {
-  return values.find((value) => value != null && value.trim().length > 0)?.trim();
-}
-
-type HostOperationLookupResult = ReturnType<PeHostClient["general"]["getOperation"]>;
+type HostOperationLookupResult = ReturnType<HostRpcCaller["getOperation"]>;
 
 function assertHostOperationCallAccess(
   operation: HostOperationLookupResult,

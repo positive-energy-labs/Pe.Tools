@@ -4,6 +4,7 @@ using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.Product;
 using Pe.Shared.Scripting.Diagnostics;
 using Pe.Shared.Scripting.Pods;
+using Pe.Shared.StorageRuntime.PolyFill;
 using System.IO.Compression;
 
 namespace Pe.Revit.Scripting.Pods;
@@ -244,7 +245,7 @@ public sealed class ScriptPodArchiveService(
         var workspaceFullPath = Path.GetFullPath(workspaceRoot);
         return Directory
             .EnumerateFiles(workspaceRoot, "*", SearchOption.AllDirectories)
-            .Select(path => new FileEntry(path, Path.GetRelativePath(workspaceFullPath, path).Replace('\\', '/')))
+            .Select(path => new FileEntry(path, BclExtensions.GetRelativePath(workspaceFullPath, path).Replace('\\', '/')))
             .Where(entry => !IsExcludedPath(entry.RelativePath))
             .Select(entry => {
                 ValidatePortableRelativePath(entry.RelativePath);

@@ -1,22 +1,24 @@
-import { PeHostClient, type HostOpResponse } from "@pe/host-client";
+import type { HostOpResponse } from "@pe/host-contracts/operation-types";
+import { HostRpcCaller } from "./host-rpc-caller.js";
+import { resolveHostBaseUrl } from "./host-config.js";
 
 const defaultHostContextTimeoutMs = 5_000;
 
 type ActiveDocumentSummary = NonNullable<
-  HostOpResponse<"settings.session-summary">["activeDocument"]
+  HostOpResponse<"bridge.sessions.summary">["activeDocument"]
 >;
 
 export async function collectHostContext(
   options: { hostBaseUrl?: string; timeoutMs?: number } = {},
 ) {
-  const hostBaseUrl = PeHostClient.resolveHostBaseUrl(options.hostBaseUrl);
-  const hostClient = new PeHostClient({
-    baseUrl: hostBaseUrl,
+  const hostBaseUrl = resolveHostBaseUrl(options.hostBaseUrl);
+  const hostRpcCaller = new HostRpcCaller({
+    hostBaseUrl: hostBaseUrl,
     timeoutMs: options.timeoutMs ?? defaultHostContextTimeoutMs,
   });
   const [probeResult, sessionResult] = await Promise.allSettled([
-    hostClient.call("settings.host-probe"),
-    hostClient.call("settings.session-summary"),
+    hostRpcCaller.call("host.status"),
+    hostRpcCaller.call("bridge.sessions.summary"),
   ]);
 
   return {

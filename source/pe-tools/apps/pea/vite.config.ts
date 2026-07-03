@@ -9,7 +9,6 @@ export default defineConfig({
     deps: {
       alwaysBundle: [/./],
       neverBundle: [
-        /^@opentui\/core-win32-x64/,
         /^@duckdb\/node-bindings-win32-x64/,
         /^@anush008\/tokenizers-win32-x64-msvc/,
         /^@libsql\/win32-x64-msvc/,

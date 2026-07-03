@@ -1,6 +1,6 @@
 import { define } from "gunshi";
-import { PeHostClient } from "@pe/host-client";
 import { parseOptionalPort } from "@pe/runtime";
+import { resolveHostBaseUrl, resolveWorkspaceKey } from "@pe/tools";
 import { peCodeRuntimeToolProfile } from "./runtime.ts";
 import { runPeCodeWeb } from "./web.ts";
 
@@ -40,8 +40,8 @@ export function createPeCodeCliCommand() {
       }
 
       console.log("Run `peco --help` to list dev commands.");
-      console.log(`host      ${PeHostClient.resolveHostBaseUrl()}`);
-      console.log(`workspace ${PeHostClient.resolveWorkspaceKey()}`);
+      console.log(`host      ${resolveHostBaseUrl()}`);
+      console.log(`workspace ${resolveWorkspaceKey()}`);
     },
   });
 }

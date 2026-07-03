@@ -92,7 +92,7 @@ function renderContext(entries: RuntimeContextEntry[]): string {
         `<context description="${escapeXml(entry.description)}">${escapeXml(entry.value)}</context>`,
     )
     .join("\n");
-  return `<pea-workbench-context>\n<guidance>This context is orientation, not truth. Inspect fresh Pe.Host/Revit state when precision matters.</guidance>\n${context}\n</pea-workbench-context>`;
+  return `<pea-workbench-context>\n<guidance>This context is orientation, not truth. Inspect fresh host/Revit state when precision matters.</guidance>\n${context}\n</pea-workbench-context>`;
 }
 
 function escapeXml(value: string): string {

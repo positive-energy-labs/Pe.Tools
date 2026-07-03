@@ -1,4 +1,4 @@
-import { HostLogTarget, PeHostClient } from "@pe/host-client";
+import { HostLogTarget } from "@pe/host-contracts/operation-types";
 import { resolveExecutable } from "../dev/pe-dev-workflow/index.js";
 import {
   defaultRiderBridgeBaseUrl,
@@ -7,6 +7,8 @@ import {
   summarizeLastSyncResult as summarizeLiveRrdLastSyncResult,
 } from "../dev/rider/index.js";
 import { collectHostContext } from "./host-context.js";
+import { HostRpcCaller } from "./host-rpc-caller.js";
+import { resolveHostBaseUrl } from "./host-config.js";
 
 export { defaultRiderBridgeBaseUrl } from "../dev/rider/index.js";
 
@@ -91,7 +93,7 @@ export async function collectRuntimeLoopContext(options: LiveLoopContextOptions 
     policy: "DiagnosticsOnly" satisfies LiveLoopExecutionPolicy,
     checkedAt: new Date().toISOString(),
     request: {
-      hostBaseUrl: PeHostClient.resolveHostBaseUrl(options.hostBaseUrl),
+      hostBaseUrl: resolveHostBaseUrl(options.hostBaseUrl),
       logTail,
       resetLogCursor,
       includeLastSync,
@@ -148,7 +150,7 @@ export async function collectLiveLoopEnvironment(
     policy: "DiagnosticsOnly" satisfies LiveLoopExecutionPolicy,
     checkedAt: new Date().toISOString(),
     cwd: process.cwd(),
-    hostBaseUrl: PeHostClient.resolveHostBaseUrl(options.hostBaseUrl),
+    hostBaseUrl: resolveHostBaseUrl(options.hostBaseUrl),
     executables: {
       dotnet: dotnetExecutable,
     },
@@ -165,10 +167,10 @@ export async function readPeaHostLogTails(
 ) {
   const checkedAt = new Date().toISOString();
   try {
-    const hostBaseUrl = PeHostClient.resolveHostBaseUrl(options.hostBaseUrl);
-    const response = await new PeHostClient({
-      baseUrl: hostBaseUrl,
-    }).call("host.logs", {
+    const hostBaseUrl = resolveHostBaseUrl(options.hostBaseUrl);
+    const response = await new HostRpcCaller({
+      hostBaseUrl: hostBaseUrl,
+    }).call("logs.tail", {
       target: parseHostLogTarget(target),
       tailLineCount,
     });
@@ -246,7 +248,7 @@ function recommendRuntimeLoopNextAction(
       nextAction: "read_logs",
       confidence: "high",
       reason:
-        "Pe.Host is not reachable from the environment packet; inspect host/Revit logs before attempting attached runtime work.",
+        "The TS host is not reachable from the environment packet; inspect host/Revit logs before attempting attached runtime work.",
     };
   }
 
@@ -324,7 +326,7 @@ function environmentGuidance(
 
   if (host && !host.reachable)
     guidance.push(
-      "Pe.Host is not reachable. Inspect the live_loop_context log slice before attempting host operations or scripts.",
+      "The TS host is not reachable. Inspect the live_loop_context log slice before attempting host operations or scripts.",
     );
 
   const bridgeConnected =
