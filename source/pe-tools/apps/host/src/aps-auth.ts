@@ -16,6 +16,7 @@ import {
   type ApsTokenResult,
 } from "@pe/host-contracts/effect";
 import { LocalOpError } from "./local-error.ts";
+import { productGlobalSettingsPath } from "./product-paths.ts";
 
 const APS_AUTH_BASE_URL = "https://developer.api.autodesk.com/authentication/v2";
 const CALLBACK_PORT = 8080;
@@ -432,15 +433,7 @@ const readApsCredentials = Effect.fnUntraced(function* (
 });
 
 function globalSettingsPath(): string {
-  return join(
-    process.env.USERPROFILE
-      ? join(process.env.USERPROFILE, "Documents")
-      : join(homedir(), "Documents"),
-    productIdentity.productName,
-    productPathNames.settingsDirectoryName,
-    productPathNames.globalDirectoryName,
-    "settings.json",
-  );
+  return productGlobalSettingsPath();
 }
 
 function tokenStorePath(): string {
@@ -533,7 +526,7 @@ const writePersistedTokenMap = Effect.fnUntraced(function* (
 const protectUserSecret = Effect.fnUntraced(function* (plainText: string) {
   return yield* runPowershell(
     "aps.auth.token",
-    "[Convert]::ToBase64String([System.Security.Cryptography.ProtectedData]::Protect([Convert]::FromBase64String($args[0]), $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser))",
+    "$ErrorActionPreference = 'Stop'; Add-Type -AssemblyName System.Security; [Convert]::ToBase64String([System.Security.Cryptography.ProtectedData]::Protect([Convert]::FromBase64String($inputArgs[0]), $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser))",
     [Buffer.from(plainText, "utf8").toString("base64")],
   );
 });
@@ -541,7 +534,7 @@ const protectUserSecret = Effect.fnUntraced(function* (plainText: string) {
 const unprotectUserSecret = Effect.fnUntraced(function* (protectedPayload: string) {
   const base64 = yield* runPowershell(
     "aps.auth.token",
-    "[Convert]::ToBase64String([System.Security.Cryptography.ProtectedData]::Unprotect([Convert]::FromBase64String($args[0]), $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser))",
+    "$ErrorActionPreference = 'Stop'; Add-Type -AssemblyName System.Security; [Convert]::ToBase64String([System.Security.Cryptography.ProtectedData]::Unprotect([Convert]::FromBase64String($inputArgs[0]), $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser))",
     [protectedPayload],
   );
   return Buffer.from(base64, "base64").toString("utf8");
@@ -556,6 +549,11 @@ const runPowershell = Effect.fnUntraced(function* (
     return yield* Effect.fail(
       new LocalOpError(operationKey, "APS token persistence requires Windows DPAPI."),
     );
+  const inputArgs = args.map((arg) => `'${arg.replaceAll("'", "''")}'`).join(", ");
+  const encodedCommand = Buffer.from(
+    `$inputArgs = @(${inputArgs})\n${command}`,
+    "utf16le",
+  ).toString("base64");
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const output = yield* spawner
     .string(
@@ -564,13 +562,17 @@ const runPowershell = Effect.fnUntraced(function* (
         "-NonInteractive",
         "-ExecutionPolicy",
         "Bypass",
-        "-Command",
-        command,
-        ...args,
+        "-EncodedCommand",
+        encodedCommand,
       ]),
     )
     .pipe(Effect.mapError((error) => new LocalOpError(operationKey, errorMessage(error))));
-  return output.trim();
+  const trimmed = output.trim();
+  if (!trimmed)
+    return yield* Effect.fail(
+      new LocalOpError(operationKey, "PowerShell command produced no output."),
+    );
+  return trimmed;
 });
 
 const openBrowser = Effect.fnUntraced(function* (url: string) {

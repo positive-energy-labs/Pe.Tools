@@ -12,12 +12,14 @@ import {
   getSettingsWorkspaces,
   listBridgeSessions,
   openSettingsDocument,
+  openSettingsDocumentWithModule,
   saveSettingsDocument,
   tailLogs,
   validateSettingsDocument,
 } from "./local-ops.ts";
 import { LocalOpError, localOpHttpStatus } from "./local-error.ts";
 import {
+  HOST_RPC_BRIDGE_SESSION_HEADER,
   isHostOperationKey,
   tsOnlyOperationSchemas,
   type TsOnlyOperationKey,
@@ -33,12 +35,13 @@ import type { HostErrorKind } from "@pe/host-contracts/contracts";
 export const HostRpcHandlers = HostRpcs.toLayer(
   Effect.gen(function* () {
     const bridge = yield* RevitBridge;
-    const dispatchBridgeOperation: BridgeOperationRpcHandler = (key, request, bridgeSessionId) =>
-      mapHostRpcError(key, dispatchHostOperation(key, request, bridge, bridgeSessionId));
+    const dispatchBridgeOperation: BridgeOperationRpcHandler = (key, request) =>
+      mapHostRpcError(key, dispatchHostOperation(key, request, bridge));
 
     return HostRpcs.of({
       ...makeBridgeOperationRpcHandlers(dispatchBridgeOperation),
-      "host.call": Effect.fnUntraced(function* ({ key, request, bridgeSessionId }) {
+      "host.call": Effect.fnUntraced(function* ({ key, request }, options) {
+        const bridgeSessionId = bridgeSessionIdFromOptions(options);
         if (isHostOperationKey(key))
           return yield* mapHostRpcError(
             key,
@@ -46,7 +49,8 @@ export const HostRpcHandlers = HostRpcs.toLayer(
           );
         return yield* mapHostRpcError(key, dispatchTsOnlyOperation(key, request, bridgeSessionId));
       }),
-      "host.status": Effect.fnUntraced(function* ({ bridgeSessionId }) {
+      "host.status": Effect.fnUntraced(function* (_, options) {
+        const bridgeSessionId = bridgeSessionIdFromOptions(options);
         return yield* mapHostRpcError(
           "host.status",
           dispatchTsOnlyRpcOperation(
@@ -57,7 +61,8 @@ export const HostRpcHandlers = HostRpcs.toLayer(
           ),
         );
       }),
-      "bridge.sessions.summary": Effect.fnUntraced(function* ({ bridgeSessionId }) {
+      "bridge.sessions.summary": Effect.fnUntraced(function* (_, options) {
+        const bridgeSessionId = bridgeSessionIdFromOptions(options);
         return yield* mapHostRpcError(
           "bridge.sessions.summary",
           dispatchTsOnlyRpcOperation(
@@ -90,7 +95,8 @@ export const HostRpcHandlers = HostRpcs.toLayer(
           ),
         );
       }),
-      "settings.workspaces": Effect.fnUntraced(function* ({ bridgeSessionId }) {
+      "settings.workspaces": Effect.fnUntraced(function* (_, options) {
+        const bridgeSessionId = bridgeSessionIdFromOptions(options);
         return yield* mapHostRpcError(
           "settings.workspaces",
           dispatchTsOnlyRpcOperation(
@@ -120,6 +126,17 @@ export const HostRpcHandlers = HostRpcs.toLayer(
             request,
             undefined,
             tsOnlyOperationSchemas["settings.document.open"].response,
+          ),
+        );
+      }),
+      "settings.document.open-with-module": Effect.fnUntraced(function* (request) {
+        return yield* mapHostRpcError(
+          "settings.document.open-with-module",
+          dispatchTsOnlyRpcOperation(
+            "settings.document.open-with-module",
+            request,
+            undefined,
+            tsOnlyOperationSchemas["settings.document.open-with-module"].response,
           ),
         );
       }),
@@ -206,6 +223,17 @@ export const HostRpcHandlers = HostRpcs.toLayer(
 
 export const HostRpcServerLive = RpcServer.layer(HostRpcs).pipe(Layer.provide(HostRpcHandlers));
 
+type RpcRequestOptions = {
+  readonly headers?: {
+    readonly [name: string]: string | undefined;
+  };
+};
+
+function bridgeSessionIdFromOptions(options: RpcRequestOptions | undefined): string | undefined {
+  const value = options?.headers?.[HOST_RPC_BRIDGE_SESSION_HEADER]?.trim();
+  return value ? value : undefined;
+}
+
 const dispatchTsOnlyRpcOperation = Effect.fnUntraced(function* <A>(
   key: TsOnlyOperationKey,
   request: unknown,
@@ -273,6 +301,16 @@ const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
         bridgeSessionId,
         invokeBridge: (operationKey, payload, scopedBridgeSessionId) =>
           bridge.invoke(operationKey, payload, scopedBridgeSessionId),
+      });
+    }
+    case "settings.document.open-with-module": {
+      const decoded = yield* decodeTsOnlyRequest(
+        key,
+        tsOnlyOperationSchemas["settings.document.open-with-module"].request,
+        request,
+      );
+      return yield* openSettingsDocumentWithModule(decoded.request, decoded.module, {
+        schemaJson: decoded.schemaJson,
       });
     }
     case "settings.document.validate": {

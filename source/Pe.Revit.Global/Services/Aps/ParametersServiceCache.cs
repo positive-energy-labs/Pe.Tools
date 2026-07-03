@@ -1,13 +1,8 @@
 using Autodesk.Revit.DB;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-#if !NET48
-using Pe.Aps.Auth;
-#endif
 using Pe.Revit.Extensions.Id;
-#if !NET48
 using Pe.Shared.ApsAuth;
-#endif
 using Pe.Shared.RevitData;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Json;
@@ -15,9 +10,6 @@ using Serilog;
 using System.Net.Http.Headers;
 using System.Text;
 using Toon;
-#if !NET48
-using PeAps = Pe.Aps.Aps;
-#endif
 
 namespace Pe.Revit.Global.Services.Aps;
 
@@ -62,16 +54,8 @@ public static class ParametersServiceCache {
         return new Parameters(httpClient, tokenProvider);
     }
 
-    private static string AcquireParameterServiceAccessToken() {
-#if NET48
-        throw new PlatformNotSupportedException("APS auth through Revit is only available in the net8 Revit runtime lane.");
-#else
-        var credentials = new ApsCredentialSource().ReadCredentials();
-        return new ApsAuthService(
-            new PeAps.StaticAuthTokenProvider(credentials.WebClientId, credentials.WebClientSecret)
-        ).AcquireAccessToken(ApsTokenRequest.ForParameterService()).AccessToken;
-#endif
-    }
+    private static string AcquireParameterServiceAccessToken() =>
+        TsApsAuthClient.AcquireAccessToken(ApsTokenRequest.ForParameterService()).AccessToken;
 
     private static IReadOnlyList<string> WriteAdditionalFormats(
         ParametersApi.Parameters parameters,
@@ -256,15 +240,8 @@ public static class ParametersServiceCache {
 
 public static class ApsAuthActions {
     public static string LoginParameterServiceStatusDetail() {
-#if NET48
-        throw new PlatformNotSupportedException("APS auth through Revit is only available in the net8 Revit runtime lane.");
-#else
-        var credentials = new ApsCredentialSource().ReadCredentials();
-        var status = new ApsAuthService(
-            new PeAps.StaticAuthTokenProvider(credentials.WebClientId, credentials.WebClientSecret)
-        ).Login(ApsTokenRequest.ForParameterService());
+        var status = TsApsAuthClient.Login(ApsTokenRequest.ForParameterService());
         return $"Persisted auth: {(status.Exists ? "present" : "missing")}, flow={status.FlowKind}, scope={status.ScopeProfile}, expiresUtc={status.ExpiresAtUtc?.ToString("O") ?? "(unknown)"}";
-#endif
     }
 }
 

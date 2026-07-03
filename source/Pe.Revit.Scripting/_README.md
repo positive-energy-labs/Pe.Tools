@@ -25,10 +25,10 @@ This package is the Revit-side execution pipeline for a submitted C# source set.
 - Preserve supported user references/packages.
 - Generate README/AGENTS/JOIN_GUIDE/sample files when appropriate.
 
-### Host-backed execute
+### Bridge-backed execute
 
-- Caller hits `Pe.Host`.
-- Host forwards one scripting request over the private Host/Revit bridge.
+- Caller hits the TS host.
+- The host forwards one scripting request over the private Host/Revit bridge.
 - Revit handles the request on the Revit thread.
 - The scripting runtime returns one final result payload.
 
@@ -40,4 +40,4 @@ This package is the Revit-side execution pipeline for a submitted C# source set.
 ## Open Questions
 
 - How source-package sharing should reuse this pipeline without weakening the stable single-file lane.
-- Where a future out-of-proc host-composition runner should live if scripts need host-client joins without running inside a bridge request.
+- Where a future out-of-proc host-composition runner should live if scripts need host RPC joins without running inside a bridge request.

@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runWithAttachedRrdSync } from "./attached-rrd-sync.js";
 import { type ExecutionPolicy } from "./pe-dev-workflow/index.js";
@@ -50,12 +52,24 @@ export async function talkToPeaHarness(request: TalkToPeaRequest) {
   ).then((synced) => synced.result);
 }
 
+function resolveTalkToPeaWorkerPath(): string {
+  const jsWorkerPath = fileURLToPath(new URL("./talk-to-pea-worker.js", import.meta.url));
+  if (existsSync(jsWorkerPath)) return jsWorkerPath;
+  return fileURLToPath(new URL("./talk-to-pea-worker.ts", import.meta.url));
+}
+
+function resolveWorkerProcessArgs(workerPath: string): string[] {
+  if (!workerPath.endsWith(".ts")) return [workerPath];
+  const jitiPackagePath = fileURLToPath(import.meta.resolve("jiti/package.json"));
+  return [join(dirname(jitiPackagePath), "lib", "jiti-cli.mjs"), workerPath];
+}
+
 async function runTalkToPeaWorkerProcess(
   request: TalkToPeaRequest,
 ): Promise<TalkToPeaWorkerResponse> {
-  const workerPath = fileURLToPath(new URL("./talk-to-pea-worker.js", import.meta.url));
+  const workerPath = resolveTalkToPeaWorkerPath();
   const timeoutMs = Math.max(1, request.timeoutSeconds) * 1000;
-  const child = spawn(process.execPath, [workerPath], {
+  const child = spawn(process.execPath, resolveWorkerProcessArgs(workerPath), {
     cwd: process.cwd(),
     env: process.env,
     stdio: ["pipe", "pipe", "pipe"],

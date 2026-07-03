@@ -11,7 +11,7 @@ alwaysApply: true
 1. What is this product called by machines, users, installers, and Revit?
 2. Where should product-owned files live on the local machine or in user-authored document space?
 
-Keep this package small, pure, and boring. It should be safe to reference from build scripts, installer code, `Pe.Host`, `pea` support code, Revit packages, automation packages, and tests.
+Keep this package small, pure, and boring. It should be safe to reference from build scripts, installer code, TS host packaging, `pea` support code, Revit packages, automation packages, and tests.
 
 ## Taxonomy
 

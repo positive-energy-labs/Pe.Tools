@@ -31,7 +31,7 @@ meaningful workflows without re-owning raw Revit traversal, collection, or apply
 
 ## Integration Goals
 
-- Provide reusable Revit-side building blocks for `Pe.Host`, `Pe.Revit.Scripting`, `Pe.App`, tests, and feature
+- Provide reusable Revit-side building blocks for the TS host bridge, `Pe.Revit.Scripting`, `Pe.App`, tests, and feature
   packages.
 - Offer document-context and element-context concepts that can support both host endpoints and direct scripting without
   forcing each caller to rediscover the same patterns.

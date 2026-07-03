@@ -2,30 +2,21 @@
 
 ## Mental Model
 
-This package is the storage/runtime infrastructure layer. It gives the repo one explicit way to compose authored settings, runtime state, user output, JSON documents, schemas, validation, and smart field metadata without hardcoding every feature into the host or Revit command layer.
+This package is the C# storage/runtime infrastructure layer. It gives the repo one explicit way to compose authored-settings identities, runtime state, user output, global settings/log files, APS credential lookup, and storage-related metadata without hardcoding paths into feature code.
 
 ## Architecture
 
 - `Modules/` defines settings-module identity, storage conventions, and registration.
 - `ModuleStorage` and `GlobalStorage` compose authored settings, LocalAppData state, and user output roots.
 - `StateStorage` owns mutable runtime state files; `OutputStorage` owns user-facing command artifacts.
-- `Documents/` owns filesystem-backed authored settings document IO contracts.
-- `Validation/` owns schema-backed structural validation.
-- `Json/JsonSchemaFactory.cs` builds authoring/editor/fragment schemas through one pipeline.
-- `Json/SchemaDefinitions/` adds explicit per-type metadata and UI/field-option wiring.
-- `Json/SchemaProviders/` contains option providers and context keys.
-- `JsonTypeSchemaBindingRegistry` maps CLR/Revit types onto JSON/editor-facing shapes.
-- `JsonCompositionPipeline` expands include/preset directives for authored documents.
+- `Documents/` defines the C# settings document DTOs still needed by Revit-side clients.
+- `Json/` owns JSON/CSV storage wrappers and directive marker attributes consumed by settings schema/runtime code.
+- `Capabilities/` contains small schema metadata contracts exported into host contracts.
+- `PolyFill/` contains local BCL helpers needed by the supported Revit/.NET runtime.
+
+Authored settings document open/save/validate/composition is implemented in `source/pe-tools/apps/host/src/settings.ts`. Revit schema generation, schema definitions, validation, type bindings, and field options live in `source/Pe.Revit.SettingsRuntime`.
 
 ## Key Flows
-
-### Schema generation
-
-1. Raw schema is generated from the settings type.
-2. Type bindings rewrite special CLR/Revit types.
-3. Include/preset processors add composition support.
-4. Schema definitions attach descriptions, UI metadata, datasets, and field options.
-5. Editor transforms reshape the authoring schema for the external editor.
 
 ### Root composition
 
@@ -34,22 +25,20 @@ This package is the storage/runtime infrastructure layer. It gives the repo one 
 3. User-facing command output resolves through `ProductUserContentLayout.Output`.
 4. Legacy module-local `state` folders are migration sources only, not the current state root.
 
-### Document open/save
+### Module discovery
 
-1. Host or runtime resolves the module and document path.
-2. JSON is loaded from disk.
-3. Include/preset composition and schema synchronization run as needed.
-4. Structural validation runs through the schema-backed validator.
-5. On save, normalized JSON is written back with defaults pruned where applicable.
+1. Revit-side packages register structural settings modules and root bindings.
+2. `SettingsRuntimeRegistry` guards duplicate module/root keys.
+3. The bridge exposes module descriptors and settings roots to the TS host.
+4. TS host document operations use those descriptors to resolve storage options and settings document paths.
 
-### Smart options
+### Runtime files
 
-1. A property is wired through a dataset/projection or provider.
-2. Context values come from sibling fields or external execution context.
-3. Runtime mode decides whether the provider can execute.
-4. Results are returned as structured field-option envelopes, not ad hoc arrays.
+1. Product state and output roots come from `Pe.Shared.Product`.
+2. `StateStorage` and `OutputStorage` normalize filenames and directories.
+3. Runtime callers consume JSON, CSV, text, and dated-output helpers from the storage wrappers.
 
 ## Open Questions
 
-- Keep watching whether some provider-based surfaces should collapse into datasets/projections for consistency.
+- Decide whether structural settings contracts should stay here long term or move to a smaller settings-contracts package if more non-storage consumers appear.
 - Keep the structural vs live-document seam obvious; hiding that distinction makes debugging harder.

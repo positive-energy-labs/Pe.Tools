@@ -33,25 +33,6 @@ public record OpenSettingsDocumentRequest(
     bool IncludeComposedContent = false
 );
 
-public record SaveSettingsDocumentRequest(
-    SettingsDocumentId DocumentId,
-    string RawContent,
-    SettingsVersionToken? ExpectedVersionToken = null
-);
-
-public record ValidateSettingsDocumentRequest(
-    SettingsDocumentId DocumentId,
-    string RawContent
-);
-
-public record SaveSettingsDocumentResult(
-    SettingsDocumentMetadata Metadata,
-    bool WriteApplied,
-    bool ConflictDetected,
-    string? ConflictMessage,
-    SettingsValidationResult Validation
-);
-
 public enum SettingsDirectiveScope {
     Local,
     Global

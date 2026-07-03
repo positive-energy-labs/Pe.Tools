@@ -163,8 +163,8 @@ internal static class HostContractsProjection {
             var request = SchemaRef(operation, operation.RequestType, "request");
             var response = SchemaRef(operation, operation.ResponseType, "response") ?? "Schema.Void";
             var payloadFields = request == null
-                ? "bridgeSessionId: Schema.optional(Schema.String)"
-                : $"request: {request}, bridgeSessionId: Schema.optional(Schema.String)";
+                ? ""
+                : $"request: {request}";
 
             _ = builder.AppendLine("  Rpc.make(");
             _ = builder.AppendLine($"    {ToJsonString(operation.Key)},");
@@ -176,16 +176,16 @@ internal static class HostContractsProjection {
             _ = builder.AppendLine("  ),");
 
             if (request == null) {
-                _ = handlers.AppendLine($"  {ToJsonString(operation.Key)}: (payload: {{ readonly bridgeSessionId?: string }}) =>");
-                _ = handlers.AppendLine($"    handle({ToJsonString(operation.Key)}, undefined, payload.bridgeSessionId),");
+                _ = handlers.AppendLine($"  {ToJsonString(operation.Key)}: () =>");
+                _ = handlers.AppendLine($"    handle({ToJsonString(operation.Key)}, undefined),");
                 _ = callCases.AppendLine($"    case {ToJsonString(operation.Key)}:");
-                _ = callCases.AppendLine($"      return client({ToJsonString(operation.Key)}, bridgeSessionId ? {{ bridgeSessionId }} : {{}});");
+                _ = callCases.AppendLine($"      return client({ToJsonString(operation.Key)}, {{}});");
             } else {
                 var requestType = $"Schema.Schema.Type<typeof {request}>";
-                _ = handlers.AppendLine($"  {ToJsonString(operation.Key)}: (payload: {{ readonly request: {requestType}; readonly bridgeSessionId?: string }}) =>");
-                _ = handlers.AppendLine($"    handle({ToJsonString(operation.Key)}, payload.request, payload.bridgeSessionId),");
+                _ = handlers.AppendLine($"  {ToJsonString(operation.Key)}: (payload: {{ readonly request: {requestType} }}) =>");
+                _ = handlers.AppendLine($"    handle({ToJsonString(operation.Key)}, payload.request),");
                 _ = callCases.AppendLine($"    case {ToJsonString(operation.Key)}:");
-                _ = callCases.AppendLine($"      return client({ToJsonString(operation.Key)}, {{ request: request as {requestType}, ...(bridgeSessionId ? {{ bridgeSessionId }} : {{}}) }});");
+                _ = callCases.AppendLine($"      return client({ToJsonString(operation.Key)}, {{ request: request as {requestType} }});");
             }
         }
 
@@ -214,7 +214,6 @@ internal static class HostContractsProjection {
               client: BridgeOperationRpcClient<E>,
               key: HostOperationKey,
               request: unknown,
-              bridgeSessionId?: string,
             ): Effect.Effect<unknown, HostRpcError | E> {
               switch (key) {
             {{callCases.ToString().TrimEnd()}}
@@ -224,7 +223,6 @@ internal static class HostContractsProjection {
             export type BridgeOperationRpcHandler = <K extends HostOperationKey>(
               key: K,
               request: HostOpRequest<K>,
-              bridgeSessionId?: string,
             ) => Effect.Effect<HostOpResponse<K>, HostRpcError>;
 
             export function makeBridgeOperationRpcHandlers(handle: BridgeOperationRpcHandler) {

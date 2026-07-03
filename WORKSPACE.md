@@ -9,8 +9,7 @@ ui/ # local web UI, launched/served by pea. probably home to both chat app and p
 cli/ # MAYBE??? using opentui
 packages/
 runtime/ # shared runtime/session/protocol-neutral pieces
-host-generated/ # generated TS host types/catalog/client only
-host-client/ # small hand wrappers over generated host calls
+host-contracts/ # generated Effect schemas/RPC contracts and TS-owned host operation types
 schema-runtime/ # TS schema/document helpers
 schema-ui/ # form/view model helpers for profile UI
 pea-tools/ # user/operator-safe tools

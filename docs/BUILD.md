@@ -104,7 +104,7 @@ Use ordinary `dotnet build` when you need compile confidence.
 
 ```powershell
 dotnet build .\source\Pe.Revit\Pe.Revit.csproj -c Debug.R25
-dotnet build .\source\Pe.Host\Pe.Host.csproj -c Debug.R25
+dotnet build .\source\Pe.App\Pe.App.csproj -c Debug.R25
 dotnet build .\source\Pe.Dev.Cli\Pe.Dev.Cli.csproj -c Debug.R25
 ```
 
@@ -229,7 +229,7 @@ The clean source-linked CLI model is:
 - `pea --installed ...` is the explicit installed-lane selector. Use it in installed-lane validation and scripts where ambiguity would be expensive.
 - `pea --dev ...` is the explicit source-linked selector. It requires `dev-source.txt` and runs the Pea app from `source/pe-tools/apps/pea` through the Vite+-managed source TypeScript runtime.
 - `PEA_RUNTIME=dev` is a local shell convenience only. Do not use ambient environment selection as proof of lane.
-- `Pe.App` must pass `--dev` or `--installed` when launching Pea from Revit, based on its `Pe.App.runtime.json` descriptor. The Host binary already follows that descriptor; Pea must not silently cross lanes through a linked source file.
+- `Pe.App` must pass `--dev` or `--installed` when launching Pea from Revit, based on its `Pe.App.runtime.json` descriptor. `Pe.App` also resolves and launches the matching TS-built `Pe.Host.exe` lane from that descriptor; neither Pea nor Host may silently cross lanes through a linked source file.
 
 This source-linked shape is intentionally about developer iteration, not installer payload ownership. A `dev-source.txt` file is a capability registration for launchers. It does not prove packaged installed behavior and should not be used as installed-lane evidence.
 
@@ -284,35 +284,35 @@ Do not use a dev command to rewrite the installed-shaped `pea` payload selection
 
 ## Generated contract decisions
 
-Generated contracts are projections, not hand-maintained source. The C# types are the authority; the TypeScript types and zod schemas are emitted from them.
+Generated contracts are projections, not hand-maintained source. C# bridge operation types stay the authority for Revit operations; TypeScript Effect schemas/RPC contracts are emitted into `@pe/host-contracts`.
 
 ```powershell
-pe-dev codegen sync --target host-types      # src/types/*.ts   (enums only)
-pe-dev codegen sync --target host-contracts  # src/contracts/* + src/zod/* (schemas + inferred types)
+pe-dev codegen sync --target host-contracts  # @pe/host-contracts contracts + Effect schemas/RPCs
 pe-dev codegen sync --target product
 pe-dev codegen sync --target build
 pe-dev codegen sync --target all             # every target above
 ```
 
-The valid `--target` values are `all`, `build`, `product`, `host-types`, and `host-contracts` (verified: any other value exits non-zero with `Unknown codegen target`). There is no `host-client` target; the hand-maintained .NET client lives in `source/pe-tools/packages/host-client` and is not a codegen output. Codegen always rebuilds the contract assemblies first — there is no `--no-build` escape hatch (it only risked generating from stale assemblies).
+The valid `--target` values are `all`, `build`, `product`, and `host-contracts` (verified: any other value exits non-zero with `Unknown codegen target`). There is no `host-types`, `host-client`, or `host-generated` target. Codegen always rebuilds the contract assemblies first — there is no `--no-build` escape hatch (it only risked generating from stale assemblies).
 
-`sync` updates generated projections and formats affected TypeScript packages. Host DTO TypeScript is generated through `pe-dev`/TypeGen and normalized for NodeNext `.js` imports; do not run `dotnet-typegen` or maintain `tgconfig.json` by hand.
+`sync` updates generated projections and formats/checks `@pe/host-contracts`. Host DTO TypeScript is generated through `pe-dev` into Effect Schema code; do not run `dotnet-typegen` or maintain `tgconfig.json` by hand.
 
-### What lands in `@pe/host-generated`
+### What lands in `@pe/host-contracts`
 
-- `src/types/` — one TypeScript **enum** per exported C# enum (`[ExportTsEnum]`), written by `host-types`. Object types are **not** emitted here; they are inferred from the zod schemas.
-- `src/contracts/` — the `hostOperations` catalog, capability map, and operation-definition types, written by `host-contracts`.
-- `src/zod/host-zod.generated.ts` — a zod schema per exported object type, written by `host-contracts`. Exposed at `@pe/host-generated/zod`; **this is the single source of truth for object types** — each schema also exports `type X = z.infer<typeof xSchema>`, so consumers import object types from `/zod`, not `/types`.
-- `src/zod/host-op-schemas.generated.ts` — maps each public operation key to its request/response schemas. Exposed at `@pe/host-generated/zod/registry`; callers resolve the schema from the key, so they don't hand-pass schemas.
-- `src/json-schema/index.ts` — **hand-written, not generated.** Derives request JSON Schema from the zod registry via `z.toJSONSchema` for generic form rendering (`/ops`). Keeps JSON Schema from drifting off the zod SOT.
+- `src/contracts/` — generated product constants, bridge protocol schemas, operation metadata, and the `hostOperations` catalog.
+- `src/effect/host-effect.generated.ts` — generated Effect Schema codecs, inferred types, and enum value constants for exported C# operation DTOs.
+- `src/effect/host-op-schemas.generated.ts` — generated request/response schema registry for each public bridge operation.
+- `src/effect/bridge-operation-rpcs.generated.ts` — generated direct Effect RPC members for each public bridge operation.
+- `src/operation-types.ts` — hand-maintained TS-owned local/admin operation schemas, generic key/request/response maps, and scoped caller metadata.
+- `src/rpc.ts` — hand-maintained contract-only `HostRpcs` group and generic `callHostRpcMember` helper.
 
-The emitted type set is exactly what's annotated: every `[ExportTsInterface]`/`[ExportTsEnum]` type gets a zod schema (enums also get a TS enum). There is no reachability pruning — to drop a type from the surface, remove its attribute. Open generic definitions have no concrete wire shape and are skipped. Every `HostOperationsCatalog.PublicHttp` request/response type must be annotated, or `host-contracts` fails fast.
+The emitted type set is exactly what's annotated for TypeGen export: each exported C# operation DTO gets an Effect Schema codec and inferred TypeScript type. There is no reachability pruning — to drop a type from the surface, remove its export attribute. Open generic definitions have no concrete wire shape and are skipped. Every public bridge operation request/response type must be exported, or `host-contracts` fails fast.
 
-The zod emitter reflects the C# types directly, so it captures nullability a TypeScript interface would lose — which is why object types are sourced from zod, not regenerated interfaces. Verified example: `Dictionary<string, string?>` becomes `z.record(z.string(), z.string().nullable())`; the wire sends null values, so the schema is the faithful boundary. Enums bind with `z.enum(TsEnum)` (imported from `src/types`) so a schema's inferred type is the nominal enum. Recursive types (e.g. `SettingsDirectoryNode`) emit zod-v4 getters. Browser + Node callers share one caller (`@pe/host-client/call`) that validates request and response with these schemas.
+The Effect Schema emitter reflects the C# types directly, including nullability and enum values, so TS callers validate the same wire shape the bridge sends. Browser, tools, and the TS host share the `HostRpcs` group plus `callHostRpcMember`; callers do not hand-pass schemas or maintain wrapper packages.
 
-**Validation rules travel too.** The zod emitter reads standard `System.ComponentModel.DataAnnotations` and maps them to refinements — `[Range(1,100000)]` → `.min(1).max(100000)`, `[MaxLength]`/`[StringLength]` → `.max(n)`, `[RegularExpression]` → `.regex(...)`, `[Required]` → non-optional (verified on `RevitDataOutputBudget.MaxEntries`). Because the request-form JSON Schema is now derived from these zod schemas, the refinements flow into it too — DataAnnotations are the single validation source of truth.
+Session selection is caller scope, not operation payload. `HostSessionScope.bridgeSessionId` is translated into the `x-pe-bridge-session-id` RPC header by `callHostRpcMember`; generated direct bridge operation payloads only contain the operation request shape.
 
-Because the generated zod imports its enums from `src/types`, regenerate both together when a C# contract changes: run `--target host-types` then `--target host-contracts`, or `--target all`.
+When a C# host contract changes, regenerate with `pe-dev codegen sync --target host-contracts` or `--target all`.
 
 The build tool also exposes:
 

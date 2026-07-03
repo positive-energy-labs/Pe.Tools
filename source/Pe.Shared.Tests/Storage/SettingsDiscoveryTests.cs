@@ -1,6 +1,4 @@
 using Pe.Shared.StorageRuntime;
-using Pe.Shared.StorageRuntime.Capabilities;
-using Pe.Shared.StorageRuntime.Documents;
 using Pe.Shared.StorageRuntime.Modules;
 
 namespace Pe.Shared.Tests;
@@ -12,16 +10,14 @@ public sealed class SettingsDiscoveryTests {
         var basePath = Path.Combine(Path.GetTempPath(), $"pe-settings-discovery-{Guid.NewGuid():N}");
 
         try {
-            var backend = CreateBackend(basePath);
+            var storage = CreateStorage(basePath);
             var rootDirectory = SettingsStorageLocations.ResolveSettingsRootDirectory(
                 basePath,
                 "TestModule",
                 "profiles"
             );
 
-            var result = await backend.DiscoverAsync(
-                "TestModule",
-                "profiles",
+            var result = await storage.DiscoverAsync(
                 new SettingsDiscoveryOptions(Recursive: true, IncludeFragments: false, IncludeSchemas: false)
             );
 
@@ -30,41 +26,6 @@ public sealed class SettingsDiscoveryTests {
                 Assert.That(Directory.Exists(rootDirectory), Is.True);
                 Assert.That(result.Files, Is.Empty);
                 Assert.That(result.Root.Name, Is.EqualTo("profiles"));
-            });
-        } finally {
-            if (Directory.Exists(basePath))
-                Directory.Delete(basePath, true);
-        }
-    }
-
-    [Test]
-    public async Task Discovery_bootstraps_configured_default_document() {
-        var basePath = Path.Combine(Path.GetTempPath(), $"pe-settings-discovery-{Guid.NewGuid():N}");
-
-        try {
-            var backend = CreateBackend(
-                basePath,
-                SettingsRootBootstrapDocument.Create<DefaultSettings>()
-            );
-
-            var result = await backend.DiscoverAsync(
-                "TestModule",
-                "profiles",
-                new SettingsDiscoveryOptions(Recursive: true, IncludeFragments: false, IncludeSchemas: false)
-            );
-
-            var defaultPath = SettingsPathing.ResolveSafeRelativeJsonPath(
-                SettingsStorageLocations.ResolveSettingsRootDirectory(basePath, "TestModule", "profiles"),
-                "default",
-                "relativePath"
-            );
-            var content = await File.ReadAllTextAsync(defaultPath);
-
-            Assert.Multiple(() => {
-                Assert.That(File.Exists(defaultPath), Is.True);
-                Assert.That(result.Files.Select(file => file.RelativePath), Contains.Item("default.json"));
-                Assert.That(content, Does.Contain("\"Name\": \"Default Name\""));
-                Assert.That(content, Does.Contain("\"Items\""));
             });
         } finally {
             if (Directory.Exists(basePath))
@@ -88,20 +49,14 @@ public sealed class SettingsDiscoveryTests {
                 """
             );
 
-            var backend = new LocalDiskSettingsStorageBackend(
-                basePath,
-                SettingsRuntimeMode.HostOnly,
-                new Dictionary<string, SettingsStorageModuleRuntimeDefinition>(StringComparer.OrdinalIgnoreCase) {
-                    ["Global"] = SettingsStorageModuleRuntimeDefinition.CreateSingleRoot(
-                        "fragments",
-                        SettingsStorageProfiles.SharedAuthoring
-                    )
-                }
-            );
-
-            var result = await backend.DiscoverAsync(
+            var storage = new ModuleDocumentStorage(
                 "Global",
                 "fragments",
+                SettingsStorageProfiles.SharedAuthoring,
+                basePath: basePath
+            );
+
+            var result = await storage.DiscoverAsync(
                 new SettingsDiscoveryOptions(Recursive: false, IncludeFragments: true, IncludeSchemas: false)
             );
 
@@ -117,24 +72,11 @@ public sealed class SettingsDiscoveryTests {
         }
     }
 
-    private static LocalDiskSettingsStorageBackend CreateBackend(
-        string basePath,
-        SettingsRootBootstrapDocument? bootstrapDocument = null
-    ) =>
+    private static ModuleDocumentStorage CreateStorage(string basePath) =>
         new(
-            basePath,
-            SettingsRuntimeMode.HostOnly,
-            new Dictionary<string, SettingsStorageModuleRuntimeDefinition>(StringComparer.OrdinalIgnoreCase) {
-                ["TestModule"] = SettingsStorageModuleRuntimeDefinition.CreateSingleRoot(
-                    "profiles",
-                    SettingsStorageProfiles.SharedAuthoring,
-                    bootstrapDocument: bootstrapDocument
-                )
-            }
+            "TestModule",
+            "profiles",
+            SettingsStorageProfiles.SharedAuthoring,
+            basePath: basePath
         );
-
-    private sealed class DefaultSettings {
-        public string Name { get; init; } = "Default Name";
-        public List<string> Items { get; init; } = ["One"];
-    }
 }

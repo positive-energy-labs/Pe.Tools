@@ -16,7 +16,7 @@
         <ProjectReference Include="..\Pe.Aps\Pe.Aps.csproj" />
         <ProjectReference Include="..\Pe.Dev.Cli\Pe.Dev.Cli.csproj" />
         <ProjectReference Include="..\Pe.Dev.RevitAutomation\Pe.Dev.RevitAutomation.csproj" />
-        <ProjectReference Include="..\Pe.Host\Pe.Host.csproj" />
+        <!-- Pe.Host retired — HostOperationExecutorTests.cs removed with it. -->
         <ProjectReference Include="..\Pe.Shared.ApsAuth\Pe.Shared.ApsAuth.csproj" />
         <ProjectReference Include="..\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj" />
         <ProjectReference Include="..\Pe.Shared.Product\Pe.Shared.Product.csproj" />
