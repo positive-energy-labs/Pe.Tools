@@ -1,0 +1,10 @@
+{
+    "version": 1,
+    "isRoot": true,
+    "tools": {
+        "pe.revit.cli": {
+            "version": "0.1.0-dev.3",
+            "commands": ["pe-revit"]
+        }
+    }
+}
