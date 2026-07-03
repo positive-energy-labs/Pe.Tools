@@ -4,7 +4,7 @@ using Pe.Dev.RevitAutomation;
 namespace Pe.Dev.Cli.Codegen;
 
 internal static class CodegenCommandRunner {
-    private static readonly IReadOnlyList<string> AllTargets = ["build", "product", "host-types", "host-contracts"];
+    private static readonly IReadOnlyList<string> AllTargets = ["build", "product", "host-contracts"];
 
     public static async Task<int> RunAsync(
         IReadOnlyList<string> args,
@@ -18,7 +18,7 @@ internal static class CodegenCommandRunner {
 
         var verb = args[0].ToLowerInvariant();
         if (verb == "check") {
-            Console.Error.WriteLine("`pe-dev codegen check` has been removed. Run `pe-dev codegen sync` instead; sync rewrites generated files and formats @pe-tools/host-generated.");
+            Console.Error.WriteLine("`pe-dev codegen check` has been removed. Run `pe-dev codegen sync` instead; sync rewrites generated files and formats @pe/host-contracts.");
             return 10;
         }
 
@@ -42,42 +42,33 @@ internal static class CodegenCommandRunner {
             var exitCode = currentTarget switch {
                 "build" => await BuildGeneratedProjection.RunAsync(paths, cancellationToken),
                 "product" => await ProductTypeScriptProjection.RunAsync(paths, cancellationToken),
-                "host-types" => await HostTypeGenerationProjection.RunAsync(paths, cancellationToken),
-                "host-contracts" => await HostTypeScriptClientProjection.RunAsync(paths, cancellationToken),
+                "host-contracts" => await HostContractsProjection.RunAsync(paths, cancellationToken),
                 _ => 10
             };
             if (exitCode != 0)
                 return exitCode;
         }
 
-        return ShouldFormatHostGenerated(targets)
-            ? await FormatHostGeneratedAsync(paths, cancellationToken)
-            : 0;
+        if (targets.Any(static targetName => targetName is "product" or "host-contracts")) {
+            var formatExitCode = await FormatHostContractsAsync(paths, cancellationToken);
+            if (formatExitCode != 0)
+                return formatExitCode;
+        }
+
+        return 0;
     }
 
-    private static bool ShouldFormatHostGenerated(IEnumerable<string> targets) => targets.Any(target => target is "product" or "host-types" or "host-contracts");
-
-    private static async Task<int> FormatHostGeneratedAsync(CodegenPaths paths, CancellationToken cancellationToken) {
-        Console.WriteLine("Formatting @pe-tools/host-generated...");
-        var startInfo = OperatingSystem.IsWindows()
-            ? new ProcessStartInfo {
-                FileName = "cmd.exe",
+    private static Task<int> FormatHostContractsAsync(CodegenPaths paths, CancellationToken cancellationToken) =>
+        ForegroundProcessRunner.RunAsync(
+            new ProcessStartInfo("vp") {
+                WorkingDirectory = paths.PeToolsDirectory,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-                WorkingDirectory = paths.PeToolsDirectory,
-                ArgumentList = { "/c", "vp", "check", "--fix", "packages/host-generated" }
-            }
-            : new ProcessStartInfo {
-                FileName = "vp",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                WorkingDirectory = paths.PeToolsDirectory,
-                ArgumentList = { "check", "--fix", "packages/host-generated" }
-            };
-        return await ForegroundProcessRunner.RunAsync(startInfo, cancellationToken);
-    }
+                ArgumentList = { "check", "--fix", "packages/host-contracts" }
+            },
+            cancellationToken
+        );
 
     private static string ReadTarget(IReadOnlyList<string> args) {
         var target = "all";
@@ -102,7 +93,7 @@ internal static class CodegenCommandRunner {
     private static void WriteUsage() => Console.Error.WriteLine(
         """
         Usage:
-          pe-dev codegen sync [--target all|build|product|host-types|host-contracts]
+          pe-dev codegen sync [--target all|build|product|host-contracts]
         """
     );
 }

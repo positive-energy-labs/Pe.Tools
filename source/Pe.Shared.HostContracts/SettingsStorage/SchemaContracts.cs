@@ -1,16 +1,16 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using TypeGen.Core.TypeAnnotations;
+using Pe.Shared.Codegen;
 
 namespace Pe.Shared.HostContracts.SettingsStorage;
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record SchemaRequest(
     string ModuleKey,
     string RootKey
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record FieldOptionsRequest(
     string ModuleKey,
     string RootKey,
@@ -19,13 +19,12 @@ public record FieldOptionsRequest(
     Dictionary<string, string>? ContextValues
 );
 
-[ExportTsInterface]
 public record ValidateSettingsRequest(
     string ModuleKey,
     string SettingsJson
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ValidationIssue(
     string InstancePath,
     string? SchemaPath,
@@ -36,26 +35,26 @@ public record ValidationIssue(
 );
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum FieldOptionsMode {
     Suggestion,
     Constraint
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record SchemaData(
     string SchemaJson,
     string? FragmentSchemaJson
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record FieldOptionItem(
     string Value,
     string Label,
     string? Description
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record FieldOptionsData(
     string SourceKey,
     FieldOptionsMode Mode,
@@ -63,7 +62,6 @@ public record FieldOptionsData(
     List<FieldOptionItem> Items
 );
 
-[ExportTsInterface]
 public record ValidationData(
     bool IsValid,
     List<ValidationIssue> Issues

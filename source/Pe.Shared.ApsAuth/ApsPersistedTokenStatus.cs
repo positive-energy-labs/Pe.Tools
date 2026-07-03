@@ -1,8 +1,8 @@
-using TypeGen.Core.TypeAnnotations;
+using Pe.Shared.Codegen;
 
 namespace Pe.Shared.ApsAuth;
 
-[ExportTsInterface]
+[ExportTsSchema]
 public sealed record ApsPersistedTokenStatus(
     bool Exists,
     DateTime? ExpiresAtUtc,

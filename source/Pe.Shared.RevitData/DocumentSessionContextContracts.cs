@@ -1,8 +1,8 @@
-using TypeGen.Core.TypeAnnotations;
+using Pe.Shared.Codegen;
 
 namespace Pe.Shared.RevitData;
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record RevitDocumentSummary(
     string DocumentKey,
     string Title,
@@ -18,7 +18,7 @@ public record RevitDocumentSummary(
     string? CloudModelUrn
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record RevitDocumentSessionContextData(
     bool HasActiveDocument,
     RevitDocumentSummary? ActiveDocument,
@@ -26,49 +26,12 @@ public record RevitDocumentSessionContextData(
     List<RevitDocumentSummary> OpenDocuments
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record OpenRevitDocumentRequest(
     string Path
 );
 
-[ExportTsEnum]
-public enum RevitRecentDocumentSource {
-    RevitIni,
-    RegistryProfileMru
-}
-
-[ExportTsEnum]
-public enum RevitRecentDocumentPathKind {
-    LocalPath,
-    CloudPath,
-    Unknown
-}
-
-[ExportTsInterface]
-public record RevitRecentDocumentsRequest(
-    string? RevitYear = null,
-    bool IncludeRegistryMru = false,
-    bool LocalFilesOnly = true
-);
-
-[ExportTsInterface]
-public record RevitRecentDocumentEntry(
-    RevitRecentDocumentSource Source,
-    string RevitYear,
-    int? Rank,
-    string Path,
-    RevitRecentDocumentPathKind PathKind,
-    string Title,
-    bool? Exists,
-    string? Profile
-);
-
-[ExportTsInterface]
-public record RevitRecentDocumentsData(
-    List<RevitRecentDocumentEntry> Documents
-);
-
-[ExportTsInterface]
+[ExportTsSchema]
 public record OpenRevitDocumentData(
     RevitDocumentSummary Document,
     RevitDocumentSessionContextData Session

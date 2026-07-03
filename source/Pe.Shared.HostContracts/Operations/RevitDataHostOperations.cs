@@ -31,15 +31,10 @@ public static class GetLoadedFamiliesFilterSchemaOperationContract {
     public static readonly HostOperationDefinition Definition =
         HostOperationDefinition.Create<NoRequest, SchemaData>(
             "revit.catalog.loaded-families.filter-schema",
-            HostHttpVerb.Get,
-            "/api/revit/catalog/loaded-families/filter/schema",
-            HostExecutionMode.Bridge,
             "Get Loaded Families Filter Schema",
             HostOperationAgentMetadata.Create(
-                "revit",
-                "Read the filter schema for loaded-family catalog and matrix queries.",
+                                "Read the filter schema for loaded-family catalog and matrix queries.",
                 new[] { "loaded-families", "families", "filter", "schema" },
-                requiresBridge: true,
                 requiresActiveDocument: true
             )
         );
@@ -49,15 +44,10 @@ public static class GetLoadedFamiliesFilterFieldOptionsOperationContract {
     public static readonly HostOperationDefinition Definition =
         HostOperationDefinition.Create<LoadedFamiliesFilterFieldOptionsRequest, FieldOptionsData>(
             "revit.catalog.loaded-families.filter-field-options",
-            HostHttpVerb.Post,
-            "/api/revit/catalog/loaded-families/filter/field-options",
-            HostExecutionMode.Bridge,
             "Get Loaded Families Filter Field Options",
             HostOperationAgentMetadata.Create(
-                "revit",
-                "Read document-specific option values for loaded-family query filters.",
+                                "Read document-specific option values for loaded-family query filters.",
                 new[] { "loaded-families", "families", "filter", "field-options" },
-                requiresBridge: true,
                 requiresActiveDocument: true
             )
         );
@@ -67,15 +57,10 @@ public static class GetScheduleCatalogOperationContract {
     public static readonly HostOperationDefinition Definition =
         HostOperationDefinition.Create<ScheduleCatalogRequest, ScheduleCatalogData>(
             "revit.catalog.schedules",
-            HostHttpVerb.Post,
-            "/api/revit/catalog/schedules",
-            HostExecutionMode.Bridge,
             "Get Schedule Catalog",
             HostOperationAgentMetadata.Create(
-                "revit",
-                "Read compact schedule handles, names, sheet placement, optional field metadata, and factual schedule evidence summaries from the active document. Revit-generated duplicate suffixes like '(2)' and 'Copy 1' are normalized out of name summary weighting. Do not use broad schedule catalog discovery for visible equipment coverage when revit.matrix.schedule-coverage can answer from view or element handles.",
+                                "Read compact schedule handles, names, sheet placement, optional field metadata, and factual schedule evidence summaries from the active document. Revit-generated duplicate suffixes like '(2)' and 'Copy 1' are normalized out of name summary weighting. Do not use broad schedule catalog discovery for visible equipment coverage when revit.matrix.schedule-coverage can answer from view or element handles.",
                 new[] { "schedules", "catalog", "fields", "columns", "parameters", "document", "sheet-placement", "printed-context" },
-                requiresBridge: true,
                 requiresActiveDocument: true,
                 requestExamples: [
                     RevitDataHostOperationExamples.Example(
@@ -106,15 +91,10 @@ public static class GetProjectBrowserOperationContract {
     public static readonly HostOperationDefinition Definition =
         HostOperationDefinition.Create<ProjectBrowserRequest, ProjectBrowserData>(
             "revit.catalog.project-browser",
-            HostHttpVerb.Post,
-            "/api/revit/catalog/project-browser",
-            HostExecutionMode.Bridge,
             "Get Project Browser",
             HostOperationAgentMetadata.Create(
-                "revit",
-                "Read bounded Project Browser organization for views, sheets, and schedules as navigation/provenance metadata.",
+                                "Read bounded Project Browser organization for views, sheets, and schedules as navigation/provenance metadata.",
                 new[] { "project-browser", "browser", "views", "sheets", "schedules", "folders", "navigation", "provenance" },
-                requiresBridge: true,
                 requiresActiveDocument: true,
                 requestExamples: [
                     RevitDataHostOperationExamples.Example(
@@ -144,15 +124,10 @@ public static class GetSheetDetailsOperationContract {
     public static readonly HostOperationDefinition Definition =
         HostOperationDefinition.Create<SheetDetailRequest, SheetDetailData>(
             "revit.detail.sheets",
-            HostHttpVerb.Post,
-            "/api/revit/detail/sheets",
-            HostExecutionMode.Bridge,
             "Get Sheet Details",
             HostOperationAgentMetadata.Create(
-                "revit",
-                "Read minimal native sheet anchors for extractor and scripting workflows: sheet identity, placed views, placed schedules, title blocks, sheet-owned text, and provenance.",
+                                "Read minimal native sheet anchors for extractor and scripting workflows: sheet identity, placed views, placed schedules, title blocks, sheet-owned text, and provenance.",
                 new[] { "sheets", "sheet-anchors", "printed-context", "viewports", "schedule-placement", "title-blocks", "text-notes", "extractor-boundary" },
-                requiresBridge: true,
                 requiresActiveDocument: true,
                 requestExamples: [
                     RevitDataHostOperationExamples.Example(
@@ -182,15 +157,10 @@ public static class GetProjectIndexOperationContract {
     public static readonly HostOperationDefinition Definition =
         HostOperationDefinition.Create<ProjectIndexRequest, ProjectIndexData>(
             "revit.catalog.project-index",
-            HostHttpVerb.Post,
-            "/api/revit/catalog/project-index",
-            HostExecutionMode.Bridge,
             "Get Project Index",
             HostOperationAgentMetadata.Create(
-                "revit",
-                "Read a compact semantic project index with bounded Project Browser provenance for levels, sheets, views, schedules, categories, and families.",
+                                "Read a compact semantic project index with bounded Project Browser provenance for levels, sheets, views, schedules, categories, and families.",
                 new[] { "project-index", "project-browser", "browser-provenance", "levels", "sheets", "views", "schedules", "printed-context", "orientation" },
-                requiresBridge: true,
                 requiresActiveDocument: true,
                 requestExamples: [
                     RevitDataHostOperationExamples.Example(
@@ -217,15 +187,10 @@ public static class GetScheduleProfilesQueryOperationContract {
     public static readonly HostOperationDefinition Definition =
         HostOperationDefinition.Create<ScheduleProfilesQueryRequest, ScheduleProfilesQueryData>(
             "revit.matrix.schedule-profiles",
-            HostHttpVerb.Post,
-            "/api/revit/matrix/schedule-profiles",
-            HostExecutionMode.Bridge,
             "Get Schedule Profiles Query",
             HostOperationAgentMetadata.Create(
-                "revit",
-                "Read schedule profile projections from the active document.",
+                                "Read schedule profile projections from the active document.",
                 new[] { "schedules", "profiles", "query", "projection", "authored-schedule-shape" },
-                requiresBridge: true,
                 requiresActiveDocument: true,
                 requestExamples: [
                     RevitDataHostOperationExamples.Example(
@@ -252,15 +217,10 @@ public static class GetScheduleQueryOperationContract {
     public static readonly HostOperationDefinition Definition =
         HostOperationDefinition.Create<ScheduleQueryRequest, ScheduleQueryData>(
             "revit.detail.schedules",
-            HostHttpVerb.Post,
-            "/api/revit/detail/schedules",
-            HostExecutionMode.Bridge,
             "Get Schedule Query",
             HostOperationAgentMetadata.Create(
-                "revit",
-                "Read schedule rows and field values from the active document.",
+                                "Read schedule rows and field values from the active document.",
                 new[] { "schedules", "query", "rows", "values", "detail" },
-                requiresBridge: true,
                 requiresActiveDocument: true,
                 requestExamples: [
                     RevitDataHostOperationExamples.Example(
@@ -287,15 +247,10 @@ public static class GetLoadedFamiliesCatalogOperationContract {
     public static readonly HostOperationDefinition Definition =
         HostOperationDefinition.Create<LoadedFamiliesCatalogRequest, LoadedFamiliesCatalogData>(
             "revit.catalog.loaded-families",
-            HostHttpVerb.Post,
-            "/api/revit/catalog/loaded-families",
-            HostExecutionMode.Bridge,
             "Get Loaded Families Catalog",
             HostOperationAgentMetadata.Create(
-                "revit",
-                "Read loaded family and type facts from the active document.",
+                                "Read loaded family and type facts from the active document.",
                 new[] { "loaded-families", "families", "types", "catalog" },
-                requiresBridge: true,
                 requiresActiveDocument: true,
                 requestExamples: [
                     RevitDataHostOperationExamples.Example(
@@ -322,15 +277,10 @@ public static class GetLoadedFamiliesMatrixOperationContract {
     public static readonly HostOperationDefinition Definition =
         HostOperationDefinition.Create<LoadedFamiliesMatrixRequest, LoadedFamiliesMatrixData>(
             "revit.matrix.loaded-families",
-            HostHttpVerb.Post,
-            "/api/revit/matrix/loaded-families",
-            HostExecutionMode.Bridge,
             "Get Loaded Families Matrix",
             HostOperationAgentMetadata.Create(
-                "revit",
-                "Read a matrix projection of loaded family/type facts from the active document.",
+                                "Read a matrix projection of loaded family/type facts from the active document.",
                 new[] { "loaded-families", "families", "matrix", "projection", "parameter-presence" },
-                requiresBridge: true,
                 requiresActiveDocument: true,
                 requestExamples: [
                     RevitDataHostOperationExamples.Example(
@@ -351,15 +301,10 @@ public static class GetScheduleCoverageOperationContract {
     public static readonly HostOperationDefinition Definition =
         HostOperationDefinition.Create<ScheduleCoverageRequest, ScheduleCoverageData>(
             "revit.matrix.schedule-coverage",
-            HostHttpVerb.Post,
-            "/api/revit/matrix/schedule-coverage",
-            HostExecutionMode.Bridge,
             "Get Schedule Coverage Matrix",
             HostOperationAgentMetadata.Create(
-                "revit",
-                "Read bounded element-to-schedule coverage counts and samples from the active document, including active-view-visible or explicit-handle scopes.",
+                                "Read bounded element-to-schedule coverage counts and samples from the active document, including active-view-visible or explicit-handle scopes.",
                 new[] { "schedules", "coverage", "matrix", "elements", "handles", "active-view-visible", "explicit-handles", "visible-equipment", "printed-context" },
-                requiresBridge: true,
                 requiresActiveDocument: true,
                 requestExamples: [
                     RevitDataHostOperationExamples.Example(
@@ -389,15 +334,10 @@ public static class GetParameterCoverageOperationContract {
     public static readonly HostOperationDefinition Definition =
         HostOperationDefinition.Create<ParameterCoverageRequest, ParameterCoverageData>(
             "revit.matrix.parameter-coverage",
-            HostHttpVerb.Post,
-            "/api/revit/matrix/parameter-coverage",
-            HostExecutionMode.Bridge,
             "Get Parameter Coverage Matrix",
             HostOperationAgentMetadata.Create(
-                "revit",
-                "Read bounded parameter presence, blank/default counts, and sample handles from the active document.",
+                                "Read bounded parameter presence, blank/default counts, and sample handles from the active document.",
                 new[] { "parameters", "coverage", "matrix", "elements", "handles" },
-                requiresBridge: true,
                 requiresActiveDocument: true,
                 requestExamples: [
                     RevitDataHostOperationExamples.Example(
@@ -417,15 +357,10 @@ public static class GetConceptEvidenceOperationContract {
     public static readonly HostOperationDefinition Definition =
         HostOperationDefinition.Create<ConceptEvidenceRequest, ConceptEvidenceData>(
             "revit.catalog.concept-evidence",
-            HostHttpVerb.Post,
-            "/api/revit/catalog/concept-evidence",
-            HostExecutionMode.Bridge,
             "Get Concept Evidence",
             HostOperationAgentMetadata.Create(
-                "revit",
-                "Infer project-specific parameter candidates for operator concepts from factual binding and schedule evidence. Category and subject hints are weak context, not expected-shape rules; use returned reasons and facts before detail or coverage calls.",
+                                "Infer project-specific parameter candidates for operator concepts from factual binding and schedule evidence. Category and subject hints are weak context, not expected-shape rules; use returned reasons and facts before detail or coverage calls.",
                 new[] { "concepts", "parameter-evidence", "project-standards", "bindings", "schedule-fields", "discovery" },
-                requiresBridge: true,
                 requiresActiveDocument: true,
                 requestExamples: [
                     RevitDataHostOperationExamples.Example(
@@ -448,15 +383,10 @@ public static class GetParameterEvidenceOperationContract {
     public static readonly HostOperationDefinition Definition =
         HostOperationDefinition.Create<ParameterEvidenceRequest, ParameterEvidenceData>(
             "revit.catalog.parameter-evidence",
-            HostHttpVerb.Post,
-            "/api/revit/catalog/parameter-evidence",
-            HostExecutionMode.Bridge,
             "Get Parameter Evidence",
             HostOperationAgentMetadata.Create(
-                "revit",
-                "Return factual parameter evidence from project bindings, schedule fields/filters, and scoped element presence. Use this when project-standard parameter names are uncertain; inspect binding categories, schedule usage, counts, and samples, then pass observed parameter identities or named references into detail or matrix calls.",
+                                "Return factual parameter evidence from project bindings, schedule fields/filters, and scoped element presence. Use this when project-standard parameter names are uncertain; inspect binding categories, schedule usage, counts, and samples, then pass observed parameter identities or named references into detail or matrix calls.",
                 new[] { "parameters", "evidence", "project-bindings", "schedule-fields", "categories", "parameter-usage" },
-                requiresBridge: true,
                 requiresActiveDocument: true,
                 requestExamples: [
                     RevitDataHostOperationExamples.Example(
@@ -486,15 +416,10 @@ public static class GetProjectParameterBindingsOperationContract {
     public static readonly HostOperationDefinition Definition =
         HostOperationDefinition.Create<ProjectParameterBindingsRequest, ProjectParameterBindingsData>(
             "revit.catalog.parameter-bindings",
-            HostHttpVerb.Post,
-            "/api/revit/catalog/parameter-bindings",
-            HostExecutionMode.Bridge,
             "Get Project Parameter Bindings",
             HostOperationAgentMetadata.Create(
-                "revit",
-                "Read project parameter bindings from the active document, using the same canonical parameter identity and shared-GUID string language returned by parameter evidence and coverage operations.",
+                                "Read project parameter bindings from the active document, using the same canonical parameter identity and shared-GUID string language returned by parameter evidence and coverage operations.",
                 new[] { "parameters", "project-parameters", "bindings", "document", "catalog", "parameter-identity", "shared-guid" },
-                requiresBridge: true,
                 requiresActiveDocument: true,
                 requestExamples: [
                     RevitDataHostOperationExamples.Example(

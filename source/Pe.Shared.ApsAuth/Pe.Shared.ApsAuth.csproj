@@ -5,7 +5,4 @@
         <ImplicitUsings>enable</ImplicitUsings>
     </PropertyGroup>
 
-    <ItemGroup>
-        <PackageReference Include="TypeGen" Version="5.0.0"/>
-    </ItemGroup>
 </Project>

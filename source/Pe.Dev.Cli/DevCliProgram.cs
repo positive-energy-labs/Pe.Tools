@@ -9,7 +9,7 @@ internal static class DevCliProgram {
                                         pe-dev pea link-dev
                                         pe-dev web <pea|peco> [web options]
                                         pe-dev automation <auth|browse|manifest|submit|inspect|cache> ...
-                                        pe-dev codegen <check|sync> [--target all|build|host-types|host-client]
+                                        pe-dev codegen sync [--target all|build|host-contracts|product]
 
                                       Primary workflow:
                                         bootstrap-path  Add the running pe-dev build output directory to the user PATH.

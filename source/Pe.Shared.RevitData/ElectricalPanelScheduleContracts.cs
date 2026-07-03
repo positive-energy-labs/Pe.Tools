@@ -1,11 +1,11 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using TypeGen.Core.TypeAnnotations;
+using Pe.Shared.Codegen;
 
 namespace Pe.Shared.RevitData;
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ElectricalPanelSchedulesQueryKind {
     CurrentActiveView,
     ScheduleReferences,
@@ -13,7 +13,7 @@ public enum ElectricalPanelSchedulesQueryKind {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ElectricalPanelScheduleSectionType {
     Header,
     Body,
@@ -22,7 +22,7 @@ public enum ElectricalPanelScheduleSectionType {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ElectricalPanelScheduleCellSourceKind {
     Unknown,
     TextOnly,
@@ -32,13 +32,13 @@ public enum ElectricalPanelScheduleCellSourceKind {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ElectricalPanelScheduleProjectionView {
     FullSections,
     RowsOnly
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ElectricalPanelScheduleProjectionOptions {
     public ElectricalPanelScheduleProjectionView View { get; init; } = ElectricalPanelScheduleProjectionView.FullSections;
     public List<string> CircuitNumbers { get; init; } = [];
@@ -46,12 +46,12 @@ public record ElectricalPanelScheduleProjectionOptions {
     public int? MaxRows { get; init; }
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ElectricalPanelSchedulesQueryRequest(
     ElectricalPanelSchedulesQuery? Query = null
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ElectricalPanelSchedulesQuery(
     ElectricalPanelSchedulesQueryKind Kind = ElectricalPanelSchedulesQueryKind.ScheduleReferences,
     List<long>? ScheduleIds = null,
@@ -62,7 +62,7 @@ public record ElectricalPanelSchedulesQuery(
     ElectricalPanelScheduleProjectionOptions? Projection = null
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ElectricalPanelScheduleMergedRegion(
     int TopRowNumber,
     int LeftColumnNumber,
@@ -70,7 +70,7 @@ public record ElectricalPanelScheduleMergedRegion(
     int RightColumnNumber
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ElectricalPanelScheduleCellProjection(
     int ColumnNumber,
     string DisplayText,
@@ -86,14 +86,14 @@ public record ElectricalPanelScheduleCellProjection(
     ElectricalPanelScheduleMergedRegion? MergedRegion
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ElectricalPanelScheduleRowProjection(
     int RowNumber,
     bool IsCircuitTableRow,
     List<ElectricalPanelScheduleCellProjection> Cells
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ElectricalPanelScheduleSectionProjection(
     ElectricalPanelScheduleSectionType SectionType,
     bool IsValid,
@@ -106,7 +106,7 @@ public record ElectricalPanelScheduleSectionProjection(
     List<ElectricalPanelScheduleRowProjection> Rows
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ElectricalPanelScheduleProjection(
     long ScheduleId,
     string ScheduleUniqueId,
@@ -121,7 +121,7 @@ public record ElectricalPanelScheduleProjection(
     List<ElectricalPanelScheduleSectionProjection> Sections
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ElectricalPanelSchedulesQueryData(
     string DocumentTitle,
     ElectricalPanelSchedulesQueryKind QueryKind,

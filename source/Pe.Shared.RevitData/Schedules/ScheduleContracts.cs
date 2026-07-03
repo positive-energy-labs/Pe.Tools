@@ -1,12 +1,12 @@
 using Pe.Shared.RevitData;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using TypeGen.Core.TypeAnnotations;
+using Pe.Shared.Codegen;
 
 namespace Pe.Shared.RevitData.Schedules;
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ScheduleProfilesQueryKind {
     CurrentActiveView,
     ScheduleReferences,
@@ -14,7 +14,7 @@ public enum ScheduleProfilesQueryKind {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ScheduleQueryKind {
     CurrentActiveView,
     ScheduleReferences,
@@ -22,12 +22,12 @@ public enum ScheduleQueryKind {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ScheduleCustomParameterMatchKind {
     Equals
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleCustomParameterFilter(
     ParameterReference Parameter,
     string ExpectedValue,
@@ -35,14 +35,14 @@ public record ScheduleCustomParameterFilter(
 );
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum SchedulePlacementScope {
     All,
     PlacedOnly,
     UnplacedOnly
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleCatalogProjection {
     public RevitDataResultView View { get; init; } = RevitDataResultView.Summary;
     public bool IncludeFilters { get; init; }
@@ -52,7 +52,7 @@ public record ScheduleCatalogProjection {
     public bool IncludeSheetPlacements { get; init; } = true;
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleCatalogRequest {
     public List<string> CategoryNames { get; init; } = [];
     public List<string> ScheduleNames { get; init; } = [];
@@ -69,17 +69,17 @@ public record ScheduleCatalogRequest {
     public RevitDataOutputBudget? Budget { get; init; }
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleProfilesQueryRequest(
     ScheduleProfilesQuery? Query = null
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleQueryRequest(
     ScheduleQuery? Query = null
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleOnFinishSettings {
     public ScheduleOnFinishSettings() {
     }
@@ -92,7 +92,7 @@ public record ScheduleOnFinishSettings {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ScheduleTitleHorizontalAlignment {
     Left,
     Center,
@@ -100,7 +100,7 @@ public enum ScheduleTitleHorizontalAlignment {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ScheduleFieldHorizontalAlignment {
     Left,
     Center,
@@ -108,7 +108,7 @@ public enum ScheduleFieldHorizontalAlignment {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ScheduleColumnHeaderVerticalAlignment {
     Center,
     Top,
@@ -116,7 +116,7 @@ public enum ScheduleColumnHeaderVerticalAlignment {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ScheduleAuthoredFieldDisplayType {
     Standard,
     Totals,
@@ -126,21 +126,21 @@ public enum ScheduleAuthoredFieldDisplayType {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ScheduleAuthoredCalculatedFieldType {
     Formula,
     Percentage
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ScheduleAuthoredSortOrder {
     Ascending,
     Descending
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ScheduleAuthoredFilterType {
     HasParameter,
     Equal,
@@ -161,7 +161,7 @@ public enum ScheduleAuthoredFilterType {
     HasNoValue
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleTitleBorderSpec {
     public string? TopLineStyleName { get; init; }
     public string? BottomLineStyleName { get; init; }
@@ -169,13 +169,13 @@ public record ScheduleTitleBorderSpec {
     public string? RightLineStyleName { get; init; }
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleTitleStyleSpec {
     public ScheduleTitleHorizontalAlignment HorizontalAlignment { get; init; } = ScheduleTitleHorizontalAlignment.Left;
     public ScheduleTitleBorderSpec? BorderStyle { get; init; }
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleFieldFormatSpec {
     public string? UnitTypeId { get; init; }
     public string? SymbolTypeId { get; init; }
@@ -187,7 +187,7 @@ public record ScheduleFieldFormatSpec {
     public bool SuppressSpaces { get; init; }
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record CombinedParameterSpec {
     public CombinedParameterSpec() {
     }
@@ -206,7 +206,7 @@ public record CombinedParameterSpec {
         ScheduleParameterReferenceSelection.GetEffectiveParameter(this.Parameter, this.ParameterName);
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleFieldSpec {
     public ScheduleFieldSpec() {
     }
@@ -244,7 +244,7 @@ internal static class ScheduleParameterReferenceSelection {
         !string.IsNullOrWhiteSpace(parameter?.Name);
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleSortGroupSpec {
     public ScheduleSortGroupSpec() {
     }
@@ -260,7 +260,7 @@ public record ScheduleSortGroupSpec {
     public bool ShowBlankLine { get; init; }
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleFilterSpec {
     public ScheduleFilterSpec() {
     }
@@ -274,7 +274,7 @@ public record ScheduleFilterSpec {
     public string? Value { get; init; }
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleProfile {
     private const string DefaultTitleBottomLineStyleName = "Thin Lines";
 
@@ -303,7 +303,7 @@ public record ScheduleProfile {
             BorderStyle = new ScheduleTitleBorderSpec { BottomLineStyleName = DefaultTitleBottomLineStyleName }
         };
 }
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleCatalogSheetPlacement(
     string SheetNumber,
     string SheetName,
@@ -312,7 +312,7 @@ public record ScheduleCatalogSheetPlacement(
     string SheetRole
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleCatalogCustomParameterValue(
     ParameterDefinitionDescriptor Definition,
     string? Value,
@@ -322,7 +322,7 @@ public record ScheduleCatalogCustomParameterValue(
     public string Name => this.Definition.Identity.Name;
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleVisibleFamilyEntry(
     long FamilyId,
     string FamilyName,
@@ -330,7 +330,7 @@ public record ScheduleVisibleFamilyEntry(
     int VisibleInstanceCount
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleFieldParameterDescriptor(
     ParameterDefinitionDescriptor? Definition,
     string? FieldType
@@ -339,7 +339,7 @@ public record ScheduleFieldParameterDescriptor(
     public string? SpecTypeId => this.Definition?.DataTypeId;
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleParameterUsageEntry(
     string FieldName,
     string ColumnHeading,
@@ -352,7 +352,7 @@ public record ScheduleParameterUsageEntry(
     public bool IsCombinedParameter { get; init; }
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleCatalogEntry(
     long ScheduleId,
     string ScheduleUniqueId,
@@ -374,27 +374,27 @@ public record ScheduleCatalogEntry(
     List<ProjectBrowserPath> BrowserPaths
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleCatalogNameGroup(
     string NormalizedName,
     int Count,
     List<string> Names
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleCatalogNameTokenCount(
     string Token,
     int Count
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleCatalogFieldUsageSummary(
     string FieldName,
     int ScheduleCount,
     double AverageFieldIndex
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleCatalogFieldFingerprint(
     long ScheduleId,
     string ScheduleName,
@@ -405,7 +405,7 @@ public record ScheduleCatalogFieldFingerprint(
     Dictionary<string, int> PrefixDistribution
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleCatalogSummary(
     int TotalSchedules,
     List<ScheduleCatalogNameGroup> DuplicateNormalizedNameGroups,
@@ -415,7 +415,7 @@ public record ScheduleCatalogSummary(
     List<ScheduleCatalogFieldFingerprint> FieldFingerprints
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleCatalogData(
     List<ScheduleCatalogEntry> Entries,
     List<RevitDataIssue> Issues,
@@ -423,7 +423,7 @@ public record ScheduleCatalogData(
     ScheduleCatalogSummary? Summary = null
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleProfilesQuery(
     ScheduleProfilesQueryKind Kind = ScheduleProfilesQueryKind.ScheduleReferences,
     List<long>? ScheduleIds = null,
@@ -432,7 +432,7 @@ public record ScheduleProfilesQuery(
     bool IncludeTemplates = true
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleProfileQueryEntry(
     long ScheduleId,
     string ScheduleUniqueId,
@@ -444,7 +444,7 @@ public record ScheduleProfileQueryEntry(
     List<ScheduleCatalogCustomParameterValue> CustomParameters
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleProfilesQueryData(
     string DocumentTitle,
     ScheduleProfilesQueryKind QueryKind,
@@ -454,14 +454,14 @@ public record ScheduleProfilesQueryData(
     List<RevitDataIssue> Issues
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleRequiredFieldAudit {
     public List<string> FieldNames { get; init; } = [];
     public bool TreatZeroAsDefault { get; init; }
     public bool TreatDashAsBlank { get; init; } = true;
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleQueryProjection {
     public RevitDataResultView View { get; init; } = RevitDataResultView.Summary;
     public bool IncludeColumns { get; init; }
@@ -472,7 +472,7 @@ public record ScheduleQueryProjection {
     public ScheduleRequiredFieldAudit? RequiredFieldAudit { get; init; }
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleQuery(
     ScheduleQueryKind Kind = ScheduleQueryKind.ScheduleReferences,
     List<long>? ScheduleIds = null,
@@ -482,7 +482,7 @@ public record ScheduleQuery(
     RevitDataOutputBudget? Budget = null
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleRenderedColumn(
     int ColumnNumber,
     string HeaderText,
@@ -495,7 +495,7 @@ public record ScheduleRenderedColumn(
     public bool IsCombinedParameter { get; init; }
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleRenderedSubject(
     long SubjectId,
     string SubjectUniqueId,
@@ -508,14 +508,14 @@ public record ScheduleRenderedSubject(
 );
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ScheduleRenderedRowKind {
     Data,
     GroupFooter
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ScheduleRenderedRowBindingKind {
     None,
     SingleSubject,
@@ -523,7 +523,7 @@ public enum ScheduleRenderedRowBindingKind {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ScheduleRenderedRowSubjectResolutionStatus {
     NotApplicable,
     NonBindable,
@@ -532,7 +532,7 @@ public enum ScheduleRenderedRowSubjectResolutionStatus {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ScheduleRenderedRowSubjectResolutionReason {
     None,
     NonDataRow,
@@ -542,14 +542,14 @@ public enum ScheduleRenderedRowSubjectResolutionReason {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ScheduleRenderedBindingStatus {
     None,
     Partial,
     Complete
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleRenderedCellIssue(
     int RowNumber,
     int ColumnNumber,
@@ -559,7 +559,7 @@ public record ScheduleRenderedCellIssue(
     string Message
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleRenderedRow(
     int RowNumber,
     ScheduleRenderedRowKind Kind,
@@ -571,7 +571,7 @@ public record ScheduleRenderedRow(
     List<ScheduleRenderedCellIssue>? Issues = null
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleRenderedScheduleEntry(
     long ScheduleId,
     string ScheduleUniqueId,
@@ -595,7 +595,7 @@ public record ScheduleRenderedScheduleEntry(
     List<ScheduleRenderedCellIssue>? RowIssues = null
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ScheduleQueryData(
     string DocumentTitle,
     ScheduleQueryKind QueryKind,

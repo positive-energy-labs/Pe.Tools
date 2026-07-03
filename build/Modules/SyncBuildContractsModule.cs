@@ -16,8 +16,9 @@ public sealed class SyncBuildContractsModule : Module {
         }
 
         foreach (var generatedFile in generatedFiles) {
-            context.Logger.LogInformation("Updated generated build contract: {Path}", generatedFile);
-            context.Summary.KeyValue("Generated", "BuildContract", generatedFile);
+            var action = File.Exists(generatedFile) ? "Updated" : "Deleted";
+            context.Logger.LogInformation("{Action} generated build contract: {Path}", action, generatedFile);
+            context.Summary.KeyValue(action, "BuildContract", generatedFile);
         }
 
         return Task.CompletedTask;

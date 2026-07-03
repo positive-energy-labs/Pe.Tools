@@ -1,11 +1,11 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using TypeGen.Core.TypeAnnotations;
+using Pe.Shared.Codegen;
 
 namespace Pe.Shared.RevitData;
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ElectricalInsightRole {
     Panel,
     DownstreamPanel,
@@ -19,48 +19,48 @@ public enum ElectricalInsightRole {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ElectricalPanelCapacitySource {
     None,
     PanelScheduleData
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ElectricalPanelsCatalogRequest(
     ElectricalPanelFilter? Filter
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ElectricalCircuitsCatalogRequest(
     ElectricalCircuitFilter? Filter,
     ElectricalCircuitsCatalogOptions? Options = null
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ElectricalLoadClassificationsCatalogRequest(
     ElectricalLoadClassificationFilter? Filter
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ElectricalPanelFilter {
     public List<string> PanelNames { get; init; } = [];
     public List<string> Marks { get; init; } = [];
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ElectricalCircuitFilter {
     public List<string> PanelNames { get; init; } = [];
     public List<string> CircuitNumbers { get; init; } = [];
     public List<string> LoadNames { get; init; } = [];
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ElectricalLoadClassificationFilter {
     public List<string> Names { get; init; } = [];
     public List<string> Abbreviations { get; init; } = [];
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ElectricalCircuitsCatalogOptions(
     RequestedParameterQuery? ParameterQuery = null,
     bool IncludeNearbyProxyContext = false,
@@ -69,7 +69,7 @@ public record ElectricalCircuitsCatalogOptions(
     int MaxNearbyCandidatesPerCircuit = 8
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ElectricalCatalogFilterReport(
     List<string> AppliedPanelNames,
     List<string> AppliedCircuitNumbers,
@@ -80,7 +80,7 @@ public record ElectricalCatalogFilterReport(
     int MatchedCount
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ElectricalPanelCatalogEntry(
     long PanelId,
     string PanelUniqueId,
@@ -102,14 +102,14 @@ public record ElectricalPanelCatalogEntry(
     int ConnectedLoadCount
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ElectricalPanelsCatalogData(
     List<ElectricalPanelCatalogEntry> Entries,
     List<RevitDataIssue> Issues,
     ElectricalCatalogFilterReport? FilterReport = null
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ElectricalCircuitConnectedElementEntry(
     long ElementId,
     string ElementUniqueId,
@@ -128,14 +128,14 @@ public record ElectricalCircuitConnectedElementEntry(
 );
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
+[ExportTsSchema]
 public enum ElectricalNearbyProxyCandidateMatchReason {
     NearbyIdentityCandidate,
     RequestedParameterIdentityMatch,
     MarkIdentityMatch
 }
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ElectricalNearbyProxyCandidateEntry(
     long ElementId,
     string ElementUniqueId,
@@ -153,7 +153,7 @@ public record ElectricalNearbyProxyCandidateEntry(
     List<RequestedElementParameterValue>? RequestedParameters
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ElectricalCircuitWireEntry(
     long WireId,
     string WireUniqueId,
@@ -164,7 +164,7 @@ public record ElectricalCircuitWireEntry(
     int GroundConductorCount
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ElectricalCircuitCatalogEntry(
     long CircuitId,
     string CircuitUniqueId,
@@ -201,14 +201,14 @@ public record ElectricalCircuitCatalogEntry(
     List<ElectricalNearbyProxyCandidateEntry>? NearbyProxyCandidates
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ElectricalCircuitsCatalogData(
     List<ElectricalCircuitCatalogEntry> Entries,
     List<RevitDataIssue> Issues,
     ElectricalCatalogFilterReport? FilterReport = null
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ElectricalDemandFactorDefinitionEntry(
     long DemandFactorId,
     string DemandFactorUniqueId,
@@ -219,7 +219,7 @@ public record ElectricalDemandFactorDefinitionEntry(
     int ValuesCount
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ElectricalLoadClassificationCatalogEntry(
     long ClassificationId,
     string ClassificationUniqueId,
@@ -231,7 +231,7 @@ public record ElectricalLoadClassificationCatalogEntry(
     ElectricalDemandFactorDefinitionEntry? DemandFactor
 );
 
-[ExportTsInterface]
+[ExportTsSchema]
 public record ElectricalLoadClassificationsCatalogData(
     List<ElectricalLoadClassificationCatalogEntry> Entries,
     List<RevitDataIssue> Issues
