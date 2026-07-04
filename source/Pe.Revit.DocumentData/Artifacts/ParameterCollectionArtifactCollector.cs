@@ -17,7 +17,12 @@ public static class ParameterCollectionArtifactCollector {
         if (doc == null)
             throw new ArgumentNullException(nameof(doc));
 
-        var bindings = ProjectParameterBindingsCollector.Collect(doc, filter);
+        // The artifact feeds FamilyFoundry migration planning: binding categories are load-bearing,
+        // and the bindings collector strips them below Rows/Full projection.
+        var bindings = ProjectParameterBindingsCollector.Collect(
+            doc,
+            filter,
+            projection: new RevitDataProjectionRequest { View = RevitDataResultView.Full });
         var matrix = LoadedFamiliesMatrixCollector.Collect(doc, filter, onProgress);
 
         return new ParameterCollectionArtifact(

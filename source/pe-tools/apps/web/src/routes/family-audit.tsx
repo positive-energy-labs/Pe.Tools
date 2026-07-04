@@ -5,7 +5,11 @@ import { useMemo, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { HostConnectionPill, toHostIssue } from "#/host/issues";
-import { LoadedFamilyPlacementScope } from "#/host/loaded-families-view";
+import {
+  LoadedFamilyPlacementScope,
+  cellText,
+  visibleParameters,
+} from "#/host/loaded-families-view";
 import {
   useHostStatusQuery,
   useLoadedFamiliesCatalogQuery,
@@ -60,6 +64,7 @@ function FamilyAuditRoute() {
             placementScope: LoadedFamilyPlacementScope.AllLoaded,
           },
           budget: { maxEntries: 1, maxSamplesPerEntry: 1000 },
+          includeTempPlacement: true,
         }
       : undefined,
     { enabled: bridgeConnected && picked !== null },
@@ -71,20 +76,24 @@ function FamilyAuditRoute() {
     if (!family) {
       return { rows: [] as AuditRow[], columns: [] as string[], current: {} };
     }
-    const columnNames = family.types.map((type) => type.typeName);
+    const columnNames = [...family.typeNames];
     const auditRows: AuditRow[] = [];
     const values: Record<string, Record<string, string>> = {};
     const seen = new Set<string>();
-    for (const param of family.visibleParameters) {
-      const name = param.identity.name;
+    for (const param of visibleParameters(family)) {
+      const name = param.definition.identity.name;
       if (seen.has(name)) continue;
       seen.add(name);
       auditRows.push({
         name,
-        caption: `${param.kind.replace("Parameter", "")} · ${param.isInstance ? "inst" : "type"}`,
+        caption: `${param.kind.replace("Parameter", "")} · ${
+          param.definition.isInstance ? "inst" : "type"
+        }`,
         formula: param.formulaState === "Present" ? param.formula || "formula" : undefined,
       });
-      values[name] = { ...param.valuesByType };
+      values[name] = Object.fromEntries(
+        Object.entries(param.valuesPerType).map(([typeName, value]) => [typeName, cellText(value)]),
+      );
     }
     return { rows: auditRows, columns: columnNames, current: values };
   }, [family]);

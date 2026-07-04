@@ -721,8 +721,16 @@ export const hostOperations = {
     requestTypeName: "LoadedFamiliesMatrixRequest",
     responseTypeName: "LoadedFamiliesMatrixData",
     displayName: "Get Loaded Families Matrix",
-    description: "Read a matrix projection of loaded family/type facts from the active document.",
-    searchTerms: ["loaded-families", "families", "matrix", "projection", "parameter-presence"],
+    description:
+      "Read a matrix of loaded family snapshots (canonical family records: types, parameters with per-type values/formulas/scope, schedule membership) from the active document.",
+    searchTerms: [
+      "loaded-families",
+      "families",
+      "matrix",
+      "projection",
+      "parameter-scope",
+      "family-snapshot",
+    ],
     intent: "Read",
     requiresActiveDocument: true,
     costTier: "Expensive",
@@ -731,8 +739,14 @@ export const hostOperations = {
       {
         name: "bounded loaded-family matrix",
         description:
-          "Escalate from catalog to matrix only with family/category filters and a budget.",
+          "Escalate from catalog to matrix only with family/category filters and a budget. Response families are FamilySnapshotRecord: one parameters list where excluded entries carry excludedReason; per-type values in valuesPerType (null = no value).",
         json: "{ \u0022filter\u0022: { \u0022categoryNames\u0022: [\u0022Mechanical Equipment\u0022], \u0022familyNameContains\u0022: \u0022VAV\u0022, \u0022placementScope\u0022: \u0022PlacedOnly\u0022 }, \u0022budget\u0022: { \u0022maxEntries\u0022: 10, \u0022maxSamplesPerEntry\u0022: 20 } }",
+      },
+      {
+        name: "read-only matrix (no temp placement)",
+        description:
+          "Skip the temp-placement pass when live instance values and schedule membership for unplaced types are not needed; never mutates the document.",
+        json: "{ \u0022filter\u0022: { \u0022categoryNames\u0022: [\u0022Mechanical Equipment\u0022] }, \u0022includeTempPlacement\u0022: false, \u0022budget\u0022: { \u0022maxEntries\u0022: 10 } }",
       },
     ],
     safeDefaultRequestJson: "{}",

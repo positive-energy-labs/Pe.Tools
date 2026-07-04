@@ -1,21 +1,30 @@
 import { expect, test } from "vite-plus/test";
-import { flattenMatrix } from "../src/host/loaded-families-view";
+import {
+  cellText,
+  decodeMatrixData,
+  excludedParameters,
+  visibleParameters,
+} from "../src/host/loaded-families-view";
 
-// Captured verbatim from a live host matrix response. The host nests parameter
-// fields under `definition`, uses `presence` (not `scope`), and emits null cells.
-// The generated Effect schema parses this faithfully; the flatten adapter shapes
-// it for the table UI. This fixture guards both.
-const realMatrixResponse = {
+// Hand-authored to the reshaped wire contract (FamilySnapshotRecord). The host
+// nests parameter fields under `definition`, names the presence enum field
+// `scope`, ships ONE `parameters` list (excluded entries carry a non-null
+// `excludedReason`), and preserves null cells (`null` = no value, `""` = empty
+// string). The generated Effect schema parses this faithfully; components read
+// the record directly and coerce only at render via `cellText`.
+const matrixResponse = {
   families: [
     {
       familyId: 7719071,
       familyUniqueId: "401bbc9d-2d1e-46bc-bd46-45bc6bb1b40b-0075c89f",
       familyName: "!Mechanical Equipment_Clearance_Rectangular_UH",
       categoryName: "Mechanical Equipment",
+      versionGuid: "88a878a1-6b0c-4c95-b32b-7cf6f4b3ba54",
+      isPartial: false,
       placedInstanceCount: 0,
-      types: [{ typeName: "!Mechanical Equipment_Clearance_Rectangular_UH" }],
+      typeNames: ["!Mechanical Equipment_Clearance_Rectangular_UH"],
       scheduleNames: [],
-      visibleParameters: [
+      parameters: [
         {
           definition: {
             dataTypeId: "autodesk.spec:spec.bool-1.0.0",
@@ -32,9 +41,10 @@ const realMatrixResponse = {
           },
           formulaState: "NotApplicable",
           kind: "ProjectParameter",
-          presence: "ProjectBindingOnly",
+          scope: "ProjectBindingOnly",
           storageType: "Integer",
-          valuesByType: {
+          excludedReason: null,
+          valuesPerType: {
             "!Mechanical Equipment_Clearance_Rectangular_UH": null,
             default: null,
           },
@@ -47,14 +57,13 @@ const realMatrixResponse = {
           },
           formulaState: "None",
           kind: "FamilyParameter",
-          presence: "Family",
+          scope: "Family",
           storageType: "ElementId",
-          valuesByType: {
+          valuesPerType: {
             "!Mechanical Equipment_Clearance_Rectangular_UH": "PE Clearance [ID:3890443]",
+            default: "",
           },
         },
-      ],
-      excludedParameters: [
         {
           definition: {
             dataTypeLabel: "Area (Common)",
@@ -65,7 +74,9 @@ const realMatrixResponse = {
           excludedReason: "ProjectObservedBuiltIn",
           formulaState: "NotApplicable",
           kind: "Unknown",
-          presence: "Unresolved",
+          scope: "Unresolved",
+          storageType: "Double",
+          valuesPerType: {},
         },
       ],
       issues: [],
@@ -74,26 +85,51 @@ const realMatrixResponse = {
   issues: [],
 };
 
-test("matrix response flattens definition + presence and coerces null cells", () => {
-  const { families } = flattenMatrix(realMatrixResponse);
+test("matrix response decodes and helpers split visible/excluded on excludedReason", () => {
+  const { families } = decodeMatrixData(matrixResponse);
   const fam = families[0];
-  const [vp, vp2] = fam.visibleParameters;
 
-  // nested definition flattened
-  expect(vp.identity.name).toBe("Appears in Schedule");
-  expect(vp.isInstance).toBe(true);
-  expect(vp.groupTypeLabel).toBe("Identity Data");
-  // presence → scope
+  // canonical record fields survive decode as-is
+  expect(fam.typeNames).toEqual(["!Mechanical Equipment_Clearance_Rectangular_UH"]);
+  expect(fam.isPartial).toBe(false);
+  expect(fam.parameters).toHaveLength(3);
+
+  // one parameters list, split by excludedReason
+  const visible = visibleParameters(fam);
+  const excluded = excludedParameters(fam);
+  expect(visible.map((p) => p.definition.identity.name)).toEqual([
+    "Appears in Schedule",
+    "Clearance Block Material",
+  ]);
+  expect(excluded).toHaveLength(1);
+  expect(excluded[0].definition.identity.name).toBe("Area");
+  expect(excluded[0].excludedReason).toBe("ProjectObservedBuiltIn");
+
+  // nested definition + native scope field on the wire
+  const [vp, vp2] = visible;
+  expect(vp.definition.identity.name).toBe("Appears in Schedule");
+  expect(vp.definition.isInstance).toBe(true);
+  expect(vp.definition.groupTypeLabel).toBe("Identity Data");
   expect(vp.scope).toBe("ProjectBindingOnly");
   expect(vp2.scope).toBe("Family");
-  // null cells coerced to "", real values preserved
-  expect(vp.valuesByType.default).toBe("");
-  expect(vp2.valuesByType["!Mechanical Equipment_Clearance_Rectangular_UH"]).toBe(
+});
+
+test("null vs empty-string cells are preserved by decode and coerced only at render", () => {
+  const fam = decodeMatrixData(matrixResponse).families[0];
+  const [vp, vp2] = visibleParameters(fam);
+
+  // decode preserves the wire distinction: null = no value, "" = empty string
+  expect(vp.valuesPerType.default).toBeNull();
+  expect(vp2.valuesPerType.default).toBe("");
+  expect(vp2.valuesPerType["!Mechanical Equipment_Clearance_Rectangular_UH"]).toBe(
     "PE Clearance [ID:3890443]",
   );
 
-  const ex = fam.excludedParameters[0];
-  expect(ex.identity.name).toBe("Area");
-  expect(ex.scope).toBe("Unresolved");
-  expect(ex.excludedReason).toBe("ProjectObservedBuiltIn");
+  // render helper coerces both to displayable text
+  expect(cellText(vp.valuesPerType.default)).toBe("");
+  expect(cellText(vp2.valuesPerType.default)).toBe("");
+  expect(cellText(vp2.valuesPerType["!Mechanical Equipment_Clearance_Rectangular_UH"])).toBe(
+    "PE Clearance [ID:3890443]",
+  );
+  expect(cellText(vp.valuesPerType["missing-type"])).toBe("");
 });

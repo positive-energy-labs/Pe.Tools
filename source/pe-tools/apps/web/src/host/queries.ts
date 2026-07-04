@@ -5,7 +5,10 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { callHostRpc } from "#/host/client";
-import { type LoadedFamiliesRequest, flattenMatrixData } from "#/host/loaded-families-view";
+import type {
+  LoadedFamiliesMatrixRequest,
+  LoadedFamiliesRequest,
+} from "#/host/loaded-families-view";
 import type {
   FieldOptionsRequest,
   ParameterCatalogRequest,
@@ -96,16 +99,14 @@ export function useLoadedFamiliesCatalogQuery(
 }
 
 export function useLoadedFamiliesMatrixQuery(
-  request: LoadedFamiliesRequest | undefined,
+  request: LoadedFamiliesMatrixRequest | undefined,
   options?: HostQueryOptions,
 ) {
   return useQuery({
     queryKey: [...KEY, sessionKey(options), "loaded-families-matrix", filterKey(request)],
-    queryFn: async () => {
+    queryFn: () => {
       if (!request) throw new Error("Loaded families matrix request is required.");
-      return flattenMatrixData(
-        await callHostRpc("revit.matrix.loaded-families", request, callOptions(options)),
-      );
+      return callHostRpc("revit.matrix.loaded-families", request, callOptions(options));
     },
     enabled: (options?.enabled ?? true) && Boolean(request),
     staleTime: 10_000,

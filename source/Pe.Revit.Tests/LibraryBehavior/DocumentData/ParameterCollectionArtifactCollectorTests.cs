@@ -84,8 +84,9 @@ public sealed class ParameterCollectionArtifactCollectorTests {
                 filter
             );
 
+            // The loaded family takes its saved FILE name, not the family-doc title.
             var collectedFamily = artifact.LoadedFamiliesMatrix.Families
-                .SingleOrDefault(entry => string.Equals(entry.FamilyName, familyName, StringComparison.Ordinal));
+                .SingleOrDefault(entry => string.Equals(entry.FamilyName, loadedFamily!.Name, StringComparison.Ordinal));
             var collectedBinding = artifact.ProjectParameterBindings.Entries
                 .SingleOrDefault(entry => string.Equals(entry.Definition.Identity.Name, sharedParameterName, StringComparison.Ordinal));
 
@@ -99,7 +100,7 @@ public sealed class ParameterCollectionArtifactCollectorTests {
                 );
                 Assert.That(collectedFamily, Is.Not.Null);
                 Assert.That(collectedFamily!.CategoryName, Is.EqualTo("Duct Accessories"));
-                Assert.That(collectedFamily.Types.Select(type => type.TypeName), Contains.Item("Primary"));
+                Assert.That(collectedFamily.TypeNames, Contains.Item("Primary"));
                 Assert.That(collectedBinding, Is.Not.Null);
                 Assert.That(collectedBinding!.CategoryNames, Is.EqualTo(new[] { "Duct Accessories" }));
             });
