@@ -515,6 +515,9 @@ public static class ScheduleQueryCollector {
         IReadOnlyList<ScheduleRenderedSubject> subjects
     ) {
         var subjectsById = subjects.ToDictionary(subject => subject.SubjectId);
+        // One cache per schedule: parameter maps are built once per source element instead of once per
+        // (source element × column), and ParameterElement names resolve once per column.
+        var resolutionCache = new ScheduleParameterResolutionCache(doc);
         return subjectElements
             .Select(element => {
                 if (!subjectsById.TryGetValue(element.Id.Value(), out var subject))
@@ -530,7 +533,8 @@ public static class ScheduleQueryCollector {
                         context.Field,
                         context.FieldName,
                         context.SpecTypeId,
-                        context.EffectiveUnits
+                        context.EffectiveUnits,
+                        resolutionCache
                     );
                     if (comparableValue.TextValues.Count == 0 && comparableValue.RawDoubleValue == null)
                         continue;

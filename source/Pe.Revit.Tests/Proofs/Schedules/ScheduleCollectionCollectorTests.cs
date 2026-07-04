@@ -110,7 +110,12 @@ public sealed class ScheduleCollectionCollectorTests {
             var schedule = CreateScheduleWithPlacedFamily(projectDocument, loadedFamily!, scheduleName, "Family");
             var data = ScheduleQueryCollector.Collect(
                 projectDocument,
-                new ScheduleQuery { Kind = ScheduleQueryKind.ScheduleReferences, ScheduleIds = [schedule.Id.Value()] }
+                new ScheduleQuery {
+                    Kind = ScheduleQueryKind.ScheduleReferences,
+                    ScheduleIds = [schedule.Id.Value()],
+                    // These proofs assert rows/columns/subjects/bindings; the projection default (Summary) strips rows.
+                    Projection = new ScheduleQueryProjection { View = RevitDataResultView.Full }
+                }
             );
 
             var entry = data.Entries.Single();
@@ -126,7 +131,7 @@ public sealed class ScheduleCollectionCollectorTests {
                 Assert.That(entry.Columns.Any(column => string.Equals(column.Key, "synthetic:families", StringComparison.Ordinal)), Is.False);
                 Assert.That(firstRow.BindingKind, Is.EqualTo(ScheduleRenderedRowBindingKind.SingleSubject));
                 Assert.That(firstRow.SubjectIds.Count, Is.EqualTo(1));
-                Assert.That(referencedSubjects.Select(item => item.FamilyName), Is.EqualTo(new[] { familyName }));
+                Assert.That(referencedSubjects.Select(item => item.FamilyName), Is.EqualTo(new[] { loadedFamily!.Name }));
             });
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(familyDocument);
@@ -171,7 +176,12 @@ public sealed class ScheduleCollectionCollectorTests {
             var schedule = CreateScheduleWithPlacedFamily(projectDocument, loadedFamily!, scheduleName, "Type");
             var data = ScheduleQueryCollector.Collect(
                 projectDocument,
-                new ScheduleQuery { Kind = ScheduleQueryKind.ScheduleReferences, ScheduleIds = [schedule.Id.Value()] }
+                new ScheduleQuery {
+                    Kind = ScheduleQueryKind.ScheduleReferences,
+                    ScheduleIds = [schedule.Id.Value()],
+                    // These proofs assert rows/columns/subjects/bindings; the projection default (Summary) strips rows.
+                    Projection = new ScheduleQueryProjection { View = RevitDataResultView.Full }
+                }
             );
 
             var entry = data.Entries.Single();
@@ -186,7 +196,7 @@ public sealed class ScheduleCollectionCollectorTests {
                 Assert.That(entry.Columns.Any(column => string.Equals(column.Key, "synthetic:families", StringComparison.Ordinal)), Is.False);
                 Assert.That(firstRow.BindingKind, Is.EqualTo(ScheduleRenderedRowBindingKind.SingleSubject));
                 Assert.That(firstRow.SubjectIds.Count, Is.EqualTo(1));
-                Assert.That(referencedSubjects.Select(item => item.FamilyName), Is.EqualTo(new[] { familyName }));
+                Assert.That(referencedSubjects.Select(item => item.FamilyName), Is.EqualTo(new[] { loadedFamily!.Name }));
             });
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(familyDocument);
@@ -240,11 +250,15 @@ public sealed class ScheduleCollectionCollectorTests {
                 _ = transaction.Commit();
             }
 
-            projectDocument.Regenerate();
 
             var data = ScheduleQueryCollector.Collect(
                 projectDocument,
-                new ScheduleQuery { Kind = ScheduleQueryKind.ScheduleReferences, ScheduleIds = [schedule.Id.Value()] }
+                new ScheduleQuery {
+                    Kind = ScheduleQueryKind.ScheduleReferences,
+                    ScheduleIds = [schedule.Id.Value()],
+                    // These proofs assert rows/columns/subjects/bindings; the projection default (Summary) strips rows.
+                    Projection = new ScheduleQueryProjection { View = RevitDataResultView.Full }
+                }
             );
 
             var entry = data.Entries.Single();
@@ -259,7 +273,7 @@ public sealed class ScheduleCollectionCollectorTests {
                 Assert.That(firstRow.Values, Does.Contain(typeMarkValue));
                 Assert.That(firstRow.BindingKind, Is.EqualTo(ScheduleRenderedRowBindingKind.SingleSubject));
                 Assert.That(firstRow.SubjectIds.Count, Is.EqualTo(1));
-                Assert.That(referencedSubjects.Select(item => item.FamilyName), Is.EqualTo(new[] { familyName }));
+                Assert.That(referencedSubjects.Select(item => item.FamilyName), Is.EqualTo(new[] { loadedFamily!.Name }));
             });
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(familyDocument);
@@ -293,11 +307,15 @@ public sealed class ScheduleCollectionCollectorTests {
                 _ = transaction.Commit();
             }
 
-            projectDocument.Regenerate();
 
             var data = ScheduleQueryCollector.Collect(
                 projectDocument,
-                new ScheduleQuery { Kind = ScheduleQueryKind.ScheduleReferences, ScheduleIds = [schedule!.Id.Value()] }
+                new ScheduleQuery {
+                    Kind = ScheduleQueryKind.ScheduleReferences,
+                    ScheduleIds = [schedule!.Id.Value()],
+                    // These proofs assert rows/columns/subjects/bindings; the projection default (Summary) strips rows.
+                    Projection = new ScheduleQueryProjection { View = RevitDataResultView.Full }
+                }
             );
 
             var entry = data.Entries.Single();
@@ -362,14 +380,19 @@ public sealed class ScheduleCollectionCollectorTests {
             );
             var data = ScheduleQueryCollector.Collect(
                 projectDocument,
-                new ScheduleQuery { Kind = ScheduleQueryKind.ScheduleReferences, ScheduleIds = [schedule.Id.Value()] }
+                new ScheduleQuery {
+                    Kind = ScheduleQueryKind.ScheduleReferences,
+                    ScheduleIds = [schedule.Id.Value()],
+                    // These proofs assert rows/columns/subjects/bindings; the projection default (Summary) strips rows.
+                    Projection = new ScheduleQueryProjection { View = RevitDataResultView.Full }
+                }
             );
 
             var entry = data.Entries.Single();
             var row = entry.Rows.Single();
 
             Assert.Multiple(() => {
-                Assert.That(row.Values, Does.Contain($"{familyName}: {typeName}"));
+                Assert.That(row.Values, Does.Contain($"{loadedFamily!.Name}: {typeName}"));
                 Assert.That(row.BindingKind, Is.EqualTo(ScheduleRenderedRowBindingKind.SingleSubject));
                 Assert.That(row.ResolutionStatus, Is.EqualTo(ScheduleRenderedRowSubjectResolutionStatus.Bound));
                 Assert.That(row.ResolutionReason, Is.EqualTo(ScheduleRenderedRowSubjectResolutionReason.None));
@@ -465,11 +488,15 @@ public sealed class ScheduleCollectionCollectorTests {
                 _ = transaction.Commit();
             }
 
-            projectDocument.Regenerate();
 
             var data = ScheduleQueryCollector.Collect(
                 projectDocument,
-                new ScheduleQuery { Kind = ScheduleQueryKind.ScheduleReferences, ScheduleIds = [schedule!.Id.Value()] }
+                new ScheduleQuery {
+                    Kind = ScheduleQueryKind.ScheduleReferences,
+                    ScheduleIds = [schedule!.Id.Value()],
+                    // These proofs assert rows/columns/subjects/bindings; the projection default (Summary) strips rows.
+                    Projection = new ScheduleQueryProjection { View = RevitDataResultView.Full }
+                }
             );
 
             var entry = data.Entries.Single();
@@ -599,12 +626,16 @@ public sealed class ScheduleCollectionCollectorTests {
                 _ = transaction.Commit();
             }
 
-            projectDocument.Regenerate();
 
             var parameterDisplayValue = instance!.LookupParameter(parameterName)!.AsValueString();
             var data = ScheduleQueryCollector.Collect(
                 projectDocument,
-                new ScheduleQuery { Kind = ScheduleQueryKind.ScheduleReferences, ScheduleIds = [schedule!.Id.Value()] }
+                new ScheduleQuery {
+                    Kind = ScheduleQueryKind.ScheduleReferences,
+                    ScheduleIds = [schedule!.Id.Value()],
+                    // These proofs assert rows/columns/subjects/bindings; the projection default (Summary) strips rows.
+                    Projection = new ScheduleQueryProjection { View = RevitDataResultView.Full }
+                }
             );
 
             var entry = data.Entries.Single();
@@ -654,7 +685,6 @@ public sealed class ScheduleCollectionCollectorTests {
             if (!symbol.IsActive)
                 symbol.Activate();
 
-            projectDocument.Regenerate();
 
             var level = new FilteredElementCollector(projectDocument)
                 .OfClass(typeof(Level))
