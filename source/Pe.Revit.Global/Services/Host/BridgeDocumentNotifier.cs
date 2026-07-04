@@ -1,5 +1,6 @@
 using Autodesk.Revit.DB.Events;
 using Autodesk.Revit.UI.Events;
+using Pe.Revit.Utils;
 using Pe.Shared.HostContracts.Bridge;
 using Pe.Shared.HostContracts.Protocol;
 using Serilog;
@@ -88,6 +89,11 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
         var addedCount = e.GetAddedElementIds().Count;
         var deletedCount = e.GetDeletedElementIds().Count;
         if (modifiedCount == 0 && addedCount == 0 && deletedCount == 0)
+            return;
+
+        // Rollback-sandbox churn (temp placements, snapshot probes) never persists; publishing
+        // invalidation for it would evict caches mid-collection and spam the host.
+        if (DocumentSandbox.RollbackScopeActive || DocumentSandbox.IsSandboxTransaction(e.GetTransactionNames()))
             return;
 
         lock (this._sync) {

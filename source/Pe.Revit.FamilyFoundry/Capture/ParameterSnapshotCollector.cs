@@ -164,11 +164,9 @@ public class ParameterSnapshotCollector : IProjectSnapshotCollector, IFamilySnap
             };
         }
 
-        // Wrap in transaction since fm.CurrentType setter uses a sub-transaction internally
-        using var tx = new Transaction(famDoc.Document, "Snapshot Collection");
-        _ = tx.Start();
-
-        try {
+        // Sandbox because fm.CurrentType setter uses a sub-transaction internally; rollback
+        // restores the original CurrentType. Dies in P2 when FamilyType.As* replaces this loop.
+        using (Pe.Revit.Utils.DocumentSandbox.BeginRollback(famDoc.Document, "Snapshot Collection")) {
             foreach (var t in types) {
                 fm.CurrentType = t;
 
@@ -181,10 +179,6 @@ public class ParameterSnapshotCollector : IProjectSnapshotCollector, IFamilySnap
                     snap.ValuesPerType[t.Name] = value;
                 }
             }
-        } finally {
-            // Rollback to restore original CurrentType and avoid any side effects
-            if (tx.HasStarted())
-                _ = tx.RollBack();
         }
 
         return new CapturedCollection<ParameterSnapshot> {

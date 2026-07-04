@@ -1,3 +1,4 @@
+using Pe.Revit.Utils;
 using Pe.Shared.RevitData.Families;
 
 namespace Pe.Revit.DocumentData.Families.Loaded;
@@ -28,7 +29,8 @@ public sealed class LoadedFamiliesMatrixEvaluationContext : IDisposable {
         new(ElementIdEqualityComparer.Instance);
 
     public Dictionary<long, List<ProjectLoadedFamilyIssue>> IssuesByFamilyId { get; } = new();
-    public Transaction? EvaluationTransaction { get; private set; }
+    private DocumentSandbox? _sandbox;
+    public Transaction? EvaluationTransaction => this._sandbox?.Transaction;
     public int PlacementAttempts { get; internal set; }
     public int PlacementSuccesses { get; internal set; }
 
@@ -51,20 +53,16 @@ public sealed class LoadedFamiliesMatrixEvaluationContext : IDisposable {
             : [];
 
     public void BeginTransaction(string transactionName) {
-        if (this.EvaluationTransaction?.HasStarted() == true)
+        if (this._sandbox != null)
             throw new InvalidOperationException("Evaluation transaction is already active.");
 
-        this.EvaluationTransaction = new Transaction(this.ProjectDocument, transactionName);
-        _ = this.EvaluationTransaction.Start();
+        this._sandbox = DocumentSandbox.BeginRollback(this.ProjectDocument, transactionName);
         this.ResetPlacementState();
     }
 
     public void RollBackTransaction() {
-        if (this.EvaluationTransaction?.HasStarted() == true)
-            _ = this.EvaluationTransaction.RollBack();
-
-        this.EvaluationTransaction?.Dispose();
-        this.EvaluationTransaction = null;
+        this._sandbox?.Dispose();
+        this._sandbox = null;
         this.ResetPlacementState();
     }
 
