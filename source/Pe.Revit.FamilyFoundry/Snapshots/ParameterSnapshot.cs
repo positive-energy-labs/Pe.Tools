@@ -1,5 +1,6 @@
 using Pe.Revit.SettingsRuntime.Json.RevitTypes;
 using Pe.Shared.RevitData;
+using Pe.Shared.RevitData.Families;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
@@ -24,6 +25,33 @@ public record ParameterSnapshot : RevitParameterDefinition {
     public new bool IsBuiltIn { get; init; } = false;
     public new Guid? SharedGuid { get; init; } = null;
     public StorageType StorageType { get; init; }
+
+    /// <summary>Revit-typed view over the canonical shared record (see FamilySnapshotContracts).</summary>
+    public static ParameterSnapshot FromCanonical(FamilyParameterSnapshot canonical) => new() {
+        Definition = canonical.Definition,
+        Formula = canonical.Formula,
+        ValuesPerType = canonical.ValuesPerType.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value,
+            StringComparer.Ordinal),
+        IsBuiltIn = canonical.Definition.Identity.BuiltInParameterId.HasValue,
+        SharedGuid = Guid.TryParse(canonical.Definition.Identity.SharedGuid, out var sharedGuid)
+            ? sharedGuid
+            : null,
+        StorageType = Enum.TryParse<StorageType>(canonical.StorageType, out var storageType)
+            ? storageType
+            : StorageType.None
+    };
+
+    public FamilyParameterSnapshot ToCanonical() => new(
+        this.Definition,
+        this.IsShared ? LoadedFamilyParameterKind.SharedParameter : LoadedFamilyParameterKind.FamilyParameter,
+        LoadedFamilyParameterPresence.Family,
+        this.StorageType.ToString(),
+        string.IsNullOrWhiteSpace(this.Formula) ? FormulaState.None : FormulaState.Present,
+        this.Formula,
+        new Dictionary<string, string?>(this.ValuesPerType, StringComparer.Ordinal)
+    );
 
     public string? TryGetUniformValueOrFormula() =>
         !string.IsNullOrWhiteSpace(this.Formula)

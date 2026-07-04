@@ -120,15 +120,16 @@ public static class ProjectLoadedFamilyCollector {
             .Select(type => type.TypeName)
             .Distinct(StringComparer.Ordinal)
             .ToList();
+        var parameterIndex = new Dictionary<string, ProjectLoadedFamilyParameter>(StringComparer.Ordinal);
 
         if (context.SymbolsByFamilyId.TryGetValue(family.Id.Value(), out var symbols)) {
             foreach (var symbol in symbols) {
-                CollectTypeParameters(symbol, familyRecord, familyTypeNames);
+                CollectTypeParameters(symbol, familyRecord, familyTypeNames, parameterIndex);
 
                 if (!context.TempPlacementsBySymbolId.TryGetValue(symbol.Id.Value(), out var placement))
                     continue;
 
-                CollectInstanceParameters(placement.Instance, familyRecord, familyTypeNames);
+                CollectInstanceParameters(placement.Instance, familyRecord, familyTypeNames, parameterIndex);
             }
         }
 
@@ -144,7 +145,8 @@ public static class ProjectLoadedFamilyCollector {
     private static void CollectTypeParameters(
         FamilySymbol symbol,
         ProjectLoadedFamilyRecord familyRecord,
-        IReadOnlyList<string> familyTypeNames
+        IReadOnlyList<string> familyTypeNames,
+        Dictionary<string, ProjectLoadedFamilyParameter> parameterIndex
     ) {
         foreach (var parameter in symbol.Parameters.OfType<Parameter>()
                      .Where(parameter => parameter.Definition != null)) {
@@ -152,7 +154,8 @@ public static class ProjectLoadedFamilyCollector {
                 parameter,
                 false,
                 familyRecord,
-                familyTypeNames
+                familyTypeNames,
+                parameterIndex
             );
             collectedParameter.ValuesByType[symbol.Name] = GetParameterValueString(parameter, symbol.Document);
         }
@@ -161,7 +164,8 @@ public static class ProjectLoadedFamilyCollector {
     private static void CollectInstanceParameters(
         FamilyInstance instance,
         ProjectLoadedFamilyRecord familyRecord,
-        IReadOnlyList<string> familyTypeNames
+        IReadOnlyList<string> familyTypeNames,
+        Dictionary<string, ProjectLoadedFamilyParameter> parameterIndex
     ) {
         foreach (var parameter in instance.Parameters.OfType<Parameter>()
                      .Where(parameter => parameter.Definition != null)) {
@@ -169,7 +173,8 @@ public static class ProjectLoadedFamilyCollector {
                 parameter,
                 true,
                 familyRecord,
-                familyTypeNames
+                familyTypeNames,
+                parameterIndex
             );
             collectedParameter.ValuesByType[instance.Symbol.Name] =
                 GetParameterValueString(parameter, instance.Document);
@@ -180,14 +185,12 @@ public static class ProjectLoadedFamilyCollector {
         Parameter parameter,
         bool isInstance,
         ProjectLoadedFamilyRecord familyRecord,
-        IReadOnlyList<string> familyTypeNames
+        IReadOnlyList<string> familyTypeNames,
+        Dictionary<string, ProjectLoadedFamilyParameter> parameterIndex
     ) {
         var identity = ParameterIdentityFactory.FromParameter(parameter);
-        var existing = familyRecord.Parameters.FirstOrDefault(candidate =>
-            candidate.IsInstance == isInstance &&
-            string.Equals(candidate.Identity.Key, identity.Key, StringComparison.Ordinal)
-        );
-        if (existing != null)
+        var indexKey = $"{identity.Key}|{isInstance}";
+        if (parameterIndex.TryGetValue(indexKey, out var existing))
             return existing;
 
         var definition = parameter.Definition ?? throw new InvalidOperationException("Parameter.Definition is null.");
@@ -207,6 +210,7 @@ public static class ProjectLoadedFamilyCollector {
         };
 
         familyRecord.Parameters.Add(created);
+        parameterIndex[indexKey] = created;
         return created;
     }
 

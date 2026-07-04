@@ -64,7 +64,10 @@ public record LoadedFamiliesCatalogRequest(
 [ExportTsSchema]
 public record LoadedFamiliesMatrixRequest(
     LoadedFamiliesFilter? Filter,
-    RevitDataOutputBudget? Budget = null
+    RevitDataOutputBudget? Budget = null,
+    // Temp placement supplies live instance values, regen-dependent values, and schedule membership for
+    // unplaced types, at the cost of a rollback transaction on the document. Disable for a read-only pass.
+    bool IncludeTempPlacement = true
 );
 
 [ExportTsSchema]

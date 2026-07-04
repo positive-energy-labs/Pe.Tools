@@ -1,19 +1,27 @@
 using Pe.Revit.DocumentData.Families.Loaded.Models;
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.Extensions.ProjDocument;
+using Pe.Shared.RevitData.Families;
 namespace Pe.Revit.DocumentData.Families.Loaded.Collectors;
 
+/// <summary>
+///     Supplements collected project observations with family-doc truth (formulas) and resolves parameter
+///     authority (family vs project binding). Family-doc truth arrives as pre-extracted
+///     <see cref="FamilySnapshotRecord" />s (see FamilySnapshotExtractor) — this collector never opens
+///     documents itself.
+/// </summary>
 public static class LoadedFamiliesFormulaCollector {
     public static List<CollectedLoadedFamilyRecord> Supplement(
         Document projectDocument,
         IReadOnlyList<CollectedLoadedFamilyRecord> families,
+        IReadOnlyDictionary<long, FamilySnapshotRecord> recordsByFamilyId,
         Action<string, TimeSpan>? onFamilySupplemented = null
     ) {
         var projectBindingLookup = BuildProjectBindingLookup(projectDocument, families);
         return families
             .Select(family => {
                 var stopwatch = Stopwatch.StartNew();
-                var supplementedFamily = SupplementFamily(projectDocument, family, projectBindingLookup);
+                var supplementedFamily = SupplementFamily(family, recordsByFamilyId, projectBindingLookup);
                 onFamilySupplemented?.Invoke(supplementedFamily.FamilyName, stopwatch.Elapsed);
                 return supplementedFamily;
             })
@@ -22,75 +30,64 @@ public static class LoadedFamiliesFormulaCollector {
     }
 
     private static CollectedLoadedFamilyRecord SupplementFamily(
-        Document projectDocument,
         CollectedLoadedFamilyRecord family,
+        IReadOnlyDictionary<long, FamilySnapshotRecord> recordsByFamilyId,
         List<RevitProjectBindingMetadata> projectBindingLookup
     ) {
         if (family.Parameters.Count == 0)
             return family;
 
         var issues = family.Issues.ToList();
-        var familyElement = projectDocument.GetElement(new ElementId(checked((int)family.FamilyId))) as Family;
-        if (familyElement == null) {
-            issues.Add(new CollectedIssue(
-                "FamilyNotFound",
-                CollectedIssueSeverity.Error,
-                $"Family with id '{family.FamilyId}' was not found in the active project.",
-                family.FamilyName
-            ));
-            return family with { Issues = issues };
-        }
-
-        Document? familyDocument = null;
-        var shouldClose = false;
-
-        try {
-            var existingFamilyDocument = projectDocument.Application.FindOpenFamilyDocument(familyElement);
-            familyDocument = existingFamilyDocument ?? projectDocument.EditFamily(familyElement);
-            shouldClose = existingFamilyDocument == null;
-
-            var parameterLookup = BuildFamilyParameterLookup(familyDocument, family.FamilyName, issues);
-            var supplementedParameters = family.Parameters
-                .Select(parameter => SupplementParameterFormula(
-                    parameter,
-                    parameterLookup,
-                    projectBindingLookup,
-                    family.FamilyName,
-                    issues
-                ))
-                .ToList();
-            return family with { Parameters = supplementedParameters, Issues = issues };
-        } catch (Exception ex) {
+        if (!recordsByFamilyId.TryGetValue(family.FamilyId, out var record)) {
             issues.Add(new CollectedIssue(
                 "FamilyFormulaCollectionFailed",
                 CollectedIssueSeverity.Error,
-                ex.Message,
+                $"No extracted family snapshot is available for family '{family.FamilyName}'.",
                 family.FamilyName
             ));
             return family with { Issues = issues };
-        } finally {
-            if (shouldClose && familyDocument != null) {
-                try {
-                    _ = familyDocument.Close(false);
-                } catch {
-                    // Best effort only. The route must not fail because a temp family doc could not close.
-                }
-            }
         }
+
+        issues.AddRange(record.Issues.Select(issue => new CollectedIssue(
+            issue.Code,
+            ToCollectedSeverity(issue.Severity),
+            issue.Message,
+            family.FamilyName
+        )));
+
+        var parameterLookup = BuildFamilyParameterLookup(record, family.FamilyName, issues);
+        var supplementedParameters = family.Parameters
+            .Select(parameter => SupplementParameterFormula(
+                parameter,
+                parameterLookup,
+                projectBindingLookup,
+                family.FamilyName,
+                issues
+            ))
+            .ToList();
+        return family with { Parameters = supplementedParameters, Issues = issues };
     }
 
+    private static CollectedIssueSeverity ToCollectedSeverity(RevitDataIssueSeverity severity) =>
+        severity switch {
+            RevitDataIssueSeverity.Error => CollectedIssueSeverity.Error,
+            RevitDataIssueSeverity.Warning => CollectedIssueSeverity.Warning,
+            _ => CollectedIssueSeverity.Info
+        };
+
     private static FamilyParameterLookup BuildFamilyParameterLookup(
-        Document familyDocument,
+        FamilySnapshotRecord record,
         string familyName,
         List<CollectedIssue> issues
     ) {
         var sharedByGuid = new Dictionary<Guid, FamilyParameterLookupEntry>();
         var byNameAndScope = new Dictionary<string, FamilyParameterLookupEntry>(StringComparer.Ordinal);
 
-        foreach (var familyParameter in familyDocument.FamilyManager.GetParameters().ToList()) {
-            var entry = TryCreateFamilyParameterEntry(familyParameter, familyName, issues);
-            if (entry == null)
-                continue;
+        foreach (var parameterSnapshot in record.Parameters) {
+            var entry = new FamilyParameterLookupEntry(
+                new RevitFamilyParameterMetadata { Definition = parameterSnapshot.Definition },
+                parameterSnapshot.Formula
+            );
 
             if (entry.Metadata.IsInstance == null)
                 continue;
@@ -130,41 +127,6 @@ public static class LoadedFamiliesFormulaCollector {
         }
 
         return new FamilyParameterLookup(sharedByGuid, byNameAndScope);
-    }
-
-    private static FamilyParameterLookupEntry? TryCreateFamilyParameterEntry(
-        FamilyParameter familyParameter,
-        string familyName,
-        List<CollectedIssue> issues
-    ) {
-        try {
-            var identity = ParameterIdentityFactory.FromFamilyParameter(familyParameter);
-            var dataType = familyParameter.Definition.GetDataType();
-            var propertiesGroup = familyParameter.Definition.GetGroupTypeId();
-            return new FamilyParameterLookupEntry(
-                new RevitFamilyParameterMetadata {
-                    Definition = new ParameterDefinitionDescriptor(
-                        identity,
-                        familyParameter.IsInstance,
-                        NormalizeForgeTypeId(dataType),
-                        null,
-                        NormalizeForgeTypeId(propertiesGroup),
-                        null
-                    )
-                },
-                familyParameter
-            );
-        } catch (Exception ex) {
-            issues.Add(new CollectedIssue(
-                "FamilyParameterMetadataReadFailed",
-                CollectedIssueSeverity.Warning,
-                ex.Message,
-                familyName,
-                null,
-                familyParameter.Definition?.Name
-            ));
-            return null;
-        }
     }
 
     private static CollectedFamilyParameterRecord SupplementParameterFormula(
@@ -222,7 +184,7 @@ public static class LoadedFamiliesFormulaCollector {
                 issues
             );
 
-            return ApplyFamilyFormula(classifiedParameter, familyParameter.Parameter, familyName, issues);
+            return ApplyFamilyFormula(classifiedParameter, familyParameter.Formula);
         }
 
         if (effectiveProjectBinding != null)
@@ -257,27 +219,13 @@ public static class LoadedFamiliesFormulaCollector {
 
     private static CollectedFamilyParameterRecord ApplyFamilyFormula(
         CollectedFamilyParameterRecord parameter,
-        FamilyParameter familyParameter,
-        string familyName,
-        List<CollectedIssue> issues
+        string? extractedFormula
     ) {
-        try {
-            var formula = string.IsNullOrWhiteSpace(familyParameter.Formula) ? null : familyParameter.Formula;
-            return parameter with {
-                FormulaState = formula == null ? CollectedFormulaState.None : CollectedFormulaState.Present,
-                Formula = formula
-            };
-        } catch (Exception ex) {
-            issues.Add(new CollectedIssue(
-                "FamilyParameterFormulaReadFailed",
-                CollectedIssueSeverity.Warning,
-                ex.Message,
-                familyName,
-                null,
-                parameter.Name
-            ));
-            return parameter with { FormulaState = CollectedFormulaState.Unknown, Formula = null };
-        }
+        var formula = string.IsNullOrWhiteSpace(extractedFormula) ? null : extractedFormula;
+        return parameter with {
+            FormulaState = formula == null ? CollectedFormulaState.None : CollectedFormulaState.Present,
+            Formula = formula
+        };
     }
 
     private static FamilyParameterLookupEntry? FindFamilyParameter(
@@ -463,6 +411,6 @@ public static class LoadedFamiliesFormulaCollector {
 
     private sealed record FamilyParameterLookupEntry(
         RevitFamilyParameterMetadata Metadata,
-        FamilyParameter Parameter
+        string? Formula
     );
 }
