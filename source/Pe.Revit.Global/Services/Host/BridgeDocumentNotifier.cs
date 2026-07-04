@@ -41,6 +41,9 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
                 app.DocumentChanged -= this.OnDocumentChanged;
                 app.DocumentOpened -= this.OnDocumentOpened;
                 app.DocumentClosed -= this.OnDocumentClosed;
+                app.DocumentSaved -= OnDocumentSaved;
+                app.DocumentSavedAs -= OnDocumentSavedAs;
+                app.DocumentSynchronizedWithCentral -= OnDocumentSynchronized;
             }
 
             this._disposed = true;
@@ -57,6 +60,9 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
             app.DocumentChanged += this.OnDocumentChanged;
             app.DocumentOpened += this.OnDocumentOpened;
             app.DocumentClosed += this.OnDocumentClosed;
+            app.DocumentSaved += OnDocumentSaved;
+            app.DocumentSavedAs += OnDocumentSavedAs;
+            app.DocumentSynchronizedWithCentral += OnDocumentSynchronized;
             this._isInitialized = true;
         }
     }
@@ -64,8 +70,28 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
     public Task PublishInitialStateAsync() =>
         this.PublishAsync(this.BuildCurrentPayload(DocumentInvalidationReason.Changed));
 
-    private void OnDocumentOpened(object? sender, DocumentOpenedEventArgs e) =>
+    private void OnDocumentOpened(object? sender, DocumentOpenedEventArgs e) {
+        if (e?.Document != null)
+            FamilySnapshotStore.WarmStart(e.Document);
         _ = this.PublishAsync(this.BuildCurrentPayload(DocumentInvalidationReason.Opened));
+    }
+
+    // Save boundaries are the only points where Element.VersionGuid is a valid identity, so
+    // persistence lives exclusively in these handlers.
+    private static void OnDocumentSaved(object? sender, DocumentSavedEventArgs e) {
+        if (e?.Document != null)
+            FamilySnapshotStore.Persist(e.Document);
+    }
+
+    private static void OnDocumentSavedAs(object? sender, DocumentSavedAsEventArgs e) {
+        if (e?.Document != null)
+            FamilySnapshotStore.Persist(e.Document);
+    }
+
+    private static void OnDocumentSynchronized(object? sender, DocumentSynchronizedWithCentralEventArgs e) {
+        if (e?.Document != null)
+            FamilySnapshotStore.Persist(e.Document);
+    }
 
     private void OnDocumentClosed(object? sender, DocumentClosedEventArgs e) =>
         _ = this.PublishAsync(this.BuildCurrentPayload(DocumentInvalidationReason.Closed));
