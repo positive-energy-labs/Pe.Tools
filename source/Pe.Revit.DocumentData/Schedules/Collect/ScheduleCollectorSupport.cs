@@ -309,7 +309,8 @@ internal static class ScheduleCollectorSupport {
         ScheduleField field,
         string fallbackName,
         ForgeTypeId? specTypeId,
-        Units? effectiveUnits
+        Units? effectiveUnits,
+        ScheduleParameterResolutionCache? resolutionCache = null
     ) {
         var texts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (!IsComparableField(field) || !field.HasSchedulableField)
@@ -317,7 +318,10 @@ internal static class ScheduleCollectorSupport {
 
         double? rawDoubleValue = null;
         foreach (var parameterSource in parameterSources) {
-            var parameter = ResolveParameter(doc, parameterSource, field.GetSchedulableField().ParameterId, fallbackName);
+            var parameterId = field.GetSchedulableField().ParameterId;
+            var parameter = resolutionCache != null
+                ? resolutionCache.Resolve(parameterSource, parameterId, fallbackName)
+                : ResolveParameter(doc, parameterSource, parameterId, fallbackName);
             if (parameter == null)
                 continue;
 
