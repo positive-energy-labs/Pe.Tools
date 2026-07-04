@@ -10,6 +10,7 @@ using Pe.Revit.Scripting.Policy;
 using Pe.Revit.Scripting.Pods;
 using Pe.Revit.Scripting.References;
 using Pe.Revit.Scripting.Storage;
+using Pe.Revit.Utils;
 using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.Product;
 using Pe.Shared.Scripting.Analysis;
@@ -921,10 +922,9 @@ public sealed class RevitScriptExecutionService(
             );
         }
 
-        using var transaction = new Transaction(document, "Pe Script Execution");
-        TransactionStatus startStatus;
+        DocumentSandbox sandbox;
         try {
-            startStatus = transaction.Start();
+            sandbox = DocumentSandbox.BeginCommit(document, "Pe Script Execution");
         } catch (Exception ex) {
             throw new RevitScriptTransactionException(
                 ScriptExecutionStatus.RuntimeFailed,
@@ -933,45 +933,19 @@ public sealed class RevitScriptExecutionService(
             );
         }
 
-        if (startStatus != TransactionStatus.Started) {
-            throw new RevitScriptTransactionException(
-                ScriptExecutionStatus.RuntimeFailed,
-                $"Failed to start the host-owned Revit transaction: {startStatus}."
-            );
-        }
-
-        try {
+        // Sandbox dispose rolls back anything uncommitted, so a script exception propagates untouched.
+        using (sandbox) {
             container.Execute();
-        } catch {
-            TryRollBack(transaction);
-            throw;
-        }
 
-        try {
-            var commitStatus = transaction.Commit();
-            if (commitStatus != TransactionStatus.Committed) {
+            try {
+                sandbox.Complete();
+            } catch (Exception ex) {
                 throw new RevitScriptTransactionException(
                     ScriptExecutionStatus.RuntimeFailed,
-                    $"The host-owned Revit transaction did not commit successfully: {commitStatus}."
+                    $"Failed to commit the host-owned Revit transaction: {ex.Message}",
+                    ex
                 );
             }
-        } catch (RevitScriptTransactionException) {
-            throw;
-        } catch (Exception ex) {
-            throw new RevitScriptTransactionException(
-                ScriptExecutionStatus.RuntimeFailed,
-                $"Failed to commit the host-owned Revit transaction: {ex.Message}",
-                ex
-            );
-        }
-    }
-
-    private static void TryRollBack(Transaction transaction) {
-        try {
-            if (transaction.HasStarted() && !transaction.HasEnded())
-                _ = transaction.RollBack();
-        } catch (Exception ex) {
-            Log.Warning(ex, "Failed to roll back Revit scripting transaction after runtime failure.");
         }
     }
 
