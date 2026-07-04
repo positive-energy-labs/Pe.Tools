@@ -182,7 +182,8 @@ internal static class PracticalBenchmarks {
 
                 var progressLines = new List<string>();
                 var data = LoadedFamiliesMatrixCollector.Collect(projectDocument, null, progressLines.Add);
-                var visibleParameterCount = data.Families.Sum(family => family.VisibleParameters.Count);
+                var visibleParameterCount = data.Families.Sum(family =>
+                    family.Parameters.Count(parameter => parameter.ExcludedReason == null));
 
                 if (data.Families.Count <= 1) {
                     throw new InvalidOperationException(

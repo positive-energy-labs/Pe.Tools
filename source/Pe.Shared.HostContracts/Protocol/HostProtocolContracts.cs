@@ -13,7 +13,8 @@ public static class HttpRoutes {
 }
 
 public static class HostProtocol {
-    public const int ContractVersion = 35;
+    // 36: loaded-families matrix reshaped to FamilySnapshotRecord (canonical family record language)
+    public const int ContractVersion = 36;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]

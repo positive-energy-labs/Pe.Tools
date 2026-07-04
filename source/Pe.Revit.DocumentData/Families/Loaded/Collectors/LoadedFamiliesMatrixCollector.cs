@@ -193,7 +193,7 @@ public static class LoadedFamiliesMatrixCollector {
         }
 
         return new LoadedFamiliesMatrixData(
-            matrixFamilies.Select(family => ToMatrixFamily(family, effectiveBudget.MaxSamplesPerEntry)).ToList(),
+            matrixFamilies.Select(family => ToSnapshotRecord(family, effectiveBudget.MaxSamplesPerEntry)).ToList(),
             RevitDataOutputBudgets.ProjectIssues(issues, effectiveBudget),
             new RevitDataResultPage(supplementedFamilies.Count, matrixFamilies.Count, maxFamilies is > 0 && supplementedFamilies.Count > maxFamilies.Value)
         );
@@ -209,43 +209,49 @@ public static class LoadedFamiliesMatrixCollector {
                || family.Parameters.Any(parameter => parameter.ValuesByType.Count > maxSamplesPerEntry.Value);
     }
 
-    private static LoadedFamilyMatrixFamily ToMatrixFamily(CollectedLoadedFamilyRecord family, int? maxSamplesPerEntry) {
+    /// <summary>
+    ///     Projects a collected record to the canonical wire shape: one parameter list where excluded
+    ///     entries carry ExcludedReason (visible = ExcludedReason == null), per-type values in
+    ///     ValuesPerType with null (no value) vs "" (empty) preserved.
+    /// </summary>
+    private static FamilySnapshotRecord ToSnapshotRecord(CollectedLoadedFamilyRecord family, int? maxSamplesPerEntry) {
         var visibleParameters = family.Parameters
             .Where(LoadedFamiliesCollectorSupport.IsVisibleInMatrix)
-            .Select(parameter => ToVisibleParameter(parameter, maxSamplesPerEntry))
-            .OrderBy(parameter => parameter.Definition.Identity.Name, StringComparer.OrdinalIgnoreCase)
-            .ThenByDescending(parameter => parameter.Definition.IsInstance)
+            .OrderBy(parameter => parameter.Identity.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenByDescending(parameter => parameter.IsInstance)
             .AsEnumerable();
         var excludedParameters = family.Parameters
             .Where(parameter => parameter.ExcludedReason != null)
-            .Select(ToExcludedParameter)
-            .OrderBy(parameter => parameter.Definition.Identity.Name, StringComparer.OrdinalIgnoreCase)
-            .ThenByDescending(parameter => parameter.Definition.IsInstance)
+            .OrderBy(parameter => parameter.Identity.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenByDescending(parameter => parameter.IsInstance)
             .AsEnumerable();
-        var types = family.Types.Select(type => new LoadedFamilyTypeEntry(type.TypeName)).AsEnumerable();
+        var typeNames = family.Types.Select(type => type.TypeName).AsEnumerable();
         var scheduleNames = family.ScheduleNames.AsEnumerable();
         if (maxSamplesPerEntry is > 0) {
-            types = types.Take(maxSamplesPerEntry.Value);
+            typeNames = typeNames.Take(maxSamplesPerEntry.Value);
             scheduleNames = scheduleNames.Take(maxSamplesPerEntry.Value);
             visibleParameters = visibleParameters.Take(maxSamplesPerEntry.Value);
             excludedParameters = excludedParameters.Take(maxSamplesPerEntry.Value);
         }
 
-        return new LoadedFamilyMatrixFamily(
+        return new FamilySnapshotRecord(
             family.FamilyId,
             family.FamilyUniqueId,
             family.FamilyName,
             family.CategoryName,
+            VersionGuid: null,
+            typeNames.ToList(),
+            visibleParameters.Concat(excludedParameters)
+                .Select(parameter => ToParameterSnapshot(parameter, maxSamplesPerEntry))
+                .ToList(),
+            family.Issues.Select(LoadedFamiliesCollectorSupport.ToContractIssue).ToList(),
+            IsPartial: false,
             family.PlacedInstanceCount,
-            types.ToList(),
-            scheduleNames.ToList(),
-            visibleParameters.ToList(),
-            excludedParameters.ToList(),
-            family.Issues.Select(LoadedFamiliesCollectorSupport.ToContractIssue).ToList()
+            scheduleNames.ToList()
         );
     }
 
-    private static LoadedFamilyVisibleParameterEntry ToVisibleParameter(CollectedFamilyParameterRecord parameter, int? maxSamplesPerEntry) =>
+    private static FamilyParameterSnapshot ToParameterSnapshot(CollectedFamilyParameterRecord parameter, int? maxSamplesPerEntry) =>
         new(
             ToDefinition(parameter),
             LoadedFamiliesCollectorSupport.ToContractParameterKind(parameter.Kind),
@@ -256,19 +262,10 @@ public static class LoadedFamiliesMatrixCollector {
             (maxSamplesPerEntry is > 0
                 ? parameter.ValuesByType.Take(maxSamplesPerEntry.Value)
                 : parameter.ValuesByType)
-            .ToDictionary(pair => pair.Key, pair => (string?)pair.Value, StringComparer.Ordinal)
-        );
-
-    private static LoadedFamilyExcludedParameterEntry ToExcludedParameter(CollectedFamilyParameterRecord parameter) =>
-        new(
-            ToDefinition(parameter),
-            LoadedFamiliesCollectorSupport.ToContractParameterKind(parameter.Kind),
-            LoadedFamiliesCollectorSupport.ToContractParameterPresence(parameter.Scope),
-            LoadedFamiliesCollectorSupport.ToContractExcludedReason(
-                parameter.ExcludedReason ?? CollectedExcludedParameterReason.UnresolvedClassification
-            ),
-            LoadedFamiliesCollectorSupport.ToContractFormulaState(parameter.FormulaState),
-            parameter.Formula
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal),
+            parameter.ExcludedReason == null
+                ? null
+                : LoadedFamiliesCollectorSupport.ToContractExcludedReason(parameter.ExcludedReason.Value)
         );
 
     private static ParameterDefinitionDescriptor ToDefinition(CollectedFamilyParameterRecord parameter) =>

@@ -1563,6 +1563,35 @@ export const executeRevitScriptRequestSchema = Schema.suspend(() =>
   }),
 );
 
+export const familyParameterSnapshotSchema = Schema.suspend(() =>
+  Schema.Struct({
+    definition: Schema.suspend(() => parameterDefinitionDescriptorSchema),
+    excludedReason: Schema.optional(Schema.NullOr(excludedParameterReasonSchema)),
+    formula: Schema.optional(Schema.NullOr(Schema.String)),
+    formulaState: formulaStateSchema,
+    kind: loadedFamilyParameterKindSchema,
+    scope: loadedFamilyParameterPresenceSchema,
+    storageType: Schema.String,
+    valuesPerType: Schema.Record(Schema.String, Schema.NullOr(Schema.String)),
+  }),
+);
+
+export const familySnapshotRecordSchema = Schema.suspend(() =>
+  Schema.Struct({
+    categoryName: Schema.optional(Schema.NullOr(Schema.String)),
+    familyId: Schema.Number,
+    familyName: Schema.String,
+    familyUniqueId: Schema.String,
+    isPartial: Schema.Boolean,
+    issues: Schema.Array(Schema.suspend(() => revitDataIssueSchema)),
+    parameters: Schema.Array(Schema.suspend(() => familyParameterSnapshotSchema)),
+    placedInstanceCount: Schema.Number,
+    scheduleNames: Schema.optional(Schema.NullOr(Schema.Array(Schema.String))),
+    typeNames: Schema.Array(Schema.String),
+    versionGuid: Schema.optional(Schema.NullOr(Schema.String)),
+  }),
+);
+
 export const fieldOptionItemSchema = Schema.suspend(() =>
   Schema.Struct({
     description: Schema.optional(Schema.NullOr(Schema.String)),
@@ -1646,7 +1675,7 @@ export const loadedFamiliesFilterFieldOptionsRequestSchema = Schema.suspend(() =
 
 export const loadedFamiliesMatrixDataSchema = Schema.suspend(() =>
   Schema.Struct({
-    families: Schema.Array(Schema.suspend(() => loadedFamilyMatrixFamilySchema)),
+    families: Schema.Array(Schema.suspend(() => familySnapshotRecordSchema)),
     issues: Schema.Array(Schema.suspend(() => revitDataIssueSchema)),
     page: Schema.optional(Schema.NullOr(Schema.suspend(() => revitDataResultPageSchema))),
   }),
@@ -1656,6 +1685,7 @@ export const loadedFamiliesMatrixRequestSchema = Schema.suspend(() =>
   Schema.Struct({
     budget: Schema.optional(Schema.NullOr(Schema.suspend(() => revitDataOutputBudgetSchema))),
     filter: Schema.optional(Schema.NullOr(Schema.suspend(() => loadedFamiliesFilterSchema))),
+    includeTempPlacement: Schema.Boolean,
   }),
 );
 
@@ -1671,49 +1701,9 @@ export const loadedFamilyCatalogEntrySchema = Schema.suspend(() =>
   }),
 );
 
-export const loadedFamilyExcludedParameterEntrySchema = Schema.suspend(() =>
-  Schema.Struct({
-    definition: Schema.suspend(() => parameterDefinitionDescriptorSchema),
-    excludedReason: excludedParameterReasonSchema,
-    formula: Schema.optional(Schema.NullOr(Schema.String)),
-    formulaState: formulaStateSchema,
-    kind: loadedFamilyParameterKindSchema,
-    presence: loadedFamilyParameterPresenceSchema,
-  }),
-);
-
-export const loadedFamilyMatrixFamilySchema = Schema.suspend(() =>
-  Schema.Struct({
-    categoryName: Schema.optional(Schema.NullOr(Schema.String)),
-    excludedParameters: Schema.Array(
-      Schema.suspend(() => loadedFamilyExcludedParameterEntrySchema),
-    ),
-    familyId: Schema.Number,
-    familyName: Schema.String,
-    familyUniqueId: Schema.String,
-    issues: Schema.Array(Schema.suspend(() => revitDataIssueSchema)),
-    placedInstanceCount: Schema.Number,
-    scheduleNames: Schema.Array(Schema.String),
-    types: Schema.Array(Schema.suspend(() => loadedFamilyTypeEntrySchema)),
-    visibleParameters: Schema.Array(Schema.suspend(() => loadedFamilyVisibleParameterEntrySchema)),
-  }),
-);
-
 export const loadedFamilyTypeEntrySchema = Schema.suspend(() =>
   Schema.Struct({
     typeName: Schema.String,
-  }),
-);
-
-export const loadedFamilyVisibleParameterEntrySchema = Schema.suspend(() =>
-  Schema.Struct({
-    definition: Schema.suspend(() => parameterDefinitionDescriptorSchema),
-    formula: Schema.optional(Schema.NullOr(Schema.String)),
-    formulaState: formulaStateSchema,
-    kind: loadedFamilyParameterKindSchema,
-    presence: loadedFamilyParameterPresenceSchema,
-    storageType: Schema.String,
-    valuesByType: Schema.Record(Schema.String, Schema.NullOr(Schema.String)),
   }),
 );
 
@@ -3594,6 +3584,8 @@ export type ElementContextSystemRef = Schema.Schema.Type<typeof elementContextSy
 export type ElementContextWireData = Schema.Schema.Type<typeof elementContextWireDataSchema>;
 export type ExecuteRevitScriptData = Schema.Schema.Type<typeof executeRevitScriptDataSchema>;
 export type ExecuteRevitScriptRequest = Schema.Schema.Type<typeof executeRevitScriptRequestSchema>;
+export type FamilyParameterSnapshot = Schema.Schema.Type<typeof familyParameterSnapshotSchema>;
+export type FamilySnapshotRecord = Schema.Schema.Type<typeof familySnapshotRecordSchema>;
 export type FieldOptionItem = Schema.Schema.Type<typeof fieldOptionItemSchema>;
 export type FieldOptionsData = Schema.Schema.Type<typeof fieldOptionsDataSchema>;
 export type FieldOptionsRequest = Schema.Schema.Type<typeof fieldOptionsRequestSchema>;
@@ -3616,14 +3608,7 @@ export type LoadedFamiliesMatrixRequest = Schema.Schema.Type<
   typeof loadedFamiliesMatrixRequestSchema
 >;
 export type LoadedFamilyCatalogEntry = Schema.Schema.Type<typeof loadedFamilyCatalogEntrySchema>;
-export type LoadedFamilyExcludedParameterEntry = Schema.Schema.Type<
-  typeof loadedFamilyExcludedParameterEntrySchema
->;
-export type LoadedFamilyMatrixFamily = Schema.Schema.Type<typeof loadedFamilyMatrixFamilySchema>;
 export type LoadedFamilyTypeEntry = Schema.Schema.Type<typeof loadedFamilyTypeEntrySchema>;
-export type LoadedFamilyVisibleParameterEntry = Schema.Schema.Type<
-  typeof loadedFamilyVisibleParameterEntrySchema
->;
 export type OpenRevitDocumentData = Schema.Schema.Type<typeof openRevitDocumentDataSchema>;
 export type OpenRevitDocumentRequest = Schema.Schema.Type<typeof openRevitDocumentRequestSchema>;
 export type ParameterCatalogData = Schema.Schema.Type<typeof parameterCatalogDataSchema>;

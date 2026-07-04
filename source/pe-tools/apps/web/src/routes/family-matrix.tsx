@@ -23,10 +23,15 @@ import {
 } from "#/components/ui/select";
 import { Tooltip, UiTooltipProvider } from "#/components/ui/tooltip";
 import {
+  type ExcludedParameterReason,
+  type FamilyParameterSnapshot,
+  type FamilySnapshotRecord,
+  type LoadedFamiliesMatrixRequest,
   type LoadedFamiliesRequest,
-  type LoadedFamilyMatrixFamily,
   LoadedFamilyPlacementScope,
-  type LoadedFamilyVisibleParameterEntry,
+  cellText,
+  excludedParameters,
+  visibleParameters,
 } from "#/host/loaded-families-view";
 import {
   useBridgeSessionsListQuery,
@@ -61,8 +66,8 @@ interface MasterTableRow {
   rowKey: string;
   scheduleNames: readonly string[];
   valuesByParam: Record<string, string>;
-  scopeByParam: Record<string, LoadedFamilyVisibleParameterEntry["scope"]>;
-  formulaStateByParam: Record<string, LoadedFamilyVisibleParameterEntry["formulaState"]>;
+  scopeByParam: Record<string, FamilyParameterSnapshot["scope"]>;
+  formulaStateByParam: Record<string, FamilyParameterSnapshot["formulaState"]>;
   isFirstInFamily: boolean;
   familyTypeCount: number;
 }
@@ -70,10 +75,10 @@ interface MasterTableRow {
 interface ParameterColumnDef {
   key: string;
   name: string;
-  kind: LoadedFamilyVisibleParameterEntry["kind"];
+  kind: FamilyParameterSnapshot["kind"];
   isInstance: boolean;
-  formulaState: LoadedFamilyVisibleParameterEntry["formulaState"];
-  identityKind: LoadedFamilyVisibleParameterEntry["identity"]["kind"];
+  formulaState: FamilyParameterSnapshot["formulaState"];
+  identityKind: FamilyParameterSnapshot["definition"]["identity"]["kind"];
   familyCount: number;
   totalOccurrences: number;
 }
@@ -132,8 +137,8 @@ function sortColumnsClusteredMode(
 }
 
 function getCellStatusClass(
-  scope: LoadedFamilyVisibleParameterEntry["scope"] | undefined,
-  formulaState: LoadedFamilyVisibleParameterEntry["formulaState"] | undefined,
+  scope: FamilyParameterSnapshot["scope"] | undefined,
+  formulaState: FamilyParameterSnapshot["formulaState"] | undefined,
   hasValue: boolean,
 ): string {
   if (!scope || scope === "Unresolved") {
@@ -155,7 +160,7 @@ function getCellStatusClass(
   return "";
 }
 
-function getCellBorderClass(scope: LoadedFamilyVisibleParameterEntry["scope"] | undefined): string {
+function getCellBorderClass(scope: FamilyParameterSnapshot["scope"] | undefined): string {
   if (!scope || scope === "Unresolved") {
     return "border-l-2 border-l-[var(--cat-kiln)]/40";
   }
@@ -165,13 +170,11 @@ function getCellBorderClass(scope: LoadedFamilyVisibleParameterEntry["scope"] | 
   return "";
 }
 
-function getParameterDisplayName(
-  param: LoadedFamilyVisibleParameterEntry | { identity: { name: string } },
-): string {
-  return param.identity.name;
+function getParameterDisplayName(param: { definition: { identity: { name: string } } }): string {
+  return param.definition.identity.name;
 }
 
-function getKindLabel(kind: LoadedFamilyVisibleParameterEntry["kind"]): string {
+function getKindLabel(kind: FamilyParameterSnapshot["kind"]): string {
   switch (kind) {
     case "FamilyParameter":
       return "Family";
@@ -186,7 +189,7 @@ function getKindLabel(kind: LoadedFamilyVisibleParameterEntry["kind"]): string {
   }
 }
 
-function getKindBadgeClass(kind: LoadedFamilyVisibleParameterEntry["kind"]): string {
+function getKindBadgeClass(kind: FamilyParameterSnapshot["kind"]): string {
   switch (kind) {
     case "FamilyParameter":
       return "bg-[var(--cat-blue)]/12 text-[var(--cat-blue)] border-[var(--cat-blue)]/25";
@@ -211,9 +214,7 @@ function getScopeBadgeClass(isInstance: boolean): string {
     : "bg-[var(--cat-kiln)]/12 text-[var(--cat-kiln)] border-[var(--cat-kiln)]/25";
 }
 
-function getExcludedReasonLabel(
-  reason: LoadedFamilyMatrixFamily["excludedParameters"][number]["excludedReason"],
-): string {
+function getExcludedReasonLabel(reason: ExcludedParameterReason): string {
   switch (reason) {
     case "ProjectObservedBuiltIn":
       return "Project-observed built-in";
@@ -228,7 +229,7 @@ function FormulaIndicator({
   state,
   formula,
 }: {
-  state: LoadedFamilyVisibleParameterEntry["formulaState"];
+  state: FamilyParameterSnapshot["formulaState"];
   formula: string;
 }) {
   if (state === "None" || state === "NotApplicable") {
@@ -245,7 +246,7 @@ function FormulaIndicator({
   );
 }
 
-function MasterSpreadsheetTable({ families }: { families: LoadedFamilyMatrixFamily[] }) {
+function MasterSpreadsheetTable({ families }: { families: readonly FamilySnapshotRecord[] }) {
   const [columnSortMode, setColumnSortMode] = useState<ColumnSortMode>("clustered");
   const [sortLayers, setSortLayers] = useState<SortLayer[]>([]);
   const [showUncommon, setShowUncommon] = useState(false);
@@ -255,16 +256,18 @@ function MasterSpreadsheetTable({ families }: { families: LoadedFamilyMatrixFami
     const tableRows: MasterTableRow[] = [];
 
     for (const family of families) {
-      for (const param of family.visibleParameters) {
-        const parameterKey = param.identity.key;
+      const familyParameters = visibleParameters(family);
+      const scheduleNames = family.scheduleNames ?? [];
+      for (const param of familyParameters) {
+        const parameterKey = param.definition.identity.key;
         if (!paramMap.has(parameterKey)) {
           paramMap.set(parameterKey, {
             key: parameterKey,
             name: getParameterDisplayName(param),
             kind: param.kind,
-            isInstance: param.isInstance,
+            isInstance: param.definition.isInstance ?? false,
             formulaState: param.formulaState,
-            identityKind: param.identity.kind,
+            identityKind: param.definition.identity.kind,
             familyCount: 0,
             totalOccurrences: 0,
             familiesWithParam: new Set(),
@@ -280,33 +283,30 @@ function MasterSpreadsheetTable({ families }: { families: LoadedFamilyMatrixFami
         }
       }
 
-      for (let typeIndex = 0; typeIndex < family.types.length; typeIndex++) {
-        const type = family.types[typeIndex];
+      for (let typeIndex = 0; typeIndex < family.typeNames.length; typeIndex++) {
+        const typeName = family.typeNames[typeIndex];
         const valuesByParam: Record<string, string> = {};
-        const scopeByParam: Record<string, LoadedFamilyVisibleParameterEntry["scope"]> = {};
-        const formulaStateByParam: Record<
-          string,
-          LoadedFamilyVisibleParameterEntry["formulaState"]
-        > = {};
+        const scopeByParam: Record<string, FamilyParameterSnapshot["scope"]> = {};
+        const formulaStateByParam: Record<string, FamilyParameterSnapshot["formulaState"]> = {};
 
-        for (const param of family.visibleParameters) {
-          valuesByParam[param.identity.key] = param.valuesByType[type.typeName] ?? "";
-          scopeByParam[param.identity.key] = param.scope;
-          formulaStateByParam[param.identity.key] = param.formulaState;
+        for (const param of familyParameters) {
+          valuesByParam[param.definition.identity.key] = cellText(param.valuesPerType[typeName]);
+          scopeByParam[param.definition.identity.key] = param.scope;
+          formulaStateByParam[param.definition.identity.key] = param.formulaState;
         }
 
         tableRows.push({
           familyName: family.familyName,
           familyUniqueId: family.familyUniqueId,
-          categoryName: family.categoryName,
-          typeName: type.typeName,
-          rowKey: `${family.familyUniqueId}::${type.typeName}`,
-          scheduleNames: family.scheduleNames,
+          categoryName: family.categoryName ?? "",
+          typeName,
+          rowKey: `${family.familyUniqueId}::${typeName}`,
+          scheduleNames,
           valuesByParam,
           scopeByParam,
           formulaStateByParam,
           isFirstInFamily: typeIndex === 0,
-          familyTypeCount: family.types.length,
+          familyTypeCount: family.typeNames.length,
         });
       }
     }
@@ -714,29 +714,30 @@ function FamilyParameterTable({
   family,
   groupBy,
 }: {
-  family: LoadedFamilyMatrixFamily;
+  family: FamilySnapshotRecord;
   groupBy: GroupByMode;
 }) {
-  const { types, visibleParameters } = family;
+  const typeNames = family.typeNames;
+  const params = useMemo(() => visibleParameters(family), [family]);
 
   const groupedParams = useMemo(() => {
     if (groupBy === "none") {
-      return [{ key: "", label: "", params: visibleParameters }];
+      return [{ key: "", label: "", params }];
     }
 
-    const groups = new Map<string, LoadedFamilyVisibleParameterEntry[]>();
+    const groups = new Map<string, FamilyParameterSnapshot[]>();
 
-    for (const param of visibleParameters) {
+    for (const param of params) {
       let key: string;
       switch (groupBy) {
         case "group":
-          key = param.groupTypeLabel || "Ungrouped";
+          key = param.definition.groupTypeLabel || "Ungrouped";
           break;
         case "kind":
           key = getKindLabel(param.kind);
           break;
         case "scope":
-          key = param.isInstance ? "Instance" : "Type";
+          key = param.definition.isInstance ? "Instance" : "Type";
           break;
         default:
           key = "";
@@ -755,10 +756,10 @@ function FamilyParameterTable({
 
     return Array.from(groups.entries())
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, params]) => ({ key, label: key, params }));
-  }, [visibleParameters, groupBy]);
+      .map(([key, groupParams]) => ({ key, label: key, params: groupParams }));
+  }, [params, groupBy]);
 
-  if (types.length === 0) {
+  if (typeNames.length === 0) {
     return (
       <div className="rounded border border-dashed border-border/60 bg-muted/20 px-3 py-6 text-center text-sm text-muted-foreground">
         No types loaded for this family
@@ -766,7 +767,7 @@ function FamilyParameterTable({
     );
   }
 
-  if (visibleParameters.length === 0) {
+  if (params.length === 0) {
     return (
       <div className="rounded border border-dashed border-border/60 bg-muted/20 px-3 py-6 text-center text-sm text-muted-foreground">
         No visible parameters collected
@@ -788,13 +789,13 @@ function FamilyParameterTable({
             <th className="w-[52px] border-r border-b border-border/60 px-1 py-1 text-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               <span title="Instance or Type">Scope</span>
             </th>
-            {types.map((type) => (
+            {typeNames.map((typeName) => (
               <th
-                key={type.typeName}
+                key={typeName}
                 className="min-w-[90px] max-w-[140px] border-r border-b border-border/60 px-2 py-1 text-[10px] font-semibold text-muted-foreground"
-                title={type.typeName}
+                title={typeName}
               >
-                <span className="block truncate">{type.typeName}</span>
+                <span className="block truncate">{typeName}</span>
               </th>
             ))}
           </tr>
@@ -805,7 +806,7 @@ function FamilyParameterTable({
               {groupBy !== "none" && (
                 <tr key={`group-${group.key}`} className="bg-muted/40">
                   <td
-                    colSpan={3 + types.length}
+                    colSpan={3 + typeNames.length}
                     className="border-b border-border/50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-muted-foreground"
                   >
                     {group.label}
@@ -814,7 +815,10 @@ function FamilyParameterTable({
                 </tr>
               )}
               {group.params.map((param) => (
-                <tr key={param.identity.key} className="hover:bg-muted/15 transition-colors">
+                <tr
+                  key={param.definition.identity.key}
+                  className="hover:bg-muted/15 transition-colors"
+                >
                   <td className="sticky left-0 z-10 border-r border-b border-border/40 bg-background px-2 py-0.5 text-[11px] font-medium">
                     <div className="flex items-center gap-1">
                       <span
@@ -823,7 +827,7 @@ function FamilyParameterTable({
                       >
                         {getParameterDisplayName(param)}
                       </span>
-                      <FormulaIndicator state={param.formulaState} formula={param.formula} />
+                      <FormulaIndicator state={param.formulaState} formula={param.formula ?? ""} />
                     </div>
                   </td>
                   <td className="border-r border-b border-border/40 px-0.5 py-0.5 text-center">
@@ -841,19 +845,19 @@ function FamilyParameterTable({
                     <span
                       className={cn(
                         "inline-block whitespace-nowrap rounded px-1 py-px text-[8px] font-bold uppercase border",
-                        getScopeBadgeClass(param.isInstance),
+                        getScopeBadgeClass(param.definition.isInstance ?? false),
                       )}
-                      title={param.isInstance ? "Instance parameter" : "Type parameter"}
+                      title={param.definition.isInstance ? "Instance parameter" : "Type parameter"}
                     >
-                      {getScopeLabel(param.isInstance)}
+                      {getScopeLabel(param.definition.isInstance ?? false)}
                     </span>
                   </td>
-                  {types.map((type) => {
-                    const value = param.valuesByType[type.typeName] ?? "";
+                  {typeNames.map((typeName) => {
+                    const value = cellText(param.valuesPerType[typeName]);
                     const isEmpty = !value.trim();
                     return (
                       <td
-                        key={type.typeName}
+                        key={typeName}
                         className={cn(
                           "border-r border-b border-border/40 px-1.5 py-0.5 text-[11px] font-mono tracking-tight",
                           isEmpty && "text-muted-foreground/30",
@@ -882,11 +886,14 @@ function FamilyCard({
   onToggle,
   groupBy,
 }: {
-  family: LoadedFamilyMatrixFamily;
+  family: FamilySnapshotRecord;
   isExpanded: boolean;
   onToggle: () => void;
   groupBy: GroupByMode;
 }) {
+  const scheduleNames = family.scheduleNames ?? [];
+  const visibleCount = visibleParameters(family).length;
+  const excluded = excludedParameters(family);
   return (
     <div className="rounded-lg border border-border/60 bg-background/80 shadow-sm">
       <button
@@ -912,15 +919,15 @@ function FamilyCard({
         </div>
         <div className="flex shrink-0 items-center gap-2 text-[11px] text-muted-foreground">
           <span className="rounded bg-muted/60 px-1.5 py-0.5">
-            {family.types.length} type{family.types.length !== 1 ? "s" : ""}
+            {family.typeNames.length} type{family.typeNames.length !== 1 ? "s" : ""}
           </span>
           <span className="rounded bg-muted/60 px-1.5 py-0.5">
-            {family.scheduleNames.length} schedule
-            {family.scheduleNames.length !== 1 ? "s" : ""}
+            {scheduleNames.length} schedule
+            {scheduleNames.length !== 1 ? "s" : ""}
           </span>
           <span className="rounded bg-muted/60 px-1.5 py-0.5">
-            {family.visibleParameters.length} param
-            {family.visibleParameters.length !== 1 ? "s" : ""}
+            {visibleCount} param
+            {visibleCount !== 1 ? "s" : ""}
           </span>
           {family.placedInstanceCount > 0 && (
             <span className="rounded bg-[var(--cat-green)]/12 px-1.5 py-0.5 text-[var(--cat-green)]">
@@ -931,14 +938,14 @@ function FamilyCard({
       </button>
       {isExpanded && (
         <div className="p-3">
-          {family.scheduleNames.length > 0 && (
+          {scheduleNames.length > 0 && (
             <details className="mb-3">
               <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
-                Shows in {family.scheduleNames.length} schedule
-                {family.scheduleNames.length !== 1 ? "s" : ""}
+                Shows in {scheduleNames.length} schedule
+                {scheduleNames.length !== 1 ? "s" : ""}
               </summary>
               <ul className="mt-2 space-y-1 pl-4 text-xs text-muted-foreground">
-                {family.scheduleNames.map((scheduleName) => (
+                {scheduleNames.map((scheduleName) => (
                   <li key={scheduleName}>
                     <span className="font-medium">{scheduleName}</span>
                   </li>
@@ -947,16 +954,16 @@ function FamilyCard({
             </details>
           )}
           <FamilyParameterTable family={family} groupBy={groupBy} />
-          {family.excludedParameters.length > 0 && (
+          {excluded.length > 0 && (
             <details className="mt-3">
               <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
-                {family.excludedParameters.length} excluded parameter
-                {family.excludedParameters.length !== 1 ? "s" : ""}
+                {excluded.length} excluded parameter
+                {excluded.length !== 1 ? "s" : ""}
               </summary>
               <ul className="mt-2 space-y-1 pl-4 text-xs text-muted-foreground">
-                {family.excludedParameters.map((param) => (
-                  <li key={param.identity.key}>
-                    <span className="font-medium">{param.identity.name}</span>
+                {excluded.map((param) => (
+                  <li key={param.definition.identity.key}>
+                    <span className="font-medium">{param.definition.identity.name}</span>
                     <span className="ml-2 text-[10px]">
                       ({getExcludedReasonLabel(param.excludedReason)})
                     </span>
@@ -1043,7 +1050,7 @@ function FamilyMatrixRoute() {
   // The matrix is the expensive call (parameters per type). Size the budget to
   // the explicit family selection so all chosen families load without truncation,
   // and lift the per-entry sample cap so cells/types aren't dropped.
-  const matrixRequest = useMemo<LoadedFamiliesRequest | undefined>(
+  const matrixRequest = useMemo<LoadedFamiliesMatrixRequest | undefined>(
     () =>
       appliedMatrixFilter
         ? {
@@ -1052,6 +1059,7 @@ function FamilyMatrixRoute() {
               maxEntries: Math.max(appliedMatrixFilter.familyNames.length, 10),
               maxSamplesPerEntry: 1000,
             },
+            includeTempPlacement: true,
           }
         : undefined,
     [appliedMatrixFilter],
@@ -1220,12 +1228,12 @@ function FamilyMatrixRoute() {
     void matrixQuery.refetch();
   };
 
-  const totalTypes = families.reduce((sum, f) => sum + f.types.length, 0);
+  const totalTypes = families.reduce((sum, f) => sum + f.typeNames.length, 0);
   const uniqueParams = useMemo(() => {
     const paramNames = new Set<string>();
     for (const family of families) {
-      for (const param of family.visibleParameters) {
-        paramNames.add(param.identity.key);
+      for (const param of visibleParameters(family)) {
+        paramNames.add(param.definition.identity.key);
       }
     }
     return paramNames.size;

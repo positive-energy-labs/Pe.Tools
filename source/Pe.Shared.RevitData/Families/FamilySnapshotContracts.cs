@@ -1,12 +1,16 @@
+using Pe.Shared.Codegen;
 using Pe.Shared.RevitData;
 
 namespace Pe.Shared.RevitData.Families;
 
 /// <summary>
-///     Canonical family/parameter record language shared by DocumentData collection and FamilyFoundry
-///     capture. Serialization-clean: built on <see cref="ParameterDefinitionDescriptor" /> and plain values.
-///     Goes on the wire in the matrix reshape phase (gets [ExportTsSchema] then).
+///     Canonical family/parameter record language shared by DocumentData collection, FamilyFoundry
+///     capture, and the matrix wire. Serialization-clean: built on
+///     <see cref="ParameterDefinitionDescriptor" /> and plain values.
+///     ValuesPerType preserves null (no value) vs "" (empty string value) — renderers coerce, the wire
+///     does not.
 /// </summary>
+[ExportTsSchema]
 public sealed record FamilyParameterSnapshot(
     ParameterDefinitionDescriptor Definition,
     LoadedFamilyParameterKind Kind,
@@ -19,6 +23,7 @@ public sealed record FamilyParameterSnapshot(
     ExcludedParameterReason? ExcludedReason = null
 );
 
+[ExportTsSchema]
 public sealed record FamilySnapshotRecord(
     long FamilyId,
     string FamilyUniqueId,

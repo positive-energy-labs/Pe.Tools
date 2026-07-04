@@ -1,30 +1,36 @@
 /**
- * Loaded-families boundary, now sourced from C#-authored generated artifacts:
+ * Loaded-families boundary, sourced from C#-authored generated artifacts:
  *   - validation schemas, inferred types, and value constants from `@pe/host-contracts/effect`
  *
- * The generated matrix schema is faithful to the wire (parameters nested under
- * `definition`, `presence` not `scope`, null cells). The table UI wants a flat
- * model, so the one hand-maintained thing here is the flatten adapter: a view
- * mapper, not a contract. If the C# changes, the generated schema/types move
- * and this adapter fails to compile, surfacing drift immediately.
+ * Components consume the canonical `FamilySnapshotRecord` directly — there is
+ * no hand-maintained view model. The wire is faithful: parameter fields nest
+ * under `definition`, the presence enum lives on `scope`, cell values are
+ * `string | null` (null = no value, "" = empty string). This module only adds
+ * re-exports and tiny pure helpers (visible/excluded split, render coercion).
  */
-import { loadedFamiliesMatrixDataSchema } from "@pe/host-contracts/effect";
 import {
-  type LoadedFamilyMatrixFamily as GenMatrixFamily,
-  type LoadedFamiliesMatrixData as GenMatrixData,
-  type LoadedFamilyExcludedParameterEntry as GenExcludedParameter,
-  type LoadedFamilyVisibleParameterEntry as GenVisibleParameter,
+  type ExcludedParameterReason as ExcludedParameterReasonType,
+  type FamilyParameterSnapshot,
+  type FamilySnapshotRecord,
   type LoadedFamiliesCatalogRequest,
+  type LoadedFamiliesMatrixData,
   type LoadedFamiliesMatrixRequest,
-  type ParameterIdentity,
+  loadedFamiliesMatrixDataSchema,
 } from "@pe/host-contracts/effect";
 import { Schema } from "effect";
 
-// Re-exports so the route imports a single boundary module.
+// Re-exports so the routes import a single boundary module.
 export type {
+  FamilyParameterSnapshot,
+  FamilySnapshotRecord,
   LoadedFamiliesCatalogData,
-  LoadedFamilyCatalogEntry,
+  LoadedFamiliesCatalogRequest,
   LoadedFamiliesFilter,
+  LoadedFamiliesMatrixData,
+  LoadedFamiliesMatrixRequest,
+  LoadedFamilyCatalogEntry,
+  ParameterDefinitionDescriptor,
+  ParameterIdentity,
 } from "@pe/host-contracts/effect";
 export type {
   HostProbeData,
@@ -42,97 +48,31 @@ export {
 
 export type LoadedFamiliesRequest = LoadedFamiliesCatalogRequest | LoadedFamiliesMatrixRequest;
 
-// ---- flat view model the table components consume -------------------------
-
-export type LoadedFamilyVisibleParameterEntry = {
-  identity: ParameterIdentity;
-  isInstance: boolean;
-  dataTypeId: string;
-  dataTypeLabel: string;
-  groupTypeId: string;
-  groupTypeLabel: string;
-  kind: GenVisibleParameter["kind"];
-  scope: GenVisibleParameter["presence"];
-  storageType: string;
-  formulaState: GenVisibleParameter["formulaState"];
-  formula: string;
-  valuesByType: Record<string, string>;
+/** Snapshot parameter that the collector excluded, with the reason narrowed. */
+export type ExcludedFamilyParameterSnapshot = FamilyParameterSnapshot & {
+  excludedReason: ExcludedParameterReasonType;
 };
 
-export type LoadedFamilyExcludedParameterEntry = {
-  identity: ParameterIdentity;
-  isInstance: boolean;
-  kind: GenExcludedParameter["kind"];
-  scope: GenExcludedParameter["presence"];
-  excludedReason: GenExcludedParameter["excludedReason"];
-  formulaState: GenExcludedParameter["formulaState"];
-  formula: string;
-};
-
-export type LoadedFamilyMatrixFamily = {
-  familyId: number;
-  familyUniqueId: string;
-  familyName: string;
-  categoryName: string;
-  placedInstanceCount: number;
-  types: GenMatrixFamily["types"];
-  scheduleNames: GenMatrixFamily["scheduleNames"];
-  visibleParameters: LoadedFamilyVisibleParameterEntry[];
-  excludedParameters: LoadedFamilyExcludedParameterEntry[];
-};
-
-export type LoadedFamiliesMatrixView = {
-  families: LoadedFamilyMatrixFamily[];
-  issues: GenMatrixData["issues"];
-};
-
-function flattenValues(values: Record<string, string | null>): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(values)) out[key] = value ?? "";
-  return out;
+/** Parameters the matrix UI renders: excludedReason == null. */
+export function visibleParameters(family: FamilySnapshotRecord): FamilyParameterSnapshot[] {
+  return family.parameters.filter((param) => param.excludedReason == null);
 }
 
-function flattenFamily(family: GenMatrixFamily): LoadedFamilyMatrixFamily {
-  return {
-    familyId: family.familyId,
-    familyUniqueId: family.familyUniqueId,
-    familyName: family.familyName,
-    categoryName: family.categoryName ?? "",
-    placedInstanceCount: family.placedInstanceCount,
-    types: family.types,
-    scheduleNames: family.scheduleNames,
-    visibleParameters: family.visibleParameters.map((p) => ({
-      identity: p.definition.identity,
-      isInstance: p.definition.isInstance ?? false,
-      dataTypeId: p.definition.dataTypeId ?? "",
-      dataTypeLabel: p.definition.dataTypeLabel ?? "",
-      groupTypeId: p.definition.groupTypeId ?? "",
-      groupTypeLabel: p.definition.groupTypeLabel ?? "",
-      kind: p.kind,
-      scope: p.presence,
-      storageType: p.storageType,
-      formulaState: p.formulaState,
-      formula: p.formula ?? "",
-      valuesByType: flattenValues(p.valuesByType),
-    })),
-    excludedParameters: family.excludedParameters.map((p) => ({
-      identity: p.definition.identity,
-      isInstance: p.definition.isInstance ?? false,
-      kind: p.kind,
-      scope: p.presence,
-      excludedReason: p.excludedReason,
-      formulaState: p.formulaState,
-      formula: p.formula ?? "",
-    })),
-  };
+/** Parameters the collector dropped: excludedReason != null. */
+export function excludedParameters(
+  family: FamilySnapshotRecord,
+): ExcludedFamilyParameterSnapshot[] {
+  return family.parameters.filter(
+    (param): param is ExcludedFamilyParameterSnapshot => param.excludedReason != null,
+  );
 }
 
-/** Map a validated matrix payload into the flat table view. */
-export function flattenMatrixData(data: GenMatrixData): LoadedFamiliesMatrixView {
-  return { families: data.families.map(flattenFamily), issues: data.issues };
+/** Render coercion for wire cells: null (no value) and "" (empty) both display empty. */
+export function cellText(value: string | null | undefined): string {
+  return value ?? "";
 }
 
-/** Parse a raw matrix payload (generated schema) then flatten. Used by tests. */
-export function flattenMatrix(raw: unknown): LoadedFamiliesMatrixView {
-  return flattenMatrixData(Schema.decodeUnknownSync(loadedFamiliesMatrixDataSchema)(raw));
+/** Parse a raw matrix payload against the generated wire schema. Used by tests. */
+export function decodeMatrixData(raw: unknown): LoadedFamiliesMatrixData {
+  return Schema.decodeUnknownSync(loadedFamiliesMatrixDataSchema)(raw);
 }

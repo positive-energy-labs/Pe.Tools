@@ -279,15 +279,22 @@ public static class GetLoadedFamiliesMatrixOperationContract {
             "revit.matrix.loaded-families",
             "Get Loaded Families Matrix",
             HostOperationAgentMetadata.Create(
-                                "Read a matrix projection of loaded family/type facts from the active document.",
-                new[] { "loaded-families", "families", "matrix", "projection", "parameter-presence" },
+                                "Read a matrix of loaded family snapshots (canonical family records: types, parameters with per-type values/formulas/scope, schedule membership) from the active document.",
+                new[] { "loaded-families", "families", "matrix", "projection", "parameter-scope", "family-snapshot" },
                 requiresActiveDocument: true,
                 requestExamples: [
                     RevitDataHostOperationExamples.Example(
                         "bounded loaded-family matrix",
-                        "Escalate from catalog to matrix only with family/category filters and a budget.",
+                        "Escalate from catalog to matrix only with family/category filters and a budget. Response families are FamilySnapshotRecord: one parameters list where excluded entries carry excludedReason; per-type values in valuesPerType (null = no value).",
                         """
                         { "filter": { "categoryNames": ["Mechanical Equipment"], "familyNameContains": "VAV", "placementScope": "PlacedOnly" }, "budget": { "maxEntries": 10, "maxSamplesPerEntry": 20 } }
+                        """
+                    ),
+                    RevitDataHostOperationExamples.Example(
+                        "read-only matrix (no temp placement)",
+                        "Skip the temp-placement pass when live instance values and schedule membership for unplaced types are not needed; never mutates the document.",
+                        """
+                        { "filter": { "categoryNames": ["Mechanical Equipment"] }, "includeTempPlacement": false, "budget": { "maxEntries": 10 } }
                         """
                     )
                 ],

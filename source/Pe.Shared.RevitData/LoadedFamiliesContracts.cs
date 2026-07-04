@@ -113,44 +113,12 @@ public record LoadedFamiliesCatalogData(
     RevitDataResultPage? Page = null
 );
 
-[ExportTsSchema]
-public record LoadedFamilyVisibleParameterEntry(
-    ParameterDefinitionDescriptor Definition,
-    LoadedFamilyParameterKind Kind,
-    LoadedFamilyParameterPresence Presence,
-    string StorageType,
-    FormulaState FormulaState,
-    string? Formula,
-    Dictionary<string, string?> ValuesByType
-);
-
-[ExportTsSchema]
-public record LoadedFamilyExcludedParameterEntry(
-    ParameterDefinitionDescriptor Definition,
-    LoadedFamilyParameterKind Kind,
-    LoadedFamilyParameterPresence Presence,
-    ExcludedParameterReason ExcludedReason,
-    FormulaState FormulaState,
-    string? Formula
-);
-
-[ExportTsSchema]
-public record LoadedFamilyMatrixFamily(
-    long FamilyId,
-    string FamilyUniqueId,
-    string FamilyName,
-    string? CategoryName,
-    int PlacedInstanceCount,
-    List<LoadedFamilyTypeEntry> Types,
-    List<string> ScheduleNames,
-    List<LoadedFamilyVisibleParameterEntry> VisibleParameters,
-    List<LoadedFamilyExcludedParameterEntry> ExcludedParameters,
-    List<RevitDataIssue> Issues
-);
-
+// The matrix speaks the canonical family record language (FamilySnapshotContracts): one parameter list
+// where excluded entries carry ExcludedReason, `scope` replaces the old `presence`, and per-type values
+// live in ValuesPerType. UIs and agents consume FamilySnapshotRecord directly.
 [ExportTsSchema]
 public record LoadedFamiliesMatrixData(
-    List<LoadedFamilyMatrixFamily> Families,
+    List<Families.FamilySnapshotRecord> Families,
     List<RevitDataIssue> Issues,
     RevitDataResultPage? Page = null
 );
