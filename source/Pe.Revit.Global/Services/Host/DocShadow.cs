@@ -57,6 +57,12 @@ internal sealed class DocShadow : IProjectBrowserIndexProvider, IFamilySnapshotC
             this._familySnapshots[record.FamilyId] = record;
     }
 
+    /// <summary>Point-in-time copy of the cached family snapshots (for save-boundary persistence).</summary>
+    public IReadOnlyList<FamilySnapshotRecord> SnapshotFamilies() {
+        lock (this._sync)
+            return this._familySnapshots.Values.ToList();
+    }
+
     // ==================== IProjectBrowserIndexProvider ====================
 
     public ProjectBrowserCollectedIndex GetProjectBrowserIndex(
