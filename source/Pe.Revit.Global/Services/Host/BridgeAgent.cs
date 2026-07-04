@@ -376,7 +376,8 @@ internal sealed class BridgeAgent : IDisposable {
     }
 
     private async Task PublishDocumentInvalidationAsync(DocumentInvalidationEvent payload) {
-        this._revitDataRequestService.InvalidateCollectionCache(payload.Reason.ToString());
+        // Cache eviction happens element-granularly in BridgeDocumentNotifier.OnDocumentChanged
+        // (DocShadow.HandleChange); this path only notifies the TS host.
         if (!this.IsConnected)
             return;
 

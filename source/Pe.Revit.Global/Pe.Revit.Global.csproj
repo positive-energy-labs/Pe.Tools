@@ -9,6 +9,10 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <InternalsVisibleTo Include="Pe.Revit.Tests"/>
+    </ItemGroup>
+
+    <ItemGroup>
         <!-- Revit Platform -->
         <PackageReference Include="ILRepack" Version="2.0.44">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
