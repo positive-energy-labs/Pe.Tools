@@ -278,7 +278,11 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         var document = GetSupportedActiveDocument(RevitBridgeOps.LoadedFamiliesMatrix.Definition);
 
         try {
-            return LoadedFamiliesMatrixCollector.Collect(document, filter, budget: request.Budget);
+            return LoadedFamiliesMatrixCollector.Collect(
+                document,
+                filter,
+                budget: request.Budget,
+                includeTempPlacement: request.IncludeTempPlacement);
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "LoadedFamiliesMatrixException",

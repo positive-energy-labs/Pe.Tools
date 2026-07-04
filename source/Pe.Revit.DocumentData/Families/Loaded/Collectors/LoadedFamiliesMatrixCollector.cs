@@ -1,6 +1,8 @@
+using Pe.Revit.DocumentData.Families.Extraction;
 using Pe.Revit.DocumentData.Families.Loaded.Models;
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Shared.RevitData;
+using Pe.Shared.RevitData.Families;
 using Serilog;
 
 namespace Pe.Revit.DocumentData.Families.Loaded.Collectors;
@@ -10,7 +12,8 @@ public static class LoadedFamiliesMatrixCollector {
         Document doc,
         LoadedFamiliesFilter? filter = null,
         Action<string>? onProgress = null,
-        RevitDataOutputBudget? budget = null
+        RevitDataOutputBudget? budget = null,
+        bool includeTempPlacement = true
     ) {
         var effectiveBudget = RevitDataOutputBudgets.WithDefaults(budget, maxEntries: 10, maxSamplesPerEntry: 25);
         var totalStopwatch = Stopwatch.StartNew();
@@ -26,18 +29,51 @@ public static class LoadedFamiliesMatrixCollector {
             .Select(family => family.FamilyId)
             .ToHashSet();
 
+        // Phase 1: one extractor pass per family (EditFamily reuse + FamilyType.As* reads; formulas,
+        // authored per-type values, and classification metadata in a single family-doc open). Must run
+        // outside any transaction — EditFamily throws inside one.
+        var extractStopwatch = Stopwatch.StartNew();
+        onProgress?.Invoke($"Family matrix extracting family-doc truth for {catalogFamilies.Count} families.");
+        var snapshotRecords = new Dictionary<long, FamilySnapshotRecord>();
+        foreach (var familyId in selectedFamilyIds) {
+            if (doc.GetElement(familyId.ToElementId()) is not Family familyElement)
+                continue;
+
+            var familyStopwatch = Stopwatch.StartNew();
+            var record = FamilySnapshotExtractor.ExtractFromProjectFamily(doc, familyElement);
+            snapshotRecords[familyId] = record;
+            onProgress?.Invoke(
+                $"Family matrix extracted '{record.FamilyName}' in {familyStopwatch.Elapsed.TotalMilliseconds:F0} ms."
+            );
+        }
+
+        var extractElapsed = extractStopwatch.Elapsed;
+        onProgress?.Invoke($"Family matrix finished family-doc extraction in {extractElapsed.TotalMilliseconds:F0} ms.");
+
+        // Phase 2: one temp-placement sandbox pass serving BOTH project values and schedule matching
+        // (the old flow placed twice because EditFamily had to run between the two transactions).
+        // With placement disabled the same collector still gathers type parameters from symbols.
         var projectValueStopwatch = Stopwatch.StartNew();
         List<CollectedLoadedFamilyRecord> projectValueFamilies;
+        List<CollectedLoadedFamilyRecord> scheduleFamilies;
         var projectPlacementAttempts = 0;
         var projectPlacementSuccesses = 0;
-        using (var projectContext = LoadedFamiliesTempPlacementEngine.CreateEvaluationContext(doc, selectedFamilyIds)) {
+        var candidateSchedules = 0;
+        var scheduleSerializeElapsed = TimeSpan.Zero;
+        var scheduleEvalElapsed = TimeSpan.Zero;
+        TimeSpan projectValueElapsed;
+        TimeSpan scheduleMatchElapsed;
+        using (var evaluationContext = LoadedFamiliesTempPlacementEngine.CreateEvaluationContext(doc, selectedFamilyIds)) {
             onProgress?.Invoke($"Family matrix collecting project values for {catalogFamilies.Count} families.");
-            projectContext.BeginTransaction("Loaded Families Matrix Project Values");
+            if (includeTempPlacement)
+                evaluationContext.BeginTransaction("Loaded Families Matrix Evaluation");
 
             try {
-                LoadedFamiliesTempPlacementEngine.PlaceOneTempInstancePerPlaceableSymbol(projectContext);
+                if (includeTempPlacement)
+                    LoadedFamiliesTempPlacementEngine.PlaceOneTempInstancePerPlaceableSymbol(evaluationContext);
+
                 var collectedFamilies = ProjectLoadedFamilyCollector.CollectFromPlacedInstances(
-                    projectContext,
+                    evaluationContext,
                     (familyRecord, elapsed) => onProgress?.Invoke(
                         $"Family matrix collected '{familyRecord.FamilyName}' in {elapsed.TotalMilliseconds:F0} ms."
                     )
@@ -50,73 +86,60 @@ public static class LoadedFamiliesMatrixCollector {
                     catalogFamilies,
                     mappedFamilies
                 );
-                projectPlacementAttempts = projectContext.PlacementAttempts;
-                projectPlacementSuccesses = projectContext.PlacementSuccesses;
+                projectPlacementAttempts = evaluationContext.PlacementAttempts;
+                projectPlacementSuccesses = evaluationContext.PlacementSuccesses;
+                projectValueElapsed = projectValueStopwatch.Elapsed;
+                onProgress?.Invoke(
+                    $"Family matrix finished project value collection in {projectValueElapsed.TotalMilliseconds:F0} ms. Placed {projectPlacementSuccesses} of {projectPlacementAttempts} temp instances."
+                );
+
+                var scheduleMatchStopwatch = Stopwatch.StartNew();
+                if (includeTempPlacement) {
+                    onProgress?.Invoke("Family matrix matching schedules.");
+                    scheduleFamilies = LoadedFamiliesScheduleCollector.Supplement(
+                        doc,
+                        projectValueFamilies,
+                        evaluationContext,
+                        (schedule, serializeElapsed, evaluateElapsed, matchCount) => {
+                            candidateSchedules++;
+                            scheduleSerializeElapsed += serializeElapsed;
+                            scheduleEvalElapsed += evaluateElapsed;
+                            onProgress?.Invoke(
+                                $"Family matrix evaluated schedule '{schedule.Name}' in {(serializeElapsed + evaluateElapsed).TotalMilliseconds:F0} ms. Matches={matchCount}."
+                            );
+                        }
+                    );
+                } else
+                    scheduleFamilies = projectValueFamilies;
+                scheduleMatchElapsed = scheduleMatchStopwatch.Elapsed;
             } finally {
-                projectContext.RollBackTransaction();
+                evaluationContext.RollBackTransaction();
             }
         }
 
-        var projectValueElapsed = projectValueStopwatch.Elapsed;
         onProgress?.Invoke(
-            $"Family matrix finished project value collection in {projectValueElapsed.TotalMilliseconds:F0} ms. Placed {projectPlacementSuccesses} of {projectPlacementAttempts} temp instances."
+            $"Family matrix finished schedule matching in {scheduleMatchElapsed.TotalMilliseconds:F0} ms across {candidateSchedules} schedules."
         );
 
+        // Phase 3: pure-compute authority classification + formula supplement from the extracted records.
         var formulaStopwatch = Stopwatch.StartNew();
-        onProgress?.Invoke($"Family matrix collecting formulas for {projectValueFamilies.Count} families.");
+        onProgress?.Invoke($"Family matrix classifying parameters for {scheduleFamilies.Count} families.");
         var supplementedFamilies = LoadedFamiliesFormulaCollector.Supplement(
             doc,
-            projectValueFamilies,
+            scheduleFamilies,
+            snapshotRecords,
             (familyName, elapsed) => onProgress?.Invoke(
                 $"Family matrix supplemented formulas for '{familyName}' in {elapsed.TotalMilliseconds:F0} ms."
             )
         );
         var formulaElapsed = formulaStopwatch.Elapsed;
-        onProgress?.Invoke($"Family matrix finished formula collection in {formulaElapsed.TotalMilliseconds:F0} ms.");
-
-        var scheduleMatchStopwatch = Stopwatch.StartNew();
-        List<CollectedLoadedFamilyRecord> scheduleFamilies;
-        var schedulePlacementAttempts = 0;
-        var schedulePlacementSuccesses = 0;
-        var candidateSchedules = 0;
-        var scheduleSerializeElapsed = TimeSpan.Zero;
-        var scheduleEvalElapsed = TimeSpan.Zero;
-        using (var scheduleContext =
-               LoadedFamiliesTempPlacementEngine.CreateEvaluationContext(doc, selectedFamilyIds)) {
-            onProgress?.Invoke("Family matrix matching schedules.");
-            scheduleContext.BeginTransaction("Loaded Families Matrix Schedule Matching");
-
-            try {
-                LoadedFamiliesTempPlacementEngine.PlaceOneTempInstancePerPlaceableSymbol(scheduleContext);
-                schedulePlacementAttempts = scheduleContext.PlacementAttempts;
-                schedulePlacementSuccesses = scheduleContext.PlacementSuccesses;
-                scheduleFamilies = LoadedFamiliesScheduleCollector.Supplement(
-                    doc,
-                    supplementedFamilies,
-                    scheduleContext,
-                    (schedule, serializeElapsed, evaluateElapsed, matchCount) => {
-                        candidateSchedules++;
-                        scheduleSerializeElapsed += serializeElapsed;
-                        scheduleEvalElapsed += evaluateElapsed;
-                        onProgress?.Invoke(
-                            $"Family matrix evaluated schedule '{schedule.Name}' in {(serializeElapsed + evaluateElapsed).TotalMilliseconds:F0} ms. Matches={matchCount}."
-                        );
-                    }
-                );
-            } finally {
-                scheduleContext.RollBackTransaction();
-            }
-        }
-
-        var scheduleMatchElapsed = scheduleMatchStopwatch.Elapsed;
-        onProgress?.Invoke(
-            $"Family matrix finished schedule matching in {scheduleMatchElapsed.TotalMilliseconds:F0} ms across {candidateSchedules} schedules. Placed {schedulePlacementSuccesses} of {schedulePlacementAttempts} temp instances."
-        );
+        onProgress?.Invoke($"Family matrix finished classification in {formulaElapsed.TotalMilliseconds:F0} ms.");
 
         Log.Information(
-            "Loaded families matrix timings: TotalMs={TotalMs}, CatalogCollectMs={CatalogCollectMs}, PlacementPhaseProjectValuesMs={PlacementPhaseProjectValuesMs}, FormulaCollectMs={FormulaCollectMs}, PlacementPhaseScheduleMatchMs={PlacementPhaseScheduleMatchMs}, ScheduleSerializeMs={ScheduleSerializeMs}, ScheduleEvalMs={ScheduleEvalMs}, TotalFamilies={TotalFamilies}, TotalSymbols={TotalSymbols}, ProjectPlacementAttempts={ProjectPlacementAttempts}, ProjectPlacedTempInstances={ProjectPlacedTempInstances}, SchedulePlacementAttempts={SchedulePlacementAttempts}, SchedulePlacedTempInstances={SchedulePlacedTempInstances}, CandidateSchedules={CandidateSchedules}",
+            "Loaded families matrix timings: TotalMs={TotalMs}, CatalogCollectMs={CatalogCollectMs}, FamilyDocExtractMs={FamilyDocExtractMs}, PlacementPhaseProjectValuesMs={PlacementPhaseProjectValuesMs}, FormulaCollectMs={FormulaCollectMs}, PlacementPhaseScheduleMatchMs={PlacementPhaseScheduleMatchMs}, ScheduleSerializeMs={ScheduleSerializeMs}, ScheduleEvalMs={ScheduleEvalMs}, TotalFamilies={TotalFamilies}, TotalSymbols={TotalSymbols}, ProjectPlacementAttempts={ProjectPlacementAttempts}, ProjectPlacedTempInstances={ProjectPlacedTempInstances}, CandidateSchedules={CandidateSchedules}, IncludeTempPlacement={IncludeTempPlacement}",
             totalStopwatch.ElapsedMilliseconds,
             (long)catalogElapsed.TotalMilliseconds,
+            (long)extractElapsed.TotalMilliseconds,
             (long)projectValueElapsed.TotalMilliseconds,
             (long)formulaElapsed.TotalMilliseconds,
             (long)scheduleMatchElapsed.TotalMilliseconds,
@@ -126,9 +149,8 @@ public static class LoadedFamiliesMatrixCollector {
             catalogFamilies.Sum(family => family.Types.Count),
             projectPlacementAttempts,
             projectPlacementSuccesses,
-            schedulePlacementAttempts,
-            schedulePlacementSuccesses,
-            candidateSchedules
+            candidateSchedules,
+            includeTempPlacement
         );
         onProgress?.Invoke(
             $"Family matrix completed in {totalStopwatch.Elapsed.TotalMilliseconds:F0} ms."
@@ -136,17 +158,17 @@ public static class LoadedFamiliesMatrixCollector {
 
         var maxFamilies = effectiveBudget.MaxEntries;
         var matrixFamilies = maxFamilies is > 0
-            ? scheduleFamilies.Take(maxFamilies.Value).ToList()
-            : scheduleFamilies;
-        var issues = scheduleFamilies.SelectMany(family => family.Issues)
+            ? supplementedFamilies.Take(maxFamilies.Value).ToList()
+            : supplementedFamilies;
+        var issues = supplementedFamilies.SelectMany(family => family.Issues)
             .Select(LoadedFamiliesCollectorSupport.ToContractIssue)
             .Distinct()
             .ToList();
-        if (maxFamilies is > 0 && scheduleFamilies.Count > maxFamilies.Value) {
+        if (maxFamilies is > 0 && supplementedFamilies.Count > maxFamilies.Value) {
             issues.Add(new RevitDataIssue(
                 "LoadedFamiliesMatrixTruncated",
                 RevitDataIssueSeverity.Warning,
-                $"Returned {matrixFamilies.Count} of {scheduleFamilies.Count} matching loaded familie(s). Increase budget.maxEntries to expand."
+                $"Returned {matrixFamilies.Count} of {supplementedFamilies.Count} matching loaded familie(s). Increase budget.maxEntries to expand."
             ));
         }
 
@@ -161,7 +183,7 @@ public static class LoadedFamiliesMatrixCollector {
         return new LoadedFamiliesMatrixData(
             matrixFamilies.Select(family => ToMatrixFamily(family, effectiveBudget.MaxSamplesPerEntry)).ToList(),
             RevitDataOutputBudgets.ProjectIssues(issues, effectiveBudget),
-            new RevitDataResultPage(scheduleFamilies.Count, matrixFamilies.Count, maxFamilies is > 0 && scheduleFamilies.Count > maxFamilies.Value)
+            new RevitDataResultPage(supplementedFamilies.Count, matrixFamilies.Count, maxFamilies is > 0 && supplementedFamilies.Count > maxFamilies.Value)
         );
     }
 

@@ -1,16 +1,15 @@
+using Pe.Revit.DocumentData.Families.Extraction;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamManager;
-using Pe.Revit.Extensions.FamParameter;
-using Pe.Revit.DocumentData.Families.Loaded.Collectors;
-using Pe.Revit.DocumentData.Families.Loaded.Models;
+using Pe.Shared.RevitData.Families;
 
 namespace Pe.Revit.FamilyFoundry.Capture;
 
 /// <summary>
-///     Collects parameter snapshots with strategy-based source selection.
-///     Prefers the project document path, which now runs the fast temp-instance value pass and then a
-///     formula-only family-doc pass without iterating family types. Family-doc collection still exists as the
-///     fallback when only a family document is available or when the project path remains partial.
+///     Collects parameter snapshots with strategy-based source selection. Both paths ride
+///     FamilySnapshotExtractor (one FamilyType.As* pass, no transactions): the project path resolves the
+///     family document via FindOpenFamilyDocument/EditFamily; the family-doc path reads the already-open
+///     document directly.
 /// </summary>
 ///
 public class ParameterSnapshotCollector : IProjectSnapshotCollector, IFamilySnapshotCollector {
@@ -75,120 +74,35 @@ public class ParameterSnapshotCollector : IProjectSnapshotCollector, IFamilySnap
     }
 
     private static CapturedCollection<ParameterSnapshot> CollectFromProject(Document doc, Family family) {
-        var seededFamily = new CollectedLoadedFamilyRecord {
-            FamilyId = family.Id.Value(),
-            FamilyUniqueId = family.UniqueId,
-            FamilyName = family.Name,
-            CategoryName = family.FamilyCategory?.Name,
-            Types = family.GetFamilySymbolIds()
-                .Select(id => family.Document.GetElement(id) as FamilySymbol)
-                .Where(symbol => symbol != null)
-                .Select(symbol => new CollectedLoadedFamilyTypeRecord(symbol!.Name))
-                .OrderBy(type => type.TypeName, StringComparer.Ordinal)
-                .ToList()
-        };
-        var collectedFamily = LoadedFamiliesProjectValueCollector.Collect(
-                                      doc,
-                                      new List<CollectedLoadedFamilyRecord> { seededFamily }
-                                  )
-                                  .SingleOrDefault()
-                              ?? seededFamily;
-        var supplementedFamily = LoadedFamiliesFormulaCollector.Supplement(
-                                         doc,
-                                         new List<CollectedLoadedFamilyRecord> { collectedFamily }
-                                     )
-                                     .SingleOrDefault()
-                                 ?? collectedFamily;
-        var isPartial = supplementedFamily.Issues.Any(issue =>
-            string.Equals(issue.Code, "FamilyFormulaCollectionFailed", StringComparison.Ordinal) ||
-            string.Equals(issue.Code, "FamilyParameterFormulaReadFailed", StringComparison.Ordinal));
+        // One extractor pass over the family document (reuses the pipeline's already-open famDoc when
+        // present). Replaces the old temp-placement value pass + formula-only EditFamily pass — the
+        // authored family-doc truth is the right basis for FamilyFoundry's edit/reload cycle.
+        var record = FamilySnapshotExtractor.ExtractFromProjectFamily(doc, family);
 
         return new CapturedCollection<ParameterSnapshot> {
             Source = SnapshotSource.Project,
-            IsPartial = isPartial,
-            Data = [
-                .. supplementedFamily.Parameters
-                    .Where(item =>
-                        item.Kind is CollectedParameterKind.FamilyParameter or CollectedParameterKind.SharedParameter)
-                    .Where(item => !IsInternalHelperParameter(item.Name))
-                    .Select(item => new ParameterSnapshot {
-                        Name = item.Name,
-                        IsInstance = item.IsInstance,
-                        PropertiesGroup = new ForgeTypeId(item.GroupTypeId ?? string.Empty),
-                        DataType = new ForgeTypeId(item.DataTypeId ?? string.Empty),
-                        Formula = item.Formula,
-                        ValuesPerType = new Dictionary<string, string?>(item.ValuesByType, StringComparer.Ordinal),
-                        IsBuiltIn = item.IsBuiltIn,
-                        SharedGuid = Guid.TryParse(item.SharedGuid, out var sharedGuid) ? sharedGuid : null,
-                        StorageType = Enum.TryParse<StorageType>(item.StorageType, out var storageType)
-                            ? storageType
-                            : StorageType.None
-                    })
-            ]
+            IsPartial = record.IsPartial,
+            Data = ToSnapshots(record)
         };
     }
 
     private CapturedCollection<ParameterSnapshot> CollectFromFamilyDoc(FamilyDocument famDoc) {
-        var fm = famDoc.FamilyManager;
-
-        var types = fm.Types.Cast<FamilyType>().ToList();
-        var typeNames = types.Select(t => t.Name).Distinct(StringComparer.Ordinal).ToList();
-
-        var familyParameters = fm.GetParameters().ToList();
-        var snapshots = new Dictionary<string, ParameterSnapshot>(StringComparer.Ordinal);
-
-        foreach (var p in familyParameters) {
-            if (IsInternalHelperParameter(p.Definition.Name))
-                continue;
-
-            var key = GetKey(p.Definition.Name, p.IsInstance);
-
-            var isBuiltIn = p.IsBuiltInParameter();
-            Guid? sharedGuid = null;
-            if (p.IsShared) {
-                try { sharedGuid = p.GUID; } catch {
-                    /* GUID access can throw */
-                }
-            }
-
-            snapshots[key] = new ParameterSnapshot {
-                Name = p.Definition.Name,
-                IsInstance = p.IsInstance,
-                PropertiesGroup = p.Definition.GetGroupTypeId(),
-                DataType = p.Definition.GetDataType(),
-                Formula = string.IsNullOrWhiteSpace(p.Formula) ? null : p.Formula,
-                // temp create dict so we can assign to it below
-                IsBuiltIn = isBuiltIn,
-                SharedGuid = sharedGuid,
-                StorageType = p.StorageType
-            };
-        }
-
-        // Sandbox because fm.CurrentType setter uses a sub-transaction internally; rollback
-        // restores the original CurrentType. Dies in P2 when FamilyType.As* replaces this loop.
-        using (Pe.Revit.Utils.DocumentSandbox.BeginRollback(famDoc.Document, "Snapshot Collection")) {
-            foreach (var t in types) {
-                fm.CurrentType = t;
-
-                foreach (var p in familyParameters) {
-                    var key = GetKey(p.Definition.Name, p.IsInstance);
-                    if (!snapshots.TryGetValue(key, out var snap))
-                        continue;
-
-                    var value = famDoc.GetValueString(p); // must support this in SetValue.
-                    snap.ValuesPerType[t.Name] = value;
-                }
-            }
-        }
+        // FamilyType.As* accessors read any type's value directly — no CurrentType switching,
+        // no transaction, no rollback sandbox.
+        var record = FamilySnapshotExtractor.ExtractFromFamilyDocument(famDoc.Document);
 
         return new CapturedCollection<ParameterSnapshot> {
             Source = SnapshotSource.FamilyDoc,
-            Data = snapshots.Values
-                .OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
-                .ThenByDescending(s => s.IsInstance)
-                .ToList()
+            IsPartial = record.IsPartial,
+            Data = ToSnapshots(record)
         };
     }
+
+    private static List<ParameterSnapshot> ToSnapshots(FamilySnapshotRecord record) => [
+        .. record.Parameters
+            .Where(parameter => !IsInternalHelperParameter(parameter.Definition.Identity.Name))
+            .Select(ParameterSnapshot.FromCanonical)
+    ];
 
     // ==================== Helpers ====================
 

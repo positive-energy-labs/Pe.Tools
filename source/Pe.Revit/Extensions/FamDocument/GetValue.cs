@@ -70,8 +70,15 @@ public static class FamilyManagerGetValue {
     /// <param name="famDoc">The family document</param>
     /// <param name="param">The parameter to get the value from</param>
     /// <returns>The string value of the parameter, or null if the parameter is null or has no value</returns>
-    public static string? GetValueString(this FamilyDocument famDoc, FamilyParameter param) {
-        var famType = famDoc.FamilyManager.CurrentType;
+    public static string? GetValueString(this FamilyDocument famDoc, FamilyParameter param) =>
+        famDoc.GetValueString(famDoc.FamilyManager.CurrentType, param);
+
+    /// <summary>
+    ///     Same as <see cref="GetValueString(FamilyDocument, FamilyParameter)" /> but reads the value stored on an
+    ///     explicit family type. FamilyType accessors do not require the type to be current, so this needs no
+    ///     transaction and no <c>FamilyManager.CurrentType</c> switching.
+    /// </summary>
+    public static string? GetValueString(this FamilyDocument famDoc, FamilyType famType, FamilyParameter param) {
         if (!famType.HasValue(param)) return null;
 
         return param.StorageType switch {
