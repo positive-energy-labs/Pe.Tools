@@ -13,7 +13,8 @@ public static class LoadedFamiliesMatrixCollector {
         LoadedFamiliesFilter? filter = null,
         Action<string>? onProgress = null,
         RevitDataOutputBudget? budget = null,
-        bool includeTempPlacement = true
+        bool includeTempPlacement = true,
+        IFamilySnapshotCache? snapshotCache = null
     ) {
         var effectiveBudget = RevitDataOutputBudgets.WithDefaults(budget, maxEntries: 10, maxSamplesPerEntry: 25);
         var totalStopwatch = Stopwatch.StartNew();
@@ -35,20 +36,30 @@ public static class LoadedFamiliesMatrixCollector {
         var extractStopwatch = Stopwatch.StartNew();
         onProgress?.Invoke($"Family matrix extracting family-doc truth for {catalogFamilies.Count} families.");
         var snapshotRecords = new Dictionary<long, FamilySnapshotRecord>();
+        var snapshotCacheHits = 0;
         foreach (var familyId in selectedFamilyIds) {
+            if (snapshotCache != null && snapshotCache.TryGet(familyId, out var cachedRecord)) {
+                snapshotRecords[familyId] = cachedRecord;
+                snapshotCacheHits++;
+                continue;
+            }
+
             if (doc.GetElement(familyId.ToElementId()) is not Family familyElement)
                 continue;
 
             var familyStopwatch = Stopwatch.StartNew();
             var record = FamilySnapshotExtractor.ExtractFromProjectFamily(doc, familyElement);
             snapshotRecords[familyId] = record;
+            snapshotCache?.Store(record);
             onProgress?.Invoke(
                 $"Family matrix extracted '{record.FamilyName}' in {familyStopwatch.Elapsed.TotalMilliseconds:F0} ms."
             );
         }
 
         var extractElapsed = extractStopwatch.Elapsed;
-        onProgress?.Invoke($"Family matrix finished family-doc extraction in {extractElapsed.TotalMilliseconds:F0} ms.");
+        onProgress?.Invoke(
+            $"Family matrix finished family-doc extraction in {extractElapsed.TotalMilliseconds:F0} ms ({snapshotCacheHits} cache hit(s))."
+        );
 
         // Phase 2: one temp-placement sandbox pass serving BOTH project values and schedule matching
         // (the old flow placed twice because EditFamily had to run between the two transactions).
@@ -136,7 +147,7 @@ public static class LoadedFamiliesMatrixCollector {
         onProgress?.Invoke($"Family matrix finished classification in {formulaElapsed.TotalMilliseconds:F0} ms.");
 
         Log.Information(
-            "Loaded families matrix timings: TotalMs={TotalMs}, CatalogCollectMs={CatalogCollectMs}, FamilyDocExtractMs={FamilyDocExtractMs}, PlacementPhaseProjectValuesMs={PlacementPhaseProjectValuesMs}, FormulaCollectMs={FormulaCollectMs}, PlacementPhaseScheduleMatchMs={PlacementPhaseScheduleMatchMs}, ScheduleSerializeMs={ScheduleSerializeMs}, ScheduleEvalMs={ScheduleEvalMs}, TotalFamilies={TotalFamilies}, TotalSymbols={TotalSymbols}, ProjectPlacementAttempts={ProjectPlacementAttempts}, ProjectPlacedTempInstances={ProjectPlacedTempInstances}, CandidateSchedules={CandidateSchedules}, IncludeTempPlacement={IncludeTempPlacement}",
+            "Loaded families matrix timings: TotalMs={TotalMs}, CatalogCollectMs={CatalogCollectMs}, FamilyDocExtractMs={FamilyDocExtractMs}, PlacementPhaseProjectValuesMs={PlacementPhaseProjectValuesMs}, FormulaCollectMs={FormulaCollectMs}, PlacementPhaseScheduleMatchMs={PlacementPhaseScheduleMatchMs}, ScheduleSerializeMs={ScheduleSerializeMs}, ScheduleEvalMs={ScheduleEvalMs}, TotalFamilies={TotalFamilies}, TotalSymbols={TotalSymbols}, ProjectPlacementAttempts={ProjectPlacementAttempts}, ProjectPlacedTempInstances={ProjectPlacedTempInstances}, CandidateSchedules={CandidateSchedules}, IncludeTempPlacement={IncludeTempPlacement}, SnapshotCacheHits={SnapshotCacheHits}",
             totalStopwatch.ElapsedMilliseconds,
             (long)catalogElapsed.TotalMilliseconds,
             (long)extractElapsed.TotalMilliseconds,
@@ -150,7 +161,8 @@ public static class LoadedFamiliesMatrixCollector {
             projectPlacementAttempts,
             projectPlacementSuccesses,
             candidateSchedules,
-            includeTempPlacement
+            includeTempPlacement,
+            snapshotCacheHits
         );
         onProgress?.Invoke(
             $"Family matrix completed in {totalStopwatch.Elapsed.TotalMilliseconds:F0} ms."

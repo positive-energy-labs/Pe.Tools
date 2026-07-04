@@ -91,10 +91,22 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
         if (modifiedCount == 0 && addedCount == 0 && deletedCount == 0)
             return;
 
-        // Rollback-sandbox churn (temp placements, snapshot probes) never persists; publishing
-        // invalidation for it would evict caches mid-collection and spam the host.
+        // Rollback-sandbox churn (temp placements, snapshot probes) never persists; neither eviction
+        // nor host notification applies (the rolled-back changes never became document state).
         if (DocumentSandbox.RollbackScopeActive || DocumentSandbox.IsSandboxTransaction(e.GetTransactionNames()))
             return;
+
+        // Granular eviction runs synchronously per event with the element ids — never throttled,
+        // never coalesced. Only the TS-bound invalidation event below is throttled.
+        var changedDocument = e.GetDocument();
+        if (changedDocument != null) {
+            DocShadow.HandleChange(changedDocument, new DocumentDelta(
+                e.GetAddedElementIds().Select(id => id.Value()).ToList(),
+                e.GetModifiedElementIds().Select(id => id.Value()).ToList(),
+                e.GetDeletedElementIds().Select(id => id.Value()).ToList(),
+                e.GetTransactionNames().ToList()
+            ));
+        }
 
         lock (this._sync) {
             var utcNow = DateTime.UtcNow;

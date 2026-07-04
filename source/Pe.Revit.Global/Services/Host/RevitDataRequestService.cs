@@ -23,10 +23,7 @@ namespace Pe.Revit.Global.Services.Host;
 ///     Bridge-backed read-only Revit data requests for browser routes.
 /// </summary>
 internal sealed class RevitDataRequestService(RevitTaskService revitTaskService) : IRevitDataService {
-    private readonly RevitDataCollectionContext _collectionContext = new();
     private readonly RevitTaskService _revitTaskService = revitTaskService;
-
-    public void InvalidateCollectionCache(string reason) => this._collectionContext.Invalidate(reason);
 
     public Task<LoadedFamiliesCatalogData> GetLoadedFamiliesCatalogAsync(
         LoadedFamiliesCatalogRequest request
@@ -142,7 +139,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         var document = GetSupportedActiveDocument(RevitBridgeOps.ScheduleCatalog.Definition);
 
         try {
-            return ScheduleCatalogCollector.Collect(document, request, this._collectionContext);
+            return ScheduleCatalogCollector.Collect(document, request, DocShadow.For(document));
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "ScheduleCatalogException",
@@ -156,7 +153,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         var document = GetSupportedActiveDocument(RevitBridgeOps.ProjectBrowser.Definition);
 
         try {
-            return ProjectBrowserCollector.Collect(document, request, this._collectionContext);
+            return ProjectBrowserCollector.Collect(document, request, DocShadow.For(document));
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "ProjectBrowserException",
@@ -170,7 +167,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         var document = GetSupportedActiveDocument(RevitBridgeOps.ProjectIndex.Definition);
 
         try {
-            return ProjectIndexCollector.Collect(document, request, this._collectionContext);
+            return ProjectIndexCollector.Collect(document, request, DocShadow.For(document));
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "ProjectIndexException",
@@ -184,7 +181,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         var document = GetSupportedActiveDocument(RevitBridgeOps.SheetDetails.Definition);
 
         try {
-            return SheetDetailCollector.Collect(document, RevitUiSession.CurrentUIApplication.GetActiveView(), request, this._collectionContext);
+            return SheetDetailCollector.Collect(document, RevitUiSession.CurrentUIApplication.GetActiveView(), request, DocShadow.For(document));
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "SheetDetailsException",
@@ -282,7 +279,8 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
                 document,
                 filter,
                 budget: request.Budget,
-                includeTempPlacement: request.IncludeTempPlacement);
+                includeTempPlacement: request.IncludeTempPlacement,
+                snapshotCache: DocShadow.For(document));
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "LoadedFamiliesMatrixException",
@@ -300,7 +298,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
                 document,
                 request,
                 RevitUiSession.CurrentUIApplication.GetActiveView(),
-                this._collectionContext
+                DocShadow.For(document)
             );
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
@@ -340,7 +338,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
     private ConceptEvidenceData GetConceptEvidenceCore(ConceptEvidenceRequest request) {
         var document = GetSupportedActiveDocument(RevitBridgeOps.ConceptEvidence.Definition);
         try {
-            var primitives = this._collectionContext.GetParameterEvidencePrimitives(document, useCache: true);
+            var primitives = DocShadow.For(document).GetParameterEvidencePrimitives(document, useCache: true);
             return ConceptEvidenceCollector.Collect(request, primitives);
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
@@ -362,7 +360,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
 
         var document = GetSupportedActiveDocument(RevitBridgeOps.ParameterEvidence.Definition);
         try {
-            var primitives = this._collectionContext.GetParameterEvidencePrimitives(document, request.UseCache);
+            var primitives = DocShadow.For(document).GetParameterEvidencePrimitives(document, request.UseCache);
             return ParameterEvidenceCollector.Collect(
                 document,
                 request,
