@@ -2,6 +2,20 @@
   "product": "Pe.Tools",
   "vendor": "Positive Energy",
   "releases": "kaitpw/Pe.Tools",
+  "legacy": [
+    "app:bin/pea",
+    "app:dev",
+    "appdata:Autodesk/ApplicationPlugins/PE_Tools.bundle",
+    "programdata:Autodesk/ApplicationPlugins/PE_Tools.bundle",
+    "addins:*/Pe.App.runtime.json",
+    "addins:*/Pe.Revit",
+    "addins:*/Pe.Revit.DocumentData",
+    "addins:*/Pe.Revit.FamilyFoundry",
+    "addins:*/Pe.Revit.Global",
+    "addins:*/Pe.Revit.Scripting",
+    "addins:*/Pe.Revit.SettingsRuntime",
+    "addins:*/Pe.Revit.Ui"
+  ],
   "payloads": [
     {
       "type": "VersionedAddin",

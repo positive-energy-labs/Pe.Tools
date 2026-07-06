@@ -97,21 +97,25 @@ const hostStatusRoute = HttpRouter.add("GET", "/host/status", () =>
   }),
 );
 
+// Launch chain for the install kernel: PE_REVIT_CMD env override → the kernel-installed shim
+// (user machines) → `dotnet pe-revit` (dev checkout, local tool). Resolved per call — the shim
+// can appear after the host started.
+function peRevitLauncher(): [string, string[]] {
+  const installedShim = join(installRoot(), "shims", "pe-revit.cmd");
+  return process.env.PE_REVIT_CMD
+    ? [process.env.PE_REVIT_CMD, []]
+    : existsSync(installedShim)
+      ? ["cmd", ["/c", installedShim]]
+      : ["dotnet", ["pe-revit"]];
+}
+
 // One-click update: run the install kernel's consume verb against the latest published
 // release. The pointer flip makes every open Revit live-swap via the loader; the host itself
 // is NOT updated here (its own exe is running — host self-update is a VersionedApp follow-up).
-// Launch chain: PE_REVIT_CMD env override → the kernel-installed shim (user machines) →
-// `dotnet pe-revit` (dev checkout, local tool). Resolved per request — the shim can appear
-// after the host started.
 const hostUpdateRoute = HttpRouter.add("POST", "/host/update", () =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const installedShim = join(installRoot(), "shims", "pe-revit.cmd");
-    const [cmd, args] = process.env.PE_REVIT_CMD
-      ? [process.env.PE_REVIT_CMD, [] as string[]]
-      : existsSync(installedShim)
-        ? ["cmd", ["/c", installedShim]]
-        : ["dotnet", ["pe-revit"]];
+    const [cmd, args] = peRevitLauncher();
     const result = yield* Effect.result(
       spawner.string(
         ChildProcess.make(cmd, [...args, "install", "apply", "--release", "latest", "--json"]),
@@ -156,6 +160,31 @@ const hostInstallRoute = HttpRouter.add("GET", "/host/install", () =>
   }),
 );
 
+// Routine cleanup, always on: the kernel's `install gc` prunes version dirs (keep 3), sweeps
+// the manifest's declared legacy paths and rename-aside strays — lock-tolerant and idempotent.
+// Runs at host start and on every Revit session disconnect (the moment its file locks vanish),
+// so hot-swap releases never accumulate cruft. Failures are swallowed: gc is best-effort.
+const runInstallGc = Effect.gen(function* () {
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const [cmd, args] = peRevitLauncher();
+  yield* Effect.result(
+    spawner.string(ChildProcess.make(cmd, [...args, "install", "gc", "--json"])),
+  );
+});
+
+const InstallGcLive = Layer.effectDiscard(
+  Effect.gen(function* () {
+    yield* Effect.forkScoped(runInstallGc);
+    const bridge = yield* RevitBridge;
+    yield* Effect.forkScoped(
+      Stream.fromPubSub(bridge.events).pipe(
+        Stream.filter((event) => event.kind === "disconnected"),
+        Stream.runForEach(() => runInstallGc),
+      ),
+    );
+  }),
+);
+
 const adminShutdownRoute = HttpRouter.add("POST", "/admin/shutdown", (req) => {
   const token = req.headers["x-pe-host-takeover-token"];
   if (!isValidTakeoverToken(token)) return Response.json({ error: "Forbidden" }, { status: 403 });
@@ -171,6 +200,7 @@ const AppLive = Layer.mergeAll(
   hostStatusRoute,
   hostUpdateRoute,
   hostInstallRoute,
+  InstallGcLive,
   adminShutdownRoute,
   callRoute,
 );
