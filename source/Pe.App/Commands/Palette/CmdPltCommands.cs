@@ -28,7 +28,7 @@ public class CmdPltCommands : IExternalCommand {
             // Split commands with semicolon-separated names into separate items
             var selectableItems = BuildSelectableItems(commandItems);
 
-            var window = PaletteFactory.Create("Command Palette",
+            var window = PaletteFactory.Create("Command Palette HOT SWAP!!!!!",
                 new PaletteOptions<PostableCommandItem> {
                     Persistence = (persistence, item => item.Command.Value),
                     SearchConfig = SearchConfig.PrimaryAndSecondary(),
