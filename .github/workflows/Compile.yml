@@ -34,8 +34,13 @@ jobs:
           dotnet tool restore
           dotnet pe-revit doctor
 
-      - name: Compile solution
-        run: dotnet run -c Release
-        working-directory: "build"
-        env:
-          DOTNET_ENVIRONMENT: ${{ github.ref_name == 'main' && 'Production' || 'Development' }}
+      # CI runs the same verbs a human runs: plain isolated builds per matrix slice
+      # (net8 Debug, net48 Debug, Release). The build/ pipeline is pack/publish-only.
+      - name: Compile Debug.R25
+        run: dotnet build Pe.Tools.slnx -c Debug.R25 -v:q -nologo
+
+      - name: Compile Debug.R23 (net48)
+        run: dotnet build Pe.Tools.slnx -c Debug.R23 -v:q -nologo
+
+      - name: Compile Release.R25
+        run: dotnet build Pe.Tools.slnx -c Release.R25 -v:q -nologo

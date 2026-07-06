@@ -32,7 +32,7 @@
         <PackageReference Include="Nice3point.Revit.Extensions" Version="$(RevitVersion).*"/>
         <PackageReference Include="RevitExplorer.API" Version="2.6.0"/>
         <PackageReference Include="ricaun.Revit.UI.Tasks" Version="1.*"/>
-        <PackageReference Include="Pe.Revit.Versioning" Version="0.1.0-beta.1"/>
+        <PackageReference Include="Pe.Revit.Versioning" Version="0.1.0-beta.2"/>
         <!-- Build -->
         <PackageReference Include="ILRepack" Version="2.0.44">
             <IncludeAssets
