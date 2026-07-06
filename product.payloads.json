@@ -1,0 +1,17 @@
+{
+  "product": "Pe.Tools",
+  "vendor": "Positive Energy",
+  "payloads": [
+    {
+      "type": "VersionedAddin",
+      "name": "Pe.App",
+      "source": "stage:revit-addins/Pe.App",
+      "entry": "Pe.App.AppCore"
+    },
+    {
+      "type": "Exe",
+      "name": "host",
+      "source": "source/pe-tools/apps/host/dist-installed"
+    }
+  ]
+}
