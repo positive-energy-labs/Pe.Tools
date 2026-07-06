@@ -1,7 +1,7 @@
 {
   "product": "Pe.Tools",
   "vendor": "Positive Energy",
-  "releases": "kaitpw/Pe.Tools",
+  "releases": "positive-energy-labs/Pe.Tools",
   "legacy": [
     "app:bin/pea",
     "app:bin/pe-dev",
