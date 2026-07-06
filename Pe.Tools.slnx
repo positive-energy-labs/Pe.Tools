@@ -33,11 +33,16 @@
     </Folder>
     <Project Path="source/Pe.App/Pe.App.csproj" />
     <Project Path="source/Pe.Aps/Pe.Aps.csproj" />
+    <!-- Design Automation supports 2024+ only (no Forge DA package for R23), so the DA projects
+         simply do NOT build in R23 lanes. Never fix this with a config remap (the old
+         Debug.R23->Debug.R24 mapping): a remapped project's ProjectReferences drag its whole
+         closure into a second configuration identity, and NuGet restore dedupes each project to
+         ONE identity per solution restore — whichever loses has no assets file (NETSDK1004,
+         CI 2026-07-06). -->
     <Project Path="source/Pe.Dev.RevitAutomation/Pe.Dev.RevitAutomation.csproj" />
     <Project Path="source/Pe.Dev.RevitAutomation.Worker/Pe.Dev.RevitAutomation.Worker.csproj">
-        <!-- Design Automation supports 2024+ only (no Forge DA package for R23); build the floor year instead -->
-        <BuildType Solution="Debug.R23|*" Project="Debug.R24" />
-        <BuildType Solution="Release.R23|*" Project="Release.R24" />
+        <Build Solution="Debug.R23|*" Project="false" />
+        <Build Solution="Release.R23|*" Project="false" />
     </Project>
     <!-- Pe.Host retired: replaced by the Effectified TS host at source/pe-tools/apps/host (@pe/host). -->
     <Project Path="source/Pe.Revit/Pe.Revit.csproj" />
