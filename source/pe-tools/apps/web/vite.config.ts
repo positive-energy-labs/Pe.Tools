@@ -42,7 +42,7 @@ const config = defineConfig(({ mode }) => {
     // passes ?w=<port>, but these keep plain `vp dev` usable against the default backend.
     server: {
       proxy: {
-        // ponytail: dev-only passthrough so browser RPC calls to /pe-host/rpc reach the TS host.
+        // ponytail: dev-only passthrough so browser calls to /pe-host/call (+ /ops, /events) reach the TS host.
         // Keep this before the broader /pe workbench proxy.
         "/pe-host": {
           target: process.env.PE_TOOLS_HOST_BASE_URL ?? "http://localhost:5180",

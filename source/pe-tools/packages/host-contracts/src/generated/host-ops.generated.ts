@@ -201,9 +201,9 @@ export namespace RevitCatalogElectricalCircuits {
       sharedGuid?: null | string;
     }
     export interface ParameterIdentity {
-      key?: string;
-      kind?: ParameterIdentityKind;
-      name?: string;
+      key: string;
+      kind: ParameterIdentityKind;
+      name: string;
       builtInParameterId?: number | null;
       sharedGuid?: null | string;
       parameterElementId?: number | null;
@@ -554,8 +554,8 @@ export namespace RevitCatalogLoadedFamilies {
 export namespace RevitCatalogLoadedFamiliesFilterFieldOptions {
   export namespace Req {
     export interface Request {
-      propertyPath?: string;
-      sourceKey?: string;
+      propertyPath: string;
+      sourceKey: string;
       contextValues?: null | {
         [k: string]: string;
       };
@@ -624,9 +624,9 @@ export namespace RevitCatalogParameterBindings {
       sharedGuid?: null | string;
     }
     export interface ParameterIdentity {
-      key?: string;
-      kind?: ParameterIdentityKind;
-      name?: string;
+      key: string;
+      kind: ParameterIdentityKind;
+      name: string;
       builtInParameterId?: number | null;
       sharedGuid?: null | string;
       parameterElementId?: number | null;
@@ -726,9 +726,9 @@ export namespace RevitCatalogParameterEvidence {
       sharedGuid?: null | string;
     }
     export interface ParameterIdentity {
-      key?: string;
-      kind?: ParameterIdentityKind;
-      name?: string;
+      key: string;
+      kind: ParameterIdentityKind;
+      name: string;
       builtInParameterId?: number | null;
       sharedGuid?: null | string;
       parameterElementId?: number | null;
@@ -1223,9 +1223,9 @@ export namespace RevitCatalogSchedules {
       budget?: null | RevitDataOutputBudget;
     }
     export interface ScheduleCustomParameterFilter {
-      parameter?: ParameterReference;
-      expectedValue?: string;
-      matchKind?: ScheduleCustomParameterMatchKind;
+      parameter: ParameterReference;
+      expectedValue: string;
+      matchKind: ScheduleCustomParameterMatchKind;
     }
     export interface ParameterReference {
       identity?: null | ParameterIdentity;
@@ -1233,9 +1233,9 @@ export namespace RevitCatalogSchedules {
       sharedGuid?: null | string;
     }
     export interface ParameterIdentity {
-      key?: string;
-      kind?: ParameterIdentityKind;
-      name?: string;
+      key: string;
+      kind: ParameterIdentityKind;
+      name: string;
       builtInParameterId?: number | null;
       sharedGuid?: null | string;
       parameterElementId?: number | null;
@@ -1965,9 +1965,9 @@ export namespace RevitDetailElements {
       sharedGuid?: null | string;
     }
     export interface ParameterIdentity {
-      key?: string;
-      kind?: ParameterIdentityKind;
-      name?: string;
+      key: string;
+      kind: ParameterIdentityKind;
+      name: string;
       builtInParameterId?: number | null;
       sharedGuid?: null | string;
       parameterElementId?: number | null;
@@ -2571,9 +2571,9 @@ export namespace RevitMatrixParameterCoverage {
       sharedGuid?: null | string;
     }
     export interface ParameterIdentity {
-      key?: string;
-      kind?: ParameterIdentityKind;
-      name?: string;
+      key: string;
+      kind: ParameterIdentityKind;
+      name: string;
       builtInParameterId?: number | null;
       sharedGuid?: null | string;
       parameterElementId?: number | null;
@@ -2688,9 +2688,9 @@ export namespace RevitMatrixScheduleCoverage {
       budget?: null | RevitDataOutputBudget;
     }
     export interface ScheduleCustomParameterFilter {
-      parameter?: ParameterReference;
-      expectedValue?: string;
-      matchKind?: ScheduleCustomParameterMatchKind;
+      parameter: ParameterReference;
+      expectedValue: string;
+      matchKind: ScheduleCustomParameterMatchKind;
     }
     export interface ParameterReference {
       identity?: null | ParameterIdentity;
@@ -2698,9 +2698,9 @@ export namespace RevitMatrixScheduleCoverage {
       sharedGuid?: null | string;
     }
     export interface ParameterIdentity {
-      key?: string;
-      kind?: ParameterIdentityKind;
-      name?: string;
+      key: string;
+      kind: ParameterIdentityKind;
+      name: string;
       builtInParameterId?: number | null;
       sharedGuid?: null | string;
       parameterElementId?: number | null;
@@ -2992,7 +2992,7 @@ export namespace RevitResolveReferences {
       | "Family";
 
     export interface Request {
-      referenceText?: string;
+      referenceText: string;
       maxResults?: number;
       handleKinds?: RevitAgentContextHandleKind[] | null;
       requirePrintedContext?: boolean;
@@ -3115,8 +3115,8 @@ export namespace ScriptingExecute {
 export namespace ScriptingPodExport {
   export namespace Req {
     export interface Request {
-      workspaceKey?: string;
-      archivePath?: string;
+      workspaceKey: string;
+      archivePath: string;
     }
   }
   export namespace Res {
@@ -3162,7 +3162,7 @@ export namespace ScriptingPodExport {
 export namespace ScriptingPodImport {
   export namespace Req {
     export interface Request {
-      archivePath?: string;
+      archivePath: string;
       workspaceKey?: null | string;
     }
   }
@@ -3237,10 +3237,10 @@ export namespace ScriptingWorkspaceBootstrap {
 export namespace SettingsFieldOptions {
   export namespace Req {
     export interface Request {
-      moduleKey?: string;
-      rootKey?: string;
-      propertyPath?: string;
-      sourceKey?: string;
+      moduleKey: string;
+      rootKey: string;
+      propertyPath: string;
+      sourceKey: string;
       contextValues?: null | {
         [k: string]: string;
       };
@@ -3298,7 +3298,7 @@ export namespace SettingsModuleCatalog {
 export namespace SettingsParameterCatalog {
   export namespace Req {
     export interface Request {
-      moduleKey?: string;
+      moduleKey: string;
       contextValues?: null | {
         [k: string]: string;
       };
@@ -3342,8 +3342,8 @@ export namespace SettingsParameterCatalog {
 export namespace SettingsSchema {
   export namespace Req {
     export interface Request {
-      moduleKey?: string;
-      rootKey?: string;
+      moduleKey: string;
+      rootKey: string;
     }
   }
   export namespace Res {
