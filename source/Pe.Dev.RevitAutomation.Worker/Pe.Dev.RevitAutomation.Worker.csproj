@@ -17,7 +17,7 @@
         <PackageReference Include="Autodesk.Forge.DesignAutomation.Revit" Version="2025.0.1" Condition="'$(RevitVersion)' == '2025' or '$(RevitVersion)' == ''"/>
         <PackageReference Include="Autodesk.Forge.DesignAutomation.Revit" Version="2026.0.0" Condition="'$(RevitVersion)' == '2026'"/>
         <PackageReference Include="Newtonsoft.Json" Version="13.0.3"/>
-        <PackageReference Include="Pe.Revit.Versioning" Version="0.1.0-beta.1"/>
+        <PackageReference Include="Pe.Revit.Versioning" Version="0.1.0-beta.2"/>
     </ItemGroup>
 
     <ItemGroup>
