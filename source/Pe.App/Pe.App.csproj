@@ -32,6 +32,7 @@
         <PackageReference Include="Nice3point.Revit.Extensions" Version="$(RevitVersion).*"/>
         <PackageReference Include="RevitExplorer.API" Version="2.6.0"/>
         <PackageReference Include="ricaun.Revit.UI.Tasks" Version="1.*"/>
+        <PackageReference Include="Pe.Revit.Versioning" Version="0.1.0-dev.9"/>
         <!-- Build -->
         <PackageReference Include="ILRepack" Version="2.0.44">
             <IncludeAssets
@@ -69,6 +70,7 @@
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\Pe.Revit.FamilyFoundry\Pe.Revit.FamilyFoundry.csproj"/>
+        <ProjectReference Include="..\Pe.Revit.Placement\Pe.Revit.Placement.csproj"/>
         <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj"/>
         <ProjectReference Include="..\Pe.Revit.Global\Pe.Revit.Global.csproj"/>
         <ProjectReference Include="..\Pe.Revit.SettingsRuntime\Pe.Revit.SettingsRuntime.csproj"/>
@@ -82,28 +84,6 @@
              TS-side ensurePeHostRunning repoint). No Pe.Host code coupling in Pe.App. -->
         <PeInteractiveRuntimeCompanionProject Include="..\Pe.Dev.Cli\Pe.Dev.Cli.csproj"/>
     </ItemGroup>
-    <Target
-            Name="LaunchAddinApprovalWatcher"
-            AfterTargets="DeployAddin"
-            Condition="'$(DeployAddin)' == 'true' and '$(LaunchRevit)' == 'true' and '$(DesignTimeBuild)' != 'true'"
-    >
-        <PropertyGroup>
-            <PeApprovalWatcherCliPath>$(PeStableCliPath)</PeApprovalWatcherCliPath>
-        </PropertyGroup>
-        <Message
-                Text="Launching approval watcher via '$(PeApprovalWatcherCliPath)' for Revit $(RevitVersion)."
-                Importance="High"
-                Condition="Exists('$(PeApprovalWatcherCliPath)')"
-        />
-        <Warning
-                Text="Skipping approval watcher because pe-dev was not found at '$(PeApprovalWatcherCliPath)'. Build source/Pe.Dev.Cli with configuration '$(PeStableCliConfiguration)' to restore the hook."
-                Condition="!Exists('$(PeApprovalWatcherCliPath)')"
-        />
-        <Exec
-                Command="dotnet exec &quot;$(PeApprovalWatcherCliPath)&quot; --repo-root &quot;$(MSBuildProjectDirectory)\..\..&quot; __internal approve-worker --revit-year $(RevitVersion)"
-                Condition="Exists('$(PeApprovalWatcherCliPath)')"
-        />
-    </Target>
     <Target
             Name="WritePeAppRuntimeDescriptor"
             AfterTargets="PublishAddin"
@@ -133,19 +113,9 @@
                 Importance="High"
         />
     </Target>
-    <Target
-            Name="CleanAddinPublishAndDeployDirectories"
-            BeforeTargets="PublishAddin"
-            Condition="'$(PublishAddin)' == 'true'"
-    >
-        <!-- DeployAddin copies staged package output into the live Revit add-ins folder. Keep live deploy cleanup explicit. -->
-        <RemoveDir
-                Directories="$(AddinDeployDir)\$(AssemblyName)"
-                Condition="'$(DeployAddin)' == 'true' and Exists('$(AddinDeployDir)\$(AssemblyName)')"
-        />
-        <Delete
-                Files="$(AddinDeployDir)\$(AssemblyName).addin"
-                Condition="'$(DeployAddin)' == 'true' and Exists('$(AddinDeployDir)\$(AssemblyName).addin')"
-        />
-    </Target>
+    <!-- The legacy pre-deploy cleanup target is retired: the SDK's shadow deploy (P10) writes a
+         NEW stamp dir per build and prunes old ones lock-tolerantly, so deploys never fail while
+         Revit runs — deleting the whole deploy dir here fought exactly that (and hard-failed on
+         the loaded stamp's dlls). `dotnet clean` with DeployAddin=true still removes the deploy
+         via the SDK's CleanAddin. -->
 </Project>

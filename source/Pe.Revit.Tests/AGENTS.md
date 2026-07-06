@@ -12,7 +12,7 @@ Owns the VSTest-based Revit-backed test harness for this repo. The harness uses 
 
 - `Pe.Revit.Tests.csproj` - explicit-year `.Tests` configurations, warning policy, and adapter metadata.
 - `..\Pe.App\Pe.App.csproj` - desktop add-in graph under test.
-- `..\Pe.Dev.Cli\AGENTS.md` - explicit `pe-dev test` helper behavior and repo-local operator policy.
+- `..\..\.config\dotnet-tools.json` - repo-local SDK `pe-revit` tool pin.
 - `Proofs/` - durable Revit/API behavior observations. These are not ordinary package regression tests.
 - `LibraryBehavior/` - Revit-backed package behavior that needs a real document/session or currently depends on Revit-runtime target frameworks.
 - `Diagnostics/` - operational environment probes and proof-lane diagnostics.
@@ -30,30 +30,30 @@ Two verify targets matter here:
   - use when:
     iterating collaboratively against the already-running Rider-driven desktop session
   - required posture:
-    prepare package-local/runtime outputs only when the attached runtime needs them, use Peco live-loop tooling for runtime freshness, then run focused explicit-year `dotnet test` as behavior evidence
+    prepare package-local/runtime outputs only when the attached runtime needs them, use SDK `pe-revit live sync` for runtime freshness, then run focused explicit-year `dotnet test` as behavior evidence
 - `FreshRevitProcess`
   - execution policy:
     `NoRrdContact`
   - use when:
     you need a dedicated fresh Revit process that must not reuse `RRD`
   - current helper:
-    `pe-dev test ...`
+    `dotnet tool run pe-revit -- test fresh ...`
 
 Canonical attached-runtime loop:
 
 1. Prepare any package-local/runtime outputs only when the attached runtime actually needs them. Do not treat that build as the freshness proof.
-2. Use Peco live-loop tooling to establish session state, refresh/restart when needed, and decide whether attached proof is trustworthy.
-3. Run focused explicit-year tests as behavior evidence:
+2. Use SDK `pe-revit live` to establish/refresh/restart runtime state; use Peco wrappers when Pea status/log hooks should accompany the proof.
+3. Run the SDK-owned attached test lane as behavior evidence:
 
 ```powershell
-dotnet build source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests /p:WarningLevel=0
-dotnet test source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests --filter "Name~SomeFocusedTest" --no-build
+dotnet tool run pe-revit -- test attached --sync --filter "Name~SomeFocusedTest" --timeout-seconds 900 --json
+peco test --target AttachedRrd --filter "Name~SomeFocusedTest" --timeout-seconds 900
 ```
 
 Current dedicated fresh-process helper (routes tests to Revit years based on execution policy):
 
 ```powershell
-pe-dev test --filter "Name~Reports_runtime_assembly_load_paths" --timeout-seconds 900
+dotnet tool run pe-revit -- test fresh --filter "Name~Reports_runtime_assembly_load_paths" --timeout-seconds 900 --json
 ```
 
 ## Shared Language
@@ -75,14 +75,14 @@ pe-dev test --filter "Name~Reports_runtime_assembly_load_paths" --timeout-second
 - Tests run inside real Revit, not a fake host.
 - `ricaun.RevitTest` handles Revit process launching. If Revit is already open for the configured year, RevitTest can reuse it by default. That is not conducive to always-fresh assemblies, particularly when the open Revit instance is RRD.
 - Prefer explicit-year `dotnet test`, not raw artifact-path `dotnet vstest`.
-- Explicit-year `dotnet test -c Debug.R25.Tests ...` defaults to the `AttachedRrd` verify target and runs against assemblies already loaded in RRD unless you use the fresh helper.
+- Explicit-year `dotnet test -c Debug.R25.Tests ...` defaults to the `AttachedRrd` verify target and runs against assemblies already loaded in RRD unless you use SDK `pe-revit test fresh`.
 - `.Tests` build artifacts can be fresh while the already-running `RRD` runtime is still stale. The build proves compilation, not loaded-assembly freshness.
 - If the user restarted Revit from Rider by launching the normal `Pe.App` debug configuration, treat the deployed runtime add-in as fresh by default.
-- AGENT GUIDANCE: AttachedRrd validation uses assemblies already loaded in RRD. If runtime code changed, coordinate package-local/runtime refresh through Peco live-loop tooling before attached-runtime `dotnet test`; an isolated `dotnet build` is not runtime freshness proof.
+- AGENT GUIDANCE: AttachedRrd validation uses assemblies already loaded in RRD. If runtime code changed, coordinate package-local/runtime refresh through SDK `pe-revit live sync` before attached-runtime `dotnet test`; an isolated `dotnet build` is not runtime freshness proof.
 - Explicit-year raw `.Tests` runs are intentionally modeled as `AttachedRrd` verification, not ordinary `Build`.
 - The pre-`VSTest` hook is an `AttachedRrd` session check only. It is not proof of runtime freshness and not a substitute for the explicit sync step.
-- Raw `dotnet test` still inherits the adapter defaults unless you override them. If you need the runner-opened Revit process to behave like a dedicated fresh controlled host, use the explicit helper instead of assuming the adapter will do the right thing.
-- The current `FreshRevitProcess` helper intentionally avoids `RRD`, quarantines the deployed desktop add-in for the target year, launches a fresh test-owned Revit process, and closes that process after the run.
+- Raw `dotnet test` still inherits the adapter defaults unless you override them. If you need the runner-opened Revit process to behave like a dedicated fresh controlled host, use SDK `pe-revit test fresh` instead of assuming the adapter will do the right thing.
+- SDK `pe-revit test fresh` intentionally avoids `RRD`, quarantines the deployed desktop add-in for the target year, launches a fresh test-owned Revit process, and closes that process after the run.
 - Do not assume an already-open test-owned Revit instance is safe to reuse for runtime freshness. If a stale owned process survives a failure or timeout, recycle it before another run.
 - Apply the correct code fix first; do not narrow the implementation just to stay hot-reload-safe.
 - Hot reload is not trustworthy after runtime member-shape changes such as added or removed members, method signature changes, constructor changes, enum shape changes, record shape changes, or new nested/private runtime types.

@@ -239,30 +239,6 @@ public sealed class DeploymentRuntimeContractTests {
         }
     }
 
-    [Test]
-    public void Fresh_test_options_accept_json_plan_and_timeout_flags() {
-        var options = RevitTestCliOptions.Parse(["--json", "--plan", "--timeout-seconds", "900"]);
-
-        Assert.That(options.JsonOutput, Is.True);
-        Assert.That(options.PlanOnly, Is.True);
-        Assert.That(options.TimeoutSeconds, Is.EqualTo(900));
-    }
-
-    [Test]
-    public void Fresh_test_options_accept_two_digit_revit_year() {
-        var options = RevitTestCliOptions.Parse(["--revit-year", "25"]);
-
-        Assert.That(options.RevitYearOverride, Is.EqualTo(2025));
-    }
-
-    [Test]
-    public void Fresh_test_options_reject_configuration_and_revit_year_together() {
-        var exception = Assert.Throws<ArgumentException>(() =>
-            RevitTestCliOptions.Parse(["--configuration", "Debug.R25.Tests", "--revit-year", "2025"]));
-
-        Assert.That(exception?.Message, Does.Contain("Specify either --configuration or --revit-year"));
-    }
-
     private static void TryDeleteDirectory(string path) {
         try {
             if (Directory.Exists(path))

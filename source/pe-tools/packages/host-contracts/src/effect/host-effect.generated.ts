@@ -1716,7 +1716,10 @@ export const openRevitDocumentDataSchema = Schema.suspend(() =>
 
 export const openRevitDocumentRequestSchema = Schema.suspend(() =>
   Schema.Struct({
-    path: Schema.String,
+    cloudModelGuid: Schema.optional(Schema.NullOr(Schema.String)),
+    cloudProjectGuid: Schema.optional(Schema.NullOr(Schema.String)),
+    cloudRegion: Schema.optional(Schema.NullOr(Schema.String)),
+    path: Schema.optional(Schema.NullOr(Schema.String)),
   }),
 );
 

@@ -1,9 +1,0 @@
-<Project>
-  <!-- Generated from build/authored/BuildTaxonomy.props. Do not edit by hand. -->
-  <Target Name="ValidatePeGeneratedTaxonomy" BeforeTargets="PrepareForBuild" Condition="'$(DesignTimeBuild)' != 'true' and !$([System.String]::Copy('$(MSBuildProjectName)').EndsWith('_wpftmp')) and '$(MSBuildProjectName)' != 'Installer.aot'">
-    <Error Condition="'$(PeHasProjectTaxonomy)' != 'true'" Text="Project '$(MSBuildProjectName)' is missing a build taxonomy entry in build/authored/BuildTaxonomy.props." />
-    <Error Condition="'$(PeSupportsRevitYear)' != 'true' and '$(RevitVersion)' != '' and '$(RevitVersion)' != '-1'" Text="Project '$(MSBuildProjectName)' is year-neutral in build/authored/BuildTaxonomy.props. Remove RevitVersion or other Revit-year-only behavior from this workflow." />
-    <Error Condition="'$(PeVerifyTarget)' == 'AttachedRrd' and '$(PeSupportsAttachedRrd)' != 'true'" Text="Project '$(MSBuildProjectName)' does not support the AttachedRrd verify target in build/authored/BuildTaxonomy.props." />
-    <Error Condition="'$(PeVerifyTarget)' == 'FreshRevitProcess' and '$(PeSupportsFreshRevitProcess)' != 'true'" Text="Project '$(MSBuildProjectName)' does not support the FreshRevitProcess verify target in build/authored/BuildTaxonomy.props." />
-  </Target>
-</Project>

@@ -2,7 +2,21 @@
   "mcpServers": {
     "revit-api-mcp": {
       "command": "powershell.exe",
-      "args": ["-NoProfile", "-File", "C:\\Users\\kaitp\\.codex\\revit-api-mcp.ps1"]
+      "args": [
+        "-NoProfile",
+        "-File",
+        "C:\\Users\\kaitp\\.codex\\revit-api-mcp.ps1"
+      ]
+    },
+    "pe-revit-sdk": {
+      "command": "dotnet",
+      "args": [
+        "tool",
+        "run",
+        "pe-revit",
+        "--",
+        "mcp"
+      ]
     }
   }
 }

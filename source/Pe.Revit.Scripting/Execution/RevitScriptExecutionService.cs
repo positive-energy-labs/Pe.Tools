@@ -273,7 +273,7 @@ public sealed class RevitScriptExecutionService(
                         executionId,
                         containerTypeName
                     );
-                    this.ExecuteContainer(containerResult.Container, executionContext, outputSink, plan.PermissionMode);
+                    this.ExecuteContainer(containerResult.Container, executionContext, outputSink, plan.PermissionMode, diagnostics);
                     Log.Information(
                         "Revit scripting container execute completed: ExecutionId={ExecutionId}, ContainerType={ContainerTypeName}",
                         executionId,
@@ -882,16 +882,18 @@ public sealed class RevitScriptExecutionService(
         PeScriptContainer container,
         RevitScriptContext context,
         ScriptOutputSink outputSink,
-        ScriptPermissionMode permissionMode
+        ScriptPermissionMode permissionMode,
+        List<ScriptDiagnostic> diagnostics
     ) {
         using var consoleCapture = outputSink.CreateConsoleCaptureScope();
-        this.ExecuteWithTransactionPolicy(container, context, permissionMode);
+        this.ExecuteWithTransactionPolicy(container, context, permissionMode, diagnostics);
     }
 
     private void ExecuteWithTransactionPolicy(
         PeScriptContainer container,
         RevitScriptContext context,
-        ScriptPermissionMode permissionMode
+        ScriptPermissionMode permissionMode,
+        List<ScriptDiagnostic> diagnostics
     ) {
         if (permissionMode == ScriptPermissionMode.ReadOnly) {
             using var mutationMonitor = new ScriptDocumentMutationMonitor(context.App.Application);
@@ -907,10 +909,14 @@ public sealed class RevitScriptExecutionService(
             return;
         }
 
-        this.ExecuteInHostOwnedTransaction(container, context);
+        this.ExecuteInHostOwnedTransaction(container, context, diagnostics);
     }
 
-    private void ExecuteInHostOwnedTransaction(PeScriptContainer container, RevitScriptContext context) {
+    private void ExecuteInHostOwnedTransaction(
+        PeScriptContainer container,
+        RevitScriptContext context,
+        List<ScriptDiagnostic> diagnostics
+    ) {
         var document = context.Document ?? throw new RevitScriptTransactionException(
             ScriptExecutionStatus.Rejected,
             "WriteTransaction scripts require an active writable document."
@@ -933,19 +939,34 @@ public sealed class RevitScriptExecutionService(
             );
         }
 
-        // Sandbox dispose rolls back anything uncommitted, so a script exception propagates untouched.
-        using (sandbox) {
-            container.Execute();
+        // Suppress modal failure dialogs on commit: warnings and auto-resolvable errors are captured
+        // as diagnostics instead of freezing the external-event queue behind a dialog.
+        var commitFailures = new List<(bool IsError, string Message)>();
+        var failureOptions = sandbox.Transaction.GetFailureHandlingOptions();
+        _ = failureOptions.SetFailuresPreprocessor(new DialogSuppressingFailuresPreprocessor(commitFailures));
+        _ = failureOptions.SetForcedModalHandling(false);
+        sandbox.Transaction.SetFailureHandlingOptions(failureOptions);
 
-            try {
-                sandbox.Complete();
-            } catch (Exception ex) {
-                throw new RevitScriptTransactionException(
-                    ScriptExecutionStatus.RuntimeFailed,
-                    $"Failed to commit the host-owned Revit transaction: {ex.Message}",
-                    ex
-                );
+        try {
+            // Sandbox dispose rolls back anything uncommitted, so a script exception propagates untouched.
+            using (sandbox) {
+                container.Execute();
+
+                try {
+                    sandbox.Complete();
+                } catch (Exception ex) {
+                    throw new RevitScriptTransactionException(
+                        ScriptExecutionStatus.RuntimeFailed,
+                        $"Failed to commit the host-owned Revit transaction: {ex.Message}",
+                        ex
+                    );
+                }
             }
+        } finally {
+            foreach (var (isError, message) in commitFailures)
+                diagnostics.Add(isError
+                    ? ScriptDiagnosticFactory.Warning("transaction", message)
+                    : ScriptDiagnosticFactory.Info("transaction", message));
         }
     }
 

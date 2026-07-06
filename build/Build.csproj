@@ -21,6 +21,7 @@
         <PackageReference Include="Microsoft.VisualStudio.SolutionPersistence" Version="1.0.52"/>
         <PackageReference Include="Autodesk.PackageBuilder" Version="2.0.2"/>
         <PackageReference Include="JetBrains.Annotations" Version="2025.2.4" PrivateAssets="all"/>
+        <PackageReference Include="Pe.Revit.Versioning" Version="0.1.0-dev.9"/>
     </ItemGroup>
 
     <ItemGroup>
@@ -30,7 +31,6 @@
     <ItemGroup>
         <ProjectReference Include="..\source\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj"/>
         <ProjectReference Include="..\source\Pe.Shared.Product\Pe.Shared.Product.csproj"/>
-        <ProjectReference Include="..\source\Pe.Shared.RevitVersions\Pe.Shared.RevitVersions.csproj"/>
     </ItemGroup>
 
 </Project>

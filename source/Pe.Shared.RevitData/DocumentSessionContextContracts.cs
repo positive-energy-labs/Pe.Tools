@@ -28,8 +28,25 @@ public record RevitDocumentSessionContextData(
 
 [ExportTsSchema]
 public record OpenRevitDocumentRequest(
-    string Path
+    string? Path = null,
+    string? CloudRegion = null,
+    string? CloudProjectGuid = null,
+    string? CloudModelGuid = null
 );
+
+/// <summary>
+///     Pure input classification for <see cref="OpenRevitDocumentRequest" />. Kept off the record
+///     (and out of the TS schema) so the local/cloud selection stays testable without a Revit session.
+/// </summary>
+public static class OpenRevitDocumentRequestExtensions {
+    public static bool HasLocalPath(this OpenRevitDocumentRequest request) =>
+        !string.IsNullOrWhiteSpace(request.Path);
+
+    // A cloud target needs both GUIDs; region is optional (defaults to US at open time).
+    public static bool HasCloudTarget(this OpenRevitDocumentRequest request) =>
+        !string.IsNullOrWhiteSpace(request.CloudProjectGuid)
+        && !string.IsNullOrWhiteSpace(request.CloudModelGuid);
+}
 
 [ExportTsSchema]
 public record OpenRevitDocumentData(

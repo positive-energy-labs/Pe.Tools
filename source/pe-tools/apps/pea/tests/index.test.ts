@@ -48,6 +48,7 @@ test("pea exports the product tool profile used by the default runtime", () => {
     "host_operation_search",
     "pe_logs",
     "pe_status",
+    "read_image",
     "request_access",
     "script_bootstrap",
     "script_execute",

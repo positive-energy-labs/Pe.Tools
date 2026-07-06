@@ -36,6 +36,37 @@ const resultPrefix = "__PEA_TALK_WORKER_RESULT__";
 const peaConfigDir = ".pea";
 const runtimeCloseTimeoutMs = 5000;
 
+// Progress breadcrumbs on stderr: invisible on success (the parent only surfaces worker
+// stderr on failure paths), and the trail that locates a stuck await on timeout.
+// Set PEA_TALK_WORKER_TRACE=0 to silence.
+const traceEnabled = process.env.PEA_TALK_WORKER_TRACE !== "0";
+
+function trace(message: string): void {
+  if (!traceEnabled) return;
+  process.stderr.write(`[pea-worker ${new Date().toISOString()}] ${message}\n`);
+}
+
+const tracedEventTypes = new Set([
+  "agent_start",
+  "agent_end",
+  "tool_start",
+  "tool_end",
+  "tool_approval_required",
+  "tool_suspended",
+  "error",
+  "info",
+]);
+
+function traceSessionEvents(session: PeaWorkerSession): void {
+  session.subscribe?.((event) => {
+    const record = readRecord(event);
+    const type = typeof record?.type === "string" ? record.type : "";
+    if (!tracedEventTypes.has(type)) return;
+    const toolName = typeof record?.toolName === "string" ? ` tool=${record.toolName}` : "";
+    trace(`event ${type}${toolName}`);
+  });
+}
+
 type PeaWorkerRuntime = {
   session: PeaWorkerSession;
   close?: () => Promise<void> | void;
@@ -52,6 +83,7 @@ type PeaWorkerSession = {
   };
   sendMessage(request: { content: string }): Promise<void>;
   abort(): void;
+  subscribe?(listener: (event: unknown) => void): () => void;
 };
 
 export type TalkToPeaFrame = "operator" | "feedback" | "collaborate";
@@ -84,6 +116,9 @@ export interface TalkToPeaWorkerResponse {
 async function main(): Promise<void> {
   const parsed: unknown = JSON.parse(await readStdin());
   const request = readTalkToPeaWorkerRequest(parsed);
+  trace(
+    `request parsed frame=${request.frame} timeoutSeconds=${request.timeoutSeconds} threadId=${request.threadId ?? "(new)"}`,
+  );
   const response = await runTalkToPeaWorker(request);
   process.stdout.write(`${resultPrefix}${JSON.stringify(response)}\n`);
 }
@@ -91,7 +126,10 @@ async function main(): Promise<void> {
 export async function runTalkToPeaWorker(
   request: TalkToPeaWorkerRequest,
 ): Promise<TalkToPeaWorkerResponse> {
+  trace("creating runtime");
   const runtime = await createPeaWorkerRuntime();
+  trace("runtime ready");
+  traceSessionEvents(runtime.session);
   try {
     const thread = request.threadId
       ? (await runtime.session.thread.switch({ threadId: request.threadId }),
@@ -99,6 +137,7 @@ export async function runTalkToPeaWorker(
       : await runtime.session.thread.create({
           title: `Pea ${request.frame} review`,
         });
+    trace(`thread ready id=${thread.id}`);
 
     const beforeMessages = await runtime.session.thread.listMessages({
       threadId: thread.id,
@@ -163,7 +202,12 @@ async function createPeaWorkerRuntime(): Promise<PeaWorkerRuntime> {
   configurePeaProductToolContext({ hostBaseUrl, workspaceKey });
 
   const cwd = await resolvePeaWorkerCwd(hostBaseUrl, workspaceKey);
-  const productHomePath = resolvePeaProductHomePath();
+  // The host bootstrap already resolved the real product home (Documents may be
+  // OneDrive-redirected, so resolvePeaProductHomePath()'s homedir fallback can name a
+  // different directory). Skills must live under the contained workspace filesystem's
+  // basePath (= cwd) or discovery silently rejects the skills root and the skill list
+  // comes up empty.
+  const productHomePath = resolvePeaProductHomePath({ productHomePath: cwd });
   process.chdir(cwd);
 
   await materializeBundledPeaSkills({ productHomePath });
@@ -208,11 +252,13 @@ async function createPeaWorkerRuntime(): Promise<PeaWorkerRuntime> {
         currentModelId: defaultPeaAgentModelId,
         productHomePath,
         configDir: peaConfigDir,
+        // Match the production pea runtime (apps/pea/src/runtime.ts): without yolo the
+        // agent-controller runs with requireToolApproval=true and every tool call parks on
+        // an interactive approval gate that this headless worker can never answer.
+        yolo: true,
       },
     },
-    storageProfile: createPeaProductStateStorageProfile({
-      stateDirectory: path.join(cwd, peaConfigDir),
-    }),
+    storageProfile: createPeaProductStateStorageProfile(),
     memoryProfile: createRuntimeMemoryProfile({ id: "pea-memory" }),
     toolProfile: peaProductToolProfile,
     workspace: { cwd, root: cwd },
@@ -365,8 +411,11 @@ async function sendPeaMessageWithTimeout(
   });
 
   try {
+    trace("sendMessage start");
     await Promise.race([session.sendMessage({ content }), timeout]);
+    trace("sendMessage resolved; polling for new assistant text");
     const latestAssistantText = await waitForNewAssistantText(session, beforeIds, deadline);
+    trace(`poll finished hasText=${Boolean(latestAssistantText)}`);
     if (!latestAssistantText) {
       return {
         ok: false,
@@ -545,7 +594,20 @@ function readStdin(): Promise<string> {
   });
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+// Under the source-linked dev lane this worker is spawned through the jiti CLI, so the module
+// path is argv[2] (argv[1] is jiti itself); under the compiled lane it is argv[1]. Treat the
+// worker as directly invoked when its module path appears anywhere in argv.
+const workerModulePath = normalizeInvocationPath(fileURLToPath(import.meta.url));
+const isDirectInvocation = process.argv.some(
+  (argument) => argument && normalizeInvocationPath(argument) === workerModulePath,
+);
+
+function normalizeInvocationPath(candidate: string): string {
+  const resolved = path.resolve(candidate);
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
+if (isDirectInvocation) {
   main().catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     process.stdout.write(`${resultPrefix}${JSON.stringify({ ok: false, error: message })}\n`);

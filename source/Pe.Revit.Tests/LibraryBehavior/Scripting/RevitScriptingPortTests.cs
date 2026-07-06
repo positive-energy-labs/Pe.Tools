@@ -799,6 +799,67 @@ public sealed class RevitScriptingPortTests {
     }
 
     [Test]
+    public void ReadOnly_policy_allows_uncalled_helper_file_mutators(UIApplication uiApplication) {
+        var workspaceKey = $"test-readonly-uncalled-helper-{Guid.NewGuid():N}";
+        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
+        Directory.CreateDirectory(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey));
+
+        try {
+            File.WriteAllText(
+                RevitScriptingStorageLocations.ResolveSampleScriptPath(workspaceKey),
+                """
+                public sealed class WorkspaceScript : PeScriptContainer
+                {
+                    public override void Execute()
+                    {
+                        WriteLine($"Marked: {MutationHelper.CountMarked(doc)}");
+                    }
+                }
+                """
+            );
+            File.WriteAllText(
+                Path.Combine(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey), "MutationHelper.cs"),
+                """
+                public static class MutationHelper
+                {
+                    public static int CountMarked(Document document) =>
+                        document == null
+                            ? 0
+                            : new FilteredElementCollector(document).WhereElementIsNotElementType().Take(3).Count();
+
+                    public static void Delete(Document document)
+                    {
+                        if (document == null)
+                            return;
+
+                        document.Delete(ElementId.InvalidElementId);
+                    }
+                }
+                """
+            );
+            WritePodManifest(workspaceKey, "src/SampleScript.cs");
+
+            var service = CreateExecutionService(uiApplication);
+            var result = service.Execute(
+                new ExecuteRevitScriptRequest(
+                    SourceKind: ScriptExecutionSourceKind.WorkspacePath,
+                    SourcePath: @"src\SampleScript.cs",
+                    WorkspaceKey: workspaceKey
+                ),
+                "test-readonly-uncalled-helper"
+            );
+
+            // The entrypoint reaches CountMarked (read-only) but never Delete: ReadOnly policy must
+            // judge reachable code, not every file compiled into the pod.
+            Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded));
+            Assert.That(result.Diagnostics.Any(diagnostic =>
+                diagnostic.Stage == "policy" && diagnostic.Severity == ScriptDiagnosticSeverity.Error), Is.False);
+        } finally {
+            DeleteWorkspace(workspaceRoot);
+        }
+    }
+
+    [Test]
     public void ReadOnly_policy_rejects_family_manager_mutator(UIApplication uiApplication) {
         var service = CreateExecutionService(uiApplication);
 

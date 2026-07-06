@@ -32,30 +32,20 @@ internal sealed record DevCliOptions(
             }
         }
 
-        if (positionals.Count >= 2 && string.Equals(positionals[0], "__internal", StringComparison.OrdinalIgnoreCase)) {
-            var commandKind = positionals[1].ToLowerInvariant() switch {
-                "approve-worker" => DevCommandKind.InternalApproveWorker,
-                _ => DevCommandKind.Unknown
-            };
-            return commandKind == DevCommandKind.Unknown
-                ? DevCliParseResult.Failure($"Unknown internal command '{positionals[1]}'.", true)
-                : DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, commandKind, positionals.Skip(2).ToArray()));
-        }
-
         if (positionals.Count == 0)
-            return DevCliParseResult.Failure("Expected a `bootstrap-path`, `test`, `self-test`, `pea`, `web`, `automation`, or `codegen` command.", true);
+            return DevCliParseResult.Failure("Expected a `bootstrap-path`, `self-test`, `pea`, `web`, `automation`, or `codegen` command.", true);
 
         var first = positionals[0].ToLowerInvariant();
         return first switch {
             "bootstrap-path" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.BootstrapPath, positionals.Skip(1).ToArray())),
-            "test" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Test, positionals.Skip(1).ToArray())),
             "self-test" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.SelfTest, positionals.Skip(1).ToArray())),
             "pea" when positionals.Count == 1 => DevCliParseResult.Usage(),
             "pea" => ParsePea(repoRoot, positionals),
             "web" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Web, positionals.Skip(1).ToArray())),
             "automation" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Automation, positionals.Skip(1).ToArray())),
             "codegen" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Codegen, positionals.Skip(1).ToArray())),
-            "doctor" or "status" or "sync" or "env" or "revit" or "verify" => DevCliParseResult.Failure($"`pe-dev {positionals[0]}` has been removed. Use the peco `live_loop_context`/`live_rrd_sync` tools for live-loop work, or `pe-dev test` for FreshRevitProcess proof.", true),
+            "doctor" or "status" or "sync" or "env" or "revit" or "verify" => DevCliParseResult.Failure($"`pe-dev {positionals[0]}` has been removed. Use SDK `pe-revit live`/`pe-revit test` for live-loop mechanics, or Peco when Pea status/log hooks are needed.", true),
+            "test" => DevCliParseResult.Failure("`pe-dev test` has been removed. Use SDK `pe-revit test fresh|attached`, or Peco `peco test` when Pea status/log hooks are needed.", true),
             _ => DevCliParseResult.Failure($"Unknown command '{positionals[0]}'.", true)
         };
     }

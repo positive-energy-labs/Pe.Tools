@@ -93,13 +93,15 @@ export class ScriptingTools {
   ) {}
 
   execute(input: ScriptExecuteInput) {
+    // Omit nullish optional keys: the effect NDJSON RPC layer rejects an explicit `undefined`
+    // field value (fails at ["request"]) rather than treating the key as absent.
     return this.client.call("scripting.execute", {
-      scriptContent: input.scriptContent,
+      ...(input.scriptContent != null ? { scriptContent: input.scriptContent } : {}),
       sourceKind:
         (input.sourceKind ?? "InlineSnippet") === "WorkspacePath"
           ? "WorkspacePath"
           : "InlineSnippet",
-      sourcePath: input.sourcePath,
+      ...(input.sourcePath != null ? { sourcePath: input.sourcePath } : {}),
       workspaceKey: input.workspaceKey ?? this.context.workspaceKey,
       sourceName: input.sourceName ?? "AgentSnippet.cs",
       permissionMode: input.permissionMode === "WriteTransaction" ? "WriteTransaction" : "ReadOnly",
@@ -116,7 +118,7 @@ export class ScriptingTools {
   importPod(input: ScriptPodImportInput) {
     return this.client.call("scripting.pod.import", {
       archivePath: input.archivePath,
-      workspaceKey: input.workspaceKey,
+      ...(input.workspaceKey != null ? { workspaceKey: input.workspaceKey } : {}),
     });
   }
 

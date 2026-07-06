@@ -48,8 +48,6 @@
     </ItemGroup>
 
     <PropertyGroup>
-        <PeStableCliConfiguration
-        >$([System.String]::Copy('$(Configuration)').Replace('.Tests', ''))</PeStableCliConfiguration>
         <PeRevitRawDotNetTestWarningSuppressed Condition="'$(PeRevitRawDotNetTestWarningSuppressed)' == ''">false</PeRevitRawDotNetTestWarningSuppressed>
         <PeVerifyTarget Condition="'$(PeVerifyTarget)' == '' and '$(PeRevitRawDotNetTestWarningSuppressed)' != 'true' and $([System.String]::Copy('$(Configuration)').Contains('.Tests')) == 'True'">AttachedRrd</PeVerifyTarget>
         <PeWorkflow Condition="'$(PeRevitRawDotNetTestWarningSuppressed)' != 'true' and $([System.String]::Copy('$(Configuration)').Contains('.Tests')) == 'True'">Verify</PeWorkflow>
@@ -62,10 +60,7 @@
     >
         <Error
                 Condition="$([System.String]::Copy('$(Configuration)').Contains('.Tests')) != 'True'"
-                Text="`dotnet test` for `Pe.Revit.Tests` requires an explicit `.Tests` configuration such as `Debug.R25.Tests`. AGENT GUIDANCE: AttachedRrd validation uses assemblies already loaded in RRD. If runtime code changed, coordinate runtime refresh through peco live-loop tooling before attached `.Tests`; an isolated dotnet build is not runtime freshness proof. Use `pe-dev test ...` when RRD freshness is uncertain or current document state does not matter."
-        />
-        <Exec
-                Command="powershell -NoProfile -ExecutionPolicy Bypass -Command &quot;&amp; { %24ErrorActionPreference = 'Stop'; %24s = Invoke-RestMethod 'http://localhost:5180/api/settings/session-summary' -TimeoutSec 10; if (-not %24s.bridgeIsConnected) { throw 'AttachedRrd preflight failed: Revit bridge is not connected.' }; if ([string]%24s.revitVersion -ne '$(RevitVersion)') { throw ('AttachedRrd preflight failed: expected Revit $(RevitVersion), got ' + %24s.revitVersion + '.') }; if (@(%24s.availableModules).Count -lt 1) { throw 'AttachedRrd preflight failed: no Revit modules are available.' }; Write-Host ('AttachedRrd preflight passed: Revit ' + %24s.revitVersion + ', pid ' + %24s.processId + ', modules ' + @(%24s.availableModules).Count + '.') }&quot;"
+                Text="`dotnet test` for `Pe.Revit.Tests` requires an explicit `.Tests` configuration such as `Debug.R25.Tests`. AGENT GUIDANCE: AttachedRrd validation uses assemblies already loaded in RRD. If runtime code changed, coordinate runtime refresh through SDK `pe-revit live sync` before attached `.Tests`; an isolated dotnet build is not runtime freshness proof. Use SDK `pe-revit test fresh ...` when RRD freshness is uncertain or current document state does not matter."
         />
     </Target>
     <!--
@@ -73,8 +68,7 @@
       The build artifacts under `.artifacts/...` are safe to produce without touching
       RRD, but explicit-year VSTest execution is Revit-backed and defaults to the
       AttachedRrd verify target unless the repo guardrails are intentionally suppressed.
-      This pre-test hook checks attached session health only; it is not a runtime
-      freshness mechanism. After runtime edits, coordinate runtime refresh through
-      peco live-loop tooling before attached `.Tests` validation.
+      SDK `pe-revit test attached` owns attached session health checks. After
+      runtime edits, coordinate runtime refresh before attached `.Tests` validation.
     -->
 </Project>

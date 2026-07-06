@@ -1,5 +1,6 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry.Profiles;
+using Pe.Revit.Utils;
 using Pe.Revit.FamilyFoundry.DesiredState;
 using Pe.Revit.Global;
 using Pe.Revit.DocumentData.Parameters;
@@ -54,6 +55,7 @@ internal static class RevitFamilyFixtureHarness {
         if (string.IsNullOrWhiteSpace(familyName))
             throw new ArgumentException("Family name is required.", nameof(familyName));
 
+        RevitTestFailureGuard.EnsureInstalled(application);
         var templatePath = ResolveGenericModelTemplatePath(application);
         var document = application.NewFamilyDocument(templatePath);
         if (document == null)
@@ -73,6 +75,7 @@ internal static class RevitFamilyFixtureHarness {
         if (application == null)
             throw new ArgumentNullException(nameof(application));
 
+        RevitTestFailureGuard.EnsureInstalled(application);
         var defaultTemplatePath = application.DefaultProjectTemplate;
         var document = !string.IsNullOrWhiteSpace(defaultTemplatePath) && File.Exists(defaultTemplatePath)
             ? application.NewProjectDocument(defaultTemplatePath)
@@ -188,6 +191,7 @@ internal static class RevitFamilyFixtureHarness {
         if (application == null)
             throw new ArgumentNullException(nameof(application));
 
+        RevitTestFailureGuard.EnsureInstalled(application);
         var fixturePath = GetFamilyFixturePath(fixtureFileName);
         return application.OpenDocumentFile(fixturePath)
                ?? throw new InvalidOperationException($"Failed to open family fixture '{fixturePath}'.");
@@ -204,6 +208,7 @@ internal static class RevitFamilyFixtureHarness {
         if (!File.Exists(familyPath))
             throw new FileNotFoundException($"Family file was not found at '{familyPath}'.", familyPath);
 
+        RevitTestFailureGuard.EnsureInstalled(application);
         return application.OpenDocumentFile(familyPath)
                ?? throw new InvalidOperationException($"Failed to open family document '{familyPath}'.");
     }

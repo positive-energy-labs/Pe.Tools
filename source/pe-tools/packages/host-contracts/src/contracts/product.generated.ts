@@ -25,7 +25,6 @@ export const productPathNames = {
   podManifestFileName: "pod.json",
   hostLogFileName: "host.log.txt",
   revitAppLogFileName: "revit.log.txt",
-  revitApprovalWatcherLogFileName: "revit-approval-watcher.log.txt",
 } as const;
 
 export const hostProcessIdentity = {
@@ -68,10 +67,6 @@ export const revitDeploymentIdentity = {
 
 export const peAppRuntimeDeploymentDescriptor = {
   currentSchemaVersion: 1,
-} as const;
-
-export const installerPayloadManifest = {
-  currentSchemaVersion: 3,
 } as const;
 
 export const scriptingWorkspaceIdentity = {

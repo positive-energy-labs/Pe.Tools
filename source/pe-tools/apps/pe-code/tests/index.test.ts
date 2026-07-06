@@ -31,7 +31,6 @@ test("peco default profile includes Pea product and dev tool ids", () => {
     "host_operation_call",
     "host_operation_search",
     "live_loop_context",
-    "live_rrd_restart",
     "live_rrd_sync",
     "pe_logs",
     "pe_status",

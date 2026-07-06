@@ -1,18 +1,17 @@
+using System.Text.Json;
 using Build.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ModularPipelines.Attributes;
 using ModularPipelines.Context;
-using ModularPipelines.DotNet.Extensions;
-using ModularPipelines.DotNet.Options;
 using ModularPipelines.FileSystem;
 using ModularPipelines.Git.Extensions;
 using ModularPipelines.Modules;
 using ModularPipelines.Options;
 using Pe.Shared.Product;
+using Pe.Shared.RevitVersions;
 using Shouldly;
 using File = ModularPipelines.FileSystem.File;
-using InstallerOptions = Build.Options.InstallerOptions;
 
 namespace Build.Modules;
 
@@ -24,9 +23,12 @@ namespace Build.Modules;
 [DependsOn<ResolveBuildLayoutModule>]
 [DependsOn<PublishRevitAddinModule>]
 [DependsOn<CreatePeaPayloadModule>]
-public sealed class CreateInstallerModule(
-    IOptions<BuildOptions> buildOptions,
-    IOptions<InstallerOptions> installerOptions) : Module {
+public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) : Module {
+    private static readonly JsonSerializerOptions JsonOptions = new() {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = true
+    };
+
     protected override async Task ExecuteModuleAsync(IModuleContext context, CancellationToken cancellationToken) {
         var versioningResult = await context.GetModule<ResolveVersioningModule>();
         var matrixResult = await context.GetModule<ResolveBuildMatrixModule>();
@@ -39,32 +41,11 @@ public sealed class CreateInstallerModule(
         var rootDirectory = context.Git().RootDirectory;
 
         var hostPackageDirectory = rootDirectory.GetFolder("source").GetFolder("pe-tools").GetFolder("apps").GetFolder("host");
-        var wixInstaller = rootDirectory.GetFolder("install").GetFile("Installer.csproj");
-        context.Logger.LogInformation("Preparing WiX toolchain for installer packaging.");
-        var wixToolFolder = await InstallWixAsync(context, layout, cancellationToken);
-
-        context.Logger.LogInformation("Validating installer assets.");
-        ValidateInstallerAssets(rootDirectory, installerOptions.Value);
-
-        context.Logger.LogInformation("Building installer authoring executable: {Project}", wixInstaller.Path);
-        await BuildDotNetCli.BuildQuietAsync(
-            context,
-            wixInstaller.Path,
-            "Release",
-            [],
-            cancellationToken
+        var appAssemblyName = BuildProjectDiscovery.AssemblyName(
+            BuildProjectDiscovery.FindSingleProjectByKind(rootDirectory.Path, "RevitAddin")
         );
-
-        var builderFile = wixInstaller.Folder!
-            .GetFolder("bin")
-            .GetFolder("Release")
-            .GetFolder("net8.0-windows")
-            .GetFile($"{wixInstaller.NameWithoutExtension}.exe");
-
-        builderFile.Exists.ShouldBeTrue(
-            $"No installer builder was found for the project: {wixInstaller.NameWithoutExtension}");
-
-        var targetDirectories = matrix.ResolveConfigurations(BuildConfigurationGroup.Pack, buildOptions.Value.Configuration)
+        var configurations = matrix.ResolveConfigurations(BuildConfigurationGroup.Pack, buildOptions.Value.Configuration);
+        var targetDirectories = configurations
             .Select(layout.GetRevitPublishDirectory)
             .Where(Directory.Exists)
             .ToArray();
@@ -75,6 +56,7 @@ public sealed class CreateInstallerModule(
             targetDirectories.Length,
             string.Join(", ", targetDirectories)
         );
+        var revitPayloadRoot = StageRevitPayload(context, layout, configurations);
 
         var runtimePublishDirectory = await PublishRuntimeAsync(
             context,
@@ -82,48 +64,67 @@ public sealed class CreateInstallerModule(
             layout,
             cancellationToken
         );
+
         Directory.CreateDirectory(layout.Artifacts.InstallerPackagesRoot);
         foreach (var existingInstallerPath in Directory.EnumerateFiles(layout.Artifacts.InstallerPackagesRoot, "*.msi"))
             System.IO.File.Delete(existingInstallerPath);
 
-        var installerPayloadManifestPath = await layout.WriteInstallerPayloadManifestAsync(
+        var sdkInstallerOutputRoot = layout.GetSdkInstallerOutputRoot();
+        if (Directory.Exists(sdkInstallerOutputRoot)) {
+            foreach (var existingInstallerPath in Directory.EnumerateFiles(sdkInstallerOutputRoot, "*.msi"))
+                System.IO.File.Delete(existingInstallerPath);
+        }
+
+        var installerPayloadManifestPath = await WriteSdkInstallerPayloadManifestAsync(
+            layout,
             versioning.Version,
             runtimePublishDirectory.Path,
             peaPayload,
-            targetDirectories,
+            appAssemblyName,
+            revitPayloadRoot.Path,
             cancellationToken
         );
 
         context.Logger.LogInformation(
-            "Running installer authoring executable. Manifest={Manifest}; output={Output}",
+            "Running SDK MSI helper. Manifest={Manifest}; output={Output}",
             installerPayloadManifestPath,
-            layout.Artifacts.InstallerPackagesRoot
+            sdkInstallerOutputRoot
         );
-        context.Logger.LogInformation(
-            "Installer authoring will write incremental details to {LogPath}",
-            Path.Combine(layout.Artifacts.InstallerPackagesRoot, "Pe.Tools.Installer.latest.log")
-        );
+        var msiArguments = new List<string> {
+            "tool",
+            "run",
+            "pe-revit",
+            "--",
+            "msi",
+            "--manifest",
+            installerPayloadManifestPath,
+            "--version",
+            versioning.Version
+        };
+        if (versioning.IsPrerelease)
+            msiArguments.Add("--allow-prerelease-msi");
+
         await context.Shell.Command.ExecuteCommandLineTool(
-            new GenericCommandLineToolOptions(builderFile.Path) {
-                Arguments = ["--manifest", installerPayloadManifestPath]
+            new GenericCommandLineToolOptions("dotnet") {
+                Arguments = [.. msiArguments]
             },
             new CommandExecutionOptions {
-                WorkingDirectory = wixInstaller.Folder,
-                EnvironmentVariables =
-                    new Dictionary<string, string?> {
-                        { "PATH", $"{Environment.GetEnvironmentVariable("PATH")};{wixToolFolder}" }
-                    }
-            }, cancellationToken);
+                WorkingDirectory = rootDirectory.Path
+            },
+            cancellationToken
+        );
 
-        context.Logger.LogInformation("Installer authoring executable finished. Scanning output directory.");
-        var outputFiles = Directory.EnumerateFiles(layout.Artifacts.InstallerPackagesRoot, "*.msi", SearchOption.TopDirectoryOnly)
+        context.Logger.LogInformation("SDK MSI helper finished. Scanning output directory.");
+        var outputFiles = Directory.EnumerateFiles(sdkInstallerOutputRoot, "*.msi", SearchOption.TopDirectoryOnly)
             .Where(path => Path.GetFileName(path).Contains(versioning.Version, StringComparison.OrdinalIgnoreCase))
-            .Select(path => new File(path))
             .ToArray();
-        outputFiles.ShouldNotBeEmpty("Failed to create an installer");
+        outputFiles.ShouldNotBeEmpty("SDK MSI helper did not create an installer");
 
-        foreach (var outputFile in outputFiles)
-            context.Summary.KeyValue("Artifacts", "Installer", outputFile.Path);
+        foreach (var outputFile in outputFiles) {
+            var packagePath = Path.Combine(layout.Artifacts.InstallerPackagesRoot, Path.GetFileName(outputFile));
+            System.IO.File.Copy(outputFile, packagePath, true);
+            context.Summary.KeyValue("Artifacts", "Installer", new File(packagePath).Path);
+        }
     }
 
     private static async Task<Folder> PublishRuntimeAsync(
@@ -165,53 +166,95 @@ public sealed class CreateInstallerModule(
         return runtimePublishDirectory;
     }
 
-    private static async Task<Folder> InstallWixAsync(
+    private static Folder StageRevitPayload(
         IModuleContext context,
         ProductLayoutAuthority layout,
+        IReadOnlyCollection<string> configurations
+    ) {
+        var payloadRoot = new Folder(layout.GetSdkInstallerRevitPayloadRoot());
+        if (Directory.Exists(payloadRoot.Path))
+            Directory.Delete(payloadRoot.Path, true);
+
+        Directory.CreateDirectory(payloadRoot.Path);
+        foreach (var configuration in configurations) {
+            RevitVersionCatalog.TryResolveFromConfiguration(configuration, out var spec)
+                .ShouldBeTrue($"Installer configuration '{configuration}' does not map to a Revit year.");
+
+            var source = layout.GetRevitPublishDirectory(configuration);
+            Directory.Exists(source).ShouldBeTrue($"No Revit publish content was found for {configuration}: {source}");
+
+            var destination = Path.Combine(payloadRoot.Path, spec.Year.ToString());
+            CopyDirectory(source, destination);
+            context.Logger.LogInformation(
+                "Staged Revit add-in payload for {Configuration}: {Source} -> {Destination}",
+                configuration,
+                source,
+                destination
+            );
+        }
+
+        return payloadRoot;
+    }
+
+    private static async Task<string> WriteSdkInstallerPayloadManifestAsync(
+        ProductLayoutAuthority layout,
+        string version,
+        string runtimePublishDirectory,
+        PeaPayloadArtifacts peaPayload,
+        string appAssemblyName,
+        string revitPayloadRoot,
         CancellationToken cancellationToken
     ) {
-        var wixToolFolder = new Folder(Path.Combine(layout.Artifacts.ToolsRoot, "wix-7"));
-        var wixExe = wixToolFolder.GetFile("wix.exe");
+        var peaPayloadDirectory = layout.GetPeaPayloadStagingDirectory("Release", peaPayload.Version);
+        Directory.Exists(peaPayloadDirectory)
+            .ShouldBeTrue($"No pea versioned payload was found for installer packaging: {peaPayloadDirectory}");
 
-        if (!wixExe.Exists) {
-            _ = Directory.CreateDirectory(wixToolFolder.Path);
-            context.Logger.LogInformation("Installing WiX CLI into cached tool folder: {Folder}", wixToolFolder.Path);
-            _ = await context.DotNet().Tool
-                .Execute(
-                    new DotNetToolOptions {
-                        Arguments = ["install", "wix", "--version", "7.*", "--tool-path", wixToolFolder.Path]
-                    }, cancellationToken: cancellationToken);
-        } else {
-            context.Logger.LogInformation("Using cached WiX CLI: {Path}", wixExe.Path);
-        }
+        var manifest = new SdkInstallManifest(
+            ProductIdentity.ProductName,
+            ProductIdentity.VendorName,
+            [
+                new("RevitAddin", appAssemblyName, revitPayloadRoot),
+                new("Exe", HostProcessIdentity.DirectoryName, runtimePublishDirectory),
+                new("VersionedApp", PeaCliIdentity.DirectoryName, peaPayloadDirectory),
+                new(
+                    "PathShim",
+                    Path.GetFileNameWithoutExtension(PeaCliIdentity.LauncherName),
+                    Target: $"versionedApp:{PeaCliIdentity.DirectoryName}",
+                    Entry: Path.Combine(PeaCliIdentity.AppDirectoryName, PeaCliIdentity.InstalledExecutableName)
+                )
+            ]
+        );
 
-        context.Logger.LogInformation("Accepting WiX EULA.");
-        _ = await context.Shell.Command.ExecuteCommandLineTool(
-            new GenericCommandLineToolOptions(wixExe.Path) { Arguments = ["eula", "accept", "wix7"] },
-            cancellationToken: cancellationToken);
-
-        context.Logger.LogInformation("Ensuring WiX UI extension is available.");
-        _ = await context.Shell.Command.ExecuteCommandLineTool(
-            new GenericCommandLineToolOptions(wixExe.Path) {
-                Arguments = ["extension", "add", "-g", "WixToolset.UI.wixext"]
-            }, cancellationToken: cancellationToken);
-
-        context.Logger.LogInformation("WiX toolchain is ready.");
-        return wixToolFolder;
+        var manifestPath = layout.GetSdkInstallerPayloadManifestPath(version);
+        Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
+        await System.IO.File.WriteAllTextAsync(
+            manifestPath,
+            JsonSerializer.Serialize(manifest, JsonOptions),
+            cancellationToken
+        );
+        return manifestPath;
     }
 
-    private static void ValidateInstallerAssets(Folder rootDirectory, InstallerOptions options) {
-        var requiredFiles = new[] { options.BannerImagePath, options.BackgroundImagePath, options.ProductIconPath };
+    private static void CopyDirectory(string source, string destination) {
+        Directory.CreateDirectory(destination);
+        foreach (var directory in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
+            Directory.CreateDirectory(Path.Combine(destination, Path.GetRelativePath(source, directory)));
 
-        foreach (var relativeOrAbsolutePath in requiredFiles) {
-            var resolvedPath = Path.IsPathRooted(relativeOrAbsolutePath)
-                ? relativeOrAbsolutePath
-                : Path.Combine(rootDirectory.Path, relativeOrAbsolutePath);
-
-            System.IO.File.Exists(resolvedPath)
-                .ShouldBeTrue($"Installer asset was not found: {resolvedPath}");
-        }
+        foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+            System.IO.File.Copy(file, Path.Combine(destination, Path.GetRelativePath(source, file)), true);
     }
+
+    private sealed record SdkInstallManifest(
+        string Product,
+        string Vendor,
+        IReadOnlyList<SdkInstallPayload> Payloads
+    );
+
+    private sealed record SdkInstallPayload(
+        string Type,
+        string Name,
+        string? Source = null,
+        string? Target = null,
+        string? Entry = null
+    );
 }
-
-// PE_HOT_RELOAD_NUDGE

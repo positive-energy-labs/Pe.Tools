@@ -7,8 +7,8 @@
         <PeProductVendorName>Positive Energy</PeProductVendorName>
         <PeProductName>Pe.Tools</PeProductName>
 
-        <!-- Short-year configuration names preserved (Rider muscle memory + Pe.RiderBridge
-             solution-config selection). The SDK parses .R25 and .R2025 alike; declaring the list
+        <!-- Short-year configuration names preserved for Rider muscle memory and existing
+             solution-config selection. The SDK parses .R25 and .R2025 alike; declaring the list
              explicitly suppresses the SDK-generated full-year one. -->
         <Configurations>Debug.R23;Debug.R24;Debug.R25;Debug.R26;Release.R23;Release.R24;Release.R25;Release.R26</Configurations>
         <Configurations Condition="'$(EnableRevitTestConfigurations)' == 'true'">$(Configurations);Debug.R23.Tests;Debug.R24.Tests;Debug.R25.Tests;Debug.R26.Tests;Release.R23.Tests;Release.R24.Tests;Release.R25.Tests;Release.R26.Tests</Configurations>
@@ -29,15 +29,9 @@
         <IntermediateOutputPath>$(BaseIntermediateOutputPath)</IntermediateOutputPath>
     </PropertyGroup>
 
-    <!-- Product layout names (Pe.App descriptor target, installer) and the stable pe-dev CLI
-         location (Pe.App approval watcher) — kept from the legacy build system. -->
+    <!-- Product layout names (Pe.App descriptor target, installer). -->
     <PropertyGroup>
         <PeRevitAddinManifestFileName>Pe.App.addin</PeRevitAddinManifestFileName>
         <PeRevitRuntimeDescriptorFileName>Pe.App.runtime.json</PeRevitRuntimeDescriptorFileName>
-        <PeStableCliConfiguration Condition="'$(PeStableCliConfiguration)' == ''">Debug.R25</PeStableCliConfiguration>
-        <PeStableCliInteractivePath Condition="'$(PeStableCliInteractivePath)' == ''">$(MSBuildThisFileDirectory)source\Pe.Dev.Cli\bin\$(PeStableCliConfiguration)\net8.0-windows\pe-dev.dll</PeStableCliInteractivePath>
-        <PeStableCliArtifactsPath Condition="'$(PeStableCliArtifactsPath)' == ''">$(MSBuildThisFileDirectory).artifacts\build\Pe.Dev.Cli\$(PeStableCliConfiguration)\net8.0-windows\pe-dev.dll</PeStableCliArtifactsPath>
-        <PeStableCliPath Condition="'$(PeStableCliPath)' == '' AND Exists('$(PeStableCliInteractivePath)')">$(PeStableCliInteractivePath)</PeStableCliPath>
-        <PeStableCliPath Condition="'$(PeStableCliPath)' == ''">$(PeStableCliArtifactsPath)</PeStableCliPath>
     </PropertyGroup>
 </Project>

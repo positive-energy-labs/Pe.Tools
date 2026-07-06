@@ -13,6 +13,19 @@ internal static partial class BuildDotNetCli {
         CancellationToken cancellationToken
     ) => RunQuietAsync(context, BuildArguments("build", projectPath, configuration, properties), cancellationToken);
 
+    public static Task BuildTargetQuietAsync(
+        IModuleContext context,
+        string projectPath,
+        string configuration,
+        string target,
+        IReadOnlyCollection<(string Name, string? Value)> properties,
+        CancellationToken cancellationToken
+    ) {
+        var arguments = BuildArguments("build", projectPath, configuration, properties);
+        arguments.Add($"-t:{target}");
+        return RunQuietAsync(context, arguments, cancellationToken);
+    }
+
     public static Task PublishQuietAsync(
         IModuleContext context,
         string projectPath,

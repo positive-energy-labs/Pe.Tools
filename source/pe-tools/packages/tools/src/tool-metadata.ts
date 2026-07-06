@@ -26,6 +26,11 @@ export const peaProductToolCatalog: RuntimeToolCatalog = createRuntimeToolCatalo
     kind: "edit",
     provenance: { source: "app", label: "Pea product" },
   },
+  read_image: {
+    title: "Read Image",
+    kind: "read",
+    provenance: { source: "app", label: "Pea product" },
+  },
   script_bootstrap: {
     title: "Script Bootstrap",
     kind: "edit",
@@ -61,11 +66,6 @@ export const peCodeToolCatalog: RuntimeToolCatalog = createRuntimeToolCatalog({
   },
   live_rrd_sync: {
     title: "Live Rrd Sync",
-    kind: "edit",
-    provenance: { source: "app", label: "peco" },
-  },
-  live_rrd_restart: {
-    title: "Live Rrd Restart",
     kind: "edit",
     provenance: { source: "app", label: "peco" },
   },

@@ -20,7 +20,7 @@ This separation exists because Revit, Rider hot reload, package-local outputs, i
 | --------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | **Source compile**    | Ordinary terminal `dotnet build` is the safe default.                                      | Most source work should not touch Rider, Revit, installed files, or package-local hot-reload state.       | The selected package compiles into isolated `.artifacts/...` outputs.    |
 | **Package/artifact**  | `./build` owns bundle, appbundle, MSI, payload, and release artifact shape.                | Packaging needs consistent repo-local topology and generated manifests, not ad hoc project builds.        | Durable artifacts were staged under `.artifacts/packages/...`.           |
-| **FreshRevitProcess** | Fresh Revit-backed proof should use the test helper, not the active UI session.            | The current RRD session is user-owned, slow to recover, likely stale, and often not the thing under test. | Revit-backed behavior ran in a fresh test-owned process.                 |
+| **FreshRevitProcess** | Fresh Revit-backed proof should use SDK `pe-revit test fresh`, not the active UI session.  | The current RRD session is user-owned, slow to recover, likely stale, and often not the thing under test. | Revit-backed behavior ran in a fresh test-owned process.                 |
 | **AttachedRrd**       | Live-session proof must be treated as an attached runtime loop, not as normal compilation. | Rider/Revit/Host/session/document state is fragile and cannot be inferred from MSBuild success.           | A targeted probe behaved correctly in the currently running RRD session. |
 | **Installed lane**    | Installed behavior must be validated from installed roots.                                 | MSI/product roots and dev/runtime roots intentionally differ.                                             | Installed bootstrap/runtime behavior, not source or RRD behavior.        |
 
@@ -36,14 +36,14 @@ The Peco has narrow repo verification wrappers because this environment is unusu
 
 The wrappers encode policy and collect evidence: `NoRrdContact` versus `RrdRequired`, read-only orientation before mutation, bounded logs, sync/restart guidance, test-owned process planning, command fallback, and explicit proof/does-not-prove language.
 
-That does not make `BUILD.md` a Peco tool manual. The durable decision is: **when the claim depends on live Rider/Revit state, use the Peco live-loop abstraction instead of reproducing that orchestration by hand or resurrecting removed `pe-dev` commands.** The direct tool names belong in Peco instructions and skills, where they can evolve without rewriting the build philosophy.
+That does not make `BUILD.md` a Peco tool manual. The durable decision is: **when the claim depends on live Rider/Revit state, use SDK `pe-revit live/test` mechanics instead of reproducing that orchestration by hand or resurrecting removed `pe-dev` commands; use Peco only when Pea status/log hooks or product probes should wrap the proof.** The direct wrapper names belong in Peco instructions and skills, where they can evolve without rewriting the build philosophy.
 
 ## Environment limitations this repo designs around
 
 - **Windows dotnet state can be poisoned.** Missing core Windows environment variables can break NuGet/MSBuild restore with errors such as `Value cannot be null. (Parameter 'path1')`. The build tool detects this and points to `tools/dotnet-sandbox-safe.ps1`; recovery notes live in `docs/ENVIRONMENT.md`.
 - **Revit process startup is expensive.** Avoid touching RRD unless the current UI/session/document state is the subject of proof.
 - **RRD is user-owned state.** A restart can cost minutes and may require reopening a model. Attached proof should be deliberate and evidence-based.
-- **Hot reload is useful but not proof by itself.** Treat sync success as a step toward an attached behavior/log/script/test proof, not as the final freshness claim.
+- **Hot reload is useful but not proof by itself.** Treat sync success as a step toward an attached behavior/log/script/test proof, not as the final freshness claim. The SDK shadow deploy writes a content-hash stamp per build; `pe-revit live status` reports `deployedStamp` vs `loadedStamp`, which is the concrete deploy-vs-loaded freshness check that replaced the old mutate-a-signal-file approach — but a matching stamp still proves only which assembly is loaded, not that a given behavior is correct.
 - **Terminal isolated outputs do not feed loaded RRD assemblies.** The safe compile lane writes `.artifacts/...`; package-local interactive outputs and loaded Revit DLLs are a different authority.
 - **Installed and dev roots are separate.** Do not validate installed behavior against dev host/runtime roots.
 
@@ -64,7 +64,7 @@ Verified mechanics:
 - `.Tests` configurations force off `DeployAddin` and `LaunchRevit`.
 - Non-release interactive builds pin `AssemblyInformationalVersion` to stable `dev` to reduce hot-reload baseline churn from generated metadata.
 
-## Rider/Nice3point debug launch decision
+## Rider/SDK debug launch decision
 
 Rider **run/debug configurations** and MSBuild **solution/build configurations** are different inputs. For desktop Revit debugging, the durable model is:
 
@@ -72,31 +72,28 @@ Rider **run/debug configurations** and MSBuild **solution/build configurations**
 canonical Pe.App run/debug configuration
 + active Rider solution configuration such as Debug.R24 / Debug.R25 / Debug.R26
 => MSBuild Configuration
-=> Directory.Build.props RevitVersion inference
-=> Nice3point TargetFramework, Revit API refs, StartProgram, deploy, and launch behavior
+=> Pe.Revit.Sdk RevitVersion inference from the Directory.Build.props year list
+=> Pe.Revit.Sdk TargetFramework, Revit API refs, StartProgram, deploy, and launch behavior
 ```
 
 The canonical `Pe.App` run/debug configuration is year-polymorphic. The active Rider solution configuration is the year authority. The repo should share this canonical config as `.run/Pe.App.run.xml` for stability and transparency, while leaving volatile `.idea` workspace state user-local. Cached launcher fields in saved Rider XML, such as `EXE_PATH` or `PROJECT_TFM`, are materialized Rider state and must not be treated as the durable source of truth.
 
-A Rider `Build` before-launch step is part of the valid launch contract for RRD work because it runs the MSBuild/Nice3point path that builds, publishes, deploys the add-in, and triggers year-aware startup helpers. Hardcoded executable-path run/debug configurations may be useful as temporary diagnostics, but they are not the preferred automation contract because they can bypass or obscure the build/deploy path and produce stale RRD sessions.
+A Rider `Build` before-launch step is part of the valid launch contract for RRD work because it runs the MSBuild/`Pe.Revit.Sdk` path that builds, publishes, deploys the add-in, and triggers year-aware startup helpers. Hardcoded executable-path run/debug configurations may be useful as temporary diagnostics, but they are not the preferred automation contract because they can bypass or obscure the build/deploy path and produce stale RRD sessions.
 
-Therefore automation that restarts RRD should prefer:
+The `Pe.Revit.Sdk` `pe-revit live` surface now owns this build → deploy → start/restart orchestration against the canonical config. Prefer it over hand-driving Rider:
 
 ```text
-select Debug.R## solution configuration
-verify Rider reports Debug.R## as the selected solution configuration
-select canonical Pe.App run/debug configuration
-invoke Rider's Debug action
-prove bridge/session/document behavior after launch
+pe-revit live sync --start --hot-reload
+pe-revit live restart
 ```
 
-Invoking Rider's real `Debug` action matters: it produces the same visible launch/build/debug behavior as a manual Rider workflow. Programmatic execution shortcuts can report success without visibly launching Revit or the debugger.
+`live sync` builds/deploys, applies Rider Hot Reload when safe, and can start RRD when it is missing; `live restart` forces a fresh session. Agents reach this through the Peco `live_rrd_sync` tool rather than calling the SDK CLI directly, then prove bridge/session/document behavior after launch. The manual path — select `Debug.R##`, select the canonical `Pe.App` run/debug configuration, invoke Rider's real `Debug` action — remains the underlying human model and the fallback if the SDK live surface cannot converge; programmatic Rider shortcuts can report success without visibly launching Revit or the debugger.
 
 Year-specific run/debug entries should be fallback or diagnostic aids unless a future Rider constraint proves the canonical path impossible.
 
 ### RiderBridge package compatibility
 
-`Pe.RiderBridge` packages are capped by JetBrains IDE build metadata in both `tools/Pe.RiderBridge/build.gradle.kts` and `tools/Pe.RiderBridge/src/main/resources/META-INF/plugin.xml`. After a Rider major-build update, such as `RD-261`, bump the `untilBuild` / `until-build` cap and repackage through `tools/Pe.RiderBridge/package.ps1`. The install folder name can lag behind an in-place Rider update; use `product-info.json` for the actual Rider build number.
+`Pe.RiderBridge` is SDK-owned. Install or refresh it through `pe-revit live install-rider-plugin`; do not keep a Pe.Tools-local plugin source or package lane.
 
 ## Source compile decision
 
@@ -114,11 +111,11 @@ This proves compile correctness only. It does not refresh RRD, package-local Rid
 
 ### FreshRevitProcess is the preferred autonomous proof lane
 
-Use FreshRevitProcess when the current UI session is not itself under test. The repo helper plans a safe target year/session and uses the Revit test harness to launch/control Revit rather than reusing the current RRD process.
+Use FreshRevitProcess when the current UI session is not itself under test. SDK `pe-revit test fresh` plans a safe target year/session and uses the Revit test harness to launch/control Revit rather than reusing the current RRD process.
 
 ```powershell
-pe-dev test --filter "Name~Reports_runtime_assembly_load_paths" --timeout-seconds 900
-pe-dev test --plan --json --filter "Name~Reports_runtime_assembly_load_paths"
+dotnet tool run pe-revit -- test fresh --filter "Name~Reports_runtime_assembly_load_paths" --timeout-seconds 900 --json
+dotnet tool run pe-revit -- test fresh --plan --json --filter "Name~Reports_runtime_assembly_load_paths"
 ```
 
 `--plan`/`--dry-run` resolves the lane without launching Revit, building, quarantining add-ins, running tests, or cleaning sessions. Real runs should include a bounded timeout because Revit launch and test-adapter hangs are otherwise easy to mistake for agent failure.
@@ -135,11 +132,11 @@ Do not treat attached proof as “run a build, then trust it.” The attached lo
 4. Did the relevant runtime refresh/restart path actually happen?
 5. Did a behavior probe, script, host operation, attached test, log delta, or Pea black-box interaction prove the intended behavior?
 
-A Rider/IDE build may be part of preparing package-local outputs, but it is not a universal instruction and may be blocked or inappropriate while a debug session is running. Plain terminal `dotnet build` remains the compile default. When runtime freshness matters, coordinate through the Peco attached-runtime abstraction and prove behavior at the end.
+A Rider/IDE build may be part of preparing package-local outputs, but it is not a universal instruction and may be blocked or inappropriate while a debug session is running. Plain terminal `dotnet build` remains the compile default. When runtime freshness matters, coordinate through SDK `pe-revit live/test attached` and use Peco only for Pea status/log hooks or product probes.
 
 Attached probes can include host operations, script execution against the running document, attached Revit tests, or black-box Pea review. Script execution is a first-class proof path because it can reference Pe assemblies and exercise Host/Revit behavior in the live session. Pea black-box review is also a first-class product harness because it tests the operator-facing product rather than the repo agent’s assumptions.
 
-Do not document or depend on removed public `pe-dev` command groups (`doctor`, `status`, `sync`, `env`, `revit`, or `verify`) for attached RRD work. Attached live-loop behavior belongs to Peco-only verification wrappers and skills, not to a broad public CLI surface.
+Do not document or depend on removed public `pe-dev` command groups (`doctor`, `status`, `sync`, `env`, `revit`, or `verify`) for attached RRD work. SDK `pe-revit live` owns mutation/freshness mechanics; Peco wrappers add Pea status/log hooks and product-facing ergonomics.
 
 ## Packaging and release decisions
 
@@ -247,7 +244,7 @@ This asymmetry is deliberate: Host needs a dev-only root to avoid installed-runt
 
 - `pea` starts the source-linked Pea Revit/operator workbench TUI; `pea host` and `pea script` expose product command subgroups.
 - `peco` starts the MastraCode-based repo coding agent; `peco live`, `peco script`, and `peco talk-to-pea` expose repo/dev command subgroups.
-- `pe-dev` is the narrow C# source/dev CLI for PATH bootstrap, source linking, web dev supervision, codegen, FreshRevitProcess tests, and automation commands.
+- `pe-dev` is the narrow C# source/dev CLI for PATH bootstrap, source linking, web dev supervision, codegen, and automation commands.
 
 ### Source-linked web dev
 
@@ -289,11 +286,10 @@ Generated contracts are projections, not hand-maintained source. C# bridge opera
 ```powershell
 pe-dev codegen sync --target host-contracts  # @pe/host-contracts contracts + Effect schemas/RPCs
 pe-dev codegen sync --target product
-pe-dev codegen sync --target build
 pe-dev codegen sync --target all             # every target above
 ```
 
-The valid `--target` values are `all`, `build`, `product`, and `host-contracts` (verified: any other value exits non-zero with `Unknown codegen target`). There is no `host-types`, `host-client`, or `host-generated` target. Codegen always rebuilds the contract assemblies first — there is no `--no-build` escape hatch (it only risked generating from stale assemblies).
+The valid `--target` values are `all`, `product`, and `host-contracts` (verified: any other value exits non-zero with `Unknown codegen target`). There is no `build`, `host-types`, `host-client`, or `host-generated` target. Codegen always rebuilds the contract assemblies first — there is no `--no-build` escape hatch (it only risked generating from stale assemblies).
 
 `sync` updates generated projections and formats/checks `@pe/host-contracts`. Host DTO TypeScript is generated through `pe-dev` into Effect Schema code; do not run `dotnet-typegen` or maintain `tgconfig.json` by hand.
 
@@ -314,14 +310,6 @@ Session selection is caller scope, not operation payload. `HostSessionScope.brid
 
 When a C# host contract changes, regenerate with `pe-dev codegen sync --target host-contracts` or `--target all`.
 
-The build tool also exposes:
-
-```powershell
-dotnet run --project .\build\Build.csproj -c Release -- sync-contracts
-```
-
-Use it after changing human-authored build/product contract inputs such as `build/authored/*` or `Pe.Shared.Product` layout identity.
-
 ## Design Automation decision
 
 Design Automation flows are normally `NoRrdContact`. Keep first-pass audit manifests intentionally small: one or two models before broadening.
@@ -341,24 +329,21 @@ The automation shell is `Pe.Dev.RevitAutomation.Worker`, not desktop `Pe.App`. D
 - Default Revit year: `2025`.
 - Default no-config solution configuration: `Debug.R25`.
 - Solution configurations span `Debug`/`Release` for R23-R26, plus matching `.Tests` variants.
-- `PeStableCliConfiguration` defaults to `Debug.R25`.
 - Revit 2023/2024 packages target `net48`.
 - Revit 2025/2026 and out-of-proc tooling target `net8.0-windows`.
 - `Pe.Shared.*` packages are `netstandard2.0` shared-neutral libraries.
-- Build and installer projects are explicit build-infrastructure tools.
+- Build packaging projects are explicit build-infrastructure tools.
 - `Pe.Revit.Tests` is the only package that supports both `AttachedRrd` and `FreshRevitProcess` verification.
 
 ## Build/package authorities
 
 - `Pe.Tools.slnx` is IDE organization and parity input, not the build-matrix source of truth.
-- `build/authored/BuildMatrix.props` owns Revit-year and configuration-matrix vocabulary.
-- `build/authored/BuildTaxonomy.props` owns package taxonomy and Revit-awareness metadata.
-- `build/authored/PackagePolicy.props` owns repo-wide conditional package-reference policy.
-- `build/generated/*.props` and `*.targets` are generated MSBuild projections.
-- `Directory.Build.props` / `Directory.Build.targets` enforce isolated defaults, target-framework projection, execution policies, and guardrails.
+- `Directory.Build.props` owns the repo Revit-year list, default year, short solution configurations, isolated defaults, and product knobs.
+- `Pe.Revit.Sdk` owns project taxonomy, target-framework projection, Revit package policy, deploy, and guardrails.
+- `Pe.Revit.Versioning` owns non-MSBuild Revit suffixes and Design Automation support facts.
 - `build/BuildArtifactLayout.cs` owns `.artifacts/...` package topology.
-- `build/ProductLayoutAuthority.cs` composes repo/build/install layout and writes installer payload manifests.
-- `install/Installer.cs` consumes the generated installer payload manifest; do not run `install/Installer.csproj` directly unless you already have that manifest.
+- `build/ProductLayoutAuthority.cs` composes repo/build/install layout and SDK installer payload paths.
+- `pe-revit msi` owns generated MSI authoring from the SDK payload manifest emitted by `build/Modules/CreateInstallerModule.cs`.
 
 ## Compact command index
 
@@ -366,9 +351,9 @@ The automation shell is `Pe.Dev.RevitAutomation.Worker`, not desktop `Pe.App`. D
 | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | Safe source compile               | `dotnet build .\source\<Package>\<Package>.csproj -c Debug.R25`                                                                  |
 | Recover poisoned dotnet sandbox   | `.\tools\dotnet-sandbox-safe.ps1 <dotnet args>`                                                                                  |
-| Fresh Revit proof                 | `pe-dev test --filter "Name~..." --timeout-seconds 900`                                                                          |
-| Fresh proof planning              | `pe-dev test --plan --json --filter "Name~..."`                                                                                  |
-| Attached RRD proof                | Use Peco attached-runtime verification wrappers/skills, then prove with an attached operation/script/test/log/Pea product probe. |
+| Fresh Revit proof                 | `dotnet tool run pe-revit -- test fresh --filter "Name~..." --timeout-seconds 900 --json`                                        |
+| Fresh proof planning              | `dotnet tool run pe-revit -- test fresh --plan --json --filter "Name~..."`                                                       |
+| Attached RRD proof                | Use SDK `pe-revit live/test attached`; use Peco wrappers when Pea status/log hooks or product probes should accompany the proof. |
 | Product host/log/script check     | `pea host ...`, `pea script ...`                                                                                                 |
 | Package artifacts/MSI             | `dotnet run --project .\build\Build.csproj -c Release -- pack`                                                                   |
 | Package one year                  | `dotnet run --project .\build\Build.csproj -c Release -- pack --configuration Release.R25`                                       |

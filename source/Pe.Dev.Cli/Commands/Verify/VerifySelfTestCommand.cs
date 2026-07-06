@@ -20,20 +20,16 @@ internal static class VerifySelfTestCommand {
         }
 
         var checks = new[] {
-            CheckRoute("test", ["test", "--filter", "Name~Reports_runtime_assembly_load_paths"], DevCommandKind.Test, ["--filter", "Name~Reports_runtime_assembly_load_paths"]),
-            CheckRoute("test json", ["test", "--json", "--filter", "Name~Reports_runtime_assembly_load_paths"], DevCommandKind.Test, ["--json", "--filter", "Name~Reports_runtime_assembly_load_paths"]),
             CheckRoute("bootstrap-path", ["bootstrap-path"], DevCommandKind.BootstrapPath, []),
-            CheckRoute("test plan json", ["test", "--plan", "--json", "--timeout-seconds", "900", "--filter", "Name~Reports_runtime_assembly_load_paths"], DevCommandKind.Test, ["--plan", "--json", "--timeout-seconds", "900", "--filter", "Name~Reports_runtime_assembly_load_paths"]),
             CheckRoute("self-test", ["self-test"], DevCommandKind.SelfTest, []),
-            CheckFreshOptions("test accepts plan json timeout", ["--plan", "--json", "--timeout-seconds", "900"], shouldPass: true),
-            CheckFreshOptions("test rejects zero timeout", ["--json", "--timeout-seconds", "0"], shouldPass: false),
+            CheckRemovedRoute("test removed", ["test"]),
             CheckRemovedRoute("doctor removed", ["doctor"]),
             CheckRemovedRoute("status removed", ["status"]),
             CheckRemovedRoute("sync removed", ["sync"]),
-            CheckUsageText("usage advertises minimal surface", ["pe-dev bootstrap-path", "pe-dev test", "pe-dev self-test", "pe-dev automation", "pe-dev codegen"]),
+            CheckUsageText("usage advertises minimal surface", ["pe-dev bootstrap-path", "pe-dev self-test", "pe-dev automation", "pe-dev codegen"]),
+            CheckUsageTextAbsent("usage does not advertise pe-dev test", ["pe-dev test"]),
             CheckUsageTextAbsent("usage does not advertise removed codegen check", ["pe-dev codegen <check|sync>"]),
-            CheckUsageText("usage advertises fresh safety options", ["--plan", "--timeout-seconds", "--json"]),
-            CheckGuidanceText("fresh guidance distinguishes proof and attached lanes", writer => AgentGuidanceWriter.WriteFreshOwnedLane(writer, 2025), ["FreshOwnedRevit", "proof-grade", "AttachedRrd scripting"])
+            CheckUsageText("usage points Revit tests at SDK", ["pe-revit test fresh|attached"])
         };
         var report = new VerifySelfTestReport(
             SchemaVersion: 1,
@@ -77,23 +73,6 @@ internal static class VerifySelfTestCommand {
             : new VerifySelfTestCheck(name, false, "expected removed-route parse failure");
     }
 
-    private static VerifySelfTestCheck CheckFreshOptions(string name, IReadOnlyList<string> args, bool shouldPass) {
-        try {
-            var options = RevitTestCliOptions.Parse(args);
-            if (shouldPass && args.Any(arg => string.Equals(arg, "--plan", StringComparison.OrdinalIgnoreCase)) && !options.PlanOnly)
-                return new VerifySelfTestCheck(name, false, "expected plan-only mode");
-            if (shouldPass && args.Any(arg => string.Equals(arg, "--timeout-seconds", StringComparison.OrdinalIgnoreCase)) && options.TimeoutSeconds is not 900)
-                return new VerifySelfTestCheck(name, false, "expected timeoutSeconds=900");
-            return shouldPass
-                ? new VerifySelfTestCheck(name, true, null)
-                : new VerifySelfTestCheck(name, false, "expected parse failure, but parse passed");
-        } catch (Exception ex) {
-            return shouldPass
-                ? new VerifySelfTestCheck(name, false, ex.Message)
-                : new VerifySelfTestCheck(name, true, null);
-        }
-    }
-
     private static VerifySelfTestCheck CheckUsageText(string name, IReadOnlyList<string> expectedSnippets) =>
         CheckTextContains(name, DevCliProgram.UsageText, expectedSnippets);
 
@@ -104,16 +83,6 @@ internal static class VerifySelfTestCommand {
         return present.Length == 0
             ? new VerifySelfTestCheck(name, true, null)
             : new VerifySelfTestCheck(name, false, $"found forbidden text: {string.Join(", ", present)}");
-    }
-
-    private static VerifySelfTestCheck CheckGuidanceText(
-        string name,
-        Action<TextWriter> writeGuidance,
-        IReadOnlyList<string> expectedSnippets
-    ) {
-        using var writer = new StringWriter();
-        writeGuidance(writer);
-        return CheckTextContains(name, writer.ToString(), expectedSnippets);
     }
 
     private static VerifySelfTestCheck CheckTextContains(

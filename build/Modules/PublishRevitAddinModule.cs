@@ -10,20 +10,19 @@ namespace Build.Modules;
 
 [DependsOn<ResolveVersioningModule>]
 [DependsOn<ResolveBuildMatrixModule>]
-[DependsOn<ResolveBuildTaxonomyModule>]
+[DependsOn<ResolveBuildLayoutModule>]
 [DependsOn<ValidateSolutionParityModule>]
 [DependsOn<CleanProjectModule>(Optional = true)]
 public sealed class PublishRevitAddinModule(IOptions<BuildOptions> buildOptions) : Module {
     protected override async Task ExecuteModuleAsync(IModuleContext context, CancellationToken cancellationToken) {
         var versioningResult = await context.GetModule<ResolveVersioningModule>();
         var matrixResult = await context.GetModule<ResolveBuildMatrixModule>();
-        var taxonomyResult = await context.GetModule<ResolveBuildTaxonomyModule>();
+        var layoutResult = await context.GetModule<ResolveBuildLayoutModule>();
         var versioning = versioningResult.ValueOrDefault!;
         var matrix = matrixResult.ValueOrDefault!;
-        var taxonomy = taxonomyResult.ValueOrDefault!;
+        var layout = layoutResult.ValueOrDefault!;
         var rootDirectory = context.Git().RootDirectory;
-        var appProjectPath = rootDirectory.GetFolder("source").GetFolder("Pe.App").GetFile("Pe.App.csproj").Path;
-        taxonomy.RequireProductClass("Pe.App", ProductClass.DesktopAddin);
+        var appProjectPath = BuildProjectDiscovery.FindSingleProjectByKind(rootDirectory.Path, "RevitAddin");
         var configurations = matrix.ResolveConfigurations(BuildConfigurationGroup.Pack, buildOptions.Value.Configuration);
 
         foreach (var configuration in configurations)
@@ -34,6 +33,7 @@ public sealed class PublishRevitAddinModule(IOptions<BuildOptions> buildOptions)
                     versioning,
                     appProjectPath,
                     configuration,
+                    layout.GetRevitPublishDirectory(configuration),
                     cancellationToken
                 );
             });
@@ -44,6 +44,7 @@ public sealed class PublishRevitAddinModule(IOptions<BuildOptions> buildOptions)
         ResolveVersioningResult versioning,
         string projectPath,
         string configuration,
+        string publishDirectory,
         CancellationToken cancellationToken
     ) => BuildDotNetCli.BuildQuietAsync(
         context,
@@ -54,6 +55,7 @@ public sealed class PublishRevitAddinModule(IOptions<BuildOptions> buildOptions)
             ("DeployAddin", "false"),
             ("PublishAddin", "true"),
             ("LaunchRevit", "false"),
+            ("AddinPublishDir", publishDirectory),
             ("VersionPrefix", versioning.VersionPrefix),
             ("VersionSuffix", versioning.VersionSuffix!)
         ],

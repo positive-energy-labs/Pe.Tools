@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Pe.Shared.Product;
 
 namespace Build;
@@ -8,11 +7,6 @@ public sealed record ProductLayoutAuthority(
     ProductBuildLayoutProjection Product,
     BuildArtifactLayout Artifacts
 ) {
-    private static readonly JsonSerializerOptions JsonOptions = new() {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = true
-    };
-
     public static ProductLayoutAuthority ForRepository(string repositoryRoot) {
         var fullRepositoryRoot = Path.GetFullPath(repositoryRoot);
         return new ProductLayoutAuthority(
@@ -55,28 +49,21 @@ public sealed record ProductLayoutAuthority(
     public string GetAutomationStagingDirectory(string configuration, string bundleName) =>
         Path.Combine(this.Artifacts.AutomationStagingRoot, configuration, $"{bundleName}.bundle");
 
-    public string GetInstallerPayloadManifestPath(string version) =>
-        Path.Combine(this.Artifacts.InstallerPackagesRoot, InstallerPayloadManifest.CreateFileName(version));
+    public string GetSdkInstallerRevitPayloadRoot() =>
+        Path.Combine(this.Artifacts.PublishRoot, "installer", "revit");
 
-    public async Task<string> WriteInstallerPayloadManifestAsync(
-        string version,
-        string runtimePublishDirectory,
-        PeaPayloadArtifacts peaPayload,
-        IReadOnlyCollection<string> revitPublishDirectories,
-        CancellationToken cancellationToken
-    ) {
-        Directory.CreateDirectory(this.Artifacts.InstallerPackagesRoot);
-        var manifest = InstallerPayloadManifest.Create(
-            version,
+    public string GetSdkInstallerPayloadManifestPath(string version) =>
+        Path.Combine(
             this.Artifacts.InstallerPackagesRoot,
-            runtimePublishDirectory,
-            peaPayload.BootstrapDirectory.Path,
-            peaPayload.ArchiveFile.Path,
-            peaPayload.ManifestFile.Path,
-            revitPublishDirectories
+            $"{ProductIdentity.ProductName}.sdk-payloads.{SanitizeFileNameSegment(version)}.json"
         );
-        var manifestPath = this.GetInstallerPayloadManifestPath(version);
-        await File.WriteAllTextAsync(manifestPath, JsonSerializer.Serialize(manifest, JsonOptions), cancellationToken);
-        return manifestPath;
+
+    public string GetSdkInstallerOutputRoot() =>
+        Path.Combine(this.Artifacts.ArtifactsRoot, "out", "installers");
+
+    private static string SanitizeFileNameSegment(string value) {
+        var invalidCharacters = Path.GetInvalidFileNameChars();
+        var characters = value.Select(character => invalidCharacters.Contains(character) ? '-' : character).ToArray();
+        return new string(characters);
     }
 }

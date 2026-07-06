@@ -1,46 +1,38 @@
 using System.Xml.Linq;
+using Pe.Shared.RevitVersions;
 
 namespace Build;
 
 internal static class BuildConfigurationFile {
-    private const string FilePath = BuildAuthoredPaths.MatrixFilePath;
-
-    public static BuildMatrixAuthoring LoadAuthoring(string repositoryRoot) {
-        var document = LoadDocument(repositoryRoot);
-        var revitYears = document.Descendants()
-            .Where(element => string.Equals(element.Name.LocalName, "PeRevitYear", StringComparison.Ordinal))
-            .Select(ParseRevitYear)
-            .OrderBy(year => year.Year, StringComparer.Ordinal)
-            .ToArray();
-
-        return new BuildMatrixAuthoring(
-            RequireValue(document, "PeDefaultRevitYear"),
-            RequireValue(document, "PeDefaultBuildKind"),
-            RequireValue(document, "PeSharedNeutralTargetFramework"),
-            RequireValue(document, "PeOutOfProcTargetFramework"),
-            revitYears
-        );
-    }
+    private const string FilePath = "Directory.Build.props";
 
     public static BuildMatrix LoadMatrix(string repositoryRoot) {
-        var authored = LoadAuthoring(repositoryRoot);
-        var defaultYear = authored.RequireDefaultRevitYear();
-        var revitDebugConfigurations = authored.RevitYears
-            .Select(year => $"Debug.{year.ConfigurationSuffix}")
+        var document = LoadDocument(repositoryRoot);
+        var defaultYear = ParseYear(RequireValue(document, "PeDefaultRevitYear"));
+        var specs = RequireValue(document, "PeRevitYears")
+            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(ParseYear)
+            .Select(RevitVersionCatalog.RequireDesktopYear)
+            .OrderBy(spec => spec.Year)
             .ToArray();
-        var revitReleaseConfigurations = authored.RevitYears
-            .Select(year => $"Release.{year.ConfigurationSuffix}")
+        var defaultSpec = specs.FirstOrDefault(spec => spec.Year == defaultYear)
+            ?? throw new InvalidOperationException($"Default Revit year '{defaultYear}' is not listed in {FilePath}.");
+        var revitDebugConfigurations = specs
+            .Select(spec => FormatConfiguration("Debug", spec))
             .ToArray();
-        var revitTestConfigurations = authored.RevitYears
-            .Select(year => $"Debug.{year.ConfigurationSuffix}.Tests")
-            .Concat(authored.RevitYears.Select(year => $"Release.{year.ConfigurationSuffix}.Tests"))
+        var revitReleaseConfigurations = specs
+            .Select(spec => FormatConfiguration("Release", spec))
+            .ToArray();
+        var revitTestConfigurations = specs
+            .Select(spec => $"{FormatConfiguration("Debug", spec)}.Tests")
+            .Concat(specs.Select(spec => $"{FormatConfiguration("Release", spec)}.Tests"))
             .ToArray();
 
         return new BuildMatrix(
-            $"{authored.DefaultBuildKind}.{defaultYear.ConfigurationSuffix}",
-            authored.RevitYears.Where(year => year.SupportsCompile).Select(year => $"Release.{year.ConfigurationSuffix}").ToArray(),
-            authored.RevitYears.Where(year => year.SupportsPack).Select(year => $"Release.{year.ConfigurationSuffix}").ToArray(),
-            authored.RevitYears.Where(year => year.SupportsAutomationPack).Select(year => $"Release.{year.ConfigurationSuffix}").ToArray(),
+            FormatConfiguration("Debug", defaultSpec),
+            revitReleaseConfigurations,
+            revitReleaseConfigurations,
+            specs.Where(spec => spec.SupportsDesignAutomation).Select(spec => FormatConfiguration("Release", spec)).ToArray(),
             [.. revitDebugConfigurations, .. revitReleaseConfigurations, .. revitTestConfigurations]
         );
     }
@@ -49,17 +41,6 @@ internal static class BuildConfigurationFile {
         var path = Path.Combine(repositoryRoot, FilePath);
         return XDocument.Load(path);
     }
-
-    private static BuildRevitYearIdentity ParseRevitYear(XElement element) =>
-        new(
-            RequireAttribute(element, "Include"),
-            RequireAttribute(element, "Suffix"),
-            RequireAttribute(element, "RuntimeTargetFramework"),
-            RequireAttribute(element, "AutomationTargetFramework"),
-            ParseBool(RequireAttribute(element, "SupportsCompile"), "PeRevitYear", "SupportsCompile"),
-            ParseBool(RequireAttribute(element, "SupportsPack"), "PeRevitYear", "SupportsPack"),
-            ParseBool(RequireAttribute(element, "SupportsAutomationPack"), "PeRevitYear", "SupportsAutomationPack")
-        );
 
     private static string RequireValue(XDocument document, string propertyName) {
         var value = document.Descendants()
@@ -72,14 +53,11 @@ internal static class BuildConfigurationFile {
             : value;
     }
 
-    private static string RequireAttribute(XElement element, string attributeName) =>
-        element.Attribute(attributeName)?.Value
-        ?? throw new InvalidOperationException(
-            $"Element '{element.Name.LocalName}' is missing required attribute '{attributeName}' in {FilePath}.");
+    private static string FormatConfiguration(string buildKind, RevitVersionSpec spec) =>
+        $"{buildKind}.{spec.ConfigurationSuffix}";
 
-    private static bool ParseBool(string value, string elementName, string attributeName) =>
-        bool.TryParse(value, out var result)
+    private static int ParseYear(string value) =>
+        int.TryParse(value, out var result)
             ? result
-            : throw new InvalidOperationException(
-                $"Element '{elementName}' has unsupported {attributeName} value '{value}' in {FilePath}.");
+            : throw new InvalidOperationException($"Unsupported Revit year '{value}' in {FilePath}.");
 }

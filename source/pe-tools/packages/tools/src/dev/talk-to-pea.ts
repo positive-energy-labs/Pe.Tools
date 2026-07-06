@@ -2,8 +2,8 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runWithAttachedRrdSync } from "./attached-rrd-sync.js";
-import { type ExecutionPolicy } from "./pe-dev-workflow/index.js";
+import { type ExecutionPolicy } from "./pe-revit-workflow/index.js";
+import { runSdkLiveSync, sdkLiveWarning } from "./sdk-live.js";
 import type {
   TalkToPeaFrame,
   TalkToPeaWorkerRequest,
@@ -26,30 +26,21 @@ interface TalkToPeaRequest extends TalkToPeaWorkerRequest {}
 
 export async function talkToPeaHarness(request: TalkToPeaRequest) {
   const startedAt = Date.now();
+  const syncResult = await runSdkLiveSync({ timeoutSeconds: request.timeoutSeconds });
+  const workerResponse = await runTalkToPeaWorkerProcess(request);
 
-  return await runWithAttachedRrdSync(
-    {
-      workflow: "talk_to_pea",
-      stalePolicy: "warn",
-      timeoutSeconds: request.timeoutSeconds,
+  return {
+    ...workerResponse,
+    workflow: "talk_to_pea",
+    policy: "DiagnosticsOnly" satisfies ExecutionPolicy,
+    elapsedMs: Date.now() - startedAt,
+    liveSync: {
+      ok: syncResult.ok,
+      warning: sdkLiveWarning(syncResult),
+      sync: syncResult,
     },
-    async (syncResult, syncWarning) => {
-      const workerResponse = await runTalkToPeaWorkerProcess(request);
-
-      return {
-        ...workerResponse,
-        workflow: "talk_to_pea",
-        policy: "DiagnosticsOnly" satisfies ExecutionPolicy,
-        elapsedMs: Date.now() - startedAt,
-        hotReload: {
-          ok: syncResult.ok,
-          warning: syncWarning,
-          sync: syncResult,
-        },
-        proof: proofForTalkToPea(request.frame),
-      };
-    },
-  ).then((synced) => synced.result);
+    proof: proofForTalkToPea(request.frame),
+  };
 }
 
 function resolveTalkToPeaWorkerPath(): string {
@@ -68,7 +59,10 @@ async function runTalkToPeaWorkerProcess(
   request: TalkToPeaRequest,
 ): Promise<TalkToPeaWorkerResponse> {
   const workerPath = resolveTalkToPeaWorkerPath();
-  const timeoutMs = Math.max(1, request.timeoutSeconds) * 1000;
+  // The worker arms its own graceful timer at timeoutSeconds (abort the run, report a
+  // structured ok:false result with transcript/toolTrace). Give it 30s of grace before the
+  // hard kill so the graceful path wins and the harness returns evidence instead of nothing.
+  const timeoutMs = (Math.max(1, request.timeoutSeconds) + 30) * 1000;
   const child = spawn(process.execPath, resolveWorkerProcessArgs(workerPath), {
     cwd: process.cwd(),
     env: process.env,
@@ -96,7 +90,13 @@ async function runTalkToPeaWorkerProcess(
       timedOut = true;
       settled = true;
       child.kill();
-      reject(new Error(`Pea worker did not finish within ${request.timeoutSeconds} seconds.`));
+      const detail = [
+        `Pea worker did not finish within ${request.timeoutSeconds} seconds (killed after +30s grace).`,
+        stderr.trim() ? `worker stderr:\n${stderr.trim().slice(-4000)}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+      reject(new Error(detail));
     }, timeoutMs);
 
     function finishWithResponse(response: TalkToPeaWorkerResponse | { ok: false; error: string }) {
