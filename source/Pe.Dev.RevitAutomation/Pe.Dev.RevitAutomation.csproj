@@ -16,9 +16,9 @@
         <ProjectReference Include="..\Pe.Shared.Product\Pe.Shared.Product.csproj"/>
         <ProjectReference Include="..\Pe.Shared.StorageRuntime\Pe.Shared.StorageRuntime.csproj"/>
         <ProjectReference Include="..\Pe.Shared.RevitAutomation\Pe.Shared.RevitAutomation.csproj"/>
-        <ProjectReference Include="..\Pe.Shared.RevitVersions\Pe.Shared.RevitVersions.csproj"/>
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="Autodesk.PackageBuilder" Version="2.0.2"/>
+        <PackageReference Include="Pe.Revit.Versioning" Version="0.1.0-dev.9"/>
     </ItemGroup>
 </Project>

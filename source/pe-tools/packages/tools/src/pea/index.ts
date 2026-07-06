@@ -18,6 +18,7 @@ import {
   scriptPodExportInputSchema,
   scriptPodImportInputSchema,
 } from "../shared/scripting.ts";
+import { readImage } from "../shared/read-image.ts";
 import { requestAccess } from "../shared/request-access.ts";
 import { resolveHostBaseUrl, resolveWorkspaceKey } from "../shared/host-config.ts";
 import { peaProductToolCatalog } from "../tool-metadata.ts";
@@ -209,7 +210,15 @@ export const scriptExecute = createTool({
   description:
     "Execute a C# Revit script through the host scripting contract. For InlineSnippet, prefer Execute-body statements like WriteLine(...); a full PeScriptContainer class with public override void Execute() is also allowed. Use workspace .cs files for durable work. Loose workspaces compile only the requested file; pod.json workspaces compile all src and require a declared entrypoint.",
   inputSchema: scriptExecuteInputSchema,
-  execute: async (input) => createCurrentScriptingTools(input.bridgeSessionId).execute(input),
+  execute: async (input) => {
+    try {
+      return await createCurrentScriptingTools(input.bridgeSessionId).execute(input);
+    } catch (error) {
+      // Mastra derives the tool_result isError flag from the returned object; a bare throw
+      // surfaces to the agent as a "successful" result carrying an error string.
+      return { isError: true, content: error instanceof Error ? error.message : String(error) };
+    }
+  },
 });
 
 export const scriptBootstrap = createTool({
@@ -246,6 +255,7 @@ export const peaProductTools = {
   [hostOperationSearch.id]: hostOperationSearch,
   [hostOperationCall.id]: hostOperationCall,
   [requestAccess.id]: requestAccess,
+  [readImage.id]: readImage,
   [scriptBootstrap.id]: scriptBootstrap,
   [scriptExecute.id]: scriptExecute,
   [scriptPodImport.id]: scriptPodImport,

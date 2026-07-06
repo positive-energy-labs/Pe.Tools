@@ -8,6 +8,7 @@ using Pe.Revit.Scripting.References;
 using Pe.Shared.HostContracts;
 using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.Product;
+using Pe.Shared.RevitVersions;
 using Pe.Shared.StorageRuntime;
 using Serilog;
 using System.Diagnostics;
@@ -139,7 +140,7 @@ public class CmdPeTools : IExternalCommand {
 
     private static ScriptWorkspaceBootstrapData BootstrapWorkspace(UIApplication uiApplication) {
         var revitVersion = uiApplication.Application.VersionNumber ?? "unknown";
-        var targetFramework = ResolveTargetFramework(revitVersion);
+        var targetFramework = RevitVersionCatalog.ResolveTargetFramework(revitVersion);
         var runtimeAssemblyPath = typeof(PeScriptContainer).Assembly.Location;
         var bootstrapService = new ScriptWorkspaceBootstrapService(new ScriptProjectGenerator(new CsProjReader()));
 
@@ -161,13 +162,6 @@ public class CmdPeTools : IExternalCommand {
 
         throw new InvalidOperationException("Bootstrap did not return a valid workspace path.");
     }
-
-    private static string ResolveTargetFramework(string revitVersion) =>
-        int.TryParse(revitVersion, out var numericVersion) && numericVersion < 2025
-            ? "net48"
-            : "net8.0-windows";
-
-
 
     private static RuntimeActionResult OpenPeToolsBrowser() {
         Log.Information("Pe Tools command selected action: Open Pe Tools Browser");

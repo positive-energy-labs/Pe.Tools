@@ -314,8 +314,8 @@ public static class RevitBridgeOps {
             "revit.apply.document.open",
             "Open Revit Document",
             HostOperationAgentMetadata.Create(
-                "Open and activate a local Revit document in the connected Revit session.",
-                new[] { "document", "open", "activate", "cross-document" },
+                "Open and activate a local or Autodesk cloud Revit document in the connected Revit session.",
+                new[] { "document", "open", "activate", "cross-document", "cloud" },
                 intent: HostOperationIntent.Mutate,
                 requiresActiveDocument: false,
                 costTier: HostOperationCostTier.Mutation,
@@ -326,11 +326,18 @@ public static class RevitBridgeOps {
                         """
                         { "path": "C:/Models/Project.rvt" }
                         """
+                    ),
+                    new HostOperationRequestExample(
+                        "open cloud model",
+                        "Open an Autodesk Docs / BIM 360 model by project + model GUID. Region defaults to US.",
+                        """
+                        { "cloudProjectGuid": "00000000-0000-0000-0000-000000000000", "cloudModelGuid": "00000000-0000-0000-0000-000000000000", "cloudRegion": "US" }
+                        """
                     )
                 ],
                 callGuidance: [
-                    "Use a local RVT/RFA/RTE path to bootstrap or switch active document context.",
-                    "Do not use for cloud-only cld:// targets or while Revit is blocked by a modal dialog."
+                    "Pass a local RVT/RFA/RTE path, or cloudProjectGuid + cloudModelGuid (+ cloudRegion when not US); cloud opens need Autodesk sign-in and access.",
+                    "Do not call while Revit is blocked by a modal dialog."
                 ]
             ),
             static (request, context, ct) => context.RevitData.OpenRevitDocumentAsync(request)

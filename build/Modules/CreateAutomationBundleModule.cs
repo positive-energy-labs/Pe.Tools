@@ -14,7 +14,6 @@ namespace Build.Modules;
 
 [DependsOn<ResolveVersioningModule>]
 [DependsOn<ResolveBuildMatrixModule>]
-[DependsOn<ResolveBuildTaxonomyModule>]
 [DependsOn<ResolveBuildLayoutModule>]
 [DependsOn<CleanProjectModule>(Optional = true)]
 public sealed partial class CreateAutomationBundleModule(IOptions<BuildOptions> buildOptions) : Module {
@@ -26,13 +25,10 @@ public sealed partial class CreateAutomationBundleModule(IOptions<BuildOptions> 
     protected override async Task ExecuteModuleAsync(IModuleContext context, CancellationToken cancellationToken) {
         var versioningResult = await context.GetModule<ResolveVersioningModule>();
         var matrixResult = await context.GetModule<ResolveBuildMatrixModule>();
-        var taxonomyResult = await context.GetModule<ResolveBuildTaxonomyModule>();
         var layoutResult = await context.GetModule<ResolveBuildLayoutModule>();
         var versioning = versioningResult.ValueOrDefault!;
         var matrix = matrixResult.ValueOrDefault!;
-        var taxonomy = taxonomyResult.ValueOrDefault!;
         var layout = layoutResult.ValueOrDefault!;
-        taxonomy.RequireProductClass(WorkerAssemblyName, ProductClass.AutomationRuntime);
         var configurations = matrix.ResolveConfigurations(BuildConfigurationGroup.AutomationPack, buildOptions.Value.Configuration);
 
         if (configurations.Length == 0) {

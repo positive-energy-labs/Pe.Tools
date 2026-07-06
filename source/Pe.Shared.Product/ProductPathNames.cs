@@ -18,5 +18,4 @@ public static class ProductPathNames {
     public const string PodManifestFileName = "pod.json";
     public const string HostLogFileName = "host.log.txt";
     public const string RevitAppLogFileName = "revit.log.txt";
-    public const string RevitApprovalWatcherLogFileName = "revit-approval-watcher.log.txt";
 }

@@ -80,6 +80,21 @@ export function requestAccessRequiresApproval(
   return !isPathAllowed(access.absolutePath, access.projectRoot, access.allowedPaths);
 }
 
+/**
+ * Resolve a requested path against the workspace filesystem in the tool context and report
+ * whether the sandbox (workspace root + granted allowed paths) permits access to it.
+ */
+export function resolveWorkspacePathAccess(
+  requestedPath: string,
+  toolContext: unknown,
+): { absolutePath: string; allowed: boolean } {
+  const access = resolveRequestAccessContext(requestedPath, toolContext);
+  return {
+    absolutePath: access.absolutePath,
+    allowed: isPathAllowed(access.absolutePath, access.projectRoot, access.allowedPaths),
+  };
+}
+
 export function grantWorkspaceAccess(options: {
   controllerCtx?: RequestAccessControllerContext;
   localFilesystem?: LocalFilesystem;

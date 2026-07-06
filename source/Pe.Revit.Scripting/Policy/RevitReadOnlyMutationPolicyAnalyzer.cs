@@ -115,6 +115,8 @@ internal sealed class RevitReadOnlyMutationPolicyAnalyzer {
         "Autodesk.Revit.Creation.FamilyItemFactory"
     };
 
+    private const string GlobalUsingsFileName = "__PeScriptUsings.g.cs";
+
     public IReadOnlyList<ScriptDiagnostic> Analyze(
         ScriptSourceSet sourceSet,
         IReadOnlyList<MetadataReference> metadataReferences,
@@ -128,13 +130,56 @@ internal sealed class RevitReadOnlyMutationPolicyAnalyzer {
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
         );
 
+        // Policy judges the selected entrypoint file plus every pod-declared method/constructor it
+        // transitively invokes — NOT every file compiled into the pod. Pod libraries legitimately
+        // carry mutating helpers for their write-mode entrypoints; a read-only entrypoint that never
+        // reaches them must stay runnable as ReadOnly. Anything this static walk cannot see
+        // (delegates/method groups, property accessors, partials) still hits Revit's
+        // no-transaction guard at runtime, backed by the document mutation monitor.
+        var podTrees = syntaxTrees.Where(tree => tree.FilePath != GlobalUsingsFileName).ToHashSet();
+        var entryTree = podTrees.FirstOrDefault(tree =>
+            string.Equals(tree.FilePath, sourceSet.EntryPointSourceName, StringComparison.Ordinal));
+
+        var pendingScopes = new Queue<(SyntaxNode Scope, SyntaxTree Tree)>();
+        var fullyAnalyzedTrees = new HashSet<SyntaxTree>();
+        if (entryTree is null) {
+            foreach (var tree in podTrees) {
+                _ = fullyAnalyzedTrees.Add(tree);
+                pendingScopes.Enqueue((tree.GetCompilationUnitRoot(), tree));
+            }
+        } else {
+            _ = fullyAnalyzedTrees.Add(entryTree);
+            pendingScopes.Enqueue((entryTree.GetCompilationUnitRoot(), entryTree));
+        }
+
+        var visitedDeclarations = new HashSet<IMethodSymbol>(SymbolEqualityComparer.Default);
+        void EnqueuePodDeclarations(IMethodSymbol symbol) {
+            var definition = (symbol.ReducedFrom ?? symbol).OriginalDefinition;
+            if (!definition.Locations.Any(location => location.IsInSource))
+                return;
+            if (!visitedDeclarations.Add(definition))
+                return;
+
+            foreach (var reference in definition.DeclaringSyntaxReferences) {
+                if (!podTrees.Contains(reference.SyntaxTree) || fullyAnalyzedTrees.Contains(reference.SyntaxTree))
+                    continue;
+
+                pendingScopes.Enqueue((reference.GetSyntax(), reference.SyntaxTree));
+            }
+        }
+
         var diagnostics = new List<ScriptDiagnostic>();
-        foreach (var syntaxTree in syntaxTrees.Where(tree => tree.FilePath != "__PeScriptUsings.g.cs")) {
-            var root = syntaxTree.GetCompilationUnitRoot();
-            var semanticModel = compilation.GetSemanticModel(syntaxTree, ignoreAccessibility: true);
-            diagnostics.AddRange(AnalyzeDynamicUsage(root, syntaxTree.FilePath));
-            diagnostics.AddRange(AnalyzeObjectCreation(root, semanticModel, syntaxTree.FilePath));
-            diagnostics.AddRange(AnalyzeInvocations(root, semanticModel, syntaxTree.FilePath));
+        var semanticModels = new Dictionary<SyntaxTree, SemanticModel>();
+        while (pendingScopes.Count > 0) {
+            var (scope, tree) = pendingScopes.Dequeue();
+            if (!semanticModels.TryGetValue(tree, out var semanticModel)) {
+                semanticModel = compilation.GetSemanticModel(tree, ignoreAccessibility: true);
+                semanticModels[tree] = semanticModel;
+            }
+
+            diagnostics.AddRange(AnalyzeDynamicUsage(scope, tree.FilePath));
+            diagnostics.AddRange(AnalyzeObjectCreation(scope, semanticModel, tree.FilePath, EnqueuePodDeclarations));
+            diagnostics.AddRange(AnalyzeInvocations(scope, semanticModel, tree.FilePath, EnqueuePodDeclarations));
         }
 
         return diagnostics;
@@ -149,7 +194,7 @@ internal sealed class RevitReadOnlyMutationPolicyAnalyzer {
             CSharpSyntaxTree.ParseText(
                 ScriptCompilationService.CreateGlobalUsingsSource(ScriptFileTemplates.DefaultUsings, projectUsings),
                 parseOptions,
-                "__PeScriptUsings.g.cs"
+                GlobalUsingsFileName
             )
         };
 
@@ -159,10 +204,10 @@ internal sealed class RevitReadOnlyMutationPolicyAnalyzer {
     }
 
     private static IEnumerable<ScriptDiagnostic> AnalyzeDynamicUsage(
-        CompilationUnitSyntax root,
+        SyntaxNode scope,
         string sourceName
     ) {
-        foreach (var predefinedType in root.DescendantNodes().OfType<PredefinedTypeSyntax>()) {
+        foreach (var predefinedType in scope.DescendantNodesAndSelf().OfType<PredefinedTypeSyntax>()) {
             if (predefinedType.Keyword.ValueText.Equals("dynamic", StringComparison.Ordinal)) {
                 yield return CreateRejectedDiagnostic(
                     "dynamic dispatch",
@@ -174,15 +219,21 @@ internal sealed class RevitReadOnlyMutationPolicyAnalyzer {
     }
 
     private static IEnumerable<ScriptDiagnostic> AnalyzeObjectCreation(
-        CompilationUnitSyntax root,
+        SyntaxNode scope,
         SemanticModel semanticModel,
-        string sourceName
+        string sourceName,
+        Action<IMethodSymbol> enqueuePodDeclaration
     ) {
-        foreach (var creation in root.DescendantNodes().OfType<ObjectCreationExpressionSyntax>()) {
+        foreach (var creation in scope.DescendantNodesAndSelf().OfType<ObjectCreationExpressionSyntax>()) {
             var symbol = semanticModel.GetSymbolInfo(creation).Symbol as IMethodSymbol;
             var constructedType = symbol?.ContainingType.ToDisplayString();
-            if (constructedType is null || !RejectedConstructorTypes.Contains(constructedType))
+            if (constructedType is null || symbol is null)
                 continue;
+
+            if (!RejectedConstructorTypes.Contains(constructedType)) {
+                enqueuePodDeclaration(symbol);
+                continue;
+            }
 
             yield return CreateRejectedDiagnostic(
                 constructedType,
@@ -193,11 +244,12 @@ internal sealed class RevitReadOnlyMutationPolicyAnalyzer {
     }
 
     private static IEnumerable<ScriptDiagnostic> AnalyzeInvocations(
-        CompilationUnitSyntax root,
+        SyntaxNode scope,
         SemanticModel semanticModel,
-        string sourceName
+        string sourceName,
+        Action<IMethodSymbol> enqueuePodDeclaration
     ) {
-        foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>()) {
+        foreach (var invocation in scope.DescendantNodesAndSelf().OfType<InvocationExpressionSyntax>()) {
             foreach (var symbol in ResolveMethodSymbols(semanticModel, invocation)) {
                 var originalDefinition = symbol.ReducedFrom ?? symbol;
                 var containingType = originalDefinition.ContainingType.ToDisplayString();
@@ -209,6 +261,8 @@ internal sealed class RevitReadOnlyMutationPolicyAnalyzer {
                     );
                     break;
                 }
+
+                enqueuePodDeclaration(symbol);
             }
         }
     }

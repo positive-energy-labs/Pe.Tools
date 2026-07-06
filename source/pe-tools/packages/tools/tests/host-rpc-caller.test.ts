@@ -28,6 +28,19 @@ test("keeps direct admin calls out of agent operation search", () => {
   expect(results.map((result) => result.key)).not.toContain("logs.tail");
 });
 
+test("falls back to scripting for unmatched mutate searches", () => {
+  const results = new HostRpcCaller().searchOperations({
+    query: "duct layout route mains branches",
+    intent: "Mutate",
+    limit: 8,
+  });
+
+  expect(Array.isArray(results)).toBe(true);
+  if (!Array.isArray(results)) throw new Error("expected matches projection");
+  expect(results.map((result) => result.key)).toContain("scripting.execute");
+  expect(results.map((result) => result.key)).toContain("scripting.workspace.bootstrap");
+});
+
 test("rejects unknown dynamic operation keys before transport", async () => {
   const result = await new HostRpcCaller({
     hostBaseUrl: "http://127.0.0.1:1",

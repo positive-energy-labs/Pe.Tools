@@ -1,8 +1,0 @@
-<Project>
-    <ItemGroup>
-        <PePackagePolicy Include="PolySharp" Version="1.14.1" PrivateAssets="all" TargetFramework="netstandard2.0" ModuleClasses="SharedNeutral" />
-        <PePackagePolicy Include="PolySharp" Version="1.14.1" PrivateAssets="all" TargetFramework="net48" ModuleClasses="RevitRuntime;TestHarness" />
-        <PePackagePolicy Include="System.Net.Http" Version="4.3.4" TargetFramework="net48" ModuleClasses="RevitRuntime;TestHarness" />
-        <PePackagePolicy Include="System.Text.Json" Version="9.0.9" TargetFramework="net48" ProjectName="Pe.Revit.Scripting" />
-    </ItemGroup>
-</Project>

@@ -9,8 +9,9 @@ export const hostOperations = {
     requestTypeName: "OpenRevitDocumentRequest",
     responseTypeName: "OpenRevitDocumentData",
     displayName: "Open Revit Document",
-    description: "Open and activate a local Revit document in the connected Revit session.",
-    searchTerms: ["document", "open", "activate", "cross-document"],
+    description:
+      "Open and activate a local or Autodesk cloud Revit document in the connected Revit session.",
+    searchTerms: ["document", "open", "activate", "cross-document", "cloud"],
     intent: "Mutate",
     requiresActiveDocument: false,
     costTier: "Mutation",
@@ -21,11 +22,17 @@ export const hostOperations = {
         description: "Open a local Revit project or family file by absolute path.",
         json: "{ \u0022path\u0022: \u0022C:/Models/Project.rvt\u0022 }",
       },
+      {
+        name: "open cloud model",
+        description:
+          "Open an Autodesk Docs / BIM 360 model by project \u002B model GUID. Region defaults to US.",
+        json: "{ \u0022cloudProjectGuid\u0022: \u002200000000-0000-0000-0000-000000000000\u0022, \u0022cloudModelGuid\u0022: \u002200000000-0000-0000-0000-000000000000\u0022, \u0022cloudRegion\u0022: \u0022US\u0022 }",
+      },
     ],
     safeDefaultRequestJson: "{}",
     callGuidance: [
-      "Use a local RVT/RFA/RTE path to bootstrap or switch active document context.",
-      "Do not use for cloud-only cld:// targets or while Revit is blocked by a modal dialog.",
+      "Pass a local RVT/RFA/RTE path, or cloudProjectGuid \u002B cloudModelGuid (\u002B cloudRegion when not US); cloud opens need Autodesk sign-in and access.",
+      "Do not call while Revit is blocked by a modal dialog.",
     ],
   },
   "revit.apply.parameters-service-cache.refresh": {

@@ -14,6 +14,7 @@
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
         <PackageReference Include="NUnit" Version="3.13.3" />
         <PackageReference Include="NUnit3TestAdapter" Version="4.6.0" />
+        <PackageReference Include="Pe.Revit.Versioning" Version="0.1.0-dev.9" />
     </ItemGroup>
 
     <ItemGroup>
@@ -26,7 +27,6 @@
         <ProjectReference Include="..\Pe.Shared.Product\Pe.Shared.Product.csproj" />
         <ProjectReference Include="..\Pe.Shared.RevitAutomation\Pe.Shared.RevitAutomation.csproj" />
         <ProjectReference Include="..\Pe.Shared.RevitData\Pe.Shared.RevitData.csproj" />
-        <ProjectReference Include="..\Pe.Shared.RevitVersions\Pe.Shared.RevitVersions.csproj" />
         <ProjectReference Include="..\Pe.Shared.Scripting\Pe.Shared.Scripting.csproj" />
         <ProjectReference Include="..\Pe.Shared.StorageRuntime\Pe.Shared.StorageRuntime.csproj" />
     </ItemGroup>

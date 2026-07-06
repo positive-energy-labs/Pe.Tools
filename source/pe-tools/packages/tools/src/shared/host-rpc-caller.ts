@@ -140,16 +140,39 @@ function searchHostOperations(options: HostOperationSearchOptions): HostOperatio
   const queryTerms = normalizeQuery(options.query);
   const limit = Math.min(Math.max(options.limit ?? 8, 1), 50);
   const verbosity = options.verbosity ?? "compact";
-  return Object.values(hostOperations)
+  const scoredOperations = Object.values(hostOperations)
     .filter((operation) => matchesFilters(operation, options))
-    .map((operation) => ({ operation, score: scoreOperation(operation, queryTerms) }))
-    .filter(({ score }) => queryTerms.length === 0 || score > 0)
+    .map((operation) => ({ operation, score: scoreOperation(operation, queryTerms) }));
+  const matchedOperations = scoredOperations.filter(
+    ({ score }) => queryTerms.length === 0 || score > 0,
+  );
+  const rankedOperations =
+    matchedOperations.length > 0
+      ? matchedOperations
+      : fallbackMutationOperations(scoredOperations, options, queryTerms);
+
+  return rankedOperations
     .sort(
       (left, right) =>
         right.score - left.score || left.operation.key.localeCompare(right.operation.key),
     )
     .slice(0, limit)
     .map(({ operation }) => toSearchResult(operation, verbosity));
+}
+
+function fallbackMutationOperations(
+  scoredOperations: Array<{ operation: HostOperationDefinition; score: number }>,
+  options: HostOperationSearchOptions,
+  queryTerms: string[],
+) {
+  if (queryTerms.length === 0 || options.intent !== "Mutate") return [];
+  const domain = options.domain?.trim().toLowerCase();
+  if (domain && domain !== "scripting") return [];
+
+  return ["scripting.execute", "scripting.workspace.bootstrap"].flatMap((key, index) => {
+    const match = scoredOperations.find(({ operation }) => operation.key === key);
+    return match ? [{ ...match, score: -index }] : [];
+  });
 }
 
 const callHostRpcOperationEffect = Effect.fnUntraced(function* (

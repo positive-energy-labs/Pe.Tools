@@ -4,7 +4,7 @@ using Pe.Dev.RevitAutomation;
 namespace Pe.Dev.Cli.Codegen;
 
 internal static class CodegenCommandRunner {
-    private static readonly IReadOnlyList<string> AllTargets = ["build", "product", "host-contracts"];
+    private static readonly IReadOnlyList<string> AllTargets = ["product", "host-contracts"];
 
     public static async Task<int> RunAsync(
         IReadOnlyList<string> args,
@@ -40,7 +40,6 @@ internal static class CodegenCommandRunner {
         var targets = target == "all" ? AllTargets : [target];
         foreach (var currentTarget in targets) {
             var exitCode = currentTarget switch {
-                "build" => await BuildGeneratedProjection.RunAsync(paths, cancellationToken),
                 "product" => await ProductTypeScriptProjection.RunAsync(paths, cancellationToken),
                 "host-contracts" => await HostContractsProjection.RunAsync(paths, cancellationToken),
                 _ => 10
@@ -93,7 +92,7 @@ internal static class CodegenCommandRunner {
     private static void WriteUsage() => Console.Error.WriteLine(
         """
         Usage:
-          pe-dev codegen sync [--target all|build|product|host-contracts]
+          pe-dev codegen sync [--target all|product|host-contracts]
         """
     );
 }

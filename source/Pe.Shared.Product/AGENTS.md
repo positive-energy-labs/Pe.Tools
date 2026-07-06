@@ -140,6 +140,6 @@ Product/process identity remains here even when transport code consumes it. If a
 When MSBuild, installer authoring, or repo tooling needs this package's local layout identity, prefer a generated or serialized projection rooted in this package instead of retyping the same vendor/product/bin path strings in props or installer code.
 
 - `ProductBuildLayoutProjection` is allowed here because it is still pure identity/layout data.
-- `InstallerPayloadManifest` is allowed here because it is a pure serialized handoff contract for one packaging run, shared by `build` and `install`.
+- Installer manifests belong to the SDK installer payload contract; keep only durable product identity/layout data here.
 - Repo artifact topology such as `.artifacts`, package roots, publish roots, and staging roots does not belong here; use `build/ProductLayoutAuthority.cs` and `build/BuildArtifactLayout.cs`.
-- Generated imports under `build/generated/` should be treated as projections of this package, not new sources of truth.
+- Build and installer projections should consume `ProductBuildLayoutProjection` or serialized manifests directly, not generated MSBuild props.

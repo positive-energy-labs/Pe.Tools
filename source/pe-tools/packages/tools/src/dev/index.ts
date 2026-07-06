@@ -4,7 +4,6 @@ import { peaProductToolCatalog, peCodeToolCatalog } from "../tool-metadata.ts";
 import { PeCodeCliCommands, type PeCodeCliCommandOptions } from "./PeCodeCliCommands.ts";
 import {
   liveLoopContext,
-  liveRrdRestart,
   liveRrdSync,
   scriptExecuteWithSync,
   talkToPea,
@@ -16,7 +15,6 @@ export { peCodeToolCatalog } from "../tool-metadata.ts";
 export { PeCodeCliCommands } from "./PeCodeCliCommands.ts";
 export {
   liveLoopContext,
-  liveRrdRestart,
   liveRrdSync,
   scriptExecuteWithSync,
   talkToPea,
@@ -26,7 +24,6 @@ export {
 
 export const peCodeTools = {
   [liveLoopContext.id]: liveLoopContext,
-  [liveRrdRestart.id]: liveRrdRestart,
   [liveRrdSync.id]: liveRrdSync,
   [scriptExecuteWithSync.id]: scriptExecuteWithSync,
   [talkToPea.id]: talkToPea,

@@ -19,7 +19,6 @@
     </Configurations>
     <Folder Name="/Automation/">
         <Project Path="build/Build.csproj" Type="832f14a8-b248-4dd8-8004-3df028dbb372" />
-        <Project Path="install/Installer.csproj" Type="832f14a8-b248-4dd8-8004-3df028dbb372" />
     </Folder>
     <Folder Name="/Solution Items/">
         <File Path=".gitignore" />
@@ -44,6 +43,7 @@
     <!-- Pe.Host retired: replaced by the Effectified TS host at source/pe-tools/apps/host (@pe/host). -->
     <Project Path="source/Pe.Revit/Pe.Revit.csproj" />
     <Project Path="source/Pe.Revit.FamilyFoundry/Pe.Revit.FamilyFoundry.csproj" />
+    <Project Path="source/Pe.Revit.Placement/Pe.Revit.Placement.csproj" />
     <Project Path="source/Pe.Revit.Global/Pe.Revit.Global.csproj" />
     <Project Path="source/Pe.Revit.Scripting/Pe.Revit.Scripting.csproj" />
     <Project Path="source/Pe.Revit.SettingsRuntime/Pe.Revit.SettingsRuntime.csproj" />
@@ -54,7 +54,6 @@
     <Project Path="source/Pe.Shared.Tests/Pe.Shared.Tests.csproj" />
     <Project Path="source/Pe.Shared.RevitAutomation/Pe.Shared.RevitAutomation.csproj" />
     <Project Path="source/Pe.Shared.RevitData/Pe.Shared.RevitData.csproj" />
-    <Project Path="source/Pe.Shared.RevitVersions/Pe.Shared.RevitVersions.csproj" />
     <Project Path="source/Pe.Shared.Scripting/Pe.Shared.Scripting.csproj" />
 
     <Project Path="source/Pe.Shared.StorageRuntime/Pe.Shared.StorageRuntime.csproj" />

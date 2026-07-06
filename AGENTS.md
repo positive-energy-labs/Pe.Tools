@@ -27,7 +27,7 @@ C# development with the Revit API requires very a specific and fragile tooling s
 ALWAYS use RRD-safe live-loop tools, mcps, or cli commands when available.
 - Use `live_loop_context` as the read-only decision packet when AttachedRrd/Rider/Revit state matters.
 - Use `live_rrd_sync` before live scripting or AttachedRrd tests after runtime edits.
-- Use `live_rrd_restart` to start RRD from scratch, or to restart an existing one.
+- Use `live_rrd_sync` to sync, hot reload, or start/restart RRD when requested.
 - CLI use: `pea live <sync/restart/status>` 
 - Prefer FreshRevitProcess tests when Hot Reload risk, stale assembly evidence, member-shape changes, or WPF/BAML/resource changes make AttachedRrd ambiguous.
 - Use Pea product tools (`pe_status`, `pe_logs`, host operations, scripts, Revit API docs, `talk_to_pea`) only for black-box product feedback, not repo source review.
@@ -98,7 +98,7 @@ Name the lane before claiming proof:
 - **Source compile**: isolated terminal `dotnet build`; NoRrdContact; proves compilation only.
 - **Package/artifact**: build/pack output; NoRrdContact; proves durable output shape only.
 - **AttachedRrd**: Rider/IDE-built runtime packages synced into the live Rider-driven Revit session; requires live-loop care and behavior/log proof when freshness is uncertain.
-- **FreshRevitProcess**: repo test helper owning a fresh Revit process; default autonomous Revit-backed proof when current UI/RRD state is not required.
+- **FreshRevitProcess**: SDK `pe-revit test fresh` owns a fresh Revit process; default autonomous Revit-backed proof when current UI/RRD state is not required.
 - **Installed lane**: MSI/product-root behavior; do not mix with dev host/runtime roots.
 
 If proof depends on user-owned Rider/Revit/Windows state, say so and coordinate the loop instead of pretending autonomy.

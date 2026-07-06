@@ -605,21 +605,30 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
     }
 
     private OpenRevitDocumentData OpenRevitDocumentCore(OpenRevitDocumentRequest request) {
-        if (string.IsNullOrWhiteSpace(request.Path)) {
-            throw BridgeOperationExceptions.BadRequest(
-                "Document path is required.",
-                [
-                    BridgeOperationExceptions.Issue(
-                        "$.path",
-                        "MissingDocumentPath",
-                        "Document path is required.",
-                        "Pass an absolute local Revit model path."
-                    )
-                ]
-            );
-        }
+        var uiApp = RevitUiSession.CurrentUIApplication;
 
-        var path = request.Path.Trim();
+        // Cloud target wins when present; a cloud model has no local file, so the old File.Exists
+        // gate only applies to the local-path branch.
+        if (request.HasCloudTarget())
+            return OpenCloudRevitDocument(uiApp, request);
+
+        if (request.HasLocalPath())
+            return OpenLocalRevitDocument(uiApp, request.Path!.Trim());
+
+        throw BridgeOperationExceptions.BadRequest(
+            "A local path or a cloud project + model GUID is required.",
+            [
+                BridgeOperationExceptions.Issue(
+                    "$.path",
+                    "MissingDocumentTarget",
+                    "Neither a local path nor cloud project/model GUIDs were provided.",
+                    "Pass an absolute local Revit model path, or cloudProjectGuid + cloudModelGuid (+ optional cloudRegion)."
+                )
+            ]
+        );
+    }
+
+    private OpenRevitDocumentData OpenLocalRevitDocument(UIApplication uiApp, string path) {
         if (!File.Exists(path)) {
             throw BridgeOperationExceptions.BadRequest(
                 $"Document path does not exist: {path}",
@@ -634,7 +643,6 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
             );
         }
 
-        var uiApp = RevitUiSession.CurrentUIApplication;
         var alreadyOpen = uiApp.FindOpenDocumentByPath(path);
         if (alreadyOpen != null)
             return new OpenRevitDocumentData(
@@ -667,6 +675,79 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
                 "OpenRevitDocumentException",
                 ex,
                 "Verify the path points to a supported local Revit document and retry."
+            );
+        }
+    }
+
+    private OpenRevitDocumentData OpenCloudRevitDocument(UIApplication uiApp, OpenRevitDocumentRequest request) {
+        if (!Guid.TryParse(request.CloudProjectGuid, out var projectGuid))
+            throw BridgeOperationExceptions.BadRequest(
+                $"Invalid cloud project GUID: {request.CloudProjectGuid}",
+                [
+                    BridgeOperationExceptions.Issue(
+                        "$.cloudProjectGuid",
+                        "InvalidCloudProjectGuid",
+                        $"Invalid cloud project GUID: {request.CloudProjectGuid}",
+                        "Pass the project GUID as reported by revit.context / cloud browse."
+                    )
+                ]
+            );
+        if (!Guid.TryParse(request.CloudModelGuid, out var modelGuid))
+            throw BridgeOperationExceptions.BadRequest(
+                $"Invalid cloud model GUID: {request.CloudModelGuid}",
+                [
+                    BridgeOperationExceptions.Issue(
+                        "$.cloudModelGuid",
+                        "InvalidCloudModelGuid",
+                        $"Invalid cloud model GUID: {request.CloudModelGuid}",
+                        "Pass the model GUID as reported by revit.context / cloud browse."
+                    )
+                ]
+            );
+
+        // Region defaults to US; ModelPathUtils.CloudRegionEMEA is the other common value.
+        var region = string.IsNullOrWhiteSpace(request.CloudRegion)
+            ? ModelPathUtils.CloudRegionUS
+            : request.CloudRegion.Trim();
+
+        var projectKey = projectGuid.ToString("D");
+        var modelKey = modelGuid.ToString("D");
+        var alreadyOpen = uiApp.GetOpenDocuments().FirstOrDefault(doc =>
+            string.Equals(doc.GetCloudProjectGuid(), projectKey, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(doc.GetCloudModelGuid(), modelKey, StringComparison.OrdinalIgnoreCase));
+        if (alreadyOpen != null)
+            return new OpenRevitDocumentData(
+                CreateDocumentSummary(alreadyOpen, uiApp.GetActiveDocument()),
+                CreateDocumentSessionContext()
+            );
+
+        try {
+            var modelPath = ModelPathUtils.ConvertCloudGUIDsToCloudPath(region, projectGuid, modelGuid);
+            // ponytail: no network timeout; a dead-network cloud open blocks the Revit task queue.
+            // Wrap with UiApplication.TryOpenCloudDocumentWithTimeout-style handling if that bites.
+            var uiDocument = uiApp.OpenAndActivateDocument(modelPath, new OpenOptions(), false);
+            var document = uiDocument.Document;
+            return new OpenRevitDocumentData(
+                CreateDocumentSummary(document, document),
+                CreateDocumentSessionContext()
+            );
+        } catch (Exception ex) when (ex is InvalidOperationException or OperationCanceledException) {
+            throw BridgeOperationExceptions.Conflict(
+                $"Revit could not open cloud model {projectKey}/{modelKey} ({region}).",
+                [
+                    BridgeOperationExceptions.Issue(
+                        "$.cloudModelGuid",
+                        "OpenCloudRevitDocumentFailed",
+                        ex.Message,
+                        "Verify the GUIDs and region are correct, you are signed in to Autodesk with access, and Revit is idle."
+                    )
+                ]
+            );
+        } catch (Exception ex) {
+            throw BridgeOperationExceptions.Unexpected(
+                "OpenCloudRevitDocumentException",
+                ex,
+                "Verify Autodesk sign-in, cloud access, region, and that the model GUIDs are current."
             );
         }
     }

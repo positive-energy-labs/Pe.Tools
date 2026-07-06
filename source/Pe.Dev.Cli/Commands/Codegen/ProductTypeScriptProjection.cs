@@ -42,8 +42,6 @@ internal static class ProductTypeScriptProjection {
 
         {{RenderConstantObject("peAppRuntimeDeploymentDescriptor", typeof(PeAppRuntimeDeploymentDescriptor))}}
 
-        {{RenderConstantObject("installerPayloadManifest", typeof(InstallerPayloadManifest))}}
-
         {{RenderConstantObject("scriptingWorkspaceIdentity", typeof(ScriptingWorkspaceLayout))}}
         """;
 

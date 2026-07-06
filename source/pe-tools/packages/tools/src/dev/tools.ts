@@ -1,14 +1,13 @@
 import { createTool } from "@mastra/core/tools";
 import z from "zod";
-import { runWithAttachedRrdSync } from "./attached-rrd-sync.js";
 import {
+  collectPostLiveCommandHooks,
   collectRuntimeLoopContext,
-  defaultLiveLoopTimeoutSeconds,
-  defaultRiderBridgeBaseUrl,
-  restartLiveRrd,
-  syncLiveRrd,
-} from "../shared/live-loop.ts";
-import { runAttachedRrdTest, runPeDevWorkflow } from "./pe-dev-workflow/index.js";
+  defaultPeaRuntimeTimeoutSeconds,
+} from "../shared/pea-runtime-hooks.ts";
+import { syncLiveRrd } from "./live-sync.js";
+import { runAttachedRrdTest, runFreshRevitTest } from "./pe-revit-workflow/index.js";
+import { sdkLiveWarning } from "./sdk-live.js";
 
 import { HostRpcCaller } from "../shared/host-rpc-caller.js";
 import { resolveHostBaseUrl, resolveWorkspaceKey } from "../shared/host-config.js";
@@ -16,7 +15,7 @@ import { talkToPeaHarness } from "./talk-to-pea.js";
 import { talkToPecoPsmux, talkToPecoZellij } from "./talk-to-peco-mux.ts";
 import { ScriptingTools, scriptExecuteInputSchema } from "../shared/scripting.ts";
 
-const defaultTimeoutSeconds = defaultLiveLoopTimeoutSeconds;
+const defaultTimeoutSeconds = defaultPeaRuntimeTimeoutSeconds;
 
 const repoCommandInputSchema = z.object({
   timeoutSeconds: z.number().min(5).max(3600).default(defaultTimeoutSeconds),
@@ -25,7 +24,7 @@ const repoCommandInputSchema = z.object({
 export const liveLoopContext = createTool({
   id: "live_loop_context",
   description:
-    "Collect a read-only live-runtime decision packet: environment summary, host/Revit log deltas, last sync/bridge result when known, proof-lane recommendation, and the next explicit action. Does not sync, test, mutate, or restart anything.",
+    "Collect a read-only live-runtime packet: Pea host status, host/Revit log tails, and the last SDK sync result when known. Does not sync, test, mutate, or restart anything.",
   inputSchema: repoCommandInputSchema.extend({
     logTail: z.number().min(1).max(1000).default(10),
     resetLogCursor: z
@@ -48,79 +47,28 @@ export const liveLoopContext = createTool({
 export const liveRrdSync = createTool({
   id: "live_rrd_sync",
   description:
-    "Refresh the live Rider-driven RRD session by mutating PeHotReloadSignal.cs and invoking the Pe.RiderBridge localhost HTTP hot-reload endpoint directly. This is required after IDE/Rider builds of runtime packages; isolated terminal builds are not runtime freshness proof.",
+    "Refresh and converge the live RRD session through SDK pe-revit live sync. Builds/deploys, can apply Rider Hot Reload, can start RRD when missing, and can include Pea host status/log hooks in the result.",
   inputSchema: repoCommandInputSchema.extend({
-    riderBridgeBaseUrl: z.string().url().default(defaultRiderBridgeBaseUrl),
-    project: z.string().default("Pe.Tools"),
+    project: z.string().optional(),
+    revitYear: z.string().optional(),
+    hotReload: z.boolean().default(true),
+    start: z.boolean().default(true),
+    restartOnHrBreak: z.boolean().default(false),
+    includePeaStatus: z.boolean().default(true),
+    logTail: z.number().min(0).max(1000).default(20),
+    resetLogCursor: z.boolean().default(false),
   }),
   execute: async (input) =>
     syncLiveRrd({
       timeoutSeconds: input.timeoutSeconds ?? defaultTimeoutSeconds,
-      riderBridgeBaseUrl: input.riderBridgeBaseUrl ?? defaultRiderBridgeBaseUrl,
-      project: input.project ?? "Pe.Tools",
-    }),
-});
-
-export const liveRrdRestart = createTool({
-  id: "live_rrd_restart",
-  description:
-    "Start or restart the Rider-driven RRD session. Use this to manage RRD sessions to resolve assembly freshness issues or when the user asks for an RRD session to be started. No existing Rider, Revit, or host process required.",
-  inputSchema: repoCommandInputSchema.extend({
-    riderBridgeBaseUrl: z.string().url().default(defaultRiderBridgeBaseUrl),
-    project: z.string().default("Pe.Tools"),
-    actionId: z
-      .string()
-      .optional()
-      .describe("Optional Rider action override. Defaults to trying Rerun, then Debug."),
-    expectedRevitVersion: z.string().default("2025"),
-    requireNewProcess: z.boolean().default(true),
-    readinessLevel: z
-      .enum(["BridgeConnected", "ModulesLoaded", "AnyDocumentOpen", "ActiveDocumentReady"])
-      .default("ModulesLoaded"),
-    openDocument: z
-      .object({
-        path: z
-          .string()
-          .min(1)
-          .optional()
-          .describe(
-            "Absolute local RVT/RFA path to open through revit.apply.document.open; cld:// cloud paths are detected but not opened yet.",
-          ),
-        name: z.string().min(1).optional(),
-        revitYear: z.string().default("2025").optional(),
-        kind: z.enum(["Project", "Family", "Any"]).default("Any").optional(),
-        localFilesOnly: z
-          .boolean()
-          .default(true)
-          .optional()
-          .describe(
-            "When resolving by recent-document name, keep true for currently openable local files; false may match cloud entries that are reported as unsupported.",
-          ),
-      })
-      .nullable()
-      .optional()
-      .describe(
-        "Optional Revit document selector to open after RRD reaches module readiness through host operation revit.apply.document.open. Local paths are supported; cloud recent-document matches are reported but not opened yet. Explicit null disables any harness state default.",
-      ),
-    harnessStatePath: z
-      .string()
-      .min(1)
-      .optional()
-      .describe(
-        "Optional repo-relative or absolute JSON file with revit.defaultOpenDocument used when openDocument is omitted.",
-      ),
-  }),
-  execute: async (input) =>
-    restartLiveRrd({
-      timeoutSeconds: input.timeoutSeconds ?? defaultTimeoutSeconds,
-      riderBridgeBaseUrl: input.riderBridgeBaseUrl ?? defaultRiderBridgeBaseUrl,
-      project: input.project ?? "Pe.Tools",
-      actionId: input.actionId,
-      expectedRevitVersion: input.expectedRevitVersion ?? "2025",
-      requireNewProcess: input.requireNewProcess ?? true,
-      readinessLevel: input.readinessLevel ?? "ModulesLoaded",
-      openDocument: input.openDocument,
-      harnessStatePath: input.harnessStatePath,
+      project: input.project,
+      revitYear: input.revitYear,
+      hotReload: input.hotReload ?? true,
+      start: input.start ?? true,
+      restartOnHrBreak: input.restartOnHrBreak ?? false,
+      includePeaStatus: input.includePeaStatus ?? true,
+      logTail: input.logTail ?? 20,
+      resetLogCursor: input.resetLogCursor ?? false,
     }),
 });
 
@@ -234,35 +182,28 @@ export const talkToPecoPsmuxTool = createTool({
 export const scriptExecuteWithSync = createTool({
   id: "script_execute",
   description:
-    "Execute a C# Revit script through the TS host scripting contract after first attempting direct Pe.RiderBridge sync. Sync failure is a loud warning, not a script blocker.",
+    "Execute a C# Revit script through the TS host scripting contract after first attempting SDK live sync. Sync failure is a loud warning, not a script blocker.",
   inputSchema: repoCommandInputSchema.merge(scriptExecuteInputSchema),
   execute: async (input) => {
     const timeoutSeconds = input.timeoutSeconds ?? defaultTimeoutSeconds;
-    const synced = await runWithAttachedRrdSync(
-      {
-        workflow: "script_execute",
-        stalePolicy: "warn",
-        timeoutSeconds,
-      },
-      () =>
-        new ScriptingTools(
-          new HostRpcCaller({
-            hostBaseUrl: resolveHostBaseUrl(),
-            timeoutMs: Math.max(timeoutSeconds, 1) * 1000,
-          }),
-          { workspaceKey: resolveWorkspaceKey() },
-        ).execute(input),
-    );
+    const sync = await syncLiveRrd({ timeoutSeconds });
+    const script = await new ScriptingTools(
+      new HostRpcCaller({
+        hostBaseUrl: resolveHostBaseUrl(),
+        timeoutMs: Math.max(timeoutSeconds, 1) * 1000,
+      }),
+      { workspaceKey: resolveWorkspaceKey() },
+    ).execute(input);
 
     return {
       ok: true,
       workflow: "script_execute",
-      hotReload: {
-        ok: synced.sync.ok,
-        warning: synced.warning,
-        sync: synced.sync,
+      liveSync: {
+        ok: sync.ok,
+        warning: sdkLiveWarning(sync),
+        sync,
       },
-      script: synced.result,
+      script,
     };
   },
 });
@@ -270,9 +211,11 @@ export const scriptExecuteWithSync = createTool({
 export const test = createTool({
   id: "test",
   description:
-    "Run Revit-backed tests through the condoned repo loops. Prefer FreshRevitProcess (`pe-dev test`) for autonomous proof without touching RRD. Use AttachedRrd only after an IDE/Rider runtime build and sync.",
+    "Run Revit-backed tests through SDK pe-revit test. Prefer FreshRevitProcess for autonomous proof without touching RRD. Use AttachedRrd only after SDK live sync.",
   inputSchema: repoCommandInputSchema.extend({
     target: z.enum(["FreshRevitProcess", "AttachedRrd"]).default("FreshRevitProcess"),
+    project: z.string().optional(),
+    revitYear: z.string().optional(),
     filter: z.string().default("Name~Reports_runtime_assembly_load_paths"),
     planOnly: z
       .boolean()
@@ -288,21 +231,33 @@ export const test = createTool({
   execute: async (input) => {
     if ((input.target ?? "FreshRevitProcess") === "FreshRevitProcess") {
       const timeoutSeconds = input.timeoutSeconds ?? defaultTimeoutSeconds;
-      const args = [
-        "test",
-        "--filter",
-        input.filter ?? "Name~Reports_runtime_assembly_load_paths",
-        "--timeout-seconds",
-        String(timeoutSeconds),
-      ];
-      if (input.planOnly) args.push("--plan", "--json");
-      return runPeDevWorkflow("test", args, "FreshRevitProcess", timeoutSeconds + 30);
+      const result = await runFreshRevitTest({
+        filter: input.filter ?? "Name~Reports_runtime_assembly_load_paths",
+        project: input.project,
+        revitYear: input.revitYear,
+        planOnly: input.planOnly ?? false,
+        timeoutSeconds,
+      });
+      const hooks = await collectPostLiveCommandHooks({
+        includePeaStatus: true,
+        logTail: 20,
+        resetLogCursor: false,
+      });
+      return { ...result, hooks };
     }
 
-    return runAttachedRrdTest({
+    const result = await runAttachedRrdTest({
       filter: input.filter ?? "Name~Reports_runtime_assembly_load_paths",
+      project: input.project,
+      revitYear: input.revitYear,
       syncFirst: input.syncFirst ?? true,
       timeoutSeconds: input.timeoutSeconds ?? defaultTimeoutSeconds,
     });
+    const hooks = await collectPostLiveCommandHooks({
+      includePeaStatus: true,
+      logTail: 20,
+      resetLogCursor: false,
+    });
+    return { ...result, hooks };
   },
 });

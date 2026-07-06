@@ -4,20 +4,19 @@ internal static class DevCliProgram {
   internal const string UsageText = """
                                       Usage:
                                         pe-dev bootstrap-path
-                                        pe-dev test [--plan|--dry-run] [--filter <vstest-filter>] [--timeout-seconds <seconds>] [--json]
                                         pe-dev self-test [--json]
                                         pe-dev pea link-dev
                                         pe-dev web <pea|peco> [web options]
                                         pe-dev automation <auth|browse|manifest|submit|inspect|cache> ...
-                                        pe-dev codegen sync [--target all|build|host-contracts|product]
+                                        pe-dev codegen sync [--target all|host-contracts|product]
 
                                       Primary workflow:
                                         bootstrap-path  Add the running pe-dev build output directory to the user PATH.
-                                        test            Run fresh-owned Revit verification; use --plan for no-launch inspection.
 
                                       Removed command groups:
-                                        doctor, status, sync, env, revit, and verify were intentionally removed from the public surface.
-                                        Use peco live_loop_context/live_rrd_sync for attached live-loop work.
+                                        doctor, status, sync, env, revit, verify, and test were intentionally removed from the public surface.
+                                        Use SDK pe-revit live/test for live-loop mechanics and Revit-backed proof.
+                                        Use Peco when Pea status/log hooks or product probes should wrap SDK commands.
 
                                       Global options:
                                         --repo-root <path>   Override repo root discovery.

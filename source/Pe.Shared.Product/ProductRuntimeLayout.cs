@@ -72,9 +72,6 @@ public sealed record ProductRuntimeStateLayout(string RootPath) {
     public string GlobalStatePath => Path.Combine(this.RootPath, ProductPathNames.GlobalDirectoryName);
     public string ApsAuthStatePath => Path.Combine(this.RootPath, "aps-auth");
     public string ApsTokenStorePath => Path.Combine(this.ApsAuthStatePath, "tokens.json");
-    public string RevitTestStatePath => Path.Combine(this.RootPath, "revit-test");
-    public string RevitTestSessionStatePath => Path.Combine(this.RevitTestStatePath, "sessions");
-    public string RevitTestQuarantinePath => Path.Combine(this.RevitTestStatePath, "quarantine");
 
     public string ResolveModuleStatePath(string moduleKey) =>
         ProductPathing.ResolveSafeSubDirectoryPath(this.RootPath, moduleKey, nameof(moduleKey));
@@ -83,7 +80,6 @@ public sealed record ProductRuntimeStateLayout(string RootPath) {
 public sealed record ProductRuntimeLogLayout(string RootPath) {
     public string HostLogPath => Path.Combine(this.RootPath, ProductPathNames.HostLogFileName);
     public string RevitAppLogPath => Path.Combine(this.RootPath, ProductPathNames.RevitAppLogFileName);
-    public string RevitApprovalWatcherLogPath => Path.Combine(this.RootPath, ProductPathNames.RevitApprovalWatcherLogFileName);
 }
 
 public sealed record ProductRuntimeCacheLayout(string RootPath) {
