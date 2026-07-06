@@ -1,10 +1,11 @@
 import { Effect, Layer, Stream } from "effect";
 import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
-import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { NodeHttpClient, NodeHttpServer, NodeRuntime, NodeServices } from "@effect/platform-node";
+import { existsSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
+import { join } from "node:path";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-import { BRIDGE_PATH } from "@pe/host-contracts/contracts";
+import { BRIDGE_PATH, productIdentity } from "@pe/host-contracts/contracts";
 import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
 import {
   HOST_PORT,
@@ -14,7 +15,7 @@ import {
   scheduleShutdown,
 } from "./host-ownership.ts";
 import { getHostStatus } from "./local-ops.ts";
-import { HostRpcServerLive } from "./rpc-server.ts";
+import { callRoute } from "./call-route.ts";
 
 const bridgeWsRoute = HttpRouter.add("GET", BRIDGE_PATH, (req) =>
   Effect.flatMap(RevitBridge, (bridge) => bridge.handleConnection(req)),
@@ -57,6 +58,37 @@ const opsCatalogRoute = HttpRouter.add("GET", "/ops", (req) =>
   }),
 );
 
+// Live settings authoring schema, straight from the connected session. This is
+// the $schema URL settings documents carry — IDE JSON LSPs fetch it on open.
+// Never persisted: value-domain samples inside are derived from the open document.
+const settingsSchemaRoute = HttpRouter.add(
+  "GET",
+  "/schemas/settings/:moduleKey/:rootKey",
+  Effect.gen(function* () {
+    const bridge = yield* RevitBridge;
+    const params = yield* HttpRouter.params;
+    const moduleKey = decodeURIComponent(params.moduleKey ?? "");
+    const rootKey = decodeURIComponent(params.rootKey ?? "").replace(/\.json$/i, "");
+    const result = yield* Effect.result(
+      bridge.invoke("settings.schema", { moduleKey, rootKey }, undefined),
+    );
+    if (result._tag === "Failure")
+      return Response.jsonUnsafe(
+        { error: String(result.failure.message ?? result.failure) },
+        { status: 503 },
+      );
+    const schemaJson = (result.success as { schemaJson?: string } | null)?.schemaJson;
+    if (!schemaJson)
+      return Response.jsonUnsafe(
+        { error: `No schema for ${moduleKey}/${rootKey}` },
+        { status: 404 },
+      );
+    return Response.text(schemaJson, {
+      headers: { "content-type": "application/json", "cache-control": "no-cache" },
+    });
+  }),
+);
+
 const hostStatusRoute = HttpRouter.add("GET", "/host/status", () =>
   Effect.gen(function* () {
     const bridge = yield* RevitBridge;
@@ -68,12 +100,18 @@ const hostStatusRoute = HttpRouter.add("GET", "/host/status", () =>
 // One-click update: run the install kernel's consume verb against the latest published
 // release. The pointer flip makes every open Revit live-swap via the loader; the host itself
 // is NOT updated here (its own exe is running — host self-update is a VersionedApp follow-up).
-// PE_REVIT_CMD overrides the launcher for installed machines; dev default is the local tool.
+// Launch chain: PE_REVIT_CMD env override → the kernel-installed shim (user machines) →
+// `dotnet pe-revit` (dev checkout, local tool). Resolved per request — the shim can appear
+// after the host started.
 const hostUpdateRoute = HttpRouter.add("POST", "/host/update", () =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const cmd = process.env.PE_REVIT_CMD ?? "dotnet";
-    const args = process.env.PE_REVIT_CMD ? [] : ["pe-revit"];
+    const installedShim = join(installRoot(), "shims", "pe-revit.cmd");
+    const [cmd, args] = process.env.PE_REVIT_CMD
+      ? [process.env.PE_REVIT_CMD, [] as string[]]
+      : existsSync(installedShim)
+        ? ["cmd", ["/c", installedShim]]
+        : ["dotnet", ["pe-revit"]];
     const result = yield* Effect.result(
       spawner.string(
         ChildProcess.make(cmd, [...args, "install", "apply", "--release", "latest", "--json"]),
@@ -86,6 +124,38 @@ const hostUpdateRoute = HttpRouter.add("POST", "/host/update", () =>
   }),
 );
 
+function installRoot() {
+  return join(
+    process.env.LOCALAPPDATA ?? "",
+    productIdentity.vendorName,
+    productIdentity.productName,
+  );
+}
+
+// Installed-version readout for the web Update button — the kernel's receipt is the truth.
+const hostInstallRoute = HttpRouter.add("GET", "/host/install", () =>
+  Effect.sync(() => {
+    try {
+      const receipt = JSON.parse(
+        readFileSync(join(installRoot(), "install.receipt.json"), "utf8"),
+      ) as { releaseVersion?: string; releasesRepo?: string; appliedAtUtc?: string };
+      return Response.jsonUnsafe({
+        installed: true,
+        releaseVersion: receipt.releaseVersion ?? null,
+        releasesRepo: receipt.releasesRepo ?? null,
+        appliedAtUtc: receipt.appliedAtUtc ?? null,
+      });
+    } catch {
+      return Response.jsonUnsafe({
+        installed: false,
+        releaseVersion: null,
+        releasesRepo: null,
+        appliedAtUtc: null,
+      });
+    }
+  }),
+);
+
 const adminShutdownRoute = HttpRouter.add("POST", "/admin/shutdown", (req) => {
   const token = req.headers["x-pe-host-takeover-token"];
   if (!isValidTakeoverToken(token)) return Response.json({ error: "Forbidden" }, { status: 403 });
@@ -93,19 +163,17 @@ const adminShutdownRoute = HttpRouter.add("POST", "/admin/shutdown", (req) => {
   return Response.json({ shuttingDown: true, lane: hostOwnership.lane });
 });
 
-const rpcProtocol = RpcServer.layerProtocolHttp({ path: "/rpc" }).pipe(
-  Layer.provide(HttpRouter.layer),
-);
-
 const AppLive = Layer.mergeAll(
   bridgeWsRoute,
   bridgeEventsRoute,
   opsCatalogRoute,
+  settingsSchemaRoute,
   hostStatusRoute,
   hostUpdateRoute,
+  hostInstallRoute,
   adminShutdownRoute,
-  HostRpcServerLive,
-).pipe(Layer.provideMerge(rpcProtocol), Layer.provide(RpcSerialization.layerNdjson));
+  callRoute,
+);
 
 const HttpLive = HttpRouter.serve(AppLive).pipe(
   Layer.provide(NodeHttpServer.layer(createServer, { port: HOST_PORT })),
