@@ -16,7 +16,7 @@ import {
   reserveBridgePending,
   type RevitBridge,
 } from "../src/bridge.ts";
-import { dispatchHostOperation, InvalidHostRequest, InvalidHostResponse } from "../src/dispatch.ts";
+import { dispatchTsOnlyOperation, InvalidHostRequest } from "../src/call-route.ts";
 import {
   createApsTokenStoreKey,
   normalizeApsTokenRequest,
@@ -65,46 +65,24 @@ test("dispatch threads bridgeSessionId through local snapshots and bridge invoke
     list: Effect.succeed([]),
   } as unknown as RevitBridge["Service"];
 
-  await runDispatch(
-    dispatchHostOperation("revit.catalog.loaded-families.filter-schema", {}, bridge, "bridge-b"),
-  );
+  // ts-only ops thread the session id into local snapshots and bridge invokes.
+  await runDispatch(dispatchTsOnlyOperation("settings.workspaces", undefined, "bridge-b", bridge));
 
-  expect(seen).toEqual(["invoke:revit.catalog.loaded-families.filter-schema:bridge-b"]);
+  expect(seen[0]).toBe("snapshot:bridge-b");
 });
 
-test("dispatch rejects payloads for bridge no-request operations before bridge invoke", async () => {
-  const seen: string[] = [];
+test("ts-only dispatch rejects malformed requests before running the operation", async () => {
   const bridge = {
-    invoke: () => {
-      seen.push("invoke");
-      return Effect.succeed({ schemaJson: "{}" });
-    },
+    invoke: () => Effect.succeed({}),
     snapshot: () => Effect.succeed({ connected: false }),
     list: Effect.succeed([]),
   } as unknown as RevitBridge["Service"];
 
   await expect(
     runDispatch(
-      dispatchHostOperation(
-        "revit.catalog.loaded-families.filter-schema",
-        { unexpected: true },
-        bridge,
-      ),
+      dispatchTsOnlyOperation("settings.tree", { moduleKey: 123 }, undefined, bridge),
     ),
   ).rejects.toBeInstanceOf(InvalidHostRequest);
-  expect(seen).toEqual([]);
-});
-
-test("dispatch validates bridge operation responses", async () => {
-  const bridge = {
-    invoke: () => Effect.succeed({ ok: true }),
-    snapshot: () => Effect.succeed({ connected: false }),
-    list: Effect.succeed([]),
-  } as unknown as RevitBridge["Service"];
-
-  await expect(
-    runDispatch(dispatchHostOperation("revit.catalog.loaded-families.filter-schema", {}, bridge)),
-  ).rejects.toBeInstanceOf(InvalidHostResponse);
 });
 
 test("recent document registry parser reads Revit profile MRU values", () => {

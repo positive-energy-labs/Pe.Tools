@@ -1,11 +1,9 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using Pe.Shared.Codegen;
 
 namespace Pe.Shared.RevitData;
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsSchema]
 public enum LoadedFamilyPlacementScope {
     AllLoaded,
     PlacedOnly,
@@ -13,7 +11,6 @@ public enum LoadedFamilyPlacementScope {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsSchema]
 public enum FormulaState {
     None,
     Present,
@@ -22,7 +19,6 @@ public enum FormulaState {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsSchema]
 public enum LoadedFamilyParameterKind {
     Unknown,
     FamilyParameter,
@@ -32,7 +28,6 @@ public enum LoadedFamilyParameterKind {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsSchema]
 public enum LoadedFamilyParameterPresence {
     Unresolved,
     Family,
@@ -41,27 +36,23 @@ public enum LoadedFamilyParameterPresence {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsSchema]
 public enum ExcludedParameterReason {
     UnresolvedClassification,
     ProjectObservedBuiltIn
 }
 
-[ExportTsSchema]
 public record LoadedFamiliesFilterFieldOptionsRequest(
     string PropertyPath,
     string SourceKey,
     Dictionary<string, string>? ContextValues
 );
 
-[ExportTsSchema]
 public record LoadedFamiliesCatalogRequest(
     LoadedFamiliesFilter? Filter,
     RevitDataProjectionRequest? Projection = null,
     RevitDataOutputBudget? Budget = null
 );
 
-[ExportTsSchema]
 public record LoadedFamiliesMatrixRequest(
     LoadedFamiliesFilter? Filter,
     RevitDataOutputBudget? Budget = null,
@@ -70,7 +61,6 @@ public record LoadedFamiliesMatrixRequest(
     bool IncludeTempPlacement = true
 );
 
-[ExportTsSchema]
 public record LoadedFamiliesFilter {
     public List<string> FamilyNames { get; init; } = [];
     public string? FamilyNameContains { get; init; }
@@ -79,12 +69,10 @@ public record LoadedFamiliesFilter {
     public LoadedFamilyPlacementScope PlacementScope { get; init; } = LoadedFamilyPlacementScope.AllLoaded;
 }
 
-[ExportTsSchema]
 public record LoadedFamilyTypeEntry(
     string TypeName
 );
 
-[ExportTsSchema]
 public record LoadedFamilyCatalogEntry(
     long FamilyId,
     string FamilyUniqueId,
@@ -95,7 +83,6 @@ public record LoadedFamilyCatalogEntry(
     List<LoadedFamilyTypeEntry> Types
 );
 
-[ExportTsSchema]
 public record LoadedFamiliesCatalogSummary(
     int TotalFamilies,
     int PlacedFamilies,
@@ -105,7 +92,6 @@ public record LoadedFamiliesCatalogSummary(
     bool Truncated
 );
 
-[ExportTsSchema]
 public record LoadedFamiliesCatalogData(
     LoadedFamiliesCatalogSummary Summary,
     List<LoadedFamilyCatalogEntry> Families,
@@ -116,7 +102,6 @@ public record LoadedFamiliesCatalogData(
 // The matrix speaks the canonical family record language (FamilySnapshotContracts): one parameter list
 // where excluded entries carry ExcludedReason, `scope` replaces the old `presence`, and per-type values
 // live in ValuesPerType. UIs and agents consume FamilySnapshotRecord directly.
-[ExportTsSchema]
 public record LoadedFamiliesMatrixData(
     List<Families.FamilySnapshotRecord> Families,
     List<RevitDataIssue> Issues,

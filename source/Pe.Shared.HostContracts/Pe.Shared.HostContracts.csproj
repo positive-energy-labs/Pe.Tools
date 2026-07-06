@@ -14,6 +14,7 @@
 
     <ItemGroup>
         <PackageReference Include="Newtonsoft.Json" Version="13.0.3"/>
+        <PackageReference Include="NJsonSchema.NewtonsoftJson" Version="11.5.2"/>
     </ItemGroup>
 
     <ItemGroup>

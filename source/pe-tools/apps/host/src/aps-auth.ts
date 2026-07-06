@@ -14,7 +14,7 @@ import {
   type ApsPersistedTokenStatus,
   type ApsTokenRequest,
   type ApsTokenResult,
-} from "@pe/host-contracts/effect";
+} from "@pe/host-contracts/operation-types";
 import { LocalOpError } from "./local-error.ts";
 import { productGlobalSettingsPath } from "./product-paths.ts";
 

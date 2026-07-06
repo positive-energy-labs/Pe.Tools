@@ -69,6 +69,9 @@ internal sealed class BridgeAgent : IDisposable {
         Action<string?>? onDisconnected = null
     ) {
         var startupStopwatch = Stopwatch.StartNew();
+        var discoveredOps = BridgeOpRegistry.RegisterFromLoadedPeAssemblies();
+        Log.Information("Host bridge agent discovered {DiscoveredOpCount} attribute-registered operations.",
+            discoveredOps);
         var uiapp = RevitUiSession.CurrentUIApplication;
         var activeDocument = uiapp.GetActiveDocument();
         this._moduleRegistry = moduleRegistry;
@@ -256,7 +259,7 @@ internal sealed class BridgeAgent : IDisposable {
                 request.OperationKey,
                 request.RequestId
             );
-            if (!BridgeOpCatalog.ByKey.TryGetValue(request.OperationKey, out var bridgeOp))
+            if (!BridgeOpRegistry.TryGet(request.OperationKey, out var bridgeOp))
                 throw new InvalidOperationException($"Unsupported bridge operation '{request.OperationKey}'.");
 
             var responseEnvelope = await bridgeOp

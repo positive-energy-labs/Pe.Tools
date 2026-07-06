@@ -1,6 +1,5 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using Pe.Shared.Codegen;
 
 namespace Pe.Shared.HostContracts.Protocol;
 
@@ -25,7 +24,6 @@ public enum DocumentInvalidationReason {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsSchema]
 public enum HostModuleScope {
     Host,
     Session,
@@ -33,7 +31,6 @@ public enum HostModuleScope {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsSchema]
 public enum HostModuleActiveDocumentKind {
     Any,
     ProjectOnly,

@@ -1,4 +1,4 @@
-import { Context, Deferred, Effect, Layer, Ref, Schema } from "effect";
+import { Context, Deferred, Effect, Layer, PubSub, Ref, Schema } from "effect";
 import type { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpServerResponse as Response } from "effect/unstable/http";
 import { randomUUID } from "node:crypto";
@@ -17,7 +17,14 @@ type Session = {
   readonly sessionId: string;
   readonly processId: number;
   readonly state: Ref.Ref<BridgeStateSnapshot>;
+  // FIFO turn chain: each invoke awaits the previous invoke's completion gate.
+  // Machine callers (SSE-invalidated refetch bursts, IDE $ref resolution, agents)
+  // collide constantly; queueing beats instant-423. Depth-bounded below.
+  readonly queueTail: Ref.Ref<Deferred.Deferred<void>>;
+  readonly queueDepth: Ref.Ref<number>;
 };
+
+const MAX_QUEUED_OPS = 8;
 
 type BridgePendingRequest = {
   readonly operationKey: string;
@@ -47,6 +54,14 @@ export type BridgeSessionView = {
   readonly state?: BridgeStateSnapshot;
 };
 
+/** A bridge frame worth relaying to browsers: Revit events, state syncs, connects/disconnects. */
+export type HostBridgeEvent = {
+  readonly sessionId: string;
+  readonly kind: "event" | "state-sync" | "connected" | "disconnected";
+  readonly eventName?: string;
+  readonly payloadJson?: string | null;
+};
+
 export function getBridgeRegistrationRejection(registration: BridgeRegistrationRequest) {
   return registration.contractVersion === BRIDGE_CONTRACT_VERSION
     ? null
@@ -67,6 +82,7 @@ export class RevitBridge extends Context.Service<
     readonly handleConnection: (
       req: HttpServerRequest.HttpServerRequest,
     ) => Effect.Effect<HttpServerResponse.HttpServerResponse>;
+    readonly events: PubSub.PubSub<HostBridgeEvent>;
   }
 >()("RevitBridge") {}
 
@@ -139,6 +155,7 @@ export const RevitBridgeLive = Layer.effect(
   Effect.gen(function* () {
     const sessions = yield* Ref.make(new Map<string, Session>());
     const currentSessionId = yield* Ref.make<string | null>(null);
+    const events = yield* PubSub.unbounded<HostBridgeEvent>();
 
     const viewSession = Effect.fnUntraced(function* (session: Session) {
       return {
@@ -174,6 +191,10 @@ export const RevitBridgeLive = Layer.effect(
         const remaining = yield* Ref.get(sessions);
         yield* Ref.set(currentSessionId, remaining.keys().next().value ?? null);
       }
+      yield* PubSub.publish(events, {
+        sessionId: closedSession.sessionId,
+        kind: "disconnected",
+      });
     });
 
     const handleConnectionScoped = Effect.fnUntraced(function* (
@@ -209,12 +230,16 @@ export const RevitBridgeLive = Layer.effect(
               });
               return;
             }
+            const initialGate = yield* Deferred.make<void>();
+            yield* Deferred.succeed(initialGate, void 0);
             const registeredSession = {
               send,
               pending: yield* Ref.make<BridgePendingRequest | null>(null),
               sessionId: `bridge-${randomUUID()}`,
               processId: frame.registration.processId,
               state: yield* Ref.make(frame.registration.state),
+              queueTail: yield* Ref.make(initialGate),
+              queueDepth: yield* Ref.make(0),
             };
             session = registeredSession;
             yield* Ref.update(sessions, (map) =>
@@ -225,6 +250,10 @@ export const RevitBridgeLive = Layer.effect(
               kind: "RegistrationAck",
               registrationAck: { accepted: true },
             });
+            yield* PubSub.publish(events, {
+              sessionId: registeredSession.sessionId,
+              kind: "connected",
+            });
             return;
           }
           case "StateSync":
@@ -232,7 +261,13 @@ export const RevitBridgeLive = Layer.effect(
               yield* Effect.logWarning("bridge StateSync frame missing stateSync");
               return;
             }
-            if (session) yield* Ref.set(session.state, frame.stateSync.state);
+            if (session) {
+              yield* Ref.set(session.state, frame.stateSync.state);
+              yield* PubSub.publish(events, {
+                sessionId: session.sessionId,
+                kind: "state-sync",
+              });
+            }
             return;
           case "Response": {
             if (!frame.response) {
@@ -242,13 +277,21 @@ export const RevitBridgeLive = Layer.effect(
             if (session) yield* completeBridgePending(session.pending, frame.response);
             return;
           }
-          case "Event":
+          case "Event": {
             if (!frame.event) {
               yield* Effect.logWarning("bridge Event frame missing event");
               return;
             }
             yield* Effect.log(`bridge event: ${frame.event.eventName}`);
+            if (session)
+              yield* PubSub.publish(events, {
+                sessionId: session.sessionId,
+                kind: "event",
+                eventName: frame.event.eventName,
+                payloadJson: frame.event.payloadJson,
+              });
             return;
+          }
           default:
             return;
         }
@@ -305,7 +348,34 @@ export const RevitBridgeLive = Layer.effect(
     ) {
       const session = yield* getSession(bridgeSessionId);
       if (!session) return yield* Effect.fail(new NoRevitSession());
-      return yield* invokeSession(session, operationKey, payload);
+
+      const depth = yield* Ref.updateAndGet(session.queueDepth, (n) => n + 1);
+      if (depth > MAX_QUEUED_OPS) {
+        yield* Ref.update(session.queueDepth, (n) => n - 1);
+        return yield* Effect.fail(
+          new BridgeError(
+            `Revit queue is full (${MAX_QUEUED_OPS} waiting). Retry '${operationKey}' shortly.`,
+            423,
+          ),
+        );
+      }
+
+      const myGate = yield* Deferred.make<void>();
+      const previousGate = yield* Ref.getAndSet(session.queueTail, myGate);
+      return yield* Effect.gen(function* () {
+        yield* Deferred.await(previousGate);
+        // The session may have died while we queued; its socket is gone.
+        const live = yield* getSession(session.sessionId);
+        if (live !== session) return yield* Effect.fail(new NoRevitSession());
+        return yield* invokeSession(session, operationKey, payload);
+      }).pipe(
+        Effect.ensuring(
+          Effect.andThen(
+            Ref.update(session.queueDepth, (n) => n - 1),
+            Deferred.succeed(myGate, void 0),
+          ),
+        ),
+      );
     });
 
     const snapshot = Effect.fnUntraced(function* (bridgeSessionId?: string) {
@@ -319,6 +389,6 @@ export const RevitBridgeLive = Layer.effect(
       return yield* Effect.all([...map.values()].map((session) => viewSession(session)));
     });
 
-    return { invoke, snapshot, list, handleConnection };
+    return { invoke, snapshot, list, handleConnection, events };
   }),
 );

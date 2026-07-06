@@ -1,10 +1,10 @@
 import type { AnyFieldApi } from "@tanstack/react-form";
 import { createContext, useContext, useMemo, type ReactNode } from "react";
-import type {
-  FieldOptionItem,
-  FieldOptionsRequest,
-  ParameterCatalogEntry,
-} from "@pe/host-contracts/effect";
+import type { SettingsFieldOptions, SettingsParameterCatalog } from "@pe/host-contracts/generated";
+
+type FieldOptionItem = SettingsFieldOptions.Res.FieldOptionItem;
+type FieldOptionsRequest = SettingsFieldOptions.Req.Request;
+type ParameterCatalogEntry = SettingsParameterCatalog.Res.ParameterCatalogEntry;
 import type { SettingsValidationResult } from "@pe/host-contracts/operation-types";
 import { useFieldOptionsQuery, useParameterCatalogQuery } from "#/host/queries";
 import type {

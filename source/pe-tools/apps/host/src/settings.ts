@@ -20,6 +20,7 @@ import {
   type SettingsValidationIssue,
   type ValidateSettingsDocumentRequest,
 } from "@pe/host-contracts/operation-types";
+import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { LocalOpError } from "./local-error.ts";
 import { productSettingsRootPath } from "./product-paths.ts";
 import {
@@ -238,9 +239,12 @@ const saveSettingsDocumentToDisk = Effect.fnUntraced(function* (
   }
 
   yield* makeDirectory(win32.dirname(documentPath), "settings.document.save");
+  const contentToWrite = materialized.schemaJson
+    ? injectSchemaReference(request.rawContent, settingsSchemaUrl(request.documentId))
+    : request.rawContent;
   yield* writeFileStringAtomic(
     documentPath,
-    normalizeJsonTrailingNewline(request.rawContent),
+    normalizeJsonTrailingNewline(contentToWrite),
     "settings.document.save",
   );
   return {
@@ -306,6 +310,7 @@ const materializeDocument = Effect.fnUntraced(function* (
     return {
       composedContent: null,
       dependencies: [],
+      schemaJson: null,
       schemaValidation: "not-run",
       validation: { isValid: false, issues: [parsed.issue] },
     };
@@ -321,6 +326,10 @@ const materializeDocument = Effect.fnUntraced(function* (
     composition.value ?? parsed.value,
     ctx,
   );
+  const schemaJson =
+    "schemaJson" in schemaValidation && typeof schemaValidation.schemaJson === "string"
+      ? schemaValidation.schemaJson
+      : null;
   const issues = [...composition.issues, ...schemaValidation.issues];
   return {
     composedContent:
@@ -328,6 +337,7 @@ const materializeDocument = Effect.fnUntraced(function* (
         ? normalizeJsonTrailingNewline(JSON.stringify(composition.value, null, 2))
         : null,
     dependencies: composition.dependencies,
+    schemaJson,
     schemaValidation: schemaValidation.status,
     validation: { isValid: !issues.some((issue) => issue.severity === "error"), issues },
   };
@@ -384,7 +394,8 @@ const validateWithProviderSchema = Effect.fnUntraced(function* (
   value: unknown,
   ctx: SettingsRuntimeContext,
 ) {
-  if (ctx.schemaJson) return validateWithSchemaJson(ctx.schemaJson, value);
+  if (ctx.schemaJson)
+    return { ...validateWithSchemaJson(ctx.schemaJson, value), schemaJson: ctx.schemaJson };
   if (!ctx.invokeBridge) return { issues: [] as SettingsValidationIssue[], status: "unavailable" };
 
   const schemaResult = yield* Effect.result(
@@ -411,7 +422,7 @@ const validateWithProviderSchema = Effect.fnUntraced(function* (
   const schemaJson = getSchemaJson(schemaResult.success);
   if (!schemaJson) return { issues: [] as SettingsValidationIssue[], status: "not-configured" };
 
-  return validateWithSchemaJson(schemaJson, value);
+  return { ...validateWithSchemaJson(schemaJson, value), schemaJson };
 });
 
 function validateWithSchemaJson(schemaJson: string, value: unknown) {
@@ -529,6 +540,34 @@ function isSettingsModule(value: unknown): value is SettingsModuleDescriptor {
     typeof candidate.defaultRootKey === "string" &&
     Array.isArray(candidate.roots)
   );
+}
+
+// --- URL-native $schema ------------------------------------------------------
+// Settings schemas are session state (value-domain samples come from the open
+// document), so they are served live from GET /schemas/settings/... — never
+// persisted to disk. vscode-json-languageservice (VSCode and Zed) resolves
+// http $schema URLs, and localhost URLs are machine-portable: each teammate's
+// host answers for their own session.
+
+export function settingsSchemaUrl(documentId: SettingsDocumentId): string {
+  const base = hostProcessIdentity.defaultHostBaseUrl;
+  const moduleKey = encodeURIComponent(documentId.moduleKey);
+  const rootKey = encodeURIComponent(documentId.rootKey);
+  return `${base}/schemas/settings/${moduleKey}/${rootKey}.json`;
+}
+
+/** Set/repair the document's $schema URL; returns content unchanged when not applicable. */
+export function injectSchemaReference(rawContent: string, schemaUrl: string): string {
+  try {
+    const parsed = JSON.parse(rawContent) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return rawContent;
+    const record = parsed as Record<string, unknown>;
+    if (record.$schema === schemaUrl) return rawContent;
+    delete record.$schema;
+    return JSON.stringify({ $schema: schemaUrl, ...record }, null, 2);
+  } catch {
+    return rawContent;
+  }
 }
 
 const resolveDocumentPath = Effect.fnUntraced(function* (

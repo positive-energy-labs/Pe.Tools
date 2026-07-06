@@ -1,17 +1,14 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using Pe.Shared.Codegen;
 
 namespace Pe.Revit.SettingsRuntime.Modules.AutoTag;
 
-[ExportTsSchema]
 public class AutoTagSettings {
     public bool Enabled { get; set; } = true;
 
     public List<AutoTagConfiguration> Configurations { get; set; } = [];
 }
 
-[ExportTsSchema]
 public class AutoTagConfiguration {
     public BuiltInCategory BuiltInCategory { get; set; } = BuiltInCategory.INVALID;
 
@@ -31,13 +28,11 @@ public class AutoTagConfiguration {
     public List<ViewTypeFilter> ViewTypeFilter { get; set; } = [];
 }
 
-[ExportTsSchema]
 public enum TagOrientationMode {
     Horizontal,
     Vertical
 }
 
-[ExportTsSchema]
 public enum ViewTypeFilter {
     FloorPlan,
     CeilingPlan,

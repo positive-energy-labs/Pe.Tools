@@ -1,13 +1,10 @@
-using Pe.Shared.Codegen;
 
 namespace Pe.Shared.RevitData;
 
-[ExportTsSchema]
 public record ParameterCollectionRequest(
     LoadedFamiliesFilter? Filter = null
 );
 
-[ExportTsSchema]
 public record ParameterCollectionArtifact(
     string RunId,
     string Engine,

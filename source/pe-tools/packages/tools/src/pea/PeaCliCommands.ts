@@ -140,8 +140,8 @@ export class PeaCliCommands {
           default: "compact",
         },
       },
-      run: (ctx) => {
-        const results = new HostRpcCaller().searchOperations({
+      run: async (ctx) => {
+        const results = await new HostRpcCaller().searchOperations({
           query: firstNonBlank(ctx.values.query),
           domain: firstNonBlank(ctx.values.domain),
           intent: parseOperationIntent(ctx.values.intent),
@@ -410,7 +410,7 @@ function writeScriptExecution(result: HostOpResponse<"scripting.execute">) {
   console.log(`revit     ${result.revitVersion}`);
   if (result.containerTypeName) console.log(`container ${result.containerTypeName}`);
   if (result.output) console.log(result.output.trimEnd());
-  for (const diagnostic of result.diagnostics)
+  for (const diagnostic of result.diagnostics ?? [])
     console.error(`${diagnostic.severity} ${diagnostic.stage}: ${diagnostic.message}`);
 }
 
@@ -427,14 +427,14 @@ function writeScriptPodImport(result: HostOpResponse<"scripting.pod.import">) {
   console.log(`workspace ${result.workspaceKey ?? "unknown"}`);
   console.log(`root      ${result.workspaceRootPath ?? "unknown"}`);
   console.log(`archive   ${result.archivePath}`);
-  console.log(`entries   ${result.archiveEntries.length}`);
+  console.log(`entries   ${result.archiveEntries?.length ?? 0}`);
 }
 
 function writeScriptPodExport(result: HostOpResponse<"scripting.pod.export">) {
   console.log(`status    ${result.status}`);
   console.log(`workspace ${result.workspaceKey ?? "unknown"}`);
   console.log(`archive   ${result.archivePath}`);
-  console.log(`entries   ${result.archiveEntries.length}`);
+  console.log(`entries   ${result.archiveEntries?.length ?? 0}`);
 }
 
 function parseOperationVerbosity(value: unknown): "compact" | "hints" | "full" {

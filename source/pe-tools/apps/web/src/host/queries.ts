@@ -1,100 +1,118 @@
 /**
- * TanStack Query hooks over the Revit host RPC. Literal operation keys infer
- * response types from the generated/TS-owned operation contract boundary.
+ * TanStack Query over the Revit host RPC.
+ *
+ * `useHostOp` is the whole surface: any operation key (generated or
+ * runtime-registered) becomes a query with one call. The named hooks below are
+ * one-line conveniences kept for existing routes; new routes can call
+ * `useHostOp` directly.
  */
 import { useQuery } from "@tanstack/react-query";
 
-import { callHostRpc } from "#/host/client";
+import { callHostDynamic, callHostRpc } from "#/host/client";
 import type {
   LoadedFamiliesMatrixRequest,
   LoadedFamiliesRequest,
 } from "#/host/loaded-families-view";
 import type {
-  FieldOptionsRequest,
-  ParameterCatalogRequest,
-  SchemaRequest,
-} from "@pe/host-contracts/effect";
-import type { HostSessionScope, SettingsTreeRequest } from "@pe/host-contracts/operation-types";
+  HostOpRequest,
+  HostSessionScope,
+  OpKey,
+  OpRequestOf,
+  SettingsTreeRequest,
+} from "@pe/host-contracts/operation-types";
 
-const KEY = ["pe-host"] as const;
+type FieldOptionsRequest = HostOpRequest<"settings.field-options">;
+type ParameterCatalogRequest = HostOpRequest<"settings.parameter-catalog">;
+type SchemaRequest = HostOpRequest<"settings.schema">;
+
+export const HOST_QUERY_KEY = ["pe-host"] as const;
 
 type HostQueryOptions = HostSessionScope & {
   readonly enabled?: boolean;
 };
 
-function sessionKey(options: HostQueryOptions | undefined): string {
-  return options?.bridgeSessionId ?? "";
-}
+type HostOpQueryTuning = {
+  readonly staleTime?: number;
+  readonly gcTime?: number;
+  readonly refetchOnMount?: boolean;
+  readonly refetchOnReconnect?: boolean;
+  readonly refetchOnWindowFocus?: boolean;
+};
 
-function callOptions(options: HostQueryOptions | undefined) {
-  return options?.bridgeSessionId ? { bridgeSessionId: options.bridgeSessionId } : undefined;
-}
-
-function stableSerialize(input: Record<string, string> | undefined | null): string {
-  if (!input) return "{}";
-  return JSON.stringify(
-    Object.keys(input)
-      .sort((a, b) => a.localeCompare(b))
-      .reduce<Record<string, string>>((acc, key) => {
-        acc[key] = input[key] ?? "";
-        return acc;
-      }, {}),
+/** Key-order-insensitive serialization so semantically equal requests share a cache entry. */
+function stableKey(value: unknown): string {
+  return (
+    JSON.stringify(value, (_k, v: unknown) =>
+      v && typeof v === "object" && !Array.isArray(v)
+        ? Object.fromEntries(
+            Object.entries(v as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)),
+          )
+        : v,
+    ) ?? ""
   );
 }
 
-function filterKey(request: LoadedFamiliesRequest | undefined): string {
-  const f = request?.filter;
-  return [
-    f?.categoryNames?.join(",") ?? "",
-    f?.familyNames?.join(",") ?? "",
-    f?.familyNameContains ?? "",
-    f?.placementScope ?? "",
-  ].join("|");
+export function useHostOp<K extends OpKey>(
+  key: K,
+  request?: OpRequestOf<K>,
+  options?: HostQueryOptions & HostOpQueryTuning,
+) {
+  const { enabled, bridgeSessionId, ...tuning } = options ?? {};
+  const scope = bridgeSessionId ? { bridgeSessionId } : undefined;
+  return useQuery({
+    queryKey: [...HOST_QUERY_KEY, bridgeSessionId ?? "", key, stableKey(request)],
+    queryFn: () => callHostRpc(key, request, scope),
+    enabled: enabled ?? true,
+    refetchOnWindowFocus: false,
+    ...tuning,
+  });
 }
 
-export function useHostStatusQuery(options?: HostQueryOptions) {
+/**
+ * Untyped escape hatch for runtime-registered ops the checked-in types haven't
+ * caught up with. Regenerate (`host-typegen`) and switch to `useHostOp` once
+ * the op is stable.
+ */
+export function useHostOpDynamic(
+  key: string,
+  request?: unknown,
+  options?: HostQueryOptions & HostOpQueryTuning,
+) {
+  const { enabled, bridgeSessionId, ...tuning } = options ?? {};
+  const scope = bridgeSessionId ? { bridgeSessionId } : undefined;
   return useQuery({
-    queryKey: [...KEY, sessionKey(options), "host-status"],
-    queryFn: () => callHostRpc("host.status", undefined, callOptions(options)),
-    enabled: options?.enabled ?? true,
-    staleTime: 15_000,
+    queryKey: [...HOST_QUERY_KEY, bridgeSessionId ?? "", key, stableKey(request)],
+    queryFn: () => callHostDynamic(key, request, scope),
+    enabled: enabled ?? true,
     refetchOnWindowFocus: false,
+    ...tuning,
   });
+}
+
+// --- named conveniences ------------------------------------------------------
+
+export function useHostStatusQuery(options?: HostQueryOptions) {
+  return useHostOp("host.status", undefined, { ...options, staleTime: 15_000 });
 }
 
 export function useBridgeSessionSummaryQuery(options?: HostQueryOptions) {
-  return useQuery({
-    queryKey: [...KEY, sessionKey(options), "bridge-session-summary"],
-    queryFn: () => callHostRpc("bridge.sessions.summary", undefined, callOptions(options)),
-    enabled: options?.enabled ?? true,
-    staleTime: 15_000,
-    refetchOnWindowFocus: false,
-  });
+  return useHostOp("bridge.sessions.summary", undefined, { ...options, staleTime: 15_000 });
 }
 
 export function useBridgeSessionsListQuery(options?: { enabled?: boolean }) {
-  return useQuery({
-    queryKey: [...KEY, "bridge-sessions-list"],
-    queryFn: () => callHostRpc("bridge.sessions.list"),
-    enabled: options?.enabled ?? true,
-    staleTime: 5_000,
-    refetchOnWindowFocus: false,
-  });
+  return useHostOp("bridge.sessions.list", undefined, { ...options, staleTime: 5_000 });
 }
 
 export function useLoadedFamiliesCatalogQuery(
   request: LoadedFamiliesRequest,
   options?: HostQueryOptions,
 ) {
-  return useQuery({
-    queryKey: [...KEY, sessionKey(options), "loaded-families-catalog", filterKey(request)],
-    queryFn: () => callHostRpc("revit.catalog.loaded-families", request, callOptions(options)),
-    enabled: options?.enabled ?? true,
+  return useHostOp("revit.catalog.loaded-families", request, {
+    ...options,
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
     refetchOnMount: false,
     refetchOnReconnect: false,
-    refetchOnWindowFocus: false,
   });
 }
 
@@ -102,92 +120,47 @@ export function useLoadedFamiliesMatrixQuery(
   request: LoadedFamiliesMatrixRequest | undefined,
   options?: HostQueryOptions,
 ) {
-  return useQuery({
-    queryKey: [...KEY, sessionKey(options), "loaded-families-matrix", filterKey(request)],
-    queryFn: () => {
-      if (!request) throw new Error("Loaded families matrix request is required.");
-      return callHostRpc("revit.matrix.loaded-families", request, callOptions(options));
-    },
+  return useHostOp("revit.matrix.loaded-families", request, {
+    ...options,
     enabled: (options?.enabled ?? true) && Boolean(request),
     staleTime: 10_000,
     gcTime: 15 * 60 * 1000,
     refetchOnMount: false,
     refetchOnReconnect: false,
-    refetchOnWindowFocus: false,
   });
 }
 
-// --- settings -------------------------------------------------------------
+// --- settings -----------------------------------------------------------------
 
 export function useWorkspacesQuery(options?: HostQueryOptions) {
-  return useQuery({
-    queryKey: [...KEY, sessionKey(options), "workspaces"],
-    queryFn: () => callHostRpc("settings.workspaces", undefined, callOptions(options)),
-    enabled: options?.enabled ?? true,
-    staleTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: false,
-  });
+  return useHostOp("settings.workspaces", undefined, { ...options, staleTime: 5 * 60 * 1000 });
 }
 
 export function useTreeQuery(request: SettingsTreeRequest | undefined, options?: HostQueryOptions) {
-  return useQuery({
-    queryKey: [
-      ...KEY,
-      sessionKey(options),
-      "tree",
-      request?.moduleKey ?? "",
-      request?.rootKey ?? "",
-      request?.subDirectory ?? "",
-    ],
-    queryFn: () => {
-      if (!request) throw new Error("Tree request is required.");
-      return callHostRpc("settings.tree", request, callOptions(options));
-    },
+  return useHostOp("settings.tree", request, {
+    ...options,
     enabled: (options?.enabled ?? true) && Boolean(request?.moduleKey && request?.rootKey),
     staleTime: 60_000,
-    refetchOnWindowFocus: false,
   });
 }
 
 export function useSchemaQuery(request: SchemaRequest | undefined, options?: HostQueryOptions) {
-  return useQuery({
-    queryKey: [
-      ...KEY,
-      sessionKey(options),
-      "schema",
-      request?.moduleKey ?? "",
-      request?.rootKey ?? "",
-    ],
-    queryFn: () => {
-      if (!request) throw new Error("Schema request is required.");
-      return callHostRpc("settings.schema", request, callOptions(options));
-    },
+  return useHostOp("settings.schema", request, {
+    ...options,
     enabled: (options?.enabled ?? true) && Boolean(request?.moduleKey && request?.rootKey),
     staleTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: false,
   });
 }
 
 export function useFieldOptionsQuery(request: FieldOptionsRequest, options?: HostQueryOptions) {
-  return useQuery({
-    queryKey: [
-      ...KEY,
-      sessionKey(options),
-      "field-options",
-      request.moduleKey,
-      request.rootKey,
-      request.propertyPath,
-      request.sourceKey,
-      stableSerialize(request.contextValues),
-    ],
-    queryFn: () => callHostRpc("settings.field-options", request, callOptions(options)),
+  return useHostOp("settings.field-options", request, {
+    ...options,
     enabled:
       (options?.enabled ?? true) &&
       Boolean(request.moduleKey && request.propertyPath && request.sourceKey),
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
     refetchOnMount: false,
-    refetchOnWindowFocus: false,
   });
 }
 
@@ -195,19 +168,11 @@ export function useParameterCatalogQuery(
   request: ParameterCatalogRequest,
   options?: HostQueryOptions,
 ) {
-  return useQuery({
-    queryKey: [
-      ...KEY,
-      sessionKey(options),
-      "parameter-catalog",
-      request.moduleKey,
-      stableSerialize(request.contextValues),
-    ],
-    queryFn: () => callHostRpc("settings.parameter-catalog", request, callOptions(options)),
+  return useHostOp("settings.parameter-catalog", request, {
+    ...options,
     enabled: (options?.enabled ?? true) && Boolean(request.moduleKey),
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
     refetchOnMount: false,
-    refetchOnWindowFocus: false,
   });
 }

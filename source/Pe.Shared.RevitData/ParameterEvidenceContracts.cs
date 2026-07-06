@@ -1,11 +1,9 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using Pe.Shared.Codegen;
 
 namespace Pe.Shared.RevitData;
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsSchema]
 public enum ParameterEvidenceRankingMode {
     General,
     Tagging,
@@ -14,7 +12,6 @@ public enum ParameterEvidenceRankingMode {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsSchema]
 public enum ParameterEvidenceSource {
     ProjectBinding,
     ScheduleField,
@@ -23,7 +20,6 @@ public enum ParameterEvidenceSource {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsSchema]
 public enum ParameterEvidenceScope {
     Document,
     Category,
@@ -35,14 +31,12 @@ public enum ParameterEvidenceScope {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsSchema]
 public enum ParameterEvidenceStrength {
     Weak,
     Medium,
     Strong
 }
 
-[ExportTsSchema]
 public record ParameterEvidenceRequest {
     public string? TaskText { get; init; }
     public ParameterEvidenceRankingMode RankingMode { get; init; } = ParameterEvidenceRankingMode.General;
@@ -58,7 +52,6 @@ public record ParameterEvidenceRequest {
     public bool UseCache { get; init; } = true;
 }
 
-[ExportTsSchema]
 public record ParameterEvidenceCount(
     ParameterEvidenceSource Source,
     ParameterEvidenceScope Scope,
@@ -66,7 +59,6 @@ public record ParameterEvidenceCount(
     int Count
 );
 
-[ExportTsSchema]
 public record ParameterEvidenceSample(
     ParameterEvidenceSource Source,
     ParameterEvidenceScope Scope,
@@ -78,7 +70,6 @@ public record ParameterEvidenceSample(
     RevitElementHandle? Element = null
 );
 
-[ExportTsSchema]
 public record ParameterEvidenceCandidate(
     ParameterDefinitionDescriptor Definition,
     double Score,
@@ -89,7 +80,6 @@ public record ParameterEvidenceCandidate(
     public ParameterIdentity Identity => this.Definition.Identity;
 }
 
-[ExportTsSchema]
 public record ParameterEvidenceData(
     List<ParameterEvidenceCandidate> Candidates,
     List<RevitDataIssue> Issues,

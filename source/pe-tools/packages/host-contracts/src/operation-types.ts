@@ -1,22 +1,66 @@
-import {
-  hostErrorKindSchema,
-  hostModuleDescriptorSchema,
-  hostOperations,
-  hostRuntimeAssemblyDataSchema,
-  type HostErrorKind,
-  type HostOperationKey,
-} from "./contracts/index.js";
-import { hostEffectOperationSchemas } from "./effect/host-op-schemas.generated.js";
-import {
-  apsLogoutResultSchema,
-  apsPersistedTokenStatusSchema,
-  apsTokenRequestSchema,
-  apsTokenResultSchema,
-} from "./effect/host-effect.generated.js";
+import { hostModuleDescriptorSchema, hostRuntimeAssemblyDataSchema } from "./contracts/index.js";
+import { hostOpKeys, type HostOps } from "./generated/host-ops.generated.js";
 import { Schema } from "effect";
+
+/** Bridge op keys, sourced from the checked-in live-session typegen output. */
+export type HostOperationKey = keyof HostOps;
+const hostOperationKeySet: ReadonlySet<string> = new Set(hostOpKeys);
 
 type NoRequest = Record<string, never> | undefined;
 type SchemaType<T extends Schema.Schema<any>> = Schema.Schema.Type<T>;
+
+// --- APS auth (TS-owned ops) ---------------------------------------------------
+
+export const ApsAuthFlowKind = {
+  TwoLegged: "TwoLegged",
+  ThreeLeggedConfidential: "ThreeLeggedConfidential",
+} as const;
+export const apsAuthFlowKindSchema = Schema.Literals(["TwoLegged", "ThreeLeggedConfidential"]);
+export type ApsAuthFlowKind = Schema.Schema.Type<typeof apsAuthFlowKindSchema>;
+
+export const ApsScopeProfile = {
+  ParameterService: "ParameterService",
+  AutomationManagement: "AutomationManagement",
+  AutomationUserContext: "AutomationUserContext",
+  AutomationArtifactStorage: "AutomationArtifactStorage",
+} as const;
+export const apsScopeProfileSchema = Schema.Literals([
+  "ParameterService",
+  "AutomationManagement",
+  "AutomationUserContext",
+  "AutomationArtifactStorage",
+]);
+export type ApsScopeProfile = Schema.Schema.Type<typeof apsScopeProfileSchema>;
+
+export const apsTokenRequestSchema = Schema.Struct({
+  explicitScopes: Schema.optional(Schema.NullOr(Schema.Array(Schema.String))),
+  flowKind: Schema.optional(apsAuthFlowKindSchema),
+  scopeProfile: Schema.optional(apsScopeProfileSchema),
+});
+export type ApsTokenRequest = Schema.Schema.Type<typeof apsTokenRequestSchema>;
+
+export const apsPersistedTokenStatusSchema = Schema.Struct({
+  exists: Schema.Boolean,
+  expiresAtUtc: Schema.optional(Schema.NullOr(Schema.String)),
+  flowKind: apsAuthFlowKindSchema,
+  hasRefreshToken: Schema.Boolean,
+  scopeProfile: apsScopeProfileSchema,
+});
+export type ApsPersistedTokenStatus = Schema.Schema.Type<typeof apsPersistedTokenStatusSchema>;
+
+export const apsTokenResultSchema = Schema.Struct({
+  accessToken: Schema.String,
+  expiresAtUtc: Schema.String,
+  flowKind: apsAuthFlowKindSchema,
+  refreshToken: Schema.optional(Schema.NullOr(Schema.String)),
+  scopeProfile: apsScopeProfileSchema,
+});
+export type ApsTokenResult = Schema.Schema.Type<typeof apsTokenResultSchema>;
+
+export const apsLogoutResultSchema = Schema.Struct({
+  loggedOut: Schema.Boolean,
+});
+export type ApsLogoutResult = Schema.Schema.Type<typeof apsLogoutResultSchema>;
 
 export const HOST_RPC_BRIDGE_SESSION_HEADER = "x-pe-bridge-session-id";
 
@@ -507,17 +551,7 @@ export const tsOnlyOperationSchemas = {
 
 export type TsOnlyOperationKey = keyof typeof tsOnlyOperationSchemas;
 export type AnyOperationKey = HostOperationKey | TsOnlyOperationKey;
-type GeneratedOperationSchemas = typeof hostEffectOperationSchemas;
 type TsOnlyOperationSchemas = typeof tsOnlyOperationSchemas;
-type GeneratedRequest<K extends HostOperationKey> =
-  "request" extends keyof GeneratedOperationSchemas[K]
-    ? GeneratedOperationSchemas[K]["request"] extends Schema.Schema<any>
-      ? SchemaType<GeneratedOperationSchemas[K]["request"]>
-      : NoRequest
-    : NoRequest;
-type GeneratedResponse<K extends HostOperationKey> = SchemaType<
-  GeneratedOperationSchemas[K]["response"]
->;
 type TsOnlyRequest<K extends TsOnlyOperationKey> = TsOnlyOperationSchemas[K] extends {
   readonly request: infer RequestSchema extends Schema.Schema<any>;
 }
@@ -527,30 +561,40 @@ type TsOnlyResponse<K extends TsOnlyOperationKey> = SchemaType<
   TsOnlyOperationSchemas[K]["response"]
 >;
 
-export const anyOperationKeySchema = Schema.Literals([
-  ...Object.keys(hostOperations),
-  ...Object.keys(tsOnlyOperationSchemas),
-] as [AnyOperationKey, ...AnyOperationKey[]]);
-
 export function isAnyOperationKey(key: string): key is AnyOperationKey {
-  return Object.hasOwn(hostOperations, key) || Object.hasOwn(tsOnlyOperationSchemas, key);
+  return hostOperationKeySet.has(key) || Object.hasOwn(tsOnlyOperationSchemas, key);
 }
 
 export function isHostOperationKey(key: string): key is HostOperationKey {
-  return Object.hasOwn(hostOperations, key);
+  return hostOperationKeySet.has(key);
 }
 
+export function isTsOnlyOperationKey(key: string): key is TsOnlyOperationKey {
+  return Object.hasOwn(tsOnlyOperationSchemas, key);
+}
+
+/**
+ * Strict key space for the typed client surface: only keys the checked-in
+ * typegen output (or the hand-authored TS-only map) knows about. Runtime-
+ * registered ops the types haven't caught up with go through the explicit
+ * dynamic escape hatch (`callHostDynamic`) instead of weakening every call.
+ */
+export type OpKey = AnyOperationKey;
+
+export type OpRequestOf<K extends AnyOperationKey> = HostOpRequest<K>;
+export type OpResponseOf<K extends AnyOperationKey> = HostOpResponse<K>;
+
 export type HostOpResponse<K extends AnyOperationKey> = K extends HostOperationKey
-  ? GeneratedResponse<K>
+  ? HostOps[K]["response"]
   : K extends TsOnlyOperationKey
     ? TsOnlyResponse<K>
-    : unknown;
+    : never;
 
 export type HostOpRequest<K extends AnyOperationKey> = K extends HostOperationKey
-  ? GeneratedRequest<K>
+  ? HostOps[K]["request"]
   : K extends TsOnlyOperationKey
     ? TsOnlyRequest<K>
-    : unknown;
+    : never;
 
 export const hostProblemDetailsSchema = Schema.Record(Schema.String, Schema.Unknown);
 
@@ -567,33 +611,3 @@ export class HostCallError extends Error {
   }
 }
 
-export function toHostCallError(key: string, error: unknown): HostCallError | undefined {
-  if (!isHostRpcProblem(error)) return undefined;
-  return new HostCallError(`${error.key}: ${error.message}`, error.status, {
-    kind: error.kind,
-    operationKey: error.key,
-    title: error.message,
-    status: error.status,
-  });
-}
-
-function isHostRpcProblem(
-  value: unknown,
-): value is { key: string; kind: HostErrorKind; message: string; status: number } {
-  return (
-    isRecord(value) &&
-    value._tag === "HostRpcError" &&
-    typeof value.key === "string" &&
-    isHostErrorKind(value.kind) &&
-    typeof value.message === "string" &&
-    typeof value.status === "number"
-  );
-}
-
-function isHostErrorKind(value: unknown): value is HostErrorKind {
-  return Schema.is(hostErrorKindSchema)(value);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}

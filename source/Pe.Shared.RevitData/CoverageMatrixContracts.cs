@@ -1,12 +1,10 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Pe.Shared.RevitData.Schedules;
-using Pe.Shared.Codegen;
 
 namespace Pe.Shared.RevitData;
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsSchema]
 public enum RevitElementScope {
     All,
     ActiveViewVisible,
@@ -16,14 +14,12 @@ public enum RevitElementScope {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsSchema]
 public enum RevitParameterLookupPreference {
     InstanceThenType,
     InstanceOnly,
     TypeOnly
 }
 
-[ExportTsSchema]
 public record RevitElementHandle(
     long ElementId,
     string UniqueId,
@@ -34,7 +30,6 @@ public record RevitElementHandle(
 );
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsSchema]
 public enum ScheduleRoleScope {
     All,
     IssuedOnly,
@@ -43,7 +38,6 @@ public enum ScheduleRoleScope {
     IssuedOrWorking
 }
 
-[ExportTsSchema]
 public record ScheduleCoverageRequest {
     public List<string> CategoryNames { get; init; } = [];
     public RevitElementScope Scope { get; init; } = RevitElementScope.All;
@@ -59,7 +53,6 @@ public record ScheduleCoverageRequest {
     public bool IncludeMatchedScheduleNames { get; init; }
 }
 
-[ExportTsSchema]
 public record ScheduleCoverageScheduleHit(
     long ScheduleId,
     string ScheduleUniqueId,
@@ -68,13 +61,11 @@ public record ScheduleCoverageScheduleHit(
     List<ScheduleCatalogSheetPlacement> SheetPlacements
 );
 
-[ExportTsSchema]
 public record ScheduleCoverageElementEntry(
     RevitElementHandle Element,
     List<ScheduleCoverageScheduleHit> MatchingSchedules
 );
 
-[ExportTsSchema]
 public record ScheduleCoverageRoleSummary(
     string Role,
     int ScheduleCount,
@@ -82,7 +73,6 @@ public record ScheduleCoverageRoleSummary(
     List<string> ScheduleNames
 );
 
-[ExportTsSchema]
 public record ScheduleCoverageData(
     int TotalElements,
     int CoveredElements,
@@ -96,7 +86,6 @@ public record ScheduleCoverageData(
     List<ScheduleCoverageRoleSummary>? RoleSummaries = null
 );
 
-[ExportTsSchema]
 public record ParameterCoverageRequest {
     public List<string> CategoryNames { get; init; } = [];
     public RevitElementScope Scope { get; init; } = RevitElementScope.All;
@@ -109,7 +98,6 @@ public record ParameterCoverageRequest {
     public RevitDataOutputBudget? Budget { get; init; }
 }
 
-[ExportTsSchema]
 public record ParameterCoverageParameterEntry(
     ParameterDefinitionDescriptor Definition,
     string? CategoryName,
@@ -123,7 +111,6 @@ public record ParameterCoverageParameterEntry(
     public ParameterIdentity Identity => this.Definition.Identity;
 }
 
-[ExportTsSchema]
 public record ParameterCoverageData(
     int TotalElements,
     List<ParameterCoverageParameterEntry> Parameters,

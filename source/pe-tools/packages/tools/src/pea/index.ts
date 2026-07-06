@@ -199,7 +199,7 @@ export const hostOperationCall = createTool({
       input.bridgeSessionId,
       input.timeoutSeconds * 1000,
     );
-    const operation = hostRpcCaller.getOperation(input.key);
+    const operation = await hostRpcCaller.getOperation(input.key);
     assertHostOperationCallAccess(operation, input.key, context);
     return hostRpcCaller.callOperation(input.key, input.request, input.verbosity);
   },
@@ -229,7 +229,12 @@ export const scriptBootstrap = createTool({
   outputSchema: scriptWorkspaceBootstrapDataSchema,
   execute: async (input, _context) => {
     const result = await createCurrentScriptingTools(input.bridgeSessionId).bootstrap(input);
-    return { ...result, generatedFiles: [...result.generatedFiles] };
+    // Wire fields are optional-typed (NullValueHandling.Ignore); the bootstrap op
+    // always returns the full shape, so assert it for the tool's output schema.
+    return {
+      ...result,
+      generatedFiles: [...(result.generatedFiles ?? [])],
+    } as typeof result & { generatedFiles: string[] } as never;
   },
 });
 
@@ -320,7 +325,7 @@ function parseHostLogTarget(target: "host" | "revit" | "all"): HostLogTarget {
   }
 }
 
-type HostOperationLookupResult = ReturnType<HostRpcCaller["getOperation"]>;
+type HostOperationLookupResult = Awaited<ReturnType<HostRpcCaller["getOperation"]>>;
 
 function assertHostOperationCallAccess(
   operation: HostOperationLookupResult,
