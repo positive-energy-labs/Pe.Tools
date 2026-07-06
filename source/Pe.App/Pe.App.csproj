@@ -70,7 +70,6 @@
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\Pe.Revit.FamilyFoundry\Pe.Revit.FamilyFoundry.csproj"/>
-        <ProjectReference Include="..\Pe.Revit.Placement\Pe.Revit.Placement.csproj"/>
         <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj"/>
         <ProjectReference Include="..\Pe.Revit.Global\Pe.Revit.Global.csproj"/>
         <ProjectReference Include="..\Pe.Revit.SettingsRuntime\Pe.Revit.SettingsRuntime.csproj"/>
