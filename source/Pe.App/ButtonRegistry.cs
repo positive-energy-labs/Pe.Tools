@@ -1,5 +1,6 @@
 using Autodesk.Revit.UI;
 using Pe.App.Commands;
+using Pe.Revit.Loader;
 using Pe.App.Commands.AutoTag;
 using Pe.App.Commands.FamilyFoundry;
 using Pe.App.Commands.Palette;
@@ -231,11 +232,18 @@ public sealed class ButtonRegistry {
 
     /// <summary>
     ///     Builds the entire ribbon from the registry definitions.
-    ///     Creates panels, pulldown buttons, and push buttons with all metadata.
+    ///     Every button points at the target the context's binder hands back — the real command
+    ///     type in the dev lane, a stable loader slot in the installed lane. On a live swap
+    ///     (IsFirstLoad=false) ribbon items already exist and Revit forbids creating more:
+    ///     re-bind every command to repoint the existing buttons and touch nothing else.
     /// </summary>
-    /// <param name="app">The UIControlledApplication to add the ribbon to.</param>
-    /// <param name="tabName">The name of the ribbon tab to create.</param>
-    public static void BuildRibbon(UIControlledApplication app, string tabName) {
+    public static void BuildRibbon(PePayloadContext context, string tabName) {
+        if (!context.IsFirstLoad) {
+            foreach (var registration in Registrations)
+                _ = registration.Bind(context.Commands);
+            return;
+        }
+
         var panels = new Dictionary<string, RibbonPanel>();
         var pulldowns = new Dictionary<string, PulldownButton>();
         var splitButtons = new Dictionary<string, SplitButton>();
@@ -254,11 +262,11 @@ public sealed class ButtonRegistry {
 
         // Create all panels upfront
         foreach (var panelName in panelNames)
-            panels[panelName] = app.CreatePanel(panelName, tabName);
+            panels[panelName] = context.Application.CreatePanel(panelName, tabName);
 
         // Create all buttons in registration order
         foreach (var registration in Registrations)
-            _ = registration.CreateButton(app, panels, pulldowns, splitButtons);
+            _ = registration.CreateButton(context.Commands, panels, pulldowns, splitButtons);
     }
 
     /// <summary>
@@ -287,7 +295,9 @@ public sealed class ButtonRegistry {
     private interface IButtonRegistration {
         ButtonContainer Container { get; }
 
-        PushButton CreateButton(UIControlledApplication app,
+        PeCommandTarget Bind(IPeCommandBinder binder);
+
+        PushButton CreateButton(IPeCommandBinder binder,
             Dictionary<string, RibbonPanel> panels,
             Dictionary<string, PulldownButton> pulldowns,
             Dictionary<string, SplitButton> splitButtons);
@@ -304,15 +314,21 @@ public sealed class ButtonRegistry {
         public string? LongDescription { get; init; }
         public ButtonContainer Container { get; init; } = new ButtonContainer.Panel(string.Empty);
 
+        public PeCommandTarget Bind(IPeCommandBinder binder) =>
+            binder.Bind(typeof(TCommand).FullName!, typeof(TCommand));
+
         public PushButton CreateButton(
-            UIControlledApplication app,
+            IPeCommandBinder binder,
             Dictionary<string, RibbonPanel> panels,
             Dictionary<string, PulldownButton> pulldowns,
             Dictionary<string, SplitButton> splitButtons) {
+            var target = this.Bind(binder);
+            var data = new PushButtonData(typeof(TCommand).FullName, this.Text, target.AssemblyPath, target.ClassName);
+
             var button = this.Container switch {
-                ButtonContainer.Panel panel => this.CreatePanelButton(panels, panel),
-                ButtonContainer.PullDown pullDown => this.CreatePullDownButton(panels, pulldowns, pullDown),
-                ButtonContainer.Split split => this.CreateSplitButton(panels, splitButtons, split),
+                ButtonContainer.Panel panel => this.CreatePanelButton(panels, panel, data),
+                ButtonContainer.PullDown pullDown => this.CreatePullDownButton(panels, pulldowns, pullDown, data),
+                ButtonContainer.Split split => this.CreateSplitButton(panels, splitButtons, split, data),
                 _ => throw new InvalidOperationException($"Unknown container type: {this.Container.GetType().Name}")
             };
 
@@ -322,19 +338,21 @@ public sealed class ButtonRegistry {
 
         private PushButton CreatePanelButton(
             Dictionary<string, RibbonPanel> panels,
-            ButtonContainer.Panel panelContainer) {
+            ButtonContainer.Panel panelContainer,
+            PushButtonData data) {
             if (!panels.TryGetValue(panelContainer.PanelName, out var panel)) {
                 throw new InvalidOperationException(
                     $"Panel '{panelContainer.PanelName}' not found. Ensure panels are created before buttons.");
             }
 
-            return panel.AddPushButton<TCommand>(this.Text);
+            return (PushButton)panel.AddItem(data);
         }
 
         private PushButton CreatePullDownButton(
             Dictionary<string, RibbonPanel> panels,
             Dictionary<string, PulldownButton> pulldowns,
-            ButtonContainer.PullDown pullDownContainer) {
+            ButtonContainer.PullDown pullDownContainer,
+            PushButtonData data) {
             var key = $"{pullDownContainer.PanelName}.{pullDownContainer.PullDownName}";
 
             if (!pulldowns.TryGetValue(key, out var pulldown)) {
@@ -347,13 +365,14 @@ public sealed class ButtonRegistry {
                 pulldowns[key] = pulldown;
             }
 
-            return pulldown.AddPushButton<TCommand>(this.Text);
+            return pulldown.AddPushButton(data);
         }
 
         private PushButton CreateSplitButton(
             Dictionary<string, RibbonPanel> panels,
             Dictionary<string, SplitButton> splitButtons,
-            ButtonContainer.Split splitContainer) {
+            ButtonContainer.Split splitContainer,
+            PushButtonData data) {
             var key = $"{splitContainer.PanelName}.{splitContainer.SplitName}";
 
             if (!splitButtons.TryGetValue(key, out var splitButton)) {
@@ -366,7 +385,7 @@ public sealed class ButtonRegistry {
                 splitButtons[key] = splitButton;
             }
 
-            return splitButton.AddPushButton<TCommand>(this.Text);
+            return splitButton.AddPushButton(data);
         }
 
         private void HydrateButtonMetadata(PushButton button) {
