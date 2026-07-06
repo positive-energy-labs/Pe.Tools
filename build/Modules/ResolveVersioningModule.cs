@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Build.Options;
 using JetBrains.Annotations;
 using Microsoft.Extensions.Options;
@@ -11,18 +12,36 @@ namespace Build.Modules;
 
 /// <summary>
 ///     Resolve semantic versions for compiling and publishing the add-in.
+///     One release authority (Pe.Revit.Sdk P17): pe-version.json at the repo root;
+///     the Build__Version option is the only override. No GitVersion.
 /// </summary>
 public sealed class ResolveVersioningModule(IOptions<BuildOptions> buildOptions) : Module<ResolveVersioningResult> {
     protected override async Task<ResolveVersioningResult?> ExecuteAsync(IModuleContext context,
         CancellationToken cancellationToken) {
         var version = buildOptions.Value.Version;
-        var versioning = string.IsNullOrEmpty(version) switch {
-            true => await CreateFromGitVersioningAsync(context),
-            false => await CreateFromVersionStringAsync(context, version)
-        };
+        if (string.IsNullOrEmpty(version)) version = ReadVersionFile();
 
+        var versioning = await CreateFromVersionStringAsync(context, version);
         context.Summary.KeyValue("Build", "Version", versioning.Version);
         return versioning;
+    }
+
+    /// <summary>
+    ///     Read pe-version.json, walking up from the pipeline's working directory.
+    /// </summary>
+    private static string ReadVersionFile() {
+        for (var dir = new DirectoryInfo(Directory.GetCurrentDirectory()); dir is not null; dir = dir.Parent) {
+            var file = Path.Combine(dir.FullName, "pe-version.json");
+            if (!File.Exists(file)) continue;
+
+            var match = Regex.Match(File.ReadAllText(file), "(?<=\"version\"\\s*:\\s*\")[^\"]+");
+            if (match.Success) return match.Value;
+
+            throw new InvalidOperationException($"pe-version.json at {file} has no \"version\" value.");
+        }
+
+        throw new InvalidOperationException(
+            "No release version resolved: create pe-version.json at the repo root or set Build__Version.");
     }
 
     /// <summary>
@@ -37,21 +56,6 @@ public sealed class ResolveVersioningModule(IOptions<BuildOptions> buildOptions)
             VersionPrefix = versionParts[0],
             VersionSuffix = versionParts.Length > 1 ? versionParts[1] : null,
             IsPrerelease = versionParts.Length > 1,
-            PreviousVersion = await FetchPreviousVersionAsync(context)
-        };
-    }
-
-    /// <summary>
-    ///     Resolve versions using the GitVersion Tool.
-    /// </summary>
-    private static async Task<ResolveVersioningResult> CreateFromGitVersioningAsync(IModuleContext context) {
-        var gitVersioning = await context.Git().Versioning.GetGitVersioningInformation();
-
-        return new ResolveVersioningResult {
-            Version = gitVersioning.SemVer!,
-            VersionPrefix = gitVersioning.MajorMinorPatch!,
-            VersionSuffix = gitVersioning.PreReleaseTag,
-            IsPrerelease = !string.IsNullOrEmpty(gitVersioning.PreReleaseLabel),
             PreviousVersion = await FetchPreviousVersionAsync(context)
         };
     }

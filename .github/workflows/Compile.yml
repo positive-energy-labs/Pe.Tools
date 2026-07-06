@@ -8,8 +8,8 @@ on:
 
 jobs:
   windows:
-    name: windows-2025
-    runs-on: windows-2025
+    name: blacksmith-windows-2025
+    runs-on: blacksmith-4vcpu-windows-2025
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -25,8 +25,14 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'Directory.Build.targets', 'Directory.Packages.props', 'build/authored/*.props') }}
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'Directory.Packages.props', 'global.json', 'eng/sdk-feed/*.nupkg') }}
           restore-keys: ${{ runner.os }}-nuget-
+
+      # Same triage a human runs locally: env, SDK pin reachability, lock-step pins.
+      - name: pe-revit doctor
+        run: |
+          dotnet tool restore
+          dotnet pe-revit doctor
 
       - name: Compile solution
         run: dotnet run -c Release

@@ -51,8 +51,12 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'Directory.Build.targets', 'Directory.Packages.props', 'build/authored/*.props') }}
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'Directory.Packages.props', 'global.json', 'eng/sdk-feed/*.nupkg') }}
           restore-keys: ${{ runner.os }}-nuget-
+
+      # The installer module shells `pe-revit msi`; restore the pinned tool first.
+      - name: Restore pe-revit tool
+        run: dotnet tool restore
 
       - name: Publish packages
         run: dotnet run -c Release -- pack publish
