@@ -4,10 +4,10 @@
   "releases": "kaitpw/Pe.Tools",
   "legacy": [
     "app:bin/pea",
+    "app:bin/pe-dev",
     "app:dev",
     "appdata:Autodesk/ApplicationPlugins/PE_Tools.bundle",
     "programdata:Autodesk/ApplicationPlugins/PE_Tools.bundle",
-    "addins:*/Pe.App.runtime.json",
     "addins:*/Pe.Revit",
     "addins:*/Pe.Revit.DocumentData",
     "addins:*/Pe.Revit.FamilyFoundry",
