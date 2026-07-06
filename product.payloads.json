@@ -1,6 +1,7 @@
 {
   "product": "Pe.Tools",
   "vendor": "Positive Energy",
+  "releases": "kaitpw/Pe.Tools",
   "payloads": [
     {
       "type": "VersionedAddin",
@@ -12,6 +13,20 @@
       "type": "Exe",
       "name": "host",
       "source": "source/pe-tools/apps/host/dist-installed"
+    },
+    {
+      "type": "Cli",
+      "name": "pe-revit"
+    },
+    {
+      "type": "PathShim",
+      "name": "pea",
+      "dev": "pnpm --dir \"{root}/source/pe-tools\" --filter @pe/pea pea"
+    },
+    {
+      "type": "PathShim",
+      "name": "peco",
+      "dev": "pnpm --dir \"{root}/source/pe-tools\" --filter @pe/peco peco"
     }
   ]
 }

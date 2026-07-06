@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   ArrowUpRight,
@@ -19,6 +19,14 @@ import { Card } from "#/components/ui/card";
 /** One-click update: the host runs `pe-revit install apply --release latest`; open Revit
  * sessions live-swap via the loader when the version pointer flips. */
 function UpdateButton() {
+  const installed = useQuery({
+    queryKey: ["host-install"],
+    queryFn: async () =>
+      (await fetch("/pe-host/host/install")).json() as Promise<{
+        installed: boolean;
+        releaseVersion: string | null;
+      }>,
+  });
   const update = useMutation({
     mutationFn: async () => {
       const res = await fetch("/pe-host/host/update", { method: "POST" });
@@ -27,10 +35,14 @@ function UpdateButton() {
         throw new Error(body.error ?? `update failed (${res.status})`);
       return body;
     },
+    onSuccess: () => installed.refetch(),
   });
 
   return (
     <div className="flex items-center gap-2">
+      {installed.data?.releaseVersion && (
+        <span className="text-xs text-muted-foreground">v{installed.data.releaseVersion}</span>
+      )}
       {update.isSuccess && (
         <span className="text-xs text-muted-foreground">
           updated to {update.data.releaseVersion ?? "latest"} — open Revit sessions swap live
