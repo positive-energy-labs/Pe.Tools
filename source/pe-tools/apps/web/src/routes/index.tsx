@@ -1,7 +1,10 @@
+import { useMutation } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   ArrowUpRight,
+  DownloadCloud,
   FileScan,
+  LoaderCircle,
   MessageSquare,
   PencilRuler,
   Settings2,
@@ -10,7 +13,45 @@ import {
 } from "lucide-react";
 
 import { ThemeToggle } from "#/components/ThemeToggle";
+import { Button } from "#/components/ui/button";
 import { Card } from "#/components/ui/card";
+
+/** One-click update: the host runs `pe-revit install apply --release latest`; open Revit
+ * sessions live-swap via the loader when the version pointer flips. */
+function UpdateButton() {
+  const update = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/pe-host/host/update", { method: "POST" });
+      const body = (await res.json()) as { ok?: boolean; releaseVersion?: string; error?: string };
+      if (!res.ok || body.ok === false)
+        throw new Error(body.error ?? `update failed (${res.status})`);
+      return body;
+    },
+  });
+
+  return (
+    <div className="flex items-center gap-2">
+      {update.isSuccess && (
+        <span className="text-xs text-muted-foreground">
+          updated to {update.data.releaseVersion ?? "latest"} — open Revit sessions swap live
+        </span>
+      )}
+      {update.isError && (
+        <span className="text-xs text-destructive">
+          {String(update.error?.message ?? update.error)}
+        </span>
+      )}
+      <Button size="sm" onClick={() => update.mutate()} disabled={update.isPending}>
+        {update.isPending ? (
+          <LoaderCircle className="size-4 animate-spin" />
+        ) : (
+          <DownloadCloud className="size-4" />
+        )}
+        {update.isPending ? "Updating…" : "Update"}
+      </Button>
+    </div>
+  );
+}
 
 export const Route = createFileRoute("/")({ component: App });
 
@@ -80,7 +121,10 @@ function App() {
               Positive Energy
             </span>
           </div>
-          <ThemeToggle />
+          <div className="flex items-center gap-3">
+            <UpdateButton />
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 
