@@ -3,24 +3,20 @@ import { existsSync, readFileSync } from "node:fs";
 import {
   bridgeFrameSchema,
   bridgeRegistrationRequestSchema,
-  hostOperations,
 } from "@pe/host-contracts/contracts";
-import { hostEffectOperationSchemas } from "@pe/host-contracts/effect/registry";
+import { hostOpKeys } from "@pe/host-contracts/generated";
 import {
   bridgeSessionsListSchema,
   HostCallError,
-  anyOperationKeySchema,
   hostProblemDetailsSchema,
   hostSessionScopeSchema,
   isAnyOperationKey,
   isHostOperationKey,
   tsOnlyOperationSchemas,
-  toHostCallError,
   type HostOpRequest,
   type HostOpResponse,
 } from "@pe/host-contracts/operation-types";
 import { Schema } from "effect";
-import { HostRpcs } from "@pe/host-contracts/rpc";
 
 const packageJson = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf8"),
@@ -28,14 +24,15 @@ const packageJson = JSON.parse(
   exports?: Record<string, unknown>;
 };
 
-test("exports generated host operation contracts", () => {
-  expect(Object.hasOwn(hostOperations, "host.status")).toBe(false);
-  expect(Object.hasOwn(hostOperations, "logs.tail")).toBe(false);
-  expect(Object.hasOwn(hostOperations, "settings.document.validate")).toBe(false);
-  expect(Object.hasOwn(hostOperations, "settings.workspaces")).toBe(false);
-  expect(Object.hasOwn(hostOperations, "revit.catalog.recent-documents")).toBe(false);
-  expect(Object.hasOwn(hostOperations, "aps.auth.status")).toBe(false);
-  expect(hostOperations["revit.catalog.loaded-families"].key).toBe("revit.catalog.loaded-families");
+test("checked-in typegen keys cover bridge ops and exclude TS-only ops", () => {
+  const keys = new Set<string>(hostOpKeys);
+  expect(keys.has("revit.catalog.loaded-families")).toBe(true);
+  expect(keys.has("host.ops.catalog")).toBe(true);
+  expect(keys.has("scripting.execute")).toBe(true);
+  expect(keys.has("host.status")).toBe(false);
+  expect(keys.has("logs.tail")).toBe(false);
+  expect(keys.has("settings.workspaces")).toBe(false);
+  expect(keys.has("aps.auth.status")).toBe(false);
 });
 
 test("does not ship the legacy plain TypeGen DTO projection", () => {
@@ -62,33 +59,6 @@ test("exports generic operation request and response typing", () => {
   expect(recentDocumentsRequest.revitYear).toBe("2025");
   expect(status.bridgeIsConnected).toBe(false);
   expect(new HostCallError("failed", 500)).toBeInstanceOf(HostCallError);
-  expect(
-    toHostCallError("host.status", {
-      _tag: "HostRpcError",
-      key: "host.status",
-      kind: "BridgeBusy",
-      message: "failed",
-      status: 500,
-    }),
-  ).toBeInstanceOf(HostCallError);
-  expect(
-    toHostCallError("host.status", {
-      _tag: "HostRpcError",
-      key: "host.status",
-      kind: "BridgeBusy",
-      message: "failed",
-      status: 423,
-    })?.problem?.kind,
-  ).toBe("BridgeBusy");
-  const mismatched = toHostCallError("caller.key", {
-    _tag: "HostRpcError",
-    key: "server.key",
-    kind: "BridgeBusy",
-    message: "failed",
-    status: 423,
-  });
-  expect(mismatched?.problem?.operationKey).toBe("server.key");
-  expect(mismatched?.message).toBe("server.key: failed");
 });
 
 test("exports TS-owned bridge session list schema", () => {
@@ -115,20 +85,11 @@ test("exports host problem details as a schema-derived loose record", () => {
   expect(decoded.kind).toBe("BridgeBusy");
 });
 
-test("exports generic operation key schema", () => {
-  expect(Schema.decodeUnknownSync(anyOperationKeySchema)("host.status")).toBe("host.status");
-  expect(Schema.decodeUnknownSync(anyOperationKeySchema)("revit.catalog.loaded-families")).toBe(
-    "revit.catalog.loaded-families",
-  );
-  expect(Schema.decodeUnknownSync(anyOperationKeySchema)("settings.tree")).toBe("settings.tree");
-  expect(Schema.decodeUnknownSync(anyOperationKeySchema)("aps.auth.status")).toBe(
-    "aps.auth.status",
-  );
+test("exports operation key guards", () => {
   expect(isAnyOperationKey("revit.catalog.loaded-families")).toBe(true);
   expect(isAnyOperationKey("missing.operation")).toBe(false);
   expect(isHostOperationKey("revit.catalog.loaded-families")).toBe(true);
   expect(isHostOperationKey("host.status")).toBe(false);
-  expect(() => Schema.decodeUnknownSync(anyOperationKeySchema)("missing.operation")).toThrow();
 });
 
 test("exports generated Effect bridge frame schema", () => {
@@ -168,49 +129,17 @@ test("keeps bridge session ids host-owned", () => {
   expect(Object.hasOwn(decoded, "sessionId")).toBe(false);
 });
 
-test("exports generated Effect operation schema registry", () => {
+test("key guards agree with the checked-in typegen key list", () => {
+  for (const key of hostOpKeys) {
+    expect(isHostOperationKey(key)).toBe(true);
+    expect(isAnyOperationKey(key)).toBe(true);
+  }
+});
+
+test("settings open-with-module schema decodes C# module/schema context", () => {
   const decoded = Schema.decodeUnknownSync(
-    hostEffectOperationSchemas["revit.catalog.loaded-families"].request!,
-  )({});
-  expect(decoded).toEqual({});
-});
-
-test("keeps generated bridge operation metadata and Effect schemas key-aligned", () => {
-  expect(Object.keys(hostEffectOperationSchemas).sort()).toEqual(
-    Object.keys(hostOperations).sort(),
-  );
-});
-
-test("exports generated bridge operations as direct RPC members", () => {
-  expect(HostRpcs.requests.has("host.call")).toBe(true);
-  expect(HostRpcs.requests.has("revit.catalog.loaded-families")).toBe(true);
-});
-
-test("host.call accepts every public operation key", () => {
-  const hostCall = HostRpcs.requests.get("host.call");
-  const payloadSchema = hostCall?.payloadSchema;
-  expect(payloadSchema).toBeDefined();
-  if (!payloadSchema) throw new Error("missing host.call payload schema");
-
-  const decode = (payload: unknown) =>
-    Schema.decodeUnknownSync(payloadSchema)(payload) as { readonly key: string };
-  expect(decode({ key: "host.status" }).key).toBe("host.status");
-  expect(decode({ key: "settings.tree", request: {} }).key).toBe("settings.tree");
-  expect(
-    Object.hasOwn(decode({ key: "host.status", bridgeSessionId: "bridge-a" }), "bridgeSessionId"),
-  ).toBe(false);
-  expect(decode({ key: "revit.catalog.loaded-families", request: {} }).key).toBe(
-    "revit.catalog.loaded-families",
-  );
-});
-
-test("exports direct settings open RPC for C# module/schema context", () => {
-  const openWithModule = HostRpcs.requests.get("settings.document.open-with-module");
-  const payloadSchema = openWithModule?.payloadSchema;
-  expect(payloadSchema).toBeDefined();
-  if (!payloadSchema) throw new Error("missing settings.document.open-with-module payload schema");
-
-  const decoded = Schema.decodeUnknownSync(payloadSchema)({
+    tsOnlyOperationSchemas["settings.document.open-with-module"].request,
+  )({
     module: {
       defaultRootKey: "profiles",
       moduleKey: "CmdScheduleManager",
@@ -227,22 +156,10 @@ test("exports direct settings open RPC for C# module/schema context", () => {
       includeComposedContent: true,
     },
     schemaJson: "{}",
-  }) as {
-    readonly module: {
-      readonly moduleKey: string;
-      readonly storageOptions?: { readonly includeRoots?: readonly string[] };
-    };
-  };
+  });
 
   expect(decoded.module.moduleKey).toBe("CmdScheduleManager");
   expect(decoded.module.storageOptions?.includeRoots).toEqual(["fragments"]);
-});
-
-test("exports every public generated bridge operation as a direct RPC member", () => {
-  for (const key of Object.keys(hostOperations)) {
-    expect(HostRpcs.requests.has(key)).toBe(true);
-  }
-  expect(HostRpcs.requests.has("settings.module-catalog")).toBe(false);
 });
 
 test("exports TS-only admin operation schemas", () => {

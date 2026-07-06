@@ -1,9 +1,5 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { hostOperations } from "@pe/host-contracts/contracts";
-import type { HostOperationDefinition, HostOperationKey } from "@pe/host-contracts/contracts";
-import { hostEffectOperationSchemas } from "@pe/host-contracts/effect/registry";
-import { Schema } from "effect";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
@@ -17,15 +13,29 @@ import {
 } from "#/components/ui/select";
 import { Switch } from "#/components/ui/switch";
 import { Textarea } from "#/components/ui/textarea";
-import { callHostRpc } from "#/host/client";
+import { callHostDynamic } from "#/host/client";
 import { type HostIssue, HostIssuePanel, toHostIssue } from "#/host/issues";
-import { useBridgeSessionsListQuery } from "#/host/queries";
+import { useBridgeSessionsListQuery, useHostOp } from "#/host/queries";
 import { cn } from "#/lib/utils";
 
 export const Route = createFileRoute("/ops")({ component: OpsPlayground });
 
-type HostOperationCatalogEntry = HostOperationDefinition & { key: HostOperationKey };
-const OPS = Object.values(hostOperations) as HostOperationCatalogEntry[];
+// Runtime op catalog entry as served by host.ops.catalog — the connected Revit
+// session is the source of truth, so the list always matches what's callable.
+type HostOperationCatalogEntry = {
+  key: string;
+  displayName?: string | null;
+  intent?: string;
+  costTier?: string;
+  visibility?: string;
+  requiresActiveDocument?: boolean;
+  description?: string;
+  searchTerms?: readonly string[];
+  requestExamples?: readonly { name: string; description: string; json: string }[];
+  safeDefaultRequestJson?: string | null;
+  requestSchemaJson?: string;
+  responseSchemaJson?: string;
+};
 type HostOperationJsonSchema = Record<string, unknown>;
 const DEFAULT_SESSION_VALUE = "__host_default__";
 
@@ -46,24 +56,32 @@ function OpsPlayground() {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<RunResult | undefined>();
   const [issue, setIssue] = useState<HostIssue | undefined>();
-  const requestSchema = selected ? requestJsonSchema(selected.key) : undefined;
+  const requestSchema = selected ? requestJsonSchema(selected) : undefined;
   const sessionsQuery = useBridgeSessionsListQuery();
+  const catalogQuery = useHostOp("host.ops.catalog", undefined, {
+    bridgeSessionId,
+    staleTime: 60_000,
+  });
+  const ops = useMemo(
+    () => (catalogQuery.data as { operations?: HostOperationCatalogEntry[] } | undefined)?.operations ?? [],
+    [catalogQuery.data],
+  );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const ops = q
-      ? OPS.filter((op) =>
+    const matched = q
+      ? ops.filter((op) =>
           [op.key, op.displayName, op.description, ...(op.searchTerms ?? [])]
             .join(" ")
             .toLowerCase()
             .includes(q),
         )
-      : OPS;
-    return [...ops].sort((a, b) => a.key.localeCompare(b.key));
-  }, [query]);
+      : ops;
+    return [...matched].sort((a, b) => a.key.localeCompare(b.key));
+  }, [ops, query]);
 
   function select(op: HostOperationCatalogEntry) {
-    const nextSchema = requestJsonSchema(op.key);
+    const nextSchema = requestJsonSchema(op);
     const nextArgs = op.requestExamples?.[0]?.json ?? op.safeDefaultRequestJson ?? "{}";
     setSelected(op);
     setRequestSeed(nextArgs, nextSchema);
@@ -90,7 +108,8 @@ function OpsPlayground() {
           : args.trim()
             ? JSON.parse(args)
             : undefined;
-      const data = await callHostRpc(selected.key, parsed, { bridgeSessionId });
+      // The playground calls whatever the live catalog lists — dynamic by nature.
+      const data = await callHostDynamic(selected.key, parsed, { bridgeSessionId });
       setResult({
         status: 200,
         elapsedMs: Math.round(performance.now() - started),
@@ -110,7 +129,11 @@ function OpsPlayground() {
       <aside className="flex min-h-0 flex-col border-r border-border">
         <div className="border-b border-border p-2">
           <Input
-            placeholder={`Search ${OPS.length} host ops...`}
+            placeholder={
+              catalogQuery.isPending
+                ? "Loading op catalog..."
+                : `Search ${ops.length} host ops...`
+            }
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -133,7 +156,11 @@ function OpsPlayground() {
             </li>
           ))}
           {filtered.length === 0 && (
-            <li className="px-2 py-4 text-center text-xs text-muted-foreground">No ops match.</li>
+            <li className="px-2 py-4 text-center text-xs text-muted-foreground">
+              {catalogQuery.isError
+                ? "Couldn't load the op catalog — is Revit connected?"
+                : "No ops match."}
+            </li>
           )}
         </ul>
       </aside>
@@ -142,8 +169,8 @@ function OpsPlayground() {
       <section className="min-h-0 overflow-y-auto p-4">
         {!selected ? (
           <p className="text-sm text-muted-foreground">
-            Pick a host op. Calls the TS host via <code>/pe-host/rpc</code> (default{" "}
-            <code>localhost:5180</code>). Start the host if requests 502.
+            Pick a host op. The list is the live session catalog (<code>host.ops.catalog</code>);
+            calls go through <code>/pe-host/call</code> (default <code>localhost:5180</code>).
           </p>
         ) : (
           <div className="mx-auto flex max-w-3xl flex-col gap-4">
@@ -250,15 +277,11 @@ function OpsPlayground() {
   );
 }
 
-function requestJsonSchema(
-  key: HostOperationCatalogEntry["key"],
-): HostOperationJsonSchema | undefined {
-  const schemas = hostEffectOperationSchemas[key];
-  const schema = "request" in schemas ? schemas.request : undefined;
-  if (!schema) return undefined;
+function requestJsonSchema(op: HostOperationCatalogEntry): HostOperationJsonSchema | undefined {
+  if (!op.requestSchemaJson) return undefined;
   try {
-    return Schema.toJsonSchemaDocument(schema, { additionalProperties: true })
-      .schema as HostOperationJsonSchema;
+    const parsed = JSON.parse(op.requestSchemaJson) as unknown;
+    return isRecord(parsed) ? parsed : undefined;
   } catch {
     return undefined;
   }

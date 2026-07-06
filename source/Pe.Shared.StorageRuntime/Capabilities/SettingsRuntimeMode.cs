@@ -1,8 +1,6 @@
-using Pe.Shared.Codegen;
 
 namespace Pe.Shared.StorageRuntime.Capabilities;
 
-[ExportTsSchema]
 public enum SettingsRuntimeMode {
     HostOnly = 0,
     LiveDocument = 1

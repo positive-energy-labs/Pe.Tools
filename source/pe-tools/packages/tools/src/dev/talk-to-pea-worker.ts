@@ -286,6 +286,7 @@ async function resolvePeaWorkerCwd(hostBaseUrl: string, workspaceKey: string): P
       workspaceKey,
       createSampleScript: true,
     });
+    if (!bootstrap.productHomePath) throw new Error("bootstrap returned no productHomePath");
     return path.resolve(bootstrap.productHomePath);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);

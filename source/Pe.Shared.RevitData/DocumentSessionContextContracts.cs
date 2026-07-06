@@ -1,8 +1,6 @@
-using Pe.Shared.Codegen;
 
 namespace Pe.Shared.RevitData;
 
-[ExportTsSchema]
 public record RevitDocumentSummary(
     string DocumentKey,
     string Title,
@@ -18,7 +16,6 @@ public record RevitDocumentSummary(
     string? CloudModelUrn
 );
 
-[ExportTsSchema]
 public record RevitDocumentSessionContextData(
     bool HasActiveDocument,
     RevitDocumentSummary? ActiveDocument,
@@ -26,7 +23,6 @@ public record RevitDocumentSessionContextData(
     List<RevitDocumentSummary> OpenDocuments
 );
 
-[ExportTsSchema]
 public record OpenRevitDocumentRequest(
     string? Path = null,
     string? CloudRegion = null,
@@ -48,7 +44,6 @@ public static class OpenRevitDocumentRequestExtensions {
         && !string.IsNullOrWhiteSpace(request.CloudModelGuid);
 }
 
-[ExportTsSchema]
 public record OpenRevitDocumentData(
     RevitDocumentSummary Document,
     RevitDocumentSessionContextData Session

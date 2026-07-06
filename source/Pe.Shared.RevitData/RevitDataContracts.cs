@@ -1,11 +1,9 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using Pe.Shared.Codegen;
 
 namespace Pe.Shared.RevitData;
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsSchema]
 public enum RevitDataIssueSeverity {
     Info,
     Warning,
@@ -13,7 +11,6 @@ public enum RevitDataIssueSeverity {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsSchema]
 public enum RequestedParameterStorageType {
     None,
     String,
@@ -22,7 +19,6 @@ public enum RequestedParameterStorageType {
     ElementId
 }
 
-[ExportTsSchema]
 public record RevitDataIssue(
     string Code,
     RevitDataIssueSeverity Severity,

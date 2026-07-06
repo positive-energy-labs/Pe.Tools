@@ -33,7 +33,6 @@
     </Folder>
     <Project Path="source/Pe.App/Pe.App.csproj" />
     <Project Path="source/Pe.Aps/Pe.Aps.csproj" />
-    <Project Path="source/Pe.Dev.Cli/Pe.Dev.Cli.csproj" />
     <Project Path="source/Pe.Dev.RevitAutomation/Pe.Dev.RevitAutomation.csproj" />
     <Project Path="source/Pe.Dev.RevitAutomation.Worker/Pe.Dev.RevitAutomation.Worker.csproj">
         <!-- Design Automation supports 2024+ only (no Forge DA package for R23); build the floor year instead -->

@@ -1,11 +1,9 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using Pe.Shared.Codegen;
 
 namespace Pe.Shared.RevitData;
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsSchema]
 public enum ProjectBrowserSection {
     Views,
     Sheets,
@@ -13,7 +11,6 @@ public enum ProjectBrowserSection {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsSchema]
 public enum ProjectBrowserResultView {
     Summary,
     Folders,
@@ -21,13 +18,11 @@ public enum ProjectBrowserResultView {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsSchema]
 public enum ProjectBrowserMatchMode {
     Exact,
     Prefix
 }
 
-[ExportTsSchema]
 public record ProjectBrowserFilter {
     public ProjectBrowserSection? Section { get; init; }
     public List<string> Path { get; init; } = [];
@@ -35,7 +30,6 @@ public record ProjectBrowserFilter {
     public ProjectBrowserMatchMode MatchMode { get; init; } = ProjectBrowserMatchMode.Exact;
 }
 
-[ExportTsSchema]
 public record ProjectBrowserRequest {
     public List<ProjectBrowserSection> Sections { get; init; } = [];
     public ProjectBrowserResultView View { get; init; } = ProjectBrowserResultView.Summary;
@@ -44,14 +38,12 @@ public record ProjectBrowserRequest {
     public RevitDataOutputBudget? Budget { get; init; }
 }
 
-[ExportTsSchema]
 public record ProjectBrowserPathSegment(
     long? ParameterId,
     string? ParameterName,
     string FolderName
 );
 
-[ExportTsSchema]
 public record ProjectBrowserPath(
     ProjectBrowserSection Section,
     string? OrganizationName,
@@ -59,7 +51,6 @@ public record ProjectBrowserPath(
     List<ProjectBrowserPathSegment> Segments
 );
 
-[ExportTsSchema]
 public record ProjectBrowserFolderSummary(
     ProjectBrowserSection Section,
     string? OrganizationName,
@@ -68,14 +59,12 @@ public record ProjectBrowserFolderSummary(
     List<RevitAgentContextHandle> SampleHandles
 );
 
-[ExportTsSchema]
 public record ProjectBrowserItem(
     RevitAgentContextHandle Handle,
     ProjectBrowserPath BrowserPath,
     List<RevitAgentContextProvenance> Provenance
 );
 
-[ExportTsSchema]
 public record ProjectBrowserNearestMatch(
     ProjectBrowserSection Section,
     string PathLabel,
@@ -83,7 +72,6 @@ public record ProjectBrowserNearestMatch(
     int Score
 );
 
-[ExportTsSchema]
 public record ProjectBrowserPathLevel(
     int Index,
     string? ParameterName,
@@ -91,7 +79,6 @@ public record ProjectBrowserPathLevel(
     List<string> Values
 );
 
-[ExportTsSchema]
 public record ProjectBrowserOrganizationSummary(
     ProjectBrowserSection Section,
     string? OrganizationName,
@@ -104,7 +91,6 @@ public record ProjectBrowserOrganizationSummary(
     List<ProjectBrowserFolderSummary> Folders
 );
 
-[ExportTsSchema]
 public record ProjectBrowserData(
     string BrowserSnapshotId,
     ProjectBrowserResultView View,

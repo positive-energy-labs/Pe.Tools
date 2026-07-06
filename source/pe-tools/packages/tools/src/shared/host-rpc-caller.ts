@@ -1,9 +1,5 @@
-import { NodeHttpClient } from "@effect/platform-node";
 import { Effect } from "effect";
-import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
-import { callHostRpcMember } from "@pe/host-contracts/rpc";
 import {
-  hostOperations,
   hostProcessIdentity,
   type HostOperationCostTier,
   type HostOperationDefinition,
@@ -12,20 +8,66 @@ import {
   type HostOperationVisibility,
 } from "@pe/host-contracts/contracts";
 import {
+  HOST_RPC_BRIDGE_SESSION_HEADER,
   HostCallError,
-  isAnyOperationKey,
-  isHostOperationKey,
-  toHostCallError,
-  type AnyOperationKey,
-  type HostOpRequest,
-  type HostOpResponse,
+  type OpKey,
+  type OpRequestOf,
+  type OpResponseOf,
   type HostSessionScope,
 } from "@pe/host-contracts/operation-types";
 
 type HostRpcCallerOptions = HostSessionScope & {
   hostBaseUrl?: string;
   timeoutMs?: number;
+  /** Test seam: skip the live /ops fetch and use this catalog. */
+  catalogOverride?: readonly HostOperationDefinition[];
 };
+
+// --- runtime op catalog ---------------------------------------------------------
+// The connected session's GET /ops is the only catalog; there is no compiled-in
+// metadata. Cached briefly so capability maps and per-call enrichment don't hit
+// the bridge repeatedly.
+
+type OpsCatalogEntry = HostOperationDefinition & {
+  requestSchemaJson?: string;
+  responseSchemaJson?: string;
+};
+
+const CATALOG_TTL_MS = 30_000;
+const catalogCache = new Map<string, { at: number; ops: HostOperationDefinition[] }>();
+
+function schemaTitle(schemaJson: string | undefined): string | undefined {
+  if (!schemaJson) return undefined;
+  try {
+    const parsed = JSON.parse(schemaJson) as { title?: unknown };
+    return typeof parsed.title === "string" ? parsed.title : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function loadCatalog(hostBaseUrl: string): Promise<HostOperationDefinition[]> {
+  const base = trimTrailingSlash(hostBaseUrl);
+  const cached = catalogCache.get(base);
+  if (cached && Date.now() - cached.at < CATALOG_TTL_MS) return cached.ops;
+
+  const response = await fetch(`${base}/ops`, { signal: AbortSignal.timeout(30_000) });
+  if (!response.ok) {
+    throw new HostCallError(
+      `host.ops.catalog: GET ${base}/ops failed with ${response.status}`,
+      response.status,
+      { operationKey: "host.ops.catalog", status: response.status },
+    );
+  }
+  const payload = (await response.json()) as { operations?: OpsCatalogEntry[] };
+  const ops = (payload.operations ?? []).map((entry) => ({
+    ...entry,
+    requestTypeName: entry.requestTypeName ?? schemaTitle(entry.requestSchemaJson),
+    responseTypeName: entry.responseTypeName ?? schemaTitle(entry.responseSchemaJson),
+  }));
+  catalogCache.set(base, { at: Date.now(), ops });
+  return ops;
+}
 
 type HostOperationVerbosity = "compact" | "hints" | "full";
 type RevitOperationLayer = "Context" | "Catalog" | "Matrix" | "Detail" | "Resolve" | "Apply";
@@ -106,41 +148,52 @@ export class HostRpcCaller {
     };
   }
 
-  call<K extends AnyOperationKey>(key: K, request?: HostOpRequest<K>): Promise<HostOpResponse<K>> {
+  call<K extends OpKey>(key: K, request?: OpRequestOf<K>): Promise<OpResponseOf<K>> {
     return Effect.runPromise(
       callHostRpcEffect(key, request, this.options).pipe(
-        Effect.map(({ rawBody }) => rawBody as HostOpResponse<K>),
+        Effect.map(({ rawBody }) => rawBody as OpResponseOf<K>),
       ),
     );
   }
 
-  getOperation(key: string): HostOperationDefinition | undefined {
-    return getHostOperation(key);
+  /** Enrichment lookup against the live catalog; undefined when the catalog is unreachable. */
+  async getOperation(key: string): Promise<HostOperationDefinition | undefined> {
+    const operations = await this.catalog().catch(() => [] as HostOperationDefinition[]);
+    return operations.find((operation) => operation.key === key);
   }
 
-  searchOperations(options: HostOperationSearchOptions = {}) {
-    if (options.projection === "capability-map") return renderCapabilityMap(options);
-    return searchHostOperations(options);
+  /** Search/capability-map over the live catalog. Throws when the catalog is unreachable. */
+  async searchOperations(options: HostOperationSearchOptions = {}) {
+    const operations = await this.catalog();
+    if (options.projection === "capability-map") return renderCapabilityMap(operations, options);
+    return searchHostOperations(operations, options);
   }
 
-  callOperation(
+  async callOperation(
     key: string,
     request?: unknown,
     verbosity: HostOperationVerbosity = "compact",
   ): Promise<HostOperationCallResult> {
-    return Effect.runPromise(callHostRpcOperationEffect(this.options, key, request, verbosity));
+    const operation = await this.getOperation(key);
+    return Effect.runPromise(
+      callHostRpcOperationEffect(this.options, key, operation, request, verbosity),
+    );
+  }
+
+  private catalog(): Promise<HostOperationDefinition[]> {
+    if (this.options.catalogOverride) return Promise.resolve([...this.options.catalogOverride]);
+    return loadCatalog(this.options.hostBaseUrl);
   }
 }
 
-function getHostOperation(key: string): HostOperationDefinition | undefined {
-  return isHostOperationKey(key) ? hostOperations[key] : undefined;
-}
-
-function searchHostOperations(options: HostOperationSearchOptions): HostOperationSearchResult[] {
+function searchHostOperations(
+  operations: readonly HostOperationDefinition[],
+  options: HostOperationSearchOptions,
+): HostOperationSearchResult[] {
   const queryTerms = normalizeQuery(options.query);
   const limit = Math.min(Math.max(options.limit ?? 8, 1), 50);
   const verbosity = options.verbosity ?? "compact";
-  const scoredOperations = Object.values(hostOperations)
+  const scoredOperations = operations
     .filter((operation) => matchesFilters(operation, options))
     .map((operation) => ({ operation, score: scoreOperation(operation, queryTerms) }));
   const matchedOperations = scoredOperations.filter(
@@ -178,12 +231,11 @@ function fallbackMutationOperations(
 const callHostRpcOperationEffect = Effect.fnUntraced(function* (
   options: HostRpcCallerOptions,
   key: string,
+  operation: HostOperationDefinition | undefined,
   request: unknown,
   verbosity: HostOperationVerbosity,
 ) {
   const startedAt = Date.now();
-  const operation = getHostOperation(key);
-
   const result = yield* Effect.result(callHostRpcEffect(key, request, options));
   if (result._tag === "Success") {
     return {
@@ -221,37 +273,54 @@ const callHostRpcEffect = Effect.fnUntraced(function* (
   return { status: 200, elapsedMs: Math.round(performance.now() - started), rawBody };
 });
 
+// Plain POST /call — unknown keys pass through so runtime-registered Revit ops
+// are callable without a package rebuild; the host/Revit side owns validation.
 const runHostRpcEffect = Effect.fnUntraced(function* (
   key: string,
   request: unknown,
   options: HostRpcCallerOptions,
 ) {
-  if (!isAnyOperationKey(key))
-    return yield* Effect.fail(
-      new HostCallError(`${key}: unknown operation '${key}'`, 404, {
-        operationKey: key,
-        title: `unknown operation '${key}'`,
-        status: 404,
-      }),
-    );
-
-  const baseProgram = callHostRpcMember(key, request, options).pipe(
-    Effect.provide(
-      RpcClient.layerProtocolHttp({
-        url: `${trimTrailingSlash(options.hostBaseUrl ?? hostProcessIdentity.defaultHostBaseUrl)}/rpc`,
-      }),
-    ),
-    Effect.provide(RpcSerialization.layerNdjson),
-    Effect.provide(NodeHttpClient.layerUndici),
-    Effect.mapError((error) => toHostCallError(key, error) ?? error),
-    Effect.scoped,
-  );
-  const program =
-    options.timeoutMs == null
-      ? baseProgram
-      : baseProgram.pipe(Effect.timeout(Math.max(options.timeoutMs, 1)));
-
-  return yield* program;
+  const base = trimTrailingSlash(options.hostBaseUrl ?? hostProcessIdentity.defaultHostBaseUrl);
+  return yield* Effect.tryPromise({
+    try: async () => {
+      const headers: Record<string, string> = { "content-type": "application/json" };
+      if (options.bridgeSessionId)
+        headers[HOST_RPC_BRIDGE_SESSION_HEADER] = options.bridgeSessionId;
+      const response = await fetch(`${base}/call`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ key, request }),
+        signal:
+          options.timeoutMs == null
+            ? undefined
+            : AbortSignal.timeout(Math.max(options.timeoutMs, 1)),
+      });
+      if (!response.ok) {
+        const problem = (await response.json().catch(() => undefined)) as
+          | { kind?: string; message?: string }
+          | undefined;
+        throw new HostCallError(
+          `${key}: ${problem?.message ?? response.statusText}`,
+          response.status,
+          {
+            kind: problem?.kind,
+            operationKey: key,
+            title: problem?.message ?? response.statusText,
+            status: response.status,
+          },
+        );
+      }
+      return (await response.json()) as unknown;
+    },
+    catch: (error) =>
+      error instanceof HostCallError
+        ? error
+        : new HostCallError(`${key}: ${String(error)}`, 0, {
+            operationKey: key,
+            title: String(error),
+            status: 0,
+          }),
+  });
 });
 
 function trimTrailingSlash(value: string): string {
@@ -343,9 +412,12 @@ function createRequestHint(operation: HostOperationDefinition): string {
   return `${operation.requestTypeName ?? "request object"} JSON object`;
 }
 
-function renderCapabilityMap(options: HostOperationSearchOptions) {
+function renderCapabilityMap(
+  operations: readonly HostOperationDefinition[],
+  options: HostOperationSearchOptions,
+) {
   const queryTerms = normalizeQuery(options.query);
-  const sections = buildCapabilityMapSections()
+  const sections = buildCapabilityMapSections(operations)
     .map((section) => ({
       ...section,
       rows: section.rows.filter(
@@ -358,7 +430,7 @@ function renderCapabilityMap(options: HostOperationSearchOptions) {
   return {
     kind: "hostCapabilityMap",
     format: options.capabilityMapFormat ?? "markdown",
-    generatedFrom: "hostOperations",
+    generatedFrom: "host.ops.catalog",
     formatVersion: 1,
     rowCount: sections.reduce((count, section) => count + section.rows.length, 0),
     guidance:
@@ -370,8 +442,10 @@ function renderCapabilityMap(options: HostOperationSearchOptions) {
   };
 }
 
-function buildCapabilityMapSections(): HostCapabilityMapSection[] {
-  const operations = Object.values(hostOperations).sort((left, right) =>
+function buildCapabilityMapSections(
+  catalogOperations: readonly HostOperationDefinition[],
+): HostCapabilityMapSection[] {
+  const operations = [...catalogOperations].sort((left, right) =>
     left.key.localeCompare(right.key),
   );
   const sections = [

@@ -1,11 +1,9 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using Pe.Shared.Codegen;
 
 namespace Pe.Shared.RevitData;
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsSchema]
 public enum ParameterIdentityKind {
     SharedGuid,
     BuiltInParameter,
@@ -13,13 +11,11 @@ public enum ParameterIdentityKind {
     NameFallback
 }
 
-[ExportTsSchema]
 public record ParameterCatalogRequest(
     string ModuleKey,
     Dictionary<string, string>? ContextValues
 );
 
-[ExportTsSchema]
 public record ParameterIdentity(
     string Key,
     ParameterIdentityKind Kind,
@@ -29,7 +25,6 @@ public record ParameterIdentity(
     long? ParameterElementId
 );
 
-[ExportTsSchema]
 public record ParameterReference {
     public ParameterIdentity? Identity { get; init; }
     public string? Name { get; init; }
@@ -40,7 +35,6 @@ public record ParameterReference {
     public static ParameterReference FromSharedGuid(string sharedGuid) => new() { SharedGuid = sharedGuid };
 }
 
-[ExportTsSchema]
 public record ParameterDefinitionDescriptor(
     ParameterIdentity Identity,
     bool? IsInstance,
@@ -50,7 +44,6 @@ public record ParameterDefinitionDescriptor(
     string? GroupTypeLabel
 );
 
-[ExportTsSchema]
 public record ParameterCatalogEntry(
     ParameterDefinitionDescriptor Definition,
     string StorageType,
@@ -59,7 +52,6 @@ public record ParameterCatalogEntry(
     List<string> TypeNames
 );
 
-[ExportTsSchema]
 public record ParameterCatalogData(
     List<ParameterCatalogEntry> Entries,
     int FamilyCount,

@@ -1,11 +1,9 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using Pe.Shared.Codegen;
 
 namespace Pe.Shared.RevitData;
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsSchema]
 public enum RevitAgentContextHandleKind {
     Document,
     View,
@@ -17,7 +15,6 @@ public enum RevitAgentContextHandleKind {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsSchema]
 public enum RevitAgentContextProvenanceKind {
     ActiveDocument,
     OpenDocument,
@@ -33,14 +30,12 @@ public enum RevitAgentContextProvenanceKind {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsSchema]
 public enum RevitAgentVisibleContextScope {
     ActiveViewVisible,
     ViewReferences
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsSchema]
 public enum RevitAgentVisibleProjection {
     Counts,
     Handles,
@@ -48,13 +43,11 @@ public enum RevitAgentVisibleProjection {
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsSchema]
 public enum RevitAgentViewRenderingScope {
     ActiveView,
     ViewReferences
 }
 
-[ExportTsSchema]
 public record RevitAgentContextHandle(
     RevitAgentContextHandleKind Kind,
     string DocumentKey,
@@ -64,13 +57,11 @@ public record RevitAgentContextHandle(
     string? CategoryName = null
 );
 
-[ExportTsSchema]
 public record RevitAgentContextProvenance(
     RevitAgentContextProvenanceKind Kind,
     string Description
 );
 
-[ExportTsSchema]
 public record RevitAgentViewSheetPlacement(
     RevitAgentContextHandle Sheet,
     string SheetNumber,
@@ -78,7 +69,6 @@ public record RevitAgentViewSheetPlacement(
     bool IsActiveSheet
 );
 
-[ExportTsSchema]
 public record RevitAgentActiveViewContext(
     RevitAgentContextHandle Handle,
     string ViewType,
@@ -96,7 +86,6 @@ public record RevitAgentActiveViewContext(
     List<RevitAgentContextProvenance> Provenance
 );
 
-[ExportTsSchema]
 public record RevitAgentSelectionEntry(
     RevitAgentContextHandle Handle,
     string ClassName,
@@ -107,14 +96,12 @@ public record RevitAgentSelectionEntry(
     List<RevitAgentContextProvenance> Provenance
 );
 
-[ExportTsSchema]
 public record RevitAgentSelectionContext(
     int SelectedElementCount,
     int ReturnedElementCount,
     List<RevitAgentSelectionEntry> Entries
 );
 
-[ExportTsSchema]
 public record RevitAgentVisibleElementSample(
     RevitAgentContextHandle Handle,
     string ClassName,
@@ -125,14 +112,12 @@ public record RevitAgentVisibleElementSample(
     List<RevitAgentContextHandle>? VisibleInViews = null
 );
 
-[ExportTsSchema]
 public record RevitAgentVisibleElementHandle(
     RevitAgentContextHandle Handle,
     List<RevitAgentContextProvenance>? Provenance = null,
     List<RevitAgentContextHandle>? VisibleInViews = null
 );
 
-[ExportTsSchema]
 public record RevitAgentVisibleCategorySummary(
     RevitAgentContextHandle Handle,
     int ElementCount,
@@ -143,7 +128,6 @@ public record RevitAgentVisibleCategorySummary(
     List<RevitAgentVisibleElementHandle>? ElementHandles = null
 );
 
-[ExportTsSchema]
 public record RevitAgentVisibleViewSummary(
     RevitAgentContextHandle Handle,
     string ViewType,
@@ -152,7 +136,6 @@ public record RevitAgentVisibleViewSummary(
     List<RevitAgentContextProvenance> Provenance
 );
 
-[ExportTsSchema]
 public record RevitAgentBrowserSummary(
     int ViewCount,
     int SheetCount,
@@ -160,7 +143,6 @@ public record RevitAgentBrowserSummary(
     int FamilyCount
 );
 
-[ExportTsSchema]
 public record RevitAgentContextSummaryData(
     RevitDocumentSessionContextData Documents,
     RevitAgentActiveViewContext? ActiveView,
@@ -169,7 +151,6 @@ public record RevitAgentContextSummaryData(
     List<RevitAgentVisibleCategorySummary> VisibleCategories
 );
 
-[ExportTsSchema]
 public record RevitAgentContextResolveRequest(
     string ReferenceText,
     int MaxResults = 10,
@@ -179,7 +160,6 @@ public record RevitAgentContextResolveRequest(
     bool Compact = false
 );
 
-[ExportTsSchema]
 public record RevitAgentContextCandidate(
     RevitAgentContextHandle Handle,
     string Label,
@@ -188,7 +168,6 @@ public record RevitAgentContextCandidate(
     List<RevitAgentContextHandle> RelatedHandles
 );
 
-[ExportTsSchema]
 public record RevitAgentContextResolveData(
     string ReferenceText,
     int CandidateCount,
@@ -196,7 +175,6 @@ public record RevitAgentContextResolveData(
     List<RevitDataIssue> Issues
 );
 
-[ExportTsSchema]
 public record RevitAgentVisibleContextRequest(
     int MaxCategories = 12,
     List<string>? CategoryNames = null,
@@ -210,7 +188,6 @@ public record RevitAgentVisibleContextRequest(
     RevitAgentVisibleProjection Projection = RevitAgentVisibleProjection.Counts
 );
 
-[ExportTsSchema]
 public record RevitAgentVisibleContextData(
     RevitAgentContextHandle? ActiveView,
     int TotalVisibleElementCount,
@@ -219,7 +196,6 @@ public record RevitAgentVisibleContextData(
     List<RevitAgentVisibleViewSummary>? Views = null
 );
 
-[ExportTsSchema]
 public record RevitAgentViewRenderingStateRequest(
     RevitAgentViewRenderingScope Scope = RevitAgentViewRenderingScope.ActiveView,
     List<long>? ViewIds = null,
@@ -231,7 +207,6 @@ public record RevitAgentViewRenderingStateRequest(
     int MaxWorksetsPerView = 40
 );
 
-[ExportTsSchema]
 public record RevitAgentObservedViewState(
     RevitAgentContextHandle Handle,
     string ViewType,
@@ -263,7 +238,6 @@ public record RevitAgentObservedViewState(
     List<RevitAgentContextProvenance> Provenance
 );
 
-[ExportTsSchema]
 public record RevitAgentPlanViewRangeState(
     string? TopLevelName,
     double? TopOffset,
@@ -275,7 +249,6 @@ public record RevitAgentPlanViewRangeState(
     double? ViewDepthOffset
 );
 
-[ExportTsSchema]
 public record RevitAgentView3DState(
     bool IsPerspective,
     bool? IsSectionBoxActive,
@@ -283,7 +256,6 @@ public record RevitAgentView3DState(
     bool? HasSavedOrientation
 );
 
-[ExportTsSchema]
 public record RevitAgentViewFilterState(
     RevitAgentContextHandle Handle,
     bool? IsVisible,
@@ -291,13 +263,11 @@ public record RevitAgentViewFilterState(
     string? ElementFilterType
 );
 
-[ExportTsSchema]
 public record RevitAgentHiddenCategoryState(
     RevitAgentContextHandle Handle,
     string? CategoryType
 );
 
-[ExportTsSchema]
 public record RevitAgentLinkRenderingState(
     RevitAgentContextHandle Handle,
     bool? IsHiddenInView,
@@ -314,14 +284,12 @@ public record RevitAgentLinkRenderingState(
     string? Discipline
 );
 
-[ExportTsSchema]
 public record RevitAgentWorksetVisibilityState(
     string Name,
     long Id,
     string Visibility
 );
 
-[ExportTsSchema]
 public record RevitAgentViewRenderingStateData(
     RevitAgentContextHandle? ActiveView,
     List<RevitAgentObservedViewState> ObservedState,

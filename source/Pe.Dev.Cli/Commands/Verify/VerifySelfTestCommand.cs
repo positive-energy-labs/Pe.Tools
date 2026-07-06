@@ -26,9 +26,10 @@ internal static class VerifySelfTestCommand {
             CheckRemovedRoute("doctor removed", ["doctor"]),
             CheckRemovedRoute("status removed", ["status"]),
             CheckRemovedRoute("sync removed", ["sync"]),
-            CheckUsageText("usage advertises minimal surface", ["pe-dev bootstrap-path", "pe-dev self-test", "pe-dev automation", "pe-dev codegen"]),
+            CheckRemovedRoute("codegen removed", ["codegen"]),
+            CheckUsageText("usage advertises minimal surface", ["pe-dev bootstrap-path", "pe-dev self-test", "pe-dev automation"]),
             CheckUsageTextAbsent("usage does not advertise pe-dev test", ["pe-dev test"]),
-            CheckUsageTextAbsent("usage does not advertise removed codegen check", ["pe-dev codegen <check|sync>"]),
+            CheckUsageTextAbsent("usage does not advertise removed codegen", ["pe-dev codegen sync"]),
             CheckUsageText("usage points Revit tests at SDK", ["pe-revit test fresh|attached"])
         };
         var report = new VerifySelfTestReport(

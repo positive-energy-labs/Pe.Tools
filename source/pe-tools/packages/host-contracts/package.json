@@ -12,25 +12,15 @@
       "import": "./src/contracts/index.ts",
       "default": "./src/contracts/index.ts"
     },
-    "./effect": {
-      "types": "./src/effect/host-effect.generated.ts",
-      "import": "./src/effect/host-effect.generated.ts",
-      "default": "./src/effect/host-effect.generated.ts"
-    },
-    "./effect/registry": {
-      "types": "./src/effect/host-op-schemas.generated.ts",
-      "import": "./src/effect/host-op-schemas.generated.ts",
-      "default": "./src/effect/host-op-schemas.generated.ts"
-    },
     "./operation-types": {
       "types": "./src/operation-types.ts",
       "import": "./src/operation-types.ts",
       "default": "./src/operation-types.ts"
     },
-    "./rpc": {
-      "types": "./src/rpc.ts",
-      "import": "./src/rpc.ts",
-      "default": "./src/rpc.ts"
+    "./generated": {
+      "types": "./src/generated/host-ops.generated.ts",
+      "import": "./src/generated/host-ops.generated.ts",
+      "default": "./src/generated/host-ops.generated.ts"
     }
   },
   "publishConfig": {

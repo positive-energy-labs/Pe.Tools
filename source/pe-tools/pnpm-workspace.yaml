@@ -13,6 +13,7 @@ catalog:
   "@types/node": ^24
   ajv: ^8.20.0
   cmdk: ^1.1.1
+  json-schema-to-typescript: ^15.0.4
   typescript: ^5
   vite: npm:@voidzero-dev/vite-plus-core@0.2.1
   vite-plus: 0.2.1

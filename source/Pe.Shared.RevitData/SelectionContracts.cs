@@ -1,15 +1,12 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using Pe.Shared.Codegen;
 
 namespace Pe.Shared.RevitData;
 
-[ExportTsSchema]
 public record ElementContextQueryRequest(
     ElementContextQuery? Query = null
 );
 
-[ExportTsSchema]
 public record ElementContextQuery(
     ElementContextQueryKind Kind = ElementContextQueryKind.CurrentSelection,
     List<long>? ElementIds = null,
@@ -18,13 +15,11 @@ public record ElementContextQuery(
 );
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsSchema]
 public enum ElementContextQueryKind {
     CurrentSelection,
     ElementReferences
 }
 
-[ExportTsSchema]
 public record ElementContextSystemRef(
     long SystemId,
     string SystemUniqueId,
@@ -35,7 +30,6 @@ public record ElementContextSystemRef(
     string? LoadName
 );
 
-[ExportTsSchema]
 public record ElementContextElementRef(
     long ElementId,
     string ElementUniqueId,
@@ -47,13 +41,11 @@ public record ElementContextElementRef(
     string? Mark
 );
 
-[ExportTsSchema]
 public record ElementContextConnectorSummary(
     int ConnectorCount,
     int ElectricalConnectorCount
 );
 
-[ExportTsSchema]
 public record ElementContextCircuitData(
     long CircuitId,
     string CircuitUniqueId,
@@ -68,7 +60,6 @@ public record ElementContextCircuitData(
     List<ElementContextElementRef> ConnectedElements
 );
 
-[ExportTsSchema]
 public record ElementContextPanelData(
     long PanelId,
     string PanelUniqueId,
@@ -79,7 +70,6 @@ public record ElementContextPanelData(
     int AssignedCircuitCount
 );
 
-[ExportTsSchema]
 public record ElementContextWireData(
     long WireId,
     string WireUniqueId,
@@ -92,7 +82,6 @@ public record ElementContextWireData(
     List<ElementContextElementRef> ConnectedOwners
 );
 
-[ExportTsSchema]
 public record ElementContextElectricalData(
     ElectricalInsightRole Role,
     List<ElementContextSystemRef> Systems,
@@ -100,7 +89,6 @@ public record ElementContextElectricalData(
     ElementContextElementRef? BaseEquipment
 );
 
-[ExportTsSchema]
 public record ElementContextPanelScheduleData(
     long ScheduleId,
     string ScheduleUniqueId,
@@ -109,7 +97,6 @@ public record ElementContextPanelScheduleData(
     string? TemplateName
 );
 
-[ExportTsSchema]
 public record ElementContextLoadClassificationData(
     long ClassificationId,
     string ClassificationUniqueId,
@@ -118,7 +105,6 @@ public record ElementContextLoadClassificationData(
     string? DemandFactorName
 );
 
-[ExportTsSchema]
 public record ElementContextEntry(
     long ElementId,
     string ElementUniqueId,
@@ -141,7 +127,6 @@ public record ElementContextEntry(
     ElementContextLoadClassificationData? LoadClassification
 );
 
-[ExportTsSchema]
 public record ElementContextQueryData(
     string DocumentTitle,
     bool IsFamilyDocument,

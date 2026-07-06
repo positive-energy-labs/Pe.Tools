@@ -1,6 +1,5 @@
 using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Shared.StorageRuntime.Capabilities;
-using Pe.Shared.Codegen;
 
 namespace Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
 
@@ -8,20 +7,17 @@ public static class SchemaUiRendererKeys {
     public const string Table = "table";
 }
 
-[ExportTsSchema]
 public sealed record SchemaUiMetadata {
     public string? Renderer { get; init; }
     public SchemaUiLayoutMetadata? Layout { get; init; }
     public SchemaUiBehaviorMetadata? Behavior { get; init; }
 }
 
-[ExportTsSchema]
 public sealed record SchemaUiLayoutMetadata {
     public string? Section { get; init; }
     public bool? Advanced { get; init; }
 }
 
-[ExportTsSchema]
 public sealed record SchemaUiBehaviorMetadata {
     public IReadOnlyList<string> FixedColumns { get; init; } = [];
     public bool? DynamicColumnsFromAdditionalProperties { get; init; }
@@ -29,7 +25,6 @@ public sealed record SchemaUiBehaviorMetadata {
     public SchemaUiDynamicColumnOrderMetadata? DynamicColumnOrder { get; init; }
 }
 
-[ExportTsSchema]
 public sealed record SchemaUiDynamicColumnOrderMetadata {
     public string? Source { get; init; }
     public IReadOnlyList<string> Values { get; init; } = [];

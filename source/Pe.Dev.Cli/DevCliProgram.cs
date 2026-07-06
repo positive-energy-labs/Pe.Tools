@@ -8,12 +8,12 @@ internal static class DevCliProgram {
                                         pe-dev pea link-dev
                                         pe-dev web <pea|peco> [web options]
                                         pe-dev automation <auth|browse|manifest|submit|inspect|cache> ...
-                                        pe-dev codegen sync [--target all|host-contracts|product]
 
                                       Primary workflow:
                                         bootstrap-path  Add the running pe-dev build output directory to the user PATH.
 
                                       Removed command groups:
+                                        codegen was removed: ops/types come from the live session (GET /ops + host-typegen).
                                         doctor, status, sync, env, revit, verify, and test were intentionally removed from the public surface.
                                         Use SDK pe-revit live/test for live-loop mechanics and Revit-backed proof.
                                         Use Peco when Pea status/log hooks or product probes should wrap SDK commands.

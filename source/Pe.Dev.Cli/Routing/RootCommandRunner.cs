@@ -1,5 +1,3 @@
-using Pe.Dev.Cli.Codegen;
-
 namespace Pe.Dev.Cli;
 
 internal static class RootCommandRunner {
@@ -10,7 +8,6 @@ internal static class RootCommandRunner {
             DevCommandKind.PeaLinkDev => Task.FromResult(PeaLinkDevCommand.Run(options.CommandArguments, options.RepoRoot)),
             DevCommandKind.Web => DevWebCommand.RunAsync(options.CommandArguments, options.RepoRoot, cancellationToken),
             DevCommandKind.Automation => AutomationCommandRunner.RunAsync(options.CommandArguments, options.RepoRoot, cancellationToken),
-            DevCommandKind.Codegen => CodegenCommandRunner.RunAsync(options.CommandArguments, options.RepoRoot, cancellationToken),
             _ => Task.FromResult(10)
         };
 }

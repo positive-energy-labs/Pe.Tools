@@ -1,12 +1,10 @@
 using System.ComponentModel.DataAnnotations;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using Pe.Shared.Codegen;
 
 namespace Pe.Shared.RevitData;
 
 [JsonConverter(typeof(StringEnumConverter))]
-[ExportTsSchema]
 public enum RevitDataResultView {
     Summary,
     Handles,
@@ -15,7 +13,6 @@ public enum RevitDataResultView {
 }
 
 
-[ExportTsSchema]
 public record RevitDataOutputBudget {
     [Range(1, 100000)]
     public int? MaxEntries { get; init; }
@@ -29,13 +26,11 @@ public record RevitDataOutputBudget {
     public bool IncludeDiagnostics { get; init; } = true;
 }
 
-[ExportTsSchema]
 public record RevitDataProjectionRequest {
     public RevitDataResultView View { get; init; } = RevitDataResultView.Summary;
     public RevitDataOutputBudget? Budget { get; init; }
 }
 
-[ExportTsSchema]
 public record RevitDataResultPage(
     int TotalCount,
     int ReturnedCount,

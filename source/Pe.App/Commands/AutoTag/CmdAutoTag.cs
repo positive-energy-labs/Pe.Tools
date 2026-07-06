@@ -1,7 +1,9 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Pe.App.Services.AutoTag;
+using Pe.Shared.Product;
 using Pe.Revit.SettingsRuntime.Json;
 using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Revit.SettingsRuntime.Modules.AutoTag;
@@ -464,25 +466,17 @@ public class CmdAutoTag : IExternalCommand {
     }
 
     private void ExportAndOpen(string settingsFilePath, string schemaFilePath, AutoTagSettings settings) {
+        _ = schemaFilePath; // schema is served live by the host, not written to disk
         var dir = Path.GetDirectoryName(settingsFilePath);
         if (dir != null && !Directory.Exists(dir))
             _ = Directory.CreateDirectory(dir);
 
-        // Generate schema with examples
-        var schema = RevitJsonSchemaFactory.BuildAuthoringSchema(
-            typeof(AutoTagSettings),
-            SettingsRuntimeMode.LiveDocument
-        );
-
-        // Serialize with $schema reference
-        var json = JsonConvert.SerializeObject(settings, JsonSettings);
-        var jsonWithSchema = JsonSchemaDocumentService.WriteSchemaAndInjectReference(
-            schema,
-            json,
-            settingsFilePath,
-            schemaFilePath
-        );
-        File.WriteAllText(settingsFilePath, jsonWithSchema);
+        // $schema points at the host's live schema endpoint; IDE JSON LSPs fetch it,
+        // so value-domain samples always reflect the current session.
+        var document = JObject.Parse(JsonConvert.SerializeObject(settings, JsonSettings));
+        document["$schema"] =
+            $"{HostProcessIdentity.DefaultHostBaseUrl}/schemas/settings/AutoTag/autotag.json";
+        File.WriteAllText(settingsFilePath, JsonConvert.SerializeObject(document, Formatting.Indented));
 
         FileUtils.OpenInDefaultApp(settingsFilePath);
     }
