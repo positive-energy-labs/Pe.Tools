@@ -17,8 +17,19 @@ public sealed class BridgeOpSchemaGeneratorTests {
         ProbeChild? OptionalChild
     );
 
+    private sealed record ProbeTarget(string Id, string? Label = null);
+
+    private sealed record ProbeRequest(
+        string ModuleKey,
+        ProbeTarget Target,
+        string? Filter = null,
+        bool IncludeHidden = false,
+        int Depth = 2,
+        IReadOnlyList<ProbeTarget>? ExtraTargets = null
+    );
+
     [Test]
-    public void Non_nullable_properties_are_required_and_nullable_ones_are_not() {
+    public void Response_non_nullable_properties_are_required_and_nullable_ones_are_not() {
         var schema = JObject.Parse(BridgeOpSchemaGenerator.GetResponseSchemaJson(typeof(ProbeContract)));
 
         var required = schema["required"]!.Select(token => (string)token!).ToArray();
@@ -31,7 +42,7 @@ public sealed class BridgeOpSchemaGeneratorTests {
     }
 
     [Test]
-    public void Nested_definitions_get_required_too_and_names_are_camel_cased() {
+    public void Response_nested_definitions_get_required_too_and_names_are_camel_cased() {
         var schema = JObject.Parse(BridgeOpSchemaGenerator.GetResponseSchemaJson(typeof(ProbeContract)));
 
         var child = schema.SelectToken("$.definitions.ProbeChild") as JObject;
@@ -42,9 +53,36 @@ public sealed class BridgeOpSchemaGeneratorTests {
     }
 
     [Test]
-    public void Request_schemas_mark_nothing_required() {
-        var schema = JObject.Parse(BridgeOpSchemaGenerator.GetRequestSchemaJson(typeof(ProbeContract)));
-        Assert.That(schema["required"], Is.Null);
+    public void Request_requires_only_non_nullable_parameters_without_defaults() {
+        var schema = JObject.Parse(BridgeOpSchemaGenerator.GetRequestSchemaJson(typeof(ProbeRequest)));
+
+        var required = (schema["required"] ?? new JArray()).Select(token => (string)token!).ToArray();
+        Assert.That(required, Does.Contain("moduleKey"));
+        Assert.That(required, Does.Contain("target"));
+        Assert.That(required, Does.Not.Contain("filter"));
+        Assert.That(required, Does.Not.Contain("includeHidden"));
+        Assert.That(required, Does.Not.Contain("depth"));
+        Assert.That(required, Does.Not.Contain("extraTargets"));
+    }
+
+    [Test]
+    public void Request_nested_definitions_follow_the_same_rule() {
+        var schema = JObject.Parse(BridgeOpSchemaGenerator.GetRequestSchemaJson(typeof(ProbeRequest)));
+
+        var target = schema.SelectToken("$.definitions.ProbeTarget") as JObject;
+        Assert.That(target, Is.Not.Null);
+        var targetRequired = (target!["required"] ?? new JArray()).Select(token => (string)token!).ToArray();
+        Assert.That(targetRequired, Does.Contain("id"));
+        Assert.That(targetRequired, Does.Not.Contain("label"));
+    }
+
+    [Test]
+    public void Request_required_list_is_exactly_the_non_defaulted_parameters() {
+        var schema = JObject.Parse(BridgeOpSchemaGenerator.GetRequestSchemaJson(typeof(ProbeTarget)));
+
+        var required = (schema["required"] ?? new JArray()).Select(token => (string)token!).ToArray();
+        Assert.That(required, Does.Contain("id"));
+        Assert.That(required, Has.Length.EqualTo(1));
     }
 
     [Test]

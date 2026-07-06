@@ -2,8 +2,8 @@ import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   HostCallError,
   type HostSessionScope,
+  type OpCallArgs,
   type OpKey,
-  type OpRequestOf,
   type OpResponseOf,
 } from "@pe/host-contracts/operation-types";
 
@@ -16,9 +16,9 @@ const HOST_CALL_URL = "/pe-host/call";
  */
 export function callHostRpc<K extends OpKey>(
   key: K,
-  request?: OpRequestOf<K>,
-  options?: HostSessionScope,
+  ...args: OpCallArgs<K, HostSessionScope>
 ): Promise<OpResponseOf<K>> {
+  const [request, options] = args;
   return postCall(key, request, options) as Promise<OpResponseOf<K>>;
 }
 

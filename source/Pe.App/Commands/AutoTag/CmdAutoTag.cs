@@ -475,7 +475,7 @@ public class CmdAutoTag : IExternalCommand {
         // so value-domain samples always reflect the current session.
         var document = JObject.Parse(JsonConvert.SerializeObject(settings, JsonSettings));
         document["$schema"] =
-            $"{HostProcessIdentity.DefaultHostBaseUrl}/schemas/settings/AutoTag/autotag.json";
+            $"{HostProcessIdentity.ResolveHostBaseUrl().TrimEnd('/')}/schemas/settings/AutoTag/autotag.json";
         File.WriteAllText(settingsFilePath, JsonConvert.SerializeObject(document, Formatting.Indented));
 
         FileUtils.OpenInDefaultApp(settingsFilePath);

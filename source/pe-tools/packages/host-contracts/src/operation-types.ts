@@ -584,6 +584,15 @@ export type OpKey = AnyOperationKey;
 export type OpRequestOf<K extends AnyOperationKey> = HostOpRequest<K>;
 export type OpResponseOf<K extends AnyOperationKey> = HostOpResponse<K>;
 
+/**
+ * Trailing args for a typed op call: the request stays optional only when the
+ * op's request type has no required members ({} satisfies it) — an op with
+ * required inputs cannot be called without a request object.
+ */
+export type OpCallArgs<K extends AnyOperationKey, Options> = {} extends OpRequestOf<K>
+  ? [request?: OpRequestOf<K>, options?: Options]
+  : [request: OpRequestOf<K>, options?: Options];
+
 export type HostOpResponse<K extends AnyOperationKey> = K extends HostOperationKey
   ? HostOps[K]["response"]
   : K extends TsOnlyOperationKey

@@ -1,7 +1,7 @@
 # Host runtime ops — target architecture
 
-Status: phases A–D in flight on `sdk-migration`; E needs a Revit restart. No back compat —
-the old contract pipeline is deleted, not deprecated.
+Status: phases A–E landed on `sdk-migration`. No back compat — the old contract pipeline
+is deleted, not deprecated. Items marked **deferred** below are spec'd but not built.
 
 ## The whole contract, stated once
 
@@ -15,22 +15,28 @@ artifacts projected across languages.
 
 - `POST /call` — `{ key, request? }` + optional `x-pe-bridge-session-id` header → JSON
   response. Errors are `application/problem+json`-shaped `{ key, kind, message, status }`
-  with the HTTP status set. Replaces Effect RPC/NDJSON (`/rpc`) entirely.
-- `GET /ops` — runtime op catalog. MultiDocument shape (effect `JsonSchema`): shared
-  `definitions` pool + per-op request/response roots, dialect-normalized. Serves typegen,
-  agent capability maps, and docs.
+  with the HTTP status set. Replaces Effect RPC/NDJSON (`/rpc`) entirely — including the
+  reverse direction: Revit's own calls back into the host (typed settings reads, APS auth)
+  go through `TsHostCallClient` (Pe.Shared.Product) on the same wire.
+- `GET /ops` — runtime op catalog: per-op metadata + self-contained request/response
+  JSON Schema strings. Serves typegen, agent capability maps, and docs. (**Deferred**:
+  effect-smol MultiDocument shape — shared `definitions` pool across ops,
+  dialect-normalized.)
 - `GET /events` — SSE relay of bridge frames (document-changed, state-sync,
   connect/disconnect). Browser invalidates queries off it; no polling, no refresh buttons.
 - `GET /schemas/settings/<moduleKey>/<rootKey>.json` — live settings authoring schema from
-  the default (or `?session=`) session. Settings docs carry
+  the default session (**deferred**: `?session=` selection — single-session is the live
+  reality today). Settings docs carry
   `"$schema": "http://localhost:5180/schemas/settings/<module>/<root>.json"` — absolute,
-  machine-portable (each teammate's host resolves it), injected on save.
+  machine-portable (each teammate's host resolves it), injected on save; the base honors
+  `PE_TOOLS_HOST_BASE_URL`.
   **No disk mirror**: schemas are session state (value-domain samples come from the open
   document); persisting them was the old system's bug, not a feature.
-- `GET /options/<domainKey>` — context-free value-domain options as `{ "enum": [...] }`
-  (short TTL cache). Schemas reference these via remote `$ref`, which VSCode/Zed JSON LS
-  resolves → live Revit completions in the editor. Context-dependent domains stay on the
-  `settings.field-options` op (web form only).
+- **Deferred** `GET /options/<domainKey>` — context-free value-domain options as
+  `{ "enum": [...] }` (short TTL cache). Schemas would reference these via remote `$ref`,
+  which VSCode/Zed JSON LS resolves → live Revit completions in the editor. Needs
+  Revit-thread marshaling; judge the editor UX before building. Context-dependent domains
+  stay on the `settings.field-options` op (web form only).
 
 ## Bridge
 

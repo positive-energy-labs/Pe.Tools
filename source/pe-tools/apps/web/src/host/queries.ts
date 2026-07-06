@@ -16,8 +16,8 @@ import type {
 import type {
   HostOpRequest,
   HostSessionScope,
+  OpCallArgs,
   OpKey,
-  OpRequestOf,
   SettingsTreeRequest,
 } from "@pe/host-contracts/operation-types";
 
@@ -54,14 +54,16 @@ function stableKey(value: unknown): string {
 
 export function useHostOp<K extends OpKey>(
   key: K,
-  request?: OpRequestOf<K>,
-  options?: HostQueryOptions & HostOpQueryTuning,
+  ...args: OpCallArgs<K, HostQueryOptions & HostOpQueryTuning>
 ) {
+  const [request, options] = args;
   const { enabled, bridgeSessionId, ...tuning } = options ?? {};
   const scope = bridgeSessionId ? { bridgeSessionId } : undefined;
   return useQuery({
     queryKey: [...HOST_QUERY_KEY, bridgeSessionId ?? "", key, stableKey(request)],
-    queryFn: () => callHostRpc(key, request, scope),
+    // Cast: TS cannot resolve the conditional OpCallArgs tuple while K is open;
+    // the public signatures on this hook and callHostRpc enforce it at call sites.
+    queryFn: () => callHostRpc(key, ...([request, scope] as OpCallArgs<K, HostSessionScope>)),
     enabled: enabled ?? true,
     refetchOnWindowFocus: false,
     ...tuning,
@@ -145,7 +147,9 @@ export function useTreeQuery(request: SettingsTreeRequest | undefined, options?:
 }
 
 export function useSchemaQuery(request: SchemaRequest | undefined, options?: HostQueryOptions) {
-  return useHostOp("settings.schema", request, {
+  // The op requires moduleKey/rootKey; while unset the query is disabled and the
+  // placeholder never reaches the wire.
+  return useHostOp("settings.schema", request ?? { moduleKey: "", rootKey: "" }, {
     ...options,
     enabled: (options?.enabled ?? true) && Boolean(request?.moduleKey && request?.rootKey),
     staleTime: 5 * 60 * 1000,

@@ -244,7 +244,7 @@ This asymmetry is deliberate: Host needs a dev-only root to avoid installed-runt
 
 - `pea` starts the source-linked Pea Revit/operator workbench TUI; `pea host` and `pea script` expose product command subgroups.
 - `peco` starts the MastraCode-based repo coding agent; `peco live`, `peco script`, and `peco talk-to-pea` expose repo/dev command subgroups.
-- `pe-dev` is the narrow C# source/dev CLI for PATH bootstrap, source linking, web dev supervision, codegen, and automation commands.
+- `pe-dev` is the narrow C# source/dev CLI for PATH bootstrap, source linking, web dev supervision, and automation commands.
 
 ### Source-linked web dev
 
@@ -279,36 +279,27 @@ pea --installed --help
 
 Do not use a dev command to rewrite the installed-shaped `pea` payload selection. A previous `pe-dev pea install-dev` command was removed because it wrote `versions\dev` and `current.txt` under `bin\pea`, making installed-lane validation ambiguous. Source-linked dev work should use `link-dev` plus `pea` / `peco`; packaged installed payload validation should use the installer/package lane or `pea --installed ...` against an installed payload.
 
-## Generated contract decisions
+## Contract decisions (runtime op catalog)
 
-Generated contracts are projections, not hand-maintained source. C# bridge operation types stay the authority for Revit operations; TypeScript Effect schemas/RPC contracts are emitted into `@pe/host-contracts`.
+The `pe-dev codegen` tier is gone. The connected Revit session is the source of truth for the whole cross-language contract: C# `BridgeOp` fields/`[BridgeOperation]` methods self-register at startup, and the TS host serves the live catalog — request/response JSON Schemas included — from `GET /ops` (full architecture: `docs/features/host-runtime-ops/SPEC.md`).
+
+TypeScript compile-time types are a checked-in lockfile generated from that live catalog:
 
 ```powershell
-pe-dev codegen sync --target host-contracts  # @pe/host-contracts contracts + Effect schemas/RPCs
-pe-dev codegen sync --target product
-pe-dev codegen sync --target all             # every target above
+# from source/pe-tools/packages/tools, with Revit connected
+node src/dev/host-typegen.ts          # regenerate packages/host-contracts/src/generated/host-ops.generated.ts
+node src/dev/host-typegen.ts --check  # drift gate: exit 1 when the checked-in types disagree with /ops
 ```
 
-The valid `--target` values are `all`, `product`, and `host-contracts` (verified: any other value exits non-zero with `Unknown codegen target`). There is no `build`, `host-types`, `host-client`, or `host-generated` target. Codegen always rebuilds the contract assemblies first — there is no `--no-build` escape hatch (it only risked generating from stale assemblies).
+Regenerate after changing a C# request/response DTO or adding an op, and commit the result like a lockfile. Schema required-ness is honest per direction: response properties are required exactly when non-nullable in C#; request properties are required only when non-nullable *and* their constructor parameter has no default (`BridgeOpSchemaGenerator`).
 
-`sync` updates generated projections and formats/checks `@pe/host-contracts`. Host DTO TypeScript is generated through `pe-dev` into Effect Schema code; do not run `dotnet-typegen` or maintain `tgconfig.json` by hand.
+What lives in `@pe/host-contracts`:
 
-### What lands in `@pe/host-contracts`
+- `src/generated/host-ops.generated.ts` — the typegen lockfile: per-op request/response interfaces, the `HostOps` map, `hostOpKeys`.
+- `src/operation-types.ts` — hand-authored TS-only op schemas (settings runtime, APS auth, logs), key guards, `OpKey`/`OpRequestOf`/`OpResponseOf`.
+- `src/contracts/` — hand-authored bridge protocol, product constants, and operation vocabulary.
 
-- `src/contracts/` — generated product constants, bridge protocol schemas, operation metadata, and the `hostOperations` catalog.
-- `src/effect/host-effect.generated.ts` — generated Effect Schema codecs, inferred types, and enum value constants for exported C# operation DTOs.
-- `src/effect/host-op-schemas.generated.ts` — generated request/response schema registry for each public bridge operation.
-- `src/effect/bridge-operation-rpcs.generated.ts` — generated direct Effect RPC members for each public bridge operation.
-- `src/operation-types.ts` — hand-maintained TS-owned local/admin operation schemas, generic key/request/response maps, and scoped caller metadata.
-- `src/rpc.ts` — hand-maintained contract-only `HostRpcs` group and generic `callHostRpcMember` helper.
-
-The emitted type set is exactly what's annotated for TypeGen export: each exported C# operation DTO gets an Effect Schema codec and inferred TypeScript type. There is no reachability pruning — to drop a type from the surface, remove its export attribute. Open generic definitions have no concrete wire shape and are skipped. Every public bridge operation request/response type must be exported, or `host-contracts` fails fast.
-
-The Effect Schema emitter reflects the C# types directly, including nullability and enum values, so TS callers validate the same wire shape the bridge sends. Browser, tools, and the TS host share the `HostRpcs` group plus `callHostRpcMember`; callers do not hand-pass schemas or maintain wrapper packages.
-
-Session selection is caller scope, not operation payload. `HostSessionScope.bridgeSessionId` is translated into the `x-pe-bridge-session-id` RPC header by `callHostRpcMember`; generated direct bridge operation payloads only contain the operation request shape.
-
-When a C# host contract changes, regenerate with `pe-dev codegen sync --target host-contracts` or `--target all`.
+Session selection is caller scope, not operation payload: `HostSessionScope.bridgeSessionId` travels as the `x-pe-bridge-session-id` header on `POST /call`.
 
 ## Design Automation decision
 
@@ -365,4 +356,4 @@ The automation shell is `Pe.Dev.RevitAutomation.Worker`, not desktop `Pe.App`. D
 | Link source `pea` dev lane        | `pe-dev pea link-dev`, then `pea`, `peco`, `pea web`, or `peco web`                                                              |
 | Run source web dev explicitly     | `pe-dev web pea` or `pe-dev web peco`                                                                                            |
 | Validate installed `pea` lane     | `pea --installed ...`                                                                                                            |
-| Generated contract update         | `pe-dev codegen sync --target <target>`                                                                                          |
+| Regenerate host op types          | `node src/dev/host-typegen.ts` from `source/pe-tools/packages/tools` (Revit connected); `--check` is the drift gate              |

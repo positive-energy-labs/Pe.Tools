@@ -550,7 +550,10 @@ function isSettingsModule(value: unknown): value is SettingsModuleDescriptor {
 // host answers for their own session.
 
 export function settingsSchemaUrl(documentId: SettingsDocumentId): string {
-  const base = hostProcessIdentity.defaultHostBaseUrl;
+  // ponytail: persisted into documents — a nonstandard base bakes machine-specific
+  // URLs into files teammates open. Fine while everyone runs the default port.
+  const base =
+    process.env[hostProcessIdentity.hostBaseUrlVariable] ?? hostProcessIdentity.defaultHostBaseUrl;
   const moduleKey = encodeURIComponent(documentId.moduleKey);
   const rootKey = encodeURIComponent(documentId.rootKey);
   return `${base}/schemas/settings/${moduleKey}/${rootKey}.json`;
