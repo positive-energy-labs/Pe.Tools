@@ -1,0 +1,24 @@
+<Project Sdk="Pe.Revit.Sdk">
+
+    <PropertyGroup>
+        <PeProjectKind>RevitLibrary</PeProjectKind>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>Pe.Revit.Takeoff</RootNamespace>
+        <!-- PresentationCore for PngBitmapDecoder: Revit is WPF-hosted, so this adds no runtime
+             payload; avoids a System.Drawing.Common package dep on net8 lanes. -->
+        <UseWPF>true</UseWPF>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="ILRepack" Version="2.0.44">
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+    </ItemGroup>
+
+</Project>
