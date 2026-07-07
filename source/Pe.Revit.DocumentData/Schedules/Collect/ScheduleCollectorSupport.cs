@@ -268,9 +268,13 @@ internal static class ScheduleCollectorSupport {
 
         try {
             var units = doc.GetUnits();
-            var formatOptions =
-                SafeGet(() => bodySection.GetCellFormatOptions(columnNumber, doc)) ?? SafeGet(field.GetFormatOptions);
-            if (formatOptions != null && !formatOptions.UseDefault)
+            // Cell-level options often come back non-null with UseDefault=true while the real unit
+            // override lives on the FIELD (e.g. a dimension column formatted as decimal inches).
+            // A plain ?? never consults the field then, so subject values format with project units
+            // (1' - 7") while the grid renders the override (19") and every row unbinds.
+            var cellOptions = SafeGet(() => bodySection.GetCellFormatOptions(columnNumber, doc));
+            var formatOptions = cellOptions is { UseDefault: false } ? cellOptions : SafeGet(field.GetFormatOptions);
+            if (formatOptions is { UseDefault: false })
                 units.SetFormatOptions(specTypeId, formatOptions);
 
             return units;
@@ -294,6 +298,9 @@ internal static class ScheduleCollectorSupport {
         AddNormalizedText(texts, SafeGet(() => field.MultipleValuesText));
         AddNormalizedText(texts, SafeGet(() => field.MultipleValuesCustomText));
         AddNormalizedText(texts, "<varies>");
+        // Electrical circuit columns (Length, Voltage Drop) render this sentinel for circuits Revit
+        // hasn't computed while parameter reads produce 0 — treat it like <varies>: non-comparable.
+        AddNormalizedText(texts, "Not Computed");
         return texts;
     }
 

@@ -628,6 +628,9 @@ public static class ScheduleQueryCollector {
 
             var rowKind = ClassifyRowKind(bodySection, contexts, rowNumber);
             var binding = BindRow(values, contexts, contextByColumnNumber, subjectContexts, rowKind);
+            var mismatchIssues = binding.ResolutionStatus == ScheduleRenderedRowSubjectResolutionStatus.Unbound
+                ? ExplainRowMismatch(rowNumber, values, contexts, contextByColumnNumber, subjectContexts)
+                : null;
             rows.Add(new CollectedRow(
                 new ScheduleRenderedRow(
                     rowNumber,
@@ -636,13 +639,68 @@ public static class ScheduleQueryCollector {
                     binding.BindingKind,
                     binding.ResolutionStatus,
                     binding.ResolutionReason,
-                    binding.SubjectIds
+                    binding.SubjectIds,
+                    mismatchIssues
                 ),
                 binding.ResolutionStatus
             ));
         }
 
         return rows;
+    }
+
+    /// <summary>
+    ///     Explains an Unbound row: for each comparable column, how many subjects matched the row's
+    ///     cell text, with subject-side sample values for the columns nobody matched. This is the
+    ///     diagnostic that turns "HeuristicMismatch" into an actionable formatting delta.
+    /// </summary>
+    private static List<ScheduleRenderedCellIssue> ExplainRowMismatch(
+        int rowNumber,
+        IReadOnlyList<string> values,
+        IReadOnlyList<ColumnContext> contexts,
+        IReadOnlyDictionary<int, ColumnContext> contextByColumnNumber,
+        IReadOnlyList<SubjectContext> subjectContexts
+    ) {
+        const int maxIssuesPerRow = 5;
+        const int maxSampleTexts = 3;
+        var issues = new List<ScheduleRenderedCellIssue>();
+
+        for (var i = 0; i < contexts.Count && i < values.Count && issues.Count < maxIssuesPerRow; i++) {
+            var context = contexts[i];
+            var normalizedValue = ScheduleCollectorSupport.NormalizeCellText(values[i]);
+            if (!context.IsComparable
+                || string.IsNullOrWhiteSpace(normalizedValue)
+                || context.MultipleValueTexts.Contains(normalizedValue))
+                continue;
+
+            var subjectsWithColumn = subjectContexts
+                .Where(subject => subject.ValuesByColumn.ContainsKey(context.Column.ColumnNumber))
+                .ToList();
+            if (subjectsWithColumn.Count == 0)
+                continue;
+
+            var rowValue = new ComparableRowValue(context.Column.ColumnNumber, normalizedValue, true);
+            var matchCount = subjectsWithColumn.Count(subject =>
+                MatchesComparableValue(contextByColumnNumber, rowValue, subject.ValuesByColumn[context.Column.ColumnNumber]));
+            if (matchCount != 0)
+                continue;
+
+            var samples = subjectsWithColumn
+                .SelectMany(subject => subject.ValuesByColumn[context.Column.ColumnNumber].TextValues)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(maxSampleTexts)
+                .ToList();
+            issues.Add(new ScheduleRenderedCellIssue(
+                rowNumber,
+                context.Column.ColumnNumber,
+                context.Column.FieldName,
+                context.Column.HeaderText,
+                "RowBindingColumnMismatch",
+                $"cell='{normalizedValue}' matched 0 of {subjectsWithColumn.Count} subject(s); subject texts: [{string.Join(" | ", samples)}]"
+            ));
+        }
+
+        return issues;
     }
 
     private static RowBindingResult BindRow(
