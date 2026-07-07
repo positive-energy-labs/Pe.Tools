@@ -373,6 +373,41 @@ public static class RevitBridgeOps {
             ),
             static (request, context, ct) => context.RevitData.ApplyFamilyEditorEditsAsync(request)
         );
+
+    public static readonly BridgeOp ApplyParameterValues =
+        BridgeOp.Create<ParameterValueApplyRequest, ParameterValueApplyData>(
+            "revit.apply.parameter-values",
+            "Apply Parameter Values",
+            HostOperationAgentMetadata.Create(
+                "Apply parameter values to project elements in one host-owned transaction, redeeming binding handles (target element id + parameter id) returned by revit.detail.schedules projection.includeBindings.",
+                new[] { "parameters", "apply", "mutation", "elements", "schedule-bindings", "binding-handles", "cell-edit", "write" },
+                intent: HostOperationIntent.Mutate,
+                requiresActiveDocument: true,
+                costTier: HostOperationCostTier.Mutation,
+                requestExamples: [
+                    Example(
+                        "plain string fill from binding handles",
+                        "Redeem schedule cell binding handles: elementId + parameterId from projection.includeBindings, string values written as-is.",
+                        """
+                        { "edits": [{ "elementId": 12345, "parameterId": -1010106, "value": "AHU-1" }, { "elementId": 67890, "parameterId": -1002501, "value": "Roof unit" }] }
+                        """
+                    ),
+                    Example(
+                        "unit display-string fill previewed with dryRun",
+                        "Double parameters accept raw internal feet or unit display strings (parsed against the parameter's spec); dryRun validates and parses everything (see parsedRaw) without writing.",
+                        """
+                        { "dryRun": true, "edits": [{ "elementId": 12345, "parameterName": "Discharge Air Temperature", "value": "79 °F" }] }
+                        """
+                    )
+                ],
+                callGuidance: [
+                    "Preview with dryRun=true first: it resolves, validates, and parses every edit (results carry parsedRaw) without opening a transaction or changing the document.",
+                    "One call is one transaction and one Revit undo step; at most 500 edits per call. Binding handles for type-parameter columns target the shared type element, so one write fans out to every instance of the type."
+                ]
+            ),
+            static (request, context, ct) => context.RevitData.ApplyParameterValuesAsync(request)
+        );
+
     public static readonly BridgeOp ScheduleCoverage =
         BridgeOp.Create<ScheduleCoverageRequest, ScheduleCoverageData>(
             "revit.matrix.schedule-coverage",
@@ -846,6 +881,40 @@ public static class RevitBridgeOps {
                 ]
             ),
             static (request, context, ct) => context.RevitData.GetRevitViewImageAsync(request)
+        );
+
+    public static readonly BridgeOp ExecuteRibbonCommand =
+        BridgeOp.Create<RibbonCommandExecuteRequest, RibbonCommandExecuteData>(
+            "revit.apply.command.execute",
+            "Execute Ribbon Command",
+            HostOperationAgentMetadata.Create(
+                "Search Revit ribbon/postable commands by name and execute one by command id — the same discovery and PostCommand machinery as the command palette. Call with searchText to list candidates without executing, then commandId to post.",
+                new[] { "command", "execute", "postable", "ribbon", "palette", "post", "trigger" },
+                intent: HostOperationIntent.Mutate,
+                requiresActiveDocument: false,
+                costTier: HostOperationCostTier.Mutation,
+                requestExamples: [
+                    Example(
+                        "find a command",
+                        "List ribbon commands matching a name; nothing is executed.",
+                        """
+                        { "searchText": "sheet" }
+                        """
+                    ),
+                    Example(
+                        "execute a command",
+                        "Post a command by exact id from a prior search.",
+                        """
+                        { "commandId": "ID_VIEW_NEW_SHEET" }
+                        """
+                    )
+                ],
+                callGuidance: [
+                    "Search first; ids are stable (SCREAMING_SNAKE for built-ins, CustomCtrl_% for add-in buttons).",
+                    "PostCommand queues the command to run when Revit is idle — Posted=true does not mean the command has finished, and commands that open modal UI will block the bridge until dismissed."
+                ]
+            ),
+            static (request, context, ct) => context.RevitData.ExecuteRibbonCommandAsync(request)
         );
 
     public static readonly BridgeOp ScriptWorkspaceBootstrap =

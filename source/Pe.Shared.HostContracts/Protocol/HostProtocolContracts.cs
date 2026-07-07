@@ -14,7 +14,8 @@ public static class HttpRoutes {
 public static class HostProtocol {
     // 36: loaded-families matrix reshaped to FamilySnapshotRecord (canonical family record language)
     // 37: schedule query rows gain optional cell bindings (write surface: includeBindings projection)
-    public const int ContractVersion = 37;
+    // 38: revit.apply.parameter-values op (redeem binding handles) + element-detail parameter editability
+    public const int ContractVersion = 38;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]

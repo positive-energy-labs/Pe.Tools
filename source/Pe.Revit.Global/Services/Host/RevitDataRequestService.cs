@@ -1,4 +1,5 @@
 using Autodesk.Revit.DB.Electrical;
+using Autodesk.Revit.UI.Events;
 using Pe.Revit.DocumentData.AgentContext;
 using Pe.Revit.DocumentData.Electrical;
 using Pe.Revit.DocumentData.Families.Loaded.Collectors;
@@ -69,6 +70,10 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         FamilyEditorApplyRequest request
     ) => this.EnqueueAsync(() => this.ApplyFamilyEditorEditsCore(request));
 
+    public Task<ParameterValueApplyData> ApplyParameterValuesAsync(
+        ParameterValueApplyRequest request
+    ) => this.EnqueueAsync(() => this.ApplyParameterValuesCore(request));
+
     public Task<ScheduleCoverageData> GetScheduleCoverageAsync(
         ScheduleCoverageRequest request
     ) => this.EnqueueAsync(() => this.GetScheduleCoverageCore(request));
@@ -136,6 +141,68 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
 
     public Task<ParametersServiceCacheData> RefreshParametersServiceCacheAsync() =>
         ParametersServiceCache.RefreshAsync();
+
+    public Task<RibbonCommandExecuteData> ExecuteRibbonCommandAsync(RibbonCommandExecuteRequest request) =>
+        this.EnqueueAsync(() => ExecuteRibbonCommandCore(request));
+
+    private static RibbonCommandExecuteData ExecuteRibbonCommandCore(RibbonCommandExecuteRequest request) {
+        var uiApp = RevitUiSession.CurrentUIApplication;
+
+        if (!string.IsNullOrWhiteSpace(request.CommandId)) {
+            var (posted, error) = Lib.Commands.Execute(uiApp, request.CommandId!);
+            return new RibbonCommandExecuteData(
+                Posted: posted,
+                Executed: new RibbonCommandInfo(request.CommandId!, request.CommandId!, null, null, posted),
+                Matches: [],
+                Message: error?.Message
+            );
+        }
+
+        // Discovery: same ribbon walk + shortcuts-XML naming as the command palette.
+        var shortcuts = Ui.ShortcutsService.Instance;
+        var search = request.SearchText ?? string.Empty;
+        var maxMatches = Math.Max(1, request.MaxMatches);
+        var matches = new List<RibbonCommandInfo>();
+
+        foreach (var command in Ui.Ribbon.GetAllCommands()) {
+            var (info, _) = shortcuts.GetShortcutInfo(command.Id);
+            string name;
+            string? paths;
+            if (info is not null) {
+                name = info.CommandName;
+                paths = string.Join("; ", info.Paths);
+            } else if (command.ItemType == "RibbonButton" && !command.Panel.Contains("_shr_")) {
+                name = command.Text;
+                paths = $"{command.Tab} > {command.Panel.Split('_').Last()}";
+            } else
+                continue;
+
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            if (search.Length > 0 &&
+                name.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0 &&
+                command.Id.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0)
+                continue;
+
+            var liveShortcuts = shortcuts.GetLiveShortcuts(command.Id);
+            matches.Add(new RibbonCommandInfo(
+                command.Id,
+                name,
+                paths,
+                liveShortcuts.Count > 0 ? liveShortcuts[0] : null,
+                Lib.Commands.IsAvailable(uiApp, command.Id)
+            ));
+            if (matches.Count >= maxMatches) break;
+        }
+
+        return new RibbonCommandExecuteData(
+            Posted: false,
+            Executed: null,
+            Matches: matches,
+            Message: matches.Count == 0
+                ? "No matching commands. Broaden searchText or omit it to list the first page."
+                : null
+        );
+    }
 
     private LoadedFamiliesCatalogData GetLoadedFamiliesCatalogCore(LoadedFamiliesCatalogRequest request) {
         var document = GetSupportedActiveDocument(RevitBridgeOps.LoadedFamiliesCatalog.Definition);
@@ -383,6 +450,36 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
 
         return new FamilyEditorApplyData(applied, results);
     }
+
+    private ParameterValueApplyData ApplyParameterValuesCore(ParameterValueApplyRequest request) {
+        var document = GetSupportedActiveDocument(RevitBridgeOps.ApplyParameterValues.Definition);
+        if (!request.DryRun && document.IsReadOnly) {
+            throw BridgeOperationExceptions.Conflict(
+                "Active document is read-only.",
+                [
+                    BridgeOperationExceptions.Issue(
+                        "$",
+                        "ParameterValueApplyDocumentReadOnly",
+                        "Active document is read-only.",
+                        "Open a writable document and retry, or use dryRun=true to preview."
+                    )
+                ]
+            );
+        }
+
+        try {
+            return ParameterValueApplier.Apply(document, request);
+        } catch (BridgeOperationException) {
+            throw;
+        } catch (Exception ex) {
+            throw BridgeOperationExceptions.Unexpected(
+                "ParameterValueApplyException",
+                ex,
+                "Verify the active document is writable and the edits reference valid binding handles, then retry."
+            );
+        }
+    }
+
     private ScheduleCoverageData GetScheduleCoverageCore(ScheduleCoverageRequest request) {
         var document = GetSupportedActiveDocument(RevitBridgeOps.ScheduleCoverage.Definition);
 
@@ -745,7 +842,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
 
         try {
             var modelPath = ModelPathUtils.ConvertUserVisiblePathToModelPath(path);
-            var uiDocument = uiApp.OpenAndActivateDocument(modelPath, new OpenOptions(), false);
+            var uiDocument = OpenAndActivateSuppressingLinkDialog(uiApp, modelPath);
             var document = uiDocument.Document;
             return new OpenRevitDocumentData(
                 CreateDocumentSummary(document, document),
@@ -818,7 +915,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
             var modelPath = ModelPathUtils.ConvertCloudGUIDsToCloudPath(region, projectGuid, modelGuid);
             // ponytail: no network timeout; a dead-network cloud open blocks the Revit task queue.
             // Wrap with UiApplication.TryOpenCloudDocumentWithTimeout-style handling if that bites.
-            var uiDocument = uiApp.OpenAndActivateDocument(modelPath, new OpenOptions(), false);
+            var uiDocument = OpenAndActivateSuppressingLinkDialog(uiApp, modelPath);
             var document = uiDocument.Document;
             return new OpenRevitDocumentData(
                 CreateDocumentSummary(document, document),
@@ -842,6 +939,28 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
                 ex,
                 "Verify Autodesk sign-in, cloud access, region, and that the model GUIDs are current."
             );
+        }
+    }
+
+    /// <summary>
+    ///     Opens a document with the "Manage Links" unresolved-references TaskDialog auto-dismissed
+    ///     ("Ignore and continue opening the project"), so bridge opens of linked cloud models don't
+    ///     block on a modal dialog. Handler is scoped to this call only — manual opens still see it.
+    /// </summary>
+    private static UIDocument OpenAndActivateSuppressingLinkDialog(UIApplication uiApp, ModelPath modelPath) {
+        void OnDialogShowing(object? sender, DialogBoxShowingEventArgs args) {
+            if (args is not TaskDialogShowingEventArgs td) return;
+            if (td.DialogId == "TaskDialog_Unresolved_References")
+                td.OverrideResult(1002); // CommandLink2 = "Ignore and continue opening the project"
+            else
+                Console.WriteLine($"[OpenRevitDocument] Unhandled dialog during open: {td.DialogId}");
+        }
+
+        uiApp.DialogBoxShowing += OnDialogShowing;
+        try {
+            return uiApp.OpenAndActivateDocument(modelPath, new OpenOptions(), false);
+        } finally {
+            uiApp.DialogBoxShowing -= OnDialogShowing;
         }
     }
 
