@@ -1,5 +1,6 @@
 using Autodesk.Revit.DB.Structure;
 using Pe.Revit.DocumentData.Parameters;
+using Pe.Revit.DocumentData.Schedules.Authored.ValueDomains;
 using Pe.Shared.RevitData;
 
 namespace Pe.Revit.Tests;
@@ -167,6 +168,124 @@ public sealed class ParameterValueApplyProofTests {
                     var reread = projectDocument.GetElement(fixture.InstanceIds[0].ToElementId())
                         .LookupParameter(LengthParameterName)!;
                     Assert.That(reread.AsDouble(), Is.EqualTo(2.5).Within(1e-9));
+                });
+            });
+    }
+
+    [Test]
+    public void Unit_conversion_is_exact_via_revits_own_tables_and_symbols_resolve_within_spec(
+        UIApplication uiApplication
+    ) {
+        RunWithPlacedInstances(
+            uiApplication,
+            nameof(this.Unit_conversion_is_exact_via_revits_own_tables_and_symbols_resolve_within_spec),
+            (projectDocument, fixture) => {
+                var lengthParameter = projectDocument.GetElement(fixture.InstanceIds[0].ToElementId())
+                    .LookupParameter(LengthParameterName)!;
+                // Expected values come from the same API the applier must use — correctness by
+                // construction, no hand-written conversion constants.
+                var expectedFeet = UnitUtils.ConvertToInternalUnits(30, UnitTypeId.Inches);
+                // Resolve a symbol label ("in-ish") from the API so the proof survives label churn.
+                var inchSymbol = ScheduleFieldFormatValueDomain.GetValidSymbols(UnitTypeId.Inches)
+                    .Select(ScheduleFieldFormatValueDomain.GetSymbolLabel)
+                    .FirstOrDefault(label => !string.IsNullOrWhiteSpace(label));
+                Assert.That(inchSymbol, Is.Not.Null, "Inches must expose at least one symbol label.");
+
+                var data = ParameterValueApplier.Apply(projectDocument, new ParameterValueApplyRequest([
+                    new ParameterValueEdit(fixture.InstanceIds[0], lengthParameter.Id.Value(),
+                        Value: "30", Unit: "Inches"),
+                    new ParameterValueEdit(fixture.InstanceIds[1], MarkParameterId, Value: "PE-KEEP"),
+                    new ParameterValueEdit(fixture.InstanceIds[1],
+                        projectDocument.GetElement(fixture.InstanceIds[1].ToElementId())
+                            .LookupParameter(LengthParameterName)!.Id.Value(),
+                        Value: "30", Unit: inchSymbol)
+                ]));
+
+                Assert.Multiple(() => {
+                    Assert.That(data.Results.Where(result => !result.Ok), Is.Empty,
+                        string.Join("; ", data.Results.Where(result => !result.Ok).Select(result => result.Error)));
+                    // Member-name spelling and symbol spelling land the IDENTICAL internal value.
+                    foreach (var instanceId in fixture.InstanceIds) {
+                        var reread = projectDocument.GetElement(instanceId.ToElementId())
+                            .LookupParameter(LengthParameterName)!.AsDouble();
+                        Assert.That(reread, Is.EqualTo(expectedFeet), $"instance {instanceId}");
+                    }
+                });
+            });
+    }
+
+    [Test]
+    public void Bare_numerals_on_measurable_doubles_are_rejected_unless_rawInternal(
+        UIApplication uiApplication
+    ) {
+        RunWithPlacedInstances(
+            uiApplication,
+            nameof(this.Bare_numerals_on_measurable_doubles_are_rejected_unless_rawInternal),
+            (projectDocument, fixture) => {
+                var lengthParameterId = projectDocument.GetElement(fixture.InstanceIds[0].ToElementId())
+                    .LookupParameter(LengthParameterName)!.Id.Value();
+
+                var data = ParameterValueApplier.Apply(projectDocument, new ParameterValueApplyRequest([
+                    // The landmine this feature exists to close: "1500" meant as CFM must never
+                    // silently write 1500 internal units.
+                    new ParameterValueEdit(fixture.InstanceIds[0], lengthParameterId, Value: "2.5"),
+                    new ParameterValueEdit(fixture.InstanceIds[0], lengthParameterId, Value: "2.5", RawInternal: true),
+                    new ParameterValueEdit(fixture.InstanceIds[0], lengthParameterId,
+                        Value: "2.5", Unit: "Feet", RawInternal: true)
+                ]));
+
+                Assert.Multiple(() => {
+                    Assert.That(data.Results[0].Ok, Is.False);
+                    Assert.That(data.Results[0].Error, Does.Contain("ambiguous"));
+                    Assert.That(data.Results[1].Ok, Is.True, data.Results[1].Error);
+                    Assert.That(data.Results[2].Ok, Is.False);
+                    Assert.That(data.Results[2].Error, Does.Contain("mutually exclusive"));
+                    Assert.That(projectDocument.GetElement(fixture.InstanceIds[0].ToElementId())
+                        .LookupParameter(LengthParameterName)!.AsDouble(), Is.EqualTo(2.5));
+                });
+            });
+    }
+
+    [Test]
+    public void Invalid_unit_fails_listing_the_specs_valid_vocabulary_and_dryRun_echoes_display(
+        UIApplication uiApplication
+    ) {
+        RunWithPlacedInstances(
+            uiApplication,
+            nameof(this.Invalid_unit_fails_listing_the_specs_valid_vocabulary_and_dryRun_echoes_display),
+            (projectDocument, fixture) => {
+                var lengthParameterId = projectDocument.GetElement(fixture.InstanceIds[0].ToElementId())
+                    .LookupParameter(LengthParameterName)!.Id.Value();
+
+                var data = ParameterValueApplier.Apply(projectDocument, new ParameterValueApplyRequest(
+                    [
+                        new ParameterValueEdit(fixture.InstanceIds[0], lengthParameterId,
+                            Value: "1500", Unit: "CFM"),
+                        new ParameterValueEdit(fixture.InstanceIds[0], lengthParameterId,
+                            Value: "30", Unit: "Inches")
+                    ],
+                    DryRun: true
+                ));
+
+                Assert.Multiple(() => {
+                    // Wrong-spec unit fails per-edit and teaches the valid vocabulary.
+                    Assert.That(data.Results[0].Ok, Is.False);
+                    Assert.That(data.Results[0].Error, Does.Contain("not valid"));
+                    Assert.That(data.Results[0].Error, Does.Contain("Feet").IgnoreCase);
+
+                    // The round-trip echo: internal value re-formatted with document units, so the
+                    // caller can assert intent before a wet run.
+                    Assert.That(data.Results[1].Ok, Is.True, data.Results[1].Error);
+                    var expectedDisplay = UnitFormatUtils.Format(
+                        projectDocument.GetUnits(),
+                        SpecTypeId.Length,
+                        UnitUtils.ConvertToInternalUnits(30, UnitTypeId.Inches),
+                        forEditing: false);
+                    Assert.That(data.Results[1].ParsedDisplay, Is.EqualTo(expectedDisplay));
+
+                    // dryRun still wrote nothing.
+                    Assert.That(projectDocument.GetElement(fixture.InstanceIds[0].ToElementId())
+                        .LookupParameter(LengthParameterName)!.AsDouble(), Is.EqualTo(0));
                 });
             });
     }

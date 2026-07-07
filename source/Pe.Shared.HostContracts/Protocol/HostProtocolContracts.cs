@@ -15,7 +15,9 @@ public static class HostProtocol {
     // 36: loaded-families matrix reshaped to FamilySnapshotRecord (canonical family record language)
     // 37: schedule query rows gain optional cell bindings (write surface: includeBindings projection)
     // 38: revit.apply.parameter-values op (redeem binding handles) + element-detail parameter editability
-    public const int ContractVersion = 38;
+    // 39: parameter-values unit-aware conversion (value + unit canonical; bare numerals on
+    //     measurable doubles rejected as ambiguous; parsedDisplay round-trip echo)
+    public const int ContractVersion = 39;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]

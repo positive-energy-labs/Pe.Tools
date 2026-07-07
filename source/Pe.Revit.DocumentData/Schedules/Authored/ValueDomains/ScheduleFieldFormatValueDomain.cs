@@ -88,7 +88,9 @@ public static class ScheduleFieldFormatValueDomain {
         }
     }
 
-    private static IEnumerable<ForgeTypeId> GetValidSymbols(ForgeTypeId unitTypeId) {
+    // GetValidSymbols/GetUnitLabel/GetSymbolLabel are public: ParameterUnitResolver reuses this
+    // class as the spec→units/labels/symbols core for unit-aware value conversion.
+    public static IEnumerable<ForgeTypeId> GetValidSymbols(ForgeTypeId unitTypeId) {
         try {
             return FormatOptions.GetValidSymbols(unitTypeId);
         } catch {
@@ -96,7 +98,7 @@ public static class ScheduleFieldFormatValueDomain {
         }
     }
 
-    private static string GetUnitLabel(ForgeTypeId unitTypeId) {
+    public static string GetUnitLabel(ForgeTypeId unitTypeId) {
         try {
             var label = LabelUtils.GetLabelForUnit(unitTypeId);
             if (!string.IsNullOrWhiteSpace(label))
@@ -107,7 +109,7 @@ public static class ScheduleFieldFormatValueDomain {
         return GetStaticMemberName(typeof(UnitTypeId), unitTypeId) ?? unitTypeId.TypeId;
     }
 
-    private static string GetSymbolLabel(ForgeTypeId symbolTypeId) {
+    public static string GetSymbolLabel(ForgeTypeId symbolTypeId) {
         try {
             var label = LabelUtils.GetLabelForSymbol(symbolTypeId);
             if (!string.IsNullOrWhiteSpace(label))

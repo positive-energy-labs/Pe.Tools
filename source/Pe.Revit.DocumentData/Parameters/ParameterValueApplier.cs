@@ -97,13 +97,13 @@ public static class ParameterValueApplier {
                 return new ParameterValueEditResult(index, false,
                     $"Parameter '{parameter.Definition?.Name ?? DescribeParameterReference(edit)}' is read-only on element {edit.ElementId}.");
 
-            var (parsedRaw, write) = ParseValue(document, parameter, edit.Value);
+            var (parsedRaw, parsedDisplay, write) = ParseValue(document, parameter, edit);
             if (!dryRun && !write())
                 return new ParameterValueEditResult(index, false,
                     $"Revit rejected value '{edit.Value}' for parameter '{parameter.Definition?.Name}' on element {edit.ElementId}.",
-                    parsedRaw);
+                    parsedRaw, parsedDisplay);
 
-            return new ParameterValueEditResult(index, true, null, parsedRaw);
+            return new ParameterValueEditResult(index, true, null, parsedRaw, parsedDisplay);
         } catch (Exception ex) {
             return new ParameterValueEditResult(index, false, ex.Message);
         }
@@ -143,18 +143,26 @@ public static class ParameterValueApplier {
 
     /// <summary>
     ///     Parses the wire value for the parameter's storage type (invariant culture) and returns the
-    ///     invariant raw that will be written plus a deferred write. Doubles accept raw internal feet
-    ///     first, then unit display strings (e.g. 79 °F, 2' 6") via UnitFormatUtils against the
-    ///     parameter's spec. YesNo integers additionally accept yes/no/true/false.
+    ///     invariant raw that will be written, a display round-trip echo for measurable doubles, and
+    ///     a deferred write. Double semantics are strict: an explicit Unit converts exactly via
+    ///     UnitUtils.ConvertToInternalUnits (canonical, document-independent); RawInternal accepts
+    ///     internal units verbatim; bare numerals on measurable specs are REJECTED as ambiguous
+    ///     (they'd silently mean internal units); unit display strings (79 °F, 2' 6") still parse
+    ///     via UnitFormatUtils. YesNo integers additionally accept yes/no/true/false.
     /// </summary>
-    private static (string ParsedRaw, Func<bool> Write) ParseValue(
+    private static (string ParsedRaw, string? ParsedDisplay, Func<bool> Write) ParseValue(
         Document document,
         Parameter parameter,
-        string? value
+        ParameterValueEdit edit
     ) {
+        var value = edit.Value;
+        if (parameter.StorageType != StorageType.Double && !string.IsNullOrWhiteSpace(edit.Unit))
+            throw new InvalidOperationException(
+                $"Unit '{edit.Unit}' was supplied but parameter '{parameter.Definition?.Name}' has {parameter.StorageType} storage; units apply to Double parameters only.");
+
         if (parameter.StorageType == StorageType.String) {
             var stringValue = value ?? string.Empty;
-            return (stringValue, () => parameter.Set(stringValue));
+            return (stringValue, null, () => parameter.Set(stringValue));
         }
 
         if (string.IsNullOrWhiteSpace(value))
@@ -164,15 +172,18 @@ public static class ParameterValueApplier {
         switch (parameter.StorageType) {
             case StorageType.Integer: {
                 var intValue = ParseInteger(parameter, value);
-                return (intValue.ToString(CultureInfo.InvariantCulture), () => parameter.Set(intValue));
+                return (intValue.ToString(CultureInfo.InvariantCulture), null, () => parameter.Set(intValue));
             }
             case StorageType.Double: {
-                var doubleValue = ParseDouble(document, parameter, value);
-                return (doubleValue.ToString("G17", CultureInfo.InvariantCulture), () => parameter.Set(doubleValue));
+                var doubleValue = ParseDouble(document, parameter, edit, value);
+                return (
+                    doubleValue.ToString("G17", CultureInfo.InvariantCulture),
+                    FormatDisplayEcho(document, parameter, doubleValue),
+                    () => parameter.Set(doubleValue));
             }
             case StorageType.ElementId: {
                 var elementIdValue = long.Parse(value, CultureInfo.InvariantCulture);
-                return (elementIdValue.ToString(CultureInfo.InvariantCulture),
+                return (elementIdValue.ToString(CultureInfo.InvariantCulture), null,
                     () => parameter.Set(elementIdValue.ToElementId()));
             }
             default:
@@ -201,17 +212,63 @@ public static class ParameterValueApplier {
             (isYesNo ? " (yes/no/true/false are also accepted)." : "."));
     }
 
-    private static double ParseDouble(Document document, Parameter parameter, string value) {
-        if (double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var rawFeet))
-            return rawFeet;
-
+    private static double ParseDouble(Document document, Parameter parameter, ParameterValueEdit edit, string value) {
         var dataType = parameter.Definition?.GetDataType();
+        var isMeasurable = IsMeasurableSpec(dataType);
+
+        if (!string.IsNullOrWhiteSpace(edit.Unit)) {
+            if (edit.RawInternal)
+                throw new InvalidOperationException("Unit and rawInternal are mutually exclusive; pass one.");
+            if (!isMeasurable)
+                throw new InvalidOperationException(
+                    $"Unit '{edit.Unit}' was supplied but parameter '{parameter.Definition?.Name}' has no measurable spec; omit unit.");
+            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var number))
+                throw new InvalidOperationException(
+                    $"With an explicit unit, value must be a plain invariant number; got '{value}'.");
+
+            var unitTypeId = ParameterUnitResolver.Resolve(edit.Unit!, dataType!);
+            return UnitUtils.ConvertToInternalUnits(number, unitTypeId);
+        }
+
+        if (double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var bare)) {
+            if (edit.RawInternal || !isMeasurable)
+                return bare;
+
+            // Refusing is the correctness feature: a bare numeral would silently mean internal
+            // units (feet, ft³/s...) — "1500" intended as CFM would write ~900,000 CFM.
+            throw new InvalidOperationException(
+                $"Bare numeric value '{value}' is ambiguous for measurable parameter '{parameter.Definition?.Name}'. Pass unit (e.g. unit: \"CFM\"), or rawInternal: true if the value is already in internal units.");
+        }
+
         if (dataType != null &&
             UnitFormatUtils.TryParse(document.GetUnits(), dataType, value, out var parsed))
             return parsed;
 
         throw new InvalidOperationException(
-            $"Value '{value}' is neither a raw invariant double nor a parseable unit display string for parameter '{parameter.Definition?.Name}'.");
+            $"Value '{value}' is not a parseable unit display string for parameter '{parameter.Definition?.Name}'. Prefer value + unit for exact conversion.");
+    }
+
+    private static bool IsMeasurableSpec(ForgeTypeId? dataType) {
+        if (dataType == null || dataType.Empty())
+            return false;
+
+        try {
+            return UnitUtils.IsMeasurableSpec(dataType);
+        } catch {
+            return false;
+        }
+    }
+
+    private static string? FormatDisplayEcho(Document document, Parameter parameter, double internalValue) {
+        var dataType = parameter.Definition?.GetDataType();
+        if (!IsMeasurableSpec(dataType))
+            return null;
+
+        try {
+            return UnitFormatUtils.Format(document.GetUnits(), dataType!, internalValue, forEditing: false);
+        } catch {
+            return null;
+        }
     }
 
     private static string DescribeParameterReference(ParameterValueEdit edit) =>
