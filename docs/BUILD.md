@@ -286,7 +286,7 @@ The `pe-dev codegen` tier is gone. The connected Revit session is the source of 
 TypeScript compile-time types are a checked-in lockfile generated from that live catalog:
 
 ```powershell
-# from source/pe-tools/packages/tools, with Revit connected
+# from source/pe-tools/packages/mcps, with Revit connected
 node src/dev/host-typegen.ts          # regenerate packages/host-contracts/src/generated/host-ops.generated.ts
 node src/dev/host-typegen.ts --check  # drift gate: exit 1 when the checked-in types disagree with /ops
 ```
@@ -356,4 +356,4 @@ The automation shell is `Pe.Dev.RevitAutomation.Worker`, not desktop `Pe.App`. D
 | Link source `pea` dev lane        | `pe-dev pea link-dev`, then `pea`, `peco`, `pea web`, or `peco web`                                                              |
 | Run source web dev explicitly     | `pe-dev web pea` or `pe-dev web peco`                                                                                            |
 | Validate installed `pea` lane     | `pea --installed ...`                                                                                                            |
-| Regenerate host op types          | `node src/dev/host-typegen.ts` from `source/pe-tools/packages/tools` (Revit connected); `--check` is the drift gate              |
+| Regenerate host op types          | `node src/dev/host-typegen.ts` from `source/pe-tools/packages/mcps` (Revit connected); `--check` is the drift gate              |

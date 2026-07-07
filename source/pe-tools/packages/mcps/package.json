@@ -1,7 +1,7 @@
 {
-  "name": "@pe/tools",
+  "name": "@pe/mcps",
   "version": "0.0.0",
-  "description": "A starter for creating a TypeScript package.",
+  "description": "Pe tool surfaces exposed as MCP servers (pea product, peco dev).",
   "homepage": "https://github.com/author/library#readme",
   "bugs": {
     "url": "https://github.com/author/library/issues"
@@ -35,6 +35,7 @@
   "dependencies": {
     "@effect/platform-node": "4.0.0-beta.92",
     "@mastra/core": "1.48.0-alpha.4",
+    "@mastra/mcp": "1.12.0",
     "@pe/agent-contracts": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "@pe/runtime": "workspace:*",

@@ -36,7 +36,7 @@ import {
   resolvePeaProductHomePath,
   resolvePeaSkillPaths,
   resolveWorkspaceKey,
-} from "@pe/tools";
+} from "@pe/mcps";
 import { PeaContextSignalProvider } from "./context-signals.ts";
 import { peaAgentInstructions } from "./instructions.ts";
 
