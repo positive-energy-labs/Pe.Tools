@@ -65,9 +65,18 @@ const outPath = argValue("--out", DEFAULT_OUT);
 const checkMode = process.argv.includes("--check");
 
 const url = `${hostBase}/ops${session ? `?session=${encodeURIComponent(session)}` : ""}`;
-const response = await fetch(url);
-if (!response.ok) {
-  console.error(`GET ${url} failed: ${response.status} ${await response.text()}`);
+const response = await fetch(url).catch(() => null);
+if (!response || !response.ok) {
+  const reason = response
+    ? `${response.status} ${await response.text()}`
+    : "host unreachable";
+  if (checkMode) {
+    // ponytail: drift gate needs a live Revit session; without one, skip — the
+    // committed file is still the contract, it just can't be re-verified here.
+    console.warn(`host-typegen --check skipped: GET ${url} failed (${reason}).`);
+    process.exit(0);
+  }
+  console.error(`GET ${url} failed: ${reason}`);
   process.exit(1);
 }
 const catalog = (await response.json()) as { operations: CatalogEntry[] };
@@ -119,7 +128,8 @@ chunks.push(
 const output = chunks.join("\n");
 
 if (checkMode) {
-  const existing = await readFile(outPath, "utf8").catch(() => null);
+  // Windows checkouts may carry CRLF (git autocrlf); the contract is content, not EOLs.
+  const existing = (await readFile(outPath, "utf8").catch(() => null))?.replaceAll("\r\n", "\n") ?? null;
   if (existing === output) {
     console.log(`host-ops types are in sync with ${url} (${operations.length} operations).`);
     process.exit(0);
