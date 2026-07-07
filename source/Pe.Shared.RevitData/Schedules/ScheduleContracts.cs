@@ -426,6 +426,7 @@ public record ScheduleQueryProjection {
     public bool IncludeCellValues { get; init; }
     public bool IncludeRows { get; init; }
     public bool IncludeOnlyRowsWithIssues { get; init; }
+    public bool IncludeBindings { get; init; }
     public ScheduleRequiredFieldAudit? RequiredFieldAudit { get; init; }
 }
 
@@ -507,6 +508,37 @@ public record ScheduleRenderedCellIssue(
     string Message
 );
 
+/// <summary>Why a schedule cell has no writable parameter behind it.</summary>
+[JsonConverter(typeof(StringEnumConverter))]
+public enum ScheduleCellBindingBlocker {
+    None,
+    CalculatedField,
+    CombinedParameterField,
+    NonStandardDisplay,
+    ParameterNotFound,
+    ReadOnlyParameter
+}
+
+/// <summary>
+///     The write surface behind one rendered schedule cell: which element(s) a cell edit would
+///     write to, and through which parameter. A type-parameter column resolves to the shared type
+///     element, so <see cref="TargetElementIds" /> makes write fan-out explicit — one id shared by
+///     every row of that type — instead of a per-instance surprise.
+/// </summary>
+public record ScheduleCellBinding(
+    int ColumnNumber,
+    List<long> TargetElementIds,
+    string? ParameterName,
+    long? ParameterId,
+    RequestedParameterStorageType StorageType,
+    string? RawValue,
+    string? DisplayValue,
+    bool IsTypeParameter,
+    bool IsEditable,
+    ScheduleCellBindingBlocker Blocker = ScheduleCellBindingBlocker.None,
+    bool HasMixedValues = false
+);
+
 public record ScheduleRenderedRow(
     int RowNumber,
     ScheduleRenderedRowKind Kind,
@@ -515,7 +547,8 @@ public record ScheduleRenderedRow(
     ScheduleRenderedRowSubjectResolutionStatus ResolutionStatus,
     ScheduleRenderedRowSubjectResolutionReason ResolutionReason,
     List<long> SubjectIds,
-    List<ScheduleRenderedCellIssue>? Issues = null
+    List<ScheduleRenderedCellIssue>? Issues = null,
+    List<ScheduleCellBinding>? Bindings = null
 );
 
 public record ScheduleRenderedScheduleEntry(

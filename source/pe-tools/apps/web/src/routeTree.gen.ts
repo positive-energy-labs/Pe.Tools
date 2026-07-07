@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from "./routes/__root";
 import { Route as SettingsPrototypeRouteImport } from "./routes/settings-prototype";
+import { Route as ScheduleGridRouteImport } from "./routes/schedule-grid";
 import { Route as OpsRouteImport } from "./routes/ops";
 import { Route as FamilySheetRouteImport } from "./routes/family-sheet";
 import { Route as FamilyMatrixRouteImport } from "./routes/family-matrix";
@@ -27,6 +28,11 @@ import { Route as ApiPdfAuditParseParseIdRouteImport } from "./routes/api/pdf-au
 const SettingsPrototypeRoute = SettingsPrototypeRouteImport.update({
   id: "/settings-prototype",
   path: "/settings-prototype",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const ScheduleGridRoute = ScheduleGridRouteImport.update({
+  id: "/schedule-grid",
+  path: "/schedule-grid",
   getParentRoute: () => rootRouteImport,
 } as any);
 const OpsRoute = OpsRouteImport.update({
@@ -105,6 +111,7 @@ export interface FileRoutesByFullPath {
   "/family-matrix": typeof FamilyMatrixRoute;
   "/family-sheet": typeof FamilySheetRoute;
   "/ops": typeof OpsRoute;
+  "/schedule-grid": typeof ScheduleGridRoute;
   "/settings-prototype": typeof SettingsPrototypeRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
   "/api/pdf-audit/map": typeof ApiPdfAuditMapRoute;
@@ -121,6 +128,7 @@ export interface FileRoutesByTo {
   "/family-matrix": typeof FamilyMatrixRoute;
   "/family-sheet": typeof FamilySheetRoute;
   "/ops": typeof OpsRoute;
+  "/schedule-grid": typeof ScheduleGridRoute;
   "/settings-prototype": typeof SettingsPrototypeRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
   "/api/pdf-audit/map": typeof ApiPdfAuditMapRoute;
@@ -138,6 +146,7 @@ export interface FileRoutesById {
   "/family-matrix": typeof FamilyMatrixRoute;
   "/family-sheet": typeof FamilySheetRoute;
   "/ops": typeof OpsRoute;
+  "/schedule-grid": typeof ScheduleGridRoute;
   "/settings-prototype": typeof SettingsPrototypeRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
   "/api/pdf-audit/map": typeof ApiPdfAuditMapRoute;
@@ -156,6 +165,7 @@ export interface FileRouteTypes {
     | "/family-matrix"
     | "/family-sheet"
     | "/ops"
+    | "/schedule-grid"
     | "/settings-prototype"
     | "/demo/tanstack-query"
     | "/api/pdf-audit/map"
@@ -172,6 +182,7 @@ export interface FileRouteTypes {
     | "/family-matrix"
     | "/family-sheet"
     | "/ops"
+    | "/schedule-grid"
     | "/settings-prototype"
     | "/demo/tanstack-query"
     | "/api/pdf-audit/map"
@@ -188,6 +199,7 @@ export interface FileRouteTypes {
     | "/family-matrix"
     | "/family-sheet"
     | "/ops"
+    | "/schedule-grid"
     | "/settings-prototype"
     | "/demo/tanstack-query"
     | "/api/pdf-audit/map"
@@ -205,6 +217,7 @@ export interface RootRouteChildren {
   FamilyMatrixRoute: typeof FamilyMatrixRoute;
   FamilySheetRoute: typeof FamilySheetRoute;
   OpsRoute: typeof OpsRoute;
+  ScheduleGridRoute: typeof ScheduleGridRoute;
   SettingsPrototypeRoute: typeof SettingsPrototypeRoute;
   DemoTanstackQueryRoute: typeof DemoTanstackQueryRoute;
   ApiPdfAuditMapRoute: typeof ApiPdfAuditMapRoute;
@@ -218,6 +231,13 @@ declare module "@tanstack/react-router" {
       path: "/settings-prototype";
       fullPath: "/settings-prototype";
       preLoaderRoute: typeof SettingsPrototypeRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/schedule-grid": {
+      id: "/schedule-grid";
+      path: "/schedule-grid";
+      fullPath: "/schedule-grid";
+      preLoaderRoute: typeof ScheduleGridRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/ops": {
@@ -335,6 +355,7 @@ const rootRouteChildren: RootRouteChildren = {
   FamilyMatrixRoute: FamilyMatrixRoute,
   FamilySheetRoute: FamilySheetRoute,
   OpsRoute: OpsRoute,
+  ScheduleGridRoute: ScheduleGridRoute,
   SettingsPrototypeRoute: SettingsPrototypeRoute,
   DemoTanstackQueryRoute: DemoTanstackQueryRoute,
   ApiPdfAuditMapRoute: ApiPdfAuditMapRoute,

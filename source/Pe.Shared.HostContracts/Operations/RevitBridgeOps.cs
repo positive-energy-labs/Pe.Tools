@@ -26,7 +26,7 @@ public static class RevitBridgeOps {
 
     private static readonly IReadOnlyList<string> ScheduleDetailExpansionHints = [
         "Resolve schedules through revit.catalog.schedules first, then pass ids, unique ids, or exact names under the query wrapper.",
-        "Summary/handles omit row cell values; set projection.view=Rows or Full and includeCellValues=true only when rows are needed."
+        "Summary/handles omit row cell values; set projection.view=Rows or Full and includeCellValues=true only when rows are needed, and projection.includeBindings=true for per-cell write surfaces (target element ids, parameter id, raw value, editability blocker) when editing cells, not reading them."
     ];
 
     private static HostOperationRequestExample Example(
