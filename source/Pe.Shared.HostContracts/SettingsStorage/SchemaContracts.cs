@@ -16,6 +16,15 @@ public record FieldOptionsRequest(
     Dictionary<string, string>? ContextValues
 );
 
+/// <summary>
+///     Options for a value domain addressed by source key alone — the resolution target for
+///     request schema fields annotated with <c>x-options</c> (see FieldOptionsAttribute).
+/// </summary>
+public record ValueDomainOptionsRequest(
+    string SourceKey,
+    Dictionary<string, string>? ContextValues = null
+);
+
 public record ValidateSettingsRequest(
     string ModuleKey,
     string SettingsJson

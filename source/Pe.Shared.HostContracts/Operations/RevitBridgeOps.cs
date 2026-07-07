@@ -95,6 +95,30 @@ public static class RevitBridgeOps {
             static (request, context, ct) => context.Settings.GetLoadedFamiliesFilterFieldOptionsAsync(request)
         );
 
+    public static readonly BridgeOp ValueDomainFieldOptions =
+        BridgeOp.Create<ValueDomainOptionsRequest, FieldOptionsData>(
+            "revit.catalog.field-options",
+            "Get Field Options",
+            HostOperationAgentMetadata.Create(
+                "Read document-specific option values for a value-domain source key (e.g. category-names, family-names). Request schemas mark option-backed fields with an x-options.key annotation that resolves through this operation.",
+                new[] { "field-options", "value-domain", "options", "categories", "families", "suggestions" },
+                requiresActiveDocument: true,
+                requestExamples: [
+                    Example(
+                        "category names",
+                        "List category names present in the active document.",
+                        """{ "sourceKey": "category-names" }"""
+                    ),
+                    Example(
+                        "family names",
+                        "List loaded family names in the active document.",
+                        """{ "sourceKey": "family-names" }"""
+                    )
+                ]
+            ),
+            static (request, context, ct) => context.Settings.GetValueDomainOptionsAsync(request)
+        );
+
     public static readonly BridgeOp LoadedFamiliesFilterSchema =
         BridgeOp.Create<NoRequest, SchemaData>(
             "revit.catalog.loaded-families.filter-schema",

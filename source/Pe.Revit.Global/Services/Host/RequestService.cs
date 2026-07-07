@@ -107,6 +107,28 @@ public class RequestService : ISettingsBridgeService {
         return response;
     }
 
+    public async Task<FieldOptionsData> GetValueDomainOptionsAsync(
+        ValueDomainOptionsRequest request,
+        string? connectionId = null
+    ) {
+        var key = BuildThrottleKey(
+            connectionId,
+            "value-domain-options",
+            request.SourceKey,
+            null,
+            null,
+            request.ContextValues
+        );
+
+        var (response, decision) = await this._throttleGate.ExecuteAsync(
+            key,
+            FieldOptionsThrottleWindow,
+            () => this.GetValueDomainOptionsCore(request)
+        );
+        LogThrottleDecision(nameof(this.GetValueDomainOptionsAsync), decision, request.SourceKey, null);
+        return response;
+    }
+
     public Task<SchemaData> GetSchemaAsync(SchemaRequest request) =>
         this.EnqueueAsync(() => {
             try {
@@ -227,6 +249,47 @@ public class RequestService : ISettingsBridgeService {
             );
         }
     });
+
+    // Resolves a value domain by source key alone — no settings module or property binding.
+    // This is the runtime side of FieldOptionsAttribute / x-options on request schemas.
+    private Task<FieldOptionsData> GetValueDomainOptionsCore(ValueDomainOptionsRequest request) =>
+        this.EnqueueAsync(() => {
+            if (!SettingsValueDomainRegistry.Shared.TryCreate(request.SourceKey, out var domain))
+                throw BridgeOperationExceptions.BadRequest(
+                    $"Unknown value domain source key '{request.SourceKey}'.",
+                    [
+                        BridgeOperationExceptions.Issue(
+                            "$.sourceKey",
+                            "UnknownValueDomain",
+                            $"No value domain is registered for '{request.SourceKey}'.",
+                            "Use a source key from a request schema x-options annotation."
+                        )
+                    ]
+                );
+
+            try {
+                var items = domain.GetOptionsAsync(CreateValueDomainContext(request.ContextValues))
+                    .AsTask()
+                    .GetAwaiter()
+                    .GetResult();
+                var descriptor = domain.Describe();
+                return new FieldOptionsData(
+                    request.SourceKey,
+                    ToHostFieldOptionsMode(descriptor.Mode),
+                    descriptor.AllowsCustomValue,
+                    items.Select(ToFieldOptionItem).ToList()
+                );
+            } catch (BridgeOperationException) {
+                throw;
+            } catch (Exception ex) {
+                Log.Error(ex, "GetValueDomainOptions failed for source key '{SourceKey}'", request.SourceKey);
+                throw BridgeOperationExceptions.Unexpected(
+                    "FieldOptionsException",
+                    ex,
+                    "Check value-domain configuration and active document state."
+                );
+            }
+        });
 
     private Task<FieldOptionsData> GetFieldOptionsCore(FieldOptionsRequest request) =>
         this.EnqueueAsync(() => {

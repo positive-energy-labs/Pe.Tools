@@ -18,7 +18,7 @@
   "type": "module",
   "scripts": {
     "ready": "vp check && vp run -r test -- --passWithNoTests && vp run -r build && pnpm typegen:check",
-    "typegen:check": "pnpm --filter @pe/mcps exec node src/dev/host-typegen.ts --check",
+    "typegen:check": "pnpm --filter @pe/host-contracts codegen:check",
     "test": "vp run -r test -- --passWithNoTests",
     "dev:pea-web": "pe-dev web pea",
     "dev:peco-web": "pe-dev web peco"
