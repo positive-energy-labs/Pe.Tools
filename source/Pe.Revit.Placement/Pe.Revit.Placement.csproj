@@ -1,0 +1,30 @@
+<Project Sdk="Pe.Revit.Sdk">
+
+    <PropertyGroup>
+        <PeProjectKind>RevitLibrary</PeProjectKind>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>Pe.Revit.Placement</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="ILRepack" Version="2.0.44">
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+
+        <PackageReference Include="JetBrains.Annotations" Version="2025.2.4"/>
+        <PackageReference Include="Nice3point.Revit.Extensions" Version="$(RevitVersion).*"/>
+        <PackageReference Include="Serilog" Version="4.3.0"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj"/>
+        <ProjectReference Include="..\Pe.Revit.DocumentData\Pe.Revit.DocumentData.csproj"/>
+    </ItemGroup>
+
+</Project>
