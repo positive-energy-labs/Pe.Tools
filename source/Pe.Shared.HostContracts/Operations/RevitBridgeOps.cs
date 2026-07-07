@@ -393,15 +393,16 @@ public static class RevitBridgeOps {
                         """
                     ),
                     Example(
-                        "unit display-string fill previewed with dryRun",
-                        "Double parameters accept raw internal feet or unit display strings (parsed against the parameter's spec); dryRun validates and parses everything (see parsedRaw) without writing.",
+                        "unit-aware fill previewed with dryRun",
+                        "The canonical path for measurable double parameters: value + unit converts exactly via Revit's own unit tables, independent of document display units. Unit accepts a ForgeTypeId, UnitTypeId member name, label, or symbol, resolved within the parameter's spec; invalid units fail per-edit listing the valid ones.",
                         """
-                        { "dryRun": true, "edits": [{ "elementId": 12345, "parameterName": "Discharge Air Temperature", "value": "79 °F" }] }
+                        { "dryRun": true, "edits": [{ "elementId": 12345, "parameterId": 9876, "value": "1500", "unit": "CFM" }, { "elementId": 12345, "parameterName": "Discharge Air Temperature", "value": "79", "unit": "°F" }] }
                         """
                     )
                 ],
                 callGuidance: [
-                    "Preview with dryRun=true first: it resolves, validates, and parses every edit (results carry parsedRaw) without opening a transaction or changing the document.",
+                    "Preview with dryRun=true first: it resolves, validates, and parses every edit (results carry parsedRaw and, for measurable doubles, parsedDisplay — assert parsedDisplay matches intent) without opening a transaction or changing the document.",
+                    "For measurable double parameters pass value + unit. Bare numeric values without unit are rejected as ambiguous; pass rawInternal=true only when the value is already in Revit internal units. Display strings like \"2' 6\\\"\" still parse.",
                     "One call is one transaction and one Revit undo step; at most 500 edits per call. Binding handles for type-parameter columns target the shared type element, so one write fans out to every instance of the type."
                 ]
             ),
