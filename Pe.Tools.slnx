@@ -51,6 +51,7 @@
     <Project Path="source/Pe.Revit.Placement/Pe.Revit.Placement.csproj" />
     <Project Path="source/Pe.Revit.Scripting/Pe.Revit.Scripting.csproj" />
     <Project Path="source/Pe.Revit.SettingsRuntime/Pe.Revit.SettingsRuntime.csproj" />
+    <Project Path="source/Pe.Revit.Takeoff/Pe.Revit.Takeoff.csproj" />
     <Project Path="source/Pe.Revit.Ui/Pe.Revit.Ui.csproj" />
     <Project Path="source/Pe.Shared.HostContracts/Pe.Shared.HostContracts.csproj" />
     <Project Path="source/Pe.Shared.Product/Pe.Shared.Product.csproj" />
