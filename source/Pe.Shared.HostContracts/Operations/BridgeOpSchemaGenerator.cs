@@ -4,6 +4,7 @@ using Newtonsoft.Json.Serialization;
 using NJsonSchema;
 using NJsonSchema.Generation;
 using NJsonSchema.NewtonsoftJson.Generation;
+using Pe.Shared.RevitData;
 using System.Collections.Concurrent;
 using System.Reflection;
 
@@ -89,10 +90,27 @@ public static class BridgeOpSchemaGenerator {
             var clrProperty = FindClrProperty(type, pair.Key);
             if (clrProperty == null)
                 continue;
+            ApplyFieldOptions(clrProperty, pair.Value);
             foreach (var nested in CandidateObjectTypes(clrProperty.PropertyType, []))
                 if (resolver.HasSchema(nested, false))
                     MarkRequiredRequestProperties(nested, resolver.GetSchema(nested, false), resolver, visited);
         }
+    }
+
+    // Emits the same x-options node the settings schema pipeline uses (and
+    // @pe/schema-core reads), so one property attribute lights up every form.
+    private static void ApplyFieldOptions(PropertyInfo property, JsonSchemaProperty schema) {
+        var attribute = property.GetCustomAttribute<FieldOptionsAttribute>();
+        if (attribute == null)
+            return;
+        schema.ExtensionData ??= new Dictionary<string, object?>();
+        schema.ExtensionData["x-options"] = new Dictionary<string, object?> {
+            ["key"] = attribute.SourceKey,
+            ["mode"] = attribute.Constraint ? "constraint" : "suggestion",
+            ["resolver"] = "remote",
+            ["allowsCustomValue"] = attribute.AllowsCustomValue,
+            ["dependsOn"] = Array.Empty<object>()
+        };
     }
 
     private static Dictionary<string, ParameterInfo> LargestConstructorParameters(Type type) {

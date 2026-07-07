@@ -24,6 +24,7 @@ public interface ISettingsBridgeService {
         LoadedFamiliesFilterFieldOptionsRequest request,
         string? connectionId = null
     );
+    Task<FieldOptionsData> GetValueDomainOptionsAsync(ValueDomainOptionsRequest request, string? connectionId = null);
     Task<SchemaData> GetLoadedFamiliesFilterSchemaAsync();
 }
 

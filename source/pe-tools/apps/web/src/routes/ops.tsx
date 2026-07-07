@@ -15,7 +15,7 @@ import { Switch } from "#/components/ui/switch";
 import { Textarea } from "#/components/ui/textarea";
 import { callHostDynamic } from "#/host/client";
 import { type HostIssue, HostIssuePanel, toHostIssue } from "#/host/issues";
-import { useBridgeSessionsListQuery, useHostOp } from "#/host/queries";
+import { useBridgeSessionsListQuery, useHostOp, useHostOpDynamic } from "#/host/queries";
 import { cn } from "#/lib/utils";
 
 export const Route = createFileRoute("/ops")({ component: OpsPlayground });
@@ -63,7 +63,9 @@ function OpsPlayground() {
     staleTime: 60_000,
   });
   const ops = useMemo(
-    () => (catalogQuery.data as { operations?: HostOperationCatalogEntry[] } | undefined)?.operations ?? [],
+    () =>
+      (catalogQuery.data as { operations?: HostOperationCatalogEntry[] } | undefined)?.operations ??
+      [],
     [catalogQuery.data],
   );
 
@@ -104,7 +106,7 @@ function OpsPlayground() {
     try {
       const parsed =
         mode === "form" && requestSchema
-          ? buildFormRequest(requestSchema, formValues)
+          ? buildFormRequest(requestSchema, formValues, requestSchema)
           : args.trim()
             ? JSON.parse(args)
             : undefined;
@@ -130,9 +132,7 @@ function OpsPlayground() {
         <div className="border-b border-border p-2">
           <Input
             placeholder={
-              catalogQuery.isPending
-                ? "Loading op catalog..."
-                : `Search ${ops.length} host ops...`
+              catalogQuery.isPending ? "Loading op catalog..." : `Search ${ops.length} host ops...`
             }
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -236,8 +236,11 @@ function OpsPlayground() {
               {requestSchema && mode === "form" ? (
                 <JsonSchemaForm
                   schema={requestSchema}
+                  root={requestSchema}
+                  depth={0}
                   value={formValues}
                   onChange={setFormValues}
+                  bridgeSessionId={bridgeSessionId}
                 />
               ) : (
                 <Textarea
@@ -287,14 +290,48 @@ function requestJsonSchema(op: HostOperationCatalogEntry): HostOperationJsonSche
   }
 }
 
+// Follow $ref and nullable oneOf/anyOf wrappers to the concrete schema so nested
+// request objects (filter, projection, budget) render as fields, not JSON blobs.
+function resolveSchema(
+  schema: HostOperationJsonSchema,
+  root: HostOperationJsonSchema,
+): HostOperationJsonSchema {
+  let current = schema;
+  for (let hops = 0; hops < 4; hops++) {
+    if (typeof current.$ref === "string") {
+      const name = current.$ref.split("/").at(-1) ?? "";
+      const definition = isRecord(root.definitions) ? root.definitions[name] : undefined;
+      if (!isRecord(definition)) return current;
+      current = definition;
+      continue;
+    }
+    const branches = [current.oneOf, current.anyOf].find(Array.isArray);
+    if (branches) {
+      const concrete = branches.find((branch) => isRecord(branch) && branch.type !== "null");
+      if (isRecord(concrete)) {
+        current = concrete;
+        continue;
+      }
+    }
+    return current;
+  }
+  return current;
+}
+
 function JsonSchemaForm({
   schema,
+  root,
+  depth,
   value,
   onChange,
+  bridgeSessionId,
 }: {
   schema: HostOperationJsonSchema;
+  root: HostOperationJsonSchema;
+  depth: number;
   value: Record<string, unknown>;
   onChange: (next: Record<string, unknown>) => void;
+  bridgeSessionId?: string;
 }) {
   const fields = schemaProperties(schema);
   const required = new Set(readStringArray(schema.required));
@@ -304,40 +341,89 @@ function JsonSchemaForm({
 
   return (
     <div className="grid gap-3 rounded-md border border-border p-3">
-      {fields.map(([name, fieldSchema]) => (
-        <div key={name} className="grid gap-1">
-          <Label htmlFor={`op-field-${name}`}>
-            <span className="font-mono">{name}</span>
-            {required.has(name) && <span className="ml-1 text-destructive">required</span>}
-          </Label>
-          <SchemaInput
-            id={`op-field-${name}`}
-            name={name}
-            schema={fieldSchema}
-            value={value[name]}
-            onChange={(next) => onChange({ ...value, [name]: next })}
-          />
-        </div>
-      ))}
+      {fields.map(([name, fieldSchema]) => {
+        const description = readDescription(fieldSchema, root);
+        return (
+          <div key={name} className="grid gap-1">
+            <Label htmlFor={`op-field-${depth}-${name}`}>
+              <span className="font-mono">{name}</span>
+              {required.has(name) && <span className="ml-1 text-destructive">required</span>}
+            </Label>
+            {description && <p className="text-xs text-muted-foreground">{description}</p>}
+            <SchemaInput
+              id={`op-field-${depth}-${name}`}
+              name={name}
+              schema={fieldSchema}
+              root={root}
+              depth={depth}
+              value={value[name]}
+              onChange={(next) => onChange({ ...value, [name]: next })}
+              bridgeSessionId={bridgeSessionId}
+            />
+          </div>
+        );
+      })}
     </div>
   );
+}
+
+function readDescription(
+  schema: HostOperationJsonSchema,
+  root: HostOperationJsonSchema,
+): string | undefined {
+  if (typeof schema.description === "string") return schema.description;
+  const resolved = resolveSchema(schema, root);
+  return typeof resolved.description === "string" ? resolved.description : undefined;
 }
 
 function SchemaInput({
   id,
   name,
   schema,
+  root,
+  depth,
   value,
   onChange,
+  bridgeSessionId,
 }: {
   id: string;
   name: string;
   schema: HostOperationJsonSchema;
+  root: HostOperationJsonSchema;
+  depth: number;
   value: unknown;
   onChange: (next: unknown) => void;
+  bridgeSessionId?: string;
 }) {
-  const options = readEnum(schema);
-  const type = readSchemaType(schema);
+  const resolved = resolveSchema(schema, root);
+  const options = readEnum(resolved);
+  const type = readSchemaType(resolved);
+  const fieldOptionsKey = readFieldOptionsKey(resolved);
+
+  if (options.length === 0 && fieldOptionsKey && (type === "string" || type === undefined)) {
+    return (
+      <FieldOptionsInput
+        id={id}
+        sourceKey={fieldOptionsKey}
+        value={value}
+        onChange={onChange}
+        bridgeSessionId={bridgeSessionId}
+      />
+    );
+  }
+
+  if (type === "object" && depth < 2 && schemaProperties(resolved).length > 0) {
+    return (
+      <JsonSchemaForm
+        schema={resolved}
+        root={root}
+        depth={depth + 1}
+        value={isRecord(value) ? value : {}}
+        onChange={onChange}
+        bridgeSessionId={bridgeSessionId}
+      />
+    );
+  }
 
   if (options.length > 0) {
     return (
@@ -387,6 +473,77 @@ function SchemaInput({
       value={scalarText(value)}
       onChange={(event) => onChange(event.currentTarget.value)}
     />
+  );
+}
+
+// Request schemas annotate value-domain-backed fields with x-options (same shape the
+// settings pipeline emits); the options themselves come from revit.catalog.field-options.
+function readFieldOptionsKey(schema: HostOperationJsonSchema): string | undefined {
+  const raw = schema["x-options"];
+  return isRecord(raw) && typeof raw.key === "string" ? raw.key : undefined;
+}
+
+type FieldOptionsData = {
+  mode?: string;
+  allowsCustomValue?: boolean;
+  items?: { value: string; label: string; description?: string | null }[];
+};
+
+function FieldOptionsInput({
+  id,
+  sourceKey,
+  value,
+  onChange,
+  bridgeSessionId,
+}: {
+  id: string;
+  sourceKey: string;
+  value: unknown;
+  onChange: (next: unknown) => void;
+  bridgeSessionId?: string;
+}) {
+  const optionsQuery = useHostOpDynamic(
+    "revit.catalog.field-options",
+    { sourceKey },
+    { bridgeSessionId, staleTime: 5 * 60_000 },
+  );
+  const data = optionsQuery.data as FieldOptionsData | undefined;
+  const items = data?.items ?? [];
+
+  if (data && data.mode?.toLowerCase() === "constraint" && !data.allowsCustomValue) {
+    return (
+      <Select value={scalarText(value)} onValueChange={(next) => onChange(next ?? "")}>
+        <SelectTrigger id={id} className="w-full">
+          <SelectValue placeholder="Unset" />
+        </SelectTrigger>
+        <SelectContent>
+          {items.map((item) => (
+            <SelectItem key={item.value} value={item.value}>
+              {item.label || item.value}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    );
+  }
+
+  return (
+    <>
+      <Input
+        id={id}
+        list={`${id}-options`}
+        value={scalarText(value)}
+        onChange={(event) => onChange(event.currentTarget.value)}
+        placeholder={optionsQuery.isPending ? "Loading options..." : `${items.length} options`}
+      />
+      <datalist id={`${id}-options`}>
+        {items.map((item) => (
+          <option key={item.value} value={item.value}>
+            {item.label !== item.value ? item.label : undefined}
+          </option>
+        ))}
+      </datalist>
+    </>
   );
 }
 
@@ -490,10 +647,23 @@ function readFormSeed(
 function buildFormRequest(
   schema: HostOperationJsonSchema,
   values: Record<string, unknown>,
+  root: HostOperationJsonSchema,
 ): Record<string, unknown> {
   const request: Record<string, unknown> = {};
   for (const [name, fieldSchema] of schemaProperties(schema)) {
-    const value = coerceFormValue(name, fieldSchema, values[name]);
+    const resolved = resolveSchema(fieldSchema, root);
+    const raw = values[name];
+    let value: unknown;
+    if (
+      readSchemaType(resolved) === "object" &&
+      schemaProperties(resolved).length > 0 &&
+      isRecord(raw)
+    ) {
+      const nested = buildFormRequest(resolved, raw, root);
+      value = Object.keys(nested).length > 0 ? nested : undefined;
+    } else {
+      value = coerceFormValue(name, resolved, raw);
+    }
     if (value !== undefined) request[name] = value;
   }
   return request;

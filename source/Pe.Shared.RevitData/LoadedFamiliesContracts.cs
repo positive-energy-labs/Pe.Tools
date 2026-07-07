@@ -62,10 +62,23 @@ public record LoadedFamiliesMatrixRequest(
 );
 
 public record LoadedFamiliesFilter {
+    /// <summary>Exact family names to include; empty means all families.</summary>
+    [FieldOptions("family-names")]
     public List<string> FamilyNames { get; init; } = [];
+
+    /// <summary>Case-insensitive substring match against family names.</summary>
+    [FieldOptions("family-names")]
     public string? FamilyNameContains { get; init; }
+
+    /// <summary>Exact category names to include; empty means all categories.</summary>
+    [FieldOptions("category-names")]
     public List<string> CategoryNames { get; init; } = [];
+
+    /// <summary>Case-insensitive substring match against category names.</summary>
+    [FieldOptions("category-names")]
     public string? CategoryNameContains { get; init; }
+
+    /// <summary>Restrict to families with (or without) placed instances in the document.</summary>
     public LoadedFamilyPlacementScope PlacementScope { get; init; } = LoadedFamilyPlacementScope.AllLoaded;
 }
 

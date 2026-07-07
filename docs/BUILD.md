@@ -286,12 +286,12 @@ The `pe-dev codegen` tier is gone. The connected Revit session is the source of 
 TypeScript compile-time types are a checked-in lockfile generated from that live catalog:
 
 ```powershell
-# from source/pe-tools/packages/mcps, with Revit connected
-node src/dev/host-typegen.ts          # regenerate packages/host-contracts/src/generated/host-ops.generated.ts
-node src/dev/host-typegen.ts --check  # drift gate: exit 1 when the checked-in types disagree with /ops
+# with Revit connected — the generator lives in the package it writes
+pnpm --filter @pe/host-contracts codegen         # regenerate src/generated/host-ops.generated.ts
+pnpm --filter @pe/host-contracts codegen:check   # drift gate: exit 1 when the checked-in types disagree with /ops
 ```
 
-Regenerate after changing a C# request/response DTO or adding an op, and commit the result like a lockfile. Schema required-ness is honest per direction: response properties are required exactly when non-nullable in C#; request properties are required only when non-nullable *and* their constructor parameter has no default (`BridgeOpSchemaGenerator`).
+The generator is `packages/host-contracts/scripts/host-typegen.ts`; root `pnpm typegen:check` delegates to `codegen:check` and runs inside `pnpm ready`. Regenerate after changing a C# request/response DTO or adding an op, and commit the result like a lockfile. Schema required-ness is honest per direction: response properties are required exactly when non-nullable in C#; request properties are required only when non-nullable *and* their constructor parameter has no default (`BridgeOpSchemaGenerator`).
 
 What lives in `@pe/host-contracts`:
 
@@ -300,6 +300,14 @@ What lives in `@pe/host-contracts`:
 - `src/contracts/` — hand-authored bridge protocol, product constants, and operation vocabulary.
 
 Session selection is caller scope, not operation payload: `HostSessionScope.bridgeSessionId` travels as the `x-pe-bridge-session-id` header on `POST /call`.
+
+### Field options, examples, and the registration gate
+
+Operation metadata travels with the thing it describes, and the connected session validates it at registration — callers never hand-maintain a parallel copy.
+
+- **Field options and descriptions live on the request DTO.** `[FieldOptions("<domain>")]` on a property (`source/Pe.Shared.RevitData/FieldOptionsAttribute.cs`) makes `BridgeOpSchemaGenerator` emit an `x-options` node on that property's request schema, and the property's XML `<summary>` becomes its schema `description`. The `/ops` form renders an option-backed string field as an input + `<datalist>` and shows the description; agents read the same off the catalog. This requires `GenerateDocumentationFile` on the *defining* project and the `.xml` present beside the assembly at runtime (it deploys with the bundle, so a missing description usually means the dependency's outputs went stale — see the SDK stamp/deploy note above — not that XML was skipped).
+- **Options resolve live, by source key.** The `revit.catalog.field-options` op (`{ sourceKey }` → `FieldOptionsData`) resolves against the shared `SettingsValueDomainRegistry` — the *same* value domains the settings field-options path uses, so category/family/parameter lists come from the open document. Because it resolves by key alone (no property binding), a source key must be globally unambiguous.
+- **Registration is the validation gate.** `BridgeOpRegistry` scans in two phases — discover + validate the whole set, then commit — so a failed op cannot half-register and mask the real error when the bridge supervisor re-scans on every reconnect. Validation strict-deserializes every request example and safe default against the request type (`MissingMemberHandling.Error`), so example drift fails registration and the unit tests instead of reaching a caller. Examples and call guidance are capped at two entries each.
 
 ## Design Automation decision
 
@@ -356,4 +364,4 @@ The automation shell is `Pe.Dev.RevitAutomation.Worker`, not desktop `Pe.App`. D
 | Link source `pea` dev lane        | `pe-dev pea link-dev`, then `pea`, `peco`, `pea web`, or `peco web`                                                              |
 | Run source web dev explicitly     | `pe-dev web pea` or `pe-dev web peco`                                                                                            |
 | Validate installed `pea` lane     | `pea --installed ...`                                                                                                            |
-| Regenerate host op types          | `node src/dev/host-typegen.ts` from `source/pe-tools/packages/mcps` (Revit connected); `--check` is the drift gate              |
+| Regenerate host op types          | `pnpm --filter @pe/host-contracts codegen` (Revit connected); `codegen:check` is the drift gate                                 |

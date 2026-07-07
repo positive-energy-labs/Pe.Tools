@@ -1,3 +1,6 @@
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+using Newtonsoft.Json.Serialization;
 using System.Collections.Concurrent;
 using System.Reflection;
 
@@ -49,26 +52,42 @@ public static class BridgeOpRegistry {
         );
 
     public static int RegisterFrom(params Assembly[] assemblies) {
-        var registeredCount = 0;
+        // Two-phase: discover + validate the whole scan before touching the registry.
+        // A validation throw mid-scan must not leave Registered partially populated —
+        // the bridge supervisor re-scans on every Connect retry, and fresh BridgeOp
+        // instances (method/property ops) would then fail the ReferenceEquals check
+        // with a spurious "registered twice", masking the real validation error.
+        var discovered = new Dictionary<string, BridgeOp>(StringComparer.Ordinal);
         foreach (var assembly in assemblies) {
             foreach (var type in EnumerateTypes(assembly)) {
-                foreach (var op in EnumerateDeclaredOps(type)) {
-                    Register(op);
-                    registeredCount++;
-                }
+                foreach (var op in EnumerateDeclaredOps(type))
+                    Discover(discovered, op);
 
                 foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)) {
                     var attribute = method.GetCustomAttribute<BridgeOperationAttribute>();
                     if (attribute == null)
                         continue;
 
-                    Register(CreateOpFromMethod(attribute, method));
-                    registeredCount++;
+                    Discover(discovered, CreateOpFromMethod(attribute, method));
                 }
             }
         }
 
-        return registeredCount;
+        foreach (var op in discovered.Values)
+            ValidateOperation(op);
+
+        // Overwrite on commit: a re-scan produces fresh-but-equivalent instances for
+        // method/property ops, which is exactly the idempotency the doc promises.
+        foreach (var op in discovered.Values)
+            Registered[op.Key] = op;
+
+        return discovered.Count;
+    }
+
+    private static void Discover(Dictionary<string, BridgeOp> discovered, BridgeOp op) {
+        if (discovered.TryGetValue(op.Key, out var existing) && !ReferenceEquals(existing, op))
+            throw new InvalidOperationException($"Bridge op '{op.Key}' is registered twice with different definitions.");
+        discovered[op.Key] = op;
     }
 
     private static IEnumerable<Type> EnumerateTypes(Assembly assembly) {
@@ -130,6 +149,19 @@ public static class BridgeOpRegistry {
         return (BridgeOp)create.Invoke(null, [attribute.Key, attribute.DisplayName, metadata, handler])!;
     }
 
+    // Wire-shaped like BridgeOp dispatch (camelCase, string enums), plus
+    // MissingMemberHandling.Error so a JSON member with no matching DTO property fails.
+    private static readonly JsonSerializerSettings StrictRequestJsonSettings = new() {
+        MissingMemberHandling = MissingMemberHandling.Error,
+        ContractResolver = new DefaultContractResolver {
+            NamingStrategy = new CamelCaseNamingStrategy {
+                ProcessDictionaryKeys = false,
+                OverrideSpecifiedNames = false
+            }
+        },
+        Converters = [new StringEnumConverter()]
+    };
+
     // Key taxonomy + metadata budget rules, enforced on every registration.
     private static void ValidateOperation(BridgeOp op) {
         var definition = op.Definition;
@@ -144,6 +176,16 @@ public static class BridgeOpRegistry {
         if (metadata.RequestExamples.Count > 2)
             errors.Add($"{definition.Key}: RequestExamples has {metadata.RequestExamples.Count} entries; max 2.");
 
+        // Examples and safe defaults are hand-authored wire JSON; deserialize them strictly
+        // so a renamed DTO property fails registration instead of shipping a stale example
+        // to every agent and the /ops playground.
+        if (definition.RequestType != null) {
+            foreach (var example in metadata.RequestExamples)
+                ValidateRequestJson(definition, $"request example '{example.Name}'", example.Json, errors);
+            if (metadata.SafeDefaultRequestJson is { } safeDefault)
+                ValidateRequestJson(definition, "safe default request", safeDefault, errors);
+        }
+
         if (definition.IsPublic) {
             var dotIndex = definition.Key.IndexOf(".", StringComparison.Ordinal);
             var topLevel = dotIndex < 0 ? definition.Key : definition.Key[..dotIndex];
@@ -157,6 +199,19 @@ public static class BridgeOpRegistry {
             throw new InvalidOperationException(
                 $"Invalid bridge operation:{Environment.NewLine}  {string.Join($"{Environment.NewLine}  ", errors)}"
             );
+    }
+
+    private static void ValidateRequestJson(
+        HostOperationDefinition definition,
+        string label,
+        string json,
+        List<string> errors
+    ) {
+        try {
+            JsonConvert.DeserializeObject(json, definition.RequestType, StrictRequestJsonSettings);
+        } catch (Exception ex) {
+            errors.Add($"{definition.Key}: {label} does not deserialize to {definition.RequestType.Name}: {ex.Message}");
+        }
     }
 
     private static bool IsValidPublicRevitKey(string key) {

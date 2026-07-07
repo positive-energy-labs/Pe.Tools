@@ -31,7 +31,9 @@
     "dev": "vp pack --watch",
     "test": "vp test",
     "check": "vp check",
-    "prepublishOnly": "vp run build"
+    "prepublishOnly": "vp run build",
+    "codegen": "vpx node --import jiti/register scripts/host-typegen.ts",
+    "codegen:check": "vpx node --import jiti/register scripts/host-typegen.ts --check"
   },
   "dependencies": {
     "effect": "4.0.0-beta.92"
@@ -39,6 +41,7 @@
   "devDependencies": {
     "@types/node": "^25.6.2",
     "@typescript/native-preview": "7.0.0-dev.20260509.2",
+    "json-schema-to-typescript": "catalog:",
     "bumpp": "^11.1.0",
     "typescript": "^6.0.3",
     "vite-plus": "catalog:"

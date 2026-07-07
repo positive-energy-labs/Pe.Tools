@@ -9,6 +9,9 @@
         <LangVersion>latest</LangVersion>
         <Nullable>enable</Nullable>
         <RootNamespace>Pe.Shared.RevitData</RootNamespace>
+        <!-- XML docs feed generated request schemas: property summaries become field descriptions. -->
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <NoWarn>$(NoWarn);1591</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>

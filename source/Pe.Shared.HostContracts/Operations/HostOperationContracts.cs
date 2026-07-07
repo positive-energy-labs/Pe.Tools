@@ -171,6 +171,7 @@ public sealed record HostOperationDefinition(
             "revit.catalog.parameter-bindings" => """{ "projection": { "view": "Summary" }, "budget": { "maxEntries": 50 } }""",
             "revit.catalog.parameter-evidence" => """{ "scope": "ActiveViewVisible", "candidateParameters": [], "budget": { "maxEntries": 25, "maxSamplesPerEntry": 5 } }""",
             "revit.matrix.parameter-coverage" => """{ "parameters": [], "scope": "ActiveViewVisible", "budget": { "maxEntries": 25, "maxSamplesPerEntry": 5 } }""",
+            "revit.catalog.field-options" => """{ "sourceKey": "category-names" }""",
             "settings.schema" => """{ "moduleKey": "CmdScheduleManager", "rootKey": "schedules" }""",
             "settings.field-options" => """{ "moduleKey": "CmdScheduleManager", "rootKey": "schedules", "propertyPath": "fields[].parameter.name", "sourceKey": "schedule-field-names", "contextValues": {} }""",
             "settings.parameter-catalog" => """{ "moduleKey": "CmdFFManager", "contextValues": {} }""",
