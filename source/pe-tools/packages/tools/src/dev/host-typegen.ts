@@ -67,9 +67,7 @@ const checkMode = process.argv.includes("--check");
 const url = `${hostBase}/ops${session ? `?session=${encodeURIComponent(session)}` : ""}`;
 const response = await fetch(url).catch(() => null);
 if (!response || !response.ok) {
-  const reason = response
-    ? `${response.status} ${await response.text()}`
-    : "host unreachable";
+  const reason = response ? `${response.status} ${await response.text()}` : "host unreachable";
   if (checkMode) {
     // ponytail: drift gate needs a live Revit session; without one, skip — the
     // committed file is still the contract, it just can't be re-verified here.
@@ -129,7 +127,8 @@ const output = chunks.join("\n");
 
 if (checkMode) {
   // Windows checkouts may carry CRLF (git autocrlf); the contract is content, not EOLs.
-  const existing = (await readFile(outPath, "utf8").catch(() => null))?.replaceAll("\r\n", "\n") ?? null;
+  const existing =
+    (await readFile(outPath, "utf8").catch(() => null))?.replaceAll("\r\n", "\n") ?? null;
   if (existing === output) {
     console.log(`host-ops types are in sync with ${url} (${operations.length} operations).`);
     process.exit(0);

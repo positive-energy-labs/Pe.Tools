@@ -31,6 +31,11 @@ export const peaProductToolCatalog: RuntimeToolCatalog = createRuntimeToolCatalo
     kind: "read",
     provenance: { source: "app", label: "Pea product" },
   },
+  capture_view: {
+    title: "Capture View",
+    kind: "read",
+    provenance: { source: "app", label: "Pea product" },
+  },
   script_bootstrap: {
     title: "Script Bootstrap",
     kind: "edit",
@@ -49,6 +54,36 @@ export const peaProductToolCatalog: RuntimeToolCatalog = createRuntimeToolCatalo
   script_pod_export: {
     title: "Script Pod Export",
     kind: "edit",
+    provenance: { source: "app", label: "Pea product" },
+  },
+  family_sheet_status: {
+    title: "Family Sheet Status",
+    kind: "read",
+    provenance: { source: "app", label: "Pea product" },
+  },
+  family_sheet_doc: {
+    title: "Family Sheet Doc",
+    kind: "read",
+    provenance: { source: "app", label: "Pea product" },
+  },
+  family_sheet_propose: {
+    title: "Family Sheet Propose",
+    kind: "edit",
+    provenance: { source: "app", label: "Pea product" },
+  },
+  family_sheet_mark: {
+    title: "Family Sheet Mark",
+    kind: "edit",
+    provenance: { source: "app", label: "Pea product" },
+  },
+  family_sheet_refresh: {
+    title: "Family Sheet Refresh",
+    kind: "read",
+    provenance: { source: "app", label: "Pea product" },
+  },
+  family_sheet_parse_spec: {
+    title: "Family Sheet Parse Spec",
+    kind: "execute",
     provenance: { source: "app", label: "Pea product" },
   },
 });

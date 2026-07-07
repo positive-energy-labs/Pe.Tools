@@ -589,9 +589,10 @@ export type OpResponseOf<K extends AnyOperationKey> = HostOpResponse<K>;
  * op's request type has no required members ({} satisfies it) — an op with
  * required inputs cannot be called without a request object.
  */
-export type OpCallArgs<K extends AnyOperationKey, Options> = {} extends OpRequestOf<K>
-  ? [request?: OpRequestOf<K>, options?: Options]
-  : [request: OpRequestOf<K>, options?: Options];
+export type OpCallArgs<K extends AnyOperationKey, Options> =
+  {} extends OpRequestOf<K>
+    ? [request?: OpRequestOf<K>, options?: Options]
+    : [request: OpRequestOf<K>, options?: Options];
 
 export type HostOpResponse<K extends AnyOperationKey> = K extends HostOperationKey
   ? HostOps[K]["response"]
@@ -619,4 +620,3 @@ export class HostCallError extends Error {
     this.name = "HostCallError";
   }
 }
-

@@ -4,6 +4,7 @@ using Newtonsoft.Json.Serialization;
 using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.RevitData;
+using Pe.Shared.RevitData.Families;
 using Pe.Shared.RevitData.Schedules;
 
 namespace Pe.Shared.HostContracts.Operations;
@@ -35,6 +36,8 @@ public interface IRevitDataService {
     Task<ScheduleQueryData> GetScheduleQueryAsync(ScheduleQueryRequest request);
     Task<LoadedFamiliesCatalogData> GetLoadedFamiliesCatalogAsync(LoadedFamiliesCatalogRequest request);
     Task<LoadedFamiliesMatrixData> GetLoadedFamiliesMatrixAsync(LoadedFamiliesMatrixRequest request);
+    Task<FamilyEditorSnapshotData> GetFamilyEditorSnapshotAsync(FamilyEditorSnapshotRequest request);
+    Task<FamilyEditorApplyData> ApplyFamilyEditorEditsAsync(FamilyEditorApplyRequest request);
     Task<ScheduleCoverageData> GetScheduleCoverageAsync(ScheduleCoverageRequest request);
     Task<ParameterCoverageData> GetParameterCoverageAsync(ParameterCoverageRequest request);
     Task<ConceptEvidenceData> GetConceptEvidenceAsync(ConceptEvidenceRequest request);
@@ -57,6 +60,7 @@ public interface IRevitDataService {
     Task<RevitAgentViewRenderingStateData> GetRevitAgentViewRenderingStateAsync(
         RevitAgentViewRenderingStateRequest request
     );
+    Task<RevitViewImageData> GetRevitViewImageAsync(RevitViewImageRequest request);
     Task<ParametersServiceCacheData> RefreshParametersServiceCacheAsync();
 }
 

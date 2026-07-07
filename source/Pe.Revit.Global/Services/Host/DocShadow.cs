@@ -1,10 +1,11 @@
 using Pe.Revit.DocumentData.Families.Extraction;
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.DocumentData.ProjectBrowser;
+using Pe.Revit.Extensions.ProjDocument;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Families;
 using Serilog;
-using System.Runtime.CompilerServices;
+using System.Collections.Concurrent;
 using RevitDocument = Autodesk.Revit.DB.Document;
 
 namespace Pe.Revit.Global.Services.Host;
@@ -12,9 +13,17 @@ namespace Pe.Revit.Global.Services.Host;
 /// <summary>
 ///     Per-document cache of collected Revit data, evicted with element granularity from the
 ///     DocumentChanged pipeline (BridgeDocumentNotifier). Replaces the TTL/blanket-invalidation
-///     RevitDataCollectionContext. Lifetime rides the Document itself via ConditionalWeakTable — a closed
-///     document's shadow is collected with it, so there is no cross-open reuse (that is the persistent
-///     warm-start layer's job).
+///     RevitDataCollectionContext.
+///     <para>
+///         Keyed by <see cref="DocumentIdentityExtensions.GetDocumentKey" />, NOT the Document reference:
+///         Revit hands back a fresh managed <c>Document</c> wrapper on every <c>ActiveUIDocument.Document</c>
+///         access (verified live — two reads in one request are not reference-equal), so a
+///         ConditionalWeakTable keyed on the wrapper mints a new empty shadow per request and the cache
+///         never survives a request boundary. The stable string key is the same identity the rest of the
+///         host uses (session summaries, FamilySnapshotStore). Shadows are dropped explicitly when their
+///         document closes (<see cref="Evict" /> from BridgeDocumentNotifier's DocumentClosing handler) so a
+///         reopen re-validates through the warm-start layer instead of reusing stale in-memory truth.
+///     </para>
 ///     <para>
 ///         Eviction policy: stale beats slow, never the reverse. Family snapshots evict on Family or
 ///         FamilySymbol changes (family-doc truth is untouched by instance placement). Deletions and
@@ -24,19 +33,26 @@ namespace Pe.Revit.Global.Services.Host;
 internal sealed class DocShadow : IProjectBrowserIndexProvider, IFamilySnapshotCache {
     private const int MaxProjectBrowserEntries = 16;
     private const int OversizedDeltaThreshold = 512;
-    private static readonly ConditionalWeakTable<RevitDocument, DocShadow> Shadows = new();
+    private static readonly ConcurrentDictionary<string, DocShadow> Shadows = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly object _sync = new();
     private readonly Dictionary<long, FamilySnapshotRecord> _familySnapshots = new();
     private readonly Dictionary<ProjectBrowserShadowKey, ProjectBrowserShadowEntry> _projectBrowserIndexes = new();
     private ParameterEvidencePrimitiveSet? _parameterEvidencePrimitives;
 
-    public static DocShadow For(RevitDocument document) => Shadows.GetValue(document, _ => new DocShadow());
+    public static DocShadow For(RevitDocument document) =>
+        Shadows.GetOrAdd(document.GetDocumentKey(), _ => new DocShadow());
 
     /// <summary>Routes a DocumentChanged delta to the changed document's shadow, if one exists.</summary>
     public static void HandleChange(RevitDocument document, DocumentDelta delta) {
-        if (Shadows.TryGetValue(document, out var shadow))
+        if (Shadows.TryGetValue(document.GetDocumentKey(), out var shadow))
             shadow.Apply(delta, id => ClassifyElement(document, id));
+    }
+
+    /// <summary>Drops a closed document's shadow so a later reopen cannot reuse stale in-memory truth.</summary>
+    public static void Evict(RevitDocument document) {
+        if (Shadows.TryRemove(document.GetDocumentKey(), out _))
+            Log.Debug("DocShadow evicted on close: Document={DocumentKey}", document.GetDocumentKey());
     }
 
     // ==================== IFamilySnapshotCache ====================

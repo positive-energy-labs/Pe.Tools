@@ -156,8 +156,14 @@ function parseWorkerResponse(
     .find((candidate) => candidate.startsWith(workerResultPrefix));
   if (!line) return null;
 
-  const parsed: unknown = JSON.parse(line.slice(workerResultPrefix.length));
-  return readWorkerResponse(parsed);
+  // The result line can exceed one pipe chunk (64KB); a partial line is not an error —
+  // return null and wait for the next data event to complete it.
+  try {
+    const parsed: unknown = JSON.parse(line.slice(workerResultPrefix.length));
+    return readWorkerResponse(parsed);
+  } catch {
+    return null;
+  }
 }
 
 function readWorkerResponse(
