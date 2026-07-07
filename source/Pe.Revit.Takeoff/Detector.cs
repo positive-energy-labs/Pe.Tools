@@ -1,48 +1,59 @@
 namespace Pe.Revit.Takeoff;
 
-// Detection core: compose the projection-seed ink (where the walls ARE) with the heightfield
-// (where you can STAND) and extract room polygons.
+// Detection core. THE LAW (a post-port regression made it explicit, user-caught 2026-07-06):
+// INK DEFINES SHAPE; PHYSICS DEFINES EXISTENCE.
 //
-//   obstruction = seed ink | heightfield.Blocked, then morphological close (GapSealFt)
-//   candidate   = heightfield.Walkable & !obstruction
-//   rooms       = connected candidate components >= MinSqft
+//   obstruction = seed ink, hairline-closed (GapSealFt ~1 ft)
+//   candidate   = !obstruction & floor-present            <- boundary sources: ink + floor only
+//   room        = component >= MinSqft AND ceiling-fraction >= MinCeilingFrac   <- physics GATES
 //
-// Why the composite fixes the two flaws of round 2 (user-reported, 2026-07-06):
-// - LACKING FILLS: corridors/halls previously leaked to "outside" through stair openings or
-//   unmodeled glazing and were discarded with it. Here the escape path dies at cells with no
-//   floor (stairwell) or no ceiling (roofless), so those spaces close and fill.
-// - FUNKY CORNERS: blob-morphology contours (dilate/erode + approx-poly) rounded every corner
-//   and shot edges inward. We trace exact cell-boundary loops and then RECTILINEARIZE: snap
-//   edge runs to the dominant wall axes and re-intersect neighbors for crisp miters. Diagonal
-//   walls survive (only near-axis edges snap).
+// Room boundaries come from wall ink (straight walls -> straight contours) plus the floor edge
+// (stair voids, double-height volumes — subfloor data is dense and reliable at any model stage).
+// The CEILING must never shape a boundary: at framing stage it is patchy (joist gaps, tilted
+// planes) and its noise eats wavy bites out of every room edge — that was the regression. It
+// gates at region level instead: a region where too few cells have real headroom is open-to-sky
+// (courtyard, terrace) and is dropped whole.
+//
+// Why this fixes the two round-2 flaws:
+// - LACKING FILLS: corridor leak paths die at the floor edge (stairwell) or the region gate, so
+//   corridors/halls close and fill instead of merging with "outside".
+// - FUNKY CORNERS: exact cell-boundary loops + RECTILINEARIZE (snap edge runs to the dominant
+//   wall axes, re-intersect neighbors for crisp miters; true diagonals survive) replace
+//   blob-morphology contours, and the hairline GapSeal stops concave-corner rounding.
 public static class Detector
 {
     public static TakeoffResult Detect(
         Heightfield hf, bool[] seedInk, Level level, TakeoffOptions opt, Action<string> log)
     {
         int W = hf.W, H = hf.H, n = W * H;
+        double lvlZ = level.ProjectElevation;
 
-        var obst = new bool[n];
-        for (int i = 0; i < n; i++) obst[i] = seedInk[i] || hf.Blocked[i];
+        var obst = (bool[])seedInk.Clone();
         Close(obst, W, H, (float)(opt.GapSealFt / 2.0 / opt.CellFt));
 
         var open = new bool[n];
-        for (int i = 0; i < n; i++) open[i] = hf.Walkable[i] && !obst[i];
+        for (int i = 0; i < n; i++)
+            open[i] = !obst[i] && !float.IsNaN(hf.FloorZ[i]) && Math.Abs(hf.FloorZ[i] - lvlZ) <= opt.FloorTolFt;
 
-        // label connected candidate regions (4-neighborhood)
+        // label connected candidate regions (4-neighborhood); track border contact + ceiling stats
         var label = new int[n];
         var sizes = new List<int> { 0 };
+        var ceilOkCounts = new List<int> { 0 };
+        var touchesBorder = new List<bool> { false };
         var q = new Queue<int>();
         int nReg = 0;
         for (int i = 0; i < n; i++)
         {
             if (!open[i] || label[i] != 0) continue;
-            nReg++; sizes.Add(0);
+            nReg++; sizes.Add(0); ceilOkCounts.Add(0); touchesBorder.Add(false);
             label[i] = nReg; q.Enqueue(i);
             while (q.Count > 0)
             {
                 int c = q.Dequeue(); sizes[nReg]++;
+                if (!float.IsNaN(hf.CeilZ[c]) && hf.CeilZ[c] - hf.FloorZ[c] >= opt.MinHeadroomFt
+                    && hf.CeilZ[c] < lvlZ + 14) ceilOkCounts[nReg]++;
                 int cx = c % W, cy = c / W;
+                if (cx == 0 || cy == 0 || cx == W - 1 || cy == H - 1) touchesBorder[nReg] = true;
                 if (cx > 0 && open[c - 1] && label[c - 1] == 0) { label[c - 1] = nReg; q.Enqueue(c - 1); }
                 if (cx < W - 1 && open[c + 1] && label[c + 1] == 0) { label[c + 1] = nReg; q.Enqueue(c + 1); }
                 if (cy > 0 && open[c - W] && label[c - W] == 0) { label[c - W] = nReg; q.Enqueue(c - W); }
@@ -52,10 +63,12 @@ public static class Detector
 
         double cellArea = opt.CellFt * opt.CellFt;
         var roomIds = Enumerable.Range(1, nReg)
-            .Where(id => sizes[id] * cellArea >= opt.MinSqft)
+            .Where(id => !touchesBorder[id]
+                         && sizes[id] * cellArea >= opt.MinSqft
+                         && (double)ceilOkCounts[id] / sizes[id] >= opt.MinCeilingFrac)
             .OrderByDescending(id => sizes[id])
             .ToList();
-        log($"[detect] regions={nReg} rooms={roomIds.Count} (>= {opt.MinSqft} sf)");
+        log($"[detect] regions={nReg} rooms={roomIds.Count} (>= {opt.MinSqft} sf, ceilFrac >= {opt.MinCeilingFrac})");
 
         var result = new TakeoffResult { LevelName = level.Name, LevelElevation = level.ProjectElevation };
         int rank = 0;

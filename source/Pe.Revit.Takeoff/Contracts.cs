@@ -19,9 +19,18 @@ public sealed class TakeoffOptions
     public double MinSqft = 40;             // reject smaller regions
     public double MinHeadroomFt = 6.0;      // walkable = ceiling - floor >= this (kills eaves)
     public double FloorTolFt = 1.5;         // floor must sit within +/- this of level plane
-    public double GapSealFt = 4.2;          // morphological close on obstruction; > widest door
-                                            // leaf (3-4 ft), < narrowest corridor (5-6 ft). With
-                                            // header-band seeding this mostly seals stud dashes.
+    public double GapSealFt = 1.0;          // morphological close on the ink — HAIRLINE bridging
+                                            // only. Projection ink is continuous (Revit draws cut
+                                            // lines unbroken; doors seal via the header band), so
+                                            // the old slicing-era 4.2 ft is obsolete here and
+                                            // actively harmful: a fat close rounds every concave
+                                            // room corner and shrinks rooms (post-port regression,
+                                            // user-caught 2026-07-06).
+    public double MinCeilingFrac = 0.35;    // region gate: fraction of cells that must have a
+                                            // real ceiling (headroom >= MinHeadroomFt). Kills
+                                            // open-to-sky courtyards/terraces at REGION level —
+                                            // ceiling data is too patchy at framing stage to be
+                                            // a per-cell boundary (see Detector header).
     public double KneeBandFt = 4.0;         // seed band A: catches knee walls + under-window studs
     public double HeaderBandFt = 8.5;       // seed band B: ABOVE door/window heads, where framing
                                             // is continuous = geometric door sealing. Estates run
