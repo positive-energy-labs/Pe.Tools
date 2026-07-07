@@ -34,11 +34,11 @@
         <PackageReference Include="Nice3point.Revit.Extensions" Version="$(RevitVersion).*" />
         <PackageReference Include="RevitExplorer.API" Version="2.6.0" />
         <PackageReference Include="ricaun.Revit.UI.Tasks" Version="1.*" />
-        <PackageReference Include="Pe.Revit.Versioning" Version="0.1.0-beta.6" />
+        <PackageReference Include="Pe.Revit.Versioning" Version="0.1.0-beta.7" />
         <!-- IPePayload contract + self-hosted context. Ships in the output too: the dev lane
              loads Pe.App directly and needs the dll beside it; in the installed lane the loader
              skip-lists its own name, so the payload-dir copy is never loaded (type identity). -->
-        <PackageReference Include="Pe.Revit.Loader" Version="0.1.0-beta.6" />
+        <PackageReference Include="Pe.Revit.Loader" Version="0.1.0-beta.7" />
         <!-- Build -->
         <PackageReference Include="ILRepack" Version="2.0.44">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive
