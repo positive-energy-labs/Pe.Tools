@@ -13,5 +13,3 @@ public sealed class AutomationActivitySpec {
 
     public IReadOnlyDictionary<string, object>? Settings { get; init; }
 }
-
-// PE_HOT_RELOAD_NUDGE

@@ -11,5 +11,3 @@ public sealed class ResolveBuildLayoutModule : Module<ProductLayoutAuthority> {
         return Task.FromResult<ProductLayoutAuthority?>(authority);
     }
 }
-
-// PE_HOT_RELOAD_NUDGE

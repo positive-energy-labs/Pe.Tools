@@ -7,5 +7,3 @@ public sealed class AutomationAppBundleSpec {
     public string Description { get; init; } = "";
     public string AliasId { get; init; } = "dev";
 }
-
-// PE_HOT_RELOAD_NUDGE

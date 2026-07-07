@@ -4,7 +4,7 @@
 
 Owns the dev-facing `pe-dev` CLI surface for `pea` source linking, source web dev supervision, codegen, and APS Design Automation operator workflows.
 
-Attached RRD/live-loop diagnostics, sync, restart, and hot reload are no longer public `pe-dev` command groups. SDK `pe-revit` owns the live/test mechanics; Peco wrappers may add Pea status/log hooks where appropriate.
+Attached RRD/live-loop diagnostics, sync, restart, and hot reload are no longer public `pe-dev` command groups. SDK `pe-revit` owns the live/test mechanics; Peco keeps only Pea status/log context and product probes.
 
 ## Purpose
 
@@ -51,7 +51,8 @@ Keep `Pe.Dev.Cli` focused on stable command naming, parse/print behavior, and or
 
 - AttachedRrd/live-loop mutation and proof lanes are owned by SDK `pe-revit`, not public `pe-dev` commands.
 - Use `live_loop_context` for the single read-only environment/session/log decision packet.
-- Use Peco `live_rrd_sync` when Pea status/log hooks should wrap SDK-backed sync, HR, and start/restart actions.
+- Use SDK `pe-revit live` or MCP `live_converge` for SDK-backed sync, HR, and start/restart actions.
+- Use Peco `script_execute` or `talk_to_pea` when a product-facing tool should run after SDK freshness preflight.
 - Use deployed `pea` surfaces for operator log access and scripting.
 - SDK `pe-revit test fresh|attached` owns Revit-backed proof lanes.
 - Use `pe-revit test fresh --plan --json ...` for safe smoke checks and command planning through the SDK.

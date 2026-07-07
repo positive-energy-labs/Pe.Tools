@@ -64,5 +64,3 @@ internal static class ApsScopeProfiles {
             _ => throw new ArgumentOutOfRangeException(nameof(scopeProfile), scopeProfile, null)
         };
 }
-
-// PE_HOT_RELOAD_NUDGE

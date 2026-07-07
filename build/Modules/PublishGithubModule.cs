@@ -93,5 +93,3 @@ public sealed class PublishGithubModule : Module {
         }
     }
 }
-
-// PE_HOT_RELOAD_NUDGE

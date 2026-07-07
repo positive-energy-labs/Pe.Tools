@@ -3,7 +3,7 @@
  *
  * Run: node src/server.ts <pea|peco>
  *   pea  — product surface: status/logs, host ops, scripting, capture, family sheet
- *   peco — dev surface: everything in pea plus live RRD / dev tools
+ *   peco — dev surface: everything in pea plus Peco runtime context and harness tools
  */
 import { MCPServer } from "@mastra/mcp";
 import { peCodeTools } from "./dev/index.ts";
@@ -26,7 +26,7 @@ await new MCPServer({
   version: "0.0.0",
   description:
     serverName === "peco"
-      ? "Pe dev MCP: pea product tools plus live RRD sync/test and dev harness tools."
+      ? "Pe dev MCP: pea product tools plus Peco runtime context and dev harness tools."
       : "Pe product MCP: Revit host status/logs, host operations, scripting, view capture, family sheet.",
   tools,
 }).startStdio();

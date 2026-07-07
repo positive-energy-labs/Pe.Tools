@@ -89,19 +89,9 @@ export const peaProductToolCatalog: RuntimeToolCatalog = createRuntimeToolCatalo
 });
 
 export const peCodeToolCatalog: RuntimeToolCatalog = createRuntimeToolCatalog({
-  test: {
-    title: "Test",
-    kind: "execute",
-    provenance: { source: "app", label: "peco" },
-  },
   live_loop_context: {
     title: "Live Loop Context",
     kind: "read",
-    provenance: { source: "app", label: "peco" },
-  },
-  live_rrd_sync: {
-    title: "Live Rrd Sync",
-    kind: "edit",
     provenance: { source: "app", label: "peco" },
   },
   script_execute: {

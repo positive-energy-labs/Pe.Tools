@@ -15,5 +15,3 @@ public sealed class AutomationParameterSpec {
     [JsonProperty("localName")]
     public string? LocalName { get; init; }
 }
-
-// PE_HOT_RELOAD_NUDGE

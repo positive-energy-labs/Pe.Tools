@@ -8,9 +8,6 @@ export interface LiveRrdSyncOptions {
   timeoutSeconds?: number;
   project?: string;
   revitYear?: string;
-  hotReload?: boolean;
-  start?: boolean;
-  restartOnHrBreak?: boolean;
   includePeaStatus?: boolean;
   logTail?: number;
   resetLogCursor?: boolean;
@@ -22,9 +19,6 @@ export async function syncLiveRrd(options: LiveRrdSyncOptions = {}) {
     timeoutSeconds: options.timeoutSeconds ?? defaultPeaRuntimeTimeoutSeconds,
     project: options.project,
     revitYear: options.revitYear,
-    hotReload: options.hotReload ?? true,
-    start: options.start ?? true,
-    restartOnHrBreak: options.restartOnHrBreak ?? false,
   });
 
   const hooks = await collectPostLiveCommandHooks({

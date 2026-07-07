@@ -35,7 +35,7 @@ This package is the Revit-side execution pipeline for a submitted C# source set.
 ## Validation Posture
 
 - Plain terminal `dotnet build` proves the isolated compile lane only.
-- Live scripting validation uses the assemblies loaded in the running Revit process. If runtime packages changed, use SDK `pe-revit live sync` before trusting `pea script ...` behavior; use Peco wrappers when Pea status/log hooks should accompany the proof.
+- Live scripting validation uses the assemblies loaded in the running Revit process. If runtime packages changed, use SDK `pe-revit live` before trusting `pea script ...` behavior; use Peco wrappers when Pea status/log hooks should accompany the proof.
 
 ## Open Questions
 

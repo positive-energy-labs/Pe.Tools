@@ -11,18 +11,12 @@ export async function runSdkLiveSync(request: {
   timeoutSeconds: number;
   project?: string;
   revitYear?: string;
-  hotReload?: boolean;
-  start?: boolean;
-  restartOnHrBreak?: boolean;
 }): Promise<WorkflowCommandResult> {
-  const args = ["live", "sync", "--json"];
+  const args = ["live", "--json"];
   if (request.project) args.push("--project", request.project);
   if (request.revitYear) args.push("--year", request.revitYear);
-  if (request.hotReload ?? true) args.push("--hot-reload");
-  if (request.start ?? true) args.push("--start");
-  if (request.restartOnHrBreak ?? false) args.push("--restart-on-hr-break");
 
-  const result = await runPeRevitWorkflow("sync", args, "RrdRequired", request.timeoutSeconds);
+  const result = await runPeRevitWorkflow("live", args, "RrdRequired", request.timeoutSeconds);
   rememberLastSyncResult(result);
   return result;
 }
@@ -50,8 +44,7 @@ export function summarizeLastSyncResult() {
     loadedGraphVerdict: assemblyVerdict,
     sourceDeltaVerdict: verdict,
     actionStatuses: [],
-    proofSummary:
-      readString(json, "note") ?? `pe-revit live sync ${result.ok ? "succeeded" : "failed"}`,
+    proofSummary: readString(json, "note") ?? `pe-revit live ${result.ok ? "succeeded" : "failed"}`,
     guidance: null,
   };
 }
@@ -62,7 +55,7 @@ export function sdkLiveWarning(result: WorkflowCommandResult): string | null {
   if (warning) return warning;
   if (result.ok) return null;
   const fallback = readString(json, "note") ?? result.stderrTail;
-  return fallback || "SDK live sync failed.";
+  return fallback || "SDK live failed.";
 }
 
 function readSdkLiveVerdict(result: WorkflowCommandResult): string {
