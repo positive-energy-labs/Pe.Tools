@@ -1,5 +1,23 @@
 {
   "mcpServers": {
+    "pea": {
+      "command": "node",
+      "args": [
+        "--import",
+        "./source/pe-tools/node_modules/jiti/lib/jiti-register.mjs",
+        "source/pe-tools/packages/mcps/src/server.ts",
+        "pea"
+      ]
+    },
+    "peco": {
+      "command": "node",
+      "args": [
+        "--import",
+        "./source/pe-tools/node_modules/jiti/lib/jiti-register.mjs",
+        "source/pe-tools/packages/mcps/src/server.ts",
+        "peco"
+      ]
+    },
     "revit-api-mcp": {
       "command": "powershell.exe",
       "args": [

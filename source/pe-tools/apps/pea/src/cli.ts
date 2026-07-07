@@ -1,6 +1,6 @@
 import { cli, define } from "gunshi";
 import { parseOptionalPort } from "@pe/runtime";
-import { PeaCliCommands, resolveHostBaseUrl, resolveWorkspaceKey } from "@pe/tools";
+import { PeaCliCommands, resolveHostBaseUrl, resolveWorkspaceKey } from "@pe/mcps";
 import type { PeaRuntimeAuthSource } from "./runtime.ts";
 
 export async function runPeaMain(args = process.argv.slice(2)): Promise<void> {

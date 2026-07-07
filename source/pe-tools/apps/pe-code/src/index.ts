@@ -1,6 +1,6 @@
 import { define } from "gunshi";
 import { parseOptionalPort } from "@pe/runtime";
-import { resolveHostBaseUrl, resolveWorkspaceKey } from "@pe/tools";
+import { resolveHostBaseUrl, resolveWorkspaceKey } from "@pe/mcps";
 import { peCodeRuntimeToolProfile } from "./runtime.ts";
 import { runPeCodeWeb } from "./web.ts";
 

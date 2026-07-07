@@ -46,7 +46,7 @@ bounded FIFO queue (reject with 423 only when full) replaces the instant-423 mai
 
 ## Types
 
-`packages/tools/src/dev/host-typegen.ts` reads `/ops` from a live session and emits
+`packages/mcps/src/dev/host-typegen.ts` reads `/ops` from a live session and emits
 `packages/host-contracts/src/generated/host-ops.generated.ts` — **checked in, committed
 like a lockfile**. `useHostOp` / `callHost` type themselves via
 `K extends keyof HostOps ? HostOps[K] : unknown`. New op flow: write C# method → hot

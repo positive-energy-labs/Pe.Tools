@@ -3,7 +3,7 @@ import path from "node:path";
 import { createMastraCode, type MastraCodeConfig } from "mastracode";
 import type { MastraTUIOptions } from "mastracode/tui";
 import { runRuntimeAcpAgent } from "@pe/runtime";
-import { peCodeRuntimeToolProfile as peCodeToolsRuntimeToolProfile } from "@pe/tools";
+import { peCodeRuntimeToolProfile as peCodeToolsRuntimeToolProfile } from "@pe/mcps";
 
 export const peCodeRuntimeToolProfile = peCodeToolsRuntimeToolProfile;
 export const defaultPeCodeRuntimeToolProfile = peCodeRuntimeToolProfile;

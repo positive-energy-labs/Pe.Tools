@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { expect, test } from "vite-plus/test";
 import { createRuntimeRequestContext, resolveRuntimeThreadStateStore } from "@pe/runtime";
-import { bundledPeaSkills, peaProductHomeEnvVar, peaStandardSkillsRoot } from "@pe/tools";
+import { bundledPeaSkills, peaProductHomeEnvVar, peaStandardSkillsRoot } from "@pe/mcps";
 import {
   createPeaCliCommand,
   createPeaRuntime,
@@ -44,6 +44,7 @@ test("pea exports the product tool profile used by the default runtime", () => {
   expect(
     [...defaultPeaRuntimeToolCatalog.keys()].sort((left, right) => left.localeCompare(right)),
   ).toEqual([
+    "capture_view",
     "host_operation_call",
     "host_operation_search",
     "pe_logs",
