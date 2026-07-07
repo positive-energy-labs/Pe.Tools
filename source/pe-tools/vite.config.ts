@@ -7,6 +7,8 @@ export default defineConfig({
       "**/dist-installed/**",
       "**/node_modules/**",
       "**/.artifacts/**",
+      // tsr owns this file's shape and its dev watcher instantly reverts any reformat
+      "**/routeTree.gen.ts",
     ],
   },
   lint: {
