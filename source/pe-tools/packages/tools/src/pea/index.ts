@@ -19,9 +19,11 @@ import {
   scriptPodImportInputSchema,
 } from "../shared/scripting.ts";
 import { readImage } from "../shared/read-image.ts";
+import { createCaptureViewTool } from "../shared/capture-view.ts";
 import { requestAccess } from "../shared/request-access.ts";
 import { resolveHostBaseUrl, resolveWorkspaceKey } from "../shared/host-config.ts";
 import { peaProductToolCatalog } from "../tool-metadata.ts";
+import { familySheetTools } from "./family-sheet.ts";
 import { PeaCliCommands, type PeaCliCommandOptions } from "./PeaCliCommands.ts";
 export { peaProductToolCatalog } from "../tool-metadata.ts";
 export { PeaCliCommands } from "./PeaCliCommands.ts";
@@ -254,6 +256,10 @@ export const scriptPodExport = createTool({
   execute: async (input) => createCurrentScriptingTools(input.bridgeSessionId).exportPod(input),
 });
 
+export const captureView = createCaptureViewTool((bridgeSessionId) =>
+  createCurrentHostRpcCaller(bridgeSessionId),
+);
+
 export const peaProductTools = {
   [peStatus.id]: peStatus,
   [peLogs.id]: peLogs,
@@ -261,10 +267,12 @@ export const peaProductTools = {
   [hostOperationCall.id]: hostOperationCall,
   [requestAccess.id]: requestAccess,
   [readImage.id]: readImage,
+  [captureView.id]: captureView,
   [scriptBootstrap.id]: scriptBootstrap,
   [scriptExecute.id]: scriptExecute,
   [scriptPodImport.id]: scriptPodImport,
   [scriptPodExport.id]: scriptPodExport,
+  ...familySheetTools,
   // [revitApiSearch.id]: revitApiSearch,
   // [revitApiFetch.id]: revitApiFetch,
 };

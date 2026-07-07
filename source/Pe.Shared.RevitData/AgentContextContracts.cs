@@ -299,3 +299,16 @@ public record RevitAgentViewRenderingStateData(
     List<string> LikelyInspectionNextSteps,
     List<RevitDataIssue> Issues
 );
+
+public record RevitViewImageRequest(
+    long? ViewId = null,
+    string? ViewUniqueId = null,
+    int PixelSize = 1500
+);
+
+public record RevitViewImageData(
+    RevitAgentContextHandle View,
+    string FilePath,
+    long ByteSize,
+    int PixelSize
+);

@@ -3,6 +3,8 @@ using Pe.Revit.DocumentData.AgentContext;
 using Pe.Revit.DocumentData.Electrical;
 using Pe.Revit.DocumentData.Families.Loaded.Collectors;
 using Pe.Revit.DocumentData.Parameters;
+using Pe.Revit.Extensions.FamManager;
+using Pe.Revit.Utils;
 using Pe.Revit.DocumentData.ProjectBrowser;
 using Pe.Revit.DocumentData.ProjectIndex;
 using Pe.Revit.DocumentData.Schedules.Collect;
@@ -12,8 +14,10 @@ using Pe.Revit.Global.Services.Aps;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.RevitData;
+using Pe.Shared.RevitData.Families;
 using Pe.Shared.RevitData.Schedules;
 using ricaun.Revit.UI.Tasks;
+using System.Globalization;
 using System.Runtime.ExceptionServices;
 using RevitDocument = Autodesk.Revit.DB.Document;
 
@@ -56,6 +60,14 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
     public Task<LoadedFamiliesMatrixData> GetLoadedFamiliesMatrixAsync(
         LoadedFamiliesMatrixRequest request
     ) => this.EnqueueAsync(() => this.GetLoadedFamiliesMatrixCore(request));
+
+    public Task<FamilyEditorSnapshotData> GetFamilyEditorSnapshotAsync(
+        FamilyEditorSnapshotRequest request
+    ) => this.EnqueueAsync(this.GetFamilyEditorSnapshotCore);
+
+    public Task<FamilyEditorApplyData> ApplyFamilyEditorEditsAsync(
+        FamilyEditorApplyRequest request
+    ) => this.EnqueueAsync(() => this.ApplyFamilyEditorEditsCore(request));
 
     public Task<ScheduleCoverageData> GetScheduleCoverageAsync(
         ScheduleCoverageRequest request
@@ -117,6 +129,10 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
     public Task<RevitAgentViewRenderingStateData> GetRevitAgentViewRenderingStateAsync(
         RevitAgentViewRenderingStateRequest request
     ) => this.EnqueueAsync(() => this.GetRevitAgentViewRenderingStateCore(request));
+
+    public Task<RevitViewImageData> GetRevitViewImageAsync(
+        RevitViewImageRequest request
+    ) => this.EnqueueAsync(() => this.GetRevitViewImageCore(request));
 
     public Task<ParametersServiceCacheData> RefreshParametersServiceCacheAsync() =>
         ParametersServiceCache.RefreshAsync();
@@ -290,6 +306,83 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         }
     }
 
+    private FamilyEditorSnapshotData GetFamilyEditorSnapshotCore() {
+        var document = GetActiveFamilyDocument();
+
+        try {
+            var fm = document.FamilyManager;
+            var familyTypes = fm.Types.Cast<FamilyType>().ToList();
+            var typeNames = familyTypes.Select(type => type.Name).ToList();
+            var parameters = fm.Parameters.Cast<FamilyParameter>()
+                .Select(parameter => CreateFamilyEditorParameterSnapshot(document, parameter, familyTypes))
+                .OrderBy(parameter => parameter.Name, StringComparer.OrdinalIgnoreCase)
+                .ThenByDescending(parameter => parameter.IsInstance)
+                .ToList();
+
+            return new FamilyEditorSnapshotData(
+                document.Title,
+                fm.CurrentType?.Name ?? string.Empty,
+                typeNames,
+                parameters
+            );
+        } catch (BridgeOperationException) {
+            throw;
+        } catch (Exception ex) {
+            throw BridgeOperationExceptions.Unexpected(
+                "FamilyEditorSnapshotException",
+                ex,
+                "Verify the active document is a family document and retry."
+            );
+        }
+    }
+
+    private FamilyEditorApplyData ApplyFamilyEditorEditsCore(FamilyEditorApplyRequest request) {
+        var document = GetActiveFamilyDocument();
+        if (document.IsReadOnly) {
+            throw BridgeOperationExceptions.Conflict(
+                "Active family document is read-only.",
+                [
+                    BridgeOperationExceptions.Issue(
+                        "$",
+                        "FamilyEditorDocumentReadOnly",
+                        "Active family document is read-only.",
+                        "Open a writable family document and retry."
+                    )
+                ]
+            );
+        }
+
+        var edits = request.Edits ?? [];
+        if (edits.Count == 0)
+            return new FamilyEditorApplyData(0, []);
+
+        using var sandbox = DocumentSandbox.BeginCommit(document, "Pe Family Editor Apply");
+        var commitFailures = new List<(bool IsError, string Message)>();
+        var failureOptions = sandbox.Transaction.GetFailureHandlingOptions();
+        _ = failureOptions.SetFailuresPreprocessor(new DialogSuppressingFailuresPreprocessor(commitFailures));
+        _ = failureOptions.SetForcedModalHandling(false);
+        sandbox.Transaction.SetFailureHandlingOptions(failureOptions);
+
+        var applied = 0;
+        var results = new List<FamilyEditorApplyEditResult>();
+        for (var i = 0; i < edits.Count; i++) {
+            try {
+                ApplyFamilyEditorEdit(document.FamilyManager, edits[i]);
+                applied++;
+                results.Add(new FamilyEditorApplyEditResult(i, true, null));
+            } catch (Exception ex) {
+                results.Add(new FamilyEditorApplyEditResult(i, false, ex.Message));
+            }
+        }
+
+        if (applied > 0)
+            sandbox.Complete();
+
+        foreach (var (_, message) in commitFailures)
+            results.Add(new FamilyEditorApplyEditResult(edits.Count + results.Count, false, message));
+
+        return new FamilyEditorApplyData(applied, results);
+    }
     private ScheduleCoverageData GetScheduleCoverageCore(ScheduleCoverageRequest request) {
         var document = GetSupportedActiveDocument(RevitBridgeOps.ScheduleCoverage.Definition);
 
@@ -832,6 +925,178 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         }
     }
 
+    private RevitViewImageData GetRevitViewImageCore(RevitViewImageRequest request) {
+        var document = GetSupportedActiveDocument(RevitBridgeOps.ViewImage.Definition);
+        var element = request.ViewId is { } viewId
+            ? document.GetElement(viewId.ToElementId())
+            : !string.IsNullOrWhiteSpace(request.ViewUniqueId)
+                ? document.GetElement(request.ViewUniqueId)
+                : RevitUiSession.CurrentUIApplication.GetActiveView();
+        if (element is not View { IsTemplate: false } view) {
+            throw BridgeOperationExceptions.Conflict(
+                "No exportable view.",
+                [
+                    BridgeOperationExceptions.Issue(
+                        "$.viewId",
+                        "ViewNotExportable",
+                        "The requested reference is not a graphical view or sheet (or is a view template).",
+                        "Pass a view/sheet id from revit.resolve.references, or activate a graphical view and retry."
+                    )
+                ]
+            );
+        }
+
+        try {
+            return RevitViewImageExporter.Export(document, view, request.PixelSize);
+        } catch (Exception ex) {
+            throw BridgeOperationExceptions.Unexpected(
+                "ViewImageExportException",
+                ex,
+                "Verify the view is a graphical view or sheet that Revit can export as an image, then retry."
+            );
+        }
+    }
+
+    private static FamilyEditorParameterSnapshot CreateFamilyEditorParameterSnapshot(
+        RevitDocument document,
+        FamilyParameter parameter,
+        IReadOnlyList<FamilyType> familyTypes
+    ) {
+        var definition = parameter.Definition;
+        var formula = string.IsNullOrWhiteSpace(parameter.Formula) ? null : parameter.Formula;
+        var valuesPerType = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var familyType in familyTypes)
+            valuesPerType[familyType.Name] = GetFamilyEditorValue(familyType, parameter);
+
+        return new FamilyEditorParameterSnapshot(
+            definition?.Name ?? string.Empty,
+            parameter.IsInstance,
+            parameter.IsReadOnly,
+            formula != null,
+            parameter.IsShared,
+            GetSharedParameterGuid(parameter),
+            parameter.StorageType.ToString(),
+            NormalizeForgeTypeId(definition?.GetDataType()),
+            GetParameterGroupLabel(definition),
+            formula,
+            valuesPerType
+        );
+    }
+
+    private static string GetFamilyEditorValue(FamilyType familyType, FamilyParameter parameter) {
+        try {
+            var value = familyType.AsValueString(parameter);
+            if (!string.IsNullOrEmpty(value))
+                return value;
+        } catch {
+        }
+
+        try {
+            var value = familyType.AsString(parameter);
+            if (!string.IsNullOrEmpty(value))
+                return value;
+        } catch {
+        }
+
+        try {
+            return parameter.StorageType switch {
+                StorageType.Integer => familyType.AsInteger(parameter)?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
+                StorageType.Double => familyType.AsDouble(parameter)?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
+                StorageType.ElementId => familyType.AsElementId(parameter)?.ToString() ?? string.Empty,
+                _ => string.Empty
+            };
+        } catch {
+            return string.Empty;
+        }
+    }
+
+    private static void ApplyFamilyEditorEdit(FamilyManager familyManager, FamilyEditorApplyEdit edit) {
+        var parameter = familyManager.FindParameter(edit.ParamName)
+            ?? throw new InvalidOperationException($"Parameter not found: {edit.ParamName}");
+
+        if (edit.Formula != null) {
+            familyManager.SetFormula(parameter, string.IsNullOrEmpty(edit.Formula) ? null : edit.Formula);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(edit.TypeName))
+            throw new InvalidOperationException("Value edits require typeName.");
+
+        var familyType = familyManager.Types.Cast<FamilyType>()
+            .FirstOrDefault(type => string.Equals(type.Name, edit.TypeName, StringComparison.Ordinal))
+            ?? throw new InvalidOperationException($"Type not found: {edit.TypeName}");
+        var value = edit.Value ?? string.Empty;
+        familyManager.CurrentType = familyType;
+
+        try {
+            familyManager.SetValueString(parameter, value);
+            return;
+        } catch {
+        }
+
+        switch (parameter.StorageType) {
+            case StorageType.String:
+                familyManager.Set(parameter, value);
+                break;
+            case StorageType.Integer:
+                familyManager.Set(parameter, int.Parse(value, CultureInfo.InvariantCulture));
+                break;
+            case StorageType.Double:
+                familyManager.Set(parameter, double.Parse(value, CultureInfo.InvariantCulture));
+                break;
+            default:
+                throw new InvalidOperationException($"Unsupported storage type {parameter.StorageType}.");
+        }
+    }
+
+    private static string? GetSharedParameterGuid(FamilyParameter parameter) {
+        if (!parameter.IsShared)
+            return null;
+
+        try {
+            var guid = parameter.GUID;
+            return guid == Guid.Empty ? null : guid.ToString("D");
+        } catch {
+            return null;
+        }
+    }
+
+    private static string? GetParameterGroupLabel(Definition? definition) {
+        var groupTypeId = definition?.GetGroupTypeId();
+        if (groupTypeId == null || string.IsNullOrWhiteSpace(groupTypeId.TypeId))
+            return null;
+
+        try {
+            return RevitLabelCatalog.GetLabelForPropertyGroup(groupTypeId);
+        } catch {
+            return groupTypeId.TypeId;
+        }
+    }
+
+    private static string? NormalizeForgeTypeId(ForgeTypeId? forgeTypeId) {
+        if (forgeTypeId == null || string.IsNullOrWhiteSpace(forgeTypeId.TypeId))
+            return null;
+
+        return forgeTypeId.TypeId;
+    }
+
+    private static RevitDocument GetActiveFamilyDocument() {
+        var document = GetActiveDocument();
+        if (document.IsFamilyDocument)
+            return document;
+
+        throw BridgeOperationExceptions.Conflict(
+            "Active document is not a family document.",
+            [
+                BridgeOperationExceptions.Issue(
+                    "$",
+                    "ActiveFamilyDocumentRequired",
+                    "Active document is not a family document.",
+                    "Open a family in the Revit family editor and retry."
+                )
+            ]
+        );
+    }
     private static LoadedFamiliesFilter ValidateMatrixFilter(LoadedFamiliesMatrixRequest request) {
         var categoryNames = request.Filter?.CategoryNames
             .Where(name => !string.IsNullOrWhiteSpace(name))

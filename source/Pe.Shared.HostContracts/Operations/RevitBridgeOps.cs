@@ -1,6 +1,7 @@
 using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.RevitData;
+using Pe.Shared.RevitData.Families;
 using Pe.Shared.RevitData.Schedules;
 
 namespace Pe.Shared.HostContracts.Operations;
@@ -347,6 +348,31 @@ public static class RevitBridgeOps {
             static (request, context, ct) => context.RevitData.GetLoadedFamiliesMatrixAsync(request)
         );
 
+    public static readonly BridgeOp FamilyEditorSnapshot =
+        BridgeOp.Create<FamilyEditorSnapshotRequest, FamilyEditorSnapshotData>(
+            "family.editor.snapshot",
+            "Get Family Editor Snapshot",
+            HostOperationAgentMetadata.Create(
+                "Read parameters, types, formulas, and display values from the active family editor document.",
+                new[] { "family-editor", "family", "parameters", "types", "formulas", "snapshot" },
+                requiresActiveDocument: true
+            ),
+            static (request, context, ct) => context.RevitData.GetFamilyEditorSnapshotAsync(request)
+        );
+
+    public static readonly BridgeOp FamilyEditorApply =
+        BridgeOp.Create<FamilyEditorApplyRequest, FamilyEditorApplyData>(
+            "family.editor.apply",
+            "Apply Family Editor Edits",
+            HostOperationAgentMetadata.Create(
+                "Apply parameter value and formula edits to the active family editor document in one host-owned transaction.",
+                new[] { "family-editor", "family", "parameters", "apply", "formulas", "mutation" },
+                intent: HostOperationIntent.Mutate,
+                requiresActiveDocument: true,
+                costTier: HostOperationCostTier.Mutation
+            ),
+            static (request, context, ct) => context.RevitData.ApplyFamilyEditorEditsAsync(request)
+        );
     public static readonly BridgeOp ScheduleCoverage =
         BridgeOp.Create<ScheduleCoverageRequest, ScheduleCoverageData>(
             "revit.matrix.schedule-coverage",
@@ -788,6 +814,38 @@ public static class RevitBridgeOps {
                 ]
             ),
             static (request, context, ct) => context.RevitData.GetRevitAgentViewRenderingStateAsync(request)
+        );
+
+    public static readonly BridgeOp ViewImage =
+        BridgeOp.Create<RevitViewImageRequest, RevitViewImageData>(
+            "revit.context.view-image",
+            "Export View Image",
+            HostOperationAgentMetadata.Create(
+                "Export the active view, or an explicit view/sheet handle, to a PNG file and return its path for visual inspection. No transaction; works on read-only documents.",
+                new[] { "view", "sheet", "image", "capture", "screenshot", "png", "export", "visual", "see", "look" },
+                requiresActiveDocument: true,
+                requestExamples: [
+                    Example(
+                        "capture the active view",
+                        "Export whatever the user is currently looking at.",
+                        """
+                        { "pixelSize": 1500 }
+                        """
+                    ),
+                    Example(
+                        "capture a resolved view or sheet",
+                        "Use a view/sheet id returned by revit.resolve.references or the project browser.",
+                        """
+                        { "viewId": 12345, "pixelSize": 2000 }
+                        """
+                    )
+                ],
+                callGuidance: [
+                    "Only graphical views and sheets export; schedules and view templates do not.",
+                    "Read the returned filePath with an image-capable tool (Pea: capture_view already returns the image; read_image reads the path)."
+                ]
+            ),
+            static (request, context, ct) => context.RevitData.GetRevitViewImageAsync(request)
         );
 
     public static readonly BridgeOp ScriptWorkspaceBootstrap =

@@ -3,6 +3,62 @@
 // Regenerate: pnpm --filter @pe/tools exec node src/dev/host-typegen.ts
 // Drift gate: append --check (fails when this file no longer matches the live catalog).
 
+/** Apply parameter value and formula edits to the active family editor document in one host-owned transaction. */
+export namespace FamilyEditorApply {
+  export namespace Req {
+    export interface Request {
+      edits: FamilyEditorApplyEdit[];
+    }
+    export interface FamilyEditorApplyEdit {
+      paramName: string;
+      typeName?: null | string;
+      value?: null | string;
+      formula?: null | string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      applied: number;
+      results: FamilyEditorApplyEditResult[];
+    }
+    export interface FamilyEditorApplyEditResult {
+      index: number;
+      ok: boolean;
+      error?: null | string;
+    }
+  }
+}
+
+/** Read parameters, types, formulas, and display values from the active family editor document. */
+export namespace FamilyEditorSnapshot {
+  export namespace Req {
+    export interface Request {}
+  }
+  export namespace Res {
+    export interface Response {
+      familyName: string;
+      currentTypeName: string;
+      typeNames: string[];
+      parameters: FamilyEditorParameterSnapshot[];
+    }
+    export interface FamilyEditorParameterSnapshot {
+      name: string;
+      isInstance: boolean;
+      isReadOnly: boolean;
+      isDeterminedByFormula: boolean;
+      isShared: boolean;
+      guid?: null | string;
+      storageType: string;
+      dataType?: null | string;
+      group?: null | string;
+      formula?: null | string;
+      valuesPerType: {
+        [k: string]: string;
+      };
+    }
+  }
+}
+
 /** List every bridge operation this Revit session supports, with JSON Schemas for request and response payloads. */
 export namespace HostOpsCatalog {
   export namespace Req {
@@ -106,7 +162,11 @@ export namespace RevitCatalogConceptEvidence {
     }
   }
   export namespace Res {
-    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+    export type ParameterIdentityKind =
+      | "SharedGuid"
+      | "BuiltInParameter"
+      | "ParameterElement"
+      | "NameFallback";
     export type ConceptEvidenceConfidence = "Low" | "Medium" | "High";
     export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
 
@@ -174,7 +234,11 @@ export namespace RevitCatalogConceptEvidence {
 /** Read electrical circuit facts, connected load identity, panel names, circuit numbers, optional nearby proxy context, and compact filter diagnostics from the active Revit document. */
 export namespace RevitCatalogElectricalCircuits {
   export namespace Req {
-    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+    export type ParameterIdentityKind =
+      | "SharedGuid"
+      | "BuiltInParameter"
+      | "ParameterElement"
+      | "NameFallback";
 
     export interface Request {
       filter?: null | ElectricalCircuitFilter;
@@ -221,8 +285,17 @@ export namespace RevitCatalogElectricalCircuits {
       | "LoadClassification"
       | "Element";
     export type ElementIdentitySource = "None" | "RequestedParameter" | "Mark";
-    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
-    export type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
+    export type ParameterIdentityKind =
+      | "SharedGuid"
+      | "BuiltInParameter"
+      | "ParameterElement"
+      | "NameFallback";
+    export type RequestedParameterStorageType =
+      | "None"
+      | "String"
+      | "Integer"
+      | "Double"
+      | "ElementId";
     export type RequestedParameterValueSource = "None" | "Instance" | "Type";
     export type ElectricalNearbyProxyCandidateMatchReason =
       | "NearbyIdentityCandidate"
@@ -595,7 +668,11 @@ export namespace RevitCatalogLoadedFamiliesFilterSchema {
 export namespace RevitCatalogParameterBindings {
   export namespace Req {
     export type LoadedFamilyPlacementScope = "AllLoaded" | "PlacedOnly" | "UnplacedOnly";
-    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+    export type ParameterIdentityKind =
+      | "SharedGuid"
+      | "BuiltInParameter"
+      | "ParameterElement"
+      | "NameFallback";
     export type ProjectParameterBindingKind = "Instance" | "Type";
     export type RevitDataResultView = "Summary" | "Handles" | "Rows" | "Full";
 
@@ -643,7 +720,11 @@ export namespace RevitCatalogParameterBindings {
     }
   }
   export namespace Res {
-    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+    export type ParameterIdentityKind =
+      | "SharedGuid"
+      | "BuiltInParameter"
+      | "ParameterElement"
+      | "NameFallback";
     export type ProjectParameterBindingKind = "Instance" | "Type";
     export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
 
@@ -702,9 +783,22 @@ export namespace RevitCatalogParameterBindings {
 /** Return factual parameter evidence from project bindings, schedule fields/filters, and scoped element presence. Use this when project-standard parameter names are uncertain; inspect binding categories, schedule usage, counts, and samples, then pass observed parameter identities or named references into detail or matrix calls. */
 export namespace RevitCatalogParameterEvidence {
   export namespace Req {
-    export type ParameterEvidenceRankingMode = "General" | "Tagging" | "ScheduleJoin" | "ElectricalJoin";
-    export type RevitElementScope = "All" | "ActiveViewVisible" | "ViewReferences" | "CurrentSelection" | "ExplicitHandles";
-    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+    export type ParameterEvidenceRankingMode =
+      | "General"
+      | "Tagging"
+      | "ScheduleJoin"
+      | "ElectricalJoin";
+    export type RevitElementScope =
+      | "All"
+      | "ActiveViewVisible"
+      | "ViewReferences"
+      | "CurrentSelection"
+      | "ExplicitHandles";
+    export type ParameterIdentityKind =
+      | "SharedGuid"
+      | "BuiltInParameter"
+      | "ParameterElement"
+      | "NameFallback";
 
     export interface Request {
       taskText?: null | string;
@@ -741,8 +835,16 @@ export namespace RevitCatalogParameterEvidence {
     }
   }
   export namespace Res {
-    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
-    export type ParameterEvidenceSource = "ProjectBinding" | "ScheduleField" | "ScheduleFilter" | "ScopedElement";
+    export type ParameterIdentityKind =
+      | "SharedGuid"
+      | "BuiltInParameter"
+      | "ParameterElement"
+      | "NameFallback";
+    export type ParameterEvidenceSource =
+      | "ProjectBinding"
+      | "ScheduleField"
+      | "ScheduleFilter"
+      | "ScopedElement";
     export type ParameterEvidenceScope =
       | "Document"
       | "Category"
@@ -965,7 +1067,13 @@ export namespace RevitCatalogProjectBrowser {
 /** Read a compact semantic project index with bounded Project Browser provenance for levels, sheets, views, schedules, categories, and families. */
 export namespace RevitCatalogProjectIndex {
   export namespace Req {
-    export type ProjectIndexSection = "Levels" | "Sheets" | "Views" | "Schedules" | "Categories" | "Families";
+    export type ProjectIndexSection =
+      | "Levels"
+      | "Sheets"
+      | "Views"
+      | "Schedules"
+      | "Categories"
+      | "Families";
     export type ProjectBrowserSection = "Views" | "Sheets" | "Schedules";
     export type ProjectBrowserMatchMode = "Exact" | "Prefix";
     export type RevitDataResultView = "Summary" | "Handles" | "Rows" | "Full";
@@ -1201,7 +1309,11 @@ export namespace RevitCatalogProjectIndex {
 export namespace RevitCatalogSchedules {
   export namespace Req {
     export type SchedulePlacementScope = "All" | "PlacedOnly" | "UnplacedOnly";
-    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+    export type ParameterIdentityKind =
+      | "SharedGuid"
+      | "BuiltInParameter"
+      | "ParameterElement"
+      | "NameFallback";
     export type ScheduleCustomParameterMatchKind = "Equals";
     export type ProjectBrowserSection = "Views" | "Sheets" | "Schedules";
     export type ProjectBrowserMatchMode = "Exact" | "Prefix";
@@ -1282,8 +1394,17 @@ export namespace RevitCatalogSchedules {
       | "IsNotAssociatedWithGlobalParameter"
       | "HasValue"
       | "HasNoValue";
-    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
-    export type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
+    export type ParameterIdentityKind =
+      | "SharedGuid"
+      | "BuiltInParameter"
+      | "ParameterElement"
+      | "NameFallback";
+    export type RequestedParameterStorageType =
+      | "None"
+      | "String"
+      | "Integer"
+      | "Double"
+      | "ElementId";
     export type ProjectBrowserSection = "Views" | "Sheets" | "Schedules";
     export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
 
@@ -1593,6 +1714,42 @@ export namespace RevitContextSummary {
   }
 }
 
+/** Export the active view, or an explicit view/sheet handle, to a PNG file and return its path for visual inspection. No transaction; works on read-only documents. */
+export namespace RevitContextViewImage {
+  export namespace Req {
+    export interface Request {
+      viewId?: number | null;
+      viewUniqueId?: null | string;
+      pixelSize?: number;
+    }
+  }
+  export namespace Res {
+    export type RevitAgentContextHandleKind =
+      | "Document"
+      | "View"
+      | "Sheet"
+      | "Element"
+      | "Schedule"
+      | "Category"
+      | "Family";
+
+    export interface Response {
+      view: RevitAgentContextHandle;
+      filePath: string;
+      byteSize: number;
+      pixelSize: number;
+    }
+    export interface RevitAgentContextHandle {
+      kind: RevitAgentContextHandleKind;
+      documentKey: string;
+      elementId?: number | null;
+      uniqueId?: null | string;
+      label: string;
+      categoryName?: null | string;
+    }
+  }
+}
+
 /** Read a bounded evidence packet for visibility/rendering-affecting state in the active view or explicit views, including explicit limitations and uninspected causes. */
 export namespace RevitContextViewRenderingState {
   export namespace Req {
@@ -1845,7 +2002,10 @@ export namespace RevitContextVisibleSummary {
 /** Read electrical panel schedule row/cell projections from the active Revit document. Use this for known panels/schedules, not as the first-choice element-to-load join. */
 export namespace RevitDetailElectricalPanelSchedules {
   export namespace Req {
-    export type ElectricalPanelSchedulesQueryKind = "CurrentActiveView" | "ScheduleReferences" | "PanelReferences";
+    export type ElectricalPanelSchedulesQueryKind =
+      | "CurrentActiveView"
+      | "ScheduleReferences"
+      | "PanelReferences";
     export type ElectricalPanelScheduleProjectionView = "FullSections" | "RowsOnly";
 
     export interface Request {
@@ -1868,9 +2028,17 @@ export namespace RevitDetailElectricalPanelSchedules {
     }
   }
   export namespace Res {
-    export type ElectricalPanelSchedulesQueryKind = "CurrentActiveView" | "ScheduleReferences" | "PanelReferences";
+    export type ElectricalPanelSchedulesQueryKind =
+      | "CurrentActiveView"
+      | "ScheduleReferences"
+      | "PanelReferences";
     export type ElectricalPanelScheduleSectionType = "Header" | "Body" | "Summary" | "Footer";
-    export type ElectricalPanelScheduleCellSourceKind = "Unknown" | "TextOnly" | "Parameter" | "Combined" | "Calculated";
+    export type ElectricalPanelScheduleCellSourceKind =
+      | "Unknown"
+      | "TextOnly"
+      | "Parameter"
+      | "Combined"
+      | "Calculated";
     export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
 
     export interface Response {
@@ -1945,7 +2113,11 @@ export namespace RevitDetailElectricalPanelSchedules {
 export namespace RevitDetailElements {
   export namespace Req {
     export type ElementContextQueryKind = "CurrentSelection" | "ElementReferences";
-    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+    export type ParameterIdentityKind =
+      | "SharedGuid"
+      | "BuiltInParameter"
+      | "ParameterElement"
+      | "NameFallback";
 
     export interface Request {
       query?: null | ElementContextQuery;
@@ -1976,8 +2148,17 @@ export namespace RevitDetailElements {
   export namespace Res {
     export type ElementContextQueryKind = "CurrentSelection" | "ElementReferences";
     export type ElementIdentitySource = "None" | "RequestedParameter" | "Mark";
-    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
-    export type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
+    export type ParameterIdentityKind =
+      | "SharedGuid"
+      | "BuiltInParameter"
+      | "ParameterElement"
+      | "NameFallback";
+    export type RequestedParameterStorageType =
+      | "None"
+      | "String"
+      | "Integer"
+      | "Double"
+      | "ElementId";
     export type RequestedParameterValueSource = "None" | "Instance" | "Type";
     export type ElectricalInsightRole =
       | "Panel"
@@ -2176,10 +2357,18 @@ export namespace RevitDetailSchedules {
   export namespace Res {
     export type ScheduleQueryKind = "CurrentActiveView" | "ScheduleReferences" | "ScheduleNames";
     export type ScheduleRenderedBindingStatus = "None" | "Partial" | "Complete";
-    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+    export type ParameterIdentityKind =
+      | "SharedGuid"
+      | "BuiltInParameter"
+      | "ParameterElement"
+      | "NameFallback";
     export type ScheduleRenderedRowKind = "Data" | "GroupFooter";
     export type ScheduleRenderedRowBindingKind = "None" | "SingleSubject" | "MultipleSubjects";
-    export type ScheduleRenderedRowSubjectResolutionStatus = "NotApplicable" | "NonBindable" | "Unbound" | "Bound";
+    export type ScheduleRenderedRowSubjectResolutionStatus =
+      | "NotApplicable"
+      | "NonBindable"
+      | "Unbound"
+      | "Bound";
     export type ScheduleRenderedRowSubjectResolutionReason =
       | "None"
       | "NonDataRow"
@@ -2473,14 +2662,22 @@ export namespace RevitMatrixLoadedFamilies {
     }
   }
   export namespace Res {
-    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+    export type ParameterIdentityKind =
+      | "SharedGuid"
+      | "BuiltInParameter"
+      | "ParameterElement"
+      | "NameFallback";
     export type LoadedFamilyParameterKind =
       | "Unknown"
       | "FamilyParameter"
       | "SharedParameter"
       | "ProjectParameter"
       | "ProjectSharedParameter";
-    export type LoadedFamilyParameterPresence = "Unresolved" | "Family" | "FamilyAndProjectBinding" | "ProjectBindingOnly";
+    export type LoadedFamilyParameterPresence =
+      | "Unresolved"
+      | "Family"
+      | "FamilyAndProjectBinding"
+      | "ProjectBindingOnly";
     export type FormulaState = "None" | "Present" | "NotApplicable" | "Unknown";
     export type ExcludedParameterReason = "UnresolvedClassification" | "ProjectObservedBuiltIn";
     export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
@@ -2550,8 +2747,17 @@ export namespace RevitMatrixLoadedFamilies {
 /** Read bounded parameter presence, blank/default counts, and sample handles from the active document. */
 export namespace RevitMatrixParameterCoverage {
   export namespace Req {
-    export type RevitElementScope = "All" | "ActiveViewVisible" | "ViewReferences" | "CurrentSelection" | "ExplicitHandles";
-    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+    export type RevitElementScope =
+      | "All"
+      | "ActiveViewVisible"
+      | "ViewReferences"
+      | "CurrentSelection"
+      | "ExplicitHandles";
+    export type ParameterIdentityKind =
+      | "SharedGuid"
+      | "BuiltInParameter"
+      | "ParameterElement"
+      | "NameFallback";
     export type RevitParameterLookupPreference = "InstanceThenType" | "InstanceOnly" | "TypeOnly";
 
     export interface Request {
@@ -2586,7 +2792,11 @@ export namespace RevitMatrixParameterCoverage {
     }
   }
   export namespace Res {
-    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+    export type ParameterIdentityKind =
+      | "SharedGuid"
+      | "BuiltInParameter"
+      | "ParameterElement"
+      | "NameFallback";
     export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
 
     export interface Response {
@@ -2649,14 +2859,28 @@ export namespace RevitMatrixParameterCoverage {
 /** Read bounded element-to-schedule coverage counts and samples from the active document, including active-view-visible or explicit-handle scopes. */
 export namespace RevitMatrixScheduleCoverage {
   export namespace Req {
-    export type RevitElementScope = "All" | "ActiveViewVisible" | "ViewReferences" | "CurrentSelection" | "ExplicitHandles";
+    export type RevitElementScope =
+      | "All"
+      | "ActiveViewVisible"
+      | "ViewReferences"
+      | "CurrentSelection"
+      | "ExplicitHandles";
     export type SchedulePlacementScope = "All" | "PlacedOnly" | "UnplacedOnly";
-    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+    export type ParameterIdentityKind =
+      | "SharedGuid"
+      | "BuiltInParameter"
+      | "ParameterElement"
+      | "NameFallback";
     export type ScheduleCustomParameterMatchKind = "Equals";
     export type ProjectBrowserSection = "Views" | "Sheets" | "Schedules";
     export type ProjectBrowserMatchMode = "Exact" | "Prefix";
     export type RevitDataResultView = "Summary" | "Handles" | "Rows" | "Full";
-    export type ScheduleRoleScope = "All" | "IssuedOnly" | "WorkingOnly" | "ArchiveOnly" | "IssuedOrWorking";
+    export type ScheduleRoleScope =
+      | "All"
+      | "IssuedOnly"
+      | "WorkingOnly"
+      | "ArchiveOnly"
+      | "IssuedOrWorking";
 
     export interface Request {
       categoryNames?: string[];
@@ -2794,7 +3018,10 @@ export namespace RevitMatrixScheduleCoverage {
 /** Read schedule profile projections from the active document. */
 export namespace RevitMatrixScheduleProfiles {
   export namespace Req {
-    export type ScheduleProfilesQueryKind = "CurrentActiveView" | "ScheduleReferences" | "ScheduleNames";
+    export type ScheduleProfilesQueryKind =
+      | "CurrentActiveView"
+      | "ScheduleReferences"
+      | "ScheduleNames";
 
     export interface Request {
       query?: null | ScheduleProfilesQuery;
@@ -2808,10 +3035,17 @@ export namespace RevitMatrixScheduleProfiles {
     }
   }
   export namespace Res {
-    export type ScheduleProfilesQueryKind = "CurrentActiveView" | "ScheduleReferences" | "ScheduleNames";
+    export type ScheduleProfilesQueryKind =
+      | "CurrentActiveView"
+      | "ScheduleReferences"
+      | "ScheduleNames";
     export type ScheduleTitleHorizontalAlignment = "Left" | "Center" | "Right";
     export type ScheduleColumnHeaderVerticalAlignment = "Center" | "Top" | "Bottom";
-    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+    export type ParameterIdentityKind =
+      | "SharedGuid"
+      | "BuiltInParameter"
+      | "ParameterElement"
+      | "NameFallback";
     export type ScheduleAuthoredFieldDisplayType = "Standard" | "Totals" | "MinMax" | "Max" | "Min";
     export type ScheduleFieldHorizontalAlignment = "Left" | "Center" | "Right";
     export type ScheduleAuthoredCalculatedFieldType = "Formula" | "Percentage";
@@ -2834,7 +3068,12 @@ export namespace RevitMatrixScheduleProfiles {
       | "IsNotAssociatedWithGlobalParameter"
       | "HasValue"
       | "HasNoValue";
-    export type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
+    export type RequestedParameterStorageType =
+      | "None"
+      | "String"
+      | "Integer"
+      | "Double"
+      | "ElementId";
     export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
 
     export interface Response {
@@ -3305,7 +3544,11 @@ export namespace SettingsParameterCatalog {
     }
   }
   export namespace Res {
-    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+    export type ParameterIdentityKind =
+      | "SharedGuid"
+      | "BuiltInParameter"
+      | "ParameterElement"
+      | "NameFallback";
 
     export interface Response {
       entries: ParameterCatalogEntry[];
@@ -3356,46 +3599,165 @@ export namespace SettingsSchema {
 
 /** Key → request/response types for every bridge op the generating session supported. */
 export interface HostOps {
-  "host.ops.catalog": { request: HostOpsCatalog.Req.Request; response: HostOpsCatalog.Res.Response };
-  "revit.apply.document.open": { request: RevitApplyDocumentOpen.Req.Request; response: RevitApplyDocumentOpen.Res.Response };
-  "revit.apply.parameters-service-cache.refresh": { request: RevitApplyParametersServiceCacheRefresh.Req.Request; response: RevitApplyParametersServiceCacheRefresh.Res.Response };
-  "revit.catalog.concept-evidence": { request: RevitCatalogConceptEvidence.Req.Request; response: RevitCatalogConceptEvidence.Res.Response };
-  "revit.catalog.electrical-circuits": { request: RevitCatalogElectricalCircuits.Req.Request; response: RevitCatalogElectricalCircuits.Res.Response };
-  "revit.catalog.electrical-load-classifications": { request: RevitCatalogElectricalLoadClassifications.Req.Request; response: RevitCatalogElectricalLoadClassifications.Res.Response };
-  "revit.catalog.electrical-panels": { request: RevitCatalogElectricalPanels.Req.Request; response: RevitCatalogElectricalPanels.Res.Response };
-  "revit.catalog.loaded-families": { request: RevitCatalogLoadedFamilies.Req.Request; response: RevitCatalogLoadedFamilies.Res.Response };
-  "revit.catalog.loaded-families.filter-field-options": { request: RevitCatalogLoadedFamiliesFilterFieldOptions.Req.Request; response: RevitCatalogLoadedFamiliesFilterFieldOptions.Res.Response };
-  "revit.catalog.loaded-families.filter-schema": { request: RevitCatalogLoadedFamiliesFilterSchema.Req.Request; response: RevitCatalogLoadedFamiliesFilterSchema.Res.Response };
-  "revit.catalog.parameter-bindings": { request: RevitCatalogParameterBindings.Req.Request; response: RevitCatalogParameterBindings.Res.Response };
-  "revit.catalog.parameter-evidence": { request: RevitCatalogParameterEvidence.Req.Request; response: RevitCatalogParameterEvidence.Res.Response };
-  "revit.catalog.project-browser": { request: RevitCatalogProjectBrowser.Req.Request; response: RevitCatalogProjectBrowser.Res.Response };
-  "revit.catalog.project-index": { request: RevitCatalogProjectIndex.Req.Request; response: RevitCatalogProjectIndex.Res.Response };
-  "revit.catalog.schedules": { request: RevitCatalogSchedules.Req.Request; response: RevitCatalogSchedules.Res.Response };
-  "revit.context.document-session": { request: RevitContextDocumentSession.Req.Request; response: RevitContextDocumentSession.Res.Response };
-  "revit.context.summary": { request: RevitContextSummary.Req.Request; response: RevitContextSummary.Res.Response };
-  "revit.context.view-rendering-state": { request: RevitContextViewRenderingState.Req.Request; response: RevitContextViewRenderingState.Res.Response };
-  "revit.context.visible-summary": { request: RevitContextVisibleSummary.Req.Request; response: RevitContextVisibleSummary.Res.Response };
-  "revit.detail.electrical-panel-schedules": { request: RevitDetailElectricalPanelSchedules.Req.Request; response: RevitDetailElectricalPanelSchedules.Res.Response };
-  "revit.detail.elements": { request: RevitDetailElements.Req.Request; response: RevitDetailElements.Res.Response };
-  "revit.detail.schedules": { request: RevitDetailSchedules.Req.Request; response: RevitDetailSchedules.Res.Response };
-  "revit.detail.sheets": { request: RevitDetailSheets.Req.Request; response: RevitDetailSheets.Res.Response };
-  "revit.matrix.loaded-families": { request: RevitMatrixLoadedFamilies.Req.Request; response: RevitMatrixLoadedFamilies.Res.Response };
-  "revit.matrix.parameter-coverage": { request: RevitMatrixParameterCoverage.Req.Request; response: RevitMatrixParameterCoverage.Res.Response };
-  "revit.matrix.schedule-coverage": { request: RevitMatrixScheduleCoverage.Req.Request; response: RevitMatrixScheduleCoverage.Res.Response };
-  "revit.matrix.schedule-profiles": { request: RevitMatrixScheduleProfiles.Req.Request; response: RevitMatrixScheduleProfiles.Res.Response };
-  "revit.resolve.references": { request: RevitResolveReferences.Req.Request; response: RevitResolveReferences.Res.Response };
-  "scripting.execute": { request: ScriptingExecute.Req.Request; response: ScriptingExecute.Res.Response };
-  "scripting.pod.export": { request: ScriptingPodExport.Req.Request; response: ScriptingPodExport.Res.Response };
-  "scripting.pod.import": { request: ScriptingPodImport.Req.Request; response: ScriptingPodImport.Res.Response };
-  "scripting.workspace.bootstrap": { request: ScriptingWorkspaceBootstrap.Req.Request; response: ScriptingWorkspaceBootstrap.Res.Response };
-  "settings.field-options": { request: SettingsFieldOptions.Req.Request; response: SettingsFieldOptions.Res.Response };
-  "settings.module-catalog": { request: SettingsModuleCatalog.Req.Request; response: SettingsModuleCatalog.Res.Response };
-  "settings.parameter-catalog": { request: SettingsParameterCatalog.Req.Request; response: SettingsParameterCatalog.Res.Response };
+  "family.editor.apply": {
+    request: FamilyEditorApply.Req.Request;
+    response: FamilyEditorApply.Res.Response;
+  };
+  "family.editor.snapshot": {
+    request: FamilyEditorSnapshot.Req.Request;
+    response: FamilyEditorSnapshot.Res.Response;
+  };
+  "host.ops.catalog": {
+    request: HostOpsCatalog.Req.Request;
+    response: HostOpsCatalog.Res.Response;
+  };
+  "revit.apply.document.open": {
+    request: RevitApplyDocumentOpen.Req.Request;
+    response: RevitApplyDocumentOpen.Res.Response;
+  };
+  "revit.apply.parameters-service-cache.refresh": {
+    request: RevitApplyParametersServiceCacheRefresh.Req.Request;
+    response: RevitApplyParametersServiceCacheRefresh.Res.Response;
+  };
+  "revit.catalog.concept-evidence": {
+    request: RevitCatalogConceptEvidence.Req.Request;
+    response: RevitCatalogConceptEvidence.Res.Response;
+  };
+  "revit.catalog.electrical-circuits": {
+    request: RevitCatalogElectricalCircuits.Req.Request;
+    response: RevitCatalogElectricalCircuits.Res.Response;
+  };
+  "revit.catalog.electrical-load-classifications": {
+    request: RevitCatalogElectricalLoadClassifications.Req.Request;
+    response: RevitCatalogElectricalLoadClassifications.Res.Response;
+  };
+  "revit.catalog.electrical-panels": {
+    request: RevitCatalogElectricalPanels.Req.Request;
+    response: RevitCatalogElectricalPanels.Res.Response;
+  };
+  "revit.catalog.loaded-families": {
+    request: RevitCatalogLoadedFamilies.Req.Request;
+    response: RevitCatalogLoadedFamilies.Res.Response;
+  };
+  "revit.catalog.loaded-families.filter-field-options": {
+    request: RevitCatalogLoadedFamiliesFilterFieldOptions.Req.Request;
+    response: RevitCatalogLoadedFamiliesFilterFieldOptions.Res.Response;
+  };
+  "revit.catalog.loaded-families.filter-schema": {
+    request: RevitCatalogLoadedFamiliesFilterSchema.Req.Request;
+    response: RevitCatalogLoadedFamiliesFilterSchema.Res.Response;
+  };
+  "revit.catalog.parameter-bindings": {
+    request: RevitCatalogParameterBindings.Req.Request;
+    response: RevitCatalogParameterBindings.Res.Response;
+  };
+  "revit.catalog.parameter-evidence": {
+    request: RevitCatalogParameterEvidence.Req.Request;
+    response: RevitCatalogParameterEvidence.Res.Response;
+  };
+  "revit.catalog.project-browser": {
+    request: RevitCatalogProjectBrowser.Req.Request;
+    response: RevitCatalogProjectBrowser.Res.Response;
+  };
+  "revit.catalog.project-index": {
+    request: RevitCatalogProjectIndex.Req.Request;
+    response: RevitCatalogProjectIndex.Res.Response;
+  };
+  "revit.catalog.schedules": {
+    request: RevitCatalogSchedules.Req.Request;
+    response: RevitCatalogSchedules.Res.Response;
+  };
+  "revit.context.document-session": {
+    request: RevitContextDocumentSession.Req.Request;
+    response: RevitContextDocumentSession.Res.Response;
+  };
+  "revit.context.summary": {
+    request: RevitContextSummary.Req.Request;
+    response: RevitContextSummary.Res.Response;
+  };
+  "revit.context.view-image": {
+    request: RevitContextViewImage.Req.Request;
+    response: RevitContextViewImage.Res.Response;
+  };
+  "revit.context.view-rendering-state": {
+    request: RevitContextViewRenderingState.Req.Request;
+    response: RevitContextViewRenderingState.Res.Response;
+  };
+  "revit.context.visible-summary": {
+    request: RevitContextVisibleSummary.Req.Request;
+    response: RevitContextVisibleSummary.Res.Response;
+  };
+  "revit.detail.electrical-panel-schedules": {
+    request: RevitDetailElectricalPanelSchedules.Req.Request;
+    response: RevitDetailElectricalPanelSchedules.Res.Response;
+  };
+  "revit.detail.elements": {
+    request: RevitDetailElements.Req.Request;
+    response: RevitDetailElements.Res.Response;
+  };
+  "revit.detail.schedules": {
+    request: RevitDetailSchedules.Req.Request;
+    response: RevitDetailSchedules.Res.Response;
+  };
+  "revit.detail.sheets": {
+    request: RevitDetailSheets.Req.Request;
+    response: RevitDetailSheets.Res.Response;
+  };
+  "revit.matrix.loaded-families": {
+    request: RevitMatrixLoadedFamilies.Req.Request;
+    response: RevitMatrixLoadedFamilies.Res.Response;
+  };
+  "revit.matrix.parameter-coverage": {
+    request: RevitMatrixParameterCoverage.Req.Request;
+    response: RevitMatrixParameterCoverage.Res.Response;
+  };
+  "revit.matrix.schedule-coverage": {
+    request: RevitMatrixScheduleCoverage.Req.Request;
+    response: RevitMatrixScheduleCoverage.Res.Response;
+  };
+  "revit.matrix.schedule-profiles": {
+    request: RevitMatrixScheduleProfiles.Req.Request;
+    response: RevitMatrixScheduleProfiles.Res.Response;
+  };
+  "revit.resolve.references": {
+    request: RevitResolveReferences.Req.Request;
+    response: RevitResolveReferences.Res.Response;
+  };
+  "scripting.execute": {
+    request: ScriptingExecute.Req.Request;
+    response: ScriptingExecute.Res.Response;
+  };
+  "scripting.pod.export": {
+    request: ScriptingPodExport.Req.Request;
+    response: ScriptingPodExport.Res.Response;
+  };
+  "scripting.pod.import": {
+    request: ScriptingPodImport.Req.Request;
+    response: ScriptingPodImport.Res.Response;
+  };
+  "scripting.workspace.bootstrap": {
+    request: ScriptingWorkspaceBootstrap.Req.Request;
+    response: ScriptingWorkspaceBootstrap.Res.Response;
+  };
+  "settings.field-options": {
+    request: SettingsFieldOptions.Req.Request;
+    response: SettingsFieldOptions.Res.Response;
+  };
+  "settings.module-catalog": {
+    request: SettingsModuleCatalog.Req.Request;
+    response: SettingsModuleCatalog.Res.Response;
+  };
+  "settings.parameter-catalog": {
+    request: SettingsParameterCatalog.Req.Request;
+    response: SettingsParameterCatalog.Res.Response;
+  };
   "settings.schema": { request: SettingsSchema.Req.Request; response: SettingsSchema.Res.Response };
 }
 
 /** Runtime key list matching HostOps — powers key guards without a metadata catalog. */
 export const hostOpKeys = [
+  "family.editor.apply",
+  "family.editor.snapshot",
   "host.ops.catalog",
   "revit.apply.document.open",
   "revit.apply.parameters-service-cache.refresh",
@@ -3413,6 +3775,7 @@ export const hostOpKeys = [
   "revit.catalog.schedules",
   "revit.context.document-session",
   "revit.context.summary",
+  "revit.context.view-image",
   "revit.context.view-rendering-state",
   "revit.context.visible-summary",
   "revit.detail.electrical-panel-schedules",

@@ -1,9 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import { existsSync, readFileSync } from "node:fs";
-import {
-  bridgeFrameSchema,
-  bridgeRegistrationRequestSchema,
-} from "@pe/host-contracts/contracts";
+import { bridgeFrameSchema, bridgeRegistrationRequestSchema } from "@pe/host-contracts/contracts";
 import { hostOpKeys } from "@pe/host-contracts/generated";
 import {
   bridgeSessionsListSchema,

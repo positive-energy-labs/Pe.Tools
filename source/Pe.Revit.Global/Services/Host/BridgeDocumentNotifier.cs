@@ -40,6 +40,7 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
                 uiApp.ViewActivated -= this.OnViewActivated;
                 app.DocumentChanged -= this.OnDocumentChanged;
                 app.DocumentOpened -= this.OnDocumentOpened;
+                app.DocumentClosing -= OnDocumentClosing;
                 app.DocumentClosed -= this.OnDocumentClosed;
                 app.DocumentSaved -= OnDocumentSaved;
                 app.DocumentSavedAs -= OnDocumentSavedAs;
@@ -59,6 +60,7 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
             uiApp.ViewActivated += this.OnViewActivated;
             app.DocumentChanged += this.OnDocumentChanged;
             app.DocumentOpened += this.OnDocumentOpened;
+            app.DocumentClosing += OnDocumentClosing;
             app.DocumentClosed += this.OnDocumentClosed;
             app.DocumentSaved += OnDocumentSaved;
             app.DocumentSavedAs += OnDocumentSavedAs;
@@ -91,6 +93,13 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
     private static void OnDocumentSynchronized(object? sender, DocumentSynchronizedWithCentralEventArgs e) {
         if (e?.Document != null)
             FamilySnapshotStore.Persist(e.Document);
+    }
+
+    // DocumentClosed exposes no Document, so the shadow (keyed by document key) is evicted here on
+    // DocumentClosing while the Document is still live. A cancelled close only costs a cache rebuild.
+    private static void OnDocumentClosing(object? sender, DocumentClosingEventArgs e) {
+        if (e?.Document != null)
+            DocShadow.Evict(e.Document);
     }
 
     private void OnDocumentClosed(object? sender, DocumentClosedEventArgs e) =>

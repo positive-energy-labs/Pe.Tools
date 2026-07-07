@@ -36,3 +36,47 @@ public sealed record FamilySnapshotRecord(
     int PlacedInstanceCount = 0,
     IReadOnlyList<string>? ScheduleNames = null
 );
+public sealed record FamilyEditorSnapshotRequest;
+
+public sealed record FamilyEditorSnapshotData(
+    string FamilyName,
+    string CurrentTypeName,
+    IReadOnlyList<string> TypeNames,
+    IReadOnlyList<FamilyEditorParameterSnapshot> Parameters
+);
+
+public sealed record FamilyEditorParameterSnapshot(
+    string Name,
+    bool IsInstance,
+    bool IsReadOnly,
+    bool IsDeterminedByFormula,
+    bool IsShared,
+    string? Guid,
+    string StorageType,
+    string? DataType,
+    string? Group,
+    string? Formula,
+    IReadOnlyDictionary<string, string> ValuesPerType
+);
+
+public sealed record FamilyEditorApplyRequest(
+    IReadOnlyList<FamilyEditorApplyEdit> Edits
+);
+
+public sealed record FamilyEditorApplyEdit(
+    string ParamName,
+    string? TypeName,
+    string? Value,
+    string? Formula
+);
+
+public sealed record FamilyEditorApplyData(
+    int Applied,
+    IReadOnlyList<FamilyEditorApplyEditResult> Results
+);
+
+public sealed record FamilyEditorApplyEditResult(
+    int Index,
+    bool Ok,
+    string? Error
+);
