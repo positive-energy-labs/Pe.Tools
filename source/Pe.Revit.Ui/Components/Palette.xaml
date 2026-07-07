@@ -14,7 +14,18 @@
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </UserControl.Resources>
-    <!-- Outer Grid: Transparent container for independent palette/panel backgrounds -->
+    <!-- Single window surface: palette + optional detail panel, divided by a hairline -->
+    <Border x:Name="RootBackground"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Top"
+            CornerRadius="10"
+            ClipToBounds="True"
+            BorderThickness="1"
+            BorderBrush="{ui:ThemeResource ControlStrokeColorDefaultBrush}"
+            Background="{ui:ThemeResource ApplicationBackgroundBrush}">
+        <Border.Effect>
+            <DropShadowEffect Color="Black" Direction="270" ShadowDepth="6" BlurRadius="28" Opacity="0.45" />
+        </Border.Effect>
     <Grid HorizontalAlignment="Stretch"
           VerticalAlignment="Top">
         <Grid.ColumnDefinitions>
@@ -22,17 +33,12 @@
             <ColumnDefinition x:Name="SidebarColumn" Width="0" />
         </Grid.ColumnDefinitions>
 
-        <!-- PALETTE SIDE: Own background, shadow, and rounded corners -->
+        <!-- PALETTE SIDE (chromeless; window chrome lives on RootBackground) -->
         <Border x:Name="PaletteBackground"
                 Grid.Column="0"
                 HorizontalAlignment="Stretch"
                 VerticalAlignment="Top"
-                CornerRadius="8"
-                ClipToBounds="True"
-                Background="{ui:ThemeResource ApplicationBackgroundBrush}">
-            <Border.Effect>
-                <DropShadowEffect Color="Black" Direction="270" ShadowDepth="2" BlurRadius="12" Opacity="0.5" />
-            </Border.Effect>
+                Background="Transparent">
 
             <!-- Main palette content -->
             <Grid x:Name="PaletteContentGrid"
@@ -46,57 +52,39 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <!-- Title Bar with Tabs and Pin Button -->
-                <Border x:Name="TitleBarBorder"
+                <!-- Search Box (hero row) with Filter and Pin -->
+                <Border x:Name="SearchBoxBorder"
                         Grid.Row="0"
-                        Padding="12,8,12,6">
-                    <Grid>
+                        ClipToBounds="True"
+                        Background="Transparent">
+                    <Grid x:Name="SearchBoxGrid"
+                          HorizontalAlignment="Stretch"
+                          VerticalAlignment="Center">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <!-- Title on the left -->
-                        <ui:TextBlock x:Name="TitleText"
-                                      Grid.Column="0"
-                                      Text="Palette"
-                                      FontSize="16"
-                                      FontWeight="SemiBold"
-                                      VerticalAlignment="Center"
-                                      Foreground="{ui:ThemeResource TextFillColorPrimaryBrush}" />
+                        <ui:TextBox x:Name="SearchTextBox"
+                                    Grid.Column="0"
+                                    Style="{StaticResource TransparentTextBoxStyle}"
+                                    FontSize="16"
+                                    PlaceholderText="Search…"
+                                    Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                            <ui:TextBox.InputBindings>
+                                <KeyBinding Key="Down" Command="{Binding MoveSelectionDownCommand}" />
+                                <KeyBinding Key="Up" Command="{Binding MoveSelectionUpCommand}" />
+                            </ui:TextBox.InputBindings>
+                        </ui:TextBox>
 
-                        <!-- Tab Bar in the middle (hidden when no tabs) -->
-                        <Border x:Name="TabBarBorder"
-                                Grid.Column="2"
-                                Visibility="Collapsed"
-                                Margin="0,0,4,0"
-                                Padding="4,3,4,3"
-                                Background="{ui:ThemeResource CardBackgroundFillColorSecondaryBrush}"
-                                CornerRadius="6"
-                                HorizontalAlignment="Right"
-                                VerticalAlignment="Center">
-                            <controls:AnimatedScrollViewer x:Name="TabScrollViewer"
-                                                           HorizontalScrollBarVisibility="Hidden"
-                                                           VerticalScrollBarVisibility="Disabled"
-                                                           HorizontalAlignment="Right"
-                                                           VerticalAlignment="Center">
-                                <ItemsControl x:Name="TabBarItemsControl">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <StackPanel Orientation="Horizontal" />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                </ItemsControl>
-                            </controls:AnimatedScrollViewer>
-                        </Border>
+                        <!-- FilterBox will be added programmatically to Grid.Column="1" -->
 
-                        <!-- Pin button on the far right -->
                         <ui:Button x:Name="PinButton"
-                                   Grid.Column="3"
+                                   Grid.Column="2"
                                    Padding="4"
-                                   Margin="4,0,0,0"
+                                   Margin="8,0,0,0"
+                                   VerticalAlignment="Center"
                                    Appearance="Transparent"
                                    BorderThickness="0"
                                    ToolTip="Pin window (keep open when clicking outside)"
@@ -109,84 +97,90 @@
                     </Grid>
                 </Border>
 
-                <!-- Search Box with Filter -->
-                <Border x:Name="SearchBoxBorder"
+                <!-- Tab Bar (segmented row, hidden when no tabs) -->
+                <Border x:Name="TabBarBorder"
                         Grid.Row="1"
-                        ClipToBounds="True"
-                        Background="Transparent">
-                    <Grid x:Name="SearchBoxGrid"
-                          HorizontalAlignment="Stretch"
-                          VerticalAlignment="Center">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-
-                        <ui:TextBox x:Name="SearchTextBox"
-                                    Grid.Column="0"
-                                    Style="{StaticResource TransparentTextBoxStyle}"
-                                    Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
-                            <ui:TextBox.InputBindings>
-                                <KeyBinding Key="Down" Command="{Binding MoveSelectionDownCommand}" />
-                                <KeyBinding Key="Up" Command="{Binding MoveSelectionUpCommand}" />
-                            </ui:TextBox.InputBindings>
-                        </ui:TextBox>
-
-                        <!-- FilterBox will be added programmatically to Grid.Column="1" -->
-                    </Grid>
+                        Visibility="Collapsed"
+                        Margin="12,8,12,0"
+                        Padding="3"
+                        Background="{ui:ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                        CornerRadius="6"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center">
+                    <controls:AnimatedScrollViewer x:Name="TabScrollViewer"
+                                                   HorizontalScrollBarVisibility="Hidden"
+                                                   VerticalScrollBarVisibility="Disabled"
+                                                   VerticalAlignment="Center">
+                        <ItemsControl x:Name="TabBarItemsControl">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </controls:AnimatedScrollViewer>
                 </Border>
 
                 <!-- Item List - MaxHeight set dynamically in code based on DefaultVisibleItems -->
                 <Border Grid.Row="2"
-                        Padding="4,0,4,0">
+                        Padding="4,4,4,4">
                     <local:ListView x:Name="ItemListView"
                                     ItemsSource="{Binding FilteredItems}"
                                     SelectedItem="{Binding SelectedItem}"
                                     SelectedIndex="{Binding SelectedIndex}" />
                 </Border>
 
-                <!-- Status Bar -->
+                <!-- Status Bar / Footer: title lives here now (Raycast-style) -->
                 <Border x:Name="StatusBarBorder"
                         Grid.Row="3"
                         Background="{ui:ThemeResource CardBackgroundFillColorSecondaryBrush}">
                     <Grid x:Name="StatusBarGrid">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <ui:TextBlock x:Name="ItemCountText"
+                        <ui:TextBlock x:Name="TitleText"
                                       Grid.Column="0"
-                                      Text="{Binding FilteredItems.Count, StringFormat=\{0\} items}"
-                                      VerticalAlignment="Center"
-                                      HorizontalAlignment="Left"
+                                      Text="Palette"
                                       FontSize="11"
+                                      FontWeight="SemiBold"
+                                      VerticalAlignment="Center"
                                       Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
 
-                        <ui:TextBlock x:Name="HelpText"
+                        <ui:TextBlock x:Name="ItemCountText"
                                       Grid.Column="1"
-                                      Text="↑↓ Navigate • ← Tooltip • → Actions • Click/Enter Execute • Esc Close"
+                                      Text="{Binding FilteredItems.Count, StringFormat=· \{0\} items}"
+                                      Margin="6,0,0,0"
+                                      VerticalAlignment="Center"
+                                      FontSize="11"
+                                      Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}" />
+
+                        <ui:TextBlock x:Name="HelpText"
+                                      Grid.Column="2"
+                                      Text="↑↓ Navigate · ← Tooltip · → Actions · ↵ Run · Esc Close"
                                       VerticalAlignment="Center"
                                       HorizontalAlignment="Right"
                                       FontSize="11"
-                                      Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
+                                      Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}" />
 
                         <!-- Tab switching hint (only visible when tabs exist) -->
                         <ui:TextBlock x:Name="TabSwitchHint"
-                                      Grid.Column="2"
-                                      Text="• Ctrl+← → Tabs"
+                                      Grid.Column="3"
+                                      Text="· Ctrl+← → Tabs"
                                       VerticalAlignment="Center"
                                       HorizontalAlignment="Right"
                                       Margin="4,0,0,0"
                                       FontSize="11"
                                       Visibility="Collapsed"
-                                      Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
+                                      Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}" />
 
                         <!-- Tray Toggle Button -->
                         <ui:Button x:Name="TrayToggleButton"
-                                   Grid.Column="3"
+                                   Grid.Column="4"
                                    Padding="4"
                                    Margin="4,0,0,0"
                                    Appearance="Secondary"
@@ -215,20 +209,15 @@
             </Grid>
         </Border>
 
-        <!-- PANEL SIDE: Own background, shadow, and rounded corners (initially collapsed) -->
+        <!-- PANEL SIDE: same surface, hairline divider (initially collapsed) -->
         <!-- MaxHeight set dynamically in code to match palette height -->
         <Border x:Name="PanelBackground"
                 Grid.Column="1"
                 HorizontalAlignment="Stretch"
-                VerticalAlignment="Top"
-                CornerRadius="8"
-                ClipToBounds="True"
+                VerticalAlignment="Stretch"
                 BorderThickness="1,0,0,0"
                 BorderBrush="{ui:ThemeResource ControlStrokeColorDefaultBrush}"
-                Background="{ui:ThemeResource ApplicationBackgroundBrush}">
-            <Border.Effect>
-                <DropShadowEffect Color="Black" Direction="270" ShadowDepth="2" BlurRadius="12" Opacity="0.5" />
-            </Border.Effect>
+                Background="Transparent">
 
             <Grid>
                 <Grid.RowDefinitions>
@@ -278,4 +267,5 @@
             </Grid>
         </Border>
     </Grid>
+    </Border>
 </core:RevitHostedUserControl>

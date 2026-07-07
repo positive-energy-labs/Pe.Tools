@@ -20,9 +20,30 @@
                 Margin="0,4,12,4"
                 Visibility="Collapsed" />
 
-        <Image x:Name="IconImage"
-               Grid.Column="1"
-               VerticalAlignment="Center" />
+        <!-- Fixed-size icon slot: every row gets either its icon or a monogram tile,
+             so text always aligns regardless of icon availability -->
+        <Grid x:Name="IconSlot"
+              Grid.Column="1"
+              Width="20"
+              Height="20"
+              Margin="0,0,10,0"
+              VerticalAlignment="Center">
+            <Border x:Name="IconFallback"
+                    CornerRadius="5"
+                    Background="{ui:ThemeResource ControlFillColorDefaultBrush}"
+                    BorderThickness="1"
+                    BorderBrush="{ui:ThemeResource ControlStrokeColorDefaultBrush}"
+                    Visibility="Collapsed">
+                <TextBlock x:Name="IconFallbackText"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           FontSize="10"
+                           FontWeight="SemiBold"
+                           Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
+            </Border>
+            <Image x:Name="IconImage"
+                   RenderOptions.BitmapScalingMode="HighQuality" />
+        </Grid>
 
         <Grid x:Name="TextGrid"
               Grid.Column="2"
