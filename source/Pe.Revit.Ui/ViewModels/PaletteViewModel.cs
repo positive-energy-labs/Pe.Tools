@@ -240,6 +240,16 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
         }, DispatcherPriority.Background);
     }
 
+    /// <summary>
+    ///     Invalidates the cached item snapshot and re-runs the current tab's ItemProvider.
+    ///     Used by long-lived (docked) palettes that never rebuild on open.
+    /// </summary>
+    public void RefreshItems() {
+        this._currentSnapshot = [];
+        this._snapshotTabIndex = -1;
+        this.FilterItems();
+    }
+
     private TabDefinition<TItem>? GetActiveTab(int selectedIndex) =>
         GetActiveTab(this.Tabs, selectedIndex);
 
@@ -392,6 +402,10 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     #region Property Change Handlers
 
     partial void OnSearchTextChanged(string value) {
+        // "sh: 501" switches to the Sheets tab and searches "501" — scoping lives in the
+        // search language (VSCode `>`/`@`, Raycast style) instead of extra chrome.
+        if (this.TryApplyTabToken(value)) return;
+
         // If search is cleared, filter immediately (no debounce)
         if (string.IsNullOrWhiteSpace(value)) {
             this._debounceTimer.Stop();
@@ -402,6 +416,31 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
         // Otherwise, restart debounce timer
         this._debounceTimer.Stop();
         this._debounceTimer.Start();
+    }
+
+    /// <summary>
+    ///     If the text starts with "token:" where token is a prefix of a tab name,
+    ///     switches to that tab and strips the token from the search text.
+    ///     Returns true when handled (SearchText was rewritten and will re-enter the handler).
+    /// </summary>
+    private bool TryApplyTabToken(string value) {
+        if (!this.HasTabs || this.Tabs is null || string.IsNullOrEmpty(value)) return false;
+
+        var colon = value.IndexOf(':');
+        if (colon <= 0) return false;
+
+        var token = value.Substring(0, colon).Trim();
+        if (token.Length == 0 || token.Contains(" ")) return false;
+
+        for (var i = 0; i < this.Tabs.Count; i++) {
+            if (!this.Tabs[i].Name.StartsWith(token, StringComparison.OrdinalIgnoreCase)) continue;
+
+            this.SelectedTabIndex = i;
+            this.SearchText = value.Substring(colon + 1).TrimStart();
+            return true;
+        }
+
+        return false;
     }
 
     partial void OnSelectedItemChanged(TItem value) {

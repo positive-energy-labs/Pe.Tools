@@ -1,6 +1,8 @@
-﻿using Autodesk.Revit.Attributes;
+using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.App.Commands.Palette.CommandPalette;
+using Pe.App.Commands.Palette.TaskPalette;
+using Pe.App.Tasks;
 using Pe.Revit.Ui.Core;
 using Pe.Revit.Ui.Core.Services;
 using Pe.Shared.StorageRuntime;
@@ -10,42 +12,80 @@ using System.Text.RegularExpressions;
 
 namespace Pe.App.Commands.Palette;
 
+/// <summary>
+///     The "Do" palette: every verb in one place. Commands (ribbon/postable) and Tasks
+///     (registered code snippets) are tabs of the same palette — they are the same intent.
+///     Tabs are type-erased over <see cref="IPaletteListItem" /> so heterogeneous item
+///     types coexist; each tab's action casts back to its own type.
+/// </summary>
 [Transaction(TransactionMode.Manual)]
 public class CmdPltCommands : IExternalCommand {
+    internal const string Title = "Do";
+
     public Result Execute(
         ExternalCommandData commandData,
         ref string message,
         ElementSet elementSet
-    ) {
+    ) => Show(commandData.Application, 0);
+
+    internal static Result Show(UIApplication uiapp, int defaultTabIndex) {
         try {
-            var uiapp = commandData.Application;
+            // Docked palette acts like a command line: the ribbon shortcut summons + focuses it.
+            if (PaletteDock.TrySummonDocked(Title))
+                return Result.Succeeded;
+
             var persistence = StorageClient.Default.Module(nameof(CmdPltCommands));
 
-            // Load commands using existing helper
             var commandHelper = new PostableCommandHelper(persistence);
-            var commandItems = commandHelper.GetAllCommands();
 
-            // Split commands with semicolon-separated names into separate items
-            var selectableItems = BuildSelectableItems(commandItems);
-
-            var window = PaletteFactory.Create("Command Palette HOT SWAP!!!!!",
-                new PaletteOptions<PostableCommandItem> {
-                    Persistence = (persistence, item => item.Command.Value),
+            var window = PaletteFactory.Create(Title,
+                new PaletteOptions<IPaletteListItem> {
+                    Persistence = (persistence, item => item switch {
+                        PostableCommandItem c => c.Command.Value,
+                        TaskItem t => $"task:{t.Id}",
+                        _ => item.TextPrimary
+                    }),
                     SearchConfig = SearchConfig.PrimaryAndSecondary(),
+                    DefaultTabIndex = defaultTabIndex,
                     Tabs = [
-                        new TabDefinition<PostableCommandItem>(
-                            "All",
-                            () => selectableItems,
-                            new PaletteAction<PostableCommandItem> {
+                        new TabDefinition<IPaletteListItem>(
+                            "Commands",
+                            () => BuildSelectableItems(commandHelper.GetAllCommands()),
+                            new PaletteAction<IPaletteListItem> {
                                 Name = "Execute",
                                 Execute = async item => {
-                                    var (success, error) = Revit.Global.Lib.Commands.Execute(uiapp, item.Command);
+                                    if (item is not PostableCommandItem command) return;
+                                    var (success, error) = Revit.Global.Lib.Commands.Execute(uiapp, command.Command);
                                     if (error is not null) Log.Error("Error: " + error.Message + error.StackTrace);
-                                    if (success) commandHelper.UpdateCommandUsage(item.Command);
+                                    if (success) commandHelper.UpdateCommandUsage(command.Command);
                                 },
-                                CanExecute = item => Revit.Global.Lib.Commands.IsAvailable(uiapp, item.Command)
+                                CanExecute = item => item is PostableCommandItem command &&
+                                                     Revit.Global.Lib.Commands.IsAvailable(uiapp, command.Command)
                             }
-                        )
+                        ),
+                        new TabDefinition<IPaletteListItem>(
+                            "Tasks",
+                            () => {
+                                // Refresh registry on collection so hot-reloaded tasks appear
+                                TaskInitializer.RegisterAllTasks();
+                                return TaskRegistry.Instance.GetAll()
+                                    .Select(tuple => new TaskItem { Id = tuple.Id, Task = tuple.Task });
+                            },
+                            new PaletteAction<IPaletteListItem> {
+                                Name = "Execute",
+                                Execute = async item => {
+                                    if (item is not TaskItem task) return;
+                                    try {
+                                        Console.WriteLine($"Executing task: {task.Task.Name}");
+                                        await task.Task.ExecuteAsync(uiapp);
+                                        Console.WriteLine($"Task '{task.Task.Name}' completed\n");
+                                    } catch (Exception ex) {
+                                        Console.WriteLine($"Task '{task.Task.Name}' failed: {ex.Message}");
+                                        Console.WriteLine(ex.StackTrace);
+                                    }
+                                }
+                            }
+                        ) { FilterKeySelector = item => (item as TaskItem)?.Task.Category ?? string.Empty }
                     ]
                 });
             window.Show();
@@ -57,8 +97,8 @@ public class CmdPltCommands : IExternalCommand {
         }
     }
 
-    private static List<PostableCommandItem> BuildSelectableItems(IEnumerable<PostableCommandItem> commandItems) {
-        var selectableItems = new List<PostableCommandItem>();
+    private static List<IPaletteListItem> BuildSelectableItems(IEnumerable<PostableCommandItem> commandItems) {
+        var selectableItems = new List<IPaletteListItem>();
 
         foreach (var item in commandItems) {
             if (string.IsNullOrEmpty(item.Name) || !item.Name.Contains(';')) {
@@ -70,7 +110,8 @@ public class CmdPltCommands : IExternalCommand {
                         UsageCount = item.UsageCount,
                         LastUsed = item.LastUsed,
                         Shortcuts = [.. item.Shortcuts],
-                        Paths = [.. item.Paths]
+                        Paths = [.. item.Paths],
+                        ImageSource = item.ImageSource
                     };
                 }
 
@@ -91,7 +132,8 @@ public class CmdPltCommands : IExternalCommand {
                     UsageCount = item.UsageCount,
                     LastUsed = item.LastUsed,
                     Shortcuts = [.. item.Shortcuts],
-                    Paths = [.. item.Paths]
+                    Paths = [.. item.Paths],
+                    ImageSource = item.ImageSource
                 });
             }
         }

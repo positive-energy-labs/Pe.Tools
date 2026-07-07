@@ -1,28 +1,35 @@
 using Autodesk.Revit.Attributes;
+using Autodesk.Revit.UI;
 using Pe.App.Commands.Palette.FamilyPalette;
+using Pe.App.Commands.Palette.ViewPalette;
 
 namespace Pe.App.Commands.Palette;
 
 /// <summary>
-///     Opens the family palette with the "Families" tab selected.
+///     Opens the Go palette on its "Families" tab.
 /// </summary>
 [Transaction(TransactionMode.Manual)]
-public class CmdPltFamilies : FamilyPaletteBase {
-    protected override int DefaultTabIndex => 0;
+public class CmdPltFamilies : ViewPaletteBase {
+    protected override int DefaultTabIndex => 4;
 }
 
 /// <summary>
-///     Opens the family palette with the "Family Types" tab selected.
+///     Opens the Go palette on its "Place" tab (family types).
 /// </summary>
 [Transaction(TransactionMode.Manual)]
-public class CmdPltFamilyTypes : FamilyPaletteBase {
-    protected override int DefaultTabIndex => 1;
+public class CmdPltFamilyTypes : ViewPaletteBase {
+    protected override int DefaultTabIndex => 5;
 }
 
 /// <summary>
-///     Opens the family palette with the "Family Instances" tab selected.
+///     Opens the Elements palette: placed family instances in a project document,
+///     family elements in a family document.
 /// </summary>
 [Transaction(TransactionMode.Manual)]
-public class CmdPltFamilyInstances : FamilyPaletteBase {
-    protected override int DefaultTabIndex => 2;
+public class CmdPltFamilyInstances : IExternalCommand {
+    public Result Execute(
+        ExternalCommandData commandData,
+        ref string message,
+        ElementSet elementSet
+    ) => ElementsPalette.Show(commandData.Application);
 }

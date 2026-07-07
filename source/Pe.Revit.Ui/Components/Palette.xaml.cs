@@ -43,21 +43,24 @@ public static class PaletteAttachedProperties {
 ///     NOT inheritance (generic classes cannot inherit from XAML partial classes).
 /// </summary>
 public sealed partial class Palette : ICloseRequestable, ITitleable {
-    private const double DefaultSidebarWidth = 400;
-    private const double ExpandedPanelWidth = 600;
-    private const double DefaultPaletteWidth = 640;
+    private const double DefaultSidebarWidth = 480;
+    private const double ExpandedPanelWidth = 720;
+    private const double DefaultPaletteWidth = 768;
 
     /// <summary>
     ///     Palette column width while the detail panel is open. The palette compresses so the
     ///     combined window stays around 2/3 of the old side-by-side footprint.
     /// </summary>
-    private const double CompactPaletteWidth = 340;
+    private const double CompactPaletteWidth = 408;
 
     /// <summary> Cap on the panel width in its normal (non-expanded) state. </summary>
-    private const double MaxSidebarWidth = 360;
+    private const double MaxSidebarWidth = 432;
 
     /// <summary> Extra height added to both columns when the panel expand button is toggled. </summary>
     private const double ExpandedExtraHeight = 300;
+
+    /// <summary> Max height of the bottom details panel in docked (pane) mode. </summary>
+    private const double DockedPanelMaxHeight = 280;
 
     private const double DefaultTrayMaxHeight = 200;
 
@@ -89,11 +92,15 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     private FilterBox? _filterBox;
     private Func<object?>? _getSelectedItemFunc;
     private bool _isCtrlPressed;
+    private bool _isDocked;
     private bool _isPanelExpanded;
     private bool _isTrayExpanded;
     private Action? _onCtrlReleased;
-    private EphemeralWindow? _parentWindow;
+    private Action? _refreshItems;
+    private ScaleTransform? _dockZoom;
+    private IPaletteHost? _host;
     private bool _sidebarAutoExpanded;
+    private System.Windows.Media.Effects.Effect? _windowShadow;
 
     /// <summary> Per-tab action registry for dynamic action switching </summary>
     private Dictionary<int, object>? _tabActionBindings;
@@ -138,6 +145,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     ) where TItem : class, IPaletteListItem {
         this.DataContext = viewModel;
         this._customKeyBindings = customKeyBindings;
+        this._refreshItems = viewModel.RefreshItems;
 
         // Initialize tabs if provided
         if (viewModel.TabCount > 1)
@@ -202,6 +210,10 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
 
         // Wire up pin button
         this.PinButton.Click += this.PinButton_Click;
+
+        // Wire up dock button (hidden when the dock pane was not registered at startup)
+        this.DockButton.Click += this.DockButton_Click;
+        this.DockButton.Visibility = PaletteDock.IsAvailable ? Visibility.Visible : Visibility.Collapsed;
 
         // Build per-tab action bindings (includes single-tab palettes)
         this._tabActionBindings = new Dictionary<int, object>();
@@ -336,6 +348,11 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     ///     window grows less than the panel's full width.
     /// </summary>
     public void ExpandSidebar(GridLength width) {
+        if (this._isDocked) {
+            this.PanelBackground.Visibility = Visibility.Visible;
+            return;
+        }
+
         this.SidebarColumn.Width = new GridLength(Math.Min(width.Value, MaxSidebarWidth));
         this.PaletteBackground.Width = CompactPaletteWidth;
     }
@@ -353,6 +370,12 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     ///     Collapses the sidebar/panel to width 0 and restores the full palette width.
     /// </summary>
     public void CollapseSidebar() {
+        if (this._isDocked) {
+            this.PanelBackground.Visibility = Visibility.Collapsed;
+            this._isPanelExpanded = false;
+            return;
+        }
+
         var currentWidth = this.SidebarColumn.Width.Value;
         if (currentWidth <= 0) return; // Already collapsed
 
@@ -370,7 +393,10 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     public void ToggleSidebar() {
         if (this._currentSidebar == null) return;
 
-        if (this.SidebarColumn.Width.Value > 0)
+        var isOpen = this._isDocked
+            ? this.PanelBackground.Visibility == Visibility.Visible
+            : this.SidebarColumn.Width.Value > 0;
+        if (isOpen)
             this.CollapseSidebar();
         else
             this.ExpandSidebar(this._currentSidebar.Width);
@@ -381,6 +407,15 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     ///     (both the item list and the panel grow). Used by the expand button in the panel header.
     /// </summary>
     public void ExpandPanel() {
+        if (this._isDocked) {
+            // Pane size is user-controlled; only the bottom panel's share can grow.
+            this._isPanelExpanded = !this._isPanelExpanded;
+            this.PanelBackground.MaxHeight = this._isPanelExpanded
+                ? DockedPanelMaxHeight + ExpandedExtraHeight
+                : DockedPanelMaxHeight;
+            return;
+        }
+
         if (this._isPanelExpanded) {
             var currentWidth = this._currentSidebar?.Width ?? new GridLength(DefaultSidebarWidth);
             this.SidebarColumn.Width = new GridLength(Math.Min(currentWidth.Value, MaxSidebarWidth));
@@ -457,10 +492,10 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     ///     Handles pin button clicks to toggle window pinning (ephemeral behavior).
     /// </summary>
     private void PinButton_Click(object sender, RoutedEventArgs e) {
-        if (this._parentWindow == null) return;
+        if (this._host == null) return;
 
         // Toggle ephemeral mode
-        this._parentWindow.IsEphemeral = !this._parentWindow.IsEphemeral;
+        this._host.IsEphemeral = !this._host.IsEphemeral;
         this.UpdatePinButtonState();
     }
 
@@ -468,9 +503,9 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     ///     Updates the pin button icon and color based on current pin state.
     /// </summary>
     private void UpdatePinButtonState() {
-        if (this._parentWindow == null) return;
+        if (this._host == null || this._isDocked) return;
 
-        var isPinned = !this._parentWindow.IsEphemeral;
+        var isPinned = !this._host.IsEphemeral;
         this.PinButton.MouseEnter -= this.PinButton_MouseEnter;
         this.PinButton.MouseLeave -= this.PinButton_MouseLeave;
 
@@ -497,7 +532,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     ///     Sets the parent window reference for coordinating window size with sidebar expansion.
     /// </summary>
     public void SetParentWindow(EphemeralWindow window) {
-        this._parentWindow = window;
+        this._host = window;
 
         // Initialize pin button state based on window's ephemeral setting
         this.UpdatePinButtonState();
@@ -532,12 +567,12 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         PaletteAction<TItem> action,
         TItem item
     ) where TItem : class, IPaletteListItem {
-        if (this._parentWindow == null) {
+        if (this._host == null) {
             throw new InvalidOperationException(
-                "Palette parent window not set. Use PaletteFactory.Create or call SetParentWindow.");
+                "Palette host not set. Use PaletteFactory.Create or call SetParentWindow.");
         }
 
-        if (!this._parentWindow.IsEphemeral)
+        if (!this._host.IsEphemeral)
             return actionBinding.ExecuteAsync(action, item);
 
         this.ExecuteDeferred(() => actionBinding.ExecuteAsync(action, item));
@@ -548,17 +583,19 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     ///     Closes the window first, then runs the provided callback after the window has closed.
     /// </summary>
     private void ExecuteDeferred(Func<Task> action) {
-        if (this._parentWindow == null) {
+        if (this._host == null) {
             throw new InvalidOperationException(
-                "Palette parent window not set. Use PaletteFactory.Create or call SetParentWindow.");
+                "Palette host not set. Use PaletteFactory.Create or call SetParentWindow.");
         }
 
+        var host = this._host;
+
         void ClosedHandler(object? sender, EventArgs args) {
-            this._parentWindow.Closed -= ClosedHandler;
+            host.Closed -= ClosedHandler;
             _ = action();
         }
 
-        this._parentWindow.Closed += ClosedHandler;
+        host.Closed += ClosedHandler;
         this.RequestClose();
     }
 
@@ -574,8 +611,15 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         this.ExecuteDeferred(() => RevitTaskAccessor.RunAsync!(action));
     }
 
-    private void RequestClose(bool restoreFocus = true) =>
+    private void RequestClose(bool restoreFocus = true) {
+        // Docked: no window subscribes CloseRequested; hide the pane directly.
+        if (this._isDocked) {
+            this._host?.CloseHost(restoreFocus);
+            return;
+        }
+
         this.CloseRequested?.Invoke(this, new CloseRequestedEventArgs { RestoreFocus = restoreFocus });
+    }
 
     private void UserControl_Loaded(object sender, RoutedEventArgs e) {
         if (this.DataContext == null) throw new InvalidOperationException("Palette DataContext is null");
@@ -584,24 +628,165 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         if (this._onCtrlReleased != null)
             this._isCtrlPressed = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
 
-        // If search box is hidden - focus on the UserControl itself to receive keyboard input
-        if (this._isSearchBoxHidden)
-            _ = this.Focus();
-        else {
-            _ = this.SearchTextBox.Focus();
-            this.SearchTextBox.SelectAll();
-        }
-
+        this.FocusSearch();
         this.UpdatePinButtonState();
     }
 
+    /// <summary>
+    ///     Focuses the search box (or the control itself for searchless palettes).
+    ///     Also the summon entry point for docked palettes.
+    /// </summary>
+    public void FocusSearch() {
+        if (this._isSearchBoxHidden) {
+            _ = this.Focus();
+            return;
+        }
+
+        _ = this.SearchTextBox.Focus();
+        this.SearchTextBox.SelectAll();
+    }
+
+    private void DockButton_Click(object sender, RoutedEventArgs e) {
+        if (this._isDocked)
+            this.Undock();
+        else
+            this.Dock();
+    }
+
+    /// <summary>
+    ///     Moves this palette from its floating window into the shared dockable pane.
+    /// </summary>
+    private void Dock() {
+        if (this._host is not EphemeralWindow window || !PaletteDock.IsAvailable) {
+            Serilog.Log.Warning("Palette dock skipped: Host={Host}, PaneAvailable={Available}",
+                this._host?.GetType().Name ?? "null", PaletteDock.IsAvailable);
+            return;
+        }
+
+        Serilog.Log.Information("Palette docking: {Title}", this.TitleText.Text);
+        window.DetachContent();
+        window.CloseWindow(restoreFocus: false);
+
+        this.SetDockedLayout(true);
+        this._host = new DockablePaneHost();
+        PaletteDock.Dock(this, this.TitleText.Text, this.FocusSearch, this._refreshItems);
+        _ = this.Dispatcher.BeginInvoke(this.FocusSearch, DispatcherPriority.Loaded);
+    }
+
+    /// <summary>
+    ///     Moves this palette out of the pane back into a fresh floating window.
+    /// </summary>
+    private void Undock() {
+        if (!this._isDocked) return;
+
+        Serilog.Log.Information("Palette undocking: {Title}", this.TitleText.Text);
+        PaletteDock.Undock(this);
+        this.SetDockedLayout(false);
+
+        var window = new EphemeralWindow(this, this.TitleText.Text);
+        this.SetParentWindow(window);
+        window.Show();
+    }
+
+    /// <summary>
+    ///     Switches between floating layout (fixed width, side details panel, window chrome)
+    ///     and docked layout (stretch to fill the pane, details panel on the bottom, no chrome).
+    /// </summary>
+    private void SetDockedLayout(bool docked) {
+        this._isDocked = docked;
+        var listBorder = this.ItemListView.Parent as Border;
+
+        if (docked) {
+            this._windowShadow ??= this.RootBackground.Effect;
+
+            this.VerticalAlignment = VerticalAlignment.Stretch;
+            // Palette column fills the pane width (Auto would hug natural width, leaving
+            // an unpainted region that renders black in the pane host)
+            this.RootGrid.ColumnDefinitions[0].Width = new GridLength(1, GridUnitType.Star);
+            this.RootBackground.VerticalAlignment = VerticalAlignment.Stretch;
+            this.RootBackground.CornerRadius = new CornerRadius(0);
+            this.RootBackground.BorderThickness = new Thickness(0);
+            this.RootBackground.Effect = null;
+            this.RootGrid.VerticalAlignment = VerticalAlignment.Stretch;
+            this.PaletteBackground.Width = double.NaN;
+            this.PaletteBackground.VerticalAlignment = VerticalAlignment.Stretch;
+            this.PaletteContentGrid.VerticalAlignment = VerticalAlignment.Stretch;
+            this.PaletteContentGrid.RowDefinitions[2].Height = new GridLength(1, GridUnitType.Star);
+            if (listBorder != null) listBorder.MaxHeight = double.PositiveInfinity;
+
+            this.PinButton.Visibility = Visibility.Collapsed;
+            this.DockIcon.Symbol = SymbolRegular.ArrowUpload24;
+            this.DockButton.ToolTip = "Float as window";
+            // Docked zoom: the window applied a LayoutTransform when floating; carry the
+            // shared zoom level ourselves inside the pane (Ctrl+/-/0 keeps working).
+            this._dockZoom = new ScaleTransform(EphemeralWindow.ZoomLevel, EphemeralWindow.ZoomLevel);
+            this.LayoutTransform = this._dockZoom;
+            this.MovePanel(toBottom: true);
+        } else {
+            this.VerticalAlignment = VerticalAlignment.Top;
+            this.RootGrid.ColumnDefinitions[0].Width = GridLength.Auto;
+            this.RootBackground.VerticalAlignment = VerticalAlignment.Top;
+            this.RootBackground.CornerRadius = new CornerRadius(10);
+            this.RootBackground.BorderThickness = new Thickness(1);
+            this.RootBackground.Effect = this._windowShadow;
+            this.RootGrid.VerticalAlignment = VerticalAlignment.Top;
+            this.PaletteBackground.Width = DefaultPaletteWidth;
+            // List row stays star (matches XAML default): the list is capped by MaxHeight and
+            // Top-aligned, so a taller details panel pins the status bar to the bottom.
+            this.PaletteContentGrid.RowDefinitions[2].Height = new GridLength(1, GridUnitType.Star);
+            if (listBorder != null) listBorder.MaxHeight = DefaultVisibleItems * ItemHeight;
+
+            this.PinButton.Visibility = Visibility.Visible;
+            this.DockIcon.Symbol = SymbolRegular.ArrowDownload24;
+            this.DockButton.ToolTip = "Dock as panel";
+            // Back to window-managed zoom
+            this._dockZoom = null;
+            this.LayoutTransform = null;
+            this.MovePanel(toBottom: false);
+        }
+
+        this._isPanelExpanded = false;
+    }
+
+    /// <summary>
+    ///     Re-parents the details panel between the right column (floating) and
+    ///     the bottom row of the palette grid (docked).
+    /// </summary>
+    private void MovePanel(bool toBottom) {
+        var panel = this.PanelBackground;
+        if (panel.Parent is System.Windows.Controls.Panel currentParent)
+            currentParent.Children.Remove(panel);
+
+        if (toBottom) {
+            this.SidebarColumn.Width = new GridLength(0);
+            Grid.SetRow(panel, 3);
+            Grid.SetColumn(panel, 0);
+            panel.BorderThickness = new Thickness(0, 1, 0, 0);
+            panel.MaxHeight = DockedPanelMaxHeight;
+            panel.Visibility = this._currentSidebar != null && this._sidebarAutoExpanded
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            this.PaletteContentGrid.Children.Add(panel);
+        } else {
+            Grid.SetRow(panel, 0);
+            Grid.SetColumn(panel, 1);
+            panel.BorderThickness = new Thickness(1, 0, 0, 0);
+            panel.MaxHeight = PaletteChromeHeight + (DefaultVisibleItems * ItemHeight);
+            panel.Visibility = Visibility.Visible;
+            this.RootGrid.Children.Add(panel);
+            // Collapsed column; next selection (or ←) re-expands the sidebar
+            this.SidebarColumn.Width = new GridLength(0);
+            this._sidebarAutoExpanded = false;
+        }
+    }
+
     private void PinButton_MouseEnter(object sender, MouseEventArgs e) {
-        if (this._parentWindow == null || this._parentWindow.IsEphemeral) return;
+        if (this._host == null || this._host.IsEphemeral) return;
         this.PinIcon.Foreground = this._pinHoverBrush;
     }
 
     private void PinButton_MouseLeave(object sender, MouseEventArgs e) {
-        if (this._parentWindow == null || this._parentWindow.IsEphemeral) return;
+        if (this._host == null || this._host.IsEphemeral) return;
         this.PinIcon.Foreground = this._pinPinnedBrush;
     }
 
@@ -623,6 +808,13 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         // Track Ctrl key state for Ctrl-release behavior
         if ((modifiers & ModifierKeys.Control) != 0)
             this._isCtrlPressed = true;
+
+        // Docked: no window to handle Ctrl+/-/0 zoom, apply it here
+        if (this._isDocked && this._dockZoom != null && (modifiers & ModifierKeys.Control) != 0 &&
+            EphemeralWindow.ApplyZoomKey(e.Key, this._dockZoom)) {
+            e.Handled = true;
+            return;
+        }
 
         // Handle Ctrl+Left/Right for tab switching
         if ((modifiers & ModifierKeys.Control) != 0 && e.Key == Key.Left) {

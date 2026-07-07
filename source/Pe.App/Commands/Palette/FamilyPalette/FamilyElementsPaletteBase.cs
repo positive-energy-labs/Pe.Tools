@@ -54,7 +54,7 @@ public abstract class FamilyElementsPaletteBase : IExternalCommand {
             // Create tab definitions with lazy loading
             var tabs = FamilyElementsTabConfig.CreateTabs(familyDoc);
 
-            var window = PaletteFactory.Create("Family Elements",
+            var window = PaletteFactory.Create(ElementsPalette.Title,
                 new PaletteOptions<FamilyElementItem> {
                     SearchConfig = SearchConfig.PrimaryAndSecondary(),
                     Tabs = tabs,
