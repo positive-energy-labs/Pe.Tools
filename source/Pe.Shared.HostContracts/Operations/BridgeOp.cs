@@ -38,6 +38,7 @@ public interface IRevitDataService {
     Task<LoadedFamiliesMatrixData> GetLoadedFamiliesMatrixAsync(LoadedFamiliesMatrixRequest request);
     Task<FamilyEditorSnapshotData> GetFamilyEditorSnapshotAsync(FamilyEditorSnapshotRequest request);
     Task<FamilyEditorApplyData> ApplyFamilyEditorEditsAsync(FamilyEditorApplyRequest request);
+    Task<ParameterValueApplyData> ApplyParameterValuesAsync(ParameterValueApplyRequest request);
     Task<ScheduleCoverageData> GetScheduleCoverageAsync(ScheduleCoverageRequest request);
     Task<ParameterCoverageData> GetParameterCoverageAsync(ParameterCoverageRequest request);
     Task<ConceptEvidenceData> GetConceptEvidenceAsync(ConceptEvidenceRequest request);
@@ -62,6 +63,7 @@ public interface IRevitDataService {
     );
     Task<RevitViewImageData> GetRevitViewImageAsync(RevitViewImageRequest request);
     Task<ParametersServiceCacheData> RefreshParametersServiceCacheAsync();
+    Task<RibbonCommandExecuteData> ExecuteRibbonCommandAsync(RibbonCommandExecuteRequest request);
 }
 
 public interface IScriptingBridgeService {
