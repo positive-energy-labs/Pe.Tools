@@ -2,6 +2,10 @@
 
     <PropertyGroup>
         <PeProjectKind>RevitAddin</PeProjectKind>
+        <PeAddinId>43B12CEC-8FCF-4E33-AF86-904DCF056087</PeAddinId>
+        <PeAddinVendorId>Development</PeAddinVendorId>
+        <PeAddinUseRevitContext>False</PeAddinUseRevitContext>
+        <PeAddinContextName>Pe.Tools</PeAddinContextName>
     </PropertyGroup>
     <PropertyGroup>
         <UseWPF>true</UseWPF>
@@ -34,11 +38,11 @@
         <PackageReference Include="Nice3point.Revit.Extensions" Version="$(RevitVersion).*" />
         <PackageReference Include="RevitExplorer.API" Version="2.6.0" />
         <PackageReference Include="ricaun.Revit.UI.Tasks" Version="1.*" />
-        <PackageReference Include="Pe.Revit.Versioning" Version="0.1.0-beta.7" />
+        <PackageReference Include="Pe.Revit.Versioning" Version="0.1.0-beta.9" />
         <!-- IPePayload contract + self-hosted context. Ships in the output too: the dev lane
              loads Pe.App directly and needs the dll beside it; in the installed lane the loader
              skip-lists its own name, so the payload-dir copy is never loaded (type identity). -->
-        <PackageReference Include="Pe.Revit.Loader" Version="0.1.0-beta.7" />
+        <PackageReference Include="Pe.Revit.Loader" Version="0.1.0-beta.9" />
         <!-- Build -->
         <PackageReference Include="ILRepack" Version="2.0.44">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive
@@ -88,44 +92,4 @@
              TS-side ensurePeHostRunning repoint). No Pe.Host code coupling in Pe.App. -->
         <PeInteractiveRuntimeCompanionProject Include="..\Pe.Dev.Cli\Pe.Dev.Cli.csproj" />
     </ItemGroup>
-    <Target
-        Name="WritePeAppRuntimeDescriptor"
-        AfterTargets="PublishAddin"
-        Condition="'$(PublishAddin)' == 'true' and '$(DesignTimeBuild)' != 'true'"
-    >
-        <PropertyGroup>
-            <PeAppRuntimeDescriptorPublishPath>
-                $(AddinPublishDir)\$(AssemblyName)\$(PeRevitRuntimeDescriptorFileName)</PeAppRuntimeDescriptorPublishPath>
-            <_PeRuntimeDescriptorLaneJson>$([System.String]::Copy('$(PeRuntimeLane)').Replace('\',
-                '/'))</_PeRuntimeDescriptorLaneJson>
-            <_PeRuntimeDescriptorConfigurationJson>$([System.String]::Copy('$(Configuration)').Replace('\',
-                '/'))</_PeRuntimeDescriptorConfigurationJson>
-        </PropertyGroup>
-        <MakeDir Directories="$(AddinPublishDir)\$(AssemblyName)" />
-        <ItemGroup>
-            <PeAppRuntimeDescriptorLines Include="{" />
-            <PeAppRuntimeDescriptorLines Include="  &quot;schemaVersion&quot;: 1," />
-            <PeAppRuntimeDescriptorLines
-                Include="  &quot;productName&quot;: &quot;$(PeProductName)&quot;," />
-            <PeAppRuntimeDescriptorLines
-                Include="  &quot;runtimeLane&quot;: &quot;$(_PeRuntimeDescriptorLaneJson)&quot;," />
-            <PeAppRuntimeDescriptorLines
-                Include="  &quot;configuration&quot;: &quot;$(_PeRuntimeDescriptorConfigurationJson)&quot;" />
-            <PeAppRuntimeDescriptorLines Include="}" />
-        </ItemGroup>
-        <WriteLinesToFile
-            File="$(PeAppRuntimeDescriptorPublishPath)"
-            Lines="@(PeAppRuntimeDescriptorLines)"
-            Overwrite="true"
-        />
-        <Message
-            Text="Wrote Pe.App runtime descriptor '$(PeAppRuntimeDescriptorPublishPath)' with lane $(PeRuntimeLane)."
-            Importance="High"
-        />
-    </Target>
-    <!-- The legacy pre-deploy cleanup target is retired: the SDK's shadow deploy (P10) writes a
-         NEW stamp dir per build and prunes old ones lock-tolerantly, so deploys never fail while
-         Revit runs — deleting the whole deploy dir here fought exactly that (and hard-failed on
-         the loaded stamp's dlls). `dotnet clean` with DeployAddin=true still removes the deploy
-         via the SDK's CleanAddin. -->
 </Project>

@@ -2,7 +2,6 @@ import { readFile } from "node:fs/promises";
 import { define } from "gunshi";
 import { HostRpcCaller } from "../shared/host-rpc-caller.js";
 import {
-  collectPostLiveCommandHooks,
   collectRuntimeLoopContext,
   defaultPeaRuntimeTimeoutSeconds,
 } from "../shared/pea-runtime-hooks.ts";
@@ -13,7 +12,6 @@ import { ScriptingTools } from "../shared/scripting.ts";
 import type { ScriptExecuteInput } from "../shared/scripting.ts";
 import { talkToPeaHarness } from "./talk-to-pea.ts";
 import { talkToPecoZellij, type TalkToPecoMuxRequest } from "./talk-to-peco-mux.ts";
-import { runAttachedRrdTest, runFreshRevitTest } from "./pe-revit-workflow/index.ts";
 
 export interface PeCodeCliCommandOptions {
   hostBaseUrl?: string;
@@ -26,7 +24,6 @@ export class PeCodeCliCommands {
   commands() {
     return {
       live: this.liveCommand(),
-      test: this.testCommand(),
       script: this.scriptCommand(),
       "talk-to-pea": this.talkToPeaCommand(),
       // "talk-to-peco-psmux": this.talkToPecoPsmuxCommand(),
@@ -37,11 +34,10 @@ export class PeCodeCliCommands {
   liveCommand() {
     return define({
       name: "live",
-      description: "Inspect, sync, and restart the SDK-driven Revit development loop.",
-      examples: ["peco live context", "peco live sync"].join("\n"),
+      description: "Inspect Peco runtime context around the SDK-driven Revit development loop.",
+      examples: ["peco live context"].join("\n"),
       subCommands: {
         context: this.liveContextCommand(),
-        sync: this.liveSyncCommand(),
       },
       run: () => {
         console.log("Run `peco live --help` to list live commands.");
@@ -52,7 +48,8 @@ export class PeCodeCliCommands {
   scriptCommand() {
     return define({
       name: "script",
-      description: "Run peco scripting tools through the TS host with a live RRD sync preflight.",
+      description:
+        "Run peco scripting tools through the TS host with a live RRD convergence preflight.",
       subCommands: {
         execute: this.scriptExecuteCommand(),
       },
@@ -80,7 +77,7 @@ export class PeCodeCliCommands {
         },
         noLastSync: {
           type: "boolean",
-          description: "Do not include the last SDK live sync summary.",
+          description: "Do not include the last SDK live summary.",
           default: false,
         },
         timeoutSeconds: commonArgs.timeoutSeconds,
@@ -93,63 +90,6 @@ export class PeCodeCliCommands {
           resetLogCursor: ctx.values.resetLogCursor,
           includeLastSync: !ctx.values.noLastSync,
           timeoutSeconds: ctx.values.timeoutSeconds,
-        });
-        writeObject(result);
-      },
-    });
-  }
-
-  private liveSyncCommand() {
-    return define({
-      name: "sync",
-      description: "Invoke SDK pe-revit live sync for the live RRD session.",
-      args: {
-        timeoutSeconds: commonArgs.timeoutSeconds,
-        project: commonArgs.project,
-        revitYear: commonArgs.revitYear,
-        noHotReload: {
-          type: "boolean",
-          description: "Do not try Rider Hot Reload when sync finds an attached stale assembly.",
-          default: false,
-        },
-        noStart: {
-          type: "boolean",
-          description: "Do not start Rider/RRD when sync finds no live bridge or loaded addin.",
-          default: false,
-        },
-        restartOnHrBreak: {
-          type: "boolean",
-          description: "Restart RRD when Hot Reload cannot converge stale attached code.",
-          default: false,
-        },
-        noPeaStatus: {
-          type: "boolean",
-          description: "Do not include Pea host status in the output hook packet.",
-          default: false,
-        },
-        logTail: {
-          type: "number",
-          description: "Pea host/Revit log tail lines to include; 0 disables log hook output.",
-          default: 20,
-        },
-        resetLogCursor: {
-          type: "boolean",
-          description: "Reset log cursors after reading the hook packet.",
-          default: false,
-        },
-      },
-      toKebab: true,
-      run: async (ctx) => {
-        const result = await syncLiveRrd({
-          timeoutSeconds: ctx.values.timeoutSeconds,
-          project: asOptionalString(ctx.values.project),
-          revitYear: asOptionalString(ctx.values.revitYear),
-          hotReload: !ctx.values.noHotReload,
-          start: !ctx.values.noStart,
-          restartOnHrBreak: ctx.values.restartOnHrBreak,
-          includePeaStatus: !ctx.values.noPeaStatus,
-          logTail: ctx.values.logTail,
-          resetLogCursor: ctx.values.resetLogCursor,
         });
         writeObject(result);
       },
@@ -217,7 +157,7 @@ export class PeCodeCliCommands {
     return define({
       name: "execute",
       description:
-        "Sync the live RRD loop, then execute a C# Revit script through the TS host from inline content, stdin, a file, or a workspace source path.",
+        "Converge the live RRD loop, then execute a C# Revit script through the TS host from inline content, stdin, a file, or a workspace source path.",
       args: {
         host: commonArgs.host,
         workspace: commonArgs.workspace,
@@ -279,98 +219,6 @@ export class PeCodeCliCommands {
           workflow: "script_execute",
           liveSync: sync,
           script,
-        });
-      },
-    });
-  }
-
-  private testCommand() {
-    return define({
-      name: "test",
-      description: "Run SDK pe-revit tests and append Pea status/log hooks.",
-      args: {
-        target: {
-          type: "string",
-          description: "Test lane: FreshRevitProcess or AttachedRrd.",
-          default: "FreshRevitProcess",
-        },
-        project: {
-          type: "string",
-          description: "Revit test project path.",
-        },
-        revitYear: commonArgs.revitYear,
-        filter: {
-          type: "string",
-          description: "VSTest filter.",
-          default: "Name~Reports_runtime_assembly_load_paths",
-        },
-        planOnly: {
-          type: "boolean",
-          description: "For FreshRevitProcess only: resolve the test plan without launching Revit.",
-          default: false,
-        },
-        noSync: {
-          type: "boolean",
-          description: "For AttachedRrd only: skip SDK live sync before running tests.",
-          default: false,
-        },
-        noPeaStatus: {
-          type: "boolean",
-          description: "Do not include Pea host status in the hook packet.",
-          default: false,
-        },
-        logTail: {
-          type: "number",
-          description: "Pea host/Revit log tail lines to include; 0 disables log hook output.",
-          default: 20,
-        },
-        resetLogCursor: {
-          type: "boolean",
-          description: "Reset log cursors after reading the hook packet.",
-          default: false,
-        },
-        timeoutSeconds: commonArgs.timeoutSeconds,
-      },
-      toKebab: true,
-      run: async (ctx) => {
-        const target = parseTestTarget(ctx.values.target);
-        const timeoutSeconds = ctx.values.timeoutSeconds ?? defaultPeaRuntimeTimeoutSeconds;
-        const project = asOptionalString(ctx.values.project);
-        const revitYear = asOptionalString(ctx.values.revitYear);
-        const filter =
-          asOptionalString(ctx.values.filter) ?? "Name~Reports_runtime_assembly_load_paths";
-        const hooksRequest = {
-          includePeaStatus: !ctx.values.noPeaStatus,
-          logTail: asOptionalNumber(ctx.values.logTail) ?? 20,
-          resetLogCursor: ctx.values.resetLogCursor === true,
-        };
-
-        if (target === "FreshRevitProcess") {
-          const result = await runFreshRevitTest({
-            filter,
-            project,
-            revitYear,
-            planOnly: ctx.values.planOnly === true,
-            timeoutSeconds,
-          });
-          writeObject({
-            ...result,
-            hooks: await collectPostLiveCommandHooks(hooksRequest),
-          });
-          return;
-        }
-
-        if (ctx.values.planOnly) throw new Error("--plan-only only applies to FreshRevitProcess.");
-        const result = await runAttachedRrdTest({
-          filter,
-          project,
-          revitYear,
-          syncFirst: !ctx.values.noSync,
-          timeoutSeconds,
-        });
-        writeObject({
-          ...result,
-          hooks: await collectPostLiveCommandHooks(hooksRequest),
         });
       },
     });
@@ -443,14 +291,6 @@ const commonArgs = {
     description: "Timeout in seconds.",
     default: defaultPeaRuntimeTimeoutSeconds,
   },
-  project: {
-    type: "string",
-    description: "Revit addin project path.",
-  },
-  revitYear: {
-    type: "string",
-    description: "Revit year.",
-  },
 } as const;
 
 function resolvePecoMuxCliRequest(values: Record<string, unknown>): TalkToPecoMuxRequest {
@@ -502,17 +342,6 @@ function parsePermissionMode(value: unknown): "ReadOnly" | "WriteTransaction" {
       return "WriteTransaction";
     default:
       throw new Error("Unknown permission mode. Expected ReadOnly or WriteTransaction.");
-  }
-}
-
-function parseTestTarget(value: unknown): "FreshRevitProcess" | "AttachedRrd" {
-  const target = asOptionalString(value) ?? "FreshRevitProcess";
-  switch (target) {
-    case "FreshRevitProcess":
-    case "AttachedRrd":
-      return target;
-    default:
-      throw new Error("Unknown test target. Expected FreshRevitProcess or AttachedRrd.");
   }
 }
 

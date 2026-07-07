@@ -1,4 +1,4 @@
-﻿namespace Build.Options;
+namespace Build.Options;
 
 /// <summary>
 ///     Build configuration options.
@@ -23,5 +23,3 @@ public sealed record BuildOptions {
     /// </summary>
     public string? Configuration { get; set; }
 }
-
-// PE_HOT_RELOAD_NUDGE

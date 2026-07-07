@@ -26,9 +26,9 @@ C# development with the Revit API requires very a specific and fragile tooling s
 
 ALWAYS use RRD-safe live-loop tools, mcps, or cli commands when available.
 - Use `live_loop_context` as the read-only decision packet when AttachedRrd/Rider/Revit state matters.
-- Use `live_rrd_sync` before live scripting or AttachedRrd tests after runtime edits.
-- Use `live_rrd_sync` to sync, hot reload, or start/restart RRD when requested.
-- CLI use: `pea live <sync/restart/status>` 
+- Use SDK `pe-revit live` / MCP `live_converge` to sync, hot reload, or start/restart RRD.
+- Use SDK `pe-revit test fresh|attached` / MCP `test_fresh` and `test_attached` for Revit-backed proof lanes.
+- Use Peco `script_execute` or `talk_to_pea` when the tool should run after an SDK freshness preflight and include Pea-facing evidence.
 - Prefer FreshRevitProcess tests when Hot Reload risk, stale assembly evidence, member-shape changes, or WPF/BAML/resource changes make AttachedRrd ambiguous.
 - Use Pea product tools (`pe_status`, `pe_logs`, host operations, scripts, Revit API docs, `talk_to_pea`) only for black-box product feedback, not repo source review.
 

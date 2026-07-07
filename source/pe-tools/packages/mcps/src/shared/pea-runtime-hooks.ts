@@ -60,7 +60,7 @@ export async function collectRuntimeLoopContext(options: PeaRuntimeContextOption
     limits: [
       "Read-only packet: does not run sync, tests, scripts, hot reload, or restart Revit/Rider.",
       "Log deltas are correlation evidence, not health proof by themselves.",
-      "A successful SDK live sync proves stamp freshness only until attached behavior or Revit logs confirm the runtime path.",
+      "A successful SDK live run proves the convergence attempt only until attached behavior or Revit logs confirm the runtime path.",
     ],
   };
 }

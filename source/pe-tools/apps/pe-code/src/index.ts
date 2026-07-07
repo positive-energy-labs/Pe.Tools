@@ -25,7 +25,6 @@ export function createPeCodeCliCommand() {
       "peco",
       "peco --acp",
       "peco live context",
-      "peco live sync",
       'peco talk-to-pea --prompt "Review this operator flow"',
     ].join("\n"),
     args: protocolArgs,

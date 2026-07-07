@@ -1,12 +1,10 @@
 import { createTool } from "@mastra/core/tools";
 import z from "zod";
 import {
-  collectPostLiveCommandHooks,
   collectRuntimeLoopContext,
   defaultPeaRuntimeTimeoutSeconds,
 } from "../shared/pea-runtime-hooks.ts";
 import { syncLiveRrd } from "./live-sync.js";
-import { runAttachedRrdTest, runFreshRevitTest } from "./pe-revit-workflow/index.js";
 import { sdkLiveWarning } from "./sdk-live.js";
 
 import { HostRpcCaller } from "../shared/host-rpc-caller.js";
@@ -41,34 +39,6 @@ export const liveLoopContext = createTool({
       resetLogCursor: input.resetLogCursor ?? false,
       includeLastSync: input.includeLastSync ?? true,
       timeoutSeconds: input.timeoutSeconds ?? defaultTimeoutSeconds,
-    }),
-});
-
-export const liveRrdSync = createTool({
-  id: "live_rrd_sync",
-  description:
-    "Refresh and converge the live RRD session through SDK pe-revit live sync. Builds/deploys, can apply Rider Hot Reload, can start RRD when missing, and can include Pea host status/log hooks in the result.",
-  inputSchema: repoCommandInputSchema.extend({
-    project: z.string().optional(),
-    revitYear: z.string().optional(),
-    hotReload: z.boolean().default(true),
-    start: z.boolean().default(true),
-    restartOnHrBreak: z.boolean().default(false),
-    includePeaStatus: z.boolean().default(true),
-    logTail: z.number().min(0).max(1000).default(20),
-    resetLogCursor: z.boolean().default(false),
-  }),
-  execute: async (input) =>
-    syncLiveRrd({
-      timeoutSeconds: input.timeoutSeconds ?? defaultTimeoutSeconds,
-      project: input.project,
-      revitYear: input.revitYear,
-      hotReload: input.hotReload ?? true,
-      start: input.start ?? true,
-      restartOnHrBreak: input.restartOnHrBreak ?? false,
-      includePeaStatus: input.includePeaStatus ?? true,
-      logTail: input.logTail ?? 20,
-      resetLogCursor: input.resetLogCursor ?? false,
     }),
 });
 
@@ -182,7 +152,7 @@ export const talkToPecoPsmuxTool = createTool({
 export const scriptExecuteWithSync = createTool({
   id: "script_execute",
   description:
-    "Execute a C# Revit script through the TS host scripting contract after first attempting SDK live sync. Sync failure is a loud warning, not a script blocker.",
+    "Execute a C# Revit script through the TS host scripting contract after first attempting SDK live convergence. Live convergence failure is a loud warning, not a script blocker.",
   inputSchema: repoCommandInputSchema.merge(scriptExecuteInputSchema),
   execute: async (input) => {
     const timeoutSeconds = input.timeoutSeconds ?? defaultTimeoutSeconds;
@@ -205,59 +175,5 @@ export const scriptExecuteWithSync = createTool({
       },
       script,
     };
-  },
-});
-
-export const test = createTool({
-  id: "test",
-  description:
-    "Run Revit-backed tests through SDK pe-revit test. Prefer FreshRevitProcess for autonomous proof without touching RRD. Use AttachedRrd only after SDK live sync.",
-  inputSchema: repoCommandInputSchema.extend({
-    target: z.enum(["FreshRevitProcess", "AttachedRrd"]).default("FreshRevitProcess"),
-    project: z.string().optional(),
-    revitYear: z.string().optional(),
-    filter: z.string().default("Name~Reports_runtime_assembly_load_paths"),
-    planOnly: z
-      .boolean()
-      .default(false)
-      .describe(
-        "For FreshRevitProcess only: resolve and print the plan without launching Revit or running tests.",
-      ),
-    syncFirst: z
-      .boolean()
-      .default(true)
-      .describe("For AttachedRrd only: run sync before the build/test sequence."),
-  }),
-  execute: async (input) => {
-    if ((input.target ?? "FreshRevitProcess") === "FreshRevitProcess") {
-      const timeoutSeconds = input.timeoutSeconds ?? defaultTimeoutSeconds;
-      const result = await runFreshRevitTest({
-        filter: input.filter ?? "Name~Reports_runtime_assembly_load_paths",
-        project: input.project,
-        revitYear: input.revitYear,
-        planOnly: input.planOnly ?? false,
-        timeoutSeconds,
-      });
-      const hooks = await collectPostLiveCommandHooks({
-        includePeaStatus: true,
-        logTail: 20,
-        resetLogCursor: false,
-      });
-      return { ...result, hooks };
-    }
-
-    const result = await runAttachedRrdTest({
-      filter: input.filter ?? "Name~Reports_runtime_assembly_load_paths",
-      project: input.project,
-      revitYear: input.revitYear,
-      syncFirst: input.syncFirst ?? true,
-      timeoutSeconds: input.timeoutSeconds ?? defaultTimeoutSeconds,
-    });
-    const hooks = await collectPostLiveCommandHooks({
-      includePeaStatus: true,
-      logTail: 20,
-      resetLogCursor: false,
-    });
-    return { ...result, hooks };
   },
 });

@@ -24,9 +24,9 @@ This separation exists because Revit, Rider hot reload, package-local outputs, i
 | **AttachedRrd**       | Live-session proof must be treated as an attached runtime loop, not as normal compilation. | Rider/Revit/Host/session/document state is fragile and cannot be inferred from MSBuild success.           | A targeted probe behaved correctly in the currently running RRD session. |
 | **Installed lane**    | Installed behavior must be validated from installed roots.                                 | MSI/product roots and dev/runtime roots intentionally differ.                                             | Installed bootstrap/runtime behavior, not source or RRD behavior.        |
 
-## Peco wrapper decision
+## Peco context decision
 
-The Peco has narrow repo verification wrappers because this environment is unusually easy to misread:
+Peco keeps narrow repo-specific context tools because this environment is unusually easy to misread:
 
 - Rider and Revit are long-lived user processes.
 - Hot reload can report success without proving the loaded Revit assembly graph is behaviorally fresh.
@@ -34,9 +34,9 @@ The Peco has narrow repo verification wrappers because this environment is unusu
 - Revit-backed tests can either own a fresh process or attach to an existing one; those are not interchangeable.
 - Source-linked `pea`, installed `pea`, dev `Pe.Host`, and installed `Pe.Host` are different runtime roots.
 
-The wrappers encode policy and collect evidence: `NoRrdContact` versus `RrdRequired`, read-only orientation before mutation, bounded logs, sync/restart guidance, test-owned process planning, command fallback, and explicit proof/does-not-prove language.
+The SDK encodes live/test policy and mutation mechanics: `NoRrdContact` versus `RrdRequired`, sync/restart guidance, test-owned process planning, command fallback, and explicit proof/does-not-prove language. Peco adds the repo/product context around that: read-only orientation, bounded Pea/host/Revit logs, product probes, and black-box Pea feedback.
 
-That does not make `BUILD.md` a Peco tool manual. The durable decision is: **when the claim depends on live Rider/Revit state, use SDK `pe-revit live/test` mechanics instead of reproducing that orchestration by hand or resurrecting removed `pe-dev` commands; use Peco only when Pea status/log hooks or product probes should wrap the proof.** The direct wrapper names belong in Peco instructions and skills, where they can evolve without rewriting the build philosophy.
+That does not make `BUILD.md` a Peco tool manual. The durable decision is: **when the claim depends on live Rider/Revit state, use SDK `pe-revit live/test` mechanics instead of reproducing that orchestration by hand or resurrecting removed `pe-dev` commands; use Peco only when Pea status/logs or product probes should accompany the proof.**
 
 ## Environment limitations this repo designs around
 
@@ -83,11 +83,11 @@ A Rider `Build` before-launch step is part of the valid launch contract for RRD 
 The `Pe.Revit.Sdk` `pe-revit live` surface now owns this build → deploy → start/restart orchestration against the canonical config. Prefer it over hand-driving Rider:
 
 ```text
-pe-revit live sync --start --hot-reload
-pe-revit live restart
+dotnet tool run pe-revit -- live --project .\source\Pe.App\Pe.App.csproj --year 2025 --json
+dotnet tool run pe-revit -- live --project .\source\Pe.App\Pe.App.csproj --year 2025 --restart --json
 ```
 
-`live sync` builds/deploys, applies Rider Hot Reload when safe, and can start RRD when it is missing; `live restart` forces a fresh session. Agents reach this through the Peco `live_rrd_sync` tool rather than calling the SDK CLI directly, then prove bridge/session/document behavior after launch. The manual path — select `Debug.R##`, select the canonical `Pe.App` run/debug configuration, invoke Rider's real `Debug` action — remains the underlying human model and the fallback if the SDK live surface cannot converge; programmatic Rider shortcuts can report success without visibly launching Revit or the debugger.
+Bare `pe-revit live` builds/deploys, applies Rider Hot Reload when safe, and can start RRD when it is missing; `--restart` forces a fresh session. Agents should call the SDK live surface directly, then use `live_loop_context` when Pea/host/Revit status or log evidence matters. The manual path — select `Debug.R##`, select the canonical `Pe.App` run/debug configuration, invoke Rider's real `Debug` action — remains the underlying human model and the fallback if the SDK live surface cannot converge; programmatic Rider shortcuts can report success without visibly launching Revit or the debugger.
 
 Year-specific run/debug entries should be fallback or diagnostic aids unless a future Rider constraint proves the canonical path impossible.
 
@@ -136,7 +136,7 @@ A Rider/IDE build may be part of preparing package-local outputs, but it is not 
 
 Attached probes can include host operations, script execution against the running document, attached Revit tests, or black-box Pea review. Script execution is a first-class proof path because it can reference Pe assemblies and exercise Host/Revit behavior in the live session. Pea black-box review is also a first-class product harness because it tests the operator-facing product rather than the repo agent’s assumptions.
 
-Do not document or depend on removed public `pe-dev` command groups (`doctor`, `status`, `sync`, `env`, `revit`, or `verify`) for attached RRD work. SDK `pe-revit live` owns mutation/freshness mechanics; Peco wrappers add Pea status/log hooks and product-facing ergonomics.
+Do not document or depend on removed public `pe-dev` command groups (`doctor`, `status`, `sync`, `env`, `revit`, or `verify`) for attached RRD work. SDK `pe-revit live` owns mutation/freshness mechanics; Peco adds Pea status/log context and product-facing probes.
 
 ## Packaging and release decisions
 
@@ -352,7 +352,7 @@ The automation shell is `Pe.Dev.RevitAutomation.Worker`, not desktop `Pe.App`. D
 | Recover poisoned dotnet sandbox   | `.\tools\dotnet-sandbox-safe.ps1 <dotnet args>`                                                                                  |
 | Fresh Revit proof                 | `dotnet tool run pe-revit -- test fresh --filter "Name~..." --timeout-seconds 900 --json`                                        |
 | Fresh proof planning              | `dotnet tool run pe-revit -- test fresh --plan --json --filter "Name~..."`                                                       |
-| Attached RRD proof                | Use SDK `pe-revit live/test attached`; use Peco wrappers when Pea status/log hooks or product probes should accompany the proof. |
+| Attached RRD proof                | Use SDK `pe-revit live/test attached`; use Peco context/product tools when Pea status/logs or product probes should accompany the proof. |
 | Product host/log/script check     | `pea host ...`, `pea script ...`                                                                                                 |
 | Package artifacts/MSI             | `dotnet run --project .\build\Build.csproj -c Release -- pack`                                                                   |
 | Package one year                  | `dotnet run --project .\build\Build.csproj -c Release -- pack --configuration Release.R25`                                       |

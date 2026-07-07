@@ -28,12 +28,19 @@ test("peco default profile includes Pea product and dev tool ids", () => {
   expect(
     [...defaultPeCodeRuntimeToolCatalog.keys()].sort((left, right) => left.localeCompare(right)),
   ).toEqual([
+    "capture_view",
+    "family_sheet_doc",
+    "family_sheet_mark",
+    "family_sheet_parse_spec",
+    "family_sheet_propose",
+    "family_sheet_refresh",
+    "family_sheet_status",
     "host_operation_call",
     "host_operation_search",
     "live_loop_context",
-    "live_rrd_sync",
     "pe_logs",
     "pe_status",
+    "read_image",
     "request_access",
     "script_bootstrap",
     "script_execute",
@@ -41,7 +48,6 @@ test("peco default profile includes Pea product and dev tool ids", () => {
     "script_pod_import",
     "talk_to_pea",
     "talk_to_peco_zellij",
-    "test",
   ]);
 });
 

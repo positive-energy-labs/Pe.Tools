@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Json;
@@ -478,6 +478,3 @@ internal sealed class SchemaUiBehaviorBuilder : ISchemaUiBehaviorBuilder {
         );
     }
 }
-
-
-// PE_HOT_RELOAD_NUDGE

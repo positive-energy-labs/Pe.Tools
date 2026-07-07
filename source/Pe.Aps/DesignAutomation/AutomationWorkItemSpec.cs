@@ -9,5 +9,3 @@ public sealed class AutomationWorkItemSpec {
     public int? LimitProcessingTimeSec { get; init; }
     public bool? Debug { get; init; }
 }
-
-// PE_HOT_RELOAD_NUDGE

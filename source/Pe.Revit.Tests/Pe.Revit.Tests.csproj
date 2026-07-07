@@ -60,7 +60,7 @@
     >
         <Error
                 Condition="$([System.String]::Copy('$(Configuration)').Contains('.Tests')) != 'True'"
-                Text="`dotnet test` for `Pe.Revit.Tests` requires an explicit `.Tests` configuration such as `Debug.R25.Tests`. AGENT GUIDANCE: AttachedRrd validation uses assemblies already loaded in RRD. If runtime code changed, coordinate runtime refresh through SDK `pe-revit live sync` before attached `.Tests`; an isolated dotnet build is not runtime freshness proof. Use SDK `pe-revit test fresh ...` when RRD freshness is uncertain or current document state does not matter."
+                Text="`dotnet test` for `Pe.Revit.Tests` requires an explicit `.Tests` configuration such as `Debug.R25.Tests`. AGENT GUIDANCE: AttachedRrd validation uses assemblies already loaded in RRD. If runtime code changed, coordinate runtime refresh through SDK `pe-revit live` before attached `.Tests`; an isolated dotnet build is not runtime freshness proof. Use SDK `pe-revit test fresh ...` when RRD freshness is uncertain or current document state does not matter."
         />
     </Target>
     <!--

@@ -4,32 +4,26 @@ import { peaProductToolCatalog, peCodeToolCatalog } from "../tool-metadata.ts";
 import { PeCodeCliCommands, type PeCodeCliCommandOptions } from "./PeCodeCliCommands.ts";
 import {
   liveLoopContext,
-  liveRrdSync,
   scriptExecuteWithSync,
   talkToPea,
   talkToPecoZellijTool,
-  test,
 } from "./tools.ts";
 
 export { peCodeToolCatalog } from "../tool-metadata.ts";
 export { PeCodeCliCommands } from "./PeCodeCliCommands.ts";
 export {
   liveLoopContext,
-  liveRrdSync,
   scriptExecuteWithSync,
   talkToPea,
   talkToPecoZellijTool,
-  test,
 } from "./tools.ts";
 
 export const peCodeTools = {
   [liveLoopContext.id]: liveLoopContext,
-  [liveRrdSync.id]: liveRrdSync,
   [scriptExecuteWithSync.id]: scriptExecuteWithSync,
   [talkToPea.id]: talkToPea,
   // [talkToPecoPsmuxTool.id]: talkToPecoPsmuxTool,
   [talkToPecoZellijTool.id]: talkToPecoZellijTool,
-  [test.id]: test,
 };
 
 export const peCodeRuntimeToolProfile = createRuntimeToolProfile({

@@ -44,8 +44,8 @@ internal sealed record DevCliOptions(
             "web" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Web, positionals.Skip(1).ToArray())),
             "automation" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Automation, positionals.Skip(1).ToArray())),
             "codegen" => DevCliParseResult.Failure("`pe-dev codegen` has been removed. Ops/types come from the live session now: GET /ops on the running host, `pnpm --filter @pe/host-contracts codegen` for checked-in types.", true),
-            "doctor" or "status" or "sync" or "env" or "revit" or "verify" => DevCliParseResult.Failure($"`pe-dev {positionals[0]}` has been removed. Use SDK `pe-revit live`/`pe-revit test` for live-loop mechanics, or Peco when Pea status/log hooks are needed.", true),
-            "test" => DevCliParseResult.Failure("`pe-dev test` has been removed. Use SDK `pe-revit test fresh|attached`, or Peco `peco test` when Pea status/log hooks are needed.", true),
+            "doctor" or "status" or "sync" or "env" or "revit" or "verify" => DevCliParseResult.Failure($"`pe-dev {positionals[0]}` has been removed. Use SDK `pe-revit live`/`pe-revit test` for live-loop mechanics; use Peco context/product tools only when Pea status/logs or product probes are needed.", true),
+            "test" => DevCliParseResult.Failure("`pe-dev test` has been removed. Use SDK `pe-revit test fresh|attached` or the SDK MCP `test_fresh`/`test_attached` tools.", true),
             _ => DevCliParseResult.Failure($"Unknown command '{positionals[0]}'.", true)
         };
     }

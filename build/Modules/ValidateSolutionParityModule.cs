@@ -1,4 +1,4 @@
-﻿using ModularPipelines.Attributes;
+using ModularPipelines.Attributes;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.SolutionPersistence.Model;
 using Microsoft.VisualStudio.SolutionPersistence.Serializer;
@@ -44,5 +44,3 @@ public sealed class ValidateSolutionParityModule : Module {
         context.Summary.KeyValue("Build", "SolutionParity", "Warning");
     }
 }
-
-// PE_HOT_RELOAD_NUDGE

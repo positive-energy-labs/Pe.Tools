@@ -139,5 +139,3 @@ public sealed partial class CreateAutomationBundleModule(IOptions<BuildOptions> 
     }, addinManifestPath);
 
 }
-
-// PE_HOT_RELOAD_NUDGE

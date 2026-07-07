@@ -1,4 +1,4 @@
-﻿using Autodesk.Revit.DB.Electrical;
+using Autodesk.Revit.DB.Electrical;
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Shared.RevitData;
 using System.Text.RegularExpressions;
@@ -402,5 +402,3 @@ public static class ElectricalCircuitsCatalogCollector {
         double DistanceFeet
     );
 }
-
-// PE_HOT_RELOAD_NUDGE
