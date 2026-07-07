@@ -39,8 +39,19 @@ internal sealed record ScriptContainerResolutionResult(
 
 internal sealed record RuntimeReferenceScope(
     IReadOnlyList<MetadataReference> MetadataReferences,
-    IDisposable ResolverScope
+    IScriptRuntimeScope ResolverScope
 );
+
+/// <summary>
+///     Owns dependency resolution for one script run AND loads the compiled script assembly
+///     itself. The script must be loaded through this scope: on .NET Core the default load
+///     context silently satisfies binds for any assembly the host already has loaded, BEFORE
+///     resolve events fire — so hot-reloading a lib the host loaded only works when the script
+///     lives in a context whose Load() gets first say.
+/// </summary>
+internal interface IScriptRuntimeScope : IDisposable {
+    System.Reflection.Assembly LoadScriptAssembly(byte[] assemblyBytes);
+}
 
 internal static class RevitRuntimeTargetFramework {
     public static string Resolve(string revitVersion) {

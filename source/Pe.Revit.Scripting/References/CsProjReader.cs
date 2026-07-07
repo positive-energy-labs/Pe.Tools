@@ -49,7 +49,13 @@ public sealed class CsProjReader {
             .Select(node => new ScriptReferenceDeclaration(
                 node.Attribute("Include")?.Value?.Trim() ?? string.Empty,
                 node.Elements().FirstOrDefault(child => child.Name.LocalName == "HintPath")?.Value?.Trim() ??
-                string.Empty
+                string.Empty,
+                // <Private>false</Private> is the generator's fingerprint (see ScriptProjectGenerator).
+                string.Equals(
+                    node.Elements().FirstOrDefault(child => child.Name.LocalName == "Private")?.Value?.Trim(),
+                    "false",
+                    StringComparison.OrdinalIgnoreCase
+                )
             ))
             .Where(reference => !string.IsNullOrWhiteSpace(reference.HintPath))
             .ToList();

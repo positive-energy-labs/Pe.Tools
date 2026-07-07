@@ -4,7 +4,11 @@ namespace Pe.Revit.Scripting.References;
 
 internal sealed record ScriptReferenceDeclaration(
     string Include,
-    string HintPath
+    string HintPath,
+    // The generator stamps <Private>false</Private> on every reference it emits; a reference
+    // without that marker was hand-written by the user. This is how user overrides are told
+    // apart from machine-refreshed entries when the project is regenerated.
+    bool IsGenerated = false
 );
 
 internal sealed record ScriptPackageReference(
