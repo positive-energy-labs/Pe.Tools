@@ -210,6 +210,7 @@ public static class ScheduleQueryCollector {
         long subjectContextsMs = 0;
         long rowsMs = 0;
         long projectRowsMs = 0;
+        long bindingsMs = 0;
 
         try {
             var sheetPlacements = Measure(
@@ -238,10 +239,13 @@ public static class ScheduleQueryCollector {
             var comparableContexts = contexts
                 .Where(context => context.IsComparable)
                 .ToList();
+            // One cache per schedule, shared by subject comparable reads and binding resolution:
+            // both phases resolve parameters on the same source elements.
+            var resolutionCache = new ScheduleParameterResolutionCache(doc);
             var subjectContexts = bodySection == null
                 ? []
                 : Measure(
-                    () => CollectSubjectContexts(doc, comparableContexts, subjectElements, subjects),
+                    () => CollectSubjectContexts(doc, comparableContexts, subjectElements, subjects, resolutionCache),
                     out subjectContextsMs
                 );
             var collectedRows = bodySection == null
@@ -257,6 +261,14 @@ public static class ScheduleQueryCollector {
                 () => ProjectRows(schedule.Name, rows, contexts, projection, query.Budget, issues),
                 out projectRowsMs
             );
+            if (projection.IncludeBindings && contexts.Count != 0) {
+                // Post-projection so only surviving rows pay resolution cost.
+                projectedRows = Measure(
+                    () => ResolveRowBindings(doc, projectedRows, contexts, subjectElements, resolutionCache),
+                    out bindingsMs
+                );
+            }
+
             var rowIssues = projectedRows.SelectMany(row => row.Issues ?? []).ToList();
             var includeAll = projection.View == RevitDataResultView.Full;
             var includeRows = includeAll || projection.View == RevitDataResultView.Rows || projection.IncludeRows || projection.IncludeOnlyRowsWithIssues;
@@ -284,6 +296,7 @@ public static class ScheduleQueryCollector {
                 subjectContextsMs,
                 rowsMs,
                 projectRowsMs,
+                bindingsMs,
                 subjectElements.Count,
                 subjects.Count,
                 contexts.Count,
@@ -335,6 +348,7 @@ public static class ScheduleQueryCollector {
         long subjectContextsMs,
         long rowsMs,
         long projectRowsMs,
+        long bindingsMs,
         int visibleSubjectElementCount,
         int subjectCount,
         int columnCount,
@@ -346,7 +360,7 @@ public static class ScheduleQueryCollector {
             return;
 
         Log.Information(
-            "ScheduleQuery slow projection: Schedule={ScheduleName}, ScheduleId={ScheduleId}, TotalMs={TotalMs}, SheetPlacementsMs={SheetPlacementsMs}, VisibleSubjectsMs={VisibleSubjectsMs}, SubjectDtosMs={SubjectDtosMs}, BodySectionMs={BodySectionMs}, ColumnContextsMs={ColumnContextsMs}, SubjectContextsMs={SubjectContextsMs}, RowsMs={RowsMs}, ProjectRowsMs={ProjectRowsMs}, VisibleSubjectElements={VisibleSubjectElements}, Subjects={Subjects}, Columns={Columns}, Rows={Rows}, ProjectedRows={ProjectedRows}, BoundRows={BoundRows}, UnboundRows={UnboundRows}",
+            "ScheduleQuery slow projection: Schedule={ScheduleName}, ScheduleId={ScheduleId}, TotalMs={TotalMs}, SheetPlacementsMs={SheetPlacementsMs}, VisibleSubjectsMs={VisibleSubjectsMs}, SubjectDtosMs={SubjectDtosMs}, BodySectionMs={BodySectionMs}, ColumnContextsMs={ColumnContextsMs}, SubjectContextsMs={SubjectContextsMs}, RowsMs={RowsMs}, ProjectRowsMs={ProjectRowsMs}, BindingsMs={BindingsMs}, VisibleSubjectElements={VisibleSubjectElements}, Subjects={Subjects}, Columns={Columns}, Rows={Rows}, ProjectedRows={ProjectedRows}, BoundRows={BoundRows}, UnboundRows={UnboundRows}",
             schedule.Name,
             schedule.Id.Value(),
             totalMs,
@@ -358,6 +372,7 @@ public static class ScheduleQueryCollector {
             subjectContextsMs,
             rowsMs,
             projectRowsMs,
+            bindingsMs,
             visibleSubjectElementCount,
             subjectCount,
             columnCount,
@@ -500,7 +515,10 @@ public static class ScheduleQueryCollector {
                 specTypeId,
                 ScheduleCollectorSupport.BuildEffectiveUnits(doc, bodySection, visibleColumnNumber, field, specTypeId),
                 ScheduleCollectorSupport.GetMultipleValueTexts(field),
-                ScheduleCollectorSupport.IsComparableField(field)
+                // HasSchedulableField matters here: subjects can never produce comparable values for
+                // synthetic fields like Count, so treating them as comparable makes BindRow demand a
+                // match no subject can supply and every row in the schedule goes Unbound.
+                ScheduleCollectorSupport.IsComparableField(field) && field.HasSchedulableField
             ));
             visibleColumnNumber++;
         }
@@ -508,16 +526,48 @@ public static class ScheduleQueryCollector {
         return contexts;
     }
 
+    private static List<ScheduleRenderedRow> ResolveRowBindings(
+        Document doc,
+        IReadOnlyList<ScheduleRenderedRow> rows,
+        IReadOnlyList<ColumnContext> contexts,
+        IReadOnlyList<Element> subjectElements,
+        ScheduleParameterResolutionCache resolutionCache
+    ) {
+        var bindingColumns = contexts
+            .Select(context => new ScheduleBindingResolver.BindingColumn(
+                context.Column.ColumnNumber,
+                context.Field,
+                context.FieldName
+            ))
+            .ToList();
+        var subjectElementsById = subjectElements.ToDictionary(element => element.Id.Value());
+        return rows
+            .Select(row => {
+                if (row.ResolutionStatus != ScheduleRenderedRowSubjectResolutionStatus.Bound)
+                    return row;
+
+                var boundElements = row.SubjectIds
+                    .Select(subjectId => subjectElementsById.GetValueOrDefault(subjectId))
+                    .Where(element => element != null)
+                    .Cast<Element>()
+                    .ToList();
+                return boundElements.Count == 0
+                    ? row
+                    : row with {
+                        Bindings = ScheduleBindingResolver.ResolveRow(doc, bindingColumns, boundElements, resolutionCache)
+                    };
+            })
+            .ToList();
+    }
+
     private static List<SubjectContext> CollectSubjectContexts(
         Document doc,
         IReadOnlyList<ColumnContext> contexts,
         IReadOnlyList<Element> subjectElements,
-        IReadOnlyList<ScheduleRenderedSubject> subjects
+        IReadOnlyList<ScheduleRenderedSubject> subjects,
+        ScheduleParameterResolutionCache resolutionCache
     ) {
         var subjectsById = subjects.ToDictionary(subject => subject.SubjectId);
-        // One cache per schedule: parameter maps are built once per source element instead of once per
-        // (source element × column), and ParameterElement names resolve once per column.
-        var resolutionCache = new ScheduleParameterResolutionCache(doc);
         return subjectElements
             .Select(element => {
                 if (!subjectsById.TryGetValue(element.Id.Value(), out var subject))
@@ -629,6 +679,12 @@ public static class ScheduleQueryCollector {
             );
         }
 
+        // A column only participates in binding if at least one subject actually produced a value
+        // for it. Synthetic columns (Count reports a schedulable field with an invalid parameter id)
+        // render cell text no subject read can ever match — requiring them unbinds every row.
+        var subjectValueColumns = subjectContexts
+            .SelectMany(subject => subject.ValuesByColumn.Keys)
+            .ToHashSet();
         var comparableValues = values
             .Select((value, index) => {
                 var normalizedValue = ScheduleCollectorSupport.NormalizeCellText(value);
@@ -636,6 +692,7 @@ public static class ScheduleQueryCollector {
                     contexts[index].Column.ColumnNumber,
                     normalizedValue,
                     contexts[index].IsComparable
+                    && subjectValueColumns.Contains(contexts[index].Column.ColumnNumber)
                     && !contexts[index].MultipleValueTexts.Contains(normalizedValue)
                 );
             })

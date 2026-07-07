@@ -13,7 +13,8 @@ public static class HttpRoutes {
 
 public static class HostProtocol {
     // 36: loaded-families matrix reshaped to FamilySnapshotRecord (canonical family record language)
-    public const int ContractVersion = 36;
+    // 37: schedule query rows gain optional cell bindings (write surface: includeBindings projection)
+    public const int ContractVersion = 37;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
