@@ -401,8 +401,7 @@ public static class RevitBridgeOps {
                     )
                 ],
                 callGuidance: [
-                    "Preview with dryRun=true first: it resolves, validates, and parses every edit (results carry parsedRaw and, for measurable doubles, parsedDisplay — assert parsedDisplay matches intent) without opening a transaction or changing the document.",
-                    "For measurable double parameters pass value + unit. Bare numeric values without unit are rejected as ambiguous; pass rawInternal=true only when the value is already in Revit internal units. Display strings like \"2' 6\\\"\" still parse.",
+                    "Preview with dryRun=true first (no transaction, nothing changes): results carry parsedRaw and, for measurable doubles, parsedDisplay — assert parsedDisplay matches intent before the wet run. Measurable double values need value + unit; bare numerics without unit are rejected as ambiguous (rawInternal=true only for internal-unit values).",
                     "One call is one transaction and one Revit undo step; at most 500 edits per call. Binding handles for type-parameter columns target the shared type element, so one write fans out to every instance of the type."
                 ]
             ),
