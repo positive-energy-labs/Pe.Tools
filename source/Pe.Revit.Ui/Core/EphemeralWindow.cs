@@ -15,7 +15,7 @@ namespace Pe.Revit.Ui.Core;
 ///     Wrapper window that handles all ephemeral window lifecycle management:
 ///     Alt+Tab hiding, window deactivation detection, focus restoration, and closing logic.
 /// </summary>
-public class EphemeralWindow : Window {
+public class EphemeralWindow : Window, IPaletteHost {
     private const double ZoomStep = 0.025;
     private const double ZoomMin = 0.5;
     private const double ZoomMax = 1.5;
@@ -124,25 +124,33 @@ public class EphemeralWindow : Window {
         if (this._zoomTransform == null) return;
         if ((Keyboard.Modifiers & ModifierKeys.Control) == 0) return;
 
-        var zoomDelta = e.Key switch {
+        e.Handled = ApplyZoomKey(e.Key, this._zoomTransform);
+    }
+
+    /// <summary>
+    ///     Applies a Ctrl+Plus/Minus/0 zoom key to the shared ZoomLevel and the given transform.
+    ///     Shared by floating windows and docked palettes so zoom stays consistent between modes.
+    /// </summary>
+    public static bool ApplyZoomKey(Key key, ScaleTransform transform) {
+        var zoomDelta = key switch {
             Key.OemPlus => ZoomStep, // +/= key
             Key.Add => ZoomStep, // Numpad +
             Key.OemMinus => -ZoomStep, // -/_ key
             Key.Subtract => -ZoomStep, // Numpad -
-            Key.D0 when (Keyboard.Modifiers & ModifierKeys.Control) != 0 => 0, // Reset marker
+            Key.D0 => 0, // Reset marker
             _ => (double?)null
         };
 
-        if (zoomDelta == null) return;
+        if (zoomDelta == null) return false;
 
         // Ctrl+0 resets to 100%, otherwise adjust by delta
-        ZoomLevel = e.Key == Key.D0
+        ZoomLevel = key == Key.D0
             ? 1.0
             : BclExtensions.Clamp(ZoomLevel + zoomDelta.Value, ZoomMin, ZoomMax);
 
-        this._zoomTransform.ScaleX = ZoomLevel;
-        this._zoomTransform.ScaleY = ZoomLevel;
-        e.Handled = true;
+        transform.ScaleX = ZoomLevel;
+        transform.ScaleY = ZoomLevel;
+        return true;
     }
 
     /// <summary>
@@ -173,6 +181,14 @@ public class EphemeralWindow : Window {
         rise.BeginAnimation(TranslateTransform.YProperty,
             new DoubleAnimation(10, 0, TimeSpan.FromMilliseconds(150)) { EasingFunction = ease });
     }
+
+    /// <summary> IPaletteHost: close maps to the ephemeral close flow. </summary>
+    public void CloseHost(bool restoreFocus) => this.CloseWindow(restoreFocus);
+
+    /// <summary>
+    ///     Detaches the hosted content so it can be re-parented elsewhere (e.g. the dock pane).
+    /// </summary>
+    public void DetachContent() => this._contentBorder.Child = null;
 
     public void CloseWindow(bool restoreFocus = true) {
         if (this._isClosing) return;
