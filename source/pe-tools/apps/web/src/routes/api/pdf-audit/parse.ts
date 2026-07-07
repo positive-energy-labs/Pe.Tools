@@ -9,6 +9,7 @@ import type {
   ParsedDocView,
   ParsedPage,
 } from "#/grounded-doc/types";
+import { putParsedDoc } from "#/grounded-doc/parse-cache";
 
 export const Route = createFileRoute("/api/pdf-audit/parse")({
   server: {
@@ -158,6 +159,8 @@ export const Route = createFileRoute("/api/pdf-audit/parse")({
           blocks,
           images,
         };
+        // Cache so other tabs (and pea's tools) can fetch the full grounded view by jobId.
+        putParsedDoc(view);
         return Response.json(view);
       },
     },

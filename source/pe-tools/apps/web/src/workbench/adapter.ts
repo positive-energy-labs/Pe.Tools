@@ -273,6 +273,9 @@ export function applyWireEvent(state: WorkbenchState, event: WireEvent): Workben
       return { ...state, modes: { ...state.modes, currentModeId: event.modeId } };
     case "model_changed":
       return { ...state, models: { ...state.models, currentModelId: event.modelId } };
+    case "state_changed":
+      // Full-map rebroadcast from SessionState — route slices select their `route:*` key.
+      return { ...state, sessionState: { values: event.state, hydrated: true } };
     case "error":
       return pushError(state, errorText(event.error));
     // ponytail: thread_changed/created/deleted are handled by the provider (it refreshes the

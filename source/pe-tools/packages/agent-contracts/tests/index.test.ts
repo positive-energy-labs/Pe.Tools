@@ -27,6 +27,7 @@ const minimalState: WorkbenchState = {
   memory: { entries: [] },
   inspector: { contextEntries: [], rawMessages: [] },
   debug: { events: [] },
+  sessionState: { values: {}, hydrated: false },
   uiPreferences: {
     activePanel: "transcript",
     sidebarVisible: true,
