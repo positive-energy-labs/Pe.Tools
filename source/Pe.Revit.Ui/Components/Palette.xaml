@@ -26,7 +26,8 @@
         <Border.Effect>
             <DropShadowEffect Color="Black" Direction="270" ShadowDepth="6" BlurRadius="28" Opacity="0.45" />
         </Border.Effect>
-    <Grid HorizontalAlignment="Stretch"
+    <Grid x:Name="RootGrid"
+          HorizontalAlignment="Stretch"
           VerticalAlignment="Top">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
@@ -37,16 +38,20 @@
         <Border x:Name="PaletteBackground"
                 Grid.Column="0"
                 HorizontalAlignment="Stretch"
-                VerticalAlignment="Top"
+                VerticalAlignment="Stretch"
                 Background="Transparent">
 
             <!-- Main palette content -->
             <Grid x:Name="PaletteContentGrid"
                   HorizontalAlignment="Stretch"
-                  VerticalAlignment="Top">
+                  VerticalAlignment="Stretch">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <!-- List row is star so it absorbs extra height: when the details panel makes
+                         the window taller than the list, the status bar (row 4) stays pinned bottom -->
+                    <RowDefinition Height="*" />
+                    <!-- Docked mode: PanelBackground is re-parented into this row (bottom details) -->
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -62,6 +67,7 @@
                           VerticalAlignment="Center">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
@@ -80,10 +86,25 @@
 
                         <!-- FilterBox will be added programmatically to Grid.Column="1" -->
 
-                        <ui:Button x:Name="PinButton"
+                        <ui:Button x:Name="DockButton"
                                    Grid.Column="2"
                                    Padding="4"
                                    Margin="8,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Appearance="Transparent"
+                                   BorderThickness="0"
+                                   ToolTip="Dock as panel"
+                                   Cursor="Hand">
+                            <ui:SymbolIcon x:Name="DockIcon"
+                                           Symbol="ArrowDownload24"
+                                           FontSize="16"
+                                           Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
+                        </ui:Button>
+
+                        <ui:Button x:Name="PinButton"
+                                   Grid.Column="3"
+                                   Padding="4"
+                                   Margin="4,0,0,0"
                                    VerticalAlignment="Center"
                                    Appearance="Transparent"
                                    BorderThickness="0"
@@ -121,8 +142,10 @@
                     </controls:AnimatedScrollViewer>
                 </Border>
 
-                <!-- Item List - MaxHeight set dynamically in code based on DefaultVisibleItems -->
+                <!-- Item List - MaxHeight set dynamically in code based on DefaultVisibleItems.
+                     Top-aligned so the list hugs the top of its star row (slack falls below it). -->
                 <Border Grid.Row="2"
+                        VerticalAlignment="Top"
                         Padding="4,4,4,4">
                     <local:ListView x:Name="ItemListView"
                                     ItemsSource="{Binding FilteredItems}"
@@ -132,7 +155,7 @@
 
                 <!-- Status Bar / Footer: title lives here now (Raycast-style) -->
                 <Border x:Name="StatusBarBorder"
-                        Grid.Row="3"
+                        Grid.Row="4"
                         Background="{ui:ThemeResource CardBackgroundFillColorSecondaryBrush}">
                     <Grid x:Name="StatusBarGrid">
                         <Grid.ColumnDefinitions>
@@ -159,11 +182,15 @@
                                       FontSize="11"
                                       Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}" />
 
+                        <!-- TextTrimming: right-aligned text in a star column overflows LEFT over
+                             the item count when the palette is narrow; trimming clips it instead -->
                         <ui:TextBlock x:Name="HelpText"
                                       Grid.Column="2"
                                       Text="↑↓ Navigate · ← Tooltip · → Actions · ↵ Run · Esc Close"
                                       VerticalAlignment="Center"
                                       HorizontalAlignment="Right"
+                                      TextTrimming="CharacterEllipsis"
+                                      Margin="12,0,0,0"
                                       FontSize="11"
                                       Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}" />
 
@@ -194,7 +221,7 @@
 
                 <!-- Pull-Down Tray (collapsible) -->
                 <Border x:Name="TrayBorder"
-                        Grid.Row="4"
+                        Grid.Row="5"
                         Background="{ui:ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderThickness="0,1,0,0"
                         BorderBrush="{ui:ThemeResource ControlStrokeColorDefaultBrush}"

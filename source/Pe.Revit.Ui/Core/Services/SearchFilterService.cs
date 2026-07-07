@@ -8,9 +8,7 @@ namespace Pe.Revit.Ui.Core.Services;
 ///     Standard implementation of search/filter service with fuzzy matching and persistence
 /// </summary>
 public class SearchFilterService<TItem> where TItem : class, IPaletteListItem {
-    private readonly Cosine _cosine = new(2); // 2-gram for cosine similarity
-
-    // String similarity algorithms
+    // Typo tolerance only — applied per-word, never to full strings (see WordTypoScore)
     private readonly JaroWinkler _jaroWinkler = new();
     private readonly Func<TItem, string>? _keyGenerator;
     private readonly SearchConfig _searchConfig;
@@ -48,17 +46,37 @@ public class SearchFilterService<TItem> where TItem : class, IPaletteListItem {
             return [ordered.First(), .. ordered.Skip(1).ToList()];
         }
 
-        var searchLower = searchText.ToLowerInvariant();
+        var searchTokens = searchText.Trim().ToLowerInvariant()
+            .Split([' '], StringSplitOptions.RemoveEmptyEntries);
 
-        // Use LINQ for cleaner, more functional approach
+        // Frecency is blended into the score (not a tiebreaker): a daily-driver item
+        // with a decent match outranks a never-used item with a slightly better one.
         return snapshotList
-            .Select(s => (item: s.Item, score: this.CalculateItemSearchScore(s, searchLower), s.UsageKey))
+            .Select(s => (item: s.Item, score: this.CalculateItemSearchScore(s, searchTokens), s.UsageKey))
             .Where(x => x.score > 0)
+            .Select(x => (x.item, score: x.score + this.FrecencyBoost(x.UsageKey), x.UsageKey))
             .OrderByDescending(x => x.score)
             .ThenByDescending(x => this.GetUsageCount(x.UsageKey))
             .ThenByDescending(x => this.GetLastUsedDate(x.UsageKey))
             .Select(x => x.item)
             .ToList();
+    }
+
+    /// <summary>
+    ///     Usage-derived score bonus (0-60): log-scaled use count (max 40) + recency bucket (max 20).
+    ///     Additive so it reorders near-ties without letting a popular item hijack a bad match.
+    /// </summary>
+    private double FrecencyBoost(string? key) {
+        if (string.IsNullOrWhiteSpace(key)) return 0;
+        ItemUsageData? usage;
+        lock (this._usageLock)
+            usage = this._usageCache.GetValueOrDefault(key);
+        if (usage == null || usage.UsageCount <= 0) return 0;
+
+        var countBoost = Math.Min(40.0, Math.Log(usage.UsageCount + 1, 2) * 8);
+        var days = (DateTime.Now - usage.LastUsed).TotalDays;
+        var recencyBoost = days switch { < 1 => 20.0, < 7 => 12.0, < 30 => 6.0, _ => 0.0 };
+        return countBoost + recencyBoost;
     }
 
     public void RecordUsage(TItem item) {
@@ -114,10 +132,13 @@ public class SearchFilterService<TItem> where TItem : class, IPaletteListItem {
         };
     }
 
+    // '.' matters for Revit content naming conventions ("A.O.Smith_Voltex_...")
+    private static readonly char[] WordSeparators = [' ', '-', '_', '.', '/', '('];
+
     private static string[] SplitIntoWords(string text) {
         if (string.IsNullOrEmpty(text)) return [];
 
-        return text.Split([' ', '-', '_'], StringSplitOptions.RemoveEmptyEntries)
+        return text.Split(WordSeparators, StringSplitOptions.RemoveEmptyEntries)
             .Select(w => w.ToLowerInvariant())
             .ToArray();
     }
@@ -125,7 +146,7 @@ public class SearchFilterService<TItem> where TItem : class, IPaletteListItem {
     private static string BuildAcronym(string text) {
         if (string.IsNullOrEmpty(text)) return string.Empty;
 
-        var words = text.Split([' ', '-', '_'], StringSplitOptions.RemoveEmptyEntries);
+        var words = text.Split(WordSeparators, StringSplitOptions.RemoveEmptyEntries);
         return string.Concat(words.Select(w => w.Length > 0 ? char.ToLower(w[0]) : ' '));
     }
 
@@ -152,9 +173,12 @@ public class SearchFilterService<TItem> where TItem : class, IPaletteListItem {
     }
 
     /// <summary>
-    ///     Calculates search score for an item across all configured fields
+    ///     Scores an item against all search tokens. Every token must match somewhere
+    ///     (best field wins per token); the item score is the mean token score, so
+    ///     adding a refining word never demotes the item it was meant to find.
     /// </summary>
-    private double CalculateItemSearchScore(PaletteSearchSnapshot<TItem> snapshot, string searchLower) {
+    private double CalculateItemSearchScore(PaletteSearchSnapshot<TItem> snapshot, string[] searchTokens) {
+        if (searchTokens.Length == 0) return 0;
         var metadata = snapshot.Metadata;
 
         var fields = this._searchConfig.SearchFields;
@@ -177,112 +201,105 @@ public class SearchFilterService<TItem> where TItem : class, IPaletteListItem {
 
         if (fieldTexts.Count == 0) return 0;
 
-        // Check if this is a multi-token search
-        var searchTokens = searchLower.Split([' '], StringSplitOptions.RemoveEmptyEntries);
+        var total = 0.0;
+        foreach (var token in searchTokens) {
+            var best = 0.0;
+            foreach (var (text, weight) in fieldTexts)
+                best = Math.Max(best, this.ScoreToken(text, token, metadata) * weight);
 
-        if (searchTokens.Length > 1) {
-            // Multi-token search: try to match tokens across different fields
-            var crossFieldScore = this.CalculateCrossFieldScore(fieldTexts, searchTokens);
-            if (crossFieldScore > 0) return crossFieldScore;
+            // Fuzzy fallbacks run on primary + secondary — never pill/info, where
+            // subsequence hits in long text are noise, not intent.
+            if (best < 70 * weights.Primary) {
+                var fuzzy = 0.0;
+                if (!string.IsNullOrEmpty(metadata.PrimaryLower)) {
+                    fuzzy = Math.Max(
+                        SubsequenceScore(metadata.PrimaryLower, token),
+                        this.WordTypoScore(metadata.PrimaryWords, token)) * weights.Primary;
+                }
+
+                if (fields.HasFlag(SearchFields.TextSecondary) && !string.IsNullOrEmpty(metadata.SecondaryLower))
+                    fuzzy = Math.Max(fuzzy, SubsequenceScore(metadata.SecondaryLower, token) * weights.Secondary);
+
+                best = Math.Max(best, fuzzy);
+            }
+
+            if (best <= 0) return 0; // every token must land somewhere
+            total += best;
         }
 
-        // Single token or fallback: find the best score from any single field
-        var maxScore = 0.0;
-        foreach (var (text, weight) in fieldTexts) {
-            var score = this.CalculateSearchScore(text, searchLower, metadata) * weight;
-            maxScore = Math.Max(maxScore, score);
-        }
+        var score = total / searchTokens.Length;
 
         // Apply custom score adjuster if provided
-        if (this._searchConfig.CustomScoreAdjuster != null && maxScore > 0)
-            maxScore = this._searchConfig.CustomScoreAdjuster(snapshot.Item, maxScore);
+        if (this._searchConfig.CustomScoreAdjuster != null && score > 0)
+            score = this._searchConfig.CustomScoreAdjuster(snapshot.Item, score);
 
-        return maxScore;
+        return score;
     }
 
     /// <summary>
-    ///     Calculates score when search tokens can match across different fields
-    ///     Example: "pyrevit settings" can match "pyrevit" in Secondary and "settings" in Primary
+    ///     Exact-ish match ladder for one token against one field (0-200).
     /// </summary>
-    private double CalculateCrossFieldScore(List<(string text, double weight)> fieldTexts, string[] searchTokens) {
-        // Try to match each token to the best field
-        var totalScore = 0.0;
-        var matchedTokens = 0;
+    private double ScoreToken(string text, string token, SearchableItemMetadata metadata) {
+        if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(token)) return 0;
 
-        foreach (var token in searchTokens) {
-            var bestTokenScore = 0.0;
-
-            foreach (var (text, weight) in fieldTexts) {
-                var tokenScore = 0.0;
-
-                if (this.IsWordBoundaryMatch(text, token))
-                    tokenScore = 80;
-                else if (text.StartsWith(token))
-                    tokenScore = 70;
-                else if (text.Contains(token))
-                    tokenScore = 50;
-
-                if (tokenScore > 0) bestTokenScore = Math.Max(bestTokenScore, tokenScore * weight);
-            }
-
-            if (bestTokenScore > 0) {
-                totalScore += bestTokenScore;
-                matchedTokens++;
-            }
-        }
-
-        // All tokens must match somewhere
-        if (matchedTokens != searchTokens.Length) return 0;
-
-        // Apply penalty for multi-token search (0.8x)
-        return totalScore * 0.8;
+        if (text == token) return 200;
+        if (text.StartsWith(token)) return 150;
+        // Acronym (e.g. "mfp" -> "Mechanical Floor Plan"); metadata acronym is primary-only,
+        // so this only fires when scoring the primary field.
+        if (ReferenceEquals(text, metadata.PrimaryLower) && this.IsAcronymMatch(metadata, token)) return 120;
+        if (this.IsWordBoundaryMatch(text, token)) return 110;
+        if (text.Contains(token)) return 90;
+        return 0;
     }
 
     /// <summary>
-    ///     Calculates search relevance score using String.Similarity algorithms
-    ///     Uses JaroWinkler for primary scoring (designed for short strings and typos)
-    ///     Combined with exact/prefix matching for better UX
+    ///     fzf-style in-order subsequence match (0-85): "mecfl" hits "mechanical floor plan".
+    ///     Greedy left-to-right; bonuses for word-boundary and consecutive hits, penalty for a
+    ///     late first hit. ponytail: greedy, not the fzf DP — upgrade if ranking feels off.
     /// </summary>
-    private double CalculateSearchScore(string text, string search, SearchableItemMetadata metadata) {
-        if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(search))
-            return 0;
+    private static double SubsequenceScore(string text, string token) {
+        if (token.Length < 2 || token.Length > text.Length) return 0;
 
-        var baseScore = 0.0;
-
-        // Exact match - highest priority
-        if (text == search) return 200;
-
-        // Prefix match - very high priority for type-ahead
-        if (text.StartsWith(search)) baseScore += 150;
-
-        // Contains match - high priority for substring matching
-        if (text.Contains(search)) baseScore = Math.Max(baseScore, 100);
-
-        // Acronym match (e.g., "wfs" matches "Wall Foundation Section")
-        if (this.IsAcronymMatch(metadata, search))
-            baseScore = Math.Max(baseScore, 80);
-
-        // Word boundary match (e.g., "wall" prefers "Wall Section" over "Drywall")
-        if (this.IsWordBoundaryMatch(text, search))
-            baseScore = Math.Max(baseScore, 70);
-
-        // JaroWinkler similarity - excellent for typos and short strings
-        // Returns value between 0.0 and 1.0, scale to 0-100
-        var jaroScore = this._jaroWinkler.Similarity(text, search) * 100;
-
-        // Only use JaroWinkler if it's above threshold (0.7 = 70 score)
-        if (jaroScore >= 70) baseScore = Math.Max(baseScore, jaroScore);
-
-        // For longer strings, also try Cosine similarity (good for partial matches)
-        if (search.Length >= 3 && text.Length >= 3) {
-            var cosineScore = this._cosine.Similarity(text, search) * 100;
-            if (cosineScore >= 50) {
-                // Cosine gets lower weight, but can help with partial matches
-                baseScore = Math.Max(baseScore, cosineScore * 0.7);
+        var qi = 0;
+        var bonus = 0.0;
+        var firstHit = -1;
+        var prevHit = false;
+        for (var ti = 0; ti < text.Length && qi < token.Length; ti++) {
+            if (text[ti] != token[qi]) {
+                prevHit = false;
+                continue;
             }
+
+            if (firstHit < 0) firstHit = ti;
+            var atBoundary = ti == 0 || WordSeparators.Contains(text[ti - 1]);
+            bonus += atBoundary ? 8 : prevHit ? 5 : 1;
+            prevHit = true;
+            qi++;
         }
 
-        return baseScore;
+        if (qi < token.Length) return 0; // not all chars found in order
+
+        // Normalize: all-boundary hits = 8/char is the ceiling.
+        var quality = bonus / (token.Length * 8.0);
+        var startPenalty = Math.Min(firstHit, 10);
+        return Math.Max(10, (30 + (55 * quality)) - startPenalty);
+    }
+
+    /// <summary>
+    ///     Typo tolerance (0-70): best JaroWinkler over individual primary words, so
+    ///     "shedule" still finds "Schedule" without full-string similarity noise.
+    /// </summary>
+    private double WordTypoScore(string[] words, string token) {
+        if (token.Length < 3 || words.Length == 0) return 0;
+
+        var threshold = Math.Max(0.85, this._searchConfig.MinFuzzyScore);
+        var best = 0.0;
+        foreach (var word in words) {
+            var sim = this._jaroWinkler.Similarity(word, token);
+            if (sim >= threshold) best = Math.Max(best, sim * 70);
+        }
+
+        return best;
     }
 
     /// <summary>
@@ -311,7 +328,6 @@ public class SearchFilterService<TItem> where TItem : class, IPaletteListItem {
         if (index == 0) return true;
 
         // Check if character before match is a separator
-        var charBefore = text[index - 1];
-        return charBefore is ' ' or '-' or '_';
+        return WordSeparators.Contains(text[index - 1]);
     }
 }

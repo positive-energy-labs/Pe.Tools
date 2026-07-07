@@ -43,6 +43,30 @@ public class PostableCommandHelper(ModuleStorage storage) {
         this._allCommands = null;
 
     /// <summary>
+    ///     Re-attaches the parent group (split/pulldown container) to nested button names,
+    ///     e.g. "All" under the "View Palette" split becomes "View Palette: All".
+    ///     External button ids encode the ribbon hierarchy:
+    ///     CustomCtrl_%CustomCtrl_%{Tab}%{Panel}%[{Container}%]{ItemName}
+    ///     The id is used because container Text is unstable (split buttons mirror the last-used child).
+    /// </summary>
+    private static string BuildGroupedName(DiscoveredCommand command) {
+        if (!command.Id.StartsWith("CustomCtrl_"))
+            return command.Text;
+
+        var segments = command.Id.Split('%');
+        if (segments.Length < 6)
+            return command.Text; // Direct panel button, no container
+
+        var group = segments[segments.Length - 2];
+        // GUID = a container created without an explicit internal name (Nice3point single-arg
+        // AddPullDownButton/AddSplitButton do this) — meaningless as a display prefix.
+        if (string.IsNullOrWhiteSpace(group) || group == command.Text || Guid.TryParse(group, out _))
+            return command.Text;
+
+        return $"{group}: {command.Text}";
+    }
+
+    /// <summary>
     ///     Loads all PostableCommand enum values and creates metadata
     /// </summary>
     private List<PostableCommandItem> LoadPostableCommands() {
@@ -70,7 +94,7 @@ public class PostableCommandHelper(ModuleStorage storage) {
                     continue;
 
                 var panel = command.Panel.Split('_').Last();
-                commandItem.Name = command.Text;
+                commandItem.Name = BuildGroupedName(command);
                 commandItem.Paths = [$"{command.Tab} > {panel}"];
             }
 

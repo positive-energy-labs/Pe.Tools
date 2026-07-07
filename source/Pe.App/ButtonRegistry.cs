@@ -82,28 +82,28 @@ public sealed class ButtonRegistry {
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Search and open all views, schedules, and sheets in the current document.",
-            Container = new ButtonContainer.Split("View Palette", "Tools")
+            Container = new ButtonContainer.Split("Project Palette", "Tools")
         }),
         Register(new ButtonRegistration<CmdPltViewsOnly> {
             Text = "Views",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Search and open views in the current document.",
-            Container = new ButtonContainer.Split("View Palette", "Tools")
+            Container = new ButtonContainer.Split("Project Palette", "Tools")
         }),
         Register(new ButtonRegistration<CmdPltSchedules> {
             Text = "Schedules",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Search and open schedules in the current document.",
-            Container = new ButtonContainer.Split("View Palette", "Tools")
+            Container = new ButtonContainer.Split("Project Palette", "Tools")
         }),
         Register(new ButtonRegistration<CmdPltSheets> {
             Text = "Sheets",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Search and open sheets in the current document.",
-            Container = new ButtonContainer.Split("View Palette", "Tools")
+            Container = new ButtonContainer.Split("Project Palette", "Tools")
         }),
         Register(new ButtonRegistration<CmdPltMruViews> {
             Text = "MRU Views",
@@ -130,14 +130,14 @@ public sealed class ButtonRegistry {
             Text = "Instances",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
-            ToolTip = "Browse family instances in the current document.",
+            ToolTip = "Select and zoom to placed instances; shows family elements in family documents.",
             Container = new ButtonContainer.Split("Family Palette", "Tools")
         }),
         Register(new ButtonRegistration<CmdPltFamilyElements> {
             Text = "Family Elements",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
-            ToolTip = "Browse elements inside the current family document.",
+            ToolTip = "Select and zoom to elements in the current document: family elements in family docs, placed instances in projects.",
             Container = new ButtonContainer.Panel("Tools")
         }),
         Register(new ButtonRegistration<CmdPltTasks> {
@@ -361,7 +361,10 @@ public sealed class ButtonRegistry {
                         $"Panel '{pullDownContainer.PanelName}' not found for pulldown '{pullDownContainer.PullDownName}'.");
                 }
 
-                pulldown = panel.AddPullDownButton(pullDownContainer.PullDownName);
+                // Two-arg overload: the single-arg one generates a GUID internal name, and the
+                // internal name is the container segment in child command ids — the palette
+                // parses it back out as the group prefix ("General: APS Auth").
+                pulldown = panel.AddPullDownButton(pullDownContainer.PullDownName, pullDownContainer.PullDownName);
                 pulldowns[key] = pulldown;
             }
 
@@ -381,7 +384,8 @@ public sealed class ButtonRegistry {
                         $"Panel '{splitContainer.PanelName}' not found for split button '{splitContainer.SplitName}'.");
                 }
 
-                splitButton = panel.AddSplitButton(splitContainer.SplitName);
+                // Two-arg overload for the same reason as AddPullDownButton above.
+                splitButton = panel.AddSplitButton(splitContainer.SplitName, splitContainer.SplitName);
                 splitButtons[key] = splitButton;
             }
 

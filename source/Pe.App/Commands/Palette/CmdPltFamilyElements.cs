@@ -1,15 +1,20 @@
 using Autodesk.Revit.Attributes;
+using Autodesk.Revit.UI;
 using Pe.App.Commands.Palette.FamilyPalette;
 
 namespace Pe.App.Commands.Palette;
 
 /// <summary>
-///     Shows all family elements (parameters, dimensions, etc.) in a family document.
-///     Opens on the "All" tab by default.
+///     Opens the Elements palette: family elements (parameters, dimensions, etc.) in a
+///     family document, placed family instances in a project document.
 /// </summary>
 [Transaction(TransactionMode.Manual)]
-public class CmdPltFamilyElements : FamilyElementsPaletteBase {
-    protected override int DefaultTabIndex => 0; // All tab
+public class CmdPltFamilyElements : IExternalCommand {
+    public Result Execute(
+        ExternalCommandData commandData,
+        ref string message,
+        ElementSet elementSet
+    ) => ElementsPalette.Show(commandData.Application);
 }
 
 /// <summary>
