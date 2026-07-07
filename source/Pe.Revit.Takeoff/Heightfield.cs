@@ -1,28 +1,22 @@
 namespace Pe.Revit.Takeoff;
 
-// Physics layer: per-cell floor / ceiling / headroom from the raw triangle soup. This is the
-// first-principles generalization that killed every cut-height hack at once (round-2 heightfield
-// pod): rooms are where you can STAND — floor below, ceiling above, headroom >= threshold.
-// - Level plane != floor: shafts, stair voids and double-height volumes cross any cut plane; a
-//   cell with no floor in the level window is simply not walkable.
-// - Open-to-sky (courtyards, terraces) have no ceiling -> not rooms. This is the corrective for
-//   projection-seed false positives, which cannot see "roofless".
-// - Knee walls / raked partitions / sloped ceilings need no special cases: headroom handles them.
-// - Dormered-wing corridors that "leaked to outside" in 2D approaches are bounded here because
-//   the leak path crosses cells with no floor (stairwell) or no ceiling (roof deck).
+// Physics layer: per-cell floor / ceiling from the raw triangle soup (round-2 heightfield pod
+// lineage). Role division is strict — see Detector: the FLOOR edge may shape room boundaries
+// (subfloor data is dense and reliable; stair voids and double-height volumes end rooms exactly
+// where the floor ends), the CEILING only GATES regions (headroom fraction kills open-to-sky
+// courtyards/terraces). Ceiling data is too patchy at framing stage (joist gaps, tilted planes)
+// to touch boundary geometry — letting it do so was the wavy-room-edge regression.
 //
 // Earned data-quality lessons (Chadds framing IFC): joist-only floors (no subfloor sheathing yet)
-// need a small morphological gap-fill; vertical geometry must ALSO block walkability (stud walls
-// otherwise read as 7.4-ft-headroom cells: the probe sees over the plate); roof planes near the
-// level plane masquerade as floors -> constrain the floor window tightly around the level.
+// need a small morphological gap-fill; roof planes near the level plane masquerade as floors ->
+// constrain the floor window tightly around the level; site geometry (topo, planting) must be
+// excluded or tree canopies read as ceilings and terraces as floors.
 public sealed class Heightfield
 {
     public int W, H;
     public double MinX, MinY, CellFt;
     public float[] FloorZ = null!;   // NaN = no floor found in window
     public float[] CeilZ = null!;    // NaN = open to sky
-    public bool[] Blocked = null!;   // vertical geometry in the wall band
-    public bool[] Walkable = null!;  // floor + ceiling + headroom, minus Blocked
 
     private static readonly HashSet<ElementId> SiteCategories = new(new[] {
         BuiltInCategory.OST_Topography, BuiltInCategory.OST_Planting, BuiltInCategory.OST_Site,
@@ -40,7 +34,7 @@ public sealed class Heightfield
             H = (int)Math.Ceiling((crop.Max.Y - crop.Min.Y) / opt.CellFt),
         };
         int n = hf.W * hf.H;
-        hf.FloorZ = new float[n]; hf.CeilZ = new float[n]; hf.Blocked = new bool[n];
+        hf.FloorZ = new float[n]; hf.CeilZ = new float[n];
         for (int i = 0; i < n; i++) { hf.FloorZ[i] = float.NaN; hf.CeilZ[i] = float.NaN; }
 
         double zLo = lvlZ - opt.FloorTolFt - 1.0, zHi = lvlZ + 14.0;
@@ -72,14 +66,10 @@ public sealed class Heightfield
         // mask by copying the nearest floor z — round-2 heightfield pod lesson.
         FillFloorGaps(hf, (int)Math.Ceiling(0.75 / opt.CellFt));
 
-        hf.Walkable = new bool[n];
+        int floorCells = 0;
         for (int i = 0; i < n; i++)
-        {
-            if (hf.Blocked[i] || float.IsNaN(hf.FloorZ[i]) || float.IsNaN(hf.CeilZ[i])) continue;
-            if (Math.Abs(hf.FloorZ[i] - lvlZ) > opt.FloorTolFt) continue;
-            hf.Walkable[i] = hf.CeilZ[i] - hf.FloorZ[i] >= opt.MinHeadroomFt;
-        }
-        log($"[heightfield] {hf.W}x{hf.H} elems={nElems} tris={nTris} walkable={hf.Walkable.Count(b => b)}");
+            if (!float.IsNaN(hf.FloorZ[i]) && Math.Abs(hf.FloorZ[i] - lvlZ) <= opt.FloorTolFt) floorCells++;
+        log($"[heightfield] {hf.W}x{hf.H} elems={nElems} tris={nTris} floorCells={floorCells}");
         return hf;
     }
 
@@ -139,7 +129,6 @@ public sealed class Heightfield
     {
         int added = 0;
         double floorLo = lvlZ - opt.FloorTolFt, floorHi = lvlZ + opt.FloorTolFt;
-        double wallLo = lvlZ + 1.0, wallHi = lvlZ + opt.MinHeadroomFt;
         for (int i = 0; i < m.NumTriangles; i++)
         {
             var t = m.get_Triangle(i);
@@ -151,27 +140,19 @@ public sealed class Heightfield
             double nl = Math.Sqrt(nx * nx + ny * ny + nz * nz);
             if (nl < 1e-12) continue;
             double vert = Math.Abs(nz) / nl; // 1 = horizontal surface, 0 = vertical surface
+            if (vert < 0.5) continue;        // vertical geometry is ink's job (walls are drawn)
             double tz0 = Math.Min(a.Z, Math.Min(b.Z, c.Z)), tz1 = Math.Max(a.Z, Math.Max(b.Z, c.Z));
 
-            if (vert >= 0.5)
-            {
-                // horizontal-ish: candidate floor (in the level window) and/or ceiling (above it)
-                bool asFloor = tz1 >= floorLo && tz0 <= floorHi;
-                bool asCeil = tz1 > floorHi; // anything overhead counts toward the ceiling probe
-                if (asFloor || asCeil)
-                    RasterizeTri(a, b, c, hf, (idx, z) => {
-                        if (asFloor && z >= floorLo && z <= floorHi)
-                            if (float.IsNaN(hf.FloorZ[idx]) || z > hf.FloorZ[idx]) hf.FloorZ[idx] = (float)z;
-                        if (asCeil && z > floorHi)
-                            if (float.IsNaN(hf.CeilZ[idx]) || z < hf.CeilZ[idx]) hf.CeilZ[idx] = (float)z;
-                    });
-            }
-            else if (vert < 0.5 && tz1 >= wallLo && tz0 <= wallHi)
-            {
-                // vertical-ish geometry crossing the wall band blocks walkability (stud walls,
-                // posts, blocking). Without this pass walls read as walkable 7-ft-headroom cells.
-                RasterizeTri(a, b, c, hf, (idx, _) => hf.Blocked[idx] = true);
-            }
+            // horizontal-ish: candidate floor (in the level window) and/or ceiling (above it)
+            bool asFloor = tz1 >= floorLo && tz0 <= floorHi;
+            bool asCeil = tz1 > floorHi; // anything overhead counts toward the ceiling probe
+            if (asFloor || asCeil)
+                RasterizeTri(a, b, c, hf, (idx, z) => {
+                    if (asFloor && z >= floorLo && z <= floorHi)
+                        if (float.IsNaN(hf.FloorZ[idx]) || z > hf.FloorZ[idx]) hf.FloorZ[idx] = (float)z;
+                    if (asCeil && z > floorHi)
+                        if (float.IsNaN(hf.CeilZ[idx]) || z < hf.CeilZ[idx]) hf.CeilZ[idx] = (float)z;
+                });
         }
         return added;
     }
