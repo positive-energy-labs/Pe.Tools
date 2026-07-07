@@ -1,6 +1,7 @@
 using Autodesk.Revit.DB.Electrical;
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Shared.RevitData;
+using System.Globalization;
 
 namespace Pe.Revit.DocumentData.Electrical;
 
@@ -295,9 +296,23 @@ internal static class ElectricalCollectorSupport {
             value,
             displayValue,
             ToRequestedParameterStorageType(parameter?.StorageType ?? StorageType.None),
-            source
+            source,
+            ParameterId: parameter?.Id.Value(),
+            RawValue: parameter == null ? null : GetRawValue(parameter),
+            // Parameter.IsReadOnly ONLY — UserModifiable reports false for writable built-ins
+            // (Mark, Type Comments) whose Set() succeeds; proven in ScheduleCellBindingProofTests.
+            IsReadOnly: parameter?.IsReadOnly
         );
     }
+
+    private static string? GetRawValue(Parameter parameter) =>
+        parameter.StorageType switch {
+            StorageType.String => parameter.AsString(),
+            StorageType.Integer => parameter.AsInteger().ToString(CultureInfo.InvariantCulture),
+            StorageType.Double => parameter.AsDouble().ToString("G17", CultureInfo.InvariantCulture),
+            StorageType.ElementId => parameter.AsElementId()?.Value().ToString(CultureInfo.InvariantCulture),
+            _ => null
+        };
 
     private static Parameter? TryFindRequestedParameter(
         Element element,
