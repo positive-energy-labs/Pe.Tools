@@ -65,6 +65,16 @@ public sealed class AppCore : IPePayload {
 
         ButtonRegistry.BuildRibbon(context, "PE TOOLS");
 
+        // Shell pane for dockable palettes — registration is startup-only; a hot-swapped
+        // payload no-ops here and reuses the shell via Application.Current.Properties.
+        try {
+            var registered = PaletteDock.Register(app);
+            Log.Information("Palette dock pane registration: {Outcome}",
+                registered ? "registered" : "skipped (no WPF Application yet)");
+        } catch (Exception ex) {
+            Log.Warning(ex, "Palette dock pane registration failed; dock buttons will be hidden.");
+        }
+
         TaskInitializer.RegisterAllTasks();
 
         AutoTagService.Instance.Initialize(app.ActiveAddInId, app);
