@@ -240,7 +240,8 @@ public sealed class RevitScriptExecutionService(
                 var containerResult = this.InstantiateContainer(
                     compilationResult.AssemblyBytes,
                     executionContext,
-                    plan
+                    plan,
+                    runtimeReferenceScope.ResolverScope
                 );
                 Log.Information(
                     "Revit scripting instantiate completed: ExecutionId={ExecutionId}, Status={Status}, ContainerType={ContainerTypeName}, Diagnostics={DiagnosticCount}",
@@ -754,10 +755,14 @@ public sealed class RevitScriptExecutionService(
     private ScriptContainerResolutionResult InstantiateContainer(
         byte[] assemblyBytes,
         RevitScriptContext context,
-        ScriptExecutionPlan plan
+        ScriptExecutionPlan plan,
+        IScriptRuntimeScope runtimeScope
     ) {
         try {
-            var assembly = Assembly.Load(assemblyBytes);
+            // Loaded through the scope's own load context, NOT Assembly.Load: only a context we
+            // own can route the script's binds to freshly built dlls when the host already has
+            // an older copy loaded (see IScriptRuntimeScope).
+            var assembly = runtimeScope.LoadScriptAssembly(assemblyBytes);
             var containerTypes = assembly.GetTypes()
                 .Where(type => !type.IsAbstract && typeof(PeScriptContainer).IsAssignableFrom(type))
                 .ToList();

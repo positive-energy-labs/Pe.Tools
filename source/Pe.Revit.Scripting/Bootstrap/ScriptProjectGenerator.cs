@@ -29,10 +29,25 @@ public sealed class ScriptProjectGenerator(
     ) {
         var generatedRuntimeReferences = GetGeneratedRuntimeReferences(runtimeAssemblyPath);
         var existingProject = this._csProjReader.Read(existingProjectContent ?? "<Project />", workspaceRoot);
+        // References the USER wrote (no <Private>false</Private> fingerprint) always survive
+        // regeneration; machine entries are discarded and re-derived fresh each run. When a user
+        // reference names the same assembly as an auto-enumerated bundle sibling, the user's
+        // HintPath wins and the auto entry is dropped — that is the override hook for pointing a
+        // script at a rebuilt dll when the host has the bundle copy loaded (and its file locked).
         var preservedReferences = existingProject.References
-            .Where(reference => !IsGeneratedRuntimeReference(reference, generatedRuntimeReferences))
+            .Where(reference => !reference.IsGenerated)
             .GroupBy(reference => reference.HintPath, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
+            .ToList();
+        var preservedReferenceNames = new HashSet<string>(
+            preservedReferences.Select(reference =>
+                string.IsNullOrWhiteSpace(reference.Include)
+                    ? Path.GetFileNameWithoutExtension(reference.HintPath)
+                    : reference.Include),
+            StringComparer.OrdinalIgnoreCase
+        );
+        generatedRuntimeReferences = generatedRuntimeReferences
+            .Where(reference => !preservedReferenceNames.Contains(reference.Include))
             .ToList();
         var preservedPackageReferences = NormalizePackageReferences(existingProject.PackageReferences, revitVersion);
         var usings = NormalizeUsings(existingProject.Usings);
@@ -114,6 +129,8 @@ public sealed class ScriptProjectGenerator(
         foreach (var runtimeReference in generatedRuntimeReferences) {
             _ = builder.AppendLine($"    <Reference Include=\"{EscapeXml(runtimeReference.Include)}\">");
             _ = builder.AppendLine($"      <HintPath>{EscapeXml(runtimeReference.HintPath)}</HintPath>");
+            // <Private>false</Private> doubles as the "machine wrote this" fingerprint that
+            // CsProjReader reads back as IsGenerated — do not add it to hand-written references.
             _ = builder.AppendLine("      <Private>false</Private>");
             _ = builder.AppendLine("    </Reference>");
         }
@@ -161,22 +178,6 @@ public sealed class ScriptProjectGenerator(
             .Distinct(StringComparer.Ordinal)
             .OrderBy(@using => @using, StringComparer.Ordinal)
             .ToList();
-
-    private static bool IsGeneratedRuntimeReference(
-        ScriptReferenceDeclaration reference,
-        IReadOnlyList<ScriptReferenceDeclaration> generatedRuntimeReferences
-    ) {
-        if (generatedRuntimeReferences.Any(generatedReference =>
-                string.Equals(reference.Include, generatedReference.Include, StringComparison.OrdinalIgnoreCase)))
-            return true;
-
-        return generatedRuntimeReferences.Any(generatedReference =>
-            string.Equals(
-                Path.GetFullPath(reference.HintPath),
-                Path.GetFullPath(generatedReference.HintPath),
-                StringComparison.OrdinalIgnoreCase
-            ));
-    }
 
     private static string EscapeXml(string value) =>
         SecurityElement.Escape(value) ?? string.Empty;
