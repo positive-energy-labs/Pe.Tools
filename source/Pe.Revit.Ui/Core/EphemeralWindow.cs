@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 
 namespace Pe.Revit.Ui.Core;
 
@@ -41,7 +42,10 @@ public class EphemeralWindow : Window {
         var ownerHandle = RevitUiSession.CurrentUIApplication.GetActiveWindowHandle();
         if (ownerHandle != IntPtr.Zero) {
             _ = new WindowInteropHelper(this) { Owner = ownerHandle };
-            this.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            // CenterOwner + SizeToContent positions with the pre-layout size (WPF quirk),
+            // so place manually at Loaded when the real size is known.
+            this.WindowStartupLocation = WindowStartupLocation.Manual;
+            this.Loaded += (_, _) => this.PositionOverOwner(ownerHandle);
         } else
             this.WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
@@ -76,6 +80,9 @@ public class EphemeralWindow : Window {
         this.PreviewKeyDown += this.OnPreviewKeyDown;
 
         this.Content = this._contentBorder;
+
+        // Subtle fade + rise on open (after PositionOverOwner, which subscribed earlier)
+        this.Loaded += (_, _) => this.AnimateEntrance();
 
         // Set title on Palette if it supports it
         if (content is ITitleable titleable) titleable.SetTitle(title);
@@ -136,6 +143,35 @@ public class EphemeralWindow : Window {
         this._zoomTransform.ScaleX = ZoomLevel;
         this._zoomTransform.ScaleY = ZoomLevel;
         e.Handled = true;
+    }
+
+    /// <summary>
+    ///     Centers the window horizontally over the owner and anchors it 20% down
+    ///     from the owner's top edge (launcher-style placement).
+    /// </summary>
+    private void PositionOverOwner(IntPtr ownerHandle) {
+        if (!GetWindowRect(ownerHandle, out var rect)) return;
+
+        // ponytail: uses this window's DPI transform for the owner rect; close enough
+        // unless owner sits on a monitor with a different scale factor
+        var transform = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice
+                        ?? Matrix.Identity;
+        var topLeft = transform.Transform(new System.Windows.Point(rect.Left, rect.Top));
+        var bottomRight = transform.Transform(new System.Windows.Point(rect.Right, rect.Bottom));
+
+        this.Left = topLeft.X + ((bottomRight.X - topLeft.X - this.ActualWidth) / 2);
+        this.Top = topLeft.Y + ((bottomRight.Y - topLeft.Y) * 0.2);
+    }
+
+    private void AnimateEntrance() {
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+        var rise = new TranslateTransform(0, 10);
+        this._contentBorder.RenderTransform = rise;
+
+        this._contentBorder.BeginAnimation(OpacityProperty,
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(120)) { EasingFunction = ease });
+        rise.BeginAnimation(TranslateTransform.YProperty,
+            new DoubleAnimation(10, 0, TimeSpan.FromMilliseconds(150)) { EasingFunction = ease });
     }
 
     public void CloseWindow(bool restoreFocus = true) {
@@ -273,6 +309,18 @@ public class EphemeralWindow : Window {
 
     [DllImport("user32.dll")]
     private static extern short GetAsyncKeyState(int vKey);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
     [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);

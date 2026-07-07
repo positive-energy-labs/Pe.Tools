@@ -45,14 +45,27 @@ public static class PaletteAttachedProperties {
 public sealed partial class Palette : ICloseRequestable, ITitleable {
     private const double DefaultSidebarWidth = 400;
     private const double ExpandedPanelWidth = 600;
-    private const double DefaultPaletteWidth = 500;
+    private const double DefaultPaletteWidth = 640;
+
+    /// <summary>
+    ///     Palette column width while the detail panel is open. The palette compresses so the
+    ///     combined window stays around 2/3 of the old side-by-side footprint.
+    /// </summary>
+    private const double CompactPaletteWidth = 340;
+
+    /// <summary> Cap on the panel width in its normal (non-expanded) state. </summary>
+    private const double MaxSidebarWidth = 360;
+
+    /// <summary> Extra height added to both columns when the panel expand button is toggled. </summary>
+    private const double ExpandedExtraHeight = 300;
+
     private const double DefaultTrayMaxHeight = 200;
 
     /// <summary>
     ///     Number of visible items in the palette list before scrolling.
     ///     Determines both list MaxHeight and default panel height.
     /// </summary>
-    private const int DefaultVisibleItems = 7;
+    private const int DefaultVisibleItems = 9;
 
     /// <summary>
     ///     Approximate height per list item in pixels.
@@ -63,7 +76,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     ///     Height of palette chrome (title bar + search + status bar).
     ///     Used to calculate panel height to match palette.
     /// </summary>
-    private const double PaletteChromeHeight = 115;
+    private const double PaletteChromeHeight = 90;
 
     private readonly bool _isSearchBoxHidden;
     private readonly SolidColorBrush _pinHoverBrush = new(Color.FromRgb(126, 179, 255));
@@ -156,11 +169,14 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
 
         // Apply styling to palette content borders
         new BorderSpec()
-            .Padding(UiSz.ll, UiSz.ll, UiSz.ll, UiSz.ll)
+            .Padding(12, 10, 12, 10)
             .ApplyToBorder(this.SearchBoxBorder);
+        // Hairline divider between search and results (set after ApplyToBorder, which resets borders)
+        this.SearchBoxBorder.BorderThickness = new Thickness(0, 0, 0, 1);
+        this.SearchBoxBorder.SetResourceReference(BorderBrushProperty, "DividerStrokeColorDefaultBrush");
 
         new BorderSpec()
-            .Border((UiSz.none, UiSz.none, UiSz.l, UiSz.l))
+            .Border((UiSz.none, UiSz.none, UiSz.ll, UiSz.ll))
             .Padding(UiSz.l, UiSz.s, UiSz.l, UiSz.s)
             .ApplyToBorder(this.StatusBarBorder);
         this.StatusBarBorder.ClipToBounds = true;
@@ -243,7 +259,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
             this.SidebarContent.Content = paletteSidebar.Content;
 
             // Update help text to reflect sidebar instead of tooltip
-            this.HelpText.Text = "↑↓ Navigate • ← Details • → Actions • Click/Enter Execute • Esc Close";
+            this.HelpText.Text = "↑↓ Navigate · ← Details · → Actions · ↵ Run · Esc Close";
         }
     }
 
@@ -316,18 +332,12 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     }
 
     /// <summary>
-    ///     Expands the sidebar/panel to the specified width.
-    ///     Adjusts corner radii so palette has flat right edge when panel is visible.
+    ///     Expands the sidebar/panel. The palette column compresses so the combined
+    ///     window grows less than the panel's full width.
     /// </summary>
     public void ExpandSidebar(GridLength width) {
-        var wasCollapsed = this.SidebarColumn.Width.Value == 0;
-        this.SidebarColumn.Width = width;
-
-        if (wasCollapsed) {
-            // Both sides get rounded inner corners (smaller radius) for visual separation
-            this.PaletteBackground.CornerRadius = new CornerRadius(8, 4, 4, 8);
-            this.PanelBackground.CornerRadius = new CornerRadius(4, 8, 8, 4);
-        }
+        this.SidebarColumn.Width = new GridLength(Math.Min(width.Value, MaxSidebarWidth));
+        this.PaletteBackground.Width = CompactPaletteWidth;
     }
 
     /// <summary>
@@ -340,17 +350,17 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     }
 
     /// <summary>
-    ///     Collapses the sidebar/panel to width 0.
-    ///     Restores full corner radius to palette.
+    ///     Collapses the sidebar/panel to width 0 and restores the full palette width.
     /// </summary>
     public void CollapseSidebar() {
         var currentWidth = this.SidebarColumn.Width.Value;
         if (currentWidth <= 0) return; // Already collapsed
 
         this.SidebarColumn.Width = new GridLength(0);
+        this.PaletteBackground.Width = DefaultPaletteWidth;
 
-        // Restore full corners to palette when panel is hidden
-        this.PaletteBackground.CornerRadius = new CornerRadius(8);
+        if (this._isPanelExpanded)
+            this.SetExpandedHeights(false);
         this._isPanelExpanded = false;
     }
 
@@ -367,23 +377,30 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     }
 
     /// <summary>
-    ///     Expands only the panel width (not the palette).
-    ///     Used by the expand button in the panel header.
+    ///     Toggles the panel between normal and expanded: wider panel and a taller window
+    ///     (both the item list and the panel grow). Used by the expand button in the panel header.
     /// </summary>
     public void ExpandPanel() {
         if (this._isPanelExpanded) {
-            // Collapse back to normal width and height
             var currentWidth = this._currentSidebar?.Width ?? new GridLength(DefaultSidebarWidth);
-            this.SidebarColumn.Width = currentWidth;
-            this.PanelBackground.MaxHeight = PaletteChromeHeight + (DefaultVisibleItems * ItemHeight);
+            this.SidebarColumn.Width = new GridLength(Math.Min(currentWidth.Value, MaxSidebarWidth));
+            this.SetExpandedHeights(false);
             this._isPanelExpanded = false;
         } else {
-            // Expand to larger width and height
             this.SidebarColumn.Width = new GridLength(ExpandedPanelWidth);
-            this.PanelBackground.MaxHeight =
-                PaletteChromeHeight + (DefaultVisibleItems * ItemHeight) + 300; // Extra 300px when expanded
+            this.SetExpandedHeights(true);
             this._isPanelExpanded = true;
         }
+    }
+
+    /// <summary>
+    ///     Grows/shrinks both columns together so the whole window changes height.
+    /// </summary>
+    private void SetExpandedHeights(bool expanded) {
+        var listHeight = (DefaultVisibleItems * ItemHeight) + (expanded ? ExpandedExtraHeight : 0);
+        if (this.ItemListView.Parent is Border itemListBorder)
+            itemListBorder.MaxHeight = listHeight;
+        this.PanelBackground.MaxHeight = PaletteChromeHeight + listHeight;
     }
 
     private void ExpandPanelButton_Click(object sender, RoutedEventArgs e) => this.ExpandPanel();
@@ -790,13 +807,13 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         for (var i = 0; i < this._tabButtons.Count; i++) {
             var button = this._tabButtons[i];
             if (i == selectedIndex) {
-                // Selected: lighter than palette background
+                // Selected: raised segment inside the tab container
                 button.SetResourceReference(BackgroundProperty, "ControlFillColorDefaultBrush");
                 button.SetResourceReference(ForegroundProperty, "TextFillColorPrimaryBrush");
                 button.FontWeight = FontWeights.SemiBold;
             } else {
-                // Unselected: same background as palette to read as buttons
-                button.SetResourceReference(BackgroundProperty, "ApplicationBackgroundBrush");
+                // Unselected: flat against the segmented container
+                button.Background = Brushes.Transparent;
                 button.SetResourceReference(ForegroundProperty, "TextFillColorSecondaryBrush");
                 button.FontWeight = FontWeights.Normal;
             }

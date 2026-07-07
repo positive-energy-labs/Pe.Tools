@@ -17,7 +17,7 @@ public partial class ListView {
         nameof(ItemsSource),
         typeof(IEnumerable),
         typeof(ListView),
-        new PropertyMetadata(null, OnItemsSourceChanged));
+        new PropertyMetadata(null));
 
     public static readonly DependencyProperty SelectedItemProperty = DependencyProperty.Register(
         nameof(SelectedItem),
@@ -30,15 +30,6 @@ public partial class ListView {
         typeof(int),
         typeof(ListView),
         new FrameworkPropertyMetadata(-1, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
-
-    /// <summary>
-    ///     Attached property to indicate if the list has any items with icons (for consistent spacing)
-    /// </summary>
-    public static readonly DependencyProperty HasIconsProperty = DependencyProperty.RegisterAttached(
-        "HasIcons",
-        typeof(bool),
-        typeof(ListView),
-        new PropertyMetadata(false));
 
     private readonly TimeSpan _scrollAnimationDuration = TimeSpan.FromMilliseconds(300);
     private readonly TimeSpan _selectionChangeThrottle = TimeSpan.FromMilliseconds(50);
@@ -162,24 +153,6 @@ public partial class ListView {
         }
 
         return null;
-    }
-
-    public static bool GetHasIcons(DependencyObject obj) => (bool)obj.GetValue(HasIconsProperty);
-    public static void SetHasIcons(DependencyObject obj, bool value) => obj.SetValue(HasIconsProperty, value);
-
-    private static void OnItemsSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) {
-        if (d is not ListView listView) return;
-
-        // Check if any item has an icon
-        if (e.NewValue is IEnumerable items) {
-            var hasIcons = items.Cast<object>()
-                .OfType<IPaletteListItem>()
-                .Any(item => item.Icon != null);
-
-            SetHasIcons(listView, hasIcons);
-            // Also set on the inner ItemListView so items can find it
-            SetHasIcons(listView.ItemListView, hasIcons);
-        }
     }
 
     public WpfUiListViewItem? ContainerFromItem(object item) =>
