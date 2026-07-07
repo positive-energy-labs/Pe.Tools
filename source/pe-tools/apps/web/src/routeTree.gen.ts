@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from "./routes/__root";
 import { Route as SettingsPrototypeRouteImport } from "./routes/settings-prototype";
 import { Route as OpsRouteImport } from "./routes/ops";
+import { Route as FamilySheetRouteImport } from "./routes/family-sheet";
 import { Route as FamilyMatrixRouteImport } from "./routes/family-matrix";
 import { Route as FamilyDocRouteImport } from "./routes/family-doc";
 import { Route as FamilyAuditRouteImport } from "./routes/family-audit";
@@ -21,6 +22,7 @@ import { Route as IndexRouteImport } from "./routes/index";
 import { Route as DemoTanstackQueryRouteImport } from "./routes/demo/tanstack-query";
 import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
 import { Route as ApiPdfAuditMapRouteImport } from "./routes/api/pdf-audit/map";
+import { Route as ApiPdfAuditParseParseIdRouteImport } from "./routes/api/pdf-audit/parse.$parseId";
 
 const SettingsPrototypeRoute = SettingsPrototypeRouteImport.update({
   id: "/settings-prototype",
@@ -30,6 +32,11 @@ const SettingsPrototypeRoute = SettingsPrototypeRouteImport.update({
 const OpsRoute = OpsRouteImport.update({
   id: "/ops",
   path: "/ops",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const FamilySheetRoute = FamilySheetRouteImport.update({
+  id: "/family-sheet",
+  path: "/family-sheet",
   getParentRoute: () => rootRouteImport,
 } as any);
 const FamilyMatrixRoute = FamilyMatrixRouteImport.update({
@@ -82,6 +89,11 @@ const ApiPdfAuditMapRoute = ApiPdfAuditMapRouteImport.update({
   path: "/api/pdf-audit/map",
   getParentRoute: () => rootRouteImport,
 } as any);
+const ApiPdfAuditParseParseIdRoute = ApiPdfAuditParseParseIdRouteImport.update({
+  id: "/$parseId",
+  path: "/$parseId",
+  getParentRoute: () => ApiPdfAuditParseRoute,
+} as any);
 
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
@@ -91,11 +103,13 @@ export interface FileRoutesByFullPath {
   "/family-audit": typeof FamilyAuditRoute;
   "/family-doc": typeof FamilyDocRoute;
   "/family-matrix": typeof FamilyMatrixRoute;
+  "/family-sheet": typeof FamilySheetRoute;
   "/ops": typeof OpsRoute;
   "/settings-prototype": typeof SettingsPrototypeRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
   "/api/pdf-audit/map": typeof ApiPdfAuditMapRoute;
-  "/api/pdf-audit/parse": typeof ApiPdfAuditParseRoute;
+  "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
+  "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute;
@@ -105,11 +119,13 @@ export interface FileRoutesByTo {
   "/family-audit": typeof FamilyAuditRoute;
   "/family-doc": typeof FamilyDocRoute;
   "/family-matrix": typeof FamilyMatrixRoute;
+  "/family-sheet": typeof FamilySheetRoute;
   "/ops": typeof OpsRoute;
   "/settings-prototype": typeof SettingsPrototypeRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
   "/api/pdf-audit/map": typeof ApiPdfAuditMapRoute;
-  "/api/pdf-audit/parse": typeof ApiPdfAuditParseRoute;
+  "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
+  "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
@@ -120,11 +136,13 @@ export interface FileRoutesById {
   "/family-audit": typeof FamilyAuditRoute;
   "/family-doc": typeof FamilyDocRoute;
   "/family-matrix": typeof FamilyMatrixRoute;
+  "/family-sheet": typeof FamilySheetRoute;
   "/ops": typeof OpsRoute;
   "/settings-prototype": typeof SettingsPrototypeRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
   "/api/pdf-audit/map": typeof ApiPdfAuditMapRoute;
-  "/api/pdf-audit/parse": typeof ApiPdfAuditParseRoute;
+  "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
+  "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
@@ -136,11 +154,13 @@ export interface FileRouteTypes {
     | "/family-audit"
     | "/family-doc"
     | "/family-matrix"
+    | "/family-sheet"
     | "/ops"
     | "/settings-prototype"
     | "/demo/tanstack-query"
     | "/api/pdf-audit/map"
-    | "/api/pdf-audit/parse";
+    | "/api/pdf-audit/parse"
+    | "/api/pdf-audit/parse/$parseId";
   fileRoutesByTo: FileRoutesByTo;
   to:
     | "/"
@@ -150,11 +170,13 @@ export interface FileRouteTypes {
     | "/family-audit"
     | "/family-doc"
     | "/family-matrix"
+    | "/family-sheet"
     | "/ops"
     | "/settings-prototype"
     | "/demo/tanstack-query"
     | "/api/pdf-audit/map"
-    | "/api/pdf-audit/parse";
+    | "/api/pdf-audit/parse"
+    | "/api/pdf-audit/parse/$parseId";
   id:
     | "__root__"
     | "/"
@@ -164,11 +186,13 @@ export interface FileRouteTypes {
     | "/family-audit"
     | "/family-doc"
     | "/family-matrix"
+    | "/family-sheet"
     | "/ops"
     | "/settings-prototype"
     | "/demo/tanstack-query"
     | "/api/pdf-audit/map"
-    | "/api/pdf-audit/parse";
+    | "/api/pdf-audit/parse"
+    | "/api/pdf-audit/parse/$parseId";
   fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
@@ -179,11 +203,12 @@ export interface RootRouteChildren {
   FamilyAuditRoute: typeof FamilyAuditRoute;
   FamilyDocRoute: typeof FamilyDocRoute;
   FamilyMatrixRoute: typeof FamilyMatrixRoute;
+  FamilySheetRoute: typeof FamilySheetRoute;
   OpsRoute: typeof OpsRoute;
   SettingsPrototypeRoute: typeof SettingsPrototypeRoute;
   DemoTanstackQueryRoute: typeof DemoTanstackQueryRoute;
   ApiPdfAuditMapRoute: typeof ApiPdfAuditMapRoute;
-  ApiPdfAuditParseRoute: typeof ApiPdfAuditParseRoute;
+  ApiPdfAuditParseRoute: typeof ApiPdfAuditParseRouteWithChildren;
 }
 
 declare module "@tanstack/react-router" {
@@ -200,6 +225,13 @@ declare module "@tanstack/react-router" {
       path: "/ops";
       fullPath: "/ops";
       preLoaderRoute: typeof OpsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/family-sheet": {
+      id: "/family-sheet";
+      path: "/family-sheet";
+      fullPath: "/family-sheet";
+      preLoaderRoute: typeof FamilySheetRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/family-matrix": {
@@ -272,8 +304,26 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof ApiPdfAuditMapRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/api/pdf-audit/parse/$parseId": {
+      id: "/api/pdf-audit/parse/$parseId";
+      path: "/$parseId";
+      fullPath: "/api/pdf-audit/parse/$parseId";
+      preLoaderRoute: typeof ApiPdfAuditParseParseIdRouteImport;
+      parentRoute: typeof ApiPdfAuditParseRoute;
+    };
   }
 }
+
+interface ApiPdfAuditParseRouteChildren {
+  ApiPdfAuditParseParseIdRoute: typeof ApiPdfAuditParseParseIdRoute;
+}
+
+const ApiPdfAuditParseRouteChildren: ApiPdfAuditParseRouteChildren = {
+  ApiPdfAuditParseParseIdRoute: ApiPdfAuditParseParseIdRoute,
+};
+
+const ApiPdfAuditParseRouteWithChildren =
+  ApiPdfAuditParseRoute._addFileChildren(ApiPdfAuditParseRouteChildren);
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -283,11 +333,12 @@ const rootRouteChildren: RootRouteChildren = {
   FamilyAuditRoute: FamilyAuditRoute,
   FamilyDocRoute: FamilyDocRoute,
   FamilyMatrixRoute: FamilyMatrixRoute,
+  FamilySheetRoute: FamilySheetRoute,
   OpsRoute: OpsRoute,
   SettingsPrototypeRoute: SettingsPrototypeRoute,
   DemoTanstackQueryRoute: DemoTanstackQueryRoute,
   ApiPdfAuditMapRoute: ApiPdfAuditMapRoute,
-  ApiPdfAuditParseRoute: ApiPdfAuditParseRoute,
+  ApiPdfAuditParseRoute: ApiPdfAuditParseRouteWithChildren,
 };
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

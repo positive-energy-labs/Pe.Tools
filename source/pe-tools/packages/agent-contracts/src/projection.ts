@@ -95,6 +95,10 @@ export function createWorkbenchState(): WorkbenchState {
     debug: {
       events: [],
     },
+    sessionState: {
+      values: {},
+      hydrated: false,
+    },
     uiPreferences: defaultWorkbenchUiPreferences(),
     uiStatus: {
       overall: { status: "idle" },

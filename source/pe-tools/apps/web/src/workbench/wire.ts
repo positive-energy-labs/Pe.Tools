@@ -176,6 +176,11 @@ export const wireEventSchema = z.discriminatedUnion("type", [
     compressedTokens: z.number(),
   }),
   z.object({
+    type: z.literal("state_changed"),
+    state: z.record(z.string(), z.unknown()),
+    changedKeys: z.array(z.string()).optional(),
+  }),
+  z.object({
     type: z.literal("mode_changed"),
     modeId: z.string(),
     previousModeId: z.string().optional(),

@@ -504,6 +504,15 @@ export interface WorkbenchDebugState {
   selectedEventId?: string;
 }
 
+/** Raw AgentController session-state map — the collaborative-UI primitive.
+ * Route slices live under namespaced `route:*` keys (see route-state.ts);
+ * every server-side write rebroadcasts the full map via `state_changed`. */
+export interface WorkbenchSessionStateState {
+  values: Record<string, unknown>;
+  /** False until the first state_changed (or hydration nudge) lands. */
+  hydrated: boolean;
+}
+
 export interface WorkbenchState {
   agent: WorkbenchAgentState;
   threads: WorkbenchThreadState;
@@ -517,6 +526,7 @@ export interface WorkbenchState {
   memory: WorkbenchMemoryState;
   inspector: WorkbenchInspectorState;
   debug: WorkbenchDebugState;
+  sessionState: WorkbenchSessionStateState;
   uiPreferences: WorkbenchUiPreferencesState;
   uiStatus: WorkbenchUiStatusState;
 }
