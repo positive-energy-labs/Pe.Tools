@@ -21,7 +21,7 @@
         <PackageReference Include="Microsoft.VisualStudio.SolutionPersistence" Version="1.0.52" />
         <PackageReference Include="Autodesk.PackageBuilder" Version="2.0.2" />
         <PackageReference Include="JetBrains.Annotations" Version="2025.2.4" PrivateAssets="all" />
-        <PackageReference Include="Pe.Revit.Versioning" Version="0.1.0-beta.9" />
+        <PackageReference Include="Pe.Revit.Versioning" Version="0.1.0-beta.18" />
     </ItemGroup>
 
     <ItemGroup>
