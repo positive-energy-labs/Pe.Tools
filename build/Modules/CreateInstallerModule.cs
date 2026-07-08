@@ -164,8 +164,8 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
 
         context.Logger.LogInformation("Building TS host runtime for installer packaging: {Output}", runtimePublishDirectory.Path);
         await context.Shell.Command.ExecuteCommandLineTool(
-            new GenericCommandLineToolOptions("vp") { Arguments = ["pack"] },
-            new CommandExecutionOptions { WorkingDirectory = hostPackageDirectory.Path },
+            new GenericCommandLineToolOptions("pnpm") { Arguments = ["--filter", "@pe/host", "build:payload"] },
+            new CommandExecutionOptions { WorkingDirectory = hostPackageDirectory.Parent!.Parent!.Path },
             cancellationToken
         );
 
@@ -182,6 +182,8 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
             .ShouldNotBeEmpty("Failed to publish the shared runtime for installer packaging.");
         runtimePublishDirectory.GetFile(HostProcessIdentity.ExecutableName).Exists
             .ShouldBeTrue("Failed to publish TS host for installer packaging.");
+        runtimePublishDirectory.GetFile("web/client/index.html").Exists
+            .ShouldBeTrue("Installer runtime publish should include the staged web SPA.");
         runtimePublishDirectory.GetFile(PeDevCliIdentity.ExecutableName).Exists
             .ShouldBeFalse("Installer runtime publish should not include pe-dev.");
 

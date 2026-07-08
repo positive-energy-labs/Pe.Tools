@@ -8,7 +8,16 @@ export default defineConfig({
     shims: true,
     deps: {
       alwaysBundle: [/./],
+      neverBundle: [
+        /^@duckdb\/node-bindings-win32-x64/,
+        /^@anush008\/tokenizers-win32-x64-msvc/,
+        /^@libsql\/win32-x64-msvc/,
+      ],
       onlyBundle: false,
+    },
+    loader: {
+      ".wasm": "base64",
+      ".scm": "text",
     },
     exe: {
       fileName: "Pe.Host",
