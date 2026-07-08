@@ -1,6 +1,6 @@
-# Installed E2E — Codex driver handoff (2026-07-08, beta.17 / 0.6.9 spike)
+# Installed E2E — Codex driver handoff (2026-07-08, beta.18 / 0.6.9 spike)
 
-Mission: prove the **beta.17 SDK + Pe.Tools 0.6.9** spike on this machine, through the CLI/GH-release
+Mission: prove the **beta.18 SDK + Pe.Tools 0.6.9** spike on this machine, through the CLI/GH-release
 channel, with GUI verification via computer use. This spike fixed the three defects the owner cared
 about most — **firewall prompt, installed `/pe/*` 503, and dev-shim DX** — plus the SDK lane/verify/
 service/PATH primitives behind them. Your job is to prove those fixes hold end-to-end on a real
@@ -12,7 +12,7 @@ Full context lives in [PLAN.md](PLAN.md), [SDK-LEDGER.md](SDK-LEDGER.md), and th
 
 ## What changed THIS spike (hold this in your head)
 
-The SDK went beta.16 → **beta.17** and Pe.Tools consumed it. Fixes that change how you drive:
+The SDK went beta.16 → **beta.18** (beta.17 was the spike wave; beta.18 = beta.17 + the doctor node_modules-prune fix) and Pe.Tools consumed it. Fixes that change how you drive:
 
 - **`/pe/*` works installed now.** The installed Mastra runtime used to 503 ("Agent runtime
   unavailable"). Root cause was SEA-bundling (drizzle-orm circular imports, onnxruntime-node native,
@@ -59,7 +59,7 @@ Revit keeps the old addin until restart. That is correct, not a bug.
    — read the token from `state/service/host.json`, `POST http://127.0.0.1:<port>/admin/shutdown`
    with header `X-Pe-Service-Token: <token>` (fallback: taskkill the pid). Confirm the port is free
    and the service file is gone.
-4. Use the **beta.17** CLI: `dotnet tool restore` in the Pe.Tools checkout (the pin is beta.17;
+4. Use the **beta.18** CLI: `dotnet tool restore` in the Pe.Tools checkout (the pin is beta.18;
    it restores from `eng/sdk-feed`), then drive with `dotnet pe-revit ...` (or the installed shim
    once install #1 lands). `pe-revit doctor` should be clean — in particular `companion-pins` and
    `ts-client-drift` are new checks and must pass.
@@ -168,7 +168,7 @@ Revit keeps the old addin until restart. That is correct, not a bug.
   but VersionedApp `current.txt` pointer-guard parity is still deferred (S-DEF-6). This E2E is the
   CLI/GH-release (install.zip) channel; run MSI only if the owner asks, and treat its pea/host
   pointer behavior as unproven.
-- Don't touch SDK versions or repack SDK nupkgs (beta.17 is packed + in `eng/sdk-feed`). Don't run
+- Don't touch SDK versions or repack SDK nupkgs (beta.18 is packed + in `eng/sdk-feed`). Don't run
   `pe-revit live converge` against the owner's dev year unless asked (it kills/starts Revit).
 - Logs, read the FIRST failure not the last: `state/host/mastra-init.err.log` (agent init),
   `state/service/host.log` (spawned-host stdout/stderr — new this spike, SDK captures it),
