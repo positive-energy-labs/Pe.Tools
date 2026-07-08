@@ -19,6 +19,9 @@ catalog:
   vite-plus: 0.2.1
 overrides:
   vite: "catalog:"
+  # transitive of mastracode -> @aws-sdk/credential-providers; unpinned version broke
+  # the installed pea.exe web bundle. Revisit at the mastracode bump (docs/rework/PLAN.md Phase 3).
+  "@smithy/core": 3.26.0
 patchedDependencies:
   vite-plus@0.2.1: patches/vite-plus@0.2.1.patch
 peerDependencyRules:

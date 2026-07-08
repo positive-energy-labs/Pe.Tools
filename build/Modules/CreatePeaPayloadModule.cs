@@ -66,6 +66,7 @@ public sealed class CreatePeaPayloadModule : Module<PeaPayloadArtifacts> {
             true
         );
 
+        await BuildWebStaticAsync(context, peToolsDirectory.Path, payloadDirectory.Path, cancellationToken);
         CopyNativeSidecars(peToolsDirectory.Path, payloadDirectory.Path);
         ValidateInstalledNodePayload(payloadDirectory.Path);
         await SmokeInstalledNodePayload(context, payloadDirectory.Path, cancellationToken);
@@ -107,6 +108,61 @@ public sealed class CreatePeaPayloadModule : Module<PeaPayloadArtifacts> {
         context.Summary.KeyValue("Artifacts", "pea manifest", manifestPath);
 
         return new PeaPayloadArtifacts(version, bootstrapDirectory, archiveFile, new File(manifestPath));
+    }
+
+    private static async Task BuildWebStaticAsync(
+        IModuleContext context,
+        string peToolsDirectory,
+        string payloadDirectory,
+        CancellationToken cancellationToken
+    ) {
+        var webAppSourceDirectory = Path.Combine(peToolsDirectory, "apps", "web");
+        context.Logger.LogInformation("Building installed web static client: {Directory}", webAppSourceDirectory);
+        await context.Shell.Command.ExecuteCommandLineTool(
+            new GenericCommandLineToolOptions("vp") { Arguments = ["build"] },
+            new CommandExecutionOptions { WorkingDirectory = webAppSourceDirectory },
+            cancellationToken
+        );
+
+        var staticSource = Path.Combine(webAppSourceDirectory, "dist", "client");
+        Directory.Exists(staticSource)
+            .ShouldBeTrue($"web static build did not create {staticSource}");
+        var staticTarget = Path.Combine(payloadDirectory, "web", "client");
+        CopyDirectory(staticSource, staticTarget);
+        WriteStaticIndexHtml(staticTarget);
+    }
+
+    private static void WriteStaticIndexHtml(string staticDirectory) {
+        var assetsDirectory = Path.Combine(staticDirectory, "assets");
+        Directory.Exists(assetsDirectory).ShouldBeTrue($"web static build is missing assets directory: {assetsDirectory}");
+
+        var script = Directory.GetFiles(assetsDirectory, "index-*.js", SearchOption.TopDirectoryOnly)
+            .Select(Path.GetFileName)
+            .SingleOrDefault();
+        script.ShouldNotBeNull($"web static build is missing an index script in {assetsDirectory}");
+
+        var styles = Directory.GetFiles(assetsDirectory, "*.css", SearchOption.TopDirectoryOnly)
+            .Select(Path.GetFileName)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .Select(file => $"    <link rel=\"stylesheet\" href=\"/assets/{file}\">");
+
+        var html = string.Join(Environment.NewLine, [
+            "<!doctype html>",
+            "<html lang=\"en\">",
+            "  <head>",
+            "    <meta charset=\"UTF-8\">",
+            "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">",
+            "    <title>Positive Energy</title>",
+            .. styles,
+            $"    <script type=\"module\" src=\"/assets/{script}\"></script>",
+            "  </head>",
+            "  <body>",
+            "    <div id=\"root\"></div>",
+            "  </body>",
+            "</html>",
+            ""
+        ]);
+        System.IO.File.WriteAllText(Path.Combine(staticDirectory, "index.html"), html);
     }
 
     private static void CopyNativeSidecars(string peToolsDirectory, string payloadDirectory) {

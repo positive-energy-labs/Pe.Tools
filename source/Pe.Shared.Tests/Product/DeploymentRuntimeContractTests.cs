@@ -199,6 +199,17 @@ public sealed class DeploymentRuntimeContractTests {
                 installedResolution.HostExecutablePath,
                 Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "bin", "host", "Pe.Host.exe"))
             );
+
+            var installedHost = ProductRuntimeLayout.ForCurrentUser(localAppData).Binaries;
+            Directory.CreateDirectory(Path.Combine(installedHost.HostVersionsDirectoryPath, "1.2.3"));
+            File.WriteAllText(installedHost.HostCurrentVersionPath, "1.2.3");
+            File.WriteAllText(installedHost.ResolveHostVersionInstalledExecutablePath("1.2.3"), string.Empty);
+
+            var versionedResolution = ProductRuntimeAuthority.ResolveForCurrentMachine(ProductRuntimeLane.Installed, localAppData);
+            Assert.That(
+                versionedResolution.HostExecutablePath,
+                Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "bin", "host", "versions", "1.2.3", "Pe.Host.exe"))
+            );
             Assert.That(devResolution.PeaLauncherPath, Is.EqualTo(installedResolution.PeaLauncherPath));
         } finally {
             TryDeleteDirectory(localAppData);
