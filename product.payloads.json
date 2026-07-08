@@ -41,8 +41,15 @@
       "name": "pe-revit"
     },
     {
+      "type": "VersionedApp",
+      "name": "pea",
+      "source": "source/pe-tools/apps/pea/dist-installed",
+      "entry": "pea.exe"
+    },
+    {
       "type": "PathShim",
       "name": "pea",
+      "target": "versionedApp:pea",
       "dev": "pnpm --dir \"{root}/source/pe-tools\" --filter @pe/pea pea"
     },
     {
