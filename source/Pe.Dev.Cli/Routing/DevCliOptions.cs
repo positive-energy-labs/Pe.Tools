@@ -33,11 +33,11 @@ internal sealed record DevCliOptions(
         }
 
         if (positionals.Count == 0)
-            return DevCliParseResult.Failure("Expected a `bootstrap-path`, `self-test`, `pea`, `web`, `automation`, or `codegen` command.", true);
+            return DevCliParseResult.Failure("Expected a `self-test`, `web`, or `automation` command.", true);
 
         var first = positionals[0].ToLowerInvariant();
         return first switch {
-            "bootstrap-path" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.BootstrapPath, positionals.Skip(1).ToArray())),
+            "bootstrap-path" => DevCliParseResult.Failure("`pe-dev bootstrap-path` has been removed: it rewrote the whole user PATH as REG_SZ (destroying REG_EXPAND_SZ). The SDK owns PATH now — run `pe-revit path ensure` once (registers the product shims dir), then `pe-revit dev link` from this checkout (routes pea/peco/pe-dev shims to source).", true),
             "self-test" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.SelfTest, positionals.Skip(1).ToArray())),
             "pea" when positionals.Count == 1 => DevCliParseResult.Usage(),
             "pea" => ParsePea(repoRoot, positionals),
@@ -56,17 +56,17 @@ internal sealed record DevCliOptions(
 
         if (subcommand == "install-dev")
             return DevCliParseResult.Failure(
-                "`pe-dev pea install-dev` has been removed because it mutates the installed pea payload selection. Use `pe-dev pea link-dev` for source-linked dev work and `pea --installed ...` for installed-lane validation.",
+                "`pe-dev pea install-dev` has been removed because it mutates the installed pea payload selection. Use `pe-revit dev link` for source-linked dev work and `pea --installed ...` for installed-lane validation.",
                 true
             );
 
-        var commandKind = subcommand switch {
-            "link-dev" => DevCommandKind.PeaLinkDev,
-            _ => DevCommandKind.Unknown
-        };
-        return commandKind == DevCommandKind.Unknown
-            ? DevCliParseResult.Failure($"Unknown pea command '{positionals[1]}'.", true)
-            : DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, commandKind, positionals.Skip(2).ToArray()));
+        if (subcommand == "link-dev")
+            return DevCliParseResult.Failure(
+                "`pe-dev pea link-dev` has been removed (it kept a second shim generator and prepended the user PATH). Use the SDK verbs: `pe-revit path ensure` once, then `pe-revit dev link` from this checkout; `pe-revit dev status` shows each shim's lane.",
+                true
+            );
+
+        return DevCliParseResult.Failure($"Unknown pea command '{positionals[1]}'.", true);
     }
 
     private static string RequireValue(IReadOnlyList<string> args, ref int index, string optionName) {

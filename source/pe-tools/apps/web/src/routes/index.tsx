@@ -45,7 +45,8 @@ function UpdateButton() {
       )}
       {update.isSuccess && (
         <span className="text-xs text-muted-foreground">
-          updated to {update.data.releaseVersion ?? "latest"} — open Revit sessions swap live
+          updated to {update.data.releaseVersion ?? "latest"} — takes effect when Revit restarts;
+          open sessions keep their current version
         </span>
       )}
       {update.isError && (

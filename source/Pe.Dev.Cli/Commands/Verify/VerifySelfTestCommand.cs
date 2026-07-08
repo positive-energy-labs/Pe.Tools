@@ -20,14 +20,16 @@ internal static class VerifySelfTestCommand {
         }
 
         var checks = new[] {
-            CheckRoute("bootstrap-path", ["bootstrap-path"], DevCommandKind.BootstrapPath, []),
             CheckRoute("self-test", ["self-test"], DevCommandKind.SelfTest, []),
             CheckRemovedRoute("test removed", ["test"]),
             CheckRemovedRoute("doctor removed", ["doctor"]),
             CheckRemovedRoute("status removed", ["status"]),
             CheckRemovedRoute("sync removed", ["sync"]),
             CheckRemovedRoute("codegen removed", ["codegen"]),
-            CheckUsageText("usage advertises minimal surface", ["pe-dev bootstrap-path", "pe-dev self-test", "pe-dev automation"]),
+            CheckRemovedRoute("bootstrap-path removed", ["bootstrap-path"]),
+            CheckRemovedRoute("pea link-dev removed", ["pea", "link-dev"]),
+            CheckUsageText("usage advertises minimal surface", ["pe-dev self-test", "pe-dev automation"]),
+            CheckUsageText("usage points PATH/dev shims at SDK", ["pe-revit path ensure", "pe-revit dev link"]),
             CheckUsageTextAbsent("usage does not advertise pe-dev test", ["pe-dev test"]),
             CheckUsageTextAbsent("usage does not advertise removed codegen", ["pe-dev codegen sync"]),
             CheckUsageText("usage points Revit tests at SDK", ["pe-revit test fresh|attached"])
