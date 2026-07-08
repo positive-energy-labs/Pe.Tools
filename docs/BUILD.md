@@ -224,9 +224,9 @@ The clean source-linked CLI model is:
 - `pea <subcommand> ...` stays available for product/operator commands such as `host` and `script`.
 - `peco <subcommand> ...` stays available for repo/dev commands such as `live`, `script`, and `talk-to-pea`.
 - `pea --installed ...` is the explicit installed-lane selector. Use it in installed-lane validation and scripts where ambiguity would be expensive.
-- `pea --dev ...` is the explicit source-linked selector. It requires `dev-source.txt` and runs the Pea app from `source/pe-tools/apps/pea` through the Vite+-managed source TypeScript runtime.
+- `pea --dev ...` is the explicit source-linked selector: it routes through the shim's `pea.dev.txt` marker (written by `pe-revit dev link`) and runs the Pea app from `source/pe-tools/apps/pea`.
 - `PEA_RUNTIME=dev` is a local shell convenience only. Do not use ambient environment selection as proof of lane.
-- `Pe.App` must pass `--dev` or `--installed` when launching Pea from Revit, based on its `Pe.App.runtime.json` descriptor. `Pe.App` also resolves and launches the matching TS-built `Pe.Host.exe` lane from that descriptor; neither Pea nor Host may silently cross lanes through a linked source file.
+- `Pe.App`'s lane comes from `PePayloadContext`: loaded by the installed loader shim ⇒ `Deployment` is the lane-pinned `InstalledProduct` (host via `EnsureRunning`, siblings via `Resolve`); self-hosted classic deploy ⇒ dev lane. There is no `Pe.App.runtime.json` descriptor anymore, and no ambient lane inference.
 
 This source-linked shape is intentionally about developer iteration, not installer payload ownership. A shim's `{name}.dev.txt` marker is a per-shim capability registration written by `pe-revit dev link`. It does not prove packaged installed behavior and should not be used as installed-lane evidence.
 
