@@ -71,11 +71,8 @@ public sealed class CreatePeaPayloadModule : Module<PeaPayloadArtifacts> {
         ValidateInstalledNodePayload(payloadDirectory.Path);
         await SmokeInstalledNodePayload(context, payloadDirectory.Path, cancellationToken);
 
-        await System.IO.File.WriteAllTextAsync(
-            Path.Combine(bootstrapDirectory.Path, PeaCliIdentity.LauncherName),
-            PeaLauncherContent.Create(),
-            cancellationToken
-        );
+        // No launcher bake-in: the installer's SDK PathShim (ShimContent) is the one pea.cmd
+        // generator now. The pea payload ships only the versioned app + web static + sidecars.
 
         var archivePath = Path.Combine(layout.Artifacts.PeaPackagesRoot, PeaCliIdentity.CreatePayloadArchiveFileName(version));
         var manifestPath = Path.Combine(layout.Artifacts.PeaPackagesRoot, PeaCliIdentity.CreatePayloadManifestFileName(version));

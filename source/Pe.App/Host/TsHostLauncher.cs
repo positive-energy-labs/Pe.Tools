@@ -15,9 +15,7 @@ internal static class TsHostLauncher {
 
     public static TsHostLaunchResult EnsureRunning() {
         try {
-            var runtimeResolution = ProductRuntimeAuthority.ResolveForExecutingPeAppAssembly(
-                typeof(TsHostLauncher).Assembly.Location
-            );
+            var runtimeResolution = PeRuntimeContext.Resolve();
             var runningHost = TryGetRunningHostStatus();
             if (runningHost != null) {
                 if (MatchesRuntime(runningHost, runtimeResolution))
@@ -55,7 +53,7 @@ internal static class TsHostLauncher {
         }
     }
 
-    private static ProcessStartInfo CreateStartInfo(ProductRuntimeResolution runtimeResolution) {
+    private static ProcessStartInfo CreateStartInfo(PeRuntimeTarget runtimeResolution) {
         var startInfo = new ProcessStartInfo(runtimeResolution.HostExecutablePath) {
             WorkingDirectory = Path.GetDirectoryName(runtimeResolution.HostExecutablePath) ?? AppContext.BaseDirectory,
             UseShellExecute = false,
@@ -67,7 +65,7 @@ internal static class TsHostLauncher {
 
     private static TsHostLaunchResult StartAndWait(
         ProcessStartInfo startInfo,
-        ProductRuntimeResolution runtimeResolution
+        PeRuntimeTarget runtimeResolution
     ) {
         var process = Process.Start(startInfo);
         var timeout = TimeSpan.FromMilliseconds(HostRuntimeDefaults.DefaultHostStartupTimeoutMs);
@@ -92,13 +90,13 @@ internal static class TsHostLauncher {
         );
     }
 
-    private static bool CanStartOver(RunningTsHostStatus runningHost, ProductRuntimeResolution runtimeResolution) =>
+    private static bool CanStartOver(RunningTsHostStatus runningHost, PeRuntimeTarget runtimeResolution) =>
         runtimeResolution.RuntimeLane == ProductRuntimeLane.Dev
         && string.Equals(runningHost.Lane, "installed", StringComparison.OrdinalIgnoreCase);
 
     private static bool MatchesRuntime(
         RunningTsHostStatus runningHost,
-        ProductRuntimeResolution runtimeResolution
+        PeRuntimeTarget runtimeResolution
     ) {
         if (!string.Equals(runningHost.Lane, ToHostLane(runtimeResolution.RuntimeLane), StringComparison.OrdinalIgnoreCase))
             return false;
@@ -137,7 +135,7 @@ internal static class TsHostLauncher {
         _ => lane.ToString().ToLowerInvariant()
     };
 
-    private static string Describe(ProductRuntimeResolution runtimeResolution) =>
+    private static string Describe(PeRuntimeTarget runtimeResolution) =>
         $"{runtimeResolution.RuntimeLane} host '{runtimeResolution.HostExecutablePath}' from {runtimeResolution.Source}";
 
     private static string Describe(RunningTsHostStatus status) {

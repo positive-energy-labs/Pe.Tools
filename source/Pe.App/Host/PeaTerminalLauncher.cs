@@ -12,9 +12,7 @@ internal sealed record PeaTerminalLaunchResult(
 
 internal static class PeaTerminalLauncher {
     public static PeaTerminalLaunchResult LaunchAgent(string workspaceKey = ScriptingWorkspaceLayout.DefaultWorkspaceKey) {
-        var runtimeResolution = ProductRuntimeAuthority.ResolveForExecutingPeAppAssembly(
-            typeof(PeaTerminalLauncher).Assembly.Location
-        );
+        var runtimeResolution = PeRuntimeContext.Resolve();
         var launcherPath = runtimeResolution.PeaLauncherPath;
         if (!File.Exists(launcherPath)) {
             return new PeaTerminalLaunchResult(

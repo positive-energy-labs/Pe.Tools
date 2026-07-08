@@ -55,9 +55,15 @@ Scope corrected per MASTRA-DELTA.md (verified against npm tarballs — the local
 - **Fix the approval bug ourselves**: our symptom is a live SSE replay-flood / vanishing approval buttons — NOT upstream #18583. Diagnose + fix Pe-side (likely subscribe/replay handling in provider.tsx/adapter.ts).
 - Exit: bump green, dead packages gone, approvals + images demonstrably working live.
 
+### Phase 1.5 — SDK service primitive (owner spec, ledger A10; extends/supersedes A2's stop-only)
+Per-payload `service` block in product.payloads.json: `{ preferredPort, health, shutdown, tier: managed|plain, autostart? }`. SDK standardizes the runtime service file `state/service/<name>.json` (pid, actual bound port, version, lane, token) written by the service on bind. ONE small client per language with a single entrypoint `EnsureRunning(name)`: read service file → probe health → compare version+lane → shut down stale (token endpoint for managed, pid-kill for plain) → spawn manifest-resolved exe (via InstalledProduct) → wait healthy. `install apply` restarts services whose payload advanced via the same code path (subsumes stopOnUpdate). Rules: discovery is file-based (preferred port is a hint, actual wins — clients never hardcode ports); managed = our exes, plain = third-party/ML sidecars (pid-file + kill fallback); lazy parent-driven start — no supervisor/broker/registry daemon; autostart = install-time Run-key (Windows is the supervisor). Schema generic for N services; code implements only what today's payloads exercise (one managed service: the host). C# impl in Pe.Revit.Loader beside InstalledProduct; TS impl owned by the SDK repo as a copy-in/npm-shipped client so Pe.Tools has ONE implementation per language (extracts host-ownership.ts + TsHostLauncher into the SDK instead of two divergent copies). ~500–900 LOC SDK, deletes ~300 in Pe.Tools during Phase 4.
+
+### Phase 3b — mastracode deep-cut audit (owner directive)
+Migrating past the breaking changes was the floor, not the goal. Audit our custom code against everything mastracode 0.27→0.30 added, hunting deletions: `runMC({controller, session, prompt})` programmatic API (typed result + async-iterable events — candidates: talk_to_pea / peco-driving glue, any headless spawn of pea, maybe the model-resolver throwaway runtime if runMC exposes resolution); `createCodingAgent` factory from @mastra/core/coding-agent (vs our inline Agent construction in apps/pea/src/runtime.ts); MCP `${VAR}` env resolution (vs any secret-plumbing glue in .mcp.json/packages/mcps); web chat hydration improvements (vs our wire.ts/hydrateWorkbenchState gnarl — re-test whether the hydration glue can shrink). Output: deletion list with verdicts, executed where clean.
+
 ### Phase 4 — The squash (host absorbs pea)
 - Host: effect beta.92 → current; Mastra runtime as a `Layer.scoped` tenant; `MastraServer` (Hono, fetch-based) mounted under the Effect HTTP server; static web served by host; ONE port (5180).
-- Process lifecycle: `/host/update` returns-after-staging then self-restarts; addin kills version-mismatched stale hosts via tokened `/admin/shutdown`; orphan story (job object or startup sweep); ribbon = one button → open web at the host URL.
+- Process lifecycle: built on the Phase-1.5 service primitive — the addin and pea both `EnsureRunning("host")` (deletes TsHostLauncher's bespoke matching + host-ownership.ts takeover); `/host/update` returns-after-staging then self-shutdowns and the callers' EnsureRunning respawns; ribbon = one button → open web at the port from the service file.
 - Typed Effect RPC/HttpApi for Pe surfaces replacing untyped `/call` + dev-only `/pe-host` proxy; web consumes the derived client.
 - `apps/pea` shrinks to whatever survives (MCP entries live in `packages/mcps`; TUI deletable; `pea web` dies into host). `apps/host/dist-installed` + separate host payload entry die; the service ships as the single VersionedApp.
 - Exit: one Revit-spawned process; installed web functionally equal to dev; e2e types on Pe surfaces; peco/pea MCPs still work.
@@ -68,3 +74,11 @@ Scope corrected per MASTRA-DELTA.md (verified against npm tarballs — the local
 
 ### Phase 6 — SDK to NuGet (after a release or two proves the SDK)
 - Template/docs polish reflecting the condoned patterns (runtime API, service primitive, staged updates); publish pipeline; version/tag discipline.
+
+## Standing follow-ups (live-gated or deferred)
+
+- **talk_to_pea → runMC** (~60 LOC deletable in packages/mcps/src/dev/talk-to-pea-worker.ts): replace sendPeaMessageWithTimeout + waitForNewAssistantText + toolTraceSince with `runMC({controller, session, prompt, timeoutMs})`; result.text/toolCalls subsume the poll/diff scaffolding; autoApprovePolicy subsumes the yolo gate. Live gate: one operator + one feedback turn against real Revit, confirm transcript/toolTrace parity. Do during/after Phase 4.
+- **Dead TS constant**: packages/host-contracts/src/contracts/product.ts:61 `runtimeDescriptorFileName: "Pe.App.runtime.json"` — C# descriptor model deleted in Phase 2; remove the constant (it had zero TS consumers).
+- **host → service-file convention (Phase 4)**: host writes state/service/host.json on bind per the A10 schema; addin + pea move to EnsureRunning; manifest already declares the service block.
+- **createCodingAgent for pea** (optional, additive): would add ECONNRESET/bad-request retry + prefill error processors pea lacks. Not a deletion; decide at Phase 4.
+- **Approval fix live click-path** (Phase 5): boot pea web → request_access approval → buttons persist across reload → approve/deny both resolve; SSE quiet.

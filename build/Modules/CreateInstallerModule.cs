@@ -1,5 +1,7 @@
 using System.IO.Compression;
+using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Build.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -17,7 +19,12 @@ using File = ModularPipelines.FileSystem.File;
 namespace Build.Modules;
 
 /// <summary>
-///     Create the .msi installer.
+///     Create the .msi installer and the .install.zip package.
+///     Both transports are byte-derived from the checked-in <c>product.payloads.json</c> — the one
+///     source of truth for identity, payload set, entries, legacy paths, dev commands, and version.
+///     The build only rewrites each payload's <c>source</c> to point at the transport's staged
+///     artifacts (MSI: absolute staged paths; install.zip: package-relative <c>payloads/&lt;name&gt;</c>);
+///     everything else passes through verbatim, so the two manifests can never drift from the SoT.
 /// </summary>
 [DependsOn<ResolveVersioningModule>]
 [DependsOn<ResolveBuildMatrixModule>]
@@ -25,24 +32,13 @@ namespace Build.Modules;
 [DependsOn<PublishRevitAddinModule>]
 [DependsOn<CreatePeaPayloadModule>]
 public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) : Module {
-    private static readonly IReadOnlyList<string> LegacyPaths = [
-        "app:bin/pe-dev",
-        "app:dev",
-        "appdata:Autodesk/ApplicationPlugins/PE_Tools.bundle",
-        "programdata:Autodesk/ApplicationPlugins/PE_Tools.bundle",
-        "addins:*/Pe.Revit",
-        "addins:*/Pe.Revit.Bridge",
-        "addins:*/Pe.Revit.DocumentData",
-        "addins:*/Pe.Revit.FamilyFoundry",
-        "addins:*/Pe.Revit.Global",
-        "addins:*/Pe.Revit.Scripting",
-        "addins:*/Pe.Revit.SettingsRuntime",
-        "addins:*/Pe.Revit.Ui"
-    ];
+    private const string SourceManifestFileName = "product.payloads.json";
 
     private static readonly JsonSerializerOptions JsonOptions = new() {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = true
+        WriteIndented = true,
+        // Emit embedded quotes in dev commands as \" (matching the checked-in manifest and the SDK's
+        // regex field parser) rather than the default ".
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
 
     protected override async Task ExecuteModuleAsync(IModuleContext context, CancellationToken cancellationToken) {
@@ -57,9 +53,15 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         var rootDirectory = context.Git().RootDirectory;
 
         var hostPackageDirectory = rootDirectory.GetFolder("source").GetFolder("pe-tools").GetFolder("apps").GetFolder("host");
-        var appAssemblyName = BuildProjectDiscovery.AssemblyName(
+        // Presence check only: the payload name/entry now come from the checked-in manifest, but the
+        // build still asserts the repo has exactly one RevitAddin project to stage.
+        _ = BuildProjectDiscovery.AssemblyName(
             BuildProjectDiscovery.FindSingleProjectByKind(rootDirectory.Path, "RevitAddin")
         );
+        var sourceManifestPath = Path.Combine(rootDirectory.Path, SourceManifestFileName);
+        System.IO.File.Exists(sourceManifestPath)
+            .ShouldBeTrue($"Checked-in payload manifest not found: {sourceManifestPath}");
+
         var configurations = matrix.ResolveConfigurations(BuildConfigurationGroup.Pack, buildOptions.Value.Configuration);
         var targetDirectories = configurations
             .Select(layout.GetRevitPublishDirectory)
@@ -81,6 +83,10 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
             cancellationToken
         );
 
+        var peaPayloadDirectory = layout.GetPeaPayloadStagingDirectory("Release", peaPayload.Version);
+        Directory.Exists(peaPayloadDirectory)
+            .ShouldBeTrue($"No pea versioned payload was found for installer packaging: {peaPayloadDirectory}");
+
         Directory.CreateDirectory(layout.Artifacts.InstallerPackagesRoot);
         foreach (var existingInstallerPath in Directory.EnumerateFiles(layout.Artifacts.InstallerPackagesRoot, "*.msi"))
             System.IO.File.Delete(existingInstallerPath);
@@ -91,22 +97,22 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
                 System.IO.File.Delete(existingInstallerPath);
         }
 
-        var installerPayloadManifestPath = await WriteSdkInstallerPayloadManifestAsync(
+        var installerPayloadManifestPath = await WriteMsiPayloadManifestAsync(
             layout,
+            sourceManifestPath,
             versioning.Version,
-            runtimePublishDirectory.Path,
-            peaPayload,
-            appAssemblyName,
             revitPayloadRoot.Path,
+            runtimePublishDirectory.Path,
+            peaPayloadDirectory,
             cancellationToken
         );
-        var installPackagePath = await WriteSdkInstallPackageAsync(
+        var installPackagePath = await WriteInstallPackageAsync(
             layout,
+            sourceManifestPath,
             versioning.Version,
-            runtimePublishDirectory.Path,
-            peaPayload,
-            appAssemblyName,
             revitPayloadRoot.Path,
+            runtimePublishDirectory.Path,
+            peaPayloadDirectory,
             cancellationToken
         );
         context.Summary.KeyValue("Artifacts", "Install package", installPackagePath);
@@ -222,55 +228,46 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         return payloadRoot;
     }
 
-    private static async Task<string> WriteSdkInstallerPayloadManifestAsync(
+    /// <summary>
+    ///     MSI transport: rewrite each payload source to its absolute staged path. SDK beta.15's
+    ///     MsiCommand lays the versioned layout for the real <c>VersionedAddin</c>/<c>VersionedApp</c>
+    ///     types the manifest declares (ledger S2), so no type downgrade happens here.
+    /// </summary>
+    private static async Task<string> WriteMsiPayloadManifestAsync(
         ProductLayoutAuthority layout,
+        string sourceManifestPath,
         string version,
-        string runtimePublishDirectory,
-        PeaPayloadArtifacts peaPayload,
-        string appAssemblyName,
         string revitPayloadRoot,
+        string runtimePublishDirectory,
+        string peaPayloadDirectory,
         CancellationToken cancellationToken
     ) {
-        var peaPayloadDirectory = layout.GetPeaPayloadStagingDirectory("Release", peaPayload.Version);
-        Directory.Exists(peaPayloadDirectory)
-            .ShouldBeTrue($"No pea versioned payload was found for installer packaging: {peaPayloadDirectory}");
-
-        var manifest = new SdkInstallManifest(
-            ProductIdentity.ProductName,
-            ProductIdentity.VendorName,
-            "positive-energy-labs/Pe.Tools",
-            LegacyPaths,
-            [
-                new("RevitAddin", appAssemblyName, revitPayloadRoot),
-                new("Exe", HostProcessIdentity.DirectoryName, runtimePublishDirectory),
-                new("Cli", "pe-revit"),
-                new("VersionedApp", PeaCliIdentity.DirectoryName, peaPayloadDirectory),
-                new(
-                    "PathShim",
-                    Path.GetFileNameWithoutExtension(PeaCliIdentity.LauncherName),
-                    Target: $"versionedApp:{PeaCliIdentity.DirectoryName}",
-                    Entry: Path.Combine(PeaCliIdentity.AppDirectoryName, PeaCliIdentity.InstalledExecutableName)
-                )
-            ]
+        var manifest = TransformManifest(
+            sourceManifestPath,
+            new Dictionary<string, string>(StringComparer.Ordinal) {
+                ["Pe.App"] = revitPayloadRoot,
+                ["host"] = runtimePublishDirectory,
+                ["pea"] = peaPayloadDirectory
+            }
         );
 
         var manifestPath = layout.GetSdkInstallerPayloadManifestPath(version);
         Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
-        await System.IO.File.WriteAllTextAsync(
-            manifestPath,
-            JsonSerializer.Serialize(manifest, JsonOptions),
-            cancellationToken
-        );
+        await System.IO.File.WriteAllTextAsync(manifestPath, manifest, cancellationToken);
         return manifestPath;
     }
 
-    private static async Task<string> WriteSdkInstallPackageAsync(
+    /// <summary>
+    ///     install.zip transport: copy each staged payload into the package under
+    ///     <c>payloads/&lt;name&gt;</c> and rewrite its source to that package-relative path.
+    /// </summary>
+    private static async Task<string> WriteInstallPackageAsync(
         ProductLayoutAuthority layout,
+        string sourceManifestPath,
         string version,
-        string runtimePublishDirectory,
-        PeaPayloadArtifacts peaPayload,
-        string appAssemblyName,
         string revitPayloadRoot,
+        string runtimePublishDirectory,
+        string peaPayloadDirectory,
         CancellationToken cancellationToken
     ) {
         var packageRoot = Path.Combine(layout.Artifacts.InstallerPackagesRoot, "install-package");
@@ -279,37 +276,24 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
 
         Directory.CreateDirectory(packageRoot);
         var payloadsRoot = Path.Combine(packageRoot, "payloads");
-        var revitPayload = Path.Combine(payloadsRoot, "revit-addins", appAssemblyName);
-        var hostPayload = Path.Combine(payloadsRoot, "host");
-        var peaPayloadSource = layout.GetPeaPayloadStagingDirectory("Release", peaPayload.Version);
-        var peaPayloadTarget = Path.Combine(payloadsRoot, "pea");
 
-        CopyDirectory(revitPayloadRoot, revitPayload);
-        CopyDirectory(runtimePublishDirectory, hostPayload);
-        CopyDirectory(peaPayloadSource, peaPayloadTarget);
+        // Name -> staged source. Copy the artifact to payloads/<name>; the manifest source is that
+        // same package-relative path. Keyed by payload name so any drift fails TransformManifest.
+        var stagedByName = new Dictionary<string, string>(StringComparer.Ordinal) {
+            ["Pe.App"] = revitPayloadRoot,
+            ["host"] = runtimePublishDirectory,
+            ["pea"] = peaPayloadDirectory
+        };
+        var sourceByName = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (name, stagedPath) in stagedByName) {
+            CopyDirectory(stagedPath, Path.Combine(payloadsRoot, name));
+            sourceByName[name] = $"payloads/{name}";
+        }
 
-        var manifest = new SdkInstallManifest(
-            ProductIdentity.ProductName,
-            ProductIdentity.VendorName,
-            "positive-energy-labs/Pe.Tools",
-            LegacyPaths,
-            [
-                new("VersionedAddin", appAssemblyName, $"payloads/revit-addins/{appAssemblyName}", Entry: "Pe.App.AppCore"),
-                new("VersionedApp", HostProcessIdentity.DirectoryName, "payloads/host", Entry: HostProcessIdentity.ExecutableName),
-                new("Cli", "pe-revit"),
-                new("VersionedApp", PeaCliIdentity.DirectoryName, "payloads/pea"),
-                new(
-                    "PathShim",
-                    Path.GetFileNameWithoutExtension(PeaCliIdentity.LauncherName),
-                    Target: $"versionedApp:{PeaCliIdentity.DirectoryName}",
-                    Entry: Path.Combine(PeaCliIdentity.AppDirectoryName, PeaCliIdentity.InstalledExecutableName)
-                )
-            ]
-        );
-
+        var manifest = TransformManifest(sourceManifestPath, sourceByName);
         await System.IO.File.WriteAllTextAsync(
-            Path.Combine(packageRoot, "product.payloads.json"),
-            JsonSerializer.Serialize(manifest, JsonOptions),
+            Path.Combine(packageRoot, SourceManifestFileName),
+            manifest,
             cancellationToken
         );
 
@@ -323,6 +307,35 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         return packagePath;
     }
 
+    /// <summary>
+    ///     Parse the checked-in manifest and rewrite ONLY each payload's <c>source</c> from
+    ///     <paramref name="sourceByName"/>. Payloads without a source (Cli, PathShim) pass through.
+    ///     A sourced payload with no mapping throws — the build refuses to emit a manifest that would
+    ///     drop or dangle a payload the SoT declares.
+    /// </summary>
+    private static string TransformManifest(string sourceManifestPath, IReadOnlyDictionary<string, string> sourceByName) {
+        var manifest = JsonNode.Parse(System.IO.File.ReadAllText(sourceManifestPath))
+            ?? throw new InvalidOperationException($"Could not parse {sourceManifestPath}.");
+        var payloads = manifest["payloads"]?.AsArray()
+            ?? throw new InvalidOperationException($"{sourceManifestPath} has no payloads array.");
+
+        foreach (var payloadNode in payloads) {
+            if (payloadNode is not JsonObject payload || payload["source"] is null)
+                continue;
+
+            var name = (string?)payload["name"]
+                ?? throw new InvalidOperationException($"A payload in {sourceManifestPath} has a source but no name.");
+            if (!sourceByName.TryGetValue(name, out var rewritten))
+                throw new InvalidOperationException(
+                    $"Payload '{name}' declares a source but the build staged no artifact for it. " +
+                    "Add its staged path in CreateInstallerModule, or drop its source in product.payloads.json.");
+
+            payload["source"] = rewritten;
+        }
+
+        return manifest.ToJsonString(JsonOptions);
+    }
+
     private static void CopyDirectory(string source, string destination) {
         Directory.CreateDirectory(destination);
         foreach (var directory in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
@@ -331,20 +344,4 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
             System.IO.File.Copy(file, Path.Combine(destination, Path.GetRelativePath(source, file)), true);
     }
-
-    private sealed record SdkInstallManifest(
-        string Product,
-        string Vendor,
-        string Releases,
-        IReadOnlyList<string>? Legacy,
-        IReadOnlyList<SdkInstallPayload> Payloads
-    );
-
-    private sealed record SdkInstallPayload(
-        string Type,
-        string Name,
-        string? Source = null,
-        string? Target = null,
-        string? Entry = null
-    );
 }

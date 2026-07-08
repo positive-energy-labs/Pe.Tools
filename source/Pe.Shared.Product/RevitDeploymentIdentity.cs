@@ -1,37 +1,15 @@
 namespace Pe.Shared.Product;
 
+/// <summary>
+///     Naming constants for the classic per-user Revit add-in layout that the build projection still
+///     targets (<see cref="ProductBuildLayoutProjection" />). The pre-loader descriptor model and the
+///     <c>Addins\&lt;year&gt;\Pe.App</c> runtime-path helpers were removed in Phase 2 — the installed
+///     lane now resolves its layout through <c>Pe.Revit.Loader.InstalledProduct</c>, and the dev lane
+///     is self-hosted (no descriptor, no versioned Addins tree).
+/// </summary>
 public static class RevitDeploymentIdentity {
     public const string AddinManifestFileName = "Pe.App.addin";
-    public const string RuntimeDescriptorFileName = "Pe.App.runtime.json";
-    public const string AddinAssemblyDirectoryName = "Pe.App";
     public const string AutodeskDirectoryName = "Autodesk";
     public const string RevitDirectoryName = "Revit";
     public const string AddinsDirectoryName = "Addins";
-
-    public static string ResolvePerUserAddinsRootPath(string? applicationData = null) =>
-        Path.Combine(
-            ProductPathing.ResolveApplicationData(applicationData),
-            AutodeskDirectoryName,
-            RevitDirectoryName,
-            AddinsDirectoryName
-        );
-
-    public static string ResolvePerUserAddinDirectoryPath(int revitYear, string? applicationData = null) =>
-        Path.Combine(ResolvePerUserAddinsRootPath(applicationData), revitYear.ToString());
-
-    public static string ResolvePerUserAddinManifestPath(int revitYear, string? applicationData = null) =>
-        Path.Combine(ResolvePerUserAddinDirectoryPath(revitYear, applicationData), AddinManifestFileName);
-
-    public static string ResolvePerUserAddinAssemblyDirectoryPath(int revitYear, string? applicationData = null) =>
-        Path.Combine(ResolvePerUserAddinDirectoryPath(revitYear, applicationData), AddinAssemblyDirectoryName);
-
-    public static string ResolvePerUserRuntimeDescriptorPath(int revitYear, string? applicationData = null) =>
-        Path.Combine(ResolvePerUserAddinAssemblyDirectoryPath(revitYear, applicationData), RuntimeDescriptorFileName);
-
-    public static string ResolveRuntimeDescriptorPathForAssembly(string assemblyPath) =>
-        Path.Combine(
-            Path.GetDirectoryName(Path.GetFullPath(assemblyPath))
-            ?? throw new InvalidOperationException("Assembly path did not have a directory."),
-            RuntimeDescriptorFileName
-        );
 }
