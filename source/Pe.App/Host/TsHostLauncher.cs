@@ -10,6 +10,7 @@ namespace Pe.App.Host;
 
 internal static class TsHostLauncher {
     private const string HostServiceName = "host";
+    private const string ServiceLaneVariable = "PE_LANE";
     private const string HostLaneVariable = "PE_TOOLS_HOST_LANE";
     private static readonly HttpClient HttpClient = new() {
         Timeout = TimeSpan.FromMilliseconds(HostRuntimeDefaults.DefaultHostProbeTimeoutMs)
@@ -51,7 +52,7 @@ internal static class TsHostLauncher {
 
     private static TsHostLaunchResult EnsureInstalledHostRunning(InstalledProduct deployment) {
         var timeout = TimeSpan.FromMilliseconds(HostRuntimeDefaults.DefaultHostStartupTimeoutMs);
-        var result = deployment.EnsureRunning(HostServiceName, timeout);
+        var result = EnsureInstalledServiceRunning(deployment, timeout);
         if (!result.Ok || result.File is null) {
             return new TsHostLaunchResult(
                 false,
@@ -74,7 +75,19 @@ internal static class TsHostLauncher {
             alreadyRunning
                 ? $"Matching host service is already listening: {baseUrl}"
                 : $"Started host service: {baseUrl}"
-        );
+            );
+    }
+
+    private static ServiceResult EnsureInstalledServiceRunning(InstalledProduct deployment, TimeSpan timeout) {
+        var previousLane = Environment.GetEnvironmentVariable(ServiceLaneVariable);
+        try {
+            // Installed Revit is authoritative here. Source-linked pea/peco shims can leave
+            // *.dev.txt markers in the shared shim root, which the SDK lane reader treats as dev.
+            Environment.SetEnvironmentVariable(ServiceLaneVariable, "installed");
+            return deployment.EnsureRunning(HostServiceName, timeout);
+        } finally {
+            Environment.SetEnvironmentVariable(ServiceLaneVariable, previousLane);
+        }
     }
 
     private static TsHostLaunchResult EnsureDevHostRunning(PeRuntimeTarget runtimeResolution) {
