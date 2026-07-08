@@ -52,9 +52,24 @@ public static class Theme {
     /// </summary>
     public static ResourceDictionary WpfUiResources =>
         _wpfUiResources ??= new ResourceDictionary {
-            Source = new Uri("pack://application:,,,/Pe.Revit.Ui;component/Core/WpfUiResources.xaml",
-                UriKind.Absolute)
+            Source = ResolveComponentUri("Core/WpfUiResources.xaml")
         };
+
+    /// <summary>
+    ///     Build a pack URI for a XAML resource in this assembly that is correct in both build shapes.
+    ///     Debug leaves Pe.Revit.Ui as its own assembly (URI: <c>/Pe.Revit.Ui;component/&lt;path&gt;</c>).
+    ///     Release ILRepacks Pe.Revit.Ui into Pe.App, and the merged BAML stream keeps the source
+    ///     assembly's folder prefix, so the URI becomes <c>/Pe.App;component/Pe.Revit.Ui/&lt;path&gt;</c>.
+    ///     The old hardcoded <c>/Pe.Revit.Ui;component/…</c> only worked post-merge by WPF fallback
+    ///     luck (no such assembly exists after repack). Deriving the assembly name from the running
+    ///     type makes both shapes resolve the real stream.
+    /// </summary>
+    private static Uri ResolveComponentUri(string componentPath) {
+        var assemblyName = typeof(Theme).Assembly.GetName().Name ?? "Pe.Revit.Ui";
+        var merged = !string.Equals(assemblyName, "Pe.Revit.Ui", StringComparison.Ordinal);
+        var path = merged ? $"Pe.Revit.Ui/{componentPath}" : componentPath;
+        return new Uri($"pack://application:,,,/{assemblyName};component/{path}", UriKind.Absolute);
+    }
 
     /// <summary>
     ///     Loads WPF.UI resources into a FrameworkElement's resource dictionary.

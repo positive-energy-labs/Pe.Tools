@@ -24,13 +24,8 @@ public sealed record ProductRuntimeLayout(
                 binRootPath,
                 Path.Combine(binRootPath, HostProcessIdentity.DirectoryName),
                 Path.Combine(binRootPath, HostProcessIdentity.DirectoryName, HostProcessIdentity.ExecutableName),
-                Path.Combine(binRootPath, HostProcessIdentity.DirectoryName, PeaCliIdentity.CurrentVersionFileName),
-                Path.Combine(binRootPath, HostProcessIdentity.DirectoryName, PeaCliIdentity.VersionsDirectoryName),
                 Path.Combine(binRootPath, PeaCliIdentity.DirectoryName),
-                Path.Combine(binRootPath, PeaCliIdentity.DirectoryName, PeaCliIdentity.LauncherName),
-                Path.Combine(binRootPath, PeaCliIdentity.DirectoryName, PeaCliIdentity.CurrentVersionFileName),
-                Path.Combine(binRootPath, PeaCliIdentity.DirectoryName, PeaCliIdentity.VersionsDirectoryName),
-                Path.Combine(binRootPath, PeaCliIdentity.DirectoryName, PeaCliIdentity.PackagesDirectoryName)
+                Path.Combine(binRootPath, PeaCliIdentity.DirectoryName, PeaCliIdentity.LauncherName)
             ),
             new ProductRuntimeStateLayout(stateRootPath),
             new ProductRuntimeLogLayout(logsRootPath),
@@ -39,48 +34,22 @@ public sealed record ProductRuntimeLayout(
     }
 }
 
+/// <summary>
+///     Stable per-user binary paths. The versioned-layout path math (host <c>current.txt</c> +
+///     <c>versions/&lt;v&gt;</c> resolution, and the parallel pea versioned/packages helpers) was
+///     removed in Phase 2 — <c>Pe.Revit.Loader.InstalledProduct</c> now owns installed-lane
+///     resolution through the same grammar the installer wrote. What remains is the dev-lane surface:
+///     <see cref="PeaDirectoryPath" />/<see cref="PeaLauncherPath" /> are where <c>pe-dev pea
+///     link-dev</c> writes the source-linked launcher, and <see cref="HostExecutablePath" /> is the
+///     stable host candidate.
+/// </summary>
 public sealed record ProductRuntimeBinaryLayout(
     string RootPath,
     string HostDirectoryPath,
     string HostExecutablePath,
-    string HostCurrentVersionPath,
-    string HostVersionsDirectoryPath,
     string PeaDirectoryPath,
-    string PeaLauncherPath,
-    string PeaCurrentVersionPath,
-    string PeaVersionsDirectoryPath,
-    string PeaPackagesDirectoryPath
-) {
-    public string ResolveHostVersionInstalledExecutablePath(string version) =>
-        Path.Combine(
-            ProductPathing.ResolveSafeSubDirectoryPath(
-                this.HostVersionsDirectoryPath,
-                PeaCliIdentity.NormalizePayloadVersion(version),
-                nameof(version)
-            ),
-            HostProcessIdentity.ExecutableName
-        );
-
-    public string ResolvePeaVersionDirectoryPath(string version) =>
-        ProductPathing.ResolveSafeSubDirectoryPath(
-            this.PeaVersionsDirectoryPath,
-            PeaCliIdentity.NormalizePayloadVersion(version),
-            nameof(version)
-        );
-
-    public string ResolvePeaPackageArchivePath(string version) =>
-        Path.Combine(this.PeaPackagesDirectoryPath, PeaCliIdentity.CreatePayloadArchiveFileName(version));
-
-    public string ResolvePeaPackageManifestPath(string version) =>
-        Path.Combine(this.PeaPackagesDirectoryPath, PeaCliIdentity.CreatePayloadManifestFileName(version));
-
-    public string ResolvePeaVersionInstalledExecutablePath(string version) =>
-        Path.Combine(
-            this.ResolvePeaVersionDirectoryPath(version),
-            PeaCliIdentity.AppDirectoryName,
-            PeaCliIdentity.InstalledExecutableName
-        );
-}
+    string PeaLauncherPath
+);
 
 public sealed record ProductRuntimeStateLayout(string RootPath) {
     public string GlobalStatePath => Path.Combine(this.RootPath, ProductPathNames.GlobalDirectoryName);

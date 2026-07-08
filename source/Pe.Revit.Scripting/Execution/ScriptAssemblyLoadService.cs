@@ -155,14 +155,20 @@ public sealed class ScriptAssemblyLoadService {
         if (string.IsNullOrWhiteSpace(simpleName))
             return;
 
-        var alreadyLoaded = AppDomain.CurrentDomain.GetAssemblies()
-            .FirstOrDefault(assembly =>
+        var loadedCandidates = AppDomain.CurrentDomain.GetAssemblies()
+            .Where(assembly =>
                 !assembly.IsDynamic
                 && assembly.GetName().Name != null
                 && assembly.GetName().Name.Equals(simpleName, StringComparison.OrdinalIgnoreCase)
                 && !string.IsNullOrWhiteSpace(assembly.Location)
                 && File.Exists(assembly.Location)
-            );
+            )
+            .ToList();
+        // Single-era loader: this is 0 or 1 assembly. When two same-name copies are loaded
+        // side-by-side, prefer the one the intended candidate path points at (else first) so the
+        // staleness check compares against the build the caller meant, not an arbitrary namesake.
+        var alreadyLoaded = loadedCandidates.FirstOrDefault(a => PathsMatch(a.Location, assemblyPath))
+                            ?? loadedCandidates.FirstOrDefault();
         // Compile-time and run-time must agree: whatever path lands in this map is BOTH what the
         // script compiles against and what the resolver loads. Compiling against one build and
         // running another ends in MissingMethodException.
@@ -246,6 +252,16 @@ public sealed class ScriptAssemblyLoadService {
             return metadataReader.GetGuid(metadataReader.GetModuleDefinition().Mvid);
         } catch {
             return null;
+        }
+    }
+
+    private static bool PathsMatch(string? left, string? right) {
+        if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
+            return false;
+        try {
+            return string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase);
+        } catch {
+            return false;
         }
     }
 
@@ -342,13 +358,18 @@ public sealed class ScriptAssemblyLoadService {
             // host copy loses to the rebuilt dll — that is the hot-reload path. Byte-loaded
             // copies from earlier script runs have an empty Location and never count as host
             // copies, so a previous run's version can't satisfy this run's binds.
-            var alreadyLoaded = AppDomain.CurrentDomain.GetAssemblies()
-                .FirstOrDefault(assembly =>
+            var loadedCandidates = AppDomain.CurrentDomain.GetAssemblies()
+                .Where(assembly =>
                     !assembly.IsDynamic
                     && !string.IsNullOrWhiteSpace(assembly.Location)
                     && assembly.GetName().Name != null
                     && assembly.GetName().Name.Equals(simpleName, StringComparison.OrdinalIgnoreCase)
-                );
+                )
+                .ToList();
+            // Prefer the loaded copy at the resolved candidate path (else first); a no-op under the
+            // single-era loader, correct when same-name copies coexist.
+            var alreadyLoaded = loadedCandidates.FirstOrDefault(a => PathsMatch(a.Location, assemblyPath))
+                                ?? loadedCandidates.FirstOrDefault();
             if (alreadyLoaded != null && ShouldUseLoadedCopy(alreadyLoaded, assemblyPath))
                 return alreadyLoaded;
 

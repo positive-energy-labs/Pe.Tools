@@ -34,6 +34,10 @@ public sealed class AppCore : IPePayload {
     private UIControlledApplication? _application;
 
     public void Startup(PePayloadContext context) {
+        // Capture lane + install location from the loader once, so host/pea launchers resolve
+        // sibling payloads honestly (installed lane via InstalledProduct; dev lane self-hosted).
+        PeRuntimeContext.Capture(context);
+
         var app = context.Application;
         this._application = app;
 
