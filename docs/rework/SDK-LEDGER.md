@@ -71,5 +71,5 @@ Every SDK defect/enhancement, with status. Any agent that finds an SDK issue ADD
 | R4 | fixed@worktree | MSI wrote raw version where CLI writes NormalizePayloadVersion — channels could lay different versions/<v> dirs. MSI now calls the same (internal) normalizer. |
 | R5 | open | LoaderApplication.OnStartup returns Result.Failed (Revit error dialog) on missing/corrupt loader.json — the inert-never-crash philosophy covers staged-missing-version but not a corrupt shim. Low priority. |
 | R6 | open | Program.cs pin-drift guard walks RepoContext.Find() redundantly before dispatch (each ship command Finds again). Cosmetic. |
-| P11 | open | Verify MsiCommand tolerates a targetless PathShim (peco: dev-only, no target/entry) now that the consumer manifest ships peco on the MSI lane. |
+| P11 | closed | Verified 2026-07-08: MsiCommand skips targetless PathShims cleanly ("Dev-only shims don't ship", MsiCommand.cs ~:221-224). Now load-bearing: the pea shim is also targetless post-squash. |
 | P12 | open | InstalledProduct.Resolve(name) is ambiguous when two payloads share a name (flagship: pea VersionedApp + pea PathShim) — first-by-name wins. Consider Resolve(name, type?) or documented precedence. |

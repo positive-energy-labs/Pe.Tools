@@ -29,6 +29,16 @@ const config = defineConfig(({ mode }) => {
           quoteStyle: "double",
           semicolons: true,
         },
+        // Installed lane serves dist/client statically from the host (no node SSR
+        // process), so the build must emit an index.html shell. Server-function
+        // routes (pdf-audit labs) are dev-lane only by consequence.
+        spa: {
+          enabled: true,
+          prerender: {
+            outputPath: "/index.html",
+            crawlLinks: false,
+          },
+        },
       }) as never,
       tanstackStartVite8DevMiddleware() as never,
       react() as never,
