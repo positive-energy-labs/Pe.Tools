@@ -19,7 +19,7 @@
     "@assistant-ui/react-markdown": "catalog:",
     "@base-ui/react": "catalog:",
     "@llamaindex/llama-cloud": "^2.10.0",
-    "@mastra/client-js": "1.28.0",
+    "@mastra/client-js": "1.31.1",
     "@pe/agent-contracts": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "@pe/schema-core": "workspace:*",

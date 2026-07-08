@@ -232,18 +232,10 @@ public sealed class ButtonRegistry {
 
     /// <summary>
     ///     Builds the entire ribbon from the registry definitions.
-    ///     Every button points at the target the context's binder hands back — the real command
-    ///     type in the dev lane, a stable loader slot in the installed lane. On a live swap
-    ///     (IsFirstLoad=false) ribbon items already exist and Revit forbids creating more:
-    ///     re-bind every command to repoint the existing buttons and touch nothing else.
+    ///     Every button points at the target the context's binder hands back: the real command
+    ///     type in the dev lane, a stable loader slot in the installed lane.
     /// </summary>
     public static void BuildRibbon(PePayloadContext context, string tabName) {
-        if (!context.IsFirstLoad) {
-            foreach (var registration in Registrations)
-                _ = registration.Bind(context.Commands);
-            return;
-        }
-
         var panels = new Dictionary<string, RibbonPanel>();
         var pulldowns = new Dictionary<string, PulldownButton>();
         var splitButtons = new Dictionary<string, SplitButton>();
