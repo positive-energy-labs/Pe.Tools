@@ -3,19 +3,20 @@ namespace Pe.Dev.Cli;
 internal static class DevCliProgram {
   internal const string UsageText = """
                                       Usage:
-                                        pe-dev bootstrap-path
                                         pe-dev self-test [--json]
-                                        pe-dev pea link-dev
                                         pe-dev web <pea|peco> [web options]
                                         pe-dev automation <auth|browse|manifest|submit|inspect|cache> ...
 
-                                      Primary workflow:
-                                        bootstrap-path  Add the running pe-dev build output directory to the user PATH.
+                                      PATH and dev shims are SDK-owned:
+                                        `pe-revit path ensure` registers the product shims dir on the user PATH (once).
+                                        `pe-revit dev link` routes pea/peco/pe-dev shims to this checkout; `pe-revit dev status` shows lanes.
 
                                       Removed command groups:
+                                        bootstrap-path and pea link-dev were removed: they hand-edited the user PATH and kept a second
+                                        shim generator. Use `pe-revit path ensure` + `pe-revit dev link` instead.
                                         codegen was removed: ops/types come from the live session (GET /ops + `pnpm --filter @pe/host-contracts codegen`).
                                         doctor, status, sync, env, revit, verify, and test were intentionally removed from the public surface.
-                                        Use SDK pe-revit live/test for live-loop mechanics and Revit-backed proof.
+                                        Use SDK `pe-revit live` for live-loop mechanics and `pe-revit test fresh|attached` for Revit-backed proof.
                                         Use Peco when Pea status/log hooks or product probes should wrap SDK commands.
 
                                       Global options:

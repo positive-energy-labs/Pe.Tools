@@ -228,15 +228,9 @@ The clean source-linked CLI model is:
 - `PEA_RUNTIME=dev` is a local shell convenience only. Do not use ambient environment selection as proof of lane.
 - `Pe.App` must pass `--dev` or `--installed` when launching Pea from Revit, based on its `Pe.App.runtime.json` descriptor. `Pe.App` also resolves and launches the matching TS-built `Pe.Host.exe` lane from that descriptor; neither Pea nor Host may silently cross lanes through a linked source file.
 
-This source-linked shape is intentionally about developer iteration, not installer payload ownership. A `dev-source.txt` file is a capability registration for launchers. It does not prove packaged installed behavior and should not be used as installed-lane evidence.
+This source-linked shape is intentionally about developer iteration, not installer payload ownership. A shim's `{name}.dev.txt` marker is a per-shim capability registration written by `pe-revit dev link`. It does not prove packaged installed behavior and should not be used as installed-lane evidence.
 
-`pe-dev` is different by design: it is source/dev-only repo tooling, not an installed product slice. The MSI must not install it, register it on PATH, or harvest a `pe-dev` payload. Developers bootstrap their own PATH entry to the build output they want to use:
-
-```powershell
-dotnet run --project .\source\Pe.Dev.Cli\Pe.Dev.Cli.csproj -c Debug.R25 -- bootstrap-path
-```
-
-`bootstrap-path` points the user PATH at `AppContext.BaseDirectory` for that invocation, so `dotnet run -c Debug.R25 -- bootstrap-path` targets the project-bin output for `Debug.R25`. This keeps `pe-dev` personal and configuration-specific without creating another product runtime root.
+`pe-dev` is source/dev-only repo tooling, not an installed product slice: release installs never ship it (its PathShim is targetless, so users never see it). Devs get it on PATH the same way as pea/peco — the manifest declares a `pe-dev` PathShim with a `dotnet run` dev command; `pe-revit dev link` routes it to this checkout. No hand PATH edits, no separate bootstrap.
 
 This asymmetry is deliberate: Host needs a dev-only root to avoid installed-runtime file locks and stale installed contracts; `pea` and `peco` need stable operator/dev launch commands; `pe-dev` should stay a local source workflow helper.
 
@@ -264,20 +258,28 @@ Installed/product web behavior is separate. `pea --installed web ...` runs the p
 Useful dev-lane refresh commands:
 
 ```powershell
-pe-dev bootstrap-path
-pe-dev pea link-dev
+pe-revit path ensure     # once per machine: registers <appBase>\shims on the user PATH (safely)
+pe-revit dev link        # from this checkout: routes pea/peco/pe-dev shims to source
+pe-revit dev status      # shows each shim's resolved lane
 pe-dev web pea
 pea
 peco
-pea web
-peco web
-pea --dev --help
 pea --installed --help
 ```
 
-`pe-dev pea link-dev` writes `dev-source.txt` next to PATH-visible `pea.cmd` / `peco.cmd` launchers and refreshes those launchers. It does not mutate `current.txt` or install a `versions\dev` payload. Use `pea`, `peco`, or `pea --dev ...` for source-linked development; use `pea --installed ...` for installed payload behavior.
+PATH and dev-shim management is SDK-owned (`pe-revit path`, `pe-revit dev`). The old
+`pe-dev bootstrap-path` and `pe-dev pea link-dev` commands were removed: they hand-edited the user
+PATH (REG_SZ overwrite, whole-PATH rewrites) and maintained a second launcher generator in `bin\pea`.
+One PATH entry — the product shims dir — is the condoned way onto PATH; everything else is a shim
+file in that dir. A shim runs dev when ITS `{name}.dev.txt` exists (written by `dev link`), installed
+otherwise; `--installed` / `PE_LANE=installed` forces the installed target.
 
-Do not use a dev command to rewrite the installed-shaped `pea` payload selection. A previous `pe-dev pea install-dev` command was removed because it wrote `versions\dev` and `current.txt` under `bin\pea`, making installed-lane validation ambiguous. Source-linked dev work should use `link-dev` plus `pea` / `peco`; packaged installed payload validation should use the installer/package lane or `pea --installed ...` against an installed payload.
+If you used the old flow on this machine, clean up once: delete `%LOCALAPPDATA%\Positive Energy\Pe.Tools\bin\pea\*.cmd`
+and remove the `bin\pea` / Pe.Dev.Cli output-dir entries from your user PATH (the SDK never writes those).
+
+Do not use a dev command to rewrite the installed-shaped `pea` payload selection: source-linked dev
+work is `pe-revit dev link` + `pea` / `peco`; packaged installed payload validation is the
+installer/package lane or `pea --installed ...`.
 
 ## Contract decisions (runtime op catalog)
 
@@ -361,7 +363,7 @@ The automation shell is `Pe.Dev.RevitAutomation.Worker`, not desktop `Pe.App`. D
 | Package installer only            | `dotnet run --project .\build\Build.csproj -c Release -- pack installer --configuration Release.R25`                             |
 | Package automation appbundle only | `dotnet run --project .\build\Build.csproj -c Release -- pack automation`                                                        |
 | Publish GitHub release artifacts  | `dotnet run --project .\build\Build.csproj -c Release -- pack publish`                                                           |
-| Link source `pea` dev lane        | `pe-dev pea link-dev`, then `pea`, `peco`, `pea web`, or `peco web`                                                              |
+| Link source dev shims             | `pe-revit path ensure` (once), `pe-revit dev link`, then `pea` / `peco` / `pe-dev`                                               |
 | Run source web dev explicitly     | `pe-dev web pea` or `pe-dev web peco`                                                                                            |
 | Validate installed `pea` lane     | `pea --installed ...`                                                                                                            |
 | Regenerate host op types          | `pnpm --filter @pe/host-contracts codegen` (Revit connected); `codegen:check` is the drift gate                                 |

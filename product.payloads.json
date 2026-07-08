@@ -49,6 +49,11 @@
       "type": "PathShim",
       "name": "peco",
       "dev": "pnpm --dir \"{root}/source/pe-tools\" --filter @pe/peco peco"
+    },
+    {
+      "type": "PathShim",
+      "name": "pe-dev",
+      "dev": "dotnet run --project \"{root}/source/Pe.Dev.Cli\" --"
     }
   ]
 }
