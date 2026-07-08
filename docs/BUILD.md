@@ -190,22 +190,21 @@ Key local roots:
 
 Do not validate installed behavior against the dev host root. MSI upgrades intentionally replace the installed host runtime tree under `bin\host`; installer cleanup must never target `dev\bin\host`.
 
-Installed Pea payloads are versioned under `bin\pea\versions\<version>`. The launcher contract is:
+Installed Pea is an SDK `VersionedApp` payload (`product.payloads.json` → `{type: VersionedApp, name: pea, entry: pea.exe}`), fronted by a lane-aware PathShim (`target: versionedApp:pea`). The SDK install kernel owns the layout:
 
 ```text
-bin\pea\
-  pea.cmd
-  current.txt
-  versions\<version>\
-    app\pea.exe
-    node_modules\@opentui\core-win32-x64\...
-    node_modules\@duckdb\node-bindings-win32-x64\...
-    node_modules\@anush008\tokenizers-win32-x64-msvc\...
-    node_modules\@libsql\win32-x64-msvc\...
-    bin\napi-v6\win32\x64\...
+%LOCALAPPDATA%\Positive Energy\Pe.Tools\
+  shims\pea.cmd                       # SDK-written lane-aware shim (installed by default; dev when pea.dev.txt present)
+  bin\pea\
+    current.txt                       # active version pointer
+    versions\<version>\
+      pea.exe                         # the Node SEA (entry)
+      bundle\                         # the SEA bundle sources
+      node_modules\                   # sidecars staged beside the exe (see apps/pea/scripts/stage-native-sidecars.mjs)
+      package.json                    # mastracode package-root decoy
 ```
 
-The payload is a Node SEA executable produced by Vite+/tsdown from `source/pe-tools/apps/pea/src/main.ts` plus explicit native sidecars, not a package-manager install and not an alternate installed-only entrypoint. Build machines need Vite+ with Node 25.7.0 or newer for tsdown `exe` packaging and the `source/pe-tools` dependency store available, but end-user machines do not run `pnpm install`, `pnpm deploy`, or dependency resolution. `pea.cmd` runs the selected version's `app\pea.exe`.
+The payload is a Node SEA executable produced by Vite+/tsdown from `source/pe-tools/apps/pea/src/main.ts`. Because a SEA cannot static-ESM-import external bare specifiers, `apps/pea/vite.config.ts` carries the `pe:sea-require-shim` plugin (identical to the host's): the win32 natives (duckdb/tokenizers/libsql) plus the JS sidecars that break when inlined (`drizzle-orm`, `get-stream`) are rewritten to runtime `createRequire` and staged into `node_modules\` beside the exe; `onnxruntime-node` is a throwing stub (no embedding feature runs — see SDK-LEDGER T9). `stage-native-sidecars.mjs` is the authority for the exact staged set. Build machines need Vite+ with Node 25.7.0+ and the `source/pe-tools` dependency store; end-user machines run no `pnpm install`/`deploy`/resolution. The shim resolves the installed target through `current.txt`; `pea --installed` forces it; a `pea.dev.txt` (written by `pe-revit dev link`) routes to the checkout instead.
 
 Private `source/pe-tools` packages are source-exported for development. Their Vite+ package configs use explicit `pack.entry` values so `vp pack` can still produce artifacts without mutating package exports back to `dist`; keep installed payload bundling as the artifact boundary instead of adding parallel `main` / `main-installed` source entrypoints.
 
