@@ -11,7 +11,7 @@
  * Run (from packages/host-contracts):
  *   pnpm codegen                                 # regenerate the checked-in file
  *   pnpm codegen:check                           # drift gate: exit 1 if stale
- *   [--host http://localhost:5180] [--session <bridgeSessionId>] [--out <path>]
+ *   [--host http://127.0.0.1:5180] [--session <bridgeSessionId>] [--out <path>]
  */
 import { compile } from "json-schema-to-typescript";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -56,7 +56,7 @@ function parseUntitled(schemaJson: string): Record<string, unknown> {
 
 const DEFAULT_OUT = resolve(import.meta.dirname, "../src/generated/host-ops.generated.ts");
 
-const hostBase = argValue("--host", "http://localhost:5180");
+const hostBase = argValue("--host", "http://127.0.0.1:5180");
 const session = argValue("--session", "");
 const outPath = argValue("--out", DEFAULT_OUT);
 const checkMode = process.argv.includes("--check");

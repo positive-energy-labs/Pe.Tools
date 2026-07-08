@@ -27,7 +27,7 @@ artifacts projected across languages.
 - `GET /schemas/settings/<moduleKey>/<rootKey>.json` — live settings authoring schema from
   the default session (**deferred**: `?session=` selection — single-session is the live
   reality today). Settings docs carry
-  `"$schema": "http://localhost:5180/schemas/settings/<module>/<root>.json"` — absolute,
+  `"$schema": "http://127.0.0.1:5180/schemas/settings/<module>/<root>.json"` — absolute,
   machine-portable (each teammate's host resolves it), injected on save; the base honors
   `PE_TOOLS_HOST_BASE_URL`.
   **No disk mirror**: schemas are session state (value-domain samples come from the open
