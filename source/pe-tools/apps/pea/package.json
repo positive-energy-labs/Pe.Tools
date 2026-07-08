@@ -28,7 +28,7 @@
   "scripts": {
     "pea": "vp exec jiti src/main.ts",
     "build": "vp pack",
-    "build:installed": "vp pack",
+    "build:installed": "vp pack && node scripts/stage-native-sidecars.mjs",
     "dev": "vp pack --watch",
     "test": "vp test",
     "check": "vp check",

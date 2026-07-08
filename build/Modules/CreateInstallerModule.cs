@@ -80,6 +80,14 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
             cancellationToken
         );
 
+        var peaPackageDirectory = rootDirectory.GetFolder("source").GetFolder("pe-tools").GetFolder("apps").GetFolder("pea");
+        var peaPublishDirectory = await PublishPeaAsync(
+            context,
+            peaPackageDirectory,
+            layout,
+            cancellationToken
+        );
+
         Directory.CreateDirectory(layout.Artifacts.InstallerPackagesRoot);
         foreach (var existingInstallerPath in Directory.EnumerateFiles(layout.Artifacts.InstallerPackagesRoot, "*.msi"))
             System.IO.File.Delete(existingInstallerPath);
@@ -96,6 +104,7 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
             versioning.Version,
             revitPayloadRoot.Path,
             runtimePublishDirectory.Path,
+            peaPublishDirectory.Path,
             cancellationToken
         );
         var installPackagePath = await WriteInstallPackageAsync(
@@ -104,6 +113,7 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
             versioning.Version,
             revitPayloadRoot.Path,
             runtimePublishDirectory.Path,
+            peaPublishDirectory.Path,
             cancellationToken
         );
         context.Summary.KeyValue("Artifacts", "Install package", installPackagePath);
@@ -191,6 +201,44 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         return runtimePublishDirectory;
     }
 
+    private static async Task<Folder> PublishPeaAsync(
+        IModuleContext context,
+        Folder peaPackageDirectory,
+        ProductLayoutAuthority layout,
+        CancellationToken cancellationToken
+    ) {
+        if (Directory.Exists(layout.GetPeaPublishDirectory("Release")))
+            Directory.Delete(layout.GetPeaPublishDirectory("Release"), true);
+
+        Directory.CreateDirectory(layout.GetPeaPublishDirectory("Release"));
+        var peaPublishDirectory = new Folder(layout.GetPeaPublishDirectory("Release"));
+
+        context.Logger.LogInformation("Building TS pea runtime for installer packaging: {Output}", peaPublishDirectory.Path);
+        await context.Shell.Command.ExecuteCommandLineTool(
+            new GenericCommandLineToolOptions("pnpm") { Arguments = ["--filter", "@pe/pea", "build:installed"] },
+            new CommandExecutionOptions { WorkingDirectory = peaPackageDirectory.Parent!.Parent!.Path },
+            cancellationToken
+        );
+
+        // Copy the whole dist-installed tree: the pea SEA build places its exe at the root and the
+        // staged Mastra sidecars (drizzle-orm + get-stream(+2 deps) + the 3 natives) and the
+        // mastracode package-root decoy under dist-installed, all of which must ride into the
+        // versioned pea payload beside pea.exe (mirrors the host; docs/rework/SDK-LEDGER.md T5).
+        var builtPeaDirectory = Path.Combine(peaPackageDirectory.Path, "dist-installed");
+        var builtPeaExecutable = Path.Combine(builtPeaDirectory, PeaCliIdentity.ExecutableName);
+        System.IO.File.Exists(builtPeaExecutable)
+            .ShouldBeTrue($"TS pea executable build did not create {builtPeaExecutable}");
+        CopyDirectory(builtPeaDirectory, peaPublishDirectory.Path);
+
+        peaPublishDirectory.GetFiles(file => file.Exists)
+            .ShouldNotBeEmpty("Failed to publish the pea runtime for installer packaging.");
+        peaPublishDirectory.GetFile(PeaCliIdentity.ExecutableName).Exists
+            .ShouldBeTrue("Failed to publish TS pea for installer packaging.");
+
+        context.Logger.LogInformation("Finished publishing TS pea runtime for installer packaging.");
+        return peaPublishDirectory;
+    }
+
     private static Folder StageRevitPayload(
         IModuleContext context,
         ProductLayoutAuthority layout,
@@ -232,13 +280,15 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         string version,
         string revitPayloadRoot,
         string runtimePublishDirectory,
+        string peaPublishDirectory,
         CancellationToken cancellationToken
     ) {
         var manifest = TransformManifest(
             sourceManifestPath,
             new Dictionary<string, string>(StringComparer.Ordinal) {
                 ["Pe.App"] = revitPayloadRoot,
-                ["host"] = runtimePublishDirectory
+                ["host"] = runtimePublishDirectory,
+                ["pea"] = peaPublishDirectory
             }
         );
 
@@ -258,6 +308,7 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         string version,
         string revitPayloadRoot,
         string runtimePublishDirectory,
+        string peaPublishDirectory,
         CancellationToken cancellationToken
     ) {
         var packageRoot = Path.Combine(layout.Artifacts.InstallerPackagesRoot, "install-package");
@@ -271,7 +322,8 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         // same package-relative path. Keyed by payload name so any drift fails TransformManifest.
         var stagedByName = new Dictionary<string, string>(StringComparer.Ordinal) {
             ["Pe.App"] = revitPayloadRoot,
-            ["host"] = runtimePublishDirectory
+            ["host"] = runtimePublishDirectory,
+            ["pea"] = peaPublishDirectory
         };
         var sourceByName = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var (name, stagedPath) in stagedByName) {
