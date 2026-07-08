@@ -421,6 +421,15 @@ export type BridgeSessionListEntry = BridgeSessionsListData["sessions"][number];
 export type HostProbeData = Schema.Schema.Type<typeof hostProbeDataSchema>;
 
 export const hostProbeDataSchema = Schema.Struct({
+  // Mastra tenant health (D4): a failed agent-runtime init degrades /pe/* to 503 instead of
+  // taking the host down; this is where that state becomes observable (spawned hosts run
+  // stdio-ignored). `error` is the persisted init failure, null when available or not yet settled.
+  agentRuntime: Schema.optional(
+    Schema.Struct({
+      available: Schema.Boolean,
+      error: Schema.NullOr(Schema.String),
+    }),
+  ),
   bridgeContractVersion: Schema.Number,
   bridgeIsConnected: Schema.Boolean,
   bridgePath: Schema.String,

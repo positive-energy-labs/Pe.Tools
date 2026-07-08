@@ -1,7 +1,12 @@
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { Context, Effect, Layer } from "effect";
 import { HttpEffect, HttpRouter, HttpServer } from "effect/unstable/http";
+import { productPathNames } from "@pe/host-contracts/contracts";
 import { buildAgentControllerApp } from "@pe/runtime";
 import { createPeaRuntime } from "@pe/runtime/pea";
+import { productRoot } from "./host-ownership.ts";
+import { setAgentRuntimeStatus } from "./local-ops.ts";
 
 /**
  * The Mastra agent runtime as an Effect tenant (Pillar 1). Its HTTP surface is a Hono app
@@ -16,6 +21,37 @@ export class MastraRuntime extends Context.Service<
     readonly fetch: (request: Request) => Promise<Response>;
   }
 >()("pe/MastraRuntime") {}
+
+/**
+ * D4 observability: spawned hosts run detached with stdio ignored, so `Effect.logError` alone
+ * makes an init failure invisible. Persist it beside the host's other state
+ * (`state/host/mastra-init.err.log`) and report it to `/host/status` via `setAgentRuntimeStatus`.
+ */
+function mastraInitErrorLogPath(): string {
+  return join(productRoot(), productPathNames.stateDirectoryName, "host", "mastra-init.err.log");
+}
+
+/** Message + stack, following the `cause` chain (tryPromise wraps the original throw). */
+function formatInitError(error: unknown): string {
+  const parts: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; current != null && depth < 5; depth++) {
+    parts.push(current instanceof Error ? (current.stack ?? current.message) : String(current));
+    current = current instanceof Error ? current.cause : null;
+  }
+  return parts.join("\ncaused by: ");
+}
+
+const persistMastraInitError = (detail: string) =>
+  Effect.promise(async () => {
+    try {
+      const logPath = mastraInitErrorLogPath();
+      await mkdir(dirname(logPath), { recursive: true });
+      await writeFile(logPath, `${new Date().toISOString()} Mastra runtime failed to start\n${detail}\n`, "utf8");
+    } catch {
+      /* best-effort: observability must not change the degrade-to-503 behavior */
+    }
+  });
 
 /**
  * Builds the pea runtime AFTER the server has bound (this layer depends on `HttpServer`), so the
@@ -36,6 +72,9 @@ export const MastraRuntimeLive = Layer.effect(
       Effect.tryPromise(async () => {
         const runtime = await createPeaRuntime({ hostBaseUrl });
         const app = await buildAgentControllerApp({ runtime, label: "pea" });
+        setAgentRuntimeStatus({ available: true, error: null });
+        // A stale error log from a previous degraded boot would misreport this healthy one.
+        await rm(mastraInitErrorLogPath(), { force: true }).catch(() => undefined);
         // hono's `fetch` may return `Response | Promise<Response>`; normalize to a Promise so the
         // seam matches `HttpEffect.fromWebHandler`'s `(req) => Promise<Response>` contract.
         return {
@@ -45,19 +84,26 @@ export const MastraRuntimeLive = Layer.effect(
       }).pipe(
         // A broken agent runtime (bad auth profile, storage failure) must NOT take the Revit
         // bridge down with it — Revit respawns the host, so a boot defect here becomes a crash
-        // loop. Degrade the agent surface to 503 and keep serving.
+        // loop. Degrade the agent surface to 503 and keep serving — but observably (D4): persist
+        // the failure and surface it on /host/status.
         Effect.catch((error) =>
-          Effect.as(
-            Effect.logError("Mastra runtime failed to start; agent surface degraded to 503", error),
-            {
+          Effect.gen(function* () {
+            yield* Effect.logError(
+              "Mastra runtime failed to start; agent surface degraded to 503",
+              error,
+            );
+            const detail = formatInitError(error);
+            setAgentRuntimeStatus({ available: false, error: detail });
+            yield* persistMastraInitError(detail);
+            return {
               runtime: null,
               fetch: async () =>
                 Response.json(
                   { error: "Agent runtime unavailable on this host." },
                   { status: 503 },
                 ),
-            },
-          ),
+            };
+          }),
         ),
       ),
       // Release must never throw: swallow a rejecting close so scope teardown continues.
