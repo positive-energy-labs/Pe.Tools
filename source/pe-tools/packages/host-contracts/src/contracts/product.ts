@@ -34,7 +34,7 @@ export const hostProcessIdentity = {
   hostBaseUrlVariable: "PE_TOOLS_HOST_BASE_URL",
   hostExecutablePathVariable: "PE_TOOLS_HOST_EXECUTABLE_PATH",
   defaultFrontendBaseUrl: "http://localhost:5150",
-  defaultHostBaseUrl: "http://localhost:5180",
+  defaultHostBaseUrl: "http://127.0.0.1:5180",
 } as const;
 
 export const peaCliIdentity = {

@@ -54,7 +54,7 @@ const config = defineConfig(({ mode }) => {
     // proxy is dev-only. ponytail: one target for every host-backed path the app uses.
     server: {
       proxy: (() => {
-        const target = process.env.PE_TOOLS_HOST_BASE_URL ?? "http://localhost:5180";
+        const target = process.env.PE_TOOLS_HOST_BASE_URL ?? "http://127.0.0.1:5180";
         const options = { target, changeOrigin: true } as const;
         return {
           "/call": options,
