@@ -53,3 +53,6 @@ lerna-debug.log*
 !.vscode/
 !.vscode/settings.json
 !.vscode/extensions.json
+
+# local SDK feed - nupkgs are build artifacts, not source (until NuGet publish)
+eng/sdk-feed/*.nupkg

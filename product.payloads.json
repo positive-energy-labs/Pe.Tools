@@ -3,12 +3,12 @@
   "vendor": "Positive Energy",
   "releases": "positive-energy-labs/Pe.Tools",
   "legacy": [
-    "app:bin/pea",
     "app:bin/pe-dev",
     "app:dev",
     "appdata:Autodesk/ApplicationPlugins/PE_Tools.bundle",
     "programdata:Autodesk/ApplicationPlugins/PE_Tools.bundle",
     "addins:*/Pe.Revit",
+    "addins:*/Pe.Revit.Bridge",
     "addins:*/Pe.Revit.DocumentData",
     "addins:*/Pe.Revit.FamilyFoundry",
     "addins:*/Pe.Revit.Global",
@@ -24,9 +24,10 @@
       "entry": "Pe.App.AppCore"
     },
     {
-      "type": "Exe",
+      "type": "VersionedApp",
       "name": "host",
-      "source": "source/pe-tools/apps/host/dist-installed"
+      "source": "source/pe-tools/apps/host/dist-installed",
+      "entry": "Pe.Host.exe"
     },
     {
       "type": "Cli",
@@ -35,6 +36,8 @@
     {
       "type": "PathShim",
       "name": "pea",
+      "target": "versionedApp:pea",
+      "entry": "app\\pea.exe",
       "dev": "pnpm --dir \"{root}/source/pe-tools\" --filter @pe/pea pea"
     },
     {

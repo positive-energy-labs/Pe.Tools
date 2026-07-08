@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { runRuntimeAgentControllerWeb } from "@pe/runtime";
 import { createPeaRuntime, type PeaTuiRuntimeOptions } from "./runtime.ts";
 
@@ -21,8 +23,13 @@ export async function runPeaWeb(options: PeaWebOptions = {}): Promise<void> {
     runtimeOptions,
     host: options.host,
     port: options.port,
-    staticDir: options.staticDir,
+    staticDir: options.staticDir ?? resolveInstalledStaticDir(),
     workbenchPort: options.workbenchPort,
     workbenchToken: options.workbenchToken,
   });
+}
+
+function resolveInstalledStaticDir(): string | undefined {
+  const dir = resolve(dirname(process.execPath), "..", "web", "client");
+  return existsSync(join(dir, "index.html")) ? dir : undefined;
 }

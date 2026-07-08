@@ -20,7 +20,7 @@ public static class ProductRuntimeAuthority {
 
         var hostExecutablePath = runtimeLane == ProductRuntimeLane.Dev
             ? developmentRuntime.Binaries.HostExecutablePath
-            : installedRuntime.Binaries.HostExecutablePath;
+            : ResolveInstalledHostExecutable(installedRuntime.Binaries);
 
         return new ProductRuntimeResolution(
             runtimeLane,
@@ -29,6 +29,22 @@ public static class ProductRuntimeAuthority {
             descriptorPath,
             source ?? "explicit"
         );
+    }
+
+    private static string ResolveInstalledHostExecutable(ProductRuntimeBinaryLayout binaries) {
+        try {
+            if (File.Exists(binaries.HostCurrentVersionPath)) {
+                var version = File.ReadAllText(binaries.HostCurrentVersionPath).Trim();
+                if (version.Length > 0) {
+                    var versioned = binaries.ResolveHostVersionInstalledExecutablePath(version);
+                    if (File.Exists(versioned)) return versioned;
+                }
+            }
+        } catch (IOException) {
+        } catch (UnauthorizedAccessException) {
+        }
+
+        return binaries.HostExecutablePath;
     }
 
     public static ProductRuntimeResolution ResolveForExecutingPeAppAssembly(string executingAssemblyPath) {

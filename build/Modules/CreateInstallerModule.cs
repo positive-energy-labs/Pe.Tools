@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Text.Json;
 using Build.Options;
 using Microsoft.Extensions.Logging;
@@ -24,6 +25,21 @@ namespace Build.Modules;
 [DependsOn<PublishRevitAddinModule>]
 [DependsOn<CreatePeaPayloadModule>]
 public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) : Module {
+    private static readonly IReadOnlyList<string> LegacyPaths = [
+        "app:bin/pe-dev",
+        "app:dev",
+        "appdata:Autodesk/ApplicationPlugins/PE_Tools.bundle",
+        "programdata:Autodesk/ApplicationPlugins/PE_Tools.bundle",
+        "addins:*/Pe.Revit",
+        "addins:*/Pe.Revit.Bridge",
+        "addins:*/Pe.Revit.DocumentData",
+        "addins:*/Pe.Revit.FamilyFoundry",
+        "addins:*/Pe.Revit.Global",
+        "addins:*/Pe.Revit.Scripting",
+        "addins:*/Pe.Revit.SettingsRuntime",
+        "addins:*/Pe.Revit.Ui"
+    ];
+
     private static readonly JsonSerializerOptions JsonOptions = new() {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true
@@ -84,6 +100,16 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
             revitPayloadRoot.Path,
             cancellationToken
         );
+        var installPackagePath = await WriteSdkInstallPackageAsync(
+            layout,
+            versioning.Version,
+            runtimePublishDirectory.Path,
+            peaPayload,
+            appAssemblyName,
+            revitPayloadRoot.Path,
+            cancellationToken
+        );
+        context.Summary.KeyValue("Artifacts", "Install package", installPackagePath);
 
         context.Logger.LogInformation(
             "Running SDK MSI helper. Manifest={Manifest}; output={Output}",
@@ -212,9 +238,12 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         var manifest = new SdkInstallManifest(
             ProductIdentity.ProductName,
             ProductIdentity.VendorName,
+            "positive-energy-labs/Pe.Tools",
+            LegacyPaths,
             [
                 new("RevitAddin", appAssemblyName, revitPayloadRoot),
                 new("Exe", HostProcessIdentity.DirectoryName, runtimePublishDirectory),
+                new("Cli", "pe-revit"),
                 new("VersionedApp", PeaCliIdentity.DirectoryName, peaPayloadDirectory),
                 new(
                     "PathShim",
@@ -235,6 +264,65 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         return manifestPath;
     }
 
+    private static async Task<string> WriteSdkInstallPackageAsync(
+        ProductLayoutAuthority layout,
+        string version,
+        string runtimePublishDirectory,
+        PeaPayloadArtifacts peaPayload,
+        string appAssemblyName,
+        string revitPayloadRoot,
+        CancellationToken cancellationToken
+    ) {
+        var packageRoot = Path.Combine(layout.Artifacts.InstallerPackagesRoot, "install-package");
+        if (Directory.Exists(packageRoot))
+            Directory.Delete(packageRoot, true);
+
+        Directory.CreateDirectory(packageRoot);
+        var payloadsRoot = Path.Combine(packageRoot, "payloads");
+        var revitPayload = Path.Combine(payloadsRoot, "revit-addins", appAssemblyName);
+        var hostPayload = Path.Combine(payloadsRoot, "host");
+        var peaPayloadSource = layout.GetPeaPayloadStagingDirectory("Release", peaPayload.Version);
+        var peaPayloadTarget = Path.Combine(payloadsRoot, "pea");
+
+        CopyDirectory(revitPayloadRoot, revitPayload);
+        CopyDirectory(runtimePublishDirectory, hostPayload);
+        CopyDirectory(peaPayloadSource, peaPayloadTarget);
+
+        var manifest = new SdkInstallManifest(
+            ProductIdentity.ProductName,
+            ProductIdentity.VendorName,
+            "positive-energy-labs/Pe.Tools",
+            LegacyPaths,
+            [
+                new("VersionedAddin", appAssemblyName, $"payloads/revit-addins/{appAssemblyName}", Entry: "Pe.App.AppCore"),
+                new("VersionedApp", HostProcessIdentity.DirectoryName, "payloads/host", Entry: HostProcessIdentity.ExecutableName),
+                new("Cli", "pe-revit"),
+                new("VersionedApp", PeaCliIdentity.DirectoryName, "payloads/pea"),
+                new(
+                    "PathShim",
+                    Path.GetFileNameWithoutExtension(PeaCliIdentity.LauncherName),
+                    Target: $"versionedApp:{PeaCliIdentity.DirectoryName}",
+                    Entry: Path.Combine(PeaCliIdentity.AppDirectoryName, PeaCliIdentity.InstalledExecutableName)
+                )
+            ]
+        );
+
+        await System.IO.File.WriteAllTextAsync(
+            Path.Combine(packageRoot, "product.payloads.json"),
+            JsonSerializer.Serialize(manifest, JsonOptions),
+            cancellationToken
+        );
+
+        var packagePath = Path.Combine(
+            layout.Artifacts.InstallerPackagesRoot,
+            $"{ProductIdentity.ProductName}.{version}.install.zip"
+        );
+        if (System.IO.File.Exists(packagePath))
+            System.IO.File.Delete(packagePath);
+        ZipFile.CreateFromDirectory(packageRoot, packagePath, CompressionLevel.Optimal, false);
+        return packagePath;
+    }
+
     private static void CopyDirectory(string source, string destination) {
         Directory.CreateDirectory(destination);
         foreach (var directory in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
@@ -247,6 +335,8 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
     private sealed record SdkInstallManifest(
         string Product,
         string Vendor,
+        string Releases,
+        IReadOnlyList<string>? Legacy,
         IReadOnlyList<SdkInstallPayload> Payloads
     );
 
