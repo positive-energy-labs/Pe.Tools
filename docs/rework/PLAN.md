@@ -57,6 +57,10 @@ inventory and statuses live in [SDK-LEDGER.md](SDK-LEDGER.md). Prior-spike histo
   module ordering; natives are fine. Repro: run the installed exe with
   `PE_TOOLS_HOST_BASE_URL=http://127.0.0.1:<altport>` + captured stdio. CAVEAT: a second instance
   clobbers `state/service/host.json` — restore it afterward.
+- A Node SEA cannot static-ESM-import an external bare specifier (ERR_UNKNOWN_BUILTIN_MODULE);
+  only runtime createRequire survives — CJS require sites work, ESM import sites need the require
+  shim (`pe:sea-require-shim` in apps/host/vite.config.ts). T5 (pea.exe) will need exactly this
+  plugin + sidecar staging + the mastracode package-root decoy.
 - Existing tooling first: `pe-revit doctor|pack|install|live|dev-sign|guide`, `scripts/smoke.ps1`
   (SDK), `dotnet run --project build` (Pe.Tools). Never reinvent a verb.
 - Testing: one vertical check per real seam (smoke check / Loader.Tests / the alt-port host repro).

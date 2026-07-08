@@ -3,7 +3,7 @@
 
 import { Schema } from "effect";
 
-export const HOST_CONTRACT_VERSION = 36 as const;
+export const HOST_CONTRACT_VERSION = 37 as const;
 export const BRIDGE_CONTRACT_VERSION = 19 as const;
 export const BRIDGE_PATH = "/api/bridge" as const;
 

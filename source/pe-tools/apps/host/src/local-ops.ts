@@ -40,6 +40,16 @@ import { LocalOpError } from "./local-error.ts";
 
 const RUNTIME_IDENTITY = `pe-host-ts/${process.version}`;
 
+export type AgentRuntimeStatus = { readonly available: boolean; readonly error: string | null };
+
+// Mastra tenant health (D4). Starts unavailable/no-error ("not yet settled"); the tenant layer
+// reports in once its init succeeds or degrades to 503 (mastra-runtime.ts catch).
+let agentRuntimeStatus: AgentRuntimeStatus = { available: false, error: null };
+
+export function setAgentRuntimeStatus(status: AgentRuntimeStatus): void {
+  agentRuntimeStatus = status;
+}
+
 type LocalOpContext = {
   readonly bridge: BridgeSessionView;
   readonly invokeBridge: (
@@ -56,6 +66,7 @@ type RecentDocumentsEffect = Effect.Effect<
 
 export function getHostStatus(bridge: BridgeSessionView) {
   return Effect.succeed({
+    agentRuntime: agentRuntimeStatus,
     bridgeContractVersion: BRIDGE_CONTRACT_VERSION,
     bridgeIsConnected: bridge.connected,
     bridgePath: BRIDGE_PATH,
