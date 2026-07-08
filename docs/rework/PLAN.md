@@ -47,6 +47,8 @@ inventory and statuses live in [SDK-LEDGER.md](SDK-LEDGER.md). Prior-spike histo
 
 ## Grounding (every brief points here)
 
+- **The review of record: [DESIGN-REVIEW-2026-07-08.md](DESIGN-REVIEW-2026-07-08.md)** — full
+  good/bad verdict, every bug's root cause + disposition, the primitive ranking. Do not re-derive.
 - SDK contract: `Pe.Revit.Sdk/SPEC.md`. Defects: `SDK-LEDGER.md`. Effect/Mastra patterns:
   `EFFECT-V4-PATTERNS.md`, `MASTRA-DELTA.md`, `SQUASH-DESIGN.md` (all this dir).
 - Install grammar: read side `Pe.Revit.Loader/InstalledProduct.cs`, write side
@@ -76,15 +78,18 @@ inventory and statuses live in [SDK-LEDGER.md](SDK-LEDGER.md). Prior-spike histo
   drift checks · service stdio capture + loopback contract (D9) · `Resolve` uniqueness ·
   loader inert-on-corrupt-shim (R5) · residual pe-version wording. **Exit:** smoke green incl. new
   checks (no-source verify, already-current, dev link, path ensure); beta.17 packed to the folder feed.
-- **P2 Pe.Tools consume + product → 0.6.9.** Drizzle sidecar + Mastra observability (D4/D8) ·
-  consume beta.17 (pins incl. Versioning beta.9→17, delete the `PE_LANE` guard, D11 timeout, adopt
-  dev link / delete `PeaLinkDevCommand`'s PATH edit) · pea installed revival (D5) · web copy fix
-  ("swap live" → staged-until-restart truth) · BUILD.md stale sections. **Exit:** `install apply`
+- **P2 Pe.Tools consume + product → 0.6.9.** Drizzle sidecar + Mastra observability (D4/D8) ✅ ·
+  consume beta.17 ✅ (T3) · PATH writers deleted / dev verbs adopted ✅ (T4) · web copy ✅ (T6) ·
+  BUILD.md ✅-partial (T7) · **REMAINING: pea installed revival (T5)** — brief must carry the SEA
+  facts from Grounding (require-shim plugin + sidecars + mastracode decoy, all proven in
+  apps/host/vite.config.ts) and finish BUILD.md's bin\pea layout section. **Exit:** `install apply`
   from checkout → plain `verify` green → alt-port repro shows `/pe/*` 200 and `/host/status` reports
-  the agent runtime · `pea` from PATH resolves installed with no dev marker present.
-- **P3 Release-ready + handoff.** Pack 0.6.9; `release --plan` green (no publish); rewrite
-  E2E-HANDOFF.md as Codex's brief (restart Revit, web-update 0.6.8→0.6.9, no firewall prompt, `pea`
-  from PATH, `/pe/*` live, plain verify green). **Exit:** handoff written; every ledger line fixed,
+  the agent runtime ✅ · `pea` from PATH resolves installed with no dev marker present (T5).
+- **P3 Release-ready + handoff.** Bump manifest version to 0.6.9 · build payloads (`pnpm --filter
+  @pe/host build:payload`, pea equivalent) · `dotnet run --project build -- pack installer` ·
+  `release --plan` green (no publish) · rewrite E2E-HANDOFF.md as Codex's brief (restart Revit,
+  web-update 0.6.8→0.6.9, no firewall prompt, `pea` from PATH, `/pe/*` live, plain verify green,
+  old bin\pea launcher/PATH cleanup). **Exit:** handoff written; every ledger line fixed,
   deferred-with-reason, or explicitly handed to Codex.
 
 ## Rules
