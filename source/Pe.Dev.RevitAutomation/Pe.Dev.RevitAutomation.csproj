@@ -19,6 +19,6 @@
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="Autodesk.PackageBuilder" Version="2.0.2" />
-        <PackageReference Include="Pe.Revit.Versioning" Version="0.1.0-beta.9" />
+        <PackageReference Include="Pe.Revit.Versioning" Version="0.1.0-beta.17" />
     </ItemGroup>
 </Project>
