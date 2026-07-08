@@ -185,6 +185,9 @@ public class CmdPeTools : IExternalCommand {
         if (!status.IsConnected)
             _ = sb.AppendLine($"Status: {connectAttempt?.Message ?? status.LastError ?? "Connection attempt is pending."}");
 
+        // Which Pe.App this Revit session loaded (dev = self-hosted checkout; installed = loader shim).
+        // Fixed at add-in startup, so it also tells you which host lane the launcher resolves.
+        _ = sb.AppendLine($"Lane: {PeRuntimeContext.Lane}");
         _ = sb.AppendLine($"Bridge: {status.BridgeUri}");
         _ = sb.AppendLine($"Process: {status.ProcessId}");
         _ = sb.AppendLine($"Modules: {status.AvailableModuleCount}");

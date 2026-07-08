@@ -24,6 +24,9 @@ type CatalogEntry = {
   description: string;
   requestSchemaJson: string;
   responseSchemaJson: string;
+  // Host-local (TS-only) ops are listed in /ops for discovery but carry no schema JSON — their
+  // types are hand-authored in operation-types.ts. Skip them here; the bridge is the type source.
+  origin?: string;
 };
 
 function argValue(flag: string, fallback: string): string {
@@ -75,7 +78,19 @@ if (!response || !response.ok) {
   process.exit(1);
 }
 const catalog = (await response.json()) as { operations: CatalogEntry[] };
-const operations = [...catalog.operations].sort((a, b) => a.key.localeCompare(b.key));
+const operations = [...catalog.operations]
+  .filter((op) => op.origin !== "host-local") // types are hand-authored, not generated from /ops
+  .sort((a, b) => a.key.localeCompare(b.key));
+
+// No bridge ops means no live Revit session (the host still lists its host-local ops, which we
+// filtered out). Regenerating now would wipe the checked-in bridge types — skip, same posture as
+// an unreachable host. A connected session always carries bridge ops.
+if (operations.length === 0) {
+  console.warn(
+    `host-typegen skipped: GET ${url} returned no bridge operations (no live Revit session). The checked-in ${outPath} is unchanged.`,
+  );
+  process.exit(0);
+}
 
 const chunks: string[] = [
   "/* eslint-disable */",

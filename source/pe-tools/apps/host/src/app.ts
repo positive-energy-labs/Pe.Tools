@@ -8,6 +8,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { BRIDGE_PATH, productIdentity } from "@pe/host-contracts/contracts";
 import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
 import { getHostStatus } from "./local-ops.ts";
+import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
 import { callRoute } from "./call-route.ts";
 import { adminShutdownRoute, HostLifecycle, ServiceFileLive } from "./host-lifecycle.ts";
 import { MastraMountLive, MastraRuntime } from "./mastra-runtime.ts";
@@ -40,7 +41,13 @@ const bridgeEventsRoute = HttpRouter.add("GET", "/events", () =>
 
 // Runtime operation catalog for browsers/typegen: proxies host.ops.catalog to the
 // connected Revit session (?session=<bridgeSessionId> to target one) and returns
-// op keys + request/response JSON Schemas as plain JSON.
+// op keys + request/response JSON Schemas as plain JSON. The host-local (TS-only) ops
+// are appended so discovery (host_operation_search, pea `operations`, the web ops page)
+// sees both surfaces from one catalog; host-typegen skips them by their origin marker.
+// A disconnected bridge still lists the local ops (they need no Revit session) with a
+// bridgeCatalogError note, rather than a bare 503 — so discovery of e.g. recent-documents
+// works with the host up and Revit closed. (host-typegen treats a bridge-op-less catalog
+// as "no session" and does not regenerate off the local ops alone.)
 const opsCatalogRoute = HttpRouter.add("GET", "/ops", (req) =>
   Effect.gen(function* () {
     const bridge = yield* RevitBridge;
@@ -48,12 +55,17 @@ const opsCatalogRoute = HttpRouter.add("GET", "/ops", (req) =>
     const result = yield* Effect.result(
       bridge.invoke("host.ops.catalog", {}, sessionParam ?? undefined),
     );
+    const bridgeOps =
+      result._tag === "Success" &&
+      Array.isArray((result.success as { operations?: unknown }).operations)
+        ? (result.success as { operations: unknown[] }).operations
+        : [];
+    const body: { operations: unknown[]; bridgeCatalogError?: string } = {
+      operations: [...bridgeOps, ...tsOnlyOperationCatalog],
+    };
     if (result._tag === "Failure")
-      return Response.jsonUnsafe(
-        { error: String(result.failure.message ?? result.failure) },
-        { status: 503 },
-      );
-    return Response.jsonUnsafe(result.success);
+      body.bridgeCatalogError = String(result.failure.message ?? result.failure);
+    return Response.jsonUnsafe(body);
   }),
 );
 
