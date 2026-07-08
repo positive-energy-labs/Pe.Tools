@@ -24,9 +24,8 @@ namespace Pe.App;
 /// <summary>
 ///     The real application, hosted two ways: by <see cref="Application"/> in the dev lane
 ///     (Revit loads Pe.App directly, hot reload intact) and by Pe.Revit.Loader in the installed
-///     lane (versioned payload, live-swappable). Startup must tolerate IsFirstLoad=false — a
-///     live swap re-binds commands and restarts services but must not touch the ribbon.
-///     Shutdown runs on swap, not just Revit exit: it must release every exclusive resource
+///     lane (versioned payload staged until Revit restart).
+///     Shutdown must release every exclusive resource
 ///     (bridge socket, Revit event subscriptions); leaked memory is fine, leaked handles are not.
 /// </summary>
 public sealed class AppCore : IPePayload {
@@ -65,8 +64,7 @@ public sealed class AppCore : IPePayload {
 
         ButtonRegistry.BuildRibbon(context, "PE TOOLS");
 
-        // Shell pane for dockable palettes — registration is startup-only; a hot-swapped
-        // payload no-ops here and reuses the shell via Application.Current.Properties.
+        // Shell pane for dockable palettes; registration can no-op if WPF is not ready or the shell already exists.
         try {
             var registered = PaletteDock.Register(app);
             Log.Information("Palette dock pane registration: {Outcome}",

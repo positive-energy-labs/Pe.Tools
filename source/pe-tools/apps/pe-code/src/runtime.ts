@@ -176,7 +176,7 @@ export async function closePeCodeRuntime(runtime: PeCodeRuntimeWithSession): Pro
   await runtime.session.thread.clearAndReleaseLock();
   await runtime.mcpManager?.disconnect?.();
   await runtime.controller.getMastra()?.stopWorkers?.();
-  await runtime.controller.stopHeartbeats();
+  await runtime.controller.stopIntervals();
   await closeSignalsPubSub(runtime.signalsPubSub);
 }
 

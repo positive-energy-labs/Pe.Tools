@@ -46,10 +46,14 @@ Decisions locked (do not relitigate):
 - Delete `pe-version.json` (version into manifest / tag). Prune `Pe.Shared.Product`: descriptor model (`PeAppRuntimeDeploymentDescriptor`, `RevitDeploymentIdentity` stale layout), `PeaLauncherContent` (SDK ShimContent is the one generator), layout constants superseded by the runtime API. Fix `ThemeManager.cs:55` stale pack URI.
 - Exit: release bump ≤1 file; contract tests green; ledger reviewed.
 
-### Phase 3 — Mastra/mastracode bump + glue purge (on the current 3-process shape)
-- Bump @mastra/* → 1.50.x, mastracode → latest. Then delete per MASTRA-DELTA: `/pe/messages` image hack + `postPeMessage` (native attachments), approval workarounds (verify `autoResumeSuspendedTools` against our symptom), capture proxies (native accessors), dead code (`interrupts.ts`, `packages/agent-projection`, `packages/workbench-transport`), `models/resolve.ts` throwaway-runtime hack if upstream now exposes a resolver.
-- Verify approvals + images live before proceeding. Thread hydration stays ours (upstream mastra#13645); note on ledger.
-- Exit: web works on current shape with strictly less code; approvals/images demonstrably fixed or isolated with a named cause.
+### Phase 3 — Mastra/mastracode bump + approval fix (on the current 3-process shape)
+Scope corrected per MASTRA-DELTA.md (verified against npm tarballs — the local mastra checkout is destroyed):
+- Bump core→1.50.1, client-js→1.31.1, mastracode→0.30.0 etc. Only two rename breaks: `heartbeatHandlers`→`intervalHandlers` (resolve.ts:38), `stopHeartbeats()`→`stopIntervals()` (pe-code/runtime.ts:179).
+- KEEP (upstream gaps persist): `/pe/messages` image hack (client-js sendMessage still string-only), degraded `forkThread`, `models/resolve.ts` throwaway-runtime hack (no public resolver in mastracode 0.30.0), `interrupts.ts` (it is alive — imported by context.ts/prompts.ts).
+- DELETE unconditionally: `packages/agent-projection/`, `packages/workbench-transport/` (orphan dist-only dirs).
+- VERIFY-AT-BUMP: capture proxies (~163 LOC; gated on re-sourcing `/pe/inspect` from native accessors), approval behavior, @smithy/core override still needed.
+- **Fix the approval bug ourselves**: our symptom is a live SSE replay-flood / vanishing approval buttons — NOT upstream #18583. Diagnose + fix Pe-side (likely subscribe/replay handling in provider.tsx/adapter.ts).
+- Exit: bump green, dead packages gone, approvals + images demonstrably working live.
 
 ### Phase 4 — The squash (host absorbs pea)
 - Host: effect beta.92 → current; Mastra runtime as a `Layer.scoped` tenant; `MastraServer` (Hono, fetch-based) mounted under the Effect HTTP server; static web served by host; ONE port (5180).

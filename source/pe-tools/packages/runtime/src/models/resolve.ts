@@ -35,7 +35,7 @@ function loadMastraCodeModelResolver(): Promise<MastraCodeModelResolver> {
       cwd,
       disableHooks: true,
       disableMcp: true,
-      heartbeatHandlers: [],
+      intervalHandlers: [],
     });
     return runtime.resolveModel as MastraCodeModelResolver;
   })();
