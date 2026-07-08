@@ -2,24 +2,17 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "pea-web",
-      "runtimeExecutable": "pe-dev",
-      "runtimeArgs": ["web", "pea"],
-      "port": 5173,
-      "autoPort": false
-    },
-    {
-      "name": "peco-web",
-      "runtimeExecutable": "pe-dev",
-      "runtimeArgs": ["web", "peco"],
-      "port": 5173,
-      "autoPort": false
-    },
-    {
-      "name": "web-only",
+      "name": "host",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@pe/web", "exec", "vp", "dev", "--port", "3010"],
-      "port": 3010,
+      "runtimeArgs": ["--filter", "@pe/host", "start"],
+      "port": 5180,
+      "autoPort": false
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@pe/web", "dev"],
+      "port": 3000,
       "autoPort": false
     }
   ]
