@@ -9,6 +9,7 @@ import {
   hostSessionScopeSchema,
   isAnyOperationKey,
   isHostOperationKey,
+  tsOnlyOperationCatalog,
   tsOnlyOperationSchemas,
   type HostOpRequest,
   type HostOpResponse,
@@ -30,6 +31,17 @@ test("checked-in typegen keys cover bridge ops and exclude TS-only ops", () => {
   expect(keys.has("logs.tail")).toBe(false);
   expect(keys.has("settings.workspaces")).toBe(false);
   expect(keys.has("aps.auth.status")).toBe(false);
+});
+
+test("host-local op catalog covers every TS-only op exactly once (GET /ops discovery)", () => {
+  const catalogKeys = tsOnlyOperationCatalog.map((entry) => entry.key);
+  const schemaKeys = Object.keys(tsOnlyOperationSchemas);
+  expect(new Set(catalogKeys).size).toBe(catalogKeys.length); // no dupes
+  expect(new Set(catalogKeys)).toEqual(new Set(schemaKeys)); // 1:1 with the schema map
+  for (const entry of tsOnlyOperationCatalog) {
+    expect(entry.origin).toBe("host-local"); // marks them for host-typegen to skip
+    expect(entry.key in tsOnlyOperationSchemas).toBe(true);
+  }
 });
 
 test("does not ship the legacy plain TypeGen DTO projection", () => {

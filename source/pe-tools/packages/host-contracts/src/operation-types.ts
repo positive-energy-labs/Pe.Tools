@@ -1,4 +1,8 @@
-import { hostModuleDescriptorSchema, hostRuntimeAssemblyDataSchema } from "./contracts/index.js";
+import {
+  hostModuleDescriptorSchema,
+  hostRuntimeAssemblyDataSchema,
+  type HostOperationDefinition,
+} from "./contracts/index.js";
 import { hostOpKeys, type HostOps } from "./generated/host-ops.generated.js";
 import { Schema } from "effect";
 
@@ -581,6 +585,221 @@ export function isHostOperationKey(key: string): key is HostOperationKey {
 export function isTsOnlyOperationKey(key: string): key is TsOnlyOperationKey {
   return Object.hasOwn(tsOnlyOperationSchemas, key);
 }
+
+export type HostLocalCatalogEntry = HostOperationDefinition & {
+  readonly key: TsOnlyOperationKey;
+  readonly origin: "host-local";
+};
+
+/**
+ * Discovery metadata for the TS-only (host-local) ops so `GET /ops` lists them next to the Revit
+ * bridge ops — host_operation_search, the pea `operations` command, and the web ops page all read
+ * that one catalog. These ops dispatch locally (call-route.ts) and don't need a Revit session.
+ *
+ * `origin:"host-local"` marks them so host-typegen SKIPS them: their request/response types are the
+ * hand-authored schemas above (tsOnlyOperationSchemas), not generated from the live catalog, and the
+ * entries carry no request/response schema JSON. Keep exactly one entry per tsOnlyOperationSchemas
+ * key — the index test asserts full coverage.
+ */
+export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
+  {
+    key: "revit.catalog.recent-documents",
+    origin: "host-local",
+    displayName: "Recent Documents",
+    description:
+      "Recently opened Revit documents, read from Revit.ini and the per-profile registry MRU on this machine. Works without a connected Revit session.",
+    intent: "Read",
+    visibility: "DefaultVisible",
+    costTier: "Cheap",
+    requiresActiveDocument: false,
+    requestTypeName: "RevitRecentDocumentsRequest",
+    responseTypeName: "RevitRecentDocumentsData",
+    searchTerms: [
+      "recent",
+      "documents",
+      "recent files",
+      "mru",
+      "revit.ini",
+      "open recent",
+      "projects",
+    ],
+  },
+  {
+    key: "settings.workspaces",
+    origin: "host-local",
+    displayName: "Settings Workspaces",
+    description: "Settings workspaces available to author, with their modules and roots.",
+    intent: "Read",
+    visibility: "DefaultVisible",
+    costTier: "Cheap",
+    requestTypeName: "NoRequest",
+    responseTypeName: "SettingsWorkspacesData",
+    searchTerms: ["settings", "workspaces", "modules", "roots"],
+  },
+  {
+    key: "settings.tree",
+    origin: "host-local",
+    displayName: "Settings Tree",
+    description:
+      "Browse the settings document tree (profiles, fragments, schemas) for a module and root.",
+    intent: "Read",
+    visibility: "DefaultVisible",
+    costTier: "Cheap",
+    requestTypeName: "SettingsTreeRequest",
+    responseTypeName: "SettingsDiscoveryResult",
+    searchTerms: ["settings", "tree", "browse", "documents", "fragments", "schemas"],
+  },
+  {
+    key: "settings.document.open",
+    origin: "host-local",
+    displayName: "Open Settings Document",
+    description:
+      "Open a settings document: raw + composed content, metadata, dependencies, and validation.",
+    intent: "Read",
+    visibility: "DefaultVisible",
+    costTier: "Bounded",
+    requestTypeName: "OpenSettingsDocumentRequest",
+    responseTypeName: "SettingsDocumentSnapshot",
+    searchTerms: ["settings", "open", "document", "profile", "composed"],
+  },
+  {
+    key: "settings.document.open-with-module",
+    origin: "host-local",
+    displayName: "Open Settings Document (module)",
+    description: "Open a settings document against an explicit module descriptor and schema.",
+    intent: "Read",
+    visibility: "EscalationVisible",
+    costTier: "Bounded",
+    requestTypeName: "OpenSettingsDocumentWithModuleRequest",
+    responseTypeName: "SettingsDocumentSnapshot",
+    searchTerms: ["settings", "open", "module", "schema"],
+  },
+  {
+    key: "settings.document.validate",
+    origin: "host-local",
+    displayName: "Validate Settings Document",
+    description: "Validate settings document content against its schema without saving.",
+    intent: "Read",
+    visibility: "DefaultVisible",
+    costTier: "Bounded",
+    requestTypeName: "ValidateSettingsDocumentRequest",
+    responseTypeName: "SettingsValidationResult",
+    searchTerms: ["settings", "validate", "lint", "check"],
+  },
+  {
+    key: "settings.document.save",
+    origin: "host-local",
+    displayName: "Save Settings Document",
+    description:
+      "Save a settings document with optimistic concurrency (version token); reports conflicts and validation.",
+    intent: "Mutate",
+    visibility: "DefaultVisible",
+    costTier: "Mutation",
+    requestTypeName: "SaveSettingsDocumentRequest",
+    responseTypeName: "SaveSettingsDocumentResult",
+    searchTerms: ["settings", "save", "write", "document", "profile"],
+  },
+  {
+    key: "aps.auth.status",
+    origin: "host-local",
+    displayName: "APS Auth Status",
+    description:
+      "Autodesk Platform Services persisted-token status for the requested scope profile.",
+    intent: "Read",
+    visibility: "DefaultVisible",
+    costTier: "Cheap",
+    requestTypeName: "ApsTokenRequest",
+    responseTypeName: "ApsPersistedTokenStatus",
+    searchTerms: ["aps", "autodesk", "auth", "token", "status", "credentials"],
+  },
+  {
+    key: "aps.auth.login",
+    origin: "host-local",
+    displayName: "APS Auth Login",
+    description: "Begin an Autodesk Platform Services auth flow and persist the resulting token.",
+    intent: "Mutate",
+    visibility: "DefaultVisible",
+    costTier: "Bounded",
+    requestTypeName: "ApsTokenRequest",
+    responseTypeName: "ApsPersistedTokenStatus",
+    searchTerms: ["aps", "autodesk", "auth", "login", "sign in", "oauth"],
+  },
+  {
+    key: "aps.auth.logout",
+    origin: "host-local",
+    displayName: "APS Auth Logout",
+    description: "Clear the persisted Autodesk Platform Services token.",
+    intent: "Mutate",
+    visibility: "DefaultVisible",
+    costTier: "Cheap",
+    requestTypeName: "NoRequest",
+    responseTypeName: "ApsLogoutResult",
+    searchTerms: ["aps", "autodesk", "auth", "logout", "sign out"],
+  },
+  {
+    key: "aps.auth.token",
+    origin: "host-local",
+    displayName: "APS Access Token",
+    description:
+      "Fetch a valid Autodesk Platform Services access token for the requested scope profile.",
+    intent: "Read",
+    visibility: "EscalationVisible",
+    costTier: "Bounded",
+    requestTypeName: "ApsTokenRequest",
+    responseTypeName: "ApsTokenResult",
+    searchTerms: ["aps", "autodesk", "token", "access token", "scope"],
+  },
+  {
+    key: "host.status",
+    origin: "host-local",
+    displayName: "Host Status",
+    description:
+      "Host process health: contract versions, bridge connectivity, lane, and agent-runtime availability.",
+    intent: "Read",
+    visibility: "ExpertOnly",
+    costTier: "Cheap",
+    requestTypeName: "NoRequest",
+    responseTypeName: "HostProbeData",
+    searchTerms: ["host", "status", "health", "diagnostics", "contract", "runtime", "lane"],
+  },
+  {
+    key: "bridge.sessions.summary",
+    origin: "host-local",
+    displayName: "Bridge Session Summary",
+    description:
+      "Active Revit session summary: open document, available modules, and runtime assemblies.",
+    intent: "Read",
+    visibility: "EscalationVisible",
+    costTier: "Cheap",
+    requestTypeName: "NoRequest",
+    responseTypeName: "HostSessionSummaryData",
+    searchTerms: ["bridge", "session", "summary", "active document", "modules"],
+  },
+  {
+    key: "bridge.sessions.list",
+    origin: "host-local",
+    displayName: "Bridge Sessions",
+    description: "All connected Revit bridge sessions (process id, version, open documents).",
+    intent: "Read",
+    visibility: "ExpertOnly",
+    costTier: "Cheap",
+    requestTypeName: "NoRequest",
+    responseTypeName: "BridgeSessionsListData",
+    searchTerms: ["bridge", "sessions", "list", "connected", "revit"],
+  },
+  {
+    key: "logs.tail",
+    origin: "host-local",
+    displayName: "Tail Logs",
+    description: "Tail the host and Revit add-in log files for diagnostics.",
+    intent: "Read",
+    visibility: "EscalationVisible",
+    costTier: "Cheap",
+    requestTypeName: "HostLogsRequest",
+    responseTypeName: "HostLogsData",
+    searchTerms: ["logs", "tail", "host log", "revit log", "diagnostics"],
+  },
+];
 
 /**
  * Strict key space for the typed client surface: only keys the checked-in
