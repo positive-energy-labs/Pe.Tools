@@ -230,7 +230,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
     // Provide the tenant BEFORE the server layer so its own HttpServer requirement bubbles up and
     // is satisfied by the same NodeHttpServer.layer below (one bound server, shared).
     Layer.provide(options.mastraLayer),
-    Layer.provide(NodeHttpServer.layer(createServer, { port: options.port })),
+    Layer.provide(NodeHttpServer.layer(createServer, { host: "127.0.0.1", port: options.port })),
     Layer.provide(NodeHttpClient.layerUndici),
     Layer.provide(RevitBridgeLive),
     Layer.provide(Layer.succeed(HostLifecycle, options.lifecycle)),
