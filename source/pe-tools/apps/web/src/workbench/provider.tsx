@@ -133,10 +133,17 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       if (!api || !info) return;
       if (!options?.silent) setLoading(true);
       try {
-        // Align the session's active thread to the URL so state + the stream track it.
-        await api.session.switchThread(threadId).catch(() => undefined);
+        // Align the session's active thread to the URL so state + the stream track it. But 1.50's
+        // `session.thread.switch()` ALWAYS calls `session.abort()` first — even when switching to the
+        // thread we're already bound to — which tears down a live HITL suspension (request_access),
+        // drops the parked approval, and emits agent_end(aborted). That vanishes the approve/deny
+        // buttons AND, via the re-hydrate below, floods the stream. So only switch when we're
+        // genuinely on a DIFFERENT thread; a redundant switch to the current thread is pure harm.
+        const bound = await api.session.state().catch(() => undefined);
+        const needsSwitch = bound?.threadId !== threadId;
+        if (needsSwitch) await api.session.switchThread(threadId).catch(() => undefined);
         const [display, messages, inspect, models, modes] = await Promise.all([
-          api.session.state().catch(() => undefined),
+          needsSwitch ? api.session.state().catch(() => undefined) : Promise.resolve(bound),
           api.session
             .listMessages(threadId)
             .then(parseWireMessages)
@@ -214,18 +221,6 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         onEvent: (raw) => {
           const event = parseWireEvent(raw);
           if (!event) return; // unmodeled event type — dropped at the boundary
-          // TEMP diagnostic — remove once the request_access jitter is root-caused.
-          console.info(
-            "[wire-diag]",
-            event.type,
-            "reason" in event ? `reason=${event.reason}` : "",
-            "toolName" in event ? `name=${event.toolName}` : "",
-            "message" in event ? `msg=${event.message.id} role=${event.message.role}` : "",
-            "toolCallId" in event ? `tool=${event.toolCallId}` : "",
-            event.type === "tool_end"
-              ? `isError=${event.isError} result=${stringifyShort(event.result)}`
-              : "",
-          );
           setState((previous) => applyWireEvent(previous, event));
           if (
             event.type === "thread_created" ||
@@ -236,12 +231,14 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
           }
           // Re-hydrate the canonical transcript when a run truly ends — but NOT when it merely
           // SUSPENDED for a HITL approval (request_access). A suspended run stays active server-side;
-          // hydrate's `switchThread` re-attaches and REPLAYS it, emitting another agent_end(suspended)
-          // → hydrate → replay … a full-history flood (~165 events/s) that jitters the UI until it
-          // dies. The streamed state already holds the pending approval; leave it be.
+          // hydrate's state()/switchThread would touch it (and 1.50's switch() aborts it outright),
+          // and the resulting agent_end re-enters here → hydrate → … a full-history replay flood
+          // that jitters the UI until it dies. Skip re-hydrate on a bare `suspended` end AND whenever
+          // an approval is still pending — the streamed state already holds it; leave it be.
           if (
             event.type === "agent_end" &&
             event.reason !== "suspended" &&
+            selectPendingApprovals(stateRef.current).length === 0 &&
             currentThreadIdRef.current
           ) {
             void hydrateRef.current(currentThreadIdRef.current, { silent: true });
@@ -668,13 +665,4 @@ function shortId(value: string): string {
 
 function errorMessage(value: unknown): string {
   return value instanceof Error ? value.message : String(value);
-}
-
-// TEMP diagnostic helper — remove with the wire-diag logging.
-function stringifyShort(value: unknown): string {
-  try {
-    return JSON.stringify(value)?.slice(0, 120) ?? String(value);
-  } catch {
-    return String(value);
-  }
 }
