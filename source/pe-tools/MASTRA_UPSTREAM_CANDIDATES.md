@@ -109,3 +109,7 @@ fork once the route supports it.
 ## session.thread.switch() aborts the active run even when switching to the already-active thread (core 1.50.1)
 
 `AgentControllerSession` `thread.switch({ threadId })` unconditionally calls `session.abort()` (→ `suspensions.clear()` + `approval.cancel()`) before rebinding, with no early-out when `threadId` equals the currently-bound thread. Any UI that re-aligns the session thread on hydrate/reload therefore destroys a live HITL suspension and emits `agent_end(aborted)` — in our workbench this cancelled pending approval buttons and (pre-guard) drove a hydrate/abort event flood. Ask: make `switch()` a no-op (or a non-aborting re-bind) when the target thread is already bound, and/or don't drop parked suspensions/approvals for the thread being switched *to*. Our fallback (apps/web provider.tsx hydrate): only call `switchThread` when `session.state().threadId` differs from the target, plus reducer guards so no `agent_end` cancels a live approval.
+
+## Narrowed: model resolver without any controller (mastracode 0.30)
+
+`createMastraCodeAgentController` (root export) returns `resolveModel` on an inert controller — no `init()`, no session, no thread lock — so our throwaway boot got much lighter (packages/runtime/src/models/resolve.ts now uses it). Remaining ask, smaller: a root `resolveModel` / `createMastraCodeModelResolver()` that constructs no controller/storage at all, which would delete the cached inert-controller singleton + temp dir entirely. OAuth-for-OM half of the original candidate unchanged and still open.

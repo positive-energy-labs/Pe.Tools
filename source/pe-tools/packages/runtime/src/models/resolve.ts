@@ -10,15 +10,16 @@ import type { RequestContext } from "@mastra/core/request-context";
  * `apikey:` slot → env var). This is what gives Pea BYO-OAuth inference instead of forcing an API
  * key or a (nonexistent) Pea Cloud gateway.
  *
- * MastraCode exposes its resolver only via `createMastraCode().resolveModel` (see
- * MASTRA_UPSTREAM_CANDIDATES.md — a public root `resolveModel`/gateway export would delete this
- * whole boot). `resolveModel` itself only reads the global `auth.json`, but `createMastraCode` also
- * does workspace + thread-lock work keyed on `cwd`. So we boot ONE cached runtime pointed at a
- * throwaway temp dir, purely to borrow the resolver: its session is never used, its locks never
- * touch the Pea product thread, and heartbeats are disabled so it makes no background gateway calls.
+ * MastraCode still exposes no public root `resolveModel` export (verified against `mastracode@0.30.0`
+ * — see MASTRA_UPSTREAM_CANDIDATES.md; a public resolver/gateway export would delete this whole boot).
+ * But 0.30's `createMastraCodeAgentController` builds the providers/gateways/agent and hands back
+ * `resolveModel` on an INERT controller: it never calls `init()`, mints no session, and takes no
+ * thread lock (unlike `createMastraCode` = `bootLocalAgentController`, which does all three). We build
+ * one cached inert controller pointed at a throwaway temp dir, purely to borrow the resolver, with
+ * hooks/MCP/intervals disabled so it makes no background gateway calls.
  *
- * ponytail: leaks one idle runtime for the process lifetime (MastraCode has no public dispose).
- * Acceptable for a cached singleton; deletes entirely if MastraCode ever roots `resolveModel`.
+ * ponytail: still leaks one inert controller for the process lifetime (MastraCode has no public
+ * dispose), but no session/lock/init overhead. Deletes entirely if MastraCode ever roots `resolveModel`.
  */
 type MastraCodeModelResolver = (
   modelId: string,
@@ -29,15 +30,15 @@ let resolverTask: Promise<MastraCodeModelResolver> | undefined;
 
 function loadMastraCodeModelResolver(): Promise<MastraCodeModelResolver> {
   resolverTask ??= (async () => {
-    const { createMastraCode } = await import("mastracode");
+    const { createMastraCodeAgentController } = await import("mastracode");
     const cwd = mkdtempSync(path.join(tmpdir(), "pea-model-resolver-"));
-    const runtime = await createMastraCode({
+    const inert = await createMastraCodeAgentController({
       cwd,
       disableHooks: true,
       disableMcp: true,
       intervalHandlers: [],
     });
-    return runtime.resolveModel as MastraCodeModelResolver;
+    return inert.resolveModel as MastraCodeModelResolver;
   })();
   return resolverTask;
 }
