@@ -38,29 +38,24 @@ const config = defineConfig(({ mode }) => {
         consolePiping: { enabled: false },
       }) as never,
     ],
-    // Dev proxy to the workbench agent server (apps/pea/pe-code). `pe-dev web` also
-    // passes ?w=<port>, but these keep plain `vp dev` usable against the default backend.
+    // Dev proxy to the squashed Effect host (port 5180), which serves the SPA and
+    // absorbs the former Mastra agent server. Single same-origin target, no rewrites,
+    // no token injection. Installed builds have the host serve the SPA directly, so this
+    // proxy is dev-only. ponytail: one target for every host-backed path the app uses.
     server: {
-      proxy: {
-        // ponytail: dev-only passthrough so browser calls to /pe-host/call (+ /ops, /events) reach the TS host.
-        // Keep this before the broader /pe workbench proxy.
-        "/pe-host": {
-          target: process.env.PE_TOOLS_HOST_BASE_URL ?? "http://localhost:5180",
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/pe-host/, ""),
-        },
-        "/pe": {
-          target: process.env.PE_WORKBENCH_AGENT_URL ?? "http://127.0.0.1:43112",
-          changeOrigin: true,
-          headers: {
-            "x-runtime-workbench-token": process.env.PE_WORKBENCH_DEV_TOKEN ?? "dev-loopback",
-          },
-        },
-        "/api/agent-controller": {
-          target: process.env.PE_WORKBENCH_AGENT_URL ?? "http://127.0.0.1:43112",
-          changeOrigin: true,
-        },
-      },
+      proxy: (() => {
+        const target = process.env.PE_TOOLS_HOST_BASE_URL ?? "http://localhost:5180";
+        const options = { target, changeOrigin: true } as const;
+        return {
+          "/call": options,
+          "/events": options,
+          "/ops": options,
+          "/schemas": options,
+          "/host": options,
+          "/pe": options,
+          "/api/agent-controller": options,
+        };
+      })(),
     },
     resolve: { tsconfigPaths: true, dedupe: ["react", "react-dom"] },
     // assistant-ui ships React-Compiler output (`useMemoCache`); under TanStack Start's

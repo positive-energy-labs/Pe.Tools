@@ -20,6 +20,10 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
+    },
+    "./pea": {
+      "types": "./src/pea-runtime.ts",
+      "import": "./src/pea-runtime.ts"
     }
   },
   "publishConfig": {
@@ -39,6 +43,7 @@
     "@mastra/hono": "1.5.6",
     "@mastra/libsql": "1.15.1",
     "@mastra/memory": "1.22.2",
+    "@pe/mcps": "workspace:*",
     "hono": "^4.12.24",
     "mastracode": "0.30.0",
     "zod": "^4.4.3"

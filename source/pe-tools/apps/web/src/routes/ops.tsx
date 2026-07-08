@@ -170,7 +170,7 @@ function OpsPlayground() {
         {!selected ? (
           <p className="text-sm text-muted-foreground">
             Pick a host op. The list is the live session catalog (<code>host.ops.catalog</code>);
-            calls go through <code>/pe-host/call</code> (default <code>localhost:5180</code>).
+            calls go through <code>/call</code> (default <code>localhost:5180</code>).
           </p>
         ) : (
           <div className="mx-auto flex max-w-3xl flex-col gap-4">

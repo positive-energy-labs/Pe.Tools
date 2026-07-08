@@ -7,7 +7,6 @@ public sealed record BuildArtifactLayout(
     string PackagesRoot,
     string BundlePackagesRoot,
     string AutomationPackagesRoot,
-    string PeaPackagesRoot,
     string InstallerPackagesRoot,
     string AutomationStagingRoot,
     string ToolsRoot
@@ -23,7 +22,6 @@ public sealed record BuildArtifactLayout(
             EnsureTrailingSeparator(packagesRoot),
             EnsureTrailingSeparator(Path.Combine(packagesRoot, "bundles")),
             EnsureTrailingSeparator(Path.Combine(packagesRoot, "automation")),
-            EnsureTrailingSeparator(Path.Combine(packagesRoot, "pea")),
             EnsureTrailingSeparator(Path.Combine(packagesRoot, "installers")),
             EnsureTrailingSeparator(Path.Combine(artifactsRoot, "staging", "automation")),
             EnsureTrailingSeparator(Path.Combine(artifactsRoot, "tools"))

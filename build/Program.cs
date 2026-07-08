@@ -55,9 +55,6 @@ if (parsedArgs.Commands.Contains("pack")) {
     if (parsedArgs.PackTargets.Contains(PackTarget.Automation))
         _ = builder.Services.AddModule<CreateAutomationBundleModule>();
 
-    if (parsedArgs.PackTargets.Contains(PackTarget.Pea) || parsedArgs.PackTargets.Contains(PackTarget.Installer))
-        _ = builder.Services.AddModule<CreatePeaPayloadModule>();
-
     if (parsedArgs.PackTargets.Contains(PackTarget.Installer))
         _ = builder.Services.AddModule<CreateInstallerModule>();
 }
@@ -226,7 +223,7 @@ namespace Build {
         private static readonly HashSet<string> SupportedCommands =
             ["pack", "publish"];
         private static readonly HashSet<string> SupportedPackTargets =
-            new(StringComparer.OrdinalIgnoreCase) { "all", "desktop", "installer", "automation", "pea" };
+            new(StringComparer.OrdinalIgnoreCase) { "all", "desktop", "installer", "automation" };
 
         public static BuildCliArguments Parse(IReadOnlyList<string> args) {
             string? configuration = null;
@@ -254,7 +251,7 @@ namespace Build {
             }
 
             if (commands.Count == 0)
-                throw new ArgumentException("Expected at least one command. Supported commands: pack, publish. Pack targets: desktop, installer, automation, pea, all.");
+                throw new ArgumentException("Expected at least one command. Supported commands: pack, publish. Pack targets: desktop, installer, automation, all.");
 
             var unsupportedCommands = commands
                 .Where(command => !SupportedCommands.Contains(command))
@@ -262,10 +259,10 @@ namespace Build {
                 .ToArray();
             if (unsupportedCommands.Length > 0)
                 throw new ArgumentException(
-                    $"Unsupported command(s): {string.Join(", ", unsupportedCommands)}. Supported commands: pack, publish. Pack targets: desktop, installer, automation, pea, all.");
+                    $"Unsupported command(s): {string.Join(", ", unsupportedCommands)}. Supported commands: pack, publish. Pack targets: desktop, installer, automation, all.");
 
             if (explicitPackTargets.Count > 0 && !commands.Contains("pack"))
-                throw new ArgumentException("Pack targets require the pack command. Use: pack desktop, pack installer, pack automation, pack pea, or pack all.");
+                throw new ArgumentException("Pack targets require the pack command. Use: pack desktop, pack installer, pack automation, or pack all.");
 
             var packTargets = ResolvePackTargets(explicitPackTargets);
 
@@ -281,7 +278,6 @@ namespace Build {
             "desktop" => PackTarget.Desktop,
             "installer" => PackTarget.Installer,
             "automation" => PackTarget.Automation,
-            "pea" => PackTarget.Pea,
             _ => throw new ArgumentOutOfRangeException(nameof(value), value, null)
         };
 
@@ -297,7 +293,6 @@ namespace Build {
         All,
         Desktop,
         Installer,
-        Automation,
-        Pea
+        Automation
     }
 }

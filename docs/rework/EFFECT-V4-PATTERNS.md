@@ -557,9 +557,80 @@ const status = yield* client.host.status()                     // fully typed
 `HttpApiClient.make(api, { baseUrl?, transformClient?, transformResponse? })` returns
 `Effect<Client<Groups>, never, HttpClient>`; provide `FetchHttpClient.layer` in the browser.
 
-**RPC vs HttpApi:** use **RPC** where you want streaming and a single procedure surface (bridge ops, live
-status/events) — Phase 4's main need. Use **HttpApi** for a handful of plain typed REST routes if you'd
-rather keep URL semantics. Both derive typed clients; don't hand-roll `fetch` wrappers for Pe surfaces.
+**RPC vs HttpApi — settled verdict (Phase 4 index, supersedes earlier leaning):** use **HttpApi** for the
+static Pe surfaces (status, install, update, shutdown, `/call` envelope, `/events`). Reasons: consumers
+include curl + the C# addin/CLI, and RPC's HTTP transport is POST-only with a framed body envelope plain
+HTTP clients can't speak; HttpApi gives ordinary GET/POST + derived typed client + free OpenAPI
+(`HttpApiBuilder.layer(api, { openapiPath })`, `HttpApiScalar` docs UI). Typed SSE exists:
+`HttpApiSchema.StreamSse({ data: EventSchema })` — handler returns a `Stream`, client receives a decoded
+`Stream`; stream failures travel as a reserved `effect/httpapi/stream/failure` event carrying the `Cause`.
+HttpApi errors carry status via `{ httpApiStatus: 400 }` on `Schema.ErrorClass` options; built-ins in
+`HttpApiError` (BadRequest 400 … InternalServerError 500). Streaming is success-only (stream schema in the
+error channel throws at construction).
+
+**The dynamic op catalog cannot be typed contracts** — `RpcGroup.make`/`HttpApi.make` are compile-time
+values; ops self-register from Revit at runtime. `POST /call` stays a generic envelope
+(`{key, request} → Unknown`) with runtime JSON-schema validation; typegen stays the type source.
+
+Keep RPC in the quiver for per-procedure streaming / WS multiplexing, with two source-verified traps:
+`RpcServer.layerHttp` **defaults to `protocol: "websocket"`** (pass `"http"`), and
+`RpcSerialization.layerJson` **buffers** stream responses — only framed serializations (`layerNdjson`,
+`layerMsgPack`) stream over plain HTTP (`makeProtocolWithHttpEffect` checks `includesFraming`). Also:
+`RpcSerialization.ts` top-level-imports `msgpackr` — if RPC enters the browser bundle, measure whether
+tree-shaking drops it. Both derive typed clients; don't hand-roll `fetch` wrappers for Pe surfaces.
+
+---
+
+## 4b. HTTP serving primitives (verified in the Phase-4 index, beta.92 ≡ beta.94)
+
+All byte-identical between installed beta.92 and effect-smol HEAD beta.94 — the bump needs no HTTP changes.
+
+### Mount a foreign fetch handler (Hono/Mastra) — `HttpEffect.fromWebHandler`
+`effect/unstable/http/HttpEffect` has a first-class bridge — do NOT hand-roll conversions:
+```ts
+import { fromWebHandler } from "effect/unstable/http/HttpEffect"
+const h = fromWebHandler((req: Request) => honoApp.fetch(req))
+// register: HttpRouter.add("*", "/api/agent-controller/*", h)
+```
+Streaming survives both directions: request bodies go in as `Stream.toReadableStreamWith` +
+`duplex:"half"`; `HttpServerResponse.fromWeb` wraps `Response.body` with `Stream.fromReadableStream`
+(lazy/chunked — SSE passes through unbuffered; verified in source, not assumed).
+Prefix semantics: `router.prefixed("/x").add("*", "/*", h)` **strips** `/x` from the URL the child sees;
+a bare `add("*", "/x/*", h)` does NOT strip. Raw Node escape hatch:
+`NodeHttpServerRequest.toIncomingMessage/toServerResponse` (`HttpServerRequest.source` is the raw req).
+
+### Static SPA — `HttpStaticServer.layer`
+```ts
+HttpStaticServer.layer({ root: dir, spa: true, index: "index.html" })  // merge LAST; API routes win
+```
+SPA fallback, MIME, etag/304, byte ranges built in. Its deps (FileSystem/Path/HttpPlatform/Etag) are
+**already bundled by `NodeHttpServer.layer`** — zero extra wiring. Single files:
+`HttpServerResponse.file(path)` (needs `HttpPlatform`, same story).
+
+### Actual bound address — the `HttpServer` service
+```ts
+const { address } = yield* HttpServer.HttpServer   // { _tag: "TcpAddress", hostname, port } after listen
+```
+Filled from Node `server.address()` post-listen, so `{ port: 0 }` fallback works. Helpers:
+`HttpServer.formatAddress`, `addressFormattedWith`, `withLogAddress`.
+
+### Graceful self-shutdown — latch raced against `Layer.launch`
+`process.exit(0)` skips every finalizer (stale locks/service files). The native pattern:
+```ts
+const latch = yield* Deferred.make<void>()
+// handler: respond first, then trip the latch
+Effect.as(Effect.forkDetach(Deferred.succeed(latch, void 0)), Response.jsonUnsafe({ shuttingDown: true }))
+yield* Effect.raceFirst(Layer.launch(HttpLive), Deferred.await(latch))
+```
+Closing the launch scope runs `NodeHttpServer`'s graceful `server.close()` finalizer
+(`gracefulShutdownTimeout` default 20s; `disablePreemptiveShutdown` exists), then remaining releases in
+reverse acquisition order. A hard `process.exit` fallback timer after the latch is acceptable insurance.
+
+### Middleware notes
+`HttpRouter.serve` **auto-installs `HttpMiddleware.logger`** (`disableLogger: true`) and auto-logs the
+bound address (`disableListenLog: true`). `HttpMiddleware.cors({...})` exists (also `HttpRouter.cors`).
+`serve({ middleware })` wraps response *sending* and cannot modify the final response — use
+`HttpRouter.middleware`/`addGlobalMiddleware` for response-modifying middleware.
 
 ---
 

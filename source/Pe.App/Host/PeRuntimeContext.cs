@@ -26,7 +26,14 @@ internal static class PeRuntimeContext {
 
     public static ProductRuntimeLane Lane => _lane;
 
-    /// <summary>Resolve the host executable and pea launcher for the captured lane.</summary>
+    /// <summary>
+    ///     The installed product this payload was loaded into, or null in the self-hosted dev lane.
+    ///     The installed-lane host lifecycle rides this through <c>InstalledProduct.EnsureRunning</c>.
+    /// </summary>
+    public static InstalledProduct? Deployment => _deployment;
+
+    /// <summary>Resolve the host executable for the captured lane. Used by the dev-lane host launcher
+    /// (the installed lane goes through <see cref="Deployment" />'s <c>EnsureRunning</c> instead).</summary>
     public static PeRuntimeTarget Resolve() {
         var deployment = _deployment;
         if (deployment is not null) {
@@ -37,26 +44,18 @@ internal static class PeRuntimeContext {
                            HostProcessIdentity.DirectoryName,
                            HostProcessIdentity.ExecutableName
                        );
-            // The manifest declares two payloads named "pea" (VersionedApp + PathShim), so
-            // Resolve("pea") is ambiguous (returns the first by name). The launcher we want is the
-            // PathShim, which the installer always lays at shims/pea.cmd — compute that grammar
-            // directly rather than depend on payload order.
-            var pea = Path.Combine(deployment.ShimsDirectory, PeaCliIdentity.LauncherName);
-            return new PeRuntimeTarget(ProductRuntimeLane.Installed, host, pea, "loader-deployment");
+            return new PeRuntimeTarget(ProductRuntimeLane.Installed, host, "loader-deployment");
         }
 
-        // Self-hosted dev lane: the dev host build + the source-linked launcher written by
-        // `pe-dev pea link-dev`. Kept on the Pe.Shared.Product dev-layout surface (the SDK has no
-        // dev-lane concept yet).
+        // Self-hosted dev lane: the dev host build written by the dev tooling. Kept on the
+        // Pe.Shared.Product dev-layout surface (the SDK has no dev-lane concept yet).
         var devHost = ProductDevelopmentRuntimeLayout.ForCurrentUser().Binaries.HostExecutablePath;
-        var peaLauncher = ProductRuntimeLayout.ForCurrentUser().Binaries.PeaLauncherPath;
-        return new PeRuntimeTarget(ProductRuntimeLane.Dev, devHost, peaLauncher, "self-hosted-dev");
+        return new PeRuntimeTarget(ProductRuntimeLane.Dev, devHost, "self-hosted-dev");
     }
 }
 
 internal sealed record PeRuntimeTarget(
     ProductRuntimeLane RuntimeLane,
     string HostExecutablePath,
-    string PeaLauncherPath,
     string Source
 );

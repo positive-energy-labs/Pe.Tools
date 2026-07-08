@@ -1,3 +1,4 @@
+using Pe.Revit.Loader;
 using Pe.Shared.Product;
 using Pe.Shared.HostContracts;
 using System.Diagnostics;
@@ -8,6 +9,7 @@ using System.Text.Json;
 namespace Pe.App.Host;
 
 internal static class TsHostLauncher {
+    private const string HostServiceName = "host";
     private const string HostLaneVariable = "PE_TOOLS_HOST_LANE";
     private static readonly HttpClient HttpClient = new() {
         Timeout = TimeSpan.FromMilliseconds(HostRuntimeDefaults.DefaultHostProbeTimeoutMs)
@@ -15,42 +17,99 @@ internal static class TsHostLauncher {
 
     public static TsHostLaunchResult EnsureRunning() {
         try {
-            var runtimeResolution = PeRuntimeContext.Resolve();
-            var runningHost = TryGetRunningHostStatus();
-            if (runningHost != null) {
-                if (MatchesRuntime(runningHost, runtimeResolution))
-                    return new TsHostLaunchResult(
-                        true,
-                        true,
-                        false,
-                        $"Matching TS host is already listening: {Describe(runningHost)}"
-                    );
+            // Installed lane: the SDK service primitive owns discover/probe/spawn from the manifest's
+            // `service` block and the runtime service file — no hardcoded port. Dev lane stays hand-rolled
+            // (dev is not the SDK's job: pnpm dev host, installed-host takeover).
+            var deployment = PeRuntimeContext.Deployment;
+            return deployment is not null
+                ? EnsureInstalledHostRunning(deployment)
+                : EnsureDevHostRunning(PeRuntimeContext.Resolve());
+        } catch (Exception ex) {
+            return new TsHostLaunchResult(false, false, false, ex.Message);
+        }
+    }
 
-                if (!CanStartOver(runningHost, runtimeResolution))
-                    return new TsHostLaunchResult(
-                        false,
-                        false,
-                        false,
-                        $"Host port is occupied by {Describe(runningHost)}, but Pe.App resolved {Describe(runtimeResolution)}. Stop the other host or switch lanes."
-                    );
-            }
+    /// <summary>
+    ///     Resolve the base URL every in-process host caller (bridge WS, POST /call, schema fetch) should
+    ///     use. Prefers the actual bound port from the runtime service file (installed lane, A10); falls
+    ///     back to <c>PE_TOOLS_HOST_BASE_URL</c> / the 5180 default when no service file is present
+    ///     (dev lane, or before the host has bound).
+    /// </summary>
+    public static string ResolveHostBaseUrl() {
+        var port = TryReadServiceFilePort();
+        return port is int value
+            ? $"http://127.0.0.1:{value}"
+            : HostProcessIdentity.ResolveHostBaseUrl();
+    }
 
-            var hostExecutablePath = runtimeResolution.HostExecutablePath;
-            if (!File.Exists(hostExecutablePath))
+    private static int? TryReadServiceFilePort() {
+        var deployment = PeRuntimeContext.Deployment;
+        if (deployment is null)
+            return null;
+        return ServiceFile.Read(deployment.AppBase, HostServiceName)?.Port;
+    }
+
+    private static TsHostLaunchResult EnsureInstalledHostRunning(InstalledProduct deployment) {
+        var timeout = TimeSpan.FromMilliseconds(HostRuntimeDefaults.DefaultHostStartupTimeoutMs);
+        var result = deployment.EnsureRunning(HostServiceName, timeout);
+        if (!result.Ok || result.File is null) {
+            return new TsHostLaunchResult(
+                false,
+                false,
+                false,
+                result.Reason ?? "Host service could not be started."
+            );
+        }
+
+        // Publish the actual bound port so every downstream host-URL consumer (bridge, /call, schemas)
+        // resolves to it instead of the 5180 default.
+        var baseUrl = $"http://127.0.0.1:{result.File.Port}";
+        Environment.SetEnvironmentVariable(HostProcessIdentity.HostBaseUrlVariable, baseUrl);
+
+        var alreadyRunning = result.State == ServiceRunState.Running;
+        return new TsHostLaunchResult(
+            true,
+            alreadyRunning,
+            !alreadyRunning,
+            alreadyRunning
+                ? $"Matching host service is already listening: {baseUrl}"
+                : $"Started host service: {baseUrl}"
+        );
+    }
+
+    private static TsHostLaunchResult EnsureDevHostRunning(PeRuntimeTarget runtimeResolution) {
+        var runningHost = TryGetRunningHostStatus();
+        if (runningHost != null) {
+            if (MatchesRuntime(runningHost, runtimeResolution))
+                return new TsHostLaunchResult(
+                    true,
+                    true,
+                    false,
+                    $"Matching TS host is already listening: {Describe(runningHost)}"
+                );
+
+            if (!CanStartOver(runningHost, runtimeResolution))
                 return new TsHostLaunchResult(
                     false,
                     false,
                     false,
-                    $"{runtimeResolution.RuntimeLane} TS host was not found: {hostExecutablePath}"
+                    $"Host port is occupied by {Describe(runningHost)}, but Pe.App resolved {Describe(runtimeResolution)}. Stop the other host or switch lanes."
                 );
-
-            return StartAndWait(
-                CreateStartInfo(runtimeResolution),
-                runtimeResolution
-            );
-        } catch (Exception ex) {
-            return new TsHostLaunchResult(false, false, false, ex.Message);
         }
+
+        var hostExecutablePath = runtimeResolution.HostExecutablePath;
+        if (!File.Exists(hostExecutablePath))
+            return new TsHostLaunchResult(
+                false,
+                false,
+                false,
+                $"{runtimeResolution.RuntimeLane} TS host was not found: {hostExecutablePath}"
+            );
+
+        return StartAndWait(
+            CreateStartInfo(runtimeResolution),
+            runtimeResolution
+        );
     }
 
     private static ProcessStartInfo CreateStartInfo(PeRuntimeTarget runtimeResolution) {

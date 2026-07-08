@@ -1,5 +1,4 @@
 import { cli, define } from "gunshi";
-import { parseOptionalPort } from "@pe/runtime";
 import { PeaCliCommands, resolveHostBaseUrl, resolveWorkspaceKey } from "@pe/mcps";
 import type { PeaRuntimeAuthSource } from "./runtime.ts";
 
@@ -33,7 +32,6 @@ export function createPeaCliCommand() {
     examples: [
       "pea",
       "pea --acp",
-      "pea web",
       "pea host status",
       "pea script bootstrap",
       "pea script execute --source-path src\\SampleScript.cs",
@@ -69,26 +67,6 @@ export function createPeaCliCommand() {
 export function createPeaCliSubCommands() {
   return {
     ...new PeaCliCommands().commands(),
-    web: define({
-      name: "web",
-      description: "Run the local React Pea workbench over HTTP/SSE.",
-      toKebab: true,
-      args: webArgs,
-      run: async (ctx) => {
-        const { runPeaWeb } = await import("./web.ts");
-        await runPeaWeb({
-          host: ctx.values.host,
-          port: parseOptionalPort(ctx.values.port),
-          staticDir: ctx.values.staticDir,
-          modelId: ctx.values.modelId,
-          workspaceRoot: ctx.values.workspaceRoot,
-          authSource: resolvePeaCliAuthSource(ctx.values.authSource),
-          noCloudAuth: ctx.values.noCloudAuth,
-          workbenchPort: parseOptionalPort(ctx.values.workbenchPort),
-          workbenchToken: ctx.values.workbenchToken,
-        });
-      },
-    }),
   };
 }
 
@@ -208,35 +186,5 @@ const protocolArgs = {
     description: "Optional model id to force for the runtime.",
   },
   ...runtimeAuthArgs,
-  ...workspaceArgs,
-} as const;
-
-const webArgs = {
-  host: {
-    type: "string",
-    description: "Host interface for the web workbench server. Defaults to 127.0.0.1.",
-  },
-  port: {
-    type: "string",
-    description: "Port for the static website server. Defaults to an ephemeral port.",
-  },
-  staticDir: {
-    type: "string",
-    description: "Optional built website directory to serve.",
-  },
-  modelId: {
-    type: "string",
-    description: "Optional model id to force for the runtime.",
-  },
-  ...runtimeAuthArgs,
-  workbenchPort: {
-    type: "string",
-    description:
-      "Port for the workbench HTTP/SSE API. Defaults to 43112; use 0 for an ephemeral port.",
-  },
-  workbenchToken: {
-    type: "string",
-    description: "Local connection token for the workbench HTTP/SSE API.",
-  },
   ...workspaceArgs,
 } as const;

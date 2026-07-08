@@ -26,23 +26,8 @@ const peSendMessageSchema = z.object({
     .optional(),
 });
 
-export interface RuntimeAgentControllerWebOptions<TRuntimeOptions = unknown> {
-  label: string;
-  title?: string;
-  createRuntime: (options: TRuntimeOptions) => Promise<unknown>;
-  runtimeOptions?: TRuntimeOptions;
-  host?: string;
-  port?: number;
-  /** Static SPA build to serve alongside the API (production single-server). Omit in dev. */
-  staticDir?: string;
-  /** @deprecated Use `port`. Kept for launcher compatibility. */
-  workbenchPort?: number;
-  /** Accepted but unused — native routes are open on loopback. */
-  workbenchToken?: string;
-}
-
 /** The minimal shape we serve: an AgentController + its session, on a Mastra. */
-interface ServableRuntime {
+export interface ServableRuntime {
   controller: AgentController;
   session?: Session;
   mastra?: Mastra;
@@ -94,15 +79,26 @@ function resolveServingTarget(
   return { mastra, controllerId: label };
 }
 
-export async function runRuntimeAgentControllerWeb<TRuntimeOptions = unknown>(
-  options: RuntimeAgentControllerWebOptions<TRuntimeOptions>,
-): Promise<void> {
-  const runtime = requireServableRuntime(
-    await options.createRuntime((options.runtimeOptions ?? {}) as TRuntimeOptions),
-  );
+export interface BuildAgentControllerAppOptions {
+  /** A pre-constructed runtime: an AgentController + its session (plus optional Mastra/metadata). */
+  runtime: ServableRuntime;
+  /** Registration key used when the controller isn't already listed on a Mastra. */
+  label: string;
+}
+
+/**
+ * Build the Hono app that fronts a runtime's AgentController — the Pe-owned `/pe/*` extras
+ * plus the native `@mastra/server` agent-controller routes (`/api/agent-controller/*`).
+ *
+ * Pure: it does NOT bind a port. Mount `app.fetch` under any server — the host mounts it into
+ * its Effect `HttpRouter` at the absolute paths; the dev shim below binds it with
+ * `@hono/node-server`. `MastraServer#init` is async, so the builder is async.
+ */
+export async function buildAgentControllerApp(
+  options: BuildAgentControllerAppOptions,
+): Promise<Hono> {
+  const runtime = requireServableRuntime(options.runtime);
   const { mastra, controllerId } = resolveServingTarget(runtime, options.label);
-  const host = options.host ?? "127.0.0.1";
-  const port = options.port ?? options.workbenchPort ?? 43112;
   const info: PeWebInfo = {
     controllerId,
     resourceId: runtime.session!.identity.getResourceId(),
@@ -129,6 +125,41 @@ export async function runRuntimeAgentControllerWeb<TRuntimeOptions = unknown>(
 
   const server = new MastraServer({ app: app as never, mastra });
   await server.init();
+  return app;
+}
+
+export interface RuntimeAgentControllerWebOptions<TRuntimeOptions = unknown> {
+  label: string;
+  title?: string;
+  createRuntime: (options: TRuntimeOptions) => Promise<unknown>;
+  runtimeOptions?: TRuntimeOptions;
+  host?: string;
+  port?: number;
+  /** Static SPA build to serve alongside the API (production single-server). Omit in dev. */
+  staticDir?: string;
+  /** @deprecated Use `port`. Kept for launcher compatibility. */
+  workbenchPort?: number;
+  /** Accepted but unused — native routes are open on loopback. */
+  workbenchToken?: string;
+}
+
+/**
+ * Dev/standalone server shim: construct a runtime, build its Hono app via
+ * {@link buildAgentControllerApp}, optionally serve a static SPA, bind a port, and hold the
+ * process until SIGINT/SIGTERM. Pea no longer uses this (the host mounts
+ * `buildAgentControllerApp` into its own Effect server); it remains for `@pe/pe-code`'s
+ * dev `web` subcommand, whose `createMastraCode` controller relies on the wrap branch in
+ * `resolveServingTarget`.
+ */
+export async function runRuntimeAgentControllerWeb<TRuntimeOptions = unknown>(
+  options: RuntimeAgentControllerWebOptions<TRuntimeOptions>,
+): Promise<void> {
+  const runtime = requireServableRuntime(
+    await options.createRuntime((options.runtimeOptions ?? {}) as TRuntimeOptions),
+  );
+  const app = await buildAgentControllerApp({ runtime, label: options.label });
+  const host = options.host ?? "127.0.0.1";
+  const port = options.port ?? options.workbenchPort ?? 43112;
 
   if (options.staticDir) {
     app.use("*", serveStatic({ root: options.staticDir }));
@@ -136,9 +167,7 @@ export async function runRuntimeAgentControllerWeb<TRuntimeOptions = unknown>(
   }
 
   const node = serve({ fetch: app.fetch, hostname: host, port });
-  const baseUrl = `http://${host}:${port}`;
-  console.log(`${options.label} agent-controller API ${baseUrl}/api`);
-  console.log(`${options.label} controller=${info.controllerId} resource=${info.resourceId}`);
+  console.log(`${options.label} agent-controller API http://${host}:${port}/api`);
 
   await waitForShutdown(async () => {
     await new Promise<void>((resolve) => node.close(() => resolve()));

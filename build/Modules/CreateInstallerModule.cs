@@ -30,7 +30,6 @@ namespace Build.Modules;
 [DependsOn<ResolveBuildMatrixModule>]
 [DependsOn<ResolveBuildLayoutModule>]
 [DependsOn<PublishRevitAddinModule>]
-[DependsOn<CreatePeaPayloadModule>]
 public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) : Module {
     private const string SourceManifestFileName = "product.payloads.json";
 
@@ -45,11 +44,9 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         var versioningResult = await context.GetModule<ResolveVersioningModule>();
         var matrixResult = await context.GetModule<ResolveBuildMatrixModule>();
         var layoutResult = await context.GetModule<ResolveBuildLayoutModule>();
-        var peaPayloadResult = await context.GetModule<CreatePeaPayloadModule>();
         var versioning = versioningResult.ValueOrDefault!;
         var matrix = matrixResult.ValueOrDefault!;
         var layout = layoutResult.ValueOrDefault!;
-        var peaPayload = peaPayloadResult.ValueOrDefault!;
         var rootDirectory = context.Git().RootDirectory;
 
         var hostPackageDirectory = rootDirectory.GetFolder("source").GetFolder("pe-tools").GetFolder("apps").GetFolder("host");
@@ -83,10 +80,6 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
             cancellationToken
         );
 
-        var peaPayloadDirectory = layout.GetPeaPayloadStagingDirectory("Release", peaPayload.Version);
-        Directory.Exists(peaPayloadDirectory)
-            .ShouldBeTrue($"No pea versioned payload was found for installer packaging: {peaPayloadDirectory}");
-
         Directory.CreateDirectory(layout.Artifacts.InstallerPackagesRoot);
         foreach (var existingInstallerPath in Directory.EnumerateFiles(layout.Artifacts.InstallerPackagesRoot, "*.msi"))
             System.IO.File.Delete(existingInstallerPath);
@@ -103,7 +96,6 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
             versioning.Version,
             revitPayloadRoot.Path,
             runtimePublishDirectory.Path,
-            peaPayloadDirectory,
             cancellationToken
         );
         var installPackagePath = await WriteInstallPackageAsync(
@@ -112,7 +104,6 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
             versioning.Version,
             revitPayloadRoot.Path,
             runtimePublishDirectory.Path,
-            peaPayloadDirectory,
             cancellationToken
         );
         context.Summary.KeyValue("Artifacts", "Install package", installPackagePath);
@@ -178,14 +169,14 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
             cancellationToken
         );
 
-        var builtHostExecutable = Path.Combine(hostPackageDirectory.Path, "dist-installed", HostProcessIdentity.ExecutableName);
+        // Copy the whole dist-installed tree, not just the exe: the TS host build places the web SPA
+        // at dist-installed/web/client (contract: static root = <dir of Pe.Host.exe>/web/client), so it
+        // must ride into the versioned host payload beside the executable.
+        var builtHostDirectory = Path.Combine(hostPackageDirectory.Path, "dist-installed");
+        var builtHostExecutable = Path.Combine(builtHostDirectory, HostProcessIdentity.ExecutableName);
         System.IO.File.Exists(builtHostExecutable)
             .ShouldBeTrue($"TS host executable build did not create {builtHostExecutable}");
-        System.IO.File.Copy(
-            builtHostExecutable,
-            runtimePublishDirectory.GetFile(HostProcessIdentity.ExecutableName).Path,
-            true
-        );
+        CopyDirectory(builtHostDirectory, runtimePublishDirectory.Path);
 
         runtimePublishDirectory.GetFiles(file => file.Exists)
             .ShouldNotBeEmpty("Failed to publish the shared runtime for installer packaging.");
@@ -239,15 +230,13 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         string version,
         string revitPayloadRoot,
         string runtimePublishDirectory,
-        string peaPayloadDirectory,
         CancellationToken cancellationToken
     ) {
         var manifest = TransformManifest(
             sourceManifestPath,
             new Dictionary<string, string>(StringComparer.Ordinal) {
                 ["Pe.App"] = revitPayloadRoot,
-                ["host"] = runtimePublishDirectory,
-                ["pea"] = peaPayloadDirectory
+                ["host"] = runtimePublishDirectory
             }
         );
 
@@ -267,7 +256,6 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         string version,
         string revitPayloadRoot,
         string runtimePublishDirectory,
-        string peaPayloadDirectory,
         CancellationToken cancellationToken
     ) {
         var packageRoot = Path.Combine(layout.Artifacts.InstallerPackagesRoot, "install-package");
@@ -281,8 +269,7 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         // same package-relative path. Keyed by payload name so any drift fails TransformManifest.
         var stagedByName = new Dictionary<string, string>(StringComparer.Ordinal) {
             ["Pe.App"] = revitPayloadRoot,
-            ["host"] = runtimePublishDirectory,
-            ["pea"] = peaPayloadDirectory
+            ["host"] = runtimePublishDirectory
         };
         var sourceByName = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var (name, stagedPath) in stagedByName) {
