@@ -226,8 +226,7 @@ public sealed class DeploymentRuntimeContractTests {
                   "vendor": "Positive Energy",
                   "payloads": [
                     { "type": "VersionedApp", "name": "host", "entry": "Pe.Host.exe" },
-                    { "type": "VersionedApp", "name": "pea" },
-                    { "type": "PathShim", "name": "pea", "target": "versionedApp:pea", "entry": "app\\pea.exe" }
+                    { "type": "PathShim", "name": "pea" }
                   ]
                 }
                 """
@@ -249,8 +248,8 @@ public sealed class DeploymentRuntimeContractTests {
             // Host: VersionedApp resolves versions/<current>/<entry>.
             Assert.That(deployment!.Resolve("host")?.EntryPath, Is.EqualTo(hostExe));
 
-            // Pea launcher: the PathShim always lands at shims/<name>.cmd — the grammar PeRuntimeContext
-            // computes directly (Resolve("pea") is ambiguous: two payloads share the name).
+            // Pea launcher: pea is now a dev-only PathShim, and a PathShim always lands at
+            // shims/<name>.cmd — the grammar the dev-lane pea shim resolves through.
             Assert.That(Path.Combine(deployment.ShimsDirectory, "pea.cmd"), Is.EqualTo(peaShim));
             Assert.That(File.Exists(Path.Combine(deployment.ShimsDirectory, "pea.cmd")), Is.True);
         } finally {

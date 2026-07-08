@@ -11,12 +11,14 @@
     "start": "vp exec jiti src/index.ts",
     "dev": "vp exec jiti --watch src/index.ts",
     "build": "vp pack",
+    "build:payload": "vp pack && pnpm --filter @pe/web build && node scripts/stage-web.mjs",
     "test": "vp test",
     "check": "vp check"
   },
   "dependencies": {
     "@effect/platform-node": "4.0.0-beta.92",
     "@pe/host-contracts": "workspace:*",
+    "@pe/runtime": "workspace:*",
     "ajv": "catalog:",
     "effect": "4.0.0-beta.92"
   },

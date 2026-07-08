@@ -7,7 +7,6 @@ using Pe.Revit.Scripting.Context;
 using Pe.Revit.Scripting.References;
 using Pe.Shared.HostContracts;
 using Pe.Shared.HostContracts.Scripting;
-using Pe.Shared.Product;
 using Pe.Shared.RevitVersions;
 using Pe.Shared.StorageRuntime;
 using Serilog;
@@ -55,13 +54,8 @@ public class CmdPeTools : IExternalCommand {
                 );
                 dialog.AddCommandLink(
                     TaskDialogCommandLinkId.CommandLink2,
-                    "Open Pea Agent Terminal",
-                    "Launch `pea agent` in a terminal window."
-                );
-                dialog.AddCommandLink(
-                    TaskDialogCommandLinkId.CommandLink3,
-                    "Open Pe Tools Browser",
-                    "Open the external Pe Tools frontend in your default browser."
+                    "Open Pe Tools Web",
+                    "Open the Pe Tools web app (served by the host) in your default browser."
                 );
             }
 
@@ -74,10 +68,7 @@ public class CmdPeTools : IExternalCommand {
                 ShowActionResult("Scripting Workspace", OpenScriptingWorkspace(commandData.Application));
                 break;
             case TaskDialogResult.CommandLink2:
-                _ = PeaTerminalLauncher.LaunchAgent();
-                break;
-            case TaskDialogResult.CommandLink3:
-                ShowActionResult("Pe Tools Browser", OpenPeToolsBrowser());
+                ShowActionResult("Pe Tools Web", OpenPeToolsBrowser());
                 break;
             }
 
@@ -164,18 +155,18 @@ public class CmdPeTools : IExternalCommand {
     }
 
     private static RuntimeActionResult OpenPeToolsBrowser() {
-        Log.Information("Pe Tools command selected action: Open Pe Tools Browser");
+        Log.Information("Pe Tools command selected action: Open Pe Tools Web");
         var connectResult = HostBridgeConnector.EnsureConnected();
         if (!connectResult.Success)
             return connectResult.RuntimeActionResult;
 
         var launched = PeToolsBrowser.TryLaunch();
-        Log.Information("Pe Tools browser launch result: Success={Success}", launched);
+        Log.Information("Pe Tools web launch result: Success={Success}", launched);
         return new RuntimeActionResult(
             launched,
             launched
-                ? "Opened the external Pe Tools frontend in your default browser."
-                : $"Could not open the external Pe Tools frontend. Check {HostProcessIdentity.FrontendBaseUrlVariable}."
+                ? "Opened the Pe Tools web app in your default browser."
+                : "Could not open the Pe Tools web app. The host may not be listening yet."
         );
     }
 
@@ -204,8 +195,7 @@ public class CmdPeTools : IExternalCommand {
             _ = sb.AppendLine();
             _ = sb.AppendLine("Unavailable until connected:");
             _ = sb.AppendLine("- Open Scripting Workspace");
-            _ = sb.AppendLine("- Open Pea Agent Terminal");
-            _ = sb.AppendLine("- Open Pe Tools Browser");
+            _ = sb.AppendLine("- Open Pe Tools Web");
         }
 
         if (!string.IsNullOrWhiteSpace(status.LastError)) {

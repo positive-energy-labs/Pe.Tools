@@ -48,8 +48,17 @@ export function isValidTakeoverToken(value: string | undefined): boolean {
   return value === hostOwnership.takeoverToken;
 }
 
-export function scheduleShutdown(): void {
-  setTimeout(() => process.exit(0), 25);
+/**
+ * Product root under `%LOCALAPPDATA%\<vendor>\<product>` — the A10 service-file `appBase`
+ * (`state/service/host.json` lives beneath it) and the install-receipt root. Resolved lazily so
+ * tests can redirect it via `LOCALAPPDATA`.
+ */
+export function productRoot(): string {
+  return join(
+    process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"),
+    productIdentity.vendorName,
+    productIdentity.productName,
+  );
 }
 
 function resolveHostOwnership(): HostOwnership {
@@ -108,14 +117,6 @@ function currentModulePath(): string | null {
 
 function hostIdentityPath(): string {
   return join(productRoot(), productPathNames.stateDirectoryName, "host", "identity.json");
-}
-
-function productRoot(): string {
-  return join(
-    process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"),
-    productIdentity.vendorName,
-    productIdentity.productName,
-  );
 }
 
 const writeIdentity = Effect.fnUntraced(function* (ownership: HostOwnership) {

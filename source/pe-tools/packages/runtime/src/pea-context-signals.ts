@@ -6,7 +6,7 @@ import {
   getRuntimeContextEntries,
   normalizeContextEntries,
   type RuntimeContextEntry,
-} from "@pe/runtime";
+} from "./context.ts";
 
 export const peaContextStateId = "pea-workbench-context";
 export const peaContextTagName = "pea-workbench-context";

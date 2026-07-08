@@ -22,14 +22,14 @@ function UpdateButton() {
   const installed = useQuery({
     queryKey: ["host-install"],
     queryFn: async () =>
-      (await fetch("/pe-host/host/install")).json() as Promise<{
+      (await fetch("/host/install")).json() as Promise<{
         installed: boolean;
         releaseVersion: string | null;
       }>,
   });
   const update = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/pe-host/host/update", { method: "POST" });
+      const res = await fetch("/host/update", { method: "POST" });
       const body = (await res.json()) as { ok?: boolean; releaseVersion?: string; error?: string };
       if (!res.ok || body.ok === false)
         throw new Error(body.error ?? `update failed (${res.status})`);

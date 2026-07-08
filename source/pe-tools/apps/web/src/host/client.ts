@@ -7,7 +7,7 @@ import {
   type OpResponseOf,
 } from "@pe/host-contracts/operation-types";
 
-const HOST_CALL_URL = "/pe-host/call";
+const HOST_CALL_URL = "/call";
 
 /**
  * The typed client: POST { key, request } as JSON, keys constrained to the

@@ -1,47 +1,21 @@
 export interface WorkbenchEndpointConfig {
   origin: string;
-  token?: string;
 }
 
 /**
- * Resolves the workbench server origin + token. These are *connection* params (dev loopback
- * port `w` / token `t`), deliberately NOT part of the typed app search schema — they're a
- * dev/env concern, read once off the live URL. App navigation state (thread/mode/prompt) goes
- * through TanStack Router search; this stays out of it.
+ * Resolves the workbench server origin. Post-squash there is exactly one origin — the
+ * host that serves this SPA — so this is just `window.location.origin`. No dev-port /
+ * token query params, no injected globals: the browser talks to one origin for everything.
  * ponytail: window.location read kept as the one exception; revisit if prod ever needs it typed.
  */
 export function resolveWorkbenchConfig(): WorkbenchEndpointConfig {
   if (typeof window === "undefined") return { origin: "" }; // SSR guard
-  const params = new URL(window.location.href).searchParams;
-  const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {};
-  const injected = (window as Window & { __PE_WORKBENCH_URL__?: string }).__PE_WORKBENCH_URL__;
-
-  let origin = window.location.origin;
-  let token = firstParam(params, "t", "token");
-  const workbenchPort = params.get("w");
-  if (workbenchPort && /^\d+$/.test(workbenchPort)) {
-    origin = `${window.location.protocol}//${window.location.hostname}:${workbenchPort}`;
-    return { origin, token: token ?? "dev-loopback" };
-  }
-
-  const seed = injected ?? env.VITE_PE_WORKBENCH_RUN_URL ?? undefined;
-  if (seed) {
-    try {
-      const url = new URL(seed, window.location.origin);
-      origin = url.origin;
-      token = url.searchParams.get("token") ?? token;
-    } catch {
-      // fall through to window origin
-    }
-  }
-  return { origin, token };
+  return { origin: window.location.origin };
 }
 
 /**
  * Build a URL against the workbench origin. Native @mastra/server routes live under `/api`
- * (`/api/agent-controller/...`); the Pe handshake + transparency endpoints under `/pe`. A dev
- * `token` (loopback) is appended as a query param — the native routes ignore it, but it keeps the
- * URL identical to what the launcher seeds.
+ * (`/api/agent-controller/...`); the Pe handshake + transparency endpoints under `/pe`.
  */
 export function workbenchUrl(
   config: WorkbenchEndpointConfig,
@@ -49,7 +23,6 @@ export function workbenchUrl(
   query: Record<string, string> = {},
 ): string {
   const url = new URL(path, config.origin || "http://localhost");
-  if (config.token) url.searchParams.set("token", config.token);
   for (const [name, value] of Object.entries(query)) url.searchParams.set(name, value);
   return url.toString();
 }
@@ -58,12 +31,4 @@ export function workbenchUrl(
  * native @mastra/server routes are driven by `@mastra/client-js` (MastraClient), not these helpers. */
 export function peUrl(config: WorkbenchEndpointConfig, path: string): string {
   return workbenchUrl(config, `/pe${path}`);
-}
-
-function firstParam(params: URLSearchParams, ...names: string[]): string | undefined {
-  for (const name of names) {
-    const value = params.get(name);
-    if (value) return value;
-  }
-  return undefined;
 }

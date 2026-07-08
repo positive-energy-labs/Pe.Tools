@@ -15,7 +15,7 @@ import { HOST_QUERY_KEY } from "#/host/queries";
 export function useHostLiveInvalidation() {
   const queryClient = useQueryClient();
   useEffect(() => {
-    const source = new EventSource("/pe-host/events");
+    const source = new EventSource("/events");
     let timer: ReturnType<typeof setTimeout> | undefined;
     source.onmessage = () => {
       // Revit sends Event + StateSync back-to-back per change; debounce to one refetch.

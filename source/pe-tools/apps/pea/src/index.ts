@@ -13,6 +13,5 @@ export {
   defaultPeaRuntimeToolCatalog,
   defaultPeaRuntimeToolProfile,
 } from "./runtime.ts";
-export { runPeaWeb } from "./web.ts";
-export { PeaContextSignalProvider, PeaContextStateProcessor } from "./context-signals.ts";
-export type { PeaContextStateSignalArgs } from "./context-signals.ts";
+export { PeaContextSignalProvider, PeaContextStateProcessor } from "@pe/runtime/pea";
+export type { PeaContextStateSignalArgs } from "@pe/runtime/pea";

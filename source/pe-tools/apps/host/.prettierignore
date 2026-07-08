@@ -1,0 +1,4 @@
+# Verbatim vendored copy of the SDK-owned service-file client (clients/ts/pe-service.ts).
+# Owned by Pe.Revit.Sdk — kept byte-for-byte so it diffs cleanly against the source of truth.
+# Do not reformat.
+src/pe-service.ts

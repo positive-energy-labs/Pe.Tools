@@ -16,7 +16,7 @@
         <PackageReference Include="NUnit3TestAdapter" Version="4.6.0" />
         <PackageReference Include="Pe.Revit.Versioning" Version="0.1.0-beta.9" />
         <!-- Consumer-side pin for the InstalledProduct grammar our host/pea launchers resolve through. -->
-        <PackageReference Include="Pe.Revit.Loader" Version="0.1.0-beta.15" />
+        <PackageReference Include="Pe.Revit.Loader" Version="0.1.0-beta.16" />
     </ItemGroup>
 
     <ItemGroup>

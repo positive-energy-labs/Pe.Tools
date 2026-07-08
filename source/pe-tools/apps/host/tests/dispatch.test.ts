@@ -79,9 +79,7 @@ test("ts-only dispatch rejects malformed requests before running the operation",
   } as unknown as RevitBridge["Service"];
 
   await expect(
-    runDispatch(
-      dispatchTsOnlyOperation("settings.tree", { moduleKey: 123 }, undefined, bridge),
-    ),
+    runDispatch(dispatchTsOnlyOperation("settings.tree", { moduleKey: 123 }, undefined, bridge)),
   ).rejects.toBeInstanceOf(InvalidHostRequest);
 });
 

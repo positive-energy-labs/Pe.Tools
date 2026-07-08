@@ -28,24 +28,6 @@ public sealed record ProductLayoutAuthority(
             HostProcessIdentity.DirectoryName
         );
 
-    public string GetPeaPayloadStagingDirectory(string configuration, string version) =>
-        Path.Combine(
-            this.Artifacts.PublishRoot,
-            "pea",
-            configuration,
-            "payload",
-            PeaCliIdentity.NormalizePayloadVersion(version)
-        );
-
-    public string GetPeaBootstrapStagingDirectory(string configuration) =>
-        Path.Combine(
-            this.Artifacts.PublishRoot,
-            "pea",
-            configuration,
-            ProductPathNames.BinDirectoryName,
-            PeaCliIdentity.DirectoryName
-        );
-
     public string GetAutomationStagingDirectory(string configuration, string bundleName) =>
         Path.Combine(this.Artifacts.AutomationStagingRoot, configuration, $"{bundleName}.bundle");
 
