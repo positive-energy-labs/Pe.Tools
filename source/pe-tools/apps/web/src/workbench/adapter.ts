@@ -149,10 +149,14 @@ export function applyWireEvent(state: WorkbenchState, event: WireEvent): Workben
     case "agent_start":
       return withRunStatus(state, "running");
     case "agent_end":
-      // A suspended run is PAUSED for a HITL approval, not finished — keep the pending approval and
-      // the "waiting" status that tool_suspended just set. endRun would cancel the approval (→ the
-      // approve/deny buttons vanish the instant they appear) and flip to idle.
-      if (event.reason === "suspended") return state;
+      // A run with a LIVE pending approval is PAUSED for HITL, not finished — even when the server
+      // labels the end `suspended` OR `aborted`. (@mastra/core 1.50's `session.thread.switch()`
+      // aborts the active run before rebinding, so a redundant hydrate emits agent_end(aborted)
+      // over a run the UI is still gating.) Keep the pending approval + the "waiting" status that
+      // tool_suspended/tool_approval_required set; endRun would cancel the approval — the
+      // approve/deny buttons vanish the instant they appear — and flip to idle, and the provider
+      // would re-hydrate → switch → abort → a full-history replay flood.
+      if (event.reason === "suspended" || hasPendingApproval(state)) return state;
       return event.reason === "error" ? endRunWithError(state, "Run failed.") : endRun(state);
     case "message_start":
     case "message_update":
@@ -510,6 +514,11 @@ function requestApproval(state: WorkbenchState, input: PendingApprovalInput): Wo
     approvals: { requests },
     uiStatus: { ...state.uiStatus, overall: { ...state.uiStatus.overall, status: "waiting" } },
   };
+}
+
+/** True while any approval is still awaiting the user — the run is HITL-paused, not finished. */
+function hasPendingApproval(state: WorkbenchState): boolean {
+  return state.approvals.requests.some((request) => request.status === "pending");
 }
 
 /** Once a tool completes, drop any pending approval that was gating it. */

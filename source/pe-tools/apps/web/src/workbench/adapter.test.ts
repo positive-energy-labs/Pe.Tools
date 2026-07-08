@@ -89,6 +89,57 @@ test("a suspended agent_end keeps the pending approval (does NOT end the run)", 
   expect(state.uiStatus.overall.status).toBe("waiting");
 });
 
+test("a live approval survives a stray agent_end(aborted) from a redundant thread switch", () => {
+  // 1.50's session.thread.switch() aborts the active run before rebinding — even switching to the
+  // thread we're already on — so a redundant hydrate emits agent_end(aborted) over a run the UI is
+  // still gating. The reducer must NOT let that cancel the pending approval (buttons would vanish).
+  const state = reduce([
+    { type: "agent_start" },
+    { type: "tool_approval_required", toolCallId: "t7", toolName: "write_file", args: {} },
+    { type: "agent_end", reason: "aborted" },
+  ]);
+  expect(state.approvals.requests[0]?.status).toBe("pending");
+  expect(state.approvals.requests[0]?.requestId).toBe("tool-approval:t7");
+  expect(state.uiStatus.overall.status).toBe("waiting");
+});
+
+test("approval survives a duplicate replay of the whole suspend sequence, then resolves", () => {
+  // The full lifecycle the owner hits: tool call → suspension → the run gets replayed (a duplicate
+  // agent_start + tool_suspended arrives over a reconnected/rebound stream) → the user finally
+  // approves and the tool completes. Through all of it the approval UI state must stay coherent:
+  // exactly one pending request while suspended, then resolved once tool_end lands.
+  const suspend: WireEvent = {
+    type: "tool_suspended",
+    toolCallId: "t9",
+    toolName: "request_access",
+    args: { path: "/tmp" },
+    suspendPayload: { options: ["Approve"] },
+  };
+  const suspended = reduce([
+    { type: "agent_start" },
+    suspend,
+    { type: "agent_end", reason: "suspended" },
+    // --- duplicate replay of the same run (no markers distinguishing it from live) ---
+    { type: "agent_start" },
+    suspend,
+    { type: "agent_end", reason: "suspended" },
+  ]);
+  // Exactly one pending approval survives — the replay is idempotent, not additive.
+  expect(suspended.approvals.requests.length).toBe(1);
+  expect(suspended.approvals.requests[0]?.status).toBe("pending");
+  expect(suspended.uiStatus.overall.status).toBe("waiting");
+
+  // The user approves; the resumed tool completes.
+  const resolved = applyWireEvent(suspended, {
+    type: "tool_end",
+    toolCallId: "t9",
+    result: "Access granted.",
+    isError: false,
+  });
+  expect(resolved.approvals.requests[0]?.status).toBe("resolved");
+  expect(resolved.uiStatus.overall.status).toBe("running");
+});
+
 test("the optimistic user echo reconciles in place — no duplicate turn", () => {
   // sendPrompt inserts a `local-user-*` turn, then the server streams the same turn back with its
   // own id. The reducer must adopt the server id in place, not append a second "you" bubble.
