@@ -56,3 +56,19 @@ phase exits review this file. Fixed items from prior spikes live in git history,
 | S-DEF-11 | deferred(trivial; next loader touch) | `Deployment.ServiceBaseUrl(name)` → read service file → `http://127.0.0.1:{port}` — deletes Pe.Tools' env-var port re-broadcast (`PE_TOOLS_HOST_BASE_URL` set inside TsHostLauncher) once C# callers read it. |
 | S-DEF-12 | deferred(DISCUSS FIRST — owner ledger style) | Dev-lane service seam ownership: Pe.Tools' hand-rolled `EnsureDevHostRunning` (TsHostLauncher.cs:93+, probe/match/takeover) is the de facto spec nobody owns. Either extend `ensureRunning` with a dev descriptor (checkout entry, lane dev) or bless "dev is the consumer's job" in SPEC and document the takeover-token pattern. |
 | T-DEF-1 | deferred(live-gated; prior spike) | talk_to_pea→runMC; createCodingAgent for pea; effect beta.94 coordinated bump; runRuntimeAgentControllerWeb deletion after peco migrates; thread-lock as Effect service; `/host/update` self-shutdown + stale CmdFFMigrator route text; host port-0 fallback; env-var port plumbing → service-file reads in C# callers (see S-DEF-11); `runtimeDescriptorFileName` + `devSourceFileName` dead TS constants. |
+
+## Codex installed E2E (2026-07-08, v0.6.9 on real Revit 2025) — findings
+
+Headline gates ALL PASS: firewall-free install (loopback-only), installed `/pe/*` live
+(`agentRuntime.available:true`, `/pe/info` 200 — the CRITICAL 503 fix proven), installed Revit
+bridge (Pe.App 0.6.9 loaded), `pea` from PATH → installed exe, `path ensure` byte-identical PATH.
+Released v0.6.9 (MSI + install.zip + manifest) at commit ae4dd22; tag/release pushed, `main` NOT
+pushed (local ahead 54 — owner to push when ready).
+
+| id | status | item |
+|---|---|---|
+| E1 | open (SDK, low — cosmetic) | `install apply --release latest` same-version is not fully touchless: exits 0 (already-current) but still rewrites `install.receipt.json` and re-runs the Cli + PathShim payloads. S3 short-circuits only the versioned copy/flip. Harmless (Cli self-copy is skipped when running installed; receipt rewrite is cosmetic) but not the intended no-op. Fix: when EVERY payload resolves already-current, skip the receipt rewrite + non-versioned re-runs too. Does NOT affect the web-Update UX (that advances a version). |
+| E2 | open (SDK, med) | `install apply --force` cannot recopy a VersionedAddin/VersionedApp whose files a running Revit/host hold locked → exit 1 (locked Pe.App.dll + Pe.Host.exe; host recovers). --force + same-version + Revit-open is inherently at odds with staged-until-restart (a loaded addin dll can't be live-swapped). Fix: --force should be best-effort over locked files — stage the fresh copy where possible and report `staged-locked`/`skipped-locked` rather than fail. Edge case (the web-Update version-advance path is unaffected). |
+| E3 | open (Pe.Tools, low) | `revit.catalog.recent-documents` is a TS host-local op (call-route.ts:124), callable via POST /call but absent from the Revit `/ops` bridge catalog + `host_operation_search`. Add host-local ops to the discoverable catalog, or document them as a separate discovery surface. |
+| E4 | resolved-by-design | Fresh install has no `pe-dev.cmd` → shell says "command not found", not a friendly "no linked checkout" message. This is CORRECT per D7 (release installs skip targetless dev-only shims — no `.cmd` is written, so there is nothing to print a message). The E2E-HANDOFF's stated expectation was wrong; the behavior is right. No code change. |
+| E5 | open (low) | `pe-revit live status` is a dev-lane bridge tool, not a reliable installed-product path-identity proof (Codex used installed `/host/status` + pea status instead). Either scope `live status` output to say "dev lane" or add an installed-aware freshness proof. Matches SPEC (live loop is the dev lane) — mostly a docs/expectation clarification. |
