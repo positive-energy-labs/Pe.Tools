@@ -86,18 +86,21 @@ export async function createPeCodeRuntime(
   process.chdir(cwd);
 
   const sandboxAllowedPaths = mergeSandboxAllowedPaths(options.additionalDirectories ?? []);
-  const runtime = await createMastraCode({
-    cwd,
-    // default is configDir: ".mastracode",
-    extraTools: peCodeExtraTools,
-    disabledTools: ["string_replace_lsp", "ast_smart_edit", "lsp_inspect"], // this doesn't seem to apply?
-    initialState: {
-      ...(options.modelId ? { currentModelId: options.modelId } : {}),
-      sandboxAllowedPaths,
-      yolo: true,
-    },
-  });
-  return requirePeCodeSession(runtime);
+  const runtime = requirePeCodeSession(
+    await createMastraCode({
+      cwd,
+      // default is configDir: ".mastracode",
+      extraTools: peCodeExtraTools,
+      disabledTools: ["string_replace_lsp", "ast_smart_edit", "lsp_inspect"], // this doesn't seem to apply?
+      initialState: {
+        ...(options.modelId ? { currentModelId: options.modelId } : {}),
+        sandboxAllowedPaths,
+        yolo: true,
+      },
+    }),
+  );
+  await applySandboxAllowedPaths(runtime.session, sandboxAllowedPaths);
+  return runtime;
 }
 
 const peCodeExtraTools = createMastraCodeExtraTools(
@@ -140,6 +143,19 @@ function mergeSandboxAllowedPaths(paths: string[]): string[] {
   return Array.from(
     new Set([defaultPeCodeSandboxAllowedPath, ...paths].map((entry) => path.resolve(entry))),
   );
+}
+
+async function applySandboxAllowedPaths(
+  session: PeCodeSession,
+  sandboxAllowedPaths: string[],
+): Promise<void> {
+  const current = session.state.get().sandboxAllowedPaths;
+  const merged = mergeSandboxAllowedPaths([
+    ...(Array.isArray(current) ? current : []),
+    ...sandboxAllowedPaths,
+  ]);
+  await session.state.set({ sandboxAllowedPaths: merged });
+  await session.thread.setSetting({ key: "sandboxAllowedPaths", value: merged });
 }
 
 async function resolveDevAgentProjectRoot(startPath: string): Promise<string> {

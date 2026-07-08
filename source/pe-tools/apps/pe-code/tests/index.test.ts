@@ -126,6 +126,10 @@ test(
           throw new Error("Expected Peco runtime workspace to use LocalFilesystem.");
         }
 
+        const expectedAllowedPaths = [
+          path.resolve(defaultPeCodeSandboxAllowedPath),
+          path.resolve(externalRoot),
+        ];
         const listing = await tools.find_files.execute(
           {
             path: externalRoot,
@@ -138,13 +142,11 @@ test(
           },
         );
 
-        expect(filesystem.basePath).toBe(path.resolve(workspaceRoot));
-        expect(filesystem.allowedPaths).toEqual(
-          expect.arrayContaining([
-            path.resolve(defaultPeCodeSandboxAllowedPath),
-            path.resolve(externalRoot),
-          ]),
+        expect(runtime.session.state.get().sandboxAllowedPaths).toEqual(
+          expect.arrayContaining(expectedAllowedPaths),
         );
+        expect(filesystem.basePath).toBe(path.resolve(workspaceRoot));
+        expect(filesystem.allowedPaths).toEqual(expect.arrayContaining(expectedAllowedPaths));
         expect(listing).toContain("external.txt");
       } finally {
         process.chdir(originalCwd);
