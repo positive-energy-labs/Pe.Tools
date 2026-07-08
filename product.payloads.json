@@ -2,7 +2,7 @@
   "product": "Pe.Tools",
   "vendor": "Positive Energy",
   "releases": "positive-energy-labs/Pe.Tools",
-  "version": "0.6.7",
+  "version": "0.6.8",
   "legacy": [
     "app:bin/pe-dev",
     "app:dev",
