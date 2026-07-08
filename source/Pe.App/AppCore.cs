@@ -68,6 +68,9 @@ public sealed class AppCore : IPePayload {
 
         ButtonRegistry.BuildRibbon(context, "PE TOOLS");
 
+        // Every palette gets the switcher for free: the UI layer reads this provider slot.
+        PaletteSwitcher.Provider = () => Commands.Palette.PaletteRegistry.Entries;
+
         // Shell pane for dockable palettes; registration can no-op if WPF is not ready or the shell already exists.
         try {
             var registered = PaletteDock.Register(app);

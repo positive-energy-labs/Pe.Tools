@@ -59,7 +59,7 @@
 
                 <!-- Search Box (hero row) with Filter and Pin -->
                 <Border x:Name="SearchBoxBorder"
-                        Grid.Row="0"
+                        Grid.Row="1"
                         ClipToBounds="True"
                         Background="Transparent">
                     <Grid x:Name="SearchBoxGrid"
@@ -118,29 +118,65 @@
                     </Grid>
                 </Border>
 
-                <!-- Tab Bar (segmented row, hidden when no tabs) -->
-                <Border x:Name="TabBarBorder"
-                        Grid.Row="1"
-                        Visibility="Collapsed"
-                        Margin="12,8,12,0"
-                        Padding="3"
-                        Background="{ui:ThemeResource CardBackgroundFillColorSecondaryBrush}"
-                        CornerRadius="6"
-                        HorizontalAlignment="Left"
-                        VerticalAlignment="Center">
-                    <controls:AnimatedScrollViewer x:Name="TabScrollViewer"
-                                                   HorizontalScrollBarVisibility="Hidden"
-                                                   VerticalScrollBarVisibility="Disabled"
-                                                   VerticalAlignment="Center">
-                        <ItemsControl x:Name="TabBarItemsControl">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <StackPanel Orientation="Horizontal" />
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                        </ItemsControl>
-                    </controls:AnimatedScrollViewer>
-                </Border>
+                <!-- Top bar: palette-switcher breadcrumb (left) + tab pill. Always visible. -->
+                <Grid x:Name="TopBar"
+                      Grid.Row="0"
+                      Margin="12,10,12,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Switcher trigger: current palette name + chevron (Ctrl+P). Opens the overlay. -->
+                    <ui:Button x:Name="SwitcherTriggerButton"
+                               Grid.Column="0"
+                               Padding="8,3,7,3"
+                               VerticalAlignment="Center"
+                               Appearance="Secondary"
+                               BorderThickness="0"
+                               Visibility="Collapsed"
+                               ToolTip="Switch palette (Ctrl+P)"
+                               Cursor="Hand">
+                        <StackPanel Orientation="Horizontal">
+                            <ui:TextBlock x:Name="SwitcherTriggerText"
+                                          Text="Palette"
+                                          FontSize="12"
+                                          FontWeight="SemiBold"
+                                          VerticalAlignment="Center"
+                                          Foreground="{ui:ThemeResource TextFillColorPrimaryBrush}" />
+                            <ui:SymbolIcon Symbol="ChevronDown20"
+                                           FontSize="11"
+                                           Margin="6,1,0,0"
+                                           VerticalAlignment="Center"
+                                           Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}" />
+                        </StackPanel>
+                    </ui:Button>
+
+                    <!-- Tab Bar (segmented pill, hidden when no tabs) -->
+                    <Border x:Name="TabBarBorder"
+                            Grid.Column="1"
+                            Visibility="Collapsed"
+                            Margin="8,0,0,0"
+                            Padding="3"
+                            Background="{ui:ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                            CornerRadius="6"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Center">
+                        <controls:AnimatedScrollViewer x:Name="TabScrollViewer"
+                                                       HorizontalScrollBarVisibility="Hidden"
+                                                       VerticalScrollBarVisibility="Disabled"
+                                                       VerticalAlignment="Center">
+                            <ItemsControl x:Name="TabBarItemsControl">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                        </controls:AnimatedScrollViewer>
+                    </Border>
+                </Grid>
 
                 <!-- Item List - MaxHeight set dynamically in code based on DefaultVisibleItems.
                      Top-aligned so the list hugs the top of its star row (slack falls below it). -->
@@ -153,31 +189,21 @@
                                     SelectedIndex="{Binding SelectedIndex}" />
                 </Border>
 
-                <!-- Status Bar / Footer: title lives here now (Raycast-style) -->
+                <!-- Status Bar / Footer: item count (left) + shortcut hints (right). -->
                 <Border x:Name="StatusBarBorder"
                         Grid.Row="4"
                         Background="{ui:ThemeResource CardBackgroundFillColorSecondaryBrush}">
                     <Grid x:Name="StatusBarGrid">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <ui:TextBlock x:Name="TitleText"
-                                      Grid.Column="0"
-                                      Text="Palette"
-                                      FontSize="11"
-                                      FontWeight="SemiBold"
-                                      VerticalAlignment="Center"
-                                      Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
-
                         <ui:TextBlock x:Name="ItemCountText"
-                                      Grid.Column="1"
-                                      Text="{Binding FilteredItems.Count, StringFormat=· \{0\} items}"
-                                      Margin="6,0,0,0"
+                                      Grid.Column="0"
+                                      Text="{Binding FilteredItems.Count, StringFormat=\{0\} items}"
                                       VerticalAlignment="Center"
                                       FontSize="11"
                                       Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}" />
@@ -185,7 +211,7 @@
                         <!-- TextTrimming: right-aligned text in a star column overflows LEFT over
                              the item count when the palette is narrow; trimming clips it instead -->
                         <ui:TextBlock x:Name="HelpText"
-                                      Grid.Column="2"
+                                      Grid.Column="1"
                                       Text="↑↓ Navigate · ← Tooltip · → Actions · ↵ Run · Esc Close"
                                       VerticalAlignment="Center"
                                       HorizontalAlignment="Right"
@@ -196,7 +222,7 @@
 
                         <!-- Tab switching hint (only visible when tabs exist) -->
                         <ui:TextBlock x:Name="TabSwitchHint"
-                                      Grid.Column="3"
+                                      Grid.Column="2"
                                       Text="· Ctrl+← → Tabs"
                                       VerticalAlignment="Center"
                                       HorizontalAlignment="Right"
@@ -207,7 +233,7 @@
 
                         <!-- Tray Toggle Button -->
                         <ui:Button x:Name="TrayToggleButton"
-                                   Grid.Column="4"
+                                   Grid.Column="3"
                                    Padding="4"
                                    Margin="4,0,0,0"
                                    Appearance="Secondary"
@@ -233,6 +259,57 @@
                         <ContentControl x:Name="TrayContent" />
                     </ScrollViewer>
                 </Border>
+
+                <!-- Command overlay: full-surface takeover that slides down from the top.
+                     Hosts both the palette switcher and the per-item Actions list (rows built in code-behind). -->
+                <Grid x:Name="Overlay"
+                      Grid.Row="0"
+                      Grid.RowSpan="6"
+                      Panel.ZIndex="30"
+                      Visibility="Collapsed">
+                    <Border x:Name="OverlayScrim"
+                            Background="{ui:ThemeResource ApplicationBackgroundBrush}"
+                            Opacity="0.72"
+                            MouseLeftButtonDown="OverlayScrim_MouseLeftButtonDown" />
+
+                    <!-- Opaque base (app bg) with a card tint on top so list content never bleeds through. -->
+                    <Border x:Name="OverlayPanel"
+                            VerticalAlignment="Top"
+                            Margin="8"
+                            Background="{ui:ThemeResource ApplicationBackgroundBrush}"
+                            BorderThickness="1"
+                            BorderBrush="{ui:ThemeResource ControlStrokeColorDefaultBrush}"
+                            CornerRadius="10">
+                        <Border.Effect>
+                            <DropShadowEffect Color="Black" Direction="270" ShadowDepth="4" BlurRadius="22" Opacity="0.4" />
+                        </Border.Effect>
+                        <Border Background="{ui:ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="10">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <ui:TextBlock x:Name="OverlayHeader"
+                                              Grid.Row="0"
+                                              Text="Switch Palette"
+                                              FontSize="10"
+                                              FontWeight="SemiBold"
+                                              Margin="16,12,16,2"
+                                              Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}" />
+
+                                <ScrollViewer x:Name="OverlayScroll"
+                                              Grid.Row="1"
+                                              MaxHeight="392"
+                                              VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              Padding="8,4,8,8">
+                                    <StackPanel x:Name="OverlayList" />
+                                </ScrollViewer>
+                            </Grid>
+                        </Border>
+                    </Border>
+                </Grid>
             </Grid>
         </Border>
 

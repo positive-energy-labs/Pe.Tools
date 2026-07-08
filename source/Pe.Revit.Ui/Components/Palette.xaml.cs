@@ -1,9 +1,12 @@
+using Autodesk.Revit.UI;
+using Pe.Revit.Extensions.ProjDocument;
 using Pe.Revit.Ui.Core;
 using Pe.Revit.Ui.ViewModels;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using Wpf.Ui.Controls;
 using Visibility = System.Windows.Visibility;
@@ -85,7 +88,6 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     private readonly SolidColorBrush _pinHoverBrush = new(Color.FromRgb(126, 179, 255));
     private readonly SolidColorBrush _pinPinnedBrush = new(Color.FromRgb(100, 149, 237));
     private readonly List<Button> _tabButtons = [];
-    private ActionMenu? _actionMenu;
     private PaletteSidebar? _currentSidebar;
     private CustomKeyBindings? _customKeyBindings;
     private Func<Task<bool>>? _executeItemFunc;
@@ -108,6 +110,23 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     private SelectableTextBox? _tooltipPanel;
     private double _trayMaxHeight = DefaultTrayMaxHeight;
 
+    private enum OverlayMode { Switcher, Actions }
+
+    /// <summary> A single selectable action offered by the Actions overlay (type-erased). </summary>
+    private sealed record OverlayAction(string Name, string Shortcut, bool Enabled, Func<Task> Execute);
+
+    /// <summary> Navigable rows in the command overlay, in display order (disabled rows excluded). </summary>
+    private readonly List<(Action Select, Border Row)> _overlayRows = [];
+    private bool _isOverlayOpen;
+    private int _overlayIndex = -1;
+    private OverlayMode _overlayMode = OverlayMode.Switcher;
+
+    /// <summary>
+    ///     Type-erased snapshot of the selected item's actions, rebuilt on demand.
+    ///     Assigned in <see cref="SetupTypedEventHandlers{TItem}" /> where TItem is in scope.
+    /// </summary>
+    private Func<IReadOnlyList<OverlayAction>>? _describeCurrentActions;
+
     public Palette(bool isSearchBoxHidden = false) {
         this.InitializeComponent();
 
@@ -128,9 +147,9 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     public event EventHandler<CloseRequestedEventArgs>? CloseRequested;
 
     /// <summary>
-    ///     Sets the title displayed in the palette's title bar.
+    ///     Sets the title displayed in the palette's title bar (and the switcher trigger label).
     /// </summary>
-    public void SetTitle(string title) => this.TitleText.Text = title;
+    public void SetTitle(string title) => this.SwitcherTriggerText.Text = title;
 
     /// <summary>
     ///     Initializes the palette with type-specific behavior via composition.
@@ -226,12 +245,6 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
             this._tabActionBindings[i] = tabActionBinding;
         }
 
-        // Create action menu for right-click
-        var actionMenu = new ActionMenu<TItem>([Key.Escape, Key.Left]);
-
-        // Store type-erased references for non-generic code paths
-        this._actionMenu = actionMenu;
-
         // Get the active action binding for the current tab (guaranteed to exist due to validation)
         var activeActionBinding = this.GetActionBindingForTab<TItem>(viewModel.SelectedTabIndex)
                                   ?? throw new InvalidOperationException(
@@ -258,7 +271,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         this._onCtrlReleased = onCtrlReleased;
 
         // Wire up typed event handlers
-        this.SetupTypedEventHandlers(viewModel, actionMenu);
+        this.SetupTypedEventHandlers(viewModel);
 
         // Wire up event handlers
         this.Loaded += this.UserControl_Loaded;
@@ -273,6 +286,13 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
             // Update help text to reflect sidebar instead of tooltip
             this.HelpText.Text = "↑↓ Navigate · ← Details · → Actions · ↵ Run · Esc Close";
         }
+
+        // Palette switcher (always-available surface) — only when a registry provider is present.
+        if (PaletteSwitcher.Provider != null) {
+            this.SwitcherTriggerButton.Visibility = Visibility.Visible;
+            this.SwitcherTriggerButton.Click += (_, _) => this.ToggleSwitcher();
+            this.HelpText.Text += " · Ctrl+P Switch";
+        }
     }
 
     /// <summary>
@@ -284,20 +304,27 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         return binding as ActionBinding<TItem>;
     }
 
-    /// <summary>
-    ///     Gets the current tab's action binding (type-erased for non-generic contexts).
-    /// </summary>
-    private ActionBinding? GetCurrentActionBinding() {
-        if (this.DataContext is not IPaletteViewModel viewModel) return null;
-        if (this._tabActionBindings == null) return null;
-        if (!this._tabActionBindings.TryGetValue(viewModel.SelectedTabIndex, out var binding)) return null;
-        return binding as ActionBinding;
-    }
-
     private void SetupTypedEventHandlers<TItem>(
-        PaletteViewModel<TItem> viewModel,
-        ActionMenu<TItem> actionMenu
+        PaletteViewModel<TItem> viewModel
     ) where TItem : class, IPaletteListItem {
+        // Type-erased view of the selected item's actions for the Actions overlay. Each row's
+        // Execute closure mirrors the item-run path (record usage, then run on the action's lane;
+        // ExecutePaletteActionAsync closes the window first when ephemeral).
+        this._describeCurrentActions = () => {
+            var item = viewModel.SelectedItem;
+            if (item == null) return Array.Empty<OverlayAction>();
+            var binding = this.GetActionBindingForTab<TItem>(viewModel.SelectedTabIndex);
+            if (binding == null) return Array.Empty<OverlayAction>();
+            return binding.GetAllActions().Select(action => new OverlayAction(
+                action.Name,
+                FormatShortcut(action.Modifiers, action.Key),
+                binding.CanExecute(action, item),
+                () => {
+                    viewModel.RecordUsage();
+                    return this.ExecutePaletteActionAsync(binding, action, item);
+                })).ToList();
+        };
+
         this.ItemListView.ItemMouseLeftButtonUp += async (_, e) => {
             if (e.OriginalSource is not FrameworkElement source) return;
             var item = source.DataContext as TItem;
@@ -307,35 +334,17 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
             _ = await this.ExecuteItemTyped(item, currentActionBinding, viewModel, Keyboard.Modifiers);
         };
 
+        // Right-click opens the same Actions overlay as the → key (no separate context menu).
         this.ItemListView.ItemMouseRightButtonUp += (_, e) => {
             if (e.OriginalSource is not FrameworkElement source) return;
-            var item = source.DataContext as TItem;
-            if (item == null) return;
+            if (source.DataContext is not TItem item) return;
             viewModel.SelectedItem = item;
-
-            e.Handled = this.ShowPopover(placementTarget => {
-                var currentActionBinding = this.GetActionBindingForTab<TItem>(viewModel.SelectedTabIndex)!;
-                actionMenu.Actions = currentActionBinding.GetAllActions().ToList();
-                actionMenu.Show(placementTarget, item);
-            });
+            this.OpenActions();
+            e.Handled = true;
         };
 
         this.ItemListView.SelectionChanged += (_, _) => {
             if (viewModel.SelectedItem != null) this.ItemListView.ScrollIntoView(viewModel.SelectedItem);
-        };
-
-        // Set up action menu handlers
-        actionMenu.ExitRequested += (_, _) => this.Focus();
-        actionMenu.ActionClicked += async (_, action) => {
-            var selectedItem = viewModel.SelectedItem;
-            if (selectedItem == null) return;
-
-            viewModel.RecordUsage();
-
-            // Get the current tab's action binding
-            var currentActionBinding = this.GetActionBindingForTab<TItem>(viewModel.SelectedTabIndex)!;
-
-            await this.ExecutePaletteActionAsync(currentActionBinding, action, selectedItem);
         };
 
         // Set up tooltip popover exit handler
@@ -582,7 +591,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     /// <summary>
     ///     Closes the window first, then runs the provided callback after the window has closed.
     /// </summary>
-    private void ExecuteDeferred(Func<Task> action) {
+    private void ExecuteDeferred(Func<Task> action, bool restoreFocus = true) {
         if (this._host == null) {
             throw new InvalidOperationException(
                 "Palette host not set. Use PaletteFactory.Create or call SetParentWindow.");
@@ -596,19 +605,19 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         }
 
         host.Closed += ClosedHandler;
-        this.RequestClose();
+        this.RequestClose(restoreFocus);
     }
 
     /// <summary>
     ///     Closes the window first, then re-enters Revit context before invoking the callback.
     /// </summary>
-    private void ExecuteDeferredInRevitContext(Func<Task> action) {
+    private void ExecuteDeferredInRevitContext(Func<Task> action, bool restoreFocus = true) {
         if (!RevitTaskAccessor.IsConfigured) {
             throw new InvalidOperationException(
                 "RevitTaskAccessor not configured. Wire up in App.OnStartup.");
         }
 
-        this.ExecuteDeferred(() => RevitTaskAccessor.RunAsync!(action));
+        this.ExecuteDeferred(() => RevitTaskAccessor.RunAsync!(action), restoreFocus);
     }
 
     private void RequestClose(bool restoreFocus = true) {
@@ -663,13 +672,13 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
             return;
         }
 
-        Serilog.Log.Information("Palette docking: {Title}", this.TitleText.Text);
+        Serilog.Log.Information("Palette docking: {Title}", this.SwitcherTriggerText.Text);
         window.DetachContent();
         window.CloseWindow(restoreFocus: false);
 
         this.SetDockedLayout(true);
         this._host = new DockablePaneHost();
-        PaletteDock.Dock(this, this.TitleText.Text, this.FocusSearch, this._refreshItems);
+        PaletteDock.Dock(this, this.SwitcherTriggerText.Text, this.FocusSearch, this._refreshItems);
         _ = this.Dispatcher.BeginInvoke(this.FocusSearch, DispatcherPriority.Loaded);
     }
 
@@ -679,11 +688,11 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     private void Undock() {
         if (!this._isDocked) return;
 
-        Serilog.Log.Information("Palette undocking: {Title}", this.TitleText.Text);
+        Serilog.Log.Information("Palette undocking: {Title}", this.SwitcherTriggerText.Text);
         PaletteDock.Undock(this);
         this.SetDockedLayout(false);
 
-        var window = new EphemeralWindow(this, this.TitleText.Text);
+        var window = new EphemeralWindow(this, this.SwitcherTriggerText.Text);
         this.SetParentWindow(window);
         window.Show();
     }
@@ -809,6 +818,41 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         if ((modifiers & ModifierKeys.Control) != 0)
             this._isCtrlPressed = true;
 
+        // Command overlay: Ctrl+P toggles the switcher. While the overlay is open it owns
+        // Up/Down/Enter/Esc (Esc closes the overlay before it would close the palette) and
+        // swallows Left/Right so they don't leak to tab-switching or reopen the Actions list.
+        if (e.Key == Key.P && (modifiers & ModifierKeys.Control) != 0) {
+            this.ToggleSwitcher();
+            e.Handled = true;
+            return;
+        }
+
+        if (this._isOverlayOpen) {
+            switch (e.Key) {
+            case Key.Escape:
+                this.CloseOverlay();
+                e.Handled = true;
+                return;
+            case Key.Up:
+                this.MoveOverlaySelection(-1);
+                e.Handled = true;
+                return;
+            case Key.Down:
+                this.MoveOverlaySelection(1);
+                e.Handled = true;
+                return;
+            case Key.Enter:
+                if (this._overlayIndex >= 0 && this._overlayIndex < this._overlayRows.Count)
+                    this._overlayRows[this._overlayIndex].Select();
+                e.Handled = true;
+                return;
+            case Key.Left:
+            case Key.Right:
+                e.Handled = true;
+                return;
+            }
+        }
+
         // Docked: no window to handle Ctrl+/-/0 zoom, apply it here
         if (this._isDocked && this._dockZoom != null && (modifiers & ModifierKeys.Control) != 0 &&
             EphemeralWindow.ApplyZoomKey(e.Key, this._dockZoom)) {
@@ -861,11 +905,8 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
                 });
             }
         } else if (e.Key == Key.Right && selectedItem != null) {
-            e.Handled = this.ShowPopover(placementTarget => {
-                var currentBinding = this.GetCurrentActionBinding();
-                this._actionMenu?.SetActionsUntyped(currentBinding?.GetAllActionsUntyped() ?? Array.Empty<object>());
-                this._actionMenu?.ShowUntyped(placementTarget, selectedItem);
-            });
+            this.OpenActions();
+            e.Handled = true;
         }
     }
 
@@ -1075,5 +1116,274 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         viewModel.SelectedTabIndex = newIndex;
         this.UpdateTabButtonStates(newIndex);
         return true;
+    }
+
+    // ---- Command overlay (Raycast-style top takeover: palette switcher + item actions) --------
+
+    private void ToggleSwitcher() {
+        if (this._isOverlayOpen)
+            this.CloseOverlay();
+        else
+            this.OpenSwitcher();
+    }
+
+    /// <summary> Opens the overlay in switcher mode (registry palettes, Navigate/Author sections). </summary>
+    private void OpenSwitcher() {
+        if (this._isOverlayOpen || PaletteSwitcher.Provider == null) return;
+
+        this.OverlayList.Children.Clear();
+        this._overlayRows.Clear();
+        this.BuildSwitcherRows();
+        if (this._overlayRows.Count == 0) return;
+
+        this._overlayMode = OverlayMode.Switcher;
+        this.OverlayHeader.Text = "SWITCH PALETTE";
+        this.OpenOverlay();
+    }
+
+    /// <summary> Opens the overlay in actions mode (the selected item's actions). </summary>
+    private void OpenActions() {
+        if (this._isOverlayOpen) return;
+
+        this.OverlayList.Children.Clear();
+        this._overlayRows.Clear();
+        this.BuildActionRows();
+        if (this._overlayRows.Count == 0) return; // no runnable actions → nothing to show
+
+        this._overlayMode = OverlayMode.Actions;
+        this.OverlayHeader.Text = "ACTIONS";
+        this.OpenOverlay();
+    }
+
+    private void OpenOverlay() {
+        this._isOverlayOpen = true;
+        this._overlayIndex = this._overlayRows.Count > 0 ? 0 : -1;
+        this.UpdateOverlayHighlight();
+
+        // ponytail: focus stays in the search box; the overlay only intercepts Up/Down/Enter/Esc
+        // (+ swallows Left/Right) via PreviewKeyDown while open, so we don't fight WPF focus.
+        this.Overlay.Visibility = Visibility.Visible;
+
+        // Fade in + slide down from the top (matches EphemeralWindow.AnimateEntrance feel).
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+        this.Overlay.BeginAnimation(OpacityProperty,
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(120)) { EasingFunction = ease });
+        var drop = new TranslateTransform(0, -16);
+        this.OverlayPanel.RenderTransform = drop;
+        drop.BeginAnimation(TranslateTransform.YProperty,
+            new DoubleAnimation(-16, 0, TimeSpan.FromMilliseconds(170)) { EasingFunction = ease });
+    }
+
+    private void CloseOverlay() {
+        if (!this._isOverlayOpen) return;
+        this._isOverlayOpen = false;
+
+        // Reverse, faster.
+        var ease = new CubicEase { EasingMode = EasingMode.EaseIn };
+        var fade = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(100)) { EasingFunction = ease };
+        fade.Completed += (_, _) => {
+            if (!this._isOverlayOpen) this.Overlay.Visibility = Visibility.Collapsed;
+        };
+        this.Overlay.BeginAnimation(OpacityProperty, fade);
+    }
+
+    private void OverlayScrim_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e) {
+        this.CloseOverlay();
+        e.Handled = true;
+    }
+
+    /// <summary>
+    ///     Builds the switcher rows from the registry, filtered to the active document
+    ///     and grouped into Navigate / Author sections.
+    /// </summary>
+    private void BuildSwitcherRows() {
+        var provider = PaletteSwitcher.Provider;
+        if (provider == null) return;
+
+        var uidoc = RevitUiSession.CurrentUIApplication.ActiveUIDocument;
+        if (uidoc == null) return;
+
+        var entries = provider().Where(e => e.IsAvailable(uidoc)).ToList();
+        this.AddSwitcherSection("Navigate", entries.Where(e => e.Family == PaletteFamily.Navigate));
+        this.AddSwitcherSection("Author", entries.Where(e => e.Family == PaletteFamily.Author));
+    }
+
+    private void AddSwitcherSection(string header, IEnumerable<PaletteSwitcherEntry> group) {
+        var list = group.ToList();
+        if (list.Count == 0) return;
+
+        _ = this.OverlayList.Children.Add(BuildOverlayHeader(header));
+        foreach (var entry in list) {
+            var e = entry; // capture per-iteration for the closures
+            var row = this.BuildOverlayRow(entry.Icon, entry.Name, entry.Description, trailing: null,
+                enabled: true, select: () => this.SwitchToPalette(e));
+            this._overlayRows.Add((() => this.SwitchToPalette(e), row));
+            _ = this.OverlayList.Children.Add(row);
+        }
+    }
+
+    /// <summary>
+    ///     Builds the Actions rows for the selected item. Disabled actions are shown dimmed for
+    ///     discoverability but are not navigable/selectable.
+    /// </summary>
+    private void BuildActionRows() {
+        var actions = this._describeCurrentActions?.Invoke() ?? Array.Empty<OverlayAction>();
+        foreach (var action in actions) {
+            var a = action; // capture per-iteration
+            var row = this.BuildOverlayRow(icon: null, a.Name, description: null, trailing: a.Shortcut,
+                enabled: a.Enabled, select: a.Enabled ? () => this.RunOverlayAction(a) : null);
+            if (a.Enabled)
+                this._overlayRows.Add((() => this.RunOverlayAction(a), row));
+            _ = this.OverlayList.Children.Add(row);
+        }
+    }
+
+    private void RunOverlayAction(OverlayAction action) {
+        this.CloseOverlay();
+        _ = action.Execute();
+    }
+
+    private static System.Windows.Controls.TextBlock BuildOverlayHeader(string text) {
+        var tb = new System.Windows.Controls.TextBlock {
+            Text = text.ToUpperInvariant(),
+            FontSize = 10,
+            FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(8, 10, 8, 4)
+        };
+        tb.SetResourceReference(ForegroundProperty, "TextFillColorTertiaryBrush");
+        return tb;
+    }
+
+    /// <summary>
+    ///     Builds one overlay row. Shared by both modes: switcher rows carry an icon + description;
+    ///     action rows carry a right-aligned shortcut. Disabled rows dim and pass a null select.
+    /// </summary>
+    private Border BuildOverlayRow(
+        SymbolRegular? icon, string name, string? description, string? trailing, bool enabled, Action? select
+    ) {
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        if (icon.HasValue) {
+            var iconEl = new SymbolIcon {
+                Symbol = icon.Value, FontSize = 16, VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(2, 0, 10, 0)
+            };
+            iconEl.SetResourceReference(ForegroundProperty, "TextFillColorSecondaryBrush");
+            Grid.SetColumn(iconEl, 0);
+            _ = grid.Children.Add(iconEl);
+        }
+
+        var nameEl = new System.Windows.Controls.TextBlock {
+            Text = name, FontSize = 13, FontWeight = FontWeights.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = icon.HasValue ? new Thickness(0) : new Thickness(6, 0, 0, 0)
+        };
+        nameEl.SetResourceReference(ForegroundProperty,
+            enabled ? "TextFillColorPrimaryBrush" : "TextFillColorDisabledBrush");
+        Grid.SetColumn(nameEl, 1);
+        _ = grid.Children.Add(nameEl);
+
+        if (!string.IsNullOrEmpty(description)) {
+            var descEl = new System.Windows.Controls.TextBlock {
+                Text = description, FontSize = 12, VerticalAlignment = VerticalAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(12, 0, 8, 0)
+            };
+            descEl.SetResourceReference(ForegroundProperty, "TextFillColorTertiaryBrush");
+            Grid.SetColumn(descEl, 2);
+            _ = grid.Children.Add(descEl);
+        }
+
+        if (!string.IsNullOrEmpty(trailing)) {
+            var shortcutEl = new System.Windows.Controls.TextBlock {
+                Text = trailing, FontSize = 11, VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(12, 0, 2, 0)
+            };
+            shortcutEl.SetResourceReference(ForegroundProperty, "TextFillColorTertiaryBrush");
+            Grid.SetColumn(shortcutEl, 3);
+            _ = grid.Children.Add(shortcutEl);
+        }
+
+        var row = new Border {
+            Height = 34,
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(8, 0, 8, 0),
+            Background = Brushes.Transparent,
+            Cursor = select != null ? Cursors.Hand : Cursors.Arrow,
+            Child = grid
+        };
+
+        if (select != null) {
+            row.MouseEnter += (_, _) => {
+                var idx = this._overlayRows.FindIndex(r => ReferenceEquals(r.Row, row));
+                if (idx < 0) return;
+                this._overlayIndex = idx;
+                this.UpdateOverlayHighlight();
+            };
+            row.MouseLeftButtonUp += (_, _) => select();
+        }
+        return row;
+    }
+
+    private void UpdateOverlayHighlight() {
+        for (var i = 0; i < this._overlayRows.Count; i++) {
+            var row = this._overlayRows[i].Row;
+            if (i == this._overlayIndex)
+                row.SetResourceReference(BackgroundProperty, "ControlFillColorDefaultBrush");
+            else
+                row.Background = Brushes.Transparent;
+        }
+
+        if (this._overlayIndex >= 0 && this._overlayIndex < this._overlayRows.Count)
+            this._overlayRows[this._overlayIndex].Row.BringIntoView();
+    }
+
+    private void MoveOverlaySelection(int delta) {
+        var n = this._overlayRows.Count;
+        if (n == 0) return;
+        this._overlayIndex = (((this._overlayIndex + delta) % n) + n) % n;
+        this.UpdateOverlayHighlight();
+    }
+
+    private static string FormatShortcut(ModifierKeys modifiers, Key? key) {
+        var parts = new List<string>();
+        if ((modifiers & ModifierKeys.Control) != 0) parts.Add("Ctrl");
+        if ((modifiers & ModifierKeys.Shift) != 0) parts.Add("Shift");
+        if ((modifiers & ModifierKeys.Alt) != 0) parts.Add("Alt");
+        if (key.HasValue) {
+            var k = key.Value.ToString();
+            if (k == "Return") k = "Enter";
+            parts.Add(k);
+        }
+        return string.Join("+", parts);
+    }
+
+    /// <summary>
+    ///     Closes the current palette and opens the target one in place: captures the current
+    ///     window position so the new EphemeralWindow spawns over it (reads as an in-place morph),
+    ///     then launches the target through the established Revit-context deferral.
+    /// </summary>
+    private void SwitchToPalette(PaletteSwitcherEntry entry) {
+        this.CloseOverlay();
+
+        // ponytail: only the floating-window case morphs in place. Switching from the docked pane
+        // leaves NextSpawnPosition null, so the new palette spawns as a fresh centered window.
+        if (this._host is EphemeralWindow window)
+            EphemeralWindow.NextSpawnPosition = (window.Left, window.Top);
+
+        this.ExecuteDeferredInRevitContext(() => {
+            try {
+                entry.Launch(RevitUiSession.CurrentUIApplication);
+            } finally {
+                // The one-shot is normally consumed by the new EphemeralWindow ctor. If the launch
+                // took a non-window path (docked summon, gated TaskDialog, early Result.Failed) or
+                // threw, clear it here so a stale position can't leak into the next unrelated open.
+                EphemeralWindow.NextSpawnPosition = null;
+            }
+            return Task.CompletedTask;
+        }, restoreFocus: false);
     }
 }

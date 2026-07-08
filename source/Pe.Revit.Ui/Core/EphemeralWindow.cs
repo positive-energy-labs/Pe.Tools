@@ -22,6 +22,7 @@ public class EphemeralWindow : Window, IPaletteHost {
 
     private readonly Border _contentBorder;
     private readonly ScaleTransform? _zoomTransform;
+    private readonly (double Left, double Top)? _presetPosition;
     private bool _isClosing;
 
     public EphemeralWindow(Border contentBorder) {
@@ -39,6 +40,12 @@ public class EphemeralWindow : Window, IPaletteHost {
         this.Title = title;
         this.SizeToContent =
             SizeToContent.WidthAndHeight; // Size to both dimensions for independent palette/panel sizing
+
+        // One-shot: a palette switch requests the new window spawn over the old one's position
+        // (in-place morph) instead of re-centering. Consume it here so it can't leak forward.
+        this._presetPosition = NextSpawnPosition;
+        NextSpawnPosition = null;
+
         var ownerHandle = RevitUiSession.CurrentUIApplication.GetActiveWindowHandle();
         if (ownerHandle != IntPtr.Zero) {
             _ = new WindowInteropHelper(this) { Owner = ownerHandle };
@@ -46,6 +53,12 @@ public class EphemeralWindow : Window, IPaletteHost {
             // so place manually at Loaded when the real size is known.
             this.WindowStartupLocation = WindowStartupLocation.Manual;
             this.Loaded += (_, _) => this.PositionOverOwner(ownerHandle);
+        } else if (this._presetPosition is { } preset) {
+            this.WindowStartupLocation = WindowStartupLocation.Manual;
+            this.Loaded += (_, _) => {
+                this.Left = preset.Left;
+                this.Top = preset.Top;
+            };
         } else
             this.WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
@@ -97,6 +110,13 @@ public class EphemeralWindow : Window, IPaletteHost {
     ///     Adjustable at runtime with Ctrl+Plus/Minus.
     /// </summary>
     public static double ZoomLevel { get; set; } = 0.85;
+
+    /// <summary>
+    ///     One-shot spawn position (screen coords) consumed by the next EphemeralWindow constructor.
+    ///     Set by a palette switch so the replacement window opens over the old one instead of
+    ///     re-centering. Cleared as soon as it is read.
+    /// </summary>
+    public static (double Left, double Top)? NextSpawnPosition { get; set; }
 
     /// <summary>
     ///     Gets the UserControl content hosted by this window (typically a Palette).
@@ -158,6 +178,13 @@ public class EphemeralWindow : Window, IPaletteHost {
     ///     from the owner's top edge (launcher-style placement).
     /// </summary>
     private void PositionOverOwner(IntPtr ownerHandle) {
+        // Preset spawn (palette switch) wins over owner-centering.
+        if (this._presetPosition is { } preset) {
+            this.Left = preset.Left;
+            this.Top = preset.Top;
+            return;
+        }
+
         if (!GetWindowRect(ownerHandle, out var rect)) return;
 
         // ponytail: uses this window's DPI transform for the owner rect; close enough
@@ -173,13 +200,16 @@ public class EphemeralWindow : Window, IPaletteHost {
 
     private void AnimateEntrance() {
         var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-        var rise = new TranslateTransform(0, 10);
+        // Preset spawn = in-place morph: keep the fade, drop the rise so it reads as a swap.
+        var riseFrom = this._presetPosition is null ? 10d : 0d;
+        var rise = new TranslateTransform(0, riseFrom);
         this._contentBorder.RenderTransform = rise;
 
         this._contentBorder.BeginAnimation(OpacityProperty,
             new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(120)) { EasingFunction = ease });
-        rise.BeginAnimation(TranslateTransform.YProperty,
-            new DoubleAnimation(10, 0, TimeSpan.FromMilliseconds(150)) { EasingFunction = ease });
+        if (riseFrom != 0d)
+            rise.BeginAnimation(TranslateTransform.YProperty,
+                new DoubleAnimation(riseFrom, 0, TimeSpan.FromMilliseconds(150)) { EasingFunction = ease });
     }
 
     /// <summary> IPaletteHost: close maps to the ephemeral close flow. </summary>
