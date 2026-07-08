@@ -11,7 +11,7 @@
     "start": "vp exec jiti src/index.ts",
     "dev": "vp exec jiti --watch src/index.ts",
     "build": "vp pack",
-    "build:payload": "vp pack && pnpm --filter @pe/web build && node scripts/stage-web.mjs",
+    "build:payload": "vp pack && node scripts/stage-native-sidecars.mjs && pnpm --filter @pe/web build && node scripts/stage-web.mjs",
     "test": "vp test",
     "check": "vp check"
   },
