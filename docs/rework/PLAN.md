@@ -16,9 +16,12 @@ inventory and statuses live in [SDK-LEDGER.md](SDK-LEDGER.md). Prior-spike histo
 - **D4 Mastra init failure = degrade + observable.** Host stays up, `/pe/*` 503s, the init error is
   persisted to state and surfaced on `/host/status`. Never fail-fast, never invisible.
 - **D5 pea resolves to the install on user machines.** Owner: "For pea on users computers, this
-  should resolve to the install!!!!!" — supersedes the prior spike's "TUI deprioritized/deletable".
-  peco stays dev-only; owner: "*peco is not a user installed product* so the path shim here is not
-  much of a shim, I'd just like a condoned way to add things to my PATH *safely*."
+  should resolve to the install!!!!!" Clarified 2026-07-08: the prior spike's "TUI deletable" was
+  misrecorded — "that decision was that a *custom tui* was deletable" (the OpenTUI/beta-tui effort;
+  "web supersedes; if we have to make something custom for better lay-user UX, then web is better").
+  "Bare pea should always launch the MastraTUI." So installed `pea` = the real pea CLI (MastraTUI by
+  default). peco stays dev-only; owner: "*peco is not a user installed product* so the path shim here
+  is not much of a shim, I'd just like a condoned way to add things to my PATH *safely*."
 - **D6 The SDK owns safe PATH registration.** One idempotent User-scope PATH entry for the shims dir
   (`pe-revit path ensure|remove|status`; REG_EXPAND_SZ-preserving, no clobber, WM_SETTINGCHANGE).
   Consumers never hand-edit PATH; Pe.Tools' link-dev PATH prepend is deleted.
