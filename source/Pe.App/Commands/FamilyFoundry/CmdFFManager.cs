@@ -28,8 +28,11 @@ public class CmdFFManager : IExternalCommand {
         ExternalCommandData commandData,
         ref string message,
         ElementSet elementSetf
-    ) {
-        var uiDoc = commandData.Application.ActiveUIDocument;
+    ) => this.Run(commandData.Application);
+
+    /// <summary> Opens the FF Manager palette. Shared by the ribbon command and the switcher. </summary>
+    internal Result Run(UIApplication uiapp) {
+        var uiDoc = uiapp.ActiveUIDocument;
         var doc = uiDoc.Document;
 
         try {
