@@ -21,7 +21,7 @@
     {
       "type": "VersionedAddin",
       "name": "Pe.App",
-      "source": "stage:revit-addins/Pe.App",
+      "source": ".artifacts/publish/installer/revit",
       "entry": "Pe.App.AppCore"
     },
     {

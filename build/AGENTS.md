@@ -34,7 +34,12 @@ See `../BUILD.md` for the complete build/runtime decision table. This executable
 - `Pe.Revit.Versioning` owns Revit suffixes and Design Automation eligibility outside MSBuild.
 - `Pe.Shared.Product` owns durable product identity and local runtime/user layout; `ProductLayoutAuthority` owns repo/build/install projection from that product truth.
 - `BuildArtifactLayout` owns `.artifacts/...` path math. Do not recreate `.artifacts`, `packages`, `publish`, `staging`, or installer output roots in modules.
-- `CreateInstallerModule` emits the SDK `product.payloads.json` shape and delegates MSI authoring to `pe-revit msi`.
+- `CreateInstallerModule` builds product-specific host/Pea/Revit sources. The checked
+  `product.payloads.json` goes unchanged to SDK `pe-revit install package` and `pe-revit msi`; do not
+  restore product-owned manifest rewriting or zip composition.
+- `CreateAutomationBundleModule` selects the worker/year matrix and delegates each engine artifact to
+  SDK `PeCreateAppBundle`; do not restore `Autodesk.PackageBuilder`, manual `.addin`/bundle XML, or zip
+  composition here.
 - `./build` owns the isolated build mode and writes to `.artifacts/...` through `ProductLayoutAuthority` / `BuildArtifactLayout`.
 - The default Revit target remains `Debug.R25`.
 - `--configuration <BuildType>` narrows packaging to one selected configuration such as `Release.R25`.

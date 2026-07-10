@@ -19,35 +19,12 @@ public sealed record ProductLayoutAuthority(
     public string GetRevitPublishDirectory(string configuration) =>
         Path.Combine(this.Artifacts.PublishRoot, "revit", configuration);
 
-    public string GetHostPublishDirectory(string configuration) =>
-        Path.Combine(
-            this.Artifacts.PublishRoot,
-            "host",
-            configuration,
-            ProductPathNames.BinDirectoryName,
-            HostProcessIdentity.DirectoryName
-        );
-
-    public string GetPeaPublishDirectory(string configuration) =>
-        Path.Combine(
-            this.Artifacts.PublishRoot,
-            "pea",
-            configuration,
-            ProductPathNames.BinDirectoryName,
-            PeaCliIdentity.DirectoryName
-        );
-
-    public string GetAutomationStagingDirectory(string configuration, string bundleName) =>
-        Path.Combine(this.Artifacts.AutomationStagingRoot, configuration, $"{bundleName}.bundle");
-
     public string GetSdkInstallerRevitPayloadRoot() =>
         Path.Combine(this.Artifacts.PublishRoot, "installer", "revit");
 
-    public string GetSdkInstallerPayloadManifestPath(string version) =>
-        Path.Combine(
-            this.Artifacts.InstallerPackagesRoot,
-            $"{ProductIdentity.ProductName}.sdk-payloads.{SanitizeFileNameSegment(version)}.json"
-        );
+    public string GetInstallPackagePath(string version) =>
+        Path.Combine(this.Artifacts.InstallerPackagesRoot,
+            $"{ProductIdentity.ProductName}.{SanitizeFileNameSegment(version)}.install.zip");
 
     public string GetSdkInstallerOutputRoot() =>
         Path.Combine(this.Artifacts.ArtifactsRoot, "out", "installers");

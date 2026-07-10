@@ -3,6 +3,8 @@
     <PropertyGroup>
         <PeProjectKind>AutomationWorker</PeProjectKind>
         <PeRevitYears>2024;2025;2026</PeRevitYears>
+        <PeAutomationEntryClass>Pe.Dev.RevitAutomation.Worker.RevitAutomationShellApp</PeAutomationEntryClass>
+        <PeAutomationAddInId>11A07E95-68DE-4E58-A699-59B27F9600D2</PeAutomationAddInId>
     </PropertyGroup>
     <PropertyGroup>
         <LangVersion>latest</LangVersion>
