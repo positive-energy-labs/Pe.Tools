@@ -30,7 +30,22 @@ internal static class Router
         if (occ[gi, gj] == 2) { r.Fail = $"goal ({gx:F1},{gy:F1}) sits inside an obstacle (padded)"; return r; }
 
         int[] di = { 1, -1, 0, 0 }, dj = { 0, 0, 1, -1 };
-        var open = new PriorityQueue<(int i, int j, int d), double>();
+        var open = new SortedDictionary<double, Queue<(int i, int j, int d)>>();
+        void Enqueue((int i, int j, int d) state, double priority)
+        {
+            if (!open.TryGetValue(priority, out var bucket))
+                open[priority] = bucket = new Queue<(int, int, int)>();
+            bucket.Enqueue(state);
+        }
+        bool TryDequeue(out (int i, int j, int d) state, out double priority)
+        {
+            if (open.Count == 0) { state = default; priority = default; return false; }
+            var first = open.First();
+            priority = first.Key;
+            state = first.Value.Dequeue();
+            if (first.Value.Count == 0) open.Remove(first.Key);
+            return true;
+        }
         var gScore = new Dictionary<(int, int, int), double>();
         var parent = new Dictionary<(int, int, int), (int, int, int)>();
         double H(int i, int j) => (Math.Abs(gi - i) + Math.Abs(gj - j)) * cell;
@@ -45,14 +60,14 @@ internal static class Router
             var fs = (fi, fj, forceDir);
             gScore[fs] = cell;
             parent[fs] = start;
-            open.Enqueue(fs, cell + H(fi, fj));
+            Enqueue(fs, cell + H(fi, fj));
         }
         else
-            open.Enqueue(start, H(si, sj));
+            Enqueue(start, H(si, sj));
         (int, int, int) goalState = default; bool found = false;
         int expansions = 0;
 
-        while (open.TryDequeue(out var cur, out var pri))
+        while (TryDequeue(out var cur, out var pri))
         {
             var (ci, cj, cd) = cur;
             if (++expansions > 500000) { r.Fail = "search budget exceeded (500k expansions) — shrink region or coarsen gridFt"; return r; }
@@ -73,7 +88,7 @@ internal static class Router
                 if (gScore.TryGetValue(ns, out var old) && old <= ng + 1e-9) continue;
                 gScore[ns] = ng;
                 parent[ns] = cur;
-                open.Enqueue(ns, ng + H(ni, nj));
+                Enqueue(ns, ng + H(ni, nj));
             }
         }
         if (!found)

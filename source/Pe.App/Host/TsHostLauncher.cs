@@ -1,10 +1,10 @@
+using Newtonsoft.Json.Linq;
 using Pe.Revit.Loader;
 using Pe.Shared.Product;
 using Pe.Shared.HostContracts;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
-using System.Text.Json;
 
 namespace Pe.App.Host;
 
@@ -177,8 +177,7 @@ internal static class TsHostLauncher {
                 return null;
 
             var responseText = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-            using var document = JsonDocument.Parse(responseText);
-            var root = document.RootElement;
+            var root = JObject.Parse(responseText);
             return new RunningTsHostStatus(
                 TryGetString(root, "lane"),
                 TryGetString(root, "executablePath"),
@@ -222,17 +221,15 @@ internal static class TsHostLauncher {
         }
     }
 
-    private static string? TryGetString(JsonElement element, string propertyName) =>
-        element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.String
-            ? property.GetString()
+    private static string? TryGetString(JObject element, string propertyName) =>
+        element.TryGetValue(propertyName, out var property) && property.Type == JTokenType.String
+            ? property.Value<string>()
             : null;
 
-    private static int? TryGetInt(JsonElement element, string propertyName) {
-        if (!element.TryGetProperty(propertyName, out var property))
+    private static int? TryGetInt(JObject element, string propertyName) {
+        if (!element.TryGetValue(propertyName, out var property) || property.Type != JTokenType.Integer)
             return null;
-        if (property.ValueKind == JsonValueKind.Number && property.TryGetInt32(out var value))
-            return value;
-        return null;
+        return property.Value<int?>();
     }
 
     private sealed record RunningTsHostStatus(

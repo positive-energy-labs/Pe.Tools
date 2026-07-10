@@ -1,10 +1,10 @@
+using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 using Pe.Shared.StorageRuntime;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.ExceptionServices;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace Pe.App.Benchmarks;
 
@@ -249,10 +249,10 @@ internal sealed record PracticalBenchmarkRunResult(
 }
 
 internal static class BenchmarkArtifactWriter {
-    private static readonly JsonSerializerOptions JsonOptions = new() {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        WriteIndented = true
+    private static readonly JsonSerializerSettings JsonOptions = new() {
+        ContractResolver = new CamelCasePropertyNamesContractResolver(),
+        NullValueHandling = NullValueHandling.Ignore,
+        Formatting = Formatting.Indented
     };
 
     public static void WriteReadme(OutputStorage taskOutput) {
@@ -405,5 +405,5 @@ internal static class BenchmarkArtifactWriter {
     }
 
     private static void WriteJson<T>(string path, T value) =>
-        File.WriteAllText(path, JsonSerializer.Serialize(value, JsonOptions) + Environment.NewLine);
+        File.WriteAllText(path, JsonConvert.SerializeObject(value, JsonOptions) + Environment.NewLine);
 }

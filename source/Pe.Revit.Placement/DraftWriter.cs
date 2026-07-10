@@ -85,7 +85,10 @@ internal static class Draft
 
         // elbow-connect consecutive pieces (ConvertDuctPlaceholders then emits the elbow fittings)
         int elbowOk = 0, elbowTry = 0;
-        foreach (var (key, chain) in chains)
+        foreach (var pair in chains)
+        {
+            var key = pair.Key;
+            var chain = pair.Value;
             for (int i = 0; i + 1 < chain.Count; i++)
             {
                 double gap = chain[i].b.DistanceTo(chain[i + 1].a);
@@ -98,6 +101,7 @@ internal static class Draft
                 try { if (MechanicalUtils.ConnectDuctPlaceholdersAtElbow(doc, chain[i].ph.Id, chain[i + 1].ph.Id)) elbowOk++; }
                 catch (Exception ex) { log.Add($"  elbow-connect {key}#{i}->{i + 1} failed: {Short(ex)}"); }
             }
+        }
         doc.Regenerate();
         log.Add($"JOINTS: {elbowOk}/{elbowTry} placeholder elbows connected");
 
