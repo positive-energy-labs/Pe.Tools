@@ -362,7 +362,7 @@ function messagePart(content: WireMessageContent): WorkbenchMessagePart[] {
 
 /** Normalize a provider image part to a render-ready URL: pass through data:/http/blob, else
  * wrap raw base64 in a data URL. */
-function imageSource(
+export function imageSource(
   direct: string | undefined,
   data: string | undefined,
   mime: string | undefined,
@@ -504,11 +504,20 @@ function requestApproval(state: WorkbenchState, input: PendingApprovalInput): Wo
     },
     options: DEFAULT_APPROVAL_OPTIONS,
   };
-  const index = state.approvals.requests.findIndex((item) => item.requestId === request.requestId);
+  // The server's approval gate is single-slot and sequential: it arms the NEXT tool only after the
+  // current one resolves. So any OTHER request still "pending" here is stale — its gate is already
+  // gone, and approving it would silently no-op server-side. Supersede it so the one rendered card is
+  // always the live gate.
+  const superseded = state.approvals.requests.map((item) =>
+    item.requestId !== request.requestId && item.status === "pending"
+      ? { ...item, status: "canceled" as const }
+      : item,
+  );
+  const index = superseded.findIndex((item) => item.requestId === request.requestId);
   const requests =
     index < 0
-      ? [...state.approvals.requests, request]
-      : state.approvals.requests.map((item, position) => (position === index ? request : item));
+      ? [...superseded, request]
+      : superseded.map((item, position) => (position === index ? request : item));
   return {
     ...state,
     approvals: { requests },

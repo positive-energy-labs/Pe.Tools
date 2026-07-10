@@ -1,4 +1,4 @@
-import type { AgentControllerRequestContext } from "@mastra/core/agent-controller";
+import type { AgentControllerRequestContext, ToolCategory } from "@mastra/core/agent-controller";
 import type { RuntimeAccessLevel } from "../runtime.ts";
 import {
   resolveRuntimeToolMetadata,
@@ -50,6 +50,41 @@ export function assertRuntimeToolAccess(options: {
 }
 
 const readOnlyToolKinds = new Set<RuntimeToolKind>(["read", "search", "fetch", "think"]);
+
+/** Pe tool `kind` → mastra permission {@link ToolCategory}. Read-only kinds collapse to "read" so
+ * the "ask" access level auto-allows them; mutating kinds keep their own category (→ "ask"). */
+const toolKindToCategory: Record<RuntimeToolKind, ToolCategory> = {
+  read: "read",
+  search: "read",
+  fetch: "read",
+  think: "read",
+  edit: "edit",
+  delete: "edit",
+  execute: "execute",
+  other: "other",
+};
+
+// ponytail: workspace builtins (mastra_workspace_*) ship without Pe catalog metadata; match the
+// read-only ones by suffix so "ask" doesn't gate a plain list/read/grep. Anything unmatched returns
+// null → mastra falls back to "ask" (the safe default).
+const readOnlyWorkspaceToolPattern = /(read_file|list_files|file_stat|grep|glob|find_files)$/;
+
+/**
+ * Map a tool name to its mastra permission category from the runtime catalog `kind`, falling back
+ * to a name match for uncatalogued workspace read builtins. Wired into the AgentController as
+ * `toolCategoryResolver`; paired with a `permissionRules.categories.read = "allow"` seed this is what
+ * lets the "ask" access level gate only state-changing tools instead of every tool.
+ */
+export function createRuntimeToolCategoryResolver(
+  toolCatalog: RuntimeToolSource | undefined,
+): (toolName: string) => ToolCategory | null {
+  return (toolName) => {
+    const kind = resolveRuntimeToolMetadata(toolCatalog, toolName)?.kind;
+    if (kind) return toolKindToCategory[kind];
+    if (readOnlyWorkspaceToolPattern.test(toolName)) return "read";
+    return null;
+  };
+}
 
 type RuntimeToolInput = RuntimeToolsInput[string];
 

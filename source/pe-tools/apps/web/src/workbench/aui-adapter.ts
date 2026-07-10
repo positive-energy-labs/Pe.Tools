@@ -41,12 +41,33 @@ export function workbenchToThreadMessages(state: WorkbenchState): ThreadMessageL
     else toolsByParent.set(parent, [call]);
   }
 
+  const callById = new Map(state.tools.calls.map((call) => [call.id, call]));
+
   const projected = chat.map((message): ThreadMessageLike => {
     if (message.role === "user") {
       return { role: "user", id: message.id, content: textContent(message), ...createdAt(message) };
     }
-    const content: LikePart[] = [...textContent(message)];
+    // Walk parts in order so tool calls land where the model emitted them (a tool_call_ref part
+    // marks the spot) instead of all sinking below the text. Falls back to append-at-end for tools
+    // with no ref part yet (a live tool_start before its content lands in the message).
+    const content: LikePart[] = [];
+    const emitted = new Set<string>();
+    for (const part of message.parts) {
+      if (part.kind === "tool_call_ref" || part.kind === "tool_result_ref") {
+        const call = callById.get(part.toolCallId);
+        if (!call || emitted.has(call.id)) continue;
+        emitted.add(call.id);
+        content.push(toolCallPart(call, findApproval(state.approvals.requests, call.id)));
+      } else if (part.kind === "text") {
+        content.push({ type: "text", text: part.text ?? "" });
+      } else if (part.kind === "reasoning" || part.kind === "thought") {
+        content.push({ type: "reasoning", text: part.text ?? "" });
+      } else if (part.kind === "image") {
+        content.push({ type: "image", image: part.url });
+      }
+    }
     for (const call of toolsByParent.get(message.id) ?? []) {
+      if (emitted.has(call.id)) continue;
       content.push(toolCallPart(call, findApproval(state.approvals.requests, call.id)));
     }
     return {

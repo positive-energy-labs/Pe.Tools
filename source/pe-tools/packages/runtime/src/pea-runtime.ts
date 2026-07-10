@@ -25,6 +25,7 @@ import {
 import { createPeaCloudGatewayRuntimeAuthProfile } from "./auth/profiles.ts";
 import type { RuntimeAuthProfile } from "./auth/types.ts";
 import { createRuntimeController } from "./controller/create-runtime-controller.ts";
+import { createRuntimeToolCategoryResolver } from "./tools/access-policy.ts";
 import { createRuntimeMemoryOptions, createRuntimeMemoryProfile } from "./memory/profiles.ts";
 import { resolveRuntimeModel } from "./models/resolve.ts";
 import type { RuntimeCreateRequest, RuntimeHandle, RuntimeHandleServices } from "./runtime.ts";
@@ -118,6 +119,10 @@ export async function createPeaRuntime(
       ],
       gateways: defaultGateways,
       tools: peaProductTools,
+      // Read-only tools (kind read/search/fetch/think + workspace read builtins) resolve to the
+      // "read" category; seeding it "allow" makes the "ask" access level gate only state-changing
+      // tools. Without this, mastra's approval gate falls back to "ask" for EVERY tool under yolo:false.
+      toolCategoryResolver: createRuntimeToolCategoryResolver(peaRuntimeToolProfile.catalog),
       initialState: {
         currentModelId: options.modelId ?? defaultPeaAgentModelId,
         projectPath: workspaceRoot,
@@ -125,6 +130,7 @@ export async function createPeaRuntime(
         configDir: ".pea",
         bundledSkillCount: bundledPeaSkills.length,
         yolo: true,
+        permissionRules: { categories: { read: "allow" }, tools: {} },
       },
     },
     auth,

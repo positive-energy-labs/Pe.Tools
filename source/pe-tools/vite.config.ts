@@ -9,6 +9,8 @@ export default defineConfig({
       "**/.artifacts/**",
       // tsr owns this file's shape and its dev watcher instantly reverts any reformat
       "**/routeTree.gen.ts",
+      // host-typegen owns this checked-in contract artifact; codegen:check compares exact bytes
+      "**/host-ops.generated.ts",
     ],
   },
   lint: {
