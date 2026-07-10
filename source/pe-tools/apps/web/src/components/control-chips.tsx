@@ -1,13 +1,14 @@
-import { ChevronDown } from "lucide-react";
 import { Button } from "#/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "#/components/ui/dropdown-menu";
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxTrigger,
+  useComboboxAnchor,
+} from "#/components/ui/combobox";
 import { useWorkbench } from "#/workbench/provider";
 import type { WorkbenchAccessLevel } from "@pe/agent-contracts";
 
@@ -36,6 +37,7 @@ export function ControlChips() {
         title="Model"
         label={modelLabel}
         activeId={models.currentModelId}
+        searchable
         options={models.availableModels.map((item) => ({
           id: item.id,
           name: item.displayName ?? item.id,
@@ -64,12 +66,14 @@ function Picker({
   activeId,
   options,
   onPick,
+  searchable = false,
 }: {
   title: string;
   label: string;
   activeId?: string;
   options: PickerOption[];
   onPick: (id: string) => void;
+  searchable?: boolean;
 }) {
   if (options.length === 0)
     return (
@@ -77,32 +81,41 @@ function Picker({
         {label}
       </span>
     );
+  const selected = options.find((option) => option.id === activeId) ?? null;
+  const anchorRef = useComboboxAnchor();
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        title={title}
-        render={<Button variant="outline" size="sm" className="text-muted-foreground" />}
-      >
-        {label}
-        <ChevronDown className="opacity-60" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="max-w-80 min-w-52">
-        <DropdownMenuRadioGroup value={activeId ?? ""} onValueChange={onPick}>
-          <DropdownMenuLabel>{title}</DropdownMenuLabel>
-          {options.map((option) => (
-            <DropdownMenuRadioItem
-              key={option.id}
-              value={option.id}
-              className="flex-col items-start"
-            >
+    <Combobox
+      items={options}
+      value={selected}
+      onValueChange={(option: PickerOption | null) => option && onPick(option.id)}
+      itemToStringLabel={(option: PickerOption) => option.name}
+    >
+      {/* ponytail: explicit anchor on the trigger — the in-popup search input can't be the
+          positioner anchor or it feedback-loops (roaming/jittering popup). */}
+      <div ref={anchorRef} className="inline-flex">
+        <ComboboxTrigger
+          title={title}
+          render={
+            <Button variant="outline" size="sm" className="w-40 justify-between text-muted-foreground" />
+          }
+        >
+          <span className="truncate">{label}</span>
+        </ComboboxTrigger>
+      </div>
+      <ComboboxContent align="end" anchor={anchorRef} className="min-w-56">
+        {searchable ? <ComboboxInput placeholder={`Search ${title.toLowerCase()}…`} /> : null}
+        <ComboboxEmpty>No matches</ComboboxEmpty>
+        <ComboboxList>
+          {(option: PickerOption) => (
+            <ComboboxItem key={option.id} value={option} className="flex-col items-start pr-7">
               <span className="text-foreground">{option.name}</span>
               {option.hint ? (
                 <span className="text-xs text-muted-foreground">{option.hint}</span>
               ) : null}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+            </ComboboxItem>
+          )}
+        </ComboboxList>
+      </ComboboxContent>
+    </Combobox>
   );
 }

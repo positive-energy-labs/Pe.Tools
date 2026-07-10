@@ -50,6 +50,18 @@ test("tool_start → tool_end yields a completed tool call carrying raw I/O", ()
   expect(state.tools.recentToolCallIds).toEqual(["t1"]);
 });
 
+test("a second approval supersedes the first still-pending one (single-slot server gate)", () => {
+  const state = reduce([
+    { type: "agent_start" },
+    { type: "tool_approval_required", toolCallId: "a", toolName: "request_access", args: {} },
+    { type: "tool_approval_required", toolCallId: "b", toolName: "write_file", args: {} },
+  ]);
+  const byId = (id: string) =>
+    state.approvals.requests.find((r) => r.requestId === `tool-approval:${id}`);
+  expect(byId("a")?.status).toBe("canceled");
+  expect(byId("b")?.status).toBe("pending");
+});
+
 test("tool_approval_required gates the run; tool_end clears it", () => {
   const pending = reduce([
     { type: "agent_start" },

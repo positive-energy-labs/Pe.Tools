@@ -9,6 +9,7 @@ import { modeDepth, type Mode } from "./depth";
 import { Moments, useThreadMessages } from "./aui";
 import { useCacheView, WorldLane } from "./world";
 import { useToolIo } from "./tool-io";
+import { imageSource } from "./adapter";
 import {
   lensScrollIntent,
   nextTailFollowState,
@@ -664,14 +665,42 @@ function ToolCellBody({ call }: { call: WorkbenchToolCall }) {
   const input = io?.rawInput ?? call.rawInput;
   const output = io?.rawOutput ?? call.rawOutput ?? call.content;
   const error = io?.error ?? call.error;
+  const images = toolImages(output);
   return (
     <>
       <div className="h">{call.title}</div>
       {input !== undefined ? <pre>{stringify(input)}</pre> : null}
-      {output !== undefined ? <pre>{stringify(output)}</pre> : null}
+      {images.length > 0 ? (
+        images.map((src, index) => <img key={index} className="tool-img" src={src} alt="" />)
+      ) : output !== undefined ? (
+        <pre>{stringify(output)}</pre>
+      ) : null}
       {error ? <pre>{error}</pre> : null}
     </>
   );
+}
+
+/**
+ * Render-ready image URLs found in a tool output — no per-tool special-casing. A tool renders
+ * inline (instead of dumping base64 into a <pre>) if its output carries image bytes in any of the
+ * shapes the model itself gets: a `{ data, mediaType }` result, a media/image content part, or a
+ * data: URL. Same normalizer as chat message parts, so the contract is one place. Shallow by design
+ * (result object OR its content array) — that's the only shape tools emit; deep-scanning arbitrary
+ * output risks walking huge base64 strings for nothing.
+ */
+function toolImages(output: unknown): string[] {
+  const parts = Array.isArray(output) ? output : [output];
+  return parts.flatMap((part) => {
+    if (typeof part === "string") return part.startsWith("data:image/") ? [part] : [];
+    if (part === null || typeof part !== "object") return [];
+    const record = part as Record<string, unknown>;
+    const mime = (record.mediaType ?? record.mimeType) as string | undefined;
+    if (mime && !mime.startsWith("image/")) return [];
+    const direct = (record.image ?? record.url) as string | undefined;
+    const data = typeof record.data === "string" ? record.data : undefined;
+    const url = imageSource(direct, data, mime);
+    return url && (mime?.startsWith("image/") || url.startsWith("data:image/")) ? [url] : [];
+  });
 }
 
 /**

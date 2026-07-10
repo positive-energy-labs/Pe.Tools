@@ -59,7 +59,8 @@ function seaRequireShimSource(spec: string): string {
     exportsObject !== null &&
     exportsObject[Symbol.toStringTag] === "Module";
   const names = Object.keys(exportsObject).filter(
-    (name) => name !== "default" && name !== "__esModule" && /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name),
+    (name) =>
+      name !== "default" && name !== "__esModule" && /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name),
   );
   return [
     `import { createRequire } from "node:module";`,

@@ -36,10 +36,28 @@ function formatInitError(error: unknown): string {
   const parts: string[] = [];
   let current: unknown = error;
   for (let depth = 0; current != null && depth < 5; depth++) {
-    parts.push(current instanceof Error ? (current.stack ?? current.message) : String(current));
+    parts.push(
+      current instanceof Error ? (current.stack ?? current.message) : formatCause(current),
+    );
     current = current instanceof Error ? current.cause : null;
   }
   return parts.join("\ncaused by: ");
+}
+
+function formatCause(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    typeof value === "bigint" ||
+    typeof value === "symbol"
+  )
+    return String(value);
+  try {
+    return JSON.stringify(value) ?? Object.prototype.toString.call(value);
+  } catch {
+    return Object.prototype.toString.call(value);
+  }
 }
 
 const persistMastraInitError = (detail: string) =>
@@ -47,7 +65,11 @@ const persistMastraInitError = (detail: string) =>
     try {
       const logPath = mastraInitErrorLogPath();
       await mkdir(dirname(logPath), { recursive: true });
-      await writeFile(logPath, `${new Date().toISOString()} Mastra runtime failed to start\n${detail}\n`, "utf8");
+      await writeFile(
+        logPath,
+        `${new Date().toISOString()} Mastra runtime failed to start\n${detail}\n`,
+        "utf8",
+      );
     } catch {
       /* best-effort: observability must not change the degrade-to-503 behavior */
     }

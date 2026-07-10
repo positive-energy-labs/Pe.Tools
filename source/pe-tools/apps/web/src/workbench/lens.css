@@ -381,6 +381,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.lens-cell .tool-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-top: 0.5px solid var(--line);
+}
 .lens-cell pre {
   margin: 0;
   padding: 5px 8px;
