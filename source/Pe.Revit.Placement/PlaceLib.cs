@@ -1,4 +1,6 @@
-using System.Text.Json;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Serialization;
 
 namespace Pe.Revit.Placement;
 
@@ -13,11 +15,10 @@ internal static class TK
     // obstacle index treats them as ordinary existing ducts (it only excludes the live Marker).
     public const string DoneMarker = "PEA-TK-DONE";
 
-    public static readonly JsonSerializerOptions Json = new JsonSerializerOptions
+    public static readonly JsonSerializerSettings Json = new JsonSerializerSettings
     {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
+        Formatting = Formatting.Indented,
+        ContractResolver = new CamelCasePropertyNamesContractResolver(),
     };
 
     // ---------- marker element handling (parameter filter: any category) ----------
@@ -81,13 +82,11 @@ internal static class TK
     {
         if (string.IsNullOrWhiteSpace(json))
             throw new InvalidOperationException("intent JSON is empty. Pass an intent JSON string (schema: see INTENT.md).");
-        var opts = new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
-        JsonDocument jd;
-        try { jd = JsonDocument.Parse(json, opts); }
-        catch (JsonException ex) { throw new InvalidOperationException($"intent JSON is not valid JSON: {ex.Message}"); }
-        using (jd)
+        JObject jd;
+        try { jd = JObject.Parse(json); }
+        catch (JsonReaderException ex) { throw new InvalidOperationException($"intent JSON is not valid JSON: {ex.Message}"); }
         {
-            var root = jd.RootElement;
+            var root = jd;
             var it = new Intent();
             WarnUnknown(it, root, "intent", "name", "level", "system", "trunk", "branches", "constraints");
 
@@ -107,7 +106,7 @@ internal static class TK
 
             it.System = ResolveSystem(doc, Str(root, "system") ?? "Supply Air");
 
-            if (!root.TryGetProperty("trunk", out var tr) || tr.ValueKind != JsonValueKind.Object)
+            if (!root.TryGetValue("trunk", out var trunkToken) || trunkToken is not JObject tr)
                 throw new InvalidOperationException("intent.trunk missing. Need: { ductType, size, elevationFt, from:[x,y], to:[x,y] }");
             WarnUnknown(it, tr, "trunk", "ductType", "size", "elevationFt", "from", "to");
             it.TrunkType = ResolveDuctType(doc, Str(tr, "ductType") ?? "Rectangular Duct: Mitered Elbows / Taps");
@@ -117,7 +116,7 @@ internal static class TK
             var f = ResolvePoint(doc, tr, "from"); it.FromX = f.Item1; it.FromY = f.Item2; it.FromElementId = f.Item3;
             var t2 = ResolvePoint(doc, tr, "to"); it.ToX = t2.Item1; it.ToY = t2.Item2; it.ToElementId = t2.Item3;
 
-            if (root.TryGetProperty("branches", out var br) && br.ValueKind == JsonValueKind.Object)
+            if (root.TryGetValue("branches", out var branchesToken) && branchesToken is JObject br)
             {
                 WarnUnknown(it, br, "branches", "ductType", "sizeIn", "elevationFt", "stubFt", "terminals", "connect");
                 it.BranchType = ResolveDuctType(doc, Str(br, "ductType") ?? "Round Duct: Taps");
@@ -125,20 +124,20 @@ internal static class TK
                 it.BranchElevFt = Num(br, "elevationFt") ?? double.NaN;
                 it.StubFt = Num(br, "stubFt") ?? 1.5;
                 it.Connect = Bool(br, "connect") ?? true;
-                if (br.TryGetProperty("terminals", out var terms) && terms.ValueKind == JsonValueKind.Array)
-                    foreach (var tv in terms.EnumerateArray()) it.Terminals.Add(tv.GetInt64());
+                if (br.TryGetValue("terminals", out var terminalsToken) && terminalsToken is JArray terms)
+                    foreach (var value in terms) it.Terminals.Add(value.Value<long>());
             }
             else it.BranchType = ResolveDuctType(doc, "Round Duct: Taps");
 
-            if (root.TryGetProperty("constraints", out var cs) && cs.ValueKind == JsonValueKind.Object)
+            if (root.TryGetValue("constraints", out var constraintsToken) && constraintsToken is JObject cs)
             {
                 WarnUnknown(it, cs, "constraints", "avoid", "clearanceIn", "maxBends", "gridFt", "keepOut");
-                if (cs.TryGetProperty("avoid", out var av) && av.ValueKind == JsonValueKind.Array)
+                if (cs.TryGetValue("avoid", out var avoidToken) && avoidToken is JArray av)
                 {
                     it.Avoid.Clear();
-                    foreach (var a in av.EnumerateArray())
+                    foreach (var value in av)
                     {
-                        var g = a.GetString() ?? "";
+                        var g = value.Value<string>() ?? "";
                         if (!Intent.KnownGroups.Contains(g, StringComparer.OrdinalIgnoreCase))
                             it.Warnings.Add($"constraints.avoid: unknown group '{g}' ignored (valid: {string.Join(",", Intent.KnownGroups)})");
                         else it.Avoid.Add(g.ToLowerInvariant());
@@ -147,11 +146,12 @@ internal static class TK
                 it.ClearanceFt = (Num(cs, "clearanceIn") ?? 2.0) / 12.0;
                 it.MaxBends = (int)(Num(cs, "maxBends") ?? 8);
                 it.GridFt = Num(cs, "gridFt") ?? 0.5;
-                if (cs.TryGetProperty("keepOut", out var ko) && ko.ValueKind == JsonValueKind.Array)
-                    foreach (var k in ko.EnumerateArray())
+                if (cs.TryGetValue("keepOut", out var keepOutToken) && keepOutToken is JArray ko)
+                    foreach (var value in ko)
                     {
-                        var mn = k.GetProperty("min"); var mx = k.GetProperty("max");
-                        it.KeepOut.Add(new double[] { mn[0].GetDouble(), mn[1].GetDouble(), mx[0].GetDouble(), mx[1].GetDouble() });
+                        var k = (JObject)value;
+                        var mn = (JArray)k["min"]!; var mx = (JArray)k["max"]!;
+                        it.KeepOut.Add(new double[] { mn[0]!.Value<double>(), mn[1]!.Value<double>(), mx[0]!.Value<double>(), mx[1]!.Value<double>() });
                         it.KeepOutNames.Add(Str(k, "name") ?? $"keepOut{it.KeepOut.Count}");
                     }
             }
@@ -159,22 +159,23 @@ internal static class TK
         }
     }
 
-    static void WarnUnknown(Intent it, JsonElement obj, string where, params string[] known)
+    static void WarnUnknown(Intent it, JObject obj, string where, params string[] known)
     {
-        foreach (var p in obj.EnumerateObject())
-            if (!known.Contains(p.Name, StringComparer.OrdinalIgnoreCase))
-                it.Warnings.Add($"{where}.{p.Name}: unknown field ignored (known: {string.Join(",", known)})");
+        foreach (var property in obj.Properties())
+            if (!known.Contains(property.Name, StringComparer.OrdinalIgnoreCase))
+                it.Warnings.Add($"{where}.{property.Name}: unknown field ignored (known: {string.Join(",", known)})");
     }
 
-    static string Str(JsonElement e, string name)
-        => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+    static string Str(JObject obj, string name)
+        => obj.TryGetValue(name, out var value) && value.Type == JTokenType.String ? value.Value<string>() : null;
 
-    static double? Num(JsonElement e, string name)
-        => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : (double?)null;
+    static double? Num(JObject obj, string name)
+        => obj.TryGetValue(name, out var value) && value.Type is JTokenType.Integer or JTokenType.Float
+            ? value.Value<double>() : (double?)null;
 
-    static bool? Bool(JsonElement e, string name)
-        => e.TryGetProperty(name, out var v) && (v.ValueKind == JsonValueKind.True || v.ValueKind == JsonValueKind.False)
-            ? v.GetBoolean() : (bool?)null;
+    static bool? Bool(JObject obj, string name)
+        => obj.TryGetValue(name, out var value) && value.Type == JTokenType.Boolean
+            ? value.Value<bool>() : (bool?)null;
 
     static (double, double) ParseRectSize(string s)
     {
@@ -184,15 +185,15 @@ internal static class TK
         return (w / 12.0, h / 12.0);
     }
 
-    static (double, double, long?) ResolvePoint(Document doc, JsonElement parent, string name)
+    static (double, double, long?) ResolvePoint(Document doc, JObject parent, string name)
     {
-        if (!parent.TryGetProperty(name, out var v))
+        if (!parent.TryGetValue(name, out var value))
             throw new InvalidOperationException($"trunk.{name} missing. Use [x,y] in model feet or {{\"element\": <id>}}.");
-        if (v.ValueKind == JsonValueKind.Array && v.GetArrayLength() >= 2)
-            return (v[0].GetDouble(), v[1].GetDouble(), null);
-        if (v.ValueKind == JsonValueKind.Object && v.TryGetProperty("element", out var idEl))
+        if (value is JArray points && points.Count >= 2)
+            return (points[0]!.Value<double>(), points[1]!.Value<double>(), null);
+        if (value is JObject point && point.TryGetValue("element", out var idToken))
         {
-            long idv = idEl.GetInt64();
+            var idv = idToken.Value<long>();
             var el = doc.GetElement(new ElementId(idv));
             if (el == null) throw new InvalidOperationException($"trunk.{name}.element {idv} not found in model.");
             if (el.Location is LocationPoint lp) return (lp.Point.X, lp.Point.Y, idv);
@@ -266,14 +267,14 @@ internal static class TK
     {
         var path = LastSolvePath(stateDir);
         if (!File.Exists(path)) return null;
-        try { return JsonSerializer.Deserialize<SolveDto>(File.ReadAllText(path), Json); }
+        try { return JsonConvert.DeserializeObject<SolveDto>(File.ReadAllText(path), Json); }
         catch { return null; }
     }
 
     public static void WriteLastSolve(string stateDir, SolveDto dto)
     {
         Directory.CreateDirectory(stateDir);
-        File.WriteAllText(LastSolvePath(stateDir), JsonSerializer.Serialize(dto, Json));
+        File.WriteAllText(LastSolvePath(stateDir), JsonConvert.SerializeObject(dto, Json));
     }
 
     public static IEnumerable<string> Diff(SolveDto prev, SolveDto cur)
