@@ -2,6 +2,7 @@
 
     <PropertyGroup>
         <PeProjectKind>AutomationWorker</PeProjectKind>
+        <PeRevitYears>2024;2025;2026</PeRevitYears>
     </PropertyGroup>
     <PropertyGroup>
         <LangVersion>latest</LangVersion>
