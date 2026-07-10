@@ -166,7 +166,19 @@ Package outputs:
 - Desktop bundle: `.artifacts/packages/bundles/Pe.App.bundle.zip`
 - Pea payload: `.artifacts/packages/pea/Pe.Tools.pea.<version>.zip` plus `.json` manifest
 - Design Automation appbundle: `.artifacts/packages/automation/Pe.Dev.RevitAutomation.Worker.<year>.appbundle.zip`
+- Portable install package: `.artifacts/packages/installers/Pe.Tools.<version>.install.zip`
 - Installer: `.artifacts/packages/installers/*.msi`
+
+`CreateInstallerModule` owns only the product-specific source builds: Pe.App year staging and the
+host/Pea SEA payloads. SDK `pe-revit install package` copies those manifest-declared sources into the
+portable zip and writes its release receipt; `pe-revit msi` consumes the same checked manifest.
+Pe.Tools does not rewrite a transport manifest or build zip topology.
+
+`CreateAutomationBundleModule` likewise supplies only Pe.Tools policy: the worker project, eligible
+year matrix, output root, and product version. SDK `PeCreateAppBundle` builds each engine lane and
+owns the `.bundle`/`Contents` layout, `DBApplication` `.addin`, `PackageContents.xml`, zip, and hashed
+receipt. Keep APS authentication/submission in `pe-dev automation`; do not restore
+`Autodesk.PackageBuilder` or product-owned appbundle composition.
 
 ### Publish is a GitHub release workflow
 
@@ -343,7 +355,8 @@ The automation shell is `Pe.Dev.RevitAutomation.Worker`, not desktop `Pe.App`. D
 - `Pe.Revit.Versioning` owns non-MSBuild Revit suffixes and Design Automation support facts.
 - `build/BuildArtifactLayout.cs` owns `.artifacts/...` package topology.
 - `build/ProductLayoutAuthority.cs` composes repo/build/install layout and SDK installer payload paths.
-- `pe-revit msi` owns generated MSI authoring from the SDK payload manifest emitted by `build/Modules/CreateInstallerModule.cs`.
+- `pe-revit install package` and `pe-revit msi` own transport composition from the checked
+  `product.payloads.json`; `CreateInstallerModule` only produces its declared source directories.
 
 ## Compact command index
 

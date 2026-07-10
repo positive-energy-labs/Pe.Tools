@@ -90,10 +90,12 @@ internal static partial class BuildDotNetCli {
         };
 
         foreach (var (name, value) in properties)
-            arguments.Add($"-p:{name}={value ?? string.Empty}");
+            arguments.Add($"-p:{name}={EscapePropertyValue(value ?? string.Empty)}");
 
         return arguments;
     }
+
+    private static string EscapePropertyValue(string value) => value.Replace("%", "%25").Replace(";", "%3B");
 
     private static string FormatCommand(IEnumerable<string> arguments) => "dotnet " + string.Join(" ", arguments.Select(QuoteIfNeeded));
 
