@@ -147,7 +147,7 @@ public sealed class AppCore : IPePayload {
 
         Log.Logger = new LoggerConfiguration()
             .WriteTo.Sink(new RevitAppLogSink(appLogFile, outputTemplate), LogEventLevel.Debug)
-            .WriteTo.Debug(LogEventLevel.Debug, outputTemplate)
+            .WriteTo.Sink(new DebugLogSink(outputTemplate), LogEventLevel.Debug)
             .MinimumLevel.Debug()
             .CreateLogger();
 
@@ -166,5 +166,15 @@ internal sealed class RevitAppLogSink(ManagedLogFile logFile, string outputTempl
         using var writer = new StringWriter();
         this._formatter.Format(logEvent, writer);
         this._logFile.Append(writer.ToString());
+    }
+}
+
+internal sealed class DebugLogSink(string outputTemplate) : ILogEventSink {
+    private readonly MessageTemplateTextFormatter _formatter = new(outputTemplate);
+
+    public void Emit(LogEvent logEvent) {
+        using var writer = new StringWriter();
+        this._formatter.Format(logEvent, writer);
+        System.Diagnostics.Debug.Write(writer.ToString());
     }
 }
