@@ -21,11 +21,12 @@ import { ChatShell } from "#/components/chat-shell";
  */
 export const PROMPT_MAX = 2000;
 
-const DEFAULTS = { mode: "chat" as const };
+const DEFAULTS = { mode: "threads" as const };
 
 const chatSearchSchema = z.object({
   thread: z.string().optional(),
-  mode: z.enum(MODES as [string, ...string[]]).default(DEFAULTS.mode),
+  // .catch keeps stale bookmarks (e.g. the old mode=chat) from throwing — they fall back to default.
+  mode: z.enum(MODES as [string, ...string[]]).default(DEFAULTS.mode).catch(DEFAULTS.mode),
   turn: z.coerce.number().int().positive().optional().catch(undefined),
   prompt: z.string().max(PROMPT_MAX).optional(),
 });

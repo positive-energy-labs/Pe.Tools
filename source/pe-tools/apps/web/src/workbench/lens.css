@@ -39,44 +39,32 @@
   scroll-behavior: smooth;
   scroll-timeline: --lens block;
 }
-/* one layout; modes only toggle which lane columns have width.
-   column order: trace | strata | chat | mapdial */
+/* one layout. The sidebar (grid-column 1) is ALWAYS present now; its width is --side (resizable,
+   set inline on <main> by ChatShell, clamped to ≤50vw). column order: sidebar | chat | mapdial */
 .lens-grid {
   display: grid;
-  grid-template-columns: var(--trace, 0px) var(--strata, 0px) minmax(0, 1fr) var(--map, 104px);
+  grid-template-columns: var(--side, 300px) minmax(0, 1fr) var(--map, 104px);
   align-items: start;
 }
 /* all share row 1 — explicit grid-column alone bumps items into separate rows */
 .lens-grid > * {
   grid-row: 1;
 }
-.lens-grid .mapdial {
-  grid-column: 4;
-}
-.lens-grid .lens-chat {
-  grid-column: 3;
-}
-.lens-grid .lens-lane.trace {
+.lens-grid .lens-lane.side {
   grid-column: 1;
 }
-.lens-grid .lens-lane.strata {
+.lens-grid .lens-chat {
   grid-column: 2;
 }
-/* lane widths live on [data-mode] (set on both <main> and .lens-frame) so the composer — a
-   sibling of the Lens — can read the same values and align to the chat lane (grid-column 3). */
-[data-mode="trace"] {
-  --trace: 300px;
+.lens-grid .mapdial {
+  grid-column: 3;
 }
-[data-mode="strata"] {
-  --trace: 248px;
-  --strata: 264px;
-}
-/* the composer floats over the chat lane: clear the left lanes + the right mapdial, then inset by
+/* the composer floats over the chat lane: clear the sidebar + the right mapdial, then inset by
    equal 20px gutters so it lines up with the chat text column (.lens-chat padding: 0 20px). The
    lane floats OUTSIDE the scroller, so it isn't pushed in by the scrollbar like .lens-chat is — the
    extra 15px on the right makes up for it. ponytail: 15px = classic scrollbar; harmless if 0 (overlay). */
 .pe-composer-lane {
-  margin-left: calc(var(--trace, 0px) + var(--strata, 0px));
+  margin-left: var(--side, 300px);
   margin-right: var(--map, 104px);
   padding-left: 20px;
   padding-right: 35px;
@@ -307,6 +295,61 @@
   white-space: nowrap;
 }
 
+/* The always-on sidebar shell: a fixed head (mode dial) over a mode-switched body, sticky beside
+   the scrolling chat. --side-head-h must match HEAD_H in Lens.tsx (the fisheye subtracts it). */
+.lens-lane.side {
+  --side-head-h: 40px;
+  position: sticky;
+  top: 0;
+  height: var(--vp, 560px);
+  display: flex;
+  flex-direction: column;
+  border-right: 0.5px solid var(--line);
+  background-color: var(--paper-3);
+  background-image: none; /* override the base .lens-lane drift gradient — only trace wants it */
+}
+.side-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--side-head-h);
+  flex: none;
+  padding: 0 8px;
+  border-bottom: 0.5px solid var(--line);
+  background: var(--paper-2);
+}
+.side-body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+/* trace fisheye needs a fixed frame (the pin translates within it) — no scrollbar. */
+.lens-lane.side[data-side="trace"] .side-body {
+  overflow: hidden;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0 27px,
+    color-mix(in srgb, var(--basalt) 5%, transparent) 27px 28px
+  );
+}
+/* drag handle straddling the sidebar's right edge */
+.side-resize {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 7px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 7;
+  touch-action: none;
+}
+.side-resize:hover,
+.side-resize:active {
+  background: color-mix(in srgb, var(--pe-blue) 25%, transparent);
+}
+
 /* trace + strata — focal planes that drift at their own (compressed) speed */
 .lens-lane {
   position: sticky;
@@ -513,18 +556,8 @@
   }
 }
 
-/* ===== World inspector lane — layout only (the panel's styling is Tailwind in world.tsx) ===== */
-[data-mode="world"] {
-  --trace: 392px;
-}
-.lens-grid .lens-lane.world {
-  grid-column: 1;
-}
-.lens-lane.world {
-  overflow-y: auto;
-  background-image: none;
-  background-color: var(--paper-3);
-}
+/* ===== World inspector — rendered inside .side-body; the panel's styling is Tailwind in world.tsx.
+   The body's own overflow-y:auto scrolls it; no lane-specific layout needed here anymore. ===== */
 
 /* Active OM-window fill pulse — referenced by world.tsx via animate-[mg-bud-pulse_…]. */
 @keyframes mg-bud-pulse {

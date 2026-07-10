@@ -442,7 +442,7 @@ function Overlays() {
 /* ── chat register: design-dependent chat surfaces, mocked ─────────────── */
 
 function ChatRegister() {
-  const [mode, setMode] = useState<Mode>("chat");
+  const [mode, setMode] = useState<Mode>("threads");
   return (
     <Section
       title="Chat register"

@@ -36,6 +36,8 @@ import {
 const SCALE = 0.14; // chat px -> map px. Fixed, NOT fit-to-container: long threads overflow, short leave the gutter empty.
 const FOCAL = 0.6; // focal line, fraction down the gutter/viewport. Lower than center: history lives above the latest turn.
 const MIN_BAND = 3; // px floor so a one-line turn stays visible and clickable.
+const HEAD_H = 40; // px — the sidebar head (dial) height; the fisheye lane sits below it, so its
+// translate subtracts this to keep cards on the same focal axis as the chat. Must match --side-head-h.
 
 interface Geom {
   key: string;
@@ -65,12 +67,21 @@ export function Lens({
   initialTurn,
   scrollKey = "",
   onTurnChange,
+  sideHead,
+  threadList,
+  onSideResize,
 }: {
   state: WorkbenchState;
   mode: Mode;
   initialTurn?: number;
   scrollKey?: string;
   onTurnChange?: (turn: number | undefined) => void;
+  /** The always-on sidebar head (the mode dial). Sits above the mode-switched body. */
+  sideHead?: React.ReactNode;
+  /** Body for `threads` mode — the recent-thread list. */
+  threadList?: React.ReactNode;
+  /** Drag-to-resize the sidebar; receives the new width in px (caller clamps + persists). */
+  onSideResize?: (px: number) => void;
 }) {
   const messages = useThreadMessages();
   const moments = toMoments(messages);
@@ -83,6 +94,7 @@ export function Lens({
   const cache = useCacheView(breakdown, userTurns);
 
   const frameRef = useRef<HTMLDivElement>(null);
+  const laneRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
   const traceInnerRef = useRef<HTMLDivElement>(null);
@@ -178,6 +190,25 @@ export function Lens({
     window.addEventListener("pointerup", up);
   }, []);
 
+  // Drag the sidebar's right edge to resize. Clamp [240, half-viewport]; the caller persists it.
+  const onResizeDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      const startX = event.clientX;
+      const startW = laneRef.current?.offsetWidth ?? 300;
+      const max = window.innerWidth / 2;
+      const move = (ev: PointerEvent) =>
+        onSideResize?.(Math.max(240, Math.min(max, startW + ev.clientX - startX)));
+      const up = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+    },
+    [onSideResize],
+  );
+
   // The single scroll controller: candlestick + bands + chat stubs + pinned fisheye cards.
   // Mutates refs only (no per-frame React render). Re-measures on resize and on row changes.
   useEffect(() => {
@@ -218,7 +249,9 @@ export function Lens({
     };
     const layoutLane = (V: number, anchorKey: string | null) => {
       const inner = traceInnerRef.current;
-      if (inner) inner.style.transform = `translateY(${FOCAL * V - laneCenterOf(anchorKey)}px)`;
+      // The lane body starts HEAD_H below the viewport top (under the sticky sidebar head), so
+      // subtract it to land the focal card on the same axis as the chat's focal message.
+      if (inner) inner.style.transform = `translateY(${FOCAL * V - HEAD_H - laneCenterOf(anchorKey)}px)`;
     };
     const applyExpansion = (key: string | null) => {
       const hoverKey = hoverKeyRef.current;
@@ -466,16 +499,10 @@ export function Lens({
   return (
     <div className="lens-frame" ref={frameRef} data-mode={mode}>
       <div className="lens-scroller" ref={scrollerRef}>
-        {moments.length === 0 ? (
-          <div className="grid h-full place-content-center justify-items-center gap-1.5 px-6 text-muted-foreground">
-            <h1 className="m-0 font-[var(--font-display)] text-[30px] font-semibold text-[var(--pe-blue)]">
-              Pea
-            </h1>
-            <p>Ask anything to begin. Use the dial to reveal what's happening underneath.</p>
-          </div>
-        ) : (
-          <div className="lens-grid">
-            <div className="mapdial" onPointerDown={onPointerDown} aria-label="Timeline">
+        {/* The grid (and thus the sidebar) always mounts — even with no messages — so the thread
+            list stays visible on a fresh session and the --vp ResizeObserver always fires. */}
+        <div className="lens-grid">
+          <div className="mapdial" onPointerDown={onPointerDown} aria-label="Timeline">
               <div className="mapdial-strip" ref={stripRef}>
                 {moments.map((moment, index) => (
                   <div
@@ -504,33 +531,45 @@ export function Lens({
                 grid item AND keeps our own ref (asChild would consume it, breaking re-measure). */}
             <ThreadPrimitive.Root style={{ display: "contents" }}>
               <div className="lens-chat" ref={chatRef}>
+                {moments.length === 0 ? (
+                  <div className="grid min-h-[60vh] place-content-center justify-items-center gap-1.5 px-6 text-center text-muted-foreground">
+                    <h1 className="m-0 font-[var(--font-display)] text-[30px] font-semibold text-[var(--pe-blue)]">
+                      Pea
+                    </h1>
+                    <p>Ask anything to begin. Pick a thread on the left, or start a new one.</p>
+                  </div>
+                ) : null}
                 <ContextStrip state={state} depth={modeDepth(mode)} />
                 <Moments register={registerMoment} />
               </div>
             </ThreadPrimitive.Root>
 
-            {mode === "trace" ? (
-              <div className="lens-lane trace">
-                <div className="lens-pin" ref={traceInnerRef}>
-                  {traceCells.map((cell) => (
-                    <TraceCellView
-                      key={cell.key}
-                      cell={cell}
-                      registerRef={(el) => {
-                        if (el) cardRefs.current.set(cell.key, el);
-                        else cardRefs.current.delete(cell.key);
-                      }}
-                    />
-                  ))}
-                </div>
+            {/* The always-on sidebar: a fixed head (mode dial) over a mode-switched body. */}
+            <div className="lens-lane side" data-side={mode} ref={laneRef}>
+              <div className="side-head">{sideHead}</div>
+              <div className="side-body">
+                {mode === "trace" ? (
+                  <div className="lens-pin" ref={traceInnerRef}>
+                    {traceCells.map((cell) => (
+                      <TraceCellView
+                        key={cell.key}
+                        cell={cell}
+                        registerRef={(el) => {
+                          if (el) cardRefs.current.set(cell.key, el);
+                          else cardRefs.current.delete(cell.key);
+                        }}
+                      />
+                    ))}
+                  </div>
+                ) : mode === "world" ? (
+                  <WorldLane breakdown={breakdown} cache={cache} sendNumber={userTurns} />
+                ) : (
+                  threadList
+                )}
               </div>
-            ) : mode === "world" ? (
-              <div className="lens-lane world">
-                <WorldLane breakdown={breakdown} cache={cache} sendNumber={userTurns} />
-              </div>
-            ) : null}
-          </div>
-        )}
+              <div className="side-resize" onPointerDown={onResizeDown} title="Drag to resize" />
+            </div>
+        </div>
       </div>
       {moments.length > 0 ? <div className="lens-scrim" aria-hidden="true" /> : null}
     </div>
@@ -731,7 +770,7 @@ function buildTraceCells(state: WorkbenchState, mode: Mode): TraceCell[] {
     toolCall: call,
     parentId: call.parentMessageId ?? call.provenance?.messageId ?? lastAssistantId,
   }));
-  if (mode !== "chat") {
+  if (mode !== "threads") {
     for (const entry of state.memory.entries) {
       if (!isTimelineMemoryEntry(entry)) continue;
       cells.push({ key: `memory:${entry.id}`, kind: "memory", memory: entry });
