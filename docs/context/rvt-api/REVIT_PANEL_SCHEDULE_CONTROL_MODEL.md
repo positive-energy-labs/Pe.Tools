@@ -58,6 +58,10 @@ Wire ownership:
 - A body-row custom field must exist on `Electrical Circuits`.
 - A combined field in the panel body can only combine circuit-owned fields.
 - Revit does not natively aggregate arbitrary child metadata like `MOCP`, `MCA`, `PE_G___TagInstance`, or `PE_M___ServesRoom` across all circuit children.
+- There is no native project-GUI rule binding like `connected equipment.MOCP -> circuit.Rating`.
+- Binding the same shared parameter to equipment and circuits creates two schedulable fields, not one live linked value.
+- `ElectricalSystem.Rating` is settable, but it is still circuit-owned breaker/OCP data. If equipment metadata should drive it, an add-in, script, Dynamo graph, or Pea operation must copy/apply that policy.
+- In Revit 2026+, conductor/cable control moved toward explicit `CableType` / `CableSize` assignment. That helps automation own conductor selection, but it does not add cross-element parameter formulas.
 
 ## What Actually Flows
 
@@ -77,6 +81,41 @@ No direct native flow to panel body:
 - `PE_E___FLA`
 - `PE_E___LRA`
 - `PE_E_LoadCalc_*`
+
+## Missing Rule Layer
+
+The observed BIM gap is not just "copy this parameter." It is the missing native rule layer between:
+
+```text
+connected equipment metadata
+  -> circuit breaker / frame / description / conductor policy
+  -> panel schedule body
+```
+
+Autodesk docs and forum evidence point to the same boundary:
+
+- circuit table template cells can use `Electrical Circuits` parameters only
+- circuit `Rating` is one of the few editable circuit properties and is used for wire sizing / overload behavior
+- Autodesk support describes load-based breaker-size automation in panel schedules as a Revit limitation
+- forum users report managing MOCP/breaker size independently between equipment and panel schedules unless they use Dynamo/API/manual coordination
+
+## Third-Party Pattern
+
+Design Master ElectroBIM's "parameter linking" is not a native Revit breakthrough. It is a product-owned electrical rule engine:
+
+```text
+device family/shared parameter
+  -> ElectroBIM setting such as OCP Trip / circuit description
+  -> ElectroBIM calculate/update command
+  -> Revit circuit Rating / Frame / description + output shared parameters
+```
+
+Their docs explicitly treat many shared parameters as output-only and say ElectroBIM controls Revit circuit `Rating`. Useful Pea takeaway:
+
+- read Revit equipment parameters as inputs
+- apply an explicit office/code policy
+- write circuit-owned `Rating`, `Frame`, `LoadName`, custom `Electrical Circuits` fields, and Revit 2026+ cable fields as outputs
+- emit provenance/conflict evidence instead of pretending the GUI can keep values linked
 
 Panel-owned, not child-owned:
 

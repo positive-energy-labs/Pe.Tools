@@ -31,6 +31,12 @@ Need to affect load summary / demand?
 
 Need arbitrary family metadata in panel body?
   -> no native path
+
+Need equipment MOCP to drive circuit breaker / Rating?
+  -> no native GUI binding; use automation that writes ElectricalSystem.Rating
+
+Need equipment MOCP visible only as panel-row metadata?
+  -> bind a custom parameter to Electrical Circuits and copy/mirror the equipment value there
 ```
 
 ## 2. Can This Family Param Show In The Panel Body?
@@ -76,7 +82,7 @@ Combine all connected child tags into one circuit row cell?
   -> no
 
 Calculate breaker size from office-specific MCA/MOCP rules?
-  -> not fully natively
+  -> no native rule layer; calculate with API/Dynamo/Pea/add-in, then write circuit Rating/Frame/custom fields
 ```
 
 ## 4. Best Native Home For `PE_*`
@@ -133,6 +139,15 @@ Keep as family metadata unless manually duplicated:
 
 "Show company metadata from the load families"
   -> regular schedules or manual duplicate-to-circuit, not native panel body
+
+"Make MOCP always match breaker size"
+  -> choose a policy, then automate equipment.MOCP -> ElectricalSystem.Rating; same-name shared params do not link
+
+"Show MOCP but do not affect wire sizing / overload checks"
+  -> use a custom Electrical Circuits parameter, not Rating
+
+"Use Revit 2026 conductor model"
+  -> write Rating for OCP intent and CableType/CableSize when automation owns conductor selection
 ```
 
 ## 6. If The Question Is About Wires...

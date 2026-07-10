@@ -486,6 +486,71 @@ Inference:
 - you can customize upstream data and parameter bindings
 - but the core connected-load and demand-load calculation engine is fundamentally Revit's
 
+#### Cross-element parameter formulas from equipment into circuit rows
+
+I did not find native Revit support for a project-GUI formula such as:
+
+```text
+connected mechanical/electrical equipment.MOCP -> ElectricalSystem.Rating
+connected equipment custom parameter -> Electrical Circuits custom parameter
+```
+
+This is the important BIM gap for MOCP/MCA/breaker coordination:
+
+- panel-schedule circuit-table values are circuit-owned
+- equipment schedules are equipment-owned
+- shared parameters with the same name on both categories are not a live link
+- Revit can derive true electrical values through connector data, but arbitrary family metadata does not become circuit metadata
+- circuit `Rating` is settable and schedulable, but Revit does not provide a native rule that keeps it equal to a connected element parameter
+
+Practical consequence:
+
+- if MOCP should drive breaker behavior, automation should write `ElectricalSystem.Rating`
+- if MOCP is only display metadata, automation should write a custom `Electrical Circuits` parameter
+- if multiple elements are on a circuit, the automation needs an explicit policy such as max, first, error-on-conflict, or joined display text
+
+#### Design Master ElectroBIM pattern
+
+Design Master's "parameter linking" appears to solve the workflow by adding an electrical design authority above Revit, not by discovering a hidden Revit-native link.
+
+Observed pattern from their public docs:
+
+```text
+family/shared parameter on device
+  -> ElectroBIM "Based on parameter" input setting
+  -> ElectroBIM sizing / description / OCP rule
+  -> Revit circuit Rating / Frame / descriptions + ElectroBIM output shared parameters
+```
+
+Useful details:
+
+- their wish-list item for changing panel-schedule breaker size from a Revit family parameter was completed through "parameter linking"
+- their `Based on parameter` UI reads a selected device parameter as a read-only input, with unit conversion for cases such as VA into amps
+- their branch-circuit `OCP Trip` field is documented as the value used to set Revit circuit `Rating`
+- their docs say many ElectroBIM shared parameters are output-only and will be overwritten on update
+- their docs also say Revit circuit `Rating` is controlled by ElectroBIM when using the product
+
+Inference for Pea:
+
+- the valuable idea is not simple mirror-copying
+- the valuable idea is a small, auditable rule engine that owns circuit intent, writes Revit circuit outputs, and records why
+- Pea should treat equipment MOCP/MCA/FLA as inputs, select an explicit office policy, write circuit-owned outputs, and report conflicts/provenance
+
+#### Revit 2026 conductor/cable changes
+
+Local reflection against installed Revit 2023, 2024, 2025, and 2026 API assemblies plus Autodesk's 2026 conductor article shows a real API shift:
+
+- `ElectricalSystem.Rating` remains settable in 2026
+- 2026 adds settable `CableType` and `CableSize`
+- 2026 adds read-only conductor-size properties such as hot, neutral, ground, and other conductor sizes
+- old `WireType`, `WireSizeString`, and `VoltageDrop` are obsolete in 2026
+- Autodesk frames 2026 conductor changes as opening sizing-control opportunities, but not as adding cross-element parameter formulas
+
+Implication:
+
+- 2026+ is a better target for Pea-owned conductor/cable selection
+- it still does not remove the need for automation between equipment metadata and circuit-owned schedule fields
+
 ## 4. What calculations do panels provide?
 
 ### Panel-level calculations
@@ -704,6 +769,15 @@ If you automate this area, the safest separation is:
 - `PanelScheduleTemplate` and `PanelScheduleData` -> presentation and structure
 - family connector setup -> upstream authoring dependency
 
+For MOCP/MCA/breaker coordination, the safest automation shape is:
+
+1. collect connected equipment and its candidate electrical parameters
+2. calculate an explicit circuit policy result such as OCP trip, frame, conductor/cable selection, or conflict
+3. write `ElectricalSystem.Rating` only when the value should behave as breaker/OCP rating
+4. write custom `Electrical Circuits` parameters for display-only metadata
+5. write Revit 2026+ `CableType` / `CableSize` only when the operation owns conductor selection
+6. emit provenance showing equipment source, chosen policy, old circuit value, and new circuit value
+
 ## Common pitfalls
 
 - wrong or missing load classification on the connector
@@ -712,6 +786,10 @@ If you automate this area, the safest separation is:
 - wrong distribution system on the panel
 - confusing a template/display problem with a calculation/setup problem
 - trying to fix load-summary behavior only in the schedule instead of in connector/load-classification/demand-factor setup
+- expecting same-name shared parameters on equipment and circuits to stay linked
+- writing equipment MOCP into circuit `Rating` without deciding whether it should affect breaker/wire/cable behavior
+- handling multi-load circuits without a max/first/conflict policy
+- treating Design Master ElectroBIM parameter linking as a hidden Revit-native feature instead of a third-party rule engine
 
 ## Sources
 
@@ -733,6 +811,16 @@ If you automate this area, the safest separation is:
   https://help.autodesk.com/cloudhelp/2015/ENU/Revit-Model/files/GUID-62144CB0-8C7F-461B-82E3-BF242CBC5D92.htm
 - Autodesk Help, About Circuit Properties
   https://help.autodesk.com/cloudhelp/2022/ENU/Revit-MEPEng/files/GUID-BDD3D7A7-0558-42E2-8B32-D87520891969.htm
+- Autodesk Support, Can Revit automate circuit breaker sizes in panel schedules based on load?
+  https://www.autodesk.com/support/technical/article/caas/sfdcarticles/sfdcarticles/Can-Revit-automate-circuit-breaker-sizes-in-the-electrical-panel-schedules-based-on-load.html
+- Autodesk AEC Tech Drop, New Conductor Capabilities in Revit 2026
+  https://www.autodesk.com/blogs/aec/2025/06/23/new-conductor-capabilities-in-revit-2026/
+- Autodesk Community, Display breaker rating in mechanical schedule?
+  https://forums.autodesk.com/t5/revit-mep-forum/display-breaker-rating-in-mechanical-schedule/td-p/6341295
+- Autodesk Community, Electrical Panel Schedule, Shared/Project Parameters Load Name
+  https://forums.autodesk.com/t5/revit-mep-forum/electrical-panel-schedule-shared-project-parameters-load-name/td-p/8963655
+- Autodesk Revit Ideas, Change how wire is auto-sized or allow override for engineering judgement
+  https://forums.autodesk.com/t5/revit-ideas/change-how-wire-is-auto-sized-or-allow-override-for-engineering/idi-p/7097910
 - Autodesk Help, Specify a Load Classification for an Electrical Connector
   https://help.autodesk.com/cloudhelp/2019/ENU/Revit-Model/files/GUID-4AC73CA6-2631-4AFB-A024-E2F7E13C4B9B.htm
 - Autodesk Help, Create Connector Load Classification Parameters
@@ -749,6 +837,20 @@ If you automate this area, the safest separation is:
   https://help.autodesk.com/cloudhelp/2018/ENU/Revit-API/Revit_API_Developers_Guide/Basic_Interaction_with_Revit_Elements/Views/View_Types/TableView/PanelScheduleView.html
 - The Building Coder, MEP 2011 API notes
   https://jeremytammik.github.io/tbc/a/0362_mep_2011_api.htm
+- AUGI, Revit MEP Panel Schedule Customization
+  https://forums.augi.com/archive/index.php/t-124519.html
+- Design Master Wish List, Change breaker size in Panel Schedule based on Revit family parameter
+  https://designmaster.uservoice.com/forums/76977-design-master-wish-list/suggestions/8915581-change-breaker-size-in-panel-schedule-based-on-rev
+- Design Master ElectroBIM Docs, Using Non-ElectroBIM Parameters for ElectroBIM Settings
+  https://www.designmaster.biz/help/electrobim/knowledgebase/general/set-parameter
+- Design Master ElectroBIM Docs, Circuit Edit
+  https://www.designmaster.biz/help/electrobim/command-reference/ribbon-command-reference/project/circuit-edit
+- Design Master ElectroBIM Docs, Instance Edit
+  https://www.designmaster.biz/help/electrobim/command-reference/ribbon-command-reference/project/instance-edit
+- Design Master ElectroBIM Docs, Making Changes: Do Not Modify the Shared Parameters
+  https://www.designmaster.biz/help/electrobim/tutorials/definitions-concepts/making-changes
+- Design Master ElectroBIM Release Notes
+  https://www.designmaster.biz/revit/release
 - Reddit, Panel Schedule-Circuit Location
   https://www.reddit.com/r/Revit/comments/1c1hkat/panel_schedulecircuit_location/
 - Reddit, Question about MEP electrical panel schedules
