@@ -37,6 +37,23 @@ Electrical Equipment -> header/footer
 Electrical Circuits -> body
 ```
 
+## Version Notes: `ElectricalSystem`
+
+Local reflection against installed `RevitAPI.dll` versions 2023, 2024, 2025, and 2026 showed:
+
+- `Rating` is settable in all four versions. It is circuit-owned OCP/breaker intent, not calculated load current.
+- `Frame`, `LoadName`, `CircuitConnectionType`, `CircuitPathMode`, `PathOffset`, `TrueLoad`, and old `WireType` are settable in 2023-2026.
+- Revit 2026 adds settable `CableType` and `CableSize`.
+- Revit 2026 adds read-only conductor-size properties such as `HotConductorSize`, `NeutralConductorSize`, `GroundConductorSize`, and `OtherConductorSize`.
+- Revit 2026 marks `WireType`, `WireSizeString`, and `VoltageDrop` obsolete.
+- Revit 2026 makes `NeutralConductorsNumber` read-only in the local 26.4.10.0 assembly.
+
+Implication:
+
+- Pre-2026 automation can write `Rating` / `Frame` and custom circuit parameters, but still relies on old wire sizing fields.
+- Revit 2026+ automation can write `Rating` plus `CableType` / `CableSize` when it owns conductor selection.
+- None of these changes create native GUI formulas from connected equipment parameters into `ElectricalSystem`.
+
 ## Snippet: Touch The Core Objects
 
 ```csharp
@@ -81,6 +98,36 @@ Observed live examples:
 - `HOOD-1 - Kitchen 100`
 - `EVSE-1 - Carport`
 - `Panel 'L'`
+
+## Snippet: Write Circuit OCP Intent
+
+Use this only when the source value should behave like breaker/OCP rating, including panel-schedule display and Revit warnings tied to `Rating`.
+
+```csharp
+var circuit = circuits.First();
+
+using var tx = new Transaction(doc, "Set circuit rating");
+tx.Start();
+
+circuit.Rating = mocpInternalCurrent;
+
+tx.Commit();
+```
+
+If MOCP is display-only office metadata, bind a shared/project parameter to `Electrical Circuits` and write that parameter instead of `Rating`.
+
+```csharp
+var mocpParam = circuit.LookupParameter("PE_E___MOCP");
+
+using var tx = new Transaction(doc, "Set circuit MOCP metadata");
+tx.Start();
+
+mocpParam?.Set(mocpInternalCurrent);
+
+tx.Commit();
+```
+
+For Revit 2026+ conductor ownership, also consider `CableType` / `CableSize` after selecting valid cable elements for the project.
 
 ## Snippet: Walk From Schedule -> Panel -> Template
 

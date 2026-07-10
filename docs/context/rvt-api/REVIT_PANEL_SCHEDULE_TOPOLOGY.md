@@ -268,9 +268,13 @@ flowchart TD
     DEV["`Child load families
 MOCP / MCA / office metadata`"] --> Q{"`Can panel body compute
 custom aggregate natively?`"}
-    Q -- No --> CIRC["`User / workflow sets circuit
-Rating or Rating Override Value`"]
-    CIRC --> ROW["`Breaker-size style column`"]
+    Q -- No --> RULE["`Automation / rule engine
+chooses policy`"]
+    RULE --> CIRC["`Write circuit-owned output:
+Rating, Frame, custom circuit params`"]
+    RULE --> CAB["`Revit 2026+ optional:
+CableType / CableSize`"]
+    CIRC --> ROW["`Panel schedule circuit row`"]
 ```
 
 ## 9. Repo Touchpoints
