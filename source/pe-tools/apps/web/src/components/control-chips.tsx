@@ -96,7 +96,11 @@ function Picker({
         <ComboboxTrigger
           title={title}
           render={
-            <Button variant="outline" size="sm" className="w-40 justify-between text-muted-foreground" />
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-40 justify-between text-muted-foreground"
+            />
           }
         >
           <span className="truncate">{label}</span>

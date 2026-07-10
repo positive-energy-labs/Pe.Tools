@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HotkeysProvider, useHotkeys } from "@tanstack/react-hotkeys";
-import { Plus, Search } from "lucide-react";
 import { selectWorkbenchChrome } from "@pe/agent-contracts";
-import { Button } from "#/components/ui/button";
 import { ControlChips } from "#/components/control-chips";
 import { ModeDial } from "#/components/mode-dial";
 import { Composer } from "#/components/composer";
-import { ThreadPalette } from "#/components/thread-palette";
+import { ThreadList, ThreadPalette } from "#/components/thread-palette";
 import { useWorkbench } from "#/workbench/provider";
 import { useMode } from "#/workbench/use-mode";
 import { MODES } from "#/workbench/depth";
@@ -55,6 +53,14 @@ function Surface({
   } = useWorkbench();
   const [mode, setMode] = useMode();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // Sidebar width — resizable via the lane's drag edge, clamped in the Lens to [240, 50vw]. Persisted.
+  const [sideWidth, setSideWidth] = useState(() => {
+    const saved = Number(localStorage.getItem("pe.sideWidth"));
+    return saved >= 240 ? saved : 300;
+  });
+  useEffect(() => {
+    localStorage.setItem("pe.sideWidth", String(Math.round(sideWidth)));
+  }, [sideWidth]);
 
   const chrome = useMemo(() => selectWorkbenchChrome(debug.state), [debug.state]);
   // Context gauges (cap + OM meters) ride beside the composer now, so the cache view is derived
@@ -102,6 +108,7 @@ function Surface({
     <main
       ref={mainRef}
       data-mode={mode}
+      style={{ "--side": `${sideWidth}px` } as React.CSSProperties}
       className="fixed inset-0 bg-background font-pe text-foreground"
     >
       {/* Inner grid holds exactly the 3 rows; ThreadPalette stays OUT of the grid (its sr-only
@@ -116,29 +123,7 @@ function Surface({
             />
             <span className="truncate text-sm font-semibold">{chrome.threadLabel}</span>
           </div>
-          <ModeDial mode={mode} setMode={setMode} />
-          <div className="flex min-w-0 items-center gap-2">
-            <ControlChips />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              title="Threads (Ctrl/Cmd-K)"
-              onClick={() => setPaletteOpen(true)}
-            >
-              <Search className="size-3.5" />
-              threads
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              title="New thread"
-              onClick={newThread}
-            >
-              <Plus className="size-4" />
-            </Button>
-          </div>
+          <ControlChips />
         </header>
 
         <div aria-live="polite" className="min-h-0 px-5">
@@ -172,6 +157,18 @@ function Surface({
             initialTurn={initialTurn}
             scrollKey={currentThreadId}
             onTurnChange={onTurnChange}
+            onSideResize={setSideWidth}
+            sideHead={<ModeDial mode={mode} setMode={setMode} />}
+            threadList={
+              <ThreadList
+                threads={threads}
+                currentThreadId={currentThreadId}
+                onSelect={switchThread}
+                onNew={newThread}
+                onDelete={(id) => void deleteThread(id)}
+                onSearch={() => setPaletteOpen(true)}
+              />
+            }
           />
           {/* The context ribbon + composer float over the CHAT lane only (pe-composer-lane clears
               the side lanes + mapdial) and resize with it. The ribbon is the unified request-

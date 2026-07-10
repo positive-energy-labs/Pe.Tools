@@ -198,7 +198,7 @@ let bootstrapPromise: Promise<unknown> | null = null;
 function ensureWorkspace(bridgeSessionId?: string): Promise<unknown> {
   bootstrapPromise ??= callHostRpc(
     "scripting.workspace.bootstrap",
-    { workspaceKey: "default", createSampleScript: false },
+    { workspaceKey: "default" },
     bridgeSessionId ? { bridgeSessionId } : undefined,
   );
   return bootstrapPromise;
@@ -215,7 +215,6 @@ async function executeScript(
     {
       workspaceKey: "default",
       permissionMode,
-      sourceKind: "InlineSnippet",
       scriptContent,
       sourceName: "pdf-audit.cs",
     },

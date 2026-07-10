@@ -25,7 +25,7 @@ interface SlashCommand {
 const BUILTIN_COMMANDS: SlashCommand[] = [
   { name: "new", description: "Start a new thread", kind: "builtin" },
   { name: "fork", description: "Fork this conversation into a new thread", kind: "builtin" },
-  { name: "chat", description: "Hide the gutters", kind: "builtin" },
+  { name: "threads", description: "Show the thread list", kind: "builtin" },
   { name: "trace", description: "Show the trace gutter", kind: "builtin" },
   { name: "world", description: "Show the context world inspector", kind: "builtin" },
 ];
@@ -92,7 +92,7 @@ export function Composer({
       case "fork":
         void forkThread();
         return true;
-      case "chat":
+      case "threads":
       case "trace":
       case "world":
         setMode(name as Mode);

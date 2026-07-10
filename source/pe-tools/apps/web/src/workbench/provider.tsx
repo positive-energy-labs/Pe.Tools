@@ -610,7 +610,8 @@ function toSummaries(threads: AgentControllerThreadInfo[]): StoredThreadSummary[
   return threads
     .map((thread) => ({
       id: thread.id,
-      title: thread.title ?? shortId(thread.id),
+      // Empty-string titles (not just null) render as blank rows — fall back to a short id.
+      title: thread.title?.trim() || shortId(thread.id),
       updatedAt: thread.updatedAt ?? new Date(0).toISOString(),
       messageCount: 0,
       persisted: true,
