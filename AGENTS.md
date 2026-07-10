@@ -24,11 +24,11 @@ C# development with the Revit API requires very a specific and fragile tooling s
 
 ### Live Looping
 
-ALWAYS use RRD-safe live-loop tools, mcps, or cli commands when available.
-- Use `live_loop_context` as the read-only decision packet when AttachedRrd/Rider/Revit state matters.
-- Use SDK `pe-revit live` / MCP `live_converge` to sync, hot reload, or start/restart RRD.
-- Use SDK `pe-revit test fresh|attached` / MCP `test_fresh` and `test_attached` for Revit-backed proof lanes.
-- Use Peco `script_execute` or `talk_to_pea` when the tool should run after an SDK freshness preflight and include Pea-facing evidence.
+Use the SDK control plane; do not hand-orchestrate Rider/Revit.
+- Use `pe-revit live` to compile-check, Hot Reload, start, or restart RRD.
+- Use `pe-revit live status` for read-only state; use `live doctor` only for reported wiring trouble.
+- Use `pe-revit test fresh|attached` for Revit-backed proof lanes.
+- Use Peco scripts, host operations, or `talk_to_pea` only after SDK freshness when product behavior is the proof target.
 - Prefer FreshRevitProcess tests when Hot Reload risk, stale assembly evidence, member-shape changes, or WPF/BAML/resource changes make AttachedRrd ambiguous.
 - Use Pea product tools (`pe_status`, `pe_logs`, host operations, scripts, Revit API docs, `talk_to_pea`) only for black-box product feedback, not repo source review.
 
@@ -53,7 +53,7 @@ Write artifacts to `.artifacts/`. Most often `.artifacts/tmp` for python/typescr
 
 ## Critical Entry Points
 
-- `source/Pe.App/Application.cs` - desktop Revit add-in startup, host bridge bootstrap, ribbon/task initialization.
+- `source/Pe.App/AppCore.cs` - desktop Revit payload startup, host bridge bootstrap, ribbon/task initialization; the SDK generates the Revit application adapter.
 - `source/Pe.App/ButtonRegistry.cs` - top-level desktop command and ribbon exposure.
 - `source/pe-tools/apps/host/src/index.ts` - TS-built `Pe.Host.exe` HTTP/RPC/WebSocket host entrypoint.
 - `source/pea/app/` - TypeScript Pea CLI/runtime surface. `pea agent` is the deployed Revit/operator workbench; `peco` starts Peco, the MastraCode-based repo coding agent with Pea black-box feedback tools.
@@ -97,7 +97,7 @@ Name the lane before claiming proof:
 
 - **Source compile**: isolated terminal `dotnet build`; NoRrdContact; proves compilation only.
 - **Package/artifact**: build/pack output; NoRrdContact; proves durable output shape only.
-- **AttachedRrd**: Rider/IDE-built runtime packages synced into the live Rider-driven Revit session; requires live-loop care and behavior/log proof when freshness is uncertain.
+- **AttachedRrd**: SDK-converged runtime packages in the live Rider-driven Revit session; requires behavior proof when freshness is uncertain.
 - **FreshRevitProcess**: SDK `pe-revit test fresh` owns a fresh Revit process; default autonomous Revit-backed proof when current UI/RRD state is not required.
 - **Installed lane**: MSI/product-root behavior; do not mix with dev host/runtime roots.
 
