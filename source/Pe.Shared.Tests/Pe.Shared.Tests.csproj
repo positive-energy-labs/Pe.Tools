@@ -14,9 +14,9 @@
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
         <PackageReference Include="NUnit" Version="3.13.3" />
         <PackageReference Include="NUnit3TestAdapter" Version="4.6.0" />
-        <PackageReference Include="Pe.Revit.Versioning" Version="0.1.0-beta.19" />
+        <PackageReference Include="Pe.Revit.Versioning" Version="$(PeSdkCompanionVersion)" />
         <!-- Consumer-side pin for the InstalledProduct grammar our host/pea launchers resolve through. -->
-        <PackageReference Include="Pe.Revit.Loader" Version="0.1.0-beta.19" />
+        <PackageReference Include="Pe.Revit.Loader" Version="$(PeSdkCompanionVersion)" />
     </ItemGroup>
 
     <ItemGroup>
