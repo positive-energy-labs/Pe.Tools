@@ -20,6 +20,7 @@
         <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj" />
         <ProjectReference Include="..\Pe.Revit.Global\Pe.Revit.Global.csproj" />
         <ProjectReference Include="..\Pe.Revit.Scripting\Pe.Revit.Scripting.csproj" />
+        <ProjectReference Include="..\Pe.Revit.Takeoff\Pe.Revit.Takeoff.csproj" />
     </ItemGroup>
 
     <ItemGroup>

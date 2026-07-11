@@ -3373,20 +3373,34 @@ export namespace RevitResolveReferences {
   }
 }
 
-/** Execute an inline or workspace-relative C# script in connected Revit. Inline content may be Execute-body statements with optional leading using directives or a full PeScriptContainer class; workspace files are normal C# PeScriptContainer entrypoints. */
+/** Signal cooperative cancellation to the currently running script execution. The script stops at its next ct / ThrowIfCancelled checkpoint; scripts that never check the token cannot be interrupted. */
+export namespace ScriptingCancel {
+  export namespace Req {
+    export interface Request {
+      executionId?: null | string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      canceled: boolean;
+      executionId?: null | string;
+      message: string;
+    }
+  }
+}
+
+/** Execute C# in connected Revit: scriptContent for an inline snippet (Execute-body statements or a full PeScriptContainer class), or sourcePath for a pod entrypoint declared in the workspace's pod.json — exactly one of the two. permissionMode defaults to ReadOnly, which discards any document changes via a rollback guard; pass WriteTransaction to keep changes. */
 export namespace ScriptingExecute {
   export namespace Req {
-    export type ScriptExecutionSourceKind = "InlineSnippet" | "WorkspacePath";
     export type ScriptPermissionMode = "ReadOnly" | "WriteTransaction";
 
     export interface Request {
       scriptContent?: null | string;
-      sourceKind?: ScriptExecutionSourceKind;
       sourcePath?: null | string;
       workspaceKey?: string;
       sourceName?: null | string;
-      artifactRunName?: null | string;
       permissionMode?: ScriptPermissionMode;
+      timeoutSeconds?: number;
     }
   }
   export namespace Res {
@@ -3396,7 +3410,9 @@ export namespace ScriptingExecute {
       | "CompilationFailed"
       | "RuntimeFailed"
       | "Rejected"
-      | "PolicyRejected";
+      | "PolicyRejected"
+      | "Canceled"
+      | "TimedOut";
     export type ScriptDiagnosticSeverity = "Info" | "Warning" | "Error";
 
     export interface Response {
@@ -3408,6 +3424,7 @@ export namespace ScriptingExecute {
       containerTypeName?: null | string;
       executionId: string;
       artifacts?: ScriptArtifactData[] | null;
+      data?: unknown;
     }
     export interface ScriptDiagnostic {
       stage: string;
@@ -3425,7 +3442,7 @@ export namespace ScriptingExecute {
   }
 }
 
-/** Export a validated pod.json-backed Revit scripting workspace as a portable source-first zip archive. */
+/** Export a validated pod.json-backed Revit scripting workspace as a portable source-first .zip archive to any path. */
 export namespace ScriptingPodExport {
   export namespace Req {
     export interface Request {
@@ -3452,16 +3469,13 @@ export namespace ScriptingPodExport {
       name: string;
       version: string;
       description?: null | string;
-      origin?: null | ScriptPodOriginData;
       entrypoints: ScriptPodEntrypointData[];
-    }
-    export interface ScriptPodOriginData {
-      path: string;
     }
     export interface ScriptPodEntrypointData {
       id: string;
       sourcePath: string;
       name?: null | string;
+      description?: null | string;
     }
     export interface ScriptDiagnostic {
       stage: string;
@@ -3472,7 +3486,7 @@ export namespace ScriptingPodExport {
   }
 }
 
-/** Import a pod.json-backed Revit scripting workspace from a conservative zip archive into a new workspace slug. */
+/** Import a pod.json-backed Revit scripting workspace from a .zip archive (any path) into a new workspace slug under Documents/Pe.Tools/workspaces. */
 export namespace ScriptingPodImport {
   export namespace Req {
     export interface Request {
@@ -3500,16 +3514,13 @@ export namespace ScriptingPodImport {
       name: string;
       version: string;
       description?: null | string;
-      origin?: null | ScriptPodOriginData;
       entrypoints: ScriptPodEntrypointData[];
-    }
-    export interface ScriptPodOriginData {
-      path: string;
     }
     export interface ScriptPodEntrypointData {
       id: string;
       sourcePath: string;
       name?: null | string;
+      description?: null | string;
     }
     export interface ScriptDiagnostic {
       stage: string;
@@ -3520,12 +3531,53 @@ export namespace ScriptingPodImport {
   }
 }
 
-/** Create or update the host-owned C# Revit scripting workspace files. */
+/** List all scripting workspaces with their validated pod.json manifests and entrypoints. Workspaces with a missing or invalid pod.json are included with diagnostics explaining what to fix. */
+export namespace ScriptingPodList {
+  export namespace Req {
+    export interface Request {}
+  }
+  export namespace Res {
+    export type ScriptDiagnosticSeverity = "Info" | "Warning" | "Error";
+
+    export interface Response {
+      workspacesRootPath: string;
+      pods: ScriptPodListItemData[];
+    }
+    export interface ScriptPodListItemData {
+      workspaceKey: string;
+      workspaceRootPath: string;
+      isValid: boolean;
+      manifest?: null | ScriptPodManifestSummaryData;
+      diagnostics: ScriptDiagnostic[];
+    }
+    export interface ScriptPodManifestSummaryData {
+      schemaVersion: number;
+      id: string;
+      name: string;
+      version: string;
+      description?: null | string;
+      entrypoints: ScriptPodEntrypointData[];
+    }
+    export interface ScriptPodEntrypointData {
+      id: string;
+      sourcePath: string;
+      name?: null | string;
+      description?: null | string;
+    }
+    export interface ScriptDiagnostic {
+      stage: string;
+      severity: ScriptDiagnosticSeverity;
+      message: string;
+      source?: null | string;
+    }
+  }
+}
+
+/** Create or update a C# Revit scripting pod workspace: pod.json, PeScripts.csproj, docs, and a sample entrypoint script. */
 export namespace ScriptingWorkspaceBootstrap {
   export namespace Req {
     export interface Request {
       workspaceKey?: string;
-      createSampleScript?: boolean;
     }
   }
   export namespace Res {
@@ -3538,6 +3590,7 @@ export namespace ScriptingWorkspaceBootstrap {
       workspaceAgentsPath: string;
       workspaceReadmePath: string;
       projectFilePath: string;
+      podManifestPath: string;
       sampleScriptPath: string;
       revitVersion: string;
       targetFramework: string;
@@ -3704,9 +3757,11 @@ export interface HostOps {
   "revit.matrix.schedule-coverage": { request: RevitMatrixScheduleCoverage.Req.Request; response: RevitMatrixScheduleCoverage.Res.Response };
   "revit.matrix.schedule-profiles": { request: RevitMatrixScheduleProfiles.Req.Request; response: RevitMatrixScheduleProfiles.Res.Response };
   "revit.resolve.references": { request: RevitResolveReferences.Req.Request; response: RevitResolveReferences.Res.Response };
+  "scripting.cancel": { request: ScriptingCancel.Req.Request; response: ScriptingCancel.Res.Response };
   "scripting.execute": { request: ScriptingExecute.Req.Request; response: ScriptingExecute.Res.Response };
   "scripting.pod.export": { request: ScriptingPodExport.Req.Request; response: ScriptingPodExport.Res.Response };
   "scripting.pod.import": { request: ScriptingPodImport.Req.Request; response: ScriptingPodImport.Res.Response };
+  "scripting.pod.list": { request: ScriptingPodList.Req.Request; response: ScriptingPodList.Res.Response };
   "scripting.workspace.bootstrap": { request: ScriptingWorkspaceBootstrap.Req.Request; response: ScriptingWorkspaceBootstrap.Res.Response };
   "settings.field-options": { request: SettingsFieldOptions.Req.Request; response: SettingsFieldOptions.Res.Response };
   "settings.module-catalog": { request: SettingsModuleCatalog.Req.Request; response: SettingsModuleCatalog.Res.Response };
@@ -3750,9 +3805,11 @@ export const hostOpKeys = [
   "revit.matrix.schedule-coverage",
   "revit.matrix.schedule-profiles",
   "revit.resolve.references",
+  "scripting.cancel",
   "scripting.execute",
   "scripting.pod.export",
   "scripting.pod.import",
+  "scripting.pod.list",
   "scripting.workspace.bootstrap",
   "settings.field-options",
   "settings.module-catalog",

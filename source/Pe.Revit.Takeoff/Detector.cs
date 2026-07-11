@@ -3,7 +3,7 @@ namespace Pe.Revit.Takeoff;
 // Detection core. THE LAW (a post-port regression made it explicit, user-caught 2026-07-06):
 // INK DEFINES SHAPE; PHYSICS DEFINES EXISTENCE.
 //
-//   obstruction = seed ink, hairline-closed (GapSealFt ~1 ft)
+//   obstruction = physical-section seed ink, stud-gap-closed (GapSealFt ~1.5 ft)
 //   candidate   = !obstruction & floor-present            <- boundary sources: ink + floor only
 //   room        = component >= MinSqft AND ceiling-fraction >= MinCeilingFrac   <- physics GATES
 //
@@ -17,9 +17,8 @@ namespace Pe.Revit.Takeoff;
 // Why this fixes the two round-2 flaws:
 // - LACKING FILLS: corridor leak paths die at the floor edge (stairwell) or the region gate, so
 //   corridors/halls close and fill instead of merging with "outside".
-// - FUNKY CORNERS: exact cell-boundary loops + RECTILINEARIZE (snap edge runs to the dominant
-//   wall axes, re-intersect neighbors for crisp miters; true diagonals survive) replace
-//   blob-morphology contours, and the hairline GapSeal stops concave-corner rounding.
+// - FUNKY CORNERS: exact cell-boundary loops are shared after wall-ink propagation, so adjacent
+//   regions meet without independently simplified edges drifting apart.
 public static class Detector
 {
     public static TakeoffResult Detect(
@@ -62,27 +61,58 @@ public static class Detector
         }
 
         double cellArea = opt.CellFt * opt.CellFt;
+        foreach (int id in Enumerable.Range(1, nReg).Where(id => sizes[id] * cellArea >= opt.MinSqft))
+        {
+            double ceilFrac = (double)ceilOkCounts[id] / sizes[id];
+            if (!touchesBorder[id] && ceilFrac >= opt.MinCeilingFrac) continue;
+            var cells = Enumerable.Range(0, n).Where(i => label[i] == id).ToList();
+            double cx = cells.Average(i => hf.MinX + (i % W + 0.5) * opt.CellFt);
+            double cy = cells.Average(i => hf.MinY + (i / W + 0.5) * opt.CellFt);
+            log($"[detect] rejected region {id}: area={sizes[id] * cellArea:F0} centroid=({cx:F1},{cy:F1}) border={touchesBorder[id]} ceilFrac={ceilFrac:F2}");
+        }
         var roomIds = Enumerable.Range(1, nReg)
             .Where(id => !touchesBorder[id]
                          && sizes[id] * cellArea >= opt.MinSqft
                          && (double)ceilOkCounts[id] / sizes[id] >= opt.MinCeilingFrac)
             .OrderByDescending(id => sizes[id])
             .ToList();
-        log($"[detect] regions={nReg} rooms={roomIds.Count} (>= {opt.MinSqft} sf, ceilFrac >= {opt.MinCeilingFrac})");
+        log($"[detect] regions={nReg} candidates={roomIds.Count} (>= {opt.MinSqft} sf, ceilFrac >= {opt.MinCeilingFrac})");
+
+        var acceptedIds = new List<int>();
+        foreach (int id in roomIds)
+        {
+            double rasterPerimeter = RasterPerimeterCells(label, id, W, H) * opt.CellFt;
+            double compactness = rasterPerimeter > 0
+                ? 4 * Math.PI * sizes[id] * cellArea / (rasterPerimeter * rasterPerimeter)
+                : 0;
+            if (compactness < opt.MinCompactness)
+                log($"[detect] rejected region {id}: compactness={compactness:F3} < {opt.MinCompactness:F3}");
+            else
+                acceptedIds.Add(id);
+        }
+
+        var partition = PartitionRegularizer.Propagate(
+            label, acceptedIds.ToHashSet(), obst, W, H,
+            (int)Math.Ceiling(opt.PartitionFillFt / opt.CellFt), out var partitionStats);
+        log($"[partition] accepted={acceptedIds.Count} claimed={partitionStats.ClaimedCells * cellArea:F0}sf " +
+            $"sharedEdges={partitionStats.SharedEdgeCells} unclaimedInk={partitionStats.UnclaimedInkCells}");
 
         var result = new TakeoffResult { LevelName = level.Name, LevelElevation = level.ProjectElevation };
         int rank = 0;
-        foreach (int id in roomIds)
+        foreach (int id in acceptedIds)
         {
-            rank++;
+            var coreCells = new List<int>();
             var cellsOf = new List<int>();
-            for (int i = 0; i < n; i++) if (label[i] == id) cellsOf.Add(i);
+            for (int i = 0; i < n; i++)
+            {
+                if (label[i] == id) coreCells.Add(i);
+                if (partition[i] == id) cellsOf.Add(i);
+            }
 
-            var loops = TraceLoops(cellsOf, label, id, W, H);
+            var loops = TraceLoops(cellsOf, partition, id, W, H);
             var polys = loops
                 .Select(lp => lp.Select(v => new[] { hf.MinX + v.x * opt.CellFt, hf.MinY + v.y * opt.CellFt }).ToList())
                 .Select(CollapseCollinear)
-                .Select(p => Rectilinearize(p, opt.CellFt))
                 .Where(p => p.Count >= 3)
                 .ToList();
             if (polys.Count == 0) continue;
@@ -92,20 +122,21 @@ public static class Detector
             if (Shoelace(outer) < 0) outer.Reverse();
 
             double ceilSum = 0; int ceilN = 0;
-            foreach (int c in cellsOf)
+            foreach (int c in coreCells)
                 if (!float.IsNaN(hf.CeilZ[c]) && !float.IsNaN(hf.FloorZ[c])) { ceilSum += hf.CeilZ[c] - hf.FloorZ[c]; ceilN++; }
 
-            var lp2 = PoleOfInaccessibility(cellsOf, label, id, W, H);
+            var lp2 = PoleOfInaccessibility(coreCells, label, id, W, H);
             double perim = 0;
             for (int i = 0; i < outer.Count; i++)
             {
                 var a2 = outer[i]; var b2 = outer[(i + 1) % outer.Count];
                 perim += Math.Sqrt((a2[0] - b2[0]) * (a2[0] - b2[0]) + (a2[1] - b2[1]) * (a2[1] - b2[1]));
             }
+            rank++;
 
             var room = new RoomResult {
                 Id = "R" + rank.ToString("D2"),
-                RawSqft = sizes[id] * cellArea,
+                RawSqft = cellsOf.Count * cellArea,
                 PerimeterFt = perim,
                 LabelX = hf.MinX + (lp2 % W + 0.5) * opt.CellFt,
                 LabelY = hf.MinY + (lp2 / W + 0.5) * opt.CellFt,
@@ -117,6 +148,21 @@ public static class Detector
             result.TotalSqft += room.RawSqft;
         }
         return result;
+    }
+
+    private static int RasterPerimeterCells(int[] labels, int id, int width, int height)
+    {
+        int edges = 0;
+        for (int cell = 0; cell < labels.Length; cell++)
+        {
+            if (labels[cell] != id) continue;
+            int x = cell % width, y = cell / width;
+            if (x == 0 || labels[cell - 1] != id) edges++;
+            if (x == width - 1 || labels[cell + 1] != id) edges++;
+            if (y == 0 || labels[cell - width] != id) edges++;
+            if (y == height - 1 || labels[cell + width] != id) edges++;
+        }
+        return edges;
     }
 
     // Diagnostic that found the 8-ft door heads: BFS from a point through non-obstruction cells;

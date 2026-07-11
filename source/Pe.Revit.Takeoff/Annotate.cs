@@ -79,7 +79,7 @@ public static class Annotate
         foreach (var v in new FilteredElementCollector(doc).OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
                  .Where(x => !x.IsTemplate && x.Name.StartsWith(viewNamePrefix)))
         {
-            string basePath = Path.Combine(outDir, v.Name.Replace(" ", "_").ToLowerInvariant());
+            string basePath = Path.Combine(outDir, string.Concat(v.Name.Select(ch => char.IsLetterOrDigit(ch) ? char.ToLowerInvariant(ch) : '_')));
             var eo = new ImageExportOptions {
                 ExportRange = ExportRange.SetOfViews,
                 FilePath = basePath,
@@ -104,7 +104,7 @@ public static class Annotate
     // may still have landed — never blindly re-issue, count first.
     public static int Cleanup(Document doc, TakeoffOptions opt, Action<string> log)
     {
-        var views = new FilteredElementCollector(doc).OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
+        var views = new FilteredElementCollector(doc).OfClass(typeof(View)).Cast<View>()
             .Where(v => v.Name.StartsWith(opt.Marker)).Select(v => v.Id).ToList();
         if (views.Count > 0) doc.Delete(views);
         log($"[cleanup] deleted {views.Count} views (regions go with them)");

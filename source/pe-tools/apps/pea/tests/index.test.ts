@@ -59,10 +59,10 @@ test("pea exports the product tool profile used by the default runtime", () => {
     "pe_status",
     "read_image",
     "request_access",
+    "revit_api_docs_fetch",
+    "revit_api_docs_search",
     "script_bootstrap",
     "script_execute",
-    "script_pod_export",
-    "script_pod_import",
   ]);
 });
 

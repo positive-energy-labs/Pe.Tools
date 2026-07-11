@@ -2,7 +2,7 @@ using System.Windows.Media.Imaging;
 
 namespace Pe.Revit.Takeoff;
 
-// Room-seed layer: steal Revit's own 2D projection instead of slicing geometry ourselves.
+// Room-seed layer: use Revit's renderer instead of slicing geometry ourselves.
 // Chadds Ford proved why: the architect's deliverable was a framing-stage IFC — 70k DirectShapes,
 // zero Wall elements — where every LocationCurve/native-room approach is dead on arrival, and
 // Revit's plan renderer still draws perfect wall ink (it solves view range, cut planes, link
@@ -10,9 +10,10 @@ namespace Pe.Revit.Takeoff;
 // at a known crop->pixel mapping and read the ink back as an occupancy grid.
 //
 // The recipe (every line below was paid for in blood on Chadds, 2026-07-06):
-// - FRESH ViewPlan; never mutate user views (their templates/crops fight everything).
-// - THIN-SLAB view range (top = cut + 0.5, bottom = cut - 0.5): keeps below-cut projection noise
-//   (low roofs, floor framing, decks) out of the ink, and cut a 12-min export to ~1 min.
+// - FRESH top-down orthographic View3D; never mutate user views.
+// - PHYSICAL one-foot section box around each cut. Plan view ranges are insufficient for IFC
+//   DirectShapes: Revit projects geometry from other stories even when all four range planes are
+//   correctly bound to the current level (Chadds live proof, 2026-07-10).
 // - TWO bands OR'd downstream: KneeBand (~4 ft) catches knee walls and under-window studs;
 //   HeaderBand (~8.5 ft, ABOVE door/window heads) is the door-sealer — Revit draws headers
 //   continuous through openings, which morphological closing provably cannot do for collinear
@@ -34,6 +35,9 @@ public static class ProjectionSeed
         BuiltInCategory.OST_CurtainWallPanels, BuiltInCategory.OST_CurtainWallMullions,
     };
 
+    internal static bool IsInkCategory(ElementId? id) =>
+        id != null && InkCategories.Any(category => id == ((long)category).ToElementId());
+
     // WriteTransaction step: create the two stripped band views, cropped to `crop` (model coords).
     // Returns view names. Idempotent: same-named views are deleted first.
     public static (string viewA, string viewB) PrepareSeedViews(
@@ -44,7 +48,7 @@ public static class ProjectionSeed
         // doc.Delete(singleId) on a VIEW silently rolls back the host-owned transaction with
         // success-looking logs (dwgvec pod, 2026-07-06). Always delete views via the ICollection
         // overload.
-        var stale = new FilteredElementCollector(doc).OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
+        var stale = new FilteredElementCollector(doc).OfClass(typeof(View)).Cast<View>()
             .Where(v => v.Name == nameA || v.Name == nameB).Select(v => v.Id).ToList();
         if (stale.Count > 0) doc.Delete(stale);
 
@@ -58,25 +62,35 @@ public static class ProjectionSeed
         Document doc, Level level, BoundingBoxXYZ crop, double cutFt, string name, TakeoffOptions opt)
     {
         var vft = new FilteredElementCollector(doc).OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>()
-            .First(t => t.ViewFamily == ViewFamily.FloorPlan);
-        var v = ViewPlan.Create(doc, vft.Id, level.Id);
+            .First(t => t.ViewFamily == ViewFamily.ThreeDimensional);
+        var v = View3D.CreateIsometric(doc, vft.Id);
         v.Name = name;
-        // The default ViewFamilyType often carries a view TEMPLATE, which locks DetailLevel/Scale
-        // ("Detail Level cannot be modified", Chadds). Detach it before any view-property writes.
-        try { v.ViewTemplateId = ElementId.InvalidElementId; } catch { }
-        try { v.Discipline = ViewDiscipline.Coordination; } catch { /* discipline param can be locked */ }
+        try { v.DisplayStyle = DisplayStyle.HLR; } catch { }
         try { v.DetailLevel = ViewDetailLevel.Medium; } catch { }
         try { v.Scale = 96; } catch { }
-        v.CropBox = crop;
+        double z = level.ProjectElevation + cutFt;
+        double cx = (crop.Min.X + crop.Max.X) / 2, cy = (crop.Min.Y + crop.Max.Y) / 2;
+        v.SetOrientation(new ViewOrientation3D(new XYZ(cx, cy, z + 200), XYZ.BasisY, -XYZ.BasisZ));
+
+        var slab = new BoundingBoxXYZ {
+            Min = new XYZ(crop.Min.X, crop.Min.Y, z - 0.5),
+            Max = new XYZ(crop.Max.X, crop.Max.Y, z + 0.5),
+        };
+        v.SetSectionBox(slab);
+
+        // View3D.CropBox is view-local. Preserve its transform and project the model crop into it;
+        // assigning model XY directly produces a correctly-sized but blank export.
+        var viewCrop = v.CropBox;
+        var toView = viewCrop.Transform.Inverse;
+        var corners = from x in new[] { slab.Min.X, slab.Max.X }
+                      from y in new[] { slab.Min.Y, slab.Max.Y }
+                      from zz in new[] { slab.Min.Z, slab.Max.Z }
+                      select toView.OfPoint(new XYZ(x, y, zz));
+        viewCrop.Min = new XYZ(corners.Min(p => p.X), corners.Min(p => p.Y), corners.Min(p => p.Z));
+        viewCrop.Max = new XYZ(corners.Max(p => p.X), corners.Max(p => p.Y), corners.Max(p => p.Z));
+        v.CropBox = viewCrop;
         v.CropBoxActive = true;
         v.CropBoxVisible = false;
-
-        var vr = v.GetViewRange();
-        vr.SetOffset(PlanViewPlane.TopClipPlane, cutFt + 0.5);
-        vr.SetOffset(PlanViewPlane.CutPlane, cutFt);
-        vr.SetOffset(PlanViewPlane.BottomClipPlane, cutFt - 0.5);
-        vr.SetOffset(PlanViewPlane.ViewDepthPlane, cutFt - 0.5);
-        v.SetViewRange(vr);
 
         var keep = new HashSet<ElementId>(InkCategories.Select(c => ((long)c).ToElementId()));
         keep.Add(((long)BuiltInCategory.OST_RvtLinks).ToElementId()); // hiding the link category blanks the IFC
@@ -107,7 +121,7 @@ public static class ProjectionSeed
         var ink = new bool[gridW * gridH];
         foreach (var name in new[] { viewA, viewB })
         {
-            var v = new FilteredElementCollector(doc).OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
+            var v = new FilteredElementCollector(doc).OfClass(typeof(View)).Cast<View>()
                 .FirstOrDefault(x => x.Name == name) ?? throw new InvalidOperationException($"seed view '{name}' missing — run PrepareSeedViews first");
             string basePath = Path.Combine(workDir, "seed_" + v.Id);
             var eo = new ImageExportOptions {

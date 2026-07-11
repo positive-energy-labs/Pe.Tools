@@ -16,21 +16,21 @@ public sealed class TakeoffOptions
 {
     public string LevelNameContains = "";   // matched against host Level.Name
     public double CellFt = 0.25;            // grid resolution; 0.25 resolves stud walls
-    public double MinSqft = 40;             // reject smaller regions
+    public double MinSqft = 20;             // retain small closets/baths for Pea-human review
     public double MinHeadroomFt = 6.0;      // walkable = ceiling - floor >= this (kills eaves)
     public double FloorTolFt = 1.5;         // floor must sit within +/- this of level plane
-    public double GapSealFt = 1.0;          // morphological close on the ink — HAIRLINE bridging
-                                            // only. Projection ink is continuous (Revit draws cut
-                                            // lines unbroken; doors seal via the header band), so
-                                            // the old slicing-era 4.2 ft is obsolete here and
-                                            // actively harmful: a fat close rounds every concave
-                                            // room corner and shrinks rooms (post-port regression,
-                                            // user-caught 2026-07-06).
-    public double MinCeilingFrac = 0.35;    // region gate: fraction of cells that must have a
+    public double GapSealFt = 1.5;          // closes stud/dash gaps in physical View3D section ink.
+                                            // Chadds slab sweep: 1.0 found 11 rooms, 1.5 found 45,
+                                            // and 2.0 regressed to 44; larger closes damage corners.
+    public double MinCeilingFrac = 0.30;    // region gate: fraction of cells that must have a
                                             // real ceiling (headroom >= MinHeadroomFt). Kills
                                             // open-to-sky courtyards/terraces at REGION level —
                                             // ceiling data is too patchy at framing stage to be
                                             // a per-cell boundary (see Detector header).
+    public double MinCompactness = 0.09;    // 4*pi*area/perimeter^2; Chadds' valid long circulation
+                                            // room is 0.095, while exterior snakes are <= 0.041.
+    public double PartitionFillFt = 1.0;    // safety cap for assigning connected wall ink to the
+                                            // nearest accepted region; not a wall-width guarantee
     public double KneeBandFt = 4.0;         // seed band A: catches knee walls + under-window studs
     public double HeaderBandFt = 8.5;       // seed band B: ABOVE door/window heads, where framing
                                             // is continuous = geometric door sealing. Estates run

@@ -96,7 +96,11 @@ export async function readServiceFile(appBase: string, name: string): Promise<Se
 }
 
 /** Write the service file (services call this on bind; tests plant fixtures). Creates state/service/. */
-export async function writeServiceFile(appBase: string, name: string, file: ServiceFile): Promise<void> {
+export async function writeServiceFile(
+  appBase: string,
+  name: string,
+  file: ServiceFile,
+): Promise<void> {
   const path = serviceFilePath(appBase, name);
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, `${JSON.stringify(file, null, 2)}\n`, "utf8");
@@ -126,7 +130,8 @@ export async function ensureRunning(
   const existing = await readServiceFile(appBase, name);
   if (existing) {
     if (await probeHealth(existing.port, opts.health)) {
-      if (matches(existing, opts.expectedVersion, opts.lane)) return { state: "running", file: existing };
+      if (matches(existing, opts.expectedVersion, opts.lane))
+        return { state: "running", file: existing };
       await shutDown(appBase, existing, opts); // healthy but stale/wrong-lane ⇒ replace it
     } else {
       await killByPid(appBase, existing.pid); // recorded but not answering ⇒ dead/orphaned; clear it out
@@ -141,7 +146,11 @@ function matches(file: ServiceFile, expectedVersion: string | undefined, lane: s
   return versionOk && file.lane.toLowerCase() === lane.toLowerCase();
 }
 
-async function shutDown(appBase: string, file: ServiceFile, opts: EnsureRunningOptions): Promise<void> {
+async function shutDown(
+  appBase: string,
+  file: ServiceFile,
+  opts: EnsureRunningOptions,
+): Promise<void> {
   if (
     opts.tier === "managed" &&
     opts.shutdown &&
@@ -166,7 +175,10 @@ async function spawnAndWait(
     mkdirSync(dirname(logPath), { recursive: true });
     logFd = openSync(logPath, "w");
   } catch (error) {
-    return { state: "failed", reason: `failed to open service log '${logPath}': ${describe(error)}` };
+    return {
+      state: "failed",
+      reason: `failed to open service log '${logPath}': ${describe(error)}`,
+    };
   }
   try {
     const child = spawn(opts.entryPath, [...(opts.spawnArgs ?? [])], {
@@ -191,7 +203,10 @@ async function spawnAndWait(
     if (!(await probeHealth(file.port, opts.health))) continue;
     if (matches(file, opts.expectedVersion, opts.lane)) return { state: "started", file };
   }
-  return { state: "failed", reason: `'${name}' did not become healthy within ${(timeoutMs / 1000).toFixed(1)}s` };
+  return {
+    state: "failed",
+    reason: `'${name}' did not become healthy within ${(timeoutMs / 1000).toFixed(1)}s`,
+  };
 }
 
 async function probeHealth(port: number, healthPath: string): Promise<boolean> {
@@ -206,7 +221,11 @@ async function probeHealth(port: number, healthPath: string): Promise<boolean> {
   }
 }
 
-async function requestShutdown(port: number, shutdownPath: string, token: string): Promise<boolean> {
+async function requestShutdown(
+  port: number,
+  shutdownPath: string,
+  token: string,
+): Promise<boolean> {
   try {
     const response = await fetch(`http://127.0.0.1:${port}${shutdownPath}`, {
       method: "POST",
