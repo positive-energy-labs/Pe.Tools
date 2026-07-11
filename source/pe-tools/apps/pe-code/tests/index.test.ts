@@ -42,10 +42,10 @@ test("peco default profile includes Pea product and dev tool ids", () => {
     "pe_status",
     "read_image",
     "request_access",
+    "revit_api_docs_fetch",
+    "revit_api_docs_search",
     "script_bootstrap",
     "script_execute",
-    "script_pod_export",
-    "script_pod_import",
     "talk_to_pea",
     "talk_to_peco_zellij",
   ]);

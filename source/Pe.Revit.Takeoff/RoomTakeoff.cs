@@ -18,12 +18,17 @@ namespace Pe.Revit.Takeoff;
 // four competing approaches ran as isolated pods against a framing-stage IFC estate (70k
 // DirectShapes, no Wall elements, no Rooms). Autodesk-native (EnergyAnalysisDetailModel, gbXML,
 // link room-bounding) is definitively blind to DirectShapes; geometry slicing needs a per-model
-// cut-height hack per failure mode; Revit's own 2D projection produced the most complete wall
-// ink (~55 rooms) but cannot see "roofless"; the headroom field closed everything the ink
-// missed and adds ceiling heights. The composite is deliberate: ink = walls, field = physics.
+// cut-height hack per failure mode; Revit's renderer supplies wall ink through physically clipped
+// top-down 3D bands, while the headroom field rejects roofless areas and adds ceiling heights.
+// The composite is deliberate: ink = walls, field = physics.
 // Dev law: extract once, iterate locally — never tune detection through repeated bridge runs.
 public static class RoomTakeoff
 {
+    private static readonly HashSet<ElementId> SpatialSlabCategories = new(new[] {
+        BuiltInCategory.OST_Floors, BuiltInCategory.OST_Roofs, BuiltInCategory.OST_Ceilings,
+        BuiltInCategory.OST_Stairs, BuiltInCategory.OST_Ramps,
+    }.Select(category => ((long)category).ToElementId()));
+
     public static string DefaultArtifactDir =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Pe.Tools", "takeoff");
 
@@ -93,6 +98,9 @@ public static class RoomTakeoff
         {
             foreach (var e in new FilteredElementCollector(srcDoc).WhereElementIsNotElementType())
             {
+                var categoryId = e.Category?.Id;
+                if (!ProjectionSeed.IsInkCategory(categoryId)
+                    && (categoryId == null || !SpatialSlabCategories.Contains(categoryId))) continue;
                 var bb = e.get_BoundingBox(null);
                 if (bb == null) continue;
                 double bx0 = double.MaxValue, by0 = double.MaxValue, bz0 = double.MaxValue;

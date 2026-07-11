@@ -63,7 +63,7 @@ Treat possible member-shape edits, WPF/BAML/resource changes, Rider restart-requ
 
 Use when autonomous proof should not touch the live Rider-driven RRD session.
 
-1. Prefer the repo test wrapper or pe-dev test with a focused filter and bounded timeout.
+1. Prefer the repo test wrapper or `pe-revit test fresh` with a focused filter and bounded timeout.
 2. Use plan-only mode for command planning/smoke checks; do not launch Revit just to test parsing.
 3. Treat timeout or launch failures as environment evidence, not product behavior proof.
 4. Confirm the owned fresh Revit process was cleaned up before broadening the run.
