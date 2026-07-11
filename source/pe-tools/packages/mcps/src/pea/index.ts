@@ -14,13 +14,13 @@ type ActiveDocumentSummary = NonNullable<
 import {
   ScriptingTools,
   scriptBootstrapInputSchema,
+  scriptClientTimeoutMs,
   scriptExecuteInputSchema,
-  scriptPodExportInputSchema,
-  scriptPodImportInputSchema,
 } from "../shared/scripting.ts";
 import { readImage } from "../shared/read-image.ts";
 import { createCaptureViewTool } from "../shared/capture-view.ts";
 import { requestAccess } from "../shared/request-access.ts";
+import { revitApiFetch, revitApiSearch } from "../shared/rvt-api.ts";
 import { resolveHostBaseUrl, resolveWorkspaceKey } from "../shared/host-config.ts";
 import { peaProductToolCatalog } from "../tool-metadata.ts";
 import { familySheetTools } from "./family-sheet.ts";
@@ -66,9 +66,15 @@ const hostOperationSearchInputSchema = z.object({
     .string()
     .optional()
     .describe("Optional exact top-level domain filter, such as revit, settings, or scripting."),
-  intent: z.enum(["Read", "Mutate"]).optional(),
-  requiresActiveDocument: z.boolean().optional(),
-  limit: z.number().min(1).max(50).default(8),
+  intent: z
+    .enum(["Read", "Mutate"])
+    .optional()
+    .describe("Filter to read-only or mutating operations."),
+  requiresActiveDocument: z
+    .boolean()
+    .optional()
+    .describe("Filter by whether the operation needs an active Revit document."),
+  limit: z.number().min(1).max(50).default(8).describe("Maximum ranked matches to return."),
   verbosity: toolVerbositySchema
     .default("compact")
     .describe(
@@ -97,6 +103,7 @@ const scriptWorkspaceBootstrapDataSchema = z.object({
   workspaceAgentsPath: z.string(),
   workspaceReadmePath: z.string(),
   projectFilePath: z.string(),
+  podManifestPath: z.string(),
   sampleScriptPath: z.string(),
   revitVersion: z.string(),
   targetFramework: z.string(),
@@ -107,9 +114,12 @@ const scriptWorkspaceBootstrapDataSchema = z.object({
 export const peStatus = createTool({
   id: "pe_status",
   description:
-    "Read fresh host status: host, bridge/session, active document, workspace, and log-location facts. Use compact for orientation and full for the raw probe/session DTOs.",
+    "Read fresh host status: host, bridge/session, and active document. Call FIRST for orientation and whenever a call fails with a connectivity-shaped error. Use compact by default; full returns the raw probe/session DTOs.",
   inputSchema: z.object({
-    verbosity: z.enum(["compact", "full"]).default("compact"),
+    verbosity: z
+      .enum(["compact", "full"])
+      .default("compact")
+      .describe("compact for orientation; full for the raw probe/session DTOs."),
     bridgeSessionId: bridgeSessionIdSchema,
   }),
   execute: async (input) => {
@@ -140,17 +150,37 @@ export const peStatus = createTool({
             : summarizeActiveDocument(sessionSummary.activeDocument),
         availableModuleCount: sessionSummary.availableModules.length,
       },
+      hint: createStatusHint(probe.bridgeIsConnected, sessionSummary.bridgeIsConnected),
     };
   },
 });
+
+function createStatusHint(
+  bridgeIsConnected: boolean,
+  sessionIsConnected: boolean,
+): string | undefined {
+  if (!bridgeIsConnected)
+    return "Revit bridge is down: no Revit process is connected to this host. Read pe_logs target=host for the disconnect cause; Revit ops and scripts will fail until a Revit session with the Pe add-in connects.";
+  if (!sessionIsConnected)
+    return "Bridge path is up but no Revit session is active. Read pe_logs for the last session events before retrying Revit ops.";
+  return undefined;
+}
 
 export const peLogs = createTool({
   id: "pe_logs",
   description:
     "Read bounded host and/or Revit log tails after status or execution indicates a host/Revit failure.",
   inputSchema: z.object({
-    target: z.enum(["host", "revit", "all"]).default("all"),
-    tailLineCount: z.number().min(1).max(1000).default(200),
+    target: z
+      .enum(["host", "revit", "all"])
+      .default("all")
+      .describe("Which log to tail: host = TS host process, revit = Revit add-in, all = both."),
+    tailLineCount: z
+      .number()
+      .min(1)
+      .max(1000)
+      .default(200)
+      .describe("Lines to read from the end of each log."),
   }),
   execute: async (input) =>
     createCurrentHostRpcCaller().call("logs.tail", {
@@ -162,7 +192,7 @@ export const peLogs = createTool({
 export const hostOperationSearch = createTool({
   id: "host_operation_search",
   description:
-    "Search generated user-facing host operations by capability and filters. Use projection=capability-map for broad orientation, compact matches for discovery, hints for examples/call guidance, and full for metadata plus request/response shapes. Direct host admin calls such as status, sessions, and logs use dedicated tools instead of this search surface.",
+    "Discover host operations by capability. Start with projection=capability-map for broad orientation, then projection=matches (default) to rank candidates for a task; verbosity=hints adds examples and call guidance. Host admin status/logs are excluded here — use pe_status and pe_logs for those.",
   inputSchema: hostOperationSearchInputSchema,
   execute: async (input) => new HostRpcCaller().searchOperations(input),
 });
@@ -210,11 +240,14 @@ export const hostOperationCall = createTool({
 export const scriptExecute = createTool({
   id: "script_execute",
   description:
-    "Execute a C# Revit script through the host scripting contract. For InlineSnippet, prefer Execute-body statements like WriteLine(...); a full PeScriptContainer class with public override void Execute() is also allowed. Use workspace .cs files for durable work. Loose workspaces compile only the requested file; pod.json workspaces compile all src and require a declared entrypoint.",
+    "Execute a C# Revit script through the host scripting contract. Pass scriptContent for an inline snippet (prefer Execute-body statements like WriteLine(...); a full PeScriptContainer class is also allowed) OR sourcePath for a pod entrypoint declared in the workspace's pod.json — not both. Defaults to ReadOnly: document changes are rolled back and discarded with a warning; pass permissionMode=WriteTransaction to keep changes. Use Result(...) in the script for structured JSON results; scripts should check ct / ThrowIfCancelled() in loops so the timeout (default 600s) and scripting.cancel can interrupt them.",
   inputSchema: scriptExecuteInputSchema,
   execute: async (input) => {
     try {
-      return await createCurrentScriptingTools(input.bridgeSessionId).execute(input);
+      return await createCurrentScriptingTools(
+        input.bridgeSessionId,
+        scriptClientTimeoutMs(input.timeoutSeconds),
+      ).execute(input);
     } catch (error) {
       // Mastra derives the tool_result isError flag from the returned object; a bare throw
       // surfaces to the agent as a "successful" result carrying an error string.
@@ -226,7 +259,7 @@ export const scriptExecute = createTool({
 export const scriptBootstrap = createTool({
   id: "script_bootstrap",
   description:
-    "Create or update a Pe.Revit scripting workspace through the host and return host-owned paths/references. Preserves user-authored files and writes only host-owned workspace files.",
+    "Create or update a Pe.Revit scripting pod workspace through the host: pod.json, project file, docs, and a sample entrypoint. Preserves user-authored files and writes only host-owned workspace files.",
   inputSchema: scriptBootstrapInputSchema,
   outputSchema: scriptWorkspaceBootstrapDataSchema,
   execute: async (input, _context) => {
@@ -238,22 +271,6 @@ export const scriptBootstrap = createTool({
       generatedFiles: [...(result.generatedFiles ?? [])],
     } as typeof result & { generatedFiles: string[] } as never;
   },
-});
-
-export const scriptPodImport = createTool({
-  id: "script_pod_import",
-  description:
-    "Import a pod.json-backed Revit scripting workspace from a conservative zip archive. Import hard-fails if the target workspace slug already exists.",
-  inputSchema: scriptPodImportInputSchema,
-  execute: async (input) => createCurrentScriptingTools(input.bridgeSessionId).importPod(input),
-});
-
-export const scriptPodExport = createTool({
-  id: "script_pod_export",
-  description:
-    "Export an existing pod.json-backed Revit scripting workspace as a portable source-first zip archive. Generated/runtime folders and DLL payloads are excluded.",
-  inputSchema: scriptPodExportInputSchema,
-  execute: async (input) => createCurrentScriptingTools(input.bridgeSessionId).exportPod(input),
 });
 
 export const captureView = createCaptureViewTool((bridgeSessionId) =>
@@ -268,13 +285,11 @@ export const peaProductTools = {
   [requestAccess.id]: requestAccess,
   [readImage.id]: readImage,
   [captureView.id]: captureView,
+  [revitApiSearch.id]: revitApiSearch,
+  [revitApiFetch.id]: revitApiFetch,
   [scriptBootstrap.id]: scriptBootstrap,
   [scriptExecute.id]: scriptExecute,
-  [scriptPodImport.id]: scriptPodImport,
-  [scriptPodExport.id]: scriptPodExport,
   ...familySheetTools,
-  // [revitApiSearch.id]: revitApiSearch,
-  // [revitApiFetch.id]: revitApiFetch,
 };
 
 export const peaTools = peaProductTools;
@@ -296,8 +311,8 @@ function createCurrentHostRpcCaller(bridgeSessionId?: string, timeoutMs?: number
   });
 }
 
-function createCurrentScriptingTools(bridgeSessionId?: string) {
-  return new ScriptingTools(createCurrentHostRpcCaller(bridgeSessionId), {
+function createCurrentScriptingTools(bridgeSessionId?: string, timeoutMs?: number) {
+  return new ScriptingTools(createCurrentHostRpcCaller(bridgeSessionId, timeoutMs), {
     workspaceKey: resolveWorkspaceKey(peaProductToolContext.workspaceKey),
   });
 }

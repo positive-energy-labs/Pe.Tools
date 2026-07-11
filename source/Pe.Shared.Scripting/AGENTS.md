@@ -15,7 +15,7 @@ Owns Revit-neutral scripting primitives shared by Revit-hosted execution and fut
 - `Analysis/ScriptEntryPointResolver.cs` - syntax-only container entry-point discovery.
 - `Policy/ScriptPolicyAnalyzer.cs` - policy pipeline and default rule composition.
 - `Policy/IScriptPolicyRule.cs` - extension point for future semantic/Revit-type-oriented safety rules.
-- `Policy/ProcessShellPolicyRule.cs` and `Policy/RevitTransactionPolicyRule.cs` - current minimum viable syntax rules.
+- `Policy/RevitTransactionPolicyRule.cs` - the current minimum viable syntax rule (script-created transactions).
 - `Pods/*` - Revit-neutral Pod manifest models and validation rules.
 
 ## Validation
@@ -29,7 +29,7 @@ Owns Revit-neutral scripting primitives shared by Revit-hosted execution and fut
 | ---------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
 | **policy rule**              | One syntax/analysis check that returns `ScriptDiagnostic` values                   | Prefer additive rules over hardcoded checks in the Revit adapter |
 | **host-owned transaction**   | The Revit transaction opened by the scripting host for `WriteTransaction` requests | Scripts must not create their own Revit transactions             |
-| **read-only script**         | Default permission mode; no host transaction is opened                             | Prefer this for host RPC joins, inspection, and artifacts        |
+| **read-only script**         | Default permission mode; the Revit host rolls back and discards document changes   | Prefer this for host RPC joins, inspection, and artifacts        |
 | **write-transaction script** | Explicit opt-in mode where the host opens one transaction                          | Use only for intentional document mutations                      |
 
 ## Living Memory

@@ -50,7 +50,7 @@ public static class RevitBridgeOps {
     public static readonly BridgeOp FieldOptions =
         BridgeOp.Create<FieldOptionsRequest, FieldOptionsData>(
             "settings.field-options",
-            "Get Field Options",
+            "Get Settings Field Options",
             HostOperationAgentMetadata.Create(
                 "Read document-specific field option values for a settings module.",
                 new[] { "settings", "field-options", "schema", "document" },
@@ -200,7 +200,7 @@ public static class RevitBridgeOps {
             "revit.catalog.project-index",
             "Get Project Index",
             HostOperationAgentMetadata.Create(
-                "Read a compact semantic project index with bounded Project Browser provenance for levels, sheets, views, schedules, categories, and families.",
+                "Read a compact semantic project index with bounded Project Browser provenance for levels, sheets, views, schedules, categories, and families. Use after revit.context.summary when you need actual names and handles across the project, not just counts.",
                 new[] { "project-index", "project-browser", "browser-provenance", "levels", "sheets", "views", "schedules", "printed-context", "orientation" },
                 requiresActiveDocument: true,
                 requestExamples: [
@@ -720,7 +720,7 @@ public static class RevitBridgeOps {
             "revit.context.document-session",
             "Get Revit Document Session Context",
             HostOperationAgentMetadata.Create(
-                "Read open, active, and selected document session context from connected Revit.",
+                "Read open, active, and selected document session context from connected Revit. Use only when the question spans multiple open documents or there is no active document; revit.context.summary covers single-document orientation.",
                 new[] { "document", "session", "active-document", "open-documents" }
             ),
             static (request, context, ct) => context.RevitData.GetRevitDocumentSessionContextAsync()
@@ -779,8 +779,8 @@ public static class RevitBridgeOps {
             "revit.context.summary",
             "Get Revit Agent Context Summary",
             HostOperationAgentMetadata.Create(
-                "Read compact current document, active view or sheet, selection, browser counts, and visible-category context for Pea orientation.",
-                new[] { "agent-context", "summary", "active-view", "selection", "visible", "browser" },
+                "THE orientation call: compact current document, active view or sheet, selection, browser counts, and visible-category context. Call this first; escalate to project-index for names/handles, visible-summary for element handles, or document-session for multi-document facts.",
+                new[] { "agent-context", "summary", "active-view", "selection", "visible", "browser", "orientation", "start-here" },
                 requiresActiveDocument: true
             ),
             static (request, context, ct) => context.RevitData.GetRevitAgentContextSummaryAsync()
@@ -946,8 +946,8 @@ public static class RevitBridgeOps {
             "scripting.workspace.bootstrap",
             "Bootstrap Script Workspace",
             HostOperationAgentMetadata.Create(
-                "Create or update the host-owned C# Revit scripting workspace files.",
-                new[] { "script", "workspace", "bootstrap", "files" },
+                "Create or update a C# Revit scripting pod workspace: pod.json, PeScripts.csproj, docs, and a sample entrypoint script.",
+                new[] { "script", "workspace", "pod", "bootstrap", "files" },
                 HostOperationIntent.Mutate
             ),
             static (request, context, ct) => context.Scripting.BootstrapWorkspaceAsync(request, ct)
@@ -958,12 +958,30 @@ public static class RevitBridgeOps {
             "scripting.execute",
             "Execute Revit Script",
             HostOperationAgentMetadata.Create(
-                "Execute an inline or workspace-relative C# script in connected Revit. Inline content may be Execute-body statements with optional leading using directives or a full PeScriptContainer class; workspace files are normal C# PeScriptContainer entrypoints.",
-                new[] { "script", "execute", "csharp", "revit" },
+                "Execute C# in connected Revit: scriptContent for an inline snippet (Execute-body statements or a full PeScriptContainer class), or sourcePath for a pod entrypoint declared in the workspace's pod.json — exactly one of the two. permissionMode defaults to ReadOnly, which discards any document changes via a rollback guard; pass WriteTransaction to keep changes.",
+                new[] { "script", "execute", "csharp", "revit", "pod" },
                 HostOperationIntent.Mutate,
-                requiresActiveDocument: true
+                requiresActiveDocument: true,
+                callGuidance: [
+                    "Scripts run with a cooperative timeout (timeoutSeconds, default 600s) and one at a time (a second request waits up to 30s, then fails busy). Long loops should check ct or call ThrowIfCancelled() so the timeout and scripting.cancel can interrupt them.",
+                    "Use Result(...) in the script to return structured JSON (response data field); WriteLine for short human output; Artifacts for durable files."
+                ]
             ),
             static (request, context, ct) => context.Scripting.ExecuteAsync(request, ct)
+        );
+
+    public static readonly BridgeOp CancelRevitScript =
+        BridgeOp.Create<ScriptCancelRequest, ScriptCancelData>(
+            "scripting.cancel",
+            "Cancel Revit Script",
+            HostOperationAgentMetadata.Create(
+                "Signal cooperative cancellation to the currently running script execution. The script stops at its next ct / ThrowIfCancelled checkpoint; scripts that never check the token cannot be interrupted.",
+                new[] { "script", "cancel", "stop", "timeout", "revit" },
+                // Read intent: cancelling restores safety and must not require edit access.
+                HostOperationIntent.Read,
+                requiresActiveDocument: false
+            ),
+            static (request, context, ct) => context.Scripting.CancelAsync(request, ct)
         );
 
     public static readonly BridgeOp ImportScriptPod =
@@ -971,7 +989,7 @@ public static class RevitBridgeOps {
             "scripting.pod.import",
             "Import Script Pod",
             HostOperationAgentMetadata.Create(
-                "Import a pod.json-backed Revit scripting workspace from a conservative zip archive into a new workspace slug.",
+                "Import a pod.json-backed Revit scripting workspace from a .zip archive (any path) into a new workspace slug under Documents/Pe.Tools/workspaces.",
                 new[] { "script", "pod", "import", "workspace", "zip", "archive" },
                 HostOperationIntent.Mutate
             ),
@@ -983,10 +1001,23 @@ public static class RevitBridgeOps {
             "scripting.pod.export",
             "Export Script Pod",
             HostOperationAgentMetadata.Create(
-                "Export a validated pod.json-backed Revit scripting workspace as a portable source-first zip archive.",
+                "Export a validated pod.json-backed Revit scripting workspace as a portable source-first .zip archive to any path.",
                 new[] { "script", "pod", "export", "workspace", "zip", "archive" },
                 HostOperationIntent.Mutate
             ),
             static (request, context, ct) => context.Scripting.ExportPodAsync(request, ct)
+        );
+
+    public static readonly BridgeOp ListScriptPods =
+        BridgeOp.Create<ScriptPodListRequest, ScriptPodListData>(
+            "scripting.pod.list",
+            "List Script Pods",
+            HostOperationAgentMetadata.Create(
+                "List all scripting workspaces with their validated pod.json manifests and entrypoints. Workspaces with a missing or invalid pod.json are included with diagnostics explaining what to fix.",
+                new[] { "script", "pod", "list", "workspace", "entrypoints", "catalog" },
+                HostOperationIntent.Read,
+                requiresActiveDocument: false
+            ),
+            static (request, context, ct) => context.Scripting.ListPodsAsync(request, ct)
         );
 }

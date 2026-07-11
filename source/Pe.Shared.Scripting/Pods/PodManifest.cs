@@ -13,12 +13,7 @@ public sealed record PodManifest(
     string Name,
     string Version,
     string? Description,
-    PodOrigin? Origin,
     IReadOnlyList<PodEntrypoint> Entrypoints
-);
-
-public sealed record PodOrigin(
-    string Path
 );
 
 public sealed record PodEntrypoint(
@@ -45,12 +40,7 @@ public static class PodManifestValidator {
         "name",
         "version",
         "description",
-        "origin",
         "entrypoints"
-    };
-
-    private static readonly HashSet<string> OriginFields = new(StringComparer.Ordinal) {
-        "path"
     };
 
     private static readonly HashSet<string> EntrypointFields = new(StringComparer.Ordinal) {
@@ -99,7 +89,6 @@ public static class PodManifestValidator {
         var name = ReadRequiredString(root, "name", diagnostics);
         var version = ReadRequiredString(root, "version", diagnostics);
         var description = ReadOptionalString(root, "description", diagnostics);
-        var origin = ReadOrigin(root, diagnostics);
         var entrypoints = ReadEntrypoints(root, diagnostics);
 
         if (diagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error))
@@ -112,7 +101,6 @@ public static class PodManifestValidator {
                 name!,
                 version!,
                 description,
-                origin,
                 entrypoints
             ),
             diagnostics
@@ -168,34 +156,6 @@ public static class PodManifestValidator {
 
         diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, $"pod.json field '{fieldName}' must be a string."));
         return null;
-    }
-
-    private static PodOrigin? ReadOrigin(JObject root, List<ScriptDiagnostic> diagnostics) {
-        var token = root["origin"];
-        if (token is null || token.Type == JTokenType.Null)
-            return null;
-
-        if (token is not JObject obj) {
-            diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, "pod.json field 'origin' must be an object."));
-            return null;
-        }
-
-        AddUnknownFieldDiagnostics(obj, OriginFields, diagnostics, "origin");
-        var path = ReadRequiredString(obj, "path", diagnostics);
-        if (path is not null && !IsAbsoluteLocalPath(path))
-            diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, "pod.json origin.path must be an absolute local path."));
-
-        return path is null ? null : new PodOrigin(path);
-    }
-
-    private static bool IsAbsoluteLocalPath(string path) {
-        if (Uri.TryCreate(path, UriKind.Absolute, out var uri) && !uri.IsFile)
-            return false;
-
-        var root = Path.GetPathRoot(path);
-        return !string.IsNullOrWhiteSpace(root)
-               && !string.Equals(root, Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal)
-               && path.Length > root.Length;
     }
 
     private static IReadOnlyList<PodEntrypoint> ReadEntrypoints(JObject root, List<ScriptDiagnostic> diagnostics) {

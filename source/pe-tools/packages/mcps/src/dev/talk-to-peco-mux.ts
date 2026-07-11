@@ -7,29 +7,19 @@ const defaultPostSubmitDelayMs = 2500;
 const defaultTimeoutSeconds = 90;
 const screenTailLimit = 12000;
 
-export type PecoMuxDirection = "right" | "down";
-
 export interface TalkToPecoMuxRequest {
   prompt?: string;
   cwd?: string;
-  direction?: PecoMuxDirection;
   startupDelayMs?: number;
   postSubmitDelayMs?: number;
   timeoutSeconds?: number;
-  dumpScreen?: boolean;
   dumpFullScrollback?: boolean;
-}
-
-export interface TalkToPecoPsmuxRequest extends TalkToPecoMuxRequest {
-  sessionName?: string;
-  attachInZellij?: boolean;
 }
 
 export async function talkToPecoZellij(request: TalkToPecoMuxRequest = {}) {
   const startedAt = Date.now();
   const cwd = await resolveRepoRoot(request.cwd ?? process.cwd());
   const timeoutSeconds = request.timeoutSeconds ?? defaultTimeoutSeconds;
-  const direction = request.direction ?? "right";
 
   const launch = await runProcess(
     "zellij",
@@ -37,7 +27,7 @@ export async function talkToPecoZellij(request: TalkToPecoMuxRequest = {}) {
       "action",
       "new-pane",
       "--direction",
-      direction,
+      "right",
       "--cwd",
       cwd,
       "--name",
@@ -59,10 +49,7 @@ export async function talkToPecoZellij(request: TalkToPecoMuxRequest = {}) {
   const promptSent = await sendPromptToZellijPane(paneId, request.prompt, timeoutSeconds);
   if (promptSent) await delay(request.postSubmitDelayMs ?? defaultPostSubmitDelayMs);
 
-  const screen =
-    request.dumpScreen === false
-      ? undefined
-      : await dumpZellijPane(paneId, request.dumpFullScrollback ?? false, timeoutSeconds);
+  const screen = await dumpZellijPane(paneId, request.dumpFullScrollback ?? false, timeoutSeconds);
 
   return {
     ok: true,
@@ -70,7 +57,6 @@ export async function talkToPecoZellij(request: TalkToPecoMuxRequest = {}) {
     mux: "zellij",
     paneId,
     cwd,
-    direction,
     promptSent,
     elapsedMs: Date.now() - startedAt,
     command: "pnpm -C source/pe-tools --filter @pe/peco peco",
@@ -81,127 +67,6 @@ export async function talkToPecoZellij(request: TalkToPecoMuxRequest = {}) {
         "A second peco TUI was opened in a zellij pane and, when prompt is provided, text was injected through zellij's terminal input path rather than a headless worker API.",
       doesNotProve:
         "That the model completed the answer; use the visible pane or dumped screen as conversational evidence.",
-    },
-    screen,
-  };
-}
-
-export async function talkToPecoPsmux(request: TalkToPecoPsmuxRequest = {}) {
-  const startedAt = Date.now();
-  const cwd = await resolveRepoRoot(request.cwd ?? process.cwd());
-  const timeoutSeconds = request.timeoutSeconds ?? defaultTimeoutSeconds;
-  const direction = request.direction ?? "right";
-  const sessionName = sanitizeTmuxSessionName(request.sessionName ?? "peco-mux-poc");
-
-  let paneId: string;
-  let sessionCreated = false;
-  let zellijAttachmentPaneId: string | undefined;
-  if (process.env.TMUX) {
-    const split = await runProcess(
-      "tmux",
-      [
-        "split-window",
-        direction === "down" ? "-v" : "-h",
-        "-P",
-        "-F",
-        "#{pane_id}",
-        "-c",
-        cwd,
-        'powershell -NoExit -Command "' +
-          escapeForPowerShellDoubleQuoted(pecoPanePowerShellCommand()) +
-          '"',
-      ],
-      { cwd, timeoutSeconds },
-    );
-    paneId = parseTmuxPaneId(split.stdout);
-  } else {
-    const hasSession = await runProcessAllowFailure("tmux", ["has-session", "-t", sessionName], {
-      cwd,
-      timeoutSeconds,
-    });
-    if (hasSession.exitCode !== 0) {
-      await runProcess(
-        "tmux",
-        ["new-session", "-d", "-s", sessionName, "-c", cwd, "powershell -NoExit"],
-        { cwd, timeoutSeconds },
-      );
-      sessionCreated = true;
-    }
-
-    const split = await runProcess(
-      "tmux",
-      [
-        "split-window",
-        direction === "down" ? "-v" : "-h",
-        "-P",
-        "-F",
-        "#{pane_id}",
-        "-t",
-        `${sessionName}:0`,
-        "-c",
-        cwd,
-        'powershell -NoExit -Command "' +
-          escapeForPowerShellDoubleQuoted(pecoPanePowerShellCommand()) +
-          '"',
-      ],
-      { cwd, timeoutSeconds },
-    );
-    paneId = parseTmuxPaneId(split.stdout);
-
-    if (request.attachInZellij ?? Boolean(process.env.ZELLIJ)) {
-      const attach = await runProcessAllowFailure(
-        "zellij",
-        [
-          "action",
-          "new-pane",
-          "--direction",
-          "down",
-          "--cwd",
-          cwd,
-          "--name",
-          `psmux-${sessionName}`,
-          "--",
-          "tmux",
-          "attach-session",
-          "-t",
-          sessionName,
-        ],
-        { cwd, timeoutSeconds },
-      );
-      zellijAttachmentPaneId = parseZellijPaneId(attach.stdout) ?? undefined;
-    }
-  }
-
-  if (!paneId) throw new Error("tmux did not report a created pane id.");
-
-  await delay(request.startupDelayMs ?? defaultStartupDelayMs);
-  const promptSent = await sendPromptToTmuxPane(paneId, request.prompt, timeoutSeconds);
-  if (promptSent) await delay(request.postSubmitDelayMs ?? defaultPostSubmitDelayMs);
-
-  const screen =
-    request.dumpScreen === false
-      ? undefined
-      : await captureTmuxPane(paneId, request.dumpFullScrollback ?? false, timeoutSeconds);
-
-  return {
-    ok: true,
-    workflow: "talk_to_peco_psmux",
-    mux: "psmux/tmux",
-    paneId,
-    sessionName: process.env.TMUX ? undefined : sessionName,
-    sessionCreated,
-    zellijAttachmentPaneId,
-    cwd,
-    direction,
-    promptSent,
-    elapsedMs: Date.now() - startedAt,
-    command: "pnpm -C source/pe-tools --filter @pe/peco peco",
-    proof: {
-      inputPath: "tmux send-keys -l -t <pane> <prompt> + tmux send-keys -t <pane> Enter",
-      interpretation:
-        "A second peco TUI was opened in a psmux/tmux pane and, when prompt is provided, text was injected through tmux key sending rather than a headless worker API.",
-      doesNotProve:
-        "That the model completed the answer; use the attached session/pane or captured pane text as conversational evidence.",
     },
     screen,
   };
@@ -222,17 +87,6 @@ async function sendPromptToZellijPane(
   return true;
 }
 
-async function sendPromptToTmuxPane(
-  paneId: string,
-  prompt: string | undefined,
-  timeoutSeconds: number,
-): Promise<boolean> {
-  if (!prompt?.trim()) return false;
-  await runProcess("tmux", ["send-keys", "-t", paneId, "-l", prompt], { timeoutSeconds });
-  await runProcess("tmux", ["send-keys", "-t", paneId, "Enter"], { timeoutSeconds });
-  return true;
-}
-
 async function dumpZellijPane(
   paneId: string,
   full: boolean,
@@ -242,18 +96,6 @@ async function dumpZellijPane(
   if (full) args.push("--full");
   const dump = await runProcess("zellij", args, { timeoutSeconds });
   return tailText(dump.stdout);
-}
-
-async function captureTmuxPane(
-  paneId: string,
-  full: boolean,
-  timeoutSeconds: number,
-): Promise<string> {
-  const args = ["capture-pane", "-p", "-t", paneId];
-  if (full) args.push("-S", "-");
-  else args.push("-S", "-200");
-  const capture = await runProcess("tmux", args, { timeoutSeconds });
-  return tailText(capture.stdout);
 }
 
 function pecoPanePowerShellCommand(): string {
@@ -351,19 +193,6 @@ function runProcessAllowFailure(
 
 function parseZellijPaneId(stdout: string): string | null {
   return stdout.match(/terminal_\d+/)?.[0] ?? null;
-}
-
-function parseTmuxPaneId(stdout: string): string {
-  return stdout.match(/%\d+/)?.[0] ?? stdout.trim().split(/\s+/)[0] ?? "";
-}
-
-function sanitizeTmuxSessionName(value: string): string {
-  const sanitized = value.replace(/[^A-Za-z0-9_.-]/g, "-").replace(/^-+|-+$/g, "");
-  return sanitized || "peco-mux-poc";
-}
-
-function escapeForPowerShellDoubleQuoted(value: string): string {
-  return value.replace(/`/g, "``").replace(/\$/g, "`$").replace(/"/g, '`"');
 }
 
 function tailText(value: string): string {

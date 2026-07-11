@@ -73,8 +73,10 @@ public interface IScriptingBridgeService {
         CancellationToken cancellationToken
     );
     Task<ExecuteRevitScriptData> ExecuteAsync(ExecuteRevitScriptRequest request, CancellationToken cancellationToken);
+    Task<ScriptCancelData> CancelAsync(ScriptCancelRequest request, CancellationToken cancellationToken);
     Task<ScriptPodImportData> ImportPodAsync(ScriptPodImportRequest request, CancellationToken cancellationToken);
     Task<ScriptPodExportData> ExportPodAsync(ScriptPodExportRequest request, CancellationToken cancellationToken);
+    Task<ScriptPodListData> ListPodsAsync(ScriptPodListRequest request, CancellationToken cancellationToken);
 }
 
 public sealed class BridgeOp {

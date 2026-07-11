@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { define } from "gunshi";
 import { HostRpcCaller } from "../shared/host-rpc-caller.js";
 import {
@@ -8,7 +7,12 @@ import {
 import { syncLiveRrd } from "./live-sync.ts";
 import { resolveHostBaseUrl, resolveWorkspaceKey } from "../shared/host-config.ts";
 import { asOptionalString, firstNonBlank } from "../shared/cli-values.ts";
-import { ScriptingTools } from "../shared/scripting.ts";
+import {
+  ScriptingTools,
+  parseCliPermissionMode,
+  resolveCliScriptContent,
+  scriptClientTimeoutMs,
+} from "../shared/scripting.ts";
 import type { ScriptExecuteInput } from "../shared/scripting.ts";
 import { talkToPeaHarness } from "./talk-to-pea.ts";
 import { talkToPecoZellij, type TalkToPecoMuxRequest } from "./talk-to-peco-mux.ts";
@@ -26,7 +30,6 @@ export class PeCodeCliCommands {
       live: this.liveCommand(),
       script: this.scriptCommand(),
       "talk-to-pea": this.talkToPeaCommand(),
-      // "talk-to-peco-psmux": this.talkToPecoPsmuxCommand(),
       "talk-to-peco-zellij": this.talkToPecoZellijCommand(),
     };
   }
@@ -182,36 +185,39 @@ export class PeCodeCliCommands {
         sourceName: {
           type: "string",
           description: "Synthetic source filename used for diagnostics.",
-          default: "AgentSnippet.cs",
         },
         permissionMode: {
           type: "string",
-          description: "Script permission mode: ReadOnly or WriteTransaction.",
-          default: "ReadOnly",
+          description:
+            "Script permission mode: ReadOnly (default; changes discarded) or WriteTransaction (changes kept).",
         },
       },
       toKebab: true,
       run: async (ctx) => {
-        const scriptContent = await resolveScriptContent(ctx.values);
+        const scriptContent = await resolveCliScriptContent(ctx.values);
         const sourcePath = firstNonBlank(ctx.values.sourcePath);
         if (!scriptContent && !sourcePath)
           throw new Error("Provide --file, --stdin, --script-content, or --source-path.");
+        if (scriptContent && sourcePath)
+          throw new Error(
+            "Provide inline content (--file/--stdin/--script-content) or --source-path, not both.",
+          );
 
         const timeoutSeconds = ctx.values.timeoutSeconds ?? defaultPeaRuntimeTimeoutSeconds;
         const sync = await syncLiveRrd({ timeoutSeconds });
         const script = await new ScriptingTools(
           new HostRpcCaller({
             hostBaseUrl: this.resolveHostBaseUrl(ctx.values.host),
-            timeoutMs: Math.max(timeoutSeconds, 1) * 1000,
+            timeoutMs: scriptClientTimeoutMs(timeoutSeconds),
           }),
           { workspaceKey: this.resolveWorkspaceKey(ctx.values.workspace) },
         ).execute({
           scriptContent,
-          sourceKind: sourcePath ? "WorkspacePath" : "InlineSnippet",
           sourcePath,
           workspaceKey: ctx.values.workspace,
-          sourceName: ctx.values.sourceName,
-          permissionMode: parsePermissionMode(ctx.values.permissionMode),
+          sourceName: firstNonBlank(ctx.values.sourceName),
+          permissionMode: parseCliPermissionMode(ctx.values.permissionMode),
+          timeoutSeconds,
         } satisfies ScriptExecuteInput);
 
         writeObject({
@@ -242,11 +248,6 @@ const pecoMuxArgs = {
     type: "string",
     description: "Repo path used as the pane working directory.",
   },
-  direction: {
-    type: "string",
-    description: "Pane split direction: right or down.",
-    default: "right",
-  },
   startupDelayMs: {
     type: "number",
     description: "Milliseconds to wait for the TUI to start before sending the prompt.",
@@ -261,11 +262,6 @@ const pecoMuxArgs = {
     type: "number",
     description: "Timeout in seconds.",
     default: 90,
-  },
-  dumpScreen: {
-    type: "boolean",
-    description: "Dump the target pane screen after launch/send.",
-    default: true,
   },
   dumpFullScrollback: {
     type: "boolean",
@@ -294,55 +290,14 @@ const commonArgs = {
 } as const;
 
 function resolvePecoMuxCliRequest(values: Record<string, unknown>): TalkToPecoMuxRequest {
-  const direction = asOptionalString(values.direction) ?? "right";
-  if (direction !== "right" && direction !== "down") {
-    throw new Error("Unknown direction. Expected right or down.");
-  }
-
   return {
     prompt: firstNonBlank(values.prompt),
     cwd: firstNonBlank(values.cwd),
-    direction,
     startupDelayMs: asOptionalNumber(values.startupDelayMs) ?? 7000,
     postSubmitDelayMs: asOptionalNumber(values.postSubmitDelayMs) ?? 2500,
     timeoutSeconds: asOptionalNumber(values.timeoutSeconds) ?? 90,
-    dumpScreen: values.dumpScreen !== false,
     dumpFullScrollback: values.dumpFullScrollback === true,
   };
-}
-
-async function resolveScriptContent(values: Record<string, unknown>): Promise<string | undefined> {
-  const explicit = firstNonBlank(values.scriptContent);
-  if (explicit) return explicit;
-
-  const file = firstNonBlank(values.file);
-  if (file) return readFile(file, "utf-8");
-
-  if (values.stdin === true) return readStdin();
-  return undefined;
-}
-
-function readStdin(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let content = "";
-    process.stdin.setEncoding("utf8");
-    process.stdin.on("data", (chunk) => {
-      content += chunk;
-    });
-    process.stdin.on("error", reject);
-    process.stdin.on("end", () => resolve(content));
-  });
-}
-
-function parsePermissionMode(value: unknown): "ReadOnly" | "WriteTransaction" {
-  switch (asOptionalString(value) ?? "ReadOnly") {
-    case "ReadOnly":
-      return "ReadOnly";
-    case "WriteTransaction":
-      return "WriteTransaction";
-    default:
-      throw new Error("Unknown permission mode. Expected ReadOnly or WriteTransaction.");
-  }
 }
 
 function parseTalkToPeaFrame(value: unknown): "operator" | "feedback" | "collaborate" {

@@ -24,6 +24,7 @@ public sealed class ScriptWorkspaceBootstrapService(
         var sourceDirectory = RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey);
         var vscodeDirectory = RevitScriptingStorageLocations.ResolveGeneratedDirectory(workspaceKey);
         var sampleScriptPath = RevitScriptingStorageLocations.ResolveSampleScriptPath(workspaceKey);
+        var podManifestPath = RevitScriptingStorageLocations.ResolvePodManifestPath(workspaceKey);
         var agentsPath = RevitScriptingStorageLocations.ResolveAgentsPath(workspaceKey);
         var readmePath = RevitScriptingStorageLocations.ResolveReadmePath(workspaceKey);
         var joinGuidePath = RevitScriptingStorageLocations.ResolveJoinGuidePath(workspaceKey);
@@ -52,8 +53,10 @@ public sealed class ScriptWorkspaceBootstrapService(
         EnsureFile(readmePath, ScriptFileTemplates.CreateReadme(), generatedFiles);
         EnsureFile(joinGuidePath, ScriptFileTemplates.CreateJoinGuide(), generatedFiles);
         EnsureFile(vscodeSettingsPath, ScriptFileTemplates.CreateVscodeSettings(), generatedFiles);
-        if (createSampleScript)
+        if (createSampleScript) {
             EnsureFile(sampleScriptPath, ScriptFileTemplates.CreateSampleScript(), generatedFiles);
+            EnsureFile(podManifestPath, ScriptFileTemplates.CreatePodManifest(workspaceKey), generatedFiles);
+        }
 
         return new ScriptWorkspaceBootstrapData(
             workspaceKey,
@@ -64,6 +67,7 @@ public sealed class ScriptWorkspaceBootstrapService(
             agentsPath,
             readmePath,
             projectFilePath,
+            podManifestPath,
             sampleScriptPath,
             revitVersion,
             targetFramework,

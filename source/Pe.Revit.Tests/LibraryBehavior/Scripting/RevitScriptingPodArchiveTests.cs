@@ -95,17 +95,16 @@ public sealed class RevitScriptingPodArchiveTests {
     }
 
     [Test]
-    public void Import_rejects_origin_version_mismatch_with_diagnostics() {
+    public void Import_rejects_manifest_with_origin_field() {
         var workspaceKey = $"pod-{Guid.NewGuid():N}";
         var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
-        var originRoot = Path.Combine(Path.GetTempPath(), $"pod-origin-{Guid.NewGuid():N}");
         var archivePath = CreateArchivePath();
 
         try {
-            Directory.CreateDirectory(originRoot);
-            File.WriteAllText(Path.Combine(originRoot, "pod.json"), CreatePodManifest(workspaceKey, version: "2.0.0"));
+            // 'origin' was removed from the pod.json schema; the strict validator now rejects it
+            // as an unknown field.
             using (var archive = ZipFile.Open(archivePath, ZipArchiveMode.Create)) {
-                WriteEntry(archive, "pod.json", CreatePodManifest(workspaceKey, version: "1.0.0", originPath: originRoot));
+                WriteEntry(archive, "pod.json", CreatePodManifestWithOrigin(workspaceKey));
                 WriteEntry(archive, "src/Main.cs", "public sealed class MainScript : PeScriptContainer { public override void Execute() { } }");
             }
 
@@ -117,27 +116,59 @@ public sealed class RevitScriptingPodArchiveTests {
             );
 
             Assert.That(result.Status, Is.EqualTo(ScriptPodTransferStatus.Rejected));
-            Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("Reimport the Pod"));
+            Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("Unknown field 'origin'"));
             Assert.That(Directory.Exists(workspaceRoot), Is.False);
         } finally {
             DeleteWorkspace(workspaceRoot);
-            DeleteWorkspace(originRoot);
             DeleteFile(archivePath);
         }
     }
 
     [Test]
-    public void Export_rejects_origin_version_mismatch_with_diagnostics() {
+    public void Import_rejects_directory_archive_path() {
+        var directoryPath = Path.Combine(Path.GetTempPath(), $"pod-dir-{Guid.NewGuid():N}");
+
+        try {
+            Directory.CreateDirectory(directoryPath);
+
+            var result = CreateArchiveService().Import(
+                new ScriptPodImportRequest(directoryPath),
+                "2025",
+                "net8.0-windows",
+                typeof(PeScriptContainer).Assembly.Location
+            );
+
+            Assert.That(result.Status, Is.EqualTo(ScriptPodTransferStatus.Rejected));
+            Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("pods import from .zip archives only"));
+        } finally {
+            DeleteWorkspace(directoryPath);
+        }
+    }
+
+    [Test]
+    public void Import_rejects_non_zip_archive_path() {
+        var archivePath = Path.Combine(Path.GetTempPath(), $"pod-{Guid.NewGuid():N}.tar.gz");
+
+        var result = CreateArchiveService().Import(
+            new ScriptPodImportRequest(archivePath),
+            "2025",
+            "net8.0-windows",
+            typeof(PeScriptContainer).Assembly.Location
+        );
+
+        Assert.That(result.Status, Is.EqualTo(ScriptPodTransferStatus.Rejected));
+        Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("Pod archives must be .zip files"));
+    }
+
+    [Test]
+    public void Export_rejects_manifest_with_origin_field() {
         var workspaceKey = $"pod-{Guid.NewGuid():N}";
         var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
-        var originRoot = Path.Combine(Path.GetTempPath(), $"pod-origin-{Guid.NewGuid():N}");
         var archivePath = CreateArchivePath();
 
         try {
             Directory.CreateDirectory(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey));
-            Directory.CreateDirectory(originRoot);
-            File.WriteAllText(Path.Combine(originRoot, "pod.json"), CreatePodManifest(workspaceKey, version: "2.0.0"));
-            File.WriteAllText(RevitScriptingStorageLocations.ResolvePodManifestPath(workspaceKey), CreatePodManifest(workspaceKey, version: "1.0.0", originPath: originRoot));
+            File.WriteAllText(RevitScriptingStorageLocations.ResolvePodManifestPath(workspaceKey), CreatePodManifestWithOrigin(workspaceKey));
             File.WriteAllText(
                 Path.Combine(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey), "Main.cs"),
                 "public sealed class MainScript : PeScriptContainer { public override void Execute() { } }"
@@ -147,11 +178,36 @@ public sealed class RevitScriptingPodArchiveTests {
             var result = CreateArchiveService().Export(new ScriptPodExportRequest(workspaceKey, archivePath), "net8.0-windows", "2025");
 
             Assert.That(result.Status, Is.EqualTo(ScriptPodTransferStatus.Rejected));
-            Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("Reimport the Pod"));
+            Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("Unknown field 'origin'"));
             Assert.That(File.Exists(archivePath), Is.False);
         } finally {
             DeleteWorkspace(workspaceRoot);
-            DeleteWorkspace(originRoot);
+            DeleteFile(archivePath);
+        }
+    }
+
+    [Test]
+    public void Export_rejects_non_zip_archive_path() {
+        var workspaceKey = $"pod-{Guid.NewGuid():N}";
+        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
+        var archivePath = Path.Combine(Path.GetTempPath(), $"pod-{Guid.NewGuid():N}.tar.gz");
+
+        try {
+            Directory.CreateDirectory(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey));
+            File.WriteAllText(RevitScriptingStorageLocations.ResolvePodManifestPath(workspaceKey), CreatePodManifest(workspaceKey));
+            File.WriteAllText(
+                Path.Combine(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey), "Main.cs"),
+                "public sealed class MainScript : PeScriptContainer { public override void Execute() { } }"
+            );
+            File.WriteAllText(RevitScriptingStorageLocations.ResolveProjectFilePath(workspaceKey), "<Project></Project>");
+
+            var result = CreateArchiveService().Export(new ScriptPodExportRequest(workspaceKey, archivePath), "net8.0-windows", "2025");
+
+            Assert.That(result.Status, Is.EqualTo(ScriptPodTransferStatus.Rejected));
+            Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("Pod export archive path must end in .zip"));
+            Assert.That(File.Exists(archivePath), Is.False);
+        } finally {
+            DeleteWorkspace(workspaceRoot);
             DeleteFile(archivePath);
         }
     }
@@ -264,28 +320,32 @@ public sealed class RevitScriptingPodArchiveTests {
         WriteEntry(archive, "src/Main.cs", "public sealed class MainScript : PeScriptContainer { public override void Execute() { } }");
     }
 
-    private static string CreatePodManifest(string workspaceKey, string version = "1.0.0", string? originPath = null) {
-        var originJson = originPath is null
-            ? string.Empty
-            : $$"""
-              "origin": {
-                "path": "{{originPath.Replace("\\", "\\\\")}}"
-              },
-        """;
-
-        return $$"""
+    private static string CreatePodManifest(string workspaceKey) =>
+        $$"""
         {
           "schemaVersion": 1,
           "id": "{{workspaceKey}}",
           "name": "{{workspaceKey}}",
-          "version": "{{version}}",
-        {{originJson}}
+          "version": "1.0.0",
           "entrypoints": [
             { "id": "main", "sourcePath": "src/Main.cs" }
           ]
         }
         """;
-    }
+
+    private static string CreatePodManifestWithOrigin(string workspaceKey) =>
+        $$"""
+        {
+          "schemaVersion": 1,
+          "id": "{{workspaceKey}}",
+          "name": "{{workspaceKey}}",
+          "version": "1.0.0",
+          "origin": { "path": "C:/pods/legacy" },
+          "entrypoints": [
+            { "id": "main", "sourcePath": "src/Main.cs" }
+          ]
+        }
+        """;
 
     private static void WriteEntry(ZipArchive archive, string name, string content) {
         var entry = archive.CreateEntry(name);

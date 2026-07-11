@@ -36,6 +36,16 @@ export const peaProductToolCatalog: RuntimeToolCatalog = createRuntimeToolCatalo
     kind: "read",
     provenance: { source: "app", label: "Pea product" },
   },
+  revit_api_docs_search: {
+    title: "Revit API Docs Search",
+    kind: "read",
+    provenance: { source: "app", label: "Pea product" },
+  },
+  revit_api_docs_fetch: {
+    title: "Revit API Docs Fetch",
+    kind: "read",
+    provenance: { source: "app", label: "Pea product" },
+  },
   script_bootstrap: {
     title: "Script Bootstrap",
     kind: "edit",
@@ -44,16 +54,6 @@ export const peaProductToolCatalog: RuntimeToolCatalog = createRuntimeToolCatalo
   script_execute: {
     title: "Script Execute",
     kind: "execute",
-    provenance: { source: "app", label: "Pea product" },
-  },
-  script_pod_import: {
-    title: "Script Pod Import",
-    kind: "edit",
-    provenance: { source: "app", label: "Pea product" },
-  },
-  script_pod_export: {
-    title: "Script Pod Export",
-    kind: "edit",
     provenance: { source: "app", label: "Pea product" },
   },
   family_sheet_status: {

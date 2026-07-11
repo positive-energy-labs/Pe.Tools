@@ -77,8 +77,17 @@ public sealed class DocumentSandbox : IDisposable {
             _rollbackScopeDepth--;
 
         try {
-            if (this.Transaction.HasStarted() && !this.Transaction.HasEnded())
-                _ = this.Transaction.RollBack();
+            if (this.Transaction.HasStarted() && !this.Transaction.HasEnded()) {
+                // Hold the rollback-scope flag across the RollBack call itself so the DocumentChanged
+                // event it raises is recognizable as sandbox churn even for commit-mode transactions
+                // (a script that threw mid-write must not look like a real document change).
+                _rollbackScopeDepth++;
+                try {
+                    _ = this.Transaction.RollBack();
+                } finally {
+                    _rollbackScopeDepth--;
+                }
+            }
         } catch {
             // Dispose must not throw; a rollback that fails here has no recovery path and the
             // transaction's own dispose will still abort it.

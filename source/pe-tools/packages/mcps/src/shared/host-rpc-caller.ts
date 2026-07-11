@@ -33,6 +33,14 @@ type OpsCatalogEntry = HostOperationDefinition & {
   responseSchemaJson?: string;
 };
 
+/** Ops already exposed through dedicated MCP tools (pe_status, pe_logs). */
+const dedicatedToolOperationKeys = new Set([
+  "host.status",
+  "logs.tail",
+  "bridge.sessions.list",
+  "bridge.sessions.summary",
+]);
+
 const CATALOG_TTL_MS = 30_000;
 const catalogCache = new Map<string, { at: number; ops: HostOperationDefinition[] }>();
 
@@ -164,7 +172,11 @@ export class HostRpcCaller {
 
   /** Search/capability-map over the live catalog. Throws when the catalog is unreachable. */
   async searchOperations(options: HostOperationSearchOptions = {}) {
-    const operations = await this.catalog();
+    // Host-admin ops are served by the dedicated pe_status/pe_logs tools; hiding
+    // them here keeps exactly one door per capability.
+    const operations = (await this.catalog()).filter(
+      (operation) => !dedicatedToolOperationKeys.has(operation.key),
+    );
     if (options.projection === "capability-map") return renderCapabilityMap(operations, options);
     return searchHostOperations(operations, options);
   }
@@ -664,7 +676,9 @@ function createFailureNextSteps(
   if (operation == null) return ["Use host_operation_search to verify the operation key."];
   if (error instanceof HostCallError && error.status === 400)
     return [`Check the JSON request against ${createRequestHint(operation)}.`];
-  return ["Confirm the Revit bridge is connected, then retry with a bounded request."];
+  return [
+    "Check pe_status for bridge/session connectivity; if it shows a failure, read pe_logs, then retry with a bounded request.",
+  ];
 }
 
 function normalizeQuery(query: string | undefined): string[] {
