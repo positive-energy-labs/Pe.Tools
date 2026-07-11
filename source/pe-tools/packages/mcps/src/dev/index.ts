@@ -22,7 +22,6 @@ export const peCodeTools = {
   [liveLoopContext.id]: liveLoopContext,
   [scriptExecuteWithSync.id]: scriptExecuteWithSync,
   [talkToPea.id]: talkToPea,
-  // [talkToPecoPsmuxTool.id]: talkToPecoPsmuxTool,
   [talkToPecoZellijTool.id]: talkToPecoZellijTool,
 };
 

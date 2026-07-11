@@ -144,17 +144,19 @@ public sealed class RevitScriptingPortTests {
             var agentsPath = RevitScriptingStorageLocations.ResolveAgentsPath(workspaceKey);
             Assert.That(File.Exists(agentsPath), Is.True);
             Assert.That(File.ReadAllText(agentsPath),
-                Does.Contain("Pod mode validates root `pod.json`, compiles all `src/**/*.cs`, and executes only the requested declared entrypoint source"));
-            Assert.That(File.ReadAllText(agentsPath), Does.Contain("Pod manifests require `version`; optional local `origin.path`"));
-            Assert.That(File.ReadAllText(agentsPath), Does.Contain("ReadOnly` opens no host transaction"));
+                Does.Contain("Every workspace is a Pod: `pod.json` is validated, all `src/**/*.cs` compile together, and only declared entrypoints are runnable."));
+            Assert.That(File.ReadAllText(agentsPath), Does.Contain("add new scripts to `pod.json` under `entrypoints` first"));
+            Assert.That(File.ReadAllText(agentsPath), Does.Contain("ReadOnly` (default) runs inside a rollback guard"));
             Assert.That(File.ReadAllText(agentsPath), Does.Not.Contain("lane"));
             Assert.That(File.Exists(result.ProductAgentsPath), Is.True);
             Assert.That(File.Exists(result.ProductReadmePath), Is.True);
             Assert.That(File.Exists(result.WorkspaceReadmePath), Is.True);
             Assert.That(File.ReadAllText(result.WorkspaceReadmePath), Does.Not.Contain("lane"));
-            Assert.That(File.ReadAllText(result.SampleScriptPath), Does.Contain("pea script execute --source-path src\\SampleScript.cs"));
+            Assert.That(File.Exists(result.PodManifestPath), Is.True);
+            Assert.That(File.ReadAllText(result.PodManifestPath), Does.Contain("src/SampleScript.cs"));
+            Assert.That(File.ReadAllText(result.SampleScriptPath), Does.Contain("pea script execute --source-path src/SampleScript.cs"));
             Assert.That(File.ReadAllText(result.SampleScriptPath),
-                Does.Contain("Keep exactly one non-abstract PeScriptContainer in this file"));
+                Does.Contain("Keep exactly one non-abstract PeScriptContainer per entrypoint file"));
             Assert.That(result.GeneratedFiles, Does.Contain(agentsPath));
         } finally {
             DeleteWorkspace(workspaceRoot);
@@ -518,7 +520,7 @@ public sealed class RevitScriptingPortTests {
             var service = CreateExecutionService(uiApplication);
             var result = service.Execute(
                 new ExecuteRevitScriptRequest(
-                    """
+                    ScriptContent: """
                     public sealed class InlineOverrideScript : PeScriptContainer
                     {
                         public override void Execute()
@@ -527,7 +529,6 @@ public sealed class RevitScriptingPortTests {
                         }
                     }
                     """,
-                    ScriptExecutionSourceKind.InlineSnippet,
                     WorkspaceKey: workspaceKey
                 ),
                 "test-inline-project-override"
@@ -725,187 +726,6 @@ public sealed class RevitScriptingPortTests {
     }
 
     [Test]
-    public void ReadOnly_policy_rejects_direct_document_delete(UIApplication uiApplication) {
-        var service = CreateExecutionService(uiApplication);
-
-        var result = service.Execute(new ExecuteRevitScriptRequest(
-            """
-            public sealed class DeleteScript : PeScriptContainer
-            {
-                public override void Execute()
-                {
-                    if (doc == null)
-                        return;
-
-                    doc.Delete(ElementId.InvalidElementId);
-                }
-            }
-            """
-        ), "test-readonly-document-delete");
-
-        AssertPolicyRejected(result, "Autodesk.Revit.DB.Document.Delete");
-    }
-
-    [Test]
-    public void ReadOnly_policy_rejects_helper_file_document_delete(UIApplication uiApplication) {
-        var workspaceKey = $"test-readonly-helper-delete-{Guid.NewGuid():N}";
-        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
-        Directory.CreateDirectory(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey));
-
-        try {
-            File.WriteAllText(
-                RevitScriptingStorageLocations.ResolveSampleScriptPath(workspaceKey),
-                """
-                public sealed class WorkspaceScript : PeScriptContainer
-                {
-                    public override void Execute()
-                    {
-                        MutationHelper.Delete(doc);
-                    }
-                }
-                """
-            );
-            File.WriteAllText(
-                Path.Combine(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey), "MutationHelper.cs"),
-                """
-                public static class MutationHelper
-                {
-                    public static void Delete(Document document)
-                    {
-                        if (document == null)
-                            return;
-
-                        document.Delete(ElementId.InvalidElementId);
-                    }
-                }
-                """
-            );
-            WritePodManifest(workspaceKey, "src/SampleScript.cs");
-
-            var service = CreateExecutionService(uiApplication);
-            var result = service.Execute(
-                new ExecuteRevitScriptRequest(
-                    SourceKind: ScriptExecutionSourceKind.WorkspacePath,
-                    SourcePath: @"src\SampleScript.cs",
-                    WorkspaceKey: workspaceKey
-                ),
-                "test-readonly-helper-delete"
-            );
-
-            AssertPolicyRejected(result, "Autodesk.Revit.DB.Document.Delete");
-        } finally {
-            DeleteWorkspace(workspaceRoot);
-        }
-    }
-
-    [Test]
-    public void ReadOnly_policy_allows_uncalled_helper_file_mutators(UIApplication uiApplication) {
-        var workspaceKey = $"test-readonly-uncalled-helper-{Guid.NewGuid():N}";
-        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
-        Directory.CreateDirectory(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey));
-
-        try {
-            File.WriteAllText(
-                RevitScriptingStorageLocations.ResolveSampleScriptPath(workspaceKey),
-                """
-                public sealed class WorkspaceScript : PeScriptContainer
-                {
-                    public override void Execute()
-                    {
-                        WriteLine($"Marked: {MutationHelper.CountMarked(doc)}");
-                    }
-                }
-                """
-            );
-            File.WriteAllText(
-                Path.Combine(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey), "MutationHelper.cs"),
-                """
-                public static class MutationHelper
-                {
-                    public static int CountMarked(Document document) =>
-                        document == null
-                            ? 0
-                            : new FilteredElementCollector(document).WhereElementIsNotElementType().Take(3).Count();
-
-                    public static void Delete(Document document)
-                    {
-                        if (document == null)
-                            return;
-
-                        document.Delete(ElementId.InvalidElementId);
-                    }
-                }
-                """
-            );
-            WritePodManifest(workspaceKey, "src/SampleScript.cs");
-
-            var service = CreateExecutionService(uiApplication);
-            var result = service.Execute(
-                new ExecuteRevitScriptRequest(
-                    SourceKind: ScriptExecutionSourceKind.WorkspacePath,
-                    SourcePath: @"src\SampleScript.cs",
-                    WorkspaceKey: workspaceKey
-                ),
-                "test-readonly-uncalled-helper"
-            );
-
-            // The entrypoint reaches CountMarked (read-only) but never Delete: ReadOnly policy must
-            // judge reachable code, not every file compiled into the pod.
-            Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded));
-            Assert.That(result.Diagnostics.Any(diagnostic =>
-                diagnostic.Stage == "policy" && diagnostic.Severity == ScriptDiagnosticSeverity.Error), Is.False);
-        } finally {
-            DeleteWorkspace(workspaceRoot);
-        }
-    }
-
-    [Test]
-    public void ReadOnly_policy_rejects_family_manager_mutator(UIApplication uiApplication) {
-        var service = CreateExecutionService(uiApplication);
-
-        var result = service.Execute(new ExecuteRevitScriptRequest(
-            """
-            public sealed class FamilyManagerScript : PeScriptContainer
-            {
-                public override void Execute()
-                {
-                    if (doc?.IsFamilyDocument != true)
-                        return;
-
-                    doc.FamilyManager.NewType("Blocked");
-                }
-            }
-            """
-        ), "test-readonly-family-manager-mutator");
-
-        AssertPolicyRejected(result, "Autodesk.Revit.DB.FamilyManager.NewType");
-    }
-
-    [Test]
-    public void ReadOnly_policy_rejects_pe_family_wrapper_mutator(UIApplication uiApplication) {
-        var service = CreateExecutionService(uiApplication);
-
-        var result = service.Execute(new ExecuteRevitScriptRequest(
-            """
-            using Pe.Revit.Extensions.FamDocument;
-
-            public sealed class WrapperScript : PeScriptContainer
-            {
-                public override void Execute()
-                {
-                    if (doc?.IsFamilyDocument != true)
-                        return;
-
-                    _ = doc.GetFamilyDocument().EnsureDefaultType();
-                }
-            }
-            """
-        ), "test-readonly-pe-family-wrapper");
-
-        AssertPolicyRejected(result, "EnsureDefaultType");
-    }
-
-    [Test]
     public void WriteTransaction_policy_still_rejects_script_owned_transaction(UIApplication uiApplication) {
         var service = CreateExecutionService(uiApplication);
 
@@ -969,7 +789,7 @@ public sealed class RevitScriptingPortTests {
             var service = CreateExecutionService(uiApplication);
             var result = service.Execute(
                 new ExecuteRevitScriptRequest(
-                    """
+                    ScriptContent: """
                     public sealed class InlineScript : PeScriptContainer
                     {
                         public override void Execute()
@@ -978,7 +798,6 @@ public sealed class RevitScriptingPortTests {
                         }
                     }
                     """,
-                    ScriptExecutionSourceKind.InlineSnippet,
                     WorkspaceKey: workspaceKey,
                     SourceName: "SmokeInline.cs"
                 ),
@@ -1003,12 +822,11 @@ public sealed class RevitScriptingPortTests {
             var service = CreateExecutionService(uiApplication);
             var result = service.Execute(
                 new ExecuteRevitScriptRequest(
-                    """
+                    ScriptContent: """
                     using System.Globalization;
 
                     WriteLine(CultureInfo.InvariantCulture.Name);
                     """,
-                    ScriptExecutionSourceKind.InlineSnippet,
                     WorkspaceKey: workspaceKey,
                     SourceName: "UsingInline.cs"
                 ),
@@ -1030,7 +848,7 @@ public sealed class RevitScriptingPortTests {
             var service = CreateExecutionService(uiApplication);
             var result = service.Execute(
                 new ExecuteRevitScriptRequest(
-                    """
+                    ScriptContent: """
                     public sealed class DocumentHintScript : PeScriptContainer
                     {
                         public override void Execute()
@@ -1040,7 +858,6 @@ public sealed class RevitScriptingPortTests {
                         }
                     }
                     """,
-                    ScriptExecutionSourceKind.InlineSnippet,
                     WorkspaceKey: workspaceKey,
                     SourceName: "DocumentHint.cs"
                 ),
@@ -1064,7 +881,7 @@ public sealed class RevitScriptingPortTests {
             var service = CreateExecutionService(uiApplication);
             var result = service.Execute(
                 new ExecuteRevitScriptRequest(
-                    """
+                    ScriptContent: """
                     public sealed class BrokenInline : PeScriptContainer
                     {
                         public override void Execute()
@@ -1073,7 +890,6 @@ public sealed class RevitScriptingPortTests {
                         }
                     }
                     """,
-                    ScriptExecutionSourceKind.InlineSnippet,
                     WorkspaceKey: workspaceKey,
                     SourceName: "SmokeInlineFail.cs"
                 ),
@@ -1108,11 +924,12 @@ public sealed class RevitScriptingPortTests {
                 }
                 """
             );
+            WritePodManifest(workspaceKey, "src/SampleScript.cs");
 
             var service = CreateExecutionService(uiApplication);
             var failedResult = service.Execute(
                 new ExecuteRevitScriptRequest(
-                    """
+                    ScriptContent: """
                     public sealed class BrokenInline : PeScriptContainer
                     {
                         public override void Execute()
@@ -1121,14 +938,12 @@ public sealed class RevitScriptingPortTests {
                         }
                     }
                     """,
-                    ScriptExecutionSourceKind.InlineSnippet,
                     WorkspaceKey: workspaceKey
                 ),
                 "test-inline-first"
             );
             var succeededResult = service.Execute(
                 new ExecuteRevitScriptRequest(
-                    SourceKind: ScriptExecutionSourceKind.WorkspacePath,
                     SourcePath: @"src\SampleScript.cs",
                     WorkspaceKey: workspaceKey
                 ),
@@ -1144,12 +959,11 @@ public sealed class RevitScriptingPortTests {
     }
 
     [Test]
-    public void Missing_inline_script_content_is_rejected(UIApplication uiApplication) {
+    public void Request_without_script_content_or_source_path_is_rejected(UIApplication uiApplication) {
         var service = CreateExecutionService(uiApplication);
 
         var result = service.Execute(
             new ExecuteRevitScriptRequest(
-                SourceKind: ScriptExecutionSourceKind.InlineSnippet,
                 WorkspaceKey: $"test-empty-inline-{Guid.NewGuid():N}"
             ),
             "test-empty-inline"
@@ -1158,7 +972,26 @@ public sealed class RevitScriptingPortTests {
         Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Rejected));
         Assert.That(result.Diagnostics.Any(diagnostic =>
             diagnostic.Stage == "normalize"
-            && diagnostic.Message.Contains("ScriptContent is required", StringComparison.Ordinal)), Is.True);
+            && diagnostic.Message.Contains("Provide scriptContent (inline C#) or sourcePath", StringComparison.Ordinal)), Is.True);
+    }
+
+    [Test]
+    public void Request_with_both_script_content_and_source_path_is_rejected(UIApplication uiApplication) {
+        var service = CreateExecutionService(uiApplication);
+
+        var result = service.Execute(
+            new ExecuteRevitScriptRequest(
+                ScriptContent: "WriteLine(\"inline\");",
+                SourcePath: @"src\SampleScript.cs",
+                WorkspaceKey: $"test-both-sources-{Guid.NewGuid():N}"
+            ),
+            "test-both-sources"
+        );
+
+        Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Rejected));
+        Assert.That(result.Diagnostics.Any(diagnostic =>
+            diagnostic.Stage == "normalize"
+            && diagnostic.Message.Contains("not both", StringComparison.Ordinal)), Is.True);
     }
 
     [Test]
@@ -1171,7 +1004,6 @@ public sealed class RevitScriptingPortTests {
             var service = CreateExecutionService(uiApplication);
             var result = service.Execute(
                 new ExecuteRevitScriptRequest(
-                    SourceKind: ScriptExecutionSourceKind.WorkspacePath,
                     SourcePath: @"src\Missing.cs",
                     WorkspaceKey: workspaceKey
                 ),
@@ -1188,8 +1020,8 @@ public sealed class RevitScriptingPortTests {
     }
 
     [Test]
-    public void Loose_workspace_execution_ignores_broken_sibling_source(UIApplication uiApplication) {
-        var workspaceKey = $"test-loose-ignore-{Guid.NewGuid():N}";
+    public void Workspace_execution_without_pod_manifest_is_rejected(UIApplication uiApplication) {
+        var workspaceKey = $"test-no-pod-{Guid.NewGuid():N}";
         var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
         Directory.CreateDirectory(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey));
 
@@ -1201,59 +1033,8 @@ public sealed class RevitScriptingPortTests {
                 {
                     public override void Execute()
                     {
-                        WriteLine("loose workspace script ran");
+                        WriteLine("should not run");
                     }
-                }
-                """
-            );
-            File.WriteAllText(
-                Path.Combine(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey), "BrokenSibling.cs"),
-                "public sealed class BrokenSibling { public void Nope( }"
-            );
-
-            var service = CreateExecutionService(uiApplication);
-            var result = service.Execute(
-                new ExecuteRevitScriptRequest(
-                    SourceKind: ScriptExecutionSourceKind.WorkspacePath,
-                    SourcePath: @"src\SampleScript.cs",
-                    WorkspaceKey: workspaceKey
-                ),
-                "test-loose-ignore"
-            );
-
-            Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded));
-            Assert.That(result.Output, Does.Contain("loose workspace script ran"));
-            Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("Loose workspace mode"));
-        } finally {
-            DeleteWorkspace(workspaceRoot);
-        }
-    }
-
-    [Test]
-    public void Loose_workspace_execution_cannot_use_helper_source_without_pod(UIApplication uiApplication) {
-        var workspaceKey = $"test-loose-helper-{Guid.NewGuid():N}";
-        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
-        Directory.CreateDirectory(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey));
-
-        try {
-            File.WriteAllText(
-                RevitScriptingStorageLocations.ResolveSampleScriptPath(workspaceKey),
-                """
-                public sealed class WorkspaceScript : PeScriptContainer
-                {
-                    public override void Execute()
-                    {
-                        WriteLine(WorkspaceHelper.Message);
-                    }
-                }
-                """
-            );
-            File.WriteAllText(
-                Path.Combine(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey), "WorkspaceHelper.cs"),
-                """
-                public static class WorkspaceHelper
-                {
-                    public const string Message = "workspace script ran";
                 }
                 """
             );
@@ -1261,16 +1042,18 @@ public sealed class RevitScriptingPortTests {
             var service = CreateExecutionService(uiApplication);
             var result = service.Execute(
                 new ExecuteRevitScriptRequest(
-                    SourceKind: ScriptExecutionSourceKind.WorkspacePath,
                     SourcePath: @"src\SampleScript.cs",
                     WorkspaceKey: workspaceKey
                 ),
-                "test-loose-helper"
+                "test-no-pod"
             );
 
-            Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.CompilationFailed));
+            Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Rejected));
+            Assert.That(result.Output, Does.Not.Contain("should not run"));
             Assert.That(result.Diagnostics.Any(diagnostic =>
-                diagnostic.Stage == "compile" && diagnostic.Message.Contains("WorkspaceHelper", StringComparison.Ordinal)), Is.True);
+                diagnostic.Stage == "pod-manifest"
+                && diagnostic.Message.Contains($"Workspace '{workspaceKey}' has no pod.json", StringComparison.Ordinal)
+                && diagnostic.Message.Contains("scripting.workspace.bootstrap", StringComparison.Ordinal)), Is.True);
         } finally {
             DeleteWorkspace(workspaceRoot);
         }
@@ -1317,7 +1100,6 @@ public sealed class RevitScriptingPortTests {
             var service = CreateExecutionService(uiApplication);
             var result = service.Execute(
                 new ExecuteRevitScriptRequest(
-                    SourceKind: ScriptExecutionSourceKind.WorkspacePath,
                     SourcePath: @"src\SampleScript.cs",
                     WorkspaceKey: workspaceKey
                 ),
@@ -1361,7 +1143,6 @@ public sealed class RevitScriptingPortTests {
             var service = CreateExecutionService(uiApplication);
             var result = service.Execute(
                 new ExecuteRevitScriptRequest(
-                    SourceKind: ScriptExecutionSourceKind.WorkspacePath,
                     SourcePath: @"src\SampleScript.cs",
                     WorkspaceKey: workspaceKey
                 ),
@@ -1411,7 +1192,6 @@ public sealed class RevitScriptingPortTests {
             var service = CreateExecutionService(uiApplication);
             var result = service.Execute(
                 new ExecuteRevitScriptRequest(
-                    SourceKind: ScriptExecutionSourceKind.WorkspacePath,
                     SourcePath: @"src\SampleScript.cs",
                     WorkspaceKey: workspaceKey
                 ),
@@ -1427,14 +1207,12 @@ public sealed class RevitScriptingPortTests {
     }
 
     [Test]
-    public void Pod_workspace_execution_rejects_origin_version_mismatch(UIApplication uiApplication) {
+    public void Pod_workspace_execution_rejects_manifest_with_origin_field(UIApplication uiApplication) {
         var workspaceKey = $"test-pod-origin-{Guid.NewGuid():N}";
         var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
-        var originRoot = Path.Combine(Path.GetTempPath(), $"pod-origin-{Guid.NewGuid():N}");
         Directory.CreateDirectory(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey));
 
         try {
-            Directory.CreateDirectory(originRoot);
             File.WriteAllText(
                 RevitScriptingStorageLocations.ResolveSampleScriptPath(workspaceKey),
                 """
@@ -1447,13 +1225,27 @@ public sealed class RevitScriptingPortTests {
                 }
                 """
             );
-            WritePodManifest(workspaceKey, ["src/SampleScript.cs"], "1.0.0", originRoot);
-            File.WriteAllText(Path.Combine(originRoot, "pod.json"), CreatePodManifestText(workspaceKey, ["src/SampleScript.cs"], "2.0.0"));
+            // 'origin' was removed from the pod.json schema; the strict validator now rejects it
+            // as an unknown field.
+            File.WriteAllText(
+                RevitScriptingStorageLocations.ResolvePodManifestPath(workspaceKey),
+                $$"""
+                {
+                  "schemaVersion": 1,
+                  "id": "{{workspaceKey}}",
+                  "name": "{{workspaceKey}}",
+                  "version": "1.0.0",
+                  "origin": { "path": "C:/pods/legacy" },
+                  "entrypoints": [
+                    { "id": "main", "sourcePath": "src/SampleScript.cs" }
+                  ]
+                }
+                """
+            );
 
             var service = CreateExecutionService(uiApplication);
             var result = service.Execute(
                 new ExecuteRevitScriptRequest(
-                    SourceKind: ScriptExecutionSourceKind.WorkspacePath,
                     SourcePath: @"src\SampleScript.cs",
                     WorkspaceKey: workspaceKey
                 ),
@@ -1463,10 +1255,9 @@ public sealed class RevitScriptingPortTests {
             Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Rejected));
             Assert.That(result.Output, Does.Not.Contain("should not run"));
             Assert.That(result.Diagnostics.Any(diagnostic =>
-                diagnostic.Stage == "pod-origin" && diagnostic.Message.Contains("Reimport the Pod", StringComparison.Ordinal)), Is.True);
+                diagnostic.Stage == "pod-manifest" && diagnostic.Message.Contains("Unknown field 'origin'", StringComparison.Ordinal)), Is.True);
         } finally {
             DeleteWorkspace(workspaceRoot);
-            DeleteWorkspace(originRoot);
         }
     }
 
@@ -1486,44 +1277,26 @@ public sealed class RevitScriptingPortTests {
     }
 
     private static void WritePodManifest(string workspaceKey, params string[] entrypointSourcePaths) =>
-        WritePodManifest(workspaceKey, entrypointSourcePaths, "1.0.0", null);
-
-    private static void WritePodManifest(
-        string workspaceKey,
-        IReadOnlyList<string> entrypointSourcePaths,
-        string version,
-        string? originPath = null
-    ) =>
         File.WriteAllText(
             RevitScriptingStorageLocations.ResolvePodManifestPath(workspaceKey),
-            CreatePodManifestText(workspaceKey, entrypointSourcePaths, version, originPath)
+            CreatePodManifestText(workspaceKey, entrypointSourcePaths)
         );
 
     private static string CreatePodManifestText(
         string workspaceKey,
-        IReadOnlyList<string> entrypointSourcePaths,
-        string version,
-        string? originPath = null
+        IReadOnlyList<string> entrypointSourcePaths
     ) {
         var entrypoints = string.Join(",\n", entrypointSourcePaths.Select((sourcePath, index) =>
             $$"""
                 { "id": "entry-{{index + 1}}", "sourcePath": "{{sourcePath.Replace("\\", "/")}}" }
               """));
-        var originJson = originPath is null
-            ? string.Empty
-            : $$"""
-              "origin": {
-                "path": "{{originPath.Replace("\\", "\\\\")}}"
-              },
-        """;
 
         return $$"""
             {
               "schemaVersion": 1,
               "id": "{{workspaceKey}}",
               "name": "{{workspaceKey}}",
-              "version": "{{version}}",
-            {{originJson}}
+              "version": "1.0.0",
               "entrypoints": [
             {{entrypoints}}
               ]

@@ -3,8 +3,10 @@ using Autodesk.Revit.UI;
 using Pe.App.Commands.Palette.CommandPalette;
 using Pe.App.Commands.Palette.TaskPalette;
 using Pe.App.Tasks;
+using Pe.Revit.Scripting.Pods;
 using Pe.Revit.Ui.Core;
 using Pe.Revit.Ui.Core.Services;
+using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.StorageRuntime;
 using Serilog;
 using System.Diagnostics;
@@ -43,6 +45,7 @@ public class CmdPltCommands : IExternalCommand {
                     Persistence = (persistence, item => item switch {
                         PostableCommandItem c => c.Command.Value,
                         TaskItem t => $"task:{t.Id}",
+                        PodScriptTaskItem p => p.Id,
                         _ => item.TextPrimary
                     }),
                     SearchConfig = SearchConfig.PrimaryAndSecondary(),
@@ -85,7 +88,25 @@ public class CmdPltCommands : IExternalCommand {
                                     }
                                 }
                             }
-                        ) { FilterKeySelector = item => (item as TaskItem)?.Task.Category ?? string.Empty }
+                        ) { FilterKeySelector = item => (item as TaskItem)?.Task.Category ?? string.Empty },
+                        new TabDefinition<IPaletteListItem>(
+                            "Scripts",
+                            BuildPodScriptItems,
+                            new PaletteAction<IPaletteListItem> {
+                                Name = "Run — safe (changes discarded)",
+                                Execute = async item => {
+                                    if (item is PodScriptTaskItem pod)
+                                        PodScriptRunner.Run(uiapp, pod, ScriptPermissionMode.ReadOnly);
+                                }
+                            },
+                            new PaletteAction<IPaletteListItem> {
+                                Name = "Run — full (can modify model)",
+                                Execute = async item => {
+                                    if (item is PodScriptTaskItem pod)
+                                        PodScriptRunner.Run(uiapp, pod, ScriptPermissionMode.WriteTransaction);
+                                }
+                            }
+                        ) { FilterKeySelector = item => (item as PodScriptTaskItem)?.PodName ?? string.Empty }
                     ]
                 });
             window.Show();
@@ -96,6 +117,19 @@ public class CmdPltCommands : IExternalCommand {
             throw new InvalidOperationException($"Error opening command palette: {ex.Message}");
         }
     }
+
+    /// <summary>
+    ///     Every entrypoint of every valid pod becomes a palette item. Invalid pods are skipped
+    ///     here (the CLI/agent `scripting.pod.list` surface reports their diagnostics).
+    /// </summary>
+    private static IEnumerable<IPaletteListItem> BuildPodScriptItems() =>
+        ScriptPodCatalogService.List().Pods
+            .Where(pod => pod.IsValid && pod.Manifest is not null)
+            .SelectMany(pod => pod.Manifest!.Entrypoints.Select(entrypoint => (IPaletteListItem)new PodScriptTaskItem {
+                WorkspaceKey = pod.WorkspaceKey,
+                PodName = pod.Manifest.Name,
+                Entrypoint = entrypoint
+            }));
 
     private static List<IPaletteListItem> BuildSelectableItems(IEnumerable<PostableCommandItem> commandItems) {
         var selectableItems = new List<IPaletteListItem>();

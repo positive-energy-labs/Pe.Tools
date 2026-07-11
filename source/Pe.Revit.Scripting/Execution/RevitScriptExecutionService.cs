@@ -6,7 +6,6 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pe.Revit.Scripting.Bootstrap;
 using Pe.Revit.Scripting.Context;
-using Pe.Revit.Scripting.Policy;
 using Pe.Revit.Scripting.Pods;
 using Pe.Revit.Scripting.References;
 using Pe.Revit.Scripting.Storage;
@@ -35,22 +34,38 @@ public sealed class RevitScriptExecutionService(
     private readonly ScriptCompilationService _compilationService = compilationService;
     private readonly ScriptEntryPointResolver _entryPointResolver = new(nameof(PeScriptContainer));
     private readonly ScriptPolicyAnalyzer _policyAnalyzer = ScriptPolicyAnalyzer.CreateDefault();
-    private readonly RevitReadOnlyMutationPolicyAnalyzer _readOnlyMutationPolicyAnalyzer = new();
     private readonly Action<string>? _notificationSink = notificationSink;
     private readonly ScriptProjectGenerator _projectGenerator = projectGenerator;
     private readonly ScriptReferenceResolver _referenceResolver = referenceResolver;
     private readonly Func<UIApplication?> _uiApplicationAccessor = uiApplicationAccessor;
 
-    private const string AuthoringShapeHint = "Inline scriptContent accepts Execute-body statements such as WriteLine(\"...\"), with optional leading using directives, or a full container class: public sealed class Script : PeScriptContainer { public override void Execute() { WriteLine(\"...\"); } }. Execute() returns void. WorkspacePath scripts are normal C# files with one PeScriptContainer. Inside Execute(), use doc, uidoc, app, selection, revitVersion, Artifacts, and WriteLine(...).";
+    private const string AuthoringShapeHint = "Inline scriptContent accepts Execute-body statements such as WriteLine(\"...\"), with optional leading using directives, or a full container class: public sealed class Script : PeScriptContainer { public override void Execute() { WriteLine(\"...\"); } }. Execute() returns void. Pod scripts are normal C# files with one PeScriptContainer, declared as entrypoints in pod.json. Inside Execute(), use doc, uidoc, app, selection, revitVersion, ct, Artifacts, Result(...), and WriteLine(...).";
+
+    /// <summary>Standard wiring shared by the bridge transport and the in-process palette runner.</summary>
+    public static RevitScriptExecutionService CreateDefault(
+        Func<UIApplication?> uiApplicationAccessor,
+        Action<string>? notificationSink = null
+    ) {
+        var csProjReader = new CsProjReader();
+        return new RevitScriptExecutionService(
+            new ScriptProjectGenerator(csProjReader),
+            new ScriptReferenceResolver(csProjReader),
+            new ScriptAssemblyLoadService(),
+            new ScriptCompilationService(ScriptFileTemplates.DefaultUsings),
+            uiApplicationAccessor,
+            notificationSink
+        );
+    }
 
     public ExecuteRevitScriptData Execute(
         ExecuteRevitScriptRequest request,
-        string executionId
+        string executionId,
+        ScriptCancellationScope? cancellation = null
     ) {
+        cancellation ??= ScriptCancellationScope.None;
         Log.Information(
-            "Revit scripting execute starting: ExecutionId={ExecutionId}, SourceKind={SourceKind}, WorkspaceKey={WorkspaceKey}, SourcePath={SourcePath}",
+            "Revit scripting execute starting: ExecutionId={ExecutionId}, WorkspaceKey={WorkspaceKey}, SourcePath={SourcePath}",
             executionId,
-            request.SourceKind,
             request.WorkspaceKey,
             request.SourcePath
         );
@@ -60,6 +75,7 @@ public sealed class RevitScriptExecutionService(
         var revitVersion = "unknown";
         var targetFramework = string.Empty;
         string? containerTypeName = null;
+        RevitScriptContext? executionContext = null;
 
         try {
             var planResult = this.NormalizeRequest(request, executionId);
@@ -101,20 +117,8 @@ public sealed class RevitScriptExecutionService(
                 $"{DescribeExecutionMode(plan.ExecutionMode)} Executing {plan.SourceSet.EntryPointSourceName}; compiling {plan.SourceSet.Files.Count} source file(s): {string.Join(", ", plan.SourceSet.Files.Select(file => file.Name))}.",
                 plan.SourceSet.EntryPointSourceName
             ));
-            IReadOnlyList<ScriptDiagnostic> originDiagnostics = plan.PodManifest is null ? [] : PodOriginVersionGuard.Check(plan.PodManifest);
-            foreach (var diagnostic in originDiagnostics)
-                AppendDiagnostic(diagnostics, diagnostic);
-            if (originDiagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error))
-                return CreateResult(
-                    ScriptExecutionStatus.Rejected,
-                    outputSink,
-                    diagnostics,
-                    revitVersion,
-                    targetFramework,
-                    containerTypeName,
-                    executionId
-                );
 
+            cancellation.Token.ThrowIfCancellationRequested();
             var policyDiagnostics = this._policyAnalyzer.Analyze(plan.SourceSet, plan.PermissionMode);
             foreach (var diagnostic in policyDiagnostics)
                 AppendDiagnostic(diagnostics, diagnostic);
@@ -189,25 +193,7 @@ public sealed class RevitScriptExecutionService(
             }
 
             using (runtimeReferenceScope.ResolverScope) {
-                var readOnlyMutationDiagnostics = this.AnalyzeReadOnlyMutations(
-                    plan,
-                    runtimeReferenceScope.MetadataReferences,
-                    resolvedProject.Usings
-                );
-                foreach (var diagnostic in readOnlyMutationDiagnostics)
-                    AppendDiagnostic(diagnostics, diagnostic);
-                if (readOnlyMutationDiagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error)) {
-                    return CreateResult(
-                        ScriptExecutionStatus.PolicyRejected,
-                        outputSink,
-                        diagnostics,
-                        revitVersion,
-                        targetFramework,
-                        containerTypeName,
-                        executionId
-                    );
-                }
-
+                cancellation.Token.ThrowIfCancellationRequested();
                 var compilationResult = this.CompileScript(
                     plan,
                     runtimeReferenceScope.MetadataReferences,
@@ -236,7 +222,8 @@ public sealed class RevitScriptExecutionService(
                     );
                 }
 
-                var executionContext = this.BuildExecutionContext(plan, outputSink);
+                cancellation.Token.ThrowIfCancellationRequested();
+                executionContext = this.BuildExecutionContext(plan, outputSink, cancellation.Token);
                 var containerResult = this.InstantiateContainer(
                     compilationResult.AssemblyBytes,
                     executionContext,
@@ -288,7 +275,8 @@ public sealed class RevitScriptExecutionService(
                         targetFramework,
                         containerTypeName,
                         executionId,
-                        executionContext.Artifacts.Artifacts
+                        executionContext.Artifacts.Artifacts,
+                        executionContext.ResultData
                     );
                 } catch (RevitScriptMutationException ex) {
                     AppendDiagnostic(diagnostics, ScriptDiagnosticFactory.Error(
@@ -334,6 +322,8 @@ public sealed class RevitScriptExecutionService(
                         executionId,
                         executionContext.Artifacts.Artifacts
                     );
+                } catch (OperationCanceledException) {
+                    throw;
                 } catch (Exception ex) {
                     AppendDiagnostic(diagnostics, ScriptDiagnosticFactory.Error(
                         "runtime",
@@ -358,6 +348,31 @@ public sealed class RevitScriptExecutionService(
                     );
                 }
             }
+        } catch (OperationCanceledException) {
+            var status = cancellation.IsTimeout ? ScriptExecutionStatus.TimedOut : ScriptExecutionStatus.Canceled;
+            AppendDiagnostic(diagnostics, ScriptDiagnosticFactory.Error(
+                "cancel",
+                cancellation.IsTimeout
+                    ? $"Script execution exceeded the {cancellation.TimeoutSeconds}s timeout and stopped at a cooperative checkpoint. Partial document changes were rolled back."
+                    : "Script execution was cancelled and stopped at a cooperative checkpoint. Partial document changes were rolled back.",
+                containerTypeName
+            ));
+            Log.Warning(
+                "Revit scripting execute cancelled: ExecutionId={ExecutionId}, Status={Status}",
+                executionId,
+                status
+            );
+            return CreateResult(
+                status,
+                outputSink,
+                diagnostics,
+                revitVersion,
+                targetFramework,
+                containerTypeName,
+                executionId,
+                executionContext?.Artifacts.Artifacts,
+                executionContext?.ResultData
+            );
         } finally {
             Log.Information(
                 "Revit scripting execute finished: ExecutionId={ExecutionId}, Diagnostics={DiagnosticCount}, OutputLength={OutputLength}",
@@ -384,6 +399,24 @@ public sealed class RevitScriptExecutionService(
         var targetFramework = RevitRuntimeTargetFramework.Resolve(revitVersion);
         var runtimeAssemblyPath = RevitRuntimeTargetFramework.GetRuntimeAssemblyPath();
 
+        var hasInlineContent = !string.IsNullOrWhiteSpace(request.ScriptContent);
+        var hasSourcePath = !string.IsNullOrWhiteSpace(request.SourcePath);
+        if (hasInlineContent && hasSourcePath) {
+            diagnostics.Add(ScriptDiagnosticFactory.Error(
+                "normalize",
+                "Provide either scriptContent (inline C#) or sourcePath (a pod entrypoint under src/), not both."
+            ));
+            return (null, ScriptExecutionStatus.Rejected, diagnostics);
+        }
+
+        if (!hasInlineContent && !hasSourcePath) {
+            diagnostics.Add(ScriptDiagnosticFactory.Error(
+                "normalize",
+                "Provide scriptContent (inline C#) or sourcePath (a pod entrypoint under src/)."
+            ));
+            return (null, ScriptExecutionStatus.Rejected, diagnostics);
+        }
+
         try {
             var workspaceKey = ScriptingWorkspaceLayout.NormalizeWorkspaceKey(request.WorkspaceKey);
             var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
@@ -392,14 +425,14 @@ public sealed class RevitScriptExecutionService(
             ScriptSourceSet sourceSet;
             ScriptWorkspaceExecutionMode executionMode;
             PodManifest? podManifest = null;
-            if (request.SourceKind == ScriptExecutionSourceKind.InlineSnippet) {
+            if (hasInlineContent) {
                 sourceSet = this.MaterializeInlineSnippet(
                     request.ScriptContent,
                     request.SourceName,
                     executionId
                 );
                 executionMode = ScriptWorkspaceExecutionMode.InlineSnippet;
-            } else if (request.SourceKind == ScriptExecutionSourceKind.WorkspacePath) {
+            } else {
                 var workspaceSource = this.LoadWorkspaceSource(workspaceKey, request.SourcePath);
                 foreach (var diagnostic in workspaceSource.Diagnostics)
                     diagnostics.Add(diagnostic);
@@ -409,13 +442,9 @@ public sealed class RevitScriptExecutionService(
                 sourceSet = workspaceSource.SourceSet;
                 executionMode = workspaceSource.ExecutionMode;
                 podManifest = workspaceSource.PodManifest;
-            } else {
-                throw new InvalidOperationException($"Unsupported source kind '{request.SourceKind}'.");
             }
 
-            var projectSeed = request.SourceKind == ScriptExecutionSourceKind.InlineSnippet
-                ? null
-                : ReadFileIfExists(workspaceProjectPath);
+            var projectSeed = hasInlineContent ? null : ReadFileIfExists(workspaceProjectPath);
             var canonicalProjectContent = this._projectGenerator.GenerateProjectContent(
                 projectSeed,
                 workspaceRoot,
@@ -433,13 +462,12 @@ public sealed class RevitScriptExecutionService(
                     runtimeAssemblyPath,
                     workspaceKey,
                     workspaceRoot,
-                    request.ArtifactRunName,
                     request.PermissionMode,
                     sourceSet,
                     executionMode,
                     podManifest,
                     canonicalProjectContent,
-                    request.SourceKind == ScriptExecutionSourceKind.InlineSnippet
+                    hasInlineContent
                 ),
                 ScriptExecutionStatus.Succeeded,
                 diagnostics
@@ -563,7 +591,6 @@ public sealed class RevitScriptExecutionService(
 
     private static string DescribeExecutionMode(ScriptWorkspaceExecutionMode executionMode) => executionMode switch {
         ScriptWorkspaceExecutionMode.InlineSnippet => "Inline snippet mode:",
-        ScriptWorkspaceExecutionMode.LooseWorkspace => "Loose workspace mode:",
         ScriptWorkspaceExecutionMode.Pod => "Pod mode:",
         _ => "Script mode:"
     };
@@ -591,20 +618,15 @@ public sealed class RevitScriptExecutionService(
 
         var podManifestPath = RevitScriptingStorageLocations.ResolvePodManifestPath(workspaceKey);
         if (!File.Exists(podManifestPath)) {
-            var looseSelectedSource = new ScriptSourceFile(
-                GetRelativePath(sourceDirectory, selectedPath),
-                File.ReadAllText(selectedPath),
-                selectedPath
-            );
             return new WorkspaceSourceLoadResult(
-                new ScriptSourceSet([looseSelectedSource], looseSelectedSource.Name),
-                ScriptWorkspaceExecutionMode.LooseWorkspace,
+                new ScriptSourceSet([], string.Empty),
+                ScriptWorkspaceExecutionMode.Pod,
                 null,
                 [
-                    ScriptDiagnosticFactory.Info(
-                        "normalize",
-                        "Loose workspace mode: no pod.json was found, so only the requested source file will be compiled and sibling files are ignored.",
-                        looseSelectedSource.Name
+                    ScriptDiagnosticFactory.Error(
+                        PodManifestValidator.DiagnosticStage,
+                        $"Workspace '{workspaceKey}' has no pod.json, so scripts cannot execute from it. Run scripting.workspace.bootstrap (pea script bootstrap) to create pod.json, then declare '{normalizedSourcePath}' under entrypoints.",
+                        normalizedSourcePath
                     )
                 ]
             );
@@ -710,18 +732,6 @@ public sealed class RevitScriptExecutionService(
         diagnostics
     );
 
-    private IReadOnlyList<ScriptDiagnostic> AnalyzeReadOnlyMutations(
-        ScriptExecutionPlan plan,
-        IReadOnlyList<MetadataReference> metadataReferences,
-        IReadOnlyList<string> projectUsings
-    ) => plan.PermissionMode == ScriptPermissionMode.ReadOnly
-        ? this._readOnlyMutationPolicyAnalyzer.Analyze(
-            plan.SourceSet,
-            metadataReferences,
-            projectUsings
-        )
-        : [];
-
     private ScriptCompilationResult CompileScript(
         ScriptExecutionPlan plan,
         IReadOnlyList<MetadataReference> metadataReferences,
@@ -734,7 +744,8 @@ public sealed class RevitScriptExecutionService(
 
     private RevitScriptContext BuildExecutionContext(
         ScriptExecutionPlan plan,
-        ScriptOutputSink outputSink
+        ScriptOutputSink outputSink,
+        CancellationToken cancellationToken
     ) {
         var uiDocument = plan.UiApplication.ActiveUIDocument;
         var document = uiDocument?.Document;
@@ -746,7 +757,8 @@ public sealed class RevitScriptExecutionService(
             document,
             selection,
             plan.RevitVersion,
-            new ScriptArtifactWriter(plan.ExecutionId, plan.ArtifactRunName),
+            new ScriptArtifactWriter(plan.ExecutionId),
+            cancellationToken,
             outputSink.WriteLine,
             this._notificationSink
         );
@@ -901,20 +913,91 @@ public sealed class RevitScriptExecutionService(
         List<ScriptDiagnostic> diagnostics
     ) {
         if (permissionMode == ScriptPermissionMode.ReadOnly) {
-            using var mutationMonitor = new ScriptDocumentMutationMonitor(context.App.Application);
-            try {
-                container.Execute();
-            } catch (Exception ex) when (mutationMonitor.HasChanges) {
-                throw new RevitScriptMutationException(mutationMonitor.CreateSummary(), ex);
-            }
-
-            if (mutationMonitor.HasChanges)
-                throw new RevitScriptMutationException(mutationMonitor.CreateSummary());
-
+            ExecuteInReadOnlyRollbackGuard(container, context, diagnostics);
             return;
         }
 
         this.ExecuteInHostOwnedTransaction(container, context, diagnostics);
+    }
+
+    private const string ReadOnlyGuardTransactionName = DocumentSandbox.TransactionNamePrefix + "Pe Script ReadOnly";
+
+    /// <summary>
+    ///     ReadOnly runs inside a commit-then-rollback guard: the script executes in a transaction
+    ///     that COMMITS inside a TransactionGroup that always rolls back. The inner commit is what
+    ///     makes mutation detection possible — Revit raises DocumentChanged with real deltas only on
+    ///     commit, never for a rolled-back transaction — while the group rollback physically discards
+    ///     the changes. The sandbox name prefix keeps document-event consumers (bridge invalidation)
+    ///     from treating the churn as a real change. Mutations observed with unprefixed transaction
+    ///     names persisted outside the guard (another document, a bypassed transaction) and stay hard
+    ///     errors. With no writable document, the DocumentChanged tripwire is the only guard.
+    /// </summary>
+    private static void ExecuteInReadOnlyRollbackGuard(
+        PeScriptContainer container,
+        RevitScriptContext context,
+        List<ScriptDiagnostic> diagnostics
+    ) {
+        using var mutationMonitor = new ScriptDocumentMutationMonitor(context.App.Application);
+        TransactionGroup? group = null;
+        Transaction? transaction = null;
+        if (context.Document is { IsReadOnly: false } document) {
+            try {
+                group = new TransactionGroup(document, ReadOnlyGuardTransactionName);
+                _ = group.Start();
+                transaction = new Transaction(document, ReadOnlyGuardTransactionName);
+                var commitFailures = new List<(bool IsError, string Message)>();
+                var failureOptions = transaction.GetFailureHandlingOptions();
+                _ = failureOptions.SetFailuresPreprocessor(new DialogSuppressingFailuresPreprocessor(commitFailures));
+                _ = failureOptions.SetForcedModalHandling(false);
+                transaction.SetFailureHandlingOptions(failureOptions);
+                _ = transaction.Start();
+            } catch (Exception ex) {
+                transaction?.Dispose();
+                if (group?.HasStarted() == true)
+                    _ = group.RollBack();
+                group?.Dispose();
+                group = null;
+                transaction = null;
+                diagnostics.Add(ScriptDiagnosticFactory.Info(
+                    "readonly",
+                    $"ReadOnly rollback guard could not open a transaction ({ex.Message}); running with mutation detection only."
+                ));
+            }
+        }
+
+        try {
+            container.Execute();
+        } finally {
+            try {
+                // Commit fires DocumentChanged with the script's deltas so the monitor can report
+                // what was discarded; the group rollback below then throws those changes away.
+                if (transaction is not null && transaction.HasStarted() && !transaction.HasEnded())
+                    _ = transaction.Commit();
+            } catch {
+                // A failed guard commit must not mask the script's own outcome; the group rollback
+                // still discards everything.
+            } finally {
+                transaction?.Dispose();
+                if (group?.HasStarted() == true)
+                    _ = group.RollBack();
+                group?.Dispose();
+            }
+        }
+
+        if (mutationMonitor.HasPersistedChanges)
+            throw new RevitScriptMutationException(
+                "ReadOnly script execution changed an open Revit document and the changes PERSISTED (they happened outside the rollback guard). " +
+                mutationMonitor.CreateSummary() +
+                " Rerun with permissionMode=WriteTransaction for intentional changes."
+            );
+
+        if (mutationMonitor.HasChanges)
+            diagnostics.Add(ScriptDiagnosticFactory.Warning(
+                "readonly",
+                "ReadOnly script modified the document; all changes were rolled back and discarded. " +
+                mutationMonitor.CreateSummary() +
+                " Rerun with permissionMode=WriteTransaction to keep changes."
+            ));
     }
 
     private void ExecuteInHostOwnedTransaction(
@@ -983,7 +1066,8 @@ public sealed class RevitScriptExecutionService(
         string targetFramework,
         string? containerTypeName,
         string executionId,
-        IReadOnlyList<ScriptArtifactData>? artifacts = null
+        IReadOnlyList<ScriptArtifactData>? artifacts = null,
+        object? data = null
     ) => new(
         status,
         outputSink.GetBufferedOutput(),
@@ -992,7 +1076,8 @@ public sealed class RevitScriptExecutionService(
         targetFramework,
         containerTypeName,
         executionId,
-        artifacts?.ToList() ?? []
+        artifacts?.ToList() ?? [],
+        data
     );
 
     private static void AppendDiagnostic(
@@ -1070,6 +1155,9 @@ public sealed class RevitScriptExecutionService(
 
         public bool HasChanges => this._events.Count != 0;
 
+        /// <summary>Changes committed outside the rollback sandbox (unprefixed transaction names) — they persisted.</summary>
+        public bool HasPersistedChanges => this._events.Any(item => !item.IsSandboxChurn);
+
         public void Dispose() {
             if (this._disposed)
                 return;
@@ -1095,7 +1183,6 @@ public sealed class RevitScriptExecutionService(
                 .ToList();
 
             return
-                "ReadOnly script execution changed an open Revit document. " +
                 $"Added={totalAdded}, Modified={totalModified}, Deleted={totalDeleted}. " +
                 $"Documents={FormatList(documentNames)}. " +
                 $"Transactions={FormatList(transactionNames)}.";
@@ -1109,12 +1196,14 @@ public sealed class RevitScriptExecutionService(
                 return;
 
             var document = args.GetDocument();
+            var transactionNames = args.GetTransactionNames().ToList();
             this._events.Add(new ScriptDocumentMutationEvent(
                 document?.Title ?? "<unknown>",
                 addedCount,
                 modifiedCount,
                 deletedCount,
-                args.GetTransactionNames().ToList()
+                transactionNames,
+                DocumentSandbox.IsSandboxTransaction(transactionNames)
             ));
         }
 
@@ -1127,7 +1216,8 @@ public sealed class RevitScriptExecutionService(
         int AddedCount,
         int ModifiedCount,
         int DeletedCount,
-        IReadOnlyList<string> TransactionNames
+        IReadOnlyList<string> TransactionNames,
+        bool IsSandboxChurn
     );
 
     private static string? ReadFileIfExists(string path) =>

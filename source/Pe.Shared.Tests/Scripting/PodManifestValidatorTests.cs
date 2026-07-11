@@ -35,45 +35,17 @@ public sealed class PodManifestValidatorTests {
     }
 
     [Test]
-    public void Origin_path_accepts_local_absolute_paths() {
-        var originPath = Path.GetTempPath().Replace("\\", "/").TrimEnd('/');
-        var result = PodManifestValidator.ValidateJson(
-            $$"""
-            {
-              "schemaVersion": 1,
-              "id": "connector-audit",
-              "name": "Connector Audit",
-              "version": "1.0.0",
-              "origin": {
-                "path": "{{originPath}}"
-              },
-              "entrypoints": [
-                { "id": "main", "sourcePath": "src/Main.cs" }
-              ]
-            }
-            """,
-            "connector-audit"
-        );
-
-        Assert.That(result.Success, Is.True);
-        Assert.That(result.Manifest!.Origin!.Path, Is.EqualTo(originPath));
-    }
-
-    [Test]
-    public void Version_and_local_origin_path_are_validated() {
+    public void Origin_field_is_no_longer_accepted() {
         var result = PodManifestValidator.ValidateJson(
             """
             {
               "schemaVersion": 1,
               "id": "connector-audit",
               "name": "Connector Audit",
-              "origin": {
-                "path": "https://example.com/pods/connector-audit",
-                "extra": true
-              },
               "entrypoints": [
                 { "id": "main", "sourcePath": "src/Main.cs" }
-              ]
+              ],
+              "origin": { "path": "C:/pods/connector-audit" }
             }
             """,
             "connector-audit"
@@ -81,8 +53,7 @@ public sealed class PodManifestValidatorTests {
 
         Assert.That(result.Success, Is.False);
         Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("missing required field 'version'"));
-        Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("origin.path must be an absolute local path"));
-        Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("Unknown field 'extra'"));
+        Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("Unknown field 'origin'"));
     }
 
     [Test]

@@ -4,8 +4,7 @@ using Newtonsoft.Json.Converters;
 namespace Pe.Shared.HostContracts.Scripting;
 
 public record ScriptWorkspaceBootstrapRequest(
-    string WorkspaceKey = "default",
-    bool CreateSampleScript = true
+    string WorkspaceKey = "default"
 );
 
 public record ScriptWorkspaceBootstrapData(
@@ -17,6 +16,7 @@ public record ScriptWorkspaceBootstrapData(
     string WorkspaceAgentsPath,
     string WorkspaceReadmePath,
     string ProjectFilePath,
+    string PodManifestPath,
     string SampleScriptPath,
     string RevitVersion,
     string TargetFramework,
@@ -26,12 +26,11 @@ public record ScriptWorkspaceBootstrapData(
 
 public record ExecuteRevitScriptRequest(
     string? ScriptContent = null,
-    ScriptExecutionSourceKind SourceKind = ScriptExecutionSourceKind.InlineSnippet,
     string? SourcePath = null,
     string WorkspaceKey = "default",
     string? SourceName = null,
-    string? ArtifactRunName = null,
-    ScriptPermissionMode PermissionMode = ScriptPermissionMode.ReadOnly
+    ScriptPermissionMode PermissionMode = ScriptPermissionMode.ReadOnly,
+    int TimeoutSeconds = 600
 );
 
 public record ScriptArtifactData(
@@ -50,7 +49,18 @@ public record ExecuteRevitScriptData(
     string TargetFramework,
     string? ContainerTypeName,
     string ExecutionId,
-    List<ScriptArtifactData>? Artifacts = null
+    List<ScriptArtifactData>? Artifacts = null,
+    object? Data = null
+);
+
+public record ScriptCancelRequest(
+    string? ExecutionId = null
+);
+
+public record ScriptCancelData(
+    bool Canceled,
+    string? ExecutionId,
+    string Message
 );
 
 public record ScriptPodImportRequest(
@@ -63,24 +73,35 @@ public record ScriptPodExportRequest(
     string ArchivePath
 );
 
+public record ScriptPodListRequest();
+
+public record ScriptPodListData(
+    string WorkspacesRootPath,
+    List<ScriptPodListItemData> Pods
+);
+
+public record ScriptPodListItemData(
+    string WorkspaceKey,
+    string WorkspaceRootPath,
+    bool IsValid,
+    ScriptPodManifestSummaryData? Manifest,
+    List<ScriptDiagnostic> Diagnostics
+);
+
 public record ScriptPodManifestSummaryData(
     int SchemaVersion,
     string Id,
     string Name,
     string Version,
     string? Description,
-    ScriptPodOriginData? Origin,
     List<ScriptPodEntrypointData> Entrypoints
-);
-
-public record ScriptPodOriginData(
-    string Path
 );
 
 public record ScriptPodEntrypointData(
     string Id,
     string SourcePath,
-    string? Name = null
+    string? Name = null,
+    string? Description = null
 );
 
 public record ScriptPodImportData(
@@ -117,7 +138,9 @@ public enum ScriptExecutionStatus {
     CompilationFailed,
     RuntimeFailed,
     Rejected,
-    PolicyRejected
+    PolicyRejected,
+    Canceled,
+    TimedOut
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
@@ -131,12 +154,6 @@ public enum ScriptDiagnosticSeverity {
     Info,
     Warning,
     Error
-}
-
-[JsonConverter(typeof(StringEnumConverter))]
-public enum ScriptExecutionSourceKind {
-    InlineSnippet,
-    WorkspacePath
 }
 
 public record ScriptDiagnostic(

@@ -187,7 +187,7 @@ public sealed record HostOperationDefinition(
             return HostOperationVisibility.DefaultVisible;
         if (key is "revit.matrix.schedule-profiles" or "revit.catalog.electrical-load-classifications")
             return HostOperationVisibility.ExpertOnly;
-        if (key.StartsWith("script.", StringComparison.Ordinal))
+        if (key.StartsWith("scripting.", StringComparison.Ordinal))
             return HostOperationVisibility.ExpertOnly;
         if (key.StartsWith("revit.matrix.", StringComparison.Ordinal)
             || key.StartsWith("revit.detail.", StringComparison.Ordinal)

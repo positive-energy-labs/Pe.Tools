@@ -15,7 +15,6 @@ internal sealed record ScriptExecutionPlan(
     string RuntimeAssemblyPath,
     string WorkspaceKey,
     string WorkspaceRoot,
-    string? ArtifactRunName,
     ScriptPermissionMode PermissionMode,
     ScriptSourceSet SourceSet,
     ScriptWorkspaceExecutionMode ExecutionMode,
@@ -26,8 +25,23 @@ internal sealed record ScriptExecutionPlan(
 
 internal enum ScriptWorkspaceExecutionMode {
     InlineSnippet,
-    LooseWorkspace,
     Pod
+}
+
+/// <summary>
+///     Cooperative cancellation for one script execution: the linked token fires on caller cancel,
+///     scripting.cancel, or timeout; <see cref="IsTimeout" /> distinguishes the timeout source.
+/// </summary>
+public sealed class ScriptCancellationScope(
+    CancellationToken token,
+    Func<bool> isTimeout,
+    int timeoutSeconds
+) {
+    public static readonly ScriptCancellationScope None = new(CancellationToken.None, static () => false, 0);
+
+    public CancellationToken Token { get; } = token;
+    public int TimeoutSeconds { get; } = timeoutSeconds;
+    public bool IsTimeout => isTimeout();
 }
 
 internal sealed record ScriptContainerResolutionResult(

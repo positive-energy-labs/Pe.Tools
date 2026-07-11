@@ -1,8 +1,12 @@
-import { readFile } from "node:fs/promises";
 import { define } from "gunshi";
 import { HostLogTarget, type HostOpResponse } from "@pe/host-contracts/operation-types";
 import { HostRpcCaller } from "../shared/host-rpc-caller.js";
-import { ScriptingTools } from "../shared/scripting.ts";
+import {
+  ScriptingTools,
+  parseCliPermissionMode,
+  resolveCliScriptContent,
+  scriptClientTimeoutMs,
+} from "../shared/scripting.ts";
 import type { ScriptExecuteInput } from "../shared/scripting.ts";
 import { resolveHostBaseUrl, resolveWorkspaceKey } from "../shared/host-config.ts";
 import { asOptionalString, firstNonBlank } from "../shared/cli-values.ts";
@@ -50,13 +54,17 @@ export class PeaCliCommands {
         "Bootstrap, execute, import, and export Pe.Revit scripting workspaces and Pods through the host.",
       examples: [
         "pea script bootstrap",
+        "pea script list",
         "pea script execute --source-path src\\SampleScript.cs",
+        "pea script cancel",
         "pea script export --workspace panel-audit --output .\\panel-audit.zip",
         "pea script import --archive .\\panel-audit.zip",
       ].join("\n"),
       subCommands: {
         bootstrap: this.scriptBootstrapCommand(),
+        list: this.scriptPodListCommand(),
         execute: this.scriptExecuteCommand(),
+        cancel: this.scriptCancelCommand(),
         export: this.scriptPodExportCommand(),
         import: this.scriptPodImportCommand(),
       },
@@ -197,7 +205,7 @@ export class PeaCliCommands {
     return define({
       name: "execute",
       description:
-        "Execute a C# Revit script through the host from inline content, stdin, a file, or a workspace source path.",
+        "Execute a C# Revit script through the host from inline content, stdin, a file, or a declared pod entrypoint. ReadOnly by default: document changes are rolled back and discarded.",
       args: {
         ...commonArgs,
         file: { type: "string", description: "Read inline script content from a local file." },
@@ -209,40 +217,91 @@ export class PeaCliCommands {
         scriptContent: { type: "string", description: "Inline script content." },
         sourcePath: {
           type: "string",
-          description: "Workspace-relative source path to execute.",
+          description: "Workspace-relative pod entrypoint path to execute (declared in pod.json).",
         },
         sourceName: {
           type: "string",
           description: "Synthetic source filename used for diagnostics.",
-          default: "AgentSnippet.cs",
         },
         permissionMode: {
           type: "string",
-          description: "Script permission mode: ReadOnly or WriteTransaction.",
-          default: "ReadOnly",
+          description:
+            "Script permission mode: ReadOnly (default; changes discarded) or WriteTransaction (changes kept).",
+        },
+        timeoutSeconds: {
+          type: "number",
+          description: "Cooperative execution timeout in seconds (host default 600).",
         },
       },
       toKebab: true,
       examples: [
         "pea script execute --file scratch\\Probe.cs",
         "pea script execute --source-path src\\SampleScript.cs",
+        "pea script execute --source-path src\\Fix.cs --permission-mode WriteTransaction",
         "Get-Content .\\Probe.cs | pea script execute --stdin --source-name Probe.cs",
       ].join("\n"),
       run: async (ctx) => {
-        const scriptContent = await resolveScriptContent(ctx.values);
+        const scriptContent = await resolveCliScriptContent(ctx.values);
         const sourcePath = firstNonBlank(ctx.values.sourcePath);
         if (!scriptContent && !sourcePath)
           throw new Error("Provide --file, --stdin, --script-content, or --source-path.");
+        if (scriptContent && sourcePath)
+          throw new Error(
+            "Provide inline content (--file/--stdin/--script-content) or --source-path, not both.",
+          );
 
-        const result = await this.createScriptingTools(ctx.values).execute({
+        const timeoutSeconds = asOptionalNumber(ctx.values.timeoutSeconds);
+        const result = await this.createScriptingTools(ctx.values, timeoutSeconds).execute({
           scriptContent,
-          sourceKind: sourcePath ? "WorkspacePath" : "InlineSnippet",
           sourcePath,
           workspaceKey: ctx.values.workspace,
-          sourceName: ctx.values.sourceName,
-          permissionMode: parsePermissionMode(ctx.values.permissionMode),
+          sourceName: firstNonBlank(ctx.values.sourceName),
+          permissionMode: parseCliPermissionMode(ctx.values.permissionMode),
+          timeoutSeconds,
         } satisfies ScriptExecuteInput);
         writeScriptExecution(result);
+      },
+    });
+  }
+
+  private scriptCancelCommand() {
+    return define({
+      name: "cancel",
+      description:
+        "Signal cooperative cancellation to the currently running script execution. The script stops at its next ct / ThrowIfCancelled checkpoint.",
+      args: {
+        host: commonArgs.host,
+        bridgeSessionId: commonArgs.bridgeSessionId,
+        executionId: {
+          type: "string",
+          description: "Optional execution id guard; omit to cancel the current execution.",
+        },
+      },
+      toKebab: true,
+      run: async (ctx) => {
+        const result = await this.createScriptingTools(ctx.values).cancel({
+          executionId: firstNonBlank(ctx.values.executionId),
+        });
+        console.log(`canceled  ${result.canceled}`);
+        if (result.executionId) console.log(`execution ${result.executionId}`);
+        console.log(result.message);
+      },
+    });
+  }
+
+  private scriptPodListCommand() {
+    return define({
+      name: "list",
+      description:
+        "List scripting workspaces (pods) with their validated entrypoints. Invalid pods appear with diagnostics explaining what to fix.",
+      args: {
+        host: commonArgs.host,
+        bridgeSessionId: commonArgs.bridgeSessionId,
+      },
+      toKebab: true,
+      run: async (ctx) => {
+        const result = await this.createScriptingTools(ctx.values).listPods();
+        writeScriptPodList(result);
       },
     });
   }
@@ -250,24 +309,16 @@ export class PeaCliCommands {
   private scriptBootstrapCommand() {
     return define({
       name: "bootstrap",
-      description: "Create or update a Pe scripting workspace through the host.",
+      description:
+        "Create or update a Pe scripting pod workspace through the host: pod.json, project file, docs, and a sample entrypoint.",
       args: {
         ...commonArgs,
-        noSample: {
-          type: "boolean",
-          description: "Do not create the sample script file.",
-          default: false,
-        },
       },
       toKebab: true,
-      examples: [
-        "pea script bootstrap",
-        "pea script bootstrap --workspace default --no-sample",
-      ].join("\n"),
+      examples: ["pea script bootstrap", "pea script bootstrap --workspace panel-audit"].join("\n"),
       run: async (ctx) => {
         const result = await this.createScriptingTools(ctx.values).bootstrap({
           workspaceKey: ctx.values.workspace,
-          createSampleScript: !ctx.values.noSample,
         });
         writeScriptBootstrap(result);
       },
@@ -321,16 +372,25 @@ export class PeaCliCommands {
     });
   }
 
-  private createScriptingTools(values: Record<string, unknown>): ScriptingTools {
-    return new ScriptingTools(this.createHostRpcCaller(values), {
+  private createScriptingTools(
+    values: Record<string, unknown>,
+    scriptTimeoutSeconds?: number,
+  ): ScriptingTools {
+    return new ScriptingTools(this.createHostRpcCaller(values, scriptTimeoutSeconds), {
       workspaceKey: this.resolveWorkspaceKey(values.workspace),
     });
   }
 
-  private createHostRpcCaller(values: Record<string, unknown>): HostRpcCaller {
+  private createHostRpcCaller(
+    values: Record<string, unknown>,
+    scriptTimeoutSeconds?: number,
+  ): HostRpcCaller {
     return new HostRpcCaller({
       hostBaseUrl: this.resolveHostBaseUrl(values.host),
       bridgeSessionId: asOptionalString(values.bridgeSessionId),
+      ...(scriptTimeoutSeconds != null
+        ? { timeoutMs: scriptClientTimeoutMs(scriptTimeoutSeconds) }
+        : {}),
     });
   }
 
@@ -361,27 +421,8 @@ const commonArgs = {
   },
 } as const;
 
-async function resolveScriptContent(values: Record<string, unknown>): Promise<string | undefined> {
-  const explicit = firstNonBlank(values.scriptContent);
-  if (explicit) return explicit;
-
-  const file = firstNonBlank(values.file);
-  if (file) return readFile(file, "utf-8");
-
-  if (values.stdin === true) return readStdin();
-  return undefined;
-}
-
-function readStdin(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let content = "";
-    process.stdin.setEncoding("utf8");
-    process.stdin.on("data", (chunk) => {
-      content += chunk;
-    });
-    process.stdin.on("error", reject);
-    process.stdin.on("end", () => resolve(content));
-  });
+function asOptionalNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function writeHostStatus(
@@ -410,6 +451,8 @@ function writeScriptExecution(result: HostOpResponse<"scripting.execute">) {
   console.log(`revit     ${result.revitVersion}`);
   if (result.containerTypeName) console.log(`container ${result.containerTypeName}`);
   if (result.output) console.log(result.output.trimEnd());
+  if (result.data !== undefined && result.data !== null)
+    console.log(`data      ${JSON.stringify(result.data, null, 2)}`);
   for (const diagnostic of result.diagnostics ?? [])
     console.error(`${diagnostic.severity} ${diagnostic.stage}: ${diagnostic.message}`);
 }
@@ -419,7 +462,25 @@ function writeScriptBootstrap(result: HostOpResponse<"scripting.workspace.bootst
   console.log(`product home ${result.productHomePath}`);
   console.log(`workspace    ${result.workspaceRootPath}`);
   console.log(`project      ${result.projectFilePath}`);
+  console.log(`pod          ${result.podManifestPath}`);
   console.log(`sample       ${result.sampleScriptPath}`);
+}
+
+function writeScriptPodList(result: HostOpResponse<"scripting.pod.list">) {
+  console.log(`workspaces ${result.workspacesRootPath}`);
+  for (const pod of result.pods ?? []) {
+    const label = pod.isValid ? (pod.manifest?.name ?? pod.workspaceKey) : "INVALID";
+    console.log(
+      `${pod.workspaceKey}  ${label}${pod.manifest?.version ? ` v${pod.manifest.version}` : ""}`,
+    );
+    for (const entrypoint of pod.manifest?.entrypoints ?? [])
+      console.log(
+        `  ${entrypoint.id}  ${entrypoint.sourcePath}${entrypoint.name ? `  ${entrypoint.name}` : ""}`,
+      );
+    for (const diagnostic of pod.diagnostics ?? [])
+      console.error(`  ${diagnostic.severity} ${diagnostic.stage}: ${diagnostic.message}`);
+  }
+  if (!result.pods?.length) console.log("(no workspaces found — run `pea script bootstrap`)");
 }
 
 function writeScriptPodImport(result: HostOpResponse<"scripting.pod.import">) {
@@ -459,17 +520,6 @@ function parseOperationIntent(value: unknown): "Read" | "Mutate" | undefined {
       return text;
     default:
       throw new Error("Unknown operation intent. Expected Read or Mutate.");
-  }
-}
-
-function parsePermissionMode(value: unknown): "ReadOnly" | "WriteTransaction" {
-  switch (asOptionalString(value) ?? "ReadOnly") {
-    case "ReadOnly":
-      return "ReadOnly";
-    case "WriteTransaction":
-      return "WriteTransaction";
-    default:
-      throw new Error("Unknown permission mode. Expected ReadOnly or WriteTransaction.");
   }
 }
 

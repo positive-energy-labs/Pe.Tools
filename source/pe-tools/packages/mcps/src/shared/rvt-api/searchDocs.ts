@@ -57,40 +57,25 @@ export async function searchRvtDocsCom(
   types: ReadonlyArray<(typeof SearchResultTypes)[number]> = SearchResultTypes,
 ): Promise<SearchResult[]> {
   try {
-    // Using the rvtdocs.com search API endpoint
-    const searchUrl = "https://rvtdocs.com/search/api/search";
-
-    const requestBody = {
-      query: query,
-      current_version: year.toString(),
-      include_description: false,
-    };
-
-    // Make the search request
-    const response = await fetch(searchUrl, {
-      method: "POST",
-      body: JSON.stringify(requestBody),
-    });
+    const response = await fetch(`https://rvtdocs.com/static/json_trees/sidebar_${year}.json`);
 
     if (!response.ok) {
       throw new Error(`Search request failed: ${response.status} ${response.statusText}`);
     }
 
-    const items = readRvtDocsSearchItems(await response.json());
-    const results: SearchResult[] = [];
-
-    // Parse the response based on the expected format
-    for (const item of items.slice(0, maxResults)) {
-      results.push({
-        title: item.title ?? "",
-        description: (item.description ?? "").replace(/^Description:\s*/i, ""),
-        namespace: (item.namespace ?? "").replace(/^Namespace:\s*/i, ""),
-        type: item.type ?? "",
-        url: item.url ?? "",
-      });
-    }
-
-    return results.filter((result) => includesSearchResultType(types, result.type));
+    const items = readRvtDocsTree(await response.json());
+    return items
+      .filter((item) => item.title.toLowerCase().includes(query.toLowerCase()))
+      .map(
+        (item): SearchResult => ({
+          title: item.title ?? "",
+          namespace: item.fqn?.split(".").slice(0, -1).join(".") ?? "",
+          type: TypeFromTitle.parse(item.title),
+          url: `/${year}/${item.url}`,
+        }),
+      )
+      .filter((result) => includesSearchResultType(types, result.type))
+      .slice(0, maxResults);
   } catch (error) {
     console.error("Error searching Revit API docs using rvtdocs.com:", error);
     throw error;
@@ -153,12 +138,11 @@ const TypeFromTitle = z.string().transform((title) => {
   return "Unknown";
 });
 
-type RvtDocsSearchItem = {
-  title?: string;
-  description?: string;
-  namespace?: string;
-  type?: string;
-  url?: string;
+type RvtDocsTreeNode = {
+  title: string;
+  url: string;
+  fqn?: string;
+  children?: RvtDocsTreeNode[] | string;
 };
 
 type RevitApiDocsProduct = {
@@ -166,21 +150,18 @@ type RevitApiDocsProduct = {
   url: string;
 };
 
-function readRvtDocsSearchItems(value: unknown): RvtDocsSearchItem[] {
-  const results = readRecord(value).current_version_results;
-  if (!Array.isArray(results)) return [];
-  return results.map(readRvtDocsSearchItem);
-}
-
-function readRvtDocsSearchItem(value: unknown): RvtDocsSearchItem {
-  const record = readRecord(value);
-  return {
-    title: readString(record.title),
-    description: readString(record.description),
-    namespace: readString(record.namespace),
-    type: readString(record.type),
-    url: readString(record.url),
-  };
+function readRvtDocsTree(value: unknown): RvtDocsTreeNode[] {
+  if (!Array.isArray(value)) return [];
+  const nodes: RvtDocsTreeNode[] = [];
+  const pending = [...value];
+  while (pending.length) {
+    const record = readRecord(pending.shift());
+    const title = readString(record.title);
+    const url = readString(record.url);
+    if (title && url) nodes.push({ title, url, fqn: readString(record.fqn) });
+    if (Array.isArray(record.children)) pending.push(...record.children);
+  }
+  return nodes;
 }
 
 function readRevitApiDocsProducts(value: unknown): RevitApiDocsProduct[] {

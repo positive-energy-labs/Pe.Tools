@@ -284,7 +284,6 @@ async function resolvePeaWorkerCwd(hostBaseUrl: string, workspaceKey: string): P
     await ensureTsHostRunning(client, hostBaseUrl);
     const bootstrap = await client.call("scripting.workspace.bootstrap", {
       workspaceKey,
-      createSampleScript: true,
     });
     if (!bootstrap.productHomePath) throw new Error("bootstrap returned no productHomePath");
     return path.resolve(bootstrap.productHomePath);

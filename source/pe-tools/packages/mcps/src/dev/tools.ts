@@ -10,8 +10,12 @@ import { sdkLiveWarning } from "./sdk-live.js";
 import { HostRpcCaller } from "../shared/host-rpc-caller.js";
 import { resolveHostBaseUrl, resolveWorkspaceKey } from "../shared/host-config.js";
 import { talkToPeaHarness } from "./talk-to-pea.js";
-import { talkToPecoPsmux, talkToPecoZellij } from "./talk-to-peco-mux.ts";
-import { ScriptingTools, scriptExecuteInputSchema } from "../shared/scripting.ts";
+import { talkToPecoZellij } from "./talk-to-peco-mux.ts";
+import {
+  ScriptingTools,
+  scriptClientTimeoutMs,
+  scriptExecuteInputSchema,
+} from "../shared/scripting.ts";
 
 const defaultTimeoutSeconds = defaultPeaRuntimeTimeoutSeconds;
 
@@ -24,14 +28,22 @@ export const liveLoopContext = createTool({
   description:
     "Collect a read-only live-runtime packet: Pea host status, host/Revit log tails, and the last SDK sync result when known. Does not sync, test, mutate, or restart anything.",
   inputSchema: repoCommandInputSchema.extend({
-    logTail: z.number().min(1).max(1000).default(10),
+    logTail: z
+      .number()
+      .min(1)
+      .max(1000)
+      .default(10)
+      .describe("Lines to read from the end of each log."),
     resetLogCursor: z
       .boolean()
       .default(false)
       .describe(
         "Reset log cursors after reading, establishing a new baseline for the next runtime-loop check.",
       ),
-    includeLastSync: z.boolean().default(true),
+    includeLastSync: z
+      .boolean()
+      .default(true)
+      .describe("Include the last SDK live-sync result when one is known."),
   }),
   execute: async (input) =>
     collectRuntimeLoopContext({
@@ -96,63 +108,44 @@ const talkToPecoMuxInputSchema = repoCommandInputSchema.extend({
     .optional()
     .describe("Optional first prompt to type into the newly opened peco TUI pane."),
   cwd: z.string().min(1).optional().describe("Repo path used as the pane working directory."),
-  direction: z.enum(["right", "down"]).default("right"),
-  startupDelayMs: z.number().min(0).max(60000).default(7000),
-  postSubmitDelayMs: z.number().min(0).max(60000).default(2500),
-  dumpScreen: z.boolean().default(true),
-  dumpFullScrollback: z.boolean().default(false),
+  startupDelayMs: z
+    .number()
+    .min(0)
+    .max(60000)
+    .default(7000)
+    .describe("Wait for the TUI to boot before typing. Raise only if the pane comes up slow."),
+  postSubmitDelayMs: z
+    .number()
+    .min(0)
+    .max(60000)
+    .default(2500)
+    .describe("Wait after submitting the prompt before reading the screen."),
+  dumpFullScrollback: z
+    .boolean()
+    .default(false)
+    .describe("Return the pane's full scrollback instead of just the visible screen."),
 });
 
 export const talkToPecoZellijTool = createTool({
   id: "talk_to_peco_zellij",
   description:
-    "POC: open a second peco TUI in a new zellij pane and optionally talk to it by sending terminal input with zellij write-chars/send-keys.",
+    "Open a second peco TUI in a new zellij pane and drive it by sending terminal input. Use to reproduce or observe peco TUI behavior hands-on; returns the pane's screen text after the prompt runs.",
   inputSchema: talkToPecoMuxInputSchema,
   execute: async (input) =>
     talkToPecoZellij({
       prompt: input.prompt,
       cwd: input.cwd,
-      direction: input.direction,
       startupDelayMs: input.startupDelayMs,
       postSubmitDelayMs: input.postSubmitDelayMs,
       timeoutSeconds: input.timeoutSeconds,
-      dumpScreen: input.dumpScreen,
       dumpFullScrollback: input.dumpFullScrollback,
-    }),
-});
-
-export const talkToPecoPsmuxTool = createTool({
-  id: "talk_to_peco_psmux",
-  description:
-    "POC: open a second peco TUI in a psmux/tmux pane and optionally talk to it by sending terminal input with tmux send-keys.",
-  inputSchema: talkToPecoMuxInputSchema.extend({
-    sessionName: z.string().min(1).default("peco-mux-poc"),
-    attachInZellij: z
-      .boolean()
-      .default(true)
-      .describe(
-        "When not already inside psmux/tmux, also open a zellij pane attached to the tmux session for visibility.",
-      ),
-  }),
-  execute: async (input) =>
-    talkToPecoPsmux({
-      prompt: input.prompt,
-      cwd: input.cwd,
-      direction: input.direction,
-      startupDelayMs: input.startupDelayMs,
-      postSubmitDelayMs: input.postSubmitDelayMs,
-      timeoutSeconds: input.timeoutSeconds,
-      dumpScreen: input.dumpScreen,
-      dumpFullScrollback: input.dumpFullScrollback,
-      sessionName: input.sessionName,
-      attachInZellij: input.attachInZellij,
     }),
 });
 
 export const scriptExecuteWithSync = createTool({
   id: "script_execute",
   description:
-    "Execute a C# Revit script through the TS host scripting contract after first attempting SDK live convergence. Live convergence failure is a loud warning, not a script blocker.",
+    "Execute a C# Revit script through the host scripting contract. Pass scriptContent for an inline snippet (prefer Execute-body statements like WriteLine(...); a full PeScriptContainer class is also allowed) OR sourcePath for a pod entrypoint declared in the workspace's pod.json — not both. Defaults to ReadOnly: document changes are rolled back and discarded with a warning; pass permissionMode=WriteTransaction to keep changes. Use Result(...) in the script for structured JSON results; scripts should check ct / ThrowIfCancelled() in loops so the timeout (default 600s) and scripting.cancel can interrupt them. In peco, SDK live convergence runs first; a convergence failure is reported in liveSync as a loud warning, not a script blocker.",
   inputSchema: repoCommandInputSchema.merge(scriptExecuteInputSchema),
   execute: async (input) => {
     const timeoutSeconds = input.timeoutSeconds ?? defaultTimeoutSeconds;
@@ -160,20 +153,20 @@ export const scriptExecuteWithSync = createTool({
     const script = await new ScriptingTools(
       new HostRpcCaller({
         hostBaseUrl: resolveHostBaseUrl(),
-        timeoutMs: Math.max(timeoutSeconds, 1) * 1000,
+        timeoutMs: scriptClientTimeoutMs(timeoutSeconds),
       }),
       { workspaceKey: resolveWorkspaceKey() },
-    ).execute(input);
+    ).execute({ ...input, timeoutSeconds });
 
+    // Same contract as pea's script_execute (the host result), plus the peco-only
+    // liveSync report as a sibling field.
     return {
-      ok: true,
-      workflow: "script_execute",
+      ...script,
       liveSync: {
         ok: sync.ok,
         warning: sdkLiveWarning(sync),
         sync,
       },
-      script,
     };
   },
 });

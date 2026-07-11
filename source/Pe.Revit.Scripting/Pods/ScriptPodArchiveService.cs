@@ -54,6 +54,10 @@ public sealed class ScriptPodArchiveService(
                 return CreateRejectedImport(archivePath, workspaceKey, archiveEntryPaths, "ArchivePath is required.");
 
             archivePath = Path.GetFullPath(request.ArchivePath);
+            if (Directory.Exists(archivePath))
+                return CreateRejectedImport(archivePath, workspaceKey, archiveEntryPaths, $"Pod archive path is a directory; pods import from .zip archives only: {archivePath}");
+            if (!archivePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                return CreateRejectedImport(archivePath, workspaceKey, archiveEntryPaths, $"Pod archives must be .zip files: {archivePath}");
             if (!File.Exists(archivePath))
                 return CreateRejectedImport(archivePath, workspaceKey, archiveEntryPaths, $"Pod archive does not exist: {archivePath}");
 
@@ -72,9 +76,6 @@ public sealed class ScriptPodArchiveService(
             if (HasManifestErrors(manifestResult.Diagnostics))
                 return CreateRejectedImport(archivePath, workspaceKey, archiveEntryPaths, manifestResult.Diagnostics);
             var manifest = manifestResult.Manifest!;
-            var originDiagnostics = PodOriginVersionGuard.Check(manifest);
-            if (HasManifestErrors(originDiagnostics))
-                return CreateRejectedImport(archivePath, workspaceKey, archiveEntryPaths, originDiagnostics);
 
             var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
             if (Directory.Exists(workspaceRoot))
@@ -85,7 +86,7 @@ public sealed class ScriptPodArchiveService(
             ValidateEntrypointFiles(tempRoot, manifest);
 
             _ = Directory.CreateDirectory(Path.GetDirectoryName(workspaceRoot)!);
-            Directory.Move(tempRoot, workspaceRoot);
+            MoveDirectory(tempRoot, workspaceRoot);
             tempRoot = string.Empty;
 
             var bootstrapResult = this._bootstrapService.Bootstrap(
@@ -96,7 +97,6 @@ public sealed class ScriptPodArchiveService(
                 runtimeAssemblyPath
             );
             var diagnostics = manifestResult.Diagnostics.ToList();
-            diagnostics.AddRange(originDiagnostics);
 
             return new ScriptPodImportData(
                 ScriptPodTransferStatus.Succeeded,
@@ -144,12 +144,11 @@ public sealed class ScriptPodArchiveService(
             if (HasManifestErrors(manifestResult.Diagnostics))
                 return CreateRejectedExport(archivePath, workspaceKey, workspaceRoot, archiveEntryPaths, manifestResult.Diagnostics);
             var manifest = manifestResult.Manifest!;
-            var originDiagnostics = PodOriginVersionGuard.Check(manifest);
-            if (HasManifestErrors(originDiagnostics))
-                return CreateRejectedExport(archivePath, workspaceKey, workspaceRoot, archiveEntryPaths, originDiagnostics);
             ValidateEntrypointFiles(workspaceRoot, manifest);
 
             archivePath = Path.GetFullPath(request.ArchivePath);
+            if (!archivePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                return CreateRejectedExport(archivePath, workspaceKey, workspaceRoot, archiveEntryPaths, $"Pod export archive path must end in .zip: {archivePath}");
             var archiveDirectory = Path.GetDirectoryName(archivePath);
             if (!string.IsNullOrWhiteSpace(archiveDirectory))
                 _ = Directory.CreateDirectory(archiveDirectory);
@@ -180,7 +179,6 @@ public sealed class ScriptPodArchiveService(
             ReplaceArchive(tempArchivePath, archivePath);
             tempArchivePath = null;
             var diagnostics = manifestResult.Diagnostics.ToList();
-            diagnostics.AddRange(originDiagnostics);
 
             return new ScriptPodExportData(
                 ScriptPodTransferStatus.Succeeded,
@@ -325,6 +323,25 @@ public sealed class ScriptPodArchiveService(
         return reader.ReadToEnd();
     }
 
+    private static void MoveDirectory(string source, string destination) {
+        try {
+            Directory.Move(source, destination);
+        } catch (IOException) {
+            // Directory.Move cannot cross volumes (TEMP and a redirected Documents often differ);
+            // fall back to copy + delete.
+            CopyDirectory(source, destination);
+            Directory.Delete(source, true);
+        }
+    }
+
+    private static void CopyDirectory(string source, string destination) {
+        _ = Directory.CreateDirectory(destination);
+        foreach (var directory in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
+            _ = Directory.CreateDirectory(Path.Combine(destination, BclExtensions.GetRelativePath(source, directory)));
+        foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+            File.Copy(file, Path.Combine(destination, BclExtensions.GetRelativePath(source, file)), overwrite: false);
+    }
+
     private static string CreateTempDirectory() {
         var path = Path.Combine(Path.GetTempPath(), "Pe.Tools", "pods", Guid.NewGuid().ToString("N"));
         _ = Directory.CreateDirectory(path);
@@ -410,15 +427,19 @@ public sealed class ScriptPodArchiveService(
         diagnostics.ToList()
     );
 
-    private static ScriptPodManifestSummaryData ToSummary(PodManifest manifest) => new(
+    internal static ScriptPodManifestSummaryData ToSummary(PodManifest manifest) => new(
         manifest.SchemaVersion,
         manifest.Id,
         manifest.Name,
         manifest.Version,
         manifest.Description,
-        manifest.Origin is null ? null : new ScriptPodOriginData(manifest.Origin.Path),
         manifest.Entrypoints
-            .Select(entrypoint => new ScriptPodEntrypointData(entrypoint.Id, entrypoint.SourcePath, entrypoint.Name))
+            .Select(entrypoint => new ScriptPodEntrypointData(
+                entrypoint.Id,
+                entrypoint.SourcePath,
+                entrypoint.Name,
+                entrypoint.Description
+            ))
             .ToList()
     );
 

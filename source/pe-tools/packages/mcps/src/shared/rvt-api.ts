@@ -1,10 +1,6 @@
 import { extractRvtDocsText } from "./rvt-api/extractDocs.js";
 import { searchWrapper } from "./rvt-api/searchDocs.ts";
-import {
-  toolInputArgSchemas,
-  toolOutputSchemas,
-  revitApiQueryInputSchema,
-} from "../shared/rvt-api/validators.ts";
+import { toolInputArgSchemas, revitApiQueryInputSchema } from "../shared/rvt-api/validators.ts";
 import { createTool } from "@mastra/core/tools";
 import z from "zod";
 
@@ -13,7 +9,6 @@ export const revitApiSearch = createTool({
   description:
     "Search Revit API documentation for exact API entities, signatures, members, and remarks. Set extractFirstResult to include extractedText on the first result only. Use live host operations or scripts for current model/session/document state.",
   inputSchema: revitApiQueryInputSchema,
-  outputSchema: toolOutputSchemas.searchResultsSchema,
   execute: async (input) => {
     const { queryString, queryTypes, year, maxResults, extractFirstResult } = input;
     const results = await searchWrapper(queryString, year, maxResults, queryTypes);
@@ -32,7 +27,6 @@ export const revitApiFetch = createTool({
   inputSchema: z.object({
     urlSlug: toolInputArgSchemas.urlSlug,
   }),
-  outputSchema: toolOutputSchemas.docsTextSchema,
   execute: async (input) => extractRvtDocsText(rvtDocsUrlFromSlug(input.urlSlug)),
 });
 
