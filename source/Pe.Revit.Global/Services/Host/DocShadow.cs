@@ -12,8 +12,8 @@ namespace Pe.Revit.Global.Services.Host;
 
 /// <summary>
 ///     Per-document cache of collected Revit data, evicted with element granularity from the
-///     DocumentChanged pipeline (BridgeDocumentNotifier). Replaces the TTL/blanket-invalidation
-///     RevitDataCollectionContext.
+///     SDK document tracker's Changed event (DocumentCacheMaintenance). Replaces the
+///     TTL/blanket-invalidation RevitDataCollectionContext.
 ///     <para>
 ///         Keyed by <see cref="DocumentIdentityExtensions.GetDocumentKey" />, NOT the Document reference:
 ///         Revit hands back a fresh managed <c>Document</c> wrapper on every <c>ActiveUIDocument.Document</c>
@@ -21,8 +21,9 @@ namespace Pe.Revit.Global.Services.Host;
 ///         ConditionalWeakTable keyed on the wrapper mints a new empty shadow per request and the cache
 ///         never survives a request boundary. The stable string key is the same identity the rest of the
 ///         host uses (session summaries, FamilySnapshotStore). Shadows are dropped explicitly when their
-///         document closes (<see cref="Evict" /> from BridgeDocumentNotifier's DocumentClosing handler) so a
-///         reopen re-validates through the warm-start layer instead of reusing stale in-memory truth.
+///         document closes (<see cref="Evict" /> from the tracker's Closed event, which carries the key
+///         Revit's own DocumentClosed withholds) so a reopen re-validates through the warm-start layer
+///         instead of reusing stale in-memory truth.
 ///     </para>
 ///     <para>
 ///         Eviction policy: stale beats slow, never the reverse. Family snapshots evict on Family or
@@ -49,10 +50,11 @@ internal sealed class DocShadow : IProjectBrowserIndexProvider, IFamilySnapshotC
             shadow.Apply(delta, id => ClassifyElement(document, id));
     }
 
-    /// <summary>Drops a closed document's shadow so a later reopen cannot reuse stale in-memory truth.</summary>
-    public static void Evict(RevitDocument document) {
-        if (Shadows.TryRemove(document.GetDocumentKey(), out _))
-            Log.Debug("DocShadow evicted on close: Document={DocumentKey}", document.GetDocumentKey());
+    /// <summary>Drops a closed document's shadow so a later reopen cannot reuse stale in-memory truth.
+    /// Key-based because the tracker's Closed event fires after the Document wrapper is dead.</summary>
+    public static void Evict(string documentKey) {
+        if (Shadows.TryRemove(documentKey, out _))
+            Log.Debug("DocShadow evicted on close: Document={DocumentKey}", documentKey);
     }
 
     // ==================== IFamilySnapshotCache ====================

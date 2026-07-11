@@ -26,7 +26,7 @@ public class CmdPltMruViews : IExternalCommand {
     }
 
     public static void Open(UIApplication uiapp) {
-        var items = DocumentManager.Instance
+        var items = MruViewBuffer.Instance
             .GetMruOrderedViews(uiapp)
             .Select(v => new MruViewPaletteItem(v))
             .ToList();
@@ -75,7 +75,7 @@ public class CmdPltMruViews : IExternalCommand {
 public class MruViewPaletteItem : IPaletteListItem {
     public MruViewPaletteItem(View view) {
         this.View = view;
-        this.ItemColor = DocumentManager.Instance.GetDocumentColor(view.Document);
+        this.ItemColor = DocumentColors.Get(view.Document);
     }
 
     public View View { get; }

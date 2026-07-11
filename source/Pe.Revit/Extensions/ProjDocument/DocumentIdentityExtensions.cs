@@ -71,28 +71,6 @@ public static class DocumentIdentityExtensions {
         return $"{documentKind}:unsaved:{doc.Title}:{doc.GetHashCode()}";
     }
 
-    /// <summary>
-    ///     Returns a softer document continuity key for MRU/session heuristics.
-    ///     This intentionally preserves logical family identity across temp-save and reopen flows.
-    /// </summary>
-    public static string GetDocumentMruAffinityKey(this Document doc) {
-        if (doc == null)
-            throw new ArgumentNullException(nameof(doc));
-
-        if (!doc.IsFamilyDocument)
-            return doc.GetDocumentKey();
-
-        var familyName = doc.GetOwnerFamilyName();
-        if (!string.IsNullOrWhiteSpace(familyName))
-            return $"family:name:{familyName}";
-
-        var documentPath = doc.GetDocumentPath();
-        if (!string.IsNullOrWhiteSpace(documentPath) && !IsTemporaryFamilyPath(documentPath))
-            return $"family:path:{documentPath}";
-
-        return $"family:title:{doc.Title}";
-    }
-
     public static string? GetCloudProjectGuid(this Document doc) {
         if (doc == null)
             throw new ArgumentNullException(nameof(doc));
@@ -135,19 +113,6 @@ public static class DocumentIdentityExtensions {
             return null;
         }
     }
-
-    private static string? GetOwnerFamilyName(this Document doc) {
-        try {
-            return doc.IsFamilyDocument ? doc.OwnerFamily?.Name : null;
-        } catch {
-            return null;
-        }
-    }
-
-    private static bool IsTemporaryFamilyPath(string documentPath) =>
-        documentPath.EndsWith(".rfa", StringComparison.OrdinalIgnoreCase) &&
-        (documentPath.Contains(@"\Temp\", StringComparison.OrdinalIgnoreCase) ||
-         documentPath.Contains(@"/Temp/", StringComparison.OrdinalIgnoreCase));
 
     ////////////////////////////////////////
 

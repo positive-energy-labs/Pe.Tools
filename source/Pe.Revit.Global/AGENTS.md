@@ -17,9 +17,14 @@ before higher packages copy it.
   need `Document`.
 - `Revit/Documents/RevitUiSession.cs` and `UIApplicationDocumentSessionExtensions.cs` - explicit current-session and
   `UIApplication` document-session helpers.
-- `Services/Document/DocumentManager.cs` - session-aware document/open/active/MRU coordination.
+- `Services/Document/DocumentTrackerAccessor.cs` - process-wide handle to the SDK document tracker
+  (`PePayloadContext.Documents`): document identity, lifecycle events, and per-document `State<T>` bags. Subscribe here
+  instead of raw Revit document events.
+- `Services/Document/MruViewBuffer.cs` - MRU view history over tracked documents, fed by the tracker's ViewActivated.
 - `Services/Host/RevitDataRequestService.cs` - bridge-backed document query and summary shaping.
-- `Services/Host/BridgeDocumentNotifier.cs` - active/open document freshness payloads for the host SSE stream.
+- `Services/Host/DocumentCacheMaintenance.cs` - always-on tracker wiring for DocShadow eviction and FamilySnapshotStore.
+- `Services/Host/BridgeDocumentNotifier.cs` - active/open document freshness payloads for the host SSE stream
+  (tracker subscriber, bridge-scoped).
 - `Revit/Lib/` - reusable collectors and Revit-domain helpers that should stay broader than one caller.
 
 ## Validation
@@ -35,7 +40,7 @@ before higher packages copy it.
 | Term                 | Meaning                                                                                 | Prefer / Avoid                                                                                             |
 | -------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | **document-owned**   | Behavior derivable from a specific `Document` without active/open UI session state      | Prefer extension methods or small document-centric helpers; avoid putting it behind session singletons     |
-| **document session** | Open/active/UI-tab state for documents in the current Revit process                     | Prefer `DocumentManager` or `UIApplication`-adjacent helpers; avoid mixing it into pure `Document` helpers |
+| **document session** | Open/active/UI-tab state for documents in the current Revit process                     | Prefer the SDK document tracker (`DocumentTrackerAccessor.Current`) or `UIApplication`-adjacent helpers; avoid mixing it into pure `Document` helpers |
 | **document key**     | Canonical identity string for an open Revit document used by host payloads and matching | Prefer one shared implementation; avoid per-caller variations                                              |
 
 ## Living Memory
@@ -44,8 +49,8 @@ before higher packages copy it.
   static manager methods.
 - Prefer document-owned entrypoints even when the implementation still lives in a feature package; the feature model can
   move later without callers relearning the seam.
-- Keep `DocumentManager` focused on session-aware behavior: active/open document state, window handles, MRU tracking,
-  and related UI coordination.
+- Per-document state belongs in the tracked document's `State<T>` bag (dropped automatically on close), not in
+  dictionaries keyed by wrapper hash or hand-evicted key maps. Never key anything on `Document.GetHashCode()`.
 - Document identity, document path, and project-parameter binding enumeration should not have multiple implementations.
 - Do not pull feature-owned snapshot or apply models into `Pe.Revit.Global` until the semantics are stable across more
   than one feature.
