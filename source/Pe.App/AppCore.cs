@@ -1,7 +1,6 @@
 using Autodesk.Revit.DB.Events;
 using Autodesk.Revit.DB.ExtensibleStorage;
 using Autodesk.Revit.UI;
-using Autodesk.Revit.UI.Events;
 using Pe.App.Host;
 using Pe.App.Services.AutoTag;
 using Pe.App.Tasks;
@@ -9,6 +8,7 @@ using Pe.Revit.FamilyFoundry;
 using Pe.Revit.Global.Services.Document;
 using Pe.Revit.Global.Services.Host;
 using Pe.Revit.Loader;
+using Pe.Revit.Loader.Documents;
 using Pe.Revit.SettingsRuntime.Modules;
 using Pe.Revit.Ui.Core;
 using Pe.Shared.StorageRuntime;
@@ -31,7 +31,6 @@ namespace Pe.App;
 public sealed class AppCore : IPePayload {
     private RevitTaskService? _revitTaskService;
     private BridgeConnectionSupervisor? _bridgeConnectionSupervisor;
-    private UIControlledApplication? _application;
 
     public void Startup(PePayloadContext context) {
         // Capture lane + install location from the loader once, so host/pea launchers resolve
@@ -39,11 +38,16 @@ public sealed class AppCore : IPePayload {
         PeRuntimeContext.Capture(context);
 
         var app = context.Application;
-        this._application = app;
 
-        app.ViewActivated += OnViewActivated;
-        app.ControlledApplication.DocumentClosing += OnDocumentClosing;
-        app.ControlledApplication.DocumentChanged += OnDocumentChanged;
+        // The SDK document tracker is the app's single document-event surface: identity, MRU,
+        // caches, AutoTag, and the bridge notifier all subscribe here instead of raw Revit events.
+        // The SDK owns its teardown; nothing to unsubscribe in Shutdown.
+        var documents = context.Documents;
+        DocumentTrackerAccessor.Current = documents;
+        DocumentCacheMaintenance.Wire(documents);
+        documents.ViewActivated += (doc, viewId) => MruViewBuffer.Instance.RecordViewActivation(doc, viewId);
+        documents.Closed += key => MruViewBuffer.Instance.RemoveDocumentViews(key);
+        documents.Changed += OnDocumentChanged;
 
         // RevitTaskService for async/deferred execution in Revit API context
         var revitTaskService = new RevitTaskService(app);
@@ -82,16 +86,11 @@ public sealed class AppCore : IPePayload {
 
         TaskInitializer.RegisterAllTasks();
 
-        AutoTagService.Instance.Initialize(app.ActiveAddInId, app);
+        AutoTagService.Instance.Initialize(app.ActiveAddInId, documents);
     }
 
     public void Shutdown() {
-        var app = this._application;
-        if (app is not null) {
-            app.ViewActivated -= OnViewActivated;
-            app.ControlledApplication.DocumentClosing -= OnDocumentClosing;
-            app.ControlledApplication.DocumentChanged -= OnDocumentChanged;
-        }
+        DocumentTrackerAccessor.Current = null;
 
         this._bridgeConnectionSupervisor?.Dispose();
         this._bridgeConnectionSupervisor = null;
@@ -102,27 +101,9 @@ public sealed class AppCore : IPePayload {
         Log.CloseAndFlush();
     }
 
-    private static void OnViewActivated(object? sender, ViewActivatedEventArgs e) {
-        if (e?.CurrentActiveView == null) return;
-        if (sender is not UIApplication) return;
-
-        // Record view activation for MRU tracking
-        DocumentManager.Instance.RecordViewActivation(e.CurrentActiveView.Document, e.CurrentActiveView.Id);
-    }
-
-    private static void OnDocumentClosing(object? sender, DocumentClosingEventArgs e) {
-        if (e?.Document == null) return;
-        DocumentManager.Instance.OnDocumentClosed(e.Document);
-
-        // Clean up AutoTag settings for this document to prevent memory leak
-        AutoTagService.Instance.CleanupDocument(e.Document);
-    }
-
-    private static void OnDocumentChanged(object? sender, DocumentChangedEventArgs e) {
-        if (e?.GetDocument() == null) return;
-
+    private static void OnDocumentChanged(TrackedDocument tracked, DocumentChangedEventArgs e) {
         try {
-            var doc = e.GetDocument();
+            var doc = tracked.Resolve();
 
             // Check if any DataStorage elements with AutoTag settings were modified
             var autoTagStorageChanged = e.GetModifiedElementIds()
@@ -133,7 +114,7 @@ public sealed class AppCore : IPePayload {
             if (autoTagStorageChanged) {
                 Log.Information(
                     "AutoTag: Settings changed in document '{Title}'. Changes will apply on next document open.",
-                    doc.Title);
+                    tracked.Title);
             }
         } catch (Exception ex) {
             // Don't crash on notification failure

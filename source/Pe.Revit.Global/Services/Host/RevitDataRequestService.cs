@@ -1269,6 +1269,9 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
     }
 
     private static RevitDocumentSessionContextData CreateDocumentSessionContext() {
+        // ponytail: still enumerates on the API thread inside the request queue. The tracker's
+        // Open/metadata snapshots (DocumentTrackerAccessor.Current) make session context
+        // answerable off-thread; move this off the queue when the hop starts to hurt.
         var uiApp = RevitUiSession.CurrentUIApplication;
         var activeDocument = uiApp.GetActiveDocument();
         var openDocuments = uiApp.GetOpenDocuments()

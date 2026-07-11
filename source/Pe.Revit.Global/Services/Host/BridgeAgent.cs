@@ -109,6 +109,9 @@ internal sealed class BridgeAgent : IDisposable {
             this._serializerSettings
         );
         this._documentNotifier = new BridgeDocumentNotifier(
+            Global.Services.Document.DocumentTrackerAccessor.Current
+                ?? throw new InvalidOperationException(
+                    "Document tracker not available; AppCore.Startup must run before the bridge connects."),
             this.BuildStateSnapshot,
             this.PublishDocumentInvalidationAsync
         );
