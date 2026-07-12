@@ -56,11 +56,39 @@ public sealed record FamilyEditorParameterSnapshot(
     string? DataType,
     string? Group,
     string? Formula,
-    IReadOnlyDictionary<string, string> ValuesPerType
+    IReadOnlyDictionary<string, string> ValuesPerType,
+    // Canonical parameter identity (minted via RevitParameterDefinition.ObservedFamilyParameter — never
+    // hand-rolled key prefixes). Null when identity could not be resolved.
+    ParameterIdentity? Identity = null,
+    // Formula graph, one level deep, by parameter name. DependsOn = params THIS formula references;
+    // Dependents = params whose formulas reference THIS one. Null (not empty) when there is nothing.
+    IReadOnlyList<string>? DependsOn = null,
+    IReadOnlyList<string>? Dependents = null,
+    // Direct element associations (dims/arrays/nested), one level deep. Null when none.
+    FamilyParameterAssociationInfo? Associations = null
+);
+
+/// <summary>
+///     Direct (element-based) associations for a family parameter, one level deep. Dimensions and Arrays
+///     are "Name [ID:{id}]" labels; Nested carries element-parameter associations (nested instances,
+///     connectors). Phantom parameters/elements (negative ids, dangling) are filtered out.
+/// </summary>
+public sealed record FamilyParameterAssociationInfo(
+    IReadOnlyList<string> Dimensions,
+    IReadOnlyList<string> Arrays,
+    IReadOnlyList<FamilyNestedAssociation> Nested
+);
+
+public sealed record FamilyNestedAssociation(
+    string ElementName,
+    string ElementId,
+    string ParamName
 );
 
 public sealed record FamilyEditorApplyRequest(
-    IReadOnlyList<FamilyEditorApplyEdit> Edits
+    IReadOnlyList<FamilyEditorApplyEdit> Edits,
+    // Run the full edit sequence inside a transaction, then roll back — validate without persisting.
+    bool DryRun = false
 );
 
 public sealed record FamilyEditorApplyEdit(

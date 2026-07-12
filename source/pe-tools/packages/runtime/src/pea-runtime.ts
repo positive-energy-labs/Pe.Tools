@@ -9,7 +9,9 @@ import { LocalFilesystem, LocalSandbox, Workspace } from "@mastra/core/workspace
 import {
   bundledPeaSkills,
   configurePeaProductToolContext,
+  createFamilyTypesCommandHandlers,
   defaultPeaAgentModelId,
+  familyTypesRouteState,
   materializeBundledPeaSkills,
   peaProductToolProfile,
   peaProductTools,
@@ -18,6 +20,7 @@ import {
   resolvePeaSkillPaths,
   resolveWorkspaceKey,
 } from "@pe/mcps";
+import { registerRouteState } from "./route-state-dispatch.ts";
 import {
   createMastraCodeAuthStorageContext,
   type MastraCodeAuthStorage,
@@ -76,6 +79,11 @@ export async function createPeaRuntime(
   const hostBaseUrl = resolveHostBaseUrl(options.hostBaseUrl);
   const workspaceKey = resolveWorkspaceKey(options.workspaceKey);
   configurePeaProductToolContext({ hostBaseUrl, workspaceKey });
+
+  // The /family-types collaborative route: schema + write mask + command handlers.
+  // The dispatcher endpoints (buildAgentControllerApp) and the three universal tools
+  // read this registration; handlers reach Revit at the same host base URL pea uses.
+  registerRouteState(familyTypesRouteState, createFamilyTypesCommandHandlers({ hostBaseUrl }));
 
   const authStorageContext = await createMastraCodeAuthStorageContext();
   const authStorage = authStorageContext.storage;
