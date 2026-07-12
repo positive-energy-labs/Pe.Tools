@@ -1,7 +1,7 @@
 import { Context, Deferred, Effect, Layer, PubSub, Ref, Schema } from "effect";
 import type { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpServerResponse as Response } from "effect/unstable/http";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   BRIDGE_CONTRACT_VERSION,
   bridgeFrameSchema,
@@ -11,11 +11,19 @@ import {
   type BridgeStateSnapshot,
 } from "@pe/host-contracts/contracts";
 
+// Vocabulary: a SESSION is one Revit process incarnation; a CONNECTION is one WS attachment to
+// it. With stable ids (hash(pid + processStartUtc)) a reconnect re-registers the SAME session id,
+// so registration performs an explicit takeover and cleanup must be guarded (see cleanupSession).
 type Session = {
   readonly send: (frame: BridgeFrame) => Effect.Effect<void>;
   readonly pending: Ref.Ref<BridgePendingRequest | null>; // single in-flight mailbox
   readonly sessionId: string;
   readonly processId: number;
+  // Observed selector metadata, never identity. lane is normalized ("dev" → "rrd"); buildStamp is
+  // the LOADED payload's stamp as reported at registration — the host never computes staleness.
+  readonly lane: string | null;
+  readonly sandboxId: string | null;
+  readonly buildStamp: string | null;
   readonly state: Ref.Ref<BridgeStateSnapshot>;
   // FIFO turn chain: each invoke awaits the previous invoke's completion gate.
   // Machine callers (SSE-invalidated refetch bursts, IDE $ref resolution, agents)
@@ -51,6 +59,9 @@ export type BridgeSessionView = {
   readonly connected: boolean;
   readonly sessionId?: string;
   readonly processId?: number;
+  readonly lane?: string | null;
+  readonly sandboxId?: string | null;
+  readonly buildStamp?: string | null;
   readonly state?: BridgeStateSnapshot;
 };
 
@@ -66,6 +77,143 @@ export function getBridgeRegistrationRejection(registration: BridgeRegistrationR
   return registration.contractVersion === BRIDGE_CONTRACT_VERSION
     ? null
     : `Unsupported bridge contract version '${registration.contractVersion}'. Expected '${BRIDGE_CONTRACT_VERSION}'.`;
+}
+
+/**
+ * The universal session id: hash(pid + processStartUtc), for every lane, no exceptions.
+ * The broker (this host) assigns it and returns it in the registration ack. Returns null when
+ * the client did not report process identity — the caller keeps the bridge-${uuid} fallback
+ * (deleting that fallback is later hardening).
+ */
+export function computeBridgeSessionId(registration: {
+  readonly processId: number;
+  readonly processStartUtcUnixMs?: number | null;
+}): string | null {
+  const startUtc = registration.processStartUtcUnixMs;
+  if (typeof startUtc !== "number" || !Number.isFinite(startUtc) || startUtc <= 0) return null;
+  const digest = createHash("sha256").update(`${registration.processId}:${startUtc}`).digest("hex");
+  return `session-${digest.slice(0, 16)}`;
+}
+
+/**
+ * Registered lane vocabulary: rrd | sandbox | installed. Descriptor-launched dev sessions report
+ * the SDK lane string "dev"; in the broker's vocabulary that is the rrd session (Rider/Hot Reload
+ * — it holds the user's live docs). The wire field stays verbatim; only the broker maps it.
+ */
+export function normalizeSessionLane(lane: string | null | undefined): string | null {
+  const normalized = lane?.trim().toLowerCase();
+  if (!normalized) return null;
+  return normalized === "dev" ? "rrd" : normalized;
+}
+
+export type SessionTargetCandidate = {
+  readonly sessionId: string;
+  readonly processId: number;
+  readonly lane: string | null;
+  readonly sandboxId: string | null;
+};
+
+export type SessionTargetResolution<S extends SessionTargetCandidate> =
+  | { readonly _tag: "found"; readonly session: S }
+  | { readonly _tag: "none" }
+  | { readonly _tag: "error"; readonly message: string; readonly statusCode: number };
+
+function describeSessions(sessions: readonly SessionTargetCandidate[]): string {
+  if (sessions.length === 0) return "(no sessions connected)";
+  return sessions
+    .map(
+      (s) =>
+        `${s.sessionId} (pid ${s.processId}, lane ${s.lane ?? "unknown"}${
+          s.sandboxId ? `, sandbox ${s.sandboxId}` : ""
+        })`,
+    )
+    .join("; ");
+}
+
+const TARGET_SYNTAX =
+  "Target one with target=<selector>: 'rrd' (the Rider dev session — rrd holds the user's live docs), 'sandbox:<id>', a pid, or a session id.";
+
+/**
+ * The sole target-resolution choke point. Selector grammar: `sandbox:<id>` → the current process
+ * session for that logical sandbox; `rrd` → succeeds only when exactly one rrd session exists;
+ * all digits → pid; anything else → raw session id (one process incarnation). Untargeted with one
+ * session is implicit (ergonomic and safe); untargeted with several HARD-FAILS immediately with
+ * the listing — read-only status/list surfaces aggregate via `list` instead, never through here.
+ */
+export function resolveSessionTarget<S extends SessionTargetCandidate>(
+  sessions: readonly S[],
+  target: string | undefined,
+): SessionTargetResolution<S> {
+  const selector = target?.trim();
+  const listing = describeSessions(sessions);
+
+  if (!selector) {
+    if (sessions.length === 0) return { _tag: "none" };
+    if (sessions.length === 1) return { _tag: "found", session: sessions[0] };
+    return {
+      _tag: "error",
+      statusCode: 409,
+      message: `Multiple Revit sessions are connected; untargeted Revit operations are ambiguous and refused. ${TARGET_SYNTAX} Connected sessions: ${listing}`,
+    };
+  }
+
+  if (selector.toLowerCase().startsWith("sandbox:")) {
+    const sandboxId = selector.slice("sandbox:".length).trim();
+    const matches = sessions.filter((s) => s.sandboxId === sandboxId);
+    if (matches.length === 1) return { _tag: "found", session: matches[0] };
+    if (matches.length === 0)
+      return {
+        _tag: "error",
+        statusCode: 404,
+        message: `No connected session for sandbox '${sandboxId}'. Connected sessions: ${listing}`,
+      };
+    return {
+      _tag: "error",
+      statusCode: 409,
+      message: `Sandbox '${sandboxId}' has ${matches.length} connected sessions — this should not happen (takeover keeps one per sandbox). Target a pid or session id instead. Connected sessions: ${listing}`,
+    };
+  }
+
+  if (selector.toLowerCase() === "rrd") {
+    const matches = sessions.filter((s) => s.lane === "rrd");
+    if (matches.length === 1) return { _tag: "found", session: matches[0] };
+    if (matches.length === 0)
+      return {
+        _tag: "error",
+        statusCode: 404,
+        message: `No rrd session is connected. Connected sessions: ${listing}`,
+      };
+    return {
+      _tag: "error",
+      statusCode: 409,
+      message: `'rrd' is ambiguous: ${matches.length} rrd sessions are connected. Target a pid or session id. Connected sessions: ${listing}`,
+    };
+  }
+
+  if (/^\d+$/.test(selector)) {
+    const pid = Number.parseInt(selector, 10);
+    const matches = sessions.filter((s) => s.processId === pid);
+    if (matches.length === 1) return { _tag: "found", session: matches[0] };
+    if (matches.length === 0)
+      return {
+        _tag: "error",
+        statusCode: 404,
+        message: `No connected session has pid ${pid}. Connected sessions: ${listing}`,
+      };
+    return {
+      _tag: "error",
+      statusCode: 409,
+      message: `Pid ${pid} matches ${matches.length} sessions. Target a session id. Connected sessions: ${listing}`,
+    };
+  }
+
+  const byId = sessions.find((s) => s.sessionId === selector);
+  if (byId) return { _tag: "found", session: byId };
+  return {
+    _tag: "error",
+    statusCode: 404,
+    message: `No connected session matches target '${selector}'. ${TARGET_SYNTAX} Connected sessions: ${listing}`,
+  };
 }
 
 // Multi-session registry with a current-session fallback for old callers.
@@ -162,27 +310,35 @@ export const RevitBridgeLive = Layer.effect(
         connected: true,
         sessionId: session.sessionId,
         processId: session.processId,
+        lane: session.lane,
+        sandboxId: session.sandboxId,
+        buildStamp: session.buildStamp,
         state: yield* Ref.get(session.state),
       } satisfies BridgeSessionView;
     });
 
-    const getSession = Effect.fnUntraced(function* (bridgeSessionId?: string) {
+    // The sole target-resolution choke point for operations that reach into one Revit process.
+    const resolveTarget = Effect.fnUntraced(function* (target?: string) {
       const map = yield* Ref.get(sessions);
-      const sessionId = bridgeSessionId ?? (yield* Ref.get(currentSessionId));
-      return sessionId ? (map.get(sessionId) ?? null) : null;
+      return resolveSessionTarget([...map.values()], target);
     });
 
+    const failPendingRequest = Effect.fnUntraced(function* (session: Session, reason: string) {
+      const pending = yield* Ref.get(session.pending);
+      if (!pending) return;
+      yield* Deferred.fail(pending.reply, new BridgeError(reason, 503));
+      yield* Ref.set(session.pending, null);
+    });
+
+    // Socket-close cleanup. With stable session ids this races reconnect takeover: the OLD
+    // connection's close must never tear down the NEW connection that re-registered the same id.
+    // Guard: only the session object still present in the map cleans up its id.
     const cleanupSession = Effect.fnUntraced(function* (closedSession: Session) {
-      const pending = yield* Ref.get(closedSession.pending);
-      if (pending) {
-        yield* Deferred.fail(
-          pending.reply,
-          new BridgeError("Revit bridge disconnected before responding.", 503),
-        );
-        yield* Ref.set(closedSession.pending, null);
-      }
-      yield* Ref.update(sessions, (map) => {
-        const next = new Map(map);
+      yield* failPendingRequest(closedSession, "Revit bridge disconnected before responding.");
+      const map = yield* Ref.get(sessions);
+      if (map.get(closedSession.sessionId) !== closedSession) return; // superseded by takeover — harmless
+      yield* Ref.update(sessions, (current) => {
+        const next = new Map(current);
         next.delete(closedSession.sessionId);
         return next;
       });
@@ -232,15 +388,35 @@ export const RevitBridgeLive = Layer.effect(
             }
             const initialGate = yield* Deferred.make<void>();
             yield* Deferred.succeed(initialGate, void 0);
+            // Broker-assigned identity: hash(pid + processStartUtc) when the client reported
+            // process identity; bridge-${uuid} fallback otherwise (deleting it is later hardening).
+            const sessionId =
+              computeBridgeSessionId(frame.registration) ?? `bridge-${randomUUID()}`;
             const registeredSession = {
               send,
               pending: yield* Ref.make<BridgePendingRequest | null>(null),
-              sessionId: `bridge-${randomUUID()}`,
+              sessionId,
               processId: frame.registration.processId,
+              lane: normalizeSessionLane(frame.registration.lane),
+              sandboxId: frame.registration.sandboxId ?? null,
+              buildStamp: frame.registration.buildStamp ?? null,
               state: yield* Ref.make(frame.registration.state),
               queueTail: yield* Ref.make(initialGate),
               queueDepth: yield* Ref.make(0),
             };
+            // Reconnect takeover: a stable id re-registering means the same Revit process came
+            // back on a new socket. Replace the old connection, fail its pending request, and
+            // leave its eventual socket-close cleanup harmless (guarded in cleanupSession).
+            const previous = (yield* Ref.get(sessions)).get(sessionId);
+            if (previous) {
+              yield* Effect.logInfo(
+                `bridge session ${sessionId} re-registered (pid ${registeredSession.processId}); taking over the previous connection`,
+              );
+              yield* failPendingRequest(
+                previous,
+                "Revit bridge connection was superseded by a reconnect for the same session.",
+              );
+            }
             session = registeredSession;
             yield* Ref.update(sessions, (map) =>
               new Map(map).set(registeredSession.sessionId, registeredSession),
@@ -248,7 +424,7 @@ export const RevitBridgeLive = Layer.effect(
             yield* Ref.set(currentSessionId, registeredSession.sessionId);
             yield* send({
               kind: "RegistrationAck",
-              registrationAck: { accepted: true },
+              registrationAck: { accepted: true, sessionId: registeredSession.sessionId },
             });
             yield* PubSub.publish(events, {
               sessionId: registeredSession.sessionId,
@@ -346,8 +522,13 @@ export const RevitBridgeLive = Layer.effect(
       payload: unknown,
       bridgeSessionId?: string,
     ) {
-      const session = yield* getSession(bridgeSessionId);
-      if (!session) return yield* Effect.fail(new NoRevitSession());
+      // Every bridge invoke reaches into exactly one Revit process, so ambiguity hard-fails here
+      // (no warning-only release). Read-only aggregation across sessions goes through `list`.
+      const resolution = yield* resolveTarget(bridgeSessionId);
+      if (resolution._tag === "none") return yield* Effect.fail(new NoRevitSession());
+      if (resolution._tag === "error")
+        return yield* Effect.fail(new BridgeError(resolution.message, resolution.statusCode));
+      const session = resolution.session;
 
       const depth = yield* Ref.updateAndGet(session.queueDepth, (n) => n + 1);
       if (depth > MAX_QUEUED_OPS) {
@@ -364,8 +545,8 @@ export const RevitBridgeLive = Layer.effect(
       const previousGate = yield* Ref.getAndSet(session.queueTail, myGate);
       return yield* Effect.gen(function* () {
         yield* Deferred.await(previousGate);
-        // The session may have died while we queued; its socket is gone.
-        const live = yield* getSession(session.sessionId);
+        // The session may have died — or been taken over by a reconnect — while we queued.
+        const live = (yield* Ref.get(sessions)).get(session.sessionId);
         if (live !== session) return yield* Effect.fail(new NoRevitSession());
         return yield* invokeSession(session, operationKey, payload);
       }).pipe(
@@ -378,10 +559,18 @@ export const RevitBridgeLive = Layer.effect(
       );
     });
 
+    // Read-only view: never hard-fails. An untargeted snapshot with several sessions falls back
+    // to the most recently registered one (status displays); targeted misses read as disconnected.
     const snapshot = Effect.fnUntraced(function* (bridgeSessionId?: string) {
-      const session = yield* getSession(bridgeSessionId);
-      if (!session) return { connected: false } satisfies BridgeSessionView;
-      return yield* viewSession(session);
+      const resolution = yield* resolveTarget(bridgeSessionId);
+      if (resolution._tag === "found") return yield* viewSession(resolution.session);
+      if (!bridgeSessionId) {
+        const map = yield* Ref.get(sessions);
+        const currentId = yield* Ref.get(currentSessionId);
+        const current = currentId ? map.get(currentId) : undefined;
+        if (current) return yield* viewSession(current);
+      }
+      return { connected: false } satisfies BridgeSessionView;
     });
 
     const list = Effect.gen(function* () {
