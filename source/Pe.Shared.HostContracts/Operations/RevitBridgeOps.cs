@@ -384,6 +384,20 @@ public static class RevitBridgeOps {
             static (request, context, ct) => context.RevitData.GetFamilyEditorSnapshotAsync(request)
         );
 
+    public static readonly BridgeOp FamilyEditorOpen =
+        BridgeOp.Create<FamilyEditorOpenRequest, FamilyEditorOpenData>(
+            "family.editor.open",
+            "Open Family In Editor",
+            HostOperationAgentMetadata.Create(
+                "Open a loaded family from the active project in the Revit family editor and activate it (saves to a scratch .rfa to make activation possible).",
+                new[] { "family-editor", "family", "open", "edit-family", "activate" },
+                intent: HostOperationIntent.Mutate,
+                requiresActiveDocument: true,
+                costTier: HostOperationCostTier.Mutation
+            ),
+            static (request, context, ct) => context.RevitData.OpenFamilyEditorAsync(request)
+        );
+
     public static readonly BridgeOp FamilyEditorApply =
         BridgeOp.Create<FamilyEditorApplyRequest, FamilyEditorApplyData>(
             "family.editor.apply",
@@ -958,7 +972,7 @@ public static class RevitBridgeOps {
             "scripting.execute",
             "Execute Revit Script",
             HostOperationAgentMetadata.Create(
-                "Execute C# in connected Revit: scriptContent for an inline snippet (Execute-body statements or a full PeScriptContainer class), or sourcePath for a pod entrypoint declared in the workspace's pod.json — exactly one of the two. permissionMode defaults to ReadOnly, which discards any document changes via a rollback guard; pass WriteTransaction to keep changes.",
+                "Execute trusted in-process C# in connected Revit: scriptContent for an inline snippet (Execute-body statements or a full PeScriptContainer class), or sourcePath for a pod entrypoint declared in the workspace's pod.json — exactly one of the two. permissionMode defaults to ReadOnly, which discards active-document changes via a rollback guard; pass WriteTransaction to keep changes.",
                 new[] { "script", "execute", "csharp", "revit", "pod" },
                 HostOperationIntent.Mutate,
                 requiresActiveDocument: true,

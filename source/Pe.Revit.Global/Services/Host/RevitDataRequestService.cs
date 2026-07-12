@@ -70,6 +70,10 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         FamilyEditorSnapshotRequest request
     ) => this.EnqueueAsync(this.GetFamilyEditorSnapshotCore);
 
+    public Task<FamilyEditorOpenData> OpenFamilyEditorAsync(
+        FamilyEditorOpenRequest request
+    ) => this.EnqueueAsync(() => this.OpenFamilyEditorCore(request));
+
     public Task<FamilyEditorApplyData> ApplyFamilyEditorEditsAsync(
         FamilyEditorApplyRequest request
     ) => this.EnqueueAsync(() => this.ApplyFamilyEditorEditsCore(request));
@@ -826,6 +830,69 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
                 )
             ]
         );
+    }
+
+    private FamilyEditorOpenData OpenFamilyEditorCore(FamilyEditorOpenRequest request) {
+        var uiApp = RevitUiSession.CurrentUIApplication;
+        var document = GetActiveDocument();
+        if (document.IsFamilyDocument) {
+            throw BridgeOperationExceptions.Conflict(
+                "Active document is already a family document.",
+                [
+                    BridgeOperationExceptions.Issue(
+                        "$",
+                        "ActiveProjectDocumentRequired",
+                        "Active document is already a family document.",
+                        "Activate the project document that loads the family, then retry."
+                    )
+                ]
+            );
+        }
+
+        var family = request.FamilyId is { } familyId
+            ? document.GetElement(familyId.ToElementId()) as Family
+            : null;
+        if (family == null && !string.IsNullOrWhiteSpace(request.FamilyName)) {
+            family = new FilteredElementCollector(document)
+                .OfClass(typeof(Family))
+                .Cast<Family>()
+                .FirstOrDefault(f => string.Equals(f.Name, request.FamilyName!.Trim(),
+                    StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (family == null) {
+            throw BridgeOperationExceptions.BadRequest(
+                "Family not found in the active project.",
+                [
+                    BridgeOperationExceptions.Issue(
+                        "$.familyId",
+                        "FamilyNotFound",
+                        "No loaded family matched the given familyId/familyName.",
+                        "Pass a familyId or familyName from revit.catalog.loaded-families."
+                    )
+                ]
+            );
+        }
+
+        // EditFamily documents have no PathName and cannot be activated (gotcha: reopening by
+        // OpenAndActivateDocument often throws). Save to a scratch .rfa and reopen by path.
+        var scratchDir = Path.Combine(Path.GetTempPath(), "pe-family-editor");
+        _ = Directory.CreateDirectory(scratchDir);
+        var scratchPath = Path.Combine(scratchDir, family.Name + ".rfa");
+
+        if (uiApp.FindOpenDocumentByPath(scratchPath) == null) {
+            var familyDocument = document.EditFamily(family);
+            try {
+                if (File.Exists(scratchPath))
+                    File.Delete(scratchPath);
+                familyDocument.SaveAs(scratchPath);
+            } finally {
+                _ = familyDocument.Close(false);
+            }
+        }
+
+        var opened = this.OpenLocalRevitDocument(uiApp, scratchPath);
+        return new FamilyEditorOpenData(family.Name, opened.Document.Title, scratchPath);
     }
 
     private OpenRevitDocumentData OpenLocalRevitDocument(UIApplication uiApp, string path) {
