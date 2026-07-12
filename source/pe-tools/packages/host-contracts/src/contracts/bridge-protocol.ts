@@ -54,6 +54,9 @@ export type BridgeEvent = Schema.Schema.Type<typeof bridgeEventSchema>;
 export const bridgeRegistrationAckSchema = Schema.Struct({
   accepted: Schema.Boolean,
   errorMessage: nullableString,
+  // Broker-assigned session id (hash(pid + processStartUtc) when identity was reported,
+  // bridge-${uuid} fallback otherwise). The client learns its own name from the ack.
+  sessionId: nullableString,
 });
 export type BridgeRegistrationAck = Schema.Schema.Type<typeof bridgeRegistrationAckSchema>;
 
@@ -78,9 +81,18 @@ export const bridgeStateSnapshotSchema = Schema.Struct({
 });
 export type BridgeStateSnapshot = Schema.Schema.Type<typeof bridgeStateSnapshotSchema>;
 
+// Session = one Revit process incarnation; connection = one WS attachment to it. The identity
+// tuple is pid + processStartUtcUnixMs (the broker hashes it into the session id); lane/
+// sandboxId/buildStamp/sessionDescriptorPath are selectors and observed metadata, never identity.
+// All optional — absent fields decode fine, so BRIDGE_CONTRACT_VERSION stays 19 on purpose.
 export const bridgeRegistrationRequestSchema = Schema.Struct({
+  buildStamp: nullableString,
   contractVersion: Schema.Number,
+  lane: nullableString,
   processId: Schema.Number,
+  processStartUtcUnixMs: Schema.optional(Schema.NullOr(Schema.Number)),
+  sandboxId: nullableString,
+  sessionDescriptorPath: nullableString,
   state: bridgeStateSnapshotSchema,
 });
 export type BridgeRegistrationRequest = Schema.Schema.Type<typeof bridgeRegistrationRequestSchema>;

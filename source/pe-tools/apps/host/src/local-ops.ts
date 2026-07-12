@@ -84,6 +84,9 @@ export function getBridgeSessionSummary(bridge: BridgeSessionView) {
   const s = bridge.state;
   const sharedParametersFilename = s?.sharedParametersFilename ?? null;
   return Effect.succeed({
+    buildStamp: bridge.buildStamp ?? null,
+    lane: bridge.lane ?? null,
+    sandboxId: bridge.sandboxId ?? null,
     activeDocument:
       s?.hasActiveDocument === true
         ? {
@@ -131,12 +134,16 @@ export const listBridgeSessions = Effect.fnUntraced(function* (
       .filter((bridge) => bridge.connected && bridge.sessionId)
       .map((bridge) => ({
         activeDocumentTitle: bridge.state?.activeDocumentTitle ?? null,
+        // Observed facts only: the lane/buildStamp the session reported. Never staleness.
+        buildStamp: bridge.buildStamp ?? null,
         connected: true,
+        lane: bridge.lane ?? null,
         openDocumentCount:
           typeof bridge.state?.openDocumentCount === "number" ? bridge.state.openDocumentCount : 0,
         processId: bridge.processId ?? null,
         revitVersion: bridge.state?.revitVersion ?? null,
         runtimeFramework: bridge.state?.runtimeFramework ?? null,
+        sandboxId: bridge.sandboxId ?? null,
         sessionId: bridge.sessionId!,
       })),
   };
