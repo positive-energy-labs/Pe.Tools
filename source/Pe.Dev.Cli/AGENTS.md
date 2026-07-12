@@ -4,7 +4,7 @@
 
 Owns the dev-facing `pe-dev` CLI surface for `pea` source linking, source web dev supervision, codegen, and APS Design Automation operator workflows.
 
-Attached RRD/live-loop diagnostics, sync, restart, and hot reload are no longer public `pe-dev` command groups. SDK `pe-revit` owns the live/test mechanics; Peco keeps only Pea status/log context and product probes.
+Attached RRD/live-loop diagnostics, sync, restart, and hot reload are no longer public `pe-dev` command groups. SDK `pe-revit` owns the live/test mechanics; the pea MCP tools (`pe_status`, `pe_logs`) own Pea status/log context and product probes.
 
 ## Purpose
 
@@ -18,7 +18,7 @@ Attached RRD/live-loop diagnostics, sync, restart, and hot reload are no longer 
 - `DevCliProgram.cs` - top-level usage/help and command dispatch.
 - `Routing/RootCommandRunner.cs` - top-level `bootstrap-path`, `self-test`, `pea`, `web`, `automation`, `codegen`, and internal dispatch.
 - `Commands/BootstrapPathCommand.cs` - personal PATH bootstrap to the current build output.
-- `Commands/Pea/DevWebCommand.cs` - explicit `pe-dev web pea|peco` entrypoint into the source-linked web dev supervisor.
+- `Commands/Pea/DevWebCommand.cs` - explicit `pe-dev web pea` entrypoint into the source-linked web dev supervisor.
 - `Commands/Automation/AutomationCommandRunner.cs` - top-level `automation ...` command routing.
 - `Commands/Codegen/CodegenCommandRunner.cs` - generated build contracts, schema-backed Host contracts, and TypeScript Host check/sync routing.
 - `../Pe.Aps/Auth/ApsAuthService.cs` - persisted APS auth status, login, logout, and token acquisition flow.
@@ -50,9 +50,9 @@ Keep `Pe.Dev.Cli` focused on stable command naming, parse/print behavior, and or
 ## Live Runtime Boundary
 
 - AttachedRrd/live-loop mutation and proof lanes are owned by SDK `pe-revit`, not public `pe-dev` commands.
-- Use `live_loop_context` for the single read-only environment/session/log decision packet.
+- Use the pea MCP tools (`pe_status`, `pe_logs`) plus SDK `live_status` for read-only environment/session/log context.
 - Use SDK `pe-revit live` or MCP `live_converge` for SDK-backed sync, HR, and start/restart actions.
-- Use Peco `script_execute` or `talk_to_pea` when a product-facing tool should run after SDK freshness preflight.
+- Use pea `script_execute` or `pea --prompt` when a product-facing tool should run after SDK freshness preflight.
 - Use deployed `pea` surfaces for operator log access and scripting.
 - SDK `pe-revit test fresh|attached` owns Revit-backed proof lanes.
 - Use `pe-revit test fresh --plan --json ...` for safe smoke checks and command planning through the SDK.
@@ -65,7 +65,7 @@ Keep `Pe.Dev.Cli` focused on stable command naming, parse/print behavior, and or
 | ----------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | **dev CLI**             | The repo-local developer/operator surface is `pe-dev`                      | Avoid reviving `pe-script` or separate automation executables               |
 | **FreshRevitProcess**   | The dedicated fresh-owned Revit proof lane exposed by SDK `pe-revit test`  | Prefer this when current RRD document/session state is irrelevant           |
-| **live-loop context**   | The Peco decision packet exposed as `live_loop_context`, wrapping Pea status/log hooks | Prefer this over reviving `pe-dev doctor`, `status`, `env`, or `sync`       |
+| **live-loop context**   | The read-only packet from pea `pe_status`/`pe_logs` plus SDK `live_status`  | Prefer this over reviving `pe-dev doctor`, `status`, `env`, or `sync`       |
 | **automation workflow** | `pe-dev automation ...` Design Automation workflows                        | Prefer this over nesting DA under desktop Revit                             |
 | **browse workflow**     | Sticky-context ACC discovery commands under `pe-dev automation browse ...` | Prefer this over copy-pasting ids through one-off list commands             |
 | **status workflow**     | `automation inspect receipt` and `automation inspect workitem`             | Prefer inspection over rerunning jobs when you already have a receipt or id |

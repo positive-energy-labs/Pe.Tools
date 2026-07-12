@@ -498,11 +498,6 @@ function workbenchLaunchCommands(): WorkbenchCommandHint[] {
       command: "pea agent",
       description: "Open the Pea operator workbench in the current repo.",
     },
-    {
-      id: "peco",
-      command: "peco",
-      description: "Use the developer coding workbench for Pe.Tools repo tasks.",
-    },
   ];
 }
 

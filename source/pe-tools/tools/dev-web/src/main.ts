@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import net from "node:net";
 import path from "node:path";
 
-type AgentName = "pea" | "peco";
+type AgentName = "pea";
 
 interface DevWebOptions {
   agent: AgentName;
@@ -40,8 +40,7 @@ async function main(args: string[]): Promise<void> {
 
 function parseArgs(args: string[]): DevWebOptions {
   const agent = args.shift();
-  if (agent !== "pea" && agent !== "peco")
-    throw new Error("Usage: dev-web <pea|peco> web [options]");
+  if (agent !== "pea") throw new Error("Usage: dev-web pea web [options]");
   if (args[0] === "web") args.shift();
 
   const forwardedArgs: string[] = ["web"];
@@ -103,11 +102,7 @@ function readPort(value: string, name: string): number {
 }
 
 function startBackend(options: DevWebOptions): ChildProcess {
-  const appDirectory = path.join(
-    repoPeToolsRoot,
-    "apps",
-    options.agent === "pea" ? "pea" : "pe-code",
-  );
+  const appDirectory = path.join(repoPeToolsRoot, "apps", "pea");
   const nodeArgs = [
     ...(options.watch ? ["--watch"] : []),
     "--import",

@@ -45,7 +45,7 @@ Use for bugs, regressions, confusing failures, stale runtime behavior, failing s
 
 Use diagnosis for the root-cause loop once the live verification lane is trustworthy. If proof depends on Rider/IDE build freshness, RRD restart, document setup, modal Revit UI, installed-lane switches, auth/login, or visual confirmation, activate pe-live-loop first and coordinate the human-maintained session boundary before diagnosing deeper.
 
-After live-loop coordination establishes a trustworthy lane, probe with the smallest script, host operation, or focused test that observes the changed behavior. Peco sync should use the non-focus Pe.RiderBridge lane; if sync reports runtime freshness stale or unproven, or behavior still diverges after a nominal bridge invocation, return to pe-live-loop instead of treating stale live state as source evidence.
+After live-loop coordination establishes a trustworthy lane, probe with the smallest script, host operation, or focused test that observes the changed behavior. SDK `pe-revit live` convergence should use the non-focus Pe.RiderBridge lane; if sync reports runtime freshness stale or unproven, or behavior still diverges after a nominal bridge invocation, return to pe-live-loop instead of treating stale live state as source evidence.
 
 ### AttachedRrd freshness verdict
 
@@ -84,7 +84,7 @@ Use when evaluating whether Pea and the typed host surface can answer realistic 
 
 1. Start from a normal, imperfect user question, not a tool-shaped prompt. Prefer wording like a project user would actually type: fuzzy names, incomplete context, and practical intent are useful signal.
 2. Pick two to five hard questions that force joins users mentally expect: active view, model elements, families/types, parameters, schedules, sheets, rooms/spaces, project browser organization, and issue/printed context.
-3. Use talk_to_pea with frame=operator or frame=collaborate first, then continue the same thread with frame=feedback when harness/product friction matters.
+3. Use `pea --prompt "..." --json` for the black-box turn (pass `--thread <id>` to continue the same Pea thread with follow-up or feedback questions when harness/product friction matters).
 4. Establish basic readiness before interpreting failures: fresh host/session/document state when current facts matter, generated operation discovery before scripts, one minimal successful read when possible, and bounded logs only when host/Revit failures suggest them.
 5. For each question, record whether current typed operations answered it, how much orchestration/guessing/scripting was needed, what reusable projection or data join would make it easier, and whether that improvement is worth its context and optionality cost.
 6. Classify failures as missing capability, weak join, bad model data, unclear user wording, or harness instability.

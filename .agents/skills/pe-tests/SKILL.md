@@ -44,7 +44,7 @@ Use this mode to decide where tests belong and what the smallest durable suite s
 Good durable tests usually assert:
 
 - identity and ownership: session/thread/resource ids, locks, active state, close/cancel/abort/takeover boundaries;
-- product policy: Pea/Peco/Host/surface differences that should not drift.
+- product policy: Pea/Host/surface differences that should not drift.
 - Revit API behavior: view/document/family resolve/open/close, element/schedule/etc. create/update/delete, undo/redo/transaction behavior, parameter metadata resolution on a variety of elements in different contexts.
 - end to end user-facing product behavior
 

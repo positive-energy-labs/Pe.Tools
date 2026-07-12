@@ -1,6 +1,6 @@
 ---
 name: pe-architecture
-description: Improve Pe.Tools architecture by resolving where code should live, product boundaries, module seams, interface depth, locality, and deterministic-vs-latent design. Use when the user asks where should this live, this feels tangled, design an interface, deepen modules, boundary question, Pea vs Peco, desktop vs DA, document-owned vs session-owned, typed host operation vs script, or whether logic belongs in code, docs, skills, or Pea workflows.
+description: Improve Pe.Tools architecture by resolving where code should live, product boundaries, module seams, interface depth, locality, and deterministic-vs-latent design. Use when the user asks where should this live, this feels tangled, design an interface, deepen modules, boundary question, product vs dev surface, desktop vs DA, document-owned vs session-owned, typed host operation vs script, or whether logic belongs in code, docs, skills, or Pea workflows.
 metadata:
   goal: true
 ---
@@ -13,7 +13,7 @@ Use for module/interface design, refactoring direction, product-boundary questio
 
 - If the question is "where should this live", inspect current package boundaries and nearest docs before proposing a target.
 - If code feels tangled, identify the public interface and the volatility hidden behind it.
-- If Pea/Peco, desktop/DA, document/session, host operation/bridge, or build/runtime lanes are involved, name the boundary before changing source.
+- If Pea/dev-tooling, desktop/DA, document/session, host operation/bridge, or build/runtime lanes are involved, name the boundary before changing source.
 - If the decision resolves a durable boundary rule, capture it before moving code.
 - If the problem is actually vague intent, use pe-steer first.
 
@@ -28,7 +28,7 @@ Use Module, Interface, Implementation, Depth, Seam, Adapter, Leverage, and Local
 3. Inspect neighboring implementations before inventing abstractions.
 4. Prefer generated contracts and public seams as current truth.
 5. Consider how release packaging orchestration and distribution will be impacted
-6. Keep Pea implications in Peco context docs until a Pea-specific design pass updates operator skills.
+6. Keep Pea implications in repo context docs until a Pea-specific design pass updates operator skills.
 
 ## Loop
 
@@ -36,7 +36,7 @@ Use Module, Interface, Implementation, Depth, Seam, Adapter, Leverage, and Local
 2. Read neighboring implementations and docs before proposing shape changes.
 3. Find where a smaller interface could hide more implementation depth.
 4. Prefer feature locality and explicit contracts over broad abstractions.
-5. Preserve product boundaries, especially Pea vs Peco and desktop vs DA shells.
+5. Preserve product boundaries, especially Pea vs repo dev tooling and desktop vs DA shells.
 6. Propose at most a few candidate changes, ranked by leverage and risk.
 7. Implement only the smallest approved/obvious slice, then prove it with focused checks.
 
@@ -44,7 +44,7 @@ Use Module, Interface, Implementation, Depth, Seam, Adapter, Leverage, and Local
 
 Before proposing architecture changes, name which boundary is involved:
 
-- Pea vs Peco: deployed operator workbench vs repo coding agent.
+- Pea vs repo dev tooling: deployed operator workbench vs SDK `pe-revit` and repo agents.
 - Desktop shell vs automation shell: Pe.App/RRD startup vs Design Automation worker startup over shared DA-safe packages.
 - Document-owned vs session-owned Revit behavior: Document/FamilyDocument collect/capture/apply vs UIApplication/open-active-navigation behavior.
 - Public host operation vs private bridge: generated Pe.Host operation contracts are the product surface; private bridge frames are not.
@@ -56,7 +56,7 @@ If a proposed seam crosses one of these boundaries, keep the public contract sma
 
 ## Harness Projection Judgment
 
-Use after a Revit harness stress test or talk_to_pea feedback identifies friction.
+Use after a Revit harness stress test or `pea --prompt` feedback identifies friction.
 
 Ask:
 

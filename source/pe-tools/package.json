@@ -20,8 +20,7 @@
     "ready": "vp check && vp run -r test -- --passWithNoTests && vp run -r build && pnpm typegen:check",
     "typegen:check": "pnpm --filter @pe/host-contracts codegen:check",
     "test": "vp run -r test -- --passWithNoTests",
-    "dev:pea-web": "pe-dev web pea",
-    "dev:peco-web": "pe-dev web peco"
+    "dev:pea-web": "pe-dev web pea"
   },
   "devDependencies": {
     "jiti": "^2.7.0",

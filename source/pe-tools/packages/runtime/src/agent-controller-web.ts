@@ -216,9 +216,8 @@ export interface RuntimeAgentControllerWebOptions<TRuntimeOptions = unknown> {
  * Dev/standalone server shim: construct a runtime, build its Hono app via
  * {@link buildAgentControllerApp}, optionally serve a static SPA, bind a port, and hold the
  * process until SIGINT/SIGTERM. Pea no longer uses this (the host mounts
- * `buildAgentControllerApp` into its own Effect server); it remains for `@pe/pe-code`'s
- * dev `web` subcommand, whose `createMastraCode` controller relies on the wrap branch in
- * `resolveServingTarget`.
+ * `buildAgentControllerApp` into its own Effect server); it remains as a standalone dev
+ * server for controller runtimes that need the wrap branch in `resolveServingTarget`.
  */
 export async function runRuntimeAgentControllerWeb<TRuntimeOptions = unknown>(
   options: RuntimeAgentControllerWebOptions<TRuntimeOptions>,

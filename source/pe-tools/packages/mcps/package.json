@@ -1,7 +1,7 @@
 {
   "name": "@pe/mcps",
   "version": "0.0.0",
-  "description": "Pe tool surfaces exposed as MCP servers (pea product, peco dev).",
+  "description": "Pe tool surfaces exposed as MCP servers (pea product).",
   "homepage": "https://github.com/author/library#readme",
   "bugs": {
     "url": "https://github.com/author/library/issues"
