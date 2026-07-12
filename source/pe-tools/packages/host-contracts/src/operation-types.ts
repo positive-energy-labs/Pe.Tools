@@ -405,11 +405,17 @@ export const bridgeSessionsListSchema = Schema.Struct({
   sessions: Schema.Array(
     Schema.Struct({
       activeDocumentTitle: Schema.optional(Schema.NullOr(Schema.String)),
+      // Observed facts reported at registration: normalized lane (rrd | sandbox | installed),
+      // logical sandbox id, and the LOADED payload's build stamp. The host never computes
+      // staleness from these — the SDK owns desired-state/freshness.
+      buildStamp: Schema.optional(Schema.NullOr(Schema.String)),
       connected: Schema.Boolean,
+      lane: Schema.optional(Schema.NullOr(Schema.String)),
       openDocumentCount: Schema.Number,
       processId: Schema.optional(Schema.NullOr(Schema.Number)),
       revitVersion: Schema.optional(Schema.NullOr(Schema.String)),
       runtimeFramework: Schema.optional(Schema.NullOr(Schema.String)),
+      sandboxId: Schema.optional(Schema.NullOr(Schema.String)),
       sessionId: Schema.String,
     }),
   ),
@@ -482,11 +488,15 @@ export const hostSessionSummaryDataSchema = Schema.Struct({
   activeDocument: Schema.optional(Schema.NullOr(hostActiveDocumentSummarySchema)),
   availableModules: Schema.Array(hostModuleDescriptorSchema),
   bridgeIsConnected: Schema.Boolean,
+  // Observed session metadata (lane/sandboxId/buildStamp) — facts as reported, never staleness.
+  buildStamp: Schema.optional(Schema.NullOr(Schema.String)),
+  lane: Schema.optional(Schema.NullOr(Schema.String)),
   openDocumentCount: Schema.Number,
   processId: Schema.optional(Schema.NullOr(Schema.Number)),
   revitVersion: Schema.optional(Schema.NullOr(Schema.String)),
   runtimeAssemblies: Schema.Array(hostRuntimeAssemblyDataSchema),
   runtimeFramework: Schema.optional(Schema.NullOr(Schema.String)),
+  sandboxId: Schema.optional(Schema.NullOr(Schema.String)),
   sessionId: Schema.optional(Schema.NullOr(Schema.String)),
   workbenchResources: hostWorkbenchResourcesDataSchema,
 });
@@ -610,4 +620,3 @@ export class HostCallError extends Error {
     this.name = "HostCallError";
   }
 }
-

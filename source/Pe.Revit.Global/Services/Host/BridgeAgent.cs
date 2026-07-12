@@ -145,6 +145,9 @@ internal sealed class BridgeAgent : IDisposable {
     public string? RevitVersion { get; }
     public string? RuntimeFramework { get; }
 
+    /// <summary>Broker-assigned session id from the registration ack — the client learns its own name.</summary>
+    public string? SessionId { get; private set; }
+
     public void Dispose() {
         if (this._disposed)
             return;
@@ -397,10 +400,27 @@ internal sealed class BridgeAgent : IDisposable {
     }
 
     private void SendRegistrationAndAwaitAck() {
+        // Session = this Revit process incarnation; this WS connection is just one attachment to it.
+        // We send the raw identity tuple (pid + processStartUtc) plus selector metadata; the broker
+        // derives the session id and returns it in the ack — no client-side id derivation.
+        var identity = BridgeSessionIdentity.Resolve();
+        Log.Information(
+            "Host bridge session identity: ProcessStartUtcUnixMs={ProcessStartUtcUnixMs}, Lane={Lane}, SandboxId={SandboxId}, BuildStamp={BuildStamp}, SessionDescriptorPath={SessionDescriptorPath}",
+            identity.ProcessStartUtcUnixMs,
+            identity.Lane,
+            identity.SandboxId,
+            identity.BuildStamp,
+            identity.SessionDescriptorPath
+        );
         var registration = new BridgeRegistrationRequest(
             BridgeProtocol.ContractVersion,
             this._bridgeOptions.ProcessId,
-            this.BuildStateSnapshot()
+            this.BuildStateSnapshot(),
+            identity.ProcessStartUtcUnixMs > 0 ? identity.ProcessStartUtcUnixMs : null,
+            identity.SessionDescriptorPath,
+            identity.Lane,
+            identity.SandboxId,
+            identity.BuildStamp
         );
         this._transportSession.Write(new BridgeFrame(
             BridgeFrameKind.Registration,
@@ -414,6 +434,8 @@ internal sealed class BridgeAgent : IDisposable {
             throw new InvalidOperationException("Host did not acknowledge Revit bridge registration.");
         if (!ack.Accepted)
             throw new InvalidOperationException(ack.ErrorMessage ?? "Host rejected Revit bridge registration.");
+        this.SessionId = ack.SessionId;
+        Log.Information("Host bridge session registered: SessionId={SessionId}", ack.SessionId ?? "(none assigned)");
     }
 
     private async Task SendStateSyncAsync(CancellationToken cancellationToken) {

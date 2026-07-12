@@ -53,7 +53,9 @@ const toolVerbositySchema = z.enum(["compact", "hints", "full"]);
 const bridgeSessionIdSchema = z
   .string()
   .optional()
-  .describe("Optional TS host bridge session id to target a specific connected Revit process.");
+  .describe(
+    "Optional target selector for a connected Revit session: 'rrd' (the Rider dev session — it holds the user's live docs), 'sandbox:<id>', a pid, or a raw session id. With one session connected it may be omitted; with several, untargeted Revit operations hard-fail with the session listing.",
+  );
 
 const hostOperationSearchInputSchema = z.object({
   query: z
@@ -114,7 +116,11 @@ export const peStatus = createTool({
     const hostRpcCaller = createCurrentHostRpcCaller(input.bridgeSessionId);
     const probe = await hostRpcCaller.call("host.status");
     const sessionSummary = await hostRpcCaller.call("bridge.sessions.summary");
-    if (input.verbosity === "full") return { probe, sessionSummary };
+    // Observed facts per connected session (lane/buildStamp as reported at registration).
+    // Freshness/staleness is the SDK's to compute — pe_status only reports host connectivity.
+    const sessionsList = await hostRpcCaller.call("bridge.sessions.list");
+    if (input.verbosity === "full")
+      return { probe, sessionSummary, sessions: sessionsList.sessions };
 
     return {
       bridge: {
@@ -130,6 +136,9 @@ export const peStatus = createTool({
         isConnected: sessionSummary.bridgeIsConnected,
         sessionId: sessionSummary.sessionId,
         processId: sessionSummary.processId,
+        lane: sessionSummary.lane,
+        sandboxId: sessionSummary.sandboxId,
+        buildStamp: sessionSummary.buildStamp,
         revitVersion: sessionSummary.revitVersion,
         openDocumentCount: sessionSummary.openDocumentCount,
         activeDocument:
@@ -138,6 +147,16 @@ export const peStatus = createTool({
             : summarizeActiveDocument(sessionSummary.activeDocument),
         availableModuleCount: sessionSummary.availableModules.length,
       },
+      sessions: sessionsList.sessions.map((session) => ({
+        sessionId: session.sessionId,
+        processId: session.processId,
+        lane: session.lane,
+        sandboxId: session.sandboxId,
+        buildStamp: session.buildStamp,
+        revitVersion: session.revitVersion,
+        openDocumentCount: session.openDocumentCount,
+        activeDocumentTitle: session.activeDocumentTitle,
+      })),
     };
   },
 });

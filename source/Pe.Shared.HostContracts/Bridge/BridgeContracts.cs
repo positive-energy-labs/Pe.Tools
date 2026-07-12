@@ -40,15 +40,26 @@ public sealed record BridgeStateSnapshot(
     List<HostModuleDescriptor> AvailableModules
 );
 
+// Vocabulary: a SESSION is one Revit process incarnation; a CONNECTION is one WS attachment to it.
+// The broker (TS host) derives the universal session id from hash(pid + processStartUtc); the
+// optional fields below are selectors/metadata (lane, sandboxId, buildStamp), never identity.
+// They are additive optionals — absent fields decode fine on the TS side, so ContractVersion
+// deliberately stays unbumped (the 19→20 bump + mandatory identity is later hardening).
 public sealed record BridgeRegistrationRequest(
     int ContractVersion,
     int ProcessId,
-    BridgeStateSnapshot State
+    BridgeStateSnapshot State,
+    long? ProcessStartUtcUnixMs = null,
+    string? SessionDescriptorPath = null,
+    string? Lane = null,
+    string? SandboxId = null,
+    string? BuildStamp = null
 );
 
 public sealed record BridgeRegistrationAck(
     bool Accepted,
-    string? ErrorMessage = null
+    string? ErrorMessage = null,
+    string? SessionId = null
 );
 
 public sealed record BridgeStateSync(
