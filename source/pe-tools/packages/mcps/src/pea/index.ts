@@ -23,8 +23,9 @@ import { requestAccess } from "../shared/request-access.ts";
 import { revitApiFetch, revitApiSearch } from "../shared/rvt-api.ts";
 import { resolveHostBaseUrl, resolveWorkspaceKey } from "../shared/host-config.ts";
 import { peaProductToolCatalog } from "../tool-metadata.ts";
-import { familySheetTools } from "./family-sheet.ts";
+import { routeStateTools } from "./route-state.ts";
 import { PeaCliCommands, type PeaCliCommandOptions } from "./PeaCliCommands.ts";
+export { createFamilyTypesCommandHandlers, familyTypesRouteState } from "./route-state-commands.ts";
 export { peaProductToolCatalog } from "../tool-metadata.ts";
 export { PeaCliCommands } from "./PeaCliCommands.ts";
 export {
@@ -240,7 +241,7 @@ export const hostOperationCall = createTool({
 export const scriptExecute = createTool({
   id: "script_execute",
   description:
-    "Execute a C# Revit script through the host scripting contract. Pass scriptContent for an inline snippet (prefer Execute-body statements like WriteLine(...); a full PeScriptContainer class is also allowed) OR sourcePath for a pod entrypoint declared in the workspace's pod.json — not both. Defaults to ReadOnly: document changes are rolled back and discarded with a warning; pass permissionMode=WriteTransaction to keep changes. Use Result(...) in the script for structured JSON results; scripts should check ct / ThrowIfCancelled() in loops so the timeout (default 600s) and scripting.cancel can interrupt them.",
+    "Execute trusted in-process C# through the Revit scripting contract. Pass scriptContent for an inline snippet (prefer Execute-body statements like WriteLine(...); a full PeScriptContainer class is also allowed) OR sourcePath for a pod entrypoint declared in the workspace's pod.json — not both. Defaults to ReadOnly: active-document changes are rolled back and discarded with a warning; pass permissionMode=WriteTransaction to keep changes. Use Result(...) for structured JSON; check ct / ThrowIfCancelled() in loops so the cooperative timeout can interrupt them.",
   inputSchema: scriptExecuteInputSchema,
   execute: async (input) => {
     try {
@@ -289,7 +290,7 @@ export const peaProductTools = {
   [revitApiFetch.id]: revitApiFetch,
   [scriptBootstrap.id]: scriptBootstrap,
   [scriptExecute.id]: scriptExecute,
-  ...familySheetTools,
+  ...routeStateTools,
 };
 
 export const peaTools = peaProductTools;

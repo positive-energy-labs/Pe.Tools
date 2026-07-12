@@ -47,12 +47,6 @@ test("pea exports the product tool profile used by the default runtime", () => {
     [...defaultPeaRuntimeToolCatalog.keys()].sort((left, right) => left.localeCompare(right)),
   ).toEqual([
     "capture_view",
-    "family_sheet_doc",
-    "family_sheet_mark",
-    "family_sheet_parse_spec",
-    "family_sheet_propose",
-    "family_sheet_refresh",
-    "family_sheet_status",
     "host_operation_call",
     "host_operation_search",
     "pe_logs",
@@ -61,6 +55,9 @@ test("pea exports the product tool profile used by the default runtime", () => {
     "request_access",
     "revit_api_docs_fetch",
     "revit_api_docs_search",
+    "route_command",
+    "route_state_apply",
+    "route_state_read",
     "script_bootstrap",
     "script_execute",
   ]);

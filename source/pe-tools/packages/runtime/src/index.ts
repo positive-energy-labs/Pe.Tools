@@ -1,6 +1,7 @@
 export * from "./runtime.ts";
 export * from "./acp-server.ts";
 export * from "./agent-controller-web.ts";
+export * from "./route-state-dispatch.ts";
 export * from "./cli-bootstrap.ts";
 export * from "./events.ts";
 export * from "./context.ts";

@@ -6,6 +6,13 @@ import { MastraServer } from "@mastra/hono";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { z } from "zod";
+import {
+  applyRouteStatePatches,
+  describeRouteState,
+  listRouteStates,
+  runRouteStateCommand,
+  type RouteStateSession,
+} from "./route-state-dispatch.ts";
 
 /**
  * Body for the Pe send route. The native `/messages` route is `{ message: string }` only, so it
@@ -24,6 +31,23 @@ const peSendMessageSchema = z.object({
       }),
     )
     .optional(),
+});
+
+/* ── Route-state dispatcher request bodies ─────────────────────────────────── */
+
+const routeStateActorSchema = z.enum(["agent", "human"]);
+const routeStatePatchSchema = z.object({
+  path: z.array(z.union([z.string(), z.number()])),
+  value: z.unknown().optional(),
+});
+const routeStateApplyBodySchema = z.object({
+  actor: routeStateActorSchema,
+  patches: z.array(routeStatePatchSchema),
+});
+const routeStateCommandBodySchema = z.object({
+  actor: routeStateActorSchema,
+  command: z.string(),
+  input: z.unknown().optional(),
 });
 
 /** The minimal shape we serve: an AgentController + its session, on a Mastra. */
@@ -121,6 +145,51 @@ export async function buildAgentControllerApp(
     if (!parsed.success) return c.json({ error: "Invalid message body." }, 400);
     void runtime.session!.sendMessage({ content: parsed.data.message, files: parsed.data.files });
     return c.json({ ok: true });
+  });
+
+  // Route-state dispatcher: the server-side seam of the collaborative-UI primitive.
+  // Pea's three universal tools and the browser are thin clients of these endpoints;
+  // the AgentController session owns the state, so writes here fan out over the same
+  // native `state_changed` event both consumers already listen to.
+  const routeStateSession: RouteStateSession = {
+    getState: () => (runtime.session!.state.get() as Record<string, unknown>) ?? {},
+    update: (updater) => runtime.session!.state.update(updater as never),
+  };
+  app.get("/pe/route-state", (c) => c.json(listRouteStates(routeStateSession)));
+  app.get("/pe/route-state/:route", (c) => {
+    const route = c.req.param("route");
+    const view = describeRouteState(routeStateSession, route);
+    return view ? c.json(view) : c.json({ error: `unknown route '${route}'` }, 404);
+  });
+  app.post("/pe/route-state/:route/apply", async (c) => {
+    const parsed = routeStateApplyBodySchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return c.json({ ok: false, error: "invalid body", hint: "expected { actor, patches }" }, 400);
+    }
+    const result = await applyRouteStatePatches(
+      routeStateSession,
+      c.req.param("route"),
+      parsed.data.actor,
+      parsed.data.patches,
+    );
+    return c.json(result);
+  });
+  app.post("/pe/route-state/:route/command", async (c) => {
+    const parsed = routeStateCommandBodySchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return c.json(
+        { ok: false, error: "invalid body", hint: "expected { actor, command, input? }" },
+        400,
+      );
+    }
+    const result = await runRouteStateCommand(
+      routeStateSession,
+      c.req.param("route"),
+      parsed.data.actor,
+      parsed.data.command,
+      parsed.data.input,
+    );
+    return c.json(result);
   });
 
   const server = new MastraServer({ app: app as never, mastra });

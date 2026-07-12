@@ -56,33 +56,18 @@ export const peaProductToolCatalog: RuntimeToolCatalog = createRuntimeToolCatalo
     kind: "execute",
     provenance: { source: "app", label: "Pea product" },
   },
-  family_sheet_status: {
-    title: "Family Sheet Status",
+  route_state_read: {
+    title: "Route State Read",
     kind: "read",
     provenance: { source: "app", label: "Pea product" },
   },
-  family_sheet_doc: {
-    title: "Family Sheet Doc",
-    kind: "read",
-    provenance: { source: "app", label: "Pea product" },
-  },
-  family_sheet_propose: {
-    title: "Family Sheet Propose",
+  route_state_apply: {
+    title: "Route State Apply",
     kind: "edit",
     provenance: { source: "app", label: "Pea product" },
   },
-  family_sheet_mark: {
-    title: "Family Sheet Mark",
-    kind: "edit",
-    provenance: { source: "app", label: "Pea product" },
-  },
-  family_sheet_refresh: {
-    title: "Family Sheet Refresh",
-    kind: "read",
-    provenance: { source: "app", label: "Pea product" },
-  },
-  family_sheet_parse_spec: {
-    title: "Family Sheet Parse Spec",
+  route_command: {
+    title: "Route Command",
     kind: "execute",
     provenance: { source: "app", label: "Pea product" },
   },

@@ -2,23 +2,20 @@
  * Stdio MCP server entrypoints, one per product boundary.
  *
  * Run: node src/server.ts <pea|peco>
- *   pea  — product surface: status/logs, host ops, scripting, capture
+ *   pea  — product surface: status/logs, host ops, scripting, capture, route state
  *   peco — dev surface: everything in pea plus Peco runtime context and harness tools
  *
- * family_sheet_* tools are excluded here: they require the in-pea AgentController
- * session and always fail with NO_CONTROLLER over stdio.
+ * The route_state_* / route_command tools are thin HTTP clients to the host's
+ * /pe/route-state dispatcher, so they work over stdio (unlike the old in-pea
+ * family_sheet_* tools) — no exclusion needed.
  */
 import { MCPServer } from "@mastra/mcp";
 import { peCodeTools } from "./dev/index.ts";
 import { peaProductTools } from "./pea/index.ts";
 
-const stdioProductTools = Object.fromEntries(
-  Object.entries(peaProductTools).filter(([id]) => !id.startsWith("family_sheet_")),
-);
-
 const serverTools: Record<string, ConstructorParameters<typeof MCPServer>[0]["tools"]> = {
-  pea: stdioProductTools,
-  peco: { ...stdioProductTools, ...peCodeTools },
+  pea: peaProductTools,
+  peco: { ...peaProductTools, ...peCodeTools },
 };
 
 const serverName = process.argv[2] ?? "";
