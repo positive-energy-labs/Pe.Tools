@@ -8,6 +8,7 @@ export namespace FamilyEditorApply {
   export namespace Req {
     export interface Request {
       edits: FamilyEditorApplyEdit[];
+      dryRun?: boolean;
     }
     export interface FamilyEditorApplyEdit {
       paramName: string;
@@ -35,6 +36,8 @@ export namespace FamilyEditorSnapshot {
     export interface Request {}
   }
   export namespace Res {
+    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+
     export interface Response {
       familyName: string;
       currentTypeName: string;
@@ -55,6 +58,34 @@ export namespace FamilyEditorSnapshot {
       valuesPerType: {
         [k: string]: string;
       };
+      identity?: null | ParameterIdentity;
+      dependsOn?: string[] | null;
+      dependents?: string[] | null;
+      associations?: null | FamilyParameterAssociationInfo;
+    }
+    export interface ParameterIdentity {
+      key: string;
+      kind: ParameterIdentityKind;
+      name: string;
+      builtInParameterId?: number | null;
+      sharedGuid?: null | string;
+      parameterElementId?: number | null;
+    }
+    /**
+     * Direct (element-based) associations for a family parameter, one level deep. Dimensions and Arrays
+     * are "Name [ID:{id}]" labels; Nested carries element-parameter associations (nested instances,
+     * connectors). Phantom parameters/elements (negative ids, dangling) are filtered out.
+     *
+     */
+    export interface FamilyParameterAssociationInfo {
+      dimensions: string[];
+      arrays: string[];
+      nested: FamilyNestedAssociation[];
+    }
+    export interface FamilyNestedAssociation {
+      elementName: string;
+      elementId: string;
+      paramName: string;
     }
   }
 }
@@ -1168,7 +1199,7 @@ export namespace RevitCatalogProjectBrowser {
   }
 }
 
-/** Read a compact semantic project index with bounded Project Browser provenance for levels, sheets, views, schedules, categories, and families. */
+/** Read a compact semantic project index with bounded Project Browser provenance for levels, sheets, views, schedules, categories, and families. Use after revit.context.summary when you need actual names and handles across the project, not just counts. */
 export namespace RevitCatalogProjectIndex {
   export namespace Req {
     export type ProjectIndexSection = "Levels" | "Sheets" | "Views" | "Schedules" | "Categories" | "Families";
@@ -1636,7 +1667,7 @@ export namespace RevitCatalogSchedules {
   }
 }
 
-/** Read open, active, and selected document session context from connected Revit. */
+/** Read open, active, and selected document session context from connected Revit. Use only when the question spans multiple open documents or there is no active document; revit.context.summary covers single-document orientation. */
 export namespace RevitContextDocumentSession {
   export namespace Req {
     export interface Request {}
@@ -1665,7 +1696,7 @@ export namespace RevitContextDocumentSession {
   }
 }
 
-/** Read compact current document, active view or sheet, selection, browser counts, and visible-category context for Pea orientation. */
+/** THE orientation call: compact current document, active view or sheet, selection, browser counts, and visible-category context. Call this first; escalate to project-index for names/handles, visible-summary for element handles, or document-session for multi-document facts. */
 export namespace RevitContextSummary {
   export namespace Req {
     export interface Request {}
@@ -3389,7 +3420,7 @@ export namespace ScriptingCancel {
   }
 }
 
-/** Execute C# in connected Revit: scriptContent for an inline snippet (Execute-body statements or a full PeScriptContainer class), or sourcePath for a pod entrypoint declared in the workspace's pod.json — exactly one of the two. permissionMode defaults to ReadOnly, which discards any document changes via a rollback guard; pass WriteTransaction to keep changes. */
+/** Execute trusted in-process C# in connected Revit: scriptContent for an inline snippet (Execute-body statements or a full PeScriptContainer class), or sourcePath for a pod entrypoint declared in the workspace's pod.json — exactly one of the two. permissionMode defaults to ReadOnly, which discards active-document changes via a rollback guard; pass WriteTransaction to keep changes. */
 export namespace ScriptingExecute {
   export namespace Req {
     export type ScriptPermissionMode = "ReadOnly" | "WriteTransaction";

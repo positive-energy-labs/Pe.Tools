@@ -85,6 +85,22 @@ public sealed record FamilyNestedAssociation(
     string ParamName
 );
 
+/// <summary>
+///     Open a loaded family from the active project in the family editor and activate it.
+///     EditFamily documents have no path and cannot be activated directly, so the family is
+///     saved to a scratch .rfa and reopened by path (the proven activation workaround).
+/// </summary>
+public sealed record FamilyEditorOpenRequest(
+    long? FamilyId = null,
+    string? FamilyName = null
+);
+
+public sealed record FamilyEditorOpenData(
+    string FamilyName,
+    string DocumentTitle,
+    string? SavedPath
+);
+
 public sealed record FamilyEditorApplyRequest(
     IReadOnlyList<FamilyEditorApplyEdit> Edits,
     // Run the full edit sequence inside a transaction, then roll back — validate without persisting.
