@@ -1,4 +1,9 @@
-# Family editing — Revit API grounding (from Family Foundry precedent)
+# Family editing — Revit API grounding (from OLD-repo Family Foundry)
+
+> SUPERSEDED AS DESIGN PRECEDENT (user steer 2026-07-12): "FF" means
+> `source/Pe.Revit.FamilyFoundry` in THIS repo — the standardized-language surface.
+> This doc remains valid ONLY as Revit API gotcha lore. For input models, parameter
+> identity, snapshots, desired state: see GROUNDING-LANGUAGE.md (in-repo FF index).
 
 Source: `C:\Users\kaitp\source\repos\PE_Tools` (old repo, read-only precedent). Every
 implementation brief touching Revit-side family ops reads this first. You will write
