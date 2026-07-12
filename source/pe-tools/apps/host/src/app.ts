@@ -52,8 +52,11 @@ const opsCatalogRoute = HttpRouter.add("GET", "/ops", (req) =>
   Effect.gen(function* () {
     const bridge = yield* RevitBridge;
     const sessionParam = new URL(req.url, "http://localhost").searchParams.get("session");
+    // Catalog reads never hard-fail on multi-session ambiguity: untargeted falls back to the
+    // snapshot session (most recently registered), same as other status displays.
+    const readSessionId = sessionParam ?? (yield* bridge.snapshot(undefined)).sessionId;
     const result = yield* Effect.result(
-      bridge.invoke("host.ops.catalog", {}, sessionParam ?? undefined),
+      bridge.invoke("host.ops.catalog", {}, readSessionId),
     );
     const bridgeOps =
       result._tag === "Success" &&
@@ -81,7 +84,7 @@ const settingsSchemaRoute = HttpRouter.add(
     const moduleKey = decodeURIComponent(params.moduleKey ?? "");
     const rootKey = decodeURIComponent(params.rootKey ?? "").replace(/\.json$/i, "");
     const result = yield* Effect.result(
-      bridge.invoke("settings.schema", { moduleKey, rootKey }, undefined),
+      bridge.invoke("settings.schema", { moduleKey, rootKey }, (yield* bridge.snapshot(undefined)).sessionId),
     );
     if (result._tag === "Failure")
       return Response.jsonUnsafe(
