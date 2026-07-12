@@ -36,6 +36,7 @@
   },
   "dependencies": {
     "@mastra/core": "1.50.1",
+    "@pe/host-contracts": "workspace:*",
     "@pe/mcps": "workspace:*",
     "@pe/runtime": "workspace:*",
     "gunshi": "^0.29.5",

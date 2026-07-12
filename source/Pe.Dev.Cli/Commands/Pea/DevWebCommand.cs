@@ -6,14 +6,14 @@ namespace Pe.Dev.Cli;
 internal static class DevWebCommand {
     public static async Task<int> RunAsync(IReadOnlyList<string> args, string? repoRootOverride, CancellationToken cancellationToken) {
         if (args.Count == 0 || args[0] is "--help" or "-h") {
-            Console.WriteLine("Usage: pe-dev web <pea|peco> [web options]");
+            Console.WriteLine("Usage: pe-dev web pea [web options]");
             Console.WriteLine("Runs the source-linked web dev supervisor with fixed local ports and takeover.");
             return args.Count == 0 ? 10 : 0;
         }
 
         var agent = args[0].ToLowerInvariant();
-        if (agent is not ("pea" or "peco")) {
-            Console.Error.WriteLine("Expected `pea` or `peco` after `pe-dev web`.");
+        if (agent is not "pea") {
+            Console.Error.WriteLine("Expected `pea` after `pe-dev web`.");
             return 10;
         }
 

@@ -19,7 +19,7 @@ Docs are local at `node_modules/vite-plus/docs` or online at https://viteplus.de
 
 ## Decision
 
-`source/pe-tools` is the TypeScript workspace for Pe.Tools product-adjacent surfaces: user-facing `pea`, dev-only `peco`, generated Host contracts, and small TypeScript libraries that make agent/TUI work possible.
+`source/pe-tools` is the TypeScript workspace for Pe.Tools product-adjacent surfaces: user-facing `pea`, generated Host contracts, and small TypeScript libraries that make agent/TUI work possible.
 
 This workspace should use:
 
@@ -50,7 +50,7 @@ Names may change, but the authority boundaries should not blur.
 
 `pea` is the user product entrypoint. It owns product policy over a MastraCode `Session` and TUI shell. It is not the semantic authority for Revit behavior, settings semantics, JSON schema generation, product layout, or Host operation contracts.
 
-`peco` is private developer tooling. It can chain very specific Revit development workflows, RRD/live-loop checks, repo verification, and black-box Pea feedback. These commands should move out of the user-facing `pea` surface over time.
+There is no separate dev agent surface anymore (`peco` was deleted): the SDK `pe-revit` CLI/MCP owns live-loop and test mechanics, the `pea` MCP server owns product tools, and `pea --prompt` is the headless black-box Pea probe.
 
 `@pe/runtime` is the thin shared runtime helper package below Pea and tooling. Keep it limited to storage, memory, auth profile, tool metadata, request-context, and Harness construction helpers that still need Pe-owned policy. Do not rebuild MastraCode protocol, run-control, event-bus, model/mode, thread, or ACP surfaces here.
 
@@ -73,7 +73,7 @@ The intended flow is:
 
 ```text
 TUI / agent / CLI
-  -> pea or peco TypeScript runtime
+  -> pea TypeScript runtime
   -> app-local callers or generated Host RPCs over generated Host contracts
   -> TypeScript Host public operations
   -> shared C# contracts / Revit packages / storage runtime
@@ -94,7 +94,6 @@ Source exports make that explicit:
 Dist-first remains appropriate for:
 
 - installed `pea` payloads;
-- bundled `peco` artifacts if a built private artifact is useful;
 - web/frontend production bundles;
 - package outputs that are intentionally consumed outside the workspace;
 - any future package whose default import shape must match installed/published runtime behavior.

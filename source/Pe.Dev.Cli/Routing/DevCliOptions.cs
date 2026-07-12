@@ -37,14 +37,14 @@ internal sealed record DevCliOptions(
 
         var first = positionals[0].ToLowerInvariant();
         return first switch {
-            "bootstrap-path" => DevCliParseResult.Failure("`pe-dev bootstrap-path` has been removed: it rewrote the whole user PATH as REG_SZ (destroying REG_EXPAND_SZ). The SDK owns PATH now — run `pe-revit path ensure` once (registers the product shims dir), then `pe-revit dev link` from this checkout (routes pea/peco/pe-dev shims to source).", true),
+            "bootstrap-path" => DevCliParseResult.Failure("`pe-dev bootstrap-path` has been removed: it rewrote the whole user PATH as REG_SZ (destroying REG_EXPAND_SZ). The SDK owns PATH now — run `pe-revit path ensure` once (registers the product shims dir), then `pe-revit dev link` from this checkout (routes pea/pe-dev shims to source).", true),
             "self-test" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.SelfTest, positionals.Skip(1).ToArray())),
             "pea" when positionals.Count == 1 => DevCliParseResult.Usage(),
             "pea" => ParsePea(repoRoot, positionals),
             "web" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Web, positionals.Skip(1).ToArray())),
             "automation" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Automation, positionals.Skip(1).ToArray())),
             "codegen" => DevCliParseResult.Failure("`pe-dev codegen` has been removed. Ops/types come from the live session now: GET /ops on the running host, `pnpm --filter @pe/host-contracts codegen` for checked-in types.", true),
-            "doctor" or "status" or "sync" or "env" or "revit" or "verify" => DevCliParseResult.Failure($"`pe-dev {positionals[0]}` has been removed. Use SDK `pe-revit live`/`pe-revit test` for live-loop mechanics; use Peco context/product tools only when Pea status/logs or product probes are needed.", true),
+            "doctor" or "status" or "sync" or "env" or "revit" or "verify" => DevCliParseResult.Failure($"`pe-dev {positionals[0]}` has been removed. Use SDK `pe-revit live`/`pe-revit test` for live-loop mechanics; use the pea MCP tools (pe_status, pe_logs) when Pea status/logs or product probes are needed.", true),
             "test" => DevCliParseResult.Failure("`pe-dev test` has been removed. Use SDK `pe-revit test fresh|attached` or the SDK MCP `test_fresh`/`test_attached` tools.", true),
             _ => DevCliParseResult.Failure($"Unknown command '{positionals[0]}'.", true)
         };

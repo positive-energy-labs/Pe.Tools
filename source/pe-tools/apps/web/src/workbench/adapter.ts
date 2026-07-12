@@ -35,7 +35,7 @@ import type { WireEvent, WireMessage, WireMessageContent, WireTaskItem } from ".
 /** OM windows payload carried by the `om_status` event (the SDK under-types it to `{ status }`). */
 type OmStatusWindows = Extract<WireEvent, { type: "om_status" }>["windows"];
 
-/** The `/pe/inspect` transparency payload (Pe-owned; `{}` for peco). */
+/** The `/pe/inspect` transparency payload (Pe-owned). */
 export interface PeInspect {
   systemPrompt?: { content?: string; source?: string; updatedAt?: string };
   toolList?: { tools?: unknown[] };

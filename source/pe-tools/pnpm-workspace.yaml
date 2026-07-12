@@ -41,6 +41,7 @@ allowBuilds:
   esbuild: true
   geckodriver: false
   koffi: false
+  msgpackr-extract: false
   onnxruntime-node: false
   protobufjs: false
 minimumReleaseAgeExclude:

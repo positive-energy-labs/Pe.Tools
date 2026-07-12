@@ -72,26 +72,3 @@ export const peaProductToolCatalog: RuntimeToolCatalog = createRuntimeToolCatalo
     provenance: { source: "app", label: "Pea product" },
   },
 });
-
-export const peCodeToolCatalog: RuntimeToolCatalog = createRuntimeToolCatalog({
-  live_loop_context: {
-    title: "Live Loop Context",
-    kind: "read",
-    provenance: { source: "app", label: "peco" },
-  },
-  script_execute: {
-    title: "Script Execute",
-    kind: "execute",
-    provenance: { source: "app", label: "peco" },
-  },
-  talk_to_pea: {
-    title: "Talk To Pea",
-    kind: "execute",
-    provenance: { source: "app", label: "peco" },
-  },
-  talk_to_peco_zellij: {
-    title: "Talk To Peco Zellij",
-    kind: "execute",
-    provenance: { source: "app", label: "peco" },
-  },
-});
