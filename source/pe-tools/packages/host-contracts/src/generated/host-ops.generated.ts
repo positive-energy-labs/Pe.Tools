@@ -157,17 +157,24 @@ export namespace RevitApplyCommandExecute {
 /** Open and activate a local or Autodesk cloud Revit document in the connected Revit session. */
 export namespace RevitApplyDocumentOpen {
   export namespace Req {
+    export type WorksharingDetachOption =
+      | "DoNotDetach"
+      | "DetachAndPreserveWorksets"
+      | "DetachAndDiscardWorksets";
+
     export interface Request {
       path?: null | string;
       cloudRegion?: null | string;
       cloudProjectGuid?: null | string;
       cloudModelGuid?: null | string;
+      detach?: WorksharingDetachOption;
     }
   }
   export namespace Res {
     export interface Response {
       document: RevitDocumentSummary;
       session: RevitDocumentSessionContextData;
+      isDetached: boolean;
     }
     export interface RevitDocumentSummary {
       documentKey: string;
