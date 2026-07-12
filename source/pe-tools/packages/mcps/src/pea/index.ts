@@ -68,7 +68,7 @@ const hostOperationSearchInputSchema = z.object({
   domain: z
     .string()
     .optional()
-    .describe("Optional exact top-level domain filter, such as revit, settings, or scripting."),
+    .describe("Optional exact top-level domain filter, such as revit or settings."),
   intent: z
     .enum(["Read", "Mutate"])
     .optional()
@@ -212,7 +212,7 @@ export const peLogs = createTool({
 export const hostOperationSearch = createTool({
   id: "host_operation_search",
   description:
-    "Discover host operations by capability. Start with projection=capability-map for broad orientation, then projection=matches (default) to rank candidates for a task; verbosity=hints adds examples and call guidance. Host admin status/logs are excluded here — use pe_status and pe_logs for those.",
+    "Discover host operations by capability. Start with projection=capability-map for broad orientation, then projection=matches (default) to rank candidates for a task; verbosity=hints adds examples and call guidance. Host admin status/logs are excluded here — use pe_status and pe_logs for those. Scripting is not in the catalog either — use the script_execute tool.",
   inputSchema: hostOperationSearchInputSchema,
   execute: async (input) => new HostRpcCaller().searchOperations(input),
 });

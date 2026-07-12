@@ -41,6 +41,17 @@ const dedicatedToolOperationKeys = new Set([
   "bridge.sessions.summary",
 ]);
 
+/**
+ * Control-plane keys hidden from the catalog projection (search and capability
+ * map), exactly like the dedicated-tool admin ops above. scripting.* remains a
+ * bridge op at the transport level (POST /call, host_operation_call) — the
+ * script_execute tool is the one scripting door; the catalog is purely the
+ * document-world data plane.
+ */
+function isHiddenFromCatalogProjection(key: string): boolean {
+  return dedicatedToolOperationKeys.has(key) || key.startsWith("scripting.");
+}
+
 const CATALOG_TTL_MS = 30_000;
 const catalogCache = new Map<string, { at: number; ops: HostOperationDefinition[] }>();
 
@@ -172,10 +183,11 @@ export class HostRpcCaller {
 
   /** Search/capability-map over the live catalog. Throws when the catalog is unreachable. */
   async searchOperations(options: HostOperationSearchOptions = {}) {
-    // Host-admin ops are served by the dedicated pe_status/pe_logs tools; hiding
-    // them here keeps exactly one door per capability.
+    // Host-admin ops are served by the dedicated pe_status/pe_logs tools and
+    // scripting by the script_execute tool; hiding them here keeps exactly one
+    // door per capability.
     const operations = (await this.catalog()).filter(
-      (operation) => !dedicatedToolOperationKeys.has(operation.key),
+      (operation) => !isHiddenFromCatalogProjection(operation.key),
     );
     if (options.projection === "capability-map") return renderCapabilityMap(operations, options);
     return searchHostOperations(operations, options);
@@ -205,18 +217,15 @@ function searchHostOperations(
   const queryTerms = normalizeQuery(options.query);
   const limit = Math.min(Math.max(options.limit ?? 8, 1), 50);
   const verbosity = options.verbosity ?? "compact";
-  const scoredOperations = operations
+  const matchedOperations = operations
     .filter((operation) => matchesFilters(operation, options))
-    .map((operation) => ({ operation, score: scoreOperation(operation, queryTerms) }));
-  const matchedOperations = scoredOperations.filter(
-    ({ score }) => queryTerms.length === 0 || score > 0,
-  );
-  const rankedOperations =
-    matchedOperations.length > 0
-      ? matchedOperations
-      : fallbackMutationOperations(scoredOperations, options, queryTerms);
+    .map((operation) => ({ operation, score: scoreOperation(operation, queryTerms) }))
+    .filter(({ score }) => queryTerms.length === 0 || score > 0);
 
-  return rankedOperations
+  if (matchedOperations.length === 0 && shouldHintScriptExecuteTool(options, queryTerms))
+    return [scriptExecuteToolHint];
+
+  return matchedOperations
     .sort(
       (left, right) =>
         right.score - left.score || left.operation.key.localeCompare(right.operation.key),
@@ -225,19 +234,28 @@ function searchHostOperations(
     .map(({ operation }) => toSearchResult(operation, verbosity));
 }
 
-function fallbackMutationOperations(
-  scoredOperations: Array<{ operation: HostOperationDefinition; score: number }>,
+// Mutation searches that match no catalog operation fall back to scripting, which
+// lives behind the dedicated script_execute TOOL — not a catalog op, so the hint
+// is synthetic rather than a catalog entry.
+const scriptExecuteToolHint: HostOperationSearchResult = {
+  key: "script_execute",
+  displayName: "script_execute (dedicated tool)",
+  description:
+    "No catalog operation covers this mutation. Scripting is not a catalog op: use the script_execute tool to run a C# script against the Revit API; script_bootstrap prepares a workspace.",
+  safety: "mutation",
+  requestTypeName: "n/a",
+  responseTypeName: "n/a",
+  requestHint: "Call the script_execute tool directly; host_operation_call does not apply.",
+  usageHint: "Use the script_execute tool (inline snippet or workspace file).",
+};
+
+function shouldHintScriptExecuteTool(
   options: HostOperationSearchOptions,
   queryTerms: string[],
-) {
-  if (queryTerms.length === 0 || options.intent !== "Mutate") return [];
+): boolean {
+  if (queryTerms.length === 0 || options.intent !== "Mutate") return false;
   const domain = options.domain?.trim().toLowerCase();
-  if (domain && domain !== "scripting") return [];
-
-  return ["scripting.execute", "scripting.workspace.bootstrap"].flatMap((key, index) => {
-    const match = scoredOperations.find(({ operation }) => operation.key === key);
-    return match ? [{ ...match, score: -index }] : [];
-  });
+  return !domain || domain === "scripting";
 }
 
 const callHostRpcOperationEffect = Effect.fnUntraced(function* (
@@ -510,13 +528,8 @@ function buildCapabilityMapSections(
       "settings",
       operations,
     ),
-    createDomainSection(
-      "script",
-      "Scripting",
-      "Host-owned C# scripting workspace bootstrap and execution.",
-      "scripting",
-      operations,
-    ),
+    // No Scripting section: scripting.* is control plane, hidden from the catalog
+    // projection — the script_execute tool is the one scripting door.
   ].filter((section) => section.rows.length > 0);
   const covered = new Set(sections.flatMap((section) => section.rows.map((row) => row.key)));
   const otherRows = operations
@@ -595,14 +608,7 @@ function formatCapabilityInputKind(operation: HostOperationDefinition): string {
     case "Apply":
       return "explicit mutation request";
     default:
-      switch (inferDomain(operation.key)) {
-        case "settings":
-          return "settings/profile request";
-        case "scripting":
-          return "workspace/script request";
-        default:
-          return "typed request";
-      }
+      return inferDomain(operation.key) === "settings" ? "settings/profile request" : "typed request";
   }
 }
 
@@ -621,14 +627,7 @@ function formatCapabilityOutputKind(operation: HostOperationDefinition): string 
     case "Apply":
       return "mutation result";
     default:
-      switch (inferDomain(operation.key)) {
-        case "settings":
-          return "settings/profile result";
-        case "scripting":
-          return "workspace/script result";
-        default:
-          return "typed result";
-      }
+      return inferDomain(operation.key) === "settings" ? "settings/profile result" : "typed result";
   }
 }
 

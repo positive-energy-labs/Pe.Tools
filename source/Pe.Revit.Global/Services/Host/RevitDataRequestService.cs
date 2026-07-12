@@ -813,11 +813,25 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
 
         // Cloud target wins when present; a cloud model has no local file, so the old File.Exists
         // gate only applies to the local-path branch.
-        if (request.HasCloudTarget())
+        if (request.HasCloudTarget()) {
+            // Detach-on-open for cloud models is a separate, spike-gated capability; v1 is local only.
+            if (request.RequestsDetach())
+                throw BridgeOperationExceptions.BadRequest(
+                    "Detach-on-open is supported for local workshared files only.",
+                    [
+                        BridgeOperationExceptions.Issue(
+                            "$.detach",
+                            "CloudDetachUnsupported",
+                            "Detach was requested together with a cloud project/model target.",
+                            "Open the cloud model without detach, or pass a local workshared file path with detach."
+                        )
+                    ]
+                );
             return OpenCloudRevitDocument(uiApp, request);
+        }
 
         if (request.HasLocalPath())
-            return OpenLocalRevitDocument(uiApp, request.Path!.Trim());
+            return OpenLocalRevitDocument(uiApp, request.Path!.Trim(), request.Detach);
 
         throw BridgeOperationExceptions.BadRequest(
             "A local path or a cloud project + model GUID is required.",
@@ -895,7 +909,11 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         return new FamilyEditorOpenData(family.Name, opened.Document.Title, scratchPath);
     }
 
-    private OpenRevitDocumentData OpenLocalRevitDocument(UIApplication uiApp, string path) {
+    private OpenRevitDocumentData OpenLocalRevitDocument(
+        UIApplication uiApp,
+        string path,
+        WorksharingDetachOption detach = WorksharingDetachOption.DoNotDetach
+    ) {
         if (!File.Exists(path)) {
             throw BridgeOperationExceptions.BadRequest(
                 $"Document path does not exist: {path}",
@@ -910,21 +928,44 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
             );
         }
 
-        var alreadyOpen = uiApp.FindOpenDocumentByPath(path);
+        // A detached open produces a NEW independent document; never satisfy a detach
+        // request with an attached already-open copy of the same file.
+        var alreadyOpen = detach == WorksharingDetachOption.DoNotDetach
+            ? uiApp.FindOpenDocumentByPath(path)
+            : null;
         if (alreadyOpen != null)
             return new OpenRevitDocumentData(
                 CreateDocumentSummary(alreadyOpen, uiApp.GetActiveDocument()),
-                CreateDocumentSessionContext()
+                CreateDocumentSessionContext(),
+                alreadyOpen.IsDetached
             );
 
         try {
             var modelPath = ModelPathUtils.ConvertUserVisiblePathToModelPath(path);
-            var uiDocument = OpenAndActivateSuppressingLinkDialog(uiApp, modelPath);
+            var uiDocument = OpenAndActivateSuppressingLinkDialog(uiApp, modelPath, CreateOpenOptions(detach));
             var document = uiDocument.Document;
+            // Verified from the opened Document, never echoed from the request: Revit silently
+            // ignores detach options for non-workshared files, so an unhonored detach fails loudly.
+            var isDetached = document.IsDetached;
+            if (detach != WorksharingDetachOption.DoNotDetach && !isDetached)
+                throw BridgeOperationExceptions.Conflict(
+                    $"Revit opened the document, but it is not detached: {path}",
+                    [
+                        BridgeOperationExceptions.Issue(
+                            "$.detach",
+                            "OpenRevitDocumentNotDetached",
+                            "The opened document reports IsDetached=false despite the detach request.",
+                            "Detach-on-open requires a local workshared file; verify the file is workshared."
+                        )
+                    ]
+                );
             return new OpenRevitDocumentData(
                 CreateDocumentSummary(document, document),
-                CreateDocumentSessionContext()
+                CreateDocumentSessionContext(),
+                isDetached
             );
+        } catch (BridgeOperationException) {
+            throw;
         } catch (Exception ex) when (ex is InvalidOperationException or OperationCanceledException) {
             throw BridgeOperationExceptions.Conflict(
                 $"Revit could not open document: {path}",
@@ -985,7 +1026,8 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         if (alreadyOpen != null)
             return new OpenRevitDocumentData(
                 CreateDocumentSummary(alreadyOpen, uiApp.GetActiveDocument()),
-                CreateDocumentSessionContext()
+                CreateDocumentSessionContext(),
+                alreadyOpen.IsDetached
             );
 
         try {
@@ -996,7 +1038,8 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
             var document = uiDocument.Document;
             return new OpenRevitDocumentData(
                 CreateDocumentSummary(document, document),
-                CreateDocumentSessionContext()
+                CreateDocumentSessionContext(),
+                document.IsDetached
             );
         } catch (Exception ex) when (ex is InvalidOperationException or OperationCanceledException) {
             throw BridgeOperationExceptions.Conflict(
@@ -1024,7 +1067,11 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
     ///     ("Ignore and continue opening the project"), so bridge opens of linked cloud models don't
     ///     block on a modal dialog. Handler is scoped to this call only — manual opens still see it.
     /// </summary>
-    private static UIDocument OpenAndActivateSuppressingLinkDialog(UIApplication uiApp, ModelPath modelPath) {
+    private static UIDocument OpenAndActivateSuppressingLinkDialog(
+        UIApplication uiApp,
+        ModelPath modelPath,
+        OpenOptions? openOptions = null
+    ) {
         void OnDialogShowing(object? sender, DialogBoxShowingEventArgs args) {
             if (args is not TaskDialogShowingEventArgs td) return;
             if (td.DialogId == "TaskDialog_Unresolved_References")
@@ -1037,11 +1084,22 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
 
         uiApp.DialogBoxShowing += OnDialogShowing;
         try {
-            return uiApp.OpenAndActivateDocument(modelPath, new OpenOptions(), false);
+            return uiApp.OpenAndActivateDocument(modelPath, openOptions ?? new OpenOptions(), false);
         } finally {
             uiApp.DialogBoxShowing -= OnDialogShowing;
         }
     }
+
+    private static OpenOptions CreateOpenOptions(WorksharingDetachOption detach) =>
+        new() {
+            DetachFromCentralOption = detach switch {
+                WorksharingDetachOption.DetachAndPreserveWorksets =>
+                    DetachFromCentralOption.DetachAndPreserveWorksets,
+                WorksharingDetachOption.DetachAndDiscardWorksets =>
+                    DetachFromCentralOption.DetachAndDiscardWorksets,
+                _ => DetachFromCentralOption.DoNotDetach
+            }
+        };
 
     private RevitAgentContextSummaryData GetRevitAgentContextSummaryCore() {
         var document = GetSupportedActiveDocument(RevitBridgeOps.RevitAgentContextSummary.Definition);

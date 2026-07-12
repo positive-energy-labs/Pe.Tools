@@ -23,11 +23,24 @@ public record RevitDocumentSessionContextData(
     List<RevitDocumentSummary> OpenDocuments
 );
 
+/// <summary>
+///     Worksharing detach behavior for opening a local workshared file. Mirrors Revit's
+///     DetachFromCentralOption (the contract assembly cannot reference RevitAPI). Detached
+///     opens are the sandbox-document story: DetachAndPreserveWorksets is the sensible
+///     detach flavor; DoNotDetach is the request default so ordinary opens stay untouched.
+/// </summary>
+public enum WorksharingDetachOption {
+    DoNotDetach,
+    DetachAndPreserveWorksets,
+    DetachAndDiscardWorksets
+}
+
 public record OpenRevitDocumentRequest(
     string? Path = null,
     string? CloudRegion = null,
     string? CloudProjectGuid = null,
-    string? CloudModelGuid = null
+    string? CloudModelGuid = null,
+    WorksharingDetachOption Detach = WorksharingDetachOption.DoNotDetach
 );
 
 /// <summary>
@@ -42,9 +55,14 @@ public static class OpenRevitDocumentRequestExtensions {
     public static bool HasCloudTarget(this OpenRevitDocumentRequest request) =>
         !string.IsNullOrWhiteSpace(request.CloudProjectGuid)
         && !string.IsNullOrWhiteSpace(request.CloudModelGuid);
+
+    public static bool RequestsDetach(this OpenRevitDocumentRequest request) =>
+        request.Detach != WorksharingDetachOption.DoNotDetach;
 }
 
 public record OpenRevitDocumentData(
     RevitDocumentSummary Document,
-    RevitDocumentSessionContextData Session
+    RevitDocumentSessionContextData Session,
+    // Verified from the opened Document (Document.IsDetached), never echoed from the request.
+    bool IsDetached
 );

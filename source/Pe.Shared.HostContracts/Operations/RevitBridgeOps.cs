@@ -759,8 +759,8 @@ public static class RevitBridgeOps {
             "revit.apply.document.open",
             "Open Revit Document",
             HostOperationAgentMetadata.Create(
-                "Open and activate a local or Autodesk cloud Revit document in the connected Revit session.",
-                new[] { "document", "open", "activate", "cross-document", "cloud" },
+                "Open and activate a local or Autodesk cloud Revit document in the connected Revit session; local workshared files can be opened detached.",
+                new[] { "document", "open", "activate", "cross-document", "cloud", "detach", "workshared" },
                 intent: HostOperationIntent.Mutate,
                 requiresActiveDocument: false,
                 costTier: HostOperationCostTier.Mutation,
@@ -773,16 +773,16 @@ public static class RevitBridgeOps {
                         """
                     ),
                     Example(
-                        "open cloud model",
-                        "Open an Autodesk Docs / BIM 360 model by project + model GUID. Region defaults to US.",
+                        "open local workshared model detached",
+                        "Open a local workshared file detached from central; the response isDetached reports the verified state.",
                         """
-                        { "cloudProjectGuid": "00000000-0000-0000-0000-000000000000", "cloudModelGuid": "00000000-0000-0000-0000-000000000000", "cloudRegion": "US" }
+                        { "path": "C:/Models/Project.rvt", "detach": "DetachAndPreserveWorksets" }
                         """
                     )
                 ],
                 callGuidance: [
-                    "Pass a local RVT/RFA/RTE path, or cloudProjectGuid + cloudModelGuid (+ cloudRegion when not US); cloud opens need Autodesk sign-in and access.",
-                    "Do not call while Revit is blocked by a modal dialog."
+                    "Pass a local RVT/RFA/RTE path, or cloudProjectGuid + cloudModelGuid (+ cloudRegion when not US); cloud opens need Autodesk sign-in and access, and do not support detach.",
+                    "detach=DetachAndPreserveWorksets (or DetachAndDiscardWorksets) applies to local workshared files only; do not call while Revit is blocked by a modal dialog."
                 ]
             ),
             static (request, context, ct) => context.RevitData.OpenRevitDocumentAsync(request)
