@@ -14,6 +14,7 @@ const tinyPngBase64 =
 async function withTinyPng<T>(run: (fixturePath: string) => Promise<T>): Promise<T> {
   // Under process.cwd() so the workspace sandbox check passes without a tool context.
   const fixturePath = path.join(process.cwd(), "tests", ".tmp-read-image-fixture.png");
+  await fs.mkdir(path.dirname(fixturePath), { recursive: true });
   await fs.writeFile(fixturePath, Buffer.from(tinyPngBase64, "base64"));
   try {
     return await run(fixturePath);
