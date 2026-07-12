@@ -14,3 +14,4 @@
 | 10 | open | parse-cache is in-memory, 8 entries, dies with dev server — persistence undecided |
 | 11 | open | Memory file doc-lab-ux-pocs names routes (/lab-loupe,/lab-focal,/lab-sweep) that don't exist — update memory |
 | 12 | open | family-sheet tools' stale `PE_WEB_URL` default 3010 (web dev is 3000) — fix in new tools |
+| 13 | done | Orchestrator mis-grounded "FF" to the old PE_Tools repo; user steer corrected to in-repo Pe.Revit.FamilyFoundry — GROUNDING-REVIT demoted to API-lore-only, GROUNDING-LANGUAGE added |

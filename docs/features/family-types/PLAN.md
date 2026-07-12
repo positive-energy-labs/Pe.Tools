@@ -6,6 +6,15 @@ every brief): `GROUNDING-WIRING.md`, `GROUNDING-REVIT.md`.
 
 ## 1. Decisions locked (do not relitigate)
 
+- **USER STEER 2026-07-12 (verbatim intent):** "when I meant FF, I meant source/Pe.Revit.FamilyFoundry
+  here, not in the old PE_Tools repo. Since the new repo's inception, many new changes have been made
+  to standardize the 'language' across our surfaces, and this is still churning. Surfaces include
+  input models for CmdFFMigrator / CmdFFManager / CmdScheduleManager; host ops (particularly identity
+  and parameter model); same/similar to host ops, family snapshots; and probably some more."
+  → The family-types state model must SPEAK THAT LANGUAGE (parameter identity, snapshot shapes,
+  desired-state/profile idioms), not invent a new dialect. GROUNDING-REVIT.md's old-repo gotchas
+  remain valid as Revit API lore only; in-repo FamilyFoundry supersedes it as design precedent.
+
 - **Three universal tools** — `route_state_read`, `route_state_apply`, `route_command` — replace
   the six `family_sheet_*` tools, which are DELETED. Per-route code = one zod schema + write
   mask + command handlers. (User handoff.)
@@ -50,11 +59,16 @@ every brief): `GROUNDING-WIRING.md`, `GROUNDING-REVIT.md`.
 
 ## 3. Cross-agent contracts (fixed verbatim, both sides)
 
-- Snapshot parameter extension: `dependsOn?: string[]`, `dependents?: string[]`,
+- Snapshot parameter extension: `identity?: { key: string; kind: string; name: string;
+  builtInParameterId?: number|null; sharedGuid?: string|null; parameterElementId?: number|null }`
+  (canonical ParameterIdentity, minted via RevitParameterDefinition.CreateIdentity — never
+  hand-rolled prefixes), `dependsOn?: string[]`, `dependents?: string[]`,
   `associations?: { dimensions: string[]; arrays: string[]; nested: { elementName: string;
-  elementId: string; paramName: string }[] }` (nullable/loose on TS side).
+  elementId: string; paramName: string }[] }` (all nullable/loose on TS side).
 - `FamilyEditorApplyRequest` gains `dryRun?: boolean` (validate, no commit).
-- Patch op shape: `{ path: string; value?: unknown }[]` — dot paths, `value` absent = delete key.
+- Patch op shape: `{ path: (string|number)[]; value?: unknown }[]` — SEGMENT ARRAYS (param names may
+  contain dots; never string-split paths), `value` absent = delete key. Mask patterns are segment
+  arrays too; `*` matches exactly one segment; a pattern authorizes its subtree.
 - Endpoints: `GET /pe/route-state` (list) · `GET /pe/route-state/:route` (doc+schema+mask) ·
   `POST /pe/route-state/:route/apply` `{ actor, patches }` · `POST /pe/route-state/:route/command`
   `{ actor, command, input }`. All JSON; zod-validated post-patch; rejection returns the zod
