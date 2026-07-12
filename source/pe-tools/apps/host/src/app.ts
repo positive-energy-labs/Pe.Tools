@@ -1,15 +1,17 @@
 import { Effect, Layer, Stream } from "effect";
 import { HttpRouter, HttpServer, HttpServerResponse as Response } from "effect/unstable/http";
 import { NodeHttpClient, NodeHttpServer, NodeServices } from "@effect/platform-node";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-import { BRIDGE_PATH, productIdentity } from "@pe/host-contracts/contracts";
+import { BRIDGE_PATH } from "@pe/host-contracts/contracts";
 import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
 import { getHostStatus } from "./local-ops.ts";
 import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
 import { callRoute } from "./call-route.ts";
+import { installRoot, peRevitLauncher } from "./pe-revit-cli.ts";
+import { sandboxesRoute } from "./sandbox-route.ts";
 import { adminShutdownRoute, HostLifecycle, ServiceFileLive } from "./host-lifecycle.ts";
 import { MastraMountLive, MastraRuntime } from "./mastra-runtime.ts";
 import { staticSpaLayer } from "./static-spa.ts";
@@ -111,18 +113,6 @@ const hostStatusRoute = HttpRouter.add("GET", "/host/status", () =>
   }),
 );
 
-// Launch chain for the install kernel: PE_REVIT_CMD env override → the kernel-installed shim
-// (user machines) → `dotnet pe-revit` (dev checkout, local tool). Resolved per call — the shim
-// can appear after the host started.
-function peRevitLauncher(): [string, string[]] {
-  const installedShim = join(installRoot(), "shims", "pe-revit.cmd");
-  return process.env.PE_REVIT_CMD
-    ? [process.env.PE_REVIT_CMD, []]
-    : existsSync(installedShim)
-      ? ["cmd", ["/c", installedShim]]
-      : ["dotnet", ["pe-revit"]];
-}
-
 // One-click update: run the install kernel's consume verb against the latest published
 // release. The pointer flip makes every open Revit live-swap via the loader; the host itself
 // is NOT updated here (its own exe is running — host self-update is a VersionedApp follow-up).
@@ -141,14 +131,6 @@ const hostUpdateRoute = HttpRouter.add("POST", "/host/update", () =>
     return yield* Response.json({ ok: false, error: String(result.failure) }, { status: 500 });
   }),
 );
-
-function installRoot() {
-  return join(
-    process.env.LOCALAPPDATA ?? "",
-    productIdentity.vendorName,
-    productIdentity.productName,
-  );
-}
 
 // Installed-version readout for the web Update button — the kernel's receipt is the truth.
 const hostInstallRoute = HttpRouter.add("GET", "/host/install", () =>
@@ -234,6 +216,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
     hostUpdateRoute,
     hostInstallRoute,
     adminShutdownRoute,
+    sandboxesRoute,
     callRoute,
     ServiceFileLive,
     MastraMountLive,

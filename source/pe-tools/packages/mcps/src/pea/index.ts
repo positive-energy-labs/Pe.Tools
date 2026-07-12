@@ -23,6 +23,7 @@ import { requestAccess } from "../shared/request-access.ts";
 import { revitApiFetch, revitApiSearch } from "../shared/rvt-api.ts";
 import { resolveHostBaseUrl, resolveWorkspaceKey } from "../shared/host-config.ts";
 import { peaProductToolCatalog } from "../tool-metadata.ts";
+import { createPeSandboxTool, presentSessionKind } from "./sandbox.ts";
 import { routeStateTools } from "./route-state.ts";
 import { PeaCliCommands, type PeaCliCommandOptions } from "./PeaCliCommands.ts";
 export { createFamilyTypesCommandHandlers, familyTypesRouteState } from "./route-state-commands.ts";
@@ -57,7 +58,7 @@ const bridgeSessionIdSchema = z
   .string()
   .optional()
   .describe(
-    "Optional target selector for a connected Revit session: 'rrd' (the Rider dev session — it holds the user's live docs), 'sandbox:<id>', a pid, or a raw session id. With one session connected it may be omitted; with several, untargeted Revit operations hard-fail with the session listing.",
+    "Optional target selector for a connected Revit session: 'sandbox:<id>' (a pea-owned sandbox from pe_sandbox), a pid, or a raw session id from pe_status sessions. The user's session is the kind=user entry — target it by pid or session id. With one session connected it may be omitted; with several, untargeted Revit operations hard-fail with the session listing.",
   );
 
 const hostOperationSearchInputSchema = z.object({
@@ -135,45 +136,56 @@ export const peStatus = createTool({
     if (input.verbosity === "full")
       return { probe, sessionSummary, sessions: sessionsList.sessions };
 
-    return {
-      bridge: {
-        isConnected: probe.bridgeIsConnected,
-        path: probe.bridgePath,
-        disconnectReason: probe.disconnectReason,
-      },
-      contracts: {
-        host: probe.hostContractVersion,
-        bridge: probe.bridgeContractVersion,
-      },
-      session: {
-        isConnected: sessionSummary.bridgeIsConnected,
-        sessionId: sessionSummary.sessionId,
-        processId: sessionSummary.processId,
-        lane: sessionSummary.lane,
-        sandboxId: sessionSummary.sandboxId,
-        buildStamp: sessionSummary.buildStamp,
-        revitVersion: sessionSummary.revitVersion,
-        openDocumentCount: sessionSummary.openDocumentCount,
-        activeDocument:
-          sessionSummary.activeDocument == null
-            ? undefined
-            : summarizeActiveDocument(sessionSummary.activeDocument),
-        availableModuleCount: sessionSummary.availableModules.length,
-      },
-      hint: createStatusHint(probe.bridgeIsConnected, sessionSummary.bridgeIsConnected),
-      sessions: sessionsList.sessions.map((session) => ({
-        sessionId: session.sessionId,
-        processId: session.processId,
-        lane: session.lane,
-        sandboxId: session.sandboxId,
-        buildStamp: session.buildStamp,
-        revitVersion: session.revitVersion,
-        openDocumentCount: session.openDocumentCount,
-        activeDocumentTitle: session.activeDocumentTitle,
-      })),
-    };
+    return presentCompactStatus(probe, sessionSummary, sessionsList.sessions);
   },
 });
+
+/**
+ * Compact pe_status presentation. Pea's world is "the user's session + pea-owned sandboxes":
+ * every session presents as kind=user or kind=sandbox (with its id) — broker/SDK lane
+ * vocabulary never reaches compact output. verbosity=full keeps the raw DTOs.
+ */
+export function presentCompactStatus(
+  probe: HostOpResponse<"host.status">,
+  sessionSummary: HostOpResponse<"bridge.sessions.summary">,
+  sessions: HostOpResponse<"bridge.sessions.list">["sessions"],
+) {
+  return {
+    bridge: {
+      isConnected: probe.bridgeIsConnected,
+      path: probe.bridgePath,
+      disconnectReason: probe.disconnectReason,
+    },
+    contracts: {
+      host: probe.hostContractVersion,
+      bridge: probe.bridgeContractVersion,
+    },
+    session: {
+      isConnected: sessionSummary.bridgeIsConnected,
+      sessionId: sessionSummary.sessionId,
+      processId: sessionSummary.processId,
+      ...presentSessionKind(sessionSummary.lane, sessionSummary.sandboxId),
+      buildStamp: sessionSummary.buildStamp,
+      revitVersion: sessionSummary.revitVersion,
+      openDocumentCount: sessionSummary.openDocumentCount,
+      activeDocument:
+        sessionSummary.activeDocument == null
+          ? undefined
+          : summarizeActiveDocument(sessionSummary.activeDocument),
+      availableModuleCount: sessionSummary.availableModules.length,
+    },
+    hint: createStatusHint(probe.bridgeIsConnected, sessionSummary.bridgeIsConnected),
+    sessions: sessions.map((session) => ({
+      sessionId: session.sessionId,
+      processId: session.processId,
+      ...presentSessionKind(session.lane, session.sandboxId),
+      buildStamp: session.buildStamp,
+      revitVersion: session.revitVersion,
+      openDocumentCount: session.openDocumentCount,
+      activeDocumentTitle: session.activeDocumentTitle,
+    })),
+  };
+}
 
 function createStatusHint(
   bridgeIsConnected: boolean,
@@ -297,9 +309,16 @@ export const captureView = createCaptureViewTool((bridgeSessionId) =>
   createCurrentHostRpcCaller(bridgeSessionId),
 );
 
+// Dedicated control-plane tool (pe_status class); sandbox lifecycle is fleet management and
+// never appears in host_operation_search.
+export const peSandbox = createPeSandboxTool(() =>
+  resolveHostBaseUrl(peaProductToolContext.hostBaseUrl),
+);
+
 export const peaProductTools = {
   [peStatus.id]: peStatus,
   [peLogs.id]: peLogs,
+  [peSandbox.id]: peSandbox,
   [hostOperationSearch.id]: hostOperationSearch,
   [hostOperationCall.id]: hostOperationCall,
   [requestAccess.id]: requestAccess,
