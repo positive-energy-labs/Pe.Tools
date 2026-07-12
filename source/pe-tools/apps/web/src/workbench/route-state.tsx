@@ -1,36 +1,53 @@
 /**
  * useRouteState — the collaborative-UI primitive, standalone.
  *
- * Any route can mount this hook (no WorkbenchProvider needed): it opens its own
- * session client, subscribes to the SSE wire filtering `state_changed`, and
- * exposes the route's typed slice of AgentController session state. Writes go
- * through `session.setState` (server-serialized top-level merge → rebroadcast
- * to every tab and to pea's tools). Pea writes the same slice server-side via
- * `controllerContext.updateState`; changes arrive here as `state_changed`.
+ * Any route can mount this hook (no WorkbenchProvider needed). It:
+ *   - runs the `/pe/info` handshake, opens its own session client, and subscribes to
+ *     the SSE wire (filtering `state_changed` for live updates, `agent_start/end` for
+ *     the pea-active flag),
+ *   - hydrates the route's document once via `GET /pe/route-state/:route` (replacing the
+ *     old zero-key `setState({})` nudge — the dispatcher exposes the doc directly now),
+ *   - writes through the dispatcher endpoints as `actor:"human"` (unmasked): `apply`
+ *     posts segment-array patches, `command` runs a named side-effect. Every write's
+ *     result echoes back through `state_changed`, so the slice stays authoritative.
  *
- * Hydration: the curated GET /sessions/:id route doesn't expose raw state keys,
- * but a zero-key merge (`setState({})`) makes SessionState re-emit the full map
- * to all subscribers. ponytail: hydration nudge; replace with a raw-state GET
- * route if the empty-merge trick ever breaks.
+ * Pea writes the same document server-side (masked); its changes arrive here identically.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { MastraClient } from "@mastra/client-js";
 import { z } from "zod";
 
-import { type RouteStateDef, readRouteState } from "@pe/agent-contracts";
+import { type RouteStateSpec, readRouteState } from "@pe/agent-contracts";
 
-import { resolveWorkbenchConfig, peUrl } from "./config";
+import { type WorkbenchEndpointConfig, peUrl, resolveWorkbenchConfig } from "./config";
 import { parseWireEvent } from "./wire";
 
 const peInfoSchema = z.object({ controllerId: z.string(), resourceId: z.string() });
 
+/** A single segment-array patch. Omit `value` (or set it undefined) to delete the key. */
+export interface RouteStatePatch {
+  path: (string | number)[];
+  value?: unknown;
+}
+
+/** The dispatcher's apply/command reply — `hint` is teaching text to surface verbatim. */
+export interface RouteStateWriteResult {
+  ok: boolean;
+  error?: string;
+  hint?: string;
+  doc?: unknown;
+  result?: unknown;
+}
+
 export interface RouteStateHandle<T> {
   /** The parsed route slice; null until hydrated or when absent/invalid. */
   slice: T | null;
-  /** True once the full session-state map has arrived at least once. */
+  /** True once the document has arrived (via GET hydration or a state_changed echo). */
   hydrated: boolean;
-  /** Replace the route's slice (whole-key merge, optimistic locally). */
-  setSlice: (next: T) => Promise<void>;
+  /** Apply segment-array patches as the human actor (bypasses the agent mask). */
+  apply: (patches: RouteStatePatch[]) => Promise<RouteStateWriteResult>;
+  /** Run a named command as the human actor. */
+  command: (command: string, input?: unknown) => Promise<RouteStateWriteResult>;
   /** True while a pea run is in flight on this session (agent_start..agent_end). */
   peaActive: boolean;
   connected: boolean;
@@ -38,7 +55,7 @@ export interface RouteStateHandle<T> {
 }
 
 export function useRouteState<TSchema extends z.ZodType>(
-  def: RouteStateDef<TSchema>,
+  spec: RouteStateSpec<TSchema>,
 ): RouteStateHandle<z.infer<TSchema>> {
   const config = useMemo(() => resolveWorkbenchConfig(), []);
   const [session, setSession] = useState<SessionClient | null>(null);
@@ -68,6 +85,21 @@ export function useRouteState<TSchema extends z.ZodType>(
     };
   }, [config]);
 
+  // Hydrate the document from the dispatcher (authoritative snapshot, no live merge needed).
+  useEffect(() => {
+    let cancelled = false;
+    void fetch(peUrl(config, `/route-state/${spec.route}`))
+      .then(async (response) => (response.ok ? await response.json() : null))
+      .then((payload: { doc?: unknown } | null) => {
+        if (cancelled || payload?.doc == null) return;
+        setValues((prev) => ({ ...prev, [spec.key]: payload.doc }));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [config, spec.route, spec.key]);
+
   // One SSE subscription; state_changed carries the full map, agent_start/end drive peaActive.
   useEffect(() => {
     if (!session) return;
@@ -90,8 +122,6 @@ export function useRouteState<TSchema extends z.ZodType>(
           return;
         }
         unsubscribe = subscription.unsubscribe;
-        // Hydration nudge: zero-key merge → server re-emits the full state map.
-        void session.setState({}).catch(() => undefined);
       })
       .catch((caught: unknown) => {
         if (!cancelled) setError(caught instanceof Error ? caught.message : String(caught));
@@ -102,33 +132,52 @@ export function useRouteState<TSchema extends z.ZodType>(
     };
   }, [session]);
 
-  const valuesRef = useRef(values);
-  valuesRef.current = values;
-
-  const setSlice = useCallback(
-    async (next: z.infer<TSchema>) => {
-      if (!session) throw new Error("Workbench session not connected yet.");
-      // Optimistic: the authoritative state_changed echo overwrites this shortly after.
-      setValues((prev) => ({ ...prev, [def.key]: next }));
-      await session.setState({ [def.key]: next });
-    },
-    [session, def.key],
+  const apply = useCallback(
+    (patches: RouteStatePatch[]) => postWrite(config, spec.route, "apply", { patches }),
+    [config, spec.route],
+  );
+  const command = useCallback(
+    (command: string, input?: unknown) =>
+      postWrite(config, spec.route, "command", { command, input: input ?? {} }),
+    [config, spec.route],
   );
 
   const slice = useMemo(
-    () => (values ? readRouteState(values, def) : null),
-    // def is a stable module-level object for callers by convention
-    [values, def],
+    () => (values ? readRouteState(values, spec) : null),
+    // spec is a stable module-level object for callers by convention
+    [values, spec],
   );
 
   return {
     slice,
     hydrated: values != null,
-    setSlice,
+    apply,
+    command,
     peaActive,
     connected: session != null && error == null,
     error,
   };
+}
+
+/** POST a human-actor write to a dispatcher endpoint; returns its `{ ok, hint, ... }` reply. */
+async function postWrite(
+  config: WorkbenchEndpointConfig,
+  route: string,
+  suffix: "apply" | "command",
+  body: Record<string, unknown>,
+): Promise<RouteStateWriteResult> {
+  try {
+    const response = await fetch(peUrl(config, `/route-state/${route}/${suffix}`), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ actor: "human", ...body }),
+    });
+    const payload = (await response.json().catch(() => null)) as RouteStateWriteResult | null;
+    if (payload) return payload;
+    return { ok: false, error: `${suffix} failed (${response.status})` };
+  } catch (caught) {
+    return { ok: false, error: caught instanceof Error ? caught.message : String(caught) };
+  }
 }
 
 type SessionClient = ReturnType<ReturnType<MastraClient["getAgentController"]>["session"]>;

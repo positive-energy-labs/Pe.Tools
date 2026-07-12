@@ -84,6 +84,14 @@ const TOOLS = [
     description: "Parameter values across loaded Revit family types, as a scannable matrix.",
   },
   {
+    to: "/family-types",
+    title: "Family Types",
+    label: "Revit editor",
+    icon: PencilRuler,
+    description:
+      "A web Family Types dialog — pea proposes spec-sheet values with provenance; you review, stage, and push to Revit.",
+  },
+  {
     to: "/settings-prototype",
     title: "Settings",
     label: "Host pipeline",

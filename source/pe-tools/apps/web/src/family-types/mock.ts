@@ -1,20 +1,22 @@
 /**
- * Mock data for the /family-sheet UI lane: a fake FCU-400 family snapshot,
- * a pre-parsed spec doc built from the lab's deterministic ACME submittal
- * (FakePage + TableSpec geometry = cell-level grounding with zero network),
- * and a scripted pea proposal batch for demoing the collaborative flow.
+ * Mock data for the /family-types UI lane: a fake FCU-400 family document, a
+ * pre-parsed spec doc built from the lab's deterministic ACME submittal (FakePage
+ * + TableSpec geometry = cell-level grounding with zero network), and a scripted
+ * pea proposal batch for demoing the collaborative flow. Parameters carry
+ * identity + ancestry (dependsOn/dependents/associations) so the inspector has
+ * something to show without Revit running.
  */
 import { createElement } from "react";
 
 import {
   type CellProposal,
   type CellReview,
+  type FamilyTypesDocument,
+  type FamilyTypesParam,
   FORMULA_TYPE,
-  type FamilySheetParam,
   type SourceRef,
   type SpecDocBlock,
-  type Worksheet,
-  worksheetCellKey,
+  cellKey,
 } from "@pe/agent-contracts";
 
 import { FakePage } from "#/lab/kit";
@@ -88,8 +90,8 @@ function param(
   group: string,
   storageType: string,
   values: [string, string, string] | string,
-  extra?: Partial<FamilySheetParam>,
-): FamilySheetParam {
+  extra?: Partial<FamilyTypesParam>,
+): FamilyTypesParam {
   const perType = typeof values === "string" ? [values, values, values] : values;
   return {
     name,
@@ -102,34 +104,79 @@ function param(
     group,
     formula: null,
     valuesPerType: Object.fromEntries(TYPES.map((t, i) => [t, perType[i]])),
+    identity: { key: `name:${name.toLowerCase()}`, kind: "NameFallback", name },
+    dependsOn: null,
+    dependents: null,
+    associations: null,
     ...extra,
   };
 }
 
-export function buildMockWorksheet(): Worksheet {
-  const parameters: FamilySheetParam[] = [
-    // Dimensions
-    param("Width", "Dimensions", "Double", ['24"', '30"', '36"']),
-    param("Depth", "Dimensions", "Double", '22"'),
+export function buildMockDocument(): FamilyTypesDocument {
+  const parameters: FamilyTypesParam[] = [
+    // Dimensions — Width drives dims; Height is formula-driven by Depth.
+    param("Width", "Dimensions", "Double", ['24"', '30"', '36"'], {
+      identity: {
+        key: "shared:8f2a-width",
+        kind: "SharedGuid",
+        name: "Width",
+        sharedGuid: "8f2a1c00-0000-0000-0000-000000000001",
+      },
+      dependents: ["Height"],
+      associations: {
+        dimensions: ["Cabinet Width [ID:4412]", "Coil Width [ID:4488]"],
+        arrays: [],
+        nested: [],
+      },
+    }),
+    param("Depth", "Dimensions", "Double", '22"', {
+      dependents: ["Height"],
+      associations: { dimensions: ["Cabinet Depth [ID:4415]"], arrays: [], nested: [] },
+    }),
     param("Height", "Dimensions", "Double", '32"', {
       formula: 'Depth + 10"',
       isDeterminedByFormula: true,
       isReadOnly: true,
+      dependsOn: ["Depth"],
+      associations: {
+        dimensions: ["Cabinet Height [ID:4418]"],
+        arrays: [],
+        nested: [{ elementName: "Coil Frame", elementId: "9021", paramName: "Frame Height" }],
+      },
     }),
-    // Mechanical — empty placeholders pea will fill from the spec
+    // Mechanical — empty placeholders pea will fill from the spec.
     param("Nominal Airflow", "Mechanical", "Double", ["", "", ""]),
     param("Cooling Capacity", "Mechanical", "Double", ["", "", ""]),
     param("External Static Pressure", "Mechanical", "Double", ["", "", ""]),
     param("Water Connection", "Mechanical", "Text", ""),
-    // Electrical — stale defaults worth overwriting
+    // Electrical — stale defaults worth overwriting; MCA is formula-driven.
     param("Voltage", "Electrical", "Double", "277 V"),
-    param("FLA", "Electrical", "Double", ["", "", ""]),
-    param("MCA", "Electrical", "Double", ""),
+    param("FLA", "Electrical", "Double", ["", "", ""], { dependents: ["MCA"] }),
+    param("MCA", "Electrical", "Double", ["", "", ""], {
+      formula: "FLA * 1.25",
+      isDeterminedByFormula: true,
+      isReadOnly: true,
+      dependsOn: ["FLA"],
+    }),
     param("MOCP", "Electrical", "Double", ""),
     param("Motor HP", "Electrical", "Text", ["", "", ""]),
     // Identity
-    param("Manufacturer", "Identity Data", "Text", "ACME Air Systems"),
-    param("Model", "Identity Data", "Text", ["FCU-400-A", "FCU-400-B", "FCU-400-C"]),
+    param("Manufacturer", "Identity Data", "Text", "ACME Air Systems", {
+      identity: {
+        key: "builtin:-1002051",
+        kind: "BuiltInParameter",
+        name: "Manufacturer",
+        builtInParameterId: -1002051,
+      },
+    }),
+    param("Model", "Identity Data", "Text", ["FCU-400-A", "FCU-400-B", "FCU-400-C"], {
+      identity: {
+        key: "builtin:-1002052",
+        kind: "BuiltInParameter",
+        name: "Model",
+        builtInParameterId: -1002052,
+      },
+    }),
     param("Operating Weight", "Identity Data", "Double", ["", "", ""], { isInstance: true }),
     param("Reference ESP", "Mechanical", "Double", "0.30", { isReadOnly: true }),
   ];
@@ -149,18 +196,18 @@ export function buildMockWorksheet(): Worksheet {
     },
     cells: {
       // one already-accepted + reviewed-good cell
-      [worksheetCellKey("Nominal Airflow", "FCU-400-A")]: {
+      [cellKey("Nominal Airflow", "FCU-400-A")]: {
         proposal: peaCell("400 CFM", "p1-perf", 0, 1, "high"),
         staged: "400 CFM",
         review: "good",
       },
       // one open proposal
-      [worksheetCellKey("Cooling Capacity", "FCU-400-A")]: {
+      [cellKey("Cooling Capacity", "FCU-400-A")]: {
         proposal: peaCell("12.0 MBH", "p1-perf", 1, 1, "high"),
         review: "none",
       },
       // the wrinkle: pea flagged its own low-confidence read (doc says 208 V for model C)
-      [worksheetCellKey("Voltage", "FCU-400-C")]: {
+      [cellKey("Voltage", "FCU-400-C")]: {
         proposal: peaCell(
           "115 V",
           "p1-perf",
@@ -189,7 +236,7 @@ function peaCell(
 
 /* ── Scripted pea batch (simulatePea) ────────────────────────────────────── */
 
-interface MockPeaEntry {
+export interface MockPeaEntry {
   paramName: string;
   typeName: string;
   proposal: CellProposal;
@@ -210,18 +257,6 @@ export const MOCK_PEA_BATCH: MockPeaEntry[] = [
     proposal: peaCell(T1.rows[3].values[colIdx - 1], "p1-perf", 3, colIdx, "high" as const),
   })),
   // single-value table rows apply to every type — same source, three cells
-  ...TYPES.map((typeName) => ({
-    paramName: "MCA",
-    typeName,
-    proposal: peaCell(
-      "3.0 A",
-      "p2-elec",
-      3,
-      1,
-      "high" as const,
-      "Single value — applies to all models.",
-    ),
-  })),
   ...TYPES.map((typeName) => ({
     paramName: "MOCP",
     typeName,
