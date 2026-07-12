@@ -12,7 +12,7 @@ import { Route as rootRouteImport } from "./routes/__root";
 import { Route as SettingsPrototypeRouteImport } from "./routes/settings-prototype";
 import { Route as ScheduleGridRouteImport } from "./routes/schedule-grid";
 import { Route as OpsRouteImport } from "./routes/ops";
-import { Route as FamilySheetRouteImport } from "./routes/family-sheet";
+import { Route as FamilyTypesRouteImport } from "./routes/family-types";
 import { Route as FamilyMatrixRouteImport } from "./routes/family-matrix";
 import { Route as FamilyDocRouteImport } from "./routes/family-doc";
 import { Route as FamilyAuditRouteImport } from "./routes/family-audit";
@@ -40,9 +40,9 @@ const OpsRoute = OpsRouteImport.update({
   path: "/ops",
   getParentRoute: () => rootRouteImport,
 } as any);
-const FamilySheetRoute = FamilySheetRouteImport.update({
-  id: "/family-sheet",
-  path: "/family-sheet",
+const FamilyTypesRoute = FamilyTypesRouteImport.update({
+  id: "/family-types",
+  path: "/family-types",
   getParentRoute: () => rootRouteImport,
 } as any);
 const FamilyMatrixRoute = FamilyMatrixRouteImport.update({
@@ -109,7 +109,7 @@ export interface FileRoutesByFullPath {
   "/family-audit": typeof FamilyAuditRoute;
   "/family-doc": typeof FamilyDocRoute;
   "/family-matrix": typeof FamilyMatrixRoute;
-  "/family-sheet": typeof FamilySheetRoute;
+  "/family-types": typeof FamilyTypesRoute;
   "/ops": typeof OpsRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings-prototype": typeof SettingsPrototypeRoute;
@@ -126,7 +126,7 @@ export interface FileRoutesByTo {
   "/family-audit": typeof FamilyAuditRoute;
   "/family-doc": typeof FamilyDocRoute;
   "/family-matrix": typeof FamilyMatrixRoute;
-  "/family-sheet": typeof FamilySheetRoute;
+  "/family-types": typeof FamilyTypesRoute;
   "/ops": typeof OpsRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings-prototype": typeof SettingsPrototypeRoute;
@@ -144,7 +144,7 @@ export interface FileRoutesById {
   "/family-audit": typeof FamilyAuditRoute;
   "/family-doc": typeof FamilyDocRoute;
   "/family-matrix": typeof FamilyMatrixRoute;
-  "/family-sheet": typeof FamilySheetRoute;
+  "/family-types": typeof FamilyTypesRoute;
   "/ops": typeof OpsRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings-prototype": typeof SettingsPrototypeRoute;
@@ -163,7 +163,7 @@ export interface FileRouteTypes {
     | "/family-audit"
     | "/family-doc"
     | "/family-matrix"
-    | "/family-sheet"
+    | "/family-types"
     | "/ops"
     | "/schedule-grid"
     | "/settings-prototype"
@@ -180,7 +180,7 @@ export interface FileRouteTypes {
     | "/family-audit"
     | "/family-doc"
     | "/family-matrix"
-    | "/family-sheet"
+    | "/family-types"
     | "/ops"
     | "/schedule-grid"
     | "/settings-prototype"
@@ -197,7 +197,7 @@ export interface FileRouteTypes {
     | "/family-audit"
     | "/family-doc"
     | "/family-matrix"
-    | "/family-sheet"
+    | "/family-types"
     | "/ops"
     | "/schedule-grid"
     | "/settings-prototype"
@@ -215,7 +215,7 @@ export interface RootRouteChildren {
   FamilyAuditRoute: typeof FamilyAuditRoute;
   FamilyDocRoute: typeof FamilyDocRoute;
   FamilyMatrixRoute: typeof FamilyMatrixRoute;
-  FamilySheetRoute: typeof FamilySheetRoute;
+  FamilyTypesRoute: typeof FamilyTypesRoute;
   OpsRoute: typeof OpsRoute;
   ScheduleGridRoute: typeof ScheduleGridRoute;
   SettingsPrototypeRoute: typeof SettingsPrototypeRoute;
@@ -247,11 +247,11 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof OpsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/family-sheet": {
-      id: "/family-sheet";
-      path: "/family-sheet";
-      fullPath: "/family-sheet";
-      preLoaderRoute: typeof FamilySheetRouteImport;
+    "/family-types": {
+      id: "/family-types";
+      path: "/family-types";
+      fullPath: "/family-types";
+      preLoaderRoute: typeof FamilyTypesRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/family-matrix": {
@@ -353,7 +353,7 @@ const rootRouteChildren: RootRouteChildren = {
   FamilyAuditRoute: FamilyAuditRoute,
   FamilyDocRoute: FamilyDocRoute,
   FamilyMatrixRoute: FamilyMatrixRoute,
-  FamilySheetRoute: FamilySheetRoute,
+  FamilyTypesRoute: FamilyTypesRoute,
   OpsRoute: OpsRoute,
   ScheduleGridRoute: ScheduleGridRoute,
   SettingsPrototypeRoute: SettingsPrototypeRoute,

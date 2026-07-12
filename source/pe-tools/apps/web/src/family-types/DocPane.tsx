@@ -1,8 +1,10 @@
+import { Loader2 } from "lucide-react";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { SourceRef } from "@pe/agent-contracts";
 
-import type { GroundingView } from "#/family-sheet/store";
+import { Button } from "#/components/ui/button";
+import { type GroundingView, useFamilyTypes } from "#/family-types/store";
 
 const PAGE_GAP = 24;
 
@@ -20,13 +22,11 @@ function usePageTops(grounding: GroundingView | null) {
 }
 
 /**
- * The right pane: the parsed spec sheet with a camera that flies to the
- * source geometry of the focused cell's proposal. Pages stacked at native
- * coords, transform on a canvas div, corner reticle sizes divided by scale so
- * they stay constant screen-size.
- *
- * `source` null → no focus: frame the whole first page. `measured` decides
- * solid (measured geometry) vs dashed (estimated column) reticle.
+ * The right pane: the parsed spec sheet with a camera that flies to the source
+ * geometry of the focused cell's proposal. Pages stacked at native coords,
+ * transform on a canvas div, corner reticle sizes divided by scale so they stay
+ * constant screen-size. `source` null → frame the whole first page. `measured`
+ * decides solid (measured geometry) vs dashed (estimated column) reticle.
  */
 export function DocPane({
   grounding,
@@ -53,8 +53,6 @@ export function DocPane({
     );
   }, []);
 
-  // Observe size, and re-measure on window resize as a fallback for headless
-  // contexts where ResizeObserver can be quiet.
   useLayoutEffect(() => {
     measure();
     const el = paneRef.current;
@@ -68,8 +66,6 @@ export function DocPane({
     };
   }, [measure]);
 
-  // Re-measure right before we need the camera, so a focus that arrives before
-  // the observer settles still frames correctly.
   useLayoutEffect(measure, [source, measure]);
 
   const target = useMemo(
@@ -85,8 +81,6 @@ export function DocPane({
     );
   }
 
-  // camera: frame the target box (or whole first page when nothing focused).
-  // pad generously so the surrounding row context stays visible (frame ≥ 110pt).
   let cam = { tx: 0, ty: 0, scale: 1 };
   if (pane.vw > 0) {
     if (target) {
@@ -105,20 +99,15 @@ export function DocPane({
         ty: pane.vh / 2 - (pageTop + frame.y + frame.h / 2) * scale,
       };
     } else {
-      // whole first page zoomed to fit
       const first = grounding.pages[0];
       const scale = Math.min(pane.vw / first.width, pane.vh / first.height, 1.2);
-      cam = {
-        scale,
-        tx: pane.vw / 2 - (first.width / 2) * scale,
-        ty: 24,
-      };
+      cam = { scale, tx: pane.vw / 2 - (first.width / 2) * scale, ty: 24 };
     }
   }
 
   const measured = target?.measured ?? false;
   const reticle = measured ? "var(--pe-green)" : "var(--cat-blue)";
-  const brk = 12 / cam.scale; // corner-bracket arm length, constant screen-size
+  const brk = 12 / cam.scale;
   const stroke = 1.75 / cam.scale;
 
   return (
@@ -151,7 +140,6 @@ export function DocPane({
             className="absolute animate-in fade-in duration-300"
             style={{ left: 0, top: tops.get(target.page) }}
           >
-            {/* fill + border box: solid = measured geometry, dashed = estimated */}
             <div
               className="absolute rounded-[2px]"
               style={{
@@ -163,7 +151,6 @@ export function DocPane({
                 background: `color-mix(in srgb, ${reticle} 9%, transparent)`,
               }}
             />
-            {/* corner brackets — constant screen-size (arm length ÷ scale) */}
             {corners(target.bbox, brk).map((c, i) => (
               <div
                 key={i}
@@ -184,7 +171,6 @@ export function DocPane({
         )}
       </div>
 
-      {/* provenance readout */}
       {target ? (
         <div className="absolute inset-x-4 bottom-4 rounded-lg border border-[var(--line)] bg-card/95 px-3 py-2 shadow-xl backdrop-blur">
           <div className="flex items-center justify-between gap-2">
@@ -226,9 +212,79 @@ export function DocPane({
 /** Four corner-bracket anchor points for a bbox, each an L drawn with 2 borders. */
 function corners(b: { x: number; y: number; w: number; h: number }, len: number) {
   return [
-    { x: b.x, y: b.y, top: true, left: true }, // top-left
-    { x: b.x + b.w - len, y: b.y, top: true, left: false }, // top-right
-    { x: b.x, y: b.y + b.h - len, top: false, left: true }, // bottom-left
-    { x: b.x + b.w - len, y: b.y + b.h - len, top: false, left: false }, // bottom-right
+    { x: b.x, y: b.y, top: true, left: true },
+    { x: b.x + b.w - len, y: b.y, top: true, left: false },
+    { x: b.x, y: b.y + b.h - len, top: false, left: true },
+    { x: b.x + b.w - len, y: b.y + b.h - len, top: false, left: false },
   ];
+}
+
+/** Doc-pane empty state doubling as the parse entry point (URL, file, or drag-drop). */
+export function UploadSurface() {
+  const store = useFamilyTypes();
+  const [url, setUrl] = useState("");
+  const [dragging, setDragging] = useState(false);
+  const parsing = store.status.parsing;
+
+  return (
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragging(false);
+        const file = e.dataTransfer.files?.[0];
+        if (file) void store.parseSpec({ file });
+      }}
+      className={
+        "flex h-full flex-col items-center justify-center gap-3 border-l border-[var(--line)] px-8 transition-colors " +
+        (dragging
+          ? "bg-[color-mix(in_srgb,var(--pe-blue)_20%,var(--basalt))]"
+          : "bg-[color-mix(in_srgb,var(--basalt)_88%,var(--pe-blue))]")
+      }
+    >
+      <p className="text-xs text-muted-foreground">
+        {parsing
+          ? "Parsing spec sheet (takes a minute or two)…"
+          : "No spec sheet parsed — drop a PDF here, paste a URL, or ask pea to do it."}
+      </p>
+      {parsing ? (
+        <Loader2 className="size-4 animate-spin text-muted-foreground" />
+      ) : (
+        <>
+          <div className="flex w-full max-w-md items-center gap-2">
+            <input
+              value={url}
+              onChange={(event) => setUrl(event.target.value)}
+              placeholder="https://…/datasheet.pdf"
+              className="h-8 min-w-0 flex-1 rounded-md border border-[var(--line)] bg-white/70 px-2.5 text-xs outline-none focus:border-[var(--pea-line)]"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!url.trim()}
+              onClick={() => void store.parseSpec({ url: url.trim() })}
+            >
+              Parse
+            </Button>
+          </div>
+          <label className="cursor-pointer text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground">
+            or upload a PDF
+            <input
+              type="file"
+              accept="application/pdf"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void store.parseSpec({ file });
+              }}
+            />
+          </label>
+        </>
+      )}
+    </div>
+  );
 }

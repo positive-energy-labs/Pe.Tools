@@ -1,9 +1,10 @@
-import { Check, Lock, X } from "lucide-react";
+import { AlertCircle, Check, Lock, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import type { CellReview, CellState } from "@pe/agent-contracts";
 
-import { useFamilySheet } from "#/family-sheet/store";
+import type { FormulaProblem } from "#/family-types/formula";
+import { useFamilyTypes } from "#/family-types/store";
 import { cn } from "#/lib/utils";
 
 /** Cycle order for the tiny review toggle: none → good → attention → none. */
@@ -19,12 +20,13 @@ export interface CellFocus {
 }
 
 /**
- * One worksheet cell. Renders the snapshot value, then layers the worksheet
- * trichotomy (proposal → staged → pushed) plus an orthogonal review mark.
- * Read-only / formula-determined cells drop edit affordances but still show
- * proposals (pea can propose a formula change).
+ * One document cell. Renders the snapshot value, then layers the trichotomy
+ * (proposal → staged → pushed) plus an orthogonal review mark. Formula cells
+ * additionally validate the in-progress draft (client-side, instant) and, on
+ * stage, run an authoritative host dryRun — problems surface inline but never
+ * block staging (the host is the final word).
  */
-export function SheetCell({
+export function Cell({
   cellKey,
   snapshotValue,
   cell,
@@ -33,6 +35,8 @@ export function SheetCell({
   onFocus,
   onBlur,
   onPin,
+  validate,
+  formulaParamName,
 }: {
   cellKey: string;
   snapshotValue: string;
@@ -42,10 +46,15 @@ export function SheetCell({
   onFocus: () => void;
   onBlur: () => void;
   onPin: () => void;
+  /** Formula cells only: live client-side check of the current draft. */
+  validate?: (draft: string) => FormulaProblem[];
+  /** Formula cells only: the owning parameter, for the host dryRun. */
+  formulaParamName?: string;
 }) {
-  const store = useFamilySheet();
+  const store = useFamilyTypes();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
+  const [hostProblem, setHostProblem] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -59,19 +68,26 @@ export function SheetCell({
   const isStaged = staged != null;
   const groundable = proposal?.source != null;
 
-  // display value: staged wins, else open-proposal value, else snapshot
   const display = isStaged ? staged : hasOpenProposal ? proposal.value : snapshotValue;
   const showOld = (hasOpenProposal || isStaged) && snapshotValue && snapshotValue !== display;
 
+  const problems = editing && validate ? validate(draft) : [];
+
   const commitEdit = () => {
     setEditing(false);
-    if (draft !== staged) store.stageEdit(cellKey, draft);
+    if (draft !== staged) {
+      store.stageEdit(cellKey, draft);
+      // authoritative check on formula edits, ephemeral & non-blocking
+      if (formulaParamName && store.dryRunFormula) {
+        void store.dryRunFormula(formulaParamName, draft).then(setHostProblem);
+      }
+    }
   };
 
   return (
     <td
       className={cn(
-        "group/cell relative h-8 border-b border-[var(--line-soft)] border-l border-l-[var(--line-soft)] px-2 align-middle",
+        "group/cell relative h-8 border-b border-l border-[var(--line-soft)] px-2 align-middle",
         groundable && "cursor-pointer",
       )}
       onMouseEnter={groundable ? onFocus : undefined}
@@ -92,18 +108,35 @@ export function SheetCell({
         )}
 
         {editing ? (
-          <input
-            ref={inputRef}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={commitEdit}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") commitEdit();
-              else if (e.key === "Escape") setEditing(false);
-            }}
-            onClick={(e) => e.stopPropagation()}
-            className="min-w-0 flex-1 rounded-sm border border-[var(--pea-line)] bg-card px-1 py-0.5 text-[12px] tabular-nums outline-none focus:border-[var(--pe-green)]"
-          />
+          <div className="relative min-w-0 flex-1">
+            <input
+              ref={inputRef}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commitEdit}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitEdit();
+                else if (e.key === "Escape") setEditing(false);
+              }}
+              onClick={(e) => e.stopPropagation()}
+              className={cn(
+                "w-full rounded-sm border bg-card px-1 py-0.5 text-[12px] tabular-nums outline-none",
+                problems.length
+                  ? "border-[var(--cat-clay)] focus:border-[var(--cat-clay)]"
+                  : "border-[var(--pea-line)] focus:border-[var(--pe-green)]",
+              )}
+            />
+            {problems.length > 0 && (
+              <div className="absolute left-0 top-full z-30 mt-1 w-max max-w-[260px] rounded-md border border-[var(--cat-clay)]/40 bg-card px-2 py-1.5 text-[11px] shadow-xl">
+                {problems.map((problem, i) => (
+                  <div key={i} className="flex items-start gap-1 text-[var(--cat-clay)]">
+                    <AlertCircle className="mt-0.5 size-3 shrink-0" />
+                    <span>{problem.message}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         ) : (
           <span
             className={cn(
@@ -113,7 +146,6 @@ export function SheetCell({
             )}
             title={display || undefined}
             onClick={(e) => {
-              // clicking a staged cell opens inline edit
               if (isStaged && !readOnly) {
                 e.stopPropagation();
                 setDraft(staged);
@@ -130,6 +162,13 @@ export function SheetCell({
           </span>
         )}
 
+        {/* host dryRun problem on a staged formula — ephemeral, advisory */}
+        {!editing && hostProblem && isStaged && (
+          <span className="shrink-0" title={hostProblem}>
+            <AlertCircle className="size-3 text-[var(--cat-clay)]" aria-label="host rejected" />
+          </span>
+        )}
+
         {/* low-confidence clay dot on open proposals */}
         {hasOpenProposal && proposal.confidence === "low" && (
           <span
@@ -138,10 +177,8 @@ export function SheetCell({
           />
         )}
 
-        {/* review corner mark */}
         <ReviewMark review={review} onCycle={() => store.setReview(cellKey, NEXT_REVIEW[review])} />
 
-        {/* accept / reject affordances — hover only, open proposals only */}
         {hasOpenProposal && !editing && (
           <span className="ml-auto hidden shrink-0 items-center gap-0.5 group-hover/cell:flex">
             <button
@@ -169,7 +206,6 @@ export function SheetCell({
           </span>
         )}
 
-        {/* staged: a clear affordance to unstage */}
         {isStaged && !editing && (
           <button
             type="button"
@@ -190,7 +226,6 @@ export function SheetCell({
 
 function ReviewMark({ review, onCycle }: { review: CellReview; onCycle: () => void }) {
   if (review === "none") {
-    // invisible until hover — a quiet handle to start reviewing
     return (
       <button
         type="button"
@@ -233,9 +268,8 @@ function cellBackground(
   staged: boolean,
   focused: boolean,
 ): React.CSSProperties {
-  if (review === "attention") {
+  if (review === "attention")
     return { background: "color-mix(in srgb, var(--cat-clay) 12%, transparent)" };
-  }
   if (focused) return { background: "color-mix(in srgb, var(--pe-blue) 10%, transparent)" };
   if (staged) return { background: "color-mix(in srgb, var(--pe-green) 8%, transparent)" };
   if (openProposal) return { background: "var(--pea-tint)" };
@@ -248,21 +282,12 @@ function cellBorder(
   staged: boolean,
   focused: boolean,
 ): React.CSSProperties {
-  if (review === "attention") {
+  if (review === "attention")
     return { boxShadow: "inset 0 0 0 1.5px color-mix(in srgb, var(--cat-clay) 55%, transparent)" };
-  }
-  if (staged) {
+  if (staged)
     return { boxShadow: "inset 0 0 0 1.5px color-mix(in srgb, var(--pe-green) 70%, transparent)" };
-  }
-  if (openProposal) {
-    // dashed pea-line — an outline element so we can dash it
-    return {
-      border: "1.5px dashed var(--pea-line)",
-      borderRadius: 2,
-    };
-  }
-  if (focused) {
+  if (openProposal) return { border: "1.5px dashed var(--pea-line)", borderRadius: 2 };
+  if (focused)
     return { boxShadow: "inset 0 0 0 1.5px color-mix(in srgb, var(--pe-blue) 40%, transparent)" };
-  }
   return {};
 }

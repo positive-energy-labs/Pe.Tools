@@ -1,11 +1,11 @@
 /**
- * Family-sheet store seam. The UI renders exclusively against `FamilySheetStore`;
+ * Family-types store seam. The UI renders exclusively against `FamilyTypesStore`;
  * providers implement it twice:
- *   - MockFamilySheetProvider (here) — local state + fake ACME data, for building
- *     the UI without Revit/pea running.
- *   - LiveFamilySheetProvider (live.tsx, integration phase) — the worksheet slice
- *     of AgentController session state via useRouteState, host RPC for read/push,
- *     parse cache for grounding.
+ *   - MockFamilyTypesProvider (here) — local state + fake FCU-400 data, for building
+ *     the UI without Revit/pea/dispatcher running (`?mock`).
+ *   - LiveFamilyTypesProvider (live.tsx) — the `route:family-types` document over the
+ *     route-state dispatcher (all writes as `actor:"human"`), the parse endpoint for
+ *     grounding, and family.editor.apply dryRun for authoritative formula checks.
  */
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import type { ComponentType, ReactNode } from "react";
@@ -13,13 +13,15 @@ import type { ComponentType, ReactNode } from "react";
 import {
   type CellReview,
   type CellState,
+  type FamilyTypesDocument,
   type SourceRef,
-  type Worksheet,
-  worksheetCellKey,
+  cellKey,
+  isFormulaCellKey,
+  splitCellKey,
 } from "@pe/agent-contracts";
 
 import type { BBox } from "#/lab/mock";
-import { MOCK_PEA_BATCH, buildMockWorksheet, mockGrounding } from "#/family-sheet/mock";
+import { MOCK_PEA_BATCH, buildMockDocument, mockGrounding } from "#/family-types/mock";
 
 /** Resolves proposal provenance (md coordinates) to page geometry for the doc pane. */
 export interface GroundingView {
@@ -35,16 +37,28 @@ export interface PushOutcome {
   failures: { key: string; error: string }[];
 }
 
-export interface FamilySheetStore {
-  worksheet: Worksheet;
+/** Per-cell authoritative validation from a family.editor.apply dryRun (host truth). */
+export type DryRunResult = { key: string; error: string | null };
+
+export const EMPTY_DOCUMENT: FamilyTypesDocument = {
+  snapshot: null,
+  doc: null,
+  cells: {},
+  pushedAt: null,
+};
+
+export interface FamilyTypesStore {
+  document: FamilyTypesDocument;
   grounding: GroundingView | null;
   status: {
     bridgeConnected: boolean;
     reading: boolean;
     parsing: boolean;
     pushing: boolean;
-    /** pea run in flight — UI shows a "pea is working" hint near the grid. */
+    /** pea run in flight — the header shows a "pea is working" pill. */
     peaActive: boolean;
+    /** Last rejected write/command hint, verbatim (the dispatcher's teaching text). */
+    hint: string | null;
     error: string | null;
   };
   lastPush: PushOutcome | null;
@@ -60,66 +74,68 @@ export interface FamilySheetStore {
   setReview(key: string, review: CellReview): void;
   push(): void | Promise<void>;
 
-  /** Mock-only demo hook (undefined on the live provider): streams in a pea proposal batch. */
+  /** Authoritative per-edit formula check (live only); undefined on the mock. */
+  dryRunFormula?: (paramName: string, formula: string) => Promise<string | null>;
+  /** Mock-only demo hook: streams in a pea proposal batch. */
   simulatePea?: () => void;
 }
 
-const FamilySheetContext = createContext<FamilySheetStore | null>(null);
+const FamilyTypesContext = createContext<FamilyTypesStore | null>(null);
 
-export function useFamilySheet(): FamilySheetStore {
-  const store = useContext(FamilySheetContext);
-  if (!store) throw new Error("useFamilySheet must be used inside a FamilySheet provider");
+export function useFamilyTypes(): FamilyTypesStore {
+  const store = useContext(FamilyTypesContext);
+  if (!store) throw new Error("useFamilyTypes must be used inside a FamilyTypes provider");
   return store;
 }
 
-export function FamilySheetContextProvider({
+export function FamilyTypesContextProvider({
   store,
   children,
 }: {
-  store: FamilySheetStore;
+  store: FamilyTypesStore;
   children: ReactNode;
 }) {
-  return <FamilySheetContext.Provider value={store}>{children}</FamilySheetContext.Provider>;
+  return <FamilyTypesContext.Provider value={store}>{children}</FamilyTypesContext.Provider>;
 }
 
 /* ── Derived helpers (pure — shared by both providers and the UI) ────────── */
 
-export function proposalCount(worksheet: Worksheet): number {
-  return Object.values(worksheet.cells).filter((c) => c.proposal && c.staged == null).length;
+export function proposalCount(doc: FamilyTypesDocument): number {
+  return Object.values(doc.cells).filter((c) => c.proposal && c.staged == null).length;
 }
 
-export function stagedEntries(worksheet: Worksheet): [string, CellState][] {
-  return Object.entries(worksheet.cells).filter(([, c]) => c.staged != null);
+export function stagedEntries(doc: FamilyTypesDocument): [string, CellState][] {
+  return Object.entries(doc.cells).filter(([, c]) => c.staged != null);
 }
 
-export function attentionCount(worksheet: Worksheet): number {
-  return Object.values(worksheet.cells).filter((c) => c.review === "attention").length;
+export function attentionCount(doc: FamilyTypesDocument): number {
+  return Object.values(doc.cells).filter((c) => c.review === "attention").length;
 }
 
 /** Push gate: something staged, nothing staged still marked needs-attention. */
-export function canPush(worksheet: Worksheet): boolean {
-  const staged = stagedEntries(worksheet);
+export function canPush(doc: FamilyTypesDocument): boolean {
+  const staged = stagedEntries(doc);
   return staged.length > 0 && staged.every(([, c]) => c.review !== "attention");
 }
 
 /* ── Mock provider ───────────────────────────────────────────────────────── */
 
-export function MockFamilySheetProvider({ children }: { children: ReactNode }) {
-  const [worksheet, setWorksheet] = useState<Worksheet>(() => buildMockWorksheet());
+export function MockFamilyTypesProvider({ children }: { children: ReactNode }) {
+  const [document, setDocument] = useState<FamilyTypesDocument>(() => buildMockDocument());
   const [peaActive, setPeaActive] = useState(false);
   const [pushing, setPushing] = useState(false);
   const [lastPush, setLastPush] = useState<PushOutcome | null>(null);
 
   const patchCell = useCallback((key: string, patch: Partial<CellState>) => {
-    setWorksheet((prev) => {
+    setDocument((prev) => {
       const cell: CellState = prev.cells[key] ?? { review: "none" };
       return { ...prev, cells: { ...prev.cells, [key]: { ...cell, ...patch } } };
     });
   }, []);
 
-  const store = useMemo<FamilySheetStore>(
+  const store = useMemo<FamilyTypesStore>(
     () => ({
-      worksheet,
+      document,
       grounding: mockGrounding(),
       status: {
         bridgeConnected: true,
@@ -127,18 +143,19 @@ export function MockFamilySheetProvider({ children }: { children: ReactNode }) {
         parsing: false,
         pushing,
         peaActive,
+        hint: null,
         error: null,
       },
       lastPush,
-      readFamily: () => setWorksheet(buildMockWorksheet()),
+      readFamily: () => setDocument(buildMockDocument()),
       parseSpec: () => undefined, // mock ships with the doc pre-parsed
       acceptProposal: (key) => {
-        const proposal = worksheet.cells[key]?.proposal;
+        const proposal = document.cells[key]?.proposal;
         if (proposal) patchCell(key, { staged: proposal.value });
       },
       rejectProposal: (key) => patchCell(key, { proposal: null }),
       acceptAll: () =>
-        setWorksheet((prev) => ({
+        setDocument((prev) => ({
           ...prev,
           cells: Object.fromEntries(
             Object.entries(prev.cells).map(([key, cell]) => [
@@ -155,18 +172,16 @@ export function MockFamilySheetProvider({ children }: { children: ReactNode }) {
       push: () => {
         setPushing(true);
         setTimeout(() => {
-          setWorksheet((prev) => {
+          setDocument((prev) => {
             const applied = stagedEntries(prev).length;
             setLastPush({ applied, failures: [] });
-            // mock: staged values land in the snapshot, cells reset
             const next = structuredClone(prev);
             for (const [key, cell] of Object.entries(next.cells)) {
               if (cell.staged == null) continue;
-              const sep = key.lastIndexOf("::");
-              const [paramName, typeName] = [key.slice(0, sep), key.slice(sep + 2)];
+              const { paramName, typeName } = splitCellKey(key);
               const param = next.snapshot?.parameters.find((p) => p.name === paramName);
-              if (param && typeName !== "@formula") param.valuesPerType[typeName] = cell.staged;
-              if (param && typeName === "@formula") param.formula = cell.staged;
+              if (param && !isFormulaCellKey(key)) param.valuesPerType[typeName] = cell.staged;
+              if (param && isFormulaCellKey(key)) param.formula = cell.staged;
               next.cells[key] = { review: "none" };
             }
             next.pushedAt = new Date().toISOString();
@@ -180,7 +195,7 @@ export function MockFamilySheetProvider({ children }: { children: ReactNode }) {
         MOCK_PEA_BATCH.forEach((entry, i) => {
           setTimeout(
             () => {
-              patchCell(worksheetCellKey(entry.paramName, entry.typeName), {
+              patchCell(cellKey(entry.paramName, entry.typeName), {
                 proposal: entry.proposal,
                 ...(entry.review ? { review: entry.review } : {}),
               });
@@ -191,8 +206,8 @@ export function MockFamilySheetProvider({ children }: { children: ReactNode }) {
         });
       },
     }),
-    [worksheet, peaActive, pushing, lastPush, patchCell],
+    [document, peaActive, pushing, lastPush, patchCell],
   );
 
-  return <FamilySheetContextProvider store={store}>{children}</FamilySheetContextProvider>;
+  return <FamilyTypesContextProvider store={store}>{children}</FamilyTypesContextProvider>;
 }
