@@ -9,6 +9,7 @@ namespace Pe.Shared.Product;
 /// </summary>
 public static class RevitDeploymentIdentity {
     public const string AddinManifestFileName = "Pe.App.addin";
+    public const string RuntimeDescriptorFileName = "Pe.App.runtime.json";
     public const string AutodeskDirectoryName = "Autodesk";
     public const string RevitDirectoryName = "Revit";
     public const string AddinsDirectoryName = "Addins";
