@@ -7,8 +7,7 @@
  *
  * What remains here is the keep-as-CSS zone — the stuff a Tailwind class genuinely can't express:
  * (1) JS-driven geometry — map-dial, candlestick, fisheye trace lane, parallax grid — positioned
- * by inline styles the rAF/scroll controller sets per frame; (2) scroll-timeline + [data-mode]
- * lane widths; (3) pseudo-elements, descendant/state selectors, and keyframe animations (caret
+ * by inline styles the rAF/scroll controller sets per frame; (2) [data-mode] lane widths; (3) pseudo-elements, descendant/state selectors, and keyframe animations (caret
  * blink, sheen, pulse). Flat single-element styling has moved to Tailwind on the elements.
  */
 .lens-frame {
@@ -23,10 +22,9 @@
   }
 }
 
-/* ===== Lens view: parallax focal planes ============================== */
-/* --vp (the scroll aperture height) is fed in px by a ResizeObserver. The
-   trace/strata lanes drift via pure CSS scroll-timeline; the map-dial gutter
-   uses a small rAF scroll handler (it needs measured pixel heights). */
+/* ===== Lens view: focal planes ======================================== */
+/* --vp (the scroll aperture height) is fed in px by a ResizeObserver. The map-dial gutter and
+   trace fisheye use a small rAF scroll handler (they need measured pixel heights). */
 .lens-frame {
   min-height: 0;
   height: 100%; /* fill the ChatShell main row (was a grid child in apps/website) */
@@ -37,7 +35,6 @@
   overflow-y: auto;
   overflow-x: hidden;
   scroll-behavior: smooth;
-  scroll-timeline: --lens block;
   /* No browser scrollbar in the chat lane — the mapdial IS the position instrument. */
   scrollbar-width: none;
 }
