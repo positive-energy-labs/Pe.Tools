@@ -66,7 +66,9 @@ export const apsLogoutResultSchema = Schema.Struct({
 });
 export type ApsLogoutResult = Schema.Schema.Type<typeof apsLogoutResultSchema>;
 
-export const HOST_RPC_BRIDGE_SESSION_HEADER = "x-pe-bridge-session-id";
+// Preserve the long-standing operation-types import surface while the transport constant itself
+// lives below the generated-contract boundary (host-typegen must not import its own output).
+export { HOST_RPC_BRIDGE_SESSION_HEADER } from "./contracts/bridge-protocol.js";
 
 export const hostSessionScopeSchema = Schema.Struct({
   bridgeSessionId: Schema.optional(Schema.String),
