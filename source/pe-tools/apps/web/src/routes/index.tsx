@@ -30,9 +30,20 @@ function UpdateButton() {
   const update = useMutation({
     mutationFn: async () => {
       const res = await fetch("/host/update", { method: "POST" });
-      const body = (await res.json()) as { ok?: boolean; releaseVersion?: string; error?: string };
+      // The relayed pe-revit envelope: { result: {...}, diagnostics: [{code, detail}] }.
+      // Pre-envelope CLIs returned the payload at the top level — read both shapes.
+      const raw = (await res.json()) as {
+        ok?: boolean;
+        releaseVersion?: string;
+        error?: string;
+        result?: { ok?: boolean; releaseVersion?: string };
+        diagnostics?: ReadonlyArray<{ code?: string; detail?: string }>;
+      };
+      const body = { ...raw, ...raw.result };
       if (!res.ok || body.ok === false)
-        throw new Error(body.error ?? `update failed (${res.status})`);
+        throw new Error(
+          body.error ?? raw.diagnostics?.[0]?.detail ?? `update failed (${res.status})`,
+        );
       return body;
     },
     onSuccess: () => installed.refetch(),
