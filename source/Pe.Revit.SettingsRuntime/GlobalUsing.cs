@@ -4,4 +4,4 @@ global using Pe.Shared.StorageRuntime.Documents;
 global using Pe.Shared.StorageRuntime.Json;
 global using Pe.Shared.StorageRuntime.Json.Converters;
 global using Pe.Shared.StorageRuntime.Modules;
-global using Pe.Shared.StorageRuntime.PolyFill;
+global using Pe.Bcl.Compat;

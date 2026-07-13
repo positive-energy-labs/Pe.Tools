@@ -1,6 +1,5 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamParameter.Formula;
-using Pe.Revit.PolyFill;
 
 namespace Pe.Revit.Extensions.FamParameter;
 

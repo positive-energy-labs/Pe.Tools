@@ -1,6 +1,5 @@
 using Pe.Revit.DocumentData.ProjectBrowser;
 using Pe.Revit.DocumentData.Schedules.Apply;
-using Pe.Revit.PolyFill;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
 using Serilog;
@@ -541,7 +540,7 @@ public static partial class ScheduleCatalogCollector {
         .Trim();
 
     private static List<string> SplitNameTokens(string name) => name
-        .SplitAndTrim([' ', '-', '_', '/', '\\'], BclExtensions.RemoveEmptyAndTrimEntries)
+        .SplitAndTrim([' ', '-', '_', '/', '\\'], BclCompat.RemoveEmptyAndTrimEntries)
         .ToList();
 
     private static string? GetParameterPrefix(string fieldName) {
@@ -550,8 +549,8 @@ public static partial class ScheduleCatalogCollector {
     }
 
     private static string HashFields(IEnumerable<string> fields) {
-        var bytes = BclExtensions.ComputeSha256Hash(Encoding.UTF8.GetBytes(string.Join("\u001f", fields)));
-        return BclExtensions.ToHexString(bytes)[..16];
+        var bytes = BclCompat.ComputeSha256Hash(Encoding.UTF8.GetBytes(string.Join("\u001f", fields)));
+        return BclCompat.ToHexString(bytes)[..16];
     }
 
     private static Regex RevitDuplicateSuffixRegex() => DuplicateSuffixRegex;

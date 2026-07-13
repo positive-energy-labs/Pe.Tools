@@ -58,7 +58,7 @@ public sealed class StateStorage {
 
         var searchOption = options.Recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
         var directories = Directory.EnumerateDirectories(discoveryRootPath, "*", searchOption)
-            .Select(path => BclExtensions.GetRelativePath(this.DirectoryPath, path).Replace('\\', '/'))
+            .Select(path => BclCompat.GetRelativePath(this.DirectoryPath, path).Replace('\\', '/'))
             .ToList();
         var files = Directory.EnumerateFiles(discoveryRootPath, "*.json", searchOption)
             .Select(path => SettingsDiscoveryBuilder.CreateSettingsFileEntry(path, this.DirectoryPath))
@@ -132,12 +132,12 @@ public sealed class StateStorage {
 
     private static void CopyDirectoryContents(string sourceDirectoryPath, string destinationDirectoryPath) {
         foreach (var sourceDirectory in Directory.EnumerateDirectories(sourceDirectoryPath, "*", SearchOption.AllDirectories)) {
-            var relativePath = BclExtensions.GetRelativePath(sourceDirectoryPath, sourceDirectory);
+            var relativePath = BclCompat.GetRelativePath(sourceDirectoryPath, sourceDirectory);
             _ = Directory.CreateDirectory(Path.Combine(destinationDirectoryPath, relativePath));
         }
 
         foreach (var sourceFilePath in Directory.EnumerateFiles(sourceDirectoryPath, "*", SearchOption.AllDirectories)) {
-            var relativePath = BclExtensions.GetRelativePath(sourceDirectoryPath, sourceFilePath);
+            var relativePath = BclCompat.GetRelativePath(sourceDirectoryPath, sourceFilePath);
             var destinationFilePath = Path.Combine(destinationDirectoryPath, relativePath);
             var destinationParent = Path.GetDirectoryName(destinationFilePath);
             if (!string.IsNullOrWhiteSpace(destinationParent))

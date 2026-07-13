@@ -1,7 +1,7 @@
 using Newtonsoft.Json;
 using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.Product;
-using Pe.Shared.StorageRuntime.PolyFill;
+using Pe.Bcl.Compat;
 using Pe.Shared.StorageRuntime;
 
 namespace Pe.Revit.Scripting.Storage;
@@ -59,7 +59,7 @@ public sealed class ScriptArtifactWriter {
 
         var artifact = new ScriptArtifactData(
             Path.GetFileName(fullPath),
-            BclExtensions.GetRelativePath(this._runRoot, fullPath).Replace(Path.DirectorySeparatorChar, '/'),
+            BclCompat.GetRelativePath(this._runRoot, fullPath).Replace(Path.DirectorySeparatorChar, '/'),
             fullPath,
             contentType,
             new FileInfo(fullPath).Length

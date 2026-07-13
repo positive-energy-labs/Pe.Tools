@@ -62,7 +62,7 @@ public sealed class ModuleDocumentStorage {
             ? SearchOption.AllDirectories
             : SearchOption.TopDirectoryOnly;
         var directories = Directory.EnumerateDirectories(discoveryRootPath, "*", searchOption)
-            .Select(path => BclExtensions.GetRelativePath(rootDirectory, path).Replace('\\', '/'))
+            .Select(path => BclCompat.GetRelativePath(rootDirectory, path).Replace('\\', '/'))
             .ToList();
         var files = Directory.EnumerateFiles(discoveryRootPath, "*.json", searchOption)
             .Select(path => SettingsDiscoveryBuilder.CreateSettingsFileEntry(path, rootDirectory))
