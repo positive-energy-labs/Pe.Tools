@@ -184,12 +184,23 @@ export function executeSandboxCli<R>(
   });
 }
 
-// Real shell layer: same launcher chain as hostUpdateRoute/install-gc.
+// Real shell layer: same launcher chain as hostUpdateRoute/install-gc. An empty stdout means
+// the resolved CLI does not speak this verb (e.g. a pre-sandbox installed shim) — fail loudly
+// instead of relaying a blank 200.
 const runPeRevitCli: SandboxCliRunner<ChildProcessSpawner.ChildProcessSpawner> = (args) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const [cmd, baseArgs] = peRevitLauncher();
-    return yield* spawner.string(ChildProcess.make(cmd, [...baseArgs, ...args]));
+    const launch = peRevitLauncher();
+    const stdout = yield* spawner.string(
+      ChildProcess.make(launch.cmd, [...launch.args, ...args], { cwd: launch.cwd }),
+    );
+    if (!stdout.trim())
+      return yield* Effect.fail(
+        new Error(
+          `pe-revit produced no output for '${args.join(" ")}' — the resolved CLI (${launch.cmd} ${launch.args.join(" ")}) may predate the sandbox verb`,
+        ),
+      );
+    return stdout;
   });
 
 function jsonResponse(outcome: SandboxCliOutcome) {
