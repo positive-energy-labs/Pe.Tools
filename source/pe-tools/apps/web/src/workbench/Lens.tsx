@@ -529,7 +529,7 @@ export function Lens({
                   }}
                 >
                   <span className="num" title={formatTime(moment.createdAt)}>
-                    {bandNumber(index)}
+                    #{moment.turn}
                   </span>
                 </div>
               ))}
@@ -834,11 +834,9 @@ function isTimelineMemoryEntry(entry: WorkbenchObservationMemoryEntry): boolean 
   );
 }
 
-/* The 64px dial can't fit a clock string; the turn number is the dial's native unit (and the
-   URL's `turn` param). The timestamp survives as the hover title. */
-function bandNumber(index: number): string {
-  return `#${index + 1}`;
-}
+/* Band numbers show the SEMANTIC exchange turn (Moment.turn — increments per user send), not the
+   message index: it's the same coordinate as the URL's ?turn= and the transcript's turn tags, and
+   it stays stable while an assistant reply streams as several messages. */
 
 function formatTime(date?: Date): string | undefined {
   if (!date || Number.isNaN(date.getTime())) return undefined;
