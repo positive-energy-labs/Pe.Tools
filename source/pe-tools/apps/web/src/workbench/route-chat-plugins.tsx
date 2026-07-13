@@ -1,7 +1,6 @@
 import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import {
   type FamilyTypesDocument,
-  type ParameterLinkProfile,
   type ParameterLinksDocument,
   familyTypesRouteState,
   parameterLinksRouteState,
@@ -140,7 +139,9 @@ function ParameterLinksChatPlugin({
   const { config } = useWorkbench();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [previewedProfile, setPreviewedProfile] = useState<ParameterLinkProfile | null>(null);
+  const [previewedProfile, setPreviewedProfile] = useState<NonNullable<typeof profile> | null>(
+    null,
+  );
 
   const errors = evaluation?.issues.filter((issue) => issue.severity === "error") ?? [];
 
@@ -156,8 +157,8 @@ function ParameterLinksChatPlugin({
       });
       if (!result.ok) {
         setError(result.error ?? result.hint ?? `${name} failed.`);
-      } else if (name === "preview") {
-        setPreviewedProfile(commandProfile);
+      } else if (name === "preview" && profile) {
+        setPreviewedProfile(profile);
       } else {
         setPreviewedProfile(null);
       }
@@ -284,10 +285,7 @@ function ParameterLinksReview({
   );
 }
 
-function sameParameterLinkProfile(
-  left: ParameterLinkProfile | null | undefined,
-  right: ParameterLinkProfile | null | undefined,
-) {
+function sameParameterLinkProfile(left: unknown, right: unknown) {
   return left != null && right != null && JSON.stringify(left) === JSON.stringify(right);
 }
 
