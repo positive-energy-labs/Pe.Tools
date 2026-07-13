@@ -10,7 +10,7 @@ import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
 import { getHostStatus } from "./local-ops.ts";
 import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
 import { callRoute } from "./call-route.ts";
-import { installRoot, peRevitLauncher } from "./pe-revit-cli.ts";
+import { installRoot, peRevitLauncher, validatePeRevitEnvelope } from "./pe-revit-cli.ts";
 import { sandboxesRoute } from "./sandbox-route.ts";
 import { adminShutdownRoute, HostLifecycle, ServiceFileLive } from "./host-lifecycle.ts";
 import { MastraMountLive, MastraRuntime } from "./mastra-runtime.ts";
@@ -120,18 +120,20 @@ const hostUpdateRoute = HttpRouter.add("POST", "/host/update", () =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const launch = peRevitLauncher();
+    const args = ["install", "apply", "--release", "latest", "--json"] as const;
     const result = yield* Effect.result(
-      spawner.string(
-        ChildProcess.make(
-          launch.cmd,
-          [...launch.args, "install", "apply", "--release", "latest", "--json"],
-          { cwd: launch.cwd },
-        ),
-      ),
+      spawner.string(ChildProcess.make(launch.cmd, [...launch.args, ...args], { cwd: launch.cwd })),
     );
-    if (result._tag === "Success")
+    if (result._tag === "Success") {
       // stdout is the kernel's JSON envelope (verb/actions/verdicts) — pass it through verbatim.
-      return Response.text(result.success, { headers: { "content-type": "application/json" } });
+      try {
+        return Response.text(validatePeRevitEnvelope(result.success, args, launch), {
+          headers: { "content-type": "application/json" },
+        });
+      } catch (error) {
+        return yield* Response.json({ ok: false, error: String(error) }, { status: 500 });
+      }
+    }
     return yield* Response.json({ ok: false, error: String(result.failure) }, { status: 500 });
   }),
 );

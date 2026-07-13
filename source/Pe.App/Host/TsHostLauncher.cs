@@ -44,9 +44,8 @@ internal static class TsHostLauncher {
 
     private static int? TryReadServiceFilePort() {
         var deployment = PeRuntimeContext.Deployment;
-        if (deployment is null)
-            return null;
-        return ServiceFile.Read(deployment.AppBase, HostServiceName)?.Port;
+        var appBase = deployment?.AppBase ?? ProductRuntimeLayout.ForCurrentUser().RootPath;
+        return ServiceFile.Read(appBase, HostServiceName)?.Port;
     }
 
     private static TsHostLaunchResult EnsureInstalledHostRunning(InstalledProduct deployment) {
@@ -81,32 +80,33 @@ internal static class TsHostLauncher {
 
     private static TsHostLaunchResult EnsureDevHostRunning(PeRuntimeTarget runtimeResolution) {
         var runningHost = TryGetRunningHostStatus();
-        if (runningHost != null) {
-            if (MatchesRuntime(runningHost, runtimeResolution))
-                return new TsHostLaunchResult(
-                    true,
-                    true,
-                    false,
-                    $"Matching TS host is already listening: {Describe(runningHost)}"
-                );
-
-            if (!CanStartOver(runningHost, runtimeResolution))
-                return new TsHostLaunchResult(
-                    false,
-                    false,
-                    false,
-                    $"Host port is occupied by {Describe(runningHost)}, but Pe.App resolved {Describe(runtimeResolution)}. Stop the other host or switch lanes."
-                );
-        }
+        // Pe.App is a client of the one shared product host, not a lane supervisor. If an explicit
+        // installed/dev caller has already selected a healthy incarnation, connect to it instead of
+        // starting a dev-vs-installed takeover loop. Only an explicit service lifecycle action may
+        // replace that incarnation; every Revit request still carries its own session selector.
+        if (runningHost != null)
+            return new TsHostLaunchResult(
+                true,
+                true,
+                false,
+                $"Shared TS host is already listening: {Describe(runningHost)}"
+            );
 
         var hostExecutablePath = runtimeResolution.HostExecutablePath;
-        if (!File.Exists(hostExecutablePath))
+        if (!File.Exists(hostExecutablePath)) {
+            if (runtimeResolution.SourceHostWorkingDirectory is { } sourceHostWorkingDirectory)
+                return StartAndWait(
+                    CreateSourceStartInfo(sourceHostWorkingDirectory),
+                    runtimeResolution
+                );
+
             return new TsHostLaunchResult(
                 false,
                 false,
                 false,
                 $"{runtimeResolution.RuntimeLane} TS host was not found: {hostExecutablePath}"
             );
+        }
 
         return StartAndWait(
             CreateStartInfo(runtimeResolution),
@@ -121,6 +121,20 @@ internal static class TsHostLauncher {
             CreateNoWindow = true
         };
         startInfo.EnvironmentVariables[HostLaneVariable] = ToHostLane(runtimeResolution.RuntimeLane);
+        return startInfo;
+    }
+
+    private static ProcessStartInfo CreateSourceStartInfo(string workingDirectory) {
+        // A clean dev checkout may not have a staged Pe.Host.exe. Vite+ is the checkout-pinned
+        // launcher already used by `pea --prompt`; this starts source only and deliberately does
+        // not build, converge, restart, or otherwise mutate the live Revit session.
+        var startInfo = new ProcessStartInfo("vp", "run @pe/host#start") {
+            WorkingDirectory = workingDirectory,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        startInfo.EnvironmentVariables[HostLaneVariable] = "dev";
+        startInfo.EnvironmentVariables["PE_TOOLS_HOST_SOURCE_DIR"] = workingDirectory;
         return startInfo;
     }
 
@@ -150,10 +164,6 @@ internal static class TsHostLauncher {
             $"Started TS host process {process?.Id.ToString() ?? "unknown"}, but {HostProcessIdentity.ResolveHostBaseUrl()} did not listen within {timeout.TotalSeconds:0.#} seconds."
         );
     }
-
-    private static bool CanStartOver(RunningTsHostStatus runningHost, PeRuntimeTarget runtimeResolution) =>
-        runtimeResolution.RuntimeLane == ProductRuntimeLane.Dev
-        && string.Equals(runningHost.Lane, "installed", StringComparison.OrdinalIgnoreCase);
 
     private static bool MatchesRuntime(
         RunningTsHostStatus runningHost,

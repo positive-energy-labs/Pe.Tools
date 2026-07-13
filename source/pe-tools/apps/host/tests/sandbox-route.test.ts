@@ -11,6 +11,7 @@ import {
   unresponsiveSandboxEnvelope,
   type SandboxActionRequest,
 } from "../src/sandbox-route.ts";
+import { peRevitLauncher, validatePeRevitEnvelope } from "../src/pe-revit-cli.ts";
 
 function parsed(body: unknown): SandboxActionRequest {
   const result = parseSandboxActionRequest(body);
@@ -27,7 +28,10 @@ test("start on a source-linked (dev) host uses the checkout's Pe.App project", (
     join("C:\\repo\\Pe.Tools", "source", "Pe.App", "Pe.App.csproj"),
   ]);
 
-  const args = sandboxCliArgs(parsed({ action: "start", year: 25, id: "scratch", wait: true }), payload);
+  const args = sandboxCliArgs(
+    parsed({ action: "start", year: 25, id: "scratch", wait: true }),
+    payload,
+  );
   expect(args).toEqual([
     "sandbox",
     "start",
@@ -42,6 +46,33 @@ test("start on a source-linked (dev) host uses the checkout's Pe.App project", (
   ]);
 });
 
+test("dev host selects its checkout CLI even when an installed shim exists", () => {
+  expect(
+    peRevitLauncher(
+      { lane: "dev", sourceRoot: "C:\\repo\\Pe.Tools\\source\\pe-tools" },
+      undefined,
+      () => true,
+    ),
+  ).toEqual({
+    cmd: "dotnet",
+    args: ["tool", "run", "pe-revit", "--"],
+    cwd: join("C:\\repo\\Pe.Tools"),
+  });
+  expect(() => peRevitLauncher({ lane: "dev", sourceRoot: null }, undefined, () => true)).toThrow(
+    "cannot resolve its source checkout",
+  );
+});
+
+test("sandbox CLI rejects empty, invalid, and non-envelope output", () => {
+  const launch = { cmd: "dotnet", args: ["pe-revit"] } as const;
+  const args = ["sandbox", "status", "--json"];
+  expect(() => validatePeRevitEnvelope("", args, launch)).toThrow("no output");
+  expect(() => validatePeRevitEnvelope("not json", args, launch)).toThrow("invalid JSON");
+  expect(() => validatePeRevitEnvelope("{}", args, launch)).toThrow("non-envelope");
+  const envelope = '{"result":{},"resolved":{},"diagnostics":[],"nextSteps":[]}';
+  expect(validatePeRevitEnvelope(envelope, args, launch)).toBe(envelope);
+});
+
 test("start on an installed-lane host uses the shipped Pe.App payload", () => {
   expect(resolveSandboxStartPayloadArgs("installed", null)).toEqual(["--installed", "Pe.App"]);
   // A dev host with no resolvable source root also falls back to the shipped payload.
@@ -53,15 +84,9 @@ test("start on an installed-lane host uses the shipped Pe.App payload", () => {
 
 test("wait/restart/stop map to --id verbs; stop honors force; timeouts skip stop", () => {
   const payload = ["--installed", "Pe.App"];
-  expect(sandboxCliArgs(parsed({ action: "wait", id: "scratch", timeoutSeconds: 300 }), payload)).toEqual([
-    "sandbox",
-    "wait",
-    "--id",
-    "scratch",
-    "--timeout-seconds",
-    "300",
-    "--json",
-  ]);
+  expect(
+    sandboxCliArgs(parsed({ action: "wait", id: "scratch", timeoutSeconds: 300 }), payload),
+  ).toEqual(["sandbox", "wait", "--id", "scratch", "--timeout-seconds", "300", "--json"]);
   expect(sandboxCliArgs(parsed({ action: "restart", id: "scratch" }), payload)).toEqual([
     "sandbox",
     "restart",
@@ -70,7 +95,10 @@ test("wait/restart/stop map to --id verbs; stop honors force; timeouts skip stop
     "--json",
   ]);
   expect(
-    sandboxCliArgs(parsed({ action: "stop", id: "scratch", force: true, timeoutSeconds: 60 }), payload),
+    sandboxCliArgs(
+      parsed({ action: "stop", id: "scratch", force: true, timeoutSeconds: 60 }),
+      payload,
+    ),
   ).toEqual(["sandbox", "stop", "--id", "scratch", "--force", "--json"]);
 });
 
@@ -88,7 +116,9 @@ test("action body validation mirrors the CLI invocation contract", () => {
 });
 
 test("caller-provided timeouts get a margin over the CLI's own budget", () => {
-  expect(sandboxActionTimeoutMs(parsed({ action: "wait", id: "s", timeoutSeconds: 300 }))).toBe(360_000);
+  expect(sandboxActionTimeoutMs(parsed({ action: "wait", id: "s", timeoutSeconds: 300 }))).toBe(
+    360_000,
+  );
   expect(sandboxActionTimeoutMs(parsed({ action: "wait", id: "s" }))).toBe(600_000);
 });
 
@@ -115,9 +145,14 @@ test("CLI stdout (the JSON envelope) relays verbatim, even for failed verdicts",
 
 test("a spawn failure is a plain 500", async () => {
   const outcome = await Effect.runPromise(
-    executeSandboxCli(["sandbox", "status", "--json"], () => Effect.fail("pe-revit not found"), 1_000, {
-      action: "status",
-    }),
+    executeSandboxCli(
+      ["sandbox", "status", "--json"],
+      () => Effect.fail("pe-revit not found"),
+      1_000,
+      {
+        action: "status",
+      },
+    ),
   );
 
   expect(outcome.status).toBe(500);

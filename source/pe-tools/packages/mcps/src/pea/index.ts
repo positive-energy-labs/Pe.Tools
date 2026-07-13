@@ -272,7 +272,7 @@ export const hostOperationCall = createTool({
 export const scriptExecute = createTool({
   id: "script_execute",
   description:
-    "Execute trusted in-process C# through the Revit scripting contract. Pass scriptContent for an inline snippet (prefer Execute-body statements like WriteLine(...); a full PeScriptContainer class is also allowed) OR sourcePath for a pod entrypoint declared in the workspace's pod.json — not both. Defaults to ReadOnly: active-document changes are rolled back and discarded with a warning; pass permissionMode=WriteTransaction to keep changes. Use Result(...) for structured JSON; check ct / ThrowIfCancelled() in loops so the cooperative timeout can interrupt them.",
+    "Execute trusted in-process C# through the Revit scripting contract. Pass scriptContent for an inline snippet (prefer Execute-body statements like WriteLine(...); a full PeScriptContainer class is also allowed) OR sourcePath for a pod entrypoint declared in the workspace's pod.json — not both. Defaults to ReadOnly: active-document changes are rolled back. Use WriteTransaction for document edits, or NoTransaction only for APIs such as Document.SaveAs that reject an open transaction and need no rollback guard. Use Result(...) for structured JSON; check ct / ThrowIfCancelled() in loops so the cooperative timeout can interrupt them. This tool never builds, converges, or restarts Revit; inspect pe_status and run SDK convergence explicitly when freshness is required.",
   inputSchema: scriptExecuteInputSchema,
   execute: async (input) => {
     try {

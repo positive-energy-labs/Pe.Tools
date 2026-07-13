@@ -9,6 +9,8 @@
  */
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,6 +43,7 @@ import {
   resolveWorkspaceKey,
 } from "@pe/mcps";
 import { HostCallError } from "@pe/host-contracts/operation-types";
+import { ensureRunning } from "../../host/src/pe-service.ts";
 
 const peaConfigDir = ".pea";
 const runtimeCloseTimeoutMs = 5000;
@@ -99,6 +102,7 @@ export interface PeaPromptRequest {
   threadId?: string;
   json?: boolean;
   timeoutSeconds?: number;
+  workspaceRoot?: string;
 }
 
 export interface PeaPromptResult {
@@ -133,7 +137,7 @@ export async function runPeaPrompt(request: PeaPromptRequest): Promise<number> {
 export async function runPeaPromptTurn(request: PeaPromptRequest): Promise<PeaPromptResult> {
   const timeoutSeconds = request.timeoutSeconds ?? defaultPeaPromptTimeoutSeconds;
   trace("creating runtime");
-  const runtime = await createPeaPromptRuntime();
+  const runtime = await createPeaPromptRuntime(request);
   trace("runtime ready");
   traceSessionEvents(runtime.session);
   try {
@@ -175,17 +179,17 @@ function withTimeout<T>(task: Promise<T> | T, timeoutMs: number): Promise<T> {
   });
 }
 
-async function createPeaPromptRuntime(): Promise<PeaPromptRuntime> {
-  const hostBaseUrl = resolveHostBaseUrl();
+async function createPeaPromptRuntime(request: PeaPromptRequest): Promise<PeaPromptRuntime> {
+  const hostBaseUrl = await ensureTsHostRunning(resolveHostBaseUrl());
   const workspaceKey = resolveWorkspaceKey();
   configurePeaProductToolContext({ hostBaseUrl, workspaceKey });
 
-  const cwd = await resolvePeaPromptCwd(hostBaseUrl, workspaceKey);
-  // The host bootstrap already resolved the real product home (Documents may be
-  // OneDrive-redirected, so resolvePeaProductHomePath()'s homedir fallback can name a
-  // different directory). Skills must live under the contained workspace filesystem's
-  // basePath (= cwd) or discovery silently rejects the skills root and the skill list
-  // comes up empty.
+  const cwd = request.workspaceRoot
+    ? path.resolve(request.workspaceRoot)
+    : await resolvePeaPromptCwd(hostBaseUrl, workspaceKey);
+  // Bootstrap (or the explicit headless workspace root) resolves the real product home. Skills
+  // must live under the contained workspace filesystem's basePath (= cwd) or discovery silently
+  // rejects the skills root and the skill list comes up empty.
   const productHomePath = resolvePeaProductHomePath({ productHomePath: cwd });
   process.chdir(cwd);
 
@@ -260,7 +264,6 @@ async function resolvePeaPromptCwd(hostBaseUrl: string, workspaceKey: string): P
   // call hard-fails on ambiguity, and pea's product home lives with the user session.
   const client = new HostRpcCaller({ hostBaseUrl: hostBaseUrl, bridgeSessionId: "user" });
   try {
-    await ensureTsHostRunning(client, hostBaseUrl);
     const bootstrap = await client.call("scripting.workspace.bootstrap", {
       workspaceKey,
     });
@@ -274,12 +277,32 @@ async function resolvePeaPromptCwd(hostBaseUrl: string, workspaceKey: string): P
   }
 }
 
-async function ensureTsHostRunning(client: HostRpcCaller, hostBaseUrl: string): Promise<void> {
+async function ensureTsHostRunning(hostBaseUrl: string): Promise<string> {
+  // An installed caller must supervise the installed incarnation even when a healthy dev host
+  // currently owns the preferred port. The service primitive performs the authenticated takeover.
+  const installed = await resolveInstalledHostLaunch();
+  if (installed) {
+    const result = await ensureRunning(installed.appBase, "host", {
+      entryPath: installed.entryPath,
+      health: "/host/status",
+      shutdown: "/admin/shutdown",
+      expectedVersion: installed.version,
+      lane: "installed",
+    });
+    if (result.state === "failed") {
+      throw new Error(`Unable to start the installed Pe.Tools host: ${result.reason}`);
+    }
+    return `http://127.0.0.1:${result.file.port}`;
+  }
+
+  const client = new HostRpcCaller({ hostBaseUrl });
   try {
     await client.call("host.status");
-    return;
+    return hostBaseUrl;
   } catch (error) {
-    if (error instanceof HostCallError) return;
+    // HostRpcCaller also wraps transport failures as HostCallError(status=0). Only a real HTTP
+    // response proves that a service owns this endpoint; status 0 must enter service supervision.
+    if (error instanceof HostCallError && error.status > 0) return hostBaseUrl;
   }
 
   const cwd = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -301,10 +324,10 @@ async function ensureTsHostRunning(client: HostRpcCaller, hostBaseUrl: string): 
     await delay(250);
     try {
       await client.call("host.status");
-      return;
+      return hostBaseUrl;
     } catch (error) {
       lastError = error;
-      if (error instanceof HostCallError) return;
+      if (error instanceof HostCallError && error.status > 0) return hostBaseUrl;
     }
   }
 
@@ -312,6 +335,40 @@ async function ensureTsHostRunning(client: HostRpcCaller, hostBaseUrl: string): 
   throw new Error(
     `Started @pe/host via \`${command} ${args.join(" ")}\`, but it did not become reachable at ${hostBaseUrl} within 12 seconds. Last probe error: ${detail}`,
   );
+}
+
+async function resolveInstalledHostLaunch(): Promise<{
+  appBase: string;
+  entryPath: string;
+  version: string;
+} | null> {
+  // Installed SEA layout: <appBase>/bin/pea/versions/<version>/pea.exe. Walking to the copied
+  // manifest keeps this independent of CWD and uses the same product root the SDK installer wrote.
+  for (let directory = path.dirname(process.execPath); ; directory = path.dirname(directory)) {
+    const manifest = path.join(directory, "product.payloads.json");
+    if (existsSync(manifest)) {
+      try {
+        const receipt = JSON.parse(
+          await readFile(path.join(directory, "install.receipt.json"), "utf8"),
+        ) as { releaseVersion?: unknown };
+        const version = (
+          await readFile(path.join(directory, "bin", "host", "current.txt"), "utf8")
+        ).trim();
+        if (typeof receipt.releaseVersion !== "string" || receipt.releaseVersion !== version) {
+          throw new Error("installed host pointer does not match the install receipt");
+        }
+        const entryPath = path.join(directory, "bin", "host", "versions", version, "Pe.Host.exe");
+        if (!existsSync(entryPath))
+          throw new Error(`installed host entry is missing: ${entryPath}`);
+        return { appBase: directory, entryPath, version };
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new Error(`Installed Pe.Tools host resolution failed at ${directory}: ${detail}`);
+      }
+    }
+    const parent = path.dirname(directory);
+    if (parent === directory) return null;
+  }
 }
 
 function resolveCurrentModel(

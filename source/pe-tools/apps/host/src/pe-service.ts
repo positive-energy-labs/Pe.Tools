@@ -1,6 +1,7 @@
+/* eslint-disable no-control-regex -- Windows rejects ASCII control characters in service names. */
 // pe-service.ts — the SDK-owned TypeScript client for the Pe service primitive (SDK-LEDGER A10).
 //
-// Service-file schema version: 1
+// Service-file schema version: 2
 // OWNED BY Pe.Revit.Sdk — DO NOT FORK. Copy this file verbatim into a consumer; the SDK ships it
 // inside the Pe.Revit.Sdk nupkg under clients/ts/ so there is exactly ONE implementation per language
 // (this mirrors Pe.Revit.Loader's C# InstalledProduct.EnsureRunning / ServiceFile byte-for-byte in
@@ -8,7 +9,8 @@
 // global fetch/AbortSignal (Node 18+).
 //
 // The runtime service file the SERVICE writes when it binds and deletes on graceful shutdown:
-//   <appBase>/state/service/<name>.json = { pid, port, version, lane, token }
+//   <appBase>/state/service/<name>.json =
+//     { schemaVersion, instanceId, pid, processStartUtc, port, version, lane, token }
 //   <appBase>/state/service/<name>.log  = the spawned service's captured stdout+stderr (truncated at each spawn)
 // Discovery is file-based: the port the service actually bound is authoritative; a manifest's
 // preferredPort is only a hint and is never hardcoded by a client. The shutdown endpoint is authorized
@@ -22,18 +24,21 @@
 
 import { spawn } from "node:child_process";
 import { closeSync, existsSync, mkdirSync, openSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 
-export const SERVICE_FILE_SCHEMA_VERSION = 1;
+export const SERVICE_FILE_SCHEMA_VERSION = 2;
 const SHUTDOWN_TOKEN_HEADER = "x-pe-service-token";
 
 export type ServiceTier = "managed" | "plain";
 
 /** The runtime service file: { pid, port, version, lane, token }. `port` is the port actually bound. */
 export interface ServiceFile {
+  readonly schemaVersion: 2;
+  readonly instanceId: string;
   readonly pid: number;
+  readonly processStartUtc: string;
   readonly port: number;
   readonly version: string;
   readonly lane: string;
@@ -47,8 +52,8 @@ export interface EnsureRunningOptions {
   readonly health: string;
   /** POST path for a token-authenticated graceful stop, e.g. "/admin/shutdown". Managed tier only. */
   readonly shutdown?: string;
-  /** managed = our own exe (token shutdown); plain = third-party/sidecar (pid-kill). */
-  readonly tier: ServiceTier;
+  /** managed = our own exe (default, token shutdown); plain = third-party/sidecar (pid-kill). */
+  readonly tier?: ServiceTier;
   /** Expected version; compared to the file's version. Omit to skip the version check (unversioned). */
   readonly expectedVersion?: string;
   /** Expected lane ("installed" | "dev"); compared to the file's lane. */
@@ -57,7 +62,7 @@ export interface EnsureRunningOptions {
   readonly timeoutMs?: number;
   /** Extra args for the spawned entry (default none). */
   readonly spawnArgs?: readonly string[];
-  /** Extra env for the spawned entry (merged over process.env; PE_LANE is set from `lane`). */
+  /** Extra env for the spawned entry. `PE_LANE` is always forced from `lane` after this merge. */
   readonly spawnEnv?: Readonly<Record<string, string>>;
 }
 
@@ -72,7 +77,62 @@ const PORT_RELEASE_TIMEOUT_MS = 5_000;
 const POLL_INTERVAL_MS = 250;
 const DEFAULT_STARTUP_TIMEOUT_MS = 15_000;
 
+interface ServiceLease {
+  readonly path: string;
+  readonly token: string;
+}
+
+async function acquireServiceLease(
+  appBase: string,
+  name: string,
+  timeoutMs: number,
+): Promise<ServiceLease | null> {
+  const path = join(appBase, "state", "service", `${name}.lock`);
+  await mkdir(dirname(path), { recursive: true });
+  const deadline = Date.now() + timeoutMs;
+  do {
+    const token = randomUUID();
+    try {
+      const handle = await open(path, "wx");
+      try {
+        await handle.writeFile(JSON.stringify({ pid: process.pid, token }), "utf8");
+      } finally {
+        await handle.close();
+      }
+      return { path, token };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") return null;
+      if (await leaseOwnerIsGone(path)) {
+        await rm(path, { force: true }).catch(() => {});
+        continue;
+      }
+      await delay(100);
+    }
+  } while (Date.now() < deadline);
+  return null;
+}
+
+async function releaseServiceLease(lease: ServiceLease): Promise<void> {
+  try {
+    const owner = JSON.parse(await readFile(lease.path, "utf8")) as { token?: unknown };
+    if (owner.token === lease.token) await rm(lease.path, { force: true });
+  } catch {}
+}
+
+async function leaseOwnerIsGone(path: string): Promise<boolean> {
+  try {
+    const owner = JSON.parse(await readFile(path, "utf8")) as { pid?: unknown };
+    if (typeof owner.pid === "number") return !(await pidIsAlive(owner.pid));
+  } catch {}
+  try {
+    return Date.now() - (await stat(path)).mtimeMs > 2_000;
+  } catch {
+    return false;
+  }
+}
+
 export function serviceFilePath(appBase: string, name: string): string {
+  if (!isSafeServiceName(name)) throw new Error("Service name must be one safe file-name segment.");
   return join(appBase, "state", "service", `${name}.json`);
 }
 
@@ -82,9 +142,21 @@ export async function readServiceFile(appBase: string, name: string): Promise<Se
   try {
     if (!existsSync(path)) return null;
     const raw = JSON.parse(await readFile(path, "utf8")) as Partial<ServiceFile>;
-    if (typeof raw.pid !== "number" || typeof raw.port !== "number") return null;
+    if (
+      raw.schemaVersion !== SERVICE_FILE_SCHEMA_VERSION ||
+      typeof raw.instanceId !== "string" ||
+      !raw.instanceId ||
+      typeof raw.processStartUtc !== "string" ||
+      !raw.processStartUtc ||
+      typeof raw.pid !== "number" ||
+      typeof raw.port !== "number"
+    )
+      return null;
     return {
+      schemaVersion: SERVICE_FILE_SCHEMA_VERSION,
+      instanceId: raw.instanceId,
       pid: raw.pid,
+      processStartUtc: raw.processStartUtc,
       port: raw.port,
       version: typeof raw.version === "string" ? raw.version : "",
       lane: typeof raw.lane === "string" ? raw.lane : "",
@@ -103,12 +175,49 @@ export async function writeServiceFile(
 ): Promise<void> {
   const path = serviceFilePath(appBase, name);
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, `${JSON.stringify(file, null, 2)}\n`, "utf8");
+  const temp = `${path}.tmp-${randomUUID()}`;
+  await writeFile(temp, `${JSON.stringify(file, null, 2)}\n`, "utf8");
+  try {
+    await rename(temp, path);
+  } finally {
+    await rm(temp, { force: true }).catch(() => {});
+  }
 }
 
-/** Delete the service file (services call this on graceful shutdown). Best-effort. */
-export async function deleteServiceFile(appBase: string, name: string): Promise<void> {
-  await rm(serviceFilePath(appBase, name), { force: true }).catch(() => {});
+/** Delete only the named launch's service file. Best-effort; a successor's identity wins. */
+export async function deleteServiceFile(
+  appBase: string,
+  name: string,
+  instanceId: string,
+): Promise<boolean> {
+  const current = await readServiceFile(appBase, name);
+  if (!current || current.instanceId !== instanceId) return false;
+  try {
+    await rm(serviceFilePath(appBase, name));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Create a schema-v2 identity for the calling service after it has bound its loopback port. */
+export function createServiceFile(
+  port: number,
+  version: string,
+  lane: string,
+  token: string,
+  instanceId: string = randomUUID(),
+): ServiceFile {
+  return {
+    schemaVersion: SERVICE_FILE_SCHEMA_VERSION,
+    instanceId,
+    pid: process.pid,
+    processStartUtc: new Date(Date.now() - process.uptime() * 1000).toISOString(),
+    port,
+    version,
+    lane,
+    token,
+  };
 }
 
 /**
@@ -127,18 +236,46 @@ export async function ensureRunning(
   name: string,
   opts: EnsureRunningOptions,
 ): Promise<EnsureRunningResult> {
-  const existing = await readServiceFile(appBase, name);
-  if (existing) {
-    if (await probeHealth(existing.port, opts.health)) {
-      if (matches(existing, opts.expectedVersion, opts.lane))
-        return { state: "running", file: existing };
-      await shutDown(appBase, existing, opts); // healthy but stale/wrong-lane ⇒ replace it
-    } else {
-      await killByPid(appBase, existing.pid); // recorded but not answering ⇒ dead/orphaned; clear it out
+  if (!isSafeServiceName(name))
+    return { state: "failed", reason: `payload '${name}' is not a safe service name` };
+  if (
+    !isLoopbackPath(opts.health) ||
+    (opts.shutdown !== undefined && !isLoopbackPath(opts.shutdown))
+  )
+    return {
+      state: "failed",
+      reason: "service health/shutdown must be loopback absolute paths beginning with one '/'",
+    };
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_STARTUP_TIMEOUT_MS;
+  const lease = await acquireServiceLease(appBase, name, timeoutMs);
+  if (!lease) return { state: "failed", reason: `service '${name}' is busy in another supervisor` };
+  try {
+    const existing = await readServiceFile(appBase, name);
+    if (existing) {
+      const stopped = (await probeHealth(existing.port, opts.health))
+        ? matches(existing, opts.expectedVersion, opts.lane)
+          ? null
+          : await shutDown(appBase, existing, opts)
+        : await killByPid(appBase, existing);
+      if (stopped === null) return { state: "running", file: existing };
+      if (!stopped)
+        return {
+          state: "failed",
+          reason: `service '${name}' could not be safely stopped; identity was preserved`,
+        };
+      const current = await readServiceFile(appBase, name);
+      if (current && current.instanceId !== existing.instanceId)
+        return {
+          state: "failed",
+          reason: `service '${name}' changed identity while stopping; retry`,
+        };
+      if (current && !(await deleteServiceFile(appBase, name, existing.instanceId)))
+        return { state: "failed", reason: `service '${name}' state could not be cleared; retry` };
     }
-    await deleteServiceFile(appBase, name); // let the freshly spawned service write a clean file
+    return await spawnAndWait(appBase, name, opts);
+  } finally {
+    await releaseServiceLease(lease);
   }
-  return spawnAndWait(appBase, name, opts);
 }
 
 function matches(file: ServiceFile, expectedVersion: string | undefined, lane: string): boolean {
@@ -150,16 +287,17 @@ async function shutDown(
   appBase: string,
   file: ServiceFile,
   opts: EnsureRunningOptions,
-): Promise<void> {
+): Promise<boolean> {
   if (
-    opts.tier === "managed" &&
+    (opts.tier ?? "managed") === "managed" &&
     opts.shutdown &&
     file.token &&
     (await requestShutdown(file.port, opts.shutdown, file.token)) &&
     (await waitForPortRelease(file.port, opts.health))
-  )
-    return;
-  await killByPid(appBase, file.pid); // plain, or graceful stop unavailable/refused/timed out
+  ) {
+    if (await waitForProcessExit(file.pid, 2_000)) return true;
+  }
+  return killByPid(appBase, file); // plain, or graceful stop unavailable/refused/timed out
 }
 
 async function spawnAndWait(
@@ -180,12 +318,26 @@ async function spawnAndWait(
       reason: `failed to open service log '${logPath}': ${describe(error)}`,
     };
   }
+  let child: ReturnType<typeof spawn> | undefined;
+  const childStartUtc = new Date().toISOString();
   try {
-    const child = spawn(opts.entryPath, [...(opts.spawnArgs ?? [])], {
+    child = spawn(opts.entryPath, [...(opts.spawnArgs ?? [])], {
       cwd: dirname(opts.entryPath),
       detached: true,
       stdio: ["ignore", logFd, logFd],
-      env: { ...process.env, PE_LANE: opts.lane, ...opts.spawnEnv },
+      env: { ...process.env, ...opts.spawnEnv, PE_LANE: opts.lane },
+    });
+    await new Promise<void>((resolve, reject) => {
+      const onSpawn = () => {
+        child!.off("error", onError);
+        resolve();
+      };
+      const onError = (error: Error) => {
+        child!.off("spawn", onSpawn);
+        reject(error);
+      };
+      child!.once("spawn", onSpawn);
+      child!.once("error", onError);
     });
     child.unref(); // detached: we never hold the child — the OS/service owns its lifetime
   } catch (error) {
@@ -203,16 +355,22 @@ async function spawnAndWait(
     if (!(await probeHealth(file.port, opts.health))) continue;
     if (matches(file, opts.expectedVersion, opts.lane)) return { state: "started", file };
   }
+  const cleaned = child?.pid ? await killByPid(appBase, child.pid, childStartUtc) : false;
+  const timedOutFile = await readServiceFile(appBase, name);
+  if (cleaned && timedOutFile && !(await pidIsAlive(timedOutFile.pid)))
+    await deleteServiceFile(appBase, name, timedOutFile.instanceId);
   return {
     state: "failed",
-    reason: `'${name}' did not become healthy within ${(timeoutMs / 1000).toFixed(1)}s`,
+    reason:
+      `'${name}' did not become healthy within ${(timeoutMs / 1000).toFixed(1)}s; ` +
+      (cleaned ? "spawned process tree was stopped" : "spawned process tree could not be stopped"),
   };
 }
 
 async function probeHealth(port: number, healthPath: string): Promise<boolean> {
   if (!healthPath) return false;
   try {
-    const response = await fetch(`http://127.0.0.1:${port}${healthPath}`, {
+    const response = await fetch(loopbackUrl(port, healthPath), {
       signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
     });
     return response.status < 400;
@@ -227,7 +385,7 @@ async function requestShutdown(
   token: string,
 ): Promise<boolean> {
   try {
-    const response = await fetch(`http://127.0.0.1:${port}${shutdownPath}`, {
+    const response = await fetch(loopbackUrl(port, shutdownPath), {
       method: "POST",
       headers: { [SHUTDOWN_TOKEN_HEADER]: token, "content-type": "application/json" },
       body: JSON.stringify({ token }),
@@ -237,6 +395,36 @@ async function requestShutdown(
   } catch {
     return false;
   }
+}
+
+function isSafeServiceName(name: string): boolean {
+  if (
+    !name ||
+    name === "." ||
+    name === ".." ||
+    /[<>:"/\\|?*\x00-\x1f]/.test(name) ||
+    /[ .]$/.test(name)
+  )
+    return false;
+  return !/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name);
+}
+
+function isLoopbackPath(path: string): boolean {
+  if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\") || path.includes("#"))
+    return false;
+  try {
+    const url = new URL(path, "http://127.0.0.1:1");
+    return url.protocol === "http:" && url.hostname === "127.0.0.1" && url.port === "1";
+  } catch {
+    return false;
+  }
+}
+
+function loopbackUrl(port: number, path: string): URL {
+  const url = new URL(path, `http://127.0.0.1:${port}`);
+  if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" || Number(url.port) !== port)
+    throw new Error("Service endpoint escaped loopback.");
+  return url;
 }
 
 async function waitForPortRelease(port: number, healthPath: string): Promise<boolean> {
@@ -253,17 +441,35 @@ async function waitForPortRelease(port: number, healthPath: string): Promise<boo
  * reuses pids freely, so an unverified kill could take out an innocent process. Best-effort; if the
  * image cannot be verified, the process is left alone. Returns true when the process is gone.
  */
-async function killByPid(appBase: string, pid: number): Promise<boolean> {
+async function killByPid(appBase: string, file: ServiceFile): Promise<boolean>;
+async function killByPid(appBase: string, pid: number, processStartUtc: string): Promise<boolean>;
+async function killByPid(
+  appBase: string,
+  fileOrPid: ServiceFile | number,
+  spawnedStartUtc?: string,
+): Promise<boolean> {
+  const pid = typeof fileOrPid === "number" ? fileOrPid : fileOrPid.pid;
+  const expectedStart =
+    typeof fileOrPid === "number" ? spawnedStartUtc! : fileOrPid.processStartUtc;
   if (!(await pidIsAlive(pid))) return true; // already gone
-  const image = await pidImagePath(pid);
-  if (!image) return false; // cannot verify ⇒ do not kill
-  if (!withinRoot(image, appBase)) return false; // not ours — innocent pid reuse
+  const identity = await pidIdentity(pid);
+  if (!identity || !withinRoot(identity.path, appBase)) return false;
+  if (Math.abs(Date.parse(identity.startUtc) - Date.parse(expectedStart)) > 2_000) return false;
   try {
-    process.kill(pid);
+    const { execFile } = await import("node:child_process");
+    await new Promise<void>((resolve, reject) => {
+      execFile("taskkill", ["/PID", String(pid), "/T", "/F"], { timeout: 5_000 }, (error) =>
+        error ? reject(error) : resolve(),
+      );
+    });
   } catch {
-    return false;
+    if (await pidIsAlive(pid)) return false;
   }
-  const deadline = Date.now() + 2_000;
+  return waitForProcessExit(pid, 5_000);
+}
+
+async function waitForProcessExit(pid: number, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (!(await pidIsAlive(pid))) return true;
     await delay(100);
@@ -280,17 +486,34 @@ async function pidIsAlive(pid: number): Promise<boolean> {
   }
 }
 
-/** Resolve a pid's executable image path (Windows: PowerShell Get-Process). null if unknown. */
-async function pidImagePath(pid: number): Promise<string | null> {
+/** Resolve the image and start time together so a reused pid never inherits stale ownership. */
+async function pidIdentity(pid: number): Promise<{ path: string; startUtc: string } | null> {
   if (process.platform !== "win32") return null; // the SDK targets Windows; other platforms: cannot verify
   try {
     const { execFile } = await import("node:child_process");
-    return await new Promise<string | null>((resolve) => {
+    return await new Promise<{ path: string; startUtc: string } | null>((resolve) => {
       execFile(
         "powershell",
-        ["-NoProfile", "-NonInteractive", "-Command", `(Get-Process -Id ${pid}).Path`],
+        [
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          `$p=Get-Process -Id ${pid}; [pscustomobject]@{path=$p.Path;startUtc=$p.StartTime.ToUniversalTime().ToString('o')} | ConvertTo-Json -Compress`,
+        ],
         { timeout: 3_000 },
-        (error, stdout) => resolve(error ? null : stdout.trim() || null),
+        (error, stdout) => {
+          if (error) return resolve(null);
+          try {
+            const value = JSON.parse(stdout) as { path?: unknown; startUtc?: unknown };
+            resolve(
+              typeof value.path === "string" && typeof value.startUtc === "string"
+                ? { path: value.path, startUtc: value.startUtc }
+                : null,
+            );
+          } catch {
+            resolve(null);
+          }
+        },
       );
     });
   } catch {
