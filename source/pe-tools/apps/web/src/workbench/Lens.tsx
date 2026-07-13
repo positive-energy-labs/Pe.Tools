@@ -25,8 +25,8 @@ import {
  * parallax layout: `chat` shows chat + MapDial; `trace` adds the detail lane. The MapDial
  * gutter and candlestick focal marker are always present.
  *
- * Provenance across lanes is shown by the focal point + the fisheye, NOT by wires: the
- * message on the focal axis highlights, and its trace card expands in place. The chat
+ * Provenance across lanes is shown by the focal point, NOT by wires: the message on the
+ * focal axis highlights, and the focal tool's I/O renders in the pinned inspect window. The chat
  * column is rendered by assistant-ui (text/reasoning/tool parts via `MessagePrimitive.Parts`),
  * but the LAYOUT — sticky MapDial, fisheye trace lane, single rAF scroll controller — stays
  * ours. assistant-ui renders each message inside a `.lens-moment` section we own (ref +
@@ -119,6 +119,10 @@ export function Lens({
   const cardRefs = useRef(new Map<string, HTMLElement>());
   const geomRef = useRef<Geom[]>([]);
   const hoverKeyRef = useRef<string | null>(null);
+  // The tool whose I/O the static inspect window shows: hover wins, else the focal tool.
+  // Changes only at tool boundaries / hover edges, so the setState is coarse, not per-frame.
+  const focalToolRef = useRef<string | null>(null);
+  const [inspectKey, setInspectKey] = useState<string | null>(null);
   const turnRef = useRef<number | undefined>(initialTurn);
   // Read by the controller's initial snap only; kept off the effect deps so the debounced turn→URL
   // write (which updates the `initialTurn` prop) never re-runs/re-measures the controller mid-scroll.
@@ -206,13 +210,6 @@ export function Lens({
     if (!scroller || !frame || !strip) return;
 
     const detailKeys = new Set(traceCells.map((cell) => cell.key));
-    // Hover link: a chat message highlights its first tool card.
-    const cardByParent = new Map<string, string>();
-    for (const cell of traceCells) {
-      if (cell.parentId && !cardByParent.has(cell.parentId)) {
-        cardByParent.set(cell.parentId, cell.key);
-      }
-    }
 
     let geom: Geom[] = [];
     let cards: { key: string; el: HTMLElement }[] = [];
@@ -223,14 +220,9 @@ export function Lens({
     // The inline chat marker for each tool key, so only the single focal tool's rail lights up.
     let markerByKey = new Map<string, HTMLElement>();
 
-    // Fisheye, two speeds. POSITION tracks continuously: the lane translates every frame so the
-    // nearest card's center rides the focal axis (parallax follow, never dumped to the bottom).
-    // EXPANSION is debounced: a card only blooms to full height after the scroll settles (~180ms),
-    // and everything collapses the instant you move again — so cards stop flickering open mid-scroll.
-    let committedKey: string | null = null; // the currently-expanded card
-    let pendingKey: string | null = null; // the last focal target seen (drives the settle timer)
-    let expandTimer = 0;
-    let fisheyeRaf = 0;
+    // The lane is now a static list of fixed-height rows: no expand-in-place, no debounce, no
+    // height pump. POSITION still tracks continuously (the row nearest the focal axis rides it);
+    // the tool's I/O renders in the pinned inspect window up top instead (React state, coarse).
     const laneCenterOf = (key: string | null): number => {
       const cell = key ? cards.find((c) => c.key === key)?.el : undefined;
       return cell ? cell.offsetTop + cell.offsetHeight / 2 : 0;
@@ -238,44 +230,20 @@ export function Lens({
     const layoutLane = (V: number, anchorKey: string | null) => {
       const inner = traceInnerRef.current;
       // The lane body starts HEAD_H below the viewport top (under the sticky sidebar head), so
-      // subtract it to land the focal card on the same axis as the chat's focal message.
+      // subtract it to land the focal row on the same axis as the chat's focal message.
       if (inner)
         inner.style.transform = `translateY(${FOCAL * V - HEAD_H - laneCenterOf(anchorKey)}px)`;
     };
-    const applyExpansion = (key: string | null) => {
+    const updateInspect = () => setInspectKey(hoverKeyRef.current ?? focalToolRef.current);
+    const positionLane = (V: number, focalCardKey: string | null) => {
+      layoutLane(V, focalCardKey);
       const hoverKey = hoverKeyRef.current;
       for (const c of cards) {
-        const on = c.key === key;
-        c.el.style.maxHeight = on ? "400px" : "28px";
-        c.el.classList.toggle("focal", on);
-        c.el.classList.toggle("hover", c.key === hoverKey && !on);
+        c.el.classList.toggle("focal", c.key === focalCardKey);
+        c.el.classList.toggle("hover", c.key === hoverKey && c.key !== focalCardKey);
       }
-    };
-    const positionFisheye = (V: number, focalCardKey: string | null) => {
-      layoutLane(V, focalCardKey); // continuous tracking, every frame
-      const hoverKey = hoverKeyRef.current; // hover is live (not gated by the expansion debounce)
-      for (const c of cards)
-        c.el.classList.toggle("hover", c.key === hoverKey && c.key !== committedKey);
-      if (focalCardKey === pendingKey) return;
-      pendingKey = focalCardKey;
-      // Moving again → collapse the previously bloomed card immediately so nothing lingers open.
-      if (committedKey !== null) {
-        committedKey = null;
-        applyExpansion(null);
-      }
-      window.clearTimeout(expandTimer);
-      expandTimer = window.setTimeout(() => {
-        committedKey = focalCardKey;
-        applyExpansion(committedKey);
-        // re-center as the card grows (max-height transition) so the bloom lands on the axis
-        cancelAnimationFrame(fisheyeRaf);
-        const end = performance.now() + 300;
-        const pump = () => {
-          layoutLane(scroller.clientHeight, committedKey);
-          fisheyeRaf = performance.now() < end ? requestAnimationFrame(pump) : 0;
-        };
-        fisheyeRaf = requestAnimationFrame(pump);
-      }, 180);
+      focalToolRef.current = focalCardKey;
+      updateInspect();
     };
 
     const sync = () => {
@@ -331,22 +299,19 @@ export function Lens({
         }
       }
 
-      // The focal card = the tool whose inline marker is nearest the focal axis, ANYWHERE in the
-      // thread (not just the focal message's group) — so the trace lane always has an anchor to
-      // track and never collapses to the bottom when the focal message has no tools.
+      // The focal card = the LAST tool whose inline marker sits at or above the focal axis —
+      // chronological reading: between tools, the previous one stays lit (it's the one whose
+      // output the axis is currently inside). Before the first tool, fall back to the first.
       let focalCardKey: string | null = null;
-      let bestDistance = Infinity;
       for (const card of cardAnchors) {
-        const distance = Math.abs(card.anchor - focalDoc);
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          focalCardKey = card.key;
-        }
+        if (card.anchor <= focalDoc) focalCardKey = card.key;
+        else break;
       }
+      if (!focalCardKey && cardAnchors.length > 0) focalCardKey = cardAnchors[0]!.key;
       // Light up only that single tool's chat rail (not the whole message's tool group).
       for (const [key, rail] of markerByKey)
         rail.classList.toggle("tool-focal", key === focalCardKey);
-      positionFisheye(V, focalCardKey);
+      positionLane(V, focalCardKey);
     };
 
     const measure = () => {
@@ -387,9 +352,6 @@ export function Lens({
         const el = cardRefs.current.get(cell.key);
         return el ? [{ key: cell.key, el }] : [];
       });
-      // Re-flow the de-overlap whenever a card's height changes (e.g. expand-in-place).
-      cardRo.disconnect();
-      for (const card of cards) cardRo.observe(card.el);
       for (const g of geom) {
         const band = bandRefs.current.get(g.key);
         if (!band) continue;
@@ -430,7 +392,6 @@ export function Lens({
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(sync);
     };
-    const cardRo = new ResizeObserver(() => schedule());
 
     measure();
     const ro = new ResizeObserver(measure);
@@ -472,10 +433,11 @@ export function Lens({
 
     const chat = chatRef.current;
     const trace = traceInnerRef.current;
-    // Hovering a chat message highlights its first tool card; trace cells highlight directly.
+    // Hovering an inline tool marker targets THAT tool (not the group's first); trace rows direct.
     const onChatOver = (e: Event) => {
-      const id = keyFrom(e, ".lens-moment");
-      setHover(id ? cardByParent.get(id) : undefined);
+      const toolId = (e.target as HTMLElement).closest<HTMLElement>("[data-tool-id]")?.dataset
+        .toolId;
+      setHover(toolId ? `tool:${toolId}` : undefined);
     };
     const onChatLeave = () => setHover(null);
     const onTraceOver = (e: Event) => setHover(keyFrom(e, ".lens-cell"));
@@ -486,12 +448,9 @@ export function Lens({
 
     return () => {
       ro.disconnect();
-      cardRo.disconnect();
       scroller.removeEventListener("scroll", onScroll);
       window.removeEventListener("pe:focus-turn", onFocusTurn);
       cancelAnimationFrame(raf);
-      cancelAnimationFrame(fisheyeRaf);
-      window.clearTimeout(expandTimer);
       chat?.removeEventListener("mouseover", onChatOver);
       chat?.removeEventListener("mouseleave", onChatLeave);
       trace?.removeEventListener("mouseover", onTraceOver);
@@ -589,6 +548,17 @@ export function Lens({
                     />
                   ))}
                 </div>
+                {/* Static inspect window: the focal (or hovered) tool's full I/O, pinned up top —
+                    inspection is chronological, so "current tool's data" belongs at a fixed spot
+                    while the row list below shows what's coming. */}
+                {(() => {
+                  const cell = traceCells.find((c) => c.key === inspectKey);
+                  return cell ? (
+                    <div className="lens-inspect">
+                      <TraceCellBody cell={cell} />
+                    </div>
+                  ) : null;
+                })()}
               </div>
             ) : mode === "world" ? (
               <WorldLane breakdown={breakdown} cache={cache} sendNumber={userTurns} />
@@ -693,6 +663,7 @@ const BLOCK_HEAD =
 const PLAN_ITEM =
   "flex gap-[9px] border-b-[0.5px] border-[var(--line-soft)] px-3 py-1.5 text-[13px] last:border-b-0";
 
+/** Trace-lane row: header strip ONLY (fixed height). Bodies render in the inspect window. */
 function TraceCellView({
   cell,
   registerRef,
@@ -702,44 +673,16 @@ function TraceCellView({
 }) {
   return (
     <div data-key={cell.key} className="lens-cell" ref={registerRef}>
-      <TraceCellBody cell={cell} />
+      <CellHeader cell={cell} />
     </div>
   );
 }
 
-function TraceCellBody({ cell }: { cell: TraceCell }) {
+function CellHeader({ cell }: { cell: TraceCell }) {
   if (cell.kind === "tool" && cell.toolCall) {
-    return <ToolCellBody call={cell.toolCall} />;
-  }
-  if (cell.kind === "memory" && cell.memory) {
-    const entry = cell.memory;
+    const call = cell.toolCall;
+    const duration = toolDuration(call);
     return (
-      <>
-        <div className="h">
-          <span className="h-title">{entry.kind}</span>
-          {entry.status ? (
-            <span className="h-meta">
-              <span className="tele-label">{entry.status}</span>
-            </span>
-          ) : null}
-        </div>
-        <pre>{stringify(entry.raw ?? entry.summary ?? entry.title ?? entry.id)}</pre>
-      </>
-    );
-  }
-  return null;
-}
-
-/** Tool trace card. Raw I/O is fetched on demand (see useToolIo) rather than streamed per frame. */
-function ToolCellBody({ call }: { call: WorkbenchToolCall }) {
-  const io = useToolIo(call);
-  const input = io?.rawInput ?? call.rawInput;
-  const output = io?.rawOutput ?? call.rawOutput ?? call.content;
-  const error = io?.error ?? call.error;
-  const images = toolImages(output);
-  const duration = toolDuration(call);
-  return (
-    <>
       <div className="h">
         <span className="h-title">{call.title}</span>
         {call.status || duration ? (
@@ -753,13 +696,66 @@ function ToolCellBody({ call }: { call: WorkbenchToolCall }) {
           </span>
         ) : null}
       </div>
-      {input !== undefined ? <pre>{stringify(input)}</pre> : null}
+    );
+  }
+  if (cell.kind === "memory" && cell.memory) {
+    const entry = cell.memory;
+    return (
+      <div className="h">
+        <span className="h-title">{entry.kind}</span>
+        {entry.status ? (
+          <span className="h-meta">
+            <span className="tele-label">{entry.status}</span>
+          </span>
+        ) : null}
+      </div>
+    );
+  }
+  return null;
+}
+
+/** Inspect-window body: full prettified I/O for the focal/hovered cell. */
+function TraceCellBody({ cell }: { cell: TraceCell }) {
+  if (cell.kind === "tool" && cell.toolCall) {
+    return <ToolCellBody call={cell.toolCall} />;
+  }
+  if (cell.kind === "memory" && cell.memory) {
+    const entry = cell.memory;
+    return (
+      <>
+        <CellHeader cell={cell} />
+        <pre>{stringify(entry.raw ?? entry.summary ?? entry.title ?? entry.id)}</pre>
+      </>
+    );
+  }
+  return null;
+}
+
+/** Tool inspect body. Raw I/O is read via useToolIo (already reduced onto the call). */
+function ToolCellBody({ call }: { call: WorkbenchToolCall }) {
+  const io = useToolIo(call);
+  const input = io?.rawInput ?? call.rawInput;
+  const output = io?.rawOutput ?? call.rawOutput ?? call.content;
+  const error = io?.error ?? call.error;
+  const images = toolImages(output);
+  return (
+    <>
+      <CellHeader cell={{ key: `tool:${call.id}`, kind: "tool", toolCall: call }} />
+      {input !== undefined ? (
+        <>
+          <div className="io-label tele-label">in</div>
+          <pre>{stringify(input)}</pre>
+        </>
+      ) : null}
       {images.length > 0 ? (
         images.map((src, index) => <img key={index} className="tool-img" src={src} alt="" />)
       ) : output !== undefined ? (
-        <pre>{stringify(output)}</pre>
+        <>
+          <div className="io-label tele-label">out</div>
+          <pre>{stringify(output)}</pre>
+        </>
       ) : null}
-      {error ? <pre>{error}</pre> : null}
+      {error ? <pre className="io-error">{error}</pre> : null}
     </>
   );
 }

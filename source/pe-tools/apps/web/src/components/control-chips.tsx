@@ -97,9 +97,9 @@ function Picker({
           title={title}
           render={
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
-              className="w-40 justify-between text-muted-foreground"
+              className="h-7 max-w-40 justify-between gap-1 px-2 text-muted-foreground"
             />
           }
         >

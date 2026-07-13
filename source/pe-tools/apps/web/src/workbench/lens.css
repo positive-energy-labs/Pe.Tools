@@ -329,8 +329,9 @@
   );
 }
 
-/* trace lane: fisheye — all cards flow; non-focal collapse to a header strip,
-   focal expands; the lane translates so the expanded card sits on the focal axis. */
+/* trace lane: a static list of fixed-height header rows. The lane still translates so the focal
+   row rides the focal axis; the row's full I/O renders in the pinned inspect window instead of
+   expanding in place (no max-height churn). */
 .lens-pin {
   position: absolute;
   left: 0;
@@ -341,15 +342,13 @@
 }
 .lens-cell {
   margin: 0 12px 4px;
-  max-height: 28px; /* matches the collapsed height the fisheye controller sets — avoids a header clip */
+  height: 28px;
   border: 0.5px solid var(--line);
-  border-radius: 0; /* trace card — hard square */
+  border-radius: 0; /* trace row — hard square */
   overflow: hidden;
   background: var(--paper);
   opacity: 0.62;
   transition:
-    max-height 0.24s cubic-bezier(0.4, 0, 0.2, 1),
-    box-shadow 0.16s ease,
     border-color 0.16s ease,
     opacity 0.16s ease;
 }
@@ -359,16 +358,52 @@
 }
 .lens-cell.focal {
   opacity: 1;
-  /* emphasis by intensity of the card's own hue — no glow, no elevation */
+  /* emphasis by intensity of the row's own hue — no glow, no elevation */
   border-color: color-mix(in srgb, var(--pe-green) 70%, transparent);
 }
-.lens-cell.focal pre {
-  max-height: 160px;
+
+/* Pinned inspect window: the focal/hovered tool's prettified I/O, fixed at the lane top —
+   inspection is chronological, so "the current tool" reads at one static spot while the row
+   list below previews what's coming. Opaque over the sliding rows. */
+.lens-inspect {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  max-height: 48%;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+  border-bottom: 0.5px solid var(--line-2);
+}
+.lens-inspect .h {
+  flex: none;
+}
+.lens-inspect .io-label {
+  flex: none;
+  padding: 3px 8px 0;
+  color: var(--muted-foreground);
+}
+.lens-inspect pre {
+  margin: 0;
+  padding: 3px 8px 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--lens-ink-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+  min-height: 0;
   overflow: auto;
+}
+.lens-inspect .io-error {
+  color: var(--fail);
 }
 /* hybrid row: sans title on the left, machine-measured metadata (status/duration) right-aligned
    in the telemetry tier. Tight density so the collapsed strip stays ~28px. */
-.lens-cell .h {
+.lens-cell .h,
+.lens-inspect .h {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -377,37 +412,29 @@
   background: var(--paper-2);
   white-space: nowrap;
 }
-.lens-cell .h .h-title {
+.lens-cell .h .h-title,
+.lens-inspect .h .h-title {
   min-width: 0;
   font-size: 13px;
   color: var(--foreground);
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.lens-cell .h .h-meta {
+.lens-cell .h .h-meta,
+.lens-inspect .h .h-meta {
   display: inline-flex;
   flex: none;
   align-items: baseline;
   gap: 8px;
   color: var(--muted-foreground);
 }
-.lens-cell .tool-img {
+.lens-inspect .tool-img {
   display: block;
   width: 100%;
   height: auto;
   border-top: 0.5px solid var(--line);
-}
-.lens-cell pre {
-  margin: 0;
-  padding: 5px 8px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--lens-ink-2);
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 96px;
-  overflow: hidden;
+  min-height: 0;
+  overflow: auto;
 }
 
 /* the focal scrim — top vignette only */
