@@ -187,13 +187,14 @@ public static class ParameterLinksEngine {
                     "A definition requires a sourceCategoryId.", definition.Id));
             }
 
-            if (!Enum.IsDefined(definition.SourceScope))
+            // Enum.IsDefined(Type, object): the generic overload is net5+, and net48 targets build this file.
+            if (!Enum.IsDefined(typeof(ParameterLinkSourceScope), definition.SourceScope))
                 issues.Add(Issue("SourceScopeUnsupported", ParameterLinkIssueSeverity.Error,
                     $"Source scope '{definition.SourceScope}' is unsupported.", definition.Id));
-            if (!Enum.IsDefined(definition.Relationship))
+            if (!Enum.IsDefined(typeof(ParameterLinkRelationship), definition.Relationship))
                 issues.Add(Issue("RelationshipUnsupported", ParameterLinkIssueSeverity.Error,
                     $"Relationship '{definition.Relationship}' is unsupported.", definition.Id));
-            if (!Enum.IsDefined(definition.Reducer))
+            if (!Enum.IsDefined(typeof(ParameterLinkReducer), definition.Reducer))
                 issues.Add(Issue("ReducerUnsupported", ParameterLinkIssueSeverity.Error,
                     $"Reducer '{definition.Reducer}' is unsupported.", definition.Id));
 
