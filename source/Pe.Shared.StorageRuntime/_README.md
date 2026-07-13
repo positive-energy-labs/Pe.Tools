@@ -12,7 +12,7 @@ This package is the C# storage/runtime infrastructure layer. It gives the repo o
 - `Documents/` defines the C# settings document DTOs still needed by Revit-side clients.
 - `Json/` owns JSON/CSV storage wrappers and directive marker attributes consumed by settings schema/runtime code.
 - `Capabilities/` contains small schema metadata contracts exported into host contracts.
-- `PolyFill/` contains local BCL helpers needed by the supported Revit/.NET runtime.
+- BCL compatibility helpers come from the SDK-injected `Pe.Bcl.Compat` package (`BclCompat`).
 
 Authored settings document open/save/validate/composition is implemented in `source/pe-tools/apps/host/src/settings.ts`. Revit schema generation, schema definitions, validation, type bindings, and field options live in `source/Pe.Revit.SettingsRuntime`.
 

@@ -137,7 +137,7 @@ public partial class ListView {
 
         // Center the item in the viewport
         var targetOffset = this._scrollViewer.VerticalOffset + itemTop - (viewportHeight / 2) + (itemHeight / 2);
-        targetOffset = BclExtensions.Clamp(targetOffset, 0, this._scrollViewer.ScrollableHeight);
+        targetOffset = BclCompat.Clamp(targetOffset, 0, this._scrollViewer.ScrollableHeight);
 
         // Only animate if we're moving a significant distance
         if (Math.Abs(this._scrollViewer.TargetVerticalOffset - targetOffset) > 1)
