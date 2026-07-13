@@ -162,13 +162,23 @@ function MomentSection({
   );
 }
 
-/* The transcript speaks the mapdial's index: #N on each role line, clickable to center that turn
-   on the focal axis (the Lens listens for pe:focus-turn). Same coordinate as the dial readout
-   and the URL's ?turn=. */
+/* The transcript speaks the SEMANTIC exchange turn: #N increments per user send, so a prompt and
+   its pea reply share one number — the same coordinate as the URL's ?turn=, the dial readout, and
+   the Lens geometry (mirrors toMoments in Lens.tsx). Clickable: centers the exchange on the focal
+   axis via pe:focus-turn. */
 function TurnTag({ id }: { id: string }) {
   const messages = useThreadMessages();
-  const turn = messages.findIndex((message) => message.id === id) + 1;
-  if (turn <= 0) return null;
+  let turn = 0;
+  let found = false;
+  for (const message of messages) {
+    if (message.role === "user") turn += 1;
+    if (message.id === id) {
+      found = true;
+      break;
+    }
+  }
+  if (!found) return null;
+  turn = Math.max(1, turn);
   return (
     <button
       type="button"
