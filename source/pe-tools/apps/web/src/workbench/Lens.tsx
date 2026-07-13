@@ -857,7 +857,8 @@ function toolDuration(call: WorkbenchToolCall): string | undefined {
   const end = call.completedAt ?? call.updatedAt;
   if (!start || !end) return undefined;
   const ms = Date.parse(end) - Date.parse(start);
-  if (!Number.isFinite(ms) || ms < 0) return undefined;
+  // 0 = hydrate backfill artifact (persisted parts share one createdAt): unknown, not measured.
+  if (!Number.isFinite(ms) || ms <= 0) return undefined;
   return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
 }
 

@@ -255,3 +255,38 @@ test("hydrate projects messages, tools, models and inspector from REST snapshots
   expect(byId["system-prompt"]?.tokens).toBe(3); // "You are Pea." = 12 chars / 4
   expect(byId.tools?.tokens).toBe(20);
 });
+
+test("persisted message parts backfill a tool call without clobbering live telemetry", async () => {
+  const live = reduce([
+    { type: "agent_start" },
+    { type: "tool_start", toolCallId: "t1", toolName: "script_execute", args: { code: "x" } },
+  ]);
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  const done = applyWireEvent(live, {
+    type: "tool_end",
+    toolCallId: "t1",
+    result: "ok",
+    isError: false,
+  });
+  const stamped = done.tools.calls[0]!;
+  expect(Date.parse(stamped.completedAt!)).toBeGreaterThan(Date.parse(stamped.startedAt!));
+
+  // The persisted assistant message refolds tool_call + tool_result with ONE createdAt — it must
+  // not overwrite the live timestamps (duration would read 0ms) nor downgrade the terminal status.
+  const refolded = applyWireEvent(done, {
+    type: "message_end",
+    message: {
+      id: "m1",
+      role: "assistant",
+      createdAt: new Date().toISOString(),
+      content: [
+        { type: "tool_call", id: "t1", name: "script_execute", args: { code: "x" } },
+        { type: "tool_result", id: "t1", name: "script_execute", result: "ok", isError: false },
+      ],
+    },
+  });
+  const call = refolded.tools.calls[0]!;
+  expect(call.status).toBe("completed");
+  expect(call.startedAt).toBe(stamped.startedAt);
+  expect(call.completedAt).toBe(stamped.completedAt);
+});
