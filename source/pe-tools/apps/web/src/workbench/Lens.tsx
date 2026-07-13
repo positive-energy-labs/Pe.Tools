@@ -10,6 +10,7 @@ import { Moments, useThreadMessages } from "./aui";
 import { RouteChatPluginDock } from "./route-chat-plugins";
 import { useCacheView, WorldLane } from "./world";
 import { useToolIo } from "./tool-io";
+import { SidePane } from "#/components/ui/side-pane";
 import { imageSource } from "./adapter";
 import {
   lensScrollIntent,
@@ -71,18 +72,24 @@ export function Lens({
   sideHead,
   threadList,
   onSideResize,
+  sideOpen = true,
+  onSideOpenChange,
 }: {
   state: WorkbenchState;
   mode: Mode;
   initialTurn?: number;
   scrollKey?: string;
   onTurnChange?: (turn: number | undefined) => void;
-  /** The always-on sidebar head (the mode dial). Sits above the mode-switched body. */
+  /** The always-on sidebar head (the mode dial). Rides the SidePane header. */
   sideHead?: React.ReactNode;
   /** Body for `threads` mode — the recent-thread list. */
   threadList?: React.ReactNode;
-  /** Drag-to-resize the sidebar; receives the new width in px (caller clamps + persists). */
+  /** SidePane drag tick — the new width in px (caller mirrors it into --side for the composer). */
   onSideResize?: (px: number) => void;
+  /** SidePane open state (controlled) — collapsing it re-runs the geometry controller. */
+  sideOpen?: boolean;
+  /** Fired when the SidePane collapses/expands (chevron rail). */
+  onSideOpenChange?: (open: boolean) => void;
 }) {
   const messages = useThreadMessages();
   const moments = toMoments(messages);
@@ -95,7 +102,6 @@ export function Lens({
   const cache = useCacheView(breakdown, userTurns);
 
   const frameRef = useRef<HTMLDivElement>(null);
-  const laneRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
   const traceInnerRef = useRef<HTMLDivElement>(null);
@@ -190,25 +196,6 @@ export function Lens({
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
   }, []);
-
-  // Drag the sidebar's right edge to resize. Clamp [240, half-viewport]; the caller persists it.
-  const onResizeDown = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      const startX = event.clientX;
-      const startW = laneRef.current?.offsetWidth ?? 300;
-      const max = window.innerWidth / 2;
-      const move = (ev: PointerEvent) =>
-        onSideResize?.(Math.max(240, Math.min(max, startW + ev.clientX - startX)));
-      const up = () => {
-        window.removeEventListener("pointermove", move);
-        window.removeEventListener("pointerup", up);
-      };
-      window.addEventListener("pointermove", move);
-      window.addEventListener("pointerup", up);
-    },
-    [onSideResize],
-  );
 
   // The single scroll controller: candlestick + bands + chat stubs + pinned fisheye cards.
   // Mutates refs only (no per-frame React render). Re-measures on resize and on row changes.
@@ -492,8 +479,11 @@ export function Lens({
     };
     // moments/traceCells are fresh arrays each render; re-running re-measures geometry as the
     // thread (and streaming text heights) change. The register callback re-measures once aui
-    // mounts the moment sections. Hover survives via hoverKeyRef.
-  }, [moments, traceCells, mode, onTurnChange]); // eslint-disable-line react-hooks/exhaustive-deps
+    // mounts the moment sections. `sideOpen` is here so expanding the collapsed rail re-runs the
+    // controller and measures the freshly-mounted trace cards (the scroller itself doesn't resize
+    // when the lane collapses, so nothing else would trigger a re-measure). Hover survives via
+    // hoverKeyRef.
+  }, [moments, traceCells, mode, onTurnChange, sideOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The scroller must always mount so the --vp ResizeObserver fires (it feeds the sticky
   // gutter/lane heights). Bailing to a different tree when empty left --vp unset, so on the
@@ -549,11 +539,24 @@ export function Lens({
             </div>
           </ThreadPrimitive.Root>
 
-          {/* The always-on sidebar: a fixed head (mode dial) over a mode-switched body. */}
-          <div className="lens-lane side" data-side={mode} ref={laneRef}>
-            <div className="side-head">{sideHead}</div>
-            <div className="side-body">
-              {mode === "trace" ? (
+          {/* The always-on side lane, now the shared SidePane primitive: it owns width, the drag
+              edge, collapse-to-rail, and width persistence ("pe.sideWidth"). The mode dial rides
+              the SidePane header (its 40px height == HEAD_H, so the fisheye axis math is intact).
+              Geometry the fisheye depends on — grid-column 1, sticky top, --vp height, the trace
+              frame — is reapplied via the className + the mode-switched body below. */}
+          <SidePane
+            side="left"
+            storageKey="pe.sideWidth"
+            minWidth={240}
+            defaultWidth={300}
+            open={sideOpen}
+            onOpenChange={onSideOpenChange}
+            onWidthChange={onSideResize}
+            header={sideHead}
+            className="lens-side-pane col-start-1 sticky top-0 border-r-[0.5px] bg-[var(--paper-3)]"
+          >
+            {mode === "trace" ? (
+              <div className="lens-trace-frame">
                 <div className="lens-pin" ref={traceInnerRef}>
                   {traceCells.map((cell) => (
                     <TraceCellView
@@ -566,14 +569,13 @@ export function Lens({
                     />
                   ))}
                 </div>
-              ) : mode === "world" ? (
-                <WorldLane breakdown={breakdown} cache={cache} sendNumber={userTurns} />
-              ) : (
-                threadList
-              )}
-            </div>
-            <div className="side-resize" onPointerDown={onResizeDown} title="Drag to resize" />
-          </div>
+              </div>
+            ) : mode === "world" ? (
+              <WorldLane breakdown={breakdown} cache={cache} sendNumber={userTurns} />
+            ) : (
+              threadList
+            )}
+          </SidePane>
         </div>
       </div>
       {moments.length > 0 ? <div className="lens-scrim" aria-hidden="true" /> : null}

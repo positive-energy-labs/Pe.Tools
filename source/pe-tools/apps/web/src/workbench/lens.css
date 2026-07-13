@@ -41,19 +41,18 @@
   /* No browser scrollbar in the chat lane — the mapdial IS the position instrument. */
   scrollbar-width: none;
 }
-/* one layout. The sidebar (grid-column 1) is ALWAYS present now; its width is --side (resizable,
-   set inline on <main> by ChatShell, clamped to ≤50vw). column order: sidebar | chat | mapdial */
+/* one layout. Column 1 is the SidePane (grid-column 1, `col-start-1`); it OWNS its width, drag,
+   collapse-to-rail, and width persistence — so the track is `auto` and sizes to the pane (its full
+   width when open, 40px when collapsed, 0 when display:none in plugin mode). --side is mirrored on
+   <main> by ChatShell for the composer lane only. column order: sidebar | chat | mapdial */
 .lens-grid {
   display: grid;
-  grid-template-columns: var(--side, 300px) minmax(0, 1fr) var(--map, 64px);
+  grid-template-columns: auto minmax(0, 1fr) var(--map, 64px);
   align-items: start;
 }
 /* all share row 1 — explicit grid-column alone bumps items into separate rows */
 .lens-grid > * {
   grid-row: 1;
-}
-.lens-grid .lens-lane.side {
-  grid-column: 1;
 }
 .lens-grid .lens-chat {
   grid-column: 2;
@@ -61,7 +60,7 @@
 .lens-grid .mapdial {
   grid-column: 3;
 }
-[data-plugin] .lens-lane.side {
+[data-plugin] .lens-side-pane {
   display: none;
 }
 /* the composer floats over the chat lane: clear the sidebar + the right mapdial, then inset by
@@ -290,85 +289,29 @@
   white-space: nowrap;
 }
 
-/* The always-on sidebar shell: a fixed head (mode dial) over a mode-switched body, sticky beside
-   the scrolling chat. --side-head-h must match HEAD_H in Lens.tsx (the fisheye subtracts it). */
-.lens-lane.side {
-  --side-head-h: 40px;
-  position: sticky;
-  top: 0;
+/* The side lane's --vp height: kept in CSS so the fallback survives before the ResizeObserver sets
+   --vp on first paint (position/border/fill ride Tailwind on the className, where twMerge wins). */
+.lens-side-pane {
   height: var(--vp, 560px);
-  display: flex;
-  flex-direction: column;
-  border-right: 0.5px solid var(--line);
-  background-color: var(--paper-3);
-  background-image: none; /* override the base .lens-lane drift gradient — only trace wants it */
-}
-.side-head {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: var(--side-head-h);
-  flex: none;
-  padding: 0 8px;
-  border-bottom: 0.5px solid var(--line);
-  background: var(--paper-2);
-}
-.side-body {
-  position: relative;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-/* trace fisheye needs a fixed frame (the pin translates within it) — no scrollbar. */
-.lens-lane.side[data-side="trace"] .side-body {
-  overflow: hidden;
-  background-image: repeating-linear-gradient(
-    to bottom,
-    transparent 0 27px,
-    color-mix(in srgb, var(--basalt) 5%, transparent) 27px 28px
-  );
-}
-/* drag handle straddling the sidebar's right edge */
-.side-resize {
-  position: absolute;
-  top: 0;
-  right: -3px;
-  width: 7px;
-  height: 100%;
-  cursor: col-resize;
-  z-index: 7;
-  touch-action: none;
-}
-.side-resize:hover,
-.side-resize:active {
-  background: color-mix(in srgb, var(--pe-blue) 25%, transparent);
 }
 
-/* trace + strata — focal planes that drift at their own (compressed) speed */
-.lens-lane {
-  position: sticky;
-  top: 0;
-  height: var(--vp, 560px);
+/* The side lane is the shared SidePane primitive (`.lens-side-pane`): it carries the sticky top,
+   --vp height, border, and paper-3 fill via Tailwind on its className, and owns width/drag/collapse.
+   Only the trace fisheye's fixed frame stays here — the pin translates within it, so it needs a
+   positioned, clipped, full-height box (SidePane's own body is overflow-y:auto for world/threads).
+   The frame sits INSIDE SidePane's body, which starts HEAD_H (40px, the SidePane header) below the
+   lane top — matching the HEAD_H subtraction in Lens.tsx's fisheye math. */
+.lens-trace-frame {
+  position: relative;
+  height: 100%;
   overflow: hidden;
-  border-right: 0.5px solid var(--line);
   background-image: repeating-linear-gradient(
     to bottom,
     transparent 0 27px,
     color-mix(in srgb, var(--basalt) 5%, transparent) 27px 28px
   );
 }
-.lens-lane.trace {
-  background-color: var(--paper-3);
-}
-.lens-lane.strata {
-  background-color: var(--paper-2);
-}
-@keyframes lens-drift {
-  to {
-    transform: translateY(min(0px, calc(var(--vp, 560px) - 100%)));
-  }
-}
+
 /* trace lane: fisheye — all cards flow; non-focal collapse to a header strip,
    focal expands; the lane translates so the expanded card sits on the focal axis. */
 .lens-pin {
@@ -542,11 +485,6 @@
 .lens-fork:hover {
   background: var(--user-tint);
   color: var(--pe-green);
-}
-
-/* devtools lane — a flat RuntimeEvent console (replaces the drifting events lane) */
-.lens-lane.strata {
-  background-image: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -69,14 +69,17 @@ function Surface({
   } = useWorkbench();
   const [mode, setMode] = useMode();
   const [paletteOpen, setPaletteOpen] = useState(false);
-  // Sidebar width — resizable via the lane's drag edge, clamped in the Lens to [240, 50vw]. Persisted.
+  // The side lane is a SidePane (rendered inside the Lens grid) that owns its own width, drag,
+  // collapse, and persistence (storageKey "pe.sideWidth"). We mirror its width/open here only to
+  // drive --side, which positions the floating composer lane (margin-left) and feeds nothing else.
+  // Initial width matches the pane's own localStorage read so --side is correct on first paint.
   const [sideWidth, setSideWidth] = useState(() => {
     const saved = Number(localStorage.getItem("pe.sideWidth"));
     return saved >= 240 ? saved : 300;
   });
-  useEffect(() => {
-    localStorage.setItem("pe.sideWidth", String(Math.round(sideWidth)));
-  }, [sideWidth]);
+  const [sideOpen, setSideOpen] = useState(true);
+  // Collapsed → the pane is a 40px rail (SidePane's RAIL) and the chat column absorbs the rest.
+  const sideSize = plugin ? 0 : sideOpen ? Math.round(sideWidth) : 40;
 
   const chrome = useMemo(() => selectWorkbenchChrome(debug.state), [debug.state]);
   // Context gauges (cap + OM meters) ride beside the composer now, so the cache view is derived
@@ -125,7 +128,7 @@ function Surface({
       ref={mainRef}
       data-mode={mode}
       data-plugin={plugin}
-      style={{ "--side": plugin ? "0px" : `${sideWidth}px` } as React.CSSProperties}
+      style={{ "--side": `${sideSize}px` } as React.CSSProperties}
       className="fixed inset-0 bg-background font-pe text-foreground"
     >
       {/* Inner grid holds exactly the 3 rows; ThreadPalette stays OUT of the grid (its sr-only
@@ -179,6 +182,8 @@ function Surface({
               scrollKey={currentThreadId}
               onTurnChange={onTurnChange}
               onSideResize={setSideWidth}
+              sideOpen={sideOpen}
+              onSideOpenChange={setSideOpen}
               sideHead={<ModeDial mode={mode} setMode={setMode} />}
               threadList={
                 <ThreadList
