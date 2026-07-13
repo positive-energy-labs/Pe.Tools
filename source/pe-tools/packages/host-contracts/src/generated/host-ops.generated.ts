@@ -1837,13 +1837,39 @@ export namespace RevitContextSummary {
   }
 }
 
-/** Export the active view, or an explicit view/sheet handle, to a PNG file and return its path for visual inspection. No transaction; works on read-only documents. */
+/** Export a view exactly as the user sees it (templates, VG overrides, temporary hide/isolate all apply) to a PNG and return its path. Target the active view (omit target), a view/sheet/viewport by id or name, or a schedule placed on a sheet. Optional focus crops to element ids, the current selection, or a scope box. Whole-view capture needs no transaction; focus capture uses a rolled-back temporary crop box (editable document only). */
 export namespace RevitContextViewImage {
   export namespace Req {
     export interface Request {
-      viewId?: number | null;
-      viewUniqueId?: null | string;
+      target?: null | RevitViewImageTarget;
+      focus?: null | RevitViewImageFocus;
+      marginPercent?: number;
       pixelSize?: number;
+    }
+    /**
+     * What to capture. Omit entirely to capture the active view. Id/UniqueId accept a view,
+     * sheet, viewport (dereferenced to its view), or schedule (must be placed on a sheet).
+     * Name matches view name, sheet name, sheet number, or schedule name — exact first, then
+     * unique substring. OnSheet (sheet number or name) disambiguates names that appear on
+     * multiple sheets and selects which placement of a schedule to capture.
+     *
+     */
+    export interface RevitViewImageTarget {
+      id?: number | null;
+      uniqueId?: null | string;
+      name?: null | string;
+      onSheet?: null | string;
+    }
+    /**
+     * Optional crop: exactly one of ElementIds, Selection, or ScopeBox. The view is exported
+     * with a temporary crop box around the focus (rolled back afterwards), so graphics stay
+     * exactly what the user sees. Requires an editable document; not supported on sheets.
+     *
+     */
+    export interface RevitViewImageFocus {
+      elementIds?: number[] | null;
+      selection?: boolean;
+      scopeBox?: null | string;
     }
   }
   export namespace Res {
@@ -1861,6 +1887,9 @@ export namespace RevitContextViewImage {
       filePath: string;
       byteSize: number;
       pixelSize: number;
+      viewScale?: number | null;
+      modelRect?: null | RevitViewImageModelRect;
+      sheetNumber?: null | string;
     }
     export interface RevitAgentContextHandle {
       kind: RevitAgentContextHandleKind;
@@ -1869,6 +1898,15 @@ export namespace RevitContextViewImage {
       uniqueId?: null | string;
       label: string;
       categoryName?: null | string;
+    }
+    /**
+     * Model-space XY extent covered by the exported image (feet), when known.
+     */
+    export interface RevitViewImageModelRect {
+      minX: number;
+      minY: number;
+      maxX: number;
+      maxY: number;
     }
   }
 }

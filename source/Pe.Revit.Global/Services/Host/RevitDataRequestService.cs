@@ -1183,27 +1183,31 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
 
     private RevitViewImageData GetRevitViewImageCore(RevitViewImageRequest request) {
         var document = GetSupportedActiveDocument(RevitBridgeOps.ViewImage.Definition);
-        var element = request.ViewId is { } viewId
-            ? document.GetElement(viewId.ToElementId())
-            : !string.IsNullOrWhiteSpace(request.ViewUniqueId)
-                ? document.GetElement(request.ViewUniqueId)
-                : RevitUiSession.CurrentUIApplication.GetActiveView();
-        if (element is not View { IsTemplate: false } view) {
-            throw BridgeOperationExceptions.Conflict(
-                "No exportable view.",
-                [
-                    BridgeOperationExceptions.Issue(
-                        "$.viewId",
-                        "ViewNotExportable",
-                        "The requested reference is not a graphical view or sheet (or is a view template).",
-                        "Pass a view/sheet id from revit.resolve.references, or activate a graphical view and retry."
-                    )
-                ]
-            );
+        // Wire deserialization does not honor record ctor defaults (0 arrives when omitted).
+        var pixelSize = request.PixelSize > 0 ? request.PixelSize : 1500;
+        var marginPercent = request.MarginPercent > 0 ? request.MarginPercent : 8;
+        var resolved = ResolveCaptureTarget(document, request.Target);
+
+        // Schedules only capture as placed on a sheet — never rendered on a contrived view.
+        if (resolved is ViewSchedule schedule) {
+            var (sheet, instance) = ResolveScheduleplacement(document, schedule, request.Target?.OnSheet);
+            try {
+                return RevitViewImageExporter.ExportSheetedSchedule(
+                    document, sheet, instance, marginPercent, pixelSize);
+            } catch (Exception ex) {
+                throw BridgeOperationExceptions.Unexpected("ViewImageExportException", ex,
+                    "Schedule capture exports its sheet and crops to the placement; verify the sheet exports normally.");
+            }
         }
 
+        if (resolved is not View { IsTemplate: false } view) throw CaptureTargetError();
+
+        var focusBox = ResolveFocusBox(document, view, request.Focus);
         try {
-            return RevitViewImageExporter.Export(document, view, request.PixelSize);
+            return focusBox is null
+                ? RevitViewImageExporter.Export(document, view, pixelSize)
+                : RevitViewImageExporter.ExportFocused(
+                    document, view, focusBox, marginPercent, pixelSize);
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "ViewImageExportException",
@@ -1212,6 +1216,164 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
             );
         }
     }
+
+    private static BridgeOperationException CaptureTargetError() => BridgeOperationExceptions.Conflict(
+        "No exportable view.",
+        [
+            BridgeOperationExceptions.Issue(
+                "$.target",
+                "ViewNotExportable",
+                "The requested reference is not a graphical view, sheet, viewport, or sheeted schedule (or is a view template).",
+                "Pass a view/sheet id or name from the project browser, or activate a graphical view and retry."
+            )
+        ]
+    );
+
+    /// <summary>Resolve target to a View: active view when omitted; viewports deref to their view.</summary>
+    private static Element? ResolveCaptureTarget(RevitDocument document, RevitViewImageTarget? target) {
+        Element? element;
+        if (target is null || target.Id is null && string.IsNullOrWhiteSpace(target.UniqueId) && string.IsNullOrWhiteSpace(target.Name)) {
+            element = RevitUiSession.CurrentUIApplication.GetActiveView();
+        } else if (target.Id is { } id) {
+            element = document.GetElement(id.ToElementId());
+        } else if (!string.IsNullOrWhiteSpace(target.UniqueId)) {
+            element = document.GetElement(target.UniqueId);
+        } else {
+            element = FindViewByName(document, target.Name!, target.OnSheet);
+        }
+
+        return element switch {
+            Viewport viewport => document.GetElement(viewport.ViewId),
+            ScheduleSheetInstance instance => document.GetElement(instance.ScheduleId),
+            _ => element
+        };
+    }
+
+    private static View? FindViewByName(RevitDocument document, string name, string? onSheet) {
+        var views = new FilteredElementCollector(document).OfClass(typeof(View)).Cast<View>()
+            .Where(v => !v.IsTemplate).ToList();
+
+        // Sheet number is the strongest key ("A101"), then exact names, then unique substring.
+        var match = views.OfType<ViewSheet>().FirstOrDefault(s =>
+                string.Equals(s.SheetNumber, name, StringComparison.OrdinalIgnoreCase))
+            ?? views.FirstOrDefault(v => string.Equals(v.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (match is null) {
+            var partial = views
+                .Where(v => v.Name.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0
+                            || v is ViewSheet ps && ps.SheetNumber.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0)
+                .ToList();
+            if (partial.Count > 1 && !string.IsNullOrWhiteSpace(onSheet)) {
+                var sheet = FindSheet(document, onSheet!);
+                var placed = sheet?.GetAllPlacedViews();
+                if (placed is not null) partial = partial.Where(v => placed.Contains(v.Id)).ToList();
+            }
+
+            if (partial.Count > 1) {
+                throw BridgeOperationExceptions.Conflict(
+                    $"View name '{name}' is ambiguous.",
+                    [
+                        BridgeOperationExceptions.Issue(
+                            "$.target.name",
+                            "AmbiguousViewName",
+                            $"Matches: {string.Join(", ", partial.Take(8).Select(v => $"'{v.Name}' ({v.Id.Value()})"))}{(partial.Count > 8 ? ", …" : "")}",
+                            "Use a more specific name, the element id, or target.onSheet to disambiguate."
+                        )
+                    ]
+                );
+            }
+
+            match = partial.FirstOrDefault();
+        }
+
+        return match;
+    }
+
+    private static ViewSheet? FindSheet(RevitDocument document, string sheetKey) =>
+        new FilteredElementCollector(document).OfClass(typeof(ViewSheet)).Cast<ViewSheet>()
+            .FirstOrDefault(s => string.Equals(s.SheetNumber, sheetKey, StringComparison.OrdinalIgnoreCase)
+                                 || string.Equals(s.Name, sheetKey, StringComparison.OrdinalIgnoreCase));
+
+    private static (ViewSheet Sheet, ScheduleSheetInstance Instance) ResolveScheduleplacement(
+        RevitDocument document,
+        ViewSchedule schedule,
+        string? onSheet
+    ) {
+        var instances = new FilteredElementCollector(document).OfClass(typeof(ScheduleSheetInstance))
+            .Cast<ScheduleSheetInstance>()
+            .Where(i => i.ScheduleId == schedule.Id && document.GetElement(i.OwnerViewId) is ViewSheet)
+            .ToList();
+        if (!string.IsNullOrWhiteSpace(onSheet)) {
+            var sheet = FindSheet(document, onSheet!);
+            instances = instances.Where(i => i.OwnerViewId == sheet?.Id).ToList();
+        }
+
+        var instance = instances.FirstOrDefault() ?? throw BridgeOperationExceptions.Conflict(
+            $"Schedule '{schedule.Name}' is not placed on a sheet{(onSheet is null ? "" : $" matching '{onSheet}'")}.",
+            [
+                BridgeOperationExceptions.Issue(
+                    "$.target",
+                    "ScheduleNotSheeted",
+                    "Schedules can only be captured as placed on a sheet (what the user actually sees).",
+                    "Read the schedule contents with revit.query.schedule instead, or place it on a sheet first."
+                )
+            ]
+        );
+        return ((ViewSheet)document.GetElement(instance.OwnerViewId), instance);
+    }
+
+    /// <summary>Union bbox for the requested focus, in model coords; null when no focus given.</summary>
+    private static BoundingBoxXYZ? ResolveFocusBox(RevitDocument document, View view, RevitViewImageFocus? focus) {
+        if (focus is null) return null;
+        if (view is ViewSheet) {
+            throw BridgeOperationExceptions.Conflict(
+                "Focus is not supported on sheets.",
+                [
+                    BridgeOperationExceptions.Issue("$.focus", "FocusOnSheet",
+                        "Sheets have no model crop box.", "Capture the placed view instead, with the same focus.")
+                ]
+            );
+        }
+
+        List<ElementId> ids;
+        if (focus.ElementIds is { Count: > 0 } explicitIds) {
+            ids = explicitIds.Select(id => id.ToElementId()).ToList();
+        } else if (focus.Selection) {
+            ids = RevitUiSession.CurrentUIApplication.GetActiveUIDocument()?.Selection.GetElementIds().ToList() ?? [];
+            if (ids.Count == 0) throw FocusError("EmptySelection", "Nothing is selected in Revit.");
+        } else if (!string.IsNullOrWhiteSpace(focus.ScopeBox)) {
+            var scopeBox = new FilteredElementCollector(document)
+                .OfCategory(BuiltInCategory.OST_VolumeOfInterest)
+                .FirstOrDefault(e => string.Equals(e.Name, focus.ScopeBox, StringComparison.OrdinalIgnoreCase)
+                                     || e.Id.Value().ToString(CultureInfo.InvariantCulture) == focus.ScopeBox)
+                ?? throw FocusError("ScopeBoxNotFound", $"No scope box named '{focus.ScopeBox}'.");
+            return scopeBox.get_BoundingBox(null);
+        } else {
+            throw FocusError("EmptyFocus", "Set exactly one of focus.elementIds, focus.selection, or focus.scopeBox.");
+        }
+
+        BoundingBoxXYZ? union = null;
+        foreach (var id in ids) {
+            // View-specific bbox first (respects visibility); model bbox as fallback.
+            var box = document.GetElement(id)?.get_BoundingBox(view) ?? document.GetElement(id)?.get_BoundingBox(null);
+            if (box is null) continue;
+            if (union is null) {
+                union = new BoundingBoxXYZ { Min = box.Transform.OfPoint(box.Min), Max = box.Transform.OfPoint(box.Max) };
+            } else {
+                var min = box.Transform.OfPoint(box.Min);
+                var max = box.Transform.OfPoint(box.Max);
+                union.Min = new XYZ(Math.Min(union.Min.X, min.X), Math.Min(union.Min.Y, min.Y), Math.Min(union.Min.Z, min.Z));
+                union.Max = new XYZ(Math.Max(union.Max.X, max.X), Math.Max(union.Max.Y, max.Y), Math.Max(union.Max.Z, max.Z));
+            }
+        }
+
+        return union ?? throw FocusError("NoFocusGeometry", "None of the focus elements have a bounding box in this view.");
+    }
+
+    private static BridgeOperationException FocusError(string code, string detail) =>
+        BridgeOperationExceptions.Conflict(
+            "Cannot resolve focus.",
+            [BridgeOperationExceptions.Issue("$.focus", code, detail, "Adjust the focus and retry, or omit focus for the whole view.")]
+        );
 
     private static FamilyEditorParameterSnapshot CreateFamilyEditorParameterSnapshot(
         FamilyDocument familyDocument,

@@ -5,6 +5,8 @@
     </PropertyGroup>
 
     <PropertyGroup>
+        <!-- PresentationCore for PNG crop in RevitViewImageExporter (WPF is always loaded in the Revit process). -->
+        <UseWPF>true</UseWPF>
         <LangVersion>latest</LangVersion>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>

@@ -894,28 +894,28 @@ public static class RevitBridgeOps {
             "revit.context.view-image",
             "Export View Image",
             HostOperationAgentMetadata.Create(
-                "Export the active view, or an explicit view/sheet handle, to a PNG file and return its path for visual inspection. No transaction; works on read-only documents.",
-                new[] { "view", "sheet", "image", "capture", "screenshot", "png", "export", "visual", "see", "look" },
+                "Export a view exactly as the user sees it (templates, VG overrides, temporary hide/isolate all apply) to a PNG and return its path. Target the active view (omit target), a view/sheet/viewport by id or name, or a schedule placed on a sheet. Optional focus crops to element ids, the current selection, or a scope box. Whole-view capture needs no transaction; focus capture sets a temporary crop box (clearing any scope box) and restores it afterward (editable document only).",
+                new[] { "view", "sheet", "viewport", "schedule", "image", "capture", "screenshot", "png", "export", "visual", "see", "look", "crop", "focus", "zoom" },
                 requiresActiveDocument: true,
                 requestExamples: [
                     Example(
-                        "capture the active view",
-                        "Export whatever the user is currently looking at.",
+                        "capture a view or sheet by name",
+                        "Names match view name, sheet name, or sheet number; exact first, then unique substring. Omit target for the active view.",
                         """
-                        { "pixelSize": 1500 }
+                        { "target": { "name": "A101" }, "pixelSize": 2000 }
                         """
                     ),
                     Example(
-                        "capture a resolved view or sheet",
-                        "Use a view/sheet id returned by revit.resolve.references or the project browser.",
+                        "capture zoomed to specific elements",
+                        "Temporary crop box around the element bboxes, rolled back after export. For a sheeted schedule use target { name, onSheet }.",
                         """
-                        { "viewId": 12345, "pixelSize": 2000 }
+                        { "target": { "name": "Upper Floor Plan" }, "focus": { "elementIds": [12345, 67890] }, "marginPercent": 10 }
                         """
                     )
                 ],
                 callGuidance: [
-                    "Only graphical views and sheets export; schedules and view templates do not.",
-                    "Read the returned filePath with an image-capable tool (Pea: capture_view already returns the image; read_image reads the path)."
+                    "Capture views that exist — never create a view, apply a blank template, or strip VG to take a picture. Schedules capture only as placed on a sheet (unplaced schedules should be read as data); focus takes exactly one of elementIds, selection, or scopeBox, needs an editable document, and leaves the view unchanged afterward.",
+                    "modelRect in the response gives the model-space XY extent for pixel↔model mapping; read the returned filePath with an image-capable tool (Pea: capture_view already returns the image; read_image reads the path)."
                 ]
             ),
             static (request, context, ct) => context.RevitData.GetRevitViewImageAsync(request)
