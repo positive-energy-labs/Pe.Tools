@@ -162,6 +162,39 @@ function MomentSection({
   );
 }
 
+/* The transcript speaks the mapdial's index: #N on each role line, clickable to center that turn
+   on the focal axis (the Lens listens for pe:focus-turn). Same coordinate as the dial readout
+   and the URL's ?turn=. */
+function TurnTag({ id }: { id: string }) {
+  const messages = useThreadMessages();
+  const turn = messages.findIndex((message) => message.id === id) + 1;
+  if (turn <= 0) return null;
+  return (
+    <button
+      type="button"
+      className="tele-label cursor-pointer border-0 bg-transparent p-0 text-muted-foreground hover:text-foreground"
+      title={`Center turn ${turn} on the focal axis`}
+      onClick={() => window.dispatchEvent(new CustomEvent("pe:focus-turn", { detail: turn }))}
+    >
+      #{turn}
+    </button>
+  );
+}
+
+/** Right-aligned send time on the role line — honest telemetry, same tier as the role label. */
+function MomentTime() {
+  // Select a stable primitive (epoch ms), not the Date object — fresh objects loop the selector.
+  const at = useMessage((message) =>
+    message.createdAt instanceof Date ? message.createdAt.getTime() : undefined,
+  );
+  if (!at) return null;
+  return (
+    <span className="tele-label ml-auto text-muted-foreground">
+      {new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+    </span>
+  );
+}
+
 function UserMoment() {
   const { forkThread } = useWorkbench();
   const id = useMessage((message) => message.id);
@@ -187,7 +220,8 @@ function UserMoment() {
   return (
     <MomentSection id={id} role="user">
       {/* Role attribution is provenance — telemetry tier, same voice as the mapdial/trace. */}
-      <div className="tele-label mb-1.5 inline-flex items-center gap-[7px] text-[var(--user)]">
+      <div className="tele-label mb-1.5 flex items-center gap-[7px] text-[var(--user)]">
+        <TurnTag id={id} />
         <span>you</span>
         {/* lens-fork kept as CSS: visibility is driven by `.lens-moment:hover` (geometry element) */}
         <button
@@ -198,6 +232,7 @@ function UserMoment() {
         >
           <GitFork size={12} />
         </button>
+        <MomentTime />
       </div>
       <div className="ml-auto flex w-fit max-w-[80%] flex-col items-end gap-1.5">
         {images.map((src) => (
@@ -235,7 +270,11 @@ function AssistantMoment() {
   if (!hasContent && !running) return null;
   return (
     <MomentSection id={id} role="assistant">
-      <div className="tele-label mb-1.5 text-[var(--pe-green)]">pea</div>
+      <div className="tele-label mb-1.5 flex items-center gap-[7px] text-[var(--pe-green)]">
+        <TurnTag id={id} />
+        <span>pea</span>
+        <MomentTime />
+      </div>
       <div className="grid gap-1">
         <AssistantParts />
         {/* mg-caret kept as CSS: it's a keyframes blink animation (the user asked to keep those) */}
@@ -334,10 +373,22 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
     // data-tool-id lets the Lens anchor this tool's trace card to the marker's real chat
     // position, so the focal card tracks the tool actually at the focal axis.
     <div className="grid gap-1" data-tool-id={toolCallId}>
-      {/* lens-marker kept as CSS: focal/hover emphasis is driven by `.lens-moment.focal` (geometry) */}
+      {/* lens-marker kept as CSS: focal/hover emphasis is driven by `.lens-moment.focal` (geometry).
+          Hybrid row: identifiers left, machine-measured status right-aligned in the telemetry tier. */}
       <div className={`lens-marker tool ${tone}`}>
         <span>⌗ {toolName}</span>
         {target ? <code>{target}</code> : null}
+        <span
+          className={`tele-label ml-auto ${
+            isError
+              ? "text-[var(--fail)]"
+              : status?.type === "running"
+                ? "text-[var(--pe-green)]"
+                : "text-muted-foreground"
+          }`}
+        >
+          {isError ? "err" : status?.type === "running" ? "run" : "ok"}
+        </span>
       </div>
       <RouteChatPluginView
         toolCallId={toolCallId}
@@ -354,7 +405,7 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
               <button
                 key={option.id}
                 type="button"
-                className={`inline-flex items-center gap-[5px] rounded-[7px] border-[0.5px] px-[11px] py-[5px] text-[12.5px] font-semibold transition-colors active:translate-y-[0.5px] ${
+                className={`inline-flex items-center gap-[5px] rounded-sm border-[0.5px] px-[11px] py-[5px] text-[12.5px] font-semibold transition-colors active:translate-y-[0.5px] ${
                   allow
                     ? "border-[var(--pe-blue)] bg-[var(--pe-blue)] text-white hover:bg-[var(--pe-blue-soft)]"
                     : "border-[var(--line-2)] bg-[var(--paper)] text-[var(--slate)] hover:border-[color-mix(in_srgb,var(--fail)_45%,transparent)] hover:bg-[color-mix(in_srgb,var(--fail)_12%,transparent)] hover:text-[var(--fail)]"
