@@ -11,21 +11,33 @@ import { MODES } from "#/workbench/depth";
 import { WorkbenchRuntimeProvider } from "#/workbench/aui";
 import { Lens } from "#/workbench/Lens";
 import { ContextRibbon, useCacheView } from "#/workbench/world";
+import { Button } from "#/components/ui/button";
+import { X } from "lucide-react";
 import "#/workbench/lens.css";
 
 export function ChatShell({
   initialTurn,
+  plugin,
   onTurnChange,
+  onPluginClose,
   promptSeed,
 }: {
   initialTurn?: number;
+  plugin?: "family-types";
   onTurnChange?: (turn: number | undefined) => void;
+  onPluginClose?: () => void;
   promptSeed?: string;
 }) {
   return (
     <HotkeysProvider>
       <WorkbenchRuntimeProvider>
-        <Surface initialTurn={initialTurn} promptSeed={promptSeed} onTurnChange={onTurnChange} />
+        <Surface
+          initialTurn={initialTurn}
+          plugin={plugin}
+          promptSeed={promptSeed}
+          onTurnChange={onTurnChange}
+          onPluginClose={onPluginClose}
+        />
       </WorkbenchRuntimeProvider>
     </HotkeysProvider>
   );
@@ -33,11 +45,15 @@ export function ChatShell({
 
 function Surface({
   initialTurn,
+  plugin,
   onTurnChange,
+  onPluginClose,
   promptSeed,
 }: {
   initialTurn?: number;
+  plugin?: "family-types";
   onTurnChange?: (turn: number | undefined) => void;
+  onPluginClose?: () => void;
   promptSeed?: string;
 }) {
   const {
@@ -108,7 +124,8 @@ function Surface({
     <main
       ref={mainRef}
       data-mode={mode}
-      style={{ "--side": `${sideWidth}px` } as React.CSSProperties}
+      data-plugin={plugin}
+      style={{ "--side": plugin ? "0px" : `${sideWidth}px` } as React.CSSProperties}
       className="fixed inset-0 bg-background font-pe text-foreground"
     >
       {/* Inner grid holds exactly the 3 rows; ThreadPalette stays OUT of the grid (its sr-only
@@ -149,47 +166,70 @@ function Surface({
           ) : null}
         </div>
 
-        <div className="relative min-h-0">
-          {/* The Lens owns the scroller + MapDial geometry; the composer floats over its chat lane. */}
-          <Lens
-            state={debug.state}
-            mode={mode}
-            initialTurn={initialTurn}
-            scrollKey={currentThreadId}
-            onTurnChange={onTurnChange}
-            onSideResize={setSideWidth}
-            sideHead={<ModeDial mode={mode} setMode={setMode} />}
-            threadList={
-              <ThreadList
-                threads={threads}
-                currentThreadId={currentThreadId}
-                onSelect={switchThread}
-                onNew={newThread}
-                onDelete={(id) => void deleteThread(id)}
-                onSearch={() => setPaletteOpen(true)}
-              />
-            }
-          />
-          {/* The context ribbon + composer float over the CHAT lane only (pe-composer-lane clears
-              the side lanes + mapdial) and resize with it. The ribbon is the unified request-
-              ordered token budget bar, spanning the input width directly above it. */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 pb-4">
-            <div className="pe-composer-lane">
-              <div ref={composerRef} className="pointer-events-auto">
-                <Composer
-                  setMode={setMode}
-                  promptSeed={promptSeed}
-                  topBar={
-                    <ContextRibbon
-                      breakdown={breakdown}
-                      cache={cache}
-                      onOpenWorld={() => setMode("world")}
-                    />
-                  }
+        <div
+          className={`relative grid min-h-0 min-w-0 grid-cols-1 ${
+            plugin ? "lg:grid-cols-[minmax(0,1fr)_minmax(480px,48vw)]" : ""
+          }`}
+        >
+          <div className="relative min-h-0 min-w-0">
+            <Lens
+              state={debug.state}
+              mode={mode}
+              initialTurn={initialTurn}
+              scrollKey={currentThreadId}
+              onTurnChange={onTurnChange}
+              onSideResize={setSideWidth}
+              sideHead={<ModeDial mode={mode} setMode={setMode} />}
+              threadList={
+                <ThreadList
+                  threads={threads}
+                  currentThreadId={currentThreadId}
+                  onSelect={switchThread}
+                  onNew={newThread}
+                  onDelete={(id) => void deleteThread(id)}
+                  onSearch={() => setPaletteOpen(true)}
                 />
+              }
+            />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 pb-4">
+              <div className="pe-composer-lane">
+                <div ref={composerRef} className="pointer-events-auto">
+                  <Composer
+                    setMode={setMode}
+                    promptSeed={promptSeed}
+                    topBar={
+                      <ContextRibbon
+                        breakdown={breakdown}
+                        cache={cache}
+                        onOpenWorld={() => setMode("world")}
+                      />
+                    }
+                  />
+                </div>
               </div>
             </div>
           </div>
+
+          {plugin === "family-types" ? (
+            <aside className="absolute inset-0 z-10 flex min-h-0 min-w-0 flex-col border-l border-border bg-background lg:static">
+              <div className="flex h-10 shrink-0 items-center justify-between border-b border-border px-3">
+                <span className="text-sm font-semibold">Family Types</span>
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  title="Close workspace"
+                  onClick={onPluginClose}
+                >
+                  <X />
+                </Button>
+              </div>
+              <div className="min-h-0 flex-1">
+                {/* ponytail: iframe keeps the pilot route-native; extract a shared surface when
+                    cross-pane focus or a single shared browser subscription becomes necessary. */}
+                <iframe className="size-full border-0" src="/family-types" title="Family Types" />
+              </div>
+            </aside>
+          ) : null}
         </div>
       </div>
 
