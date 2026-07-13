@@ -174,17 +174,19 @@ export function resolveSessionTarget<S extends SessionTargetCandidate>(
     };
   }
 
-  // Pea's world is "the user's session + sandboxes" — `user` selects the one non-sandbox
-  // session without the caller ever speaking lane vocabulary (dev pea may target a user
-  // session that is rrd underneath; that stays invisible to it).
+  // Pea's world is "the user's session + sandboxes" — `user` selects the one session on a
+  // KNOWN user lane without the caller ever speaking lane vocabulary (dev pea may target a
+  // user session that is rrd underneath; that stays invisible to it). Identity-less sessions
+  // (lane unknown — e.g. a pre-identity payload running inside a sandbox) never match: `user`
+  // fails closed rather than guess.
   if (selector.toLowerCase() === "user") {
-    const matches = sessions.filter((s) => s.lane !== "sandbox");
+    const matches = sessions.filter((s) => s.lane === "rrd" || s.lane === "installed");
     if (matches.length === 1) return { _tag: "found", session: matches[0] };
     if (matches.length === 0)
       return {
         _tag: "error",
         statusCode: 404,
-        message: `No user session is connected (only sandboxes). Connected sessions: ${listing}`,
+        message: `No identified user session is connected (sandboxes or pre-identity sessions only — target those by pid or session id). Connected sessions: ${listing}`,
       };
     return {
       _tag: "error",
