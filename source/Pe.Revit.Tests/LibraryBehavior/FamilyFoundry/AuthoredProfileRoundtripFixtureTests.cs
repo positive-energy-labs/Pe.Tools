@@ -374,7 +374,7 @@ public sealed class AuthoredProfileRoundtripFixtureTests {
         IReadOnlyDictionary<string, double> baseValues,
         IReadOnlyDictionary<string, double>? overrides = null
     ) {
-        var values = new Dictionary<string, double>(baseValues, StringComparer.Ordinal);
+        var values = baseValues.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
         if (overrides != null) {
             foreach (var (parameterName, value) in overrides)
                 values[parameterName] = value;

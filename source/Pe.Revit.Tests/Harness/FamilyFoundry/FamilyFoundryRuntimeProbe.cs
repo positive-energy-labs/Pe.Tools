@@ -105,7 +105,7 @@ internal static class FamilyFoundryRuntimeProbe {
         IReadOnlyDictionary<string, RuntimePlaneProbe> planes
     ) {
         if (!planes.TryGetValue(planeNames[0], out var first) ||
-            !planes.TryGetValue(planeNames[^1], out var last))
+            !planes.TryGetValue(planeNames[planeNames.Count - 1], out var last))
             return 0.0;
 
         return Math.Abs((last.Midpoint - first.Midpoint).DotProduct(first.Normal));

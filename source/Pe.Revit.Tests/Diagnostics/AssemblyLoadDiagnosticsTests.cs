@@ -64,7 +64,7 @@ public sealed class AssemblyLoadDiagnosticsTests {
     }
 
     private static string TryGetLastWriteTimeUtc(string location) {
-        if (string.IsNullOrWhiteSpace(location) || location.StartsWith('<'))
+        if (string.IsNullOrWhiteSpace(location) || location.StartsWith("<", StringComparison.Ordinal))
             return "<unknown>";
         if (!File.Exists(location))
             return "<missing>";

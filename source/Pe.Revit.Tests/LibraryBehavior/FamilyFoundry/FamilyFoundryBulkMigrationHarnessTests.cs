@@ -430,7 +430,9 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
     ) {
         var livePartitions = SelectMechanicalEquipmentFamilies(projectDocument)
             .Select(family => family.Name)
-            .Chunk(7)
+            .Select((name, index) => (name, index))
+            .GroupBy(pair => pair.index / 7, pair => pair.name)
+            .Select(group => group.ToArray())
             .ToList();
 
         Assert.Multiple(() => {

@@ -17,9 +17,9 @@ internal static class Draft
         foreach (var p in s.Paths)
         {
             int idx = 0;
-            var typeId = new ElementId(p.DuctTypeId);
-            var sysId = new ElementId(s.SystemTypeId);
-            var lvlId = new ElementId(s.LevelId);
+            var typeId = p.DuctTypeId.ToElementId();
+            var sysId = s.SystemTypeId.ToElementId();
+            var lvlId = s.LevelId.ToElementId();
             void Place(XYZ a, XYZ b, string what)
             {
                 if (a.DistanceTo(b) < 0.05) return;
@@ -56,7 +56,7 @@ internal static class Draft
 
         // replace-on-commit: drop previously committed REAL marked elements, keep the placeholders
         var stale = TK.MarkerElements(doc)
-            .Where(e => e.Category != null && (BuiltInCategory)e.Category.Id.Value != BuiltInCategory.OST_PlaceHolderDucts)
+            .Where(e => e.Category != null && (BuiltInCategory)e.Category.Id.Value() != BuiltInCategory.OST_PlaceHolderDucts)
             .ToList();
         if (stale.Count > 0)
         {
@@ -126,7 +126,7 @@ internal static class Draft
         // ConvertDuctPlaceholders emits the tap fitting itself (proven live) — detect that first;
         // NewTakeoffFitting is the fallback for gapped/hand-dragged junction geometry.
         var fittings = TK.MarkerElements(doc)
-            .Where(e => e.Category != null && (BuiltInCategory)e.Category.Id.Value == BuiltInCategory.OST_DuctFitting)
+            .Where(e => e.Category != null && (BuiltInCategory)e.Category.Id.Value() == BuiltInCategory.OST_DuctFitting)
             .Select(e => (e, bb: e.get_BoundingBox(null)))
             .Where(x => x.bb != null)
             .Select(x => (x.e, c: (x.bb.Min + x.bb.Max) / 2))
@@ -142,7 +142,7 @@ internal static class Draft
             branchCount++;
             var start = new XYZ(p.Points[0][0], p.Points[0][1], p.ZFt);
             var tap = fittings.FirstOrDefault(f => f.c.DistanceTo(start) < 0.8);
-            if (tap.e != null) { converted++; log.Add($"  takeoff {p.Key}: tap emitted by conversion (fitting {tap.e.Id.Value})"); continue; }
+            if (tap.e != null) { converted++; log.Add($"  takeoff {p.Key}: tap emitted by conversion (fitting {tap.e.Id.Value()})"); continue; }
             var host = reals.FirstOrDefault(r => DistToSeg(start, r.a, r.b) < 0.1
                 && Math.Abs(r.a.Z - r.b.Z) < 0.05
                 && !(r.a.DistanceTo(start) < 0.15 || r.b.DistanceTo(start) < 0.15));
@@ -160,7 +160,7 @@ internal static class Draft
         // terminal connections (only when the terminal connector is free)
         foreach (var p in s.Paths.Where(p => p.Kind == "branch" && p.TerminalId != 0))
         {
-            var term = doc.GetElement(new ElementId(p.TerminalId)) as FamilyInstance;
+            var term = doc.GetElement(p.TerminalId.ToElementId()) as FamilyInstance;
             var tc = TerminalConnector(term);
             if (tc == null) { log.Add($"  connect {p.Key}: terminal connector not found"); continue; }
             if (tc.IsConnected) { log.Add($"  connect {p.Key}: terminal already connected -> near-connect (duct ends {Setback * 12:F1} in short)"); continue; }

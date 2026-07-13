@@ -89,7 +89,7 @@ internal sealed class ObstacleIndex
             if (TK.IsMine(e)) continue;
             var bb = e.get_BoundingBox(null);
             if (bb == null) continue;
-            Clip(ix, bb.Min, bb.Max, null, group, e.Id.Value, e.Category?.Name ?? "?", x0, y0, x1, y1, zLo, zHi);
+            Clip(ix, bb.Min, bb.Max, null, group, e.Id.Value(), e.Category?.Name ?? "?", x0, y0, x1, y1, zLo, zHi);
         }
     }
 
@@ -127,12 +127,12 @@ internal sealed class ObstacleIndex
                         double sx0 = Math.Min(a.X, b.X) - half, sx1 = Math.Max(a.X, b.X) + half;
                         double sy0 = Math.Min(a.Y, b.Y) - half, sy1 = Math.Max(a.Y, b.Y) + half;
                         if (sx1 < x0 || sx0 > x1 || sy1 < y0 || sy0 > y1) continue;
-                        ix.Boxes.Add(new ObstacleBox { X0 = sx0, Y0 = sy0, Z0 = wz0, X1 = sx1, Y1 = sy1, Z1 = wz1, Group = group, Id = e.Id.Value, Label = "link:WallSeg" });
+                        ix.Boxes.Add(new ObstacleBox { X0 = sx0, Y0 = sy0, Z0 = wz0, X1 = sx1, Y1 = sy1, Z1 = wz1, Group = group, Id = e.Id.Value(), Label = "link:WallSeg" });
                     }
                 }
                 continue;
             }
-            Clip(ix, bb.Min, bb.Max, tf, group, e.Id.Value, $"link:{e.Category?.Name ?? "?"}", x0, y0, x1, y1, zLo, zHi);
+            Clip(ix, bb.Min, bb.Max, tf, group, e.Id.Value(), $"link:{e.Category?.Name ?? "?"}", x0, y0, x1, y1, zLo, zHi);
         }
     }
 

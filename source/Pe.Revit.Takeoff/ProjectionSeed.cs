@@ -138,7 +138,7 @@ public static class ProjectionSeed
         doc.Regenerate();
         // other imports sharing the category-visible state (rare) get element-hidden
         var others = new FilteredElementCollector(doc, v.Id).OfClass(typeof(ImportInstance))
-            .Where(e => e.Id.Value != dwg.Id.Value).Select(e => e.Id).ToList();
+            .Where(e => e.Id.Value() != dwg.Id.Value()).Select(e => e.Id).ToList();
         if (others.Count > 0) v.HideElements(others);
     }
 
