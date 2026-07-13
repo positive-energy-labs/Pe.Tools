@@ -31,7 +31,10 @@ const chatSearchSchema = z.object({
     .default(DEFAULTS.mode)
     .catch(DEFAULTS.mode),
   turn: z.coerce.number().int().positive().optional().catch(undefined),
-  plugin: z.enum(["family-types"]).optional().catch(undefined),
+  plugin: z
+    .enum(["family-types", "parameter-links", "settings", "schedule-grid"])
+    .optional()
+    .catch(undefined),
   prompt: z.string().max(PROMPT_MAX).optional(),
 });
 

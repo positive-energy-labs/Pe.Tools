@@ -103,8 +103,8 @@ function SidePanePoc() {
               workbench; this is mock data proving the primitive in isolation.
             </p>
             <pre className="mt-6 rounded-sm border border-[var(--line)] bg-[var(--paper-2)] px-3 py-2 font-mono text-xs">
-              left  {leftOpen ? "open " : "rail "} w={leftW}px{"\n"}right {rightOpen ? "open "
-                : "rail "} w={rightW}px
+              left {leftOpen ? "open " : "rail "} w={leftW}px{"\n"}right{" "}
+              {rightOpen ? "open " : "rail "} w={rightW}px
             </pre>
           </div>
         </section>

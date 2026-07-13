@@ -5,6 +5,8 @@ import {
   familyTypesRouteState,
   parameterLinksRouteState,
   readRouteState,
+  scheduleGridRouteState,
+  settingsRouteState,
   splitCellKey,
 } from "@pe/agent-contracts";
 import { Check, Eye, RefreshCw, RotateCcw, X } from "lucide-react";
@@ -14,10 +16,12 @@ import { Button } from "#/components/ui/button";
 import { peUrl } from "./config";
 import { useWorkbench } from "./provider";
 import { type RouteStateWriteResult, writeRouteState } from "./route-state";
+import { ScheduleGridChatPlugin } from "./plugins/schedule-grid-chat-plugin";
+import { SettingsChatPlugin } from "./plugins/settings-chat-plugin";
 
 const ROUTE_TOOL_NAMES = new Set(["route_state_read", "route_state_apply", "route_command"]);
 
-interface RouteChatPluginProps {
+export interface RouteChatPluginProps {
   toolCallId: string;
   toolName: string;
   args: unknown;
@@ -45,6 +49,16 @@ const routeChatPlugins: Record<string, RouteChatPluginRegistration> = {
     route: "family-types",
     stateKey: familyTypesRouteState.key,
     Renderer: FamilyTypesChatPlugin,
+  },
+  settings: {
+    route: "settings",
+    stateKey: settingsRouteState.key,
+    Renderer: SettingsChatPlugin,
+  },
+  "schedule-grid": {
+    route: "schedule-grid",
+    stateKey: scheduleGridRouteState.key,
+    Renderer: ScheduleGridChatPlugin,
   },
 };
 
@@ -179,6 +193,13 @@ function ParameterLinksChatPlugin({
         <Metric value={profile?.assignments.length ?? 0} label="assignments" />
         <Metric value={evaluation?.changedWriteCount ?? 0} label="projected writes" />
         <Metric value={evaluation?.issues.length ?? 0} label="issues" issue />
+        <Link
+          className="ml-auto font-medium text-[var(--pe-blue)] hover:underline"
+          to="/chat"
+          search={(previous) => ({ ...previous, plugin: "parameter-links" })}
+        >
+          Open workspace
+        </Link>
       </div>
 
       {active ? (
@@ -461,7 +482,7 @@ export function familyTypesWriteError(result: RouteStateWriteResult): string | n
   return `${failures.length} value${failures.length === 1 ? "" : "s"} failed${detail ? `: ${detail}` : "."}`;
 }
 
-function InlineRoutePlugin({
+export function InlineRoutePlugin({
   title,
   action,
   children,
@@ -481,7 +502,7 @@ function InlineRoutePlugin({
   );
 }
 
-function Metric({
+export function Metric({
   value,
   label,
   issue = false,
@@ -502,7 +523,7 @@ function Metric({
   );
 }
 
-function actionLabel(toolName: string, args: unknown, running: boolean): string {
+export function actionLabel(toolName: string, args: unknown, running: boolean): string {
   const command = isRecord(args) && typeof args.command === "string" ? args.command : null;
   const action =
     toolName === "route_state_read"

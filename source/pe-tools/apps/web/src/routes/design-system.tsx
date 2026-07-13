@@ -154,12 +154,48 @@ interface Trace {
   id: string;
 }
 const TRACES: Trace[] = [
-  { ts: "14:02:11.204", title: "Read family parameters for FA-Door-Single", dur: 142, status: "OK", id: "trc_8f2a" },
-  { ts: "14:02:11.361", title: "Query all instances in active view", dur: 88, status: "CACHE", id: "trc_8f2b" },
-  { ts: "14:02:12.009", title: "List available family types (built-in)", dur: 431, status: "OK", id: "trc_8f2c" },
-  { ts: "14:02:12.550", title: "Run bounding-box collision pass", dur: 1204, status: "RUN", id: "trc_8f2d" },
-  { ts: "14:02:13.812", title: "Set Mark on 42 selected instances", dur: 366, status: "ERR", id: "trc_8f2e" },
-  { ts: "14:02:17.104", title: "Place 3 instances at grid intersections", dur: 540, status: "OK", id: "trc_8f30" },
+  {
+    ts: "14:02:11.204",
+    title: "Read family parameters for FA-Door-Single",
+    dur: 142,
+    status: "OK",
+    id: "trc_8f2a",
+  },
+  {
+    ts: "14:02:11.361",
+    title: "Query all instances in active view",
+    dur: 88,
+    status: "CACHE",
+    id: "trc_8f2b",
+  },
+  {
+    ts: "14:02:12.009",
+    title: "List available family types (built-in)",
+    dur: 431,
+    status: "OK",
+    id: "trc_8f2c",
+  },
+  {
+    ts: "14:02:12.550",
+    title: "Run bounding-box collision pass",
+    dur: 1204,
+    status: "RUN",
+    id: "trc_8f2d",
+  },
+  {
+    ts: "14:02:13.812",
+    title: "Set Mark on 42 selected instances",
+    dur: 366,
+    status: "ERR",
+    id: "trc_8f2e",
+  },
+  {
+    ts: "14:02:17.104",
+    title: "Place 3 instances at grid intersections",
+    dur: 540,
+    status: "OK",
+    id: "trc_8f30",
+  },
 ];
 const STATUS_HUE: Record<Trace["status"], string> = {
   OK: "var(--cat-green)",
@@ -169,7 +205,13 @@ const STATUS_HUE: Record<Trace["status"], string> = {
 };
 
 /* Mock parameter rows for the dense hairline table. */
-const PARAMS: readonly { name: string; value: string; tone: BadgeTone; kind: string; at: string }[] = [
+const PARAMS: readonly {
+  name: string;
+  value: string;
+  tone: BadgeTone;
+  kind: string;
+  at: string;
+}[] = [
   { name: "Wall Height", value: "3000 mm", tone: "slate", kind: "Instance", at: "4m ago" },
   { name: "Fire Rating", value: "2 hr", tone: "kiln", kind: "Type", at: "4m ago" },
   { name: "Assembly Code", value: "B2010.10", tone: "kiln", kind: "Type", at: "11m ago" },
@@ -285,9 +327,9 @@ function Intro() {
       <p className="max-w-[70ch] text-[14px] leading-relaxed text-muted-foreground">
         Two type families, hairline surfaces, one 2px edge, a tight density, and a color budget
         spent only where a hue carries meaning. Mono is reserved for values the machine measured;
-        chrome stays in Open Sans. This page is the reference and is kept in step with the language —
-        every primitive below is the real <code>ui/*</code> component, rendered under the same laws
-        production runs under.
+        chrome stays in Open Sans. This page is the reference and is kept in step with the language
+        — every primitive below is the real <code>ui/*</code> component, rendered under the same
+        laws production runs under.
       </p>
     </section>
   );
@@ -398,8 +440,8 @@ function Laws() {
             </div>
           }
         >
-          Balanced: <code>cat-*</code> at /12 bg + /25 border + full-hue text, spent only where a hue
-          means something (provenance, severity). Exactly one PE Blue action peak per view.
+          Balanced: <code>cat-*</code> at /12 bg + /25 border + full-hue text, spent only where a
+          hue means something (provenance, severity). Exactly one PE Blue action peak per view.
         </Law>
       </div>
     </Spec>
@@ -418,9 +460,7 @@ function Tokens() {
       <Group label="Semantic — role" wrap="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
         {SEMANTIC.map(([name, bg, role]) => (
           <div key={name} className="flex items-center gap-2.5">
-            <div
-              className={`size-9 shrink-0 rounded-[var(--radius)] border border-border ${bg}`}
-            />
+            <div className={`size-9 shrink-0 rounded-[var(--radius)] border border-border ${bg}`} />
             <div className="min-w-0">
               <div className="tele text-foreground">{name}</div>
               <div className="text-[11px] leading-tight text-muted-foreground">{role}</div>
@@ -466,7 +506,9 @@ function Tokens() {
           <span className="font-pe-display text-[22px] font-semibold">Family reconciliation</span>
         </TypeSpecimen>
         <TypeSpecimen name=".body" spec="Open Sans · working prose / UI">
-          <span className="text-[14px]">Two instances carry a type-driven Mark; both were skipped.</span>
+          <span className="text-[14px]">
+            Two instances carry a type-driven Mark; both were skipped.
+          </span>
         </TypeSpecimen>
         <TypeSpecimen name="section-label" spec="small-caps · tracked SANS · panel headers">
           <span className="section-label">Active worksets</span>
@@ -794,20 +836,23 @@ function SidePaneBlock() {
           header={<span className="text-sm font-semibold">Threads</span>}
         >
           <ul className="p-1.5">
-            {["Ductwork clash sweep", "Level 3 core walls", "Curtain wall mullions", "Slab edge audit"].map(
-              (t, i) => (
-                <li key={t}>
-                  <button
-                    type="button"
-                    data-active={i === 0}
-                    className="w-full rounded-[var(--radius)] px-2.5 py-1.5 text-left hover:bg-[var(--paper-2)] data-[active=true]:bg-[var(--paper-2)]"
-                  >
-                    <div className="truncate text-[13px] font-medium">{t}</div>
-                    <div className="tele-label text-muted-foreground">{(i + 1) * 3}m ago</div>
-                  </button>
-                </li>
-              ),
-            )}
+            {[
+              "Ductwork clash sweep",
+              "Level 3 core walls",
+              "Curtain wall mullions",
+              "Slab edge audit",
+            ].map((t, i) => (
+              <li key={t}>
+                <button
+                  type="button"
+                  data-active={i === 0}
+                  className="w-full rounded-[var(--radius)] px-2.5 py-1.5 text-left hover:bg-[var(--paper-2)] data-[active=true]:bg-[var(--paper-2)]"
+                >
+                  <div className="truncate text-[13px] font-medium">{t}</div>
+                  <div className="tele-label text-muted-foreground">{(i + 1) * 3}m ago</div>
+                </button>
+              </li>
+            ))}
           </ul>
         </SidePane>
         <section className="min-w-0 flex-1 overflow-y-auto p-5">
@@ -890,7 +935,9 @@ function TelemetryRows() {
           );
         })}
       </div>
-      <p className="mt-2 text-[11px] text-muted-foreground">(row 5 is clickable → expands payload)</p>
+      <p className="mt-2 text-[11px] text-muted-foreground">
+        (row 5 is clickable → expands payload)
+      </p>
     </Group>
   );
 }

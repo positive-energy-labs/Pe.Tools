@@ -163,7 +163,7 @@ function Dial({ variant, scroll }: { variant: Variant; scroll: number }) {
             key={i}
             className="band absolute"
             style={{
-              top: (i + 0.5) / N * DIAL_H - 1,
+              top: ((i + 0.5) / N) * DIAL_H - 1,
               height: isFocal ? 3 : 2,
               right: 6,
               left: 8,
@@ -232,7 +232,11 @@ function Dial({ variant, scroll }: { variant: Variant; scroll: number }) {
           {[rTop, rBot].map((f, k) => {
             const isTop = k === 0;
             return (
-              <div key={k} className="absolute pointer-events-none" style={{ left: 3, right: 3, top: f * DIAL_H }}>
+              <div
+                key={k}
+                className="absolute pointer-events-none"
+                style={{ left: 3, right: 3, top: f * DIAL_H }}
+              >
                 <span
                   className="absolute"
                   style={{
@@ -291,7 +295,12 @@ function FakeChat({ scroll }: { scroll: number }) {
   return (
     <div
       className="relative overflow-hidden"
-      style={{ width: 220, height: DIAL_H, border: "0.5px solid var(--line)", background: "var(--paper)" }}
+      style={{
+        width: 220,
+        height: DIAL_H,
+        border: "0.5px solid var(--line)",
+        background: "var(--paper)",
+      }}
     >
       <div style={{ transform: `translateY(${translate}px)`, willChange: "transform" }}>
         {TURNS.map((role, i) => (
@@ -302,13 +311,17 @@ function FakeChat({ scroll }: { scroll: number }) {
               height: blockH,
               borderBottom: "0.5px solid var(--line-soft)",
               borderLeft: `2px solid ${role === "user" ? "var(--user-line)" : "var(--pea-line)"}`,
-              background: i === focal ? "color-mix(in srgb, var(--pe-blue) 6%, transparent)" : "transparent",
+              background:
+                i === focal ? "color-mix(in srgb, var(--pe-blue) 6%, transparent)" : "transparent",
             }}
           >
             <div className="flex items-baseline gap-2">
               <span
                 className="font-[var(--font-pe-mono)]"
-                style={{ fontSize: 10, color: i === focal ? "var(--pe-blue)" : "var(--muted-foreground)" }}
+                style={{
+                  fontSize: 10,
+                  color: i === focal ? "var(--pe-blue)" : "var(--muted-foreground)",
+                }}
               >
                 {String(i + 1).padStart(2, "0")}
               </span>
@@ -317,8 +330,12 @@ function FakeChat({ scroll }: { scroll: number }) {
               </span>
             </div>
             <div className="mt-1 space-y-1">
-              <div style={{ height: 4, width: "88%", background: "var(--line)", borderRadius: 2 }} />
-              <div style={{ height: 4, width: "62%", background: "var(--line-soft)", borderRadius: 2 }} />
+              <div
+                style={{ height: 4, width: "88%", background: "var(--line)", borderRadius: 2 }}
+              />
+              <div
+                style={{ height: 4, width: "62%", background: "var(--line-soft)", borderRadius: 2 }}
+              />
             </div>
           </div>
         ))}
@@ -437,11 +454,17 @@ function DashboardPanel({
           <div className="text-[13px] font-semibold" style={{ color: "var(--foreground)" }}>
             {title}
           </div>
-          <div className="font-[var(--font-pe-mono)]" style={{ fontSize: 10, color: "var(--muted-foreground)" }}>
+          <div
+            className="font-[var(--font-pe-mono)]"
+            style={{ fontSize: 10, color: "var(--muted-foreground)" }}
+          >
             {route}
           </div>
         </div>
-        <span className="font-[var(--font-pe-mono)]" style={{ fontSize: 10, color: "var(--muted-foreground)" }}>
+        <span
+          className="font-[var(--font-pe-mono)]"
+          style={{ fontSize: 10, color: "var(--muted-foreground)" }}
+        >
           [{intensity.toUpperCase()}]
         </span>
       </div>
@@ -475,7 +498,10 @@ function DashboardPanel({
       </div>
 
       {/* segment bar — colored ONLY at full */}
-      <div className="flex h-1.5 w-full overflow-hidden" style={{ borderBottom: "0.5px solid var(--line)" }}>
+      <div
+        className="flex h-1.5 w-full overflow-hidden"
+        style={{ borderBottom: "0.5px solid var(--line)" }}
+      >
         {barSegs.map((seg, i) => (
           <div
             key={i}
@@ -545,7 +571,10 @@ function DashboardPanel({
       </div>
 
       {/* actions — mono keeps EXACTLY ONE accent (the primary) */}
-      <div className="flex justify-end gap-2 px-3 py-2" style={{ borderTop: "0.5px solid var(--line)" }}>
+      <div
+        className="flex justify-end gap-2 px-3 py-2"
+        style={{ borderTop: "0.5px solid var(--line)" }}
+      >
         <button
           className="px-3 py-1 text-[12px]"
           style={{
@@ -612,7 +641,10 @@ function PocDial() {
   }, [playing]);
 
   return (
-    <div className="min-h-screen" style={{ background: "var(--background)", color: "var(--foreground)" }}>
+    <div
+      className="min-h-screen"
+      style={{ background: "var(--background)", color: "var(--foreground)" }}
+    >
       {/* hover-reveal for the slim variant's turn numbers — scoped, self-contained */}
       <style>{`
         .poc-dial-slim .band .num { opacity: 0; transition: opacity .12s ease; }
@@ -630,10 +662,13 @@ function PocDial() {
             >
               POC — Dial diet &amp; color budget
             </h1>
-            <p className="mt-1 max-w-[62ch] text-[13px]" style={{ color: "var(--muted-foreground)" }}>
-              Two independent judgements. Section 1 asks how thin the position instrument can get before it
-              stops being readable. Section 2 asks where the color line sits for a route you stare at for six
-              hours. Mock data; both themes.
+            <p
+              className="mt-1 max-w-[62ch] text-[13px]"
+              style={{ color: "var(--muted-foreground)" }}
+            >
+              Two independent judgements. Section 1 asks how thin the position instrument can get
+              before it stops being readable. Section 2 asks where the color line sits for a route
+              you stare at for six hours. Mock data; both themes.
             </p>
           </div>
           <ThemeToggle />
@@ -703,25 +738,23 @@ function PocDial() {
               <FakeChat scroll={scroll} />
             </div>
 
-            {(
-              [
-                {
-                  v: "ref" as const,
-                  label: "(a) 104px — current reference",
-                  desc: "14px rounded bars · focal fattens + haloes · candlestick aperture · number rides the focal band",
-                },
-                {
-                  v: "slim" as const,
-                  label: "(b) 64px — slim",
-                  desc: "8px hard-square bars · numbers on hover only · square reticle box",
-                },
-                {
-                  v: "ultra" as const,
-                  label: "(c) 44px — ultra-slim",
-                  desc: "2px ticks · bracket-mark aperture · single mono readout floats at the reticle",
-                },
-              ]
-            ).map((item) => (
+            {[
+              {
+                v: "ref" as const,
+                label: "(a) 104px — current reference",
+                desc: "14px rounded bars · focal fattens + haloes · candlestick aperture · number rides the focal band",
+              },
+              {
+                v: "slim" as const,
+                label: "(b) 64px — slim",
+                desc: "8px hard-square bars · numbers on hover only · square reticle box",
+              },
+              {
+                v: "ultra" as const,
+                label: "(c) 44px — ultra-slim",
+                desc: "2px ticks · bracket-mark aperture · single mono readout floats at the reticle",
+              },
+            ].map((item) => (
               <div key={item.v}>
                 <div
                   className="mb-2 font-[var(--font-pe-mono)]"
@@ -747,8 +780,8 @@ function PocDial() {
             2 · Color budget
           </h2>
           <p className="mb-5 max-w-[70ch] text-[13px]" style={{ color: "var(--muted-foreground)" }}>
-            The same dashboard panel — stat strip, six-row table, alert, two actions — at three color
-            intensities. Each is labeled with the route type it suits.
+            The same dashboard panel — stat strip, six-row table, alert, two actions — at three
+            color intensities. Each is labeled with the route type it suits.
           </p>
 
           <div className="grid gap-6 md:grid-cols-3">

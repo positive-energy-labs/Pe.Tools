@@ -36,14 +36,78 @@ interface Trace {
 }
 
 const TRACES: Trace[] = [
-  { ts: "14:02:11.204", tool: "host.family_read", title: "Read family parameters for FA-Door-Single", dur: 142, status: "OK", tokens: 1240, id: "trc_8f2a" },
-  { ts: "14:02:11.361", tool: "revit.element_query", title: "Query all instances in active view", dur: 88, status: "CACHE", tokens: 96, id: "trc_8f2b" },
-  { ts: "14:02:12.009", tool: "host.type_catalog", title: "List available family types (built-in)", dur: 431, status: "OK", tokens: 3420, id: "trc_8f2c" },
-  { ts: "14:02:12.550", tool: "script.execute", title: "Run bounding-box collision pass", dur: 1204, status: "RUN", tokens: 512, id: "trc_8f2d" },
-  { ts: "14:02:13.812", tool: "revit.param_write", title: "Set Mark on 42 selected instances", dur: 366, status: "ERR", tokens: 210, id: "trc_8f2e" },
-  { ts: "14:02:14.220", tool: "host.view_capture", title: "Capture floor plan L2 to PNG", dur: 2810, status: "OK", tokens: 64, id: "trc_8f2f" },
-  { ts: "14:02:17.104", tool: "revit.family_place", title: "Place 3 instances at grid intersections", dur: 540, status: "OK", tokens: 880, id: "trc_8f30" },
-  { ts: "14:02:17.699", tool: "host.doc_state", title: "Read document freshness + open worksets", dur: 47, status: "CACHE", tokens: 128, id: "trc_8f31" },
+  {
+    ts: "14:02:11.204",
+    tool: "host.family_read",
+    title: "Read family parameters for FA-Door-Single",
+    dur: 142,
+    status: "OK",
+    tokens: 1240,
+    id: "trc_8f2a",
+  },
+  {
+    ts: "14:02:11.361",
+    tool: "revit.element_query",
+    title: "Query all instances in active view",
+    dur: 88,
+    status: "CACHE",
+    tokens: 96,
+    id: "trc_8f2b",
+  },
+  {
+    ts: "14:02:12.009",
+    tool: "host.type_catalog",
+    title: "List available family types (built-in)",
+    dur: 431,
+    status: "OK",
+    tokens: 3420,
+    id: "trc_8f2c",
+  },
+  {
+    ts: "14:02:12.550",
+    tool: "script.execute",
+    title: "Run bounding-box collision pass",
+    dur: 1204,
+    status: "RUN",
+    tokens: 512,
+    id: "trc_8f2d",
+  },
+  {
+    ts: "14:02:13.812",
+    tool: "revit.param_write",
+    title: "Set Mark on 42 selected instances",
+    dur: 366,
+    status: "ERR",
+    tokens: 210,
+    id: "trc_8f2e",
+  },
+  {
+    ts: "14:02:14.220",
+    tool: "host.view_capture",
+    title: "Capture floor plan L2 to PNG",
+    dur: 2810,
+    status: "OK",
+    tokens: 64,
+    id: "trc_8f2f",
+  },
+  {
+    ts: "14:02:17.104",
+    tool: "revit.family_place",
+    title: "Place 3 instances at grid intersections",
+    dur: 540,
+    status: "OK",
+    tokens: 880,
+    id: "trc_8f30",
+  },
+  {
+    ts: "14:02:17.699",
+    tool: "host.doc_state",
+    title: "Read document freshness + open worksets",
+    dur: 47,
+    status: "CACHE",
+    tokens: 128,
+    id: "trc_8f31",
+  },
 ];
 
 const THREAD = [
@@ -157,8 +221,8 @@ function Intro() {
     <p className="max-w-[68ch] text-[14px] leading-relaxed text-muted-foreground">
       The instrument-panel move: machine truth — timestamps, tool names, token counts, elapsed ms,
       statuses, ids — rendered in mono with positive tracking, sitting against a prose/UI layer in
-      Open Sans. Every section is mock data. Judge whether the mono tier reads as PE-calm
-      (a legible instrument) or as brutalist cosplay.
+      Open Sans. Every section is mock data. Judge whether the mono tier reads as PE-calm (a legible
+      instrument) or as brutalist cosplay.
     </p>
   );
 }
@@ -255,7 +319,10 @@ function TraceRows() {
           <Caption>a · current (mixed sans)</Caption>
           <div className="border-t border-border">
             {TRACES.map((t) => (
-              <div key={t.id} className="flex items-baseline justify-between gap-2 border-b border-border py-2">
+              <div
+                key={t.id}
+                className="flex items-baseline justify-between gap-2 border-b border-border py-2"
+              >
                 <div className="min-w-0">
                   <div className="truncate text-[13px] font-medium">{t.tool}</div>
                   <div className="truncate text-[12px] text-muted-foreground">{t.title}</div>
@@ -274,9 +341,15 @@ function TraceRows() {
           <Caption>b · full telemetry (mono)</Caption>
           <div className="border-t border-border">
             {TRACES.map((t) => (
-              <div key={t.id} className="flex items-baseline justify-between gap-2 border-b border-border py-1.5">
+              <div
+                key={t.id}
+                className="flex items-baseline justify-between gap-2 border-b border-border py-1.5"
+              >
                 <div className="min-w-0" style={{ fontFamily: MONO }}>
-                  <div className="truncate text-[12px] tracking-[0.05em]" style={{ color: "var(--cat-blue)" }}>
+                  <div
+                    className="truncate text-[12px] tracking-[0.05em]"
+                    style={{ color: "var(--cat-blue)" }}
+                  >
                     {t.tool}
                   </div>
                   <div className="truncate text-[11px] tracking-[0.04em] text-muted-foreground">
@@ -284,10 +357,15 @@ function TraceRows() {
                   </div>
                 </div>
                 <div className="shrink-0 text-right" style={{ fontFamily: MONO }}>
-                  <div className="text-[11px] uppercase tracking-[0.08em]" style={{ color: STATUS_HUE[t.status] }}>
+                  <div
+                    className="text-[11px] uppercase tracking-[0.08em]"
+                    style={{ color: STATUS_HUE[t.status] }}
+                  >
                     {t.status}
                   </div>
-                  <div className="text-[11px] tracking-[0.05em] text-muted-foreground">{t.dur}ms</div>
+                  <div className="text-[11px] tracking-[0.05em] text-muted-foreground">
+                    {t.dur}ms
+                  </div>
                 </div>
               </div>
             ))}
@@ -316,8 +394,14 @@ function TraceRows() {
                         ))}
                       <span className="truncate text-[13px]">{t.title}</span>
                     </div>
-                    <div className="flex shrink-0 items-baseline gap-2" style={{ fontFamily: MONO }}>
-                      <span className="text-[11px] uppercase tracking-[0.08em]" style={{ color: STATUS_HUE[t.status] }}>
+                    <div
+                      className="flex shrink-0 items-baseline gap-2"
+                      style={{ fontFamily: MONO }}
+                    >
+                      <span
+                        className="text-[11px] uppercase tracking-[0.08em]"
+                        style={{ color: STATUS_HUE[t.status] }}
+                      >
                         {t.status}
                       </span>
                       <span className="text-[11px] tracking-[0.05em] text-muted-foreground tabular-nums">
@@ -382,7 +466,10 @@ function BudgetLegend({ mono }: { mono: boolean }) {
         >
           <span
             className="size-2 rounded-[1px]"
-            style={{ backgroundColor: `color-mix(in srgb, var(${s.cat}) 25%, transparent)`, border: `1px solid var(${s.cat})` }}
+            style={{
+              backgroundColor: `color-mix(in srgb, var(${s.cat}) 25%, transparent)`,
+              border: `1px solid var(${s.cat})`,
+            }}
           />
           {mono ? (
             <span className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground">

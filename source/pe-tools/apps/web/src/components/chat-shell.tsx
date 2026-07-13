@@ -15,6 +15,16 @@ import { Button } from "#/components/ui/button";
 import { X } from "lucide-react";
 import "#/workbench/lens.css";
 
+/** Routes hostable as chat workspace plugins; the iframe src is `/${plugin}`. */
+export type ChatPluginRoute = "family-types" | "parameter-links" | "settings" | "schedule-grid";
+
+const PLUGIN_TITLES: Record<ChatPluginRoute, string> = {
+  "family-types": "Family Types",
+  "parameter-links": "Parameter Links",
+  settings: "Settings",
+  "schedule-grid": "Schedule Grid",
+};
+
 export function ChatShell({
   initialTurn,
   plugin,
@@ -23,7 +33,7 @@ export function ChatShell({
   promptSeed,
 }: {
   initialTurn?: number;
-  plugin?: "family-types";
+  plugin?: ChatPluginRoute;
   onTurnChange?: (turn: number | undefined) => void;
   onPluginClose?: () => void;
   promptSeed?: string;
@@ -51,7 +61,7 @@ function Surface({
   promptSeed,
 }: {
   initialTurn?: number;
-  plugin?: "family-types";
+  plugin?: ChatPluginRoute;
   onTurnChange?: (turn: number | undefined) => void;
   onPluginClose?: () => void;
   promptSeed?: string;
@@ -215,10 +225,10 @@ function Surface({
             </div>
           </div>
 
-          {plugin === "family-types" ? (
+          {plugin ? (
             <aside className="absolute inset-0 z-10 flex min-h-0 min-w-0 flex-col border-l border-border bg-background lg:static">
               <div className="flex h-10 shrink-0 items-center justify-between border-b border-border px-3">
-                <span className="text-sm font-semibold">Family Types</span>
+                <span className="text-sm font-semibold">{PLUGIN_TITLES[plugin]}</span>
                 <Button
                   size="icon-sm"
                   variant="ghost"
@@ -231,7 +241,11 @@ function Surface({
               <div className="min-h-0 flex-1">
                 {/* ponytail: iframe keeps the pilot route-native; extract a shared surface when
                     cross-pane focus or a single shared browser subscription becomes necessary. */}
-                <iframe className="size-full border-0" src="/family-types" title="Family Types" />
+                <iframe
+                  className="size-full border-0"
+                  src={`/${plugin}`}
+                  title={PLUGIN_TITLES[plugin]}
+                />
               </div>
             </aside>
           ) : null}
