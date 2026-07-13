@@ -51,9 +51,7 @@ test("tool_start → tool_end yields a completed tool call carrying raw I/O", ()
 });
 
 test("state_changed replaces the live route-state map", () => {
-  const first = reduce([
-    { type: "state_changed", state: { "route:family-types": { cells: {} } } },
-  ]);
+  const first = reduce([{ type: "state_changed", state: { "route:family-types": { cells: {} } } }]);
   const second = applyWireEvent(first, {
     type: "state_changed",
     state: { "route:parameter-links": { draftProfile: null } },
