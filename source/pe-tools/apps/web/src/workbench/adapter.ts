@@ -407,21 +407,27 @@ function userText(message: WorkbenchMessage): string {
 function foldTools(calls: WorkbenchToolCall[], message: WireMessage): WorkbenchToolCall[] {
   let next = calls;
   for (const part of message.content) {
+    if (part.type !== "tool_call" && part.type !== "tool_result") continue;
+    // Persisted parts BACKFILL the call — never clobber live tool_start/tool_end telemetry:
+    // the message's createdAt stamps call and result identically (duration reads 0ms), and a
+    // tool_call part folding after tool_end would downgrade a terminal status.
+    const existing = next.find((call) => call.id === part.id);
     if (part.type === "tool_call") {
+      const terminal = existing?.status === "completed" || existing?.status === "failed";
       next = upsertTool(next, part.id, {
         title: part.name,
         rawInput: part.args,
         target: toolTargetHint(part.args),
-        status: "in_progress",
+        ...(terminal ? {} : { status: "in_progress" as const }),
         parentMessageId: message.id,
-        startedAt: iso(message.createdAt),
+        startedAt: existing?.startedAt ?? iso(message.createdAt),
       });
-    } else if (part.type === "tool_result") {
+    } else {
       next = upsertTool(next, part.id, {
         title: part.name,
         rawOutput: part.result,
         status: part.isError ? "failed" : "completed",
-        completedAt: iso(message.createdAt),
+        completedAt: existing?.completedAt ?? iso(message.createdAt),
         parentMessageId: message.id,
         ...(part.isError ? { error: stringify(part.result) } : {}),
       });
