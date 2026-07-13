@@ -92,8 +92,8 @@ internal static class SpaceBoundaryNetwork
         IEnumerable<RoomResult> rooms, double cellFt, double simplifyFt,
         Func<double, double, bool>? inkNear, ISet<string>? unresolvedRooms, Action<string>? log = null)
     {
-        if (!double.IsFinite(cellFt) || cellFt <= 0) throw new ArgumentOutOfRangeException(nameof(cellFt));
-        if (!double.IsFinite(simplifyFt) || simplifyFt < 0)
+        if (!IsFinite(cellFt) || cellFt <= 0) throw new ArgumentOutOfRangeException(nameof(cellFt));
+        if (!IsFinite(simplifyFt) || simplifyFt < 0)
             throw new ArgumentOutOfRangeException(nameof(simplifyFt));
 
         var paths = TracePaths(rooms, cellFt);
@@ -158,7 +158,7 @@ internal static class SpaceBoundaryNetwork
         var points = roomList.SelectMany(room => new[] { room.Polygon }.Concat(room.Holes))
             .SelectMany(loop => loop).ToList();
         if (points.Count == 0) return [];
-        if (points.Any(point => point.Length < 2 || !double.IsFinite(point[0]) || !double.IsFinite(point[1])))
+        if (points.Any(point => point.Length < 2 || !IsFinite(point[0]) || !IsFinite(point[1])))
             throw new InvalidOperationException("boundary contains a non-finite point");
         double originX = points.Min(point => point[0]), originY = points.Min(point => point[1]);
         var edges = new HashSet<GridEdge>();
@@ -207,8 +207,8 @@ internal static class SpaceBoundaryNetwork
 
         void Add(string roomId, double[] a, double[] b)
         {
-            if (a.Length < 2 || b.Length < 2 || !double.IsFinite(a[0]) || !double.IsFinite(a[1])
-                || !double.IsFinite(b[0]) || !double.IsFinite(b[1]))
+            if (a.Length < 2 || b.Length < 2 || !IsFinite(a[0]) || !IsFinite(a[1])
+                || !IsFinite(b[0]) || !IsFinite(b[1]))
                 throw new InvalidOperationException($"{roomId} has a non-finite boundary point");
             var ga = Grid(a); var gb = Grid(b);
             bool vertical = ga.X == gb.X;
@@ -300,9 +300,9 @@ internal static class SpaceBoundaryNetwork
         // anchor the two halves at the loop's diameter endpoints (true extreme corners) —
         // anchoring at raw[0], an arbitrary mid-wall point, erodes corners at tolerance scale
         // and the tilted segments then contaminate the dominant-axis histogram
-        int a = Enumerable.Range(1, raw.Count - 1).MaxBy(index => Distance(raw[0], raw[index]));
+        int a = Enumerable.Range(1, raw.Count - 1).OrderByDescending(index => Distance(raw[0], raw[index])).First();
         int b = Enumerable.Range(0, raw.Count).Where(index => index != a)
-            .MaxBy(index => Distance(raw[a], raw[index]));
+            .OrderByDescending(index => Distance(raw[a], raw[index])).First();
         if (a > b) (a, b) = (b, a);
         var first = SimplifyOpen(raw, a, b, tolerance);
         // second half wraps through the end back to a; simplify on a rotated copy, then map back
@@ -836,7 +836,7 @@ internal static class SpaceBoundaryNetwork
     private static Point ResolvedAt(PathGeom path, Dictionary<VertexKey, Point> resolved, int fitVertex)
     {
         var raw = path.Raw[path.FitIndex[fitVertex % path.FitIndex.Count]];
-        return resolved.GetValueOrDefault(Key(raw), raw);
+        return resolved.TryGetValue(Key(raw), out var value) ? value : raw;
     }
 
     // ---- merge collinear line intervals across the whole network ----
@@ -900,4 +900,6 @@ internal static class SpaceBoundaryNetwork
         double dx = a.X - b.X, dy = a.Y - b.Y;
         return Math.Sqrt(dx * dx + dy * dy);
     }
+
+    private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 }

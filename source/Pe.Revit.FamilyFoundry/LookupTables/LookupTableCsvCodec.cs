@@ -41,7 +41,7 @@ internal static class LookupTableCsvCodec {
         if (headers.Count == 0)
             throw new InvalidOperationException($"Lookup table '{tableName}' CSV header row is empty.");
 
-        var normalizedLookupKeyCount = BclExtensions.Clamp(inferredLookupKeyCount, 0, Math.Max(0, headers.Count - 1));
+        var normalizedLookupKeyCount = BclCompat.Clamp(inferredLookupKeyCount, 0, Math.Max(0, headers.Count - 1));
         var columns = headers
             .Skip(1)
             .Select((header, index) => DecodeHeader(
