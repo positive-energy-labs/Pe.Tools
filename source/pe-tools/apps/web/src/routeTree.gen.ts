@@ -20,6 +20,10 @@ import { Route as DocLabRouteImport } from "./routes/doc-lab";
 import { Route as DesignSystemRouteImport } from "./routes/design-system";
 import { Route as ChatRouteImport } from "./routes/chat";
 import { Route as IndexRouteImport } from "./routes/index";
+import { Route as PocTypeRouteImport } from "./routes/poc.type";
+import { Route as PocSurfacesRouteImport } from "./routes/poc.surfaces";
+import { Route as PocSidepaneRouteImport } from "./routes/poc.sidepane";
+import { Route as PocDialRouteImport } from "./routes/poc.dial";
 import { Route as DemoTanstackQueryRouteImport } from "./routes/demo/tanstack-query";
 import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
 import { Route as ApiPdfAuditMapRouteImport } from "./routes/api/pdf-audit/map";
@@ -80,6 +84,26 @@ const IndexRoute = IndexRouteImport.update({
   path: "/",
   getParentRoute: () => rootRouteImport,
 } as any);
+const PocTypeRoute = PocTypeRouteImport.update({
+  id: "/poc/type",
+  path: "/poc/type",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PocSurfacesRoute = PocSurfacesRouteImport.update({
+  id: "/poc/surfaces",
+  path: "/poc/surfaces",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PocSidepaneRoute = PocSidepaneRouteImport.update({
+  id: "/poc/sidepane",
+  path: "/poc/sidepane",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PocDialRoute = PocDialRouteImport.update({
+  id: "/poc/dial",
+  path: "/poc/dial",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const DemoTanstackQueryRoute = DemoTanstackQueryRouteImport.update({
   id: "/demo/tanstack-query",
   path: "/demo/tanstack-query",
@@ -114,6 +138,10 @@ export interface FileRoutesByFullPath {
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings-prototype": typeof SettingsPrototypeRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
+  "/poc/dial": typeof PocDialRoute;
+  "/poc/sidepane": typeof PocSidepaneRoute;
+  "/poc/surfaces": typeof PocSurfacesRoute;
+  "/poc/type": typeof PocTypeRoute;
   "/api/pdf-audit/map": typeof ApiPdfAuditMapRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
@@ -131,6 +159,10 @@ export interface FileRoutesByTo {
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings-prototype": typeof SettingsPrototypeRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
+  "/poc/dial": typeof PocDialRoute;
+  "/poc/sidepane": typeof PocSidepaneRoute;
+  "/poc/surfaces": typeof PocSurfacesRoute;
+  "/poc/type": typeof PocTypeRoute;
   "/api/pdf-audit/map": typeof ApiPdfAuditMapRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
@@ -149,6 +181,10 @@ export interface FileRoutesById {
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings-prototype": typeof SettingsPrototypeRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
+  "/poc/dial": typeof PocDialRoute;
+  "/poc/sidepane": typeof PocSidepaneRoute;
+  "/poc/surfaces": typeof PocSurfacesRoute;
+  "/poc/type": typeof PocTypeRoute;
   "/api/pdf-audit/map": typeof ApiPdfAuditMapRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
@@ -168,6 +204,10 @@ export interface FileRouteTypes {
     | "/schedule-grid"
     | "/settings-prototype"
     | "/demo/tanstack-query"
+    | "/poc/dial"
+    | "/poc/sidepane"
+    | "/poc/surfaces"
+    | "/poc/type"
     | "/api/pdf-audit/map"
     | "/api/pdf-audit/parse"
     | "/api/pdf-audit/parse/$parseId";
@@ -185,6 +225,10 @@ export interface FileRouteTypes {
     | "/schedule-grid"
     | "/settings-prototype"
     | "/demo/tanstack-query"
+    | "/poc/dial"
+    | "/poc/sidepane"
+    | "/poc/surfaces"
+    | "/poc/type"
     | "/api/pdf-audit/map"
     | "/api/pdf-audit/parse"
     | "/api/pdf-audit/parse/$parseId";
@@ -202,6 +246,10 @@ export interface FileRouteTypes {
     | "/schedule-grid"
     | "/settings-prototype"
     | "/demo/tanstack-query"
+    | "/poc/dial"
+    | "/poc/sidepane"
+    | "/poc/surfaces"
+    | "/poc/type"
     | "/api/pdf-audit/map"
     | "/api/pdf-audit/parse"
     | "/api/pdf-audit/parse/$parseId";
@@ -220,6 +268,10 @@ export interface RootRouteChildren {
   ScheduleGridRoute: typeof ScheduleGridRoute;
   SettingsPrototypeRoute: typeof SettingsPrototypeRoute;
   DemoTanstackQueryRoute: typeof DemoTanstackQueryRoute;
+  PocDialRoute: typeof PocDialRoute;
+  PocSidepaneRoute: typeof PocSidepaneRoute;
+  PocSurfacesRoute: typeof PocSurfacesRoute;
+  PocTypeRoute: typeof PocTypeRoute;
   ApiPdfAuditMapRoute: typeof ApiPdfAuditMapRoute;
   ApiPdfAuditParseRoute: typeof ApiPdfAuditParseRouteWithChildren;
 }
@@ -303,6 +355,34 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof IndexRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/poc/type": {
+      id: "/poc/type";
+      path: "/poc/type";
+      fullPath: "/poc/type";
+      preLoaderRoute: typeof PocTypeRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/poc/surfaces": {
+      id: "/poc/surfaces";
+      path: "/poc/surfaces";
+      fullPath: "/poc/surfaces";
+      preLoaderRoute: typeof PocSurfacesRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/poc/sidepane": {
+      id: "/poc/sidepane";
+      path: "/poc/sidepane";
+      fullPath: "/poc/sidepane";
+      preLoaderRoute: typeof PocSidepaneRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/poc/dial": {
+      id: "/poc/dial";
+      path: "/poc/dial";
+      fullPath: "/poc/dial";
+      preLoaderRoute: typeof PocDialRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/demo/tanstack-query": {
       id: "/demo/tanstack-query";
       path: "/demo/tanstack-query";
@@ -358,6 +438,10 @@ const rootRouteChildren: RootRouteChildren = {
   ScheduleGridRoute: ScheduleGridRoute,
   SettingsPrototypeRoute: SettingsPrototypeRoute,
   DemoTanstackQueryRoute: DemoTanstackQueryRoute,
+  PocDialRoute: PocDialRoute,
+  PocSidepaneRoute: PocSidepaneRoute,
+  PocSurfacesRoute: PocSurfacesRoute,
+  PocTypeRoute: PocTypeRoute,
   ApiPdfAuditMapRoute: ApiPdfAuditMapRoute,
   ApiPdfAuditParseRoute: ApiPdfAuditParseRouteWithChildren,
 };

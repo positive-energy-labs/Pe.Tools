@@ -252,7 +252,8 @@ export function Lens({
       const inner = traceInnerRef.current;
       // The lane body starts HEAD_H below the viewport top (under the sticky sidebar head), so
       // subtract it to land the focal card on the same axis as the chat's focal message.
-      if (inner) inner.style.transform = `translateY(${FOCAL * V - HEAD_H - laneCenterOf(anchorKey)}px)`;
+      if (inner)
+        inner.style.transform = `translateY(${FOCAL * V - HEAD_H - laneCenterOf(anchorKey)}px)`;
     };
     const applyExpansion = (key: string | null) => {
       const hoverKey = hoverKeyRef.current;
@@ -504,73 +505,75 @@ export function Lens({
             list stays visible on a fresh session and the --vp ResizeObserver always fires. */}
         <div className="lens-grid">
           <div className="mapdial" onPointerDown={onPointerDown} aria-label="Timeline">
-              <div className="mapdial-strip" ref={stripRef}>
-                {moments.map((moment, index) => (
-                  <div
-                    key={moment.id}
-                    data-key={moment.id}
-                    className={`mapdial-band ${moment.role}${
-                      cache.changed.size > 0 && index === moments.length - 1 ? " delta" : ""
-                    }`}
-                    ref={(el) => {
-                      if (el) bandRefs.current.set(moment.id, el);
-                      else bandRefs.current.delete(moment.id);
-                    }}
-                  >
-                    <span className="num">{bandNumber(moment, index)}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="cs-wick" ref={wickRef} />
-              <div className="cs-cap" ref={capTopRef} />
-              <div className="cs-cap" ref={capBotRef} />
-              <div className="cs-focal" ref={csFocalRef} />
-              <div className="caret" ref={caretRef} />
+            <div className="mapdial-strip" ref={stripRef}>
+              {moments.map((moment, index) => (
+                <div
+                  key={moment.id}
+                  data-key={moment.id}
+                  className={`mapdial-band ${moment.role}${
+                    cache.changed.size > 0 && index === moments.length - 1 ? " delta" : ""
+                  }`}
+                  ref={(el) => {
+                    if (el) bandRefs.current.set(moment.id, el);
+                    else bandRefs.current.delete(moment.id);
+                  }}
+                >
+                  <span className="num" title={formatTime(moment.createdAt)}>
+                    {bandNumber(index)}
+                  </span>
+                </div>
+              ))}
             </div>
+            <div className="cs-wick" ref={wickRef} />
+            <div className="cs-cap" ref={capTopRef} />
+            <div className="cs-cap" ref={capBotRef} />
+            <div className="cs-focal" ref={csFocalRef} />
+            <div className="caret" ref={caretRef} />
+          </div>
 
-            {/* display:contents so the Root box vanishes from layout — `.lens-chat` stays the
+          {/* display:contents so the Root box vanishes from layout — `.lens-chat` stays the
                 grid item AND keeps our own ref (asChild would consume it, breaking re-measure). */}
-            <ThreadPrimitive.Root style={{ display: "contents" }}>
-              <div className="lens-chat" ref={chatRef}>
-                {moments.length === 0 ? (
-                  <div className="grid min-h-[60vh] place-content-center justify-items-center gap-1.5 px-6 text-center text-muted-foreground">
-                    <h1 className="m-0 font-[var(--font-display)] text-[30px] font-semibold text-[var(--pe-blue)]">
-                      Pea
-                    </h1>
-                    <p>Ask anything to begin. Pick a thread on the left, or start a new one.</p>
-                  </div>
-                ) : null}
-                <ContextStrip state={state} depth={modeDepth(mode)} />
-                <Moments register={registerMoment} />
-                <RouteChatPluginDock />
-              </div>
-            </ThreadPrimitive.Root>
-
-            {/* The always-on sidebar: a fixed head (mode dial) over a mode-switched body. */}
-            <div className="lens-lane side" data-side={mode} ref={laneRef}>
-              <div className="side-head">{sideHead}</div>
-              <div className="side-body">
-                {mode === "trace" ? (
-                  <div className="lens-pin" ref={traceInnerRef}>
-                    {traceCells.map((cell) => (
-                      <TraceCellView
-                        key={cell.key}
-                        cell={cell}
-                        registerRef={(el) => {
-                          if (el) cardRefs.current.set(cell.key, el);
-                          else cardRefs.current.delete(cell.key);
-                        }}
-                      />
-                    ))}
-                  </div>
-                ) : mode === "world" ? (
-                  <WorldLane breakdown={breakdown} cache={cache} sendNumber={userTurns} />
-                ) : (
-                  threadList
-                )}
-              </div>
-              <div className="side-resize" onPointerDown={onResizeDown} title="Drag to resize" />
+          <ThreadPrimitive.Root style={{ display: "contents" }}>
+            <div className="lens-chat" ref={chatRef}>
+              {moments.length === 0 ? (
+                <div className="grid min-h-[60vh] place-content-center justify-items-center gap-1.5 px-6 text-center text-muted-foreground">
+                  <h1 className="m-0 font-[var(--font-display)] text-[30px] font-semibold text-[var(--pe-blue)]">
+                    Pea
+                  </h1>
+                  <p>Ask anything to begin. Pick a thread on the left, or start a new one.</p>
+                </div>
+              ) : null}
+              <ContextStrip state={state} depth={modeDepth(mode)} />
+              <Moments register={registerMoment} />
+              <RouteChatPluginDock />
             </div>
+          </ThreadPrimitive.Root>
+
+          {/* The always-on sidebar: a fixed head (mode dial) over a mode-switched body. */}
+          <div className="lens-lane side" data-side={mode} ref={laneRef}>
+            <div className="side-head">{sideHead}</div>
+            <div className="side-body">
+              {mode === "trace" ? (
+                <div className="lens-pin" ref={traceInnerRef}>
+                  {traceCells.map((cell) => (
+                    <TraceCellView
+                      key={cell.key}
+                      cell={cell}
+                      registerRef={(el) => {
+                        if (el) cardRefs.current.set(cell.key, el);
+                        else cardRefs.current.delete(cell.key);
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : mode === "world" ? (
+                <WorldLane breakdown={breakdown} cache={cache} sendNumber={userTurns} />
+              ) : (
+                threadList
+              )}
+            </div>
+            <div className="side-resize" onPointerDown={onResizeDown} title="Drag to resize" />
+          </div>
         </div>
       </div>
       {moments.length > 0 ? <div className="lens-scrim" aria-hidden="true" /> : null}
@@ -691,7 +694,12 @@ function TraceCellBody({ cell }: { cell: TraceCell }) {
     return (
       <>
         <div className="h">
-          {entry.kind} · {entry.status}
+          <span className="h-title">{entry.kind}</span>
+          {entry.status ? (
+            <span className="h-meta">
+              <span className="tele-label">{entry.status}</span>
+            </span>
+          ) : null}
         </div>
         <pre>{stringify(entry.raw ?? entry.summary ?? entry.title ?? entry.id)}</pre>
       </>
@@ -707,9 +715,22 @@ function ToolCellBody({ call }: { call: WorkbenchToolCall }) {
   const output = io?.rawOutput ?? call.rawOutput ?? call.content;
   const error = io?.error ?? call.error;
   const images = toolImages(output);
+  const duration = toolDuration(call);
   return (
     <>
-      <div className="h">{call.title}</div>
+      <div className="h">
+        <span className="h-title">{call.title}</span>
+        {call.status || duration ? (
+          <span className="h-meta">
+            {call.status ? (
+              <span className="tele-label" style={{ color: statusColor(call.status) }}>
+                {call.status.replace("_", " ")}
+              </span>
+            ) : null}
+            {duration ? <span className="tele">{duration}</span> : null}
+          </span>
+        ) : null}
+      </div>
       {input !== undefined ? <pre>{stringify(input)}</pre> : null}
       {images.length > 0 ? (
         images.map((src, index) => <img key={index} className="tool-img" src={src} alt="" />)
@@ -791,14 +812,37 @@ function isTimelineMemoryEntry(entry: WorkbenchObservationMemoryEntry): boolean 
   );
 }
 
-function bandNumber(moment: Moment, index: number): string {
-  const time = formatTime(moment.createdAt);
-  return time ?? `#${index + 1}`;
+/* The 64px dial can't fit a clock string; the turn number is the dial's native unit (and the
+   URL's `turn` param). The timestamp survives as the hover title. */
+function bandNumber(index: number): string {
+  return `#${index + 1}`;
 }
 
 function formatTime(date?: Date): string | undefined {
   if (!date || Number.isNaN(date.getTime())) return undefined;
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+// Telemetry metadata for a tool trace row: status hue + a human duration. Both feed the hybrid
+// header's right-aligned `tele` cluster (the machine-measured tier).
+const TOOL_STATUS_COLOR: Record<string, string> = {
+  completed: "var(--pe-green)",
+  failed: "var(--fail)",
+  in_progress: "var(--pe-blue)",
+  pending: "var(--muted-foreground)",
+};
+
+function statusColor(status: string): string {
+  return TOOL_STATUS_COLOR[status] ?? "var(--muted-foreground)";
+}
+
+function toolDuration(call: WorkbenchToolCall): string | undefined {
+  const start = call.startedAt;
+  const end = call.completedAt ?? call.updatedAt;
+  if (!start || !end) return undefined;
+  const ms = Date.parse(end) - Date.parse(start);
+  if (!Number.isFinite(ms) || ms < 0) return undefined;
+  return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
 }
 
 function stringify(value: unknown): string {

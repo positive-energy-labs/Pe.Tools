@@ -11,8 +11,8 @@ export function ModeDial({ mode, setMode }: { mode: Mode; setMode: (mode: Mode) 
       onValueChange={(value) => setMode(value as Mode)}
     >
       {MODES.map((value) => (
-        <ToggleGroupItem key={value} value={value}>
-          {value.charAt(0).toUpperCase() + value.slice(1)}
+        <ToggleGroupItem key={value} value={value} className="tele-label">
+          {value}
         </ToggleGroupItem>
       ))}
     </ToggleGroup>

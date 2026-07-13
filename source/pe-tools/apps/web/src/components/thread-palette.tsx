@@ -21,7 +21,11 @@ function ThreadDot({ thread, active }: { thread: StoredThreadSummary; active: bo
     <span
       aria-hidden
       className={`size-1.5 shrink-0 rounded-full ${
-        thread.promptActive ? "animate-pulse bg-primary" : active ? "bg-accent-foreground" : "bg-border"
+        thread.promptActive
+          ? "animate-pulse bg-primary"
+          : active
+            ? "bg-accent-foreground"
+            : "bg-border"
       }`}
     />
   );
@@ -59,20 +63,24 @@ export function ThreadList({
             <div
               key={thread.id}
               className={`group/row flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[13px] ${
-                active ? "bg-[var(--paper)] shadow-[inset_0_0_0_0.5px_var(--line)]" : "hover:bg-[var(--paper-2)]"
+                active
+                  ? "bg-[var(--paper)] shadow-[inset_0_0_0_0.5px_var(--line)]"
+                  : "hover:bg-[var(--paper-2)]"
               }`}
               onClick={() => onSelect(thread.id)}
             >
               <ThreadDot thread={thread} active={active} />
-              <span className={`min-w-0 flex-1 truncate ${active ? "font-medium text-foreground" : "text-[var(--slate)]"}`}>
+              <span
+                className={`min-w-0 flex-1 truncate ${active ? "font-medium text-foreground" : "text-[var(--slate)]"}`}
+              >
                 {thread.title}
               </span>
               {thread.promptActive ? (
-                <span className="shrink-0 rounded bg-primary/10 px-1.5 text-[10px] font-medium text-primary">
+                <span className="tele-label shrink-0 rounded bg-primary/10 px-1.5 text-primary">
                   running
                 </span>
               ) : thread.cwd ? (
-                <span className="hidden shrink-0 truncate font-mono text-[10px] text-muted-foreground group-hover/row:hidden sm:inline">
+                <span className="tele hidden shrink-0 truncate text-muted-foreground group-hover/row:hidden sm:inline">
                   {basename(thread.cwd)}
                 </span>
               ) : null}
@@ -111,7 +119,7 @@ export function ThreadList({
         >
           <Search className="size-3.5" />
           <span className="flex-1 text-left">Search all threads</span>
-          {rest > 0 ? <span className="text-[11px] text-muted-foreground">+{rest}</span> : null}
+          {rest > 0 ? <span className="tele text-muted-foreground">+{rest}</span> : null}
           <kbd className="rounded border border-border px-1 py-0.5 font-mono text-[10px] text-muted-foreground">
             ⌘K
           </kbd>
@@ -190,12 +198,12 @@ export function ThreadPalette({
                   {thread.title}
                 </span>
                 {thread.promptActive ? (
-                  <span className="shrink-0 rounded bg-primary/10 px-1.5 text-[10px] font-medium text-primary">
+                  <span className="tele-label shrink-0 rounded bg-primary/10 px-1.5 text-primary">
                     running
                   </span>
                 ) : null}
                 {thread.cwd ? (
-                  <span className="hidden max-w-[35%] shrink-0 truncate font-mono text-[11px] text-muted-foreground sm:inline">
+                  <span className="tele hidden max-w-[35%] shrink-0 truncate text-muted-foreground sm:inline">
                     {basename(thread.cwd)}
                   </span>
                 ) : null}
