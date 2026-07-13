@@ -103,11 +103,12 @@ const TOOLS = [
       "A web Family Types dialog — pea proposes spec-sheet values with provenance; you review, stage, and push to Revit.",
   },
   {
-    to: "/settings-prototype",
+    to: "/settings",
     title: "Settings",
     label: "Host pipeline",
     icon: Settings2,
-    description: "Schema-driven authoring forms validated and saved through the host.",
+    description:
+      "Schema-backed host settings — pea proposes field values, you review, stage, validate, and save.",
   },
   {
     to: "/doc-lab",

@@ -9,8 +9,9 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from "./routes/__root";
-import { Route as SettingsPrototypeRouteImport } from "./routes/settings-prototype";
+import { Route as SettingsRouteImport } from "./routes/settings";
 import { Route as ScheduleGridRouteImport } from "./routes/schedule-grid";
+import { Route as ParameterLinksRouteImport } from "./routes/parameter-links";
 import { Route as OpsRouteImport } from "./routes/ops";
 import { Route as FamilyTypesRouteImport } from "./routes/family-types";
 import { Route as FamilyMatrixRouteImport } from "./routes/family-matrix";
@@ -29,14 +30,19 @@ import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/par
 import { Route as ApiPdfAuditMapRouteImport } from "./routes/api/pdf-audit/map";
 import { Route as ApiPdfAuditParseParseIdRouteImport } from "./routes/api/pdf-audit/parse.$parseId";
 
-const SettingsPrototypeRoute = SettingsPrototypeRouteImport.update({
-  id: "/settings-prototype",
-  path: "/settings-prototype",
+const SettingsRoute = SettingsRouteImport.update({
+  id: "/settings",
+  path: "/settings",
   getParentRoute: () => rootRouteImport,
 } as any);
 const ScheduleGridRoute = ScheduleGridRouteImport.update({
   id: "/schedule-grid",
   path: "/schedule-grid",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const ParameterLinksRoute = ParameterLinksRouteImport.update({
+  id: "/parameter-links",
+  path: "/parameter-links",
   getParentRoute: () => rootRouteImport,
 } as any);
 const OpsRoute = OpsRouteImport.update({
@@ -135,8 +141,9 @@ export interface FileRoutesByFullPath {
   "/family-matrix": typeof FamilyMatrixRoute;
   "/family-types": typeof FamilyTypesRoute;
   "/ops": typeof OpsRoute;
+  "/parameter-links": typeof ParameterLinksRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
-  "/settings-prototype": typeof SettingsPrototypeRoute;
+  "/settings": typeof SettingsRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
   "/poc/dial": typeof PocDialRoute;
   "/poc/sidepane": typeof PocSidepaneRoute;
@@ -156,8 +163,9 @@ export interface FileRoutesByTo {
   "/family-matrix": typeof FamilyMatrixRoute;
   "/family-types": typeof FamilyTypesRoute;
   "/ops": typeof OpsRoute;
+  "/parameter-links": typeof ParameterLinksRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
-  "/settings-prototype": typeof SettingsPrototypeRoute;
+  "/settings": typeof SettingsRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
   "/poc/dial": typeof PocDialRoute;
   "/poc/sidepane": typeof PocSidepaneRoute;
@@ -178,8 +186,9 @@ export interface FileRoutesById {
   "/family-matrix": typeof FamilyMatrixRoute;
   "/family-types": typeof FamilyTypesRoute;
   "/ops": typeof OpsRoute;
+  "/parameter-links": typeof ParameterLinksRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
-  "/settings-prototype": typeof SettingsPrototypeRoute;
+  "/settings": typeof SettingsRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
   "/poc/dial": typeof PocDialRoute;
   "/poc/sidepane": typeof PocSidepaneRoute;
@@ -201,8 +210,9 @@ export interface FileRouteTypes {
     | "/family-matrix"
     | "/family-types"
     | "/ops"
+    | "/parameter-links"
     | "/schedule-grid"
-    | "/settings-prototype"
+    | "/settings"
     | "/demo/tanstack-query"
     | "/poc/dial"
     | "/poc/sidepane"
@@ -222,8 +232,9 @@ export interface FileRouteTypes {
     | "/family-matrix"
     | "/family-types"
     | "/ops"
+    | "/parameter-links"
     | "/schedule-grid"
-    | "/settings-prototype"
+    | "/settings"
     | "/demo/tanstack-query"
     | "/poc/dial"
     | "/poc/sidepane"
@@ -243,8 +254,9 @@ export interface FileRouteTypes {
     | "/family-matrix"
     | "/family-types"
     | "/ops"
+    | "/parameter-links"
     | "/schedule-grid"
-    | "/settings-prototype"
+    | "/settings"
     | "/demo/tanstack-query"
     | "/poc/dial"
     | "/poc/sidepane"
@@ -265,8 +277,9 @@ export interface RootRouteChildren {
   FamilyMatrixRoute: typeof FamilyMatrixRoute;
   FamilyTypesRoute: typeof FamilyTypesRoute;
   OpsRoute: typeof OpsRoute;
+  ParameterLinksRoute: typeof ParameterLinksRoute;
   ScheduleGridRoute: typeof ScheduleGridRoute;
-  SettingsPrototypeRoute: typeof SettingsPrototypeRoute;
+  SettingsRoute: typeof SettingsRoute;
   DemoTanstackQueryRoute: typeof DemoTanstackQueryRoute;
   PocDialRoute: typeof PocDialRoute;
   PocSidepaneRoute: typeof PocSidepaneRoute;
@@ -278,11 +291,11 @@ export interface RootRouteChildren {
 
 declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
-    "/settings-prototype": {
-      id: "/settings-prototype";
-      path: "/settings-prototype";
-      fullPath: "/settings-prototype";
-      preLoaderRoute: typeof SettingsPrototypeRouteImport;
+    "/settings": {
+      id: "/settings";
+      path: "/settings";
+      fullPath: "/settings";
+      preLoaderRoute: typeof SettingsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/schedule-grid": {
@@ -290,6 +303,13 @@ declare module "@tanstack/react-router" {
       path: "/schedule-grid";
       fullPath: "/schedule-grid";
       preLoaderRoute: typeof ScheduleGridRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/parameter-links": {
+      id: "/parameter-links";
+      path: "/parameter-links";
+      fullPath: "/parameter-links";
+      preLoaderRoute: typeof ParameterLinksRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/ops": {
@@ -435,8 +455,9 @@ const rootRouteChildren: RootRouteChildren = {
   FamilyMatrixRoute: FamilyMatrixRoute,
   FamilyTypesRoute: FamilyTypesRoute,
   OpsRoute: OpsRoute,
+  ParameterLinksRoute: ParameterLinksRoute,
   ScheduleGridRoute: ScheduleGridRoute,
-  SettingsPrototypeRoute: SettingsPrototypeRoute,
+  SettingsRoute: SettingsRoute,
   DemoTanstackQueryRoute: DemoTanstackQueryRoute,
   PocDialRoute: PocDialRoute,
   PocSidepaneRoute: PocSidepaneRoute,
