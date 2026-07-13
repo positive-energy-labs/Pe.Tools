@@ -38,12 +38,14 @@
   overflow-x: hidden;
   scroll-behavior: smooth;
   scroll-timeline: --lens block;
+  /* No browser scrollbar in the chat lane — the mapdial IS the position instrument. */
+  scrollbar-width: none;
 }
 /* one layout. The sidebar (grid-column 1) is ALWAYS present now; its width is --side (resizable,
    set inline on <main> by ChatShell, clamped to ≤50vw). column order: sidebar | chat | mapdial */
 .lens-grid {
   display: grid;
-  grid-template-columns: var(--side, 300px) minmax(0, 1fr) var(--map, 104px);
+  grid-template-columns: var(--side, 300px) minmax(0, 1fr) var(--map, 64px);
   align-items: start;
 }
 /* all share row 1 — explicit grid-column alone bumps items into separate rows */
@@ -63,14 +65,13 @@
   display: none;
 }
 /* the composer floats over the chat lane: clear the sidebar + the right mapdial, then inset by
-   equal 20px gutters so it lines up with the chat text column (.lens-chat padding: 0 20px). The
-   lane floats OUTSIDE the scroller, so it isn't pushed in by the scrollbar like .lens-chat is — the
-   extra 15px on the right makes up for it. ponytail: 15px = classic scrollbar; harmless if 0 (overlay). */
+   equal 20px gutters so it lines up with the chat text column (.lens-chat padding: 0 20px).
+   The scroller hides its scrollbar (the mapdial replaces it), so the gutters are symmetric. */
 .pe-composer-lane {
   margin-left: var(--side, 300px);
-  margin-right: var(--map, 104px);
+  margin-right: var(--map, 64px);
   padding-left: 20px;
-  padding-right: 35px;
+  padding-right: 20px;
 }
 
 /* ---- Map-dial: proportional minimap + viewport reticle ---------------- */
@@ -93,25 +94,28 @@
 }
 .mapdial-band {
   position: absolute;
-  right: 16px;
-  width: 14px;
-  border-radius: 2px;
-  opacity: 0.4;
+  right: 14px;
+  width: 8px;
+  border-radius: 0; /* hard-square segment bars */
+  opacity: 0.38;
   transition:
-    right 0.14s ease,
-    width 0.14s ease,
     opacity 0.14s ease,
-    transform 0.14s ease;
+    background 0.14s ease;
 }
-/* number rides on the band — shown only on the focal band, sits to the left of the band */
+/* number rides on the band, to its left. Hidden by default; revealed on hover (below) and
+   ALWAYS on the focal band (the reticle readout). Telemetry type: mono 12px, tracked, tabular. */
 .mapdial-band .num {
   position: absolute;
-  right: 26px;
+  /* band is 8px at right:14px of the 64px lane; 12px inset leaves ~38px of leftward room —
+     enough for "#999" in 12px mono without clipping at the lane's overflow:hidden edge. */
+  right: 12px;
   top: 50%;
   transform: translateY(-50%);
   font-family: var(--font-mono);
-  font-size: 9px;
-  color: var(--slate);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
   white-space: nowrap;
   text-align: right;
   opacity: 0;
@@ -122,16 +126,17 @@
 .mapdial-band.in-reticle {
   opacity: 0.85;
 }
-/* focal = the single band sitting on the focal axis */
+/* hover reveals the turn number on any band */
+.mapdial-band:hover {
+  opacity: 1;
+}
+.mapdial-band:hover .num {
+  opacity: 1;
+}
+/* focal = the single band on the focal axis: full PE Blue, hard square, no halo/glow. */
 .mapdial-band.focal {
   opacity: 1;
-  right: 12px;
-  width: 24px;
-  transform: scaleX(1.06);
-  transform-origin: right;
-  box-shadow:
-    0 0 0 2px var(--paper-3),
-    0 0 0 3px color-mix(in srgb, var(--pe-blue) 35%, transparent);
+  background: var(--pe-blue);
 }
 /* delta = the newest band when context changed this send */
 .mapdial-band.delta {
@@ -149,12 +154,14 @@
 }
 .mapdial-band.focal .num {
   opacity: 1;
+  color: var(--pe-blue);
 }
-.mapdial-band.user {
-  background: var(--user);
+/* provenance segment tints — only when NOT focal (focal owns full PE Blue above) */
+.mapdial-band.user:not(.focal) {
+  background: var(--user-line);
 }
-.mapdial-band.assistant {
-  background: var(--pe-green);
+.mapdial-band.assistant:not(.focal) {
+  background: var(--pea-line);
 }
 /* tool = pea acting → hollow green (matches the pea provenance color) */
 .mapdial-band.tool {
@@ -177,41 +184,26 @@
   background: var(--kiln);
   opacity: 0.55;
 }
-.mapdial-band.user .num {
-  color: var(--user);
-}
-.mapdial-band.assistant .num {
-  color: var(--pe-green);
-}
 
-/* ---- candlestick focal marker (replaces the reticle box) ----
-   horizontal bar = the focal point in the thread;
-   vertical wick + caps = the chat's active viewport, extending up/down. */
+/* ---- viewport reticle: a hard-square box around the aperture ----
+   .cs-wick is repositioned by the rAF controller (top = aperture top, height = aperture
+   extent in dial space); here it is styled as a hard 1px box — no radius, no halo, no glow.
+   The caps + full-width focal line of the old candlestick are retired (display:none) so the
+   controller can keep writing their `top` harmlessly while the box carries the whole marker. */
 .cs-focal {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 0;
-  border-top: 1.5px solid color-mix(in srgb, var(--pe-blue) 60%, transparent);
-  pointer-events: none;
-  z-index: 4;
+  display: none;
 }
 .cs-wick {
   position: absolute;
-  left: 50%;
-  width: 0;
-  border-left: 1px solid color-mix(in srgb, var(--pe-blue) 32%, transparent);
+  left: 4px;
+  right: 4px;
+  border: 1px solid color-mix(in srgb, var(--pe-blue) 70%, transparent);
+  border-radius: 0;
   pointer-events: none;
   z-index: 3;
 }
 .cs-cap {
-  position: absolute;
-  left: calc(50% - 8px);
-  width: 16px;
-  height: 0;
-  border-top: 1px solid color-mix(in srgb, var(--pe-blue) 32%, transparent);
-  pointer-events: none;
-  z-index: 3;
+  display: none;
 }
 .mapdial .caret {
   position: absolute;
@@ -246,7 +238,7 @@
   max-width: 100%;
   border-left: 2px solid var(--pe-green);
   padding: 1px 7px 1px 9px;
-  border-radius: 0 4px 4px 0;
+  border-radius: 0; /* instrument surface — hard square */
   font-size: 12px;
   line-height: 1.3;
   color: var(--slate);
@@ -389,9 +381,9 @@
 }
 .lens-cell {
   margin: 0 12px 4px;
-  max-height: 24px;
+  max-height: 28px; /* matches the collapsed height the fisheye controller sets — avoids a header clip */
   border: 0.5px solid var(--line);
-  border-radius: 6px;
+  border-radius: 0; /* trace card — hard square */
   overflow: hidden;
   background: var(--paper);
   opacity: 0.62;
@@ -416,16 +408,30 @@
   max-height: 160px;
   overflow: auto;
 }
+/* hybrid row: sans title on the left, machine-measured metadata (status/duration) right-aligned
+   in the telemetry tier. Tight density so the collapsed strip stays ~28px. */
 .lens-cell .h {
-  font-size: 9px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--slate);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
   background: var(--paper-2);
-  padding: 3px 8px;
   white-space: nowrap;
+}
+.lens-cell .h .h-title {
+  min-width: 0;
+  font-size: 13px;
+  color: var(--foreground);
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.lens-cell .h .h-meta {
+  display: inline-flex;
+  flex: none;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--muted-foreground);
 }
 .lens-cell .tool-img {
   display: block;
@@ -468,7 +474,7 @@
   height: 1.05em;
   vertical-align: text-bottom;
   background: var(--pe-blue);
-  border-radius: 1px;
+  border-radius: 0;
   animation: mg-blink 1s steps(2, start) infinite;
 }
 @keyframes mg-blink {
@@ -521,7 +527,7 @@
   width: 18px;
   height: 18px;
   border: none;
-  border-radius: 5px;
+  border-radius: 0;
   background: transparent;
   color: var(--muted-foreground);
   opacity: 0;

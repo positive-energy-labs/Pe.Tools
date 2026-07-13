@@ -103,7 +103,7 @@ function Picker({
             />
           }
         >
-          <span className="truncate">{label}</span>
+          <span className="tele truncate">{label}</span>
         </ComboboxTrigger>
       </div>
       <ComboboxContent align="end" anchor={anchorRef} className="min-w-56">

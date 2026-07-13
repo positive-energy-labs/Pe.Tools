@@ -79,8 +79,7 @@ function fmtTok(tokens: number): string {
 }
 
 // Cache badge (≈ inferred) — base + per-state tone. Reused by the per-row badge and the foot.
-const CACHE_BASE =
-  "rounded-[3px] border-[0.5px] px-[5px] py-px font-mono text-[8.5px] tracking-[0.02em] whitespace-nowrap";
+const CACHE_BASE = "rounded-[3px] border-[0.5px] px-[5px] py-px tele-label whitespace-nowrap";
 const CACHE_TONE = {
   cached:
     "text-[var(--lichen)] border-[color-mix(in_srgb,var(--lichen)_50%,transparent)] bg-[color-mix(in_srgb,var(--pe-green)_16%,transparent)]",
@@ -112,17 +111,16 @@ const PILL_LABEL: Record<NonNullable<WorkbenchContextItem["state"]>, string> = {
 
 // Density segmented-control button — the Plain / Inspect toggle.
 const WORLD_DIAL_BTN =
-  "cursor-pointer rounded-md border-[0.5px] border-transparent bg-transparent px-[9px] py-[3px] text-[11px] font-semibold whitespace-nowrap text-muted-foreground aria-pressed:border-[rgba(183,141,106,0.5)] aria-pressed:bg-[var(--paper)] aria-pressed:text-[var(--clay-ink)] aria-pressed:shadow-[0_1px_1px_rgba(138,94,59,0.15)]";
+  "cursor-pointer rounded-md border-[0.5px] border-transparent bg-transparent px-[9px] py-[3px] tele-label whitespace-nowrap text-muted-foreground aria-pressed:border-[rgba(183,141,106,0.5)] aria-pressed:bg-[var(--paper)] aria-pressed:text-[var(--clay-ink)] aria-pressed:shadow-[0_1px_1px_rgba(138,94,59,0.15)]";
 
 // Item load-state pill + delta blast badge (ported; standalone, not part of any cascade).
-const PILL_BASE =
-  "rounded border-[0.5px] px-[5px] py-px font-mono text-[8.5px] tracking-[0.02em] whitespace-nowrap";
+const PILL_BASE = "rounded border-[0.5px] px-[5px] py-px tele-label whitespace-nowrap";
 const PILL_TONE: Record<NonNullable<WorkbenchContextItem["state"]>, string> = {
   in: "text-[var(--pe-blue)] border-[rgba(0,86,149,0.4)] bg-[rgba(0,86,149,0.05)]",
   "on-demand": "text-[var(--clay-ink)] border-dashed border-[rgba(183,141,106,0.5)]",
   off: "text-muted-foreground border-[var(--line-2)]",
 };
-const BLAST_BASE = "rounded-[3px] border-[0.5px] px-1 font-mono text-[8.5px] whitespace-nowrap";
+const BLAST_BASE = "rounded-[3px] border-[0.5px] px-1 tele-label whitespace-nowrap";
 const BLAST_TONE: Record<Blast, string> = {
   prefix:
     "text-[var(--fail)] border-[color-mix(in_srgb,var(--fail)_50%,transparent)] bg-[color-mix(in_srgb,var(--fail)_8%,transparent)]",
@@ -132,7 +130,7 @@ const BLAST_TONE: Record<Blast, string> = {
 
 // Row chrome shared by every layer row; grid-cols differ by density (see WorldLane).
 const WORLD_ROW =
-  "grid w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-3.5 py-[9px] text-left [font:inherit] hover:bg-[var(--paper-2)]";
+  "grid w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-3.5 py-1.5 text-left [font:inherit] hover:bg-[var(--paper-2)]";
 
 export function WorldLane({
   breakdown,
@@ -180,9 +178,7 @@ export function WorldLane({
   return (
     <div className="flex min-h-0 flex-col [font-variant-numeric:tabular-nums]">
       <div className="sticky top-0 z-[2] flex items-center gap-2.5 border-b-[0.5px] border-[var(--line)] bg-[var(--paper-3)] px-3.5 pt-3 pb-2.5">
-        <h2 className="m-0 font-[var(--font-display)] text-[15px] font-semibold text-foreground">
-          What the agent sends the model
-        </h2>
+        <h2 className="section-label m-0">What the agent sends the model</h2>
         <div className="ml-auto flex items-center gap-1.5">
           <div
             className="flex gap-0.5 rounded-lg border-[0.5px] border-[var(--line-2)] bg-muted p-0.5"
@@ -226,9 +222,9 @@ export function WorldLane({
       </div>
 
       {inspect ? (
-        <div className="flex flex-wrap items-center gap-[7px] px-3.5 pt-[7px] font-mono text-[10px] text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-[7px] px-3.5 pt-[7px] text-[10px] text-muted-foreground">
           {sendNumber ? (
-            <span className="rounded-[4px] border-[0.5px] border-[color-mix(in_srgb,var(--clay)_40%,transparent)] bg-[var(--clay-tint)] px-1.5 py-px text-[var(--clay-ink)]">
+            <span className="tele-label rounded-[4px] border-[0.5px] border-[color-mix(in_srgb,var(--clay)_40%,transparent)] bg-[var(--clay-tint)] px-1.5 py-px text-[var(--clay-ink)]">
               snapshot @ send #{sendNumber}
             </span>
           ) : null}
@@ -238,17 +234,15 @@ export function WorldLane({
 
       {inspect && cache.hasBaseline ? (
         <div className="mx-3.5 mt-2.5 grid gap-1.5 rounded-lg border-[0.5px] border-[var(--line)] bg-[var(--paper)] px-3 py-2.5 text-[11px]">
-          <div className="flex items-center gap-[7px] [font-variant-numeric:tabular-nums]">
+          <div className="flex items-center gap-[7px] tele-label [font-variant-numeric:tabular-nums]">
             <span className="size-[9px] flex-none rounded-[2px] bg-[var(--pe-green)]" />
             cache-read · 0.1×
-            <span className="ml-auto font-mono text-muted-foreground">{fmtTok(totals.cached)}</span>
+            <span className="ml-auto text-muted-foreground">{fmtTok(totals.cached)}</span>
           </div>
-          <div className="flex items-center gap-[7px] [font-variant-numeric:tabular-nums]">
+          <div className="flex items-center gap-[7px] tele-label [font-variant-numeric:tabular-nums]">
             <span className="size-[9px] flex-none rounded-[2px] bg-[var(--clay)] [background-image:repeating-linear-gradient(-45deg,rgba(255,255,255,0.4)_0_2px,transparent_2px_4px)]" />
             reprocessed · 1×
-            <span className="ml-auto font-mono text-muted-foreground">
-              {fmtTok(totals.reprocessed)}
-            </span>
+            <span className="ml-auto text-muted-foreground">{fmtTok(totals.reprocessed)}</span>
           </div>
           {diff && cache.changed.size > 0 && cache.horizonRank !== null ? (
             <div className="rounded-md border-[0.5px] border-[color-mix(in_srgb,var(--clay)_40%,transparent)] bg-[var(--clay-tint)] px-2 py-1.5 text-[10.5px] leading-[1.45] text-[var(--clay-ink)]">
@@ -292,12 +286,10 @@ export function WorldLane({
                 </span>
                 {inspect ? <CacheBadge state={cache.stateOf(layer.id)} /> : null}
                 {inspect ? (
-                  <span className="font-mono text-[10.5px] text-muted-foreground">
-                    {fmtTok(layer.tokens)}
-                  </span>
+                  <span className="tele text-muted-foreground">{fmtTok(layer.tokens)}</span>
                 ) : null}
                 {inspect ? (
-                  <span className="min-w-[30px] text-right font-mono text-[10px] text-muted-foreground">
+                  <span className="min-w-[30px] text-right tele text-muted-foreground">
                     {((layer.tokens / used) * 100).toFixed(0)}%
                   </span>
                 ) : null}
@@ -397,9 +389,7 @@ function ItemRow({
             </span>
           ) : null}
           {item.tokens != null ? (
-            <span className="font-mono text-[9.5px] text-muted-foreground">
-              {fmtTok(item.tokens)}
-            </span>
+            <span className="tele text-muted-foreground">{fmtTok(item.tokens)}</span>
           ) : null}
           {hasBody ? (
             <span
@@ -531,8 +521,8 @@ function ContextBudgetBar({
   return (
     <div className="mx-3.5 mt-3">
       <div className="mb-1.5 flex justify-between text-[11px] text-muted-foreground [font-variant-numeric:tabular-nums]">
-        <b className="font-semibold text-foreground">Context budget</b>
-        <span>
+        <b className="section-label">Context budget</b>
+        <span className="tele">
           {fmtTok(inContext)} / {fmtTok(budget)} · OM windows
         </span>
       </div>
@@ -625,7 +615,7 @@ export function ContextRibbon({
             <span className="size-2 flex-none rounded-[2px]" style={{ background: tone(row.id) }} />
             {row.label}
             {row.active ? <span className="ml-1 text-primary">⟲</span> : null}
-            <span className="ml-auto font-mono text-[10px] text-muted-foreground">
+            <span className="ml-auto tele text-muted-foreground">
               {fmtTok(row.tok)}
               {row.cap ? ` / ${fmtTok(row.cap)}` : ""}
             </span>

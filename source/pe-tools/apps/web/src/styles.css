@@ -49,7 +49,9 @@
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --radius: 0.625rem;
+  /* Edge discipline: 2px. Sharp instrument edges, softened one notch off 90° so shadcn
+     primitives don't read raw against OS chrome. Data surfaces may go to 0 locally. */
+  --radius: 0.125rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.141 0.005 285.823);
   --sidebar-primary: oklch(0.21 0.006 285.885);
@@ -203,6 +205,32 @@ body,
   min-height: 100%;
 }
 
+/* ── Type tiers ──────────────────────────────────────────────────────────────
+   Two families only. Open Sans for anything a human reads as language; mono for
+   anything the machine measured. The law: "mono means the machine measured this" —
+   states, stats, statuses, timestamps, durations, counts, ids get tele/tele-label;
+   mono is never chrome. Section headers are small-caps tracked SANS (not mono). */
+@utility tele {
+  font-family: var(--font-pe-mono);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  font-variant-numeric: tabular-nums;
+}
+@utility tele-label {
+  font-family: var(--font-pe-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+@utility section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
 /* Centered content column — the one piece of the old shell worth keeping. */
 .page-wrap {
   width: min(1080px, calc(100% - 2rem));
@@ -212,6 +240,13 @@ body,
 @layer base {
   * {
     @apply border-border outline-ring/50;
+  }
+  /* One scrollbar for the whole app: thin, flat, neutral; track invisible. Inherits everywhere
+     (scrollbar-width/color are inherited), so per-surface code never styles its own. Surfaces
+     with a dedicated position instrument (chat's mapdial) opt out via scrollbar-width: none. */
+  html {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--foreground) 25%, transparent) transparent;
   }
   body {
     margin: 0;
