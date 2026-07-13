@@ -61,7 +61,11 @@ internal static class PeRuntimeContext {
     }
 
     private static string? FindSourceHostWorkingDirectory() {
-        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory != null; directory = directory.Parent) {
+        // In Revit, AppContext.BaseDirectory is Autodesk's install directory, not Pe.App's checkout.
+        // The loaded add-in assembly is the only stable authority for walking back to source/pe-tools.
+        var assemblyDirectory = Path.GetDirectoryName(typeof(PeRuntimeContext).Assembly.Location)
+                                ?? AppContext.BaseDirectory;
+        for (var directory = new DirectoryInfo(assemblyDirectory); directory != null; directory = directory.Parent) {
             var candidate = Path.Combine(directory.FullName, "source", "pe-tools");
             if (File.Exists(Path.Combine(candidate, "apps", "host", "package.json")))
                 return candidate;
