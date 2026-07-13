@@ -99,6 +99,7 @@
   opacity: 0.38;
   transition:
     opacity 0.14s ease,
+    width 0.14s ease,
     background 0.14s ease;
 }
 /* number rides on the band, to its left. Hidden by default; revealed on hover (below) and
@@ -132,10 +133,17 @@
 .mapdial-band:hover .num {
   opacity: 1;
 }
-/* focal = the single band on the focal axis: full PE Blue, hard square, no halo/glow. */
+/* focal = the single band on the focal axis. Emphasis is WIDTH + full strength of the band's OWN
+   provenance hue — never a hue swap (blue would undermine the color coding). */
 .mapdial-band.focal {
   opacity: 1;
-  background: var(--pe-blue);
+  width: 16px;
+}
+.mapdial-band.user.focal {
+  background: var(--user);
+}
+.mapdial-band.assistant.focal {
+  background: var(--pe-green);
 }
 /* delta = the newest band when context changed this send */
 .mapdial-band.delta {
@@ -153,9 +161,9 @@
 }
 .mapdial-band.focal .num {
   opacity: 1;
-  color: var(--pe-blue);
+  color: var(--foreground);
 }
-/* provenance segment tints — only when NOT focal (focal owns full PE Blue above) */
+/* provenance segment tints — the -line (soft) variants when NOT focal */
 .mapdial-band.user:not(.focal) {
   background: var(--user-line);
 }
@@ -168,10 +176,7 @@
   box-shadow: inset 0 0 0 1.25px var(--pe-green);
 }
 .mapdial-band.tool.focal {
-  box-shadow:
-    inset 0 0 0 1.5px var(--pe-green),
-    0 0 0 2px var(--paper-3),
-    0 0 0 3px color-mix(in srgb, var(--pe-green) 35%, transparent);
+  box-shadow: inset 0 0 0 2px var(--pe-green); /* thicker ring, no halo */
 }
 .mapdial-band.memory {
   background: var(--clay);
@@ -226,6 +231,12 @@
 .lens-moment {
   padding: 11px 0;
   scroll-margin-top: 12px;
+}
+/* A hairline at every you↔pea boundary: the transcript reads as a ledger of alternating speaker
+   compartments. Same-role runs stay unruled (the rule marks the handoff, not every message). */
+.lens-moment[data-role="user"] + .lens-moment[data-role="assistant"],
+.lens-moment[data-role="assistant"] + .lens-moment[data-role="user"] {
+  border-top: 0.5px solid var(--line-soft);
 }
 .lens-marker {
   display: inline-flex;
@@ -342,10 +353,8 @@
 }
 .lens-cell.focal {
   opacity: 1;
-  border-color: color-mix(in srgb, var(--pe-green) 55%, transparent);
-  box-shadow:
-    0 1px 0 color-mix(in srgb, var(--pe-green) 8%, transparent),
-    0 6px 18px color-mix(in srgb, var(--pe-green) 14%, transparent);
+  /* emphasis by intensity of the card's own hue — no glow, no elevation */
+  border-color: color-mix(in srgb, var(--pe-green) 70%, transparent);
 }
 .lens-cell.focal pre {
   max-height: 160px;

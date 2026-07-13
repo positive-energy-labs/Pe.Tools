@@ -158,7 +158,7 @@ export function Composer({
         <div
           role="listbox"
           aria-label="Commands"
-          className="absolute bottom-full mb-2 w-full overflow-hidden rounded-xl border border-border bg-popover shadow-lg"
+          className="absolute bottom-full mb-2 w-full overflow-hidden rounded-lg border-[0.5px] border-[var(--line-2)] bg-popover"
         >
           {matches.slice(0, 6).map((command) => (
             <button
@@ -174,9 +174,9 @@ export function Composer({
         </div>
       ) : null}
 
-      {/* The card clips its own children, so the budget bar is a plain flush rectangle inlaid under
-          the rounded boundary — the border does the corner-clipping, the bar needs no rounding. */}
-      <div className="overflow-hidden rounded-2xl border border-border bg-card/95 shadow-lg shadow-black/5 backdrop-blur">
+      {/* Hard-edged instrument panel: hairline border, flat opaque card, no shadow/blur. The card
+          clips its children, so the budget bar stays a flush rectangle under the boundary. */}
+      <div className="overflow-hidden rounded-lg border-[0.5px] border-[var(--line-2)] bg-card">
         {topBar}
 
         {attachments.length > 0 ? (
@@ -184,7 +184,7 @@ export function Composer({
             {attachments.map((attachment, index) => (
               <span
                 key={index}
-                className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                className="inline-flex items-center gap-1 rounded-sm border-[0.5px] border-[var(--line)] bg-muted px-2 py-0.5 text-xs text-muted-foreground"
               >
                 {attachment.name ?? "attachment"}
                 <button

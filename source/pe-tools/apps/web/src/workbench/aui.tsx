@@ -154,12 +154,9 @@ function MomentSection({
   // loop (the "full page rerendering forever" jitter). Memoized per (register,id), React only fires
   // it on real mount/unmount, so bumpMeasure runs when geometry actually changes, not every frame.
   const setRef = useCallback((el: HTMLElement | null) => register(id, el), [register, id]);
-  // User turns open an exchange: a full-width hairline turns the transcript into a ledger of
-  // request→response compartments (skipped when the turn is the first thing in the lane).
-  const exchangeRule =
-    role === "user" ? " border-t-[0.5px] border-[var(--line-soft)] first:border-t-0" : "";
+  // Speaker-boundary hairlines live in lens.css (sibling selector on data-role).
   return (
-    <section data-key={id} data-role={role} className={`lens-moment${exchangeRule}`} ref={setRef}>
+    <section data-key={id} data-role={role} className="lens-moment" ref={setRef}>
       {children}
     </section>
   );

@@ -36,7 +36,7 @@ import {
  */
 
 const SCALE = 0.14; // chat px -> map px. Fixed, NOT fit-to-container: long threads overflow, short leave the gutter empty.
-const FOCAL = 0.6; // focal line, fraction down the gutter/viewport. Lower than center: history lives above the latest turn.
+const FOCAL = 0.5; // focal line, fraction down the gutter/viewport — centered, so the focal caret sits at the reticle box's center.
 const MIN_BAND = 3; // px floor so a one-line turn stays visible and clickable.
 const HEAD_H = 40; // px — the sidebar head (dial) height; the fisheye lane sits below it, so its
 // translate subtracts this to keep cards on the same focal axis as the chat. Must match --side-head-h.
