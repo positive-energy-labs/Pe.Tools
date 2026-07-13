@@ -19,19 +19,28 @@ public static class Annotate
             .Where(v => v.Name == vname).Select(v => v.Id).ToList();
         if (stale.Count > 0) doc.Delete(stale); // ICollection overload — see ProjectionSeed note
 
-        var vft = new FilteredElementCollector(doc).OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>()
-            .First(t => t.ViewFamily == ViewFamily.FloorPlan);
-        var view = ViewPlan.Create(doc, vft.Id, level.Id);
+        // Evidence always renders on a duplicate of a REAL plan view, so the backdrop matches
+        // what the user sees (template, VG, discipline). No synthetic blank-template fallback:
+        // a doc with no plan views for the level is a hard error by design.
+        var plans = new FilteredElementCollector(doc).OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
+            .Where(v => !v.IsTemplate).ToList();
+        var reference = opt.EvidenceReferenceViewName == null
+            ? plans.FirstOrDefault(v => v.GenLevel?.Id == level.Id)
+              ?? throw new InvalidOperationException(
+                  $"no plan view exists for level '{level.Name}' — create one (or pass EvidenceReferenceViewName); evidence never draws on synthetic views")
+            : plans.FirstOrDefault(v => v.Name == opt.EvidenceReferenceViewName)
+              ?? throw new InvalidOperationException($"evidence reference view '{opt.EvidenceReferenceViewName}' not found");
+        if (reference.GenLevel?.Id != null && reference.GenLevel.Id != level.Id)
+            throw new InvalidOperationException($"evidence reference view '{reference.Name}' is not on '{level.Name}'");
+        // Revit resets CropBox.Transform on a newly-created plan. Duplicate to preserve the
+        // production view's rotation; resizing that existing crop frame is reliable.
+        var view = (ViewPlan)doc.GetElement(reference.Duplicate(ViewDuplicateOption.Duplicate));
         view.Name = vname;
-        try { view.ViewTemplateId = ElementId.InvalidElementId; } catch { } // template locks props — see ProjectionSeed
-        try { view.Discipline = ViewDiscipline.Coordination; } catch { }
-        try { view.Scale = 96; } catch { }
 
         var frType = new FilteredElementCollector(doc).OfClass(typeof(FilledRegionType)).Cast<FilledRegionType>().First();
         var solid = new FilteredElementCollector(doc).OfClass(typeof(FillPatternElement)).Cast<FillPatternElement>()
             .First(f => f.GetFillPattern().IsSolidFill);
 
-        double x0 = double.MaxValue, y0 = double.MaxValue, x1 = double.MinValue, y1 = double.MinValue;
         int made = 0, failed = 0, idx = 0;
         foreach (var room in result.Rooms)
         {
@@ -50,19 +59,17 @@ public static class Annotate
                     .SetProjectionLineColor(new Color(60, 60, 60));
                 view.SetElementOverrides(fr.Id, ogs);
                 made++;
-                foreach (var p in room.Polygon)
-                {
-                    x0 = Math.Min(x0, p[0]); x1 = Math.Max(x1, p[0]);
-                    y0 = Math.Min(y0, p[1]); y1 = Math.Max(y1, p[1]);
-                }
             }
             catch (Exception ex) { failed++; log($"[annotate] {room.Id} failed: {ex.Message}"); }
         }
         if (made > 0)
         {
             var cb = view.CropBox;
-            cb.Min = new XYZ(x0 - 25, y0 - 25, cb.Min.Z);
-            cb.Max = new XYZ(x1 + 25, y1 + 25, cb.Max.Z);
+            var toView = cb.Transform.Inverse;
+            var points = result.Rooms.SelectMany(room => room.Polygon)
+                .Select(p => toView.OfPoint(new XYZ(p[0], p[1], level.ProjectElevation))).ToList();
+            cb.Min = new XYZ(points.Min(p => p.X) - 25, points.Min(p => p.Y) - 25, cb.Min.Z);
+            cb.Max = new XYZ(points.Max(p => p.X) + 25, points.Max(p => p.Y) + 25, cb.Max.Z);
             view.CropBox = cb;
             view.CropBoxActive = true;
             view.CropBoxVisible = false;
