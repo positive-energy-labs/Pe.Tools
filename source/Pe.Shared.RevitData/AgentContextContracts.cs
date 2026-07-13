@@ -300,15 +300,52 @@ public record RevitAgentViewRenderingStateData(
     List<RevitDataIssue> Issues
 );
 
+/// <summary>
+///     What to capture. Omit entirely to capture the active view. Id/UniqueId accept a view,
+///     sheet, viewport (dereferenced to its view), or schedule (must be placed on a sheet).
+///     Name matches view name, sheet name, sheet number, or schedule name — exact first, then
+///     unique substring. OnSheet (sheet number or name) disambiguates names that appear on
+///     multiple sheets and selects which placement of a schedule to capture.
+/// </summary>
+public record RevitViewImageTarget(
+    long? Id = null,
+    string? UniqueId = null,
+    string? Name = null,
+    string? OnSheet = null
+);
+
+/// <summary>
+///     Optional crop: exactly one of ElementIds, Selection, or ScopeBox. The view is exported
+///     with a temporary crop box around the focus (rolled back afterwards), so graphics stay
+///     exactly what the user sees. Requires an editable document; not supported on sheets.
+/// </summary>
+public record RevitViewImageFocus(
+    List<long>? ElementIds = null,
+    bool Selection = false,
+    string? ScopeBox = null
+);
+
 public record RevitViewImageRequest(
-    long? ViewId = null,
-    string? ViewUniqueId = null,
+    RevitViewImageTarget? Target = null,
+    RevitViewImageFocus? Focus = null,
+    double MarginPercent = 8,
     int PixelSize = 1500
+);
+
+/// <summary>Model-space XY extent covered by the exported image (feet), when known.</summary>
+public record RevitViewImageModelRect(
+    double MinX,
+    double MinY,
+    double MaxX,
+    double MaxY
 );
 
 public record RevitViewImageData(
     RevitAgentContextHandle View,
     string FilePath,
     long ByteSize,
-    int PixelSize
+    int PixelSize,
+    int? ViewScale = null,
+    RevitViewImageModelRect? ModelRect = null,
+    string? SheetNumber = null
 );
