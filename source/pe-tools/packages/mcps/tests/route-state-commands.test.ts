@@ -1,8 +1,9 @@
 import { expect, test } from "vite-plus/test";
-import type {
-  FamilyTypesDocument,
-  ParameterLinkProfile,
-  ParameterLinksDocument,
+import {
+  type FamilyTypesDocument,
+  type ParameterLinkProfile,
+  type ParameterLinksDocument,
+  parameterLinksRouteState,
 } from "@pe/agent-contracts";
 import {
   createFamilyTypesCommandHandlers,
@@ -25,8 +26,24 @@ test("family types push rejects staged cells that still need review before calli
   );
 });
 
-test("parameter links apply rejects a reviewed profile after the draft changes", async () => {
-  const reviewed: ParameterLinkProfile = {
+// The dispatcher hands handlers `input.safeParse(payload).data`, and zod strips undeclared keys —
+// so each command schema must accept exactly what the web plugin sends (route-chat-plugins.tsx):
+// `{}` for refresh, `{ profile }` for preview/apply. A schema/client mismatch here silently
+// drops the reviewed profile and breaks the human apply lane.
+test("parameter links command schemas pass the web client payloads through to handlers", () => {
+  const profile = reviewedProfile();
+  const commands = parameterLinksRouteState.commands;
+
+  expect(commands.refresh.input.safeParse({}).success).toBe(true);
+  for (const name of ["preview", "apply"] as const) {
+    const parsed = commands[name].input.safeParse({ profile });
+    expect(parsed.success).toBe(true);
+    expect((parsed.data as { profile: ParameterLinkProfile }).profile).toEqual(profile);
+  }
+});
+
+function reviewedProfile(): ParameterLinkProfile {
+  return {
     formatVersion: 1,
     definitions: [
       {
@@ -48,6 +65,10 @@ test("parameter links apply rejects a reviewed profile after the draft changes",
       },
     ],
   };
+}
+
+test("parameter links apply rejects a reviewed profile after the draft changes", async () => {
+  const reviewed: ParameterLinkProfile = reviewedProfile();
   const document: ParameterLinksDocument = {
     profile: null,
     draftProfile: {
