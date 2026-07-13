@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Deferred, Effect, Layer } from "effect";
 import { expect, test } from "vite-plus/test";
+import { HOST_RPC_BRIDGE_SESSION_HEADER } from "@pe/host-contracts/operation-types";
 import { makeHttpLive } from "../src/app.ts";
 import { productRoot } from "../src/host-ownership.ts";
 import { MastraRuntime } from "../src/mastra-runtime.ts";
@@ -86,6 +87,21 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
     const status = await fetch(`${base}/host/status`);
     expect(status.status).toBe(200);
     expect(((await status.json()) as { lane?: string }).lane).toBe("dev");
+
+    // Discovery uses the same selector surface as /call and echoes its resolved identity so
+    // typegen can reject an accidental RRD-vs-sandbox lane mismatch.
+    const ops = await fetch(`${base}/ops`, {
+      headers: { [HOST_RPC_BRIDGE_SESSION_HEADER]: "sandbox:boundary" },
+    });
+    expect(ops.status).toBe(200);
+    expect((await ops.json()) as { bridgeSessionId?: string }).toMatchObject({
+      bridgeSessionId: "sandbox:boundary",
+    });
+
+    const conflictingOps = await fetch(`${base}/ops?session=rrd:other`, {
+      headers: { [HOST_RPC_BRIDGE_SESSION_HEADER]: "sandbox:boundary" },
+    });
+    expect(conflictingOps.status).toBe(400);
 
     // (3) static: /a.txt serves, and an unknown no-extension route falls back to index.html.
     const asset = await fetch(`${base}/a.txt`);

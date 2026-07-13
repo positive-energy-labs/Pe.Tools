@@ -9,13 +9,14 @@
  * no [ExportTsSchema], no pe-dev codegen.
  *
  * Run (from packages/host-contracts):
- *   pnpm codegen                                 # regenerate the checked-in file
- *   pnpm codegen:check                           # drift gate: exit 1 if stale
+ *   pnpm codegen -- --session <bridgeSessionId>  # regenerate the checked-in file
+ *   pnpm codegen:check -- --session <id>         # drift gate: exit 1 if stale
  *   [--host http://127.0.0.1:5180] [--session <bridgeSessionId>] [--out <path>]
  */
 import { compile } from "json-schema-to-typescript";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { HOST_RPC_BRIDGE_SESSION_HEADER } from "../src/contracts/bridge-protocol.ts";
 
 type CatalogEntry = {
   key: string;
@@ -65,7 +66,9 @@ const outPath = argValue("--out", DEFAULT_OUT);
 const checkMode = process.argv.includes("--check");
 
 const url = `${hostBase}/ops${session ? `?session=${encodeURIComponent(session)}` : ""}`;
-const response = await fetch(url).catch(() => null);
+const response = await fetch(url, {
+  headers: session ? { [HOST_RPC_BRIDGE_SESSION_HEADER]: session } : undefined,
+}).catch(() => null);
 if (!response || !response.ok) {
   const reason = response ? `${response.status} ${await response.text()}` : "host unreachable";
   if (checkMode) {
@@ -77,7 +80,10 @@ if (!response || !response.ok) {
   console.error(`GET ${url} failed: ${reason}`);
   process.exit(1);
 }
-const catalog = (await response.json()) as { operations: CatalogEntry[] };
+const catalog = (await response.json()) as {
+  operations: CatalogEntry[];
+  bridgeSessionId?: string;
+};
 const operations = [...catalog.operations]
   .filter((op) => op.origin !== "host-local") // types are hand-authored, not generated from /ops
   .sort((a, b) => a.key.localeCompare(b.key));
@@ -90,6 +96,21 @@ if (operations.length === 0) {
     `host-typegen skipped: GET ${url} returned no bridge operations (no live Revit session). The checked-in ${outPath} is unchanged.`,
   );
   process.exit(0);
+}
+
+// Typegen is a contract assertion, not a status display. An untargeted host may select RRD while
+// the operator intends a sandbox; accepting that catalog makes a wrong-lane check look green.
+if (!session) {
+  console.error(
+    `host-typegen refused an untargeted live catalog from ${url}; pass --session <bridgeSessionId>.`,
+  );
+  process.exit(1);
+}
+if (catalog.bridgeSessionId !== session) {
+  console.error(
+    `host-typegen target mismatch: requested '${session}', host reported '${catalog.bridgeSessionId ?? "<missing>"}'.`,
+  );
+  process.exit(1);
 }
 
 const chunks: string[] = [
