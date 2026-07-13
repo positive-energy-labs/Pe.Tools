@@ -166,7 +166,7 @@ test("parameter-links apply is human-only", async () => {
   const agent = await runRouteStateCommand(session, "parameter-links", "agent", "apply", input);
   expect(agent.ok).toBe(false);
   expect(agent.hint).toContain("human");
-  expect(
-    (await runRouteStateCommand(session, "parameter-links", "human", "apply", input)).ok,
-  ).toBe(true);
+  expect((await runRouteStateCommand(session, "parameter-links", "human", "apply", input)).ok).toBe(
+    true,
+  );
 });

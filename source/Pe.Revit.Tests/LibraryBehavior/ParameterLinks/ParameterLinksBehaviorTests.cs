@@ -7,7 +7,9 @@ namespace Pe.Revit.Tests;
 [TestFixture]
 public sealed class ParameterLinksBehaviorTests {
     [Test]
-    public void Electrical_template_probe(UIApplication uiApplication) {
+    public void Electrical_equipment_current_reduces_to_native_circuit_rating(
+        UIApplication uiApplication
+    ) {
         var template = Directory.GetFiles(
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
                     $"Autodesk\\RVT {uiApplication.Application.VersionNumber}\\Templates"),
@@ -15,18 +17,120 @@ public sealed class ParameterLinksBehaviorTests {
                 SearchOption.AllDirectories)
             .First();
         var document = uiApplication.Application.NewProjectDocument(template);
+        var mocpGuid = Guid.NewGuid();
         try {
-            var lines = new FilteredElementCollector(document)
+            var definition = RevitFamilyFixtureHarness.CreateSharedParameterDefinition(
+                document,
+                new RevitFamilyFixtureHarness.SharedDefinitionSpec(
+                    "_PE_MOCP",
+                    SpecTypeId.Current,
+                    "ParameterLinks",
+                    "Electrical parameter-links fixture.",
+                    mocpGuid));
+            var binding = RevitFamilyFixtureHarness.AddOrUpdateProjectParameterBinding(
+                document,
+                definition,
+                true,
+                GroupTypeId.Data,
+                BuiltInCategory.OST_ElectricalEquipment);
+            Assert.That(binding.BindingSucceeded, Is.True);
+
+            var transformerType = new FilteredElementCollector(document)
                 .OfClass(typeof(FamilySymbol))
                 .Cast<FamilySymbol>()
-                .Where(symbol => symbol.Category?.Id.Value() is
-                    (long)BuiltInCategory.OST_ElectricalEquipment or
-                    (long)BuiltInCategory.OST_ElectricalFixtures)
-                .Select(symbol => $"SYMBOL {symbol.Category?.Name} | {symbol.FamilyName} | {symbol.Name}")
-                .Concat(new FilteredElementCollector(document)
-                    .OfClass(typeof(MEPSystemType))
-                    .Select(systemType => $"SYSTEM {systemType.GetType().Name} | {systemType.Name}"));
-            Assert.Fail(string.Join(Environment.NewLine, lines));
+                .First(symbol => symbol.FamilyName.StartsWith("Dry Type Transformer", StringComparison.Ordinal) &&
+                                 symbol.Name == "15 kVA");
+            var panelType = new FilteredElementCollector(document)
+                .OfClass(typeof(FamilySymbol))
+                .Cast<FamilySymbol>()
+                .First(symbol => symbol.FamilyName.Contains("Panelboard - 480V MLO", StringComparison.Ordinal) &&
+                                 symbol.Name == "125 A");
+            var level = new FilteredElementCollector(document)
+                .OfClass(typeof(Level))
+                .Cast<Level>()
+                .OrderBy(candidate => candidate.Elevation)
+                .First();
+
+            FamilyInstance firstEquipment;
+            FamilyInstance secondEquipment;
+            Autodesk.Revit.DB.Electrical.ElectricalSystem circuit;
+            using (var transaction = new Transaction(document, "Create electrical parameter-link fixture")) {
+                _ = transaction.Start();
+                transformerType.Activate();
+                panelType.Activate();
+                firstEquipment = document.Create.NewFamilyInstance(
+                    XYZ.Zero,
+                    transformerType,
+                    level,
+                    Autodesk.Revit.DB.Structure.StructuralType.NonStructural);
+                secondEquipment = document.Create.NewFamilyInstance(
+                    new XYZ(10, 0, 0),
+                    transformerType,
+                    level,
+                    Autodesk.Revit.DB.Structure.StructuralType.NonStructural);
+                var panel = document.Create.NewFamilyInstance(
+                    new XYZ(20, 0, 0),
+                    panelType,
+                    level,
+                    Autodesk.Revit.DB.Structure.StructuralType.NonStructural);
+                document.Regenerate();
+                circuit = Autodesk.Revit.DB.Electrical.ElectricalSystem.Create(
+                    document,
+                    new List<ElementId> { firstEquipment.Id, secondEquipment.Id },
+                    Autodesk.Revit.DB.Electrical.ElectricalSystemType.PowerCircuit);
+                circuit.SelectPanel(panel);
+                Assert.That(firstEquipment.get_Parameter(mocpGuid).Set(
+                    UnitUtils.ConvertToInternalUnits(20, UnitTypeId.Amperes)), Is.True);
+                Assert.That(secondEquipment.get_Parameter(mocpGuid).Set(
+                    UnitUtils.ConvertToInternalUnits(30, UnitTypeId.Amperes)), Is.True);
+                _ = transaction.Commit();
+            }
+
+            var rating = circuit.get_Parameter(BuiltInParameter.RBS_ELEC_CIRCUIT_RATING_PARAM);
+            Assert.That(rating, Is.Not.Null);
+            Assert.That(rating.IsReadOnly, Is.False);
+            var profile = new ParameterLinkProfile {
+                Definitions = [new ParameterLinkDefinition {
+                    Id = "mocp-to-rating",
+                    SourceCategoryId = (int)BuiltInCategory.OST_ElectricalEquipment,
+                    SourceParameter = ParameterReference.FromSharedGuid(mocpGuid.ToString("D")),
+                    Relationship = ParameterLinkRelationship.ElectricalEquipmentCircuits,
+                    TargetParameter = ParameterReference.FromIdentity(
+                        ParameterIdentityFactory.FromParameter(rating)),
+                    Reducer = ParameterLinkReducer.Max
+                }],
+                Assignments = [
+                    new ParameterLinkAssignment {
+                        Id = "first-equipment",
+                        DefinitionId = "mocp-to-rating",
+                        SourceElementUniqueIds = [firstEquipment.UniqueId]
+                    },
+                    new ParameterLinkAssignment {
+                        Id = "second-equipment",
+                        DefinitionId = "mocp-to-rating",
+                        SourceElementUniqueIds = [secondEquipment.UniqueId]
+                    }
+                ]
+            };
+
+            var preview = ParameterLinksEngine.Evaluate(document, profile);
+            ParameterLinkEvaluation evaluation;
+            int applied;
+            using (var transaction = new Transaction(document, "Apply electrical parameter link")) {
+                _ = transaction.Start();
+                (evaluation, applied) = ParameterLinksEngine.Reconcile(document, profile);
+                _ = transaction.Commit();
+            }
+
+            var expected = UnitUtils.ConvertToInternalUnits(30, UnitTypeId.Amperes);
+            Assert.Multiple(() => {
+                Assert.That(preview.Issues, Is.Empty);
+                Assert.That(preview.Writes, Has.Count.EqualTo(1));
+                Assert.That(preview.ChangedWriteCount, Is.EqualTo(1));
+                Assert.That(evaluation.Issues, Is.Empty);
+                Assert.That(applied, Is.EqualTo(1));
+                Assert.That(rating.AsDouble(), Is.EqualTo(expected).Within(1e-9));
+            });
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(document);
         }
