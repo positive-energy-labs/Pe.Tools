@@ -131,7 +131,7 @@ function describeSessions(sessions: readonly SessionTargetCandidate[]): string {
 }
 
 const TARGET_SYNTAX =
-  "Target one with target=<selector>: 'rrd' (the Rider dev session — rrd holds the user's live docs), 'sandbox:<id>', a pid, or a session id.";
+  "Target one with target=<selector>: 'user' (the user's own session — it holds their live docs), 'rrd' (the Rider dev session — rrd holds the user's live docs), 'sandbox:<id>', a pid, or a session id.";
 
 /**
  * The sole target-resolution choke point. Selector grammar: `sandbox:<id>` → the current process
@@ -171,6 +171,25 @@ export function resolveSessionTarget<S extends SessionTargetCandidate>(
       _tag: "error",
       statusCode: 409,
       message: `Sandbox '${sandboxId}' has ${matches.length} connected sessions — this should not happen (takeover keeps one per sandbox). Target a pid or session id instead. Connected sessions: ${listing}`,
+    };
+  }
+
+  // Pea's world is "the user's session + sandboxes" — `user` selects the one non-sandbox
+  // session without the caller ever speaking lane vocabulary (dev pea may target a user
+  // session that is rrd underneath; that stays invisible to it).
+  if (selector.toLowerCase() === "user") {
+    const matches = sessions.filter((s) => s.lane !== "sandbox");
+    if (matches.length === 1) return { _tag: "found", session: matches[0] };
+    if (matches.length === 0)
+      return {
+        _tag: "error",
+        statusCode: 404,
+        message: `No user session is connected (only sandboxes). Connected sessions: ${listing}`,
+      };
+    return {
+      _tag: "error",
+      statusCode: 409,
+      message: `'user' is ambiguous: ${matches.length} non-sandbox sessions are connected. Target a pid or session id. Connected sessions: ${listing}`,
     };
   }
 
