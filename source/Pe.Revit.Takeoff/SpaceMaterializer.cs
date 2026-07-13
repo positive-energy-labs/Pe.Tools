@@ -22,8 +22,8 @@ internal static class SpaceMaterializer
         string token = Token(opt, level, phase), viewName = ViewName(opt, level, phase);
         var existing = new FilteredElementCollector(doc).OfClass(typeof(SpatialElement))
             .OfCategory(BuiltInCategory.OST_MEPSpaces).Cast<Space>()
-            .Where(space => space.LevelId.Value == level.Id.Value
-                            && space.get_Parameter(BuiltInParameter.ROOM_PHASE_ID)?.AsElementId().Value == phase.Id.Value
+            .Where(space => space.LevelId.Value() == level.Id.Value()
+                            && space.get_Parameter(BuiltInParameter.ROOM_PHASE_ID)?.AsElementId().Value() == phase.Id.Value()
                             && !Owned(space, token))
             .Select(space => space.Id).ToList();
         if (existing.Count > 0)
@@ -212,15 +212,15 @@ internal static class SpaceMaterializer
         var sketchIds = views.Select(OwnedSketchPlane).Where(id => id != null).Select(id => id!).ToList();
         var ids = new FilteredElementCollector(doc).WhereElementIsNotElementType()
             .Where(element => Comments(element)?.StartsWith(prefix, StringComparison.Ordinal) == true
-                              || element is ViewPlan && views.Any(view => view.Id.Value == element.Id.Value))
-            .Select(element => element.Id).Concat(sketchIds).GroupBy(id => id.Value).Select(group => group.First()).ToList();
+                              || element is ViewPlan && views.Any(view => view.Id.Value() == element.Id.Value()))
+            .Select(element => element.Id).Concat(sketchIds).GroupBy(id => id.Value()).Select(group => group.First()).ToList();
         if (ids.Count > 0) doc.Delete(ids);
         log($"[spaces] cleanup deleted {ids.Count} owned elements");
         return ids.Count;
     }
 
     internal static string Token(TakeoffOptions opt, Level level, Phase phase) =>
-        $"{opt.Marker}|spaces|{level.Id.Value}|{phase.Id.Value}";
+        $"{opt.Marker}|spaces|{level.Id.Value()}|{phase.Id.Value()}";
 
     private static string ViewName(TakeoffOptions opt, Level level, Phase phase) =>
         $"{opt.Marker} spaces {level.Name} {phase.Name}";
@@ -232,14 +232,14 @@ internal static class SpaceMaterializer
         var sketchIds = views.Select(OwnedSketchPlane).Where(id => id != null).Select(id => id!).ToList();
         var ids = new FilteredElementCollector(doc).WhereElementIsNotElementType()
             .Where(element => Owned(element, token)
-                              || element is ViewPlan && views.Any(view => view.Id.Value == element.Id.Value))
-            .Select(element => element.Id).Concat(sketchIds).GroupBy(id => id.Value).Select(group => group.First()).ToList();
+                              || element is ViewPlan && views.Any(view => view.Id.Value() == element.Id.Value()))
+            .Select(element => element.Id).Concat(sketchIds).GroupBy(id => id.Value()).Select(group => group.First()).ToList();
         // Revit refuses to delete the ACTIVE view; if the user has our spaces view open, strand it
         // under a stale name instead so the fresh view can claim the canonical name
         var active = doc.ActiveView;
-        if (active != null && ids.Any(id => id.Value == active.Id.Value))
+        if (active != null && ids.Any(id => id.Value() == active.Id.Value()))
         {
-            ids.RemoveAll(id => id.Value == active.Id.Value);
+            ids.RemoveAll(id => id.Value() == active.Id.Value());
             active.Name = $"{viewName} stale {DateTime.UtcNow.Ticks}";
         }
         if (ids.Count > 0) { doc.Delete(ids); doc.Regenerate(); }

@@ -19,7 +19,7 @@ internal static class Engine
         var terms = new List<(long id, XYZ origin, XYZ basis, bool occupied)>();
         foreach (var tid in it.Terminals)
         {
-            var fi = doc.GetElement(new ElementId(tid)) as FamilyInstance;
+            var fi = doc.GetElement(tid.ToElementId()) as FamilyInstance;
             var c = fi == null ? null : Draft.TerminalConnector(fi);
             if (c == null) { Say($"WARN terminal {tid}: not found / no HVAC connector — skipped"); continue; }
             var sysName = c.DuctSystemType.ToString();
@@ -67,9 +67,9 @@ internal static class Engine
             SolvedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
             IntentName = it.Name,
             Source = "intent",
-            LevelId = it.Level.Id.Value,
+            LevelId = it.Level.Id.Value(),
             LevelElev = lvlZ,
-            SystemTypeId = it.System.Id.Value,
+            SystemTypeId = it.System.Id.Value(),
             GridFt = cell,
             ClearanceIn = it.ClearanceFt * 12,
             Avoid = it.Avoid.OrderBy(x => x).ToList(),
@@ -80,7 +80,7 @@ internal static class Engine
         };
         dto.Paths.Add(new PathDto
         {
-            Key = "trunk", Kind = "trunk", DuctTypeId = it.TrunkType.Id.Value, Shape = "rect",
+            Key = "trunk", Kind = "trunk", DuctTypeId = it.TrunkType.Id.Value(), Shape = "rect",
             WidthIn = it.TrunkWFt * 12, HeightIn = it.TrunkHFt * 12, ZFt = zTrunk,
             Points = tr.Waypoints, LengthFt = tr.LengthFt, Bends = tr.Bends,
         });
@@ -129,7 +129,7 @@ internal static class Engine
 
             var p = new PathDto
             {
-                Key = t.id.ToString(), Kind = "branch", DuctTypeId = it.BranchType.Id.Value, Shape = "round",
+                Key = t.id.ToString(), Kind = "branch", DuctTypeId = it.BranchType.Id.Value(), Shape = "round",
                 DiaIn = it.BranchDiaFt * 12, ZFt = zBranch, Points = rr.Waypoints,
                 LengthFt = rr.LengthFt, Bends = rr.Bends, TerminalId = t.id, Connect = it.Connect,
                 Conn = new[] { t.origin.X, t.origin.Y, coz },
@@ -435,7 +435,7 @@ internal static class Report
     static void Check(Document doc, SolveDto s, string which, long? idv, double[] end, Action<string> Say)
     {
         if (idv == null) return;
-        var el = doc.GetElement(new ElementId(idv.Value));
+        var el = doc.GetElement(idv.Value.ToElementId());
         if (el == null) { Say($"ENDPOINT {which} -> #{idv}: element no longer in model"); return; }
         ConnectorManager cm = (el as FamilyInstance)?.MEPModel?.ConnectorManager ?? (el as MEPCurve)?.ConnectorManager;
         var ep = new XYZ(end[0], end[1], end[2]);

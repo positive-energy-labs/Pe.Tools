@@ -100,7 +100,7 @@ internal static class TK
                 var byName = TryResolveLevel(doc, jsonLevel);
                 if (byName == null)
                     it.Warnings.Add($"intent.level '{jsonLevel}' not resolvable — using constructor level '{authoritativeLevel.Name}'");
-                else if (byName.Id.Value != authoritativeLevel.Id.Value)
+                else if (byName.Id.Value() != authoritativeLevel.Id.Value())
                     it.Warnings.Add($"intent.level '{jsonLevel}' ({byName.Name}) differs from constructor level '{authoritativeLevel.Name}' — using the constructor's (authoritative)");
             }
 
@@ -194,7 +194,7 @@ internal static class TK
         if (value is JObject point && point.TryGetValue("element", out var idToken))
         {
             var idv = idToken.Value<long>();
-            var el = doc.GetElement(new ElementId(idv));
+            var el = doc.GetElement(idv.ToElementId());
             if (el == null) throw new InvalidOperationException($"trunk.{name}.element {idv} not found in model.");
             if (el.Location is LocationPoint lp) return (lp.Point.X, lp.Point.Y, idv);
             var bb = el.get_BoundingBox(null);
@@ -209,7 +209,7 @@ internal static class TK
         var levels = new FilteredElementCollector(doc).OfClass(typeof(Level)).Cast<Level>().ToList();
         if (long.TryParse(q, out var id))
         {
-            var byId = levels.FirstOrDefault(l => l.Id.Value == id);
+            var byId = levels.FirstOrDefault(l => l.Id.Value() == id);
             if (byId != null) return byId;
         }
         return levels.FirstOrDefault(l => string.Equals(l.Name, q, StringComparison.OrdinalIgnoreCase));
@@ -228,7 +228,7 @@ internal static class TK
         var all = new FilteredElementCollector(doc).OfClass(typeof(MechanicalSystemType)).Cast<MechanicalSystemType>().ToList();
         if (long.TryParse(q, out var id))
         {
-            var byId = all.FirstOrDefault(s => s.Id.Value == id);
+            var byId = all.FirstOrDefault(s => s.Id.Value() == id);
             if (byId != null) return byId;
         }
         // Exact name wins outright — real projects have both "Exhaust Air" and "ERV Exhaust Air",
@@ -245,7 +245,7 @@ internal static class TK
         var all = new FilteredElementCollector(doc).OfClass(typeof(DuctType)).Cast<DuctType>().ToList();
         if (long.TryParse(q, out var id))
         {
-            var byId = all.FirstOrDefault(t => t.Id.Value == id);
+            var byId = all.FirstOrDefault(t => t.Id.Value() == id);
             if (byId != null) return byId;
         }
         string Label(DuctType t) => $"{t.FamilyName}: {t.Name}";

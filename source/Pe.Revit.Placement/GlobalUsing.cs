@@ -4,5 +4,7 @@ global using System.IO;
 global using System.Linq;
 global using System.Text;
 global using Autodesk.Revit.DB;
+global using Pe.Bcl.Compat;
+global using Pe.Revit.Compat;
 global using Autodesk.Revit.DB.Mechanical;
 global using Autodesk.Revit.DB.Plumbing;

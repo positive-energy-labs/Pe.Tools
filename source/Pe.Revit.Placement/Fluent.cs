@@ -32,14 +32,14 @@ public sealed class VerbRoute
         {
             SolvedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
             IntentName = name, Source = "verbs",
-            LevelId = level.Id.Value, LevelElev = level.ProjectElevation, SystemTypeId = system.Id.Value,
+            LevelId = level.Id.Value(), LevelElev = level.ProjectElevation, SystemTypeId = system.Id.Value(),
             ClearanceIn = clearanceIn,
             Avoid = new List<string> { "mep", "walls", "structure", "equipment", "terminals" },
         };
         Z = level.ProjectElevation + elevationFt;
         Trunk = new PathDto
         {
-            Key = "trunk", Kind = "trunk", DuctTypeId = trunkType.Id.Value, Shape = "rect",
+            Key = "trunk", Kind = "trunk", DuctTypeId = trunkType.Id.Value(), Shape = "rect",
             WidthIn = wIn, HeightIn = hIn, ZFt = level.ProjectElevation + elevationFt,
             Points3 = new List<double[]>(),
         };
@@ -82,7 +82,7 @@ public sealed class VerbRoute
     /// Reads the connector (size/facing/IsConnected); occupied terminals get a stub-short end.
     public VerbRoute BranchTo(long terminalId, double stubFt = 1.5)
     {
-        var fi = Doc.GetElement(new ElementId(terminalId)) as FamilyInstance;
+        var fi = Doc.GetElement(terminalId.ToElementId()) as FamilyInstance;
         var tc = fi == null ? null : Draft.TerminalConnector(fi);
         if (tc == null) { W($"STAGE BRANCH {terminalId}: SKIPPED — no HVAC connector on that element"); return this; }
         XYZ o = tc.Origin, d = tc.CoordinateSystem.BasisZ;
@@ -112,7 +112,7 @@ public sealed class VerbRoute
         double sb = occupied ? Draft.Setback : 0;
         var p = new PathDto
         {
-            Key = terminalId.ToString(), Kind = "branch", DuctTypeId = BranchType.Id.Value, Shape = "round",
+            Key = terminalId.ToString(), Kind = "branch", DuctTypeId = BranchType.Id.Value(), Shape = "round",
             DiaIn = diaIn, ZFt = segZ, TerminalId = terminalId, Connect = !occupied,
             Conn = new[] { o.X, o.Y, o.Z },
             Points3 = new List<double[]> { new[] { tkx, tky, segZ } },

@@ -160,9 +160,9 @@ public sealed class TakeoffSpaceMaterializationTests
             Assert.That(spaces, Has.Count.EqualTo(2));
             Assert.That(spaces[0].Area, Is.EqualTo(96).Within(0.01));
             Assert.That(spaces[1].Area, Is.EqualTo(100).Within(0.01));
-            Assert.That(spaces.All(space => space.LevelId.Value == level.Id.Value
+            Assert.That(spaces.All(space => space.LevelId.Value() == level.Id.Value()
                                             && space.get_Parameter(BuiltInParameter.ROOM_PHASE_ID)
-                                                ?.AsElementId().Value == phase.Id.Value), Is.True);
+                                                ?.AsElementId().Value() == phase.Id.Value()), Is.True);
             Assert.That(spaces[0].GetBoundarySegments(new SpatialElementBoundaryOptions())?.Count, Is.EqualTo(2));
             Assert.That(spaces[1].GetBoundarySegments(new SpatialElementBoundaryOptions())?.Count, Is.EqualTo(1));
             var firstPoint = ((LocationPoint)spaces[0].Location).Point;
@@ -212,7 +212,7 @@ public sealed class TakeoffSpaceMaterializationTests
         var points = new List<(double X, double Y)> { (first.X1, first.Y1), (first.X2, first.Y2) };
         while (unused.Count > 0)
         {
-            var current = points[^1];
+            var current = points[points.Count - 1];
             int index = unused.FindIndex(line =>
                 Close(current, (line.X1, line.Y1)) || Close(current, (line.X2, line.Y2)));
             Assert.That(index, Is.GreaterThanOrEqualTo(0), "boundary network must remain connected");

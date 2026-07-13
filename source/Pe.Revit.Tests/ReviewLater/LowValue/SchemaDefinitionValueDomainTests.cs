@@ -97,7 +97,7 @@ public sealed class SchemaDefinitionValueDomainTests {
             .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
         Assert.That(exampleDefinitionRef, Is.Not.Null.And.StartWith("#/definitions/"));
 
-        var definitionName = exampleDefinitionRef!["#/definitions/".Length..];
+        var definitionName = exampleDefinitionRef!.Substring("#/definitions/".Length);
         var examples = root["definitions"]?[definitionName]?["examples"]?.ToObject<List<string>>();
 
         Assert.That(examples, Is.Not.Null);

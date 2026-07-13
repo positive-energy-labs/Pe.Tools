@@ -32,8 +32,8 @@ public sealed class DuctPlacer
         if (string.IsNullOrWhiteSpace(level)) throw new ArgumentException("level is required (name or ElementId string).", nameof(level));
         _level = TK.ResolveLevel(doc, level);
 
-        _planViewId = planViewId.HasValue ? new ElementId(planViewId.Value) : ResolvePlanView(doc, _level);
-        _isoViewId = isoViewId.HasValue ? new ElementId(isoViewId.Value) : ResolveIsoView(doc);
+        _planViewId = planViewId is { } pv ? pv.ToElementId() : ResolvePlanView(doc, _level);
+        _isoViewId = isoViewId is { } iv ? iv.ToElementId() : ResolveIsoView(doc);
 
         if (string.IsNullOrWhiteSpace(stateDir))
         {
@@ -73,11 +73,11 @@ public sealed class DuctPlacer
         var withConn = terms.Select(x => (x.fi, c: Draft.TerminalConnector(x.fi))).ToList();
         string Line(FamilyInstance fi, Connector c)
         {
-            if (c == null) return $"T {fi.Id.Value} {fi.Symbol.FamilyName}:{fi.Name} [none]";
+            if (c == null) return $"T {fi.Id.Value()} {fi.Symbol.FamilyName}:{fi.Name} [none]";
             string size = c.Shape == ConnectorProfileType.Round
                 ? $"D{c.Radius * 24:F0}in"
                 : $"{c.Width * 12:F0}x{c.Height * 12:F0}in";
-            return $"T {fi.Id.Value} {fi.Symbol.FamilyName}:{fi.Name} [{c.DuctSystemType}|{c.Shape}|{size}|o=({c.Origin.X:F1},{c.Origin.Y:F1},{c.Origin.Z:F2})|dZ={c.CoordinateSystem.BasisZ.Z:F1}|conn={c.IsConnected}]";
+            return $"T {fi.Id.Value()} {fi.Symbol.FamilyName}:{fi.Name} [{c.DuctSystemType}|{c.Shape}|{size}|o=({c.Origin.X:F1},{c.Origin.Y:F1},{c.Origin.Z:F2})|dZ={c.CoordinateSystem.BasisZ.Z:F1}|conn={c.IsConnected}]";
         }
         foreach (var (fi, c) in withConn.Where(x => x.c == null || !x.c.IsConnected))
         {
@@ -90,7 +90,7 @@ public sealed class DuctPlacer
         else
             foreach (var g in connected.GroupBy(x => $"{x.fi.Symbol.FamilyName}:{x.fi.Name}"))
             {
-                var ids = g.Select(x => x.fi.Id.Value).ToList();
+                var ids = g.Select(x => x.fi.Id.Value()).ToList();
                 W($"Tgrp {g.Key} conn=True n={ids.Count} ids={string.Join(",", ids.Take(40))}{(ids.Count > 40 ? ",..." : "")}");
             }
         W($"TERMINALS unconnected: {free} (occupied terminals get near-connect stubs, by design)");
@@ -111,7 +111,7 @@ public sealed class DuctPlacer
                 .Where(c => (c.ConnectorType == ConnectorType.End || c.ConnectorType == ConnectorType.Curve)
                             && c.Domain == Domain.DomainHvac && !c.IsConnected)
                 .Select(c => $"({c.Origin.X:F1},{c.Origin.Y:F1},z={c.Origin.Z:F2})").ToList();
-            W($"E {fi.Id.Value} {fi.Symbol.FamilyName}:{fi.Name} bb=({bb.Min.X:F1},{bb.Min.Y:F1},{bb.Min.Z:F1})..({bb.Max.X:F1},{bb.Max.Y:F1},{bb.Max.Z:F1})"
+            W($"E {fi.Id.Value()} {fi.Symbol.FamilyName}:{fi.Name} bb=({bb.Min.X:F1},{bb.Min.Y:F1},{bb.Min.Z:F1})..({bb.Max.X:F1},{bb.Max.Y:F1},{bb.Max.Z:F1})"
               + (freeConns.Count > 0 ? $" freeDuctConn: {string.Join(" ", freeConns)}" : ""));
         }
 
@@ -168,7 +168,7 @@ public sealed class DuctPlacer
         var termPts = new List<double[]>();
         foreach (var tid in it.Terminals)
         {
-            var fi = _doc.GetElement(new ElementId(tid)) as FamilyInstance;
+            var fi = _doc.GetElement(tid.ToElementId()) as FamilyInstance;
             var c = fi == null ? null : Draft.TerminalConnector(fi);
             if (c != null) termPts.Add(new[] { c.Origin.X, c.Origin.Y });
         }
@@ -260,7 +260,7 @@ public sealed class DuctPlacer
         var mine = TK.MarkerElements(_doc);
         var byCat = mine.GroupBy(e => e.Category?.Name ?? "?").Select(g => $"{g.Key} {g.Count()}");
         W($"PLACED: {mine.Count} elements [{string.Join(", ", byCat)}]");
-        W($"IDS: {string.Join(",", mine.Take(40).Select(e => e.Id.Value))}{(mine.Count > 40 ? ",..." : "")}");
+        W($"IDS: {string.Join(",", mine.Take(40).Select(e => e.Id.Value()))}{(mine.Count > 40 ? ",..." : "")}");
         W("COMMITTED. Export evidence via ExportPlan()/ExportIso(). To refine: edit the intent, re-run Solve() (replaces this), re-commit. Done with this increment? Call Keep() BEFORE the next Solve — Solve deletes anything still tagged " + TK.Marker + ".");
         return sb.ToString();
     }
@@ -358,7 +358,7 @@ public sealed class DuctPlacer
     {
         var v = new FilteredElementCollector(doc).OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
             .Where(p => !p.IsTemplate && p.ViewType == ViewType.FloorPlan)
-            .FirstOrDefault(p => p.GenLevel != null && p.GenLevel.Id.Value == level.Id.Value);
+            .FirstOrDefault(p => p.GenLevel != null && p.GenLevel.Id.Value() == level.Id.Value());
         return v?.Id;
     }
 

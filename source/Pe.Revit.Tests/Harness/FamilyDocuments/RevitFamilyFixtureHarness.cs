@@ -94,7 +94,7 @@ internal static class RevitFamilyFixtureHarness {
             Path.GetTempPath(),
             "petrt",
             shortTestToken,
-            Guid.NewGuid().ToString("N")[..8]);
+            Guid.NewGuid().ToString("N").Substring(0, 8));
 
         Directory.CreateDirectory(outputDirectory);
         Console.WriteLine($"[PE_FF_TEST_OUTPUT_DIRECTORY] {outputDirectory}");
@@ -869,7 +869,7 @@ internal static class RevitFamilyFixtureHarness {
 
         return lettersAndDigits.Length <= 12
             ? lettersAndDigits.ToLowerInvariant()
-            : lettersAndDigits[..12].ToLowerInvariant();
+            : lettersAndDigits.Substring(0, 12).ToLowerInvariant();
     }
 
     private static void ConfigureOwnerFamily(Document familyDocument,
