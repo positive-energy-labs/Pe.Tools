@@ -238,8 +238,17 @@
 .lens-moment[data-role="assistant"] + .lens-moment[data-role="user"] {
   border-top: 0.5px solid var(--line-soft);
 }
+/* The focal turn carries a hard left rule in its OWN provenance hue (never a hue swap) — the
+   in-chat twin of the mapdial's widened focal band. Inset shadow = zero layout shift. */
+.lens-moment.focal[data-role="user"] {
+  box-shadow: inset 2px 0 0 var(--user);
+}
+.lens-moment.focal[data-role="assistant"] {
+  box-shadow: inset 2px 0 0 var(--pe-green);
+}
 .lens-marker {
-  display: inline-flex;
+  /* full-width ledger row: identifiers left, the tele status hugs the right edge (ml-auto) */
+  display: flex;
   align-items: center;
   gap: 7px;
   /* The marker is a grid item; min-width:0 lets its track shrink to the lane (default `auto`

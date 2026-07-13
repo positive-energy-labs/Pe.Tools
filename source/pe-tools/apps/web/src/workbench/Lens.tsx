@@ -451,6 +451,25 @@ export function Lens({
     };
     scroller.addEventListener("scroll", onScroll, { passive: true });
 
+    // Transcript turn-number tags dispatch this (aui.tsx TurnTag): center that turn on the focal
+    // axis — same gesture as tapping its mapdial band.
+    const onFocusTurn = (event: Event) => {
+      const turn = (event as CustomEvent<number>).detail;
+      if (!Number.isFinite(turn)) return;
+      tailFollowRef.current = "detached";
+      scroller.scrollTop = scrollTopForIntent(
+        lensScrollIntent(turn),
+        geomRef.current,
+        {
+          scrollTop: scroller.scrollTop,
+          scrollHeight: scroller.scrollHeight,
+          clientHeight: scroller.clientHeight,
+        },
+        FOCAL,
+      );
+    };
+    window.addEventListener("pe:focus-turn", onFocusTurn);
+
     const chat = chatRef.current;
     const trace = traceInnerRef.current;
     // Hovering a chat message highlights its first tool card; trace cells highlight directly.
@@ -469,6 +488,7 @@ export function Lens({
       ro.disconnect();
       cardRo.disconnect();
       scroller.removeEventListener("scroll", onScroll);
+      window.removeEventListener("pe:focus-turn", onFocusTurn);
       cancelAnimationFrame(raf);
       cancelAnimationFrame(fisheyeRaf);
       window.clearTimeout(expandTimer);
