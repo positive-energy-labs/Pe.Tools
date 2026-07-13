@@ -11,6 +11,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { ArrowUp, Paperclip, Square, X } from "lucide-react";
 import type { WorkbenchState } from "@pe/agent-contracts";
 import { Button } from "#/components/ui/button";
+import { ControlChips } from "#/components/control-chips";
 import { Textarea } from "#/components/ui/textarea";
 import { useWorkbench, type WorkbenchAttachment } from "#/workbench/provider";
 import type { Mode } from "#/workbench/depth";
@@ -203,23 +204,7 @@ export function Composer({
           </div>
         ) : null}
 
-        <div className="flex items-center gap-1 p-2">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            title="Attach files"
-            onClick={() => fileRef.current?.click()}
-          >
-            <Paperclip className="size-4" />
-          </Button>
-          <input
-            ref={fileRef}
-            type="file"
-            multiple
-            hidden
-            onChange={(event) => void onFiles(event.currentTarget.files)}
-          />
+        <div className="p-2">
           <Textarea
             name="input"
             placeholder="Ask Pea…  ( / for commands )"
@@ -230,22 +215,43 @@ export function Composer({
             onKeyDown={onKeyDown}
             className="max-h-48 min-h-9 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
           />
-          {isRunning ? (
-            <Button type="button" size="icon" title="Stop" aria-label="Stop" onClick={cancel}>
-              <Square className="size-3.5" />
-            </Button>
-          ) : (
+          {/* Control row: attachments + session controls (model/access) left, send right. */}
+          <div className="flex items-center gap-1 pt-1">
             <Button
               type="button"
+              variant="ghost"
               size="icon"
-              title="Send"
-              aria-label="Send message"
-              disabled={!canSend}
-              onClick={sendCurrent}
+              title="Attach files"
+              onClick={() => fileRef.current?.click()}
             >
-              <ArrowUp className="size-4" />
+              <Paperclip className="size-4" />
             </Button>
-          )}
+            <input
+              ref={fileRef}
+              type="file"
+              multiple
+              hidden
+              onChange={(event) => void onFiles(event.currentTarget.files)}
+            />
+            <ControlChips />
+            <span className="flex-1" />
+            {isRunning ? (
+              <Button type="button" size="icon" title="Stop" aria-label="Stop" onClick={cancel}>
+                <Square className="size-3.5" />
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                size="icon"
+                title="Send"
+                aria-label="Send message"
+                disabled={!canSend}
+                onClick={sendCurrent}
+              >
+                <ArrowUp className="size-4" />
+              </Button>
+            )}
+          </div>
         </div>
         {operationError ? (
           <span className="block px-3 pb-2 text-xs text-destructive">{operationError}</span>

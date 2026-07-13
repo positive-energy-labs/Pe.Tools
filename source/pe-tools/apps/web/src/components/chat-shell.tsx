@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HotkeysProvider, useHotkeys } from "@tanstack/react-hotkeys";
 import { selectWorkbenchChrome } from "@pe/agent-contracts";
-import { ControlChips } from "#/components/control-chips";
 import { ModeDial } from "#/components/mode-dial";
 import { Composer } from "#/components/composer";
 import { ThreadList, ThreadPalette } from "#/components/thread-palette";
@@ -153,7 +152,6 @@ function Surface({
             />
             <span className="truncate text-sm font-semibold">{chrome.threadLabel}</span>
           </div>
-          <ControlChips />
         </header>
 
         <div aria-live="polite" className="min-h-0 px-5">
