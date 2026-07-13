@@ -1,263 +1,415 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { RefreshCw } from "lucide-react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Check, CheckCheck, Loader2, RefreshCw, RotateCcw, Sparkles, X } from "lucide-react";
 import { useState } from "react";
 
+import {
+  type ScheduleCellBinding,
+  type ScheduleGridDocument,
+  scheduleCellKey,
+  scheduleGridRouteState,
+} from "@pe/agent-contracts";
+
 import { Button } from "#/components/ui/button";
-import { HostConnectionPill, HostIssuePanel, toHostIssue } from "#/host/issues";
-import { useHostOpDynamic, useHostStatusQuery } from "#/host/queries";
+import { HostConnectionPill } from "#/host/issues";
 import { cn } from "#/lib/utils";
+import { useRouteState } from "#/workbench/route-state";
 
-// THROWAWAY debug route for the schedule cell-binding surface (projection.includeBindings).
-// Exists to find shape and bugs before the real schedule editor route; delete it after.
-// Types are hand-authored loose mirrors of the v37 wire shape — the checked-in generated
-// contracts lag until the live host runs v37 (see host-typegen).
-
-type CatalogEntry = {
-  scheduleId: number;
-  name: string;
-  categoryName?: string | null;
-  visibleBodyRowCount: number;
-};
-
-type CellBinding = {
-  columnNumber: number;
-  targetElementIds: number[];
-  parameterName?: string | null;
-  parameterId?: number | null;
-  storageType: string;
-  rawValue?: string | null;
-  displayValue?: string | null;
-  isTypeParameter: boolean;
-  isEditable: boolean;
-  blocker: string;
-  hasMixedValues: boolean;
-};
-
-type RenderedRow = {
-  rowNumber: number;
-  kind: string;
-  values: string[];
-  resolutionStatus: string;
-  resolutionReason: string;
-  subjectIds: number[];
-  bindings?: CellBinding[] | null;
-};
-
-type RenderedColumn = {
-  columnNumber: number;
-  headerText: string;
-  fieldName: string;
-  isCalculated: boolean;
-  isCombinedParameter: boolean;
-};
-
-type ScheduleEntry = {
-  scheduleId: number;
-  scheduleName: string;
-  bindingStatus: string;
-  boundRowCount: number;
-  unboundRowCount: number;
-  nonBindableRowCount: number;
-  visibleBodyRowCount: number;
-  columns: RenderedColumn[];
-  rows: RenderedRow[];
-};
-
+/**
+ * /schedule-grid — a web surface for editing one Revit schedule collaboratively. pea reads
+ * the schedule into the `route:schedule-grid` snapshot and proposes cell values; the engineer
+ * reviews, stages, and pushes back to Revit. All state lives in the route-state document,
+ * written through the dispatcher as `actor:"human"`. Cells carry a proposal → staged → pushed
+ * trichotomy; only the human can push. Lean working slice, not a spreadsheet product.
+ */
 export const Route = createFileRoute("/schedule-grid")({
   component: ScheduleGridRoute,
 });
 
+type CellState = NonNullable<ScheduleGridDocument["cells"][string]>;
+
 function ScheduleGridRoute() {
-  const [selectedId, setSelectedId] = useState<number | undefined>();
+  const { slice, hydrated, apply, command, peaActive, connected } =
+    useRouteState(scheduleGridRouteState);
+  const document = slice;
+  const snapshot = document?.snapshot ?? null;
+  const cells = document?.cells ?? {};
 
-  const statusQuery = useHostStatusQuery();
-  const bridgeConnected =
-    (statusQuery.data as { bridgeIsConnected?: boolean } | undefined)?.bridgeIsConnected ?? false;
+  const [busy, setBusy] = useState<null | "refresh" | "push">(null);
+  const [error, setError] = useState<string | null>(null);
+  const [scheduleName, setScheduleName] = useState("");
+  const [edit, setEdit] = useState<{ key: string; value: string } | null>(null);
 
-  const catalogQuery = useHostOpDynamic(
-    "revit.catalog.schedules",
-    { budget: { maxEntries: 500 } },
-    { enabled: bridgeConnected, staleTime: 60_000 },
-  );
-  const catalogEntries = (
-    (catalogQuery.data as { entries?: CatalogEntry[] } | undefined)?.entries ?? []
-  )
-    .slice()
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const staged = Object.entries(cells).filter(([, cell]) => cell.staged != null);
+  const stagedCount = staged.length;
+  const attention = staged.filter(([, cell]) => cell.review === "attention").length;
+  const proposalCount = Object.values(cells).filter(
+    (cell) => cell.proposal != null && cell.staged == null,
+  ).length;
+  const pushable = stagedCount > 0 && attention === 0;
 
-  const detailQuery = useHostOpDynamic(
-    "revit.detail.schedules",
-    {
-      query: {
-        kind: "ScheduleReferences",
-        scheduleIds: selectedId === undefined ? [] : [selectedId],
-        projection: { view: "Full", includeBindings: true },
-        budget: { maxEntries: 1, maxRowsPerEntry: 200 },
-      },
-    },
-    { enabled: bridgeConnected && selectedId !== undefined, staleTime: 10_000 },
-  );
-  const entry = (detailQuery.data as { entries?: ScheduleEntry[] } | undefined)?.entries?.[0];
-  const issue = detailQuery.isError
-    ? toHostIssue(detailQuery.error, "Schedule detail failed")
-    : catalogQuery.isError
-      ? toHostIssue(catalogQuery.error, "Schedule catalog failed")
-      : undefined;
+  const run = async (kind: "refresh" | "push") => {
+    setBusy(kind);
+    setError(null);
+    try {
+      const result = await command(
+        kind,
+        kind === "refresh" && scheduleName.trim() ? { scheduleName: scheduleName.trim() } : {},
+      );
+      if (!result.ok) setError(result.error ?? result.hint ?? `${kind} failed.`);
+      else setError(pushFailureNote(result.result));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : `${kind} failed.`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const stageValue = (key: string, value: string) =>
+    void apply([
+      { path: ["cells", key, "staged"], value },
+      { path: ["cells", key, "review"], value: "good" },
+    ]);
+  const approve = (key: string, value: string) => stageValue(key, value);
+  const deny = (key: string) =>
+    void apply([
+      { path: ["cells", key, "proposal"] },
+      { path: ["cells", key, "review"], value: "none" },
+    ]);
+  const undo = (key: string) =>
+    void apply([
+      { path: ["cells", key, "staged"] },
+      { path: ["cells", key, "review"], value: "none" },
+    ]);
+
+  const commitEdit = () => {
+    if (edit && edit.value.length > 0) stageValue(edit.key, edit.value);
+    setEdit(null);
+  };
 
   return (
-    <main className="page-wrap grid min-h-screen grid-cols-[18rem_1fr] gap-4 px-4 py-6">
-      <aside className="flex flex-col gap-2 overflow-y-auto rounded-xl border border-border bg-card p-3 shadow-sm">
-        <div className="flex items-center justify-between gap-2">
-          <h1 className="text-sm font-semibold">Schedule Grid (debug)</h1>
-          <HostConnectionPill connected={bridgeConnected} />
-        </div>
-        <p className="text-xs text-muted-foreground">
-          {catalogEntries.length} schedules · cell bindings probe
-        </p>
-        <ul className="flex flex-col gap-0.5 text-sm">
-          {catalogEntries.map((item) => (
-            <li key={item.scheduleId}>
-              <button
-                type="button"
-                onClick={() => setSelectedId(item.scheduleId)}
-                className={cn(
-                  "w-full rounded-md px-2 py-1 text-left hover:bg-muted",
-                  item.scheduleId === selectedId && "bg-muted font-medium",
-                )}
-              >
-                {item.name}
-                <span className="ml-1 text-xs text-muted-foreground">
-                  {item.visibleBodyRowCount}r
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </aside>
+    <main className="flex h-screen flex-col overflow-hidden bg-[var(--paper)]">
+      <header className="shrink-0 border-b border-[var(--line-2)] px-5 pb-2.5 pt-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-baseline gap-3">
+            <h1 className="font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight">
+              {snapshot?.scheduleName ?? "Schedule Grid"}
+            </h1>
+            <span className="text-xs text-[var(--slate)]">
+              {snapshot
+                ? `${snapshot.columns.length} column${snapshot.columns.length === 1 ? "" : "s"} · ${
+                    snapshot.rows.length
+                  } row${snapshot.rows.length === 1 ? "" : "s"}${
+                    snapshot.truncated ? " · truncated" : ""
+                  }${snapshot.takenAt ? ` · read ${timeAgo(snapshot.takenAt)}` : ""}`
+                : hydrated
+                  ? "no schedule read"
+                  : "connecting…"}
+            </span>
+          </div>
 
-      <section className="flex min-w-0 flex-col gap-3">
-        <div className="flex shrink-0 items-center justify-between rounded-xl border border-border bg-card px-4 py-3 shadow-sm">
-          <div className="text-sm">
-            {entry ? (
-              <>
-                <span className="font-semibold">{entry.scheduleName}</span>
-                <span className="ml-2 text-xs text-muted-foreground">
-                  binding {entry.bindingStatus} · {entry.boundRowCount} bound ·{" "}
-                  {entry.unboundRowCount} unbound · {entry.nonBindableRowCount} non-bindable ·{" "}
-                  {entry.visibleBodyRowCount} rows
-                </span>
-              </>
-            ) : (
-              <span className="text-muted-foreground">Select a schedule</span>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <HostConnectionPill connected={connected} label="Connected" />
+            {peaActive && (
+              <span className="tele-label inline-flex items-center gap-1.5 rounded-sm border-[0.5px] border-[var(--pea-line)] bg-[var(--pea-tint)] px-2 py-0.5 text-[var(--cat-green)]">
+                <Sparkles className="size-3 animate-pulse" />
+                pea working
+              </span>
             )}
+
+            <input
+              value={scheduleName}
+              onChange={(e) => setScheduleName(e.target.value)}
+              placeholder="active view"
+              className="h-8 w-40 rounded-sm border-[0.5px] border-[var(--line)] bg-[var(--paper)] px-2 text-xs outline-none focus:border-[var(--pe-blue)]"
+              title="Schedule name to read; blank reads the current active schedule view"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy != null}
+              onClick={() => void run("refresh")}
+            >
+              <RefreshCw className={busy === "refresh" ? "animate-spin" : ""} />
+              {snapshot ? "Re-read" : "Read schedule"}
+            </Button>
+
+            <Button
+              size="sm"
+              disabled={!pushable || busy != null}
+              onClick={() => void run("push")}
+              title={
+                stagedCount === 0
+                  ? "nothing staged"
+                  : attention > 0
+                    ? `${attention} cell${attention === 1 ? "" : "s"} need attention`
+                    : undefined
+              }
+            >
+              {busy === "push" ? <Loader2 className="animate-spin" /> : <CheckCheck />}
+              {busy === "push" ? "Pushing…" : `Push ${stagedCount} to Revit`}
+            </Button>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void detailQuery.refetch()}
-            disabled={detailQuery.isFetching || selectedId === undefined}
-          >
-            <RefreshCw className={cn("size-3.5", detailQuery.isFetching && "animate-spin")} />
-            Refresh
-          </Button>
         </div>
 
-        {issue ? <HostIssuePanel issue={issue} /> : null}
-        {detailQuery.isFetching ? (
-          <p className="text-sm text-muted-foreground">Loading rows + bindings…</p>
-        ) : null}
+        <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[11px]">
+          <span className="text-[var(--slate)]">
+            {proposalCount} open proposal{proposalCount === 1 ? "" : "s"} · {stagedCount} staged
+          </span>
+          {attention > 0 && (
+            <span className="text-[var(--cat-clay)]">
+              {attention} cell{attention === 1 ? "" : "s"} need attention
+            </span>
+          )}
+          {error && <span className="text-[var(--fail)]">{error}</span>}
+          <Link
+            className="ml-auto font-medium text-[var(--pe-blue)] hover:underline"
+            to="/chat"
+            search={(previous) => ({ ...previous, plugin: "schedule-grid" })}
+          >
+            Open chat
+          </Link>
+        </div>
+      </header>
 
-        {entry ? (
-          <div className="overflow-auto rounded-xl border border-border bg-background">
-            <table className="w-full border-collapse text-left text-xs">
-              <thead className="sticky top-0 bg-muted/80 backdrop-blur">
-                <tr>
-                  <th className="border-b border-border/60 px-2 py-1.5 font-semibold">Row</th>
-                  {entry.columns.map((column) => (
-                    <th
-                      key={column.columnNumber}
-                      className="border-b border-l border-border/40 px-2 py-1.5 font-semibold"
-                    >
-                      {column.headerText}
-                      {column.isCalculated ? <ColumnBadge label="calc" /> : null}
-                      {column.isCombinedParameter ? <ColumnBadge label="comb" /> : null}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {entry.rows.map((row) => (
-                  <tr
-                    key={row.rowNumber}
-                    className={cn(
-                      "border-b border-border/30",
-                      row.resolutionStatus !== "Bound" && "opacity-50",
-                    )}
+      <div className="min-h-0 flex-1 overflow-auto p-4">
+        {snapshot ? (
+          <table className="border-collapse text-left text-xs">
+            <thead className="sticky top-0 z-10 bg-[var(--paper-2)]">
+              <tr>
+                <th className="tele-label border-b border-[var(--line)] px-2 py-1.5 text-[var(--slate)]">
+                  #
+                </th>
+                {snapshot.columns.map((column) => (
+                  <th
+                    key={column.columnNumber}
+                    className="tele-label border-b border-l border-[var(--line-soft)] px-2 py-1.5 text-[var(--slate)]"
                   >
-                    <td
-                      className="whitespace-nowrap px-2 py-1 text-muted-foreground"
-                      title={`${row.resolutionStatus} (${row.resolutionReason}) subjects=[${row.subjectIds.join(",")}]`}
-                    >
-                      {row.rowNumber} {row.kind === "GroupFooter" ? "ƒ" : ""}
-                      {row.subjectIds.length > 1 ? ` ×${row.subjectIds.length}` : ""}
-                    </td>
-                    {entry.columns.map((column, columnIndex) => (
-                      <BindingCell
-                        key={column.columnNumber}
-                        text={row.values[columnIndex] ?? ""}
-                        binding={row.bindings?.find(
-                          (item) => item.columnNumber === column.columnNumber,
-                        )}
-                      />
-                    ))}
-                  </tr>
+                    {column.headerText}
+                    {column.isCalculated && <ColBadge label="calc" />}
+                    {column.isCombinedParameter && <ColBadge label="comb" />}
+                  </th>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
-      </section>
+              </tr>
+            </thead>
+            <tbody>
+              {snapshot.rows.map((row) => (
+                <tr key={row.rowNumber} className="border-b border-[var(--line-soft)]">
+                  <td
+                    className="tele whitespace-nowrap px-2 py-1 text-right text-[var(--slate)]"
+                    title={`row ${row.rowNumber} · ${row.kind} · subjects=[${row.subjectIds.join(",")}]`}
+                  >
+                    {row.rowNumber}
+                    {row.subjectIds.length > 1 ? ` ×${row.subjectIds.length}` : ""}
+                  </td>
+                  {snapshot.columns.map((column, columnIndex) => {
+                    const key = scheduleCellKey(row.rowNumber, column.columnNumber);
+                    const binding = row.bindings.find(
+                      (candidate) => candidate.columnNumber === column.columnNumber,
+                    );
+                    return (
+                      <Cell
+                        key={column.columnNumber}
+                        cellKey={key}
+                        text={row.values[columnIndex] ?? ""}
+                        binding={binding}
+                        cell={cells[key]}
+                        editing={edit?.key === key ? edit.value : null}
+                        onEditStart={() =>
+                          binding?.isEditable && binding.blocker === "None"
+                            ? setEdit({
+                                key,
+                                value: cells[key]?.staged ?? row.values[columnIndex] ?? "",
+                              })
+                            : undefined
+                        }
+                        onEditChange={(value) => setEdit({ key, value })}
+                        onEditCommit={commitEdit}
+                        onEditCancel={() => setEdit(null)}
+                        onApprove={approve}
+                        onDeny={deny}
+                        onUndo={undo}
+                      />
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p className="text-sm text-[var(--slate)]">
+            {hydrated
+              ? "No schedule read yet. Open a schedule view in Revit and press Read schedule (or name one)."
+              : "Connecting to the workbench…"}
+          </p>
+        )}
+      </div>
     </main>
   );
 }
 
-function ColumnBadge({ label }: { label: string }) {
+function Cell({
+  cellKey,
+  text,
+  binding,
+  cell,
+  editing,
+  onEditStart,
+  onEditChange,
+  onEditCommit,
+  onEditCancel,
+  onApprove,
+  onDeny,
+  onUndo,
+}: CellProps) {
+  const staged = cell?.staged != null;
+  const proposal = !staged && cell?.proposal != null;
+  const attention = cell?.review === "attention";
+  const editable = binding?.isEditable === true && binding.blocker === "None";
+  const display = staged ? cell?.staged : (binding?.displayValue ?? text);
+
+  const tooltip = binding
+    ? [
+        `param: ${binding.parameterName ?? "—"} (${binding.parameterId ?? "—"})`,
+        `storage: ${binding.storageType}`,
+        `targets: [${binding.targetElementIds.join(",")}]`,
+        binding.blocker !== "None" ? `blocker: ${binding.blocker}` : null,
+        binding.hasMixedValues ? "mixed values" : null,
+      ]
+        .filter(Boolean)
+        .join("\n")
+    : "no binding (row unbound)";
+
   return (
-    <span className="ml-1 rounded border border-[var(--cat-clay)]/25 bg-[var(--cat-clay)]/12 px-1 text-[10px] text-[var(--cat-clay)]">
+    <td
+      className={cn(
+        "border-l border-[var(--line-soft)] px-2 py-1 align-top",
+        !editable && "bg-[var(--paper-2)]/40 text-[var(--slate)]",
+        editable && "cursor-text",
+        staged && "bg-cat-green/12",
+        proposal && "bg-cat-clay/12",
+        attention && "bg-destructive/12",
+      )}
+      title={tooltip}
+      onClick={editing == null && !proposal ? onEditStart : undefined}
+    >
+      {editing != null ? (
+        <input
+          autoFocus
+          value={editing}
+          onChange={(e) => onEditChange(e.target.value)}
+          onBlur={onEditCancel}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onEditCommit();
+            else if (e.key === "Escape") onEditCancel();
+          }}
+          className="tele w-full min-w-16 rounded-none border-[0.5px] border-[var(--pe-blue)] bg-[var(--paper)] px-1 outline-none"
+        />
+      ) : (
+        <div className="flex items-start gap-1">
+          <span
+            className={cn(
+              "tele min-w-8 whitespace-pre-wrap",
+              staged && "font-medium text-[var(--cat-green)]",
+              proposal && "text-[var(--cat-clay)]",
+            )}
+          >
+            {display || "—"}
+            {binding?.isTypeParameter && (
+              <span
+                className="tele-label ml-1 align-super text-[var(--cat-kiln)]"
+                title="type parameter — shared across rows of this type"
+              >
+                T
+              </span>
+            )}
+          </span>
+          <span className="ml-auto flex shrink-0 items-center gap-0.5">
+            {proposal ? (
+              <>
+                <button
+                  type="button"
+                  title={`Deny — ${cell?.proposal?.note ?? "pea proposal"}`}
+                  className="text-[var(--slate)] hover:text-[var(--fail)]"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeny(cellKey);
+                  }}
+                >
+                  <X className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  title={`Approve → stage "${cell?.proposal?.value ?? ""}"`}
+                  className="text-[var(--slate)] hover:text-[var(--cat-green)]"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onApprove(cellKey, cell?.proposal?.value ?? "");
+                  }}
+                >
+                  <Check className="size-3.5" />
+                </button>
+              </>
+            ) : staged ? (
+              <button
+                type="button"
+                title="Undo stage"
+                className="text-[var(--slate)] hover:text-[var(--clay-ink)]"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onUndo(cellKey);
+                }}
+              >
+                <RotateCcw className="size-3.5" />
+              </button>
+            ) : null}
+          </span>
+        </div>
+      )}
+    </td>
+  );
+}
+
+interface CellProps {
+  cellKey: string;
+  text: string;
+  binding: ScheduleCellBinding | undefined;
+  cell: CellState | undefined;
+  editing: string | null;
+  onEditStart: () => void;
+  onEditChange: (value: string) => void;
+  onEditCommit: () => void;
+  onEditCancel: () => void;
+  onApprove: (key: string, value: string) => void;
+  onDeny: (key: string) => void;
+  onUndo: (key: string) => void;
+}
+
+function ColBadge({ label }: { label: string }) {
+  return (
+    <span className="tele-label ml-1 rounded-sm border-[0.5px] border-cat-clay/25 bg-cat-clay/12 px-1 text-[var(--cat-clay)]">
       {label}
     </span>
   );
 }
 
-function BindingCell({ text, binding }: { text: string; binding?: CellBinding }) {
-  const tooltip = binding
-    ? [
-        `param: ${binding.parameterName ?? "—"} (${binding.parameterId ?? "—"})`,
-        `storage: ${binding.storageType}`,
-        `raw: ${binding.rawValue ?? "—"}`,
-        `targets: [${binding.targetElementIds.join(",")}]`,
-        `blocker: ${binding.blocker}`,
-      ].join("\n")
-    : "no binding (row unbound or bindings off)";
-  return (
-    <td className="border-l border-border/20 px-2 py-1 align-top" title={tooltip}>
-      <span className="whitespace-pre-wrap">{text}</span>
-      {binding ? (
-        <span className="ml-1 inline-flex items-center gap-0.5 align-middle">
-          <span
-            className={cn(
-              "inline-block size-1.5 rounded-full",
-              binding.isEditable ? "bg-[var(--cat-green)]" : "bg-[var(--cat-slate)]/50",
-            )}
-          />
-          {binding.isTypeParameter ? (
-            <span className="text-[10px] font-semibold text-[var(--cat-blue)]">T</span>
-          ) : null}
-          {binding.hasMixedValues ? (
-            <span className="text-[10px] font-semibold text-[var(--cat-kiln)]">M</span>
-          ) : null}
-        </span>
-      ) : null}
-    </td>
-  );
+/** Surface push per-cell failures returned in the command result (fold successes silently). */
+function pushFailureNote(result: unknown): string | null {
+  if (typeof result !== "object" || result == null) return null;
+  const failures = (result as { failures?: unknown }).failures;
+  if (!Array.isArray(failures) || failures.length === 0) return null;
+  const first = failures[0] as { key?: string; error?: string };
+  return `${failures.length} cell${failures.length === 1 ? "" : "s"} failed${
+    first?.error ? `: ${first.error}` : "."
+  }`;
+}
+
+function timeAgo(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (Number.isNaN(ms)) return "";
+  const min = Math.round(ms / 60000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  return `${Math.round(hr / 24)}d ago`;
 }
