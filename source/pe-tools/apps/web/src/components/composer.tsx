@@ -231,7 +231,7 @@ export function Composer({
             className="max-h-48 min-h-9 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
           />
           {isRunning ? (
-            <Button type="button" size="icon" title="Stop" onClick={cancel}>
+            <Button type="button" size="icon" title="Stop" aria-label="Stop" onClick={cancel}>
               <Square className="size-3.5" />
             </Button>
           ) : (
@@ -239,6 +239,7 @@ export function Composer({
               type="button"
               size="icon"
               title="Send"
+              aria-label="Send message"
               disabled={!canSend}
               onClick={sendCurrent}
             >
