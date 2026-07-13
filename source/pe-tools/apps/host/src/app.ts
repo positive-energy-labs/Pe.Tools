@@ -119,10 +119,14 @@ const hostStatusRoute = HttpRouter.add("GET", "/host/status", () =>
 const hostUpdateRoute = HttpRouter.add("POST", "/host/update", () =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const [cmd, args] = peRevitLauncher();
+    const launch = peRevitLauncher();
     const result = yield* Effect.result(
       spawner.string(
-        ChildProcess.make(cmd, [...args, "install", "apply", "--release", "latest", "--json"]),
+        ChildProcess.make(
+          launch.cmd,
+          [...launch.args, "install", "apply", "--release", "latest", "--json"],
+          { cwd: launch.cwd },
+        ),
       ),
     );
     if (result._tag === "Success")
@@ -162,9 +166,13 @@ const hostInstallRoute = HttpRouter.add("GET", "/host/install", () =>
 // so hot-swap releases never accumulate cruft. Failures are swallowed: gc is best-effort.
 const runInstallGc = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const [cmd, args] = peRevitLauncher();
+  const launch = peRevitLauncher();
   yield* Effect.result(
-    spawner.string(ChildProcess.make(cmd, [...args, "install", "gc", "--json"])),
+    spawner.string(
+      ChildProcess.make(launch.cmd, [...launch.args, "install", "gc", "--json"], {
+        cwd: launch.cwd,
+      }),
+    ),
   );
 });
 
