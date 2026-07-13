@@ -58,7 +58,7 @@ const bridgeSessionIdSchema = z
   .string()
   .optional()
   .describe(
-    "Optional target selector for a connected Revit session: 'sandbox:<id>' (a pea-owned sandbox from pe_sandbox), a pid, or a raw session id from pe_status sessions. The user's session is the kind=user entry — target it by pid or session id. With one session connected it may be omitted; with several, untargeted Revit operations hard-fail with the session listing.",
+    "Optional target selector for a connected Revit session: 'user' (the user's own session — their live docs), 'sandbox:<id>' (a pea-owned sandbox from pe_sandbox), a pid, or a raw session id from pe_status sessions. With one session connected it may be omitted; with several, untargeted Revit operations hard-fail with the session listing.",
   );
 
 const hostOperationSearchInputSchema = z.object({
