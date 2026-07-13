@@ -12,6 +12,11 @@ accepted regions normally materialize as host `Space` elements. `Room` is approp
 workflow owns architectural room-program semantics. `Zone` groups accepted Spaces for shared
 thermostatic control; it is not a room detector or room substitute.
 
+On models whose source geometry cannot bound native spatial elements, accepted shared-partition
+edges materialize as marker-owned host Space Separation Lines before one Space is placed per
+accepted region. The target phase is explicit. Replacement and cleanup touch only marker-owned
+Spaces, lines, and work views; existing user Spaces are a fail-fast conflict, never collateral.
+
 ## Product behavior
 
 Pea runs the deterministic detector, presents native visible draft regions plus image and
@@ -31,11 +36,14 @@ interior boundary is a single edge shared by two regions at the wall centerline;
 the outside wall face. Shared vertices and edges must be coincident, so accepted regions leave no
 wall-thickness gaps or overlaps between them.
 
-Regularization follows evidence: straight wall runs become straight and their intersections become
-sharp corners, while real diagonals and curves remain. Residual cells are classified before they are
-claimed. Wall mass may collapse into the shared boundary and small floor/headroom-valid slivers may
-join a neighboring region; shafts, columns, voids, exterior space, and ambiguous residuals remain
-excluded or reviewable. Geometric neatness alone is never evidence that space belongs to a room.
+Regularization follows evidence under the STRAIGHT-ONLY LAW (2026-07-12): every shipped segment is
+either on a consensus wall line or an axis-aligned connector between wall lines; curves and
+free-floating diagonals are never invented. A region the priors cannot explain is DROPPED WHOLE —
+a visibly missing room is an easy human fix, a mangled shape is bewildering. Residual cells are
+classified before they are claimed. Wall mass may collapse into the shared boundary and small
+floor/headroom-valid slivers may join a neighboring region; shafts, columns, voids, exterior space,
+and ambiguous residuals remain excluded or reviewable. Geometric neatness alone is never evidence
+that space belongs to a room.
 
 ## Accuracy and proof
 
@@ -72,3 +80,15 @@ then assigns 1,966 square feet of connected physical wall ink to those cores, pr
 edge regions / 13,267 square feet with zero Revit FilledRegion failures. The valid long circulation
 room scores 0.095 compactness; the two rejected exterior snakes score 0.041 and 0.026. Image review
 still flags two small drafts for human rejection: a roof/turret pocket and a diagonal sliver.
+
+The same checkpoint now materializes successfully in R2025 as 61 host MEP Spaces in the explicit
+`Future` phase on `Level 2/Upper Level`, bounded by one shared network of 343 Space Separation
+Lines. Open shared paths preserve their topological endpoints and simplify directly to physical
+wall runs; they never reintroduce a midpoint dogleg merely to preserve raster area. A committed-
+model census reports 13,331.2 square feet, 132,422 cubic feet, and zero bad
+areas, volumes, or boundary loops; every Space has exactly one boundary loop. The partition pass
+re-solves 154 square feet of small enclosed residual pockets instead of leaving holes. A strict,
+area-preserving physical fit selects only high-confidence irregular regions; on Chadds it selects
+R03 from geometry rather than identity and reduces its native boundary to seven physical wall
+segments (18 API fragments split at network junctions), one loop, and 906.343 square feet.
+Validation and overlays use `Space.GetBoundarySegments()`, not polygons redrawn from detector TSV.

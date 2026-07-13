@@ -36,8 +36,8 @@ public static class RoomTakeoff
     {
         var level = ResolveLevel(doc, opt.LevelNameContains);
         var crop = ComputeCrop(doc, level, opt);
-        var (va, vb) = ProjectionSeed.PrepareSeedViews(doc, level, crop, opt, log);
-        SaveState(opt, level, crop, va, vb);
+        var (va, va2, vb, vd) = ProjectionSeed.PrepareSeedViews(doc, level, crop, opt, log);
+        SaveState(opt, level, crop, va, va2, vb, vd);
         log($"[prepare] level='{level.Name}' crop=({crop.Min.X:F0},{crop.Min.Y:F0})..({crop.Max.X:F0},{crop.Max.Y:F0})");
     }
 
@@ -46,14 +46,34 @@ public static class RoomTakeoff
         var opt = optOverride ?? new TakeoffOptions();
         opt.LevelNameContains = levelNameContains;
         var level = ResolveLevel(doc, levelNameContains);
-        var (crop, va, vb) = LoadState(opt, level);
+        var (crop, va, va2, vb, vd) = LoadState(opt, level);
         string workDir = ArtifactDir(opt);
 
         var hf = Heightfield.Build(doc, level, crop, opt, log);
         int n = hf.W * hf.H;
-        var ink = ProjectionSeed.CaptureInk(doc, va, vb, crop, hf.W, hf.H, opt.CellFt, workDir, opt, log);
+        // floor-slab edge: stair voids, overlooks, and the building envelope (which the header
+        // band's proximity gate anchors on — eave walls under a roof slope have no knee ink)
+        var floorEdge = new bool[n];
+        double lvlZ = level.ProjectElevation;
+        bool Floor(int i) => !float.IsNaN(hf.FloorZ[i]) && Math.Abs(hf.FloorZ[i] - lvlZ) <= opt.FloorTolFt;
+        for (int i = 0; i < n; i++)
+        {
+            if (!Floor(i)) continue;
+            int x = i % hf.W, y = i / hf.W;
+            if (x > 0 && !Floor(i - 1) || x < hf.W - 1 && !Floor(i + 1)
+                || y > 0 && !Floor(i - hf.W) || y < hf.H - 1 && !Floor(i + hf.W))
+                floorEdge[i] = true;
+        }
+        var ink = ProjectionSeed.CaptureInk(doc, va, va2, vb, vd, crop, hf.W, hf.H, opt.CellFt, workDir, opt, log,
+            floorEdge, out var kneeInk);
         var result = Detector.Detect(hf, ink, level, opt, log);
         result.SeedViewA = va; result.SeedViewB = vb;
+        // Boundary-evidence raster for materialization: where is a boundary REAL geometry rather
+        // than an equidistance seam? Real = knee-band wall ink (doors are open at +4 ft; the header
+        // band would mark sealed openings as walls) or a floor edge (stair voids, overlooks).
+        var evidence = kneeInk;
+        for (int i = 0; i < n; i++) evidence[i] |= floorEdge[i];
+        InkSupport.Save(InkPath(opt, level), hf.W, hf.H, hf.MinX, hf.MinY, opt.CellFt, evidence);
 
         string tsv = Path.Combine(workDir, $"rooms_{Sanitize(level.Name)}.tsv");
         File.WriteAllText(tsv, result.ToTsv());
@@ -76,8 +96,25 @@ public static class RoomTakeoff
         return Takeoff.Annotate.ExportEvidence(doc, $"{opt.Marker} takeoff", Path.Combine(ArtifactDir(opt), "evidence"), log);
     }
 
-    public static int Cleanup(Document doc, Action<string> log, TakeoffOptions? optOverride = null) =>
-        Takeoff.Annotate.Cleanup(doc, optOverride ?? new TakeoffOptions(), log);
+    public static IReadOnlyList<ElementId> MaterializeSpaces(
+        Document doc, string levelNameContains, Phase phase, Action<string> log, TakeoffOptions? optOverride = null)
+    {
+        var opt = optOverride ?? new TakeoffOptions();
+        opt.LevelNameContains = levelNameContains;
+        var level = ResolveLevel(doc, levelNameContains);
+        var inkNear = InkSupport.LoadOracle(InkPath(opt, level), 3 * opt.CellFt);
+        if (inkNear == null) log("[spaces] no ink raster found — arcs run on geometry alone");
+        return SpaceMaterializer.Replace(doc, level, phase, LoadResult(opt, level), opt, log, inkNear);
+    }
+
+    private static string InkPath(TakeoffOptions opt, Level level) =>
+        Path.Combine(ArtifactDir(opt), $"ink_{Sanitize(level.Name)}.bin");
+
+    public static int Cleanup(Document doc, Action<string> log, TakeoffOptions? optOverride = null)
+    {
+        var opt = optOverride ?? new TakeoffOptions();
+        return SpaceMaterializer.Cleanup(doc, opt, log) + Takeoff.Annotate.Cleanup(doc, opt, log);
+    }
 
     private static string Annotate_(Document doc, Level level, TakeoffResult result, TakeoffOptions opt, Action<string> log) =>
         Takeoff.Annotate.DrawEvidence(doc, level, result, opt, log);
@@ -152,26 +189,30 @@ public static class RoomTakeoff
     private static string StatePath(TakeoffOptions opt, Level level) =>
         Path.Combine(ArtifactDir(opt), $"state_{Sanitize(level.Name)}.txt");
 
-    private static void SaveState(TakeoffOptions opt, Level level, BoundingBoxXYZ crop, string va, string vb)
+    private static void SaveState(TakeoffOptions opt, Level level, BoundingBoxXYZ crop, string va, string va2, string vb, string? vd)
     {
         var ic = CultureInfo.InvariantCulture;
-        File.WriteAllLines(StatePath(opt, level), new[] {
+        var lines = new List<string> {
             $"minx={crop.Min.X.ToString("F6", ic)}", $"miny={crop.Min.Y.ToString("F6", ic)}",
             $"maxx={crop.Max.X.ToString("F6", ic)}", $"maxy={crop.Max.Y.ToString("F6", ic)}",
             $"minz={crop.Min.Z.ToString("F6", ic)}", $"maxz={crop.Max.Z.ToString("F6", ic)}",
-            $"viewA={va}", $"viewB={vb}",
-        });
+            $"viewA={va}", $"viewA2={va2}", $"viewB={vb}",
+        };
+        if (vd != null) lines.Add($"viewD={vd}");
+        File.WriteAllLines(StatePath(opt, level), lines);
     }
 
-    private static (BoundingBoxXYZ crop, string va, string vb) LoadState(TakeoffOptions opt, Level level)
+    private static (BoundingBoxXYZ crop, string va, string va2, string vb, string? vd) LoadState(TakeoffOptions opt, Level level)
     {
         var path = StatePath(opt, level);
         if (!File.Exists(path)) throw new InvalidOperationException($"no takeoff state at {path} — run Prepare first");
         var kv = File.ReadAllLines(path).Select(l => l.Split(new[] { '=' }, 2))
             .Where(p => p.Length == 2).ToDictionary(p => p[0], p => p[1]);
+        if (!kv.ContainsKey("viewA2"))
+            throw new InvalidOperationException("takeoff state predates the band-pair seed — run Prepare again");
         double G(string k) => double.Parse(kv[k], CultureInfo.InvariantCulture);
         var crop = new BoundingBoxXYZ { Min = new XYZ(G("minx"), G("miny"), G("minz")), Max = new XYZ(G("maxx"), G("maxy"), G("maxz")) };
-        return (crop, kv["viewA"], kv["viewB"]);
+        return (crop, kv["viewA"], kv["viewA2"], kv["viewB"], kv.GetValueOrDefault("viewD"));
     }
 
     private static TakeoffResult LoadResult(TakeoffOptions opt, Level level)

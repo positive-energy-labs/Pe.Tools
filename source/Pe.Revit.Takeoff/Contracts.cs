@@ -31,6 +31,23 @@ public sealed class TakeoffOptions
                                             // room is 0.095, while exterior snakes are <= 0.041.
     public double PartitionFillFt = 1.0;    // safety cap for assigning connected wall ink to the
                                             // nearest accepted region; not a wall-width guarantee
+    public double MaxEnclosedResidualSqft = 25; // re-solve small fully enclosed wall/grid pockets;
+                                               // larger courtyards, stairs, and voids stay empty
+    public double BoundarySimplifyFt = 2.0; // physical wall-fit tolerance for raster boundary chains
+    public double BandPairSeparationFt = 0.75; // vertical-consistency AND: band A is also cut this
+                                               // far BELOW KneeBandFt and only ink present in BOTH
+                                               // cuts counts. Walls extrude vertically so they
+                                               // survive; rafters, joists, battens, gutters, stair
+                                               // flights, raked railings, and flat LABEL junk shift
+                                               // or vanish. The second cut goes DOWN, not up: knee
+                                               // walls end just above KneeBandFt, and a higher cut
+                                               // erased them (Chadds round 2 lost 9 real rooms).
+    public double HeaderNearFt = 6.0;       // header-band ink only counts within this reach of
+                                            // knee ink: headers live over openings BETWEEN walls,
+                                            // so mid-room roof planes in the header cut are noise.
+                                            // Must cover HALF the widest opening: at 4.0 the gate
+                                            // discarded wide-window headers and unsealed the
+                                            // envelope (Chadds round 3, bedroom wing)
     public double KneeBandFt = 4.0;         // seed band A: catches knee walls + under-window studs
     public double HeaderBandFt = 8.5;       // seed band B: ABOVE door/window heads, where framing
                                             // is continuous = geometric door sealing. Estates run
@@ -38,6 +55,7 @@ public sealed class TakeoffOptions
                                             // Estimate per model: stud-top histogram (plate height)
                                             // minus ~2 ft. Three independent pods converged here.
     public int SeedPixelSize = 6000;        // ImageExportOptions.PixelSize for seed exports
+    public string? EvidenceReferenceViewName; // production view whose graphics + orientation evidence should match
     public string Marker = "PE-TAKEOFF";    // stamped into Comments of everything we create
     public string? ArtifactDir;             // where TSV/PNG artifacts land (default: temp)
 }
