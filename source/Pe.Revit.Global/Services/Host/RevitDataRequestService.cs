@@ -15,6 +15,7 @@ using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamParameter;
 using Pe.Revit.Extensions.FamParameter.Formula;
 using Pe.Revit.Global.Services.Aps;
+using Pe.Revit.Global.Services.ParameterLinks;
 using Pe.Revit.Parameters;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.SettingsStorage;
@@ -81,6 +82,14 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
     public Task<ParameterValueApplyData> ApplyParameterValuesAsync(
         ParameterValueApplyRequest request
     ) => this.EnqueueAsync(() => this.ApplyParameterValuesCore(request));
+
+    public Task<ParameterLinksData> GetParameterLinksAsync(
+        ParameterLinksDetailRequest request
+    ) => this.EnqueueAsync(() => this.GetParameterLinksCore(request));
+
+    public Task<ParameterLinksData> ApplyParameterLinksAsync(
+        ParameterLinksApplyRequest request
+    ) => this.EnqueueAsync(() => this.ApplyParameterLinksCore(request));
 
     public Task<ScheduleCoverageData> GetScheduleCoverageAsync(
         ScheduleCoverageRequest request
@@ -491,6 +500,35 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
                 ex,
                 "Verify the active document is writable and the edits reference valid binding handles, then retry."
             );
+        }
+    }
+
+    private ParameterLinksData GetParameterLinksCore(ParameterLinksDetailRequest request) {
+        var document = GetParameterLinksDocument(RevitBridgeOps.ParameterLinksDetail.Definition);
+        return ParameterLinksService.Instance.Detail(document, request.IncludeEvaluation);
+    }
+
+    private ParameterLinksData ApplyParameterLinksCore(ParameterLinksApplyRequest request) {
+        var document = GetParameterLinksDocument(RevitBridgeOps.ParameterLinksApply.Definition);
+        if (!request.PreviewOnly && document.IsReadOnly) {
+            throw BridgeOperationExceptions.Conflict(
+                "Active document is read-only.",
+                [BridgeOperationExceptions.Issue(
+                    "$",
+                    "ParameterLinksDocumentReadOnly",
+                    "Active document is read-only.",
+                    "Open a writable project document and retry, or use previewOnly=true.")]);
+        }
+
+        try {
+            return ParameterLinksService.Instance.Apply(document, request);
+        } catch (BridgeOperationException) {
+            throw;
+        } catch (Exception ex) {
+            throw BridgeOperationExceptions.Unexpected(
+                "ParameterLinksApplyException",
+                ex,
+                "Inspect revit.detail.parameter-links issues, verify the active project is writable, and retry.");
         }
     }
 
@@ -1747,6 +1785,20 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         }
 
         return document;
+    }
+
+    private static RevitDocument GetParameterLinksDocument(HostOperationDefinition operation) {
+        var document = GetSupportedActiveDocument(operation);
+        if (!document.IsFamilyDocument)
+            return document;
+
+        throw BridgeOperationExceptions.Conflict(
+            "Parameter Links requires an active project document.",
+            [BridgeOperationExceptions.Issue(
+                "$",
+                "ParameterLinksProjectDocumentRequired",
+                "The active document is a family document.",
+                "Activate a project document and retry.")]);
     }
 
     private static RevitDocument GetSupportedActiveDocument(HostOperationDefinition _) => GetActiveDocument();

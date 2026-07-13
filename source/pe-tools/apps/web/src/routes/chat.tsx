@@ -26,8 +26,12 @@ const DEFAULTS = { mode: "threads" as const };
 const chatSearchSchema = z.object({
   thread: z.string().optional(),
   // .catch keeps stale bookmarks (e.g. the old mode=chat) from throwing — they fall back to default.
-  mode: z.enum(MODES as [string, ...string[]]).default(DEFAULTS.mode).catch(DEFAULTS.mode),
+  mode: z
+    .enum(MODES as [string, ...string[]])
+    .default(DEFAULTS.mode)
+    .catch(DEFAULTS.mode),
   turn: z.coerce.number().int().positive().optional().catch(undefined),
+  plugin: z.enum(["family-types"]).optional().catch(undefined),
   prompt: z.string().max(PROMPT_MAX).optional(),
 });
 
@@ -40,7 +44,7 @@ export const Route = createFileRoute("/chat")({
 });
 
 function RouteComponent() {
-  const { prompt, turn } = Route.useSearch();
+  const { plugin, prompt, turn } = Route.useSearch();
   const navigate = useNavigate({ from: "/chat" });
   // Debounce the scroll-driven turn → URL write: scrolling fires turn changes every frame, and each
   // navigate re-renders the route. ~1s lag keeps the shareable URL fresh without thrashing the router
@@ -63,7 +67,13 @@ function RouteComponent() {
   if (!mounted) return null;
   return (
     <WorkbenchProvider>
-      <ChatShell initialTurn={turn} promptSeed={prompt} onTurnChange={setTurn} />
+      <ChatShell
+        initialTurn={turn}
+        plugin={plugin}
+        promptSeed={prompt}
+        onTurnChange={setTurn}
+        onPluginClose={() => void navigate({ search: (prev) => ({ ...prev, plugin: undefined }) })}
+      />
     </WorkbenchProvider>
   );
 }

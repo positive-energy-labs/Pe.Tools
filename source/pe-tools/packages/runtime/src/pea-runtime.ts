@@ -10,9 +10,11 @@ import {
   bundledPeaSkills,
   configurePeaProductToolContext,
   createFamilyTypesCommandHandlers,
+  createParameterLinksCommandHandlers,
   defaultPeaAgentModelId,
   familyTypesRouteState,
   materializeBundledPeaSkills,
+  parameterLinksRouteState,
   peaProductToolProfile,
   peaProductTools,
   resolveHostBaseUrl,
@@ -84,6 +86,10 @@ export async function createPeaRuntime(
   // The dispatcher endpoints (buildAgentControllerApp) and the three universal tools
   // read this registration; handlers reach Revit at the same host base URL pea uses.
   registerRouteState(familyTypesRouteState, createFamilyTypesCommandHandlers({ hostBaseUrl }));
+  registerRouteState(
+    parameterLinksRouteState,
+    createParameterLinksCommandHandlers({ hostBaseUrl }),
+  );
 
   const authStorageContext = await createMastraCodeAuthStorageContext();
   const authStorage = authStorageContext.storage;

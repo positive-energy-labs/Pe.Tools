@@ -7,6 +7,7 @@ using Pe.App.Tasks;
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.Global.Services.Document;
 using Pe.Revit.Global.Services.Host;
+using Pe.Revit.Global.Services.ParameterLinks;
 using Pe.Revit.Loader;
 using Pe.Revit.Loader.Documents;
 using Pe.Revit.SettingsRuntime.Modules;
@@ -87,6 +88,7 @@ public sealed class AppCore : IPePayload {
         TaskInitializer.RegisterAllTasks();
 
         AutoTagService.Instance.Initialize(app.ActiveAddInId, documents);
+        ParameterLinksService.Instance.Initialize(app.ActiveAddInId, documents);
     }
 
     public void Shutdown() {
@@ -97,6 +99,7 @@ public sealed class AppCore : IPePayload {
         this._revitTaskService?.Dispose();
 
         AutoTagService.Instance.Shutdown();
+        ParameterLinksService.Instance.Shutdown();
         HostRuntime.Shutdown();
         Log.CloseAndFlush();
     }

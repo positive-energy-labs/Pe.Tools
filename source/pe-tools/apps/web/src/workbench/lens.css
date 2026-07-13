@@ -59,6 +59,9 @@
 .lens-grid .mapdial {
   grid-column: 3;
 }
+[data-plugin] .lens-lane.side {
+  display: none;
+}
 /* the composer floats over the chat lane: clear the sidebar + the right mapdial, then inset by
    equal 20px gutters so it lines up with the chat text column (.lens-chat padding: 0 20px). The
    lane floats OUTSIDE the scroller, so it isn't pushed in by the scrollbar like .lens-chat is — the
