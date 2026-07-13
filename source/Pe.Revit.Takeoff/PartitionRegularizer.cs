@@ -8,7 +8,7 @@ internal static class PartitionRegularizer
     // Grow accepted room cores through connected wall ink only. This collapses wall thickness into
     // one deterministic shared partition without jumping across voids or swallowing rejected space.
     internal static int[] Propagate(
-        int[] labels, IReadOnlySet<int> accepted, bool[] ink, int width, int height, int maxCells,
+        int[] labels, ISet<int> accepted, bool[] ink, int width, int height, int maxCells,
         int maxEnclosedCells,
         out Stats stats)
     {

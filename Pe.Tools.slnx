@@ -53,6 +53,9 @@
     <Project Path="source/Pe.Revit.Placement/Pe.Revit.Placement.csproj" />
     <Project Path="source/Pe.Revit.Scripting/Pe.Revit.Scripting.csproj" />
     <Project Path="source/Pe.Revit.SettingsRuntime/Pe.Revit.SettingsRuntime.csproj" />
+    <!-- Default `pe-revit test fresh` discovery is solution-scoped. Keep the Revit test host in
+         the root solution so agents do not need a product-specific project-path escape hatch. -->
+    <Project Path="source/Pe.Revit.Tests/Pe.Revit.Tests.csproj" />
     <Project Path="source/Pe.Revit.Takeoff/Pe.Revit.Takeoff.csproj" />
     <Project Path="source/Pe.Revit.Ui/Pe.Revit.Ui.csproj" />
     <Project Path="source/Pe.Shared.HostContracts/Pe.Shared.HostContracts.csproj" />

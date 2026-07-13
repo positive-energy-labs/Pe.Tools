@@ -8,7 +8,10 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { BRIDGE_PATH } from "@pe/host-contracts/contracts";
 import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
 import { getHostStatus } from "./local-ops.ts";
-import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
+import {
+  HOST_RPC_BRIDGE_SESSION_HEADER,
+  tsOnlyOperationCatalog,
+} from "@pe/host-contracts/operation-types";
 import { callRoute } from "./call-route.ts";
 import { installRoot, peRevitLauncher, validatePeRevitEnvelope } from "./pe-revit-cli.ts";
 import { sandboxesRoute } from "./sandbox-route.ts";
@@ -42,7 +45,7 @@ const bridgeEventsRoute = HttpRouter.add("GET", "/events", () =>
 );
 
 // Runtime operation catalog for browsers/typegen: proxies host.ops.catalog to the
-// connected Revit session (?session=<bridgeSessionId> to target one) and returns
+// connected Revit session (the standard selector header targets one; ?session remains compatible)
 // op keys + request/response JSON Schemas as plain JSON. The host-local (TS-only) ops
 // are appended so discovery (host_operation_search, pea `operations`, the web ops page)
 // sees both surfaces from one catalog; host-typegen skips them by their origin marker.
@@ -53,20 +56,31 @@ const bridgeEventsRoute = HttpRouter.add("GET", "/events", () =>
 const opsCatalogRoute = HttpRouter.add("GET", "/ops", (req) =>
   Effect.gen(function* () {
     const bridge = yield* RevitBridge;
-    const sessionParam = new URL(req.url, "http://localhost").searchParams.get("session");
+    const sessionParam =
+      new URL(req.url, "http://localhost").searchParams.get("session") ?? undefined;
+    const sessionHeader = req.headers[HOST_RPC_BRIDGE_SESSION_HEADER]?.trim() || undefined;
+    if (sessionParam && sessionHeader && sessionParam !== sessionHeader)
+      return Response.jsonUnsafe(
+        { error: "Conflicting bridge session selectors in header and query." },
+        { status: 400 },
+      );
     // Catalog reads never hard-fail on multi-session ambiguity: untargeted falls back to the
     // snapshot session (most recently registered), same as other status displays.
-    const readSessionId = sessionParam ?? (yield* bridge.snapshot(undefined)).sessionId;
-    const result = yield* Effect.result(
-      bridge.invoke("host.ops.catalog", {}, readSessionId),
-    );
+    const readSessionId =
+      sessionHeader ?? sessionParam ?? (yield* bridge.snapshot(undefined)).sessionId;
+    const result = yield* Effect.result(bridge.invoke("host.ops.catalog", {}, readSessionId));
     const bridgeOps =
       result._tag === "Success" &&
       Array.isArray((result.success as { operations?: unknown }).operations)
         ? (result.success as { operations: unknown[] }).operations
         : [];
-    const body: { operations: unknown[]; bridgeCatalogError?: string } = {
+    const body: {
+      operations: unknown[];
+      bridgeSessionId?: string;
+      bridgeCatalogError?: string;
+    } = {
       operations: [...bridgeOps, ...tsOnlyOperationCatalog],
+      bridgeSessionId: readSessionId,
     };
     if (result._tag === "Failure")
       body.bridgeCatalogError = String(result.failure.message ?? result.failure);
@@ -86,7 +100,11 @@ const settingsSchemaRoute = HttpRouter.add(
     const moduleKey = decodeURIComponent(params.moduleKey ?? "");
     const rootKey = decodeURIComponent(params.rootKey ?? "").replace(/\.json$/i, "");
     const result = yield* Effect.result(
-      bridge.invoke("settings.schema", { moduleKey, rootKey }, (yield* bridge.snapshot(undefined)).sessionId),
+      bridge.invoke(
+        "settings.schema",
+        { moduleKey, rootKey },
+        (yield* bridge.snapshot(undefined)).sessionId,
+      ),
     );
     if (result._tag === "Failure")
       return Response.jsonUnsafe(

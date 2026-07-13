@@ -75,6 +75,36 @@ test("script execution forwards its selector in one direct /call without lifecyc
   }
 });
 
+test("operation discovery preserves the explicit session selector", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  globalThis.fetch = async (input, init) => {
+    calls.push({
+      url: typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+      init,
+    });
+    return new Response(JSON.stringify({ operations: catalog }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  try {
+    const client = new HostRpcCaller({
+      hostBaseUrl: "http://127.0.0.1:5181",
+      bridgeSessionId: "sandbox:catalog-e2e",
+    });
+    await client.searchOperations({ query: "context" });
+
+    expect(calls).toHaveLength(1);
+    expect(new URL(calls[0].url).pathname).toBe("/ops");
+    expect(new Headers(calls[0].init?.headers).get(HOST_RPC_BRIDGE_SESSION_HEADER)).toBe(
+      "sandbox:catalog-e2e",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("derives capability map from the op catalog", async () => {
   const result = await new HostRpcCaller({ catalogOverride: catalog }).searchOperations({
     projection: "capability-map",

@@ -3,7 +3,7 @@ namespace Pe.Shared.StorageRuntime;
 public static class SettingsDiscoveryBuilder {
     public static SettingsFileEntry CreateSettingsFileEntry(string absoluteFilePath, string settingsRootPath) {
         var fileInfo = new FileInfo(absoluteFilePath);
-        var relativePath = BclExtensions.GetRelativePath(settingsRootPath, absoluteFilePath).Replace('\\', '/');
+        var relativePath = BclCompat.GetRelativePath(settingsRootPath, absoluteFilePath).Replace('\\', '/');
         var relativePathWithoutExtension = Path.ChangeExtension(relativePath, null) ?? relativePath;
         var normalizedDirectory = Path.GetDirectoryName(relativePath)?.Replace('\\', '/');
         var relativeSegments = relativePath.SplitAndTrim(

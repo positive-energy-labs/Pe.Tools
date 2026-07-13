@@ -9,6 +9,7 @@ global using Autodesk.Revit.DB;
 global using Autodesk.Revit.UI;
 global using Pe.Revit.Extensions.ProjDocument;
 global using Pe.Revit.Parameters;
-global using Pe.Revit.PolyFill;
+global using Pe.Bcl.Compat;
+global using Pe.Revit.Compat;
 global using Pe.Shared.RevitData;
 global using View = Autodesk.Revit.DB.View;

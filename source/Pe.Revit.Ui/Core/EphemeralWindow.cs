@@ -166,7 +166,7 @@ public class EphemeralWindow : Window, IPaletteHost {
         // Ctrl+0 resets to 100%, otherwise adjust by delta
         ZoomLevel = key == Key.D0
             ? 1.0
-            : BclExtensions.Clamp(ZoomLevel + zoomDelta.Value, ZoomMin, ZoomMax);
+            : BclCompat.Clamp(ZoomLevel + zoomDelta.Value, ZoomMin, ZoomMax);
 
         transform.ScaleX = ZoomLevel;
         transform.ScaleY = ZoomLevel;
