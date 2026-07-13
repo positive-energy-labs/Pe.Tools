@@ -78,6 +78,11 @@ internal static class BuildProjectDiscovery {
         if (IgnoredDirectories.Contains(name))
             return false;
 
+        // Nested repositories and agent worktrees carry their own .git file/directory. They are
+        // separate consumers, not duplicate projects in the repository being packaged.
+        if (File.Exists(Path.Combine(directory, ".git")) || Directory.Exists(Path.Combine(directory, ".git")))
+            return false;
+
         try {
             return !new DirectoryInfo(directory).Attributes.HasFlag(FileAttributes.ReparsePoint);
         } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {

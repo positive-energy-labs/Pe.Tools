@@ -108,11 +108,18 @@ function parsePeaRootPromptOptions(args: string[]): {
   threadId?: string;
   json?: boolean;
   timeoutSeconds?: number;
+  workspaceRoot?: string;
 } {
   const consumed = new Set<number>();
   const prompt = parseStringArg(args, consumed, "--prompt");
   const threadId = parseStringArg(args, consumed, "--thread", "--thread-id", "--threadId");
-  const timeoutSecondsText = parseStringArg(args, consumed, "--timeout-seconds", "--timeoutSeconds");
+  const timeoutSecondsText = parseStringArg(
+    args,
+    consumed,
+    "--timeout-seconds",
+    "--timeoutSeconds",
+  );
+  const workspaceRoot = parseStringArg(args, consumed, "--workspace-root", "--workspaceRoot");
   const json = parseBooleanArg(args, consumed, "--json");
 
   const unexpected = args.filter((_, index) => !consumed.has(index));
@@ -120,7 +127,7 @@ function parsePeaRootPromptOptions(args: string[]): {
     throw new Error(`Unsupported Pea prompt option: ${unexpected.join(" ")}`);
   }
   if (!prompt || prompt.trim().length === 0) {
-    throw new Error("Provide a prompt: pea --prompt \"...\" [--thread <id>] [--json]");
+    throw new Error('Provide a prompt: pea --prompt "..." [--thread <id>] [--json]');
   }
 
   let timeoutSeconds: number | undefined;
@@ -131,7 +138,7 @@ function parsePeaRootPromptOptions(args: string[]): {
     }
   }
 
-  return { prompt, threadId, json, timeoutSeconds };
+  return { prompt, threadId, json, timeoutSeconds, workspaceRoot };
 }
 
 function parsePeaRootAcpOptions(args: string[]): {

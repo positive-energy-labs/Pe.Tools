@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { Context, Deferred, Effect, Layer } from "effect";
 import { HttpRouter, HttpServer, HttpServerResponse as Response } from "effect/unstable/http";
 import { hostOwnership, isValidTakeoverToken, productRoot } from "./host-ownership.ts";
-import { deleteServiceFile, writeServiceFile, type ServiceFile } from "./pe-service.ts";
+import { createServiceFile, deleteServiceFile, writeServiceFile } from "./pe-service.ts";
 
 const SERVICE_NAME = "host";
 const SERVICE_TOKEN_HEADER = "x-pe-service-token";
@@ -56,17 +56,11 @@ export const ServiceFileLive = Layer.effectDiscard(
     const { serviceToken } = yield* HostLifecycle;
     const address = server.address;
     const port = address._tag === "TcpAddress" ? address.port : 0;
-    const file: ServiceFile = {
-      pid: process.pid,
-      port,
-      version: resolveHostVersion(),
-      lane: hostOwnership.lane,
-      token: serviceToken,
-    };
+    const file = createServiceFile(port, resolveHostVersion(), hostOwnership.lane, serviceToken);
     const appBase = productRoot();
     yield* Effect.acquireRelease(
       Effect.promise(() => writeServiceFile(appBase, SERVICE_NAME, file)),
-      () => Effect.promise(() => deleteServiceFile(appBase, SERVICE_NAME)),
+      () => Effect.promise(() => deleteServiceFile(appBase, SERVICE_NAME, file.instanceId)),
     );
   }),
 );

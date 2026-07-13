@@ -1,5 +1,6 @@
 using Pe.Revit.Loader;
 using Pe.Shared.Product;
+using System;
 using System.IO;
 
 namespace Pe.App.Host;
@@ -47,15 +48,32 @@ internal static class PeRuntimeContext {
             return new PeRuntimeTarget(ProductRuntimeLane.Installed, host, "loader-deployment");
         }
 
-        // Self-hosted dev lane: the dev host build written by the dev tooling. Kept on the
-        // Pe.Shared.Product dev-layout surface (the SDK has no dev-lane concept yet).
+        // Self-hosted dev lane: prefer the stable dev payload when tooling has materialized it.
+        // The checkout path is also carried so a clean checkout can launch @pe/host directly;
+        // launching source is not a build/converge action and must never touch the Revit lifecycle.
         var devHost = ProductDevelopmentRuntimeLayout.ForCurrentUser().Binaries.HostExecutablePath;
-        return new PeRuntimeTarget(ProductRuntimeLane.Dev, devHost, "self-hosted-dev");
+        return new PeRuntimeTarget(
+            ProductRuntimeLane.Dev,
+            devHost,
+            "self-hosted-dev",
+            FindSourceHostWorkingDirectory()
+        );
+    }
+
+    private static string? FindSourceHostWorkingDirectory() {
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory != null; directory = directory.Parent) {
+            var candidate = Path.Combine(directory.FullName, "source", "pe-tools");
+            if (File.Exists(Path.Combine(candidate, "apps", "host", "package.json")))
+                return candidate;
+        }
+
+        return null;
     }
 }
 
 internal sealed record PeRuntimeTarget(
     ProductRuntimeLane RuntimeLane,
     string HostExecutablePath,
-    string Source
+    string Source,
+    string? SourceHostWorkingDirectory = null
 );

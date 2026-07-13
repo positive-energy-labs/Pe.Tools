@@ -30,6 +30,29 @@ export namespace FamilyEditorApply {
   }
 }
 
+/** Open a loaded family from the active project in the Revit family editor and activate it (saves to a scratch .rfa to make activation possible). */
+export namespace FamilyEditorOpen {
+  export namespace Req {
+    /**
+     * Open a loaded family from the active project in the family editor and activate it.
+     * EditFamily documents have no path and cannot be activated directly, so the family is
+     * saved to a scratch .rfa and reopened by path (the proven activation workaround).
+     *
+     */
+    export interface Request {
+      familyId?: number | null;
+      familyName?: null | string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      familyName: string;
+      documentTitle: string;
+      savedPath?: null | string;
+    }
+  }
+}
+
 /** Read parameters, types, formulas, and display values from the active family editor document. */
 export namespace FamilyEditorSnapshot {
   export namespace Req {
@@ -154,13 +177,17 @@ export namespace RevitApplyCommandExecute {
   }
 }
 
-/** Open and activate a local or Autodesk cloud Revit document in the connected Revit session. */
+/** Open and activate a local or Autodesk cloud Revit document in the connected Revit session; local workshared files can be opened detached. */
 export namespace RevitApplyDocumentOpen {
   export namespace Req {
-    export type WorksharingDetachOption =
-      | "DoNotDetach"
-      | "DetachAndPreserveWorksets"
-      | "DetachAndDiscardWorksets";
+    /**
+     * Worksharing detach behavior for opening a local workshared file. Mirrors Revit's
+     * DetachFromCentralOption (the contract assembly cannot reference RevitAPI). Detached
+     * opens are the sandbox-document story: DetachAndPreserveWorksets is the sensible
+     * detach flavor; DoNotDetach is the request default so ordinary opens stay untouched.
+     *
+     */
+    export type WorksharingDetachOption = "DoNotDetach" | "DetachAndPreserveWorksets" | "DetachAndDiscardWorksets";
 
     export interface Request {
       path?: null | string;
@@ -1837,7 +1864,7 @@ export namespace RevitContextSummary {
   }
 }
 
-/** Export a view exactly as the user sees it (templates, VG overrides, temporary hide/isolate all apply) to a PNG and return its path. Target the active view (omit target), a view/sheet/viewport by id or name, or a schedule placed on a sheet. Optional focus crops to element ids, the current selection, or a scope box. Whole-view capture needs no transaction; focus capture uses a rolled-back temporary crop box (editable document only). */
+/** Export a view exactly as the user sees it (templates, VG overrides, temporary hide/isolate all apply) to a PNG and return its path. Target the active view (omit target), a view/sheet/viewport by id or name, or a schedule placed on a sheet. Optional focus crops to element ids, the current selection, or a scope box. Whole-view capture needs no transaction; focus capture sets a temporary crop box (clearing any scope box) and restores it afterward (editable document only). */
 export namespace RevitContextViewImage {
   export namespace Req {
     export interface Request {
@@ -3465,10 +3492,10 @@ export namespace ScriptingCancel {
   }
 }
 
-/** Execute trusted in-process C# in connected Revit: scriptContent for an inline snippet (Execute-body statements or a full PeScriptContainer class), or sourcePath for a pod entrypoint declared in the workspace's pod.json — exactly one of the two. permissionMode defaults to ReadOnly, which discards active-document changes via a rollback guard; pass WriteTransaction to keep changes. */
+/** Execute trusted in-process C# in connected Revit: scriptContent for an inline snippet (Execute-body statements or a full PeScriptContainer class), or sourcePath for a pod entrypoint declared in the workspace's pod.json — exactly one of the two. permissionMode defaults to ReadOnly, which discards active-document changes via a rollback guard; pass WriteTransaction to keep document edits, or NoTransaction only for APIs such as Document.SaveAs that reject an open transaction. */
 export namespace ScriptingExecute {
   export namespace Req {
-    export type ScriptPermissionMode = "ReadOnly" | "WriteTransaction";
+    export type ScriptPermissionMode = "ReadOnly" | "WriteTransaction" | "NoTransaction";
 
     export interface Request {
       scriptContent?: null | string;
@@ -3800,6 +3827,7 @@ export namespace SettingsSchema {
 /** Key → request/response types for every bridge op the generating session supported. */
 export interface HostOps {
   "family.editor.apply": { request: FamilyEditorApply.Req.Request; response: FamilyEditorApply.Res.Response };
+  "family.editor.open": { request: FamilyEditorOpen.Req.Request; response: FamilyEditorOpen.Res.Response };
   "family.editor.snapshot": { request: FamilyEditorSnapshot.Req.Request; response: FamilyEditorSnapshot.Res.Response };
   "host.ops.catalog": { request: HostOpsCatalog.Req.Request; response: HostOpsCatalog.Res.Response };
   "revit.apply.command.execute": { request: RevitApplyCommandExecute.Req.Request; response: RevitApplyCommandExecute.Res.Response };
@@ -3848,6 +3876,7 @@ export interface HostOps {
 /** Runtime key list matching HostOps — powers key guards without a metadata catalog. */
 export const hostOpKeys = [
   "family.editor.apply",
+  "family.editor.open",
   "family.editor.snapshot",
   "host.ops.catalog",
   "revit.apply.command.execute",

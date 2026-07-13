@@ -192,6 +192,20 @@ dotnet run --project .\build\Build.csproj -c Release -- pack publish
 
 `Pe.Shared.Product` owns durable product identity and local runtime/user layout. Generated build projections are not the authority.
 
+### Shared service primitive and explicit lifecycle
+
+The SDK service primitive (`InstalledProduct.EnsureRunning` and the shipped TypeScript client) owns one named out-of-process service incarnation per product root: atomic service-file identity, actual bound port, version/lane matching, bounded startup, managed shutdown/takeover, and PID-reuse safety. Pe.Tools uses it for `Pe.Host` instead of maintaining a second product-specific supervisor.
+
+That boundary is deliberately narrower than Revit orchestration:
+
+- One product root plus service name means one active host. Dev and installed callers can explicitly take over that incarnation; simultaneous same-name hosts require different roots or names.
+- `Pe.App` is a client of the healthy shared host, not a lane supervisor. Loading or reconnecting a Revit add-in is not permission to replace the host.
+- Host discovery does not choose a Revit process. Raw `/call`, web, Pea, scripting, capture, and operation surfaces must preserve an explicit bridge-session selector; ambiguity is a hard failure.
+- Script execution performs the requested targeted call only. It must not build, converge, or restart a live session. Agents inspect freshness and invoke SDK lifecycle actions explicitly.
+- A clean checkout may launch its checkout-pinned source host without a staged `Pe.Host.exe`, but that launch path is not a build or Revit-convergence path.
+
+The acceptance contract and machine proof live in `Pe.Revit.Sdk/RUNTIME_ACCEPTANCE.md` and `docs/context/runtime-acceptance-2026-07-12.md`.
+
 Key local roots:
 
 ```text

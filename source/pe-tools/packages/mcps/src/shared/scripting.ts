@@ -15,7 +15,7 @@ export const scriptExecuteInputSchema = z.object({
     .string()
     .optional()
     .describe(
-      'Inline C# snippet. Prefer Execute-body statements such as WriteLine("..."); optional leading using directives are allowed. A full public sealed class deriving PeScriptContainer with public override void Execute() is also allowed. Mutually exclusive with sourcePath.',
+      'Trusted in-process C# snippet. Prefer Execute-body statements such as WriteLine("..."); optional leading using directives are allowed. A full public sealed class deriving PeScriptContainer with public override void Execute() is also allowed. Mutually exclusive with sourcePath.',
     ),
   sourcePath: z
     .string()
@@ -32,10 +32,10 @@ export const scriptExecuteInputSchema = z.object({
     .optional()
     .describe("Synthetic source filename used for inline trace files and compile diagnostics."),
   permissionMode: z
-    .enum(["ReadOnly", "WriteTransaction"])
+    .enum(["ReadOnly", "WriteTransaction", "NoTransaction"])
     .optional()
     .describe(
-      "Host default is ReadOnly: the script runs inside a rollback guard and any document changes are discarded with a warning. Pass WriteTransaction only for explicit mutations; the host owns the transaction.",
+      "Host default is ReadOnly: changes are discarded. Use WriteTransaction for document edits. Use NoTransaction only for APIs such as Document.SaveAs that reject an open transaction; it has no rollback guard.",
     ),
   timeoutSeconds: z
     .number()
@@ -116,6 +116,8 @@ export class ScriptingTools {
 
     // Omit nullish optional keys: the effect NDJSON RPC layer rejects an explicit `undefined`
     // field value (fails at ["request"]) rather than treating the key as absent.
+    // Freshness and lifecycle are explicit SDK control-plane actions. Script execution must never
+    // build, converge, or restart a Revit session as a hidden precondition.
     return this.client.call("scripting.execute", {
       ...(input.scriptContent != null ? { scriptContent: input.scriptContent } : {}),
       ...(input.sourcePath != null ? { sourcePath: input.sourcePath } : {}),
@@ -211,7 +213,7 @@ export async function resolveCliScriptContent(values: {
 
 export function parseCliPermissionMode(
   value: unknown,
-): "ReadOnly" | "WriteTransaction" | undefined {
+): "ReadOnly" | "WriteTransaction" | "NoTransaction" | undefined {
   const text = asNonBlankString(value);
   if (!text) return undefined;
   switch (text) {
@@ -219,8 +221,12 @@ export function parseCliPermissionMode(
       return "ReadOnly";
     case "WriteTransaction":
       return "WriteTransaction";
+    case "NoTransaction":
+      return "NoTransaction";
     default:
-      throw new Error("Unknown permission mode. Expected ReadOnly or WriteTransaction.");
+      throw new Error(
+        "Unknown permission mode. Expected ReadOnly, WriteTransaction, or NoTransaction.",
+      );
   }
 }
 

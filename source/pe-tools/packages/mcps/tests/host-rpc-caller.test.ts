@@ -1,6 +1,8 @@
 import { expect, test } from "vite-plus/test";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
+import { HOST_RPC_BRIDGE_SESSION_HEADER } from "@pe/host-contracts/operation-types";
 import { HostRpcCaller } from "../src/shared/host-rpc-caller.ts";
+import { ScriptingTools } from "../src/shared/scripting.ts";
 
 // Fixture standing in for a live /ops catalog (the caller's only real source).
 const catalog: HostOperationDefinition[] = [
@@ -37,6 +39,41 @@ const catalog: HostOperationDefinition[] = [
     responseTypeName: "ScriptWorkspaceBootstrapData",
   },
 ];
+
+test("script execution forwards its selector in one direct /call without lifecycle work", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  globalThis.fetch = async (input, init) => {
+    calls.push({
+      url: typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+      init,
+    });
+    return new Response(JSON.stringify({ status: "Succeeded" }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  try {
+    const client = new HostRpcCaller({
+      hostBaseUrl: "http://127.0.0.1:5180",
+      bridgeSessionId: "sandbox:source-e2e",
+    });
+    await new ScriptingTools(client, { workspaceKey: "acceptance" }).execute({
+      scriptContent: 'WriteLine("ok");',
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(new URL(calls[0].url).pathname).toBe("/call");
+    expect(new Headers(calls[0].init?.headers).get(HOST_RPC_BRIDGE_SESSION_HEADER)).toBe(
+      "sandbox:source-e2e",
+    );
+    const body = calls[0].init?.body;
+    if (typeof body !== "string") throw new Error("expected JSON request body");
+    expect(JSON.parse(body)).toMatchObject({ key: "scripting.execute" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
 
 test("derives capability map from the op catalog", async () => {
   const result = await new HostRpcCaller({ catalogOverride: catalog }).searchOperations({

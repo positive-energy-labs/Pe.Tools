@@ -3,7 +3,7 @@ import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { join } from "node:path";
 import { hostOwnership, type HostLane } from "./host-ownership.ts";
-import { peRevitLauncher } from "./pe-revit-cli.ts";
+import { peRevitLauncher, validatePeRevitEnvelope } from "./pe-revit-cli.ts";
 
 /**
  * Control plane for pea-owned Revit sandboxes — NOT a catalog op. Sandbox lifecycle is fleet
@@ -33,7 +33,9 @@ const SANDBOX_ACTIONS: readonly SandboxAction[] = ["start", "wait", "restart", "
  */
 export function parseSandboxActionRequest(
   body: unknown,
-): { readonly ok: true; readonly request: SandboxActionRequest } | { readonly ok: false; readonly error: string } {
+):
+  | { readonly ok: true; readonly request: SandboxActionRequest }
+  | { readonly ok: false; readonly error: string } {
   if (typeof body !== "object" || body === null || Array.isArray(body))
     return { ok: false, error: "body must be { action: start|wait|restart|stop, ...args }" };
   const record = body as Record<string, unknown>;
@@ -43,8 +45,7 @@ export function parseSandboxActionRequest(
   const id = readOptionalString(record.id);
   const year =
     typeof record.year === "number" ? String(record.year) : readOptionalString(record.year);
-  if (action === "start" && !year)
-    return { ok: false, error: "start requires year (e.g. \"25\")" };
+  if (action === "start" && !year) return { ok: false, error: 'start requires year (e.g. "25")' };
   if (action !== "start" && !id) return { ok: false, error: `${action} requires id` };
   return {
     ok: true,
@@ -132,7 +133,9 @@ export function unresponsiveSandboxEnvelope(
         fix: `${stopStep} — force-stop that exact owned sandbox incarnation (the user's session is untouched), then start a fresh sandbox.`,
       },
     ],
-    nextSteps: [`${stopStep} — force-stop the unresponsive sandbox; the user's session is preserved.`],
+    nextSteps: [
+      `${stopStep} — force-stop the unresponsive sandbox; the user's session is preserved.`,
+    ],
     guide: "sandbox",
     related: [],
   };
@@ -194,13 +197,10 @@ const runPeRevitCli: SandboxCliRunner<ChildProcessSpawner.ChildProcessSpawner> =
     const stdout = yield* spawner.string(
       ChildProcess.make(launch.cmd, [...launch.args, ...args], { cwd: launch.cwd }),
     );
-    if (!stdout.trim())
-      return yield* Effect.fail(
-        new Error(
-          `pe-revit produced no output for '${args.join(" ")}' — the resolved CLI (${launch.cmd} ${launch.args.join(" ")}) may predate the sandbox verb`,
-        ),
-      );
-    return stdout;
+    return yield* Effect.try({
+      try: () => validatePeRevitEnvelope(stdout, args, launch),
+      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+    });
   });
 
 function jsonResponse(outcome: SandboxCliOutcome) {
@@ -213,10 +213,15 @@ function jsonResponse(outcome: SandboxCliOutcome) {
 const sandboxesStatusRoute = HttpRouter.add("GET", "/sessions/sandboxes", (req) =>
   Effect.gen(function* () {
     const id = new URL(req.url, "http://localhost").searchParams.get("id");
-    const outcome = yield* executeSandboxCli(sandboxStatusArgs(id), runPeRevitCli, STATUS_TIMEOUT_MS, {
-      action: "status",
-      id: id ?? undefined,
-    });
+    const outcome = yield* executeSandboxCli(
+      sandboxStatusArgs(id),
+      runPeRevitCli,
+      STATUS_TIMEOUT_MS,
+      {
+        action: "status",
+        id: id ?? undefined,
+      },
+    );
     return jsonResponse(outcome);
   }),
 );
@@ -225,8 +230,7 @@ const sandboxesActionRoute = HttpRouter.add("POST", "/sessions/sandboxes", (req)
   Effect.gen(function* () {
     const body = yield* Effect.result(req.json);
     const parsed = parseSandboxActionRequest(body._tag === "Success" ? body.success : null);
-    if (!parsed.ok)
-      return Response.jsonUnsafe({ ok: false, error: parsed.error }, { status: 400 });
+    if (!parsed.ok) return Response.jsonUnsafe({ ok: false, error: parsed.error }, { status: 400 });
     const request = parsed.request;
     const args = sandboxCliArgs(
       request,

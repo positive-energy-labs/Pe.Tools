@@ -226,7 +226,7 @@ export class PeaCliCommands {
         permissionMode: {
           type: "string",
           description:
-            "Script permission mode: ReadOnly (default; changes discarded) or WriteTransaction (changes kept).",
+            "Script permission mode: ReadOnly (default), WriteTransaction (document edits), or NoTransaction (for SaveAs-like APIs that reject open transactions).",
         },
         timeoutSeconds: {
           type: "number",
