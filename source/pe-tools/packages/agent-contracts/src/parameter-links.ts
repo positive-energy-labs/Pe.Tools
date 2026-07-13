@@ -119,7 +119,7 @@ export const parameterLinksRouteState = defineRouteState({
   commands: {
     refresh: {
       description: "Refresh the stored profile, evaluation, issues, and runtime status from Revit.",
-      input: z.object({ profile: parameterLinkProfileSchema }),
+      input: z.object({}),
       actor: "any",
     },
     preview: {
@@ -130,7 +130,9 @@ export const parameterLinksRouteState = defineRouteState({
     apply: {
       description:
         "HUMAN ONLY. Store the draft profile and reconcile its changed target parameter values.",
-      input: z.object({}),
+      // The dispatcher hands the handler safeParse(...).data; zod strips undeclared keys, so the
+      // reviewed profile MUST be declared here or apply always fails its draft-freshness check.
+      input: z.object({ profile: parameterLinkProfileSchema }),
       actor: "human",
     },
   },
