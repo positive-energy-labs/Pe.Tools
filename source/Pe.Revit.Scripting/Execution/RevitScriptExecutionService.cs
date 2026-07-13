@@ -30,6 +30,11 @@ public sealed class RevitScriptExecutionService(
     Func<UIApplication?> uiApplicationAccessor,
     Action<string>? notificationSink = null
 ) {
+    private const int MaxInlineSourceBytes = 256 * 1024;
+    private const int MaxPodSourceFileCount = 200;
+    private const long MaxPodSourceFileBytes = 512 * 1024;
+    private const long MaxPodSourceBytes = 2 * 1024 * 1024;
+
     private readonly ScriptAssemblyLoadService _assemblyLoadService = assemblyLoadService;
     private readonly ScriptCompilationService _compilationService = compilationService;
     private readonly ScriptEntryPointResolver _entryPointResolver = new(nameof(PeScriptContainer));
@@ -197,7 +202,8 @@ public sealed class RevitScriptExecutionService(
                 var compilationResult = this.CompileScript(
                     plan,
                     runtimeReferenceScope.MetadataReferences,
-                    resolvedProject.Usings
+                    resolvedProject.Usings,
+                    cancellation.Token
                 );
                 Log.Information(
                     "Revit scripting compile completed: ExecutionId={ExecutionId}, Success={Success}, Diagnostics={DiagnosticCount}",
@@ -302,7 +308,7 @@ public sealed class RevitScriptExecutionService(
                     );
                 } catch (RevitScriptTransactionException ex) {
                     AppendDiagnostic(diagnostics, ScriptDiagnosticFactory.Error(
-                        "transaction",
+                        ex.Stage,
                         ex.Message,
                         containerTypeName
                     ));
@@ -496,6 +502,8 @@ public sealed class RevitScriptExecutionService(
     private ScriptSourceSet MaterializeInlineSnippet(string? scriptContent, string? sourceName, string executionId) {
         if (string.IsNullOrWhiteSpace(scriptContent))
             throw new ArgumentException("ScriptContent is required for inline snippets.", nameof(scriptContent));
+        if (System.Text.Encoding.UTF8.GetByteCount(scriptContent) > MaxInlineSourceBytes)
+            throw new ArgumentException("Inline scriptContent may not exceed 256 KiB.", nameof(scriptContent));
 
         sourceName = string.IsNullOrWhiteSpace(sourceName) ? "InlineSnippet.cs" : Path.GetFileName(sourceName);
         if (!sourceName.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
@@ -658,8 +666,20 @@ public sealed class RevitScriptExecutionService(
                 diagnostics
             );
 
-        var sourceFiles = Directory.EnumerateFiles(sourceDirectory, "*.cs", SearchOption.AllDirectories)
+        var sourcePaths = Directory.EnumerateFiles(sourceDirectory, "*.cs", SearchOption.AllDirectories)
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (sourcePaths.Count > MaxPodSourceFileCount)
+            throw new IOException($"Pod source may contain at most {MaxPodSourceFileCount} C# files.");
+
+        var sourceBytes = sourcePaths.Sum(path => new FileInfo(path).Length);
+        var oversizedSource = sourcePaths.FirstOrDefault(path => new FileInfo(path).Length > MaxPodSourceFileBytes);
+        if (oversizedSource is not null)
+            throw new IOException($"Pod source file exceeds 512 KiB: {oversizedSource}");
+        if (sourceBytes > MaxPodSourceBytes)
+            throw new IOException("Pod C# source may not exceed 2 MiB total.");
+
+        var sourceFiles = sourcePaths
             .Select(path => new ScriptSourceFile(
                 GetRelativePath(sourceDirectory, path),
                 File.ReadAllText(path),
@@ -735,11 +755,13 @@ public sealed class RevitScriptExecutionService(
     private ScriptCompilationResult CompileScript(
         ScriptExecutionPlan plan,
         IReadOnlyList<MetadataReference> metadataReferences,
-        IReadOnlyList<string> projectUsings
+        IReadOnlyList<string> projectUsings,
+        CancellationToken cancellationToken
     ) => this._compilationService.Compile(
         plan.SourceSet,
         metadataReferences,
-        projectUsings
+        projectUsings,
+        cancellationToken
     );
 
     private RevitScriptContext BuildExecutionContext(
@@ -917,7 +939,15 @@ public sealed class RevitScriptExecutionService(
             return;
         }
 
-        this.ExecuteInHostOwnedTransaction(container, context, diagnostics);
+        if (permissionMode == ScriptPermissionMode.WriteTransaction) {
+            this.ExecuteInHostOwnedTransaction(container, context, diagnostics);
+            return;
+        }
+
+        // SaveAs and a few other Revit APIs require a quiescent document and reject any open
+        // transaction. NoTransaction is explicit because it has neither rollback nor commit safety;
+        // script-owned Transaction objects remain policy-rejected in every mode.
+        container.Execute();
     }
 
     private const string ReadOnlyGuardTransactionName = DocumentSandbox.TransactionNamePrefix + "Pe Script ReadOnly";
@@ -929,41 +959,55 @@ public sealed class RevitScriptExecutionService(
     ///     commit, never for a rolled-back transaction — while the group rollback physically discards
     ///     the changes. The sandbox name prefix keeps document-event consumers (bridge invalidation)
     ///     from treating the churn as a real change. Mutations observed with unprefixed transaction
-    ///     names persisted outside the guard (another document, a bypassed transaction) and stay hard
-    ///     errors. With no writable document, the DocumentChanged tripwire is the only guard.
+    ///     names or changes to another document persisted outside the guard and stay hard errors.
+    ///     If the rollback guard cannot start, execution fails closed.
     /// </summary>
     private static void ExecuteInReadOnlyRollbackGuard(
         PeScriptContainer container,
         RevitScriptContext context,
         List<ScriptDiagnostic> diagnostics
     ) {
-        using var mutationMonitor = new ScriptDocumentMutationMonitor(context.App.Application);
+        var document = context.Document ?? throw new RevitScriptTransactionException(
+            ScriptExecutionStatus.Rejected,
+            "ReadOnly scripts require an active writable document so their changes can be rolled back.",
+            stage: "readonly"
+        );
+        if (document.IsReadOnly) {
+            throw new RevitScriptTransactionException(
+                ScriptExecutionStatus.Rejected,
+                "ReadOnly scripting cannot establish its rollback guard because the active document is read-only.",
+                stage: "readonly"
+            );
+        }
+
         TransactionGroup? group = null;
         Transaction? transaction = null;
-        if (context.Document is { IsReadOnly: false } document) {
-            try {
-                group = new TransactionGroup(document, ReadOnlyGuardTransactionName);
-                _ = group.Start();
-                transaction = new Transaction(document, ReadOnlyGuardTransactionName);
-                var commitFailures = new List<(bool IsError, string Message)>();
-                var failureOptions = transaction.GetFailureHandlingOptions();
-                _ = failureOptions.SetFailuresPreprocessor(new DialogSuppressingFailuresPreprocessor(commitFailures));
-                _ = failureOptions.SetForcedModalHandling(false);
-                transaction.SetFailureHandlingOptions(failureOptions);
-                _ = transaction.Start();
-            } catch (Exception ex) {
-                transaction?.Dispose();
-                if (group?.HasStarted() == true)
-                    _ = group.RollBack();
-                group?.Dispose();
-                group = null;
-                transaction = null;
-                diagnostics.Add(ScriptDiagnosticFactory.Info(
-                    "readonly",
-                    $"ReadOnly rollback guard could not open a transaction ({ex.Message}); running with mutation detection only."
-                ));
-            }
+        try {
+            group = new TransactionGroup(document, ReadOnlyGuardTransactionName);
+            if (group.Start() != TransactionStatus.Started)
+                throw new InvalidOperationException("The rollback transaction group did not start.");
+
+            transaction = new Transaction(document, ReadOnlyGuardTransactionName);
+            var failureOptions = transaction.GetFailureHandlingOptions();
+            _ = failureOptions.SetFailuresPreprocessor(new DialogSuppressingFailuresPreprocessor([]));
+            _ = failureOptions.SetForcedModalHandling(false);
+            transaction.SetFailureHandlingOptions(failureOptions);
+            if (transaction.Start() != TransactionStatus.Started)
+                throw new InvalidOperationException("The rollback transaction did not start.");
+        } catch (Exception ex) {
+            transaction?.Dispose();
+            if (group?.HasStarted() == true)
+                _ = group.RollBack();
+            group?.Dispose();
+            throw new RevitScriptTransactionException(
+                ScriptExecutionStatus.Rejected,
+                $"ReadOnly rollback guard could not start; the script was not executed: {ex.Message}",
+                ex,
+                "readonly"
+            );
         }
+
+        using var mutationMonitor = new ScriptDocumentMutationMonitor(context.App.Application, document);
 
         try {
             container.Execute();
@@ -1133,9 +1177,11 @@ public sealed class RevitScriptExecutionService(
     private sealed class RevitScriptTransactionException(
         ScriptExecutionStatus status,
         string message,
-        Exception? innerException = null
+        Exception? innerException = null,
+        string stage = "transaction"
     ) : Exception(message, innerException) {
         public ScriptExecutionStatus Status { get; } = status;
+        public string Stage { get; } = stage;
     }
 
     private sealed class RevitScriptMutationException(
@@ -1145,11 +1191,16 @@ public sealed class RevitScriptExecutionService(
 
     private sealed class ScriptDocumentMutationMonitor : IDisposable {
         private readonly Autodesk.Revit.ApplicationServices.Application _application;
+        private readonly Document _guardedDocument;
         private readonly List<ScriptDocumentMutationEvent> _events = [];
         private bool _disposed;
 
-        public ScriptDocumentMutationMonitor(Autodesk.Revit.ApplicationServices.Application application) {
+        public ScriptDocumentMutationMonitor(
+            Autodesk.Revit.ApplicationServices.Application application,
+            Document guardedDocument
+        ) {
             this._application = application ?? throw new ArgumentNullException(nameof(application));
+            this._guardedDocument = guardedDocument ?? throw new ArgumentNullException(nameof(guardedDocument));
             this._application.DocumentChanged += this.OnDocumentChanged;
         }
 
@@ -1203,7 +1254,9 @@ public sealed class RevitScriptExecutionService(
                 modifiedCount,
                 deletedCount,
                 transactionNames,
-                DocumentSandbox.IsSandboxTransaction(transactionNames)
+                ReferenceEquals(document, this._guardedDocument)
+                && transactionNames.Count > 0
+                && transactionNames.All(name => string.Equals(name, ReadOnlyGuardTransactionName, StringComparison.Ordinal))
             ));
         }
 

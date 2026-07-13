@@ -13,7 +13,8 @@ public sealed class ScriptCompilationService(
     public ScriptCompilationResult Compile(
         ScriptSourceSet sourceSet,
         IReadOnlyList<MetadataReference> metadataReferences,
-        IReadOnlyList<string> projectUsings
+        IReadOnlyList<string> projectUsings,
+        CancellationToken cancellationToken = default
     ) {
         var syntaxTrees = new List<SyntaxTree> {
             CSharpSyntaxTree.ParseText(
@@ -39,7 +40,7 @@ public sealed class ScriptCompilationService(
         );
 
         using var assemblyStream = new MemoryStream();
-        var emitResult = compilation.Emit(assemblyStream);
+        var emitResult = compilation.Emit(assemblyStream, cancellationToken: cancellationToken);
         if (!emitResult.Success) {
             return new ScriptCompilationResult(
                 false,

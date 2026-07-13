@@ -7,8 +7,13 @@ using Pe.Shared.StorageRuntime;
 namespace Pe.Revit.Scripting.Storage;
 
 public sealed class ScriptArtifactWriter {
+    private const int MaxArtifactCount = 100;
+    private const long MaxArtifactBytes = 10 * 1024 * 1024;
+    private const long MaxTotalArtifactBytes = 50 * 1024 * 1024;
+
     private readonly List<ScriptArtifactData> _artifacts = [];
     private readonly string _runRoot;
+    private long _totalBytes;
 
     public ScriptArtifactWriter(string executionId, string? runName = null) {
         var safeRunName = SanitizeFileName(string.IsNullOrWhiteSpace(runName) ? executionId : runName!);
@@ -39,6 +44,15 @@ public sealed class ScriptArtifactWriter {
         );
 
     private ScriptArtifactData WriteArtifact(string relativePath, string content, string contentType) {
+        if (this._artifacts.Count >= MaxArtifactCount)
+            throw new InvalidOperationException($"A script may write at most {MaxArtifactCount} artifacts.");
+
+        var byteCount = System.Text.Encoding.UTF8.GetByteCount(content);
+        if (byteCount > MaxArtifactBytes)
+            throw new InvalidOperationException("A script artifact may not exceed 10 MiB.");
+        if (this._totalBytes + byteCount > MaxTotalArtifactBytes)
+            throw new InvalidOperationException("Script artifacts may not exceed 50 MiB total per execution.");
+
         var fullPath = this.ResolveArtifactPath(relativePath);
         _ = Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
         File.WriteAllText(fullPath, content);
@@ -51,6 +65,7 @@ public sealed class ScriptArtifactWriter {
             new FileInfo(fullPath).Length
         );
         this._artifacts.Add(artifact);
+        this._totalBytes += artifact.SizeBytes;
         return artifact;
     }
 

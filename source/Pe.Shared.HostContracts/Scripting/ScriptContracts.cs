@@ -146,7 +146,8 @@ public enum ScriptExecutionStatus {
 [JsonConverter(typeof(StringEnumConverter))]
 public enum ScriptPermissionMode {
     ReadOnly,
-    WriteTransaction
+    WriteTransaction,
+    NoTransaction
 }
 
 [JsonConverter(typeof(StringEnumConverter))]

@@ -10,6 +10,7 @@ public sealed class ScriptPolicyAnalyzer(
     private readonly IReadOnlyList<IScriptPolicyRule> _rules = rules;
 
     public static ScriptPolicyAnalyzer CreateDefault() => new([
+        new ProcessShellPolicyRule(),
         new RevitTransactionPolicyRule()
     ]);
 

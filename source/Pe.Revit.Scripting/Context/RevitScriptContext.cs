@@ -16,6 +16,8 @@ public sealed class RevitScriptContext(
     Action<string>? outputWriter = null,
     Action<string>? notificationSink = null
 ) {
+    private const int MaxResultCharacters = 1024 * 1024;
+
     private readonly Action<string>? _notificationSink = notificationSink;
     private readonly Action<string>? _outputWriter = outputWriter;
     private bool _resultSet;
@@ -36,7 +38,12 @@ public sealed class RevitScriptContext(
             throw new InvalidOperationException("Result(...) may only be called once per execution.");
 
         try {
-            this.ResultData = value is null ? JValue.CreateNull() : JToken.FromObject(value);
+            var result = value is null ? JValue.CreateNull() : JToken.FromObject(value);
+            if (result.ToString(Newtonsoft.Json.Formatting.None).Length > MaxResultCharacters)
+                throw new InvalidOperationException(
+                    "Result(...) exceeds the 1 MiB limit. Write large data with Artifacts instead."
+                );
+            this.ResultData = result;
         } catch (Exception ex) {
             throw new InvalidOperationException(
                 $"Result(...) could not serialize the value to JSON: {ex.Message}. Pass a plain data object (anonymous type, dictionary, or DTO) without Revit API objects.",

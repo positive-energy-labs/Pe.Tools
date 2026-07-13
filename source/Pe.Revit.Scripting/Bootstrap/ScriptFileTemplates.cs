@@ -87,6 +87,7 @@ internal static class ScriptFileTemplates {
         - Inline snippets may be Execute-body statements with optional leading `using` directives, or a full `PeScriptContainer` class.
         - Inside `Execute()`, use `doc`, `uidoc`, `app`, `selection`, `revitVersion`, `ct`, `Artifacts`, `Result(...)`, `WriteLine(...)`, and `Notify(...)` (progress messages pushed to the caller mid-run).
         - `ReadOnly` (the default) runs inside a rollback guard: document changes are discarded and reported as a warning. Use `WriteTransaction` to keep changes.
+        - Scripts are trusted in-process C# inside Revit, not an OS/process security sandbox. `ReadOnly` controls document transaction behavior only.
         - Long-running scripts should check `ct` (or call `ThrowIfCancelled()`) inside loops so cancellation and the execution timeout can interrupt them.
         - Use `Result(...)` once per run to return structured JSON to the caller; `WriteLine(...)` for short human-readable output; `Artifacts.WriteJson/WriteCsv/WriteText(...)` for durable files.
         - Add local DLL refs and `PackageReference` items in `PeScripts.csproj`.
@@ -116,6 +117,7 @@ internal static class ScriptFileTemplates {
 
         - Current script execution runs inside Revit through one bridge request; a second request waits up to 30s for the slot, then fails with a busy error.
         - `ReadOnly` is the default permission mode: the script runs inside a rollback guard, so any document changes are discarded and reported as a warning.
+        - Scripts are trusted in-process C# inside Revit; `ReadOnly` is a document rollback guarantee, not machine isolation.
         - `WriteTransaction` is explicit and host-owned: one transaction, committed on success, rolled back if the script throws.
         - Executions have a cooperative timeout (default 600s) and can be cancelled with `scripting.cancel`; scripts that never check `ct` cannot be interrupted.
         - Keep terminal output small; use `Result(...)` for structured data and artifacts for broad rows, tables, or evidence.
