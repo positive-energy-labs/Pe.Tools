@@ -10,16 +10,24 @@
 import {
   type FamilyTypesDocument,
   type FamilyTypesSnapshot,
+  type ParameterLinksData,
+  type ParameterLinksDocument,
+  type ParameterLinkProfile,
   familyTypesSnapshotSchema,
   isFormulaCellKey,
+  parameterLinksDataSchema,
   splitCellKey,
 } from "@pe/agent-contracts";
+import type {
+  RevitApplyParameterLinks,
+  RevitDetailParameterLinks,
+} from "@pe/host-contracts/generated";
 import type { RouteStateCommandHandlers } from "@pe/runtime";
 
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
 
-export { familyTypesRouteState } from "@pe/agent-contracts";
+export { familyTypesRouteState, parameterLinksRouteState } from "@pe/agent-contracts";
 
 /** Build the three family-types command handlers, bound to a resolved host base URL. */
 export function createFamilyTypesCommandHandlers(
@@ -110,6 +118,12 @@ export function createFamilyTypesCommandHandlers(
       const document = ctx.getDoc() as FamilyTypesDocument;
       const staged = Object.entries(document.cells).filter(([, cell]) => cell.staged != null);
       if (staged.length === 0) return { applied: 0, failures: [] };
+      const attention = staged.filter(([, cell]) => cell.review === "attention");
+      if (attention.length > 0) {
+        throw new Error(
+          `Push blocked: ${attention.length} staged cell${attention.length === 1 ? "" : "s"} need review.`,
+        );
+      }
 
       const edits = staged.map(([key, cell]) => {
         const { paramName, typeName } = splitCellKey(key);
@@ -164,6 +178,88 @@ export function createFamilyTypesCommandHandlers(
 
 /* ── helpers ─────────────────────────────────────────────────────────────── */
 
+export function createParameterLinksCommandHandlers(
+  options: { hostBaseUrl?: string } = {},
+): RouteStateCommandHandlers {
+  const caller = new HostRpcCaller({ hostBaseUrl: resolveHostBaseUrl(options.hostBaseUrl) });
+
+  return {
+    refresh: async (_input, ctx) => {
+      const data = await callParameterLinks(caller, "revit.detail.parameter-links", {
+        includeEvaluation: true,
+      });
+      const document = ctx.getDoc() as ParameterLinksDocument;
+      document.profile = data.profile ?? null;
+      document.draftProfile ??= data.profile ?? null;
+      document.evaluation = data.evaluation ?? null;
+      document.status = data.status;
+      document.profileChanged = data.profileChanged;
+      document.appliedWriteCount = data.appliedWriteCount;
+      await ctx.setDoc(document);
+      return summarizeParameterLinks(data);
+    },
+
+    preview: async (input, ctx) => {
+      const { profile } = input as { profile: ParameterLinkProfile };
+      const document = ctx.getDoc() as ParameterLinksDocument;
+      requireCurrentParameterLinksDraft(document, profile);
+      const data = await callParameterLinks(caller, "revit.apply.parameter-links", {
+        profile,
+        previewOnly: true,
+        reconcile: false,
+      });
+      const latest = ctx.getDoc() as ParameterLinksDocument;
+      requireCurrentParameterLinksDraft(latest, profile);
+      latest.evaluation = data.evaluation ?? null;
+      latest.status = data.status;
+      latest.profileChanged = data.profileChanged;
+      latest.appliedWriteCount = data.appliedWriteCount;
+      await ctx.setDoc(latest);
+      return summarizeParameterLinks(data);
+    },
+
+    apply: async (input, ctx) => {
+      const { profile } = input as { profile: ParameterLinkProfile };
+      const document = ctx.getDoc() as ParameterLinksDocument;
+      requireCurrentParameterLinksDraft(document, profile);
+      const data = await callParameterLinks(caller, "revit.apply.parameter-links", {
+        profile,
+        previewOnly: false,
+        reconcile: true,
+      });
+      const latest = ctx.getDoc() as ParameterLinksDocument;
+      const hasErrors =
+        data.evaluation?.issues.some((issue) => issue.severity === "error") ?? false;
+      if (!hasErrors) {
+        latest.profile = data.profile ?? null;
+        if (sameParameterLinkProfile(latest.draftProfile ?? latest.profile, profile))
+          latest.draftProfile = data.profile ?? null;
+      }
+      latest.evaluation = data.evaluation ?? null;
+      latest.status = data.status;
+      latest.profileChanged = data.profileChanged;
+      latest.appliedWriteCount = data.appliedWriteCount;
+      await ctx.setDoc(latest);
+      return summarizeParameterLinks(data);
+    },
+  };
+}
+
+function requireCurrentParameterLinksDraft(
+  document: ParameterLinksDocument,
+  reviewed: ParameterLinkProfile,
+) {
+  if (!sameParameterLinkProfile(document.draftProfile ?? document.profile, reviewed))
+    throw new Error("Draft changed; preview again.");
+}
+
+function sameParameterLinkProfile(
+  left: ParameterLinkProfile | null | undefined,
+  right: ParameterLinkProfile | null | undefined,
+) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 /** Map a family.editor.snapshot response loosely onto the snapshot shape. */
 function coerceSnapshot(raw: unknown): FamilyTypesSnapshot | null {
   const direct = familyTypesSnapshotSchema.safeParse(raw);
@@ -177,6 +273,35 @@ function coerceSnapshot(raw: unknown): FamilyTypesSnapshot | null {
     }
   }
   return null;
+}
+
+async function callParameterLinks(
+  caller: HostRpcCaller,
+  key: "revit.detail.parameter-links" | "revit.apply.parameter-links",
+  request: RevitDetailParameterLinks.Req.Request | RevitApplyParameterLinks.Req.Request,
+): Promise<ParameterLinksData> {
+  let raw: unknown;
+  try {
+    raw =
+      key === "revit.detail.parameter-links"
+        ? await caller.call(key, request as RevitDetailParameterLinks.Req.Request)
+        : await caller.call(key, request as RevitApplyParameterLinks.Req.Request);
+  } catch (error) {
+    throw new Error(`${key} failed (${message(error)}).`);
+  }
+  const parsed = parameterLinksDataSchema.safeParse(raw);
+  if (!parsed.success) throw new Error(`Unexpected ${key} response: ${shortJson(raw)}`);
+  return parsed.data;
+}
+
+function summarizeParameterLinks(data: ParameterLinksData) {
+  return {
+    definitionCount: data.profile?.definitions.length ?? 0,
+    assignmentCount: data.profile?.assignments.length ?? 0,
+    projectedWrites: data.evaluation?.changedWriteCount ?? 0,
+    issues: data.evaluation?.issues.length ?? 0,
+    appliedWrites: data.appliedWriteCount,
+  };
 }
 
 function message(error: unknown): string {

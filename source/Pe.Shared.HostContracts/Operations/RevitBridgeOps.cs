@@ -446,6 +446,51 @@ public static class RevitBridgeOps {
             static (request, context, ct) => context.RevitData.ApplyParameterValuesAsync(request)
         );
 
+    public static readonly BridgeOp ParameterLinksDetail =
+        BridgeOp.Create<ParameterLinksDetailRequest, ParameterLinksData>(
+            "revit.detail.parameter-links",
+            "Inspect Parameter Links",
+            HostOperationAgentMetadata.Create(
+                "Read the model-owned parameter-link profile and preview every proposed target write and issue.",
+                new[] { "parameters", "links", "rules", "preview", "electrical", "circuits", "mocp" },
+                requiresActiveDocument: true,
+                requestExamples: [
+                    Example(
+                        "inspect profile and writes",
+                        "Returns the stored profile, updater status, changed writes, and validation/runtime issues.",
+                        """{ "includeEvaluation": true }""")
+                ],
+                callGuidance: [
+                    "Use this before proposing edits. Parameter selectors use the same ParameterReference identity language as other Revit detail operations."
+                ]
+            ),
+            static (request, context, ct) => context.RevitData.GetParameterLinksAsync(request)
+        );
+
+    public static readonly BridgeOp ParameterLinksApply =
+        BridgeOp.Create<ParameterLinksApplyRequest, ParameterLinksData>(
+            "revit.apply.parameter-links",
+            "Apply Parameter Links",
+            HostOperationAgentMetadata.Create(
+                "Preview or atomically replace the model-owned parameter-link profile and reconcile its changed target values.",
+                new[] { "parameters", "links", "rules", "apply", "reconcile", "electrical", "circuits", "mocp", "mutation" },
+                intent: HostOperationIntent.Mutate,
+                requiresActiveDocument: true,
+                costTier: HostOperationCostTier.Mutation,
+                requestExamples: [
+                    Example(
+                        "preview current profile",
+                        "Evaluate the stored profile without changing the model.",
+                        """{ "previewOnly": true }""")
+                ],
+                callGuidance: [
+                    "Pass previewOnly=true with a proposed whole profile first; execute the same profile with previewOnly=false only after the user explicitly approves persistence.",
+                    "One wet call stores the profile and reconciles all changed targets in one Revit transaction and undo step."
+                ]
+            ),
+            static (request, context, ct) => context.RevitData.ApplyParameterLinksAsync(request)
+        );
+
     public static readonly BridgeOp ScheduleCoverage =
         BridgeOp.Create<ScheduleCoverageRequest, ScheduleCoverageData>(
             "revit.matrix.schedule-coverage",

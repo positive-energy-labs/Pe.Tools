@@ -88,8 +88,7 @@ export const routeStateApply = createTool({
       .min(1),
   }),
   execute: async (input) =>
-    postJson(`/pe/route-state/${encodeURIComponent(input.route)}/apply`, {
-      actor: "agent",
+    postJson(`/pe/agent/route-state/${encodeURIComponent(input.route)}/apply`, {
       patches: input.patches,
     }),
 });
@@ -104,8 +103,7 @@ export const routeCommand = createTool({
     input: z.unknown().optional(),
   }),
   execute: async (input) =>
-    postJson(`/pe/route-state/${encodeURIComponent(input.route)}/command`, {
-      actor: "agent",
+    postJson(`/pe/agent/route-state/${encodeURIComponent(input.route)}/command`, {
       command: input.command,
       input: input.input,
     }),

@@ -35,17 +35,14 @@ const peSendMessageSchema = z.object({
 
 /* ── Route-state dispatcher request bodies ─────────────────────────────────── */
 
-const routeStateActorSchema = z.enum(["agent", "human"]);
 const routeStatePatchSchema = z.object({
   path: z.array(z.union([z.string(), z.number()])),
   value: z.unknown().optional(),
 });
 const routeStateApplyBodySchema = z.object({
-  actor: routeStateActorSchema,
   patches: z.array(routeStatePatchSchema),
 });
 const routeStateCommandBodySchema = z.object({
-  actor: routeStateActorSchema,
   command: z.string(),
   input: z.unknown().optional(),
 });
@@ -161,36 +158,42 @@ export async function buildAgentControllerApp(
     const view = describeRouteState(routeStateSession, route);
     return view ? c.json(view) : c.json({ error: `unknown route '${route}'` }, 404);
   });
-  app.post("/pe/route-state/:route/apply", async (c) => {
-    const parsed = routeStateApplyBodySchema.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) {
-      return c.json({ ok: false, error: "invalid body", hint: "expected { actor, patches }" }, 400);
-    }
-    const result = await applyRouteStatePatches(
-      routeStateSession,
-      c.req.param("route"),
-      parsed.data.actor,
-      parsed.data.patches,
-    );
-    return c.json(result);
-  });
-  app.post("/pe/route-state/:route/command", async (c) => {
-    const parsed = routeStateCommandBodySchema.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) {
+  const mountRouteStateWrites = (prefix: string, actor: "agent" | "human") => {
+    app.post(`${prefix}/:route/apply`, async (c) => {
+      const parsed = routeStateApplyBodySchema.safeParse(await c.req.json().catch(() => null));
+      if (!parsed.success) {
+        return c.json({ ok: false, error: "invalid body", hint: "expected { patches }" }, 400);
+      }
       return c.json(
-        { ok: false, error: "invalid body", hint: "expected { actor, command, input? }" },
-        400,
+        await applyRouteStatePatches(
+          routeStateSession,
+          c.req.param("route"),
+          actor,
+          parsed.data.patches,
+        ),
       );
-    }
-    const result = await runRouteStateCommand(
-      routeStateSession,
-      c.req.param("route"),
-      parsed.data.actor,
-      parsed.data.command,
-      parsed.data.input,
-    );
-    return c.json(result);
-  });
+    });
+    app.post(`${prefix}/:route/command`, async (c) => {
+      const parsed = routeStateCommandBodySchema.safeParse(await c.req.json().catch(() => null));
+      if (!parsed.success) {
+        return c.json(
+          { ok: false, error: "invalid body", hint: "expected { command, input? }" },
+          400,
+        );
+      }
+      return c.json(
+        await runRouteStateCommand(
+          routeStateSession,
+          c.req.param("route"),
+          actor,
+          parsed.data.command,
+          parsed.data.input,
+        ),
+      );
+    });
+  };
+  mountRouteStateWrites("/pe/route-state", "human");
+  mountRouteStateWrites("/pe/agent/route-state", "agent");
 
   const server = new MastraServer({ app: app as never, mastra });
   await server.init();

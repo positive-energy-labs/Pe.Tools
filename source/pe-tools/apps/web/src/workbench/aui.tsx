@@ -25,6 +25,7 @@ import { Check, ChevronRight, GitFork, X } from "lucide-react";
 import { useWorkbench } from "./provider";
 import { isRenderable, workbenchToThreadMessages } from "./aui-adapter";
 import { PROSE_CLASS } from "./prose";
+import { RouteChatPluginView } from "./route-chat-plugins";
 
 /**
  * assistant-ui mounted as a pure render-from view over WorkbenchState. The runtime
@@ -323,7 +324,7 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
   status,
   approval,
 }) => {
-  const { resolveApproval } = useWorkbench();
+  const { debug, resolveApproval } = useWorkbench();
   const tone = isError ? "failed" : status?.type === "running" ? "active" : "";
   const target = toolTarget(args, result);
   const pending = approval && approval.approved === undefined && !approval.resolution;
@@ -336,6 +337,13 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
         <span>⌗ {toolName}</span>
         {target ? <code>{target}</code> : null}
       </div>
+      <RouteChatPluginView
+        toolCallId={toolCallId}
+        toolName={toolName}
+        args={args}
+        sessionState={debug.state.sessionState.values}
+        running={status?.type === "running"}
+      />
       {pending ? (
         <div className="flex flex-wrap gap-[7px]">
           {(approval.options ?? DEFAULT_APPROVAL_OPTIONS).map((option) => {

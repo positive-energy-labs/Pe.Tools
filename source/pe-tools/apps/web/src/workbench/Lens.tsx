@@ -7,6 +7,7 @@ import type {
 import { ThreadPrimitive, type ThreadMessageLike } from "@assistant-ui/react";
 import { modeDepth, type Mode } from "./depth";
 import { Moments, useThreadMessages } from "./aui";
+import { RouteChatPluginDock } from "./route-chat-plugins";
 import { useCacheView, WorldLane } from "./world";
 import { useToolIo } from "./tool-io";
 import { imageSource } from "./adapter";
@@ -541,6 +542,7 @@ export function Lens({
                 ) : null}
                 <ContextStrip state={state} depth={modeDepth(mode)} />
                 <Moments register={registerMoment} />
+                <RouteChatPluginDock />
               </div>
             </ThreadPrimitive.Root>
 
