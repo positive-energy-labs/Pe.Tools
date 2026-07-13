@@ -213,7 +213,7 @@ internal static class SpaceMaterializer
         var ids = new FilteredElementCollector(doc).WhereElementIsNotElementType()
             .Where(element => Comments(element)?.StartsWith(prefix, StringComparison.Ordinal) == true
                               || element is ViewPlan && views.Any(view => view.Id.Value == element.Id.Value))
-            .Select(element => element.Id).Concat(sketchIds).DistinctBy(id => id.Value).ToList();
+            .Select(element => element.Id).Concat(sketchIds).GroupBy(id => id.Value).Select(group => group.First()).ToList();
         if (ids.Count > 0) doc.Delete(ids);
         log($"[spaces] cleanup deleted {ids.Count} owned elements");
         return ids.Count;
@@ -233,7 +233,7 @@ internal static class SpaceMaterializer
         var ids = new FilteredElementCollector(doc).WhereElementIsNotElementType()
             .Where(element => Owned(element, token)
                               || element is ViewPlan && views.Any(view => view.Id.Value == element.Id.Value))
-            .Select(element => element.Id).Concat(sketchIds).DistinctBy(id => id.Value).ToList();
+            .Select(element => element.Id).Concat(sketchIds).GroupBy(id => id.Value).Select(group => group.First()).ToList();
         // Revit refuses to delete the ACTIVE view; if the user has our spaces view open, strand it
         // under a stale name instead so the fresh view can claim the canonical name
         var active = doc.ActiveView;
