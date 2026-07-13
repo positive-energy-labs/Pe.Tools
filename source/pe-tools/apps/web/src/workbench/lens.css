@@ -371,7 +371,10 @@
   left: 0;
   right: 0;
   z-index: 2;
-  max-height: 48%;
+  /* Bottom edge lands half a row above the focal row: focal axis (in frame coords) is
+     FOCAL*vp - HEAD_H = 0.5*vp - 40px; focal row top ≈ axis - 14px; minus 1.5 rows (32px each)
+     leaves the previous row half visible → 0.5*vp - 70px. */
+  max-height: calc(var(--vp, 560px) / 2 - 70px);
   display: flex;
   flex-direction: column;
   background: var(--paper);
