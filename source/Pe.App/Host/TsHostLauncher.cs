@@ -17,6 +17,18 @@ internal static class TsHostLauncher {
 
     public static TsHostLaunchResult EnsureRunning() {
         try {
+            // A Revit payload is a client of the one shared host, not a lane-selection authority.
+            // In particular, an installed sandbox beside dev RRD must not take over the healthy
+            // dev host and sever every session socket. Host replacement stays an explicit action.
+            var runningHost = TryGetRunningHostStatus();
+            if (runningHost != null)
+                return new TsHostLaunchResult(
+                    true,
+                    true,
+                    false,
+                    $"Shared TS host is already listening: {Describe(runningHost)}"
+                );
+
             // Installed lane: the SDK service primitive owns discover/probe/spawn from the manifest's
             // `service` block and the runtime service file — no hardcoded port. Dev lane stays hand-rolled
             // (dev is not the SDK's job: pnpm dev host, installed-host takeover).
@@ -79,19 +91,6 @@ internal static class TsHostLauncher {
     }
 
     private static TsHostLaunchResult EnsureDevHostRunning(PeRuntimeTarget runtimeResolution) {
-        var runningHost = TryGetRunningHostStatus();
-        // Pe.App is a client of the one shared product host, not a lane supervisor. If an explicit
-        // installed/dev caller has already selected a healthy incarnation, connect to it instead of
-        // starting a dev-vs-installed takeover loop. Only an explicit service lifecycle action may
-        // replace that incarnation; every Revit request still carries its own session selector.
-        if (runningHost != null)
-            return new TsHostLaunchResult(
-                true,
-                true,
-                false,
-                $"Shared TS host is already listening: {Describe(runningHost)}"
-            );
-
         var hostExecutablePath = runtimeResolution.HostExecutablePath;
         if (!File.Exists(hostExecutablePath)) {
             if (runtimeResolution.SourceHostWorkingDirectory is { } sourceHostWorkingDirectory)

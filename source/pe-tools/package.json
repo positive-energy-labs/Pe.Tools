@@ -20,6 +20,7 @@
     "ready": "vp check && vp run -r test -- --passWithNoTests && vp run -r build && pnpm typegen:check",
     "typegen:check": "pnpm --filter @pe/host-contracts codegen:check",
     "test": "vp run -r test -- --passWithNoTests",
+    "acceptance": "pnpm --filter @pe/runtime-acceptance acceptance",
     "dev:pea-web": "pe-dev web pea"
   },
   "devDependencies": {

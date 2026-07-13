@@ -1,0 +1,16 @@
+{
+  "name": "@pe/runtime-acceptance",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "acceptance": "vp exec jiti src/main.ts",
+    "test": "vp test",
+    "check": "vp check"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "typescript": "^6.0.3",
+    "vite-plus": "catalog:"
+  }
+}
