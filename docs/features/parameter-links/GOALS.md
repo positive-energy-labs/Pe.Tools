@@ -52,12 +52,13 @@ Do not hide host operations, require all mutations to pass through routes, add o
 - Prove deterministic evaluation in ordinary tests and prove model storage plus the MOCP-to-Rating path in FreshRevitProcess.
 - Record Pe.Revit.Sdk defects discovered during these lanes here as follow-up notes; do not expand this work into SDK changes.
 
-The MVP Fresh fixture proves profile storage, explicit reconciliation, fail-closed reconciliation without partial writes, source-triggered updates, and correction of a manual target override. The repository has no electrical equipment/circuit fixture, so the concrete MOCP-to-Rating relationship is implemented through the existing electrical-system collector but still needs model-backed acceptance proof before release.
+The MVP Fresh fixture proves profile storage, explicit reconciliation, fail-closed reconciliation without partial writes, source-triggered updates, correction of a manual target override, and the concrete electrical path. That electrical proof creates two transformer loads and one native power circuit from Revit's installed electrical template, reduces two equipment current values across separate assignments with `max`, and writes the single native circuit Rating value.
 
 ## Pe.Revit.Sdk Follow-ups
 
 - `pe-revit test fresh` default discovery does not find this repo's `Pe.Revit.Tests` project unless `--project` is supplied. The explicit run resolves it as `PeProjectKind=RevitTests`, so discovery and configured evaluation disagree.
 - A `sandbox start` materialization failure reports a state-file path and recommends `sandbox status`, but no `state.json` is persisted. `status`/`restart` then return `unknown-id`; recovery is another full `sandbox start`.
+- `pe-revit test fresh` can show an `External Tool Failure` for `Pe.RuntimeAcceptance.Addin` with `System.IO.FileLoadException: Assembly with same name is already loaded`. The focused test remains blocked until the dialog is manually closed, then can pass and close normally. The acceptance add-in load path needs to prevent or automatically resolve this duplicate assembly load.
 - The repo pins SDK companions at beta.66, but configured restore sources do not provide that version consistently. R24 resolves `Pe.Revit.Compat.R2024` to older `dev.9`; R26 finds only versions through beta.57 and cannot reach compilation. Cross-version proof is therefore source-compatible but not package-pin-clean.
 
 ## Pe.Tools Follow-up
