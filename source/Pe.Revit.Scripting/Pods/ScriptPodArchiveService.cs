@@ -4,7 +4,7 @@ using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.Product;
 using Pe.Shared.Scripting.Diagnostics;
 using Pe.Shared.Scripting.Pods;
-using Pe.Shared.StorageRuntime.PolyFill;
+using Pe.Bcl.Compat;
 using System.IO.Compression;
 
 namespace Pe.Revit.Scripting.Pods;
@@ -243,7 +243,7 @@ public sealed class ScriptPodArchiveService(
         var workspaceFullPath = Path.GetFullPath(workspaceRoot);
         return Directory
             .EnumerateFiles(workspaceRoot, "*", SearchOption.AllDirectories)
-            .Select(path => new FileEntry(path, BclExtensions.GetRelativePath(workspaceFullPath, path).Replace('\\', '/')))
+            .Select(path => new FileEntry(path, BclCompat.GetRelativePath(workspaceFullPath, path).Replace('\\', '/')))
             .Where(entry => !IsExcludedPath(entry.RelativePath))
             .Select(entry => {
                 ValidatePortableRelativePath(entry.RelativePath);
@@ -337,9 +337,9 @@ public sealed class ScriptPodArchiveService(
     private static void CopyDirectory(string source, string destination) {
         _ = Directory.CreateDirectory(destination);
         foreach (var directory in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
-            _ = Directory.CreateDirectory(Path.Combine(destination, BclExtensions.GetRelativePath(source, directory)));
+            _ = Directory.CreateDirectory(Path.Combine(destination, BclCompat.GetRelativePath(source, directory)));
         foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
-            File.Copy(file, Path.Combine(destination, BclExtensions.GetRelativePath(source, file)), overwrite: false);
+            File.Copy(file, Path.Combine(destination, BclCompat.GetRelativePath(source, file)), overwrite: false);
     }
 
     private static string CreateTempDirectory() {

@@ -65,12 +65,23 @@ function schemaTitle(schemaJson: string | undefined): string | undefined {
   }
 }
 
-async function loadCatalog(hostBaseUrl: string): Promise<HostOperationDefinition[]> {
+async function loadCatalog(
+  hostBaseUrl: string,
+  bridgeSessionId?: string,
+): Promise<HostOperationDefinition[]> {
   const base = trimTrailingSlash(hostBaseUrl);
-  const cached = catalogCache.get(base);
+  // A catalog describes one Revit process. Sharing it across selectors can make Pea discover an
+  // operation in RRD and then invoke it in a sandbox where that contract does not exist.
+  const cacheKey = `${base}\0${bridgeSessionId ?? ""}`;
+  const cached = catalogCache.get(cacheKey);
   if (cached && Date.now() - cached.at < CATALOG_TTL_MS) return cached.ops;
 
-  const response = await fetch(`${base}/ops`, { signal: AbortSignal.timeout(30_000) });
+  const headers: Record<string, string> = {};
+  if (bridgeSessionId) headers[HOST_RPC_BRIDGE_SESSION_HEADER] = bridgeSessionId;
+  const response = await fetch(`${base}/ops`, {
+    headers,
+    signal: AbortSignal.timeout(30_000),
+  });
   if (!response.ok) {
     throw new HostCallError(
       `host.ops.catalog: GET ${base}/ops failed with ${response.status}`,
@@ -84,7 +95,7 @@ async function loadCatalog(hostBaseUrl: string): Promise<HostOperationDefinition
     requestTypeName: entry.requestTypeName ?? schemaTitle(entry.requestSchemaJson),
     responseTypeName: entry.responseTypeName ?? schemaTitle(entry.responseSchemaJson),
   }));
-  catalogCache.set(base, { at: Date.now(), ops });
+  catalogCache.set(cacheKey, { at: Date.now(), ops });
   return ops;
 }
 
@@ -206,7 +217,7 @@ export class HostRpcCaller {
 
   private catalog(): Promise<HostOperationDefinition[]> {
     if (this.options.catalogOverride) return Promise.resolve([...this.options.catalogOverride]);
-    return loadCatalog(this.options.hostBaseUrl);
+    return loadCatalog(this.options.hostBaseUrl, this.options.bridgeSessionId);
   }
 }
 
@@ -608,7 +619,9 @@ function formatCapabilityInputKind(operation: HostOperationDefinition): string {
     case "Apply":
       return "explicit mutation request";
     default:
-      return inferDomain(operation.key) === "settings" ? "settings/profile request" : "typed request";
+      return inferDomain(operation.key) === "settings"
+        ? "settings/profile request"
+        : "typed request";
   }
 }
 

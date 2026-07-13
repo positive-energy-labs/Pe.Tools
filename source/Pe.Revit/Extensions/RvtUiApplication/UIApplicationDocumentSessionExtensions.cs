@@ -1,5 +1,4 @@
 using Autodesk.Revit.UI;
-using Pe.Revit.PolyFill;
 
 namespace Pe.Revit.Extensions.ProjDocument;
 

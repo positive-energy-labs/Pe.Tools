@@ -206,6 +206,30 @@ That boundary is deliberately narrower than Revit orchestration:
 
 The acceptance contract and machine proof live in `Pe.Revit.Sdk/RUNTIME_ACCEPTANCE.md` and `docs/context/runtime-acceptance-2026-07-12.md`.
 
+### Runtime topology: readiness is not routing
+
+```mermaid
+flowchart LR
+  Web["Vite web dev server<br/>usually :3000"] -->|proxy| Host["Pe.Host<br/>service-file baseUrl"]
+  Pea["Pea / MCP / raw caller"] -->|baseUrl + selector header| Host
+  Host -->|bridgeSessionId = rrd:*| RRD["Rider/RRD Revit"]
+  Host -->|bridgeSessionId = sandbox:*| RoutedSandbox["host-registered SDK sandbox"]
+  SDK["pe-revit sandbox<br/>private SDK bridge /status"] --> Sandbox["SDK-ready sandbox Revit"]
+  Fresh["pe-revit test fresh"] --> FreshRevit["test-owned FreshRevitProcess"]
+  Sandbox -. "Pe.Tools registration joins this lane" .-> RoutedSandbox
+```
+
+A running web app plus an SDK-ready sandbox are not connected unless Pe.Tools registers a
+host/session route between them. The SDK proves the sandbox's process, generation, descriptor, and
+private readiness endpoint; it does not know about `Pe.Host`. Product callers therefore carry two
+independent coordinates:
+
+- `baseUrl` locates the one Pe.Host service incarnation using the SDK service primitive's actual bound port.
+- `bridgeSessionId` selects one Revit process inside that host and travels in `x-pe-bridge-session-id`.
+
+Never infer one coordinate from the other. Typegen, Pea, browser operations, raw calls, settings,
+capture, and scripting must preserve both; a requested/returned selector mismatch is a hard failure.
+
 Key local roots:
 
 ```text
@@ -310,9 +334,9 @@ The `pe-dev codegen` tier is gone. The connected Revit session is the source of 
 TypeScript compile-time types are a checked-in lockfile generated from that live catalog:
 
 ```powershell
-# with Revit connected — the generator lives in the package it writes
-pnpm --filter @pe/host-contracts codegen         # regenerate src/generated/host-ops.generated.ts
-pnpm --filter @pe/host-contracts codegen:check   # drift gate: exit 1 when the checked-in types disagree with /ops
+# with the exact target session connected — the generator lives in the package it writes
+pnpm --filter @pe/host-contracts codegen -- --session <bridgeSessionId>
+pnpm --filter @pe/host-contracts codegen:check -- --session <bridgeSessionId>
 ```
 
 The generator is `packages/host-contracts/scripts/host-typegen.ts`; root `pnpm typegen:check` delegates to `codegen:check` and runs inside `pnpm ready`. Regenerate after changing a C# request/response DTO or adding an op, and commit the result like a lockfile. Schema required-ness is honest per direction: response properties are required exactly when non-nullable in C#; request properties are required only when non-nullable *and* their constructor parameter has no default (`BridgeOpSchemaGenerator`).
@@ -323,7 +347,7 @@ What lives in `@pe/host-contracts`:
 - `src/operation-types.ts` — hand-authored TS-only op schemas (settings runtime, APS auth, logs), key guards, `OpKey`/`OpRequestOf`/`OpResponseOf`.
 - `src/contracts/` — hand-authored bridge protocol, product constants, and operation vocabulary.
 
-Session selection is caller scope, not operation payload: `HostSessionScope.bridgeSessionId` travels as the `x-pe-bridge-session-id` header on `POST /call`.
+Session selection is caller scope, not operation payload: `HostSessionScope.bridgeSessionId` travels as the `x-pe-bridge-session-id` header on `POST /call` and `GET /ops`. The catalog response echoes `bridgeSessionId`; typegen refuses an untargeted live catalog or a mismatched echo.
 
 ### Field options, examples, and the registration gate
 
@@ -389,4 +413,4 @@ The automation shell is `Pe.Dev.RevitAutomation.Worker`, not desktop `Pe.App`. D
 | Link source dev shims             | `pe-revit path ensure` (once), `pe-revit dev link`, then `pea` / `pe-dev`                                                        |
 | Run source web dev explicitly     | `pe-dev web pea`                                                                                                                 |
 | Validate installed `pea` lane     | `pea --installed ...`                                                                                                            |
-| Regenerate host op types          | `pnpm --filter @pe/host-contracts codegen` (Revit connected); `codegen:check` is the drift gate                                 |
+| Regenerate host op types          | `pnpm --filter @pe/host-contracts codegen -- --session <bridgeSessionId>`; `codegen:check` uses the same exact selector          |
