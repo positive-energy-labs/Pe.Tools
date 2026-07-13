@@ -28,6 +28,15 @@
         <!-- Base already carries the configuration; stock MSBuild would append it again -->
         <IntermediateOutputPath>$(BaseIntermediateOutputPath)</IntermediateOutputPath>
     </PropertyGroup>
+    <!-- Sandbox lane (PeRuntimeLane=Sandbox + PeSandboxGenerationRoot, always command-line global
+         properties): obj/restore assets/generated files go under the UNIQUE per-generation root,
+         so a sandbox build shares no MSBuild state with Rider or plain terminal builds. This must
+         live here (not in the SDK) for the same evaluation-order reason as above; it intentionally
+         overrides the isolated redirect above. -->
+    <PropertyGroup Condition="'$(PeRuntimeLane)' == 'Sandbox' AND '$(PeSandboxGenerationRoot)' != ''">
+        <BaseIntermediateOutputPath>$([MSBuild]::EnsureTrailingSlash('$(PeSandboxGenerationRoot)'))obj\$(MSBuildProjectName)\$(Configuration)\</BaseIntermediateOutputPath>
+        <IntermediateOutputPath>$(BaseIntermediateOutputPath)</IntermediateOutputPath>
+    </PropertyGroup>
 
     <!-- Product layout names (Pe.App descriptor target, installer). -->
     <PropertyGroup>
