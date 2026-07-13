@@ -3,8 +3,12 @@
 namespace Pe.Revit.Scripting.Execution;
 
 internal sealed class ScriptOutputSink {
+    private const int MaxBufferedCharacters = 256 * 1024;
+    private const string TruncatedMarker = "\n[Pe scripting output truncated at 256 KiB. Use Result(...) or Artifacts for larger data.]\n";
+
     private readonly StringBuilder _output = new();
     private readonly object _sync = new();
+    private bool _truncated;
 
     public string GetBufferedOutput() {
         lock (this._sync)
@@ -25,8 +29,21 @@ internal sealed class ScriptOutputSink {
         if (string.IsNullOrEmpty(output))
             return;
 
-        lock (this._sync)
-            _ = this._output.Append(output);
+        lock (this._sync) {
+            if (this._truncated)
+                return;
+
+            var remaining = MaxBufferedCharacters - TruncatedMarker.Length - this._output.Length;
+            if (output.Length <= remaining) {
+                _ = this._output.Append(output);
+                return;
+            }
+
+            if (remaining > 0)
+                _ = this._output.Append(output, 0, remaining);
+            _ = this._output.Append(TruncatedMarker);
+            this._truncated = true;
+        }
     }
 }
 

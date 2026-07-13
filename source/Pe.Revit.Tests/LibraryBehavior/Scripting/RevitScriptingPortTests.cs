@@ -782,6 +782,91 @@ public sealed class RevitScriptingPortTests {
     }
 
     [Test]
+    public void ReadOnly_mutations_are_rolled_back(UIApplication uiApplication) {
+        var document = EnsureActiveProjectDocument(uiApplication);
+        var before = document.ProjectInformation.Name;
+        var service = CreateExecutionService(uiApplication);
+
+        var result = service.Execute(new ExecuteRevitScriptRequest(
+            "doc!.ProjectInformation.Name = \"__pe_readonly_rollback__\"; WriteLine(doc.ProjectInformation.Name);"
+        ), "test-readonly-rollback");
+
+        var after = document.ProjectInformation.Name;
+        Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded));
+        Assert.That(result.Output, Does.Contain("__pe_readonly_rollback__"));
+        Assert.That(after, Is.EqualTo(before));
+        Assert.That(result.Diagnostics.Any(diagnostic => diagnostic.Stage == "readonly"), Is.True);
+    }
+
+    [Test]
+    public void ReadOnly_rejects_when_the_rollback_guard_cannot_start(UIApplication uiApplication) {
+        var document = EnsureActiveProjectDocument(uiApplication);
+        var service = CreateExecutionService(uiApplication);
+        using var transaction = new Transaction(document, "Block scripting rollback guard");
+        _ = transaction.Start();
+
+        var result = service.Execute(new ExecuteRevitScriptRequest(
+            "WriteLine(\"must not run\");"
+        ), "test-readonly-guard-unavailable");
+
+        _ = transaction.RollBack();
+        Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Rejected));
+        Assert.That(result.Output, Does.Not.Contain("must not run"));
+        Assert.That(result.Diagnostics.Any(diagnostic => diagnostic.Stage == "readonly"), Is.True);
+    }
+
+    [Test]
+    public void Script_output_is_bounded(UIApplication uiApplication) {
+        _ = EnsureActiveProjectDocument(uiApplication);
+        var service = CreateExecutionService(uiApplication);
+
+        var result = service.Execute(new ExecuteRevitScriptRequest(
+            "WriteLine(new string('x', 300_000));"
+        ), "test-output-limit");
+
+        Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded));
+        Assert.That(result.Output.Length, Is.LessThan(300_000));
+        Assert.That(result.Output, Does.Contain("output truncated"));
+    }
+
+    [Test]
+    public void Oversized_inline_source_is_rejected_before_compilation(UIApplication uiApplication) {
+        var service = CreateExecutionService(uiApplication);
+        var source = "WriteLine(\"x\"); //" + new string('x', 256 * 1024);
+
+        var result = service.Execute(new ExecuteRevitScriptRequest(source), "test-source-limit");
+
+        Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Rejected));
+        Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("256 KiB"));
+    }
+
+    [Test]
+    public void Oversized_structured_result_is_rejected(UIApplication uiApplication) {
+        _ = EnsureActiveProjectDocument(uiApplication);
+        var service = CreateExecutionService(uiApplication);
+
+        var result = service.Execute(new ExecuteRevitScriptRequest(
+            "Result(new string('x', 1024 * 1024 + 1));"
+        ), "test-result-limit");
+
+        Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.RuntimeFailed));
+        Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("1 MiB"));
+    }
+
+    [Test]
+    public void Oversized_artifact_is_rejected_before_writing(UIApplication uiApplication) {
+        _ = EnsureActiveProjectDocument(uiApplication);
+        var service = CreateExecutionService(uiApplication);
+
+        var result = service.Execute(new ExecuteRevitScriptRequest(
+            "Artifacts.WriteText(\"too-large.txt\", new string('x', 10 * 1024 * 1024 + 1));"
+        ), "test-artifact-limit");
+
+        Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.RuntimeFailed));
+        Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("10 MiB"));
+    }
+
+    [Test]
     public void Inline_snippet_execution_persists_trace_files_without_mutating_workspace_source(UIApplication uiApplication) {
         var workspaceKey = $"test-inline-{Guid.NewGuid():N}";
         var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
@@ -1274,6 +1359,18 @@ public sealed class RevitScriptingPortTests {
             new ScriptCompilationService(ScriptFileTemplates.DefaultUsings),
             () => uiApplication
         );
+    }
+
+    private static Document EnsureActiveProjectDocument(UIApplication uiApplication) {
+        if (uiApplication.ActiveUIDocument?.Document is { } activeDocument)
+            return activeDocument;
+
+        var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory("scripting-active-document");
+        var projectPath = Path.Combine(outputDirectory, "Scripting.rvt");
+        var projectDocument = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
+        projectDocument.SaveAs(projectPath, new SaveAsOptions { OverwriteExistingFile = true });
+        _ = projectDocument.Close(false);
+        return uiApplication.OpenAndActivateDocument(projectPath).Document;
     }
 
     private static void WritePodManifest(string workspaceKey, params string[] entrypointSourcePaths) =>

@@ -972,7 +972,7 @@ public static class RevitBridgeOps {
             "scripting.execute",
             "Execute Revit Script",
             HostOperationAgentMetadata.Create(
-                "Execute trusted in-process C# in connected Revit: scriptContent for an inline snippet (Execute-body statements or a full PeScriptContainer class), or sourcePath for a pod entrypoint declared in the workspace's pod.json — exactly one of the two. permissionMode defaults to ReadOnly, which discards active-document changes via a rollback guard; pass WriteTransaction to keep changes.",
+                "Execute trusted in-process C# in connected Revit: scriptContent for an inline snippet (Execute-body statements or a full PeScriptContainer class), or sourcePath for a pod entrypoint declared in the workspace's pod.json — exactly one of the two. permissionMode defaults to ReadOnly, which discards active-document changes via a rollback guard; pass WriteTransaction to keep document edits, or NoTransaction only for APIs such as Document.SaveAs that reject an open transaction.",
                 new[] { "script", "execute", "csharp", "revit", "pod" },
                 HostOperationIntent.Mutate,
                 requiresActiveDocument: true,

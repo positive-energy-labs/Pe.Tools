@@ -27,6 +27,20 @@ public sealed class RevitTransactionPolicyRule : IScriptPolicyRule {
                 : "ReadOnly scripts may not create Revit Transaction, SubTransaction, or TransactionGroup instances.";
             yield return ScriptDiagnosticFactory.Error("policy", message, sourceFile.Name);
         }
+
+        foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>()) {
+            if (invocation.Expression is not MemberAccessExpressionSyntax {
+                    Name.Identifier.ValueText: "BeginCommit"
+                } member
+                || GetSimpleName(member.Expression) != "DocumentSandbox")
+                continue;
+
+            yield return ScriptDiagnosticFactory.Error(
+                "policy",
+                "Scripts may not open a commit-mode DocumentSandbox; the scripting host owns transaction boundaries.",
+                sourceFile.Name
+            );
+        }
     }
 
     private static string GetSimpleName(TypeSyntax type) =>
@@ -37,4 +51,10 @@ public sealed class RevitTransactionPolicyRule : IScriptPolicyRule {
             GenericNameSyntax genericName => genericName.Identifier.ValueText,
             _ => type.ToString().Split('.').LastOrDefault() ?? type.ToString()
         };
+
+    private static string GetSimpleName(ExpressionSyntax expression) => expression switch {
+        IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+        MemberAccessExpressionSyntax member => member.Name.Identifier.ValueText,
+        _ => expression.ToString().Split('.').LastOrDefault() ?? expression.ToString()
+    };
 }

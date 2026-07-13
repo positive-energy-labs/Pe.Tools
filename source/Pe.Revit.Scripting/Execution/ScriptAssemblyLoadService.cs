@@ -316,7 +316,7 @@ public sealed class ScriptAssemblyLoadService {
 
 #if NET5_0_OR_GREATER
         private sealed class ScriptLoadContext(ResolverSubscription owner)
-            : AssemblyLoadContext($"PeScript-{Guid.NewGuid():N}") {
+            : AssemblyLoadContext($"PeScript-{Guid.NewGuid():N}", isCollectible: true) {
             // Returning null falls through to the default context (host copies, framework);
             // returning an assembly short-circuits it. Resolve() makes that call per name.
             protected override Assembly? Load(AssemblyName assemblyName) => owner.Resolve(assemblyName);
@@ -331,6 +331,7 @@ public sealed class ScriptAssemblyLoadService {
             AppDomain.CurrentDomain.AssemblyResolve -= this._appDomainHandler;
 #if NET5_0_OR_GREATER
             AssemblyLoadContext.Default.Resolving -= this._loadContextHandler;
+            this._scriptLoadContext.Unload();
 #endif
         }
 
@@ -377,8 +378,8 @@ public sealed class ScriptAssemblyLoadService {
                 return null;
 
             try {
-                // ponytail: byte-load so the dll file is never locked and each run rereads the
-                // freshly built dll; a copy stays in memory per run until the session ends.
+                // Byte-load so the dll file is never locked and each run rereads the freshly built
+                // dll; the collectible per-run context becomes unloadable after execution.
                 // Ceiling: dlls with native sidecars lose next-to-file probing — none exist today.
 #if NET5_0_OR_GREATER
                 var loaded = this._scriptLoadContext.LoadFromStream(
