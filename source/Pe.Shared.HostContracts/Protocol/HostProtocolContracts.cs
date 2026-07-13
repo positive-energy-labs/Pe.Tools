@@ -17,7 +17,8 @@ public static class HostProtocol {
     // 38: revit.apply.parameter-values op (redeem binding handles) + element-detail parameter editability
     // 39: parameter-values unit-aware conversion (value + unit canonical; bare numerals on
     //     measurable doubles rejected as ambiguous; parsedDisplay round-trip echo)
-    public const int ContractVersion = 39;
+    // 40: model-owned parameter-link detail/apply operations and shared profile language
+    public const int ContractVersion = 40;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]

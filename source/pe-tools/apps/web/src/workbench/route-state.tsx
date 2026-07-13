@@ -7,7 +7,7 @@
  *     the pea-active flag),
  *   - hydrates the route's document once via `GET /pe/route-state/:route` (replacing the
  *     old zero-key `setState({})` nudge — the dispatcher exposes the doc directly now),
- *   - writes through the dispatcher endpoints as `actor:"human"` (unmasked): `apply`
+ *   - writes through the browser dispatcher endpoints (server-owned human actor): `apply`
  *     posts segment-array patches, `command` runs a named side-effect. Every write's
  *     result echoes back through `state_changed`, so the slice stays authoritative.
  *
@@ -133,12 +133,12 @@ export function useRouteState<TSchema extends z.ZodType>(
   }, [session]);
 
   const apply = useCallback(
-    (patches: RouteStatePatch[]) => postWrite(config, spec.route, "apply", { patches }),
+    (patches: RouteStatePatch[]) => writeRouteState(config, spec.route, "apply", { patches }),
     [config, spec.route],
   );
   const command = useCallback(
     (command: string, input?: unknown) =>
-      postWrite(config, spec.route, "command", { command, input: input ?? {} }),
+      writeRouteState(config, spec.route, "command", { command, input: input ?? {} }),
     [config, spec.route],
   );
 
@@ -160,7 +160,7 @@ export function useRouteState<TSchema extends z.ZodType>(
 }
 
 /** POST a human-actor write to a dispatcher endpoint; returns its `{ ok, hint, ... }` reply. */
-async function postWrite(
+export async function writeRouteState(
   config: WorkbenchEndpointConfig,
   route: string,
   suffix: "apply" | "command",
@@ -170,7 +170,7 @@ async function postWrite(
     const response = await fetch(peUrl(config, `/route-state/${route}/${suffix}`), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ actor: "human", ...body }),
+      body: JSON.stringify(body),
     });
     const payload = (await response.json().catch(() => null)) as RouteStateWriteResult | null;
     if (payload) return payload;

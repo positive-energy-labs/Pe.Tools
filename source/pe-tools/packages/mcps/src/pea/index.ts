@@ -26,7 +26,12 @@ import { peaProductToolCatalog } from "../tool-metadata.ts";
 import { createPeSandboxTool, presentSessionKind } from "./sandbox.ts";
 import { routeStateTools } from "./route-state.ts";
 import { PeaCliCommands, type PeaCliCommandOptions } from "./PeaCliCommands.ts";
-export { createFamilyTypesCommandHandlers, familyTypesRouteState } from "./route-state-commands.ts";
+export {
+  createFamilyTypesCommandHandlers,
+  createParameterLinksCommandHandlers,
+  familyTypesRouteState,
+  parameterLinksRouteState,
+} from "./route-state-commands.ts";
 export { peaProductToolCatalog } from "../tool-metadata.ts";
 export { PeaCliCommands } from "./PeaCliCommands.ts";
 export {

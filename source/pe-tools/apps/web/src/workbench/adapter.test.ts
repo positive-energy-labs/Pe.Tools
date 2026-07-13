@@ -50,6 +50,20 @@ test("tool_start → tool_end yields a completed tool call carrying raw I/O", ()
   expect(state.tools.recentToolCallIds).toEqual(["t1"]);
 });
 
+test("state_changed replaces the live route-state map", () => {
+  const first = reduce([
+    { type: "state_changed", state: { "route:family-types": { cells: {} } } },
+  ]);
+  const second = applyWireEvent(first, {
+    type: "state_changed",
+    state: { "route:parameter-links": { draftProfile: null } },
+  });
+
+  expect(second.sessionState.values).toEqual({
+    "route:parameter-links": { draftProfile: null },
+  });
+});
+
 test("a second approval supersedes the first still-pending one (single-slot server gate)", () => {
   const state = reduce([
     { type: "agent_start" },
