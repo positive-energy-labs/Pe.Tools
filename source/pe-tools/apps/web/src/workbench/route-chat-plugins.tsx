@@ -232,7 +232,7 @@ function ParameterLinksReview({
               <div className="truncate font-medium text-[var(--clay-ink)]">
                 {write.targetElementName ?? write.targetElementId} · {write.targetParameter.name}
               </div>
-              <div className="truncate text-[10px] text-[var(--lichen)]">
+              <div className="truncate font-mono text-[10px] text-[var(--lichen)] tabular-nums">
                 {displayParameterLinkValue(write.currentValue)} →{" "}
                 {displayParameterLinkValue(write.proposedValue)}
               </div>
@@ -471,10 +471,10 @@ function InlineRoutePlugin({
   children: ReactNode;
 }) {
   return (
-    <div className="border-l-2 border-[var(--pe-green)] bg-[color-mix(in_srgb,var(--pe-green)_5%,transparent)] px-2.5 py-2 text-xs">
+    <div className="rounded-md border border-[var(--line)] bg-[var(--paper)] px-2.5 py-2 text-xs">
       <div className="flex items-baseline justify-between gap-3">
         <span className="font-semibold text-[var(--clay-ink)]">{title}</span>
-        <span className="text-[var(--lichen)]">{action}</span>
+        <span className="tele-label text-[var(--lichen)]">{action}</span>
       </div>
       <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[var(--slate)]">{children}</div>
     </div>
@@ -491,8 +491,13 @@ function Metric({
   issue?: boolean;
 }) {
   return (
-    <span className={issue && value > 0 ? "text-[var(--fail)]" : undefined}>
-      <strong>{value}</strong> {label}
+    <span
+      className={`inline-flex items-baseline gap-1 ${
+        issue && value > 0 ? "text-[var(--fail)]" : undefined
+      }`}
+    >
+      <span className="tele">{value}</span>
+      <span className="tele-label">{label}</span>
     </span>
   );
 }

@@ -116,7 +116,8 @@ function CommandGroup({
     <CommandPrimitive.Group
       data-slot="command-group"
       className={cn(
-        "overflow-hidden p-1 text-foreground **:[[cmdk-group-heading]]:px-2.5 **:[[cmdk-group-heading]]:py-1.5 **:[[cmdk-group-heading]]:text-xs **:[[cmdk-group-heading]]:font-medium **:[[cmdk-group-heading]]:text-muted-foreground",
+        // Group headings take the section-label voice (small-caps tracked sans).
+        "overflow-hidden p-1 text-foreground **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1 **:[[cmdk-group-heading]]:text-[11px] **:[[cmdk-group-heading]]:font-semibold **:[[cmdk-group-heading]]:tracking-[0.08em] **:[[cmdk-group-heading]]:uppercase **:[[cmdk-group-heading]]:text-muted-foreground",
         className,
       )}
       {...props}
@@ -146,9 +147,11 @@ function CommandItem({
     <CommandPrimitive.Item
       data-slot="command-item"
       className={cn(
-        // data-selected drives both mouse-hover and arrow-key focus in cmdk. Use the accent wash
-        // (not bg-muted, which is ~invisible on the white popover) so keyboard nav is clearly visible.
-        "group/command-item relative flex min-h-8 cursor-default items-center gap-2 rounded-md px-2.5 py-1.5 text-sm outline-hidden select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-selected:bg-accent data-selected:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
+        // data-selected drives both mouse-hover and arrow-key focus in cmdk. Selection = "armed
+        // to fire": a one-step bg shift + a hard PE Blue left rule (the view's action accent) —
+        // the rule keeps keyboard nav visible on the white popover without the old green wash
+        // repainting the whole row (color budget: green means pea/success, not selection).
+        "group/command-item relative flex min-h-7 cursor-default items-center gap-2 rounded-sm border-l-2 border-transparent px-2 py-1 text-[13px] outline-hidden select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-selected:border-[var(--pe-blue)] data-selected:bg-muted data-selected:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:text-muted-foreground",
         className,
       )}
       {...props}
@@ -163,7 +166,8 @@ function CommandShortcut({ className, ...props }: React.ComponentProps<"span">) 
     <span
       data-slot="command-shortcut"
       className={cn(
-        "ml-auto text-[0.625rem] tracking-widest text-muted-foreground group-data-selected/command-item:text-foreground",
+        // Shortcuts are machine facts — telemetry voice.
+        "ml-auto font-mono text-[10px] tracking-[0.08em] text-muted-foreground uppercase group-data-selected/command-item:text-foreground",
         className,
       )}
       {...props}

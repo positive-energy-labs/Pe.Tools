@@ -11,6 +11,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "#/components/ui/button";
+import { SidePane } from "#/components/ui/side-pane";
 import { DocPane, UploadSurface } from "#/family-types/DocPane";
 import { Grid } from "#/family-types/Grid";
 import { Inspector } from "#/family-types/Inspector";
@@ -207,8 +208,17 @@ function FamilyTypesPage() {
           <Grid focus={focus} setFocus={setFocus} selected={selected} onSelect={select} />
         </div>
 
-        {rightOpen && (
-          <div className="flex w-[40%] min-w-0 shrink-0 flex-col">
+        <SidePane
+          side="right"
+          storageKey="pe.familyTypes.specPane"
+          open={rightOpen}
+          onOpenChange={setRightOpen}
+          minWidth={320}
+          defaultWidth={480}
+          maxWidth={720}
+          header={<span className="text-sm font-semibold">Spec sheet</span>}
+        >
+          <div className="flex h-full flex-col">
             <div className="min-h-0 flex-1">
               {grounding && document.doc ? (
                 <DocPane
@@ -231,7 +241,7 @@ function FamilyTypesPage() {
               </div>
             )}
           </div>
-        )}
+        </SidePane>
       </div>
     </main>
   );

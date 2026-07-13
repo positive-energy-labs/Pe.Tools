@@ -154,8 +154,12 @@ function MomentSection({
   // loop (the "full page rerendering forever" jitter). Memoized per (register,id), React only fires
   // it on real mount/unmount, so bumpMeasure runs when geometry actually changes, not every frame.
   const setRef = useCallback((el: HTMLElement | null) => register(id, el), [register, id]);
+  // User turns open an exchange: a full-width hairline turns the transcript into a ledger of
+  // request→response compartments (skipped when the turn is the first thing in the lane).
+  const exchangeRule =
+    role === "user" ? " border-t-[0.5px] border-[var(--line-soft)] first:border-t-0" : "";
   return (
-    <section data-key={id} data-role={role} className="lens-moment" ref={setRef}>
+    <section data-key={id} data-role={role} className={`lens-moment${exchangeRule}`} ref={setRef}>
       {children}
     </section>
   );
@@ -185,7 +189,8 @@ function UserMoment() {
   if (!text && images.length === 0) return null;
   return (
     <MomentSection id={id} role="user">
-      <div className="mb-1.5 inline-flex items-center gap-[7px] text-[10px] font-semibold tracking-[0.1em] uppercase text-[var(--user)]">
+      {/* Role attribution is provenance — telemetry tier, same voice as the mapdial/trace. */}
+      <div className="tele-label mb-1.5 inline-flex items-center gap-[7px] text-[var(--user)]">
         <span>you</span>
         {/* lens-fork kept as CSS: visibility is driven by `.lens-moment:hover` (geometry element) */}
         <button
@@ -203,11 +208,13 @@ function UserMoment() {
             key={src}
             src={src}
             alt="attachment"
-            className="max-h-64 rounded-[12px] border-[0.5px] border-[var(--user-line)] object-contain"
+            className="max-h-64 rounded-sm border-[0.5px] border-[var(--user-line)] object-contain"
           />
         ))}
+        {/* Hard block, not a speech bubble — the radius law. Right alignment + tint stay: they
+            are the scan cue for "my turns". */}
         {text ? (
-          <div className="rounded-[12px_12px_2px_12px] border-[0.5px] border-[var(--user-line)] bg-[var(--user-tint)] px-3 py-2 text-sm leading-normal">
+          <div className="rounded-sm border-[0.5px] border-[var(--user-line)] bg-[var(--user-tint)] px-3 py-2 text-sm leading-normal">
             {text}
           </div>
         ) : null}
@@ -231,9 +238,7 @@ function AssistantMoment() {
   if (!hasContent && !running) return null;
   return (
     <MomentSection id={id} role="assistant">
-      <div className="mb-1.5 text-[10px] font-semibold tracking-[0.1em] uppercase text-[var(--pe-green)]">
-        pea
-      </div>
+      <div className="tele-label mb-1.5 text-[var(--pe-green)]">pea</div>
       <div className="grid gap-1">
         <AssistantParts />
         {/* mg-caret kept as CSS: it's a keyframes blink animation (the user asked to keep those) */}
