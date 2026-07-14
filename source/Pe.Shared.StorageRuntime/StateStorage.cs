@@ -27,56 +27,11 @@ public sealed class StateStorage {
     public JsonReadWriter<T> Json<T>(string filename) where T : class, new() =>
         new LocalDiskJsonFile<T>(this.GetJsonPath(filename));
 
-    public JsonReadWriter<T> JsonByRelativePath<T>(string relativePath) where T : class, new() =>
-        new LocalDiskJsonFile<T>(this.ResolveSafeRelativeJsonPath(relativePath));
-
     public CsvReadWriter<T> Csv<T>() where T : class, new() =>
         new Csv<T>(this.GetCsvPath(DefaultName));
 
     public CsvReadWriter<T> Csv<T>(string filename) where T : class, new() =>
         new Csv<T>(this.GetCsvPath(filename));
-
-    public SettingsDiscoveryResult Discover(SettingsDiscoveryOptions? options = null) {
-        options ??= new SettingsDiscoveryOptions();
-        var discoveryRootPath = SettingsPathing.ResolveSafeSubDirectoryPath(
-            this.DirectoryPath,
-            options.SubDirectory,
-            nameof(options.SubDirectory)
-        );
-        var normalizedRootRelativePath = SettingsPathing.NormalizeRelativePath(
-            options.SubDirectory,
-            nameof(options.SubDirectory)
-        );
-        var rootName = string.IsNullOrWhiteSpace(normalizedRootRelativePath)
-            ? DefaultName
-            : normalizedRootRelativePath.Split('/').Last();
-
-        if (!Directory.Exists(discoveryRootPath)) {
-            return new SettingsDiscoveryResult([],
-                new SettingsDirectoryNode(rootName, normalizedRootRelativePath, [], []));
-        }
-
-        var searchOption = options.Recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-        var directories = Directory.EnumerateDirectories(discoveryRootPath, "*", searchOption)
-            .Select(path => BclCompat.GetRelativePath(this.DirectoryPath, path).Replace('\\', '/'))
-            .ToList();
-        var files = Directory.EnumerateFiles(discoveryRootPath, "*.json", searchOption)
-            .Select(path => SettingsDiscoveryBuilder.CreateSettingsFileEntry(path, this.DirectoryPath))
-            .Where(entry => options.IncludeFragments || !entry.IsFragment)
-            .Where(entry => options.IncludeSchemas || !entry.IsSchema)
-            .OrderByDescending(entry => entry.ModifiedUtc)
-            .ToList();
-        var tree = SettingsDiscoveryBuilder.BuildDirectoryTree(
-            rootName,
-            normalizedRootRelativePath,
-            files,
-            directories
-        );
-        return new SettingsDiscoveryResult(files, tree);
-    }
-
-    public StateStorage SubDir(string subdirectory) =>
-        new(this.DirectoryPath, SettingsPathing.NormalizeRelativePath(subdirectory, nameof(subdirectory)));
 
     public string ResolveSafeRelativeJsonPath(string relativePath) =>
         SettingsPathing.ResolveSafeRelativeJsonPath(this.DirectoryPath, relativePath, nameof(relativePath));

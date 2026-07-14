@@ -33,14 +33,6 @@ public static class FamilyParameterParameterInfo {
         param.IsInstance ? "Instance" : "Type";
 
     /// <summary>
-    ///     Gets the type/instance designation as a string ("Type" or "Instance")
-    /// </summary>
-    /// <param name="isInstance">The <see cref="FamilyParameter.IsInstance" /> value</param>
-    /// <returns>"Instance" if the parameter is an instance parameter, "Type" otherwise</returns>
-    public static string GetTypeInstanceDesignation(bool isInstance) =>
-        isInstance ? "Instance" : "Type";
-
-    /// <summary>
     ///     Alias for Definition.Name, simply a convenience method to get the parameter name with less verbosity
     /// </summary>
     /// <param name="param">The family parameter</param>

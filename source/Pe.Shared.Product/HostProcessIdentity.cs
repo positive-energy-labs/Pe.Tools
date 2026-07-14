@@ -57,19 +57,6 @@ public static class HostProcessIdentity {
         }
     }
 
-    public static IEnumerable<string> EnumerateExecutableCandidates(
-        string? configuredPath,
-        string localAppData
-    ) {
-        if (configuredPath is string configuredExecutablePath &&
-            !string.IsNullOrWhiteSpace(configuredExecutablePath)) {
-            yield return configuredExecutablePath;
-        }
-
-        var binaries = ProductRuntimeLayout.ForCurrentUser(localAppData).Binaries;
-        yield return binaries.HostExecutablePath;
-    }
-
     private static string? FirstNonBlank(params string?[] values) =>
         values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
 }

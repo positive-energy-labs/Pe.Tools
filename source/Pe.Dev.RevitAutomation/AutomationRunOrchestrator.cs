@@ -154,9 +154,6 @@ internal sealed class AutomationRunOrchestrator {
                $"{projectGuid.Trim().ToLowerInvariant()}/{modelGuid.Trim().ToLowerInvariant()}/{runId}.json";
     }
 
-    public static bool IsSubmissionUnauthorized(HttpRequestException exception) =>
-        AutomationDevRunHelpers.HasStatusCode(exception, HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden);
-
     private static string BuildTransientLocalUpgradeFailureReason(int? sourceRevitYear) =>
         $"Source model year {sourceRevitYear} requires transient local upgrade, but the downloaded source was not a single RVT file supported by this MVP.";
 }

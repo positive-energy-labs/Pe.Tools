@@ -9,8 +9,6 @@ public readonly struct Result<TValue> {
         this._error = error;
     }
 
-    public static Result<TValue> Succeeded { get; set; }
-
     public void Deconstruct(out TValue? value, out Exception? error) {
         value = this._value;
         error = this._error;

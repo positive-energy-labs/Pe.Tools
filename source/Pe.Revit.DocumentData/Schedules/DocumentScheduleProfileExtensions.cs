@@ -17,16 +17,4 @@ public static class DocumentScheduleProfileExtensions {
         SharedScheduleProfile profile,
         IEnumerable<Family>? families = null
     ) => ScheduleHelper.GetFamiliesMatchingFilters(doc, profile, families);
-
-    public static List<long> GetFamilyIdsMatchingScheduleProfileFiltersAnyType(
-        this Document doc,
-        SharedScheduleProfile profile,
-        IEnumerable<Family>? families = null
-    ) => ScheduleHelper.GetFamilyIdsMatchingFiltersAnyType(doc, profile, families);
-
-    internal static List<long> GetFamilyIdsMatchingScheduleProfileFiltersAnyType(
-        this Document doc,
-        SharedScheduleProfile profile,
-        IReadOnlyList<TempPlacedSymbolRecord> placements
-    ) => ScheduleHelper.GetFamilyIdsMatchingFiltersAnyType(doc, profile, placements);
 }

@@ -80,34 +80,6 @@ public class ShortcutsService {
     }
 
     /// <summary>
-    ///     Checks if the keyboard shortcuts file has changed since last load.
-    ///     Uses file modification time for performance (avoids reading entire file).
-    /// </summary>
-    public bool IsCacheCurrent() {
-        // If we haven't loaded shortcuts yet, consider it not current
-        if (this._shortcuts == null || string.IsNullOrEmpty(this._cachedFilePath))
-            return false;
-
-        try {
-            if (!File.Exists(this._cachedFilePath))
-                return false;
-
-            var currentModified = File.GetLastWriteTimeUtc(this._cachedFilePath);
-            return currentModified == this._lastFileModified;
-        } catch {
-            return false;
-        }
-    }
-
-    /// <summary>
-    ///     Clears the cached shortcuts to force reloading on next access.
-    /// </summary>
-    public void ClearCache() {
-        this.ClearXmlCache();
-        this._uiFrameworkCommandsLoaded = false;
-    }
-
-    /// <summary>
     ///     Clears only the XML cache (not the UIFramework state).
     ///     Use after writes where UIFramework is already up-to-date.
     /// </summary>

@@ -70,19 +70,6 @@ public sealed class SettingsRuntimeRegistry {
     public IReadOnlyList<StructuralSettingsModuleDescriptor> GetModules() =>
         this._modules.Values.ToList();
 
-    public IReadOnlyList<ISettingsRootBinding> GetRootBindings() =>
-        this._bindings.Values.ToList();
-
-    public bool TryResolveModule(string moduleKey, out StructuralSettingsModuleDescriptor module) =>
-        this._modules.TryGetValue(moduleKey, out module!);
-
-    public StructuralSettingsModuleDescriptor ResolveModule(string moduleKey) =>
-        this.TryResolveModule(moduleKey, out var module)
-            ? module
-            : throw new ArgumentException(
-                $"Unknown settings module: {moduleKey}. Available modules: {string.Join(", ", this._modules.Keys)}"
-            );
-
     public bool TryResolveRootBinding(string moduleKey, string rootKey, out ISettingsRootBinding binding) =>
         this._bindings.TryGetValue((moduleKey, rootKey), out binding!);
 

@@ -21,40 +21,7 @@ public class Filters {
         return elements.FirstOrDefault();
     }
 
-    /// <summary>
-    ///     Retrieves a FamilySymbol by its Family Name and Family Symbol Name (Type Name).
-    ///     Performs case-insensitive comparison.
-    /// </summary>
-    /// <param name="doc">The active Revit Document.</param>
-    /// <param name="familyName">The name of the Family.</param>
-    /// <param name="familySymbolName">The name of the Family Symbol (Type).</param>
-    /// <returns>The matching FamilySymbol, or null if not found.</returns>
-    public static FamilySymbol? FamilySymbolByName(
-        Document doc,
-        string familyName,
-        string familySymbolName
-    ) =>
-        FirstElementOfType<FamilySymbol>(
-            doc,
-            fs => fs.FamilyName.Equals(familyName, StringComparison.OrdinalIgnoreCase)
-                  && fs.Name.Equals(familySymbolName, StringComparison.OrdinalIgnoreCase)
-        );
-
     // --- Specialized Methods using the Generic Helpers ---
-
-    /// <summary>
-    ///     Retrieves an MEPSystemType by its Name.
-    ///     Performs case-insensitive comparison.
-    /// </summary>
-    /// <returns>The matching MEPSystemType, or null if not found.</returns>
-    public static MEPSystemType? MepSystemTypeByName(
-        Document doc,
-        string name
-    ) =>
-        FirstElementOfType<MEPSystemType>(
-            doc,
-            mst => mst.Name.Equals(name, StringComparison.OrdinalIgnoreCase)
-        );
 
     /// <summary>
     ///     Retrieves a DuctType by matching its shape, junction type, and elbow type.

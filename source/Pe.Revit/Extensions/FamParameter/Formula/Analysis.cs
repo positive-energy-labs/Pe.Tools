@@ -5,17 +5,6 @@ namespace Pe.Revit.Extensions.FamParameter.Formula;
 /// </summary>
 public static class FormulaAnalysis {
     /// <summary>
-    ///     Checks if a formula is a constant expression (contains no parameter references).
-    ///     Constant formulas include literals like "20", "7.75\"", "60 Hz", "\"text\"",
-    ///     and constant expressions like "2 A + 5 A".
-    /// </summary>
-    /// <returns>True if the formula has no parameter references</returns>
-    public static bool IsConstant(this FamilyParameterSet parameters, string formula) {
-        if (string.IsNullOrWhiteSpace(formula)) return false;
-        return !parameters.GetReferencedIn(formula).Any();
-    }
-
-    /// <summary>
     ///     Checks if a formula is just a single parameter reference (no operators, no functions).
     ///     Returns the referenced parameter if so, null otherwise.
     /// </summary>
