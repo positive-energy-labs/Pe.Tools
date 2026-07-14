@@ -8,19 +8,26 @@
 import type { ReactNode } from "react";
 import { Plus, Trash2 } from "lucide-react";
 
-import type { ParameterLinkDefinition, ParameterLinkProfile } from "@pe/agent-contracts";
+import type {
+  ParameterLinkDefinition,
+  ParameterLinkProfile,
+  ParameterReference,
+} from "@pe/agent-contracts";
 
 import { Button } from "#/components/ui/button";
-import { Input } from "#/components/ui/input";
-import { Textarea } from "#/components/ui/textarea";
+import {
+  FieldOptionMultiSelect,
+  FieldOptionSelect,
+  type FieldOption,
+  parameterReferenceFromOption,
+  useFieldOptions,
+} from "#/host/field-options";
 import {
   REDUCERS,
   RELATIONSHIPS,
   SOURCE_SCOPES,
   addAssignment,
   addDefinition,
-  joinUniqueIds,
-  parseUniqueIds,
   removeAssignment,
   removeDefinition,
   updateAssignment,
@@ -30,10 +37,12 @@ import {
 export function ProfileEditor({
   profile,
   disabled,
+  target,
   onChange,
 }: {
   profile: ParameterLinkProfile | null;
   disabled?: boolean;
+  target?: string;
   onChange: (next: ParameterLinkProfile) => void;
 }) {
   if (!profile || profile.definitions.length === 0) {
@@ -63,6 +72,7 @@ export function ProfileEditor({
           profile={profile}
           definition={definition}
           disabled={disabled}
+          target={target}
           onChange={onChange}
         />
       ))}
@@ -82,17 +92,76 @@ function DefinitionCard({
   profile,
   definition,
   disabled,
+  target,
   onChange,
 }: {
   profile: ParameterLinkProfile;
   definition: ParameterLinkDefinition;
   disabled?: boolean;
+  target?: string;
   onChange: (next: ParameterLinkProfile) => void;
 }) {
   const patch = (fields: Partial<ParameterLinkDefinition>) =>
     onChange(updateDefinition(profile, definition.id, fields));
 
   const assignments = profile.assignments.filter((asn) => asn.definitionId === definition.id);
+  const enabledAssignments = assignments.filter((assignment) => assignment.enabled);
+  const hasAllElementsAssignment = enabledAssignments.some(
+    (assignment) => assignment.sourceElementUniqueIds.length === 0,
+  );
+  const sourceElementIds = hasAllElementsAssignment
+    ? []
+    : Array.from(
+        new Set(enabledAssignments.flatMap((assignment) => assignment.sourceElementUniqueIds)),
+      );
+  const categories = useFieldOptions("category-ids", {}, target);
+  const elements = useFieldOptions(
+    "element-unique-ids",
+    { CategoryId: String(definition.sourceCategoryId) },
+    target,
+    definition.sourceCategoryId !== 0,
+  );
+  const sourceParameters = useFieldOptions(
+    "parameter-identities",
+    {
+      CategoryId: String(definition.sourceCategoryId),
+      ParameterScope: "instanceThenType",
+      ...(sourceElementIds.length ? { ElementUniqueIds: sourceElementIds.join("\n") } : {}),
+    },
+    target,
+    definition.sourceCategoryId !== 0,
+  );
+  const targetCategoryId =
+    definition.relationship === "sameElement"
+      ? definition.sourceCategoryId
+      : Number(
+          categories.items.find(
+            (item) => item.metadata?.builtInCategory === "OST_ElectricalCircuit",
+          )?.value ?? 0,
+        );
+  const selectedSource = findParameterOption(sourceParameters.items, definition.sourceParameter);
+  const targetParameters = useFieldOptions(
+    "parameter-identities",
+    {
+      CategoryId: String(targetCategoryId),
+      ParameterScope: "instance",
+      WritableOnly: "true",
+      ...(selectedSource?.metadata?.storageType
+        ? { StorageType: selectedSource.metadata.storageType }
+        : {}),
+      ...(selectedSource?.metadata?.dataTypeId
+        ? { DataTypeId: selectedSource.metadata.dataTypeId }
+        : {}),
+    },
+    target,
+    targetCategoryId !== 0,
+  );
+  const readableTargetParameters = useFieldOptions(
+    "parameter-identities",
+    { CategoryId: String(targetCategoryId), ParameterScope: "instance" },
+    target,
+    targetCategoryId !== 0,
+  );
 
   return (
     <div className="rounded-[2px] border border-[var(--line-2)] bg-[var(--paper)]">
@@ -116,14 +185,16 @@ function DefinitionCard({
       </div>
 
       <div className="grid gap-2 px-3 py-2.5 sm:grid-cols-2">
-        <Field label="Source category id">
-          <Input
-            type="number"
-            value={Number.isFinite(definition.sourceCategoryId) ? definition.sourceCategoryId : ""}
-            disabled={disabled}
-            onChange={(event) =>
-              patch({ sourceCategoryId: Math.trunc(Number(event.target.value) || 0) })
+        <Field label="Source category">
+          <FieldOptionSelect
+            items={categories.items}
+            value={definition.sourceCategoryId ? String(definition.sourceCategoryId) : undefined}
+            fallbackLabel={
+              definition.sourceCategoryId ? `Category ${definition.sourceCategoryId}` : undefined
             }
+            placeholder={categories.isPending ? "Loading categories…" : "Choose a category"}
+            disabled={disabled}
+            onChange={(option) => patch({ sourceCategoryId: Number(option.value) })}
           />
         </Field>
         <Field label="Relationship">
@@ -135,59 +206,40 @@ function DefinitionCard({
           />
         </Field>
 
-        <Field label="Source parameter (name)">
-          <Input
-            value={definition.sourceParameter.name ?? ""}
-            placeholder="e.g. Apparent Load"
-            disabled={disabled}
-            onChange={(event) =>
+        <Field label="Source parameter">
+          <FieldOptionSelect
+            items={sourceParameters.items}
+            value={
+              selectedSource?.value ??
+              parameterOptionValue(definition.sourceParameter, definition.sourceScope)
+            }
+            fallbackLabel={parameterLabel(definition.sourceParameter)}
+            placeholder={
+              sourceParameters.isPending ? "Loading parameters…" : "Choose a source parameter"
+            }
+            disabled={disabled || definition.sourceCategoryId === 0}
+            onChange={(option) =>
               patch({
-                sourceParameter: { ...definition.sourceParameter, name: event.target.value },
+                sourceParameter: parameterReferenceFromOption(option),
               })
             }
           />
         </Field>
-        <Field label="Source parameter (shared GUID)">
-          <Input
-            value={definition.sourceParameter.sharedGuid ?? ""}
-            placeholder="optional"
-            disabled={disabled}
-            onChange={(event) =>
-              patch({
-                sourceParameter: {
-                  ...definition.sourceParameter,
-                  sharedGuid: event.target.value || null,
-                },
-              })
+        <Field label="Target parameter">
+          <FieldOptionSelect
+            items={targetParameters.items}
+            value={
+              findParameterOption(targetParameters.items, definition.targetParameter)?.value ??
+              parameterOptionValue(definition.targetParameter, "instance")
             }
-          />
-        </Field>
-
-        <Field label="Target parameter (name)">
-          <Input
-            value={definition.targetParameter.name ?? ""}
-            placeholder="e.g. PE Circuit Load"
-            disabled={disabled}
-            onChange={(event) =>
-              patch({
-                targetParameter: { ...definition.targetParameter, name: event.target.value },
-              })
+            fallbackLabel={parameterLabel(definition.targetParameter)}
+            placeholder={
+              targetParameters.isPending
+                ? "Loading compatible parameters…"
+                : "Choose a target parameter"
             }
-          />
-        </Field>
-        <Field label="Target parameter (shared GUID)">
-          <Input
-            value={definition.targetParameter.sharedGuid ?? ""}
-            placeholder="optional"
-            disabled={disabled}
-            onChange={(event) =>
-              patch({
-                targetParameter: {
-                  ...definition.targetParameter,
-                  sharedGuid: event.target.value || null,
-                },
-              })
-            }
+            disabled={disabled || targetCategoryId === 0}
+            onChange={(option) => patch({ targetParameter: parameterReferenceFromOption(option) })}
           />
         </Field>
 
@@ -224,69 +276,51 @@ function DefinitionCard({
         </label>
         {definition.targetOverride ? (
           <>
-            <Field label="Override enabled parameter (name)">
-              <Input
-                value={definition.targetOverride.enabledParameter.name ?? ""}
+            <Field label="Override enabled parameter">
+              <FieldOptionSelect
+                items={readableTargetParameters.items.filter((item) =>
+                  item.metadata?.dataTypeId?.includes("yesno"),
+                )}
+                value={
+                  findParameterOption(
+                    readableTargetParameters.items,
+                    definition.targetOverride.enabledParameter,
+                  )?.value
+                }
+                fallbackLabel={parameterLabel(definition.targetOverride.enabledParameter)}
+                placeholder="Choose a Yes/No parameter"
                 disabled={disabled}
-                onChange={(event) =>
+                onChange={(option) =>
                   patch({
                     targetOverride: {
                       ...definition.targetOverride!,
-                      enabledParameter: {
-                        ...definition.targetOverride!.enabledParameter,
-                        name: event.target.value,
-                      },
+                      enabledParameter: parameterReferenceFromOption(option),
                     },
                   })
                 }
               />
             </Field>
-            <Field label="Override enabled parameter (shared GUID)">
-              <Input
-                value={definition.targetOverride.enabledParameter.sharedGuid ?? ""}
-                disabled={disabled}
-                onChange={(event) =>
-                  patch({
-                    targetOverride: {
-                      ...definition.targetOverride!,
-                      enabledParameter: {
-                        ...definition.targetOverride!.enabledParameter,
-                        sharedGuid: event.target.value || null,
-                      },
-                    },
-                  })
+            <Field label="Override value parameter">
+              <FieldOptionSelect
+                items={readableTargetParameters.items.filter(
+                  (item) =>
+                    !selectedSource?.metadata?.dataTypeId ||
+                    item.metadata?.dataTypeId === selectedSource.metadata.dataTypeId,
+                )}
+                value={
+                  findParameterOption(
+                    readableTargetParameters.items,
+                    definition.targetOverride.valueParameter,
+                  )?.value
                 }
-              />
-            </Field>
-            <Field label="Override value parameter (name)">
-              <Input
-                value={definition.targetOverride.valueParameter.name ?? ""}
+                fallbackLabel={parameterLabel(definition.targetOverride.valueParameter)}
+                placeholder="Choose an override value parameter"
                 disabled={disabled}
-                onChange={(event) =>
+                onChange={(option) =>
                   patch({
                     targetOverride: {
                       ...definition.targetOverride!,
-                      valueParameter: {
-                        ...definition.targetOverride!.valueParameter,
-                        name: event.target.value,
-                      },
-                    },
-                  })
-                }
-              />
-            </Field>
-            <Field label="Override value parameter (shared GUID)">
-              <Input
-                value={definition.targetOverride.valueParameter.sharedGuid ?? ""}
-                disabled={disabled}
-                onChange={(event) =>
-                  patch({
-                    targetOverride: {
-                      ...definition.targetOverride!,
-                      valueParameter: {
-                        ...definition.targetOverride!.valueParameter,
-                        sharedGuid: event.target.value || null,
-                      },
+                      valueParameter: parameterReferenceFromOption(option),
                     },
                   })
                 }
@@ -348,19 +382,13 @@ function DefinitionCard({
                     <Trash2 />
                   </Button>
                 </div>
-                <Field label="Source element unique-ids (one per line)">
-                  <Textarea
-                    rows={2}
-                    className="min-h-12 font-mono text-[11px]"
-                    value={joinUniqueIds(assignment.sourceElementUniqueIds)}
-                    placeholder="paste UniqueIds…"
+                <Field label="Source elements">
+                  <FieldOptionMultiSelect
+                    items={elements.items}
+                    values={assignment.sourceElementUniqueIds}
                     disabled={disabled}
-                    onChange={(event) =>
-                      onChange(
-                        updateAssignment(profile, assignment.id, {
-                          sourceElementUniqueIds: parseUniqueIds(event.target.value),
-                        }),
-                      )
+                    onChange={(sourceElementUniqueIds) =>
+                      onChange(updateAssignment(profile, assignment.id, { sourceElementUniqueIds }))
                     }
                   />
                 </Field>
@@ -371,6 +399,29 @@ function DefinitionCard({
       </div>
     </div>
   );
+}
+
+function findParameterOption(items: FieldOption[], reference: ParameterReference) {
+  return items.find(
+    (item) =>
+      (reference.identity?.key && item.metadata?.key === reference.identity.key) ||
+      (reference.sharedGuid && item.metadata?.sharedGuid === reference.sharedGuid) ||
+      (reference.name && item.metadata?.name.toLowerCase() === reference.name.toLowerCase()),
+  );
+}
+
+function parameterOptionValue(reference: ParameterReference, scope: string) {
+  if (reference.identity?.key)
+    return `${reference.identity.key}|${scope === "type" ? "type" : "instance"}`;
+  return reference.sharedGuid
+    ? `shared:${reference.sharedGuid}|${scope}`
+    : reference.name
+      ? `name:${reference.name}|${scope}`
+      : undefined;
+}
+
+function parameterLabel(reference: ParameterReference) {
+  return reference.identity?.name ?? reference.name ?? reference.sharedGuid ?? undefined;
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
