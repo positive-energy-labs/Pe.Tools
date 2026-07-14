@@ -1,5 +1,6 @@
 using Pe.Revit.Loader;
 using Pe.Shared.Product;
+using Serilog;
 using System;
 using System.IO;
 
@@ -18,16 +19,27 @@ namespace Pe.App.Host;
 internal static class PeRuntimeContext {
     private static InstalledProduct? _deployment;
     private static string? _sourceRoot;
-    // Safe default before Startup captures a context (e.g. a command handler racing initialization).
+    // Pre-capture placeholder. Reading Lane before Startup captured a context is a lifecycle bug —
+    // the answer would be a guess — so the getter logs loudly rather than handing back a silent
+    // default (IPC-SEAM-SPEC D7).
     private static ProductRuntimeLane _lane = ProductRuntimeLane.Installed;
+    private static bool _captured;
 
     public static void Capture(PePayloadContext context) {
         _deployment = context.Deployment;
         _sourceRoot = context.SourceRoot;
         _lane = context.Deployment is null ? ProductRuntimeLane.Dev : ProductRuntimeLane.Installed;
+        _captured = true;
     }
 
-    public static ProductRuntimeLane Lane => _lane;
+    public static ProductRuntimeLane Lane {
+        get {
+            if (!_captured)
+                Log.Error(
+                    "PeRuntimeContext.Lane read before Capture(); returning the pre-capture Installed placeholder. This is a startup-ordering bug — the lane is not yet known and must not be trusted.");
+            return _lane;
+        }
+    }
 
     /// <summary>
     ///     The installed product this payload was loaded into, or null in the self-hosted dev lane.

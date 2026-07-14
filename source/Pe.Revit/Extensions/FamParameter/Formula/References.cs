@@ -33,18 +33,6 @@ public static class FormulaReferences {
     }
 
     /// <summary>
-    ///     Checks if this parameter's formula references another parameter.
-    /// </summary>
-    /// <returns>True if otherParam is referenced in this parameter's formula</returns>
-    public static bool ReferencesParam(this FamilyParameter thisParam, FamilyParameter otherParam) {
-        var formula = thisParam.Formula;
-        if (string.IsNullOrWhiteSpace(formula))
-            return false;
-
-        return otherParam.IsReferencedIn(formula);
-    }
-
-    /// <summary>
     ///     Gets all family parameters referenced in the given formula string.
     ///     Use this when validating a formula before setting it on a parameter.
     /// </summary>

@@ -13,8 +13,6 @@ public sealed class GlobalLogStorage(string directoryPath) {
 
     public ManagedLogFile Log() => this.CreateManagedLogFile("log.txt", DefaultMaxLines);
 
-    public ManagedLogFile HostLog() => this.CreateManagedLogFile("host.log.txt", ProcessLogMaxLines);
-
     public ManagedLogFile RevitAppLog() => this.CreateManagedLogFile("revit.log.txt", ProcessLogMaxLines);
 
     private ManagedLogFile CreateManagedLogFile(string fileName, int maxLines) =>

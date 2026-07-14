@@ -102,9 +102,6 @@ internal static class LoadedFamiliesCollectorSupport {
     public static string GetParameterKey(string name, bool isInstance) =>
         $"{name}|{isInstance}";
 
-    public static bool IsFamilyScoped(CollectedFamilyParameterRecord parameter) =>
-        parameter.Kind is CollectedParameterKind.FamilyParameter or CollectedParameterKind.SharedParameter;
-
     public static bool IsVisibleInMatrix(CollectedFamilyParameterRecord parameter) =>
         parameter.Scope != CollectedParameterScope.Unresolved;
 

@@ -188,13 +188,6 @@ internal static class ScheduleCollectorSupport {
         }
     }
 
-    public static View? GetViewTemplate(ViewSchedule schedule) {
-        var templateId = schedule.ViewTemplateId;
-        return templateId == ElementId.InvalidElementId
-            ? null
-            : schedule.Document.GetElement(templateId) as View;
-    }
-
     public static string BuildFieldKey(
         Document doc,
         ScheduleField field,
@@ -349,59 +342,6 @@ internal static class ScheduleCollectorSupport {
         }
 
         return new ComparableFieldValue(texts, rawDoubleValue);
-    }
-
-    public static HashSet<string> ReadFieldComparableTexts(
-        Document doc,
-        Element element,
-        ScheduleField field,
-        string fallbackName,
-        ForgeTypeId? specTypeId,
-        Units? effectiveUnits
-    ) => ReadFieldComparableValue(
-        doc,
-        element,
-        CollectParameterSourceElements(doc, element),
-        field,
-        fallbackName,
-        specTypeId,
-        effectiveUnits
-    ).TextValues;
-
-    public static double? ReadFieldComparableDoubleValue(
-        Document doc,
-        Element element,
-        ScheduleField field,
-        string fallbackName
-    ) => ReadFieldComparableValue(
-        doc,
-        element,
-        CollectParameterSourceElements(doc, element),
-        field,
-        fallbackName,
-        null,
-        null
-    ).RawDoubleValue;
-
-    public static string? ReadFieldDisplayValue(
-        Document doc,
-        Element element,
-        ScheduleField field,
-        string fallbackName
-    ) {
-        if (field == null)
-            throw new ArgumentNullException(nameof(field));
-
-        if (field.DisplayType != ScheduleFieldDisplayType.Standard)
-            return null;
-
-        if (field.IsCombinedParameterField)
-            return BuildCombinedFieldDisplayValue(doc, element, field, fallbackName);
-
-        if (!field.HasSchedulableField || field.IsCalculatedField)
-            return null;
-
-        return ReadParameterDisplayValue(doc, element, field.GetSchedulableField().ParameterId, fallbackName);
     }
 
     public static string? ReadParameterDisplayValue(

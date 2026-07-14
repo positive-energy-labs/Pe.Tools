@@ -42,6 +42,7 @@ import {
   resolvePeaSkillPaths,
   resolveWorkspaceKey,
 } from "@pe/mcps";
+import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { HostCallError } from "@pe/host-contracts/operation-types";
 import { ensureRunning } from "../../host/src/pe-service.ts";
 
@@ -282,10 +283,10 @@ async function ensureTsHostRunning(hostBaseUrl: string): Promise<string> {
   // currently owns the preferred port. The service primitive performs the authenticated takeover.
   const installed = await resolveInstalledHostLaunch();
   if (installed) {
-    const result = await ensureRunning(installed.appBase, "host", {
+    const result = await ensureRunning(installed.appBase, hostProcessIdentity.serviceName, {
       entryPath: installed.entryPath,
-      health: "/host/status",
-      shutdown: "/admin/shutdown",
+      health: hostProcessIdentity.healthPath,
+      shutdown: hostProcessIdentity.shutdownPath,
       expectedVersion: installed.version,
       lane: "installed",
     });

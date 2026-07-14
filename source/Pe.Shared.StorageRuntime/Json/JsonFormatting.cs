@@ -1,6 +1,4 @@
 using Newtonsoft.Json;
-using Newtonsoft.Json.Converters;
-using Newtonsoft.Json.Serialization;
 
 namespace Pe.Shared.StorageRuntime.Json;
 
@@ -13,13 +11,6 @@ public static class JsonFormatting {
     public static JsonSerializerSettings CreateIndentedSettings() => new() {
         Formatting = Formatting.Indented, NullValueHandling = NullValueHandling.Ignore
     };
-
-    public static JsonSerializerSettings CreateCamelCaseSettings() {
-        var settings = CreateDefaultSettings();
-        settings.ContractResolver = new CamelCasePropertyNamesContractResolver();
-        AddStringEnumConverter(settings);
-        return settings;
-    }
 
     public static JsonSerializer CreateSerializer(JsonSerializerSettings settings) {
         if (settings == null)
@@ -44,10 +35,6 @@ public static class JsonFormatting {
 
     public static string SerializeWithTrailingNewline(object value, JsonSerializerSettings settings) =>
         NormalizeTrailingNewline(Serialize(value, settings));
-
-    private static JsonSerializerSettings CreateDefaultSettings() => new() {
-        NullValueHandling = NullValueHandling.Ignore
-    };
 
     private static JsonSerializerSettings CloneSettings(JsonSerializerSettings settings) => new() {
         Binder = settings.Binder,
@@ -79,11 +66,4 @@ public static class JsonFormatting {
         TypeNameAssemblyFormatHandling = settings.TypeNameAssemblyFormatHandling,
         TypeNameHandling = settings.TypeNameHandling
     };
-
-    private static void AddStringEnumConverter(JsonSerializerSettings settings) {
-        if (settings.Converters.OfType<StringEnumConverter>().Any())
-            return;
-
-        settings.Converters.Add(new StringEnumConverter());
-    }
 }

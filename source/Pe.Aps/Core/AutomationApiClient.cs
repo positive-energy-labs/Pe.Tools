@@ -319,9 +319,6 @@ public sealed class AutomationApiClient(HttpClient httpClient, string automation
         return exception;
     }
 
-    public static HttpStatusCode? GetStatusCode(HttpRequestException exception) =>
-        exception.Data[StatusCodeDataKey] is HttpStatusCode statusCode ? statusCode : null;
-
     private sealed class ListResponse {
         [JsonProperty("data")] public List<string>? Data { get; init; }
     }

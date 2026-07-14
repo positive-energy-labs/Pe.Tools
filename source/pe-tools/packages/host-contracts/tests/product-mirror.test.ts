@@ -91,3 +91,19 @@ test("contracts/product.ts mirrors Pe.Shared.Product string constants", () => {
     }
   }
 });
+
+// Third mirror leg: the product manifest is the deployment authority for the host service, so its
+// host payload's name/health/shutdown must equal the same contract constants. After this, every
+// host identity string is SDK-owned, mirror-tested, or generated.
+const manifestUrl = new URL("../../../../../product.payloads.json", import.meta.url);
+
+test("product.payloads.json host payload mirrors the host service contract", () => {
+  const manifest = JSON.parse(readFileSync(fileURLToPath(manifestUrl), "utf8")) as {
+    payloads: { type: string; name: string; service?: { health?: string; shutdown?: string } }[];
+  };
+  const host = manifest.payloads.find((p) => p.type === "VersionedApp" && p.name === "host");
+  expect(host, "no VersionedApp host payload in product.payloads.json").toBeTruthy();
+  expect(host!.name).toBe(hostProcessIdentity.serviceName);
+  expect(host!.service?.health).toBe(hostProcessIdentity.healthPath);
+  expect(host!.service?.shutdown).toBe(hostProcessIdentity.shutdownPath);
+});

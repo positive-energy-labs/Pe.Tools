@@ -102,27 +102,6 @@ public static class Formula {
         }
     }
 
-    public static bool TrySetFormula(this FamilyDocument famDoc,
-        FamilyParameter targetParam,
-        FamilyParameter sourceParam,
-        out string? errorMessage) {
-        if (string.IsNullOrWhiteSpace(sourceParam.Formula)) {
-            errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. " +
-                           $"Source parameter '{sourceParam.Name()}' has no formula.";
-            return false;
-        }
-
-        var srcDataType = sourceParam.Definition.GetDataType();
-        var tgtDataType = targetParam.Definition.GetDataType();
-        if (srcDataType != tgtDataType) {
-            errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. " +
-                           $"Source parameter '{sourceParam.Name()}' has datatype '{srcDataType}' but target parameter '{targetParam.Name()}' has datatype '{tgtDataType}'.";
-            return false;
-        }
-
-        return famDoc.TrySetFormula(targetParam, sourceParam.Formula, out errorMessage);
-    }
-
     public static bool TrySetFormulaFast(
         this FamilyDocument famDoc,
         FamilyParameter targetParam,

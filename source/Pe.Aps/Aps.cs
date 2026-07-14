@@ -43,7 +43,6 @@ public sealed class Aps(IApsCredentialProvider authTokenProvider) {
 
     public ApsCloudModelCatalog CloudModels() => new(this.DataManagement());
 
-    public string GetToken() => this._auth.GetToken();
     public string GetToken(ApsTokenRequest request) => this._auth.GetToken(request);
     public ApsTokenResult GetTokenResult(ApsTokenRequest request) => this._auth.GetTokenResult(request);
     public ApsPersistedTokenStatus GetPersistedTokenStatus(ApsTokenRequest request) =>

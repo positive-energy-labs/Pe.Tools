@@ -2,25 +2,34 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Context, Deferred, Effect, Layer } from "effect";
 import { HttpRouter, HttpServer, HttpServerResponse as Response } from "effect/unstable/http";
+import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { hostOwnership, productRoot } from "./host-ownership.ts";
-import { createServiceFile, deleteServiceFile, writeServiceFile } from "./pe-service.ts";
+import {
+  authorizeShutdownFor,
+  claimServiceHost,
+  hostReplacementPolicy,
+  type ServiceHostDescriptor,
+  type ServiceHostHandle,
+} from "./pe-service-host.ts";
 
-const SERVICE_NAME = "host";
-const SERVICE_TOKEN_HEADER = "x-pe-service-token";
+// The dev script (`pnpm dev`) passes this to authorize a dev-over-dev takeover; it becomes
+// `hostReplacementPolicy` DATA (SDK-owned), not local probe logic (IPC-SEAM-SPEC D3).
+const DEV_TAKEOVER_ARGUMENT = "--take-over-host";
 
 /**
  * Lifecycle handles shared between the launch root and the request handlers (Pillar 3):
  * - `latch`: raced against `Layer.launch`; tripping it closes the launch scope so every finalizer
- *   runs (graceful server close -> Mastra release -> service-file delete -> identity delete),
- *   replacing the old `process.exit(0)` that skipped them.
- * - `serviceToken`: minted once at boot, written into the service file, and required to authorize
- *   the shutdown endpoint (A10 convention).
+ *   runs (graceful server close -> Mastra release -> service-file release), replacing the old
+ *   `process.exit(0)` that skipped them.
+ * - `handle`: resolved once the SDK claim (`claimServiceHost`) installs this host's identity on bind.
+ *   The shutdown route awaits it to authorize with the claim's per-launch token; the claim owns the
+ *   service-file lifecycle (write on claim, delete on release) — no locally minted token or writer.
  */
 export class HostLifecycle extends Context.Service<
   HostLifecycle,
   {
     readonly latch: Deferred.Deferred<void>;
-    readonly serviceToken: string;
+    readonly handle: Deferred.Deferred<ServiceHostHandle>;
   }
 >()("pe/HostLifecycle") {}
 
@@ -45,51 +54,71 @@ export function resolveHostVersion(): string {
 }
 
 /**
- * Writes `state/service/host.json` with the ACTUAL bound port on start and deletes it on graceful
- * shutdown (A10 discovery: the port a service actually bound is authoritative). Depends on
- * `HttpServer` so it runs after bind, and on `HostLifecycle` for the boot-minted token.
+ * Build the SDK claim descriptor for this host after it has bound `port`. `executablePath` is this
+ * process's own image (the D2 identity signal the installed-lane C# supervisor matches on:
+ * `process.execPath` of the SEA host equals the resolved installed entry). `sourceRoot` is recorded
+ * on the dev lane only, so the C# dev-lane reuse rule can match a healthy dev host by its checkout
+ * rather than by its (node) executable. Replacement policy is DATA (SDK-owned `hostReplacementPolicy`):
+ * a dev host evicts an installed host automatically, another dev host only with `--take-over-host`.
+ */
+function buildHostDescriptor(port: number): ServiceHostDescriptor {
+  return {
+    name: hostProcessIdentity.serviceName,
+    lane: hostOwnership.lane,
+    version: resolveHostVersion(),
+    port,
+    executablePath: hostOwnership.executablePath,
+    sourceRoot: hostOwnership.lane === "dev" ? (hostOwnership.sourceRoot ?? undefined) : undefined,
+    shutdown: hostProcessIdentity.shutdownPath,
+    policy: hostReplacementPolicy(hostOwnership.lane, process.argv.includes(DEV_TAKEOVER_ARGUMENT)),
+  };
+}
+
+/**
+ * Claims sole ownership of `state/service/host.json` on start via the SDK `claimServiceHost`
+ * primitive (D3): it writes the identity file with the ACTUAL bound port, evicts a policy-permitted
+ * incumbent end-to-end (SDK-owned — no local probe/takeover), and its handle deletes the file on
+ * graceful shutdown. Depends on `HttpServer` so it runs after bind (the bound port is authoritative,
+ * A10 discovery is file-based), and on `HostLifecycle` to publish the claim handle for the shutdown
+ * route. A refused claim is fatal — this host cannot own the service.
  */
 export const ServiceFileLive = Layer.effectDiscard(
   Effect.gen(function* () {
     const server = yield* HttpServer.HttpServer;
-    const { serviceToken } = yield* HostLifecycle;
+    const { handle: handleDeferred } = yield* HostLifecycle;
     const address = server.address;
     const port = address._tag === "TcpAddress" ? address.port : 0;
-    const file = createServiceFile(port, resolveHostVersion(), hostOwnership.lane, serviceToken);
     const appBase = productRoot();
-    yield* Effect.acquireRelease(
-      Effect.promise(() => writeServiceFile(appBase, SERVICE_NAME, file)),
-      () => Effect.promise(() => deleteServiceFile(appBase, SERVICE_NAME, file.instanceId)),
+    const handle = yield* Effect.acquireRelease(
+      Effect.promise(() => claimServiceHost(appBase, buildHostDescriptor(port))).pipe(
+        Effect.flatMap((result) =>
+          result.claimed
+            ? Effect.succeed(result.handle)
+            : Effect.dieMessage(`host service claim refused: ${result.reason}`),
+        ),
+      ),
+      (handle) => Effect.promise(() => handle.release()),
     );
+    yield* Deferred.succeed(handleDeferred, handle);
   }),
 );
 
 /**
- * Graceful self-shutdown uses the SDK service-file token (`x-pe-service-token` header or a JSON
- * body `{ token }`). Respond 200 FIRST, then trip the latch on a detached fiber so the response
- * flushes before the launch scope tears the server down.
+ * Graceful self-shutdown authorized by the SDK claim's per-launch token (`x-pe-service-token` header
+ * or a JSON body `{ token }`), validated through `authorizeShutdownFor`. Respond 200 FIRST, then trip
+ * the latch on a detached fiber so the response flushes before the launch scope tears the server down.
+ * No dev-lane header guard: the installed-lane C# supervisor no longer evicts a healthy dev host (D4),
+ * so the token alone is the authority.
  */
-export const adminShutdownRoute = HttpRouter.add("POST", "/admin/shutdown", (request) =>
+export const adminShutdownRoute = HttpRouter.add("POST", hostProcessIdentity.shutdownPath, (request) =>
   Effect.gen(function* () {
-    const { latch, serviceToken } = yield* HostLifecycle;
+    const { latch, handle: handleDeferred } = yield* HostLifecycle;
+    const handle = yield* Deferred.await(handleDeferred);
 
-    // An installed Revit client may race to reassert its installed host while source dev is
-    // taking over 5180. Never let that automatic service request evict an intentional dev host.
-    // Dev is stopped by its owning terminal; the explicit header is only for controlled tooling.
-    if (hostOwnership.lane === "dev" && request.headers["x-pe-host-dev-shutdown"] !== "true")
-      return yield* Response.json({ error: "Dev host is terminal-owned." }, { status: 409 });
-
-    const serviceHeader = request.headers[SERVICE_TOKEN_HEADER];
-    let authorized = typeof serviceHeader === "string" && serviceHeader === serviceToken;
-
-    if (!authorized) {
-      // Fall back to the JSON body `{ token }` the SDK client also sends.
-      const body = yield* Effect.orElseSucceed(request.json, () => null);
-      const bodyToken = (body as { token?: unknown } | null)?.token;
-      authorized = typeof bodyToken === "string" && bodyToken === serviceToken;
-    }
-
-    if (!authorized) return yield* Response.json({ error: "Forbidden" }, { status: 403 });
+    // Token auth via the SDK-owned validator: X-Pe-Service-Token header or JSON body { token }.
+    const body = yield* Effect.orElseSucceed(request.json, () => null);
+    if (!authorizeShutdownFor(handle)(request.headers, body))
+      return yield* Response.json({ error: "Forbidden" }, { status: 403 });
 
     yield* Effect.forkDetach(Deferred.succeed(latch, undefined));
     return yield* Response.json({ shuttingDown: true, lane: hostOwnership.lane });

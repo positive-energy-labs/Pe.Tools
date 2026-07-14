@@ -25,8 +25,5 @@ public sealed class ApsAuthService(IApsCredentialProvider credentialProvider) {
         aps.ClearPersistedTokens();
     }
 
-    public ApsTokenResult AcquireAccessToken(ApsTokenRequest request) =>
-        this.CreateAps().GetTokenResult(request);
-
     private global::Pe.Aps.Aps CreateAps() => new(this._credentialProvider);
 }
