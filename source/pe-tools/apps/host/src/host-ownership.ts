@@ -57,23 +57,21 @@ function resolveHostOwnership(): HostOwnership {
 }
 
 function resolveHostLane(): HostLane {
-  const configured = process.env.PE_TOOLS_HOST_LANE?.trim().toLowerCase();
-  if (configured === "dev" || configured === "installed") return configured;
+  // PE_LANE is the SDK's authoritative lane signal — InstalledService sets it on every installed
+  // spawn, so the installed lane is asserted rather than inferred. PE_TOOLS_HOST_LANE is the
+  // product launcher's dev-path signal; the path heuristic is a last resort for bare hosts.
+  for (const candidate of [process.env.PE_LANE, process.env.PE_TOOLS_HOST_LANE]) {
+    const lane = candidate?.trim().toLowerCase();
+    if (lane === "dev" || lane === "installed") return lane;
+  }
   return isSourceHost() ? "dev" : "installed";
 }
 
 function isSourceHost(): boolean {
+  const marker = `${normalize("apps/host/src").toLowerCase()}\\`;
   const modulePath = currentModulePath();
-  if (
-    modulePath &&
-    normalize(modulePath)
-      .toLowerCase()
-      .includes(`${normalize("apps/host/src").toLowerCase()}\\`)
-  )
-    return true;
-  return process.argv.some((arg) =>
-    normalize(arg).toLowerCase().includes(normalize("apps/host/src").toLowerCase()),
-  );
+  if (modulePath && normalize(modulePath).toLowerCase().includes(marker)) return true;
+  return process.argv.some((arg) => normalize(arg).toLowerCase().includes(marker));
 }
 
 function resolveSourceRoot(): string | null {

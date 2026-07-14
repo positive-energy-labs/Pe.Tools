@@ -13,7 +13,7 @@ import {
   tsOnlyOperationCatalog,
 } from "@pe/host-contracts/operation-types";
 import { callRoute } from "./call-route.ts";
-import { installRoot, peRevitLauncher, validatePeRevitEnvelope } from "./pe-revit-cli.ts";
+import { installRoot, peRevitLauncher, validatePeRevitEnvelope } from "./pe-revit-launch.ts";
 import { sandboxesRoute } from "./sandbox-route.ts";
 import { adminShutdownRoute, HostLifecycle, ServiceFileLive } from "./host-lifecycle.ts";
 import { MastraMountLive, MastraRuntime } from "./mastra-runtime.ts";

@@ -74,10 +74,9 @@ internal static class TsHostLauncher {
             );
         }
 
-        // Publish the actual bound port so every downstream host-URL consumer (bridge, /call, schemas)
-        // resolves to it instead of the 5180 default.
+        // Downstream host-URL consumers (bridge, /call, schemas) resolve the bound port from the
+        // service file via HostProcessIdentity.ResolveHostBaseUrl — no env-var republication.
         var baseUrl = $"http://127.0.0.1:{result.File.Port}";
-        Environment.SetEnvironmentVariable(HostProcessIdentity.HostBaseUrlVariable, baseUrl);
 
         var alreadyRunning = result.State == ServiceRunState.Running;
         return new TsHostLaunchResult(
