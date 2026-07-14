@@ -11,6 +11,9 @@ import { RouteChatPluginDock } from "./route-chat-plugins";
 import { useCacheView, WorldLane } from "./world";
 import { useToolIo } from "./tool-io";
 import { SidePane } from "#/components/ui/side-pane";
+import { TargetWorld, useChatTarget } from "#/components/chat-target";
+import { chipDescriptor, laneVar, toneColor } from "#/host/target-ui";
+import type { WorldEvent } from "#/host/use-target";
 import { imageSource } from "./adapter";
 import {
   lensScrollIntent,
@@ -100,6 +103,10 @@ export function Lens({
     0,
   );
   const cache = useCacheView(breakdown, userTurns);
+  // Target state — the world the thread acts against. Feeds the mapdial's world rail/ticks and
+  // the world-mode target section; one hook, so all three stay one resolution.
+  const chatTarget = useChatTarget();
+  const targetTone = chipDescriptor(chatTarget.resolution).tone;
 
   const frameRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -474,6 +481,23 @@ export function Lens({
             list stays visible on a fresh session and the --vp ResizeObserver always fires. */}
         <div className="lens-grid">
           <div className="mapdial" onPointerDown={onPointerDown} aria-label="Timeline">
+            {/* world rail — the thread lane's ambient answer to "against what world": the full
+                height of the dial carries the current target tone (blue pinned, kiln ambiguous,
+                clay dangling), so drift is visible without opening anything. */}
+            <div
+              aria-hidden="true"
+              title={`target: ${chipDescriptor(chatTarget.resolution).text}`}
+              style={{
+                position: "absolute",
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: 2,
+                background: toneColor(targetTone),
+                opacity: targetTone === "muted" ? 0.25 : 0.55,
+                zIndex: 1,
+              }}
+            />
             <div className="mapdial-strip" ref={stripRef}>
               {moments.map((moment, index) => (
                 <div
@@ -490,6 +514,28 @@ export function Lens({
                   <span className="num" title={formatTime(moment.createdAt)}>
                     #{moment.turn}
                   </span>
+                  {/* world ticks — bridge events (doc change, session connect/gone) that landed
+                      between this turn and the previous one, aligned to conversation time. */}
+                  {ticksForMoment(chatTarget.worldLog, moments, index).map((event, k) => (
+                    <span
+                      key={`${event.atMs}-${k}`}
+                      title={event.label}
+                      style={{
+                        position: "absolute",
+                        left: -32,
+                        top: -1 + k * 3,
+                        width: 6,
+                        height: 2,
+                        background:
+                          event.kind === "session-gone"
+                            ? "var(--cat-clay)"
+                            : laneVar(
+                                chatTarget.sessions.find((s) => s.sessionId === event.sessionId)
+                                  ?.lane ?? "installed",
+                              ),
+                      }}
+                    />
+                  ))}
                 </div>
               ))}
             </div>
@@ -561,7 +607,10 @@ export function Lens({
                 })()}
               </div>
             ) : mode === "world" ? (
-              <WorldLane breakdown={breakdown} cache={cache} sendNumber={userTurns} />
+              <>
+                <TargetWorld />
+                <WorldLane breakdown={breakdown} cache={cache} sendNumber={userTurns} />
+              </>
             ) : (
               threadList
             )}
@@ -833,6 +882,26 @@ function isTimelineMemoryEntry(entry: WorkbenchObservationMemoryEntry): boolean 
 /* Band numbers show the SEMANTIC exchange turn (Moment.turn — increments per user send), not the
    message index: it's the same coordinate as the URL's ?turn= and the transcript's turn tags, and
    it stays stable while an assistant reply streams as several messages. */
+
+/**
+ * World events that belong to a mapdial band: those observed after the previous moment and up
+ * to this one (events past the last moment attach to the last band). Linear scan — the log is
+ * capped at 100 and moments render anyway.
+ */
+function ticksForMoment(log: WorldEvent[], moments: Moment[], index: number): WorldEvent[] {
+  if (log.length === 0) return [];
+  const at = (i: number) => moments[i]?.createdAt?.getTime();
+  const lower = index > 0 ? at(index - 1) : undefined;
+  const upper = at(index);
+  const isLast = index === moments.length - 1;
+  return log
+    .filter((event) => {
+      if (lower !== undefined && event.atMs <= lower) return false;
+      if (upper !== undefined && event.atMs > upper) return isLast; // tail events ride the last band
+      return upper !== undefined || isLast;
+    })
+    .slice(0, 4); // a band is ~turn-height; more than 4 ticks would smear
+}
 
 function formatTime(date?: Date): string | undefined {
   if (!date || Number.isNaN(date.getTime())) return undefined;

@@ -2,31 +2,35 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 
 import { ThemeToggle } from "#/components/ThemeToggle";
+import { TargetChip } from "#/components/target-chip";
 import {
   resolveTarget,
-  selectorLabel,
-  sessionLabel,
   type SessionFacts,
-  type SessionLane,
   type TargetResolution,
   type TargetSelector,
 } from "#/host/target";
+import {
+  ageLabel,
+  chipDescriptor,
+  LaneBadge,
+  laneVar,
+  LiveDot,
+  resolutionReadout,
+  toneColor,
+  TONE_STYLE,
+} from "#/host/target-ui";
 
-export const Route = createFileRoute("/poc/target")({ component: PocTarget });
+export const Route = createFileRoute("/docs/target")({ component: DocsTarget });
 
 /* ------------------------------------------------------------------------------------------------
- * POC: session/document targeting — one underlying state, competing reflections.
+ * docs/target — session & document targeting: the model, its states, and where each surface
+ * reflects it. Doubles as the design exercise it grew from: a scripted world timeline drives one
+ * resolveTarget() and every exhibit below is a reflection of that single resolution. The composer
+ * chip exhibit renders the REAL product component (components/target-chip.tsx) against the
+ * scripted world; the patch bay and worldline are explanatory instruments.
  *
- * A scripted world timeline (Revit processes appearing, documents changing, pins dangling and
- * re-resolving) is scrubbed like poc.dial. Every panel below derives from the SAME
- * resolveTarget() output — the judgement is which reflection earns its keep:
- *   (a) composer TargetChip + picker  — the minimal instrument
- *   (b) patch bay                     — consumers wired to sessions; relationships as edges
- *   (c) worldline                     — session incarnations over time; the pin as a track
- *   (d) state inspector               — the raw resolution, proving it's one state
- *
- * Clicking a session in ANY panel pins it (a local override on top of the script) and every
- * other panel follows. Self-contained; mock data only.
+ * Self-contained data; the model and visual vocabulary are imported from #/host/target(-ui) —
+ * the same modules the product uses — so this page cannot drift from the shipped behavior.
  * ---------------------------------------------------------------------------------------------- */
 
 // ── the scripted world ──────────────────────────────────────────────────────────────────────────
@@ -36,13 +40,11 @@ interface WorldStep {
   title: string;
   caption: string;
   sessions: SessionFacts[];
-  /** the chat's pinned selector at this point in the script ("" = no pin) */
   chat: TargetSelector;
-  /** the /ops route's selector, to show a second consumer */
   ops: TargetSelector;
 }
 
-const T0 = 1_760_000_000_000; // fixed mock epoch — ages are scripted, not computed
+const T0 = 1_760_000_000_000; // fixed epoch — ages are scripted, not computed
 
 const userA = (doc?: string, obsAgoS = 4): SessionFacts => ({
   sessionId: "a41f0c",
@@ -62,7 +64,7 @@ const sandboxB: SessionFacts = {
   openDocumentCount: 1,
   observedAtUnixMs: T0 - 2000,
 };
-// same "user" after a restart: NEW identity (pid + start time), same selector
+// the same "user" after a restart: new identity (pid + start time), same selector
 const userA2: SessionFacts = {
   sessionId: "c5d817",
   processId: 5330,
@@ -84,7 +86,7 @@ const STEPS: WorldStep[] = [
   {
     key: "revit-opens",
     title: "revit opens",
-    caption: "One session, no pin → IMPLICIT resolution (dashed). The UI inferred it; it says so.",
+    caption: "One session, no pin → implicit resolution (dashed). The UI inferred it, and says so.",
     sessions: [userA()],
     chat: "",
     ops: "",
@@ -92,7 +94,8 @@ const STEPS: WorldStep[] = [
   {
     key: "doc-opens",
     title: "doc opens",
-    caption: "Tower-A.rvt becomes the active document. Document is session state, not a second axis.",
+    caption:
+      "Tower-A.rvt becomes the active document. Document is session state, not a second axis.",
     sessions: [userA("Tower-A.rvt")],
     chat: "",
     ops: "",
@@ -100,7 +103,7 @@ const STEPS: WorldStep[] = [
   {
     key: "sandbox",
     title: "sandbox spawns",
-    caption: "Two sessions, no pin → AMBIGUOUS. The UI refuses to guess, exactly like the host 409.",
+    caption: "Two sessions, no pin → ambiguous. The UI refuses to guess, as the host 409 does.",
     sessions: [userA("Tower-A.rvt"), sandboxB],
     chat: "",
     ops: "",
@@ -116,7 +119,7 @@ const STEPS: WorldStep[] = [
   {
     key: "doc-switch",
     title: "doc switches",
-    caption: "Active document changes under a stable pin — the world moved, the wire didn't.",
+    caption: "The active document changes under a stable pin — the world moved, the wire didn't.",
     sessions: [userA("Annex-B.rvt", 1), sandboxB],
     chat: "user",
     ops: "sandbox:fam-lab",
@@ -124,7 +127,7 @@ const STEPS: WorldStep[] = [
   {
     key: "revit-quits",
     title: "revit quits",
-    caption: "The pinned process dies. The pin DANGLES (no-match) instead of silently retargeting.",
+    caption: "The pinned process dies. The pin dangles (no-match) instead of silently retargeting.",
     sessions: [sandboxB],
     chat: "user",
     ops: "sandbox:fam-lab",
@@ -133,137 +136,47 @@ const STEPS: WorldStep[] = [
     key: "revit-returns",
     title: "revit returns",
     caption:
-      "New pid, new session id — same selector. `user` re-resolves by itself: why pins store selectors, never ids.",
+      "New pid, new session id — same selector. `user` re-resolves on its own: pins store selectors, never ids.",
     sessions: [userA2, sandboxB],
     chat: "user",
     ops: "sandbox:fam-lab",
   },
 ];
 
-// ── shared vocabulary ───────────────────────────────────────────────────────────────────────────
+// ── reference tables ────────────────────────────────────────────────────────────────────────────
 
-const LANE_CAT: Record<SessionLane, string> = {
-  installed: "slate",
-  rrd: "green",
-  sandbox: "lichen",
-};
+const SELECTOR_ROWS: [string, string][] = [
+  ["(empty)", "implicit — the sole session, or refuse when there are several"],
+  ["user", "the user's Revit (lane rrd or installed)"],
+  ["rrd", "the rrd lane specifically"],
+  ["sandbox:<id>", "a sandbox by logical id"],
+  ["<digits>", "a process id"],
+  ["anything else", "a raw session id (dies with the process — UIs never store these)"],
+];
 
-function laneVar(lane: SessionLane): string {
-  return `var(--cat-${LANE_CAT[lane]})`;
-}
+const STATE_ROWS: { tone: keyof typeof TONE_STYLE; name: string; means: string }[] = [
+  { tone: "implicit", name: "resolved / implicit", means: "sole session, inferred — drawn dashed" },
+  { tone: "pinned", name: "resolved / pinned", means: "explicit selector matched one session" },
+  { tone: "ambiguous", name: "ambiguous", means: "several candidates; untargeted calls 409" },
+  { tone: "dangling", name: "unresolved / no-match", means: "pin kept; its process is gone" },
+  { tone: "muted", name: "unresolved / no-sessions", means: "empty world" },
+];
 
-type ChipTone = "muted" | "implicit" | "pinned" | "ambiguous" | "dangling";
+// ── (exhibit) faux composer hosting the real chip ───────────────────────────────────────────────
 
-function chipDescriptor(r: TargetResolution): { tone: ChipTone; text: string; detail: string } {
-  switch (r.kind) {
-    case "resolved": {
-      const doc = r.session.activeDocumentTitle ?? `Revit ${r.session.processId}`;
-      return r.mode === "implicit"
-        ? { tone: "implicit", text: `auto · ${doc}`, detail: "sole session — inferred, not chosen" }
-        : { tone: "pinned", text: `${selectorLabel(r.selector)} · ${doc}`, detail: "pinned by you" }; // ponytail: selector, not session id
-    }
-    case "ambiguous":
-      return {
-        tone: "ambiguous",
-        text: `${r.candidates.length} sessions — pick`,
-        detail: "no pin and more than one session; calls would 409",
-      };
-    case "unresolved":
-      return r.reason === "no-sessions"
-        ? { tone: "muted", text: "no revit", detail: "no sessions connected" }
-        : {
-            tone: "dangling",
-            text: `${selectorLabel(r.selector)} · offline`,
-            detail: "pin kept; its process is gone",
-          };
-  }
-}
-
-const TONE_STYLE: Record<ChipTone, React.CSSProperties> = {
-  muted: { border: "1px dashed var(--line)", color: "var(--muted-foreground)" },
-  implicit: { border: "1px dashed var(--line-2)", color: "var(--foreground)" },
-  pinned: { border: "1px solid var(--pe-blue)", color: "var(--foreground)" },
-  ambiguous: {
-    border: "1px solid color-mix(in srgb, var(--cat-kiln) 60%, transparent)",
-    background: "color-mix(in srgb, var(--cat-kiln) 12%, transparent)",
-    color: "var(--cat-kiln)",
-  },
-  dangling: {
-    border: "1px solid color-mix(in srgb, var(--cat-clay) 50%, transparent)",
-    background: "color-mix(in srgb, var(--cat-clay) 10%, transparent)",
-    color: "var(--cat-clay)",
-  },
-};
-
-function LiveDot({ tone, lane }: { tone: ChipTone; lane?: SessionLane }) {
-  const color =
-    tone === "pinned"
-      ? "var(--pe-blue)"
-      : tone === "implicit"
-        ? (lane ? laneVar(lane) : "var(--muted-foreground)")
-        : tone === "ambiguous"
-          ? "var(--cat-kiln)"
-          : tone === "dangling"
-            ? "var(--cat-clay)"
-            : "var(--line-2)";
-  return (
-    <span
-      className="inline-block shrink-0"
-      style={{ width: 6, height: 6, borderRadius: 1, background: color }}
-    />
-  );
-}
-
-function LaneBadge({ lane }: { lane: SessionLane }) {
-  return (
-    <span
-      className="font-[var(--font-pe-mono)]"
-      style={{
-        fontSize: 9,
-        letterSpacing: "0.06em",
-        padding: "0 4px",
-        borderRadius: 2,
-        color: laneVar(lane),
-        background: `color-mix(in srgb, ${laneVar(lane)} 12%, transparent)`,
-        border: `1px solid color-mix(in srgb, ${laneVar(lane)} 25%, transparent)`,
-      }}
-    >
-      {lane.toUpperCase()}
-    </span>
-  );
-}
-
-function obsAge(s: SessionFacts): string {
-  if (!s.observedAtUnixMs) return "—";
-  return `obs ${Math.round((T0 - s.observedAtUnixMs) / 1000)}s ago`;
-}
-
-// ── (a) composer chip + picker ──────────────────────────────────────────────────────────────────
-
-function ComposerStrip({
-  resolution,
+function ComposerExhibit({
+  selector,
   sessions,
   onPin,
-  pinned,
 }: {
-  resolution: TargetResolution;
+  selector: TargetSelector;
   sessions: SessionFacts[];
   onPin: (selector: TargetSelector) => void;
-  pinned: TargetSelector;
 }) {
-  const [open, setOpen] = useState(true);
-  const chip = chipDescriptor(resolution);
-  const resolvedId = resolution.kind === "resolved" ? resolution.session.sessionId : undefined;
-
   return (
     <div style={{ maxWidth: 620 }}>
-      {/* faux composer */}
       <div
-        style={{
-          border: "0.5px solid var(--line)",
-          background: "var(--card)",
-          borderRadius: 2,
-        }}
+        style={{ border: "0.5px solid var(--line)", background: "var(--card)", borderRadius: 2 }}
       >
         <div className="px-3 py-3" style={{ color: "var(--muted-foreground)", fontSize: 13 }}>
           Ask Pea to renumber the doors on level 2…
@@ -284,19 +197,14 @@ function ComposerStrip({
               {label}
             </span>
           ))}
-          {/* THE chip */}
-          <button
-            onClick={() => setOpen((o) => !o)}
-            className="tele inline-flex items-center gap-1.5 px-2 py-0.5"
-            style={{ fontSize: 11, borderRadius: 2, ...TONE_STYLE[chip.tone] }}
-            title={chip.detail}
-          >
-            <LiveDot
-              tone={chip.tone}
-              lane={resolution.kind === "resolved" ? resolution.session.lane : undefined}
-            />
-            {chip.text}
-          </button>
+          {/* the shipped component, against the scripted world */}
+          <TargetChip
+            selector={selector}
+            sessions={sessions}
+            onPin={onPin}
+            nowMs={T0}
+            defaultOpen
+          />
           <span className="grow" />
           <span
             className="px-2 py-0.5 text-[11px] font-semibold"
@@ -310,118 +218,11 @@ function ComposerStrip({
           </span>
         </div>
       </div>
-
-      {/* the chip's popover, drawn inline for judgement */}
-      {open && (
-        <div
-          className="mt-1"
-          style={{ border: "0.5px solid var(--line)", background: "var(--paper-2)", borderRadius: 2 }}
-        >
-          <div
-            className="flex items-baseline justify-between px-3 py-1.5"
-            style={{ borderBottom: "0.5px solid var(--line-soft)" }}
-          >
-            <span
-              className="font-[var(--font-pe-mono)]"
-              style={{ fontSize: 10, letterSpacing: "0.08em", color: "var(--muted-foreground)" }}
-            >
-              TARGET
-            </span>
-            <span
-              className="font-[var(--font-pe-mono)]"
-              style={{ fontSize: 10, color: "var(--muted-foreground)" }}
-            >
-              {chip.detail}
-            </span>
-          </div>
-
-          {/* auto row */}
-          <PickRow
-            active={pinned === ""}
-            onClick={() => onPin("")}
-            left={
-              <span style={{ color: "var(--muted-foreground)" }}>
-                auto — follow the sole session
-              </span>
-            }
-            right={
-              sessions.length > 1 ? (
-                <span style={{ color: "var(--cat-kiln)" }}>ambiguous now</span>
-              ) : null
-            }
-          />
-
-          {sessions.map((s) => {
-            const isResolved = s.sessionId === resolvedId;
-            const sel: TargetSelector =
-              s.lane === "sandbox" && s.sandboxId
-                ? `sandbox:${s.sandboxId}`
-                : s.lane === "installed" || s.lane === "rrd"
-                  ? "user"
-                  : String(s.processId);
-            return (
-              <PickRow
-                key={s.sessionId}
-                active={isResolved && pinned !== ""}
-                onClick={() => onPin(sel)}
-                left={
-                  <span className="inline-flex items-center gap-2">
-                    <LiveDot tone={isResolved ? "pinned" : "implicit"} lane={s.lane} />
-                    <span style={{ color: "var(--foreground)" }}>{sessionLabel(s)}</span>
-                    <LaneBadge lane={s.lane} />
-                  </span>
-                }
-                right={
-                  <span
-                    className="font-[var(--font-pe-mono)]"
-                    style={{ fontSize: 10, color: "var(--muted-foreground)" }}
-                  >
-                    {sel} · pid {s.processId} · {obsAge(s)}
-                  </span>
-                }
-              />
-            );
-          })}
-          {sessions.length === 0 && (
-            <div className="px-3 py-2 text-[11px]" style={{ color: "var(--muted-foreground)" }}>
-              no sessions connected — open Revit or spawn a sandbox
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
 
-function PickRow({
-  left,
-  right,
-  active,
-  onClick,
-}: {
-  left: React.ReactNode;
-  right?: React.ReactNode;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="flex w-full items-center justify-between px-3 py-1.5 text-left text-[12px]"
-      style={{
-        borderBottom: "0.5px solid var(--line-soft)",
-        background: active ? "color-mix(in srgb, var(--pe-blue) 6%, transparent)" : "transparent",
-        borderLeft: active ? "2px solid var(--pe-blue)" : "2px solid transparent",
-        cursor: "pointer",
-      }}
-    >
-      {left}
-      {right}
-    </button>
-  );
-}
-
-// ── (b) patch bay ───────────────────────────────────────────────────────────────────────────────
+// ── (exhibit) patch bay — the relationship model, drawn whole ───────────────────────────────────
 
 const BAY_W = 460;
 const ROW_H = 52;
@@ -438,8 +239,8 @@ function PatchBay({
   onPin: (selector: TargetSelector) => void;
 }) {
   const consumers = [
-    { key: "chat", label: "pea chat", r: chatResolution, pinnable: true },
-    { key: "ops", label: "/ops", r: opsResolution, pinnable: false },
+    { key: "chat", label: "pea chat", r: chatResolution },
+    { key: "ops", label: "/ops", r: opsResolution },
   ];
   const sessions = step.sessions;
   const height = Math.max(consumers.length, sessions.length, 1) * ROW_H + 16;
@@ -468,13 +269,7 @@ function PatchBay({
           const y1 = consumerY(ci);
           const x1 = 132;
           const x2 = BAY_W - 172;
-          const wire = (
-            y2: number,
-            stroke: string,
-            dashed: boolean,
-            width = 1.25,
-            opacity = 1,
-          ) => (
+          const wire = (y2: number, stroke: string, dashed: boolean, width = 1.25, opacity = 1) => (
             <path
               d={`M ${x1} ${y1} C ${x1 + 60} ${y1}, ${x2 - 60} ${y2}, ${x2} ${y2}`}
               fill="none"
@@ -503,12 +298,13 @@ function PatchBay({
               <g key={c.key}>
                 {c.r.candidates.map((cand) => {
                   const i = sIndex(cand.sessionId);
-                  return i < 0 ? null : wire(sessionY(i), "var(--cat-kiln)", true, 1, 0.5);
+                  return i < 0 ? null : (
+                    <g key={cand.sessionId}>{wire(sessionY(i), "var(--cat-kiln)", true, 1, 0.5)}</g>
+                  );
                 })}
               </g>
             );
           }
-          // unresolved: a stub wire to nowhere
           return (
             <g key={c.key}>
               <path
@@ -529,36 +325,31 @@ function PatchBay({
         })}
       </svg>
 
-      {/* consumer jacks */}
-      {consumers.map((c, ci) => {
-        const chip = chipDescriptor(c.r);
-        return (
-          <div
-            key={c.key}
-            className="absolute px-2 py-1"
-            style={{
-              left: 8,
-              top: consumerY(ci) - 18,
-              width: 124,
-              border: "0.5px solid var(--line)",
-              background: "var(--card)",
-              borderRadius: 2,
-            }}
-          >
-            <div className="text-[11px] font-semibold" style={{ color: "var(--foreground)" }}>
-              {c.label}
-            </div>
-            <div
-              className="font-[var(--font-pe-mono)] truncate"
-              style={{ fontSize: 9, color: TONE_STYLE[chip.tone].color as string }}
-            >
-              {c.r.selector === "" ? "auto" : c.r.selector}
-            </div>
+      {consumers.map((c, ci) => (
+        <div
+          key={c.key}
+          className="absolute px-2 py-1"
+          style={{
+            left: 8,
+            top: consumerY(ci) - 18,
+            width: 124,
+            border: "0.5px solid var(--line)",
+            background: "var(--card)",
+            borderRadius: 2,
+          }}
+        >
+          <div className="text-[11px] font-semibold" style={{ color: "var(--foreground)" }}>
+            {c.label}
           </div>
-        );
-      })}
+          <div
+            className="truncate font-[var(--font-pe-mono)]"
+            style={{ fontSize: 9, color: TONE_STYLE[chipDescriptor(c.r).tone].color as string }}
+          >
+            {c.r.selector === "" ? "auto" : c.r.selector}
+          </div>
+        </div>
+      ))}
 
-      {/* session jacks */}
       {sessions.map((s, si) => {
         const targetedByChat =
           chatResolution.kind === "resolved" && chatResolution.session.sessionId === s.sessionId;
@@ -573,14 +364,12 @@ function PatchBay({
               right: 8,
               top: sessionY(si) - 18,
               width: 160,
-              border: targetedByChat
-                ? "1px solid var(--pe-blue)"
-                : "0.5px solid var(--line)",
+              border: targetedByChat ? "1px solid var(--pe-blue)" : "0.5px solid var(--line)",
               background: "var(--card)",
               borderRadius: 2,
               cursor: "pointer",
             }}
-            title="click to pin chat here"
+            title="pin the chat here"
           >
             <div className="flex items-center gap-1.5">
               <LiveDot tone={targetedByChat ? "pinned" : "implicit"} lane={s.lane} />
@@ -588,7 +377,7 @@ function PatchBay({
                 className="truncate text-[11px] font-semibold"
                 style={{ color: "var(--foreground)" }}
               >
-                {sessionLabel(s)}
+                {s.activeDocumentTitle ?? `Revit ${s.processId}`}
               </span>
             </div>
             <div className="flex items-center justify-between">
@@ -597,7 +386,7 @@ function PatchBay({
                 className="font-[var(--font-pe-mono)]"
                 style={{ fontSize: 9, color: "var(--muted-foreground)" }}
               >
-                {s.processId} · {obsAge(s)}
+                {s.processId} · {ageLabel(s.observedAtUnixMs, T0)}
               </span>
             </div>
           </button>
@@ -606,12 +395,7 @@ function PatchBay({
       {sessions.length === 0 && (
         <div
           className="absolute font-[var(--font-pe-mono)]"
-          style={{
-            right: 24,
-            top: height / 2 - 8,
-            fontSize: 10,
-            color: "var(--muted-foreground)",
-          }}
+          style={{ right: 24, top: height / 2 - 8, fontSize: 10, color: "var(--muted-foreground)" }}
         >
           NO SESSIONS
         </div>
@@ -620,7 +404,7 @@ function PatchBay({
   );
 }
 
-// ── (c) worldline ───────────────────────────────────────────────────────────────────────────────
+// ── (exhibit) worldline ─────────────────────────────────────────────────────────────────────────
 
 const WL_W = 460;
 const WL_ROW = 34;
@@ -628,8 +412,7 @@ const WL_ROW = 34;
 interface WorldlineRow {
   id: string;
   label: string;
-  lane: SessionLane;
-  /** doc tenure segments: [fromStep, toStepExclusive, docTitle] */
+  lane: SessionFacts["lane"];
   spans: [number, number, string][];
 }
 
@@ -681,7 +464,6 @@ function Worldline({
         borderRadius: 2,
       }}
     >
-      {/* step columns (clickable, scrubs the scenario) */}
       {STEPS.map((_, i) => (
         <div
           key={i}
@@ -700,7 +482,6 @@ function Worldline({
         />
       ))}
 
-      {/* session rows */}
       {rows.map((row, ri) => {
         const top = 8 + ri * WL_ROW;
         return (
@@ -745,11 +526,7 @@ function Worldline({
         );
       })}
 
-      {/* the chat pin track — where the chat's target actually pointed, step by step */}
-      <div
-        className="absolute inset-x-0"
-        style={{ bottom: 6, height: 18, pointerEvents: "none" }}
-      >
+      <div className="absolute inset-x-0" style={{ bottom: 6, height: 18, pointerEvents: "none" }}>
         {chatByStep.map((r, i) => {
           const cx = x(i) + WL_W / n / 2;
           const rowIndex =
@@ -766,7 +543,6 @@ function Worldline({
                   : "var(--line)";
           return (
             <div key={i}>
-              {/* marker in the pin lane */}
               <span
                 className="absolute"
                 style={{
@@ -775,12 +551,12 @@ function Worldline({
                   width: 6,
                   height: 6,
                   borderRadius: 1,
-                  background: r.kind === "resolved" && r.mode === "implicit" ? "transparent" : color,
+                  background:
+                    r.kind === "resolved" && r.mode === "implicit" ? "transparent" : color,
                   border:
                     r.kind === "resolved" && r.mode === "implicit" ? `1px dashed ${color}` : "none",
                 }}
               />
-              {/* riser up to the targeted row */}
               {rowIndex >= 0 && (
                 <span
                   className="absolute"
@@ -814,13 +590,18 @@ function Worldline({
         })}
         <span
           className="absolute font-[var(--font-pe-mono)]"
-          style={{ left: 6, bottom: 4, fontSize: 8, letterSpacing: "0.08em", color: "var(--muted-foreground)" }}
+          style={{
+            left: 6,
+            bottom: 4,
+            fontSize: 8,
+            letterSpacing: "0.08em",
+            color: "var(--muted-foreground)",
+          }}
         >
           CHAT PIN
         </span>
       </div>
 
-      {/* NOW cursor */}
       <div
         className="absolute inset-y-0 pointer-events-none"
         style={{
@@ -832,33 +613,33 @@ function Worldline({
   );
 }
 
-// ── (d) inspector ───────────────────────────────────────────────────────────────────────────────
+// ── (exhibit) inspector ─────────────────────────────────────────────────────────────────────────
 
 function Inspector({ chat, ops }: { chat: TargetResolution; ops: TargetResolution }) {
   const line = (label: string, r: TargetResolution) => {
     const chip = chipDescriptor(r);
     return (
-      <div className="flex items-baseline gap-3 px-3 py-1.5" style={{ borderBottom: "0.5px solid var(--line-soft)" }}>
+      <div
+        className="flex items-baseline gap-3 px-3 py-1.5"
+        style={{ borderBottom: "0.5px solid var(--line-soft)" }}
+      >
         <span
           className="font-[var(--font-pe-mono)]"
           style={{ fontSize: 10, width: 44, color: "var(--muted-foreground)" }}
         >
           {label}
         </span>
-        <span className="font-[var(--font-pe-mono)]" style={{ fontSize: 11, color: "var(--foreground)" }}>
-          selector=<span style={{ color: "var(--pe-blue)" }}>{JSON.stringify(r.selector)}</span>{" "}
-          → {r.kind}
-          {r.kind === "resolved" && (
-            <>
-              /{r.mode} · session {r.session.sessionId} · pid {r.session.processId} · doc{" "}
-              {r.session.activeDocumentTitle ?? "∅"}
-            </>
-          )}
-          {r.kind === "ambiguous" && <> · {r.candidates.length} candidates</>}
-          {r.kind === "unresolved" && <> · {r.reason}</>}
+        <span
+          className="break-all font-[var(--font-pe-mono)]"
+          style={{ fontSize: 11, color: "var(--foreground)" }}
+        >
+          {resolutionReadout(r)}
         </span>
         <span className="grow" />
-        <span className="font-[var(--font-pe-mono)]" style={{ fontSize: 10, color: TONE_STYLE[chip.tone].color as string }}>
+        <span
+          className="font-[var(--font-pe-mono)]"
+          style={{ fontSize: 10, color: toneColor(chip.tone) }}
+        >
           {chip.tone.toUpperCase()}
         </span>
       </div>
@@ -874,10 +655,9 @@ function Inspector({ chat, ops }: { chat: TargetResolution; ops: TargetResolutio
 
 // ── page ────────────────────────────────────────────────────────────────────────────────────────
 
-function PocTarget() {
+function DocsTarget() {
   const [step, setStep] = useState(2);
   const [playing, setPlaying] = useState(false);
-  /** local pin override on top of the script — set by clicking any session in any panel */
   const [override, setOverride] = useState<TargetSelector | null>(null);
 
   useEffect(() => {
@@ -902,27 +682,114 @@ function PocTarget() {
   };
 
   return (
-    <div className="min-h-screen" style={{ background: "var(--background)", color: "var(--foreground)" }}>
+    <div
+      className="min-h-screen"
+      style={{ background: "var(--background)", color: "var(--foreground)" }}
+    >
       <div className="page-wrap py-8">
         <header className="mb-6 flex items-start justify-between gap-4">
           <div>
+            <div
+              className="font-[var(--font-pe-mono)]"
+              style={{ fontSize: 10, letterSpacing: "0.1em", color: "var(--muted-foreground)" }}
+            >
+              DOCS / TARGET
+            </div>
             <h1
               className="m-0 text-[22px] font-semibold"
               style={{ fontFamily: "var(--font-pe-display)", color: "var(--pe-blue)" }}
             >
-              POC — Target: one state, competing reflections
+              Session &amp; document targeting
             </h1>
-            <p className="mt-1 max-w-[68ch] text-[13px]" style={{ color: "var(--muted-foreground)" }}>
-              A scripted world (sessions appearing, documents changing, pins dangling) drives one{" "}
-              <code>resolveTarget()</code>. Every panel is a reflection of that single resolution —
-              click a session in any panel and all of them follow. The judgement: which reflection
-              earns a place in the product, and where.
+            <p
+              className="mt-1 max-w-[70ch] text-[13px]"
+              style={{ color: "var(--muted-foreground)" }}
+            >
+              Every Pea surface that touches Revit — the chat, data routes, plugins — answers the
+              same question the same way:{" "}
+              <em>which session, and therefore which document, will this act on?</em> The answer is
+              a <strong>target</strong>: a stored selector, resolved live against the broker's
+              session list. This page is the model's spec and its working exhibit — the scenario
+              below scripts a world through every state the model has, and each exhibit reflects the
+              one shared resolution.
             </p>
           </div>
           <ThemeToggle />
         </header>
 
-        {/* scenario transport */}
+        {/* ── the model ─────────────────────────────────────────────────────────────────────── */}
+        <section className="mb-8 grid gap-6 md:grid-cols-2">
+          <div>
+            <SectionLabel label="selectors" />
+            <p
+              className="mb-2 max-w-[54ch] text-[12px]"
+              style={{ color: "var(--muted-foreground)" }}
+            >
+              UIs store selectors, never session ids: a selector is stable across process restarts,
+              so a pin survives the world changing under it. The grammar is the host's
+              (`resolveSessionTarget`); the web mirror is `#/host/target.ts`.
+            </p>
+            <table className="w-full border-collapse" style={{ border: "0.5px solid var(--line)" }}>
+              <tbody>
+                {SELECTOR_ROWS.map(([sel, meaning]) => (
+                  <tr key={sel} style={{ borderBottom: "0.5px solid var(--line-soft)" }}>
+                    <td
+                      className="px-3 py-1.5 font-[var(--font-pe-mono)]"
+                      style={{ fontSize: 11, color: "var(--pe-blue)", whiteSpace: "nowrap" }}
+                    >
+                      {sel}
+                    </td>
+                    <td className="px-3 py-1.5 text-[12px]" style={{ color: "var(--foreground)" }}>
+                      {meaning}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div>
+            <SectionLabel label="resolution states" />
+            <p
+              className="mb-2 max-w-[54ch] text-[12px]"
+              style={{ color: "var(--muted-foreground)" }}
+            >
+              Resolution is a pure function of (sessions, selector). Each state has one tone, used
+              identically everywhere: dashed means inferred, solid blue means chosen, kiln means the
+              UI refuses to guess, clay means a kept pin lost its process.
+            </p>
+            <table className="w-full border-collapse" style={{ border: "0.5px solid var(--line)" }}>
+              <tbody>
+                {STATE_ROWS.map((row) => (
+                  <tr key={row.name} style={{ borderBottom: "0.5px solid var(--line-soft)" }}>
+                    <td className="px-3 py-1.5" style={{ width: 20 }}>
+                      <LiveDot tone={row.tone} />
+                    </td>
+                    <td
+                      className="px-3 py-1.5 font-[var(--font-pe-mono)]"
+                      style={{ fontSize: 11, color: "var(--foreground)", whiteSpace: "nowrap" }}
+                    >
+                      {row.name}
+                    </td>
+                    <td
+                      className="px-3 py-1.5 text-[12px]"
+                      style={{ color: "var(--muted-foreground)" }}
+                    >
+                      {row.means}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {/* ── the world in motion ───────────────────────────────────────────────────────────── */}
+        <SectionLabel label="the world in motion" />
+        <p className="mb-3 max-w-[70ch] text-[12px]" style={{ color: "var(--muted-foreground)" }}>
+          A scripted world: sessions appear, documents change, the pinned process dies and returns.
+          Scrub it, or pin a session in any exhibit — every exhibit derives from the same
+          resolution, so they move together.
+        </p>
         <div className="mb-2 flex items-center gap-3">
           <button
             onClick={() => setPlaying((p) => !p)}
@@ -959,8 +826,8 @@ function PocTarget() {
         <p className="mb-6 text-[12px]" style={{ color: "var(--muted-foreground)", minHeight: 18 }}>
           {override !== null ? (
             <>
-              <span style={{ color: "var(--pe-blue)" }}>you pinned `{override || "auto"}`</span> —
-              every panel below updated from the same resolution. (changes step → script resumes)
+              <span style={{ color: "var(--pe-blue)" }}>pinned `{override || "auto"}`</span> — every
+              exhibit updated from the same resolution. (changing step resumes the script)
             </>
           ) : (
             world.caption
@@ -969,38 +836,64 @@ function PocTarget() {
 
         <div className="grid gap-8 lg:grid-cols-2">
           <section>
-            <VariantLabel
-              label="(a) composer chip + picker"
-              desc="Minimal: dot + selector + document in the control row, next to model and access. Dashed = inferred, solid = pinned, kiln = refuses to guess, clay = pin dangling."
-            />
-            <ComposerStrip
-              resolution={chat}
+            <SectionLabel label="composer chip — the product surface" />
+            <p
+              className="mb-2 max-w-[60ch] text-[11px] leading-snug"
+              style={{ color: "var(--muted-foreground)" }}
+            >
+              The chip lives in the chat control row next to model and access, and on any route that
+              targets a session. Its picker is a one-consumer patch bay: the wire gutter on the left
+              draws this surface's relationship to each session. This exhibit renders the shipped
+              component (`components/target-chip.tsx`).
+            </p>
+            <ComposerExhibit
+              selector={chatSelector}
               sessions={world.sessions}
               onPin={(sel) => setOverride(sel)}
-              pinned={chatSelector}
             />
           </section>
 
           <section>
-            <VariantLabel
-              label="(d) state inspector"
-              desc="The raw resolution both consumers derive from — the proof there is one state."
-            />
+            <SectionLabel label="resolution readout — provenance" />
+            <p
+              className="mb-2 max-w-[60ch] text-[11px] leading-snug"
+              style={{ color: "var(--muted-foreground)" }}
+            >
+              The raw resolution both consumers derive from. In the product this readout lives in
+              the chat's World lane, above the context layers.
+            </p>
             <Inspector chat={chat} ops={ops} />
             <div className="mt-6">
-              <VariantLabel
-                label="(b) patch bay"
-                desc="Consumers wired to sessions. Solid blue wire = pinned, dashed = implicit, two faint kiln wires = ambiguous, stub = dangling. Click a session to pin chat."
+              <SectionLabel label="patch bay — the relationship model, drawn whole" />
+              <p
+                className="mb-2 max-w-[60ch] text-[11px] leading-snug"
+                style={{ color: "var(--muted-foreground)" }}
+              >
+                Consumers on the left, sessions on the right, resolution as wires. The chip's gutter
+                is this diagram compressed to one consumer; this full form is the mental model
+                behind it.
+              </p>
+              <PatchBay
+                step={world}
+                chatResolution={chat}
+                opsResolution={ops}
+                onPin={setOverride}
               />
-              <PatchBay step={world} chatResolution={chat} opsResolution={ops} onPin={setOverride} />
             </div>
           </section>
 
           <section className="lg:col-span-2">
-            <VariantLabel
-              label="(c) worldline"
-              desc="Session incarnations over scenario time; document tenure as labeled spans; the chat pin as a bottom track rising to whichever row it resolves to. Watch the pin survive the restart (step 6→7) — the riser re-attaches to a NEW row because the selector, not the session id, is the stored state. Click anywhere to scrub."
-            />
+            <SectionLabel label="worldline — targets over time" />
+            <p
+              className="mb-2 max-w-[72ch] text-[11px] leading-snug"
+              style={{ color: "var(--muted-foreground)" }}
+            >
+              Session incarnations as rows, document tenure as labeled spans, the chat pin as the
+              bottom track rising to whichever row it resolves to. Between steps 6 and 7 the riser
+              re-attaches to a new row: the selector, not the session id, is the stored state. In
+              the product this appears as the thread lane's world rail and event ticks. Click to
+              scrub.
+            </p>
             <Worldline currentStep={step} chatByStep={chatByStep} onStep={goto} />
           </section>
         </div>
@@ -1009,18 +902,13 @@ function PocTarget() {
   );
 }
 
-function VariantLabel({ label, desc }: { label: string; desc: string }) {
+function SectionLabel({ label }: { label: string }) {
   return (
-    <div className="mb-2">
-      <div
-        className="font-[var(--font-pe-mono)]"
-        style={{ fontSize: 10, letterSpacing: "0.04em", color: "var(--foreground)" }}
-      >
-        {label}
-      </div>
-      <p className="m-0 mt-0.5 max-w-[60ch] text-[11px] leading-snug" style={{ color: "var(--muted-foreground)" }}>
-        {desc}
-      </p>
+    <div
+      className="mb-1.5 font-[var(--font-pe-mono)]"
+      style={{ fontSize: 10, letterSpacing: "0.06em", color: "var(--foreground)" }}
+    >
+      {label.toUpperCase()}
     </div>
   );
 }
