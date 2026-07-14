@@ -17,6 +17,8 @@ import { CHAT_PLUGIN_ROUTES } from "#/workbench/route-chat-plugins";
  *   thread — which thread is open (empty/absent = auto-land on latest or a fresh one)
  *   mode   — chat | trace | world view depth (default stripped from the URL)
  *   turn   — turn number to focal-scroll on open/share (absent = tail)
+ *   target — pinned Revit session selector ("user", "sandbox:<id>", pid…), retained like thread.
+ *            A SELECTOR, never a session id, so the pin survives process restarts.
  *   prompt — short composer draft; the composer drops it from the URL past PROMPT_MAX or when
  *            attachments are present (attachments never serialize).
  */
@@ -33,13 +35,14 @@ const chatSearchSchema = z.object({
     .catch(DEFAULTS.mode),
   turn: z.coerce.number().int().positive().optional().catch(undefined),
   plugin: z.enum(CHAT_PLUGIN_ROUTES).optional().catch(undefined),
+  target: z.string().optional().catch(undefined),
   prompt: z.string().max(PROMPT_MAX).optional(),
 });
 
 export const Route = createFileRoute("/chat")({
   validateSearch: chatSearchSchema,
   search: {
-    middlewares: [retainSearchParams(["thread"]), stripSearchParams(DEFAULTS)],
+    middlewares: [retainSearchParams(["thread", "target"]), stripSearchParams(DEFAULTS)],
   },
   component: RouteComponent,
 });

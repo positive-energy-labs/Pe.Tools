@@ -1,4 +1,5 @@
 import { Button } from "#/components/ui/button";
+import { ChatTargetChip } from "#/components/chat-target";
 import {
   Combobox,
   ComboboxContent,
@@ -56,6 +57,7 @@ export function ControlChips() {
         }))}
         onPick={(id) => void setAccessLevel(id as WorkbenchAccessLevel)}
       />
+      <ChatTargetChip />
     </>
   );
 }

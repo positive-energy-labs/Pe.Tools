@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { resolveTarget, type SessionFacts } from "./target";
 
@@ -28,14 +28,22 @@ describe("resolveTarget", () => {
 
   it("selector forms: user lane, sandbox id, pid, raw session id", () => {
     const all = [user, sandbox];
-    expect(resolveTarget(all, "user")).toMatchObject({ mode: "pinned", session: { sessionId: "aaa111" } });
-    expect(resolveTarget(all, "sandbox:fam-lab")).toMatchObject({ session: { sessionId: "bbb222" } });
+    expect(resolveTarget(all, "user")).toMatchObject({
+      mode: "pinned",
+      session: { sessionId: "aaa111" },
+    });
+    expect(resolveTarget(all, "sandbox:fam-lab")).toMatchObject({
+      session: { sessionId: "bbb222" },
+    });
     expect(resolveTarget(all, "9204")).toMatchObject({ session: { sessionId: "bbb222" } });
     expect(resolveTarget(all, "aaa111")).toMatchObject({ session: { sessionId: "aaa111" } });
   });
 
   it("a pin dangles as no-match when its process dies, and re-resolves against a new incarnation", () => {
-    expect(resolveTarget([sandbox], "user")).toMatchObject({ kind: "unresolved", reason: "no-match" });
+    expect(resolveTarget([sandbox], "user")).toMatchObject({
+      kind: "unresolved",
+      reason: "no-match",
+    });
     const reborn: SessionFacts = { ...user, sessionId: "ccc333", processId: 5330 };
     expect(resolveTarget([reborn, sandbox], "user")).toMatchObject({
       kind: "resolved",
