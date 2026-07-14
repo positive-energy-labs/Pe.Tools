@@ -2,7 +2,7 @@
  * The three universal route-state tools — pea's side of every collaborative web route.
  *
  * These replace the six family_sheet_* tools with a per-route-agnostic trio. They are
- * THIN HTTP CLIENTS to the route-state dispatcher endpoints on the host
+ * THIN HTTP CLIENTS to the RouteWorkspace endpoints on the host
  * (`/pe/route-state...`), always acting as `actor:"agent"`. The trust contract is
  * enforced server-side by the route's write mask and human-only command gate — not
  * here — so the same tools work identically from an in-pea run and over stdio.
@@ -11,6 +11,7 @@
  * how the agent learns what it may write and how to correct an invalid proposal.
  */
 import { createTool } from "@mastra/core/tools";
+import { MASTRA_THREAD_ID_KEY } from "@mastra/core/request-context";
 import z from "zod";
 
 import { coerceJsonObject } from "../shared/coerce.ts";
@@ -33,7 +34,7 @@ async function getJson(path: string): Promise<unknown> {
   } catch (error) {
     return {
       isError: true,
-      content: `Couldn't reach the route-state dispatcher at ${base} (${message(error)}). Is the host running?`,
+      content: `Couldn't reach RouteWorkspace at ${base} (${message(error)}). Is the host running?`,
     };
   }
 }
@@ -54,7 +55,7 @@ async function postJson(path: string, body: unknown): Promise<unknown> {
   } catch (error) {
     return {
       isError: true,
-      content: `Couldn't reach the route-state dispatcher at ${base} (${message(error)}).`,
+      content: `Couldn't reach RouteWorkspace at ${base} (${message(error)}).`,
     };
   }
 }
@@ -62,15 +63,19 @@ async function postJson(path: string, body: unknown): Promise<unknown> {
 export const routeStateRead = createTool({
   id: "route_state_read",
   description:
-    "Read the collaborative route-state documents you co-edit with a human in their browser. Cold start: call with NO args to discover the live routes and their commands. Call with a route to get that route's full document, its JSON Schema, the agent write mask (exactly which paths you may write — everything else is human-only), and its commands. Read before you propose: the mask tells you what you may write.",
+    "Read the collaborative route documents you co-edit with a human in their browser. Cold start: call with NO args for a shallow route list. Call with a route to get that thread's document, JSON Schema, agent write mask (exactly which paths you may write — everything else is human-only), and commands. Read detail before you propose.",
   inputSchema: z.object({
     route: z
       .string()
       .optional()
       .describe("Route name from the list; omit to list all live routes."),
   }),
-  execute: async (input) =>
-    getJson(input.route ? `/pe/route-state/${encodeURIComponent(input.route)}` : "/pe/route-state"),
+  execute: async (input, context) => {
+    if (!input.route) return getJson("/pe/route-state");
+    const threadId = activeThreadId(context);
+    if (!threadId) return missingThread("read route-state detail");
+    return getJson(scopedPath(`/pe/route-state/${encodeURIComponent(input.route)}`, threadId));
+  },
 });
 
 export const routeStateApply = createTool({
@@ -88,10 +93,16 @@ export const routeStateApply = createTool({
       )
       .min(1),
   }),
-  execute: async (input) =>
-    postJson(`/pe/agent/route-state/${encodeURIComponent(input.route)}/apply`, {
-      patches: input.patches,
-    }),
+  execute: async (input, context) => {
+    const threadId = activeThreadId(context);
+    if (!threadId) return missingThread("apply route-state patches");
+    return postJson(
+      scopedPath(`/pe/agent/route-state/${encodeURIComponent(input.route)}/apply`, threadId),
+      {
+        patches: input.patches,
+      },
+    );
+  },
 });
 
 export const routeCommand = createTool({
@@ -103,11 +114,17 @@ export const routeCommand = createTool({
     command: z.string(),
     input: z.unknown().optional(),
   }),
-  execute: async (input) =>
-    postJson(`/pe/agent/route-state/${encodeURIComponent(input.route)}/command`, {
-      command: input.command,
-      input: coerceJsonObject(input.input),
-    }),
+  execute: async (input, context) => {
+    const threadId = activeThreadId(context);
+    if (!threadId) return missingThread("run a route-state command");
+    return postJson(
+      scopedPath(`/pe/agent/route-state/${encodeURIComponent(input.route)}/command`, threadId),
+      {
+        command: input.command,
+        input: coerceJsonObject(input.input),
+      },
+    );
+  },
 });
 
 export const routeStateTools = {
@@ -121,6 +138,44 @@ export const routeStateTools = {
 function hintOf(payload: Record<string, unknown>): string | undefined {
   const hint = payload.hint ?? payload.error;
   return typeof hint === "string" ? hint : undefined;
+}
+
+function activeThreadId(toolContext: unknown): string | undefined {
+  const requestContext = record(toolContext).requestContext;
+  const controller = record(requestContextValue(requestContext, "controller"));
+  return (
+    nonEmptyString(controller.threadId) ??
+    nonEmptyString(requestContextValue(requestContext, MASTRA_THREAD_ID_KEY))
+  );
+}
+
+function requestContextValue(requestContext: unknown, key: string): unknown {
+  const context = record(requestContext);
+  if (typeof context.get === "function") {
+    return (context.get as (name: string) => unknown)(key);
+  }
+  return context[key];
+}
+
+function scopedPath(path: string, threadId: string): string {
+  return `${path}?threadId=${encodeURIComponent(threadId)}`;
+}
+
+function missingThread(action: string) {
+  return {
+    isError: true,
+    content: `Cannot ${action} without an active Pea thread. Run this tool from a thread-backed Pea turn.`,
+  };
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 function message(error: unknown): string {

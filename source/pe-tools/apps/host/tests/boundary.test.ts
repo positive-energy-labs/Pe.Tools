@@ -140,7 +140,11 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
     // (5) graceful shutdown: the service token authorizes, then the server stops + file deleted.
     const shutdown = await fetch(`${base}/admin/shutdown`, {
       method: "POST",
-      headers: { "x-pe-service-token": file.token, "content-type": "application/json" },
+      headers: {
+        "x-pe-service-token": file.token,
+        "x-pe-host-dev-shutdown": "true",
+        "content-type": "application/json",
+      },
       body: JSON.stringify({}),
     });
     expect(shutdown.status).toBe(200);

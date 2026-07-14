@@ -2,11 +2,11 @@
 
 ## Scope
 
-Owns local/operator workflows used by `pe-dev automation ...`: manifests, receipts, browse cache, repo-local paths, worker bundle building from local source, and CLI-facing orchestration. APS auth, Data Management, Object Storage, and Design Automation mechanics live in `Pe.Aps`.
+Owns reusable local/operator services used by the interim `pe-dev automation` adapter: manifests, receipts, browse cache, repo-local paths, and worker bundle building from local source. APS auth, Data Management, Object Storage, and Design Automation mechanics live in `Pe.Aps`.
 
 ## Purpose
 
-`Pe.Dev.RevitAutomation` is the dev adapter around Revit automation workflows. Keep operator UX here and push reusable APS mechanics into `Pe.Aps`. Keep `Pe.Dev.Cli` focused on command parsing and stdout/stderr behavior, and keep the worker package focused on the headless Revit execution entrypoint.
+`Pe.Dev.RevitAutomation` is the dev adapter around Revit automation workflows. Keep operator semantics here, push generic APS mechanics into `Pe.Aps`, keep `Pe.Dev.Cli` limited to command parsing/stdout, and keep the worker package focused on the headless Revit execution entrypoint. Add a future Pea/host surface only when product use proves it.
 
 ## Critical Entry Points
 

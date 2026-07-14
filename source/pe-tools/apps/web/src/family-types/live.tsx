@@ -26,10 +26,20 @@ import {
   type GroundingView,
   type PushOutcome,
 } from "#/family-types/store";
-import { type RouteStateWriteResult, useRouteState } from "#/workbench/route-state";
+import {
+  type RouteStateWriteResult,
+  type RouteWorkspaceScope,
+  useRouteState,
+} from "#/workbench/route-state";
 
-export function LiveFamilyTypesProvider({ children }: { children: ReactNode }) {
-  const route = useRouteState(familyTypesRouteState);
+export function LiveFamilyTypesProvider({
+  children,
+  scope,
+}: {
+  children: ReactNode;
+  scope?: RouteWorkspaceScope;
+}) {
+  const route = useRouteState(familyTypesRouteState, scope);
   const document = route.slice ?? EMPTY_DOCUMENT;
   const documentRef = useRef(document);
   documentRef.current = document;

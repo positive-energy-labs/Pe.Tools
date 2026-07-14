@@ -53,6 +53,7 @@ const signalContent = z.object({
     "notification_summary",
     "notification",
   ]),
+  stateId: z.string().optional(),
   message: z.string(),
 });
 

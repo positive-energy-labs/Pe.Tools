@@ -74,6 +74,8 @@ export type SettingsRouteDocument = z.infer<typeof settingsRouteDocumentSchema>;
 
 export const settingsRouteState = defineRouteState({
   route: "settings",
+  title: "Settings",
+  description: "Review, validate, and save proposed changes to a typed settings document.",
   key: "route:settings",
   schema: settingsRouteDocumentSchema,
   agentWriteMask: trichotomyAgentMask("fields"),
@@ -83,12 +85,14 @@ export const settingsRouteState = defineRouteState({
         "Open a settings document (module/root/relative path) into the snapshot: raw + composed content, version token, and validation. Existing proposals are preserved.",
       input: z.object({ documentId: settingsDocumentIdSchema }),
       actor: "any",
+      recoversExternal: true,
     },
     refresh: {
       description:
         "Re-read the currently open settings document (fresh raw content, version token, validation). Proposals and staged values are preserved.",
       input: z.object({}),
       actor: "any",
+      recoversExternal: true,
     },
     validate: {
       description:
@@ -101,6 +105,7 @@ export const settingsRouteState = defineRouteState({
         "HUMAN ONLY. Splice every staged field into the raw content and save through settings.document.save with the captured version token. Successful saves fold into the snapshot and clear staged fields; conflicts and validation failures leave them staged.",
       input: z.object({}),
       actor: "human",
+      mutatesExternal: true,
     },
   },
 });

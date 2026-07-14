@@ -1,15 +1,15 @@
 /**
- * Route state — the generic collaborative-UI primitive over AgentController session state.
+ * Route state — the declarative contract for a collaborative route workspace.
  *
- * A route that wants pea + human co-editing declares ONE top-level session-state key,
- * a zod schema for the document under it, a declarative agent write mask (which paths
+ * A route that wants pea + human co-editing declares a zod document schema,
+ * a declarative agent write mask (which paths
  * pea may propose to — everything else is human-only), and a set of named commands
  * (the side-effectful work the mask forbids doing by hand). No per-route server code
- * beyond the schema + mask + command handlers: the dispatcher (packages/runtime)
- * enforces the mask, validates every write against the schema, and runs commands; the
+ * beyond the schema + mask + command handlers: RouteWorkspace (packages/runtime)
+ * owns thread/workspace persistence, ordering, recovery, validation, and commands; the
  * three universal pea tools (route_state_read/route_state_apply/route_command) are thin
- * HTTP clients to its endpoints; the browser writes the same document as `actor:"human"`
- * (unmasked) and receives every change through the native `state_changed` event.
+ * HTTP clients to its endpoints; the browser writes the same scoped document as `actor:"human"`
+ * (unmasked) and receives document snapshots through its route-specific event stream.
  */
 import { z } from "zod";
 
@@ -18,11 +18,18 @@ export interface RouteStateCommandSpec {
   description: string;
   input: z.ZodType;
   actor: "any" | "human";
+  /** The command may mutate an external system after route state is persisted. */
+  mutatesExternal?: boolean;
+  /** A successful command proves external state fresh after an uncertain mutation. */
+  recoversExternal?: boolean;
 }
 
 export interface RouteStateSpec<TSchema extends z.ZodType> {
-  /** Route name, e.g. `family-types` — the URL segment the dispatcher endpoints key on. */
+  /** Route name, e.g. `family-types` — the URL segment transport adapters key on. */
   route: string;
+  /** Human-facing discovery metadata; adapters should not duplicate this. */
+  title: string;
+  description: string;
   /** Top-level session-state key, namespaced `route:<name>` to coexist with harness keys. */
   key: string;
   schema: TSchema;
@@ -38,7 +45,7 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
 export function defineRouteState<TSchema extends z.ZodType>(
   spec: RouteStateSpec<TSchema>,
 ): RouteStateSpec<TSchema> {
-  // Every route gets the substrate-owned `bind` command; the dispatcher implements it
+  // Every route gets the substrate-owned `bind` command; RouteWorkspace implements it
   // generically (writes doc.binding) — routes never supply a handler for it.
   return { ...spec, commands: { [BIND_COMMAND]: bindCommandSpec, ...spec.commands } };
 }

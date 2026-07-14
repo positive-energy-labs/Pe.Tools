@@ -75,6 +75,12 @@ export const adminShutdownRoute = HttpRouter.add("POST", "/admin/shutdown", (req
   Effect.gen(function* () {
     const { latch, serviceToken } = yield* HostLifecycle;
 
+    // An installed Revit client may race to reassert its installed host while source dev is
+    // taking over 5180. Never let that automatic service request evict an intentional dev host.
+    // Dev is stopped by its owning terminal; the explicit header is only for controlled tooling.
+    if (hostOwnership.lane === "dev" && request.headers["x-pe-host-dev-shutdown"] !== "true")
+      return yield* Response.json({ error: "Dev host is terminal-owned." }, { status: 409 });
+
     const takeover = request.headers[TAKEOVER_TOKEN_HEADER];
     const serviceHeader = request.headers[SERVICE_TOKEN_HEADER];
     let authorized =

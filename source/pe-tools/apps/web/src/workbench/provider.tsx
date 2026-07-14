@@ -166,7 +166,6 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
           }),
         );
         setError(undefined);
-        void hydrateRouteState(messages);
       } catch (caught) {
         setError(errorMessage(caught));
       } finally {
@@ -175,48 +174,6 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [api, info, config],
-  );
-
-  // `state_changed` only streams while Pea writes — on load, sessionState.values is empty and
-  // every inline route-plugin card reads zeros. Backfill the `route:*` slices for the routes the
-  // transcript actually touched; a live state_changed arriving meanwhile wins (spread last).
-  const hydrateRouteState = useCallback(
-    async (messages: { content: WireMessageContent[] }[]) => {
-      const routes = new Set<string>();
-      for (const message of messages) {
-        for (const part of message.content) {
-          if (part.type !== "tool_call") continue;
-          const args = part.args;
-          if (args && typeof args === "object" && "route" in args) {
-            const route = (args as { route?: unknown }).route;
-            if (typeof route === "string") routes.add(route);
-          }
-        }
-      }
-      if (routes.size === 0) return;
-      const entries = await Promise.all(
-        [...routes].map(async (route): Promise<[string, unknown] | null> => {
-          try {
-            const response = await fetch(peUrl(config, `/route-state/${route}`));
-            if (!response.ok) return null;
-            const payload = (await response.json()) as { doc?: unknown };
-            return payload.doc != null ? [`route:${route}`, payload.doc] : null;
-          } catch {
-            return null;
-          }
-        }),
-      );
-      const fetched = Object.fromEntries(entries.filter((entry) => entry !== null));
-      if (Object.keys(fetched).length === 0) return;
-      setState((previous) => ({
-        ...previous,
-        sessionState: {
-          values: { ...fetched, ...previous.sessionState.values },
-          hydrated: true,
-        },
-      }));
-    },
-    [config],
   );
 
   const threadsRef = useRef(threads);

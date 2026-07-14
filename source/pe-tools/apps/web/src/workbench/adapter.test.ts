@@ -290,3 +290,32 @@ test("persisted message parts backfill a tool call without clobbering live telem
   expect(call.startedAt).toBe(stamped.startedAt);
   expect(call.completedAt).toBe(stamped.completedAt);
 });
+
+test("route workspace signals remain visible human chronology", () => {
+  const state = hydrateWorkbenchState({
+    controllerId: "pea",
+    resourceId: "res",
+    threadId: "thread-1",
+    threads: [],
+    messages: [
+      {
+        id: "review-1",
+        role: "user",
+        content: [
+          {
+            type: "state_signal",
+            stateId: "route-workspace",
+            message: "Human review edit on family-types succeeded.",
+          },
+        ],
+      },
+    ],
+    inspect: {},
+    models: [],
+    modes: [],
+  });
+
+  expect(state.transcript.messages[0]?.parts).toEqual([
+    { kind: "text", text: "Human review edit on family-types succeeded." },
+  ]);
+});

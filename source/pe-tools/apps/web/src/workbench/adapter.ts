@@ -351,6 +351,10 @@ function messagePart(content: WireMessageContent): WorkbenchMessagePart[] {
       return [{ kind: "tool_result_ref", toolCallId: content.id, label: content.name }];
     case "system_reminder":
     case "state_signal":
+      // Route review/commit signals are deliberate human chronology, not hidden runtime
+      // bookkeeping. Keep task/memory signals on their specialized status projections.
+      if (content.stateId === "route-workspace") return [{ kind: "text", text: content.message }];
+      return [{ kind: "status", text: content.message }];
     case "reactive_signal":
     case "notification_summary":
     case "notification":

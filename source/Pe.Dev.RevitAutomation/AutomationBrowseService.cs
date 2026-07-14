@@ -364,7 +364,7 @@ public sealed class AutomationBrowseService {
     private AutomationBrowseContext RequireHubContext(string repoRoot) {
         var context = this.GetContext(repoRoot);
         if (string.IsNullOrWhiteSpace(context.HubId) || string.IsNullOrWhiteSpace(context.HubName))
-            throw new InvalidOperationException("No hub is selected. Run `pe-dev revit automation browse use-hub ...` first.");
+            throw new InvalidOperationException("No hub is selected. Run `pe-dev automation browse use-hub ...` first.");
 
         return context;
     }
@@ -372,7 +372,7 @@ public sealed class AutomationBrowseService {
     private AutomationBrowseContext RequireProjectContext(string repoRoot) {
         var context = this.RequireHubContext(repoRoot);
         if (string.IsNullOrWhiteSpace(context.ProjectId) || string.IsNullOrWhiteSpace(context.ProjectName))
-            throw new InvalidOperationException("No project is selected. Run `pe-dev revit automation browse use-project ...` first.");
+            throw new InvalidOperationException("No project is selected. Run `pe-dev automation browse use-project ...` first.");
 
         return context;
     }

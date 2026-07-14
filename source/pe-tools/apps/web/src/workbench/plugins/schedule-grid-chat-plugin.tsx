@@ -26,7 +26,6 @@ export function ScheduleGridChatPlugin({
   sessionState,
   running,
   active,
-  onRouteDocumentChange,
 }: RouteChatPluginProps) {
   const document = readRouteState(sessionState, scheduleGridRouteState);
   const cells = document?.cells ?? {};
@@ -76,7 +75,6 @@ export function ScheduleGridChatPlugin({
               </>
             );
           }}
-          onDocumentChange={onRouteDocumentChange}
         />
       ) : null}
     </InlineRoutePlugin>
