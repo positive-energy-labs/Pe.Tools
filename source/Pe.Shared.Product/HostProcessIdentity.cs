@@ -6,6 +6,13 @@ public static class HostProcessIdentity {
     public const string DirectoryName = ProductPathNames.HostDirectoryName;
     public const string ExecutableName = "Pe.Host.exe";
 
+    // Service identity mirrored into the manifest host payload and the TS contract (guarded by
+    // product-mirror.test.ts). ServiceName is the SDK service-file key (state/service/host.json);
+    // HealthPath/ShutdownPath are the loopback routes the SDK primitive probes and authorizes.
+    public const string ServiceName = "host";
+    public const string HealthPath = "/host/status";
+    public const string ShutdownPath = "/admin/shutdown";
+
     public const string FrontendBaseUrlVariable = "PE_TOOLS_FRONTEND_BASE_URL";
     public const string HostBaseUrlVariable = "PE_TOOLS_HOST_BASE_URL";
     public const string HostExecutablePathVariable = "PE_TOOLS_HOST_EXECUTABLE_PATH";
