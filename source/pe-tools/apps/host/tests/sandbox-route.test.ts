@@ -11,7 +11,7 @@ import {
   unresponsiveSandboxEnvelope,
   type SandboxActionRequest,
 } from "../src/sandbox-route.ts";
-import { peRevitLauncher, validatePeRevitEnvelope } from "../src/pe-revit-cli.ts";
+import { peRevitLauncher, validatePeRevitEnvelope } from "../src/pe-revit-launch.ts";
 
 function parsed(body: unknown): SandboxActionRequest {
   const result = parseSandboxActionRequest(body);
@@ -59,7 +59,7 @@ test("dev host selects its checkout CLI even when an installed shim exists", () 
     cwd: join("C:\\repo\\Pe.Tools"),
   });
   expect(() => peRevitLauncher({ lane: "dev", sourceRoot: null }, undefined, () => true)).toThrow(
-    "cannot resolve its source checkout",
+    "requires devWorkingDirectory",
   );
 });
 
@@ -69,7 +69,12 @@ test("sandbox CLI rejects empty, invalid, and non-envelope output", () => {
   expect(() => validatePeRevitEnvelope("", args, launch)).toThrow("no output");
   expect(() => validatePeRevitEnvelope("not json", args, launch)).toThrow("invalid JSON");
   expect(() => validatePeRevitEnvelope("{}", args, launch)).toThrow("non-envelope");
-  const envelope = '{"result":{},"resolved":{},"diagnostics":[],"nextSteps":[]}';
+  // The SDK validator requires the full six-field envelope (guide/related included) — a
+  // guide-less envelope is exactly the pre-sandbox-CLI output it exists to reject.
+  const guideless = '{"result":{},"resolved":{},"diagnostics":[],"nextSteps":[]}';
+  expect(() => validatePeRevitEnvelope(guideless, args, launch)).toThrow("non-envelope");
+  const envelope =
+    '{"result":{},"resolved":{},"diagnostics":[],"nextSteps":[],"guide":"g","related":[]}';
   expect(validatePeRevitEnvelope(envelope, args, launch)).toBe(envelope);
 });
 

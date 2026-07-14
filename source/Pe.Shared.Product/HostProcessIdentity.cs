@@ -1,3 +1,5 @@
+using Newtonsoft.Json.Linq;
+
 namespace Pe.Shared.Product;
 
 public static class HostProcessIdentity {
@@ -17,7 +19,31 @@ public static class HostProcessIdentity {
 
     public static string ResolveHostBaseUrl(string? overrideValue = null) =>
         FirstNonBlank(overrideValue, Environment.GetEnvironmentVariable(HostBaseUrlVariable))
+        ?? TryReadServiceFileBaseUrl()
         ?? DefaultHostBaseUrl;
+
+    /// <summary>
+    ///     The actual bound port from the SDK runtime service file
+    ///     (<c>state/service/host.json</c>), rewritten by the host on every bind and deleted on
+    ///     graceful exit — so it can never go stale the way a process-env copy did. Port-only
+    ///     projection; full schema validation stays with the SDK's ServiceFile/pe-service.
+    /// </summary>
+    private static string? TryReadServiceFileBaseUrl() {
+        try {
+            var path = Path.Combine(
+                ProductRuntimeLayout.ForCurrentUser().State.RootPath,
+                "service",
+                "host.json"
+            );
+            if (!File.Exists(path))
+                return null;
+
+            var port = JObject.Parse(File.ReadAllText(path)).Value<int?>("port");
+            return port is int value ? $"http://127.0.0.1:{value}" : null;
+        } catch {
+            return null;
+        }
+    }
 
     public static IEnumerable<string> EnumerateExecutableCandidates(
         string? configuredPath,

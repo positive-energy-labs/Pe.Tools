@@ -3,7 +3,7 @@ import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { join } from "node:path";
 import { hostOwnership, type HostLane } from "./host-ownership.ts";
-import { peRevitLauncher, validatePeRevitEnvelope } from "./pe-revit-cli.ts";
+import { peRevitLauncher, validatePeRevitEnvelope } from "./pe-revit-launch.ts";
 
 /**
  * Control plane for pea-owned Revit sandboxes — NOT a catalog op. Sandbox lifecycle is fleet
