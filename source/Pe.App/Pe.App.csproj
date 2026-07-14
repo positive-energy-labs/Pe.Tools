@@ -2,8 +2,8 @@
 
     <PropertyGroup>
         <PeProjectKind>RevitAddin</PeProjectKind>
-        <!-- Release artifact intent: `pe-revit release --build` discovers RevitBundle projects by
-             this property and runs -t:PeCreateBundle on them. -->
+        <!-- Release artifact intent: the orchestrated release (pe-revit release, build mode)
+             discovers RevitBundle projects by this property and runs the PeCreateBundle target. -->
         <PeProductKind>RevitBundle</PeProductKind>
         <PeAddinId>43B12CEC-8FCF-4E33-AF86-904DCF056087</PeAddinId>
         <PeAddinVendorId>Development</PeAddinVendorId>
