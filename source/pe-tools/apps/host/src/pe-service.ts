@@ -43,6 +43,14 @@ export interface ServiceFile {
   readonly version: string;
   readonly lane: string;
   readonly token: string;
+  /**
+   * D2 (optional): the running service image. When present it participates in {@link ensureRunning}'s
+   * identity match; when ABSENT the file is treated as no-match — spawn/replace fresh (the file is
+   * rewritten on every host bind, so a thin-shape file self-heals in one launch). Emitted only when set.
+   */
+  readonly executablePath?: string;
+  /** D2 (optional, dev lane): the checkout a dev host runs from. Emitted only when set. */
+  readonly sourceRoot?: string;
 }
 
 export interface EnsureRunningOptions {
@@ -174,6 +182,8 @@ export async function readServiceFile(appBase: string, name: string): Promise<Se
       typeof raw.port !== "number"
     )
       return null;
+    // executablePath / sourceRoot are additive (D2): absent ⇒ omitted (never a rejection), and the key
+    // order (after token) mirrors the C# emitter so the cross-language byte-golden holds.
     return {
       schemaVersion: SERVICE_FILE_SCHEMA_VERSION,
       instanceId: raw.instanceId,
@@ -183,6 +193,8 @@ export async function readServiceFile(appBase: string, name: string): Promise<Se
       version: typeof raw.version === "string" ? raw.version : "",
       lane: typeof raw.lane === "string" ? raw.lane : "",
       token: typeof raw.token === "string" ? raw.token : "",
+      ...(typeof raw.executablePath === "string" ? { executablePath: raw.executablePath } : {}),
+      ...(typeof raw.sourceRoot === "string" ? { sourceRoot: raw.sourceRoot } : {}),
     };
   } catch {
     return null;
@@ -230,12 +242,19 @@ export async function deleteServiceFile(
   }
 }
 
-/** Create a schema-v2 identity for the calling service after it has bound its loopback port. */
+/**
+ * Create a schema-v2 identity for the calling service after it has bound its loopback port.
+ * `executablePath` (D2) is the running service image — pass the resolved launchable so
+ * {@link ensureRunning} can match on it; `sourceRoot` records a dev-lane checkout. Both are optional
+ * and, when omitted, produce a thin file (which {@link ensureRunning} treats as no-match).
+ */
 export function createServiceFile(
   port: number,
   version: string,
   lane: string,
   token: string,
+  executablePath?: string,
+  sourceRoot?: string,
   instanceId: string = randomUUID(),
 ): ServiceFile {
   return {
@@ -247,6 +266,8 @@ export function createServiceFile(
     version,
     lane,
     token,
+    ...(executablePath !== undefined ? { executablePath } : {}),
+    ...(sourceRoot !== undefined ? { sourceRoot } : {}),
   };
 }
 
@@ -283,7 +304,7 @@ export async function ensureRunning(
     const existing = await readServiceFile(appBase, name);
     if (existing) {
       const stopped = (await probeHealth(existing.port, opts.health))
-        ? matches(existing, opts.expectedVersion, opts.lane)
+        ? matches(existing, opts.expectedVersion, opts.lane, opts.entryPath)
           ? null
           : await shutDown(appBase, existing, opts)
         : await killByPid(appBase, existing);
@@ -391,6 +412,17 @@ async function recordedProcessAlive(file: ServiceFile): Promise<boolean> {
   return Math.abs(Date.parse(identity.startUtc) - Date.parse(file.processStartUtc)) <= 2_000;
 }
 
+/**
+ * True iff <paramref name="file"/> still names a live process whose recorded (pid, processStartUtc) is
+ * the one running now — the same pid+start-time verification {@link takeOver} uses to decide whether a
+ * prior owner is a real incumbent. Exposed for serve-side claimants (pe-service-host.ts) that gate an
+ * eviction on the incumbent's lane BEFORE displacing it. A vanished pid, a reused pid, or an
+ * unverifiable process all read false (no live owner).
+ */
+export function isRecordedOwnerAlive(file: ServiceFile): Promise<boolean> {
+  return recordedProcessAlive(file);
+}
+
 async function waitForVerifiedExit(file: ServiceFile, timeoutMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -400,9 +432,26 @@ async function waitForVerifiedExit(file: ServiceFile, timeoutMs: number): Promis
   return !(await recordedProcessAlive(file));
 }
 
-function matches(file: ServiceFile, expectedVersion: string | undefined, lane: string): boolean {
+// D2 identity match. A file WITHOUT executablePath never matches — the pre-D2 conservative rule is
+// "spawn/replace fresh", and the replacement rewrites the file with the field so it self-heals in one
+// launch. When present, executablePath must equal the resolved launchable (case/separator-insensitive)
+// on top of the version+lane check. Mirrors Pe.Revit.Loader.InstalledProduct.Matches.
+function matches(
+  file: ServiceFile,
+  expectedVersion: string | undefined,
+  lane: string,
+  expectedExecutablePath: string | undefined,
+): boolean {
+  if (file.executablePath === undefined) return false;
+  if (expectedExecutablePath !== undefined && !samePath(file.executablePath, expectedExecutablePath))
+    return false;
   const versionOk = expectedVersion === undefined || file.version === expectedVersion;
   return versionOk && file.lane.toLowerCase() === lane.toLowerCase();
+}
+
+function samePath(a: string, b: string): boolean {
+  const normalize = (p: string) => p.replace(/\//g, "\\").replace(/\\+$/, "").toLowerCase();
+  return normalize(a) === normalize(b);
 }
 
 async function shutDown(
@@ -475,7 +524,7 @@ async function spawnAndWait(
     const file = await readServiceFile(appBase, name);
     if (!file) continue;
     if (!(await probeHealth(file.port, opts.health))) continue;
-    if (matches(file, opts.expectedVersion, opts.lane)) return { state: "started", file };
+    if (matches(file, opts.expectedVersion, opts.lane, opts.entryPath)) return { state: "started", file };
   }
   const cleaned = child?.pid ? await killByPid(appBase, child.pid, childStartUtc) : false;
   const timedOutFile = await readServiceFile(appBase, name);
