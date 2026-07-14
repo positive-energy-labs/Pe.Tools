@@ -2,6 +2,7 @@
 
     <PropertyGroup>
         <PeProjectKind>Explicit</PeProjectKind>
+        <IsPackable>false</IsPackable>
     </PropertyGroup>
 
     <PropertyGroup>
