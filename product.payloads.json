@@ -5,6 +5,7 @@
   "version": "0.6.11-beta.4",
   "release": {
     "artifacts": ["RevitBundle", "Msi", "InstallZip"],
+    "smokeService": "host",
     "smokePaths": [
       "app/bin/host/versions/{version}/Pe.Host.exe",
       "app/bin/host/versions/{version}/web/client/index.html",
