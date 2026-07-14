@@ -1,4 +1,6 @@
 using Build.Options;
+using System.Diagnostics;
+using System.Reflection.PortableExecutable;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -71,20 +73,15 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         );
         _ = StageRevitPayload(context, layout, configurations);
 
-        await PublishRuntimeAsync(
-            context,
-            hostPackageDirectory,
-            signing,
-            cancellationToken
-        );
+        var unsignedNode = PrepareUnsignedNode(signing);
+        try {
+            await PublishRuntimeAsync(context, hostPackageDirectory, signing, unsignedNode, cancellationToken);
 
-        var peaPackageDirectory = rootDirectory.GetFolder("source").GetFolder("pe-tools").GetFolder("apps").GetFolder("pea");
-        await PublishPeaAsync(
-            context,
-            peaPackageDirectory,
-            signing,
-            cancellationToken
-        );
+            var peaPackageDirectory = rootDirectory.GetFolder("source").GetFolder("pe-tools").GetFolder("apps").GetFolder("pea");
+            await PublishPeaAsync(context, peaPackageDirectory, signing, unsignedNode, cancellationToken);
+        } finally {
+            Directory.Delete(Path.GetDirectoryName(unsignedNode)!, recursive: true);
+        }
 
         Directory.CreateDirectory(layout.Artifacts.InstallerPackagesRoot);
         foreach (var existingInstallerPath in Directory.EnumerateFiles(layout.Artifacts.InstallerPackagesRoot, "*.msi"))
@@ -155,6 +152,7 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         IModuleContext context,
         Folder hostPackageDirectory,
         PackageSigningResult signing,
+        string unsignedNode,
         CancellationToken cancellationToken
     ) {
         context.Logger.LogInformation("Building TS host runtime for installer packaging.");
@@ -167,6 +165,13 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         var builtHostDirectory = Path.Combine(hostPackageDirectory.Path, "dist-installed");
         var runtimePublishDirectory = new Folder(builtHostDirectory);
         var builtHostExecutable = Path.Combine(builtHostDirectory, HostProcessIdentity.ExecutableName);
+        await BuildSignableSeaAsync(
+            context,
+            Path.Combine(builtHostDirectory, "bundle", "index.mjs"),
+            builtHostExecutable,
+            unsignedNode,
+            cancellationToken
+        );
         System.IO.File.Exists(builtHostExecutable)
             .ShouldBeTrue($"TS host executable build did not create {builtHostExecutable}");
         signing.SignAndVerifyFile(builtHostExecutable);
@@ -184,6 +189,7 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         IModuleContext context,
         Folder peaPackageDirectory,
         PackageSigningResult signing,
+        string unsignedNode,
         CancellationToken cancellationToken
     ) {
         context.Logger.LogInformation("Building TS pea runtime for installer packaging.");
@@ -196,6 +202,13 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         var builtPeaDirectory = Path.Combine(peaPackageDirectory.Path, "dist-installed");
         var peaPublishDirectory = new Folder(builtPeaDirectory);
         var builtPeaExecutable = Path.Combine(builtPeaDirectory, PeaCliIdentity.ExecutableName);
+        await BuildSignableSeaAsync(
+            context,
+            Path.Combine(builtPeaDirectory, "bundle", "main.mjs"),
+            builtPeaExecutable,
+            unsignedNode,
+            cancellationToken
+        );
         System.IO.File.Exists(builtPeaExecutable)
             .ShouldBeTrue($"TS pea executable build did not create {builtPeaExecutable}");
         signing.SignAndVerifyFile(builtPeaExecutable);
@@ -206,6 +219,62 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
             .ShouldBeTrue("Failed to publish TS pea for installer packaging.");
 
         context.Logger.LogInformation("Finished publishing TS pea runtime for installer packaging.");
+    }
+
+    private static string PrepareUnsignedNode(PackageSigningResult signing) {
+        var startInfo = new ProcessStartInfo("node") {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        startInfo.ArgumentList.Add("-p");
+        startInfo.ArgumentList.Add("process.execPath");
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Failed to resolve the Node executable.");
+        var nodePath = process.StandardOutput.ReadToEnd().Trim();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        if (process.ExitCode != 0 || !System.IO.File.Exists(nodePath))
+            throw new InvalidOperationException($"Failed to resolve the Node executable: {error.Trim()}");
+
+        var directory = Path.Combine(Path.GetTempPath(), "pe-tools-sea-node", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var copy = Path.Combine(directory, "node.exe");
+        System.IO.File.Copy(nodePath, copy);
+        bool hasSignature;
+        using (var stream = System.IO.File.OpenRead(copy))
+        using (var pe = new PEReader(stream))
+            hasSignature = pe.PEHeaders.PEHeader?.CertificateTableDirectory.Size > 0;
+        if (hasSignature)
+            signing.RemoveSignature(copy);
+        return copy;
+    }
+
+    private static async Task BuildSignableSeaAsync(
+        IModuleContext context,
+        string main,
+        string output,
+        string unsignedNode,
+        CancellationToken cancellationToken
+    ) {
+        var config = Path.Combine(Path.GetTempPath(), $"pe-sea-{Guid.NewGuid():N}.json");
+        try {
+            System.IO.File.WriteAllText(config, JsonSerializer.Serialize(new {
+                main,
+                mainFormat = "module",
+                executable = unsignedNode,
+                output,
+                disableExperimentalSEAWarning = true
+            }));
+            await context.Shell.Command.ExecuteCommandLineTool(
+                new GenericCommandLineToolOptions("node") { Arguments = ["--build-sea", config] },
+                new CommandExecutionOptions { WorkingDirectory = Path.GetDirectoryName(main)! },
+                cancellationToken
+            );
+        } finally {
+            if (System.IO.File.Exists(config)) System.IO.File.Delete(config);
+        }
     }
 
     private static void ValidateManifestYears(string manifestPath, IReadOnlyCollection<string> configurations) {
