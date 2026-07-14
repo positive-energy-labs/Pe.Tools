@@ -9,7 +9,6 @@ import { LocalFilesystem, LocalSandbox, Workspace } from "@mastra/core/workspace
 import {
   bundledPeaSkills,
   configurePeaProductToolContext,
-  createRouteRegistrations,
   defaultPeaAgentModelId,
   materializeBundledPeaSkills,
   peaProductToolProfile,
@@ -19,7 +18,6 @@ import {
   resolvePeaSkillPaths,
   resolveWorkspaceKey,
 } from "@pe/mcps";
-import { registerRouteState } from "./route-state-dispatch.ts";
 import {
   createMastraCodeAuthStorageContext,
   type MastraCodeAuthStorage,
@@ -78,13 +76,6 @@ export async function createPeaRuntime(
   const hostBaseUrl = resolveHostBaseUrl(options.hostBaseUrl);
   const workspaceKey = resolveWorkspaceKey(options.workspaceKey);
   configurePeaProductToolContext({ hostBaseUrl, workspaceKey });
-
-  // The collaborative routes: schema + write mask + command handlers per route. The
-  // dispatcher endpoints (buildAgentControllerApp) and the three universal tools read
-  // these registrations; handlers reach Revit at the same host base URL pea uses.
-  // Adding a route = one entry in createRouteRegistrations (packages/mcps/src/pea/routes.ts).
-  for (const { spec, handlers } of createRouteRegistrations({ hostBaseUrl }))
-    registerRouteState(spec, handlers);
 
   const authStorageContext = await createMastraCodeAuthStorageContext();
   const authStorage = authStorageContext.storage;

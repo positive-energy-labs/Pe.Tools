@@ -17,7 +17,6 @@ export function SettingsChatPlugin({
   sessionState,
   running,
   active,
-  onRouteDocumentChange,
 }: RouteChatPluginProps) {
   const document = readRouteState(sessionState, settingsRouteState);
   const fields = document?.fields ?? {};
@@ -56,7 +55,6 @@ export function SettingsChatPlugin({
           reviewHint="Pea can propose; only you can save."
           renderLabel={(path) => <span className="font-mono">{path}</span>}
           renderValue={displaySettingsValue}
-          onDocumentChange={onRouteDocumentChange}
         />
       ) : null}
     </InlineRoutePlugin>

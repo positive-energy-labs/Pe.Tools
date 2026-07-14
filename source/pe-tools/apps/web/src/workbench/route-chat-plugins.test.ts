@@ -9,10 +9,12 @@ import {
 
 test("route chat plugins select registered routes for only the three route tools", () => {
   for (const toolName of ["route_state_read", "route_state_apply", "route_command"]) {
-    expect(selectRouteChatPlugin(toolName, { route: "parameter-links" })?.route).toBe(
+    expect(selectRouteChatPlugin(toolName, { route: "parameter-links" })?.spec.route).toBe(
       "parameter-links",
     );
-    expect(selectRouteChatPlugin(toolName, { route: "family-types" })?.route).toBe("family-types");
+    expect(selectRouteChatPlugin(toolName, { route: "family-types" })?.spec.route).toBe(
+      "family-types",
+    );
   }
 });
 

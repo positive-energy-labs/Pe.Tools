@@ -1,6 +1,6 @@
 /**
  * The server-side route registry — the ONE place a new collaborative route is
- * wired (spec + command handlers). The composition root (pea-runtime) registers
+ * wired (spec + command handlers). The host composition root registers
  * every entry; nothing else enumerates routes.
  */
 import type { z } from "zod";

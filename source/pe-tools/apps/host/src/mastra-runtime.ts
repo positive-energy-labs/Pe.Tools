@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { Context, Effect, Layer } from "effect";
 import { HttpEffect, HttpRouter, HttpServer } from "effect/unstable/http";
 import { productPathNames } from "@pe/host-contracts/contracts";
+import { createRouteRegistrations } from "@pe/mcps";
 import { buildAgentControllerApp } from "@pe/runtime";
 import { createPeaRuntime } from "@pe/runtime/pea";
 import { productRoot } from "./host-ownership.ts";
@@ -114,7 +115,11 @@ export const MastraRuntimeLive = Layer.effect(
             }
           }
         })();
-        const app = await buildAgentControllerApp({ runtime, label: "pea" });
+        const app = await buildAgentControllerApp({
+          runtime,
+          label: "pea",
+          routeRegistrations: createRouteRegistrations({ hostBaseUrl }),
+        });
         setAgentRuntimeStatus({ available: true, error: null });
         // A stale error log from a previous degraded boot would misreport this healthy one.
         await rm(mastraInitErrorLogPath(), { force: true }).catch(() => undefined);

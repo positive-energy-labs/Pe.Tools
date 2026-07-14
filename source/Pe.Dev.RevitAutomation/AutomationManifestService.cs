@@ -12,7 +12,7 @@ public sealed class AutomationManifestService {
         var context = this._contextStore.Load(repoRoot);
         if (string.IsNullOrWhiteSpace(context.HubName))
             throw new InvalidOperationException(
-                "No hub is selected. Run `pe-dev revit automation browse use-hub ...` before creating a manifest."
+                "No hub is selected. Run `pe-dev automation browse use-hub ...` before creating a manifest."
             );
 
         var manifest = new ScheduleAuditManifest {

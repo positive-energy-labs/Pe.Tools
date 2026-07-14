@@ -24,6 +24,7 @@ import {
   useFamilyTypes,
 } from "#/family-types/store";
 import { HostConnectionPill } from "#/host/issues";
+import type { RouteWorkspaceScope } from "#/workbench/route-state";
 
 /**
  * /family-types — a web replacement for Revit's Family Types dialog. pea proposes
@@ -36,17 +37,27 @@ import { HostConnectionPill } from "#/host/issues";
 export const Route = createFileRoute("/family-types")({
   validateSearch: (search: Record<string, unknown>) => ({
     mock: search.mock != null && search.mock !== false ? true : undefined,
+    thread: typeof search.thread === "string" && search.thread.trim() ? search.thread : undefined,
   }),
   component: FamilyTypesRoute,
 });
 
 function FamilyTypesRoute() {
-  const { mock } = Route.useSearch();
-  const Provider = mock ? MockFamilyTypesProvider : LiveFamilyTypesProvider;
+  const { mock, thread } = Route.useSearch();
+  if (mock) {
+    return (
+      <MockFamilyTypesProvider>
+        <FamilyTypesPage />
+      </MockFamilyTypesProvider>
+    );
+  }
+  const scope: RouteWorkspaceScope = thread
+    ? { kind: "thread", threadId: thread }
+    : { kind: "workspace" };
   return (
-    <Provider>
+    <LiveFamilyTypesProvider scope={scope}>
       <FamilyTypesPage />
-    </Provider>
+    </LiveFamilyTypesProvider>
   );
 }
 

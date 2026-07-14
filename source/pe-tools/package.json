@@ -21,7 +21,7 @@
     "typegen:check": "pnpm --filter @pe/host-contracts codegen:check",
     "test": "vp run -r test",
     "acceptance": "pnpm --filter @pe/runtime-acceptance acceptance",
-    "dev:pea-web": "pe-dev web pea"
+    "dev": "pnpm --filter @pe/host dev"
   },
   "devDependencies": {
     "jiti": "^2.7.0",

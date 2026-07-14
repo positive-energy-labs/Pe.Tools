@@ -86,6 +86,8 @@ export type ScheduleGridDocument = z.infer<typeof scheduleGridDocumentSchema>;
 
 export const scheduleGridRouteState = defineRouteState({
   route: "schedule-grid",
+  title: "Schedule Grid",
+  description: "Review and apply proposed edits to bound Revit schedule cells.",
   key: "route:schedule-grid",
   schema: scheduleGridDocumentSchema,
   agentWriteMask: trichotomyAgentMask(),
@@ -100,12 +102,14 @@ export const scheduleGridRouteState = defineRouteState({
         target: z.string().optional(),
       }),
       actor: "any",
+      recoversExternal: true,
     },
     push: {
       description:
         "HUMAN ONLY. Redeem every staged cell's binding handle through revit.apply.parameter-values in one transaction, fold successes into the snapshot, and clear those cells. Failed edits stay staged. With multiple Revit sessions connected, pass target (e.g. 'sandbox:<id>' or 'user').",
       input: z.object({ target: z.string().optional() }),
       actor: "human",
+      mutatesExternal: true,
     },
   },
 });

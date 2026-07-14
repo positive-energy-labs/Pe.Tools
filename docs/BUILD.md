@@ -177,8 +177,8 @@ Pe.Tools does not rewrite a transport manifest or build zip topology.
 `CreateAutomationBundleModule` likewise supplies only Pe.Tools policy: the worker project, eligible
 year matrix, output root, and product version. SDK `PeCreateAppBundle` builds each engine lane and
 owns the `.bundle`/`Contents` layout, `DBApplication` `.addin`, `PackageContents.xml`, zip, and hashed
-receipt. Keep APS authentication/submission in `pe-dev automation`; do not restore
-`Autodesk.PackageBuilder` or product-owned appbundle composition.
+receipt. Keep APS authentication/submission in the interim `pe-dev automation` adapter; do not
+move Pe.Tools workflow semantics into the SDK or restore product-owned appbundle composition.
 
 ### Publish is a GitHub release workflow
 
@@ -268,7 +268,7 @@ The clean source-linked CLI model is:
 
 - Bare `pea` launches the Pea Revit/operator agent TUI from `source/pe-tools/apps/pea/src/main.ts`.
 - The source-linked `pea` package script uses `vp exec jiti src/main.ts`. This keeps the runtime under Vite+'s managed Node while letting `jiti` handle the repo's TypeScript/NodeNext source graph. Raw `vp exec node src/main.ts` is not enough for this source graph because Node's built-in TypeScript support is still strip/transform limited and does not resolve the repo's `.js` source specifiers back to `.ts`.
-- Source-linked `pea web` routes through `source/pe-tools/tools/dev-web`. That helper owns the two-process dev web model: a watched backend workbench API plus the Vite website dev server.
+- `pnpm --dir source/pe-tools dev` runs the source host and its programmatic Vite server in one Node process.
 - `pea <subcommand> ...` stays available for product/operator commands such as `host` and `script`.
 - `pea --prompt "..." [--thread <id>] [--json]` runs one headless Pea turn and prints `{ threadId, response }` — the black-box product probe lane.
 - `pea --installed ...` is the explicit installed-lane selector. Use it in installed-lane validation and scripts where ambiguity would be expensive.
@@ -278,43 +278,37 @@ The clean source-linked CLI model is:
 
 This source-linked shape is intentionally about developer iteration, not installer payload ownership. A shim's `{name}.dev.txt` marker is a per-shim capability registration written by `pe-revit dev link`. It does not prove packaged installed behavior and should not be used as installed-lane evidence.
 
-`pe-dev` is source/dev-only repo tooling, not an installed product slice: release installs never ship it (its PathShim is targetless, so users never see it). Devs get it on PATH the same way as pea — the manifest declares a `pe-dev` PathShim with a `dotnet run` dev command; `pe-revit dev link` routes it to this checkout. No hand PATH edits, no separate bootstrap.
-
-This asymmetry is deliberate: Host needs a dev-only root to avoid installed-runtime file locks and stale installed contracts; `pea` needs a stable operator launch command; `pe-dev` should stay a local source workflow helper.
-
-`pea` and `pe-dev` are separate surfaces:
-
-- `pea` starts the source-linked Pea Revit/operator workbench TUI; `pea host` and `pea script` expose product command subgroups; `pea --prompt` is the headless one-turn probe.
-- `pe-dev` is the narrow C# source/dev CLI for PATH bootstrap, source linking, web dev supervision, and automation commands.
+`pea` is the product/operator surface; SDK `pe-revit` owns source linking and Revit proof; ordinary
+package scripts own TypeScript development. The repo-local `pe-dev` CLI remains automation-only as
+an interim adapter over Pe.Tools-specific APS workflows. It is not a web or host supervisor.
 
 ### Source-linked web dev
 
-Source-linked web dev is intentionally one user command over two local processes:
+Source-linked web dev is one command and one Node application process:
 
-- `pea web` from a source-linked launcher starts the repo-owned `tools/dev-web` supervisor.
-- `pe-dev web pea` runs the same supervisor explicitly when debugging the dev lane.
-- The supervisor starts the selected backend workbench API with `node --watch --import jiti/register src/main.ts web ...` and starts the Vite website dev server.
-- Default local ports are fixed: website `http://127.0.0.1:5173`, workbench API `http://127.0.0.1:43112`, token `dev-loopback`.
-- The supervisor takes over those two ports by default on Windows. Pass `--no-takeover` when a smoke test or manual session should fail instead of killing the port owner.
-- Pass `--no-watch` to disable backend Node watch during smoke tests or debugger-driven sessions.
+- `pnpm --dir source/pe-tools dev` runs the watched source `@pe/host` entrypoint.
+- That entrypoint acquires a programmatic Vite server on `http://127.0.0.1:5173` and the Effect host on `http://127.0.0.1:5180` in one lifecycle scope.
+- React edits use Vite HMR without restarting the process. Host edits restart the whole process, so both listeners converge together.
+- The host keeps its tokenized installed-host takeover. Vite uses a strict port and fails clearly when `5173` is occupied.
+- Automatic installed-service startup cannot evict a terminal-owned dev host during the takeover race; stop dev with its owning terminal.
 
-The website Vite proxy is part of this dev lane. It forwards `/workbench` to `PE_WORKBENCH_AGENT_URL` or `http://127.0.0.1:43112`, adding `PE_WORKBENCH_DEV_TOKEN` or `dev-loopback`. If the backend is not on the default port, visit the website with a `?workbench=<encoded backend url>` query or set the proxy environment variables before starting Vite.
+The Vite proxy is part of this dev lane. It forwards host-backed paths (`/call`, `/events`, `/ops`, `/schemas`, `/host`, `/pe`, and `/api/agent-controller`) to `PE_TOOLS_HOST_BASE_URL` or `http://127.0.0.1:5180`. The browser remains same-origin with the website; there is no secondary workbench URL, browser token, or query-parameter routing.
 
-Installed/product web behavior is separate. `pea --installed web ...` runs the packaged Pea CLI path; source-linked `pea web` is a dev supervisor convenience, not installed-lane proof.
+Installed/product web behavior is separate: the installed host serves the built SPA itself. The source dev entrypoint is not installed-lane proof.
 
 Useful dev-lane refresh commands:
 
 ```powershell
 pe-revit path ensure     # once per machine: registers <appBase>\shims on the user PATH (safely)
-pe-revit dev link        # from this checkout: routes pea/pe-dev shims to source
+pe-revit dev link        # from this checkout: routes pea and pe-dev shims to source
 pe-revit dev status      # shows each shim's resolved lane
-pe-dev web pea
+pnpm --dir source/pe-tools dev
 pea
 pea --installed --help
 ```
 
-PATH and dev-shim management is SDK-owned (`pe-revit path`, `pe-revit dev`). The old
-`pe-dev bootstrap-path` and `pe-dev pea link-dev` commands were removed: they hand-edited the user
+PATH and dev-shim management is SDK-owned (`pe-revit path`, `pe-revit dev`). The deleted
+`pe-dev bootstrap-path` and `pe-dev pea link-dev` commands hand-edited the user
 PATH (REG_SZ overwrite, whole-PATH rewrites) and maintained a second launcher generator in `bin\pea`.
 One PATH entry — the product shims dir — is the condoned way onto PATH; everything else is a shim
 file in that dir. A shim runs dev when ITS `{name}.dev.txt` exists (written by `dev link`), installed
@@ -369,7 +363,9 @@ pe-dev automation submit schedules --manifest docs/context/my-run/schedules.json
 pe-dev automation inspect receipt --receipt latest --download-artifacts true
 ```
 
-The automation shell is `Pe.Dev.RevitAutomation.Worker`, not desktop `Pe.App`. Desktop and DA should remain sibling shells over shared DA-safe runtime packages.
+The automation shell is `Pe.Dev.RevitAutomation.Worker`, not desktop `Pe.App`. Desktop and DA remain
+sibling shells over shared DA-safe runtime packages. `pe-dev automation` is an interim thin terminal
+adapter; a future Pea/host workflow can replace it when product use proves the right operation shape.
 
 ## Build matrix and configuration facts
 
@@ -410,7 +406,7 @@ The automation shell is `Pe.Dev.RevitAutomation.Worker`, not desktop `Pe.App`. D
 | Package installer only            | `dotnet run --project .\build\Build.csproj -c Release -- pack installer --configuration Release.R25`                             |
 | Package automation appbundle only | `dotnet run --project .\build\Build.csproj -c Release -- pack automation`                                                        |
 | Publish GitHub release artifacts  | `dotnet run --project .\build\Build.csproj -c Release -- pack publish`                                                           |
-| Link source dev shims             | `pe-revit path ensure` (once), `pe-revit dev link`, then `pea` / `pe-dev`                                                        |
-| Run source web dev explicitly     | `pe-dev web pea`                                                                                                                 |
+| Link source CLI shims             | `pe-revit path ensure` (once), `pe-revit dev link`, then `pea` / `pe-dev automation`                                              |
+| Run source web dev explicitly     | `pnpm --dir source/pe-tools dev`                                                                                                  |
 | Validate installed `pea` lane     | `pea --installed ...`                                                                                                            |
 | Regenerate host op types          | `pnpm --filter @pe/host-contracts codegen -- --session <bridgeSessionId>`; `codegen:check` uses the same exact selector          |

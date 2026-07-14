@@ -350,29 +350,6 @@ internal static class AutomationCommandRunner {
         }
     }
 
-    private static async Task<int> RunWorkItemStatusAliasAsync(
-        IReadOnlyList<string> args,
-        CancellationToken cancellationToken
-    ) {
-        var json = args.Contains("--json", StringComparer.OrdinalIgnoreCase);
-        var includeReport = ReadBooleanOption(args, "--include-report", defaultValue: false);
-
-        try {
-            var service = new AutomationReceiptInspectionService();
-            var result = await service.InspectWorkItemAsync(
-                    RequireOptionValue(args, "--workitem-id"),
-                    includeReport,
-                    cancellationToken
-                )
-                .ConfigureAwait(false);
-            WriteResult(result, json);
-            return 0;
-        } catch (Exception ex) {
-            Console.Error.WriteLine(ex.Message);
-            return 14;
-        }
-    }
-
     private static Task<int> RunCacheAsync(
         IReadOnlyList<string> args,
         string? repoRootOverride

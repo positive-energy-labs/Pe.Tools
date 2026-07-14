@@ -158,9 +158,6 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
             .ShouldBeTrue("Failed to publish TS host for installer packaging.");
         runtimePublishDirectory.GetFile("web/client/index.html").Exists
             .ShouldBeTrue("Installer runtime publish should include the staged web SPA.");
-        runtimePublishDirectory.GetFile(PeDevCliIdentity.ExecutableName).Exists
-            .ShouldBeFalse("Installer runtime publish should not include pe-dev.");
-
         context.Logger.LogInformation("Finished publishing TS host runtime for installer packaging.");
     }
 

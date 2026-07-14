@@ -255,11 +255,10 @@ function Surface({
                 </div>
               }
             >
-              {/* ponytail: iframe keeps the pilot route-native; extract a shared surface when
-                  cross-pane focus or a single shared browser subscription becomes necessary. */}
+              {/* The thread query is the route-workspace identity boundary for this pane. */}
               <iframe
                 className="size-full border-0"
-                src={`/${plugin}`}
+                src={`/${plugin}?thread=${encodeURIComponent(currentThreadId)}`}
                 title={chatPluginTitle(plugin)}
               />
             </SidePane>

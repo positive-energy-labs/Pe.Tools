@@ -3,7 +3,7 @@
  * (settings fields, schedule-grid cells, family-types cells). It renders the list of
  * reviewable cells (open proposal → staged) with approve / deny / undo controls, the
  * summary/attention line, and the human-only commit button — plus the busy/error and
- * route-state refetch plumbing every plugin used to duplicate.
+ * route-state write plumbing every plugin used to duplicate.
  *
  * Differences are prop-driven: the per-key label (`renderLabel`), value rendering
  * (`renderValue`), the state segment (`cells` vs `fields`), and the commit command /
@@ -18,7 +18,6 @@ import { Check, RotateCcw, X } from "lucide-react";
 import { type CellReview, cellSummary, stagedEntries } from "@pe/agent-contracts";
 
 import { Button } from "#/components/ui/button";
-import { peUrl } from "./config";
 import { useWorkbench } from "./provider";
 import { type RouteStateWriteResult, writeRouteState } from "./route-state";
 
@@ -49,8 +48,6 @@ export interface CellTrichotomyReviewerProps {
   renderLabel: (key: string, cell: ReviewerCell) => ReactNode;
   /** Value renderer (defaults to a string cast; settings passes a JSON-aware display). */
   renderValue?: (value: unknown) => ReactNode;
-  /** Called after a successful write with the refetched document (dock hydration). */
-  onDocumentChange?: (document: unknown) => void;
 }
 
 export function CellTrichotomyReviewer({
@@ -62,7 +59,6 @@ export function CellTrichotomyReviewer({
   reviewHint,
   renderLabel,
   renderValue = defaultRenderValue,
-  onDocumentChange,
 }: CellTrichotomyReviewerProps) {
   const { config } = useWorkbench();
   const [busy, setBusy] = useState<string | null>(null);
@@ -81,11 +77,6 @@ export function CellTrichotomyReviewer({
     try {
       const result = await writeRouteState(config, route, suffix, body);
       setError(commandFailureNote(result));
-      if (result.ok && onDocumentChange) {
-        const response = await fetch(peUrl(config, `/route-state/${route}`));
-        const snapshot = (await response.json()) as { doc?: unknown };
-        if (snapshot.doc != null) onDocumentChange(snapshot.doc);
-      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Route update failed.");
     } finally {

@@ -135,6 +135,8 @@ export type FamilyTypesDocument = z.infer<typeof familyTypesDocumentSchema>;
 
 export const familyTypesRouteState = defineRouteState({
   route: "family-types",
+  title: "Family Types",
+  description: "Review and apply proposed family parameter values against a grounded spec.",
   key: "route:family-types",
   schema: familyTypesDocumentSchema,
   agentWriteMask: trichotomyAgentMask(),
@@ -150,12 +152,14 @@ export const familyTypesRouteState = defineRouteState({
         "Re-read the family open in Revit's family editor into the snapshot (parameters × types, formulas, identity, ancestry). Existing proposals and review marks are preserved. Targets the workspace's bound session; pass target to override.",
       input: z.object({ target: z.string().optional() }),
       actor: "any",
+      recoversExternal: true,
     },
     push: {
       description:
         "HUMAN ONLY. Apply every staged cell to Revit via family.editor.apply, fold successful values into the snapshot, and clear those cells. Failed edits stay staged. Targets the workspace's bound session; pass target to override.",
       input: z.object({ target: z.string().optional() }),
       actor: "human",
+      mutatesExternal: true,
     },
   },
 });

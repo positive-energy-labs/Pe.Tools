@@ -114,6 +114,8 @@ export type ParameterLinksDocument = z.infer<typeof parameterLinksDocumentSchema
 
 export const parameterLinksRouteState = defineRouteState({
   route: "parameter-links",
+  title: "Parameter Links",
+  description: "Review, preview, and reconcile a model-owned parameter linkage profile.",
   key: "route:parameter-links",
   schema: parameterLinksDocumentSchema,
   agentWriteMask: [["draftProfile"]],
@@ -123,6 +125,7 @@ export const parameterLinksRouteState = defineRouteState({
         "Refresh the stored profile, evaluation, issues, and runtime status from Revit. With multiple Revit sessions connected, pass target (e.g. 'sandbox:<id>' or 'user').",
       input: z.object({ target: z.string().optional() }),
       actor: "any",
+      recoversExternal: true,
     },
     preview: {
       description:
@@ -137,6 +140,7 @@ export const parameterLinksRouteState = defineRouteState({
       // reviewed profile MUST be declared here or apply always fails its draft-freshness check.
       input: z.object({ profile: parameterLinkProfileSchema, target: z.string().optional() }),
       actor: "human",
+      mutatesExternal: true,
     },
   },
 });

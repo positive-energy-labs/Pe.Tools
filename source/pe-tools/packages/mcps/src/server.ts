@@ -5,7 +5,7 @@
  *   pea — product surface: status/logs, host ops, scripting, capture, route state
  *
  * The route_state_* / route_command tools are thin HTTP clients to the host's
- * /pe/route-state dispatcher, so they work over stdio (unlike the old in-pea
+ * host RouteWorkspace endpoints, so they work over stdio (unlike the old in-pea
  * family_sheet_* tools) — no exclusion needed.
  */
 import { MCPServer } from "@mastra/mcp";

@@ -1,4 +1,5 @@
-import { useEffect, useState, type ComponentType, type ReactNode } from "react";
+import { useState, type ComponentType, type ReactNode } from "react";
+import type { z } from "zod";
 import {
   type FamilyTypesDocument,
   type ParameterLinksDocument,
@@ -9,14 +10,14 @@ import {
   scheduleGridRouteState,
   settingsRouteState,
   splitCellKey,
+  type RouteStateSpec,
 } from "@pe/agent-contracts";
 import { Check, Eye, RefreshCw } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
 import { Button } from "#/components/ui/button";
-import { peUrl } from "./config";
 import { useWorkbench } from "./provider";
-import { type RouteStateWriteResult, writeRouteState } from "./route-state";
+import { type RouteStateWriteResult, useRouteState, writeRouteState } from "./route-state";
 import { CellTrichotomyReviewer } from "./trichotomy-reviewer";
 import { ScheduleGridChatPlugin } from "./plugins/schedule-grid-chat-plugin";
 import { SettingsChatPlugin } from "./plugins/settings-chat-plugin";
@@ -30,51 +31,44 @@ export interface RouteChatPluginProps {
   sessionState: Record<string, unknown>;
   running: boolean;
   active: boolean;
-  onRouteDocumentChange?: (document: unknown) => void;
 }
 
 type RouteChatPluginViewProps = Omit<RouteChatPluginProps, "active">;
 
 export interface RouteChatPluginRegistration {
-  route: string;
-  title: string;
-  stateKey: string;
+  spec: RouteStateSpec<z.ZodType>;
   Renderer: ComponentType<RouteChatPluginProps>;
 }
 
-const routeChatPlugins: Record<string, RouteChatPluginRegistration> = {
-  "parameter-links": {
-    route: "parameter-links",
-    title: "Parameter Links",
-    stateKey: parameterLinksRouteState.key,
+const routeChatPluginList: RouteChatPluginRegistration[] = [
+  {
+    spec: parameterLinksRouteState,
     Renderer: ParameterLinksChatPlugin,
   },
-  "family-types": {
-    route: "family-types",
-    title: "Family Types",
-    stateKey: familyTypesRouteState.key,
+  {
+    spec: familyTypesRouteState,
     Renderer: FamilyTypesChatPlugin,
   },
-  settings: {
-    route: "settings",
-    title: "Settings",
-    stateKey: settingsRouteState.key,
+  {
+    spec: settingsRouteState,
     Renderer: SettingsChatPlugin,
   },
-  "schedule-grid": {
-    route: "schedule-grid",
-    title: "Schedule Grid",
-    stateKey: scheduleGridRouteState.key,
+  {
+    spec: scheduleGridRouteState,
     Renderer: ScheduleGridChatPlugin,
   },
-};
+];
+
+const routeChatPlugins = Object.fromEntries(
+  routeChatPluginList.map((registration) => [registration.spec.route, registration]),
+) as Record<string, RouteChatPluginRegistration>;
 
 /** Route names hostable as chat workspace plugins — derived from the registry. */
 export const CHAT_PLUGIN_ROUTES = Object.keys(routeChatPlugins) as [string, ...string[]];
 export type ChatPluginRoute = keyof typeof routeChatPlugins;
 
 export function chatPluginTitle(route: string): string {
-  return routeChatPlugins[route]?.title ?? route;
+  return routeChatPlugins[route]?.spec.title ?? route;
 }
 
 export function selectRouteChatPlugin(
@@ -87,10 +81,10 @@ export function selectRouteChatPlugin(
 }
 
 export function RouteChatPluginView(props: RouteChatPluginViewProps) {
-  const plugin = selectRouteChatPlugin(props.toolName, props.args);
-  if (!plugin) return null;
-  const Renderer = plugin.Renderer;
-  return <Renderer {...props} active={false} />;
+  const registration = selectRouteChatPlugin(props.toolName, props.args);
+  return registration ? (
+    <ConnectedRouteChatPlugin registration={registration} {...props} active={false} />
+  ) : null;
 }
 
 /**
@@ -115,43 +109,29 @@ export function RouteChatPluginDock() {
   return (
     <div className="mt-3 space-y-2">
       {registrations.map((registration) => (
-        <RouteChatPluginDockItem key={registration.route} registration={registration} />
+        <ConnectedRouteChatPlugin
+          key={registration.spec.route}
+          registration={registration}
+          toolCallId={`${registration.spec.route}-review-dock`}
+          toolName="route_command"
+          args={{ route: registration.spec.route, command: "Review" }}
+          sessionState={{}}
+          running={false}
+          active
+        />
       ))}
     </div>
   );
 }
 
-function RouteChatPluginDockItem({ registration }: { registration: RouteChatPluginRegistration }) {
-  const { config, debug } = useWorkbench();
-  const [document, setDocument] = useState<unknown>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void fetch(peUrl(config, `/route-state/${registration.route}`))
-      .then(async (response) => (response.ok ? await response.json() : null))
-      .then((payload: { doc?: unknown } | null) => {
-        if (!cancelled && payload?.doc != null) setDocument(payload.doc);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [config, registration.route]);
-
-  const liveDocument = debug.state.sessionState.values[registration.stateKey] ?? document;
-  if (liveDocument == null) return null;
+function ConnectedRouteChatPlugin({
+  registration,
+  ...props
+}: RouteChatPluginProps & { registration: RouteChatPluginRegistration }) {
+  const route = useRouteState(registration.spec);
+  if (!route.hydrated || route.slice == null) return null;
   const Renderer = registration.Renderer;
-  return (
-    <Renderer
-      toolCallId={`${registration.route}-review-dock`}
-      toolName="route_command"
-      args={{ route: registration.route, command: "Review" }}
-      sessionState={{ [registration.stateKey]: liveDocument }}
-      running={false}
-      active
-      onRouteDocumentChange={setDocument}
-    />
-  );
+  return <Renderer {...props} sessionState={{ [registration.spec.key]: route.slice }} />;
 }
 
 function ParameterLinksChatPlugin({
@@ -160,7 +140,6 @@ function ParameterLinksChatPlugin({
   sessionState,
   running,
   active,
-  onRouteDocumentChange,
 }: RouteChatPluginProps) {
   const document = readRouteState(sessionState, parameterLinksRouteState);
   const profile = document?.draftProfile ?? document?.profile;
@@ -191,9 +170,6 @@ function ParameterLinksChatPlugin({
       } else {
         setPreviewedProfile(null);
       }
-      const response = await fetch(peUrl(config, "/route-state/parameter-links"));
-      const snapshot = (await response.json()) as { doc?: unknown };
-      if (snapshot.doc != null) onRouteDocumentChange?.(snapshot.doc);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : `${name} failed.`);
     } finally {
@@ -331,7 +307,6 @@ function FamilyTypesChatPlugin({
   sessionState,
   running,
   active,
-  onRouteDocumentChange,
 }: RouteChatPluginProps) {
   const document = readRouteState(sessionState, familyTypesRouteState);
   const cells = document?.cells ?? {};
@@ -376,7 +351,6 @@ function FamilyTypesChatPlugin({
               </>
             );
           }}
-          onDocumentChange={onRouteDocumentChange}
         />
       ) : null}
     </InlineRoutePlugin>

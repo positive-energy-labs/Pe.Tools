@@ -50,12 +50,6 @@ export const peaCliIdentity = {
   payloadManifestSchemaVersion: 1,
 } as const;
 
-export const peDevCliIdentity = {
-  directoryName: "pe-dev",
-  executableName: "pe-dev.exe",
-  dllName: "pe-dev.dll",
-} as const;
-
 export const revitDeploymentIdentity = {
   addinManifestFileName: "Pe.App.addin",
   runtimeDescriptorFileName: "Pe.App.runtime.json",

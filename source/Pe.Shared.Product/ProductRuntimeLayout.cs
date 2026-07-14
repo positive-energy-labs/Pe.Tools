@@ -39,9 +39,9 @@ public sealed record ProductRuntimeLayout(
 ///     <c>versions/&lt;v&gt;</c> resolution, and the parallel pea versioned/packages helpers) was
 ///     removed in Phase 2 — <c>Pe.Revit.Loader.InstalledProduct</c> now owns installed-lane
 ///     resolution through the same grammar the installer wrote. What remains is the dev-lane surface:
-///     <see cref="PeaDirectoryPath" />/<see cref="PeaLauncherPath" /> are where <c>pe-dev pea
-///     link-dev</c> writes the source-linked launcher, and <see cref="HostExecutablePath" /> is the
-///     stable host candidate.
+///     <see cref="PeaDirectoryPath" />/<see cref="PeaLauncherPath" /> are where SDK
+///     <c>pe-revit dev link</c> writes the source-linked launcher, and
+///     <see cref="HostExecutablePath" /> is the stable host candidate.
 /// </summary>
 public sealed record ProductRuntimeBinaryLayout(
     string RootPath,
