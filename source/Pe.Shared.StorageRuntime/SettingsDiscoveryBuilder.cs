@@ -38,12 +38,6 @@ public static class SettingsDiscoveryBuilder {
     public static SettingsDirectoryNode BuildDirectoryTree(
         string rootName,
         string rootRelativePath,
-        List<SettingsFileEntry> files
-    ) => BuildDirectoryTree(rootName, rootRelativePath, files, []);
-
-    public static SettingsDirectoryNode BuildDirectoryTree(
-        string rootName,
-        string rootRelativePath,
         List<SettingsFileEntry> files,
         IEnumerable<string> directoryRelativePaths
     ) {

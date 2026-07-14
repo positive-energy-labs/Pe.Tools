@@ -27,9 +27,6 @@ public static class UIApplicationDocumentSessionExtensions {
             }
         });
 
-    public static IEnumerable<ElementId> GetOpenViewIds(this UIApplication uiApp) =>
-        uiApp.GetOpenUiViews().Select(view => view.ViewId);
-
     public static bool IsDocumentOpen(this UIApplication uiApp, Document doc) {
         if (uiApp == null || doc == null)
             return false;
@@ -51,18 +48,6 @@ public static class UIApplicationDocumentSessionExtensions {
                string.Equals(activeDocument.GetDocumentKey(), doc.GetDocumentKey(), StringComparison.OrdinalIgnoreCase);
     }
 
-    public static bool IsViewOpen(this UIApplication uiApp, ElementId viewId) =>
-        viewId != null && uiApp.GetOpenViewIds().Contains(viewId);
-
-    public static Document? FindOpenDocumentByName(this UIApplication uiApp, string name) {
-        if (uiApp == null || string.IsNullOrWhiteSpace(name))
-            return null;
-
-        return uiApp.GetOpenDocuments().FirstOrDefault(doc =>
-            string.Equals(doc.Title, name, StringComparison.OrdinalIgnoreCase) ||
-            doc.Title.Contains(name, StringComparison.OrdinalIgnoreCase));
-    }
-
     public static Document? FindOpenFamilyDocument(this UIApplication uiApp, Family family) {
         if (uiApp == null || family == null)
             return null;
@@ -70,14 +55,6 @@ public static class UIApplicationDocumentSessionExtensions {
         return uiApp.GetOpenDocuments().FirstOrDefault(doc =>
             doc.IsFamilyDocument &&
             doc.Title.Contains(family.Name, StringComparison.OrdinalIgnoreCase));
-    }
-
-    public static Document? FindOpenDocumentByKey(this UIApplication uiApp, string documentKey) {
-        if (uiApp == null || string.IsNullOrWhiteSpace(documentKey))
-            return null;
-
-        return uiApp.GetOpenDocuments().FirstOrDefault(doc =>
-            string.Equals(doc.GetDocumentKey(), documentKey, StringComparison.OrdinalIgnoreCase));
     }
 
     public static Document? FindOpenDocumentByPath(this UIApplication uiApp, string documentPath) {

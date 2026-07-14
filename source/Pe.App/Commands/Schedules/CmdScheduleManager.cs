@@ -18,7 +18,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows.Media.Imaging;
 using Color = System.Windows.Media.Color;
-using JsonValidationException = Pe.Revit.Global.JsonValidationException;
+using JsonValidationException = Pe.Revit.SettingsRuntime.Json.JsonValidationException;
 using RuntimeStorageClient = Pe.Shared.StorageRuntime.StorageClient;
 using SharedScheduleProfile = Pe.Shared.RevitData.Schedules.ScheduleProfile;
 

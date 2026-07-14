@@ -72,17 +72,5 @@ public class Commands {
             new Ballogger().AddDebug(LogEventLevel.Error, new StackFrame(), validIdErr, true).Show();
         return validId is not null && validIdErr is null;
     }
-
-    /// <summary> Returns a human-readable availability status. </summary>
-    public static string GetStatus(UIApplication uiApp, CommandRef command) {
-        var (validId, validIdErr) = command.GetPostableCommandId(uiApp);
-        if (validIdErr is not null)
-            new Ballogger().AddDebug(LogEventLevel.Error, new StackFrame(), validIdErr, true).Show();
-        return validIdErr is not null
-            ? "Availability Unknown"
-            : validId is not null
-                ? "Available"
-                : "Unavailable";
-    }
 }
 

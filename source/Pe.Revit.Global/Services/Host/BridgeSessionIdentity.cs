@@ -82,6 +82,16 @@ internal sealed record BridgeSessionIdentity(
             return null;
         }
 
+        // D6 observability: a sandbox descriptor does NOT get its own host/runtime lane — the
+        // sandbox Pe.App shares the one installed host, port, and service file by design (the
+        // ProductRuntimeLane enum answers "which binaries am I using", and for a sandbox that is
+        // genuinely "installed"). The bridge still attributes the session as sandbox here; this log
+        // makes the intentional sharing observable rather than silent. See docs/adr/0002.
+        if (descriptor.Lane == "sandbox")
+            Log.Information(
+                "Sandbox session (descriptor '{DescriptorPath}') shares the one installed host, port, and service file by design; the bridge still attributes it as 'sandbox'.",
+                descriptorPath);
+
         return new BridgeSessionIdentity(
             processStartUtcUnixMs,
             descriptorPath,

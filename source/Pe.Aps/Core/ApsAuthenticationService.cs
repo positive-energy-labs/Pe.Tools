@@ -46,8 +46,6 @@ internal sealed class ApsAuthenticationService(IApsCredentialProvider credential
     private static readonly TimeSpan RefreshTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan ClientCredentialsTimeout = TimeSpan.FromSeconds(15);
 
-    public string GetToken() => this.GetToken(ApsTokenRequest.ForParameterService());
-
     public string GetToken(ApsTokenRequest request) => this.GetTokenResult(request).AccessToken;
 
     public ApsTokenResult GetTokenResult(ApsTokenRequest request) {

@@ -1,5 +1,3 @@
-import { serve } from "@hono/node-server";
-import { serveStatic } from "@hono/node-server/serve-static";
 import { createSignal } from "@mastra/core/agent";
 import { AgentController, type Session } from "@mastra/core/agent-controller";
 import { Mastra } from "@mastra/core/mastra";
@@ -352,52 +350,4 @@ export interface RuntimeAgentControllerWebOptions<TRuntimeOptions = unknown> {
   port?: number;
   /** Static SPA build to serve alongside the API (production single-server). Omit in dev. */
   staticDir?: string;
-  /** @deprecated Use `port`. Kept for launcher compatibility. */
-  workbenchPort?: number;
-  /** Accepted but unused — native routes are open on loopback. */
-  workbenchToken?: string;
-}
-
-/**
- * Dev/standalone server shim: construct a runtime, build its Hono app via
- * {@link buildAgentControllerApp}, optionally serve a static SPA, bind a port, and hold the
- * process until SIGINT/SIGTERM. Pea no longer uses this (the host mounts
- * `buildAgentControllerApp` into its own Effect server); it remains as a standalone dev
- * server for controller runtimes that need the wrap branch in `resolveServingTarget`.
- */
-export async function runRuntimeAgentControllerWeb<TRuntimeOptions = unknown>(
-  options: RuntimeAgentControllerWebOptions<TRuntimeOptions>,
-): Promise<void> {
-  const runtime = requireServableRuntime(
-    await options.createRuntime((options.runtimeOptions ?? {}) as TRuntimeOptions),
-  );
-  const app = await buildAgentControllerApp({ runtime, label: options.label });
-  const host = options.host ?? "127.0.0.1";
-  const port = options.port ?? options.workbenchPort ?? 43112;
-
-  if (options.staticDir) {
-    app.use("*", serveStatic({ root: options.staticDir }));
-    app.get("*", serveStatic({ path: "index.html", root: options.staticDir }));
-  }
-
-  const node = serve({ fetch: app.fetch, hostname: host, port });
-  console.log(`${options.label} agent-controller API http://${host}:${port}/api`);
-
-  await waitForShutdown(async () => {
-    await new Promise<void>((resolve) => node.close(() => resolve()));
-    await runtime.close?.();
-  });
-}
-
-async function waitForShutdown(close: () => Promise<void>): Promise<void> {
-  let closing = false;
-  await new Promise<void>((resolve) => {
-    const shutdown = () => {
-      if (closing) return;
-      closing = true;
-      void close().finally(resolve);
-    };
-    process.once("SIGINT", shutdown);
-    process.once("SIGTERM", shutdown);
-  });
 }

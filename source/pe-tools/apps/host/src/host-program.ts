@@ -1,21 +1,22 @@
-import { randomUUID } from "node:crypto";
 import { Deferred, Effect, Layer } from "effect";
-import { HOST_PORT, prepareHostOwnership } from "./host-ownership.ts";
+import { HOST_PORT } from "./host-ownership.ts";
 import { makeHttpLive, MastraRuntimeLive, resolveWebRoot } from "./app.ts";
+import type { ServiceHostHandle } from "./pe-service-host.ts";
 
 /** The shared host lifecycle used by both installed startup and source web development. */
 export const hostProgram = <A, E, R>(beforeHost: Effect.Effect<A, E, R>) =>
   Effect.scoped(
     Effect.gen(function* () {
-      yield* prepareHostOwnership();
       yield* beforeHost;
 
+      // The service-file identity + eviction is SDK-owned (D3): ServiceFileLive claims it on bind and
+      // publishes the claim handle here. No pre-bind takeover, no locally minted token.
       const latch = yield* Deferred.make<void>();
-      const serviceToken = randomUUID();
+      const handle = yield* Deferred.make<ServiceHostHandle>();
       const HttpLive = makeHttpLive({
         port: HOST_PORT,
         mastraLayer: MastraRuntimeLive,
-        lifecycle: { latch, serviceToken },
+        lifecycle: { latch, handle },
         webRoot: resolveWebRoot(),
       });
 

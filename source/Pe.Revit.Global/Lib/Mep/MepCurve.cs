@@ -52,43 +52,4 @@ public class MepCurve {
             return new InvalidOperationException($"Error retrieving system type for duct {mainDuct.Id}: {ex.Message}");
         }
     }
-
-
-    /// <summary>
-    ///     Copy system properties from main duct to branch duct for proper inheritance
-    /// </summary>
-    public static Result<(bool nameSuccess, bool abbrevSuccess, bool classifSuccess)> CopySystemProperties(
-        MEPCurve sourceCurve,
-        MEPCurve targetCurve) {
-        try {
-            var nameSuccess = false;
-            var abbrevSuccess = false;
-            var classifSuccess = false;
-
-            var sourceSysName = sourceCurve.FindParameter(BuiltInParameter.RBS_SYSTEM_NAME_PARAM);
-            var targetSysName = targetCurve.FindParameter(BuiltInParameter.RBS_SYSTEM_NAME_PARAM);
-            if (sourceSysName != null && targetSysName is { IsReadOnly: false }) {
-                // targetSysName.Set(sourceSysName.AsString());
-                nameSuccess = true;
-            }
-
-            var sourceSysAbbrev = sourceCurve.FindParameter(BuiltInParameter.RBS_SYSTEM_ABBREVIATION_PARAM);
-            var targetSysAbbrev = targetCurve.FindParameter(BuiltInParameter.RBS_SYSTEM_ABBREVIATION_PARAM);
-            if (sourceSysAbbrev != null && targetSysAbbrev is { IsReadOnly: false }) {
-                // targetSysAbbrev.Set(sourceSysAbbrev.AsString());
-                abbrevSuccess = true;
-            }
-
-            var sourceSysClassif = sourceCurve.FindParameter(BuiltInParameter.RBS_SYSTEM_CLASSIFICATION_PARAM);
-            var targetSysClassif = targetCurve.FindParameter(BuiltInParameter.RBS_SYSTEM_CLASSIFICATION_PARAM);
-            if (sourceSysClassif != null && targetSysClassif is { IsReadOnly: false }) {
-                // targetSysClassif.Set(sourceSysClassif.AsString());
-                classifSuccess = true;
-            }
-
-            return (nameSuccess, abbrevSuccess, classifSuccess);
-        } catch (Exception e) {
-            return new InvalidOperationException($"Error copying system properties: {e.Message}");
-        }
-    }
 }

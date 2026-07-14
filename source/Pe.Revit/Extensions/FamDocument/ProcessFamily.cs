@@ -113,20 +113,6 @@ public static class FamilyDocumentProcessFamily {
     }
 
     /// <summary>
-    ///     Executes a function against the family document and captures the result via out parameter.
-    ///     Does NOT wrap in a transaction - caller controls transaction scope.
-    ///     Useful for snapshot collection, read-only operations, or any code that needs result capture.
-    /// </summary>
-    public static FamilyDocument Tap<T>(
-        this FamilyDocument famDoc,
-        Func<FamilyDocument, T> func,
-        out T result
-    ) {
-        result = func(famDoc);
-        return famDoc;
-    }
-
-    /// <summary>
     ///     Saves a variant of the family document to a given path with result capture.
     /// </summary>
     public static FamilyDocument ProcessAndSaveVariant<TOutput>(
@@ -186,14 +172,6 @@ public static class FamilyDocumentProcessFamily {
         return famDoc;
     }
 
-    public static Family LoadAndClose(this FamilyDocument famDoc, Document doc, IFamilyLoadOptions? options = null) {
-        if (options == null) options = new DefaultFamilyLoadOptions();
-        var family = famDoc.LoadFamily(doc, options);
-        var closed = famDoc.Close(false);
-        return closed
-            ? family
-            : throw new InvalidOperationException("Failed to close family document after load error.");
-    }
 }
 
 public class DefaultFamilyLoadOptions : IFamilyLoadOptions {

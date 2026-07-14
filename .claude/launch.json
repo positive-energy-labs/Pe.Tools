@@ -2,13 +2,6 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "host",
-      "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@pe/host", "start"],
-      "port": 5180,
-      "autoPort": false
-    },
-    {
       "name": "web",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@pe/web", "dev"],

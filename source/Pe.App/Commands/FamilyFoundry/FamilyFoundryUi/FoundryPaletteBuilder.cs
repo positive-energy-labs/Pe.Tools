@@ -15,7 +15,7 @@ using Pe.Revit.Ui.Core;
 using Pe.Revit.Ui.Core.Services;
 using Pe.Shared.RevitData;
 using Pe.Shared.StorageRuntime.Modules;
-using JsonValidationException = Pe.Revit.Global.JsonValidationException;
+using JsonValidationException = Pe.Revit.SettingsRuntime.Json.JsonValidationException;
 using RuntimeStorageClient = Pe.Shared.StorageRuntime.StorageClient;
 
 namespace Pe.App.Commands.FamilyFoundry.FamilyFoundryUi;
