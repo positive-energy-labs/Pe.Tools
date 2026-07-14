@@ -10,6 +10,7 @@ riderModule.iml
 .idea/
 
 # TS excludes
+*.tsbuildinfo
 node_modules
 dist
 dist-installed
