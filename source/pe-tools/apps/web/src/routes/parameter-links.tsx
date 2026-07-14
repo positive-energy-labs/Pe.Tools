@@ -132,9 +132,18 @@ function ParameterLinksRoute() {
       return { text: "Previewed and clean — ready to apply.", tone: "green" as const };
     if (hasUnsavedEdits) return { text: "Unsaved draft edits.", tone: "clay" as const };
     if (editing && !reviewed)
-      return { text: "Preview the draft before applying.", tone: "lichen" as const };
+      return {
+        // Apply only trusts a preview run from this pane; an agent's preview renders its
+        // evaluation but deliberately does not arm the human's Apply (defense in depth on
+        // top of the server-side draft-match guard).
+        text:
+          evaluation != null
+            ? "Pea's preview is shown — run Preview to verify it yourself and enable Apply."
+            : "Preview the draft before applying.",
+        tone: "lichen" as const,
+      };
     return null;
-  }, [message, errorCount, applyReady, hasUnsavedEdits, editing, reviewed]);
+  }, [message, errorCount, applyReady, hasUnsavedEdits, editing, reviewed, evaluation]);
 
   return (
     <RouteWorkspaceShell
@@ -198,7 +207,9 @@ function ParameterLinksRoute() {
                 ? undefined
                 : errorCount > 0
                   ? "Resolve blocking errors first"
-                  : "Preview the current draft first"
+                  : evaluation != null
+                    ? "Pea previewed this draft — run Preview yourself to enable Apply"
+                    : "Preview the current draft first"
             }
             className="bg-[var(--cat-green)] text-white hover:bg-[var(--cat-green)]/85 disabled:opacity-50"
           >
