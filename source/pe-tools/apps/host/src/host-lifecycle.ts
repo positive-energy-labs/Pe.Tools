@@ -94,7 +94,7 @@ export const ServiceFileLive = Layer.effectDiscard(
         Effect.flatMap((result) =>
           result.claimed
             ? Effect.succeed(result.handle)
-            : Effect.dieMessage(`host service claim refused: ${result.reason}`),
+            : Effect.die(new Error(`host service claim refused: ${result.reason}`)),
         ),
       ),
       (handle) => Effect.promise(() => handle.release()),
@@ -110,17 +110,20 @@ export const ServiceFileLive = Layer.effectDiscard(
  * No dev-lane header guard: the installed-lane C# supervisor no longer evicts a healthy dev host (D4),
  * so the token alone is the authority.
  */
-export const adminShutdownRoute = HttpRouter.add("POST", hostProcessIdentity.shutdownPath, (request) =>
-  Effect.gen(function* () {
-    const { latch, handle: handleDeferred } = yield* HostLifecycle;
-    const handle = yield* Deferred.await(handleDeferred);
+export const adminShutdownRoute = HttpRouter.add(
+  "POST",
+  hostProcessIdentity.shutdownPath,
+  (request) =>
+    Effect.gen(function* () {
+      const { latch, handle: handleDeferred } = yield* HostLifecycle;
+      const handle = yield* Deferred.await(handleDeferred);
 
-    // Token auth via the SDK-owned validator: X-Pe-Service-Token header or JSON body { token }.
-    const body = yield* Effect.orElseSucceed(request.json, () => null);
-    if (!authorizeShutdownFor(handle)(request.headers, body))
-      return yield* Response.json({ error: "Forbidden" }, { status: 403 });
+      // Token auth via the SDK-owned validator: X-Pe-Service-Token header or JSON body { token }.
+      const body = yield* Effect.orElseSucceed(request.json, () => null);
+      if (!authorizeShutdownFor(handle)(request.headers, body))
+        return yield* Response.json({ error: "Forbidden" }, { status: 403 });
 
-    yield* Effect.forkDetach(Deferred.succeed(latch, undefined));
-    return yield* Response.json({ shuttingDown: true, lane: hostOwnership.lane });
-  }),
+      yield* Effect.forkDetach(Deferred.succeed(latch, undefined));
+      return yield* Response.json({ shuttingDown: true, lane: hostOwnership.lane });
+    }),
 );
