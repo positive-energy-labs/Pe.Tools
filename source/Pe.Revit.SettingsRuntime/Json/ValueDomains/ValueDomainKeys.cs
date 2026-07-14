@@ -13,4 +13,7 @@ public static class ValueDomainKeys {
     public const string UnitTypeIds = "unit-type-ids";
     public const string SymbolTypeIds = "symbol-type-ids";
     public const string LineStyleNames = "line-style-names";
+    public const string CategoryIds = "category-ids";
+    public const string ElementUniqueIds = "element-unique-ids";
+    public const string ParameterIdentities = "parameter-identities";
 }

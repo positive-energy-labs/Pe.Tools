@@ -245,6 +245,7 @@ function ParameterLinksRoute() {
             <ProfileEditor
               profile={editing}
               disabled={busy != null || route.peaActive}
+              target={document?.binding.target ?? undefined}
               onChange={onDraftChange}
             />
           )}
