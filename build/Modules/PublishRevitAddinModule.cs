@@ -26,11 +26,17 @@ public sealed class PublishRevitAddinModule(IOptions<BuildOptions> buildOptions)
         var signing = signingResult.ValueOrDefault!;
         var rootDirectory = context.Git().RootDirectory;
         var appProjectPath = BuildProjectDiscovery.FindSingleProjectByKind(rootDirectory.Path, "RevitAddin");
+        var assemblyName = BuildProjectDiscovery.AssemblyName(appProjectPath);
         var configurations = matrix.ResolveConfigurations(BuildConfigurationGroup.Pack, buildOptions.Value.Configuration);
 
         foreach (var configuration in configurations)
             await context.SubModule(configuration, async () => {
                 context.Logger.LogInformation("Publishing Revit add-in for {Configuration}.", configuration);
+                foreach (var path in new[] {
+                    Path.Combine(layout.Artifacts.ArtifactsRoot, "build", assemblyName, configuration),
+                    Path.Combine(layout.Artifacts.ArtifactsRoot, "obj", assemblyName, configuration)
+                })
+                    if (Directory.Exists(path)) Directory.Delete(path, recursive: true);
                 await PublishAsync(
                     context,
                     versioning,

@@ -176,9 +176,16 @@ copies the manifest-declared sources into the portable zip and writes its releas
 MSI and refreshes only the receipt's MSI SHA-256 so the receipt describes the bytes that will be
 published. Pe.Tools does not rewrite a transport manifest or build zip topology.
 
+On Windows, installer packaging rebuilds each Vite+ bundle with Node's direct SEA builder using a
+temporary Node copy whose existing Authenticode signature has been removed. It then signs and
+verifies the final host and Pea executables. Injecting into the signed Node executable produces a
+malformed signature table and makes SignTool fail with `0x800700C1`.
+
 Installer packaging is deliberately complete-family: it rejects `--configuration`, requires every
 `Directory.Build.props` Revit year publish root, and requires the manifest `years` transport contract
-to match that matrix exactly. Other pack targets may still use `--configuration` for a narrow artifact.
+to match that matrix exactly. Before each year, it clears that exact isolated `Pe.App` release output
+so stale build trees cannot enter the payload. Other pack targets may still use `--configuration` for
+a narrow artifact.
 
 `CreateAutomationBundleModule` likewise supplies only Pe.Tools policy: the worker project, eligible
 year matrix, output root, and product version. SDK `PeCreateAppBundle` builds each engine lane and

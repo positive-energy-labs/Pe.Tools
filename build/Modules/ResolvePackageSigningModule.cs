@@ -200,6 +200,29 @@ public sealed record PackageSigningResult(
         VerifySignedFile(path, timestamp);
     }
 
+    public void RemoveSignature(string path) {
+        if (string.IsNullOrWhiteSpace(SignToolPath) || !File.Exists(SignToolPath))
+            throw new InvalidOperationException($"PeSignToolPath must identify signtool.exe: '{SignToolPath}'.");
+        var startInfo = new ProcessStartInfo(SignToolPath) {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        startInfo.ArgumentList.Add("remove");
+        startInfo.ArgumentList.Add("/s");
+        startInfo.ArgumentList.Add(path);
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException($"Failed to start signtool for '{path}'.");
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException(
+                $"Authenticode removal failed for '{path}' ({process.ExitCode}): {error.Trim()} {output.Trim()}"
+            );
+    }
+
     public void VerifyTimestampedFile(string path) => VerifySignedFile(path, requireTimestamp: true);
 
     public void VerifyReleaseInstallZip(string path, string expectedVersion, IReadOnlyCollection<string> expectedYears) {

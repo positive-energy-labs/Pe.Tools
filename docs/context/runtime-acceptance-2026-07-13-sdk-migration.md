@@ -12,17 +12,17 @@ No approval-dialog automation was required.
 | Authority | Candidate |
 | --- | --- |
 | SDK repository | `C:\Users\kaitp\source\repos\Pe.Revit.Sdk` |
-| SDK source-root fix | `a305032b37a4f85bf9dcb104c439edb361a6ae13` |
-| SDK package family | `0.1.0-beta.86` (11 packages) |
+| SDK candidate | `6417f4ace7d691bfa64a033c2b2f5e54fc060b41` (source-root fix `a305032b37a4f85bf9dcb104c439edb361a6ae13`) |
+| SDK package family | `0.1.0-beta.87` (11 packages) |
 | Consumer repository | `C:\Users\kaitp\source\repos\Pe.Tools` |
 | Product version | `0.6.10` |
 | Revit/configuration | Revit 2025 / `Debug.R25` and `Release.R25` |
 | Development signing certificate | `DBE820C856CAE3A9A06B8F2E95D37071973A470B` |
 
-`pe-revit release --plan --json` passed for the full beta.86 family at the SDK commit above. The
+`pe-revit release --plan --json` passed for the full beta.87 family at the SDK commit above. The
 consumer pins the same version in `global.json` and `.config/dotnet-tools.json`; the canonical SDK
 TypeScript service client is copied from that package. Because remote NuGet publication is deferred,
-the complete 11-package beta.86 family is committed under `eng/sdk-feed`; a fresh checkout therefore
+the complete 11-package beta.87 family is committed under `eng/sdk-feed`; a fresh checkout therefore
 does not depend on this machine's NuGet cache. Final `pe-revit doctor --json` reported every check
 green, including lockstep pins and TypeScript client drift.
 
@@ -76,10 +76,10 @@ Signer: DBE820C856CAE3A9A06B8F2E95D37071973A470B
 | Gate | Result |
 | --- | --- |
 | SDK loader/CLI/queue harness | Pass: 30 envelope verbs, bridge HTTP security, install mirror regression, and Revit-free queue suite. |
-| SDK pack/release preflight | Pass: all 11 beta.85 packages and source revision `06db550...`. |
-| Fresh consumer restore | Pass: the exact staged tree was mounted as a detached worktree with an empty `NUGET_PACKAGES`; `dotnet tool restore` and `dotnet restore source/Pe.App/Pe.App.csproj -p:Configuration=Release.R25` resolved beta.85 from the committed feed. |
+| SDK pack/release preflight | Pass: all 11 beta.87 packages and source revision `6417f4a...`. |
+| Fresh consumer restore | Pass: the beta.87 package cache was evicted; tool restore and the complete installer build then resolved the pinned CLI, SDK, and companion packages from the committed feed. Earlier detached-worktree/empty-`NUGET_PACKAGES` proof also passed. |
 | Pe.Tools isolated build | Pass: solution compiled with zero errors (existing warnings only); focused post-review `Pe.App` and build-orchestrator builds also passed. |
-| Pe.Tools installer pack | Pass: signed `Release.R25` add-in, cryptographic payload/selector verification, host, web SPA, Pea, portable install zip, and MSI. |
+| Pe.Tools installer pack | Pass: complete 2023-2026 matrix, host, web SPA, Pea, portable install zip, and MSI under beta.87. The final ZIP contains four selectors, no nested build/obj/publish debris, and all ten key payload binaries have valid Authenticode signatures. |
 | Install integrity | Pass: final forced apply followed by `install verify`, `ok-5797`. |
 | Approval-free startup | Pass: installed sandbox reached SDK-ready without an unsigned-add-in dialog or UI automation. |
 | Migrated queue E2E | Pass after review fixes: PID `69836`, session `session-6c8b90c033bf999d`; targeted `settings.module-catalog` returned four modules. Pe.Tools logged queue entry, execution on the Revit thread after 2 ms, and completion after 6 ms. |
@@ -102,10 +102,19 @@ automation, `/host/status` reported `lane=dev`, `bridgeIsConnected=true`, and
 `revit.context.document-session` operation then returned the open
 `source-sandbox-artifact.rfa`. SDK journal startup had no failure event.
 
-## Deferred publish blocker
+## Packaging blocker resolved; remaining release gates
 
-The beta.86 Revit payload and selectors were development-signed successfully, so the unsigned add-in
-dialog is no longer part of runtime acceptance. Full `pack installer` still stops while SignTool tries
-to sign the Node SEA host executable and returns `0x800700C1` (`badexeformat`). Remote creation and
-NuGet/GitHub publication remain deferred until the SEA signing stage signs a signable base executable
-before blob injection or otherwise produces a verifiably signed final host.
+The `0x800700C1` failure was caused by Node 25 injecting the SEA blob into its already-signed Windows
+executable. Installer packaging now copies Node to a temporary path, removes that copy's Authenticode
+signature, builds the host and Pea SEAs from the unsigned base, then signs and verifies the final
+executables. The exact `pack installer` command passes; the portable ZIP is 324,587,470 bytes, the MSI
+is validly development-signed, and the key binaries extracted from the ZIP all verify as signed by the
+expected development identity.
+
+Installer packaging also clears only the exact isolated `Pe.App` release output used by each year.
+This prevents stale `bin`, `obj`, or `publish` trees from leaking into a package without disrupting
+unrelated live dev processes.
+
+No public release is authorized by this evidence. A clean-machine/VM install, launch, operation,
+upgrade/wipe, and uninstall remains the pre-release gate. Production certificate plus RFC 3161
+timestamp proof, remote creation, NuGet publication, and GitHub publication also remain deferred.
