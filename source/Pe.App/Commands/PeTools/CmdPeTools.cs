@@ -54,7 +54,7 @@ public class CmdPeTools : IExternalCommand {
                 );
                 dialog.AddCommandLink(
                     TaskDialogCommandLinkId.CommandLink2,
-                    "Open Pe Tools Web",
+                    "Open Pe Tools Web UI",
                     "Open the Pe Tools web app (served by the host) in your default browser."
                 );
             }
