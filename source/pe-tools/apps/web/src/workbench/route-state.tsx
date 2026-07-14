@@ -78,6 +78,16 @@ function wireStream(
             .getAgentController(info.controllerId)
             .session(info.resourceId);
 
+          // Hydrate before opening either long-lived stream. Chat + iframe roots otherwise
+          // exhaust the browser's per-origin connection pool and strand this request. The
+          // route SSE sends its current snapshot on connect, so it closes the hydration race.
+          const initial = await fetch(
+            routeWorkspaceUrl(config, descriptor.route, "read", descriptor.scope),
+          );
+          if (!initial.ok) throw new Error(`route workspace read ${initial.status}`);
+          const payload = (await initial.json()) as { doc?: unknown };
+          if ("doc" in payload) Queue.offerUnsafe(queue, { kind: "doc", doc: payload.doc ?? null });
+
           const unsubscribeSession = await session.subscribe({
             onEvent: (raw: unknown) => {
               const event = parseWireEvent(raw);
@@ -89,7 +99,6 @@ function wireStream(
             onError: () => undefined,
           });
 
-          let pushSeen = false;
           const events = new EventSource(
             routeWorkspaceUrl(config, descriptor.route, "events", descriptor.scope),
           );
@@ -97,21 +106,11 @@ function wireStream(
             try {
               const payload = JSON.parse(raw.data) as { doc?: unknown };
               if (!("doc" in payload)) return;
-              pushSeen = true;
               Queue.offerUnsafe(queue, { kind: "doc", doc: payload.doc ?? null });
             } catch {
               // Ignore malformed frames; the next valid snapshot is authoritative.
             }
           };
-
-          // Subscribe before hydration so a pushed document wins the race.
-          void fetch(routeWorkspaceUrl(config, descriptor.route, "read", descriptor.scope))
-            .then(async (result) => (result.ok ? await result.json() : null))
-            .then((payload: { doc?: unknown } | null) => {
-              if (!pushSeen && payload && "doc" in payload)
-                Queue.offerUnsafe(queue, { kind: "doc", doc: payload.doc ?? null });
-            })
-            .catch(() => undefined);
 
           return () => {
             events.close();
