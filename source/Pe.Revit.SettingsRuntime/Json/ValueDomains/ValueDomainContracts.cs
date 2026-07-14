@@ -6,7 +6,8 @@ namespace Pe.Revit.SettingsRuntime.Json.ValueDomains;
 public sealed record ValueDomainOptionItem(
     string Value,
     string Label,
-    string? Description
+    string? Description,
+    Dictionary<string, string>? Metadata = null
 );
 
 public sealed record ValueDomainExecutionContext {

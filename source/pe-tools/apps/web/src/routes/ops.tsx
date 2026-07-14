@@ -14,8 +14,9 @@ import {
 import { Switch } from "#/components/ui/switch";
 import { Textarea } from "#/components/ui/textarea";
 import { callHostDynamic } from "#/host/client";
+import { useFieldOptions } from "#/host/field-options";
 import { type HostIssue, HostIssuePanel, toHostIssue } from "#/host/issues";
-import { useBridgeSessionsListQuery, useHostOp, useHostOpDynamic } from "#/host/queries";
+import { useBridgeSessionsListQuery, useHostOp } from "#/host/queries";
 import { cn } from "#/lib/utils";
 
 export const Route = createFileRoute("/ops")({ component: OpsPlayground });
@@ -483,12 +484,6 @@ function readFieldOptionsKey(schema: HostOperationJsonSchema): string | undefine
   return isRecord(raw) && typeof raw.key === "string" ? raw.key : undefined;
 }
 
-type FieldOptionsData = {
-  mode?: string;
-  allowsCustomValue?: boolean;
-  items?: { value: string; label: string; description?: string | null }[];
-};
-
 function FieldOptionsInput({
   id,
   sourceKey,
@@ -502,13 +497,9 @@ function FieldOptionsInput({
   onChange: (next: unknown) => void;
   bridgeSessionId?: string;
 }) {
-  const optionsQuery = useHostOpDynamic(
-    "revit.catalog.field-options",
-    { sourceKey },
-    { bridgeSessionId, staleTime: 5 * 60_000 },
-  );
-  const data = optionsQuery.data as FieldOptionsData | undefined;
-  const items = data?.items ?? [];
+  const optionsQuery = useFieldOptions(sourceKey, {}, bridgeSessionId);
+  const data = optionsQuery.data as { mode?: string; allowsCustomValue?: boolean } | undefined;
+  const items = optionsQuery.items;
 
   if (data && data.mode?.toLowerCase() === "constraint" && !data.allowsCustomValue) {
     return (

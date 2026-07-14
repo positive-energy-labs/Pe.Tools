@@ -850,6 +850,9 @@ export namespace RevitCatalogFieldOptions {
       value: string;
       label: string;
       description?: null | string;
+      metadata?: null | {
+        [k: string]: string;
+      };
     }
   }
 }
@@ -967,6 +970,9 @@ export namespace RevitCatalogLoadedFamiliesFilterFieldOptions {
       value: string;
       label: string;
       description?: null | string;
+      metadata?: null | {
+        [k: string]: string;
+      };
     }
   }
 }
@@ -3897,6 +3903,9 @@ export namespace SettingsFieldOptions {
       value: string;
       label: string;
       description?: null | string;
+      metadata?: null | {
+        [k: string]: string;
+      };
     }
   }
 }
