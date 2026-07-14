@@ -2,10 +2,8 @@ export {
   PeaCliCommands,
   bundledPeaSkills,
   configurePeaProductToolContext,
-  createFamilyTypesCommandHandlers,
-  createParameterLinksCommandHandlers,
+  createRouteRegistrations,
   defaultPeaAgentModelId,
-  familyTypesRouteState,
   materializeBundledPeaSkills,
   peaProductHomeEnvVar,
   peaProductToolProfile,
@@ -13,11 +11,11 @@ export {
   peaSkillPaths,
   peaStandardSkillsRoot,
   peaTools,
-  parameterLinksRouteState,
   resolvePeaProductHomePath,
   resolvePeaSkillPaths,
   resolvePeaStandardSkillsRoot,
 } from "./pea/index.ts";
+export type { RouteRegistration } from "./pea/index.ts";
 export type { PeaCliCommandOptions } from "./pea/PeaCliCommands.ts";
 export { resolveHostBaseUrl, resolveWorkspaceKey } from "./shared/host-config.ts";
 export { HostRpcCaller } from "./shared/host-rpc-caller.ts";

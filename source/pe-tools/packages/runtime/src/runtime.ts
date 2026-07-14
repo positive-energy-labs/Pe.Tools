@@ -50,8 +50,6 @@ export type RuntimeThreadMessagePart =
   | { type: "om-status"; data: unknown }
   | { type: "raw"; raw: unknown };
 
-export type RuntimeAccessLevel = "read-only" | "ask" | "trusted";
-
 export interface RuntimeWorkspaceInfo {
   cwd?: string;
   root?: string;

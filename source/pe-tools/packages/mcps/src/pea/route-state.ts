@@ -13,6 +13,7 @@
 import { createTool } from "@mastra/core/tools";
 import z from "zod";
 
+import { coerceJsonObject } from "../shared/coerce.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
 
 function dispatcherBaseUrl(): string {
@@ -105,7 +106,7 @@ export const routeCommand = createTool({
   execute: async (input) =>
     postJson(`/pe/agent/route-state/${encodeURIComponent(input.route)}/command`, {
       command: input.command,
-      input: input.input,
+      input: coerceJsonObject(input.input),
     }),
 });
 

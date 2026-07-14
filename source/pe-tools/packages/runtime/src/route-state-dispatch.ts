@@ -14,7 +14,13 @@
  * in per request (single-session host today, but nothing here assumes it).
  */
 import { z } from "zod";
-import type { RouteStateSpec } from "@pe/agent-contracts";
+import { BIND_COMMAND } from "@pe/agent-contracts";
+import type {
+  RouteStateCommandContext,
+  RouteStateCommandHandler,
+  RouteStateCommandHandlers,
+  RouteStateSpec,
+} from "@pe/agent-contracts";
 
 /** The session-state read/write handle the endpoints bind (AgentController `session.state`). */
 export interface RouteStateSession {
@@ -26,20 +32,6 @@ export interface RouteStateSession {
     },
   ): Promise<TResult>;
 }
-
-/** What a command handler receives: read the current document, write the next one. */
-export interface RouteStateCommandContext {
-  /** The current document (schema-parsed; a fresh empty document when absent). */
-  getDoc(): unknown;
-  /** Replace the document (schema-validated before it lands). */
-  setDoc(next: unknown): Promise<void>;
-}
-
-export type RouteStateCommandHandler = (
-  input: unknown,
-  ctx: RouteStateCommandContext,
-) => Promise<unknown>;
-export type RouteStateCommandHandlers = Record<string, RouteStateCommandHandler>;
 
 export type RouteStatePatch = { path: (string | number)[]; value?: unknown };
 
@@ -61,14 +53,16 @@ export interface RouteStateCommandResult {
 
 interface RegisteredRoute {
   spec: RouteStateSpec<z.ZodType>;
-  handlers: RouteStateCommandHandlers;
+  // biome-ignore lint/suspicious/noExplicitAny: erased per-route doc type; the dispatcher
+  // always passes the schema-parsed doc, which is exactly what the handlers declared.
+  handlers: RouteStateCommandHandlers<any>;
 }
 
 const registry = new Map<string, RegisteredRoute>();
 
 export function registerRouteState<TSchema extends z.ZodType>(
   spec: RouteStateSpec<TSchema>,
-  handlers: RouteStateCommandHandlers,
+  handlers: RouteStateCommandHandlers<z.infer<TSchema>>,
 ): void {
   registry.set(spec.route, { spec: spec as unknown as RouteStateSpec<z.ZodType>, handlers });
 }
@@ -198,7 +192,7 @@ export async function runRouteStateCommand(
       hint: formatZodError(parsedInput.error),
     };
   }
-  const handler = handlers[command];
+  const handler = handlers[command] ?? (command === BIND_COMMAND ? bindHandler : undefined);
   if (!handler) {
     return {
       ok: false,
@@ -220,6 +214,15 @@ export async function runRouteStateCommand(
 }
 
 /* ── internals ─────────────────────────────────────────────────────────────── */
+
+/** The substrate-owned `bind` command — routes never supply a handler for it. */
+const bindHandler: RouteStateCommandHandler = async (input, ctx) => {
+  const { target } = input as { target: string | null };
+  const doc = ctx.getDoc() as Record<string, unknown>;
+  doc.binding = { target, boundAt: target == null ? null : new Date().toISOString() };
+  await ctx.setDoc(doc);
+  return { target };
+};
 
 function makeCommandContext(
   session: RouteStateSession,

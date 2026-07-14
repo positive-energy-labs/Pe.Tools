@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.25.0",
+    "@mastra/core": "1.50.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {

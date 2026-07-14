@@ -1,4 +1,4 @@
-import type { RuntimeToolMetadata } from "./tool-metadata.ts";
+import type { RuntimeToolMetadata } from "@pe/agent-contracts";
 
 export type RuntimeJsonValue =
   | string

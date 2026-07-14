@@ -103,6 +103,26 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
     });
     expect(conflictingOps.status).toBe(400);
 
+    // (2b) /call envelope rejects unknown top-level body keys. A `bridgeSessionId` in the body
+    // once silently mis-routed to the user's live Revit — it must 400 and point at the header.
+    const misTargeted = await fetch(`${base}/call`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ key: "host.status", bridgeSessionId: "session-abc" }),
+    });
+    expect(misTargeted.status).toBe(400);
+    const misTargetedBody = (await misTargeted.json()) as { message?: string };
+    expect(misTargetedBody.message).toContain("bridgeSessionId");
+    expect(misTargetedBody.message).toContain(HOST_RPC_BRIDGE_SESSION_HEADER);
+
+    // A clean TS-only envelope still passes the key gate (no Revit session → Disconnected, not 400).
+    const cleanCall = await fetch(`${base}/call`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ key: "host.status" }),
+    });
+    expect(cleanCall.status).toBe(200);
+
     // (3) static: /a.txt serves, and an unknown no-extension route falls back to index.html.
     const asset = await fetch(`${base}/a.txt`);
     expect(asset.status).toBe(200);

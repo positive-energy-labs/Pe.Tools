@@ -61,11 +61,13 @@ test("allowed agent proposal patch applies and lands in state", async () => {
 test("human actor bypasses the mask and can stage", async () => {
   const session = fakeSession();
   const result = await applyRouteStatePatches(session, "family-types", "human", [
-    { path: ["cells", CELL, "staged"], value: "10" },
+    { path: ["cells", CELL, "staged"], value: { value: "10" } },
   ]);
   expect(result.ok).toBe(true);
-  const doc = session.getState()[KEY] as { cells: Record<string, { staged?: string }> };
-  expect(doc.cells[CELL].staged).toBe("10");
+  const doc = session.getState()[KEY] as {
+    cells: Record<string, { staged?: { value: string } }>;
+  };
+  expect(doc.cells[CELL].staged).toEqual({ value: "10" });
 });
 
 test("human-only command rejects the agent actor with a hint", async () => {

@@ -1,7 +1,7 @@
 import { AlertCircle, Check, Lock, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import type { CellReview, CellState } from "@pe/agent-contracts";
+import type { CellReview, FamilyTypesCell } from "@pe/agent-contracts";
 
 import type { FormulaProblem } from "#/family-types/formula";
 import { useFamilyTypes } from "#/family-types/store";
@@ -40,7 +40,7 @@ export function Cell({
 }: {
   cellKey: string;
   snapshotValue: string;
-  cell: CellState | undefined;
+  cell: FamilyTypesCell | undefined;
   readOnly: boolean;
   focused: boolean;
   onFocus: () => void;
@@ -68,14 +68,14 @@ export function Cell({
   const isStaged = staged != null;
   const groundable = proposal?.source != null;
 
-  const display = isStaged ? staged : hasOpenProposal ? proposal.value : snapshotValue;
+  const display = staged ? staged.value : hasOpenProposal ? proposal.value : snapshotValue;
   const showOld = (hasOpenProposal || isStaged) && snapshotValue && snapshotValue !== display;
 
   const problems = editing && validate ? validate(draft) : [];
 
   const commitEdit = () => {
     setEditing(false);
-    if (draft !== staged) {
+    if (draft !== staged?.value) {
       store.stageEdit(cellKey, draft);
       // authoritative check on formula edits, ephemeral & non-blocking
       if (formulaParamName && store.dryRunFormula) {
@@ -148,7 +148,7 @@ export function Cell({
             onClick={(e) => {
               if (isStaged && !readOnly) {
                 e.stopPropagation();
-                setDraft(staged);
+                setDraft(staged?.value ?? "");
                 setEditing(true);
               }
             }}

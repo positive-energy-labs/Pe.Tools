@@ -14,8 +14,8 @@ import type {
   RuntimeWorkspaceInfo,
 } from "../runtime.ts";
 import type { RuntimeStorageProfile } from "../storage/profiles.ts";
-import type { RuntimeToolProfile, RuntimeToolSource } from "../tool-metadata.ts";
-import { guardRuntimeToolsForAccessPolicy } from "../tools/access-policy.ts";
+import type { RuntimeToolProfile, RuntimeToolSource } from "@pe/agent-contracts";
+import { guardRuntimeToolsForAccessPolicy } from "@pe/agent-contracts";
 
 export type RuntimeControllerConfig<
   TState extends Record<string, unknown> = Record<string, unknown>,

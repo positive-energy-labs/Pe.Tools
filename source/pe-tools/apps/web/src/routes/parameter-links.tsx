@@ -7,12 +7,12 @@ import { parameterLinksRouteState } from "@pe/agent-contracts";
 
 import { Button } from "#/components/ui/button";
 import { SidePane } from "#/components/ui/side-pane";
-import { HostConnectionPill } from "#/host/issues";
 import { useHostStatusQuery } from "#/host/queries";
 import { EvaluationView, RuntimeStatusBar } from "#/parameter-links/Evaluation";
 import { ProfileEditor } from "#/parameter-links/ProfileEditor";
 import { canApply, errorIssueCount, isDraftDirty, sameProfile } from "#/parameter-links/model";
 import { useRouteState } from "#/workbench/route-state";
+import { RouteWorkspaceShell } from "#/workbench/route-workspace-shell";
 
 /**
  * /parameter-links — the route-native workspace for cross-element parameter links.
@@ -137,102 +137,95 @@ function ParameterLinksRoute() {
   }, [message, errorCount, applyReady, hasUnsavedEdits, editing, reviewed]);
 
   return (
-    <main className="flex h-screen flex-col overflow-hidden bg-[var(--paper)]">
-      <header className="shrink-0 border-b border-[var(--line-2)] px-5 pb-2.5 pt-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-baseline gap-3">
-            <h1 className="font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight">
-              Parameter Links
-            </h1>
-            <span className="text-xs text-muted-foreground">
-              {editing
-                ? `${editing.definitions.length} definition${editing.definitions.length === 1 ? "" : "s"} · ${editing.assignments.length} assignment${editing.assignments.length === 1 ? "" : "s"}`
-                : "no profile"}
-              {draftDirty ? " · draft differs from stored" : ""}
+    <RouteWorkspaceShell
+      title="Parameter Links"
+      connected={route.connected && bridgeConnected}
+      binding={document?.binding}
+      subtitle={
+        <span className="text-xs text-muted-foreground">
+          {editing
+            ? `${editing.definitions.length} definition${editing.definitions.length === 1 ? "" : "s"} · ${editing.assignments.length} assignment${editing.assignments.length === 1 ? "" : "s"}`
+            : "no profile"}
+          {draftDirty ? " · draft differs from stored" : ""}
+        </span>
+      }
+      actions={
+        <>
+          {route.peaActive && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--pea-tint)] px-2 py-0.5 text-xs font-medium text-[var(--cat-green)]">
+              <Sparkles className="size-3 animate-pulse" />
+              pea is working…
             </span>
-          </div>
+          )}
 
-          <div className="flex flex-wrap items-center gap-2.5">
-            <HostConnectionPill connected={route.connected && bridgeConnected} label="Connected" />
-            {route.peaActive && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--pea-tint)] px-2 py-0.5 text-xs font-medium text-[var(--cat-green)]">
-                <Sparkles className="size-3 animate-pulse" />
-                pea is working…
-              </span>
-            )}
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy != null}
+            onClick={() => void runCommand("refresh")}
+          >
+            <RefreshCw className={busy === "refresh" ? "animate-spin" : ""} />
+            Refresh
+          </Button>
 
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy != null}
-              onClick={() => void runCommand("refresh")}
-            >
-              <RefreshCw className={busy === "refresh" ? "animate-spin" : ""} />
-              Refresh
-            </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy != null || !editing || !hasUnsavedEdits}
+            onClick={() => editing && void saveDraft(editing)}
+            title="Save draft edits to the shared document"
+          >
+            <Save />
+            Save draft
+          </Button>
 
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy != null || !editing || !hasUnsavedEdits}
-              onClick={() => editing && void saveDraft(editing)}
-              title="Save draft edits to the shared document"
-            >
-              <Save />
-              Save draft
-            </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy != null || !editing}
+            onClick={() => void runCommand("preview")}
+          >
+            <Eye className={busy === "preview" ? "animate-pulse" : ""} />
+            Preview
+          </Button>
 
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy != null || !editing}
-              onClick={() => void runCommand("preview")}
-            >
-              <Eye className={busy === "preview" ? "animate-pulse" : ""} />
-              Preview
-            </Button>
-
-            <Button
-              size="sm"
-              disabled={busy != null || !applyReady}
-              onClick={() => void runCommand("apply")}
-              title={
-                applyReady
-                  ? undefined
-                  : errorCount > 0
-                    ? "Resolve blocking errors first"
-                    : "Preview the current draft first"
-              }
-              className="bg-[var(--cat-green)] text-white hover:bg-[var(--cat-green)]/85 disabled:opacity-50"
-            >
-              <Check className={busy === "apply" ? "animate-pulse" : ""} />
-              Apply
-            </Button>
-          </div>
-        </div>
-
-        <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[11px]">
-          {subline ? (
-            <span
-              className={
-                subline.tone === "fail"
-                  ? "text-[var(--fail)]"
-                  : subline.tone === "green"
-                    ? "text-[var(--cat-green)]"
-                    : subline.tone === "clay"
-                      ? "text-[var(--cat-clay)]"
-                      : "text-[var(--lichen)]"
-              }
-            >
-              {subline.text}
-            </span>
-          ) : null}
-          {route.error && !message ? (
-            <span className="text-[var(--cat-clay)]">{route.error}</span>
-          ) : null}
-        </div>
-      </header>
-
+          <Button
+            size="sm"
+            disabled={busy != null || !applyReady}
+            onClick={() => void runCommand("apply")}
+            title={
+              applyReady
+                ? undefined
+                : errorCount > 0
+                  ? "Resolve blocking errors first"
+                  : "Preview the current draft first"
+            }
+            className="bg-[var(--cat-green)] text-white hover:bg-[var(--cat-green)]/85 disabled:opacity-50"
+          >
+            <Check className={busy === "apply" ? "animate-pulse" : ""} />
+            Apply
+          </Button>
+        </>
+      }
+      error={message ? null : route.error}
+      subline={
+        subline ? (
+          <span
+            className={
+              subline.tone === "fail"
+                ? "text-[var(--fail)]"
+                : subline.tone === "green"
+                  ? "text-[var(--cat-green)]"
+                  : subline.tone === "clay"
+                    ? "text-[var(--cat-clay)]"
+                    : "text-[var(--lichen)]"
+            }
+          >
+            {subline.text}
+          </span>
+        ) : null
+      }
+    >
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1 overflow-y-auto px-5 py-4">
           {!route.hydrated ? (
@@ -267,6 +260,6 @@ function ParameterLinksRoute() {
           </div>
         </SidePane>
       </div>
-    </main>
+    </RouteWorkspaceShell>
   );
 }

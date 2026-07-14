@@ -11,18 +11,15 @@ import { WorkbenchRuntimeProvider } from "#/workbench/aui";
 import { Lens } from "#/workbench/Lens";
 import { ContextRibbon, useCacheView } from "#/workbench/world";
 import { Button } from "#/components/ui/button";
+import { SidePane } from "#/components/ui/side-pane";
 import { X } from "lucide-react";
+import { chatPluginTitle } from "#/workbench/route-chat-plugins";
 import "#/workbench/lens.css";
 
-/** Routes hostable as chat workspace plugins; the iframe src is `/${plugin}`. */
-export type ChatPluginRoute = "family-types" | "parameter-links" | "settings" | "schedule-grid";
-
-const PLUGIN_TITLES: Record<ChatPluginRoute, string> = {
-  "family-types": "Family Types",
-  "parameter-links": "Parameter Links",
-  settings: "Settings",
-  "schedule-grid": "Schedule Grid",
-};
+/** Routes hostable as chat workspace plugins; the iframe src is `/${plugin}`.
+ * Route names and titles come from the plugin registry — one registration per route. */
+export type { ChatPluginRoute } from "#/workbench/route-chat-plugins";
+import type { ChatPluginRoute } from "#/workbench/route-chat-plugins";
 
 export function ChatShell({
   initialTurn,
@@ -87,8 +84,25 @@ function Surface({
     return saved >= 240 ? saved : 300;
   });
   const [sideOpen, setSideOpen] = useState(true);
+  // The plugin workspace is a right SidePane. Only ONE flank may be expanded at a time:
+  // opening either pane collapses the other to its 40px rail (nothing is unmounted).
+  const [pluginOpen, setPluginOpen] = useState(false);
+  useEffect(() => {
+    if (plugin) {
+      setPluginOpen(true);
+      setSideOpen(false);
+    }
+  }, [plugin]);
+  const openSide = (open: boolean) => {
+    setSideOpen(open);
+    if (open) setPluginOpen(false);
+  };
+  const openPlugin = (open: boolean) => {
+    setPluginOpen(open);
+    if (open) setSideOpen(false);
+  };
   // Collapsed → the pane is a 40px rail (SidePane's RAIL) and the chat column absorbs the rest.
-  const sideSize = plugin ? 0 : sideOpen ? Math.round(sideWidth) : 40;
+  const sideSize = sideOpen ? Math.round(sideWidth) : 40;
 
   const chrome = useMemo(() => selectWorkbenchChrome(debug.state), [debug.state]);
   // Context gauges (cap + OM meters) ride beside the composer now, so the cache view is derived
@@ -177,12 +191,8 @@ function Surface({
           ) : null}
         </div>
 
-        <div
-          className={`relative grid min-h-0 min-w-0 grid-cols-1 ${
-            plugin ? "lg:grid-cols-[minmax(0,1fr)_minmax(480px,48vw)]" : ""
-          }`}
-        >
-          <div className="relative min-h-0 min-w-0">
+        <div className="relative flex min-h-0 min-w-0">
+          <div className="relative min-h-0 min-w-0 flex-1">
             <Lens
               state={debug.state}
               mode={mode}
@@ -191,7 +201,7 @@ function Surface({
               onTurnChange={onTurnChange}
               onSideResize={setSideWidth}
               sideOpen={sideOpen}
-              onSideOpenChange={setSideOpen}
+              onSideOpenChange={openSide}
               sideHead={<ModeDial mode={mode} setMode={setMode} />}
               threadList={
                 <ThreadList
@@ -224,28 +234,35 @@ function Surface({
           </div>
 
           {plugin ? (
-            <aside className="absolute inset-0 z-10 flex min-h-0 min-w-0 flex-col border-l border-border bg-background lg:static">
-              <div className="flex h-10 shrink-0 items-center justify-between border-b border-border px-3">
-                <span className="text-sm font-semibold">{PLUGIN_TITLES[plugin]}</span>
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  title="Close workspace"
-                  onClick={onPluginClose}
-                >
-                  <X />
-                </Button>
-              </div>
-              <div className="min-h-0 flex-1">
-                {/* ponytail: iframe keeps the pilot route-native; extract a shared surface when
-                    cross-pane focus or a single shared browser subscription becomes necessary. */}
-                <iframe
-                  className="size-full border-0"
-                  src={`/${plugin}`}
-                  title={PLUGIN_TITLES[plugin]}
-                />
-              </div>
-            </aside>
+            <SidePane
+              side="right"
+              storageKey="pe.pluginWidth"
+              open={pluginOpen}
+              onOpenChange={openPlugin}
+              minWidth={480}
+              defaultWidth={640}
+              header={
+                <div className="flex items-center justify-between">
+                  <span className="truncate text-sm font-semibold">{chatPluginTitle(plugin)}</span>
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    title="Close workspace"
+                    onClick={onPluginClose}
+                  >
+                    <X />
+                  </Button>
+                </div>
+              }
+            >
+              {/* ponytail: iframe keeps the pilot route-native; extract a shared surface when
+                  cross-pane focus or a single shared browser subscription becomes necessary. */}
+              <iframe
+                className="size-full border-0"
+                src={`/${plugin}`}
+                title={chatPluginTitle(plugin)}
+              />
+            </SidePane>
           ) : null}
         </div>
       </div>

@@ -12,9 +12,16 @@
  * refetched from the parse cache.
  */
 import { z } from "zod";
-import { defineRouteState } from "./route-state.ts";
+import { defineRouteState, routeBindingSchema } from "./route-state.ts";
+import {
+  LOW_CONFIDENCE_REFINE_ERROR,
+  cellProposalSchema,
+  lowConfidenceIsFlagged,
+  trichotomyAgentMask,
+  trichotomyCellWithProposal,
+} from "./trichotomy.ts";
 
-/* ── Cell trichotomy (proposal → staged → pushed) + review marks ───────────── */
+/* ── Cell trichotomy — shared core + this route's provenance extension ────── */
 
 /** Provenance in markdown coordinates — pea never sees a bbox; the UI resolves
  * geometry through the grounded-doc estimator (measured solid / estimated dashed). */
@@ -25,25 +32,12 @@ export const sourceRefSchema = z.object({
 });
 export type SourceRef = z.infer<typeof sourceRefSchema>;
 
-export const cellProposalSchema = z.object({
-  value: z.string(),
-  by: z.enum(["pea", "human"]).default("pea"),
-  source: sourceRefSchema.nullish(),
-  note: z.string().nullish(),
-  confidence: z.enum(["high", "low"]).nullish(),
-});
-export type CellProposal = z.infer<typeof cellProposalSchema>;
-
-export const cellReviewSchema = z.enum(["none", "good", "attention"]);
-export type CellReview = z.infer<typeof cellReviewSchema>;
-
-export const cellStateSchema = z.object({
-  proposal: cellProposalSchema.nullish(),
-  /** Human-promoted value — what push sends. Pea must never write this (mask-denied). */
-  staged: z.string().nullish(),
-  review: cellReviewSchema.default("none"),
-});
-export type CellState = z.infer<typeof cellStateSchema>;
+/** String-valued trichotomy cell whose proposals carry markdown source refs. */
+export const familyTypesCellSchema = trichotomyCellWithProposal(
+  z.string(),
+  cellProposalSchema(z.string()).extend({ source: sourceRefSchema.nullish() }),
+);
+export type FamilyTypesCell = z.infer<typeof familyTypesCellSchema>;
 
 /* ── Snapshot (family.editor.snapshot, extended by the parallel C# wave) ────── */
 
@@ -125,31 +119,25 @@ export type SpecDoc = z.infer<typeof specDocSchema>;
 
 export const familyTypesDocumentSchema = z
   .object({
+    binding: routeBindingSchema,
     snapshot: familyTypesSnapshotSchema.nullish(),
     doc: specDocSchema.nullish(),
     /** cellKey -> cell trichotomy state. */
-    cells: z.record(z.string(), cellStateSchema).default({}),
+    cells: z.record(z.string(), familyTypesCellSchema).default({}),
     pushedAt: z.string().nullish(),
   })
   // Post-patch invariant: a low-confidence proposal that isn't flagged is a silent risk.
   // Rejecting teaches pea the invariant through the returned zod error.
-  .refine(
-    (document) =>
-      Object.values(document.cells).every(
-        (cell) => !(cell.proposal?.confidence === "low" && cell.review === "none"),
-      ),
-    { error: "low-confidence proposals must set review to attention" },
-  );
+  .refine((document) => lowConfidenceIsFlagged(document.cells), {
+    error: LOW_CONFIDENCE_REFINE_ERROR,
+  });
 export type FamilyTypesDocument = z.infer<typeof familyTypesDocumentSchema>;
 
 export const familyTypesRouteState = defineRouteState({
   route: "family-types",
   key: "route:family-types",
   schema: familyTypesDocumentSchema,
-  agentWriteMask: [
-    ["cells", "*", "proposal"],
-    ["cells", "*", "review"],
-  ],
+  agentWriteMask: trichotomyAgentMask(),
   commands: {
     parse_spec: {
       description:
@@ -159,14 +147,14 @@ export const familyTypesRouteState = defineRouteState({
     },
     refresh_snapshot: {
       description:
-        "Re-read the family open in Revit's family editor into the snapshot (parameters × types, formulas, identity, ancestry). Existing proposals and review marks are preserved.",
-      input: z.object({}),
+        "Re-read the family open in Revit's family editor into the snapshot (parameters × types, formulas, identity, ancestry). Existing proposals and review marks are preserved. Targets the workspace's bound session; pass target to override.",
+      input: z.object({ target: z.string().optional() }),
       actor: "any",
     },
     push: {
       description:
-        "HUMAN ONLY. Apply every staged cell to Revit via family.editor.apply, fold successful values into the snapshot, and clear those cells. Failed edits stay staged.",
-      input: z.object({}),
+        "HUMAN ONLY. Apply every staged cell to Revit via family.editor.apply, fold successful values into the snapshot, and clear those cells. Failed edits stay staged. Targets the workspace's bound session; pass target to override.",
+      input: z.object({ target: z.string().optional() }),
       actor: "human",
     },
   },

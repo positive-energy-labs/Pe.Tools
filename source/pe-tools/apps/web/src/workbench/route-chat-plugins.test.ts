@@ -25,6 +25,7 @@ test("route chat plugins ignore unregistered routes, other tools, and non-args r
 
 test("family types chat summary keeps commit human-gated behind staged review", () => {
   const base: FamilyTypesDocument = {
+    binding: { target: null },
     snapshot: null,
     doc: null,
     pushedAt: null,
@@ -35,7 +36,7 @@ test("family types chat summary keeps commit human-gated behind staged review", 
       },
       "MOCP::Type A": {
         proposal: { value: "15 A", by: "pea", confidence: "low" },
-        staged: "15 A",
+        staged: { value: "15 A" },
         review: "attention",
       },
     },
@@ -54,6 +55,7 @@ test("family types chat summary keeps commit human-gated behind staged review", 
 
 test("family types chat summary includes open proposals that need attention", () => {
   const document: FamilyTypesDocument = {
+    binding: { target: null },
     snapshot: null,
     doc: null,
     pushedAt: null,

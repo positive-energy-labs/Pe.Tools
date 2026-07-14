@@ -12,7 +12,7 @@ import type { ComponentType, ReactNode } from "react";
 
 import {
   type CellReview,
-  type CellState,
+  type FamilyTypesCell,
   type FamilyTypesDocument,
   type SourceRef,
   cellKey,
@@ -41,6 +41,7 @@ export interface PushOutcome {
 export type DryRunResult = { key: string; error: string | null };
 
 export const EMPTY_DOCUMENT: FamilyTypesDocument = {
+  binding: { target: null },
   snapshot: null,
   doc: null,
   cells: {},
@@ -104,7 +105,7 @@ export function proposalCount(doc: FamilyTypesDocument): number {
   return Object.values(doc.cells).filter((c) => c.proposal && c.staged == null).length;
 }
 
-export function stagedEntries(doc: FamilyTypesDocument): [string, CellState][] {
+export function stagedEntries(doc: FamilyTypesDocument): [string, FamilyTypesCell][] {
   return Object.entries(doc.cells).filter(([, c]) => c.staged != null);
 }
 
@@ -126,9 +127,9 @@ export function MockFamilyTypesProvider({ children }: { children: ReactNode }) {
   const [pushing, setPushing] = useState(false);
   const [lastPush, setLastPush] = useState<PushOutcome | null>(null);
 
-  const patchCell = useCallback((key: string, patch: Partial<CellState>) => {
+  const patchCell = useCallback((key: string, patch: Partial<FamilyTypesCell>) => {
     setDocument((prev) => {
-      const cell: CellState = prev.cells[key] ?? { review: "none" };
+      const cell: FamilyTypesCell = prev.cells[key] ?? { review: "none" };
       return { ...prev, cells: { ...prev.cells, [key]: { ...cell, ...patch } } };
     });
   }, []);
@@ -151,7 +152,7 @@ export function MockFamilyTypesProvider({ children }: { children: ReactNode }) {
       parseSpec: () => undefined, // mock ships with the doc pre-parsed
       acceptProposal: (key) => {
         const proposal = document.cells[key]?.proposal;
-        if (proposal) patchCell(key, { staged: proposal.value });
+        if (proposal) patchCell(key, { staged: { value: proposal.value } });
       },
       rejectProposal: (key) => patchCell(key, { proposal: null }),
       acceptAll: () =>
@@ -161,12 +162,12 @@ export function MockFamilyTypesProvider({ children }: { children: ReactNode }) {
             Object.entries(prev.cells).map(([key, cell]) => [
               key,
               cell.proposal && cell.staged == null
-                ? { ...cell, staged: cell.proposal.value }
+                ? { ...cell, staged: { value: cell.proposal.value } }
                 : cell,
             ]),
           ),
         })),
-      stageEdit: (key, value) => patchCell(key, { staged: value }),
+      stageEdit: (key, value) => patchCell(key, { staged: { value } }),
       clearStaged: (key) => patchCell(key, { staged: null }),
       setReview: (key, review) => patchCell(key, { review }),
       push: () => {
@@ -180,8 +181,9 @@ export function MockFamilyTypesProvider({ children }: { children: ReactNode }) {
               if (cell.staged == null) continue;
               const { paramName, typeName } = splitCellKey(key);
               const param = next.snapshot?.parameters.find((p) => p.name === paramName);
-              if (param && !isFormulaCellKey(key)) param.valuesPerType[typeName] = cell.staged;
-              if (param && isFormulaCellKey(key)) param.formula = cell.staged;
+              if (param && !isFormulaCellKey(key))
+                param.valuesPerType[typeName] = cell.staged.value;
+              if (param && isFormulaCellKey(key)) param.formula = cell.staged.value;
               next.cells[key] = { review: "none" };
             }
             next.pushedAt = new Date().toISOString();

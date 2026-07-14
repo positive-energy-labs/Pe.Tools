@@ -190,16 +190,19 @@ export function LiveFamilyTypesProvider({ children }: { children: ReactNode }) {
       parseSpec,
       acceptProposal: (key) => {
         const proposal = documentRef.current.cells[key]?.proposal;
-        if (proposal) applyCell(key, "staged", proposal.value);
+        if (proposal) applyCell(key, "staged", { value: proposal.value });
       },
       rejectProposal: (key) => applyCell(key, "proposal"),
       acceptAll: () => {
         const patches = Object.entries(documentRef.current.cells)
           .filter(([, cell]) => cell.proposal && cell.staged == null)
-          .map(([key, cell]) => ({ path: ["cells", key, "staged"], value: cell.proposal!.value }));
+          .map(([key, cell]) => ({
+            path: ["cells", key, "staged"],
+            value: { value: cell.proposal!.value },
+          }));
         if (patches.length) void route.apply(patches).then(settle);
       },
-      stageEdit: (key, value) => applyCell(key, "staged", value),
+      stageEdit: (key, value) => applyCell(key, "staged", { value }),
       clearStaged: (key) => applyCell(key, "staged"),
       setReview: (key, review: CellReview) => applyCell(key, "review", review),
       push,

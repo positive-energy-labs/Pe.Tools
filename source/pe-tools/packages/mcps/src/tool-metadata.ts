@@ -1,4 +1,4 @@
-import { createRuntimeToolCatalog, type RuntimeToolCatalog } from "@pe/runtime";
+import { createRuntimeToolCatalog, type RuntimeToolCatalog } from "@pe/agent-contracts";
 
 export const peaProductToolCatalog: RuntimeToolCatalog = createRuntimeToolCatalog({
   pe_status: {

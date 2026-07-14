@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { parameterIdentitySchema } from "./family-types.ts";
-import { defineRouteState } from "./route-state.ts";
+import { defineRouteState, routeBindingSchema } from "./route-state.ts";
 
 const parameterLinkParameterIdentitySchema = parameterIdentitySchema.extend({
   kind: z.enum(["SharedGuid", "BuiltInParameter", "ParameterElement", "NameFallback"]),
@@ -102,6 +102,7 @@ export const parameterLinksDataSchema = z.object({
 export type ParameterLinksData = z.infer<typeof parameterLinksDataSchema>;
 
 export const parameterLinksDocumentSchema = z.object({
+  binding: routeBindingSchema,
   profile: parameterLinkProfileSchema.nullish().default(null),
   draftProfile: parameterLinkProfileSchema.nullish().default(null),
   evaluation: parameterLinkEvaluationSchema.nullish().default(null),
@@ -118,21 +119,23 @@ export const parameterLinksRouteState = defineRouteState({
   agentWriteMask: [["draftProfile"]],
   commands: {
     refresh: {
-      description: "Refresh the stored profile, evaluation, issues, and runtime status from Revit.",
-      input: z.object({}),
+      description:
+        "Refresh the stored profile, evaluation, issues, and runtime status from Revit. With multiple Revit sessions connected, pass target (e.g. 'sandbox:<id>' or 'user').",
+      input: z.object({ target: z.string().optional() }),
       actor: "any",
     },
     preview: {
-      description: "Evaluate the draft profile without storing it or writing target parameters.",
-      input: z.object({ profile: parameterLinkProfileSchema }),
+      description:
+        "Evaluate the draft profile without storing it or writing target parameters. With multiple Revit sessions connected, pass target (e.g. 'sandbox:<id>' or 'user').",
+      input: z.object({ profile: parameterLinkProfileSchema, target: z.string().optional() }),
       actor: "any",
     },
     apply: {
       description:
-        "HUMAN ONLY. Store the draft profile and reconcile its changed target parameter values.",
+        "HUMAN ONLY. Store the draft profile and reconcile its changed target parameter values. With multiple Revit sessions connected, pass target (e.g. 'sandbox:<id>' or 'user').",
       // The dispatcher hands the handler safeParse(...).data; zod strips undeclared keys, so the
       // reviewed profile MUST be declared here or apply always fails its draft-freshness check.
-      input: z.object({ profile: parameterLinkProfileSchema }),
+      input: z.object({ profile: parameterLinkProfileSchema, target: z.string().optional() }),
       actor: "human",
     },
   },

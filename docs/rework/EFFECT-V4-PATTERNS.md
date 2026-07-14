@@ -634,6 +634,40 @@ bound address (`disableListenLog: true`). `HttpMiddleware.cors({...})` exists (a
 
 ---
 
+## 4c. Effect.Atom (React state layer — adopted for route workspaces)
+
+Atom moved INTO the effect monorepo in v4. If you knew `@effect-atom/atom-react@0.5`
+(effect v3), everything renamed:
+
+| v3 (@effect-atom 0.5) | v4 (verified beta.92 ≡ beta.98) |
+| --- | --- |
+| package `@effect-atom/atom-react` (re-exports Atom + Result) | **`@effect/atom-react`** — HOOKS ONLY (`useAtom`, `useAtomValue`, `useAtomSet`, `useAtomRefresh`, `useAtomSuspense`, `RegistryProvider`, …); version-locked to effect (`4.0.0-beta.N` peers `effect ^4.0.0-beta.N`) |
+| `import { Atom, Result } from "@effect-atom/atom-react"` | `import * as Atom from "effect/unstable/reactivity/Atom"` + `import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"` |
+| `Result` module (Initial/Waiting/Success/Failure) | **`AsyncResult`** — same shape (`isSuccess`/`isFailure`/`isWaiting`/`isInitial`, `.value`, `.cause`, `value()`, `getOrElse`); renamed because `effect/Result` now means Either |
+| `Stream.asyncPush((emit) => acquireRelease(...))`, `emit.single(v)` | `Stream.callback((queue) => acquireRelease(...))`, `Queue.offerUnsafe(queue, v)` |
+| `Cause.failureOption(cause)` | `Cause.findErrorOption(cause)` |
+| `Atom.make` / `Atom.readable` / `Atom.writable` / `Atom.fn` / `Atom.family`, `RegistryProvider` | unchanged names. `Atom.make(stream)` → `Atom<AsyncResult<A, E \| NoSuchElementError>>`; `Atom.fn` → `AtomResultFn` |
+
+Also in `effect/unstable/reactivity`: `AtomRef`, `AtomRegistry`, `AtomHttpApi`, `AtomRpc`
+(atom-native HttpApi/Rpc clients — consider when a typed Pe surface meets a React view).
+
+House patterns (proven in `apps/web/src/workbench/route-state.tsx` and the
+scratch reference `packages/scratch-state-bakeoff/src/3-effect-atom.tsx`):
+- **Push-authoritative doc**: `Atom.make(Stream.concat(hydrateEffect, Stream.callback(subscribe)))`
+  — server is the single writer; the scoped finalizer in `Stream.callback` unsubscribes
+  when the atom is disposed. `Atom.family(spec => ...)` shares ONE subscription across
+  every component reading the same spec.
+- **Dirty-safe local draft**: writable `Atom<Option<T>>` override (None = follow remote,
+  Some = hold edit) + derived `Option.getOrElse(override, () => remote)` value + derived
+  `Option.isSome` dirty. Clobber-safety is structural — no lastSynced ref, no effect.
+- **Command with pending/error**: `Atom.fn(input => Effect...)`; read
+  `AsyncResult.isWaiting` / `isFailure` + `Cause.findErrorOption` in the component —
+  replaces paired useStates.
+- A default registry exists on React context; `RegistryProvider` is only needed to seed
+  values or scope lifetimes.
+
+---
+
 ## 5. AI note (we keep Mastra)
 
 Effect ships `effect/unstable/ai/*` (`LanguageModel`, `Tool`, `Toolkit`, `Chat`, `McpServer`, provider

@@ -1,5 +1,5 @@
 import type { RuntimeJsonValue } from "./events.ts";
-import type { RuntimeToolMetadata } from "./tool-metadata.ts";
+import type { RuntimeToolMetadata } from "@pe/agent-contracts";
 
 export interface RuntimeClientPermissionToolCall {
   toolCallId: string;

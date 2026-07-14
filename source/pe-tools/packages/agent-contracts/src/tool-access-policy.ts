@@ -1,12 +1,13 @@
 import type { AgentControllerRequestContext, ToolCategory } from "@mastra/core/agent-controller";
-import type { RuntimeAccessLevel } from "../runtime.ts";
 import {
   resolveRuntimeToolMetadata,
   type RuntimeToolKind,
   type RuntimeToolMetadata,
   type RuntimeToolSource,
   type RuntimeToolsInput,
-} from "../tool-metadata.ts";
+} from "./tool-metadata.ts";
+
+export type RuntimeAccessLevel = "read-only" | "ask" | "trusted";
 
 export class RuntimeToolAccessError extends Error {
   constructor(toolName: string, kind: RuntimeToolKind, accessLevel: RuntimeAccessLevel) {
