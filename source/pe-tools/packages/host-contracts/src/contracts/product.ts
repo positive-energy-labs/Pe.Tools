@@ -46,7 +46,6 @@ export const peaCliIdentity = {
   appDirectoryName: "app",
   installedExecutableName: "pea.exe",
   currentVersionFileName: "current.txt",
-  devSourceFileName: "dev-source.txt",
   versionsDirectoryName: "versions",
   packagesDirectoryName: "packages",
   payloadManifestFileName: "pea-payload.json",

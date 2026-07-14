@@ -34,6 +34,11 @@ public static class HostProcessIdentity {
     ///     (<c>state/service/host.json</c>), rewritten by the host on every bind and deleted on
     ///     graceful exit — so it can never go stale the way a process-env copy did. Port-only
     ///     projection; full schema validation stays with the SDK's ServiceFile/pe-service.
+    ///     NOTE: this is intentionally a minimal hand-rolled projection rather than the SDK
+    ///     <c>ServiceFile.Read</c> reader — Pe.Shared.Product is a platform-neutral Shared project
+    ///     and the SDK build guard forbids it referencing the Revit-flavored Pe.Revit.Loader. The
+    ///     authoritative <c>ServiceFile.Read</c> path lives in TsHostLauncher (Pe.App), which may
+    ///     reference the loader. See D8 in docs/rework/IPC-SEAM-SPEC.md.
     /// </summary>
     private static string? TryReadServiceFileBaseUrl() {
         try {
