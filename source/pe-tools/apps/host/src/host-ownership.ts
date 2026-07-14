@@ -61,21 +61,16 @@ function resolveHostOwnership(): HostOwnership {
 }
 
 function resolveHostLane(): HostLane {
-  // PE_LANE is the SDK's authoritative lane signal — InstalledService sets it on every installed
-  // spawn, so the installed lane is asserted rather than inferred. PE_TOOLS_HOST_LANE is the
-  // product launcher's dev-path signal; the path heuristic is a last resort for bare hosts.
-  for (const candidate of [process.env.PE_LANE, process.env.PE_TOOLS_HOST_LANE]) {
-    const lane = candidate?.trim().toLowerCase();
-    if (lane === "dev" || lane === "installed") return lane;
-  }
-  return isSourceHost() ? "dev" : "installed";
-}
-
-function isSourceHost(): boolean {
-  const marker = `${normalize("apps/host/src").toLowerCase()}\\`;
-  const modulePath = currentModulePath();
-  if (modulePath && normalize(modulePath).toLowerCase().includes(marker)) return true;
-  return process.argv.some((arg) => normalize(arg).toLowerCase().includes(marker));
+  // PE_LANE is the SINGLE authoritative lane signal: InstalledService sets it on every installed
+  // spawn, TsHostLauncher sets it for the Revit-dev spawn, and ensure-source-lane.ts sets it for
+  // bare source runs. No PE_TOOLS_HOST_LANE, no path/argv heuristic, no silent default — an unknown
+  // lane is a launch-configuration bug, so fail fast loudly rather than guess (IPC-SEAM-SPEC D7).
+  const lane = process.env.PE_LANE?.trim().toLowerCase();
+  if (lane === "dev" || lane === "installed") return lane;
+  throw new Error(
+    `PE_LANE must be 'dev' or 'installed' to resolve host ownership (got ${JSON.stringify(process.env.PE_LANE)}); ` +
+      "the host lane is the SDK-owned PE_LANE signal and this host refuses to guess it.",
+  );
 }
 
 function resolveSourceRoot(): string | null {
