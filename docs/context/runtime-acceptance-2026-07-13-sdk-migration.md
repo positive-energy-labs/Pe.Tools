@@ -4,24 +4,25 @@
 
 The local Pe.Tools `0.6.10` publish candidate passes the SDK-migration acceptance gates on Revit
 2025. Remote creation, GitHub publication, and NuGet publication were intentionally not performed.
-All Revit interaction in this pass was shell-driven; no approval-dialog automation was required.
+All acceptance assertions and product operations were shell-driven; the user opened the test artifact.
+No approval-dialog automation was required.
 
 ## Candidate authority
 
 | Authority | Candidate |
 | --- | --- |
 | SDK repository | `C:\Users\kaitp\source\repos\Pe.Revit.Sdk` |
-| SDK commit | `06db55071b50a88f6fb3b1ef6c00375d736ced2e` |
-| SDK package family | `0.1.0-beta.85` (11 packages) |
+| SDK source-root fix | `a305032b37a4f85bf9dcb104c439edb361a6ae13` |
+| SDK package family | `0.1.0-beta.86` (11 packages) |
 | Consumer repository | `C:\Users\kaitp\source\repos\Pe.Tools` |
 | Product version | `0.6.10` |
 | Revit/configuration | Revit 2025 / `Debug.R25` and `Release.R25` |
 | Development signing certificate | `DBE820C856CAE3A9A06B8F2E95D37071973A470B` |
 
-`pe-revit release --plan --json` passed for the full beta.85 family at the SDK commit above. The
+`pe-revit release --plan --json` passed for the full beta.86 family at the SDK commit above. The
 consumer pins the same version in `global.json` and `.config/dotnet-tools.json`; the canonical SDK
 TypeScript service client is copied from that package. Because remote NuGet publication is deferred,
-the complete 11-package beta.85 family is committed under `eng/sdk-feed`; a fresh checkout therefore
+the complete 11-package beta.86 family is committed under `eng/sdk-feed`; a fresh checkout therefore
 does not depend on this machine's NuGet cache. Final `pe-revit doctor --json` reported every check
 green, including lockstep pins and TypeScript client drift.
 
@@ -86,11 +87,25 @@ Signer: DBE820C856CAE3A9A06B8F2E95D37071973A470B
 | Deterministic close | Pass: `sandbox stop` returned `sandbox.no-save-armed` and stopped the exact owned PID cleanly. |
 | SDK doctor | Pass: every final check green. |
 
-## Known non-release-lane gap
+## Source-mode gap closed in beta.86
 
-A source-mode SDK Sandbox copies the managed payload into an immutable generation. Pe.Tools then
-classifies itself as a dev product client but cannot infer the original TypeScript checkout from that
-copied payload, so it looks for the staged dev host and retries when that host is absent. This does
-not affect the installed publish candidate proven above. A future source-product-ready lane needs an
-SDK-owned source-root value in the sandbox/payload context (or an explicit source-host launch input);
-Pe.Tools should not reverse-engineer the checkout from generation paths.
+The SDK runtime descriptor already authored the original workspace before copying the managed payload
+into an immutable generation. Beta.86 validates that absolute source workspace, carries it through
+`PePayloadContext.SourceRoot`, and rejects it on installed descriptors. Pe.Tools now consumes that
+SDK-owned value and deletes its assembly-path walk; it only accepts `<sourceRoot>\source\pe-tools`
+when the host package marker exists.
+
+Fresh source acceptance used sandbox `pe-tools-beta86-source`, generation
+`20260714012410659`, Revit PID `63928`, and a newly launched Node PID `83264`. Without approval-dialog
+automation, `/host/status` reported `lane=dev`, `bridgeIsConnected=true`, and
+`sourceRoot=C:\Users\kaitp\source\repos\Pe.Tools\source\pe-tools`. The public
+`revit.context.document-session` operation then returned the open
+`source-sandbox-artifact.rfa`. SDK journal startup had no failure event.
+
+## Deferred publish blocker
+
+The beta.86 Revit payload and selectors were development-signed successfully, so the unsigned add-in
+dialog is no longer part of runtime acceptance. Full `pack installer` still stops while SignTool tries
+to sign the Node SEA host executable and returns `0x800700C1` (`badexeformat`). Remote creation and
+NuGet/GitHub publication remain deferred until the SEA signing stage signs a signable base executable
+before blob injection or otherwise produces a verifiably signed final host.

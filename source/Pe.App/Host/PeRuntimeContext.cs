@@ -17,11 +17,13 @@ namespace Pe.App.Host;
 /// </summary>
 internal static class PeRuntimeContext {
     private static InstalledProduct? _deployment;
+    private static string? _sourceRoot;
     // Safe default before Startup captures a context (e.g. a command handler racing initialization).
     private static ProductRuntimeLane _lane = ProductRuntimeLane.Installed;
 
     public static void Capture(PePayloadContext context) {
         _deployment = context.Deployment;
+        _sourceRoot = context.SourceRoot;
         _lane = context.Deployment is null ? ProductRuntimeLane.Dev : ProductRuntimeLane.Installed;
     }
 
@@ -56,22 +58,8 @@ internal static class PeRuntimeContext {
             ProductRuntimeLane.Dev,
             devHost,
             "self-hosted-dev",
-            FindSourceHostWorkingDirectory()
+            ProductDevelopmentRuntimeLayout.ResolveSourceHostWorkingDirectory(_sourceRoot)
         );
-    }
-
-    private static string? FindSourceHostWorkingDirectory() {
-        // In Revit, AppContext.BaseDirectory is Autodesk's install directory, not Pe.App's checkout.
-        // The loaded add-in assembly is the only stable authority for walking back to source/pe-tools.
-        var assemblyDirectory = Path.GetDirectoryName(typeof(PeRuntimeContext).Assembly.Location)
-                                ?? AppContext.BaseDirectory;
-        for (var directory = new DirectoryInfo(assemblyDirectory); directory != null; directory = directory.Parent) {
-            var candidate = Path.Combine(directory.FullName, "source", "pe-tools");
-            if (File.Exists(Path.Combine(candidate, "apps", "host", "package.json")))
-                return candidate;
-        }
-
-        return null;
     }
 }
 

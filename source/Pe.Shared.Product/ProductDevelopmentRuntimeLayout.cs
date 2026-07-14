@@ -22,6 +22,12 @@ public sealed record ProductDevelopmentRuntimeLayout(
             )
         );
     }
+
+    public static string? ResolveSourceHostWorkingDirectory(string? sourceRoot) {
+        if (sourceRoot is null) return null;
+        var candidate = Path.Combine(sourceRoot, "source", "pe-tools");
+        return File.Exists(Path.Combine(candidate, "apps", "host", "package.json")) ? candidate : null;
+    }
 }
 
 public sealed record ProductDevelopmentRuntimeBinaryLayout(

@@ -209,6 +209,23 @@ public sealed class DeploymentRuntimeContractTests {
     }
 
     [Test]
+    public void Development_runtime_projects_the_sdk_source_root_to_the_ts_host() {
+        var root = Path.Combine(Path.GetTempPath(), $"pe-source-root-{Guid.NewGuid():N}");
+        var expected = Path.Combine(root, "source", "pe-tools");
+        Directory.CreateDirectory(Path.Combine(expected, "apps", "host"));
+        File.WriteAllText(Path.Combine(expected, "apps", "host", "package.json"), "{}");
+        try {
+            Assert.Multiple(() => {
+                Assert.That(ProductDevelopmentRuntimeLayout.ResolveSourceHostWorkingDirectory(root), Is.EqualTo(expected));
+                Assert.That(ProductDevelopmentRuntimeLayout.ResolveSourceHostWorkingDirectory(null), Is.Null);
+                Assert.That(ProductDevelopmentRuntimeLayout.ResolveSourceHostWorkingDirectory(Path.Combine(root, "missing")), Is.Null);
+            });
+        } finally {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Test]
     public void Installed_product_grammar_resolves_the_host_executable_and_pea_launcher() {
         // Consumer-side pin: the installed lane resolves host/pea through Pe.Revit.Loader's
         // InstalledProduct, so this fixtures a minimal install root (as `pe-revit install apply`
