@@ -18,7 +18,7 @@ public sealed class ExportApsParametersTask : ITask {
 
     public string? Category => "Export";
 
-    public async Task ExecuteAsync(UIApplication uiApp) {
+    public void Execute(UIApplication uiApp) {
         try {
             // Load cached APS parameters
             const string cacheFilename = "parameters-service-cache";
@@ -136,7 +136,6 @@ public sealed class ExportApsParametersTask : ITask {
                 }
             }
 
-            await Task.CompletedTask;
         } catch (Exception ex) {
             Console.WriteLine($"❌ Task failed: {ex.Message}");
             Console.WriteLine(ex.StackTrace);

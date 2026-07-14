@@ -240,7 +240,7 @@ public class ShortcutsService {
         if (!string.IsNullOrEmpty(this._cachedFilePath) && File.Exists(this._cachedFilePath))
             return this._cachedFilePath;
 
-        var revitVersion = Revit.Utils.Utils.GetRevitVersion();
+        var revitVersion = RevitUiSession.CurrentUIApplication.Application.VersionNumber;
         if (revitVersion == null)
             return new InvalidOperationException("Revit version not found");
 

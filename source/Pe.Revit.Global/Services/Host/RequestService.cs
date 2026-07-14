@@ -9,9 +9,8 @@ using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.RevitData;
 using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Modules;
-using ricaun.Revit.UI.Tasks;
+using Pe.Revit.Tasks;
 using Serilog;
-using System.Runtime.ExceptionServices;
 using FieldOptionItem = Pe.Shared.HostContracts.SettingsStorage.FieldOptionItem;
 
 namespace Pe.Revit.Global.Services.Host;
@@ -24,22 +23,23 @@ public class RequestService : ISettingsBridgeService {
     private static readonly TimeSpan ParameterCatalogThrottleWindow = TimeSpan.FromMilliseconds(750);
 
     private readonly SettingsRuntimeRegistry _moduleRegistry;
-    private readonly RevitTaskService _revitTaskService;
+    private readonly RevitTaskQueue _revitTaskQueue;
     private readonly ThrottleGate _throttleGate;
 
     public RequestService(
-        RevitTaskService revitTaskService,
+        RevitTaskQueue revitTaskQueue,
         SettingsRuntimeRegistry moduleRegistry,
         ThrottleGate throttleGate
     ) {
-        this._revitTaskService = revitTaskService;
+        this._revitTaskQueue = revitTaskQueue;
         this._moduleRegistry = moduleRegistry;
         this._throttleGate = throttleGate;
     }
 
     public async Task<FieldOptionsData> GetFieldOptionsAsync(
         FieldOptionsRequest request,
-        string? connectionId = null
+        string? connectionId,
+        CancellationToken cancellationToken
     ) {
         var key = BuildThrottleKey(
             connectionId,
@@ -53,7 +53,7 @@ public class RequestService : ISettingsBridgeService {
         var (response, decision) = await this._throttleGate.ExecuteAsync(
             key,
             FieldOptionsThrottleWindow,
-            () => this.GetFieldOptionsCore(request)
+            () => this.GetFieldOptionsCore(request, cancellationToken)
         );
         LogThrottleDecision(nameof(this.GetFieldOptionsAsync), decision, request.ModuleKey, request.PropertyPath);
         return response;
@@ -61,7 +61,8 @@ public class RequestService : ISettingsBridgeService {
 
     public async Task<ParameterCatalogData> GetParameterCatalogAsync(
         ParameterCatalogRequest request,
-        string? connectionId = null
+        string? connectionId,
+        CancellationToken cancellationToken
     ) {
         var key = BuildThrottleKey(
             connectionId,
@@ -74,7 +75,7 @@ public class RequestService : ISettingsBridgeService {
         var (response, decision) = await this._throttleGate.ExecuteAsync(
             key,
             ParameterCatalogThrottleWindow,
-            () => this.GetParameterCatalogCore(request)
+            () => this.GetParameterCatalogCore(request, cancellationToken)
         );
         LogThrottleDecision(nameof(this.GetParameterCatalogAsync), decision, request.ModuleKey, null);
         return response;
@@ -82,7 +83,8 @@ public class RequestService : ISettingsBridgeService {
 
     public async Task<FieldOptionsData> GetLoadedFamiliesFilterFieldOptionsAsync(
         LoadedFamiliesFilterFieldOptionsRequest request,
-        string? connectionId = null
+        string? connectionId,
+        CancellationToken cancellationToken
     ) {
         var key = BuildThrottleKey(
             connectionId,
@@ -96,7 +98,7 @@ public class RequestService : ISettingsBridgeService {
         var (response, decision) = await this._throttleGate.ExecuteAsync(
             key,
             FieldOptionsThrottleWindow,
-            () => this.GetLoadedFamiliesFilterFieldOptionsCore(request)
+            () => this.GetLoadedFamiliesFilterFieldOptionsCore(request, cancellationToken)
         );
         LogThrottleDecision(
             nameof(this.GetLoadedFamiliesFilterFieldOptionsAsync),
@@ -109,7 +111,8 @@ public class RequestService : ISettingsBridgeService {
 
     public async Task<FieldOptionsData> GetValueDomainOptionsAsync(
         ValueDomainOptionsRequest request,
-        string? connectionId = null
+        string? connectionId,
+        CancellationToken cancellationToken
     ) {
         var key = BuildThrottleKey(
             connectionId,
@@ -123,13 +126,13 @@ public class RequestService : ISettingsBridgeService {
         var (response, decision) = await this._throttleGate.ExecuteAsync(
             key,
             FieldOptionsThrottleWindow,
-            () => this.GetValueDomainOptionsCore(request)
+            () => this.GetValueDomainOptionsCore(request, cancellationToken)
         );
         LogThrottleDecision(nameof(this.GetValueDomainOptionsAsync), decision, request.SourceKey, null);
         return response;
     }
 
-    public Task<SchemaData> GetSchemaAsync(SchemaRequest request) =>
+    public Task<SchemaData> GetSchemaAsync(SchemaRequest request, CancellationToken cancellationToken) =>
         this.EnqueueAsync(() => {
             try {
                 var binding = this._moduleRegistry.ResolveRootBinding(request.ModuleKey, request.RootKey);
@@ -147,9 +150,9 @@ public class RequestService : ISettingsBridgeService {
                     "Check root binding registration and shared authored schema definitions."
                 );
             }
-        });
+        }, cancellationToken);
 
-    public Task<SchemaData> GetLoadedFamiliesFilterSchemaAsync() =>
+    public Task<SchemaData> GetLoadedFamiliesFilterSchemaAsync(CancellationToken cancellationToken) =>
         this.EnqueueAsync(() => {
             try {
                 var schema = RevitJsonSchemaFactory.CreateEditorSchemaData(
@@ -166,9 +169,9 @@ public class RequestService : ISettingsBridgeService {
                     "Check loaded families filter schema registration."
                 );
             }
-        });
+        }, cancellationToken);
 
-    public Task<GetSettingsModuleCatalogBridgeResponse> GetSettingsModuleCatalogAsync() => this.EnqueueAsync(() => {
+    public Task<GetSettingsModuleCatalogBridgeResponse> GetSettingsModuleCatalogAsync(CancellationToken cancellationToken) => this.EnqueueAsync(() => {
         var activeDocument = RevitUiSession.CurrentUIApplication.GetActiveDocument();
         var modules = this._moduleRegistry.GetModules()
             .Where(SettingsModuleAvailability.IsBridgeDiscoverable)
@@ -178,9 +181,9 @@ public class RequestService : ISettingsBridgeService {
             .ToList();
 
         return new GetSettingsModuleCatalogBridgeResponse(modules);
-    });
+    }, cancellationToken);
 
-    private Task<ParameterCatalogData> GetParameterCatalogCore(ParameterCatalogRequest request) =>
+    private Task<ParameterCatalogData> GetParameterCatalogCore(ParameterCatalogRequest request, CancellationToken cancellationToken) =>
         this.EnqueueAsync(() => {
             try {
                 var valueDomainContext = CreateValueDomainContext(request.ContextValues);
@@ -217,10 +220,11 @@ public class RequestService : ISettingsBridgeService {
                     "Verify selected families and active document state."
                 );
             }
-        });
+        }, cancellationToken);
 
     private Task<FieldOptionsData> GetLoadedFamiliesFilterFieldOptionsCore(
-        LoadedFamiliesFilterFieldOptionsRequest request
+        LoadedFamiliesFilterFieldOptionsRequest request,
+        CancellationToken cancellationToken
     ) => this.EnqueueAsync(() => {
         try {
             var fieldOptions = SettingsValueDomainService.Shared.GetOptionsAsync(
@@ -248,11 +252,11 @@ public class RequestService : ISettingsBridgeService {
                 "Check value-domain configuration and request path."
             );
         }
-    });
+    }, cancellationToken);
 
     // Resolves a value domain by source key alone — no settings module or property binding.
     // This is the runtime side of FieldOptionsAttribute / x-options on request schemas.
-    private Task<FieldOptionsData> GetValueDomainOptionsCore(ValueDomainOptionsRequest request) =>
+    private Task<FieldOptionsData> GetValueDomainOptionsCore(ValueDomainOptionsRequest request, CancellationToken cancellationToken) =>
         this.EnqueueAsync(() => {
             if (!SettingsValueDomainRegistry.Shared.TryCreate(request.SourceKey, out var domain))
                 throw BridgeOperationExceptions.BadRequest(
@@ -289,9 +293,9 @@ public class RequestService : ISettingsBridgeService {
                     "Check value-domain configuration and active document state."
                 );
             }
-        });
+        }, cancellationToken);
 
-    private Task<FieldOptionsData> GetFieldOptionsCore(FieldOptionsRequest request) =>
+    private Task<FieldOptionsData> GetFieldOptionsCore(FieldOptionsRequest request, CancellationToken cancellationToken) =>
         this.EnqueueAsync(() => {
             try {
                 var type = this._moduleRegistry.ResolveRootBinding(request.ModuleKey, request.RootKey).SettingsType;
@@ -321,47 +325,28 @@ public class RequestService : ISettingsBridgeService {
                     "Check value-domain configuration and request path."
                 );
             }
-        });
+        }, cancellationToken);
 
-    private async Task<T> EnqueueAsync<T>(Func<T> action) {
+    private async Task<T> EnqueueAsync<T>(Func<T> action, CancellationToken cancellationToken) {
         var queueStopwatch = Stopwatch.StartNew();
         Log.Information("Host request queue starting: ResultType={ResultType}", typeof(T).Name);
-        T? result = default;
-        Exception? failure = null;
-        var completed = false;
-        _ = await this._revitTaskService.Run(async () => {
+        var result = await this._revitTaskQueue.Run(context => {
+            context.Cancellation.ThrowIfCancellationRequested();
             Log.Information(
                 "Host request queue running on Revit thread after {ElapsedMs} ms: ResultType={ResultType}",
                 queueStopwatch.ElapsedMilliseconds,
                 typeof(T).Name
             );
-            try {
-                result = action();
-                completed = true;
-            } catch (Exception ex) {
-                failure = ex;
-            }
-
-            await Task.CompletedTask;
-        });
-
-        if (failure != null)
-            ExceptionDispatchInfo.Capture(failure).Throw();
-
-        if (!completed) {
-            throw BridgeOperationExceptions.Unexpected(
-                "RequestQueueNoResult",
-                new InvalidOperationException($"Revit request queue produced no result for '{typeof(T).Name}'."),
-                "Check the Revit task queue execution path for swallowed exceptions."
-            );
-        }
+            var value = action();
+            return value;
+        }, new RevitRunOptions { Label = typeof(T).Name, Timeout = TimeSpan.FromMinutes(2) }, cancellationToken);
 
         Log.Information(
             "Host request queue completed in {ElapsedMs} ms: ResultType={ResultType}",
             queueStopwatch.ElapsedMilliseconds,
             typeof(T).Name
         );
-        return result!;
+        return result;
     }
 
     private static FieldOptionsData CreateFieldOptionsData(

@@ -65,7 +65,7 @@ public static class FamilyPlacementHelper {
                         () => items,
                         new PaletteAction<FamilyTypePlacementItem> {
                             Name = "Place",
-                            Execute = async item => {
+                            Execute = item => {
                                 var symbol = item?.FamilySymbol;
                                 if (symbol == null) return;
 
@@ -104,7 +104,6 @@ public static class FamilyPlacementHelper {
                                     ShowPlacementPaletteForFamily(family);
                                 }
 
-                                await Task.CompletedTask;
                             }
                         }
                     )
@@ -196,7 +195,7 @@ public static class FamilyPlacementHelper {
                         () => items,
                         new PaletteAction<FamilyPlacementItem> {
                             Name = "Place",
-                            Execute = async item => {
+                            Execute = item => {
                                 Console.WriteLine($"[FamilyPlacement] Starting placement for: {item.Family.Name}");
 
                                 var symbol = item.GetFirstSymbol();
@@ -261,7 +260,6 @@ public static class FamilyPlacementHelper {
                                     ShowFamilyPlacementPalette(uiApp, familyNames, commandName);
                                 }
 
-                                await Task.CompletedTask;
                             }
                         }
                     )

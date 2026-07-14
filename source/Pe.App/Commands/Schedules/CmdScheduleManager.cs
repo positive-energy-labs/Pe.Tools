@@ -99,17 +99,17 @@ public class CmdScheduleManager : IExternalCommand {
                                 new SchedulePaletteItemWrapper(i, ScheduleTabType.Create)),
                             new PaletteAction<ISchedulePaletteItem> {
                                 Name = "Create Schedule",
-                                Execute = async item => this.HandleCreate(context, item),
+                                Execute = item => this.HandleCreate(context, item),
                                 CanExecute = item => context.PreviewData?.IsValid == true
                             },
                             new PaletteAction<ISchedulePaletteItem> {
                                 Name = "Open JSON File",
-                                Execute = async item => this.HandleOpenFile(item),
+                                Execute = item => this.HandleOpenFile(item),
                                 CanExecute = item => item.GetCreateItem() != null
                             },
                             new PaletteAction<ISchedulePaletteItem> {
                                 Name = "Place Matching Families",
-                                Execute = async item => this.HandlePlaceSampleFamilies(context, item),
+                                Execute = item => this.HandlePlaceSampleFamilies(context, item),
                                 CanExecute = item =>
                                     item.TabType == ScheduleTabType.Create && context.SelectedProfile != null
                             }
@@ -120,12 +120,12 @@ public class CmdScheduleManager : IExternalCommand {
                                 new SchedulePaletteItemWrapper(i, ScheduleTabType.Batch)),
                             new PaletteAction<ISchedulePaletteItem> {
                                 Name = "Open Profile File",
-                                Execute = async item => this.HandleOpenFile(item),
+                                Execute = item => this.HandleOpenFile(item),
                                 CanExecute = item => item.GetBatchItem() != null
                             },
                             new PaletteAction<ISchedulePaletteItem> {
                                 Name = "Create Schedules",
-                                Execute = async item => this.HandleCreate(context, item),
+                                Execute = item => this.HandleCreate(context, item),
                                 CanExecute = item => context.PreviewData?.IsValid == true
                             }
                         ) { FilterKeySelector = i => string.Empty }

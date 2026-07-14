@@ -53,7 +53,6 @@ public class CmdPltMruViews : IExternalCommand {
                             Execute = item => {
                                 if (item.View != null)
                                     uiapp.OpenAndActivateView(item.View);
-                                return Task.CompletedTask;
                             }
                         }
                     )

@@ -4,12 +4,13 @@ using Autodesk.Revit.UI;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Pe.Revit.Failures;
 using Pe.Revit.Scripting.Bootstrap;
 using Pe.Revit.Scripting.Context;
 using Pe.Revit.Scripting.Pods;
 using Pe.Revit.Scripting.References;
 using Pe.Revit.Scripting.Storage;
-using Pe.Revit.Utils;
+using Pe.Revit.Tasks;
 using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.Product;
 using Pe.Shared.Scripting.Analysis;
@@ -989,7 +990,7 @@ public sealed class RevitScriptExecutionService(
 
             transaction = new Transaction(document, ReadOnlyGuardTransactionName);
             var failureOptions = transaction.GetFailureHandlingOptions();
-            _ = failureOptions.SetFailuresPreprocessor(new DialogSuppressingFailuresPreprocessor([]));
+            _ = failureOptions.SetFailuresPreprocessor(PeToolsFailureHandling.CreatePreprocessor([]));
             _ = failureOptions.SetForcedModalHandling(false);
             transaction.SetFailureHandlingOptions(failureOptions);
             if (transaction.Start() != TransactionStatus.Started)
@@ -1075,7 +1076,7 @@ public sealed class RevitScriptExecutionService(
         // as diagnostics instead of freezing the external-event queue behind a dialog.
         var commitFailures = new List<(bool IsError, string Message)>();
         var failureOptions = sandbox.Transaction.GetFailureHandlingOptions();
-        _ = failureOptions.SetFailuresPreprocessor(new DialogSuppressingFailuresPreprocessor(commitFailures));
+        _ = failureOptions.SetFailuresPreprocessor(PeToolsFailureHandling.CreatePreprocessor(commitFailures));
         _ = failureOptions.SetForcedModalHandling(false);
         sandbox.Transaction.SetFailureHandlingOptions(failureOptions);
 

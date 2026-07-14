@@ -10,10 +10,10 @@ using Pe.Revit.Global.Services.Host;
 using Pe.Revit.Global.Services.ParameterLinks;
 using Pe.Revit.Loader;
 using Pe.Revit.Loader.Documents;
+using Pe.Revit.Tasks;
 using Pe.Revit.SettingsRuntime.Modules;
 using Pe.Revit.Ui.Core;
 using Pe.Shared.StorageRuntime;
-using ricaun.Revit.UI.Tasks;
 using Serilog;
 using Serilog.Core;
 using Serilog.Events;
@@ -30,7 +30,7 @@ namespace Pe.App;
 ///     (bridge socket, Revit event subscriptions); leaked memory is fine, leaked handles are not.
 /// </summary>
 public sealed class AppCore : IPePayload {
-    private RevitTaskService? _revitTaskService;
+    private RevitTaskQueue? _revitTaskQueue;
     private BridgeConnectionSupervisor? _bridgeConnectionSupervisor;
 
     public void Startup(PePayloadContext context) {
@@ -50,16 +50,14 @@ public sealed class AppCore : IPePayload {
         documents.Closed += key => MruViewBuffer.Instance.RemoveDocumentViews(key);
         documents.Changed += OnDocumentChanged;
 
-        // RevitTaskService for async/deferred execution in Revit API context
-        var revitTaskService = new RevitTaskService(app);
-        revitTaskService.Initialize();
-        this._revitTaskService = revitTaskService;
-        RevitTaskAccessor.RunAsync = async action => await revitTaskService.Run(async () => await action());
+        var revitTaskQueue = new RevitTaskQueue(app);
+        this._revitTaskQueue = revitTaskQueue;
+        RevitTaskAccessor.RunAsync = action => revitTaskQueue.Run(_ => action());
 
         CreateLogger();
 
         HostRuntime.Initialize(
-            revitTaskService,
+            revitTaskQueue,
             registry => {
                 registry.RegisterModules(RevitSettingsRuntimeRegistration.StructuralModules);
                 registry.RegisterRootBindings(RevitSettingsRuntimeRegistration.RootBindings);
@@ -68,7 +66,7 @@ public sealed class AppCore : IPePayload {
             },
             reason => this._bridgeConnectionSupervisor?.RequestReconnect(reason)
         );
-        this._bridgeConnectionSupervisor = new BridgeConnectionSupervisor(revitTaskService);
+        this._bridgeConnectionSupervisor = new BridgeConnectionSupervisor(revitTaskQueue);
         this._bridgeConnectionSupervisor.Start();
 
         ButtonRegistry.BuildRibbon(context, "PE TOOLS");
@@ -96,11 +94,13 @@ public sealed class AppCore : IPePayload {
 
         this._bridgeConnectionSupervisor?.Dispose();
         this._bridgeConnectionSupervisor = null;
-        this._revitTaskService?.Dispose();
 
         AutoTagService.Instance.Shutdown();
         ParameterLinksService.Instance.Shutdown();
         HostRuntime.Shutdown();
+        RevitTaskAccessor.RunAsync = null;
+        this._revitTaskQueue?.Dispose();
+        this._revitTaskQueue = null;
         Log.CloseAndFlush();
     }
 

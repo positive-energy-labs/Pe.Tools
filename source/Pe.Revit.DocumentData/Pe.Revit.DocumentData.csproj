@@ -21,6 +21,7 @@
 
         <PackageReference Include="JetBrains.Annotations" Version="2025.2.4"/>
         <PackageReference Include="Nice3point.Revit.Extensions" Version="$(RevitVersion).*"/>
+        <PackageReference Include="Pe.Revit.Tasks" Version="$(PeSdkCompanionVersion)"/>
         <PackageReference Include="Serilog" Version="4.3.0"/>
     </ItemGroup>
 

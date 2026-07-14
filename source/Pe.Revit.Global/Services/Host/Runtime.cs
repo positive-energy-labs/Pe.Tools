@@ -1,7 +1,7 @@
 using Pe.Shared.HostContracts.Bridge;
 using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.StorageRuntime.Modules;
-using ricaun.Revit.UI.Tasks;
+using Pe.Revit.Tasks;
 using Serilog;
 using System.Runtime.InteropServices;
 
@@ -33,12 +33,12 @@ public static class HostRuntime {
     private static BridgeAgent? _agent;
     private static BridgeConnectionOptions _connectionOptions = BridgeConnectionOptions.FromEnvironment();
     private static SettingsRuntimeRegistry? _moduleRegistry;
-    private static RevitTaskService? _revitTaskService;
+    private static RevitTaskQueue? _revitTaskQueue;
     private static Action<string?>? _onDisconnected;
     private static string? _lastError;
 
     public static void Initialize(
-        RevitTaskService revitTaskService,
+        RevitTaskQueue revitTaskQueue,
         Action<SettingsRuntimeRegistry>? configureModules = null,
         Action<string?>? onDisconnected = null
     ) {
@@ -48,7 +48,7 @@ public static class HostRuntime {
             var registry = new SettingsRuntimeRegistry();
             configureModules?.Invoke(registry);
             _moduleRegistry = registry;
-            _revitTaskService = revitTaskService;
+            _revitTaskQueue = revitTaskQueue;
             _onDisconnected = onDisconnected;
             _lastError = null;
             Log.Information(
@@ -62,7 +62,7 @@ public static class HostRuntime {
 
     public static RuntimeActionResult Connect() {
         SettingsRuntimeRegistry? moduleRegistry;
-        RevitTaskService? revitTaskService;
+        RevitTaskQueue? revitTaskQueue;
         BridgeConnectionOptions connectionOptions;
         BridgeAgent? previousAgent;
 
@@ -70,14 +70,14 @@ public static class HostRuntime {
             if (_moduleRegistry == null)
                 return new RuntimeActionResult(false, "Host runtime is not initialized.");
 
-            if (_revitTaskService == null)
-                return new RuntimeActionResult(false, "Revit task service is not initialized.");
+            if (_revitTaskQueue == null)
+                return new RuntimeActionResult(false, "Revit task queue is not initialized.");
 
             if (_agent is { IsConnected: true })
                 return new RuntimeActionResult(true, "Bridge is already connected.");
 
             moduleRegistry = _moduleRegistry;
-            revitTaskService = _revitTaskService;
+            revitTaskQueue = _revitTaskQueue;
             connectionOptions = _connectionOptions;
             previousAgent = _agent;
             _agent = null;
@@ -103,7 +103,7 @@ public static class HostRuntime {
 
         try {
             var createStopwatch = Stopwatch.StartNew();
-            newAgent = new BridgeAgent(moduleRegistry, connectionOptions, revitTaskService, OnAgentDisconnected);
+            newAgent = new BridgeAgent(moduleRegistry, connectionOptions, revitTaskQueue, OnAgentDisconnected);
 
             lock (Sync) {
                 _agent = newAgent;
@@ -195,7 +195,7 @@ public static class HostRuntime {
                 activeDocument != null,
                 activeDocument?.Title,
                 _moduleRegistry?.GetModules().Count() ?? 0,
-                Revit.Utils.Utils.GetRevitVersion(),
+                RevitUiSession.CurrentUIApplication.Application.VersionNumber,
                 RuntimeInformation.FrameworkDescription,
                 _lastError
             );

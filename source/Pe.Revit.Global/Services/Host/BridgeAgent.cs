@@ -12,7 +12,7 @@ using Pe.Shared.Product;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
 using Pe.Shared.StorageRuntime.Modules;
-using ricaun.Revit.UI.Tasks;
+using Pe.Revit.Tasks;
 using Serilog;
 using System.Net.WebSockets;
 using System.Reflection;
@@ -65,7 +65,7 @@ internal sealed class BridgeAgent : IDisposable {
     public BridgeAgent(
         SettingsRuntimeRegistry moduleRegistry,
         BridgeConnectionOptions bridgeOptions,
-        RevitTaskService revitTaskService,
+        RevitTaskQueue revitTaskQueue,
         Action<string?>? onDisconnected = null
     ) {
         var startupStopwatch = Stopwatch.StartNew();
@@ -84,8 +84,8 @@ internal sealed class BridgeAgent : IDisposable {
             activeDocument?.Title,
             moduleRegistry.GetModules().Count()
         );
-        var requestService = new RequestService(revitTaskService, this._moduleRegistry, this._throttleGate);
-        this._revitDataRequestService = new RevitDataRequestService(revitTaskService);
+        var requestService = new RequestService(revitTaskQueue, this._moduleRegistry, this._throttleGate);
+        this._revitDataRequestService = new RevitDataRequestService(revitTaskQueue);
         var scriptingMessageHandler = new ScriptingBridgeMessageHandler(
             () => RevitUiSession.CurrentUIApplication,
             message => Log.Information("Revit scripting notification: {Message}", message)
@@ -132,7 +132,7 @@ internal sealed class BridgeAgent : IDisposable {
 
         this.IsConnected = true;
         this.RuntimeFramework = RuntimeInformation.FrameworkDescription;
-        this.RevitVersion = Revit.Utils.Utils.GetRevitVersion();
+        this.RevitVersion = uiapp.Application.VersionNumber;
         Log.Information(
             "Host bridge connected in {ElapsedMs} ms: BridgeUri={BridgeUri}, RevitVersion={RevitVersion}, Runtime={RuntimeFramework}, Modules={ModuleCount}",
             startupStopwatch.ElapsedMilliseconds,
@@ -469,7 +469,7 @@ internal sealed class BridgeAgent : IDisposable {
             availableModules.Count
         );
         return new BridgeStateSnapshot(
-            Revit.Utils.Utils.GetRevitVersion() ?? "unknown",
+            RevitUiSession.CurrentUIApplication.Application.VersionNumber,
             RuntimeInformation.FrameworkDescription,
             activeDocument != null,
             activeDocument?.Title,

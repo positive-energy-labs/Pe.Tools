@@ -1,5 +1,6 @@
 using Autodesk.Revit.DB.Events;
-using Pe.Revit.Utils;
+using Pe.Revit.Failures;
+using Pe.Revit.Tasks;
 
 namespace Pe.Revit.Tests;
 
@@ -26,7 +27,7 @@ internal static class RevitTestFailureGuard {
             return;
 
         var diagnostics = new List<(bool IsError, string Message)>();
-        var result = RevitFailureHandling.ResolveFailures(accessor, diagnostics);
+        var result = PeToolsFailureHandling.ResolveFailures(accessor, diagnostics);
         foreach (var (_, message) in diagnostics)
             Console.WriteLine($"[{nameof(RevitTestFailureGuard)}] {message}");
 

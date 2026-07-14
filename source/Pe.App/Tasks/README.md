@@ -37,7 +37,7 @@ public sealed class MyNewTask : ITask {
     public string? Description => "Detailed description shown in tooltip";
     public string? Category => "MyCategory"; // Used for filtering
 
-    public async Task ExecuteAsync(UIApplication uiApp) {
+    public void Execute(UIApplication uiApp) {
         var doc = uiApp.ActiveUIDocument?.Document;
         if (doc == null) {
             Console.WriteLine("❌ No active document");
@@ -47,7 +47,6 @@ public sealed class MyNewTask : ITask {
         // Your code here...
         Console.WriteLine("✓ Task completed!");
 
-        await Task.CompletedTask;
     }
 }
 ```
@@ -88,10 +87,11 @@ Used for:
 
 Common categories: `Debug`, `Testing`, `Export`, `Cleanup`, `Analysis`
 
-### `ExecuteAsync` (required)
+### `Execute` (required)
 
 The actual task implementation. Always runs in Revit API context with access to
-`UIApplication`.
+`UIApplication`. It must remain synchronous; asynchronous continuations do not retain Revit API
+context. Move background work outside the task and marshal only the synchronous Revit segment.
 
 ## Task Output Management
 
@@ -99,7 +99,7 @@ Tasks that generate output files should use the output management system for
 consistent organization:
 
 ```csharp
-public async Task ExecuteAsync(UIApplication uiApp) {
+public void Execute(UIApplication uiApp) {
     // Get task-specific output directory
     var output = this.GetOutput();
 
@@ -150,7 +150,7 @@ For example, `ExportApsParametersTask` outputs go to:
 ```csharp
 public string? Category => "Debug";
 
-public async Task ExecuteAsync(UIApplication uiApp) {
+public void Execute(UIApplication uiApp) {
     var doc = uiApp.ActiveUIDocument?.Document;
     if (doc?.IsFamilyDocument != true) {
         Console.WriteLine("❌ Not a family document");
@@ -161,7 +161,6 @@ public async Task ExecuteAsync(UIApplication uiApp) {
         Console.WriteLine($"  {param.Definition.Name}");
     }
 
-    await Task.CompletedTask;
 }
 ```
 
@@ -170,7 +169,7 @@ public async Task ExecuteAsync(UIApplication uiApp) {
 ```csharp
 public string? Category => "Export";
 
-public async Task ExecuteAsync(UIApplication uiApp) {
+public void Execute(UIApplication uiApp) {
     var doc = uiApp.ActiveUIDocument?.Document;
     if (doc == null) return;
 
@@ -185,7 +184,6 @@ public async Task ExecuteAsync(UIApplication uiApp) {
     File.WriteAllText(path, csv);
     Console.WriteLine($"✓ Exported to: {path}");
 
-    await Task.CompletedTask;
 }
 ```
 

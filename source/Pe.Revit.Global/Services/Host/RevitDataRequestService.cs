@@ -5,7 +5,6 @@ using Pe.Revit.DocumentData.Electrical;
 using Pe.Revit.DocumentData.Families.Loaded.Collectors;
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.Extensions.FamManager;
-using Pe.Revit.Utils;
 using Pe.Revit.DocumentData.ProjectBrowser;
 using Pe.Revit.DocumentData.ProjectIndex;
 using Pe.Revit.DocumentData.Schedules.Collect;
@@ -14,17 +13,17 @@ using Pe.Revit.DocumentData.Sheets;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamParameter;
 using Pe.Revit.Extensions.FamParameter.Formula;
+using Pe.Revit.Failures;
 using Pe.Revit.Global.Services.Aps;
 using Pe.Revit.Global.Services.ParameterLinks;
 using Pe.Revit.Parameters;
+using Pe.Revit.Tasks;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Families;
 using Pe.Shared.RevitData.Schedules;
-using ricaun.Revit.UI.Tasks;
 using System.Globalization;
-using System.Runtime.ExceptionServices;
 using RevitDocument = Autodesk.Revit.DB.Document;
 
 namespace Pe.Revit.Global.Services.Host;
@@ -32,135 +31,137 @@ namespace Pe.Revit.Global.Services.Host;
 /// <summary>
 ///     Bridge-backed read-only Revit data requests for browser routes.
 /// </summary>
-internal sealed class RevitDataRequestService(RevitTaskService revitTaskService) : IRevitDataService {
-    private readonly RevitTaskService _revitTaskService = revitTaskService;
+internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : IRevitDataService {
+    private readonly RevitTaskQueue _revitTaskQueue = revitTaskQueue;
 
     public Task<LoadedFamiliesCatalogData> GetLoadedFamiliesCatalogAsync(
-        LoadedFamiliesCatalogRequest request
-    ) => this.EnqueueAsync(() => this.GetLoadedFamiliesCatalogCore(request));
+        LoadedFamiliesCatalogRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.GetLoadedFamiliesCatalogCore(request), cancellationToken);
 
     public Task<ScheduleCatalogData> GetScheduleCatalogAsync(
-        ScheduleCatalogRequest request
-    ) => this.EnqueueAsync(() => this.GetScheduleCatalogCore(request));
+        ScheduleCatalogRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.GetScheduleCatalogCore(request), cancellationToken);
 
     public Task<ScheduleProfilesQueryData> GetScheduleProfilesQueryAsync(
-        ScheduleProfilesQueryRequest request
-    ) => this.EnqueueAsync(() => this.GetScheduleProfilesQueryCore(request));
+        ScheduleProfilesQueryRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.GetScheduleProfilesQueryCore(request), cancellationToken);
 
     public Task<ProjectBrowserData> GetProjectBrowserAsync(
-        ProjectBrowserRequest request
-    ) => this.EnqueueAsync(() => this.GetProjectBrowserCore(request));
+        ProjectBrowserRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.GetProjectBrowserCore(request), cancellationToken);
 
     public Task<ProjectIndexData> GetProjectIndexAsync(
-        ProjectIndexRequest request
-    ) => this.EnqueueAsync(() => this.GetProjectIndexCore(request));
+        ProjectIndexRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.GetProjectIndexCore(request), cancellationToken);
 
     public Task<SheetDetailData> GetSheetDetailsAsync(
-        SheetDetailRequest request
-    ) => this.EnqueueAsync(() => this.GetSheetDetailsCore(request));
+        SheetDetailRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.GetSheetDetailsCore(request), cancellationToken);
 
     public Task<ScheduleQueryData> GetScheduleQueryAsync(
-        ScheduleQueryRequest request
-    ) => this.EnqueueAsync(() => this.GetScheduleQueryCore(request));
+        ScheduleQueryRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.GetScheduleQueryCore(request), cancellationToken);
 
     public Task<LoadedFamiliesMatrixData> GetLoadedFamiliesMatrixAsync(
-        LoadedFamiliesMatrixRequest request
-    ) => this.EnqueueAsync(() => this.GetLoadedFamiliesMatrixCore(request));
+        LoadedFamiliesMatrixRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.GetLoadedFamiliesMatrixCore(request), cancellationToken);
 
     public Task<FamilyEditorSnapshotData> GetFamilyEditorSnapshotAsync(
-        FamilyEditorSnapshotRequest request
-    ) => this.EnqueueAsync(this.GetFamilyEditorSnapshotCore);
+        FamilyEditorSnapshotRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(this.GetFamilyEditorSnapshotCore, cancellationToken);
 
     public Task<FamilyEditorOpenData> OpenFamilyEditorAsync(
-        FamilyEditorOpenRequest request
-    ) => this.EnqueueAsync(() => this.OpenFamilyEditorCore(request));
+        FamilyEditorOpenRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.OpenFamilyEditorCore(request), cancellationToken);
 
     public Task<FamilyEditorApplyData> ApplyFamilyEditorEditsAsync(
-        FamilyEditorApplyRequest request
-    ) => this.EnqueueAsync(() => this.ApplyFamilyEditorEditsCore(request));
+        FamilyEditorApplyRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.ApplyFamilyEditorEditsCore(request), cancellationToken);
 
     public Task<ParameterValueApplyData> ApplyParameterValuesAsync(
-        ParameterValueApplyRequest request
-    ) => this.EnqueueAsync(() => this.ApplyParameterValuesCore(request));
+        ParameterValueApplyRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.ApplyParameterValuesCore(request), cancellationToken);
 
     public Task<ParameterLinksData> GetParameterLinksAsync(
-        ParameterLinksDetailRequest request
-    ) => this.EnqueueAsync(() => this.GetParameterLinksCore(request));
+        ParameterLinksDetailRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.GetParameterLinksCore(request), cancellationToken);
 
     public Task<ParameterLinksData> ApplyParameterLinksAsync(
-        ParameterLinksApplyRequest request
-    ) => this.EnqueueAsync(() => this.ApplyParameterLinksCore(request));
+        ParameterLinksApplyRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.ApplyParameterLinksCore(request), cancellationToken);
 
     public Task<ScheduleCoverageData> GetScheduleCoverageAsync(
-        ScheduleCoverageRequest request
-    ) => this.EnqueueAsync(() => this.GetScheduleCoverageCore(request));
+        ScheduleCoverageRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.GetScheduleCoverageCore(request), cancellationToken);
 
     public Task<ParameterCoverageData> GetParameterCoverageAsync(
-        ParameterCoverageRequest request
-    ) => this.EnqueueAsync(() => this.GetParameterCoverageCore(request));
+        ParameterCoverageRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.GetParameterCoverageCore(request), cancellationToken);
 
     public Task<ConceptEvidenceData> GetConceptEvidenceAsync(
-        ConceptEvidenceRequest request
-    ) => this.EnqueueAsync(() => this.GetConceptEvidenceCore(request));
+        ConceptEvidenceRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.GetConceptEvidenceCore(request), cancellationToken);
 
     public Task<ParameterEvidenceData> GetParameterEvidenceAsync(
-        ParameterEvidenceRequest request
-    ) => this.EnqueueAsync(() => this.GetParameterEvidenceCore(request));
+        ParameterEvidenceRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.GetParameterEvidenceCore(request), cancellationToken);
 
     public Task<ProjectParameterBindingsData> GetProjectParameterBindingsAsync(
-        ProjectParameterBindingsRequest request
-    ) => this.EnqueueAsync(() => this.GetProjectParameterBindingsCore(request));
+        ProjectParameterBindingsRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.GetProjectParameterBindingsCore(request), cancellationToken);
 
     public Task<ElementContextQueryData> GetElementContextQueryAsync(
-        ElementContextQueryRequest request
-    ) => this.EnqueueAsync(() => this.GetElementContextQueryCore(request));
+        ElementContextQueryRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.GetElementContextQueryCore(request), cancellationToken);
 
     public Task<ElectricalPanelsCatalogData> GetElectricalPanelsCatalogAsync(
-        ElectricalPanelsCatalogRequest request
-    ) => this.EnqueueAsync(() => this.GetElectricalPanelsCatalogCore(request));
+        ElectricalPanelsCatalogRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.GetElectricalPanelsCatalogCore(request), cancellationToken);
 
     public Task<ElectricalCircuitsCatalogData> GetElectricalCircuitsCatalogAsync(
-        ElectricalCircuitsCatalogRequest request
-    ) => this.EnqueueAsync(() => this.GetElectricalCircuitsCatalogCore(request));
+        ElectricalCircuitsCatalogRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.GetElectricalCircuitsCatalogCore(request), cancellationToken);
 
     public Task<ElectricalPanelSchedulesQueryData> GetElectricalPanelSchedulesQueryAsync(
-        ElectricalPanelSchedulesQueryRequest request
-    ) => this.EnqueueAsync(() => this.GetElectricalPanelSchedulesQueryCore(request));
+        ElectricalPanelSchedulesQueryRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.GetElectricalPanelSchedulesQueryCore(request), cancellationToken);
 
     public Task<ElectricalLoadClassificationsCatalogData> GetElectricalLoadClassificationsCatalogAsync(
-        ElectricalLoadClassificationsCatalogRequest request
-    ) => this.EnqueueAsync(() => this.GetElectricalLoadClassificationsCatalogCore(request));
+        ElectricalLoadClassificationsCatalogRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.GetElectricalLoadClassificationsCatalogCore(request), cancellationToken);
 
-    public Task<RevitDocumentSessionContextData> GetRevitDocumentSessionContextAsync() =>
-        this.EnqueueAsync(this.GetRevitDocumentSessionContextCore);
+    public Task<RevitDocumentSessionContextData> GetRevitDocumentSessionContextAsync(CancellationToken cancellationToken) =>
+        this.EnqueueAsync(this.GetRevitDocumentSessionContextCore, cancellationToken);
 
-    public Task<OpenRevitDocumentData> OpenRevitDocumentAsync(OpenRevitDocumentRequest request) =>
-        this.EnqueueAsync(() => this.OpenRevitDocumentCore(request));
+    public Task<OpenRevitDocumentData> OpenRevitDocumentAsync(OpenRevitDocumentRequest request, CancellationToken cancellationToken) =>
+        this.EnqueueAsync(() => this.OpenRevitDocumentCore(request), cancellationToken);
 
-    public Task<RevitAgentContextSummaryData> GetRevitAgentContextSummaryAsync() =>
-        this.EnqueueAsync(this.GetRevitAgentContextSummaryCore);
+    public Task<RevitAgentContextSummaryData> GetRevitAgentContextSummaryAsync(CancellationToken cancellationToken) =>
+        this.EnqueueAsync(this.GetRevitAgentContextSummaryCore, cancellationToken);
 
     public Task<RevitAgentContextResolveData> ResolveRevitAgentContextAsync(
-        RevitAgentContextResolveRequest request
-    ) => this.EnqueueAsync(() => this.ResolveRevitAgentContextCore(request));
+        RevitAgentContextResolveRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.ResolveRevitAgentContextCore(request), cancellationToken);
 
     public Task<RevitAgentVisibleContextData> GetRevitAgentVisibleContextAsync(
-        RevitAgentVisibleContextRequest request
-    ) => this.EnqueueAsync(() => this.GetRevitAgentVisibleContextCore(request));
+        RevitAgentVisibleContextRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.GetRevitAgentVisibleContextCore(request), cancellationToken);
 
     public Task<RevitAgentViewRenderingStateData> GetRevitAgentViewRenderingStateAsync(
-        RevitAgentViewRenderingStateRequest request
-    ) => this.EnqueueAsync(() => this.GetRevitAgentViewRenderingStateCore(request));
+        RevitAgentViewRenderingStateRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.GetRevitAgentViewRenderingStateCore(request), cancellationToken);
 
     public Task<RevitViewImageData> GetRevitViewImageAsync(
-        RevitViewImageRequest request
-    ) => this.EnqueueAsync(() => this.GetRevitViewImageCore(request));
+        RevitViewImageRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.GetRevitViewImageCore(request), cancellationToken);
 
-    public Task<ParametersServiceCacheData> RefreshParametersServiceCacheAsync() =>
-        ParametersServiceCache.RefreshAsync();
+    public Task<ParametersServiceCacheData> RefreshParametersServiceCacheAsync(CancellationToken cancellationToken) =>
+        cancellationToken.IsCancellationRequested
+            ? Task.FromCanceled<ParametersServiceCacheData>(cancellationToken)
+            : ParametersServiceCache.RefreshAsync();
 
-    public Task<RibbonCommandExecuteData> ExecuteRibbonCommandAsync(RibbonCommandExecuteRequest request) =>
-        this.EnqueueAsync(() => ExecuteRibbonCommandCore(request));
+    public Task<RibbonCommandExecuteData> ExecuteRibbonCommandAsync(RibbonCommandExecuteRequest request, CancellationToken cancellationToken) =>
+        this.EnqueueAsync(() => ExecuteRibbonCommandCore(request), cancellationToken);
 
     private static RibbonCommandExecuteData ExecuteRibbonCommandCore(RibbonCommandExecuteRequest request) {
         var uiApp = RevitUiSession.CurrentUIApplication;
@@ -447,7 +448,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         using var sandbox = DocumentSandbox.BeginCommit(document, "Pe Family Editor Apply");
         var commitFailures = new List<(bool IsError, string Message)>();
         var failureOptions = sandbox.Transaction.GetFailureHandlingOptions();
-        _ = failureOptions.SetFailuresPreprocessor(new DialogSuppressingFailuresPreprocessor(commitFailures));
+        _ = failureOptions.SetFailuresPreprocessor(PeToolsFailureHandling.CreatePreprocessor(commitFailures));
         _ = failureOptions.SetForcedModalHandling(false);
         sandbox.Transaction.SetFailureHandlingOptions(failureOptions);
 
@@ -1694,34 +1695,16 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         return (request.Filter ?? new LoadedFamiliesFilter()) with { CategoryNames = categoryNames };
     }
 
-    private async Task<T> EnqueueAsync<T>(Func<T> action) {
-        T? result = default;
-        Exception? failure = null;
-        var completed = false;
-        _ = await this._revitTaskService.Run(async () => {
-            try {
-                result = action();
-                completed = true;
-            } catch (Exception ex) {
-                failure = ex;
-            }
-
-            await Task.CompletedTask;
-        });
-
-        if (failure != null)
-            ExceptionDispatchInfo.Capture(failure).Throw();
-
-        if (!completed) {
-            throw BridgeOperationExceptions.Unexpected(
-                "RequestQueueNoResult",
-                new InvalidOperationException($"Revit request queue produced no result for '{typeof(T).Name}'."),
-                "Check the Revit task queue execution path for swallowed exceptions."
-            );
-        }
-
-        return result!;
-    }
+    private Task<T> EnqueueAsync<T>(Func<T> action, CancellationToken cancellationToken) =>
+        this._revitTaskQueue.Run(
+            context => {
+                context.Cancellation.ThrowIfCancellationRequested();
+                var value = action();
+                return value;
+            },
+            new RevitRunOptions { Label = typeof(T).Name, Timeout = TimeSpan.FromMinutes(2) },
+            cancellationToken
+        );
 
     private static RevitDocumentSessionContextData CreateDocumentSessionContext() {
         // ponytail: still enumerates on the API thread inside the request queue. The tracker's

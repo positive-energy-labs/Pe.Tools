@@ -11,6 +11,7 @@ namespace Build.Modules;
 [DependsOn<ResolveVersioningModule>]
 [DependsOn<ResolveBuildMatrixModule>]
 [DependsOn<ResolveBuildLayoutModule>]
+[DependsOn<ResolvePackageSigningModule>]
 [DependsOn<ValidateSolutionParityModule>]
 [DependsOn<CleanProjectModule>(Optional = true)]
 public sealed class PublishRevitAddinModule(IOptions<BuildOptions> buildOptions) : Module {
@@ -18,9 +19,11 @@ public sealed class PublishRevitAddinModule(IOptions<BuildOptions> buildOptions)
         var versioningResult = await context.GetModule<ResolveVersioningModule>();
         var matrixResult = await context.GetModule<ResolveBuildMatrixModule>();
         var layoutResult = await context.GetModule<ResolveBuildLayoutModule>();
+        var signingResult = await context.GetModule<ResolvePackageSigningModule>();
         var versioning = versioningResult.ValueOrDefault!;
         var matrix = matrixResult.ValueOrDefault!;
         var layout = layoutResult.ValueOrDefault!;
+        var signing = signingResult.ValueOrDefault!;
         var rootDirectory = context.Git().RootDirectory;
         var appProjectPath = BuildProjectDiscovery.FindSingleProjectByKind(rootDirectory.Path, "RevitAddin");
         var configurations = matrix.ResolveConfigurations(BuildConfigurationGroup.Pack, buildOptions.Value.Configuration);
@@ -34,32 +37,38 @@ public sealed class PublishRevitAddinModule(IOptions<BuildOptions> buildOptions)
                     appProjectPath,
                     configuration,
                     layout.GetRevitPublishDirectory(configuration),
+                    signing,
                     cancellationToken
                 );
             });
     }
 
-    private static Task PublishAsync(
+    private static async Task PublishAsync(
         IModuleContext context,
         ResolveVersioningResult versioning,
         string projectPath,
         string configuration,
         string publishDirectory,
+        PackageSigningResult signing,
         CancellationToken cancellationToken
-    ) => BuildDotNetCli.BuildQuietAsync(
-        context,
-        projectPath,
-        configuration,
-        [
+    ) {
+        await BuildDotNetCli.BuildQuietAsync(
+            context,
+            projectPath,
+            configuration,
+            [
             ("PeIsolatedBuild", "true"),
             ("DeployAddin", "false"),
             ("PublishAddin", "true"),
             ("LaunchRevit", "false"),
             ("AddinPublishDir", publishDirectory),
             ("VersionPrefix", versioning.VersionPrefix),
-            ("VersionSuffix", versioning.VersionSuffix!)
-        ],
-        cancellationToken
-    );
+                ("VersionSuffix", versioning.VersionSuffix!),
+                .. signing.BuildProperties
+            ],
+            cancellationToken
+        );
+        signing.VerifyPublishedAddin(publishDirectory);
+    }
 }
 

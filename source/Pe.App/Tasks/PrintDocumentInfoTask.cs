@@ -11,7 +11,7 @@ public sealed class PrintDocumentInfoTask : ITask {
     public string Description => "Prints detailed information about the active document";
     public string Category => "Debug";
 
-    public async Task ExecuteAsync(UIApplication uiApp) {
+    public void Execute(UIApplication uiApp) {
         var doc = uiApp.ActiveUIDocument?.Document;
         if (doc == null) {
             Console.WriteLine("❌ No active document");
@@ -33,6 +33,5 @@ public sealed class PrintDocumentInfoTask : ITask {
 
         Console.WriteLine("=== End Document Info ===\n");
 
-        await Task.CompletedTask;
     }
 }

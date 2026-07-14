@@ -1,4 +1,5 @@
-using Pe.Revit.Utils;
+using Pe.Revit.Failures;
+using Pe.Revit.Tasks;
 
 namespace Pe.Revit.Tests;
 
@@ -24,7 +25,7 @@ public sealed class RevitFailureHandlingTests {
 
             using (var transaction = new Transaction(document, "Create overlapping walls")) {
                 var failureOptions = transaction.GetFailureHandlingOptions();
-                _ = failureOptions.SetFailuresPreprocessor(new DialogSuppressingFailuresPreprocessor(diagnostics));
+                _ = failureOptions.SetFailuresPreprocessor(PeToolsFailureHandling.CreatePreprocessor(diagnostics));
                 _ = failureOptions.SetForcedModalHandling(false);
                 transaction.SetFailureHandlingOptions(failureOptions);
 

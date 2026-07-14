@@ -43,6 +43,17 @@ try {
     return;
 }
 
+if (parsedArgs.Commands.Contains("publish")
+    && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("PeCodeSignThumbprint"))
+    && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("PeCodeSignPfx"))) {
+#pragma warning disable ConsoleUse
+    using var standardError = new StreamWriter(Console.OpenStandardError());
+    standardError.WriteLine("Publish requires an explicit production PeCodeSignThumbprint or PeCodeSignPfx; the local SDK development certificate is acceptance-only.");
+#pragma warning restore ConsoleUse
+    Environment.ExitCode = 1;
+    return;
+}
+
 builder.Services.PostConfigure<BuildOptions>(options =>
     options.Configuration = parsedArgs.Configuration ?? options.Configuration);
 
