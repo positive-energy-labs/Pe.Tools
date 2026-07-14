@@ -24,6 +24,7 @@ Completed items from the old root TODO are omitted; current open follow-ups:
 - Defer separate browser resolver, browser field-options endpoint, browser-specific UI activation, and browser filters on unrelated operations until usage proves them.
 - Evaluate dedicated `revit.catalog.views` and `revit.catalog.sheets` only after project-browser/project-index/schedule provenance patterns settle.
 - Promote repeated `host_operation_call` patterns into convenience tools only after usage proves they earn context.
+- Give pea a path to SDK session-journal events (investigated 2026-07-13; SDK owns journal meaning, pea stays a thin adapter): add `action=logs` to `pe_sandbox` proxying `pe-revit sandbox logs --id X --tail N --json` (~15-25 lines in sandbox-route.ts + ~20-30 in the tool); pass the `firstFailureEvent` field through `presentSandboxEnvelope` instead of dropping it (~5 lines); fix the two `pe_status` hints that point at `pe_logs` for disconnect/session causes — those live in events.jsonl, which `pe_logs` (product Serilog only, correctly) never reads. Do NOT grow a TS journal reader in Pe.Tools and do NOT merge the two log worlds into one tool — two owners, two formats, one capability one path.
 
 ## Desired-state Family Foundry direction
 
