@@ -4,7 +4,16 @@
     {
       "name": "web",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@pe/web", "dev"],
+      "runtimeArgs": [
+        "--filter",
+        "@pe/web",
+        "exec",
+        "node",
+        "../../node_modules/vite-plus/bin/vp",
+        "dev",
+        "--port",
+        "3000"
+      ],
       "port": 3000,
       "autoPort": false
     }
