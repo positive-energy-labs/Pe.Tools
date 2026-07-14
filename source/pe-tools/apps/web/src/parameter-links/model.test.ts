@@ -35,6 +35,7 @@ function profile(defId = "d1"): ParameterLinkProfile {
 
 function doc(overrides: Partial<ParameterLinksDocument>): ParameterLinksDocument {
   return {
+    binding: { target: null },
     profile: null,
     draftProfile: null,
     evaluation: null,

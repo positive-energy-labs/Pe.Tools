@@ -19,9 +19,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "#/components/ui/select";
-import { HostConnectionPill } from "#/host/issues";
 import { useTreeQuery, useWorkspacesQuery } from "#/host/queries";
 import { useRouteState } from "#/workbench/route-state";
+import { RouteWorkspaceShell } from "#/workbench/route-workspace-shell";
 
 /**
  * /settings — the substrate-backed replacement for the old settings-prototype form.
@@ -84,9 +84,11 @@ function SettingsRoute() {
   );
 
   const rows = useMemo(() => (document ? buildFieldRows(document) : []), [document]);
-  const stagedCount = rows.filter((row) => row.field?.hasStaged).length;
+  const stagedCount = rows.filter((row) => row.field?.staged != null).length;
   const attentionCount = rows.filter((row) => row.field?.review === "attention").length;
-  const proposalCount = rows.filter((row) => row.field?.proposal && !row.field.hasStaged).length;
+  const proposalCount = rows.filter(
+    (row) => row.field?.proposal && row.field.staged == null,
+  ).length;
   const canSave = stagedCount > 0 && attentionCount === 0;
 
   const runCommand = async (name: string, input?: unknown) => {
@@ -117,71 +119,68 @@ function SettingsRoute() {
   const validation = snapshot?.validation;
 
   return (
-    <main className="flex h-screen flex-col overflow-hidden bg-[var(--paper)]">
-      {/* ── header ribbon ── */}
-      <header className="shrink-0 border-b border-[var(--line-2)] px-5 pb-2.5 pt-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-baseline gap-3">
-            <h1 className="font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight text-[var(--clay-ink)]">
-              Settings
-            </h1>
-            <span className="text-xs text-[var(--lichen)]">
-              {snapshot
-                ? `${snapshot.documentId.moduleKey} · ${snapshot.documentId.relativePath}${
-                    snapshot.versionToken ? ` · v${snapshot.versionToken}` : ""
-                  }`
-                : "no document open"}
+    <RouteWorkspaceShell
+      title="Settings"
+      connected={route.connected}
+      connectionLabel="Bridge connected"
+      binding={document?.binding}
+      subtitle={
+        <span className="text-xs text-[var(--lichen)]">
+          {snapshot
+            ? `${snapshot.documentId.moduleKey} · ${snapshot.documentId.relativePath}${
+                snapshot.versionToken ? ` · v${snapshot.versionToken}` : ""
+              }`
+            : "no document open"}
+        </span>
+      }
+      actions={
+        <>
+          {route.peaActive ? (
+            <span className="inline-flex items-center gap-1.5 rounded-[2px] bg-[var(--pea-tint)] px-2 py-0.5 text-xs font-medium text-[var(--cat-green)]">
+              <Sparkles className="size-3 animate-pulse" />
+              pea is working…
             </span>
-          </div>
+          ) : null}
 
-          <div className="flex flex-wrap items-center gap-2.5">
-            <HostConnectionPill connected={route.connected} label="Bridge connected" />
-            {route.peaActive ? (
-              <span className="inline-flex items-center gap-1.5 rounded-[2px] bg-[var(--pea-tint)] px-2 py-0.5 text-xs font-medium text-[var(--cat-green)]">
-                <Sparkles className="size-3 animate-pulse" />
-                pea is working…
-              </span>
-            ) : null}
-
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!snapshot || busy != null}
-              onClick={() => void runCommand("refresh")}
-            >
-              <RefreshCw className={busy === "refresh" ? "animate-spin" : ""} />
-              Refresh
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!snapshot || busy != null}
-              onClick={() => void runCommand("validate", { includeProposals: false })}
-            >
-              <ShieldCheck />
-              Validate
-            </Button>
-            <Button
-              size="sm"
-              disabled={!canSave || busy != null}
-              title={
-                stagedCount === 0
-                  ? "nothing staged"
-                  : attentionCount > 0
-                    ? `${attentionCount} field${attentionCount === 1 ? "" : "s"} need attention`
-                    : undefined
-              }
-              onClick={() => void runCommand("save")}
-              className="bg-[var(--cat-green)] text-white hover:bg-[var(--cat-green)]/85 disabled:opacity-50"
-            >
-              <CheckCheck />
-              Save {stagedCount}
-            </Button>
-          </div>
-        </div>
-
-        {/* subline: metrics / validation / error */}
-        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!snapshot || busy != null}
+            onClick={() => void runCommand("refresh")}
+          >
+            <RefreshCw className={busy === "refresh" ? "animate-spin" : ""} />
+            Refresh
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!snapshot || busy != null}
+            onClick={() => void runCommand("validate", { includeProposals: false })}
+          >
+            <ShieldCheck />
+            Validate
+          </Button>
+          <Button
+            size="sm"
+            disabled={!canSave || busy != null}
+            title={
+              stagedCount === 0
+                ? "nothing staged"
+                : attentionCount > 0
+                  ? `${attentionCount} field${attentionCount === 1 ? "" : "s"} need attention`
+                  : undefined
+            }
+            onClick={() => void runCommand("save")}
+            className="bg-[var(--cat-green)] text-white hover:bg-[var(--cat-green)]/85 disabled:opacity-50"
+          >
+            <CheckCheck />
+            Save {stagedCount}
+          </Button>
+        </>
+      }
+      error={route.error}
+      subline={
+        <>
           <Metric value={proposalCount} label="open proposals" />
           <Metric value={stagedCount} label="staged" />
           <Metric value={attentionCount} label="need attention" issue />
@@ -196,10 +195,9 @@ function SettingsRoute() {
             <span className="text-[var(--lichen)]">saved {timeAgo(document.savedAt)}</span>
           ) : null}
           {error ? <span className="text-[var(--cat-clay)]">{error}</span> : null}
-          {route.error ? <span className="text-[var(--cat-clay)]">{route.error}</span> : null}
-        </div>
-      </header>
-
+        </>
+      }
+    >
       {/* ── picker ── */}
       <div className="shrink-0 border-b border-[var(--line-2)] bg-[var(--paper)] px-5 py-2.5">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -272,8 +270,7 @@ function SettingsRoute() {
                   busy={busy != null}
                   onApprove={(value) =>
                     void applyPatches([
-                      { path: ["fields", row.path, "staged"], value },
-                      { path: ["fields", row.path, "hasStaged"], value: true },
+                      { path: ["fields", row.path, "staged"], value: { value } },
                       { path: ["fields", row.path, "review"], value: "good" },
                     ])
                   }
@@ -286,7 +283,6 @@ function SettingsRoute() {
                   onUndo={() =>
                     void applyPatches([
                       { path: ["fields", row.path, "staged"] },
-                      { path: ["fields", row.path, "hasStaged"], value: false },
                       { path: ["fields", row.path, "review"], value: "none" },
                     ])
                   }
@@ -302,7 +298,7 @@ function SettingsRoute() {
           </EmptyNote>
         )}
       </div>
-    </main>
+    </RouteWorkspaceShell>
   );
 }
 
@@ -341,7 +337,7 @@ function FieldRow({
   onUndo: () => void;
 }) {
   const field = row.field;
-  const staged = field?.hasStaged ?? false;
+  const staged = field?.staged != null;
   const proposal = !staged ? field?.proposal : undefined;
   const attention = field?.review === "attention";
 
@@ -357,7 +353,7 @@ function FieldRow({
             <>
               {" "}
               <span className="text-[var(--cat-green)]">→ staged:</span>{" "}
-              <span className="text-[var(--clay-ink)]">{display(field?.staged)}</span>
+              <span className="text-[var(--clay-ink)]">{display(field?.staged?.value)}</span>
             </>
           ) : proposal ? (
             <>

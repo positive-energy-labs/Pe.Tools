@@ -38,7 +38,6 @@
     "@mastra/mcp": "1.13.1",
     "@pe/agent-contracts": "workspace:*",
     "@pe/host-contracts": "workspace:*",
-    "@pe/runtime": "workspace:*",
     "effect": "4.0.0-beta.92",
     "gunshi": "^0.29.5",
     "parse5": "^8.0.1",

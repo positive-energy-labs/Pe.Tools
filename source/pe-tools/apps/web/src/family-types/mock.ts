@@ -9,8 +9,8 @@
 import { createElement } from "react";
 
 import {
-  type CellProposal,
   type CellReview,
+  type FamilyTypesCell,
   type FamilyTypesDocument,
   type FamilyTypesParam,
   FORMULA_TYPE,
@@ -18,6 +18,9 @@ import {
   type SpecDocBlock,
   cellKey,
 } from "@pe/agent-contracts";
+
+/** The family-types proposal shape (the trichotomy proposal + its markdown `source` ref). */
+type CellProposal = NonNullable<FamilyTypesCell["proposal"]>;
 
 import { FakePage } from "#/lab/kit";
 import {
@@ -182,6 +185,7 @@ export function buildMockDocument(): FamilyTypesDocument {
   ];
 
   return {
+    binding: { target: null },
     snapshot: {
       familyName: "FCU-400.rfa",
       currentTypeName: "FCU-400-A",
@@ -198,7 +202,7 @@ export function buildMockDocument(): FamilyTypesDocument {
       // one already-accepted + reviewed-good cell
       [cellKey("Nominal Airflow", "FCU-400-A")]: {
         proposal: peaCell("400 CFM", "p1-perf", 0, 1, "high"),
-        staged: "400 CFM",
+        staged: { value: "400 CFM" },
         review: "good",
       },
       // one open proposal

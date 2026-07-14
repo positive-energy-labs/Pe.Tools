@@ -66,7 +66,7 @@ function ScheduleGridRoute() {
 
   const stageValue = (key: string, value: string) =>
     void apply([
-      { path: ["cells", key, "staged"], value },
+      { path: ["cells", key, "staged"], value: { value } },
       { path: ["cells", key, "review"], value: "good" },
     ]);
   const approve = (key: string, value: string) => stageValue(key, value);
@@ -218,7 +218,7 @@ function ScheduleGridRoute() {
                           binding?.isEditable && binding.blocker === "None"
                             ? setEdit({
                                 key,
-                                value: cells[key]?.staged ?? row.values[columnIndex] ?? "",
+                                value: cells[key]?.staged?.value ?? row.values[columnIndex] ?? "",
                               })
                             : undefined
                         }
@@ -265,7 +265,7 @@ function Cell({
   const proposal = !staged && cell?.proposal != null;
   const attention = cell?.review === "attention";
   const editable = binding?.isEditable === true && binding.blocker === "None";
-  const display = staged ? cell?.staged : (binding?.displayValue ?? text);
+  const display = staged ? cell?.staged?.value : (binding?.displayValue ?? text);
 
   const tooltip = binding
     ? [
@@ -343,7 +343,7 @@ function Cell({
                   className="text-[var(--slate)] hover:text-[var(--cat-green)]"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onApprove(cellKey, cell?.proposal?.value ?? "");
+                    onApprove(cellKey, (cell?.proposal?.value as string | undefined) ?? "");
                   }}
                 >
                   <Check className="size-3.5" />

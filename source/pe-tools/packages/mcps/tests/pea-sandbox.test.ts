@@ -19,7 +19,10 @@ test("every non-sandbox lane presents as the user's session", () => {
   expect(presentSessionKind("dev", null)).toEqual({ kind: "user" });
   expect(presentSessionKind("installed", null)).toEqual({ kind: "user" });
   expect(presentSessionKind(null, null)).toEqual({ kind: "user" });
-  expect(presentSessionKind("sandbox", "scratch")).toEqual({ kind: "sandbox", sandboxId: "scratch" });
+  expect(presentSessionKind("sandbox", "scratch")).toEqual({
+    kind: "sandbox",
+    sandboxId: "scratch",
+  });
 });
 
 test("pe_status compact output carries no lane words for any session mix", () => {

@@ -6,35 +6,50 @@
  * spec PDF, re-read the family editor, and push staged cells to Revit. They run where
  * the pea runtime is composed (in-process with the host), reaching Revit through
  * `HostRpcCaller` and the web parse endpoint through `PE_WEB_URL`.
+ *
+ * `push` is the reference use of the substrate commit primitive: the route supplies
+ * only select/toEdits/run/fold; attention-blocking, failure rollup, keep-failures-
+ * staged, and the structured result are substrate-owned (defineCommitCommand).
  */
 import {
+  type FamilyTypesCell,
   type FamilyTypesDocument,
   type FamilyTypesSnapshot,
   type ParameterLinksData,
   type ParameterLinksDocument,
   type ParameterLinkProfile,
+  type RouteStateCommandHandlers,
+  defineCommitCommand,
   familyTypesSnapshotSchema,
   isFormulaCellKey,
   parameterLinksDataSchema,
+  resolveTarget,
   splitCellKey,
 } from "@pe/agent-contracts";
 import type {
   RevitApplyParameterLinks,
   RevitDetailParameterLinks,
 } from "@pe/host-contracts/generated";
-import type { RouteStateCommandHandlers } from "@pe/runtime";
 
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
 
 export { familyTypesRouteState, parameterLinksRouteState } from "@pe/agent-contracts";
 
+interface FamilyTypesEdit {
+  key: string;
+  paramName: string;
+  typeName?: string;
+  value?: string;
+  formula?: string;
+}
+
 /** Build the three family-types command handlers, bound to a resolved host base URL. */
 export function createFamilyTypesCommandHandlers(
   options: { hostBaseUrl?: string } = {},
-): RouteStateCommandHandlers {
+): RouteStateCommandHandlers<FamilyTypesDocument> {
   const hostBaseUrl = resolveHostBaseUrl(options.hostBaseUrl);
-  const caller = () => new HostRpcCaller({ hostBaseUrl });
+  const caller = (target?: string) => new HostRpcCaller({ hostBaseUrl, bridgeSessionId: target });
 
   return {
     parse_spec: async (input, ctx) => {
@@ -68,7 +83,7 @@ export function createFamilyTypesCommandHandlers(
         kind,
         md,
       }));
-      const document = ctx.getDoc() as FamilyTypesDocument;
+      const document = ctx.getDoc();
       document.doc = {
         parseId: payload.jobId ?? null,
         fileName: payload.fileName ?? "document.pdf",
@@ -85,11 +100,12 @@ export function createFamilyTypesCommandHandlers(
       };
     },
 
-    refresh_snapshot: async (_input, ctx) => {
+    refresh_snapshot: async (input, ctx) => {
+      const target = resolveTarget(input, ctx.getDoc());
       let raw: unknown;
       try {
         // Unknown keys pass through POST /call untyped; typegen types this op later.
-        raw = await (caller().call as (key: string, request?: unknown) => Promise<unknown>)(
+        raw = await (caller(target).call as (key: string, request?: unknown) => Promise<unknown>)(
           "family.editor.snapshot",
           {},
         );
@@ -103,7 +119,7 @@ export function createFamilyTypesCommandHandlers(
       snapshot.takenAt = new Date().toISOString();
 
       // Preserve existing cells: getDoc returns the whole document, we replace only snapshot.
-      const document = ctx.getDoc() as FamilyTypesDocument;
+      const document = ctx.getDoc();
       document.snapshot = snapshot;
       await ctx.setDoc(document);
 
@@ -114,81 +130,71 @@ export function createFamilyTypesCommandHandlers(
       };
     },
 
-    push: async (_input, ctx) => {
-      const document = ctx.getDoc() as FamilyTypesDocument;
-      const staged = Object.entries(document.cells).filter(([, cell]) => cell.staged != null);
-      if (staged.length === 0) return { applied: 0, failures: [] };
-      const attention = staged.filter(([, cell]) => cell.review === "attention");
-      if (attention.length > 0) {
-        throw new Error(
-          `Push blocked: ${attention.length} staged cell${attention.length === 1 ? "" : "s"} need review.`,
-        );
-      }
-
-      const edits = staged.map(([key, cell]) => {
+    push: defineCommitCommand<FamilyTypesDocument, FamilyTypesCell, FamilyTypesEdit>({
+      select: (doc) => doc.cells,
+      toEdits: (key, cell) => {
         const { paramName, typeName } = splitCellKey(key);
+        const value = cell.staged?.value ?? "";
         return isFormulaCellKey(key)
-          ? { key, paramName, formula: cell.staged ?? "" }
-          : { key, paramName, typeName, value: cell.staged ?? "" };
-      });
-
-      let raw: unknown;
-      try {
-        raw = await (caller().call as (key: string, request?: unknown) => Promise<unknown>)(
-          "family.editor.apply",
-          { edits: edits.map(({ key: _key, ...edit }) => edit) },
-        );
-      } catch (error) {
-        throw new Error(`family.editor.apply failed (${message(error)}).`);
-      }
-
-      const results =
-        (raw as { results?: { index?: number; ok?: boolean; error?: string }[] } | null)?.results ??
-        [];
-      const failures: { key: string; error: string }[] = [];
-      const failedKeys = new Set<string>();
-      results.forEach((result, index) => {
-        if (result.ok === false) {
-          const key = edits[result.index ?? index]?.key ?? "?";
-          failures.push({ key, error: result.error ?? "failed" });
-          failedKeys.add(key);
+          ? [{ key, paramName, formula: value }]
+          : [{ key, paramName, typeName, value }];
+      },
+      run: async (edits, _doc, target) => {
+        let raw: unknown;
+        try {
+          raw = await (caller(target).call as (key: string, request?: unknown) => Promise<unknown>)(
+            "family.editor.apply",
+            { edits: edits.map(({ key: _key, ...edit }) => edit) },
+          );
+        } catch (error) {
+          throw new Error(`family.editor.apply failed (${message(error)}).`);
         }
-      });
-
-      // Fold successful staged values into the snapshot and clear those cells; failed
-      // edits stay staged so the engineer can retry them.
-      for (const [key, cell] of staged) {
-        if (failedKeys.has(key)) continue;
+        const results =
+          (raw as { results?: { index?: number; ok?: boolean; error?: string }[] } | null)
+            ?.results ?? [];
+        const failures: { key: string; error: string }[] = [];
+        results.forEach((result, index) => {
+          if (result.ok === false) {
+            const key = edits[result.index ?? index]?.key ?? "?";
+            failures.push({ key, error: result.error ?? "failed" });
+          }
+        });
+        return failures;
+      },
+      fold: (doc, key, cell) => {
         const { paramName, typeName } = splitCellKey(key);
-        const param = document.snapshot?.parameters.find((p) => p.name === paramName);
-        const value = cell.staged;
+        const param = doc.snapshot?.parameters.find((p) => p.name === paramName);
+        const value = cell.staged?.value;
         if (param && value != null) {
           if (isFormulaCellKey(key)) param.formula = value;
           else param.valuesPerType[typeName] = value;
         }
-        document.cells[key] = { review: "none" };
-      }
-      document.pushedAt = new Date().toISOString();
-      await ctx.setDoc(document);
-
-      return { applied: staged.length - failures.length, failures };
-    },
+      },
+      clear: (doc, key) => {
+        doc.cells[key] = { review: "none" };
+      },
+      stamp: (doc, isoNow) => {
+        doc.pushedAt = isoNow;
+      },
+    }),
   };
 }
 
-/* ── helpers ─────────────────────────────────────────────────────────────── */
+/* ── parameter-links ─────────────────────────────────────────────────────── */
 
 export function createParameterLinksCommandHandlers(
   options: { hostBaseUrl?: string } = {},
-): RouteStateCommandHandlers {
-  const caller = new HostRpcCaller({ hostBaseUrl: resolveHostBaseUrl(options.hostBaseUrl) });
+): RouteStateCommandHandlers<ParameterLinksDocument> {
+  const hostBaseUrl = resolveHostBaseUrl(options.hostBaseUrl);
+  const caller = (target?: string) => new HostRpcCaller({ hostBaseUrl, bridgeSessionId: target });
 
   return {
-    refresh: async (_input, ctx) => {
-      const data = await callParameterLinks(caller, "revit.detail.parameter-links", {
+    refresh: async (input, ctx) => {
+      const document = ctx.getDoc();
+      const target = resolveTarget(input, document);
+      const data = await callParameterLinks(caller(target), "revit.detail.parameter-links", {
         includeEvaluation: true,
       });
-      const document = ctx.getDoc() as ParameterLinksDocument;
       document.profile = data.profile ?? null;
       document.draftProfile ??= data.profile ?? null;
       document.evaluation = data.evaluation ?? null;
@@ -201,14 +207,15 @@ export function createParameterLinksCommandHandlers(
 
     preview: async (input, ctx) => {
       const { profile } = input as { profile: ParameterLinkProfile };
-      const document = ctx.getDoc() as ParameterLinksDocument;
+      const document = ctx.getDoc();
+      const target = resolveTarget(input, document);
       requireCurrentParameterLinksDraft(document, profile);
-      const data = await callParameterLinks(caller, "revit.apply.parameter-links", {
+      const data = await callParameterLinks(caller(target), "revit.apply.parameter-links", {
         profile,
         previewOnly: true,
         reconcile: false,
       });
-      const latest = ctx.getDoc() as ParameterLinksDocument;
+      const latest = ctx.getDoc();
       requireCurrentParameterLinksDraft(latest, profile);
       latest.evaluation = data.evaluation ?? null;
       latest.status = data.status;
@@ -220,14 +227,15 @@ export function createParameterLinksCommandHandlers(
 
     apply: async (input, ctx) => {
       const { profile } = input as { profile: ParameterLinkProfile };
-      const document = ctx.getDoc() as ParameterLinksDocument;
+      const document = ctx.getDoc();
+      const target = resolveTarget(input, document);
       requireCurrentParameterLinksDraft(document, profile);
-      const data = await callParameterLinks(caller, "revit.apply.parameter-links", {
+      const data = await callParameterLinks(caller(target), "revit.apply.parameter-links", {
         profile,
         previewOnly: false,
         reconcile: true,
       });
-      const latest = ctx.getDoc() as ParameterLinksDocument;
+      const latest = ctx.getDoc();
       const hasErrors =
         data.evaluation?.issues.some((issue) => issue.severity === "error") ?? false;
       if (!hasErrors) {

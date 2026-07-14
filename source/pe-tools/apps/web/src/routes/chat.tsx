@@ -9,6 +9,7 @@ import { z } from "zod";
 import { MODES } from "#/workbench/depth";
 import { WorkbenchProvider } from "#/workbench/provider";
 import { ChatShell } from "#/components/chat-shell";
+import { CHAT_PLUGIN_ROUTES } from "#/workbench/route-chat-plugins";
 
 /**
  * Chat URL state — the single home for navigable/shareable state. TanStack Router owns all of it
@@ -31,10 +32,7 @@ const chatSearchSchema = z.object({
     .default(DEFAULTS.mode)
     .catch(DEFAULTS.mode),
   turn: z.coerce.number().int().positive().optional().catch(undefined),
-  plugin: z
-    .enum(["family-types", "parameter-links", "settings", "schedule-grid"])
-    .optional()
-    .catch(undefined),
+  plugin: z.enum(CHAT_PLUGIN_ROUTES).optional().catch(undefined),
   prompt: z.string().max(PROMPT_MAX).optional(),
 });
 

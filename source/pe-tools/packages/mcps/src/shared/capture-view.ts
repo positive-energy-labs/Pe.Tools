@@ -32,7 +32,10 @@ const captureViewInputSchema = z.object({
     ),
   focus: z
     .object({
-      elementIds: z.array(z.number().int()).optional().describe("Crop to the bbox union of these elements."),
+      elementIds: z
+        .array(z.number().int())
+        .optional()
+        .describe("Crop to the bbox union of these elements."),
       selection: z.boolean().optional().describe("Crop to the user's current selection."),
       scopeBox: z.string().optional().describe("Crop to this scope box (name or element id)."),
     })

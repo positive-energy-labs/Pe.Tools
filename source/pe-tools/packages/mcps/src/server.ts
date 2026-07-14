@@ -25,7 +25,6 @@ if (!tools) {
 await new MCPServer({
   name: serverName,
   version: "0.0.0",
-  description:
-    "Pe product MCP: Revit host status/logs, host operations, scripting, view capture.",
+  description: "Pe product MCP: Revit host status/logs, host operations, scripting, view capture.",
   tools,
 }).startStdio();

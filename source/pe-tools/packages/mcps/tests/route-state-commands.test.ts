@@ -12,17 +12,18 @@ import {
 
 test("family types push rejects staged cells that still need review before calling Revit", async () => {
   const document: FamilyTypesDocument = {
+    binding: { target: null },
     snapshot: null,
     doc: null,
     pushedAt: null,
     cells: {
-      "MOCP::Type A": { staged: "15 A", review: "attention" },
+      "MOCP::Type A": { staged: { value: "15 A" }, review: "attention" },
     },
   };
   const push = createFamilyTypesCommandHandlers({ hostBaseUrl: "http://127.0.0.1:1" }).push;
 
   await expect(push({}, { getDoc: () => document, setDoc: async () => undefined })).rejects.toThrow(
-    "Push blocked: 1 staged cell need review.",
+    "Commit blocked: 1 staged cell need review.",
   );
 });
 
@@ -70,6 +71,7 @@ function reviewedProfile(): ParameterLinkProfile {
 test("parameter links apply rejects a reviewed profile after the draft changes", async () => {
   const reviewed: ParameterLinkProfile = reviewedProfile();
   const document: ParameterLinksDocument = {
+    binding: { target: null },
     profile: null,
     draftProfile: {
       ...reviewed,

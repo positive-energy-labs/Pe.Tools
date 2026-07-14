@@ -4,8 +4,8 @@
 // Service-file schema version: 2
 // OWNED BY Pe.Revit.Sdk — DO NOT FORK. Copy this file verbatim into a consumer; the SDK ships it
 // inside the Pe.Revit.Sdk nupkg under clients/ts/ so there is exactly ONE implementation per language
-// (this mirrors Pe.Revit.Loader's C# InstalledProduct.EnsureRunning / ServiceFile byte-for-byte in
-// behaviour). Dependency-free — Node stdlib only (fs/promises, path, child_process, crypto) plus the
+// (this mirrors Pe.Revit.Loader's C# InstalledProduct.EnsureRunning / TakeOver / ServiceFile byte-for-byte
+// in behaviour). Dependency-free — Node stdlib only (fs/promises, path, child_process, crypto) plus the
 // global fetch/AbortSignal (Node 18+).
 //
 // The runtime service file the SERVICE writes when it binds and deletes on graceful shutdown:
@@ -70,6 +70,28 @@ export type EnsureRunningResult =
   | { readonly state: "running"; readonly file: ServiceFile }
   | { readonly state: "started"; readonly file: ServiceFile }
   | { readonly state: "failed"; readonly reason: string };
+
+export interface TakeOverOptions {
+  /** POST path for a token-authenticated graceful stop, e.g. "/admin/shutdown". Loopback absolute path. */
+  readonly shutdown: string;
+  /** managed (default, token shutdown) vs plain. A plain owner cannot be taken over cooperatively. */
+  readonly tier?: ServiceTier;
+  /** Wait budget in ms for the incumbent to exit after it accepts the shutdown (default 15000). */
+  readonly timeoutMs?: number;
+}
+
+/**
+ * The outcomes of {@link takeOver} — the cooperative "become the sole owner" primitive. Mirrors
+ * `Pe.Revit.Loader.TakeOverResult` on the C# side. On the two claimed outcomes `file` is the caller's
+ * installed identity — the service file now names it; on the conflict outcomes `reason` explains why the
+ * caller is NOT the owner and the incumbent (if any) still holds the file.
+ */
+export type TakeOverResult =
+  | { readonly outcome: "no-current-owner"; readonly file: ServiceFile }
+  | { readonly outcome: "owner-stopped-and-claimed"; readonly file: ServiceFile }
+  | { readonly outcome: "owner-refused"; readonly reason: string }
+  | { readonly outcome: "owner-unresponsive-after-timeout"; readonly reason: string }
+  | { readonly outcome: "failed"; readonly reason: string };
 
 const HEALTH_TIMEOUT_MS = 500;
 const SHUTDOWN_TIMEOUT_MS = 1_000;
@@ -184,19 +206,27 @@ export async function writeServiceFile(
   }
 }
 
-/** Delete only the named launch's service file. Best-effort; a successor's identity wins. */
+/**
+ * Compare-and-delete the named launch's service file. Idempotent by intent: the goal is "no file naming
+ * `instanceId` remains", so an already-absent file is success, a file naming a SUCCESSOR is left
+ * untouched (returns false — never delete another launch's identity), and a concurrent delete that wins
+ * the race (the file vanishes mid-delete) is also success. This tolerance is what lets an exiting owner's
+ * delete-on-exit and a taker's post-verified-exit cleanup run without either racing the other into a
+ * spurious failure.
+ */
 export async function deleteServiceFile(
   appBase: string,
   name: string,
   instanceId: string,
 ): Promise<boolean> {
   const current = await readServiceFile(appBase, name);
-  if (!current || current.instanceId !== instanceId) return false;
+  if (!current) return true; // already absent — the delete's goal is reached
+  if (current.instanceId !== instanceId) return false; // a successor owns it
   try {
     await rm(serviceFilePath(appBase, name));
     return true;
   } catch {
-    return false;
+    return (await readServiceFile(appBase, name)) === null; // a concurrent compare-and-delete won ⇒ still success
   }
 }
 
@@ -276,6 +306,103 @@ export async function ensureRunning(
   } finally {
     await releaseServiceLease(lease);
   }
+}
+
+/**
+ * The singleton-host takeover primitive: make the CALLING process the sole owner of service `name`,
+ * displacing whatever verified owner currently holds it, and install `identity` (the caller's OWN
+ * already-bound service file — bind the loopback port and mint the token first, then
+ * {@link createServiceFile}). Unlike {@link ensureRunning} this spawns nothing: the caller is itself the
+ * new host. The whole transition runs under the same one-writer supervisor lease ensureRunning uses:
+ *   1. no verified owner (file absent, already ours, or the recorded pid+start is gone) ⇒ clear any stale
+ *      file and write our identity ⇒ "no-current-owner";
+ *   2. a live foreign owner ⇒ POST the shutdown endpoint with the owner's file token; a refusal
+ *      (plain tier / no token / non-2xx) ⇒ "owner-refused" (takeover never force-kills — the caller
+ *      decides whether to escalate);
+ *   3. shutdown accepted ⇒ wait up to timeoutMs for the recorded process to verifiably exit (pid gone, or
+ *      the pid reused with a different start time); still alive ⇒ "owner-unresponsive-after-timeout";
+ *   4. verified exit ⇒ compare-and-delete whatever the exiting owner did not remove, then write our
+ *      identity — all before the lease is released, so no supervisor observes a missing-or-foreign file
+ *      mid-handoff ⇒ "owner-stopped-and-claimed".
+ * Never throws for expected states.
+ */
+export async function takeOver(
+  appBase: string,
+  name: string,
+  identity: ServiceFile,
+  opts: TakeOverOptions,
+): Promise<TakeOverResult> {
+  if (!isSafeServiceName(name))
+    return { outcome: "failed", reason: `payload '${name}' is not a safe service name` };
+  if (!isLoopbackPath(opts.shutdown))
+    return {
+      outcome: "failed",
+      reason: "service shutdown must be a loopback absolute path beginning with one '/'",
+    };
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_STARTUP_TIMEOUT_MS;
+  const lease = await acquireServiceLease(appBase, name, timeoutMs);
+  if (!lease)
+    return { outcome: "failed", reason: `service '${name}' is busy in another supervisor` };
+  try {
+    const existing = await readServiceFile(appBase, name);
+    if (
+      !existing ||
+      existing.instanceId === identity.instanceId ||
+      !(await recordedProcessAlive(existing))
+    ) {
+      // No verified foreign owner: clear a stale file naming a dead owner, then install our identity.
+      if (existing && existing.instanceId !== identity.instanceId)
+        await deleteServiceFile(appBase, name, existing.instanceId);
+      await writeServiceFile(appBase, name, identity);
+      return { outcome: "no-current-owner", file: identity };
+    }
+    // A live, foreign owner holds the service — cooperative token shutdown only (never force-kill).
+    if ((opts.tier ?? "managed") !== "managed" || !existing.token)
+      return {
+        outcome: "owner-refused",
+        reason: `service '${name}' owner (pid ${existing.pid}) has no token shutdown route`,
+      };
+    if (!(await requestShutdown(existing.port, opts.shutdown, existing.token)))
+      return {
+        outcome: "owner-refused",
+        reason: `service '${name}' owner (pid ${existing.pid}) refused the shutdown request`,
+      };
+    if (!(await waitForVerifiedExit(existing, timeoutMs)))
+      return {
+        outcome: "owner-unresponsive-after-timeout",
+        reason:
+          `service '${name}' owner (pid ${existing.pid}) did not exit within ` +
+          `${(timeoutMs / 1000).toFixed(1)}s of an accepted shutdown`,
+      };
+    // Verified exit: compare-and-delete whatever the exiting owner did not remove, then install ours.
+    await deleteServiceFile(appBase, name, existing.instanceId);
+    await writeServiceFile(appBase, name, identity);
+    return { outcome: "owner-stopped-and-claimed", file: identity };
+  } finally {
+    await releaseServiceLease(lease);
+  }
+}
+
+/**
+ * True iff the recorded pid is a live process whose start time matches the file's `processStartUtc`
+ * (within clock slop). A vanished pid, a pid reused by an unrelated process (start-time mismatch), or a
+ * process whose identity cannot be verified (non-Windows: {@link pidIdentity} returns null) all read as
+ * "not the owner" — the takeover treats them as no live owner rather than blocking on an unverifiable pid.
+ */
+async function recordedProcessAlive(file: ServiceFile): Promise<boolean> {
+  if (!(await pidIsAlive(file.pid))) return false;
+  const identity = await pidIdentity(file.pid);
+  if (!identity) return false;
+  return Math.abs(Date.parse(identity.startUtc) - Date.parse(file.processStartUtc)) <= 2_000;
+}
+
+async function waitForVerifiedExit(file: ServiceFile, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!(await recordedProcessAlive(file))) return true;
+    await delay(POLL_INTERVAL_MS);
+  }
+  return !(await recordedProcessAlive(file));
 }
 
 function matches(file: ServiceFile, expectedVersion: string | undefined, lane: string): boolean {

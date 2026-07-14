@@ -4,7 +4,7 @@ import {
   assertRuntimeToolAccess,
   createRuntimeToolProfile,
   readRuntimeAccessLevelFromToolContext,
-} from "@pe/runtime";
+} from "@pe/agent-contracts";
 import { HostLogTarget, type HostOpResponse } from "@pe/host-contracts/operation-types";
 import { HostRpcCaller } from "../shared/host-rpc-caller.js";
 
@@ -18,6 +18,7 @@ import {
   scriptExecuteInputSchema,
 } from "../shared/scripting.ts";
 import { readImage } from "../shared/read-image.ts";
+import { coerceJsonObject } from "../shared/coerce.ts";
 import { createCaptureViewTool } from "../shared/capture-view.ts";
 import { requestAccess } from "../shared/request-access.ts";
 import { revitApiFetch, revitApiSearch } from "../shared/rvt-api.ts";
@@ -26,12 +27,7 @@ import { peaProductToolCatalog } from "../tool-metadata.ts";
 import { createPeSandboxTool, presentSessionKind } from "./sandbox.ts";
 import { routeStateTools } from "./route-state.ts";
 import { PeaCliCommands, type PeaCliCommandOptions } from "./PeaCliCommands.ts";
-export {
-  createFamilyTypesCommandHandlers,
-  createParameterLinksCommandHandlers,
-  familyTypesRouteState,
-  parameterLinksRouteState,
-} from "./route-state-commands.ts";
+export { type RouteRegistration, createRouteRegistrations } from "./routes.ts";
 export { peaProductToolCatalog } from "../tool-metadata.ts";
 export { PeaCliCommands } from "./PeaCliCommands.ts";
 export {
@@ -270,7 +266,7 @@ export const hostOperationCall = createTool({
     );
     const operation = await hostRpcCaller.getOperation(input.key);
     assertHostOperationCallAccess(operation, input.key, context);
-    return hostRpcCaller.callOperation(input.key, input.request, input.verbosity);
+    return hostRpcCaller.callOperation(input.key, coerceJsonObject(input.request), input.verbosity);
   },
 });
 

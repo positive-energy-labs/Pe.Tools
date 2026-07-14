@@ -2,6 +2,7 @@ import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import {
   type FamilyTypesDocument,
   type ParameterLinksDocument,
+  cellSummary,
   familyTypesRouteState,
   parameterLinksRouteState,
   readRouteState,
@@ -9,13 +10,14 @@ import {
   settingsRouteState,
   splitCellKey,
 } from "@pe/agent-contracts";
-import { Check, Eye, RefreshCw, RotateCcw, X } from "lucide-react";
+import { Check, Eye, RefreshCw } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
 import { Button } from "#/components/ui/button";
 import { peUrl } from "./config";
 import { useWorkbench } from "./provider";
 import { type RouteStateWriteResult, writeRouteState } from "./route-state";
+import { CellTrichotomyReviewer } from "./trichotomy-reviewer";
 import { ScheduleGridChatPlugin } from "./plugins/schedule-grid-chat-plugin";
 import { SettingsChatPlugin } from "./plugins/settings-chat-plugin";
 
@@ -35,6 +37,7 @@ type RouteChatPluginViewProps = Omit<RouteChatPluginProps, "active">;
 
 export interface RouteChatPluginRegistration {
   route: string;
+  title: string;
   stateKey: string;
   Renderer: ComponentType<RouteChatPluginProps>;
 }
@@ -42,25 +45,37 @@ export interface RouteChatPluginRegistration {
 const routeChatPlugins: Record<string, RouteChatPluginRegistration> = {
   "parameter-links": {
     route: "parameter-links",
+    title: "Parameter Links",
     stateKey: parameterLinksRouteState.key,
     Renderer: ParameterLinksChatPlugin,
   },
   "family-types": {
     route: "family-types",
+    title: "Family Types",
     stateKey: familyTypesRouteState.key,
     Renderer: FamilyTypesChatPlugin,
   },
   settings: {
     route: "settings",
+    title: "Settings",
     stateKey: settingsRouteState.key,
     Renderer: SettingsChatPlugin,
   },
   "schedule-grid": {
     route: "schedule-grid",
+    title: "Schedule Grid",
     stateKey: scheduleGridRouteState.key,
     Renderer: ScheduleGridChatPlugin,
   },
 };
+
+/** Route names hostable as chat workspace plugins — derived from the registry. */
+export const CHAT_PLUGIN_ROUTES = Object.keys(routeChatPlugins) as [string, ...string[]];
+export type ChatPluginRoute = keyof typeof routeChatPlugins;
+
+export function chatPluginTitle(route: string): string {
+  return routeChatPlugins[route]?.title ?? route;
+}
 
 export function selectRouteChatPlugin(
   toolName: string,
@@ -319,37 +334,23 @@ function FamilyTypesChatPlugin({
   onRouteDocumentChange,
 }: RouteChatPluginProps) {
   const document = readRouteState(sessionState, familyTypesRouteState);
-  const model = summarizeFamilyTypes(document);
-  const { config } = useWorkbench();
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const cells = document?.cells ?? {};
+  const summary = cellSummary(cells);
+  const openProposals = Object.values(cells).filter(
+    (cell) => cell.proposal != null && cell.staged == null,
+  ).length;
+  const reviewable = Object.values(cells).some(
+    (cell) => cell.proposal != null || cell.staged != null,
+  );
 
-  if (active && model.items.length === 0) return null;
+  if (active && !reviewable) return null;
 
-  const write = async (key: string, suffix: "apply" | "command", body: Record<string, unknown>) => {
-    setBusy(key);
-    try {
-      const result = await writeRouteState(config, "family-types", suffix, body);
-      setError(familyTypesWriteError(result));
-      if (result.ok && onRouteDocumentChange) {
-        const response = await fetch(peUrl(config, "/route-state/family-types"));
-        const snapshot = (await response.json()) as { doc?: unknown };
-        if (snapshot.doc != null) onRouteDocumentChange(snapshot.doc);
-      }
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Route update failed.");
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const interactive = active && model.items.length > 0;
   return (
     <InlineRoutePlugin title="Family Types" action={actionLabel(toolName, args, running)}>
       <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
-        <Metric value={model.proposalCount} label="open proposals" />
-        <Metric value={model.stagedCount} label="staged" />
-        <Metric value={model.attentionCount} label="need attention" issue />
+        <Metric value={openProposals} label="open proposals" />
+        <Metric value={summary.staged} label="staged" />
+        <Metric value={summary.attention} label="need attention" issue />
         <Link
           className="ml-auto font-medium text-[var(--pe-blue)] hover:underline"
           to="/chat"
@@ -359,105 +360,30 @@ function FamilyTypesChatPlugin({
         </Link>
       </div>
 
-      {interactive ? (
-        <div className="mt-1.5 w-full border-t border-[var(--line-2)]">
-          <div className="max-h-64 overflow-y-auto">
-            {model.items.map(([key, cell]) => {
-              const { paramName, typeName } = splitCellKey(key);
-              const staged = cell.staged != null;
-              return (
-                <div
-                  key={key}
-                  className="flex min-h-12 items-center gap-2 border-b border-[var(--line-2)] py-1.5 last:border-b-0"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate font-medium text-[var(--clay-ink)]">
-                      {paramName}{" "}
-                      <span className="font-normal text-[var(--lichen)]">· {typeName}</span>
-                    </div>
-                    <div className="truncate text-[var(--slate)]">
-                      {staged ? cell.staged : cell.proposal?.value}
-                    </div>
-                    {!staged && (cell.proposal?.confidence || cell.proposal?.note) ? (
-                      <div className="truncate text-[10px] text-[var(--lichen)]">
-                        {[cell.proposal.confidence, cell.proposal.note].filter(Boolean).join(" · ")}
-                      </div>
-                    ) : null}
-                  </div>
-                  {staged ? (
-                    <Button
-                      size="icon-sm"
-                      variant="ghost"
-                      title="Undo approval"
-                      disabled={busy != null}
-                      onClick={() =>
-                        void write(key, "apply", { patches: [{ path: ["cells", key, "staged"] }] })
-                      }
-                    >
-                      <RotateCcw />
-                    </Button>
-                  ) : (
-                    <div className="flex shrink-0 gap-1">
-                      <Button
-                        size="icon-sm"
-                        variant="ghost"
-                        title="Deny suggestion"
-                        disabled={busy != null}
-                        onClick={() =>
-                          void write(key, "apply", {
-                            patches: [
-                              { path: ["cells", key, "proposal"] },
-                              { path: ["cells", key, "review"], value: "none" },
-                            ],
-                          })
-                        }
-                      >
-                        <X />
-                      </Button>
-                      <Button
-                        size="icon-sm"
-                        title="Approve and stage suggestion"
-                        disabled={busy != null || !cell.proposal}
-                        onClick={() =>
-                          void write(key, "apply", {
-                            patches: [
-                              { path: ["cells", key, "staged"], value: cell.proposal?.value },
-                              { path: ["cells", key, "review"], value: "good" },
-                            ],
-                          })
-                        }
-                      >
-                        <Check />
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="flex items-center justify-between gap-2 pt-1.5">
-            <span className="min-w-0 truncate text-[10px] text-[var(--lichen)]">
-              {error ??
-                (model.attentionCount > 0
-                  ? `${model.attentionCount} value${model.attentionCount === 1 ? " needs" : "s need"} review`
-                  : "Pea can propose; only you can push.")}
-            </span>
-            <Button
-              size="sm"
-              disabled={!model.canPush || busy != null}
-              onClick={() => void write("push", "command", { command: "push", input: {} })}
-            >
-              <Check />
-              Push {model.stagedCount} to Revit
-            </Button>
-          </div>
-        </div>
+      {active && reviewable ? (
+        <CellTrichotomyReviewer
+          route="family-types"
+          segment="cells"
+          cells={cells}
+          commitCommand="push"
+          commitLabel={(staged) => `Push ${staged} to Revit`}
+          reviewHint="Pea can propose; only you can push."
+          renderLabel={(key) => {
+            const { paramName, typeName } = splitCellKey(key);
+            return (
+              <>
+                {paramName} <span className="font-normal text-[var(--lichen)]">· {typeName}</span>
+              </>
+            );
+          }}
+          onDocumentChange={onRouteDocumentChange}
+        />
       ) : null}
     </InlineRoutePlugin>
   );
 }
 
+/** Kept for the route-chat-plugins test; the inline card derives counts via `cellSummary`. */
 export function summarizeFamilyTypes(document: FamilyTypesDocument | null) {
   const entries = Object.entries(document?.cells ?? {});
   const items = entries.filter(([, cell]) => cell.proposal != null || cell.staged != null);

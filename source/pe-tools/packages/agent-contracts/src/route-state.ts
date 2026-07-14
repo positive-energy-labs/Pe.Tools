@@ -38,7 +38,47 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
 export function defineRouteState<TSchema extends z.ZodType>(
   spec: RouteStateSpec<TSchema>,
 ): RouteStateSpec<TSchema> {
-  return spec;
+  // Every route gets the substrate-owned `bind` command; the dispatcher implements it
+  // generically (writes doc.binding) — routes never supply a handler for it.
+  return { ...spec, commands: { [BIND_COMMAND]: bindCommandSpec, ...spec.commands } };
+}
+
+/** The document type a spec's schema parses to. */
+export type RouteDocOf<TSpec> =
+  TSpec extends RouteStateSpec<infer TSchema> ? z.infer<TSchema> : never;
+
+/* ── Session binding (substrate-owned doc segment) ─────────────────────────── */
+
+/**
+ * Which Revit session this workspace speaks to. Human-writable via the built-in
+ * `bind` command; commands resolve `input.target ?? doc.binding.target`. An
+ * unresolvable target with multiple sessions connected hard-fails host-side —
+ * never a silent fallback.
+ */
+export const routeBindingSchema = z
+  .object({
+    target: z.string().nullable().default(null),
+    boundAt: z.string().nullish(),
+  })
+  .prefault({ target: null });
+export type RouteBinding = z.infer<typeof routeBindingSchema>;
+
+export const BIND_COMMAND = "bind";
+
+export const bindCommandSpec: RouteStateCommandSpec = {
+  description:
+    "HUMAN ONLY. Bind this workspace to one Revit session (e.g. 'sandbox:<id>' or 'user'); commands inherit it unless they pass their own target. target: null unbinds.",
+  input: z.object({ target: z.string().nullable() }),
+  actor: "human",
+};
+
+/** Per-command override wins; otherwise the workspace binding; otherwise undefined. */
+export function resolveTarget(input: unknown, doc: unknown): string | undefined {
+  const explicit = (input as { target?: unknown } | null | undefined)?.target;
+  if (typeof explicit === "string" && explicit.length > 0) return explicit;
+  const bound = (doc as { binding?: { target?: string | null } } | null | undefined)?.binding
+    ?.target;
+  return bound ?? undefined;
 }
 
 /** Parse a route's slice out of a raw session-state map; null when absent or invalid. */
@@ -51,3 +91,20 @@ export function readRouteState<TSchema extends z.ZodType>(
   const result = spec.schema.safeParse(raw);
   return result.success ? result.data : null;
 }
+
+/** What a command handler receives: read the current document, write the next one. */
+export interface RouteStateCommandContext<TDoc = unknown> {
+  /** The current document (schema-parsed; a fresh empty document when absent). */
+  getDoc(): TDoc;
+  /** Replace the document (schema-validated before it lands). */
+  setDoc(next: TDoc): Promise<void>;
+}
+
+export type RouteStateCommandHandler<TDoc = unknown> = (
+  input: unknown,
+  ctx: RouteStateCommandContext<TDoc>,
+) => Promise<unknown>;
+export type RouteStateCommandHandlers<TDoc = unknown> = Record<
+  string,
+  RouteStateCommandHandler<TDoc>
+>;

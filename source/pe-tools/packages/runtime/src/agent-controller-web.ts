@@ -13,6 +13,7 @@ import {
   runRouteStateCommand,
   type RouteStateSession,
 } from "./route-state-dispatch.ts";
+import { createRouteStateStore, makeDurableRouteStateSession } from "./route-state-store.ts";
 
 /**
  * Body for the Pe send route. The native `/messages` route is `{ message: string }` only, so it
@@ -148,10 +149,15 @@ export async function buildAgentControllerApp(
   // Pea's three universal tools and the browser are thin clients of these endpoints;
   // the AgentController session owns the state, so writes here fan out over the same
   // native `state_changed` event both consumers already listen to.
-  const routeStateSession: RouteStateSession = {
-    getState: () => (runtime.session!.state.get() as Record<string, unknown>) ?? {},
-    update: (updater) => runtime.session!.state.update(updater as never),
-  };
+  // Session state is in-memory and resets on host restart; the durable store rehydrates the
+  // persisted `route:*` slice here (before the first read below) and write-throughs every update.
+  const routeStateSession: RouteStateSession = await makeDurableRouteStateSession(
+    {
+      getState: () => (runtime.session!.state.get() as Record<string, unknown>) ?? {},
+      update: (updater) => runtime.session!.state.update(updater as never),
+    },
+    createRouteStateStore(runtime.session!.identity.getResourceId()),
+  );
   app.get("/pe/route-state", (c) => c.json(listRouteStates(routeStateSession)));
   app.get("/pe/route-state/:route", (c) => {
     const route = c.req.param("route");

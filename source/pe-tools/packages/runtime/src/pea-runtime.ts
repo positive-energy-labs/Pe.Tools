@@ -9,12 +9,9 @@ import { LocalFilesystem, LocalSandbox, Workspace } from "@mastra/core/workspace
 import {
   bundledPeaSkills,
   configurePeaProductToolContext,
-  createFamilyTypesCommandHandlers,
-  createParameterLinksCommandHandlers,
+  createRouteRegistrations,
   defaultPeaAgentModelId,
-  familyTypesRouteState,
   materializeBundledPeaSkills,
-  parameterLinksRouteState,
   peaProductToolProfile,
   peaProductTools,
   resolveHostBaseUrl,
@@ -30,14 +27,14 @@ import {
 import { createPeaCloudGatewayRuntimeAuthProfile } from "./auth/profiles.ts";
 import type { RuntimeAuthProfile } from "./auth/types.ts";
 import { createRuntimeController } from "./controller/create-runtime-controller.ts";
-import { createRuntimeToolCategoryResolver } from "./tools/access-policy.ts";
+import { createRuntimeToolCategoryResolver } from "@pe/agent-contracts";
 import { createRuntimeMemoryOptions, createRuntimeMemoryProfile } from "./memory/profiles.ts";
 import { resolveRuntimeModel } from "./models/resolve.ts";
 import type { RuntimeCreateRequest, RuntimeHandle, RuntimeHandleServices } from "./runtime.ts";
 import { createPeaProductStateStorageProfile } from "./storage/profiles.ts";
 import { createSystemPromptCapture } from "./system-prompt-capture.ts";
 import { createToolListCapture } from "./tool-list-capture.ts";
-import type { RuntimeToolProfile } from "./tool-metadata.ts";
+import type { RuntimeToolProfile } from "@pe/agent-contracts";
 import { PeaContextSignalProvider } from "./pea-context-signals.ts";
 import { peaAgentInstructions } from "./pea-instructions.ts";
 
@@ -82,14 +79,12 @@ export async function createPeaRuntime(
   const workspaceKey = resolveWorkspaceKey(options.workspaceKey);
   configurePeaProductToolContext({ hostBaseUrl, workspaceKey });
 
-  // The /family-types collaborative route: schema + write mask + command handlers.
-  // The dispatcher endpoints (buildAgentControllerApp) and the three universal tools
-  // read this registration; handlers reach Revit at the same host base URL pea uses.
-  registerRouteState(familyTypesRouteState, createFamilyTypesCommandHandlers({ hostBaseUrl }));
-  registerRouteState(
-    parameterLinksRouteState,
-    createParameterLinksCommandHandlers({ hostBaseUrl }),
-  );
+  // The collaborative routes: schema + write mask + command handlers per route. The
+  // dispatcher endpoints (buildAgentControllerApp) and the three universal tools read
+  // these registrations; handlers reach Revit at the same host base URL pea uses.
+  // Adding a route = one entry in createRouteRegistrations (packages/mcps/src/pea/routes.ts).
+  for (const { spec, handlers } of createRouteRegistrations({ hostBaseUrl }))
+    registerRouteState(spec, handlers);
 
   const authStorageContext = await createMastraCodeAuthStorageContext();
   const authStorage = authStorageContext.storage;

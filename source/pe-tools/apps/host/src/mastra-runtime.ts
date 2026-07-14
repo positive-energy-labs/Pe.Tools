@@ -31,6 +31,16 @@ function mastraInitErrorLogPath(): string {
   return join(productRoot(), productPathNames.stateDirectoryName, "host", "mastra-init.err.log");
 }
 
+/** Structural ThreadLockError match anywhere in the `cause` chain. */
+function isThreadLockShaped(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; current instanceof Error && depth < 5; depth++) {
+    if (current.name === "ThreadLockError") return true;
+    current = current.cause;
+  }
+  return false;
+}
+
 /** Message + stack, following the `cause` chain (tryPromise wraps the original throw). */
 function formatInitError(error: unknown): string {
   const parts: string[] = [];
@@ -92,7 +102,18 @@ export const MastraRuntimeLive = Layer.effect(
 
     const handle = yield* Effect.acquireRelease(
       Effect.tryPromise(async () => {
-        const runtime = await createPeaRuntime({ hostBaseUrl });
+        // Host takeover races the pea thread lock: the dying incumbent can hold it for a
+        // few seconds after conceding the port. Retry instead of degrading to 503.
+        const runtime = await (async () => {
+          for (let attempt = 1; ; attempt += 1) {
+            try {
+              return await createPeaRuntime({ hostBaseUrl });
+            } catch (error) {
+              if (attempt >= 10 || !isThreadLockShaped(error)) throw error;
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+            }
+          }
+        })();
         const app = await buildAgentControllerApp({ runtime, label: "pea" });
         setAgentRuntimeStatus({ available: true, error: null });
         // A stale error log from a previous degraded boot would misreport this healthy one.

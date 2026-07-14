@@ -1,6 +1,9 @@
 import { createTool } from "@mastra/core/tools";
 import z from "zod";
-import { assertRuntimeToolAccess, readRuntimeAccessLevelFromToolContext } from "@pe/runtime";
+import {
+  assertRuntimeToolAccess,
+  readRuntimeAccessLevelFromToolContext,
+} from "@pe/agent-contracts";
 
 /**
  * pe_sandbox — the ONE dedicated pea tool for pea-owned Revit sandbox lifecycle (pe_status
@@ -119,7 +122,12 @@ function presentSandboxRow(row: SandboxRow): PresentedSandbox {
     state: typeof row.state === "string" ? row.state : null,
     detail: typeof row.detail === "string" ? row.detail : undefined,
     pid: typeof row.pid === "number" ? row.pid : null,
-    year: typeof row.year === "string" ? row.year : typeof row.year === "number" ? String(row.year) : null,
+    year:
+      typeof row.year === "string"
+        ? row.year
+        : typeof row.year === "number"
+          ? String(row.year)
+          : null,
     buildStamp: typeof row.buildStamp === "string" ? row.buildStamp : null,
     startedAtUtc: typeof row.startedAtUtc === "string" ? row.startedAtUtc : null,
     stoppedAtUtc: typeof row.stoppedAtUtc === "string" ? row.stoppedAtUtc : null,
@@ -194,7 +202,9 @@ export function unresponsiveSandboxPresentation(input: PeSandboxInput) {
         fix: `${stopStep} — force-stop that exact sandbox (the user's session is untouched), then start a fresh one.`,
       },
     ],
-    nextSteps: [`${stopStep} — force-stop the unresponsive sandbox; the user's session is preserved.`],
+    nextSteps: [
+      `${stopStep} — force-stop the unresponsive sandbox; the user's session is preserved.`,
+    ],
   };
 }
 
@@ -216,7 +226,9 @@ async function callSandboxRoute(
   try {
     return JSON.parse(text) as unknown;
   } catch {
-    throw new Error(`sandbox ${input.action}: host returned non-JSON output — ${text.slice(0, 500)}`);
+    throw new Error(
+      `sandbox ${input.action}: host returned non-JSON output — ${text.slice(0, 500)}`,
+    );
   }
 }
 
@@ -235,12 +247,18 @@ export function createPeSandboxTool(resolveBaseUrl: () => string, fetchImpl?: Fe
       if (MUTATING_SANDBOX_ACTIONS.has(input.action))
         assertRuntimeToolAccess({
           toolName: `pe_sandbox:${input.action}`,
-          metadata: { name: `pe_sandbox:${input.action}`, title: `Sandbox ${input.action}`, kind: "execute" },
+          metadata: {
+            name: `pe_sandbox:${input.action}`,
+            title: `Sandbox ${input.action}`,
+            kind: "execute",
+          },
           accessLevel: readRuntimeAccessLevelFromToolContext(context),
         });
       try {
         const envelope = await callSandboxRoute(resolveBaseUrl(), input, fetchImpl);
-        return input.verbosity === "full" ? envelope : presentSandboxEnvelope(envelope, input.action);
+        return input.verbosity === "full"
+          ? envelope
+          : presentSandboxEnvelope(envelope, input.action);
       } catch (error) {
         if (error instanceof Error && error.name === "TimeoutError")
           return unresponsiveSandboxPresentation(input);
