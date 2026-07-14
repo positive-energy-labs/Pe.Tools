@@ -26,6 +26,10 @@ export const hostProgram = <A, E, R>(beforeHost: Effect.Effect<A, E, R>) =>
         ),
       );
 
+      // Last pre-bind breadcrumb: the HTTP layer is about to launch. The bound "Listening on ..."
+      // line follows once NodeHttpServer binds; a gap between these two in host.log localizes a hang
+      // or crash to the layer build (e.g. bridge/service-claim/tenant) rather than earlier startup.
+      console.log(`pe-host binding http://127.0.0.1:${HOST_PORT}`);
       yield* Effect.raceFirst(Layer.launch(HttpLive), Deferred.await(latch));
     }),
   );
