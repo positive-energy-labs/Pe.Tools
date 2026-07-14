@@ -203,12 +203,28 @@ public static class ParameterLinksEngine {
             var target = definition.TargetParameter == null
                 ? null
                 : ParameterReferenceResolver.Resolve([definition.TargetParameter]).SingleOrDefault();
+            var overrideEnabled = definition.TargetOverride?.EnabledParameter == null
+                ? null
+                : ParameterReferenceResolver.Resolve([definition.TargetOverride.EnabledParameter]).SingleOrDefault();
+            var overrideValue = definition.TargetOverride?.ValueParameter == null
+                ? null
+                : ParameterReferenceResolver.Resolve([definition.TargetOverride.ValueParameter]).SingleOrDefault();
             if (source == null)
                 issues.Add(Issue("SourceParameterRequired", ParameterLinkIssueSeverity.Error,
                     "A definition requires a resolvable source parameter reference.", definition.Id));
             if (target == null)
                 issues.Add(Issue("TargetParameterRequired", ParameterLinkIssueSeverity.Error,
                     "A definition requires a resolvable target parameter reference.", definition.Id));
+            if (definition.TargetOverride != null && overrideEnabled == null)
+                issues.Add(Issue("OverrideEnabledParameterRequired", ParameterLinkIssueSeverity.Error,
+                    "A target override requires a resolvable enabled parameter reference.", definition.Id));
+            if (definition.TargetOverride != null && overrideValue == null)
+                issues.Add(Issue("OverrideValueParameterRequired", ParameterLinkIssueSeverity.Error,
+                    "A target override requires a resolvable value parameter reference.", definition.Id));
+            if (target != null && overrideValue != null &&
+                string.Equals(target.Identity.Key, overrideValue.Identity.Key, StringComparison.OrdinalIgnoreCase))
+                issues.Add(Issue("OverrideValueIsTarget", ParameterLinkIssueSeverity.Error,
+                    "The override value parameter must be separate from the resolved target parameter.", definition.Id));
 
             if (source != null && target != null &&
                 definition.Relationship == ParameterLinkRelationship.SameElement &&
@@ -313,6 +329,9 @@ public static class ParameterLinksEngine {
             ParameterLinkRelationship.SameElement => [source],
             ParameterLinkRelationship.ElectricalEquipmentCircuits when source is FamilyInstance family =>
                 ElectricalCollectorSupport.GetElectricalSystems(family)
+                    .Where(system => system.SystemType ==
+                                     Autodesk.Revit.DB.Electrical.ElectricalSystemType.PowerCircuit)
+                    .Where(system => system.Elements.Cast<Element>().Any(element => element.Id == family.Id))
                     .GroupBy(system => system.Id.Value())
                     .Select(group => (Element)group.First())
                     .ToList(),
@@ -364,6 +383,11 @@ public static class ParameterLinksEngine {
             return;
         }
 
+        var targetOverride = ResolveTargetOverride(document, definition, assignment, source, target, targetParameter,
+            issues);
+        if (definition.TargetOverride != null && targetOverride == null)
+            return;
+
         writes.Add(new PlannedWriteCandidate(
             definition,
             assignment,
@@ -371,7 +395,70 @@ public static class ParameterLinksEngine {
             target,
             targetParameter,
             current,
-            sourceValue).ToPlannedWrite());
+            sourceValue,
+            targetOverride).ToPlannedWrite());
+    }
+
+    private static TargetOverrideState? ResolveTargetOverride(
+        Document document,
+        ParameterLinkDefinition definition,
+        ParameterLinkAssignment assignment,
+        Element source,
+        Element target,
+        Parameter targetParameter,
+        List<ParameterLinkIssue> issues
+    ) {
+        if (definition.TargetOverride == null)
+            return null;
+
+        var enabled = ParameterReferenceLookup.Find(document, target,
+            definition.TargetOverride.EnabledParameter, RevitParameterLookupPreference.InstanceOnly);
+        if (enabled == null) {
+            issues.Add(Issue("OverrideEnabledParameterMissing", ParameterLinkIssueSeverity.Error,
+                $"Override enabled parameter was not found on element {target.Id.Value()}.", definition.Id,
+                assignment.Id, source.UniqueId, target.UniqueId));
+            return null;
+        }
+        if (enabled.StorageType != StorageType.Integer ||
+            !string.Equals(enabled.Definition?.GetDataType()?.TypeId, SpecTypeId.Boolean.YesNo.TypeId,
+                StringComparison.OrdinalIgnoreCase)) {
+            issues.Add(Issue("OverrideEnabledParameterInvalid", ParameterLinkIssueSeverity.Error,
+                $"Override enabled parameter '{enabled.Definition?.Name}' must be a Yes/No parameter.", definition.Id,
+                assignment.Id, source.UniqueId, target.UniqueId));
+            return null;
+        }
+
+        var value = ParameterReferenceLookup.Find(document, target,
+            definition.TargetOverride.ValueParameter, RevitParameterLookupPreference.InstanceOnly);
+        if (value == null) {
+            issues.Add(Issue("OverrideValueParameterMissing", ParameterLinkIssueSeverity.Error,
+                $"Override value parameter was not found on element {target.Id.Value()}.", definition.Id,
+                assignment.Id, source.UniqueId, target.UniqueId));
+            return null;
+        }
+        if (value.Id == targetParameter.Id) {
+            issues.Add(Issue("OverrideValueIsTarget", ParameterLinkIssueSeverity.Error,
+                "The override value parameter must be separate from the resolved target parameter.", definition.Id,
+                assignment.Id, source.UniqueId, target.UniqueId));
+            return null;
+        }
+        if (!IsCompatible(value, targetParameter)) {
+            issues.Add(Issue("IncompatibleOverrideParameter", ParameterLinkIssueSeverity.Error,
+                $"Override value '{value.Definition?.Name}' and target '{targetParameter.Definition?.Name}' have incompatible storage or specs.",
+                definition.Id, assignment.Id, source.UniqueId, target.UniqueId));
+            return null;
+        }
+
+        var isEnabled = enabled.AsInteger() != 0;
+        var overrideValue = ReadValue(value, requireValue: isEnabled);
+        if (isEnabled && overrideValue == null) {
+            issues.Add(Issue("OverrideValueMissing", ParameterLinkIssueSeverity.Error,
+                $"Override is enabled but '{value.Definition?.Name}' has no value on element {target.Id.Value()}.",
+                definition.Id, assignment.Id, source.UniqueId, target.UniqueId));
+            return null;
+        }
+
+        return new TargetOverrideState(isEnabled, overrideValue);
     }
 
     private static List<PlannedWrite> CollapseTargets(
@@ -399,10 +486,16 @@ public static class ParameterLinksEngine {
                 continue;
             }
 
+            var resolved = first.TargetOverride is { Enabled: true, Value: not null }
+                ? first.TargetOverride.Value
+                : proposed;
             writes.Add(first with {
                 Contract = first.Contract with {
-                    ProposedValue = proposed,
-                    Changed = !ValuesEqual(first.Contract.CurrentValue, proposed)
+                    LinkedValue = proposed,
+                    OverrideValue = first.TargetOverride?.Value,
+                    OverrideApplied = first.TargetOverride?.Enabled == true,
+                    ProposedValue = resolved,
+                    Changed = !ValuesEqual(first.Contract.CurrentValue, resolved)
                 }
             });
         }
@@ -536,8 +629,11 @@ public static class ParameterLinksEngine {
         ParameterLinkWrite Contract,
         Parameter TargetParameter,
         ParameterLinkReducer Reducer,
-        string SourceUniqueId
+        string SourceUniqueId,
+        TargetOverrideState? TargetOverride
     );
+
+    private sealed record TargetOverrideState(bool Enabled, ParameterLinkValue? Value);
 
     private sealed record PlannedWriteCandidate(
         ParameterLinkDefinition Definition,
@@ -546,7 +642,8 @@ public static class ParameterLinksEngine {
         Element Target,
         Parameter TargetParameter,
         ParameterLinkValue Current,
-        ParameterLinkValue Proposed
+        ParameterLinkValue Proposed,
+        TargetOverrideState? TargetOverride
     ) {
         public PlannedWrite ToPlannedWrite() => new(
             new ParameterLinkWrite {
@@ -557,12 +654,16 @@ public static class ParameterLinksEngine {
                 TargetElementName = this.Target.Name,
                 TargetParameter = ParameterIdentityFactory.FromParameter(this.TargetParameter),
                 CurrentValue = this.Current,
+                LinkedValue = this.Proposed,
+                OverrideValue = this.TargetOverride?.Value,
+                OverrideApplied = this.TargetOverride?.Enabled == true,
                 ProposedValue = this.Proposed,
                 Changed = !ValuesEqual(this.Current, this.Proposed)
             },
             this.TargetParameter,
             this.Definition.Reducer,
-            this.Source.UniqueId);
+            this.Source.UniqueId,
+            this.TargetOverride);
     }
 
 }

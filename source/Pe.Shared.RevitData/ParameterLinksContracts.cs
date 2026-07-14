@@ -62,7 +62,15 @@ public sealed record ParameterLinkDefinition {
     public required ParameterLinkRelationship Relationship { get; init; }
     [JsonProperty(Required = Required.Always)]
     public required ParameterReference TargetParameter { get; init; }
+    public ParameterLinkTargetOverride? TargetOverride { get; init; }
     public ParameterLinkReducer Reducer { get; init; } = ParameterLinkReducer.First;
+}
+
+public sealed record ParameterLinkTargetOverride {
+    [JsonProperty(Required = Required.Always)]
+    public required ParameterReference EnabledParameter { get; init; }
+    [JsonProperty(Required = Required.Always)]
+    public required ParameterReference ValueParameter { get; init; }
 }
 
 public sealed record ParameterLinkAssignment {
@@ -92,6 +100,9 @@ public sealed record ParameterLinkWrite {
     public string? TargetElementName { get; init; }
     public required ParameterIdentity TargetParameter { get; init; }
     public required ParameterLinkValue CurrentValue { get; init; }
+    public required ParameterLinkValue LinkedValue { get; init; }
+    public ParameterLinkValue? OverrideValue { get; init; }
+    public required bool OverrideApplied { get; init; }
     public required ParameterLinkValue ProposedValue { get; init; }
     public required bool Changed { get; init; }
 }
