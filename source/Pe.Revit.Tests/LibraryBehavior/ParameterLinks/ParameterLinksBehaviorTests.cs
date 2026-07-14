@@ -7,7 +7,7 @@ namespace Pe.Revit.Tests;
 [TestFixture]
 public sealed class ParameterLinksBehaviorTests {
     [Test]
-    public void Electrical_equipment_current_reduces_to_native_circuit_rating(
+    public void Electrical_equipment_values_resolve_to_circuit_defaults_and_target_overrides(
         UIApplication uiApplication
     ) {
         var template = Directory.GetFiles(
@@ -17,23 +17,32 @@ public sealed class ParameterLinksBehaviorTests {
                 SearchOption.AllDirectories)
             .First();
         var document = uiApplication.Application.NewProjectDocument(template);
+        var tagInstanceGuid = Guid.NewGuid();
         var mocpGuid = Guid.NewGuid();
+        var tagResultGuid = Guid.NewGuid();
+        var tagOverrideEnabledGuid = Guid.NewGuid();
+        var tagOverrideValueGuid = Guid.NewGuid();
+        var mocpResultGuid = Guid.NewGuid();
+        var mocpOverrideEnabledGuid = Guid.NewGuid();
+        var mocpOverrideValueGuid = Guid.NewGuid();
+        ParameterLinksUpdater? updater = null;
         try {
-            var definition = RevitFamilyFixtureHarness.CreateSharedParameterDefinition(
-                document,
-                new RevitFamilyFixtureHarness.SharedDefinitionSpec(
-                    "_PE_MOCP",
-                    SpecTypeId.Current,
-                    "ParameterLinks",
-                    "Electrical parameter-links fixture.",
-                    mocpGuid));
-            var binding = RevitFamilyFixtureHarness.AddOrUpdateProjectParameterBinding(
-                document,
-                definition,
-                true,
-                GroupTypeId.Data,
+            BindParameter(document, "_PE_TagInstance", tagInstanceGuid, SpecTypeId.String.Text,
                 BuiltInCategory.OST_ElectricalEquipment);
-            Assert.That(binding.BindingSucceeded, Is.True);
+            BindParameter(document, "_PE_MOCP", mocpGuid, SpecTypeId.Current,
+                BuiltInCategory.OST_ElectricalEquipment);
+            BindParameter(document, "_PE_Circuit_Tag", tagResultGuid, SpecTypeId.String.Text,
+                BuiltInCategory.OST_ElectricalCircuit);
+            BindParameter(document, "_PE_Circuit_Tag_Override", tagOverrideEnabledGuid,
+                SpecTypeId.Boolean.YesNo, BuiltInCategory.OST_ElectricalCircuit);
+            BindParameter(document, "_PE_Circuit_Tag_Override_Value", tagOverrideValueGuid,
+                SpecTypeId.String.Text, BuiltInCategory.OST_ElectricalCircuit);
+            BindParameter(document, "_PE_Circuit_MOCP", mocpResultGuid, SpecTypeId.Current,
+                BuiltInCategory.OST_ElectricalCircuit);
+            BindParameter(document, "_PE_Circuit_MOCP_Override", mocpOverrideEnabledGuid,
+                SpecTypeId.Boolean.YesNo, BuiltInCategory.OST_ElectricalCircuit);
+            BindParameter(document, "_PE_Circuit_MOCP_Override_Value", mocpOverrideValueGuid,
+                SpecTypeId.Current, BuiltInCategory.OST_ElectricalCircuit);
 
             var transformerType = new FilteredElementCollector(document)
                 .OfClass(typeof(FamilySymbol))
@@ -79,6 +88,7 @@ public sealed class ParameterLinksBehaviorTests {
                     new List<ElementId> { firstEquipment.Id, secondEquipment.Id },
                     Autodesk.Revit.DB.Electrical.ElectricalSystemType.PowerCircuit);
                 circuit.SelectPanel(panel);
+                Assert.That(firstEquipment.get_Parameter(tagInstanceGuid).Set("AHU-1"), Is.True);
                 Assert.That(firstEquipment.get_Parameter(mocpGuid).Set(
                     UnitUtils.ConvertToInternalUnits(20, UnitTypeId.Amperes)), Is.True);
                 Assert.That(secondEquipment.get_Parameter(mocpGuid).Set(
@@ -86,52 +96,115 @@ public sealed class ParameterLinksBehaviorTests {
                 _ = transaction.Commit();
             }
 
-            var rating = circuit.get_Parameter(BuiltInParameter.RBS_ELEC_CIRCUIT_RATING_PARAM);
-            Assert.That(rating, Is.Not.Null);
-            Assert.That(rating.IsReadOnly, Is.False);
             var profile = new ParameterLinkProfile {
-                Definitions = [new ParameterLinkDefinition {
-                    Id = "mocp-to-rating",
-                    SourceCategoryId = (int)BuiltInCategory.OST_ElectricalEquipment,
-                    SourceParameter = ParameterReference.FromSharedGuid(mocpGuid.ToString("D")),
-                    Relationship = ParameterLinkRelationship.ElectricalEquipmentCircuits,
-                    TargetParameter = ParameterReference.FromIdentity(
-                        ParameterIdentityFactory.FromParameter(rating)),
-                    Reducer = ParameterLinkReducer.Max
-                }],
+                Definitions = [
+                    new ParameterLinkDefinition {
+                        Id = "tag-to-circuit",
+                        SourceCategoryId = (int)BuiltInCategory.OST_ElectricalEquipment,
+                        SourceParameter = ParameterReference.FromSharedGuid(tagInstanceGuid.ToString("D")),
+                        Relationship = ParameterLinkRelationship.ElectricalEquipmentCircuits,
+                        TargetParameter = ParameterReference.FromSharedGuid(tagResultGuid.ToString("D")),
+                        TargetOverride = new ParameterLinkTargetOverride {
+                            EnabledParameter = ParameterReference.FromSharedGuid(
+                                tagOverrideEnabledGuid.ToString("D")),
+                            ValueParameter = ParameterReference.FromSharedGuid(tagOverrideValueGuid.ToString("D"))
+                        }
+                    },
+                    new ParameterLinkDefinition {
+                        Id = "mocp-to-circuit",
+                        SourceCategoryId = (int)BuiltInCategory.OST_ElectricalEquipment,
+                        SourceParameter = ParameterReference.FromSharedGuid(mocpGuid.ToString("D")),
+                        Relationship = ParameterLinkRelationship.ElectricalEquipmentCircuits,
+                        TargetParameter = ParameterReference.FromSharedGuid(mocpResultGuid.ToString("D")),
+                        TargetOverride = new ParameterLinkTargetOverride {
+                            EnabledParameter = ParameterReference.FromSharedGuid(
+                                mocpOverrideEnabledGuid.ToString("D")),
+                            ValueParameter = ParameterReference.FromSharedGuid(mocpOverrideValueGuid.ToString("D"))
+                        },
+                        Reducer = ParameterLinkReducer.Max
+                    }
+                ],
                 Assignments = [
                     new ParameterLinkAssignment {
-                        Id = "first-equipment",
-                        DefinitionId = "mocp-to-rating",
+                        Id = "tag-equipment",
+                        DefinitionId = "tag-to-circuit",
                         SourceElementUniqueIds = [firstEquipment.UniqueId]
                     },
                     new ParameterLinkAssignment {
-                        Id = "second-equipment",
-                        DefinitionId = "mocp-to-rating",
+                        Id = "first-mocp-equipment",
+                        DefinitionId = "mocp-to-circuit",
+                        SourceElementUniqueIds = [firstEquipment.UniqueId]
+                    },
+                    new ParameterLinkAssignment {
+                        Id = "second-mocp-equipment",
+                        DefinitionId = "mocp-to-circuit",
                         SourceElementUniqueIds = [secondEquipment.UniqueId]
                     }
                 ]
             };
 
             var preview = ParameterLinksEngine.Evaluate(document, profile);
-            ParameterLinkEvaluation evaluation;
-            int applied;
-            using (var transaction = new Transaction(document, "Apply electrical parameter link")) {
-                _ = transaction.Start();
-                (evaluation, applied) = ParameterLinksEngine.Reconcile(document, profile);
-                _ = transaction.Commit();
-            }
+            var applied = ParameterLinksService.Instance.Apply(document,
+                new ParameterLinksApplyRequest(profile));
 
             var expected = UnitUtils.ConvertToInternalUnits(30, UnitTypeId.Amperes);
             Assert.Multiple(() => {
                 Assert.That(preview.Issues, Is.Empty);
-                Assert.That(preview.Writes, Has.Count.EqualTo(1));
-                Assert.That(preview.ChangedWriteCount, Is.EqualTo(1));
-                Assert.That(evaluation.Issues, Is.Empty);
-                Assert.That(applied, Is.EqualTo(1));
-                Assert.That(rating.AsDouble(), Is.EqualTo(expected).Within(1e-9));
+                Assert.That(preview.Writes, Has.Count.EqualTo(2));
+                Assert.That(preview.ChangedWriteCount, Is.EqualTo(2));
+                Assert.That(applied.Evaluation?.Issues, Is.Empty);
+                Assert.That(applied.AppliedWriteCount, Is.EqualTo(2));
+                Assert.That(applied.ProfileChanged, Is.True);
+                Assert.That(circuit.get_Parameter(tagResultGuid).AsString(), Is.EqualTo("AHU-1"));
+                Assert.That(circuit.get_Parameter(mocpResultGuid).AsDouble(), Is.EqualTo(expected).Within(1e-9));
+            });
+
+            updater = new ParameterLinksUpdater(uiApplication.ActiveAddInId, _ => profile, Guid.NewGuid());
+            UpdaterRegistry.RegisterUpdater(updater, true);
+            UpdaterRegistry.AddTrigger(updater.GetUpdaterId(), document,
+                new ElementClassFilter(typeof(Autodesk.Revit.DB.Electrical.ElectricalSystem)),
+                Element.GetChangeTypeAny());
+
+            var overriddenMocp = UnitUtils.ConvertToInternalUnits(45, UnitTypeId.Amperes);
+            using (var transaction = new Transaction(document, "Set circuit overrides")) {
+                _ = transaction.Start();
+                Assert.That(circuit.get_Parameter(tagOverrideValueGuid).Set("MANUAL-TAG"), Is.True);
+                Assert.That(circuit.get_Parameter(tagOverrideEnabledGuid).Set(1), Is.True);
+                Assert.That(circuit.get_Parameter(mocpOverrideValueGuid).Set(overriddenMocp), Is.True);
+                Assert.That(circuit.get_Parameter(mocpOverrideEnabledGuid).Set(1), Is.True);
+                _ = transaction.Commit();
+            }
+
+            Assert.Multiple(() => {
+                Assert.That(circuit.get_Parameter(tagResultGuid).AsString(), Is.EqualTo("MANUAL-TAG"));
+                Assert.That(circuit.get_Parameter(mocpResultGuid).AsDouble(),
+                    Is.EqualTo(overriddenMocp).Within(1e-9));
+            });
+
+            var overridePreview = ParameterLinksEngine.Evaluate(document, profile);
+            Assert.Multiple(() => {
+                Assert.That(overridePreview.Issues, Is.Empty);
+                Assert.That(overridePreview.Writes, Has.All.Matches<ParameterLinkWrite>(write =>
+                    write.OverrideApplied && write.OverrideValue != null));
+                Assert.That(overridePreview.Writes.Single(write => write.DefinitionId == "tag-to-circuit")
+                    .LinkedValue.StringValue, Is.EqualTo("AHU-1"));
+                Assert.That(overridePreview.ChangedWriteCount, Is.Zero);
+            });
+
+            using (var transaction = new Transaction(document, "Disable circuit overrides")) {
+                _ = transaction.Start();
+                Assert.That(circuit.get_Parameter(tagOverrideEnabledGuid).Set(0), Is.True);
+                Assert.That(circuit.get_Parameter(mocpOverrideEnabledGuid).Set(0), Is.True);
+                _ = transaction.Commit();
+            }
+
+            Assert.Multiple(() => {
+                Assert.That(circuit.get_Parameter(tagResultGuid).AsString(), Is.EqualTo("AHU-1"));
+                Assert.That(circuit.get_Parameter(mocpResultGuid).AsDouble(), Is.EqualTo(expected).Within(1e-9));
             });
         } finally {
+            if (updater != null && UpdaterRegistry.IsUpdaterRegistered(updater.GetUpdaterId()))
+                UpdaterRegistry.UnregisterUpdater(updater.GetUpdaterId());
             RevitFamilyFixtureHarness.CloseDocument(document);
         }
     }
@@ -431,7 +504,13 @@ public sealed class ParameterLinksBehaviorTests {
         }
     }
 
-    private static void BindParameter(Document document, string name, Guid guid, ForgeTypeId dataType) {
+    private static void BindParameter(
+        Document document,
+        string name,
+        Guid guid,
+        ForgeTypeId dataType,
+        params BuiltInCategory[] categories
+    ) {
         var definition = RevitFamilyFixtureHarness.CreateSharedParameterDefinition(
             document,
             new RevitFamilyFixtureHarness.SharedDefinitionSpec(
@@ -445,7 +524,7 @@ public sealed class ParameterLinksBehaviorTests {
             definition,
             true,
             GroupTypeId.Data,
-            BuiltInCategory.OST_ProjectInformation);
+            categories.Length == 0 ? [BuiltInCategory.OST_ProjectInformation] : categories);
         Assert.That(result.BindingSucceeded, Is.True);
     }
 }

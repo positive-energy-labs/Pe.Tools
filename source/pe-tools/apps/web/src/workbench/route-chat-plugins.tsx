@@ -247,6 +247,7 @@ function ParameterLinksReview({
               <div className="truncate font-mono text-[10px] text-[var(--lichen)] tabular-nums">
                 {displayParameterLinkValue(write.currentValue)} →{" "}
                 {displayParameterLinkValue(write.proposedValue)}
+                {write.overrideApplied ? " (override)" : ""}
               </div>
             </div>
           ))}

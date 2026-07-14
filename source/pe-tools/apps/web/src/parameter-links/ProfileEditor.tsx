@@ -207,6 +207,93 @@ function DefinitionCard({
             onChange={(reducer) => patch({ reducer })}
           />
         </Field>
+        <label className="flex items-center gap-1.5 text-xs text-[var(--slate)] sm:col-span-2">
+          <input
+            type="checkbox"
+            checked={definition.targetOverride != null}
+            disabled={disabled}
+            onChange={(event) =>
+              patch({
+                targetOverride: event.target.checked
+                  ? { enabledParameter: { name: "" }, valueParameter: { name: "" } }
+                  : null,
+              })
+            }
+          />
+          Allow a target-side override
+        </label>
+        {definition.targetOverride ? (
+          <>
+            <Field label="Override enabled parameter (name)">
+              <Input
+                value={definition.targetOverride.enabledParameter.name ?? ""}
+                disabled={disabled}
+                onChange={(event) =>
+                  patch({
+                    targetOverride: {
+                      ...definition.targetOverride!,
+                      enabledParameter: {
+                        ...definition.targetOverride!.enabledParameter,
+                        name: event.target.value,
+                      },
+                    },
+                  })
+                }
+              />
+            </Field>
+            <Field label="Override enabled parameter (shared GUID)">
+              <Input
+                value={definition.targetOverride.enabledParameter.sharedGuid ?? ""}
+                disabled={disabled}
+                onChange={(event) =>
+                  patch({
+                    targetOverride: {
+                      ...definition.targetOverride!,
+                      enabledParameter: {
+                        ...definition.targetOverride!.enabledParameter,
+                        sharedGuid: event.target.value || null,
+                      },
+                    },
+                  })
+                }
+              />
+            </Field>
+            <Field label="Override value parameter (name)">
+              <Input
+                value={definition.targetOverride.valueParameter.name ?? ""}
+                disabled={disabled}
+                onChange={(event) =>
+                  patch({
+                    targetOverride: {
+                      ...definition.targetOverride!,
+                      valueParameter: {
+                        ...definition.targetOverride!.valueParameter,
+                        name: event.target.value,
+                      },
+                    },
+                  })
+                }
+              />
+            </Field>
+            <Field label="Override value parameter (shared GUID)">
+              <Input
+                value={definition.targetOverride.valueParameter.sharedGuid ?? ""}
+                disabled={disabled}
+                onChange={(event) =>
+                  patch({
+                    targetOverride: {
+                      ...definition.targetOverride!,
+                      valueParameter: {
+                        ...definition.targetOverride!.valueParameter,
+                        sharedGuid: event.target.value || null,
+                      },
+                    },
+                  })
+                }
+              />
+            </Field>
+          </>
+        ) : null}
       </div>
 
       <div className="border-t border-[var(--line-2)] px-3 py-2">

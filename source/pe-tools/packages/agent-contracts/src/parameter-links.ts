@@ -21,6 +21,12 @@ export const parameterLinkDefinitionSchema = z.object({
   sourceScope: z.enum(["instance", "type", "instanceThenType"]).default("instanceThenType"),
   relationship: z.enum(["sameElement", "electricalEquipmentCircuits"]),
   targetParameter: parameterReferenceSchema,
+  targetOverride: z
+    .object({
+      enabledParameter: parameterReferenceSchema,
+      valueParameter: parameterReferenceSchema,
+    })
+    .nullish(),
   reducer: z.enum(["first", "min", "max"]).default("first"),
 });
 export type ParameterLinkDefinition = z.infer<typeof parameterLinkDefinitionSchema>;
@@ -59,6 +65,9 @@ export const parameterLinkWriteSchema = z.object({
   targetElementName: z.string().nullish(),
   targetParameter: parameterLinkParameterIdentitySchema,
   currentValue: parameterLinkValueSchema,
+  linkedValue: parameterLinkValueSchema,
+  overrideValue: parameterLinkValueSchema.nullish(),
+  overrideApplied: z.boolean(),
   proposedValue: parameterLinkValueSchema,
   changed: z.boolean(),
 });

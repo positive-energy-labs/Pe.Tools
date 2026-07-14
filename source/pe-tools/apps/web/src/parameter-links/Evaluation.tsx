@@ -100,7 +100,8 @@ export function EvaluationView({
                 <th className="px-2 py-1.5 font-medium">Target</th>
                 <th className="px-2 py-1.5 font-medium">Parameter</th>
                 <th className="px-2 py-1.5 font-medium">Current</th>
-                <th className="px-2 py-1.5 font-medium">Proposed</th>
+                <th className="px-2 py-1.5 font-medium">Linked</th>
+                <th className="px-2 py-1.5 font-medium">Result</th>
                 <th className="px-2 py-1.5 font-medium">Δ</th>
               </tr>
             </thead>
@@ -121,12 +122,16 @@ export function EvaluationView({
                   <td className="px-2 py-1 font-mono tabular-nums text-[var(--lichen)]">
                     {displayParameterLinkValue(write.currentValue)}
                   </td>
+                  <td className="px-2 py-1 font-mono tabular-nums text-[var(--lichen)]">
+                    {displayParameterLinkValue(write.linkedValue)}
+                  </td>
                   <td
                     className={`px-2 py-1 font-mono tabular-nums ${
                       write.changed ? "text-[var(--clay-ink)]" : "text-[var(--lichen)]"
                     }`}
                   >
                     {displayParameterLinkValue(write.proposedValue)}
+                    {write.overrideApplied ? " (override)" : ""}
                   </td>
                   <td className="px-2 py-1">
                     {write.changed ? (
