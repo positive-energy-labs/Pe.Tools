@@ -70,7 +70,7 @@ public sealed class ButtonRegistry {
             Container = new ButtonContainer.Panel("Migration")
         }),
         Register(new ButtonRegistration<CmdPltCommands> {
-            Text = "Command Palette",
+            Text = "Cmd Palette",
             SmallImage = "square-terminal16.png",
             LargeImage = "square-terminal32.png",
             ToolTip =
