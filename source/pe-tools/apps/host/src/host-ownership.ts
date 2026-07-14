@@ -1,38 +1,22 @@
-import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join, normalize } from "node:path";
+import { join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Effect } from "effect";
-import {
-  hostProcessIdentity,
-  productIdentity,
-  productPathNames,
-} from "@pe/host-contracts/contracts";
+import { hostProcessIdentity, productIdentity } from "@pe/host-contracts/contracts";
+import { readServiceFile } from "./pe-service.ts";
 
 export type HostLane = "dev" | "installed";
 
 export type HostOwnership = {
   readonly executablePath: string;
-  readonly identityPath: string;
   readonly lane: HostLane;
   readonly processId: number;
   readonly sourceRoot: string | null;
-  readonly takeoverToken: string;
 };
 
-type HostIdentityFile = {
-  readonly executablePath: string;
-  readonly lane: HostLane;
-  readonly pid: number;
-  readonly port: number;
-  readonly sourceRoot: string | null;
-  readonly startedAtUtc: string;
-  readonly takeoverToken: string;
-};
-
-const TAKEOVER_HEADER = "x-pe-host-takeover-token";
+const SERVICE_TOKEN_HEADER = "x-pe-service-token";
+const DEV_SHUTDOWN_HEADER = "x-pe-host-dev-shutdown";
+const DEV_TAKEOVER_ARGUMENT = "--take-over-host";
 const HOST_BASE_URL =
   process.env[hostProcessIdentity.hostBaseUrlVariable] ?? hostProcessIdentity.defaultHostBaseUrl;
 
@@ -40,12 +24,14 @@ export const HOST_PORT = Number(new URL(HOST_BASE_URL).port || "5180");
 export const hostOwnership = resolveHostOwnership();
 
 export const prepareHostOwnership = Effect.fnUntraced(function* () {
-  if (hostOwnership.lane === "dev") yield* takeoverInstalledHost(hostOwnership);
-  return yield* Effect.acquireRelease(writeIdentity(hostOwnership), cleanupIdentity);
+  if (hostOwnership.lane === "dev") yield* takeoverCurrentHost();
 });
 
-export function isValidTakeoverToken(value: string | undefined): boolean {
-  return value === hostOwnership.takeoverToken;
+export function shouldTakeOverCurrentHost(
+  currentLane: HostLane,
+  explicitDevTakeover: boolean,
+): boolean {
+  return currentLane === "installed" || explicitDevTakeover;
 }
 
 /**
@@ -64,11 +50,9 @@ export function productRoot(): string {
 function resolveHostOwnership(): HostOwnership {
   return {
     executablePath: process.execPath,
-    identityPath: hostIdentityPath(),
     lane: resolveHostLane(),
     processId: process.pid,
     sourceRoot: resolveSourceRoot(),
-    takeoverToken: randomUUID(),
   };
 }
 
@@ -115,45 +99,16 @@ function currentModulePath(): string | null {
   }
 }
 
-function hostIdentityPath(): string {
-  return join(productRoot(), productPathNames.stateDirectoryName, "host", "identity.json");
-}
-
-const writeIdentity = Effect.fnUntraced(function* (ownership: HostOwnership) {
-  yield* Effect.tryPromise(async () => {
-    await mkdir(dirname(ownership.identityPath), { recursive: true });
-    const identity = {
-      executablePath: ownership.executablePath,
-      lane: ownership.lane,
-      pid: ownership.processId,
-      port: HOST_PORT,
-      sourceRoot: ownership.sourceRoot,
-      startedAtUtc: new Date().toISOString(),
-      takeoverToken: ownership.takeoverToken,
-    } satisfies HostIdentityFile;
-    await writeFile(ownership.identityPath, `${JSON.stringify(identity, null, 2)}\n`, "utf8");
-  });
-  return ownership;
-});
-
-const cleanupIdentity = (ownership: HostOwnership) =>
-  Effect.tryPromise(async () => {
-    if (!existsSync(ownership.identityPath)) return;
-    const identity = JSON.parse(
-      await readFile(ownership.identityPath, "utf8"),
-    ) as Partial<HostIdentityFile>;
-    if (identity.pid === ownership.processId) await rm(ownership.identityPath, { force: true });
-  }).pipe(Effect.catch(() => Effect.void));
-
-const takeoverInstalledHost = Effect.fnUntraced(function* (ownership: HostOwnership) {
+const takeoverCurrentHost = Effect.fnUntraced(function* () {
   const current = yield* probeCurrentHost();
-  if (!current || current.lane !== "installed") return;
-  const token = yield* readTakeoverToken(ownership.identityPath);
-  if (!token)
+  const explicitDevTakeover = process.argv.includes(DEV_TAKEOVER_ARGUMENT);
+  if (!current || !shouldTakeOverCurrentHost(current.lane, explicitDevTakeover)) return;
+  const service = yield* Effect.promise(() => readServiceFile(productRoot(), "host"));
+  if (!service || service.pid !== current.processId || service.port !== HOST_PORT || !service.token)
     return yield* Effect.fail(
-      new Error(`Installed host is running but ${ownership.identityPath} has no takeover token.`),
+      new Error("Current host does not match its service-file identity; refusing takeover."),
     );
-  yield* requestShutdown(token);
+  yield* requestShutdown(service.token, current.lane === "dev");
   yield* waitForPortRelease();
 });
 
@@ -163,23 +118,21 @@ const probeCurrentHost = Effect.fnUntraced(function* () {
       signal: AbortSignal.timeout(500),
     });
     if (!response.ok) return null;
-    const body = (await response.json()) as Partial<{ lane: HostLane }>;
-    return body.lane === "dev" || body.lane === "installed" ? { lane: body.lane } : null;
+    const body = (await response.json()) as Partial<{ lane: HostLane; processId: number }>;
+    return (body.lane === "dev" || body.lane === "installed") && typeof body.processId === "number"
+      ? { lane: body.lane, processId: body.processId }
+      : null;
   }).pipe(Effect.catch(() => Effect.succeed(null)));
 });
 
-const readTakeoverToken = Effect.fnUntraced(function* (identityPath: string) {
-  return yield* Effect.tryPromise(async () => {
-    const identity = JSON.parse(await readFile(identityPath, "utf8")) as Partial<HostIdentityFile>;
-    return typeof identity.takeoverToken === "string" ? identity.takeoverToken : null;
-  }).pipe(Effect.catch(() => Effect.succeed(null)));
-});
-
-const requestShutdown = Effect.fnUntraced(function* (token: string) {
+const requestShutdown = Effect.fnUntraced(function* (token: string, allowDevShutdown: boolean) {
   yield* Effect.tryPromise(async () => {
     const response = await fetch(new URL("/admin/shutdown", HOST_BASE_URL), {
       method: "POST",
-      headers: { [TAKEOVER_HEADER]: token },
+      headers: {
+        [SERVICE_TOKEN_HEADER]: token,
+        ...(allowDevShutdown ? { [DEV_SHUTDOWN_HEADER]: "true" } : {}),
+      },
       signal: AbortSignal.timeout(1_000),
     });
     if (!response.ok) throw new Error(`host shutdown rejected with HTTP ${response.status}`);

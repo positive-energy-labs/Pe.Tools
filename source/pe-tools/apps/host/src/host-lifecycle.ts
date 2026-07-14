@@ -2,12 +2,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Context, Deferred, Effect, Layer } from "effect";
 import { HttpRouter, HttpServer, HttpServerResponse as Response } from "effect/unstable/http";
-import { hostOwnership, isValidTakeoverToken, productRoot } from "./host-ownership.ts";
+import { hostOwnership, productRoot } from "./host-ownership.ts";
 import { createServiceFile, deleteServiceFile, writeServiceFile } from "./pe-service.ts";
 
 const SERVICE_NAME = "host";
 const SERVICE_TOKEN_HEADER = "x-pe-service-token";
-const TAKEOVER_TOKEN_HEADER = "x-pe-host-takeover-token";
 
 /**
  * Lifecycle handles shared between the launch root and the request handlers (Pillar 3):
@@ -66,10 +65,9 @@ export const ServiceFileLive = Layer.effectDiscard(
 );
 
 /**
- * Graceful self-shutdown: authorize on EITHER the existing takeover token (`x-pe-host-takeover-token`)
- * OR the A10 service token (`x-pe-service-token` header or a JSON body `{ token }`). Respond 200
- * FIRST, then trip the latch on a detached fiber so the response flushes before the launch scope
- * tears the server down.
+ * Graceful self-shutdown uses the SDK service-file token (`x-pe-service-token` header or a JSON
+ * body `{ token }`). Respond 200 FIRST, then trip the latch on a detached fiber so the response
+ * flushes before the launch scope tears the server down.
  */
 export const adminShutdownRoute = HttpRouter.add("POST", "/admin/shutdown", (request) =>
   Effect.gen(function* () {
@@ -81,11 +79,8 @@ export const adminShutdownRoute = HttpRouter.add("POST", "/admin/shutdown", (req
     if (hostOwnership.lane === "dev" && request.headers["x-pe-host-dev-shutdown"] !== "true")
       return yield* Response.json({ error: "Dev host is terminal-owned." }, { status: 409 });
 
-    const takeover = request.headers[TAKEOVER_TOKEN_HEADER];
     const serviceHeader = request.headers[SERVICE_TOKEN_HEADER];
-    let authorized =
-      isValidTakeoverToken(takeover) ||
-      (typeof serviceHeader === "string" && serviceHeader === serviceToken);
+    let authorized = typeof serviceHeader === "string" && serviceHeader === serviceToken;
 
     if (!authorized) {
       // Fall back to the JSON body `{ token }` the SDK client also sends.
