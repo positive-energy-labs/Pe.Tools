@@ -70,6 +70,7 @@
       "name": "host",
       "source": "source/pe-tools/apps/host/dist-installed",
       "entry": "Pe.Host.exe",
+      "dev": "vp run @pe/host#start",
       "service": {
         "preferredPort": 5180,
         "health": "/host/status",
