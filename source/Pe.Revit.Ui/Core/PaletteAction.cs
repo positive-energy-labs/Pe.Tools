@@ -23,10 +23,10 @@ public record PaletteAction<TItem> where TItem : IPaletteListItem {
     public Key? Key { get; init; }
 
     /// <summary>
-    ///     Action body. Use async lambdas: <c>Execute = async item => await DoWork(item)</c>.
-    ///     For sync work: <c>Execute = async item => DoSyncWork(item)</c>.
+    ///     Synchronous action body. Revit-lane actions run only for the duration of the
+    ///     SDK queue callback; asynchronous continuations cannot retain Revit API context.
     /// </summary>
-    public Func<TItem, Task> Execute { get; init; } = _ => Task.CompletedTask;
+    public Action<TItem> Execute { get; init; } = _ => { };
 
     /// <summary>
     ///     Controls where the action runs.

@@ -12,14 +12,17 @@ namespace Build.Modules;
 [DependsOn<ResolveVersioningModule>]
 [DependsOn<ResolveBuildMatrixModule>]
 [DependsOn<ResolveBuildLayoutModule>]
+[DependsOn<ResolvePackageSigningModule>]
 public sealed class CreateBundleModule(IOptions<BuildOptions> buildOptions) : Module {
     protected override async Task ExecuteModuleAsync(IModuleContext context, CancellationToken cancellationToken) {
         var versioningResult = await context.GetModule<ResolveVersioningModule>();
         var matrixResult = await context.GetModule<ResolveBuildMatrixModule>();
         var layoutResult = await context.GetModule<ResolveBuildLayoutModule>();
+        var signingResult = await context.GetModule<ResolvePackageSigningModule>();
         var versioning = versioningResult.ValueOrDefault!;
         var matrix = matrixResult.ValueOrDefault!;
         var layout = layoutResult.ValueOrDefault!;
+        var signing = signingResult.ValueOrDefault!;
         var rootDirectory = context.Git().RootDirectory;
         var appProjectPath = BuildProjectDiscovery.FindSingleProjectByKind(rootDirectory.Path, "RevitAddin");
         var appAssemblyName = BuildProjectDiscovery.AssemblyName(appProjectPath);
@@ -55,7 +58,8 @@ public sealed class CreateBundleModule(IOptions<BuildOptions> buildOptions) : Mo
                 ("PeBundleStagingDir", bundleStagingDir),
                 ("PeBundleZipPath", bundleZipPath),
                 ("VersionPrefix", versioning.VersionPrefix),
-                ("VersionSuffix", versioning.VersionSuffix!)
+                ("VersionSuffix", versioning.VersionSuffix!),
+                .. signing.BuildProperties
             ],
             cancellationToken
         ).ConfigureAwait(false);

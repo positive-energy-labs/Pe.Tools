@@ -65,7 +65,7 @@ public class ActionBinding<TItem> : ActionBinding where TItem : class, IPaletteL
             throw new InvalidOperationException($"Action '{action.Name}' has no Execute method defined");
 
         if (action.ExecutionLane == PaletteActionExecutionLane.Ui) {
-            await action.Execute(item);
+            action.Execute(item);
             return;
         }
 

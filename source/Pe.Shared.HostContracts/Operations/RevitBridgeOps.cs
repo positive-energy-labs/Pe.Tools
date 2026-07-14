@@ -44,7 +44,7 @@ public static class RevitBridgeOps {
                 new[] { "schema", "settings", "profile", "profiles", "module", "family-foundry" },
                 requiresActiveDocument: true
             ),
-            static (request, context, ct) => context.Settings.GetSchemaAsync(request)
+            static (request, context, ct) => context.Settings.GetSchemaAsync(request, ct)
         );
 
     public static readonly BridgeOp FieldOptions =
@@ -56,7 +56,7 @@ public static class RevitBridgeOps {
                 new[] { "settings", "field-options", "schema", "document" },
                 requiresActiveDocument: true
             ),
-            static (request, context, ct) => context.Settings.GetFieldOptionsAsync(request)
+            static (request, context, ct) => context.Settings.GetFieldOptionsAsync(request, null, ct)
         );
 
     public static readonly BridgeOp SettingsModuleCatalog =
@@ -68,7 +68,7 @@ public static class RevitBridgeOps {
                 new[] { "settings", "module", "catalog", "schema" },
                 requiresActiveDocument: true
             ),
-            static (request, context, ct) => context.Settings.GetSettingsModuleCatalogAsync()
+            static (request, context, ct) => context.Settings.GetSettingsModuleCatalogAsync(ct)
         );
 
     public static readonly BridgeOp ParameterCatalog =
@@ -80,7 +80,7 @@ public static class RevitBridgeOps {
                 new[] { "parameters", "catalog", "settings", "document" },
                 requiresActiveDocument: true
             ),
-            static (request, context, ct) => context.Settings.GetParameterCatalogAsync(request)
+            static (request, context, ct) => context.Settings.GetParameterCatalogAsync(request, null, ct)
         );
 
     public static readonly BridgeOp LoadedFamiliesFilterFieldOptions =
@@ -92,7 +92,7 @@ public static class RevitBridgeOps {
                 new[] { "loaded-families", "families", "filter", "field-options" },
                 requiresActiveDocument: true
             ),
-            static (request, context, ct) => context.Settings.GetLoadedFamiliesFilterFieldOptionsAsync(request)
+            static (request, context, ct) => context.Settings.GetLoadedFamiliesFilterFieldOptionsAsync(request, null, ct)
         );
 
     public static readonly BridgeOp ValueDomainFieldOptions =
@@ -116,7 +116,7 @@ public static class RevitBridgeOps {
                     )
                 ]
             ),
-            static (request, context, ct) => context.Settings.GetValueDomainOptionsAsync(request)
+            static (request, context, ct) => context.Settings.GetValueDomainOptionsAsync(request, null, ct)
         );
 
     public static readonly BridgeOp LoadedFamiliesFilterSchema =
@@ -128,7 +128,7 @@ public static class RevitBridgeOps {
                 new[] { "loaded-families", "families", "filter", "schema" },
                 requiresActiveDocument: true
             ),
-            static (request, context, ct) => context.Settings.GetLoadedFamiliesFilterSchemaAsync()
+            static (request, context, ct) => context.Settings.GetLoadedFamiliesFilterSchemaAsync(ct)
         );
 
     public static readonly BridgeOp ScheduleCatalog =
@@ -160,7 +160,7 @@ public static class RevitBridgeOps {
                     "For visible/current/printed equipment coverage, prefer revit.matrix.schedule-coverage with ViewReferences or ExplicitHandles; use this catalog only when schedule candidates themselves are unknown.",
                 ]
             ),
-            static (request, context, ct) => context.RevitData.GetScheduleCatalogAsync(request)
+            static (request, context, ct) => context.RevitData.GetScheduleCatalogAsync(request, ct)
         );
 
     public static readonly BridgeOp ProjectBrowser =
@@ -192,7 +192,7 @@ public static class RevitBridgeOps {
                     "Browser organization is navigation/provenance for views, sheets, and schedules; use semantic catalog/detail ops for BIM facts."
                 ]
             ),
-            static (request, context, ct) => context.RevitData.GetProjectBrowserAsync(request)
+            static (request, context, ct) => context.RevitData.GetProjectBrowserAsync(request, ct)
         );
 
     public static readonly BridgeOp ProjectIndex =
@@ -221,7 +221,7 @@ public static class RevitBridgeOps {
                 ],
                 callGuidance: CatalogExpansionHints
             ),
-            static (request, context, ct) => context.RevitData.GetProjectIndexAsync(request)
+            static (request, context, ct) => context.RevitData.GetProjectIndexAsync(request, ct)
         );
 
     public static readonly BridgeOp SheetDetails =
@@ -253,7 +253,7 @@ public static class RevitBridgeOps {
                     "Start with active sheet or exact sheet numbers, then export/parse artifacts only when semantic anchors are insufficient."
                 ]
             ),
-            static (request, context, ct) => context.RevitData.GetSheetDetailsAsync(request)
+            static (request, context, ct) => context.RevitData.GetSheetDetailsAsync(request, ct)
         );
 
     public static readonly BridgeOp ScheduleProfilesQuery =
@@ -282,7 +282,7 @@ public static class RevitBridgeOps {
                 ],
                 callGuidance: MatrixExpansionHints
             ),
-            static (request, context, ct) => context.RevitData.GetScheduleProfilesQueryAsync(request)
+            static (request, context, ct) => context.RevitData.GetScheduleProfilesQueryAsync(request, ct)
         );
 
     public static readonly BridgeOp ScheduleQuery =
@@ -311,7 +311,7 @@ public static class RevitBridgeOps {
                 ],
                 callGuidance: ScheduleDetailExpansionHints
             ),
-            static (request, context, ct) => context.RevitData.GetScheduleQueryAsync(request)
+            static (request, context, ct) => context.RevitData.GetScheduleQueryAsync(request, ct)
         );
 
     public static readonly BridgeOp LoadedFamiliesCatalog =
@@ -340,7 +340,7 @@ public static class RevitBridgeOps {
                 ],
                 callGuidance: CatalogExpansionHints
             ),
-            static (request, context, ct) => context.RevitData.GetLoadedFamiliesCatalogAsync(request)
+            static (request, context, ct) => context.RevitData.GetLoadedFamiliesCatalogAsync(request, ct)
         );
 
     public static readonly BridgeOp LoadedFamiliesMatrix =
@@ -369,7 +369,7 @@ public static class RevitBridgeOps {
                 ],
                 callGuidance: MatrixExpansionHints
             ),
-            static (request, context, ct) => context.RevitData.GetLoadedFamiliesMatrixAsync(request)
+            static (request, context, ct) => context.RevitData.GetLoadedFamiliesMatrixAsync(request, ct)
         );
 
     public static readonly BridgeOp FamilyEditorSnapshot =
@@ -381,7 +381,7 @@ public static class RevitBridgeOps {
                 new[] { "family-editor", "family", "parameters", "types", "formulas", "snapshot" },
                 requiresActiveDocument: true
             ),
-            static (request, context, ct) => context.RevitData.GetFamilyEditorSnapshotAsync(request)
+            static (request, context, ct) => context.RevitData.GetFamilyEditorSnapshotAsync(request, ct)
         );
 
     public static readonly BridgeOp FamilyEditorOpen =
@@ -395,7 +395,7 @@ public static class RevitBridgeOps {
                 requiresActiveDocument: true,
                 costTier: HostOperationCostTier.Mutation
             ),
-            static (request, context, ct) => context.RevitData.OpenFamilyEditorAsync(request)
+            static (request, context, ct) => context.RevitData.OpenFamilyEditorAsync(request, ct)
         );
 
     public static readonly BridgeOp FamilyEditorApply =
@@ -409,7 +409,7 @@ public static class RevitBridgeOps {
                 requiresActiveDocument: true,
                 costTier: HostOperationCostTier.Mutation
             ),
-            static (request, context, ct) => context.RevitData.ApplyFamilyEditorEditsAsync(request)
+            static (request, context, ct) => context.RevitData.ApplyFamilyEditorEditsAsync(request, ct)
         );
 
     public static readonly BridgeOp ApplyParameterValues =
@@ -443,7 +443,7 @@ public static class RevitBridgeOps {
                     "One call is one transaction and one Revit undo step; at most 500 edits per call. Binding handles for type-parameter columns target the shared type element, so one write fans out to every instance of the type."
                 ]
             ),
-            static (request, context, ct) => context.RevitData.ApplyParameterValuesAsync(request)
+            static (request, context, ct) => context.RevitData.ApplyParameterValuesAsync(request, ct)
         );
 
     public static readonly BridgeOp ParameterLinksDetail =
@@ -464,7 +464,7 @@ public static class RevitBridgeOps {
                     "Use this before proposing edits. Parameter selectors use the same ParameterReference identity language as other Revit detail operations."
                 ]
             ),
-            static (request, context, ct) => context.RevitData.GetParameterLinksAsync(request)
+            static (request, context, ct) => context.RevitData.GetParameterLinksAsync(request, ct)
         );
 
     public static readonly BridgeOp ParameterLinksApply =
@@ -488,7 +488,7 @@ public static class RevitBridgeOps {
                     "One wet call stores the profile and reconciles all changed targets in one Revit transaction and undo step."
                 ]
             ),
-            static (request, context, ct) => context.RevitData.ApplyParameterLinksAsync(request)
+            static (request, context, ct) => context.RevitData.ApplyParameterLinksAsync(request, ct)
         );
 
     public static readonly BridgeOp ScheduleCoverage =
@@ -520,7 +520,7 @@ public static class RevitBridgeOps {
                     "For audit summaries, request includeMissingElementHandles, includeMatchedScheduleNames, and read roleSummaries before asking for per-element samples."
                 ]
             ),
-            static (request, context, ct) => context.RevitData.GetScheduleCoverageAsync(request)
+            static (request, context, ct) => context.RevitData.GetScheduleCoverageAsync(request, ct)
         );
 
     public static readonly BridgeOp ParameterCoverage =
@@ -542,7 +542,7 @@ public static class RevitBridgeOps {
                 ],
                 callGuidance: MatrixExpansionHints
             ),
-            static (request, context, ct) => context.RevitData.GetParameterCoverageAsync(request)
+            static (request, context, ct) => context.RevitData.GetParameterCoverageAsync(request, ct)
         );
 
     public static readonly BridgeOp ConceptEvidence =
@@ -567,7 +567,7 @@ public static class RevitBridgeOps {
                     "Treat subject hints as weak scoping context; do not assume a category or expected schedule shape is authoritative without supporting schedule/binding facts.",
                 ]
             ),
-            static (request, context, ct) => context.RevitData.GetConceptEvidenceAsync(request)
+            static (request, context, ct) => context.RevitData.GetConceptEvidenceAsync(request, ct)
         );
 
     public static readonly BridgeOp ParameterEvidence =
@@ -599,7 +599,7 @@ public static class RevitBridgeOps {
                     "Keep candidateParameters when you already have observed identities, shared GUIDs, or plausible names; omit them only for bounded category/schedule scopes.",
                 ]
             ),
-            static (request, context, ct) => context.RevitData.GetParameterEvidenceAsync(request)
+            static (request, context, ct) => context.RevitData.GetParameterEvidenceAsync(request, ct)
         );
 
     public static readonly BridgeOp ProjectParameterBindings =
@@ -631,7 +631,7 @@ public static class RevitBridgeOps {
                     "Use parameters with observed ParameterIdentity values when joining from concept/parameter evidence into binding lookup.",
                 ]
             ),
-            static (request, context, ct) => context.RevitData.GetProjectParameterBindingsAsync(request)
+            static (request, context, ct) => context.RevitData.GetProjectParameterBindingsAsync(request, ct)
         );
 
     public static readonly BridgeOp ElementContextQuery =
@@ -663,7 +663,7 @@ public static class RevitBridgeOps {
                     "Use parameterQuery.parameters with names or observed ParameterIdentity values for visible tag/load-name fields, then expand to revit.catalog.electrical-circuits or revit.detail.electrical-panel-schedules only after panel/circuit candidates are known.",
                 ]
             ),
-            static (request, context, ct) => context.RevitData.GetElementContextQueryAsync(request)
+            static (request, context, ct) => context.RevitData.GetElementContextQueryAsync(request, ct)
         );
 
     public static readonly BridgeOp ElectricalPanelsCatalog =
@@ -695,7 +695,7 @@ public static class RevitBridgeOps {
                     "For per-equipment alignment, start with revit.detail.elements on exact equipment handles; this catalog is for resolving panel candidates, not proving element ownership. Inspect filterReport when a filtered lookup returns no entries."
                 ]
             ),
-            static (request, context, ct) => context.RevitData.GetElectricalPanelsCatalogAsync(request)
+            static (request, context, ct) => context.RevitData.GetElectricalPanelsCatalogAsync(request, ct)
         );
 
     public static readonly BridgeOp ElectricalCircuitsCatalog =
@@ -727,7 +727,7 @@ public static class RevitBridgeOps {
                     "Use returned panel ids/names as PanelReferences input to revit.detail.electrical-panel-schedules when row/cell schedule detail is needed; inspect filterReport when candidate keys produce zero matches.",
                 ]
             ),
-            static (request, context, ct) => context.RevitData.GetElectricalCircuitsCatalogAsync(request)
+            static (request, context, ct) => context.RevitData.GetElectricalCircuitsCatalogAsync(request, ct)
         );
 
     public static readonly BridgeOp ElectricalPanelSchedulesQuery =
@@ -759,7 +759,7 @@ public static class RevitBridgeOps {
                     "Use projection.view=RowsOnly with circuitNumbers, loadNameContains, and maxRows to avoid full panel schedule dumps."
                 ]
             ),
-            static (request, context, ct) => context.RevitData.GetElectricalPanelSchedulesQueryAsync(request)
+            static (request, context, ct) => context.RevitData.GetElectricalPanelSchedulesQueryAsync(request, ct)
         );
 
     public static readonly BridgeOp ElectricalLoadClassificationsCatalog =
@@ -771,7 +771,7 @@ public static class RevitBridgeOps {
                 new[] { "revit", "load-classifications", "catalog", "loads" },
                 requiresActiveDocument: true
             ),
-            static (request, context, ct) => context.RevitData.GetElectricalLoadClassificationsCatalogAsync(request)
+            static (request, context, ct) => context.RevitData.GetElectricalLoadClassificationsCatalogAsync(request, ct)
         );
 
     public static readonly BridgeOp RevitDocumentSessionContext =
@@ -782,7 +782,7 @@ public static class RevitBridgeOps {
                 "Read open, active, and selected document session context from connected Revit. Use only when the question spans multiple open documents or there is no active document; revit.context.summary covers single-document orientation.",
                 new[] { "document", "session", "active-document", "open-documents" }
             ),
-            static (request, context, ct) => context.RevitData.GetRevitDocumentSessionContextAsync()
+            static (request, context, ct) => context.RevitData.GetRevitDocumentSessionContextAsync(ct)
         );
 
     public static readonly BridgeOp RefreshParametersServiceCache =
@@ -796,7 +796,7 @@ public static class RevitBridgeOps {
                 requiresActiveDocument: false,
                 costTier: HostOperationCostTier.Mutation
             ),
-            static (request, context, ct) => context.RevitData.RefreshParametersServiceCacheAsync()
+            static (request, context, ct) => context.RevitData.RefreshParametersServiceCacheAsync(ct)
         );
 
     public static readonly BridgeOp OpenRevitDocument =
@@ -830,7 +830,7 @@ public static class RevitBridgeOps {
                     "detach=DetachAndPreserveWorksets (or DetachAndDiscardWorksets) applies to local workshared files only; do not call while Revit is blocked by a modal dialog."
                 ]
             ),
-            static (request, context, ct) => context.RevitData.OpenRevitDocumentAsync(request)
+            static (request, context, ct) => context.RevitData.OpenRevitDocumentAsync(request, ct)
         );
 
     public static readonly BridgeOp RevitAgentContextSummary =
@@ -842,7 +842,7 @@ public static class RevitBridgeOps {
                 new[] { "agent-context", "summary", "active-view", "selection", "visible", "browser", "orientation", "start-here" },
                 requiresActiveDocument: true
             ),
-            static (request, context, ct) => context.RevitData.GetRevitAgentContextSummaryAsync()
+            static (request, context, ct) => context.RevitData.GetRevitAgentContextSummaryAsync(ct)
         );
 
     public static readonly BridgeOp RevitAgentContextResolve =
@@ -867,7 +867,7 @@ public static class RevitBridgeOps {
                     "Reuse returned handles for the rest of the turn; call revit.resolve.references again only if context changed or the result was ambiguous."
                 ]
             ),
-            static (request, context, ct) => context.RevitData.ResolveRevitAgentContextAsync(request)
+            static (request, context, ct) => context.RevitData.ResolveRevitAgentContextAsync(request, ct)
         );
 
     public static readonly BridgeOp RevitAgentVisibleContext =
@@ -899,7 +899,7 @@ public static class RevitBridgeOps {
                     "Feed returned element handles into revit.matrix.schedule-coverage with ExplicitHandles or revit.detail.elements for electrical/tag facts.",
                 ]
             ),
-            static (request, context, ct) => context.RevitData.GetRevitAgentVisibleContextAsync(request)
+            static (request, context, ct) => context.RevitData.GetRevitAgentVisibleContextAsync(request, ct)
         );
 
     public static readonly BridgeOp RevitAgentViewRenderingState =
@@ -931,7 +931,7 @@ public static class RevitBridgeOps {
                     "Pair with revit.context.visible-summary or element detail calls when the user names a specific category or element."
                 ]
             ),
-            static (request, context, ct) => context.RevitData.GetRevitAgentViewRenderingStateAsync(request)
+            static (request, context, ct) => context.RevitData.GetRevitAgentViewRenderingStateAsync(request, ct)
         );
 
     public static readonly BridgeOp ViewImage =
@@ -963,7 +963,7 @@ public static class RevitBridgeOps {
                     "modelRect in the response gives the model-space XY extent for pixel↔model mapping; read the returned filePath with an image-capable tool (Pea: capture_view already returns the image; read_image reads the path)."
                 ]
             ),
-            static (request, context, ct) => context.RevitData.GetRevitViewImageAsync(request)
+            static (request, context, ct) => context.RevitData.GetRevitViewImageAsync(request, ct)
         );
 
     public static readonly BridgeOp ExecuteRibbonCommand =
@@ -997,7 +997,7 @@ public static class RevitBridgeOps {
                     "PostCommand queues the command to run when Revit is idle — Posted=true does not mean the command has finished, and commands that open modal UI will block the bridge until dismissed."
                 ]
             ),
-            static (request, context, ct) => context.RevitData.ExecuteRibbonCommandAsync(request)
+            static (request, context, ct) => context.RevitData.ExecuteRibbonCommandAsync(request, ct)
         );
 
     public static readonly BridgeOp ScriptWorkspaceBootstrap =

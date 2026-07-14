@@ -61,7 +61,6 @@ internal static class ElementsPalette {
                                 Name = "Zoom To",
                                 Execute = item => {
                                     FamilyActions.HandleZoomToFamilyInstance(item);
-                                    return Task.CompletedTask;
                                 }
                             },
                             new PaletteAction<UnifiedFamilyItem> {
@@ -69,7 +68,6 @@ internal static class ElementsPalette {
                                 Modifiers = ModifierKeys.Control,
                                 Execute = item => {
                                     FamilyActions.HandleOpenEditFamily(item);
-                                    return Task.CompletedTask;
                                 },
                                 CanExecute = item => item?.GetFamily()?.IsEditable == true
                             },
@@ -78,7 +76,6 @@ internal static class ElementsPalette {
                                 Modifiers = ModifierKeys.Alt,
                                 Execute = item => {
                                     FamilyActions.HandleSnoop(doc, item);
-                                    return Task.CompletedTask;
                                 }
                             }
                         ) { FilterKeySelector = i => i.TextPrimary }

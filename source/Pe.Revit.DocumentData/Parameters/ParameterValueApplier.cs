@@ -1,4 +1,5 @@
-using Pe.Revit.Utils;
+using Pe.Revit.Failures;
+using Pe.Revit.Tasks;
 using Pe.Shared.RevitData;
 using System.Globalization;
 
@@ -49,7 +50,7 @@ public static class ParameterValueApplier {
             string.IsNullOrWhiteSpace(request.TransactionName) ? DefaultTransactionName : request.TransactionName!);
         var commitFailures = new List<(bool IsError, string Message)>();
         var failureOptions = sandbox.Transaction.GetFailureHandlingOptions();
-        _ = failureOptions.SetFailuresPreprocessor(new DialogSuppressingFailuresPreprocessor(commitFailures));
+        _ = failureOptions.SetFailuresPreprocessor(PeToolsFailureHandling.CreatePreprocessor(commitFailures));
         _ = failureOptions.SetForcedModalHandling(false);
         sandbox.Transaction.SetFailureHandlingOptions(failureOptions);
 

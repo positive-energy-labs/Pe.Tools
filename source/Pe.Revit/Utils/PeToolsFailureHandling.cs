@@ -1,14 +1,10 @@
 using Autodesk.Revit.DB.Events;
+using Pe.Revit.Tasks;
 
-namespace Pe.Revit.Utils;
+namespace Pe.Revit.Failures;
 
-/// <summary>
-///     Non-modal Revit failure resolution: warnings are deleted and captured as diagnostics, errors are
-///     resolved through a non-modal resolution ladder. Use <see cref="DialogSuppressingFailuresPreprocessor" />
-///     for transaction-scoped handling or <see cref="ExecuteWithFailureHandling{T}" /> for doc-scoped
-///     operations that raise failures outside a caller-owned transaction (e.g. family load).
-/// </summary>
-public static class RevitFailureHandling {
+/// <summary>Pe.Tools policy for resolving Revit failures without modal dialogs.</summary>
+public static class PeToolsFailureHandling {
     private static readonly FailureResolutionType[] NonModalResolutionPreference = [
         FailureResolutionType.UnlockConstraints,
         FailureResolutionType.DetachElements,
@@ -22,35 +18,22 @@ public static class RevitFailureHandling {
         Func<T> action,
         ICollection<(bool IsError, string Message)> diagnostics,
         params Document[] additionalDocuments
-    ) {
-        var documents = new[] { document }
-            .Concat(additionalDocuments)
-            .Where(candidate => candidate != null)
-            .ToList();
+    ) => RevitFailureScope.Execute(
+        document,
+        accessor => ResolveFailures(accessor, diagnostics),
+        action,
+        additionalDocuments
+    );
 
-        void OnFailuresProcessing(object? _, FailuresProcessingEventArgs args) {
-            var accessor = args.GetFailuresAccessor();
-            var failureDocument = accessor?.GetDocument();
-            if (failureDocument == null || !documents.Any(candidate => candidate.Equals(failureDocument)))
-                return;
-
-            args.SetProcessingResult(ResolveFailures(accessor!, diagnostics));
-        }
-
-        document.Application.FailuresProcessing += OnFailuresProcessing;
-        try {
-            return action();
-        } finally {
-            document.Application.FailuresProcessing -= OnFailuresProcessing;
-        }
-    }
+    public static IFailuresPreprocessor CreatePreprocessor(
+        ICollection<(bool IsError, string Message)> diagnostics
+    ) => new DelegatingFailuresPreprocessor(accessor => ResolveFailures(accessor, diagnostics));
 
     public static FailureProcessingResult ResolveFailures(
         FailuresAccessor failuresAccessor,
         ICollection<(bool IsError, string Message)> diagnostics
     ) {
         var resolvedFailure = false;
-
         foreach (var failureMessage in failuresAccessor.GetFailureMessages()) {
             if (failureMessage.GetSeverity() == FailureSeverity.Warning) {
                 resolvedFailure = true;
@@ -74,10 +57,9 @@ public static class RevitFailureHandling {
     private static string DescribeFailure(FailureMessageAccessor failureMessage) {
         var description = failureMessage.GetDescriptionText();
         var failureGuid = failureMessage.GetFailureDefinitionId().Guid;
-        if (string.IsNullOrWhiteSpace(description))
-            return failureGuid.ToString();
-
-        return $"{description} [{failureGuid}]";
+        return string.IsNullOrWhiteSpace(description)
+            ? failureGuid.ToString()
+            : $"{description} [{failureGuid}]";
     }
 
     private static bool TryResolveFailure(
@@ -98,12 +80,11 @@ public static class RevitFailureHandling {
         FailuresAccessor failuresAccessor,
         FailureMessageAccessor failureMessage
     ) {
-        var currentResolutionType = failureMessage.GetCurrentResolutionType();
-        if (IsResolutionPermitted(failuresAccessor, failureMessage, currentResolutionType))
-            return currentResolutionType;
-
-        return NonModalResolutionPreference.FirstOrDefault(type =>
-            IsResolutionPermitted(failuresAccessor, failureMessage, type));
+        var current = failureMessage.GetCurrentResolutionType();
+        return IsResolutionPermitted(failuresAccessor, failureMessage, current)
+            ? current
+            : NonModalResolutionPreference.FirstOrDefault(type =>
+                IsResolutionPermitted(failuresAccessor, failureMessage, type));
     }
 
     private static bool IsResolutionPermitted(
@@ -115,15 +96,4 @@ public static class RevitFailureHandling {
         failureMessage.HasResolutionOfType(resolutionType) &&
         failuresAccessor.IsFailureResolutionPermitted(failureMessage, resolutionType) &&
         !failuresAccessor.GetAttemptedResolutionTypes(failureMessage).Contains(resolutionType);
-}
-
-/// <summary>
-///     <see cref="IFailuresPreprocessor" /> over <see cref="RevitFailureHandling.ResolveFailures" />. Set it on a
-///     transaction's <see cref="FailureHandlingOptions" /> to keep warning/error commits from raising modal dialogs.
-/// </summary>
-public sealed class DialogSuppressingFailuresPreprocessor(
-    ICollection<(bool IsError, string Message)> diagnostics
-) : IFailuresPreprocessor {
-    public FailureProcessingResult PreprocessFailures(FailuresAccessor failuresAccessor) =>
-        RevitFailureHandling.ResolveFailures(failuresAccessor, diagnostics);
 }

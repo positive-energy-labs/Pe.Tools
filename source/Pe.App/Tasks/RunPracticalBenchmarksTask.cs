@@ -12,7 +12,7 @@ public sealed class RunPracticalBenchmarksTask : ITask {
 
     public string? Category => "Testing";
 
-    public async Task ExecuteAsync(UIApplication uiApp) {
+    public void Execute(UIApplication uiApp) {
         try {
             var taskOutput = this.GetOutput();
             Console.WriteLine("Starting practical benchmarks...");
@@ -31,6 +31,5 @@ public sealed class RunPracticalBenchmarksTask : ITask {
             Console.WriteLine(ex);
         }
 
-        await Task.CompletedTask;
     }
 }

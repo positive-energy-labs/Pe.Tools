@@ -1,6 +1,5 @@
 using Pe.Revit.DocumentData.Electrical;
 using Pe.Revit.DocumentData.Parameters;
-using Pe.Revit.Utils;
 using Pe.Shared.RevitData;
 
 namespace Pe.Revit.DocumentData.ParameterLinks;

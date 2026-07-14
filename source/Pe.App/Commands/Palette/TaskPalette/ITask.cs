@@ -27,6 +27,5 @@ public interface ITask {
     ///     Executes the task. Called within Revit API context.
     /// </summary>
     /// <param name="uiApp">UIApplication for accessing Revit API</param>
-    /// <returns>Task representing async operation</returns>
-    Task ExecuteAsync(UIApplication uiApp);
+    void Execute(UIApplication uiApp);
 }

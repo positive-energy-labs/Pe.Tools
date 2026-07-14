@@ -1,7 +1,6 @@
 using Pe.Revit.Global.Services.Host;
-using ricaun.Revit.UI.Tasks;
+using Pe.Revit.Tasks;
 using Serilog;
-using System.Runtime.ExceptionServices;
 using System.Threading.Channels;
 
 namespace Pe.App.Host;
@@ -15,12 +14,12 @@ internal sealed class BridgeConnectionSupervisor : IDisposable {
         SingleReader = true,
         SingleWriter = false
     });
-    private readonly RevitTaskService _revitTaskService;
+    private readonly RevitTaskQueue _revitTaskQueue;
     private int _started;
     private Task? _runTask;
 
-    public BridgeConnectionSupervisor(RevitTaskService revitTaskService) =>
-        this._revitTaskService = revitTaskService;
+    public BridgeConnectionSupervisor(RevitTaskQueue revitTaskQueue) =>
+        this._revitTaskQueue = revitTaskQueue;
 
     public void Start() {
         if (Interlocked.Exchange(ref this._started, 1) == 1)
@@ -98,25 +97,10 @@ internal sealed class BridgeConnectionSupervisor : IDisposable {
     }
 
     private async Task<RuntimeActionResult> ConnectRuntimeAsync(CancellationToken cancellationToken) {
-        RuntimeActionResult? result = null;
-        Exception? failure = null;
-
-        _ = await this._revitTaskService.Run(async () => {
-            try {
-                result = HostBridgeConnector.ConnectRuntime();
-            } catch (Exception ex) {
-                failure = ex;
-            }
-
-            await Task.CompletedTask;
-        });
-
-        cancellationToken.ThrowIfCancellationRequested();
-
-        if (failure != null)
-            ExceptionDispatchInfo.Capture(failure).Throw();
-
-        return result ?? new RuntimeActionResult(false, "Host bridge connect did not return a result.");
+        return await this._revitTaskQueue.Run(
+            _ => HostBridgeConnector.ConnectRuntime(),
+            ct: cancellationToken
+        ).ConfigureAwait(false);
     }
 
     private async Task<string?> WaitForReconnectRequestAsync(TimeSpan? timeout, CancellationToken cancellationToken) {

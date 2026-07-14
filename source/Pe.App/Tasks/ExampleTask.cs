@@ -12,7 +12,7 @@ public sealed class ExampleTask : ITask {
     public string Description => "A simple example task that prints a message";
     public string Category => "Examples";
 
-    public async Task ExecuteAsync(UIApplication uiApp) {
+    public void Execute(UIApplication uiApp) {
         Console.WriteLine("✓ Example task executed!");
 
         var doc = uiApp.ActiveUIDocument?.Document;
@@ -21,6 +21,5 @@ public sealed class ExampleTask : ITask {
         else 
             Console.WriteLine("  No active document");
 
-        await Task.CompletedTask;
     }
 }

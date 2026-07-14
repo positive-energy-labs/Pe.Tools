@@ -341,15 +341,10 @@ export async function takeOver(
     };
   const timeoutMs = opts.timeoutMs ?? DEFAULT_STARTUP_TIMEOUT_MS;
   const lease = await acquireServiceLease(appBase, name, timeoutMs);
-  if (!lease)
-    return { outcome: "failed", reason: `service '${name}' is busy in another supervisor` };
+  if (!lease) return { outcome: "failed", reason: `service '${name}' is busy in another supervisor` };
   try {
     const existing = await readServiceFile(appBase, name);
-    if (
-      !existing ||
-      existing.instanceId === identity.instanceId ||
-      !(await recordedProcessAlive(existing))
-    ) {
+    if (!existing || existing.instanceId === identity.instanceId || !(await recordedProcessAlive(existing))) {
       // No verified foreign owner: clear a stale file naming a dead owner, then install our identity.
       if (existing && existing.instanceId !== identity.instanceId)
         await deleteServiceFile(appBase, name, existing.instanceId);

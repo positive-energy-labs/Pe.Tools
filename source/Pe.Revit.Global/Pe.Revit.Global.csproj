@@ -30,8 +30,7 @@
         <PackageReference Include="Serilog.Extensions.Logging" Version="8.0.0"/>
         <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0"/>
 
-        <!-- Revit Task Service for thread marshaling -->
-        <PackageReference Include="ricaun.Revit.UI.Tasks" Version="1.*"/>
+        <PackageReference Include="Pe.Revit.Tasks" Version="$(PeSdkCompanionVersion)"/>
 
         <!-- SDK document tracker (identity, lifecycle events, per-document state) -->
         <PackageReference Include="Pe.Revit.Loader" Version="$(PeSdkCompanionVersion)"/>

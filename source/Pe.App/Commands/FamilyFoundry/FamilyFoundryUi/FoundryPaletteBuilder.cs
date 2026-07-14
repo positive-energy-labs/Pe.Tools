@@ -130,7 +130,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfile, new()
         // Convert FoundryActions to PaletteActions
         var paletteActions = this._actions.Select(a => new PaletteAction<ProfileListItem> {
             Name = a.Name,
-            Execute = async _ => a.Handler(context),
+            Execute = _ => a.Handler(context),
             CanExecute = _ => a.CanExecute?.Invoke(context) ?? true
         }).ToList();
 

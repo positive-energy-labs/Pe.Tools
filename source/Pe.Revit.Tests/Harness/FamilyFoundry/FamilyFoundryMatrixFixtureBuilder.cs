@@ -1,6 +1,7 @@
 using Autodesk.Revit.DB.Structure;
 using Pe.Revit.Extensions.FamDocument;
-using Pe.Revit.Utils;
+using Pe.Revit.Failures;
+using Pe.Revit.Tasks;
 
 namespace Pe.Revit.Tests;
 
@@ -190,7 +191,7 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
                 _ = transaction.Commit();
             }
 
-            return RevitFailureHandling.ExecuteWithFailureHandling(
+            return PeToolsFailureHandling.ExecuteWithFailureHandling(
                 hostFamilyDocument,
                 () => nestedDocument.LoadFamily(hostFamilyDocument, new DefaultFamilyLoadOptions()),
                 new List<(bool IsError, string Message)>(),

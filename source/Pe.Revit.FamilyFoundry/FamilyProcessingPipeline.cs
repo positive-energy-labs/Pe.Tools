@@ -1,6 +1,7 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.ProjDocument;
-using Pe.Revit.Utils;
+using Pe.Revit.Failures;
+using Pe.Revit.Tasks;
 using System.Diagnostics;
 
 namespace Pe.Revit.FamilyFoundry;
@@ -208,7 +209,7 @@ public static class FamilyProcessingPipelineExtensions {
             throw new InvalidOperationException("Load() has already been called on this pipeline.");
 
         var diagnostics = new List<(bool IsError, string Message)>();
-        var loadedFamily = RevitFailureHandling.ExecuteWithFailureHandling(
+        var loadedFamily = PeToolsFailureHandling.ExecuteWithFailureHandling(
             pipeline.ProjectDoc,
             () => pipeline.FamDoc.LoadFamily(pipeline.ProjectDoc, options ?? new DefaultFamilyLoadOptions()),
             diagnostics,

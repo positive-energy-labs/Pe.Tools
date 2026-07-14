@@ -16,58 +16,62 @@ public interface IBridgeOperationContext {
 }
 
 public interface ISettingsBridgeService {
-    Task<SchemaData> GetSchemaAsync(SchemaRequest request);
-    Task<FieldOptionsData> GetFieldOptionsAsync(FieldOptionsRequest request, string? connectionId = null);
-    Task<GetSettingsModuleCatalogBridgeResponse> GetSettingsModuleCatalogAsync();
-    Task<ParameterCatalogData> GetParameterCatalogAsync(ParameterCatalogRequest request, string? connectionId = null);
+    Task<SchemaData> GetSchemaAsync(SchemaRequest request, CancellationToken cancellationToken);
+    Task<FieldOptionsData> GetFieldOptionsAsync(FieldOptionsRequest request, string? connectionId, CancellationToken cancellationToken);
+    Task<GetSettingsModuleCatalogBridgeResponse> GetSettingsModuleCatalogAsync(CancellationToken cancellationToken);
+    Task<ParameterCatalogData> GetParameterCatalogAsync(ParameterCatalogRequest request, string? connectionId, CancellationToken cancellationToken);
     Task<FieldOptionsData> GetLoadedFamiliesFilterFieldOptionsAsync(
         LoadedFamiliesFilterFieldOptionsRequest request,
-        string? connectionId = null
+        string? connectionId,
+        CancellationToken cancellationToken
     );
-    Task<FieldOptionsData> GetValueDomainOptionsAsync(ValueDomainOptionsRequest request, string? connectionId = null);
-    Task<SchemaData> GetLoadedFamiliesFilterSchemaAsync();
+    Task<FieldOptionsData> GetValueDomainOptionsAsync(ValueDomainOptionsRequest request, string? connectionId, CancellationToken cancellationToken);
+    Task<SchemaData> GetLoadedFamiliesFilterSchemaAsync(CancellationToken cancellationToken);
 }
 
 public interface IRevitDataService {
-    Task<ScheduleCatalogData> GetScheduleCatalogAsync(ScheduleCatalogRequest request);
-    Task<ProjectBrowserData> GetProjectBrowserAsync(ProjectBrowserRequest request);
-    Task<ProjectIndexData> GetProjectIndexAsync(ProjectIndexRequest request);
-    Task<SheetDetailData> GetSheetDetailsAsync(SheetDetailRequest request);
-    Task<ScheduleProfilesQueryData> GetScheduleProfilesQueryAsync(ScheduleProfilesQueryRequest request);
-    Task<ScheduleQueryData> GetScheduleQueryAsync(ScheduleQueryRequest request);
-    Task<LoadedFamiliesCatalogData> GetLoadedFamiliesCatalogAsync(LoadedFamiliesCatalogRequest request);
-    Task<LoadedFamiliesMatrixData> GetLoadedFamiliesMatrixAsync(LoadedFamiliesMatrixRequest request);
-    Task<FamilyEditorSnapshotData> GetFamilyEditorSnapshotAsync(FamilyEditorSnapshotRequest request);
-    Task<FamilyEditorOpenData> OpenFamilyEditorAsync(FamilyEditorOpenRequest request);
-    Task<FamilyEditorApplyData> ApplyFamilyEditorEditsAsync(FamilyEditorApplyRequest request);
-    Task<ParameterValueApplyData> ApplyParameterValuesAsync(ParameterValueApplyRequest request);
-    Task<ParameterLinksData> GetParameterLinksAsync(ParameterLinksDetailRequest request);
-    Task<ParameterLinksData> ApplyParameterLinksAsync(ParameterLinksApplyRequest request);
-    Task<ScheduleCoverageData> GetScheduleCoverageAsync(ScheduleCoverageRequest request);
-    Task<ParameterCoverageData> GetParameterCoverageAsync(ParameterCoverageRequest request);
-    Task<ConceptEvidenceData> GetConceptEvidenceAsync(ConceptEvidenceRequest request);
-    Task<ParameterEvidenceData> GetParameterEvidenceAsync(ParameterEvidenceRequest request);
-    Task<ProjectParameterBindingsData> GetProjectParameterBindingsAsync(ProjectParameterBindingsRequest request);
-    Task<ElementContextQueryData> GetElementContextQueryAsync(ElementContextQueryRequest request);
-    Task<ElectricalPanelsCatalogData> GetElectricalPanelsCatalogAsync(ElectricalPanelsCatalogRequest request);
-    Task<ElectricalCircuitsCatalogData> GetElectricalCircuitsCatalogAsync(ElectricalCircuitsCatalogRequest request);
+    Task<ScheduleCatalogData> GetScheduleCatalogAsync(ScheduleCatalogRequest request, CancellationToken cancellationToken);
+    Task<ProjectBrowserData> GetProjectBrowserAsync(ProjectBrowserRequest request, CancellationToken cancellationToken);
+    Task<ProjectIndexData> GetProjectIndexAsync(ProjectIndexRequest request, CancellationToken cancellationToken);
+    Task<SheetDetailData> GetSheetDetailsAsync(SheetDetailRequest request, CancellationToken cancellationToken);
+    Task<ScheduleProfilesQueryData> GetScheduleProfilesQueryAsync(ScheduleProfilesQueryRequest request, CancellationToken cancellationToken);
+    Task<ScheduleQueryData> GetScheduleQueryAsync(ScheduleQueryRequest request, CancellationToken cancellationToken);
+    Task<LoadedFamiliesCatalogData> GetLoadedFamiliesCatalogAsync(LoadedFamiliesCatalogRequest request, CancellationToken cancellationToken);
+    Task<LoadedFamiliesMatrixData> GetLoadedFamiliesMatrixAsync(LoadedFamiliesMatrixRequest request, CancellationToken cancellationToken);
+    Task<FamilyEditorSnapshotData> GetFamilyEditorSnapshotAsync(FamilyEditorSnapshotRequest request, CancellationToken cancellationToken);
+    Task<FamilyEditorOpenData> OpenFamilyEditorAsync(FamilyEditorOpenRequest request, CancellationToken cancellationToken);
+    Task<FamilyEditorApplyData> ApplyFamilyEditorEditsAsync(FamilyEditorApplyRequest request, CancellationToken cancellationToken);
+    Task<ParameterValueApplyData> ApplyParameterValuesAsync(ParameterValueApplyRequest request, CancellationToken cancellationToken);
+    Task<ParameterLinksData> GetParameterLinksAsync(ParameterLinksDetailRequest request, CancellationToken cancellationToken);
+    Task<ParameterLinksData> ApplyParameterLinksAsync(ParameterLinksApplyRequest request, CancellationToken cancellationToken);
+    Task<ScheduleCoverageData> GetScheduleCoverageAsync(ScheduleCoverageRequest request, CancellationToken cancellationToken);
+    Task<ParameterCoverageData> GetParameterCoverageAsync(ParameterCoverageRequest request, CancellationToken cancellationToken);
+    Task<ConceptEvidenceData> GetConceptEvidenceAsync(ConceptEvidenceRequest request, CancellationToken cancellationToken);
+    Task<ParameterEvidenceData> GetParameterEvidenceAsync(ParameterEvidenceRequest request, CancellationToken cancellationToken);
+    Task<ProjectParameterBindingsData> GetProjectParameterBindingsAsync(ProjectParameterBindingsRequest request, CancellationToken cancellationToken);
+    Task<ElementContextQueryData> GetElementContextQueryAsync(ElementContextQueryRequest request, CancellationToken cancellationToken);
+    Task<ElectricalPanelsCatalogData> GetElectricalPanelsCatalogAsync(ElectricalPanelsCatalogRequest request, CancellationToken cancellationToken);
+    Task<ElectricalCircuitsCatalogData> GetElectricalCircuitsCatalogAsync(ElectricalCircuitsCatalogRequest request, CancellationToken cancellationToken);
     Task<ElectricalPanelSchedulesQueryData> GetElectricalPanelSchedulesQueryAsync(
-        ElectricalPanelSchedulesQueryRequest request
+        ElectricalPanelSchedulesQueryRequest request,
+        CancellationToken cancellationToken
     );
     Task<ElectricalLoadClassificationsCatalogData> GetElectricalLoadClassificationsCatalogAsync(
-        ElectricalLoadClassificationsCatalogRequest request
+        ElectricalLoadClassificationsCatalogRequest request,
+        CancellationToken cancellationToken
     );
-    Task<RevitDocumentSessionContextData> GetRevitDocumentSessionContextAsync();
-    Task<OpenRevitDocumentData> OpenRevitDocumentAsync(OpenRevitDocumentRequest request);
-    Task<RevitAgentContextSummaryData> GetRevitAgentContextSummaryAsync();
-    Task<RevitAgentContextResolveData> ResolveRevitAgentContextAsync(RevitAgentContextResolveRequest request);
-    Task<RevitAgentVisibleContextData> GetRevitAgentVisibleContextAsync(RevitAgentVisibleContextRequest request);
+    Task<RevitDocumentSessionContextData> GetRevitDocumentSessionContextAsync(CancellationToken cancellationToken);
+    Task<OpenRevitDocumentData> OpenRevitDocumentAsync(OpenRevitDocumentRequest request, CancellationToken cancellationToken);
+    Task<RevitAgentContextSummaryData> GetRevitAgentContextSummaryAsync(CancellationToken cancellationToken);
+    Task<RevitAgentContextResolveData> ResolveRevitAgentContextAsync(RevitAgentContextResolveRequest request, CancellationToken cancellationToken);
+    Task<RevitAgentVisibleContextData> GetRevitAgentVisibleContextAsync(RevitAgentVisibleContextRequest request, CancellationToken cancellationToken);
     Task<RevitAgentViewRenderingStateData> GetRevitAgentViewRenderingStateAsync(
-        RevitAgentViewRenderingStateRequest request
+        RevitAgentViewRenderingStateRequest request,
+        CancellationToken cancellationToken
     );
-    Task<RevitViewImageData> GetRevitViewImageAsync(RevitViewImageRequest request);
-    Task<ParametersServiceCacheData> RefreshParametersServiceCacheAsync();
-    Task<RibbonCommandExecuteData> ExecuteRibbonCommandAsync(RibbonCommandExecuteRequest request);
+    Task<RevitViewImageData> GetRevitViewImageAsync(RevitViewImageRequest request, CancellationToken cancellationToken);
+    Task<ParametersServiceCacheData> RefreshParametersServiceCacheAsync(CancellationToken cancellationToken);
+    Task<RibbonCommandExecuteData> ExecuteRibbonCommandAsync(RibbonCommandExecuteRequest request, CancellationToken cancellationToken);
 }
 
 public interface IScriptingBridgeService {

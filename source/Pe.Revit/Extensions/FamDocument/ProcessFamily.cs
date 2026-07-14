@@ -1,5 +1,6 @@
 ﻿using Autodesk.Revit.DB.Events;
-using Pe.Revit.Utils;
+using Pe.Revit.Failures;
+using Pe.Revit.Tasks;
 using UIFrameworkServices;
 
 namespace Pe.Revit.Extensions.FamDocument;
@@ -63,7 +64,7 @@ public static class FamilyDocumentProcessFamily {
 
             if (suppressWarnings) {
                 var failureOptions = trans.GetFailureHandlingOptions();
-                failureOptions.SetFailuresPreprocessor(new DialogSuppressingFailuresPreprocessor(commitDiagnostics));
+                failureOptions.SetFailuresPreprocessor(PeToolsFailureHandling.CreatePreprocessor(commitDiagnostics));
                 failureOptions.SetForcedModalHandling(false);
                 trans.SetFailureHandlingOptions(failureOptions);
             }

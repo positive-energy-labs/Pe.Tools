@@ -29,7 +29,6 @@ public static class PaletteThreading {
         await runAsync(() => {
             result = action();
             hasResult = true;
-            return Task.CompletedTask;
         });
 
         return ct.IsCancellationRequested || !hasResult

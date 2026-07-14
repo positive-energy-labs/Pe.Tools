@@ -24,7 +24,7 @@ internal static class ViewTabConfig {
         var viewActions = new List<PaletteAction<IPaletteListItem>> {
             new() {
                 Name = "Open",
-                Execute = async item => {
+                Execute = item => {
                     if (item is UnifiedViewItem view) ViewActions.HandleOpen(uiapp, view);
                 },
                 CanExecute = item => item is UnifiedViewItem
@@ -32,7 +32,7 @@ internal static class ViewTabConfig {
             new() {
                 Name = "Snoop",
                 Modifiers = ModifierKeys.Alt,
-                Execute = async item => {
+                Execute = item => {
                     if (item is UnifiedViewItem view) ViewActions.HandleSnoop(doc, view);
                 }
             }
@@ -71,14 +71,14 @@ internal static class ViewTabConfig {
                 () => FamilyActions.CollectFamilies(doc, uidoc, placeOptions),
                 new PaletteAction<IPaletteListItem> {
                     Name = "Show Types",
-                    Execute = async item => {
+                    Execute = item => {
                         if (item is UnifiedFamilyItem family)
                             _ = ViewPaletteBase.ShowPalette(5, family.Family?.Name);
                     }
                 },
                 new PaletteAction<IPaletteListItem> {
                     Name = "Place Types",
-                    Execute = async item => {
+                    Execute = item => {
                         if ((item as UnifiedFamilyItem)?.Family is { } family)
                             FamilyPlacementHelper.ShowPlacementPaletteForFamily(family);
                     },
@@ -88,7 +88,7 @@ internal static class ViewTabConfig {
                 new PaletteAction<IPaletteListItem> {
                     Name = "Open/Edit",
                     Modifiers = ModifierKeys.Control,
-                    Execute = async item => {
+                    Execute = item => {
                         if (item is UnifiedFamilyItem family) FamilyActions.HandleOpenEditFamily(family);
                     },
                     CanExecute = item => (item as UnifiedFamilyItem)?.GetFamily()?.IsEditable == true
@@ -96,7 +96,7 @@ internal static class ViewTabConfig {
                 new PaletteAction<IPaletteListItem> {
                     Name = "Snoop",
                     Modifiers = ModifierKeys.Alt,
-                    Execute = async item => {
+                    Execute = item => {
                         if (item is UnifiedFamilyItem family) FamilyActions.HandleSnoop(doc, family);
                     }
                 }
@@ -106,7 +106,7 @@ internal static class ViewTabConfig {
                 () => FamilyActions.CollectFamilyTypes(doc, uidoc, placeOptions),
                 new PaletteAction<IPaletteListItem> {
                     Name = "Place",
-                    Execute = async item => {
+                    Execute = item => {
                         if (item is UnifiedFamilyItem family) FamilyActions.HandlePlace(doc, uidoc, family);
                     },
                     CanExecute = item => item is UnifiedFamilyItem &&
@@ -115,7 +115,7 @@ internal static class ViewTabConfig {
                 new PaletteAction<IPaletteListItem> {
                     Name = "Open/Edit",
                     Modifiers = ModifierKeys.Control,
-                    Execute = async item => {
+                    Execute = item => {
                         if (item is UnifiedFamilyItem family) FamilyActions.HandleOpenEditFamily(family);
                     },
                     CanExecute = item => (item as UnifiedFamilyItem)?.GetFamily()?.IsEditable == true
@@ -123,7 +123,7 @@ internal static class ViewTabConfig {
                 new PaletteAction<IPaletteListItem> {
                     Name = "Snoop",
                     Modifiers = ModifierKeys.Alt,
-                    Execute = async item => {
+                    Execute = item => {
                         if (item is UnifiedFamilyItem family) FamilyActions.HandleSnoop(doc, family);
                     }
                 }

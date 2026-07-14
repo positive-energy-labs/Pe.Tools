@@ -1,6 +1,7 @@
 using Pe.Revit.Extensions.FamDocument;
+using Pe.Revit.Failures;
 using Pe.Revit.FamilyFoundry.Profiles;
-using Pe.Revit.Utils;
+using Pe.Revit.Tasks;
 using Pe.Revit.FamilyFoundry.DesiredState;
 using Pe.Revit.Global;
 using Pe.Revit.DocumentData.Parameters;
@@ -286,7 +287,7 @@ internal static class RevitFamilyFixtureHarness {
             if (familyDocument == null || !familyDocument.IsFamilyDocument)
                 throw new InvalidOperationException($"Failed to open family document '{familyPath}'.");
 
-            return RevitFailureHandling.ExecuteWithFailureHandling(
+            return PeToolsFailureHandling.ExecuteWithFailureHandling(
                 projectDocument,
                 () => familyDocument.LoadFamily(projectDocument, loadOptions ?? new DefaultFamilyLoadOptions()),
                 new List<(bool IsError, string Message)>(),

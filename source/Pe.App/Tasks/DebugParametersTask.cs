@@ -12,7 +12,7 @@ public sealed class DebugParametersTask : ITask {
     public string Description => "Prints all family parameters to console for debugging";
     public string Category => "Debug";
 
-    public async Task ExecuteAsync(UIApplication uiApp) {
+    public void Execute(UIApplication uiApp) {
         var doc = uiApp.ActiveUIDocument?.Document;
         if (doc == null) {
             Console.WriteLine("❌ No active document");
@@ -38,6 +38,5 @@ public sealed class DebugParametersTask : ITask {
 
         Console.WriteLine("=== End Parameters ===\n");
 
-        await Task.CompletedTask;
     }
 }

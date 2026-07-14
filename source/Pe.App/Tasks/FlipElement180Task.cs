@@ -15,7 +15,7 @@ public sealed class FlipElement180Task : ITask {
     public string Description => "Click an element to flip it upside down";
     public string Category => "Edit";
 
-    public async Task ExecuteAsync(UIApplication uiApp) {
+    public void Execute(UIApplication uiApp) {
         var uidoc = uiApp.ActiveUIDocument;
         var doc = uidoc?.Document;
 
@@ -88,6 +88,5 @@ public sealed class FlipElement180Task : ITask {
             Log.Information(ex.StackTrace ?? string.Empty);
         }
 
-        await Task.CompletedTask;
     }
 }

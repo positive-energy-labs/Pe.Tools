@@ -70,8 +70,8 @@ public sealed class TabDefinition<TItem> where TItem : class, IPaletteListItem {
     /// <example>
     ///     <code>
     ///     Actions = [
-    ///         new() { Name = "Place", Execute = async item => PlaceItem(item) },
-    ///         new() { Name = "Edit", Execute = async item => EditItem(item) }
+    ///         new() { Name = "Place", Execute = item => PlaceItem(item) },
+    ///         new() { Name = "Edit", Execute = item => EditItem(item) }
     ///     ]
     ///     </code>
     /// </example>
@@ -98,7 +98,7 @@ public sealed class TabDefinition<TItem> where TItem : class, IPaletteListItem {
 ///             <SchedulePaletteItem>
 ///                 {
 ///                 Name = "Open",
-///                 Execute = async item => OpenSchedule(item)
+///                 Execute = item => OpenSchedule(item)
 ///                 }
 ///                 ) {
 ///                 FilterKeySelector = item => item.TextPill
@@ -120,7 +120,7 @@ public sealed class TabDefinition<TItem> where TItem : class, IPaletteListItem {
 ///             () => GetItems(),
 ///             new PaletteAction
 ///             <MyItem>
-///                 { Name = "Execute", Execute = async item => DoAction(item) }
+///                 { Name = "Execute", Execute = item => DoAction(item) }
 ///                 )
 ///                 ]
 ///                 });

@@ -611,7 +611,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     /// <summary>
     ///     Closes the window first, then re-enters Revit context before invoking the callback.
     /// </summary>
-    private void ExecuteDeferredInRevitContext(Func<Task> action, bool restoreFocus = true) {
+    private void ExecuteDeferredInRevitContext(Action action, bool restoreFocus = true) {
         if (!RevitTaskAccessor.IsConfigured) {
             throw new InvalidOperationException(
                 "RevitTaskAccessor not configured. Wire up in App.OnStartup.");
@@ -925,7 +925,6 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         var callback = this._onCtrlReleased;
         this.ExecuteDeferredInRevitContext(() => {
             callback();
-            return Task.CompletedTask;
         });
     }
 
@@ -1383,7 +1382,6 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
                 // threw, clear it here so a stale position can't leak into the next unrelated open.
                 EphemeralWindow.NextSpawnPosition = null;
             }
-            return Task.CompletedTask;
         }, restoreFocus: false);
     }
 }

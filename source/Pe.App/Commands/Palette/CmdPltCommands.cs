@@ -56,7 +56,7 @@ public class CmdPltCommands : IExternalCommand {
                             () => BuildSelectableItems(commandHelper.GetAllCommands()),
                             new PaletteAction<IPaletteListItem> {
                                 Name = "Execute",
-                                Execute = async item => {
+                                Execute = item => {
                                     if (item is not PostableCommandItem command) return;
                                     var (success, error) = Revit.Global.Lib.Commands.Execute(uiapp, command.Command);
                                     if (error is not null) Log.Error("Error: " + error.Message + error.StackTrace);
@@ -76,11 +76,11 @@ public class CmdPltCommands : IExternalCommand {
                             },
                             new PaletteAction<IPaletteListItem> {
                                 Name = "Execute",
-                                Execute = async item => {
+                                Execute = item => {
                                     if (item is not TaskItem task) return;
                                     try {
                                         Console.WriteLine($"Executing task: {task.Task.Name}");
-                                        await task.Task.ExecuteAsync(uiapp);
+                                        task.Task.Execute(uiapp);
                                         Console.WriteLine($"Task '{task.Task.Name}' completed\n");
                                     } catch (Exception ex) {
                                         Console.WriteLine($"Task '{task.Task.Name}' failed: {ex.Message}");
@@ -94,14 +94,14 @@ public class CmdPltCommands : IExternalCommand {
                             BuildPodScriptItems,
                             new PaletteAction<IPaletteListItem> {
                                 Name = "Run — safe (changes discarded)",
-                                Execute = async item => {
+                                Execute = item => {
                                     if (item is PodScriptTaskItem pod)
                                         PodScriptRunner.Run(uiapp, pod, ScriptPermissionMode.ReadOnly);
                                 }
                             },
                             new PaletteAction<IPaletteListItem> {
                                 Name = "Run — full (can modify model)",
-                                Execute = async item => {
+                                Execute = item => {
                                     if (item is PodScriptTaskItem pod)
                                         PodScriptRunner.Run(uiapp, pod, ScriptPermissionMode.WriteTransaction);
                                 }
