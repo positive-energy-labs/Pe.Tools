@@ -51,6 +51,14 @@ describe("resolveTarget", () => {
     });
   });
 
+  it("an unknown-lane session never matches `user`, mirroring the host", () => {
+    const unlaned: SessionFacts = { ...user, sessionId: "eee555", lane: "unknown" };
+    expect(resolveTarget([unlaned], "user")).toMatchObject({
+      kind: "unresolved",
+      reason: "no-match",
+    });
+  });
+
   it("a selector matching multiple sessions is ambiguous, mirroring the host 409", () => {
     const secondUser: SessionFacts = { ...user, sessionId: "ddd444", processId: 7777 };
     expect(resolveTarget([user, secondUser], "user")).toMatchObject({ kind: "ambiguous" });

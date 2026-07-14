@@ -219,6 +219,7 @@ export function TargetChip({
                       style={{ fontSize: 9, color: "var(--muted-foreground)" }}
                     >
                       {sel} · pid {s.processId}
+                      {s.openDocumentCount > 1 ? ` · ${s.openDocumentCount} docs` : ""}
                       {s.observedAtUnixMs ? ` · ${ageLabel(s.observedAtUnixMs, now)}` : ""}
                     </span>
                   }
