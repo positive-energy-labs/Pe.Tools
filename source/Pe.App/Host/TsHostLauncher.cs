@@ -10,7 +10,12 @@ namespace Pe.App.Host;
 
 internal static class TsHostLauncher {
     private const string HostServiceName = HostProcessIdentity.ServiceName;
-    private const string HostLaneVariable = "PE_TOOLS_HOST_LANE";
+
+    // PE_LANE is the SDK-owned single lane signal the TS host reads (host-ownership.ts
+    // resolveHostLane). The dev-lane launcher sets it here; the installed lane rides
+    // InstalledProduct.EnsureRunning, which sets PE_LANE itself. The retired PE_TOOLS_HOST_LANE
+    // product variable is gone (IPC-SEAM-SPEC D7).
+    private const string LaneEnvironmentVariable = "PE_LANE";
     private static readonly HttpClient HttpClient = new() {
         Timeout = TimeSpan.FromMilliseconds(HostRuntimeDefaults.DefaultHostProbeTimeoutMs)
     };
@@ -118,7 +123,7 @@ internal static class TsHostLauncher {
             UseShellExecute = false,
             CreateNoWindow = true
         };
-        startInfo.EnvironmentVariables[HostLaneVariable] = ToHostLane(runtimeResolution.RuntimeLane);
+        startInfo.EnvironmentVariables[LaneEnvironmentVariable] = ToHostLane(runtimeResolution.RuntimeLane);
         return startInfo;
     }
 
@@ -131,7 +136,7 @@ internal static class TsHostLauncher {
             UseShellExecute = false,
             CreateNoWindow = true
         };
-        startInfo.EnvironmentVariables[HostLaneVariable] = "dev";
+        startInfo.EnvironmentVariables[LaneEnvironmentVariable] = "dev";
         startInfo.EnvironmentVariables["PE_TOOLS_HOST_SOURCE_DIR"] = workingDirectory;
         return startInfo;
     }
