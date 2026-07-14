@@ -17,6 +17,7 @@ export const LANE_CAT: Record<SessionLane, string> = {
   installed: "slate",
   rrd: "green",
   sandbox: "lichen",
+  unknown: "kiln", // attention hue — an unlaned session is unreachable via `user`
 };
 
 export function laneVar(lane: SessionLane): string {

@@ -11,7 +11,14 @@
  * without a live host.
  */
 
-export type SessionLane = "rrd" | "sandbox" | "installed";
+/**
+ * Lane = payload provenance, reported at registration, never identity.
+ * rrd = the user-owned Rider/hot-reload debug session (source payload); installed = the product
+ * payload from installed roots; sandbox = an SDK-spawned disposable process. "unknown" mirrors
+ * the host: a session that reported no lane never matches the `user` selector (a pre-identity
+ * payload must stay unreachable through user vocabulary).
+ */
+export type SessionLane = "rrd" | "sandbox" | "installed" | "unknown";
 
 /** One Revit process incarnation, as observed by the broker. Projection of bridge session summary. */
 export interface SessionFacts {
@@ -111,7 +118,9 @@ export function fromBridgeSessions(
     .map((e) => ({
       sessionId: e.sessionId,
       processId: e.processId ?? 0,
-      lane: (e.lane === "rrd" || e.lane === "sandbox" ? e.lane : "installed") as SessionLane,
+      lane: (e.lane === "rrd" || e.lane === "sandbox" || e.lane === "installed"
+        ? e.lane
+        : "unknown") as SessionLane,
       sandboxId: e.sandboxId ?? undefined,
       activeDocumentTitle: e.activeDocumentTitle ?? undefined,
       openDocumentCount: e.openDocumentCount,

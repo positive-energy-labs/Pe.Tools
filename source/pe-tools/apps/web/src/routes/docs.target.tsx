@@ -101,10 +101,19 @@ const STEPS: WorldStep[] = [
     ops: "",
   },
   {
+    key: "second-doc",
+    title: "2nd doc opens",
+    caption:
+      "A second document opens in the same Revit. The count changes; the target doesn't move — documents are session state, never addresses.",
+    sessions: [{ ...userA("Tower-A.rvt"), openDocumentCount: 2 }],
+    chat: "",
+    ops: "",
+  },
+  {
     key: "sandbox",
     title: "sandbox spawns",
     caption: "Two sessions, no pin → ambiguous. The UI refuses to guess, as the host 409 does.",
-    sessions: [userA("Tower-A.rvt"), sandboxB],
+    sessions: [{ ...userA("Tower-A.rvt"), openDocumentCount: 2 }, sandboxB],
     chat: "",
     ops: "",
   },
@@ -112,15 +121,16 @@ const STEPS: WorldStep[] = [
     key: "pin",
     title: "you pin",
     caption: "Chat pins `user`; /ops pins `sandbox:fam-lab`. Two consumers, two solid wires.",
-    sessions: [userA("Tower-A.rvt"), sandboxB],
+    sessions: [{ ...userA("Tower-A.rvt"), openDocumentCount: 2 }, sandboxB],
     chat: "user",
     ops: "sandbox:fam-lab",
   },
   {
     key: "doc-switch",
     title: "doc switches",
-    caption: "The active document changes under a stable pin — the world moved, the wire didn't.",
-    sessions: [userA("Annex-B.rvt", 1), sandboxB],
+    caption:
+      "The user switches windows: Annex-B.rvt becomes active. Same open set, same pin — activation moved, addressing didn't.",
+    sessions: [{ ...userA("Annex-B.rvt", 1), openDocumentCount: 2 }, sandboxB],
     chat: "user",
     ops: "sandbox:fam-lab",
   },
@@ -161,6 +171,369 @@ const STATE_ROWS: { tone: keyof typeof TONE_STYLE; name: string; means: string }
   { tone: "dangling", name: "unresolved / no-match", means: "pin kept; its process is gone" },
   { tone: "muted", name: "unresolved / no-sessions", means: "empty world" },
 ];
+
+// ── anatomy — the world under the model (dev-facing) ────────────────────────────────────────────
+// A richer static world than the scenario: one broker, three Revit processes across all three
+// lanes, multiple documents in one of them. The selector lens below it resolves REAL selectors
+// through the REAL resolveTarget() against these facts — the education is the actual function.
+
+interface AnatomyProcess {
+  facts: SessionFacts;
+  buildStamp: string;
+  docs: { title: string; active: boolean }[];
+  blurb: string;
+}
+
+const ANATOMY: AnatomyProcess[] = [
+  {
+    facts: {
+      sessionId: "a41f0c",
+      processId: 4128,
+      lane: "installed",
+      activeDocumentTitle: "Tower-A.rvt",
+      openDocumentCount: 2,
+      observedAtUnixMs: T0 - 4000,
+    },
+    buildStamp: "0.6.11-beta.4",
+    docs: [
+      { title: "Tower-A.rvt", active: true },
+      { title: "Site-Plan.rvt", active: false },
+    ],
+    blurb:
+      "The user's everyday Revit. Payload from installed roots — it proves installed behavior and nothing else. Two documents open; exactly one is active, and operations always run against the active one.",
+  },
+  {
+    facts: {
+      sessionId: "7f21bd",
+      processId: 7444,
+      lane: "rrd",
+      activeDocumentTitle: "Annex-B.rvt",
+      openDocumentCount: 1,
+      observedAtUnixMs: T0 - 9000,
+    },
+    buildStamp: "src@8455251",
+    docs: [{ title: "Annex-B.rvt", active: true }],
+    blurb:
+      "The user-owned Rider/hot-reload debug session, running a source-built payload. Minutes to restart and often holding a real model, so it is protected: attached proof only, deliberately.",
+  },
+  {
+    facts: {
+      sessionId: "b7e29d",
+      processId: 9204,
+      lane: "sandbox",
+      sandboxId: "fam-lab",
+      activeDocumentTitle: "Door-Single.rfa",
+      openDocumentCount: 1,
+      observedAtUnixMs: T0 - 2000,
+    },
+    buildStamp: "pkg@0.1.0-beta.92",
+    docs: [{ title: "Door-Single.rfa", active: true }],
+    blurb:
+      "SDK-spawned, test-owned, disposable. Born with a ready selector (sandbox:fam-lab) — fresh-process proof lives here, never in the user's Revit.",
+  },
+];
+
+const LENS_SELECTORS: { sel: TargetSelector; note: string }[] = [
+  { sel: "", note: "auto — three sessions, so resolution refuses; nothing gets touched" },
+  {
+    sel: "user",
+    note: "matches lanes rrd + installed. With BOTH running, `user` is itself ambiguous — pin by pid, or keep one user-lane Revit alive",
+  },
+  { sel: "rrd", note: "the debug session only" },
+  { sel: "sandbox:fam-lab", note: "the sandbox, by the id it was minted with" },
+  { sel: "4128", note: "a pid — always unambiguous, never survives a restart" },
+  {
+    sel: "7f21bd",
+    note: "a raw session id — resolves, but dies with the process; UIs never store these",
+  },
+];
+
+const ANATOMY_W = 780;
+const CARD_W = 244;
+
+function Anatomy() {
+  const [lens, setLens] = useState<TargetSelector>("user");
+  const facts = ANATOMY.map((p) => p.facts);
+  const resolution = resolveTarget(facts, lens);
+  const resolvedId = resolution.kind === "resolved" ? resolution.session.sessionId : undefined;
+  const candidateIds = new Set(
+    resolution.kind === "ambiguous" ? resolution.candidates.map((c) => c.sessionId) : [],
+  );
+  const note = LENS_SELECTORS.find((l) => l.sel === lens)?.note;
+  const cardX = (i: number) => i * (CARD_W + (ANATOMY_W - 3 * CARD_W) / 2);
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <div style={{ width: ANATOMY_W }}>
+        {/* the broker — one per machine */}
+        <div
+          className="flex items-baseline justify-between px-3 py-1.5"
+          style={{ border: "0.5px solid var(--line)", background: "var(--card)", borderRadius: 2 }}
+        >
+          <span className="text-[12px] font-semibold" style={{ color: "var(--foreground)" }}>
+            pe host — the broker
+          </span>
+          <span
+            className="font-[var(--font-pe-mono)]"
+            style={{ fontSize: 9, color: "var(--muted-foreground)" }}
+          >
+            one per machine · every Revit attaches by websocket · identity = hash(pid + startUtc) ·
+            reconnect with the same identity = takeover
+          </span>
+        </div>
+
+        {/* websocket drops */}
+        <svg width={ANATOMY_W} height={30} aria-hidden="true">
+          {ANATOMY.map((p, i) => {
+            const x = cardX(i) + CARD_W / 2;
+            const hot = p.facts.sessionId === resolvedId;
+            const cand = candidateIds.has(p.facts.sessionId);
+            return (
+              <g key={p.facts.sessionId}>
+                <line
+                  x1={x}
+                  y1={0}
+                  x2={x}
+                  y2={30}
+                  stroke={hot ? "var(--pe-blue)" : cand ? "var(--cat-kiln)" : "var(--line-2)"}
+                  strokeWidth={hot ? 1.5 : 1}
+                  strokeDasharray={cand ? "3 3" : undefined}
+                />
+                <text
+                  x={x + 5}
+                  y={19}
+                  fontSize={8.5}
+                  fill="var(--muted-foreground)"
+                  fontFamily="var(--font-pe-mono)"
+                >
+                  ws · session {p.facts.sessionId}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+
+        {/* the processes */}
+        <div className="flex justify-between">
+          {ANATOMY.map((p) => {
+            const hot = p.facts.sessionId === resolvedId;
+            const cand = candidateIds.has(p.facts.sessionId);
+            return (
+              <div
+                key={p.facts.sessionId}
+                style={{
+                  width: CARD_W,
+                  border: hot
+                    ? "1px solid var(--pe-blue)"
+                    : cand
+                      ? "1px solid color-mix(in srgb, var(--cat-kiln) 55%, transparent)"
+                      : "0.5px solid var(--line)",
+                  background: "var(--card)",
+                  borderRadius: 2,
+                  opacity: lens !== "" && !hot && !cand ? 0.55 : 1,
+                  transition: "opacity .14s ease, border-color .14s ease",
+                }}
+              >
+                <div
+                  className="flex items-center justify-between px-2 py-1.5"
+                  style={{ borderBottom: "0.5px solid var(--line-soft)" }}
+                >
+                  <LaneBadge lane={p.facts.lane} />
+                  <span
+                    className="font-[var(--font-pe-mono)]"
+                    style={{ fontSize: 9, color: "var(--muted-foreground)" }}
+                  >
+                    revit.exe · pid {p.facts.processId}
+                  </span>
+                </div>
+                <div
+                  className="px-2 py-1.5"
+                  style={{ borderBottom: "0.5px solid var(--line-soft)" }}
+                >
+                  <div
+                    className="font-[var(--font-pe-mono)]"
+                    style={{ fontSize: 8.5, color: "var(--muted-foreground)" }}
+                  >
+                    hash({p.facts.processId} + startUtc) → {p.facts.sessionId}
+                  </div>
+                  <div
+                    className="font-[var(--font-pe-mono)]"
+                    style={{ fontSize: 8.5, color: "var(--muted-foreground)" }}
+                  >
+                    payload {p.buildStamp}
+                    {p.facts.sandboxId ? ` · sandbox:${p.facts.sandboxId}` : ""}
+                  </div>
+                </div>
+                {/* documents — session state, one active */}
+                <div className="px-2 py-1.5">
+                  {p.docs.map((d) => (
+                    <div
+                      key={d.title}
+                      className="flex items-center justify-between py-0.5"
+                      style={{
+                        borderLeft: d.active
+                          ? "2px solid var(--pe-blue)"
+                          : "2px solid var(--line-soft)",
+                        paddingLeft: 6,
+                      }}
+                    >
+                      <span
+                        className="truncate text-[11px]"
+                        style={{
+                          color: d.active ? "var(--foreground)" : "var(--muted-foreground)",
+                        }}
+                      >
+                        {d.title}
+                      </span>
+                      {d.active ? (
+                        <span
+                          className="font-[var(--font-pe-mono)]"
+                          style={{ fontSize: 8, letterSpacing: "0.06em", color: "var(--pe-blue)" }}
+                        >
+                          ACTIVE
+                        </span>
+                      ) : null}
+                    </div>
+                  ))}
+                  <div
+                    className="mt-1 font-[var(--font-pe-mono)]"
+                    style={{ fontSize: 8.5, color: "var(--muted-foreground)" }}
+                  >
+                    {p.facts.openDocumentCount} open · 1 active ·{" "}
+                    {ageLabel(p.facts.observedAtUnixMs, T0)}
+                  </div>
+                </div>
+                <p
+                  className="m-0 px-2 pb-2 text-[10.5px] leading-snug"
+                  style={{ color: "var(--muted-foreground)" }}
+                >
+                  {p.blurb}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* the selector lens */}
+        <div className="mt-4 flex flex-wrap items-center gap-1.5">
+          <span
+            className="font-[var(--font-pe-mono)]"
+            style={{ fontSize: 9, letterSpacing: "0.08em", color: "var(--muted-foreground)" }}
+          >
+            RESOLVE
+          </span>
+          {LENS_SELECTORS.map((l) => (
+            <button
+              key={l.sel || "(empty)"}
+              onClick={() => setLens(l.sel)}
+              className="tele px-2 py-0.5"
+              style={{
+                fontSize: 10.5,
+                borderRadius: 2,
+                border: lens === l.sel ? "1px solid var(--pe-blue)" : "1px solid var(--line)",
+                color: lens === l.sel ? "var(--pe-blue)" : "var(--muted-foreground)",
+                background:
+                  lens === l.sel
+                    ? "color-mix(in srgb, var(--pe-blue) 6%, transparent)"
+                    : "transparent",
+                cursor: "pointer",
+              }}
+            >
+              {l.sel === "" ? "(empty)" : l.sel}
+            </button>
+          ))}
+        </div>
+        <div
+          className="mt-1.5 break-all font-[var(--font-pe-mono)]"
+          style={{ fontSize: 10.5, color: "var(--foreground)" }}
+        >
+          {resolutionReadout(resolution)}
+        </div>
+        {note ? (
+          <p className="m-0 mt-0.5 text-[11px]" style={{ color: "var(--muted-foreground)" }}>
+            {note}
+          </p>
+        ) : null}
+        <p className="m-0 mt-2 text-[10.5px]" style={{ color: "var(--muted-foreground)" }}>
+          A session that registered without a lane never matches `user` — a pre-identity payload
+          stays unreachable through user vocabulary, by design.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── the end state ───────────────────────────────────────────────────────────────────────────────
+
+const END_STATE: { state: "decided" | "shipped" | "next" | "open"; text: string }[] = [
+  {
+    state: "decided",
+    text: "One broker per machine is the only bridge. A session is one Revit process incarnation; identity is hash(pid + startUtc); lane, sandboxId, and buildStamp are observed selectors, never identity.",
+  },
+  {
+    state: "decided",
+    text: "Documents are session state. Targeting a document means activating it in its session — an operation with a transcript trail — never a second address axis.",
+  },
+  {
+    state: "shipped",
+    text: "Web surfaces store selectors, never ids, and resolve through one pure function. The chip, its patch-bay picker, the world-lane readout, and the thread rail are reflections of that single resolution.",
+  },
+  {
+    state: "next",
+    text: "The agent inherits the chat pin: tool calls default their bridgeSessionId to the ?target selector; explicit per-call overrides stay legal and are stamped visibly in the transcript.",
+  },
+  {
+    state: "next",
+    text: "/ops and /family-matrix adopt TargetChip + a ?target param and delete their hand-rolled session selects.",
+  },
+  {
+    state: "open",
+    text: "The selector grammar is exported once from host-contracts; today it is hand-synced across the host's TARGET_SYNTAX, the MCP tool schema, and CLI help text.",
+  },
+  {
+    state: "open",
+    text: "bridge.sessions.list carries observedAt and open-document titles (today: active title + count only), so pickers can show the open set without a second call.",
+  },
+];
+
+const END_STATE_TONE: Record<(typeof END_STATE)[number]["state"], string> = {
+  decided: "var(--cat-slate)",
+  shipped: "var(--cat-green)",
+  next: "var(--pe-blue)",
+  open: "var(--cat-kiln)",
+};
+
+function EndState() {
+  return (
+    <div style={{ border: "0.5px solid var(--line)", background: "var(--card)", borderRadius: 2 }}>
+      {END_STATE.map((row, i) => (
+        <div
+          key={i}
+          className="flex items-baseline gap-3 px-3 py-2"
+          style={{
+            borderBottom: i === END_STATE.length - 1 ? "none" : "0.5px solid var(--line-soft)",
+          }}
+        >
+          <span
+            className="font-[var(--font-pe-mono)]"
+            style={{
+              fontSize: 9,
+              letterSpacing: "0.06em",
+              width: 56,
+              flexShrink: 0,
+              color: END_STATE_TONE[row.state],
+            }}
+          >
+            {row.state.toUpperCase()}
+          </span>
+          <span className="text-[12px] leading-snug" style={{ color: "var(--foreground)" }}>
+            {row.text}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // ── (exhibit) faux composer hosting the real chip ───────────────────────────────────────────────
 
@@ -783,6 +1156,20 @@ function DocsTarget() {
           </div>
         </section>
 
+        {/* ── anatomy ───────────────────────────────────────────────────────────────────────── */}
+        <section className="mb-10">
+          <SectionLabel label="anatomy — one machine, one broker, many revits" />
+          <p className="mb-3 max-w-[74ch] text-[12px]" style={{ color: "var(--muted-foreground)" }}>
+            What the model sits on. Each running Revit is a separate process holding a websocket to
+            the one broker; its <em>lane</em> says where its payload came from — which is also what
+            that process can <em>prove</em>. Documents live inside a session: several can be open,
+            exactly one is active, and operations always run against the active one. The lens below
+            resolves real selectors through the real <code>resolveTarget()</code> against this world
+            — click through the grammar and watch what each form can and cannot reach.
+          </p>
+          <Anatomy />
+        </section>
+
         {/* ── the world in motion ───────────────────────────────────────────────────────────── */}
         <SectionLabel label="the world in motion" />
         <p className="mb-3 max-w-[70ch] text-[12px]" style={{ color: "var(--muted-foreground)" }}>
@@ -897,6 +1284,18 @@ function DocsTarget() {
             <Worldline currentStep={step} chatByStep={chatByStep} onStep={goto} />
           </section>
         </div>
+
+        {/* ── the end state ─────────────────────────────────────────────────────────────────── */}
+        <section className="mt-10">
+          <SectionLabel label="the end state" />
+          <p className="mb-3 max-w-[74ch] text-[12px]" style={{ color: "var(--muted-foreground)" }}>
+            What we want out of all of this: an agent and a user who can always answer "what will
+            this touch?" without leaving the surface they're on, and a targeting model small enough
+            that the answer is the same everywhere. The ledger — decisions that hold, what's
+            shipped, what's next, what's still open:
+          </p>
+          <EndState />
+        </section>
       </div>
     </div>
   );
