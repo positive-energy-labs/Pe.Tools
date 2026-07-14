@@ -9,7 +9,7 @@ using System.Net.Http;
 namespace Pe.App.Host;
 
 internal static class TsHostLauncher {
-    private const string HostServiceName = "host";
+    private const string HostServiceName = HostProcessIdentity.ServiceName;
     private const string HostLaneVariable = "PE_TOOLS_HOST_LANE";
     private static readonly HttpClient HttpClient = new() {
         Timeout = TimeSpan.FromMilliseconds(HostRuntimeDefaults.DefaultHostProbeTimeoutMs)
@@ -180,7 +180,7 @@ internal static class TsHostLauncher {
     private static RunningTsHostStatus? TryGetRunningHostStatus() {
         try {
             var baseUrl = HostProcessIdentity.ResolveHostBaseUrl().TrimEnd('/');
-            using var response = HttpClient.GetAsync($"{baseUrl}/host/status").GetAwaiter().GetResult();
+            using var response = HttpClient.GetAsync($"{baseUrl}{HostProcessIdentity.HealthPath}").GetAwaiter().GetResult();
             if (!response.IsSuccessStatusCode)
                 return null;
 

@@ -14,6 +14,10 @@ export type HostOwnership = {
   readonly sourceRoot: string | null;
 };
 
+// Mirrors the SDK-owned shutdown-token header. The vendored pe-service.ts keeps this string
+// private (SHUTDOWN_TOKEN_HEADER, not exported) and must stay byte-identical, so the takeover
+// sender re-declares it here rather than importing it. This is the takeover/probe flow D3 deletes
+// wholesale once the SDK PeServiceHost primitive lands (SDK-LEDGER S-DEF-1/S-DEF-12).
 const SERVICE_TOKEN_HEADER = "x-pe-service-token";
 const DEV_SHUTDOWN_HEADER = "x-pe-host-dev-shutdown";
 const DEV_TAKEOVER_ARGUMENT = "--take-over-host";
@@ -101,7 +105,9 @@ const takeoverCurrentHost = Effect.fnUntraced(function* () {
   const current = yield* probeCurrentHost();
   const explicitDevTakeover = process.argv.includes(DEV_TAKEOVER_ARGUMENT);
   if (!current || !shouldTakeOverCurrentHost(current.lane, explicitDevTakeover)) return;
-  const service = yield* Effect.promise(() => readServiceFile(productRoot(), "host"));
+  const service = yield* Effect.promise(() =>
+    readServiceFile(productRoot(), hostProcessIdentity.serviceName),
+  );
   if (!service || service.pid !== current.processId || service.port !== HOST_PORT || !service.token)
     return yield* Effect.fail(
       new Error("Current host does not match its service-file identity; refusing takeover."),
@@ -112,7 +118,7 @@ const takeoverCurrentHost = Effect.fnUntraced(function* () {
 
 const probeCurrentHost = Effect.fnUntraced(function* () {
   return yield* Effect.tryPromise(async () => {
-    const response = await fetch(new URL("/host/status", HOST_BASE_URL), {
+    const response = await fetch(new URL(hostProcessIdentity.healthPath, HOST_BASE_URL), {
       signal: AbortSignal.timeout(500),
     });
     if (!response.ok) return null;
@@ -125,7 +131,7 @@ const probeCurrentHost = Effect.fnUntraced(function* () {
 
 const requestShutdown = Effect.fnUntraced(function* (token: string, allowDevShutdown: boolean) {
   yield* Effect.tryPromise(async () => {
-    const response = await fetch(new URL("/admin/shutdown", HOST_BASE_URL), {
+    const response = await fetch(new URL(hostProcessIdentity.shutdownPath, HOST_BASE_URL), {
       method: "POST",
       headers: {
         [SERVICE_TOKEN_HEADER]: token,
@@ -150,7 +156,7 @@ const waitForPortRelease = Effect.fnUntraced(function* () {
 
 async function isHostListening(): Promise<boolean> {
   try {
-    const response = await fetch(new URL("/host/status", HOST_BASE_URL), {
+    const response = await fetch(new URL(hostProcessIdentity.healthPath, HOST_BASE_URL), {
       signal: AbortSignal.timeout(250),
     });
     return response.ok;
