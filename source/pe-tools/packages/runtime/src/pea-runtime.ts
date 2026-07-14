@@ -130,6 +130,7 @@ export async function createPeaRuntime(
         configDir: ".pea",
         bundledSkillCount: bundledPeaSkills.length,
         yolo: true,
+        thinkingLevel: "high",
         permissionRules: { categories: { read: "allow" }, tools: {} },
       },
     },
@@ -157,7 +158,7 @@ export async function createPeaRuntime(
         contextWindow: 200_000,
         agents: [{ name: peaAgentName, description: peaAgentDescription }],
         availableModels: [
-          { id: defaultPeaAgentModelId, displayName: "GPT-5.4", provider: "openai" },
+          { id: defaultPeaAgentModelId, displayName: "GPT-5.6 Terra", provider: "openai" },
           {
             id: "anthropic/claude-opus-4-8",
             displayName: "Claude Opus 4.8",

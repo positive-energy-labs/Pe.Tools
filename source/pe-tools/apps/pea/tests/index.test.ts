@@ -219,13 +219,16 @@ test("pea context state processor emits on changed or missing active snapshot", 
 });
 
 test(
-  "pea runtime starts in yolo mode so tool approvals are auto-allowed",
+  "pea runtime starts with product defaults",
   async () => {
     const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-yolo-"));
     const runtime = await createPeaRuntime({ workspaceRoot });
 
     try {
-      expect(runtime.session?.state.get()).toEqual(expect.objectContaining({ yolo: true }));
+      expect(runtime.session?.model.get()).toBe("openai/gpt-5.6-terra");
+      expect(runtime.session?.state.get()).toEqual(
+        expect.objectContaining({ yolo: true, thinkingLevel: "high" }),
+      );
     } finally {
       await runtime.close?.();
       await rm(workspaceRoot, { recursive: true, force: true });

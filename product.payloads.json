@@ -2,7 +2,7 @@
   "product": "Pe.Tools",
   "vendor": "Positive Energy",
   "releases": "positive-energy-labs/Pe.Tools",
-  "version": "0.6.10",
+  "version": "0.6.11-beta.0",
   "years": ["2023", "2024", "2025", "2026"],
   "msiUpgradeCode": "DA2F1078-D093-4D58-B1DE-85A4402E49FF",
   "legacy": [
