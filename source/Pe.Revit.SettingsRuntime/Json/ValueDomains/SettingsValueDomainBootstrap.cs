@@ -20,5 +20,8 @@ public static class SettingsValueDomainBootstrap {
         registry.Register(ValueDomainKeys.UnitTypeIds, static () => new UnitTypeIdValueDomain());
         registry.Register(ValueDomainKeys.SymbolTypeIds, static () => new SymbolTypeIdValueDomain());
         registry.Register(ValueDomainKeys.LineStyleNames, static () => new LineStyleNamesValueDomain());
+        registry.Register(ValueDomainKeys.CategoryIds, static () => new CategoryIdsValueDomain());
+        registry.Register(ValueDomainKeys.ElementUniqueIds, static () => new ElementUniqueIdsValueDomain());
+        registry.Register(ValueDomainKeys.ParameterIdentities, static () => new ParameterIdentitiesValueDomain());
     }
 }

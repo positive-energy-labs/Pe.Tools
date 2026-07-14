@@ -437,7 +437,8 @@ public class RequestService : ISettingsBridgeService {
     ) => new(
         item.Value,
         item.Label,
-        item.Description
+        item.Description,
+        item.Metadata
     );
 
     private static string BuildThrottleKey(

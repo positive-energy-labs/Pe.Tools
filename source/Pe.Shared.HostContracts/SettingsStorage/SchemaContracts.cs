@@ -53,7 +53,8 @@ public record SchemaData(
 public record FieldOptionItem(
     string Value,
     string Label,
-    string? Description
+    string? Description,
+    Dictionary<string, string>? Metadata = null
 );
 
 public record FieldOptionsData(
