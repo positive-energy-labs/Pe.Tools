@@ -18,13 +18,6 @@ public static class AutomationDevRunHelpers {
         );
     }
 
-    public static Task<TArtifact> ReadJsonArtifactAsync<TArtifact>(
-        string artifactPath,
-        string invalidMessage,
-        CancellationToken cancellationToken
-    ) =>
-        DesignAutomationRunHelpers.ReadJsonArtifactAsync<TArtifact>(artifactPath, invalidMessage, cancellationToken);
-
     public static Task ValidateJsonArtifactAsync<TArtifact>(
         string artifactPath,
         string invalidMessage,
@@ -38,7 +31,4 @@ public static class AutomationDevRunHelpers {
         HttpStatusCode second
     ) =>
         DesignAutomationRunHelpers.HasStatusCode(exception, first, second);
-
-    public static HttpStatusCode? TryGetStatusCode(HttpRequestException exception) =>
-        DesignAutomationRunHelpers.TryGetStatusCode(exception);
 }

@@ -726,8 +726,3 @@ public class RefPlaneDimCreator(
 
     #endregion
 }
-
-/// <summary>
-///     Tracks a formula that needs to be restored after dimension labeling.
-/// </summary>
-public record DeferredFormula(string ParamName, string Formula);

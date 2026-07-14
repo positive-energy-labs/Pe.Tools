@@ -6,11 +6,4 @@ public static class GlobalStorageLocations {
 
     public static string ResolveSettingsPath(string basePath, string fileName = "settings.json") =>
         Path.Combine(ResolveGlobalDirectory(basePath), fileName);
-
-    public static string ResolveFragmentsDirectory(string basePath) =>
-        SettingsPathing.ResolveSafeSubDirectoryPath(
-            ResolveGlobalDirectory(basePath),
-            "fragments",
-            "fragments"
-        );
 }

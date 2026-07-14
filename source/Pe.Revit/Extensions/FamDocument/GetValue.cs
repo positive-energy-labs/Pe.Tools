@@ -28,24 +28,6 @@ public static class FamilyManagerGetValue {
     }
 
     /// <summary>
-    ///     Get a parameter value using the current family type. Returns null if the familyParameter is null.
-    /// </summary>
-    /// <remarks>
-    ///     Only use this when the type-safety of the parameter value is unimportant, like logging,
-    ///     or for example when used in conjunction with the SetValue extension methods.
-    /// </remarks>
-    /// <exception cref="T:Autodesk.Revit.Exceptions.ArgumentException">
-    ///     Thrown if the input argument-"familyParameter"-is invalid,
-    /// </exception>
-    public static object? GetValue(this FamilyDocument famDoc, string familyParameterName) {
-        var fm = famDoc.FamilyManager;
-        var familyParameter = fm.FindParameter(familyParameterName);
-        if (familyParameter == null) return null;
-
-        return famDoc.GetValue(familyParameter);
-    }
-
-    /// <summary>
     ///     Checks if a parameter has a value set, either via a formula or a direct value.
     /// </summary>
     /// <param name="doc">The family document</param>

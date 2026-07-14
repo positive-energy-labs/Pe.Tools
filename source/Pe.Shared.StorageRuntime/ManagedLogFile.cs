@@ -78,43 +78,6 @@ public sealed class ManagedLogFile {
         this.Append(logEntry);
     }
 
-    public void AppendStructuredEntry(
-        string levelCode,
-        string source,
-        string message,
-        string? eventName = null,
-        Exception? exception = null
-    ) {
-        if (string.IsNullOrWhiteSpace(levelCode))
-            throw new ArgumentException("Level code is required.", nameof(levelCode));
-        if (string.IsNullOrWhiteSpace(source))
-            throw new ArgumentException("Source is required.", nameof(source));
-        if (string.IsNullOrWhiteSpace(message) && exception == null)
-            return;
-
-        var builder = new StringBuilder()
-            .Append(DateTime.Now.ToString(TimestampFormat))
-            .Append(" [")
-            .Append(levelCode)
-            .Append("] ")
-            .Append(source);
-
-        if (!string.IsNullOrWhiteSpace(eventName)) {
-            _ = builder
-                .Append(" (")
-                .Append(eventName)
-                .Append(')');
-        }
-
-        if (!string.IsNullOrWhiteSpace(message))
-            _ = builder.Append(": ").AppendLine(message);
-
-        if (exception != null)
-            _ = builder.AppendLine(exception.ToString());
-
-        this.Append(builder.ToString());
-    }
-
     public string[] ReadAllLines() {
         using var handle = OpenFile(this.FilePath, GenericRead, OpenExisting);
         if (handle.IsInvalid)
