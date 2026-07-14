@@ -7,6 +7,7 @@ public sealed record BuildArtifactLayout(
     string BundlePackagesRoot,
     string AutomationPackagesRoot,
     string InstallerPackagesRoot,
+    string ReceiptsRoot,
     string ToolsRoot
 ) {
     public static BuildArtifactLayout ForRepository(string repositoryRoot) {
@@ -20,6 +21,7 @@ public sealed record BuildArtifactLayout(
             EnsureTrailingSeparator(Path.Combine(packagesRoot, "bundles")),
             EnsureTrailingSeparator(Path.Combine(packagesRoot, "automation")),
             EnsureTrailingSeparator(Path.Combine(packagesRoot, "installers")),
+            EnsureTrailingSeparator(Path.Combine(artifactsRoot, "receipts")),
             EnsureTrailingSeparator(Path.Combine(artifactsRoot, "tools"))
         );
     }

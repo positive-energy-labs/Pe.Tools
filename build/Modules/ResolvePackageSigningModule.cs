@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
@@ -146,11 +147,126 @@ public sealed record PackageSigningResult(
         if (!File.Exists(payload) || selectors.Length != 1)
             throw new InvalidOperationException($"Expected one published Pe.App payload and selector under '{appDirectory}'.");
 
-        VerifySignedFile(payload);
-        VerifySignedFile(selectors[0]);
+        VerifySignedFile(payload, RequiresTimestamp());
+        VerifySignedFile(selectors[0], RequiresTimestamp());
     }
 
-    private void VerifySignedFile(string path) {
+    public void SignAndVerifyFile(string path) {
+        if (!File.Exists(path))
+            throw new FileNotFoundException("Package signing input was not found.", path);
+        if (string.IsNullOrWhiteSpace(SignToolPath) || !File.Exists(SignToolPath))
+            throw new InvalidOperationException($"PeSignToolPath must identify signtool.exe: '{SignToolPath}'.");
+
+        var properties = BuildProperties.ToDictionary(row => row.Name, row => row.Value, StringComparer.OrdinalIgnoreCase);
+        properties.TryGetValue("PeCodeSignPfx", out var pfx);
+        var startInfo = new ProcessStartInfo(SignToolPath) {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        startInfo.ArgumentList.Add("sign");
+        if (!string.IsNullOrWhiteSpace(Thumbprint)) {
+            startInfo.ArgumentList.Add("/sha1");
+            startInfo.ArgumentList.Add(Thumbprint);
+        } else if (!string.IsNullOrWhiteSpace(pfx)) {
+            startInfo.ArgumentList.Add("/f");
+            startInfo.ArgumentList.Add(pfx);
+            var password = Environment.GetEnvironmentVariable("PE_CODESIGN_PFX_PASSWORD");
+            if (string.IsNullOrWhiteSpace(password))
+                throw new InvalidOperationException("PE_CODESIGN_PFX_PASSWORD is required with PeCodeSignPfx.");
+            startInfo.ArgumentList.Add("/p");
+            startInfo.ArgumentList.Add(password);
+        } else {
+            throw new InvalidOperationException("No package signing identity was resolved.");
+        }
+        startInfo.ArgumentList.Add("/fd");
+        startInfo.ArgumentList.Add("SHA256");
+        var timestamp = RequiresTimestamp();
+        if (timestamp) {
+            startInfo.ArgumentList.Add("/tr");
+            startInfo.ArgumentList.Add(Environment.GetEnvironmentVariable("PeSignTimestampUrl") ?? "http://timestamp.digicert.com");
+            startInfo.ArgumentList.Add("/td");
+            startInfo.ArgumentList.Add("SHA256");
+        }
+        startInfo.ArgumentList.Add(path);
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException($"Failed to start signtool for '{path}'.");
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException($"Authenticode signing failed for '{path}' ({process.ExitCode}): {error.Trim()} {output.Trim()}");
+        VerifySignedFile(path, timestamp);
+    }
+
+    public void VerifyTimestampedFile(string path) => VerifySignedFile(path, requireTimestamp: true);
+
+    public void VerifyReleaseInstallZip(string path, string expectedVersion, IReadOnlyCollection<string> expectedYears) {
+        using var archive = ZipFile.OpenRead(path);
+        var manifestEntry = archive.Entries.SingleOrDefault(entry =>
+            string.Equals(entry.FullName, "product.payloads.json", StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException($"Install package has no root product.payloads.json: {path}");
+        using var manifestStream = manifestEntry.Open();
+        using var manifest = JsonDocument.Parse(manifestStream);
+        var actualVersion = manifest.RootElement.GetProperty("version").GetString();
+        if (!string.Equals(actualVersion, expectedVersion, StringComparison.Ordinal))
+            throw new InvalidOperationException($"Install package version '{actualVersion}' does not match release '{expectedVersion}'.");
+        var declaredYears = manifest.RootElement.GetProperty("years").EnumerateArray()
+            .Select(value => value.GetString()).Where(value => value is not null).Select(value => value!).ToHashSet(StringComparer.Ordinal);
+        if (!declaredYears.SetEquals(expectedYears))
+            throw new InvalidOperationException(
+                $"Install package years [{string.Join(", ", declaredYears.Order())}] do not match release matrix [{string.Join(", ", expectedYears.Order())}]."
+            );
+        var addinSource = manifest.RootElement.GetProperty("payloads").EnumerateArray()
+            .Single(payload => payload.GetProperty("type").GetString() == "VersionedAddin")
+            .GetProperty("source").GetString()?.TrimEnd('/')
+            ?? throw new InvalidOperationException("Install package VersionedAddin has no source.");
+        foreach (var year in expectedYears) {
+            var yearEntries = archive.Entries.Where(entry =>
+                entry.FullName.StartsWith($"{addinSource}/{year}/", StringComparison.OrdinalIgnoreCase)).ToArray();
+            if (yearEntries.Length == 0)
+                throw new InvalidOperationException($"Install package is missing the declared Revit {year} payload.");
+            if (!yearEntries.Any(entry => Path.GetFileName(entry.FullName).Equals("Pe.App.dll", StringComparison.OrdinalIgnoreCase))
+                || !yearEntries.Any(entry => Path.GetFileName(entry.FullName).StartsWith("Pe.Revit.Loader.", StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException($"Install package Revit {year} payload is missing its signed app or selector.");
+        }
+
+        var signedEntries = archive.Entries.Where(entry => {
+            var name = Path.GetFileName(entry.FullName);
+            return name.Equals("Pe.Host.exe", StringComparison.OrdinalIgnoreCase)
+                   || name.Equals("pea.exe", StringComparison.OrdinalIgnoreCase)
+                   || name.Equals("Pe.Revit.Cli.exe", StringComparison.OrdinalIgnoreCase)
+                   || name.Equals("Pe.App.dll", StringComparison.OrdinalIgnoreCase)
+                   || name.StartsWith("Pe.Revit.Loader.", StringComparison.OrdinalIgnoreCase) && name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase);
+        }).ToArray();
+        foreach (var required in new[] { "Pe.Host.exe", "pea.exe", "Pe.Revit.Cli.exe", "Pe.App.dll" })
+            if (!signedEntries.Any(entry => Path.GetFileName(entry.FullName).Equals(required, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException($"Install package is missing required signed payload '{required}'.");
+
+        var temp = Path.Combine(Path.GetTempPath(), "pe-release-signatures", Guid.NewGuid().ToString("N"));
+        try {
+            Directory.CreateDirectory(temp);
+            foreach (var entry in signedEntries) {
+                var extracted = Path.Combine(temp, Guid.NewGuid().ToString("N") + "-" + Path.GetFileName(entry.FullName));
+                entry.ExtractToFile(extracted);
+                VerifyTimestampedFile(extracted);
+            }
+        } finally {
+            if (Directory.Exists(temp)) Directory.Delete(temp, recursive: true);
+        }
+    }
+
+    private bool RequiresTimestamp() {
+        var configured = BuildProperties.FirstOrDefault(row =>
+            string.Equals(row.Name, "PeSignTimestamp", StringComparison.OrdinalIgnoreCase)).Value;
+        if (!string.IsNullOrWhiteSpace(configured))
+            return !string.Equals(configured, "false", StringComparison.OrdinalIgnoreCase);
+        return !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("PeCodeSignThumbprint"))
+               || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("PeCodeSignPfx"));
+    }
+
+    private void VerifySignedFile(string path, bool requireTimestamp = false) {
         if (string.IsNullOrWhiteSpace(SignToolPath) || !File.Exists(SignToolPath))
             throw new InvalidOperationException(
                 $"PeSignToolPath must identify signtool.exe before packaged signatures can be verified: '{SignToolPath}'."
@@ -165,6 +281,8 @@ public sealed record PackageSigningResult(
         startInfo.ArgumentList.Add("verify");
         startInfo.ArgumentList.Add("/pa");
         startInfo.ArgumentList.Add("/q");
+        if (requireTimestamp)
+            startInfo.ArgumentList.Add("/tw");
         startInfo.ArgumentList.Add(path);
         using (var process = Process.Start(startInfo)
                ?? throw new InvalidOperationException($"Failed to start signtool verification for '{path}'.")) {

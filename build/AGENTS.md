@@ -29,7 +29,9 @@ See `../BUILD.md` for the complete build/runtime decision table. This executable
 
 ## Living Memory
 
-- `Directory.Build.props` owns the repo Revit year list and default year consumed by the SDK.
+- `Directory.Build.props` owns the repo Revit year list and default year consumed by the SDK. The
+  release manifest repeats that list as an installed transport contract; installer packaging must
+  mechanically reject any mismatch rather than treating the JSON as an independent authority.
 - `Pe.Revit.Sdk` owns project taxonomy, target-framework projection, Revit package policy, deploy, and generated configuration behavior.
 - `Pe.Revit.Versioning` owns Revit suffixes and Design Automation eligibility outside MSBuild.
 - `Pe.Shared.Product` owns durable product identity and local runtime/user layout; `ProductLayoutAuthority` owns repo/build/install projection from that product truth.
@@ -42,7 +44,9 @@ See `../BUILD.md` for the complete build/runtime decision table. This executable
   composition here.
 - `./build` owns the isolated build mode and writes to `.artifacts/...` through `ProductLayoutAuthority` / `BuildArtifactLayout`.
 - The default Revit target remains `Debug.R25`.
-- `--configuration <BuildType>` narrows packaging to one selected configuration such as `Release.R25`.
+- `--configuration <BuildType>` narrows ordinary desktop/automation packaging to one selected
+  configuration such as `Release.R25`. Installer packaging is the exception: releases must contain
+  the complete `Directory.Build.props` year matrix and reject `--configuration`.
 - Revit publish roots under `.artifacts/publish/revit/...` are staged by `pack`.
 - `.slnx` is IDE organization and parity input only; it is not the build-matrix source of truth.
 - `.slnx` and configuration strings are compatibility surfaces, not the intended orchestration authority.

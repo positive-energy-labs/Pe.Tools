@@ -20,6 +20,8 @@ namespace Build.Modules;
 [SkipIfNoGitHubToken]
 [DependsOn<ResolveVersioningModule>]
 [DependsOn<ResolveBuildLayoutModule>]
+[DependsOn<ResolveBuildMatrixModule>]
+[DependsOn<ResolvePackageSigningModule>]
 [DependsOn<GenerateGitHubChangelogModule>]
 [DependsOn<CreateBundleModule>(Optional = true)]
 [DependsOn<CreateInstallerModule>(Optional = true)]
@@ -27,15 +29,32 @@ public sealed class PublishGithubModule : Module {
     protected override async Task ExecuteModuleAsync(IModuleContext context, CancellationToken cancellationToken) {
         var versioningResult = await context.GetModule<ResolveVersioningModule>();
         var layoutResult = await context.GetModule<ResolveBuildLayoutModule>();
+        var matrixResult = await context.GetModule<ResolveBuildMatrixModule>();
+        var signingResult = await context.GetModule<ResolvePackageSigningModule>();
         var changelogResult = await context.GetModule<GenerateGitHubChangelogModule>();
         var versioning = versioningResult.ValueOrDefault!;
         var layout = layoutResult.ValueOrDefault!;
+        var matrix = matrixResult.ValueOrDefault!;
+        var signing = signingResult.ValueOrDefault!;
         var changelog = changelogResult.ValueOrDefault!;
 
         Directory.CreateDirectory(layout.Artifacts.PackagesRoot);
         var outputFolder = new Folder(layout.Artifacts.PackagesRoot);
         var targetFiles = EnumerateReleaseArtifacts(outputFolder, versioning.Version).ToArray();
         targetFiles.ShouldNotBeEmpty("No artifacts were found to create the Release");
+        targetFiles.ShouldContain(file => file.Extension == ".msi" && file.Name.Contains(versioning.Version, StringComparison.OrdinalIgnoreCase),
+            "A release requires the SDK-generated versioned MSI.");
+        targetFiles.ShouldContain(file => file.Name.EndsWith($".{versioning.Version}.install.zip", StringComparison.OrdinalIgnoreCase),
+            "A release requires the SDK-generated complete install package.");
+        var msi = targetFiles.Single(file => file.Extension == ".msi" && file.Name.Contains(versioning.Version, StringComparison.OrdinalIgnoreCase));
+        var installZip = targetFiles.Single(file => file.Name.EndsWith($".{versioning.Version}.install.zip", StringComparison.OrdinalIgnoreCase));
+        signing.VerifyTimestampedFile(msi.Path);
+        var years = matrix.PackConfigurations.Select(configuration => {
+            Pe.Shared.RevitVersions.RevitVersionCatalog.TryResolveFromConfiguration(configuration, out var spec)
+                .ShouldBeTrue($"Release configuration '{configuration}' does not map to a Revit year.");
+            return spec.Year.ToString();
+        }).Distinct(StringComparer.Ordinal).ToArray();
+        signing.VerifyReleaseInstallZip(installZip.Path, versioning.Version, years);
 
         var repository = GitHubRepositoryRef.Resolve(context);
         context.Logger.LogInformation("Publishing release to GitHub repository {Repository}", repository.Identifier);

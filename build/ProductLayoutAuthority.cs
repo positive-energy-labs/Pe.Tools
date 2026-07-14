@@ -29,6 +29,10 @@ public sealed record ProductLayoutAuthority(
     public string GetSdkInstallerOutputRoot() =>
         Path.Combine(this.Artifacts.ArtifactsRoot, "out", "installers");
 
+    public string GetInstallerReceiptPath(string version) =>
+        Path.Combine(this.Artifacts.ReceiptsRoot,
+            $"{ProductIdentity.ProductName}.{SanitizeFileNameSegment(version)}.installer.json");
+
     private static string SanitizeFileNameSegment(string value) {
         var invalidCharacters = Path.GetInvalidFileNameChars();
         var characters = value.Select(character => invalidCharacters.Contains(character) ? '-' : character).ToArray();
