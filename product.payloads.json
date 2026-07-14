@@ -2,7 +2,17 @@
   "product": "Pe.Tools",
   "vendor": "Positive Energy",
   "releases": "positive-energy-labs/Pe.Tools",
-  "version": "0.6.11-beta.2",
+  "version": "0.6.11-beta.3",
+  "release": {
+    "artifacts": ["RevitBundle", "Msi", "InstallZip"],
+    "smokePaths": [
+      "app/bin/host/versions/{version}/Pe.Host.exe",
+      "app/bin/host/versions/{version}/web/client/index.html",
+      "app/bin/host/versions/{version}/.pe-staged",
+      "app/bin/pea/versions/{version}/pea.exe",
+      "app/addin/versions/{version}"
+    ]
+  },
   "years": ["2023", "2024", "2025", "2026"],
   "msiUpgradeCode": "DA2F1078-D093-4D58-B1DE-85A4402E49FF",
   "legacy": [
@@ -71,6 +81,7 @@
       "source": "source/pe-tools/apps/host/dist-installed",
       "entry": "Pe.Host.exe",
       "dev": "vp run @pe/host#start",
+      "build": "pnpm --dir source/pe-tools --filter @pe/host build:payload",
       "service": {
         "preferredPort": 5180,
         "health": "/host/status",
@@ -86,7 +97,8 @@
       "type": "VersionedApp",
       "name": "pea",
       "source": "source/pe-tools/apps/pea/dist-installed",
-      "entry": "pea.exe"
+      "entry": "pea.exe",
+      "build": "pnpm --dir source/pe-tools --filter @pe/pea build:installed"
     },
     {
       "type": "PathShim",
