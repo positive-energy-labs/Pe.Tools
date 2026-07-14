@@ -16,7 +16,7 @@ import { callRoute } from "./call-route.ts";
 import { installRoot, peRevitLauncher, validatePeRevitEnvelope } from "./pe-revit-launch.ts";
 import { sandboxesRoute } from "./sandbox-route.ts";
 import { adminShutdownRoute, HostLifecycle, ServiceFileLive } from "./host-lifecycle.ts";
-import { MastraMountLive, MastraRuntime } from "./mastra-runtime.ts";
+import { MastraMountLive, MastraRuntime, withMastraDegrade } from "./mastra-runtime.ts";
 import { staticSpaLayer } from "./static-spa.ts";
 
 export { MastraRuntimeLive } from "./mastra-runtime.ts";
@@ -254,8 +254,10 @@ export function makeHttpLive(options: HttpLiveOptions) {
 
   return HttpRouter.serve(AppLive).pipe(
     // Provide the tenant BEFORE the server layer so its own HttpServer requirement bubbles up and
-    // is satisfied by the same NodeHttpServer.layer below (one bound server, shared).
-    Layer.provide(options.mastraLayer),
+    // is satisfied by the same NodeHttpServer.layer below (one bound server, shared). `withMastraDegrade`
+    // makes the service claim (a merge sibling) structurally independent of agent-runtime boot: any
+    // tenant build failure — failure OR defect — degrades to a 503 tenant instead of collapsing the merge.
+    Layer.provide(withMastraDegrade(options.mastraLayer)),
     Layer.provide(NodeHttpServer.layer(createServer, { host: "127.0.0.1", port: options.port })),
     Layer.provide(NodeHttpClient.layerUndici),
     Layer.provide(RevitBridgeLive),
