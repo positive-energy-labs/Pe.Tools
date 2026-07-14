@@ -284,13 +284,17 @@ public class MakeElecConnectorSettings : IOperationSettings {
     public Parameters SourceParameterNames { get; init; } = new();
     public bool Enabled { get; init; }
 
+    // Names are optional at the schema level: the operation is Enabled-gated and
+    // CollectReferencedParameterNames filters blanks. [Required] here contradicted the
+    // string.Empty defaults — every document omitting this section failed its own
+    // round-trip validation with StringTooShort.
     public class Parameters {
-        [Required] public string NumberOfPoles { get; init; } = string.Empty;
+        public string NumberOfPoles { get; init; } = string.Empty;
 
-        [Required] public string ApparentPower { get; init; } = string.Empty;
+        public string ApparentPower { get; init; } = string.Empty;
 
-        [Required] public string Voltage { get; init; } = string.Empty;
+        public string Voltage { get; init; } = string.Empty;
 
-        [Required] public string MinimumCircuitAmpacity { get; init; } = string.Empty;
+        public string MinimumCircuitAmpacity { get; init; } = string.Empty;
     }
 }
