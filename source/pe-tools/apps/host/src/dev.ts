@@ -24,4 +24,4 @@ const vite = Effect.acquireRelease(
 );
 
 // One process owns both listeners: Vite/HMR on 5173 and the Effect host on 5180.
-NodeRuntime.runMain(Effect.scoped(vite.pipe(Effect.andThen(hostProgram))));
+NodeRuntime.runMain(hostProgram(vite));
