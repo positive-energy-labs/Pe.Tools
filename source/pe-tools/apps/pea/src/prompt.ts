@@ -238,6 +238,7 @@ async function createPeaPromptRuntime(request: PeaPromptRequest): Promise<PeaPro
         // agent-controller runs with requireToolApproval=true and every tool call parks on
         // an interactive approval gate that this headless mode can never answer.
         yolo: true,
+        thinkingLevel: "high",
       },
     },
     storageProfile: createPeaProductStateStorageProfile(),
@@ -381,17 +382,7 @@ function resolveCurrentModel(
     | undefined;
   const modelId =
     controller?.session.modelId || controller?.getState().currentModelId || fallbackModelId;
-  return resolveRuntimeModel(normalizePeaModelId(modelId), requestContext);
-}
-
-function normalizePeaModelId(modelId: string): string {
-  switch (modelId) {
-    case "openai/gpt-5.5":
-    case "openai/gpt-5.4":
-      return defaultPeaAgentModelId;
-    default:
-      return modelId;
-  }
+  return resolveRuntimeModel(modelId, requestContext);
 }
 
 function createLocalResourceId(cwd: string): string {
