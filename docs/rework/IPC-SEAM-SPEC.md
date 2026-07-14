@@ -132,6 +132,13 @@ Ownership boundaries:
 4. **Parallelizable now** (no SDK dependency): D6 log + ADR, D8 constants/mirror/manifest-leg/dead
    code, D5 manifest field authoring.
 
+**Update (2026-07-14, phase 2):** the D9-step-1 entry gate was **voided** — the
+`codex/rider-shell-open-spike` touched no IPC-seam files (it is parked as a quarry per the SDK
+repo's DECISIONS "Rider open" note), so the seam branch did not need to rebase onto it. The SDK side
+(D2/D3/D5 primitives) landed on Pe.Revit.Sdk master (`35602c5`, repacked as beta.90 after the
+`3349f2a` dead-code purge — same-version-different-bytes forbidden, so the repack is the only valid
+beta.90). Pe.Tools phase-2 (this branch) pinned + re-vendored beta.90 and adopted D3/D4/D5-wiring.
+
 ## D10 — Exit gate ("safe to ship on the new seam")
 
 1. SDK repo: `service-parity` green, doctor `ts-client-drift` green, SDK acceptance green.
