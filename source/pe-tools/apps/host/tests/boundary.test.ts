@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +7,7 @@ import { HOST_RPC_BRIDGE_SESSION_HEADER } from "@pe/host-contracts/operation-typ
 import { makeHttpLive } from "../src/app.ts";
 import { productRoot } from "../src/host-ownership.ts";
 import { MastraRuntime } from "../src/mastra-runtime.ts";
+import type { ServiceHostHandle } from "../src/pe-service-host.ts";
 import { readServiceFile } from "../src/pe-service.ts";
 
 /**
@@ -60,10 +60,11 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
   const program = Effect.scoped(
     Effect.gen(function* () {
       const latch = yield* Deferred.make<void>();
+      const handle = yield* Deferred.make<ServiceHostHandle>();
       const HttpLive = makeHttpLive({
         port: 0,
         mastraLayer: StubMastraLive,
-        lifecycle: { latch, serviceToken: randomUUID() },
+        lifecycle: { latch, handle },
         webRoot: webDir,
         includeInstallGc: false,
       });
@@ -137,12 +138,11 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
     expect(info.status).toBe(200);
     expect(await info.json()).toMatchObject({ controllerId: "pea" });
 
-    // (5) graceful shutdown: the service token authorizes, then the server stops + file deleted.
+    // (5) graceful shutdown: the SDK claim token authorizes, then the server stops + file deleted.
     const shutdown = await fetch(`${base}/admin/shutdown`, {
       method: "POST",
       headers: {
         "x-pe-service-token": file.token,
-        "x-pe-host-dev-shutdown": "true",
         "content-type": "application/json",
       },
       body: JSON.stringify({}),
