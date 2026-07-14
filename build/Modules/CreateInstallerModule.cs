@@ -1,4 +1,7 @@
 using Build.Options;
+using System.Security.Cryptography;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ModularPipelines.Attributes;
@@ -22,6 +25,7 @@ namespace Build.Modules;
 [DependsOn<ResolveBuildMatrixModule>]
 [DependsOn<ResolveBuildLayoutModule>]
 [DependsOn<PublishRevitAddinModule>]
+[DependsOn<ResolvePackageSigningModule>]
 public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) : Module {
     private const string SourceManifestFileName = "product.payloads.json";
 
@@ -29,9 +33,11 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         var versioningResult = await context.GetModule<ResolveVersioningModule>();
         var matrixResult = await context.GetModule<ResolveBuildMatrixModule>();
         var layoutResult = await context.GetModule<ResolveBuildLayoutModule>();
+        var signingResult = await context.GetModule<ResolvePackageSigningModule>();
         var versioning = versioningResult.ValueOrDefault!;
         var matrix = matrixResult.ValueOrDefault!;
         var layout = layoutResult.ValueOrDefault!;
+        var signing = signingResult.ValueOrDefault!;
         var rootDirectory = context.Git().RootDirectory;
 
         var hostPackageDirectory = rootDirectory.GetFolder("source").GetFolder("pe-tools").GetFolder("apps").GetFolder("host");
@@ -44,13 +50,20 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         System.IO.File.Exists(sourceManifestPath)
             .ShouldBeTrue($"Checked-in payload manifest not found: {sourceManifestPath}");
 
-        var configurations = matrix.ResolveConfigurations(BuildConfigurationGroup.Pack, buildOptions.Value.Configuration);
+        if (!string.IsNullOrWhiteSpace(buildOptions.Value.Configuration))
+            throw new InvalidOperationException(
+                "Installer packaging always requires the complete Revit-year matrix; omit --configuration."
+            );
+        var configurations = matrix.PackConfigurations.ToArray();
+        ValidateManifestYears(sourceManifestPath, configurations);
         var targetDirectories = configurations
             .Select(layout.GetRevitPublishDirectory)
-            .Where(Directory.Exists)
             .ToArray();
 
-        targetDirectories.ShouldNotBeEmpty("No content were found to create an installer");
+        var missingDirectories = targetDirectories.Where(path => !Directory.Exists(path)).ToArray();
+        missingDirectories.ShouldBeEmpty(
+            $"Installer packaging requires every Revit publish directory. Missing: {string.Join(", ", missingDirectories)}"
+        );
         context.Logger.LogInformation(
             "Installer will include {Count} Revit publish directories: {Directories}",
             targetDirectories.Length,
@@ -61,6 +74,7 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         await PublishRuntimeAsync(
             context,
             hostPackageDirectory,
+            signing,
             cancellationToken
         );
 
@@ -68,6 +82,7 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         await PublishPeaAsync(
             context,
             peaPackageDirectory,
+            signing,
             cancellationToken
         );
 
@@ -128,6 +143,8 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         outputFiles.ShouldNotBeEmpty("SDK MSI helper did not create an installer");
 
         foreach (var outputFile in outputFiles) {
+            signing.SignAndVerifyFile(outputFile);
+            RefreshInstallerReceiptHash(layout.GetInstallerReceiptPath(versioning.Version), outputFile);
             var packagePath = Path.Combine(layout.Artifacts.InstallerPackagesRoot, Path.GetFileName(outputFile));
             System.IO.File.Copy(outputFile, packagePath, true);
             context.Summary.KeyValue("Artifacts", "Installer", new File(packagePath).Path);
@@ -137,6 +154,7 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
     private static async Task PublishRuntimeAsync(
         IModuleContext context,
         Folder hostPackageDirectory,
+        PackageSigningResult signing,
         CancellationToken cancellationToken
     ) {
         context.Logger.LogInformation("Building TS host runtime for installer packaging.");
@@ -151,6 +169,7 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         var builtHostExecutable = Path.Combine(builtHostDirectory, HostProcessIdentity.ExecutableName);
         System.IO.File.Exists(builtHostExecutable)
             .ShouldBeTrue($"TS host executable build did not create {builtHostExecutable}");
+        signing.SignAndVerifyFile(builtHostExecutable);
 
         runtimePublishDirectory.GetFiles(file => file.Exists)
             .ShouldNotBeEmpty("Failed to publish the shared runtime for installer packaging.");
@@ -164,6 +183,7 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
     private static async Task PublishPeaAsync(
         IModuleContext context,
         Folder peaPackageDirectory,
+        PackageSigningResult signing,
         CancellationToken cancellationToken
     ) {
         context.Logger.LogInformation("Building TS pea runtime for installer packaging.");
@@ -178,6 +198,7 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         var builtPeaExecutable = Path.Combine(builtPeaDirectory, PeaCliIdentity.ExecutableName);
         System.IO.File.Exists(builtPeaExecutable)
             .ShouldBeTrue($"TS pea executable build did not create {builtPeaExecutable}");
+        signing.SignAndVerifyFile(builtPeaExecutable);
 
         peaPublishDirectory.GetFiles(file => file.Exists)
             .ShouldNotBeEmpty("Failed to publish the pea runtime for installer packaging.");
@@ -185,6 +206,29 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
             .ShouldBeTrue("Failed to publish TS pea for installer packaging.");
 
         context.Logger.LogInformation("Finished publishing TS pea runtime for installer packaging.");
+    }
+
+    private static void ValidateManifestYears(string manifestPath, IReadOnlyCollection<string> configurations) {
+        using var document = JsonDocument.Parse(System.IO.File.ReadAllText(manifestPath));
+        var declared = document.RootElement.GetProperty("years").EnumerateArray()
+            .Select(value => value.GetString()).Where(value => value is not null).Select(value => value!).Order().ToArray();
+        var expected = configurations.Select(configuration => {
+                RevitVersionCatalog.TryResolveFromConfiguration(configuration, out var spec)
+                    .ShouldBeTrue($"Installer configuration '{configuration}' does not map to a Revit year.");
+                return spec.Year.ToString();
+            })
+            .Distinct(StringComparer.Ordinal).Order().ToArray();
+        declared.ShouldBe(expected, "product.payloads.json years must equal the Directory.Build.props pack matrix");
+    }
+
+    private static void RefreshInstallerReceiptHash(string receiptPath, string msiPath) {
+        if (!System.IO.File.Exists(receiptPath))
+            throw new InvalidOperationException($"SDK MSI receipt was not found after packaging: {receiptPath}");
+        var receipt = JsonNode.Parse(System.IO.File.ReadAllText(receiptPath))?.AsObject()
+            ?? throw new InvalidOperationException($"SDK MSI receipt is not a JSON object: {receiptPath}");
+        receipt["sha256"] = Convert.ToHexString(SHA256.HashData(System.IO.File.ReadAllBytes(msiPath)));
+        System.IO.File.WriteAllText(receiptPath,
+            receipt.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
     }
 
     private static Folder StageRevitPayload(

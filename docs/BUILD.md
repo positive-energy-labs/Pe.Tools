@@ -154,7 +154,7 @@ Pack targets:
 ```powershell
 dotnet run --project .\build\Build.csproj -c Release -- pack desktop --configuration Release.R25
 dotnet run --project .\build\Build.csproj -c Release -- pack pea
-dotnet run --project .\build\Build.csproj -c Release -- pack installer --configuration Release.R25
+dotnet run --project .\build\Build.csproj -c Release -- pack installer
 dotnet run --project .\build\Build.csproj -c Release -- pack automation
 dotnet run --project .\build\Build.csproj -c Release -- pack all
 ```
@@ -169,10 +169,16 @@ Package outputs:
 - Portable install package: `.artifacts/packages/installers/Pe.Tools.<version>.install.zip`
 - Installer: `.artifacts/packages/installers/*.msi`
 
-`CreateInstallerModule` owns only the product-specific source builds: Pe.App year staging and the
-host/Pea SEA payloads. SDK `pe-revit install package` copies those manifest-declared sources into the
-portable zip and writes its release receipt; `pe-revit msi` consumes the same checked manifest.
-Pe.Tools does not rewrite a transport manifest or build zip topology.
+`CreateInstallerModule` owns the product-specific source builds (Pe.App year staging and the
+host/Pea SEA payloads) plus the product release-signing boundary. SDK `pe-revit install package`
+copies the manifest-declared sources into the portable zip and writes its release receipt;
+`pe-revit msi` consumes the same checked manifest and emits the MSI. Pe.Tools then signs that final
+MSI and refreshes only the receipt's MSI SHA-256 so the receipt describes the bytes that will be
+published. Pe.Tools does not rewrite a transport manifest or build zip topology.
+
+Installer packaging is deliberately complete-family: it rejects `--configuration`, requires every
+`Directory.Build.props` Revit year publish root, and requires the manifest `years` transport contract
+to match that matrix exactly. Other pack targets may still use `--configuration` for a narrow artifact.
 
 `CreateAutomationBundleModule` likewise supplies only Pe.Tools policy: the worker project, eligible
 year matrix, output root, and product version. SDK `PeCreateAppBundle` builds each engine lane and
@@ -182,7 +188,7 @@ move Pe.Tools workflow semantics into the SDK or restore product-owned appbundle
 
 ### Publish is a GitHub release workflow
 
-The build pipeline has a `publish` command, but its module publishes release assets through GitHub and is skipped without a GitHub token. Treat it as CI/release-lane behavior, not a normal local validation command.
+The build pipeline has a `publish` command, but its module publishes release assets through GitHub and is skipped without a GitHub token. Treat it as CI/release-lane behavior, not a normal local validation command. Publish requires a production certificate through `PeCodeSignThumbprint` or `PeCodeSignPfx`; PFX use also requires `PE_CODESIGN_PFX_PASSWORD`. RFC 3161 timestamping is mandatory (`PeSignTimestamp=false` is rejected); `PeSignTimestampUrl` may override the default timestamp service.
 
 ```powershell
 dotnet run --project .\build\Build.csproj -c Release -- pack publish
@@ -403,7 +409,7 @@ adapter; a future Pea/host workflow can replace it when product use proves the r
 | Package one year                  | `dotnet run --project .\build\Build.csproj -c Release -- pack --configuration Release.R25`                                       |
 | Package desktop bundle only       | `dotnet run --project .\build\Build.csproj -c Release -- pack desktop --configuration Release.R25`                               |
 | Package Pea payload only          | `dotnet run --project .\build\Build.csproj -c Release -- pack pea`                                                               |
-| Package installer only            | `dotnet run --project .\build\Build.csproj -c Release -- pack installer --configuration Release.R25`                             |
+| Package installer only            | `dotnet run --project .\build\Build.csproj -c Release -- pack installer`                                                        |
 | Package automation appbundle only | `dotnet run --project .\build\Build.csproj -c Release -- pack automation`                                                        |
 | Publish GitHub release artifacts  | `dotnet run --project .\build\Build.csproj -c Release -- pack publish`                                                           |
 | Link source CLI shims             | `pe-revit path ensure` (once), `pe-revit dev link`, then `pea` / `pe-dev automation`                                              |
