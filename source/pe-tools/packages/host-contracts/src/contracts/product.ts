@@ -30,6 +30,9 @@ export const productPathNames = {
 export const hostProcessIdentity = {
   directoryName: "host",
   executableName: "Pe.Host.exe",
+  serviceName: "host",
+  healthPath: "/host/status",
+  shutdownPath: "/admin/shutdown",
   frontendBaseUrlVariable: "PE_TOOLS_FRONTEND_BASE_URL",
   hostBaseUrlVariable: "PE_TOOLS_HOST_BASE_URL",
   hostExecutablePathVariable: "PE_TOOLS_HOST_EXECUTABLE_PATH",
