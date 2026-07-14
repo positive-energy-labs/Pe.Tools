@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-import { BRIDGE_PATH } from "@pe/host-contracts/contracts";
+import { BRIDGE_PATH, hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
 import { getHostStatus } from "./local-ops.ts";
 import {
@@ -123,7 +123,7 @@ const settingsSchemaRoute = HttpRouter.add(
   }),
 );
 
-const hostStatusRoute = HttpRouter.add("GET", "/host/status", () =>
+const hostStatusRoute = HttpRouter.add("GET", hostProcessIdentity.healthPath, () =>
   Effect.gen(function* () {
     const bridge = yield* RevitBridge;
     const snapshot = yield* bridge.snapshot(undefined);
