@@ -5,6 +5,32 @@ Owner surfaces: FamilyFoundry (FF). Consumers: FFManager, FFMigrator, capture, r
 
 ## Implementation ledger
 
+### 2026-07-15 — Phase 4 structural and black-box proof complete
+
+- The checked-in source GRD proves one narrow native convention: two labeled half-arrays share one centered nested
+  vane; the endpoint placeholders align to the opening limits; the nested `_vane length` parameter associates to the
+  host opening length. Generated groups and equality dimensions remain evidence, never authored fields.
+- `nestedFamilies.<slug>` now declares only dependency, Revit type, `frame:family`, and host-parameter bindings.
+  `arrays.<same-slug>` exposes only `CenteredLinear`, member, planar axis, Integer half-count driver, and named
+  start/end planes. The shared slug comes from the observable loaded family name, so capture needs no hidden ID.
+- Dependencies resolve by package convention from `dependencies/<slug>.family.json`, rebuild recursively from the
+  target-year template, and are saved only to a disposable target-year `.rfa` before loading. Generated RFAs are not
+  source artifacts.
+- The compiler reproduces the hand-authored Revit sequence: expose strong named center references in the dependency;
+  align the seed; create two arrays anchored at their far endpoints; move endpoint groups onto limit planes before
+  locking; label both arrays at a safe count of two; then restore the formula so native 0/1 placeholders work.
+- Capture recognizes that exact observable topology from a reopened RFA, including endpoint alignments, axis,
+  half-count label, dependency/type, and nested parameter association. A different array convention is `unmodeled`.
+- Checked in `pe-grd-vane.family.json` and `dependencies/vane.family.json`. The GRD is face/work-plane based and the
+  fixed room-point convention resolves to one foot along `-Y`, its opening side.
+- FreshRevitProcess 2025 proves half counts 0, 1, 8, and 19, shared center identity, endpoint locks, all copied members
+  remaining between limits, exact A → capture → B → capture JSON convergence for both profiles, empty `unmodeled`,
+  and no DataStorage/extensible-storage recovery metadata.
+
+Remaining Phase 4 gate: open the generated GRD in the exact visual sandbox and place it against the room-boundary
+fixture for the final visual/room-resolution walkthrough. A legacy snapshot/apply GRD regression is tracked separately:
+its newly captured offset-plane count is not replayed by that older path; the Family Model proofs above are green.
+
 ### 2026-07-15 — Phase 3 complete
 
 - Checked in `family-model-showcase.family.json` plus a short engineer/agent walkthrough. It covers three types,
@@ -22,7 +48,7 @@ Owner surfaces: FamilyFoundry (FF). Consumers: FFManager, FFMigrator, capture, r
   storage/undeclared parameters, and equal runtime planes, constraints, solids, voids, Connector frames/sizes/config,
   and geometry while flexing Compact, Standard, and Tall. The Phase 2 minimal-box proof remains green.
 
-Next: reproduce and capture the checked-in GRD/vane topology before admitting the single `CenteredLinear` array shape.
+Next: use the checked GRD as the visual placement gate, then begin the plumbing nested-puck subset.
 
 ### 2026-07-15 — Phase 0 baseline
 

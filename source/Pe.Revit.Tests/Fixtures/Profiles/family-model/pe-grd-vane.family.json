@@ -1,0 +1,88 @@
+{
+  "family": {
+    "name": "PE GRD Supply",
+    "category": "Air Terminals",
+    "template": "Generic Model face based",
+    "placement": "FaceHosted"
+  },
+  "familyParameters": {
+    "PE_M_Grd_OpenLength": {
+      "dataType": "Length (Common)",
+      "value": "24in"
+    },
+    "PE_M_Grd_OpenWidth": {
+      "dataType": "Length (Common)",
+      "value": "12in"
+    },
+    "_opening half width": {
+      "dataType": "Length (Common)",
+      "formula": "PE_M_Grd_OpenWidth / 2"
+    },
+    "_vane spacing": {
+      "dataType": "Length (Common)",
+      "value": "3in"
+    },
+    "_show vanes": {
+      "dataType": "Integer",
+      "value": "1"
+    },
+    "_calc vane half count": {
+      "dataType": "Integer",
+      "formula": "if(_show vanes = 0, 0, roundup((PE_M_Grd_OpenWidth / 2) / _vane spacing))"
+    }
+  },
+  "types": {
+    "No Vanes": {
+      "_show vanes": "0"
+    },
+    "Single Vane": {
+      "PE_M_Grd_OpenWidth": "6in",
+      "_vane spacing": "3in"
+    },
+    "Fifteen Vanes": {
+      "PE_M_Grd_OpenWidth": "30in",
+      "_vane spacing": "2in"
+    },
+    "Thirty Seven Vanes": {
+      "PE_M_Grd_OpenWidth": "37in",
+      "_vane spacing": "1in"
+    }
+  },
+  "planes": {
+    "opening.Front": {
+      "from": "plane:family.CenterFB",
+      "by": "param:_opening half width",
+      "direction": "Out"
+    },
+    "opening.Back": {
+      "from": "plane:family.CenterFB",
+      "by": "param:_opening half width",
+      "direction": "In"
+    }
+  },
+  "nestedFamilies": {
+    "vane": {
+      "family": "dependency:vane",
+      "type": "type one",
+      "frame": "frame:family",
+      "parameterBindings": {
+        "_vane length": "param:PE_M_Grd_OpenLength"
+      }
+    }
+  },
+  "arrays": {
+    "vane": {
+      "kind": "CenteredLinear",
+      "member": "nested:vane",
+      "axis": "+Y",
+      "halfCount": "param:_calc vane half count",
+      "limits": {
+        "start": "plane:opening.Front",
+        "end": "plane:opening.Back"
+      }
+    }
+  },
+  "roomCalculationPoint": {
+    "enabled": true
+  }
+}

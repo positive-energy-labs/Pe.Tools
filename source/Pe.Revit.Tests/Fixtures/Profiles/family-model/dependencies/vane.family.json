@@ -1,0 +1,31 @@
+{
+  "family": {
+    "name": "vane",
+    "category": "Generic Models",
+    "template": "Generic Model",
+    "placement": "Unhosted"
+  },
+  "familyParameters": {
+    "_vane length": {
+      "dataType": "Length (Common)",
+      "value": "24in"
+    },
+    "_vane thickness": {
+      "dataType": "Length (Common)",
+      "value": "5/32in"
+    }
+  },
+  "types": {
+    "type one": {},
+    "type two": {}
+  },
+  "solids": {
+    "vane": {
+      "kind": "Prism",
+      "frame": "frame:family",
+      "width": "param:_vane length",
+      "depth": "1/4in",
+      "height": "param:_vane thickness"
+    }
+  }
+}

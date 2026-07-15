@@ -1,5 +1,6 @@
 using Autodesk.Revit.ApplicationServices;
 using Pe.Revit.DocumentData.Parameters;
+using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Shared.RevitData.Families;
 
@@ -26,7 +27,21 @@ public static class FamilyModelBuilder {
         Path.Combine("Family Templates", "English")
     ];
 
-    public static FamilyModelBuildResult Build(Application application, FamilyModel model) {
+    public static FamilyModelBuildResult Build(Application application, FamilyModel model) =>
+        Build(application, model, modelDirectory: null);
+
+    public static FamilyModelBuildResult Build(
+        Application application,
+        FamilyModel model,
+        string? modelDirectory
+    ) => Build(application, model, modelDirectory, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+
+    private static FamilyModelBuildResult Build(
+        Application application,
+        FamilyModel model,
+        string? modelDirectory,
+        ISet<string> dependencyStack
+    ) {
         if (application == null)
             throw new ArgumentNullException(nameof(application));
         if (model == null)
@@ -60,6 +75,9 @@ public static class FamilyModelBuilder {
             if (!applyResult.Success)
                 throw new InvalidOperationException(applyResult.Error ?? "Family Model apply failed.");
 
+            var dependencies = LoadDependencies(application, document, model, modelDirectory, dependencyStack);
+            FamilyModelCompositionBuilder.Apply(document, model, dependencies);
+
             return new FamilyModelBuildResult(document, applyResult, templatePath);
         } catch {
             if (document != null) {
@@ -72,6 +90,86 @@ public static class FamilyModelBuilder {
 
             throw;
         }
+    }
+
+    private static IReadOnlyDictionary<string, Family> LoadDependencies(
+        Application application,
+        Document hostDocument,
+        FamilyModel model,
+        string? modelDirectory,
+        ISet<string> dependencyStack
+    ) {
+        var slugs = model.NestedFamilies.Values
+            .Select(nested => {
+                _ = PortableFamilyReference.TryParse(nested.Family, out var dependency);
+                return dependency.Target;
+            })
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (slugs.Count == 0)
+            return new Dictionary<string, Family>(StringComparer.Ordinal);
+        if (string.IsNullOrWhiteSpace(modelDirectory)) {
+            throw new InvalidOperationException(
+                "A model directory is required when family.json references portable dependencies.");
+        }
+
+        var loaded = new Dictionary<string, Family>(StringComparer.Ordinal);
+        foreach (var slug in slugs) {
+            var dependencyPath = Path.GetFullPath(Path.Combine(modelDirectory!, "dependencies", $"{slug}.family.json"));
+            if (!File.Exists(dependencyPath))
+                throw new FileNotFoundException($"Family Model dependency '{slug}' was not found.", dependencyPath);
+            if (!dependencyStack.Add(dependencyPath))
+                throw new InvalidOperationException($"Family Model dependency cycle includes '{dependencyPath}'.");
+
+            Document? dependencyDocument = null;
+            string? temporaryDirectory = null;
+            try {
+                var parsed = FamilyModelJson.Parse(File.ReadAllText(dependencyPath));
+                if (parsed.Value == null || parsed.Diagnostics.Count != 0) {
+                    throw new InvalidOperationException(string.Join(Environment.NewLine,
+                        parsed.Diagnostics.Select(diagnostic =>
+                            $"{dependencyPath} {diagnostic.Path}: {diagnostic.Message}")));
+                }
+
+                dependencyDocument = Build(
+                    application,
+                    parsed.Value,
+                    Path.GetDirectoryName(dependencyPath),
+                    dependencyStack).Document;
+                FamilyModelCompositionBuilder.PrepareDependency(dependencyDocument);
+                // LoadFamily names an unsaved family after Revit's transient document title (for example Family2),
+                // not OwnerFamily.Name. Save under the portable dependency slug so the observable nested identity
+                // roundtrips without a hidden parameter or extensible-storage alias.
+                temporaryDirectory = Path.Combine(
+                    Path.GetTempPath(),
+                    "Pe.Tools",
+                    "FamilyModelDependencies",
+                    Guid.NewGuid().ToString("N"));
+                _ = Directory.CreateDirectory(temporaryDirectory);
+                dependencyDocument.SaveAs(
+                    Path.Combine(temporaryDirectory, $"{slug}.rfa"),
+                    new SaveAsOptions { OverwriteExistingFile = true, MaximumBackups = 1 });
+                loaded[slug] = dependencyDocument.LoadFamily(hostDocument, new DefaultFamilyLoadOptions());
+            } finally {
+                _ = dependencyStack.Remove(dependencyPath);
+                if (dependencyDocument != null) {
+                    try {
+                        _ = dependencyDocument.Close(false);
+                    } catch {
+                        // Preserve the load/build failure; a nested family document can refuse close while unwinding.
+                    }
+                }
+                if (temporaryDirectory != null && Directory.Exists(temporaryDirectory)) {
+                    try {
+                        Directory.Delete(temporaryDirectory, recursive: true);
+                    } catch {
+                        // The generated RFA is disposable. A cleanup failure must not hide the Revit build result.
+                    }
+                }
+            }
+        }
+
+        return loaded;
     }
 
     public static FamilyModelPlacement GetPlacement(FamilyPlacementType placementType) => placementType switch {

@@ -119,4 +119,79 @@ public sealed class FamilyModelContractTests {
         Assert.That(FamilyModelValidator.Validate(invalid).Select(item => item.Code),
             Does.Contain(FamilyModelDiagnosticCodes.InvalidRoomCalculationPoint));
     }
+
+    [Test]
+    public void Centered_linear_array_keeps_the_GRD_topology_small_and_explicit() {
+        var json = MinimalBoxJson.Replace(
+            "\"Height\": { \"dataType\": \"Length (Common)\", \"value\": \"6in\" }",
+            "\"Height\": { \"dataType\": \"Length (Common)\", \"value\": \"6in\" }, " +
+            "\"Vane Half Count\": { \"dataType\": \"Integer\", \"value\": \"2\" }")
+            .Replace(
+            "\"solids\": {",
+            """
+            "planes": {
+              "opening.Front": { "from": "plane:family.CenterFB", "by": "4in", "direction": "Out" },
+              "opening.Back": { "from": "plane:family.CenterFB", "by": "4in", "direction": "In" }
+            },
+            "nestedFamilies": {
+              "vane": {
+                "family": "dependency:vane",
+                "type": "type one",
+                "frame": "frame:family",
+                "parameterBindings": { "_vane length": "param:Width" }
+              }
+            },
+            "arrays": {
+              "vane": {
+                "kind": "CenteredLinear",
+                "member": "nested:vane",
+                "axis": "+Y",
+                "halfCount": "param:Vane Half Count",
+                "limits": { "start": "plane:opening.Front", "end": "plane:opening.Back" }
+              }
+            },
+            "solids": {
+            """);
+
+        var result = FamilyModelJson.Parse(json);
+
+        Assert.That(result.Diagnostics, Is.Empty,
+            string.Join(Environment.NewLine, result.Diagnostics.Select(item => item.Message)));
+        Assert.That(result.Value!.NestedFamilies["vane"].Family, Is.EqualTo("dependency:vane"));
+        Assert.That(result.Value.Arrays["vane"].Kind, Is.EqualTo(FamilyModelArrayKind.CenteredLinear));
+        Assert.That(result.Value.Arrays["vane"].Limits.Start, Is.EqualTo("plane:opening.Front"));
+    }
+
+    [Test]
+    public void Centered_linear_array_identity_is_derived_from_its_nested_family_not_hidden_metadata() {
+        var model = FamilyModelJson.Parse(MinimalBoxJson).Value!;
+        var invalid = new FamilyModel {
+            Family = model.Family,
+            FamilyParameters = model.FamilyParameters,
+            Types = model.Types,
+            Solids = model.Solids,
+            NestedFamilies = new Dictionary<string, FamilyModelNestedFamily>(StringComparer.Ordinal) {
+                ["vane"] = new() {
+                    Family = "dependency:vane",
+                    Type = "type one",
+                    Frame = "frame:family"
+                }
+            },
+            Arrays = new Dictionary<string, FamilyModelArray>(StringComparer.Ordinal) {
+                ["mystery-array"] = new() {
+                    Kind = FamilyModelArrayKind.CenteredLinear,
+                    Member = "nested:vane",
+                    Axis = "+Y",
+                    HalfCount = "param:Depth",
+                    Limits = new FamilyModelArrayLimits {
+                        Start = "plane:opening.Front",
+                        End = "plane:opening.Back"
+                    }
+                }
+            }
+        };
+
+        Assert.That(FamilyModelValidator.Validate(invalid).Select(item => item.Code),
+            Does.Contain(FamilyModelDiagnosticCodes.InvalidArray));
+    }
 }

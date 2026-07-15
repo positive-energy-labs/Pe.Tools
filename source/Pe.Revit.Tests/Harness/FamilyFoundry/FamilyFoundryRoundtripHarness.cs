@@ -26,7 +26,8 @@ internal static class FamilyFoundryRoundtripHarness {
         Document? buildB = null;
         Document? reopenedB = null;
         try {
-            buildA = FamilyModelBuilder.Build(application, authored).Document;
+            var modelDirectory = Path.GetDirectoryName(fixturePath);
+            buildA = FamilyModelBuilder.Build(application, authored, modelDirectory).Document;
             var savedAPath = RevitFamilyFixtureHarness.SaveDocumentCopy(buildA, outputDirectory, "A");
             RevitFamilyFixtureHarness.CloseDocument(buildA);
             buildA = null;
@@ -34,7 +35,7 @@ internal static class FamilyFoundryRoundtripHarness {
             reopenedA = RevitFamilyFixtureHarness.OpenFamilyDocument(application, savedAPath);
             // This is the black-box boundary: capture receives only the reopened RFA, never authored/compiler state.
             var captured = reopenedA.CaptureFamilyModel();
-            buildB = FamilyModelBuilder.Build(application, captured).Document;
+            buildB = FamilyModelBuilder.Build(application, captured, modelDirectory).Document;
             var savedBPath = RevitFamilyFixtureHarness.SaveDocumentCopy(buildB, outputDirectory, "B");
             RevitFamilyFixtureHarness.CloseDocument(buildB);
             buildB = null;
