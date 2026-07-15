@@ -13,9 +13,9 @@ public sealed class FamilyModelContractTests {
             "placement": "Unhosted"
           },
           "familyParameters": {
-            "Width": { "dataType": "Length", "value": "12in" },
-            "Depth": { "dataType": "Length", "value": "8in" },
-            "Height": { "dataType": "Length", "value": "6in" }
+            "Width": { "dataType": "Length (Common)", "value": "12in" },
+            "Depth": { "dataType": "Length (Common)", "value": "8in" },
+            "Height": { "dataType": "Length (Common)", "value": "6in" }
           },
           "types": {
             "Default": {}
@@ -49,8 +49,8 @@ public sealed class FamilyModelContractTests {
     public void Formula_parameter_cannot_be_overridden_by_a_family_type() {
         var result = FamilyModelJson.Parse(
             MinimalBoxJson
-                .Replace("\"Height\": { \"dataType\": \"Length\", \"value\": \"6in\" }",
-                    "\"Height\": { \"dataType\": \"Length\", \"formula\": \"Width / 2\" }")
+                .Replace("\"Height\": { \"dataType\": \"Length (Common)\", \"value\": \"6in\" }",
+                    "\"Height\": { \"dataType\": \"Length (Common)\", \"formula\": \"Width / 2\" }")
                 .Replace("\"Default\": {}", "\"Default\": { \"Height\": \"5in\" }"));
 
         Assert.That(result.Diagnostics.Select(item => item.Code),
@@ -92,5 +92,16 @@ public sealed class FamilyModelContractTests {
         Assert.That(result.Value, Is.Null);
         Assert.That(result.Diagnostics.Select(item => item.Code),
             Does.Contain(FamilyModelDiagnosticCodes.InvalidJson));
+    }
+
+    [Test]
+    public void Observable_unmodeled_state_is_an_honest_non_executable_contract() {
+        var result = FamilyModelJson.Parse(MinimalBoxJson.Replace(
+            "\"solids\": {",
+            "\"unmodeled\": [{ \"reason\": \"unsupported-array\", \"path\": \"$.arrays\" }], \"solids\": {"));
+
+        Assert.That(result.Value, Is.Not.Null);
+        Assert.That(result.Diagnostics.Select(item => item.Code),
+            Does.Contain(FamilyModelDiagnosticCodes.UnmodeledState));
     }
 }

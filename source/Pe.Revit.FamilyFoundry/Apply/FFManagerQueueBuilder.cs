@@ -29,8 +29,6 @@ public static class FFManagerQueueBuilder {
             new() { Strength = RpStrength.CenterFB, Name = "Center", Color = new Color(115, 0, 253) }
         };
 
-        AddProcessedAtParameter(profile);
-
         var compiledSolids = AuthoredParamDrivenSolidsCompiler.Compile(paramDrivenSolids);
         if (!compiledSolids.CanExecute) {
             throw new InvalidOperationException(
@@ -94,28 +92,6 @@ public static class FFManagerQueueBuilder {
             .Select(name => RevitParameterDefinition.DesiredFamilyParameter(name, SpecTypeId.Length))
             .ToList();
         familyParams.AddParameters(missingParameters);
-    }
-
-    private static void AddProcessedAtParameter(CompiledFamilyFoundryOperationProfile profile) {
-        const string parameterName = "_FOUNDRY LAST PROCESSED AT";
-        var hasProcessedAtParam = profile.AddFamilyParams.Parameters.Any(parameter =>
-            string.Equals(parameter.Name, parameterName, StringComparison.OrdinalIgnoreCase));
-        var hasProcessedAtAssignment = profile.SetKnownParams.GlobalAssignments.Any(assignment =>
-            string.Equals(assignment.Parameter, parameterName, StringComparison.OrdinalIgnoreCase));
-
-        if (!hasProcessedAtParam) {
-            profile.AddFamilyParams.AddParameters([
-                RevitParameterDefinition.DesiredFamilyParameter(parameterName, SpecTypeId.String.Text)
-            ]);
-        }
-
-        if (!hasProcessedAtAssignment) {
-            profile.SetKnownParams.GlobalAssignments.Add(new GlobalParamAssignment {
-                Parameter = parameterName,
-                Kind = ParamAssignmentKind.Formula,
-                Value = $"\"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\""
-            });
-        }
     }
 
     private static SetKnownParamsSettings BuildValueFirstAssignments(SetKnownParamsSettings settings) =>
