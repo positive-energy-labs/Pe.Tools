@@ -1,7 +1,50 @@
 # Family Model (`family.json`) — design spec
 
-Status: implementation contract, Phase 0. Captures the design review + constraint digest of 2026-07-15.
+Status: implementation contract, Phase 2 in progress. Captures the design review + constraint digest of 2026-07-15.
 Owner surfaces: FamilyFoundry (FF). Consumers: FFManager, FFMigrator, capture, replay, Pea, host operations, web preview.
+
+## Implementation ledger
+
+### 2026-07-15 — Phase 0 baseline
+
+- Worktree created at `C:\Users\kaitp\source\repos\Pe.Tools-family-model` on `codex/family-model`.
+- Isolated `Debug.R25` compile of `Pe.Revit.FamilyFoundry` passes with zero errors. The clean worktree first required
+  a normal restore; the initial `--no-restore` failure was missing `project.assets.json`, not a source failure.
+- Existing `PeGrd_Supply_snapshot_apply_aligns_with_runtime_across_existing_type_matrix` passes 1/1 in
+  FreshRevitProcess 2025. This is the pre-Family-Model runtime baseline; RRD was not contacted.
+- The older Family Foundry README/GOALS still prescribe array-shaped parameter declarations and a centralized
+  per-type table. This spec intentionally supersedes those decisions with exact-name maps and per-type objects.
+  Update those durable docs in Phase 1; do not add compatibility aliases.
+- Current `FamilyFoundryRoundtripHarness` proves authored profile → saved family and snapshot → replay, but not the
+  required save/close/reopen A → capture → build B black-box chain. Deepen that harness in Phase 2 rather than
+  creating a parallel harness.
+
+Next slice: implement the smallest no-Revit `FamilyModel` contract, strict validator, portable literal/reference
+parsers, and a minimal box fixture before adding any Revit mutation behavior.
+
+### 2026-07-15 — Phase 1 vertical slice
+
+- `FamilyModel` now lives in `Pe.Shared.RevitData.Families`: portable authored truth is independent of Revit and
+  Family Foundry execution, while `Pe.Revit.FamilyFoundry` owns lowering.
+- Strict lower-camel JSON parsing rejects unknown and duplicate fields. Validation covers exact-name collisions,
+  value/formula conflicts, formula-backed type overrides, declared parameter references, solid profiles, and the
+  fixed `frame:family` starting convention.
+- Portable references preserve exact Revit parameter names. Portable length literals accept decimal, fraction,
+  mixed-fraction, and metric forms; lowering normalizes only at the legacy execution seam.
+- The first lowerer supports family/shared parameters, explicit family type names, Prism/VoidPrism,
+  Cylinder/VoidCylinder, and deterministic family-frame geometry. It compiles through the existing
+  param-driven-solids compiler without changing `OperationProcessor` or FamilyProcessor.
+- Empty family types remain explicit on `FamilyModelLoweringResult`; they are not encoded as fake per-type parameter
+  assignments merely to satisfy the legacy `CreateFamilyTypes` discovery mechanism.
+- Generated Revit plane names use logical solid slugs, never display labels. Observable names are the only available
+  roundtrip identity because hidden metadata is forbidden.
+- Generated schema validates the authored lower-camel shape. Category, parameter data type, and properties group use
+  live value domains. Current schema metadata does not hydrate dictionary keys; add one focused key-options extension
+  when the web/form slice consumes parameter maps rather than regressing the model to arrays.
+- Proof: 7 shared contract tests pass without Revit; 3 lowerer/schema tests pass in FreshRevitProcess 2025.
+
+Next slice: create the minimal family from its declared template, seed explicit types, apply the lowered profile, then
+capture it from a saved/reopened document into a new `FamilyModel` without access to the original model.
 
 ## Outcome
 
