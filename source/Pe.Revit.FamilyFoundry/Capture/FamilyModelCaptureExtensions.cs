@@ -1,3 +1,4 @@
+using Autodesk.Revit.DB.Architecture;
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Shared.RevitData.Families;
@@ -52,6 +53,7 @@ public static class FamilyModelCaptureExtensions {
         }
 
         var solids = ProjectSolids(snapshot.AuthoredParamDrivenSolids, unmodeled);
+        var roomCalculationPoint = ProjectRoomCalculationPoint(document, placement, unmodeled);
         AddUnmodeledObservableState(document, snapshot, unmodeled);
         return new FamilyModel {
             Family = new FamilyModelHeader {
@@ -64,8 +66,47 @@ public static class FamilyModelCaptureExtensions {
             SharedParameters = sharedParameters,
             Types = types,
             Solids = solids,
+            RoomCalculationPoint = roomCalculationPoint,
             Unmodeled = unmodeled
         };
+    }
+
+    private static FamilyModelRoomCalculationPoint? ProjectRoomCalculationPoint(
+        Document document,
+        FamilyModelPlacement placement,
+        ICollection<FamilyModelUnmodeledFact> unmodeled
+    ) {
+        if (!document.OwnerFamily.ShowSpatialElementCalculationPoint)
+            return null;
+
+        var direction = placement == FamilyModelPlacement.Unhosted ? XYZ.BasisZ : new XYZ(0, -1, 0);
+        var expected = direction;
+        var singlePoints = new FilteredElementCollector(document)
+            .OfClass(typeof(SpatialElementCalculationPoint))
+            .Cast<SpatialElementCalculationPoint>()
+            .ToList();
+        var fromToPoints = new FilteredElementCollector(document)
+            .OfClass(typeof(SpatialElementFromToCalculationPoints))
+            .Cast<SpatialElementFromToCalculationPoints>()
+            .ToList();
+        var isPeConvention = singlePoints.Count + fromToPoints.Count > 0 &&
+                             singlePoints.All(point => point.Position.IsAlmostEqualTo(expected, 1e-6)) &&
+                             fromToPoints.All(point =>
+                                 point.FromPosition.IsAlmostEqualTo(expected.Negate(), 1e-6) &&
+                                 point.ToPosition.IsAlmostEqualTo(expected, 1e-6));
+        if (!isPeConvention) {
+            unmodeled.Add(new FamilyModelUnmodeledFact {
+                Reason = "non-default-room-calculation-point",
+                Path = "$.roomCalculationPoint",
+                Facts = new Dictionary<string, string>(StringComparer.Ordinal) {
+                    ["placement"] = placement.ToString(),
+                    ["singlePoints"] = singlePoints.Count.ToString(),
+                    ["fromToPoints"] = fromToPoints.Count.ToString()
+                }
+            });
+        }
+
+        return new FamilyModelRoomCalculationPoint { Enabled = true };
     }
 
     private static void AddUnmodeledObservableState(

@@ -1,6 +1,7 @@
 using Newtonsoft.Json.Linq;
 using Pe.Revit.FamilyFoundry.DesiredState;
 using Pe.Revit.FamilyFoundry.Profiles;
+using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Shared.RevitData.Families;
 using System.Globalization;
 
@@ -41,7 +42,10 @@ public static class FamilyModelLowerer {
                 SourceNames = pair.Value.MappedFrom.ToList()
             }).ToList(),
             PerTypeAssignmentsTable = LowerTypeAssignments(model),
-            ParamDrivenSolids = LowerSolids(model.Solids)
+            ParamDrivenSolids = LowerSolids(model.Solids),
+            AddRoomDingler = new AddRoomDinglerSettings {
+                Enabled = model.RoomCalculationPoint?.Enabled == true
+            }
         };
 
         // Empty types are real authored state. Keep their names beside the lowered profile instead of inventing a

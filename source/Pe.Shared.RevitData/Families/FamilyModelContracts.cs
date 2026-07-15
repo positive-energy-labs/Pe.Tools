@@ -29,8 +29,17 @@ public sealed class FamilyModel {
     [JsonProperty("solids")]
     public Dictionary<string, FamilyModelSolid> Solids { get; init; } = new(StringComparer.Ordinal);
 
+    [JsonProperty("roomCalculationPoint", NullValueHandling = NullValueHandling.Ignore)]
+    public FamilyModelRoomCalculationPoint? RoomCalculationPoint { get; init; }
+
     [JsonProperty("unmodeled")]
     public List<FamilyModelUnmodeledFact> Unmodeled { get; init; } = [];
+}
+
+[JsonObject(MemberSerialization.OptIn)]
+public sealed class FamilyModelRoomCalculationPoint {
+    [JsonProperty("enabled", Required = Required.Always)]
+    public bool Enabled { get; init; }
 }
 
 [JsonObject(MemberSerialization.OptIn)]
@@ -143,6 +152,7 @@ public static class FamilyModelDiagnosticCodes {
     public const string InvalidSolid = "invalid-solid";
     public const string InvalidDriver = "invalid-driver";
     public const string UnmodeledState = "unmodeled-state";
+    public const string InvalidRoomCalculationPoint = "invalid-room-calculation-point";
 }
 
 public sealed record FamilyModelDiagnostic(string Code, string Path, string Message);
@@ -202,6 +212,12 @@ public static class FamilyModelValidator {
 
         ValidateTypes(model.Types, parameters, diagnostics);
         ValidateSolids(model.Solids, new HashSet<string>(parameters.Keys, StringComparer.Ordinal), diagnostics);
+        if (model.RoomCalculationPoint is { Enabled: false }) {
+            diagnostics.Add(new FamilyModelDiagnostic(
+                FamilyModelDiagnosticCodes.InvalidRoomCalculationPoint,
+                "$.roomCalculationPoint.enabled",
+                "roomCalculationPoint only exposes the PE enabled convention; omit the section to disable it."));
+        }
         foreach (var fact in model.Unmodeled) {
             diagnostics.Add(new FamilyModelDiagnostic(
                 FamilyModelDiagnosticCodes.UnmodeledState,

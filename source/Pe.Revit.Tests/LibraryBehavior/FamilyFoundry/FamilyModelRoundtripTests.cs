@@ -25,6 +25,7 @@ public sealed class FamilyModelRoundtripTests {
                 nameof(this.Minimal_box_roundtrips_from_reopened_Revit_state_without_metadata));
 
             Assert.That(artifact.CapturedFromA.Unmodeled, Is.Empty);
+            Assert.That(artifact.CapturedFromA.RoomCalculationPoint?.Enabled, Is.True);
             AssertNoUndeclaredParameters(artifact.ReopenedA, artifact.Authored);
             AssertNoUndeclaredParameters(artifact.ReopenedB, artifact.CapturedFromA);
             AssertNoPersistedMetadata(artifact.ReopenedA);
