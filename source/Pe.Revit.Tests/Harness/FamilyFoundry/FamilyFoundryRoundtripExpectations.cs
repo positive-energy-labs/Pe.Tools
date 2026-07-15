@@ -1,5 +1,6 @@
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.Profiles;
+using Pe.Shared.RevitData.Families;
 
 namespace Pe.Revit.Tests;
 
@@ -15,6 +16,20 @@ internal sealed record RoundtripArtifact(
     public void CloseDocuments() {
         RevitFamilyFixtureHarness.CloseDocument(this.SavedDocument);
         RevitFamilyFixtureHarness.CloseDocument(this.SourceDocument);
+    }
+}
+
+internal sealed record FamilyModelRoundtripArtifact(
+    FamilyModel Authored,
+    FamilyModel CapturedFromA,
+    string SavedAPath,
+    string SavedBPath,
+    Document ReopenedA,
+    Document ReopenedB
+) {
+    public void CloseDocuments() {
+        RevitFamilyFixtureHarness.CloseDocument(this.ReopenedA);
+        RevitFamilyFixtureHarness.CloseDocument(this.ReopenedB);
     }
 }
 

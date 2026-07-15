@@ -28,6 +28,21 @@ public sealed class FamilyModel {
 
     [JsonProperty("solids")]
     public Dictionary<string, FamilyModelSolid> Solids { get; init; } = new(StringComparer.Ordinal);
+
+    [JsonProperty("unmodeled")]
+    public List<FamilyModelUnmodeledFact> Unmodeled { get; init; } = [];
+}
+
+[JsonObject(MemberSerialization.OptIn)]
+public sealed class FamilyModelUnmodeledFact {
+    [JsonProperty("reason", Required = Required.Always)]
+    public string Reason { get; init; } = string.Empty;
+
+    [JsonProperty("path", Required = Required.Always)]
+    public string Path { get; init; } = string.Empty;
+
+    [JsonProperty("facts")]
+    public Dictionary<string, string> Facts { get; init; } = new(StringComparer.Ordinal);
 }
 
 [JsonObject(MemberSerialization.OptIn)]
@@ -127,6 +142,7 @@ public static class FamilyModelDiagnosticCodes {
     public const string UnsupportedFrame = "unsupported-frame";
     public const string InvalidSolid = "invalid-solid";
     public const string InvalidDriver = "invalid-driver";
+    public const string UnmodeledState = "unmodeled-state";
 }
 
 public sealed record FamilyModelDiagnostic(string Code, string Path, string Message);
@@ -186,6 +202,12 @@ public static class FamilyModelValidator {
 
         ValidateTypes(model.Types, parameters, diagnostics);
         ValidateSolids(model.Solids, new HashSet<string>(parameters.Keys, StringComparer.Ordinal), diagnostics);
+        foreach (var fact in model.Unmodeled) {
+            diagnostics.Add(new FamilyModelDiagnostic(
+                FamilyModelDiagnosticCodes.UnmodeledState,
+                fact.Path,
+                $"Family state '{fact.Reason}' is observable but not executable by this Family Model version."));
+        }
         return diagnostics;
     }
 

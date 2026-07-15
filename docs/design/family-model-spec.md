@@ -1,6 +1,6 @@
 # Family Model (`family.json`) — design spec
 
-Status: implementation contract, Phase 2 in progress. Captures the design review + constraint digest of 2026-07-15.
+Status: implementation contract, Phase 3 in progress. Captures the design review + constraint digest of 2026-07-15.
 Owner surfaces: FamilyFoundry (FF). Consumers: FFManager, FFMigrator, capture, replay, Pea, host operations, web preview.
 
 ## Implementation ledger
@@ -45,6 +45,27 @@ parsers, and a minimal box fixture before adding any Revit mutation behavior.
 
 Next slice: create the minimal family from its declared template, seed explicit types, apply the lowered profile, then
 capture it from a saved/reopened document into a new `FamilyModel` without access to the original model.
+
+### 2026-07-15 — Phase 2 black-box kernel
+
+- `FamilyModelBuilder` now resolves an installed target-year template by portable template name, verifies its observed
+  placement, configures category/name, seeds explicit empty family types, and applies through the existing FFManager
+  executor. It never applies geometry to an arbitrary preexisting family.
+- Capture accepts only a reopened family `Document`. Revit does not retain the source `.rft`; the first proven capture
+  convention infers `Generic Model` from observable Generic Models + Unhosted state. Unknown conventions become
+  `unmodeled`, never recovery metadata.
+- The minimal family-frame prism decompiles from observable named planes and associations. Logical solid identity is
+  recovered from the generated `<slug>.left/.right/.back/.front/.top` plane names, not from ElementIds or hidden state.
+- FFManager no longer injects `_FOUNDRY LAST PROCESSED AT`. FFMigrator was intentionally left unchanged and bulk
+  migration was not rerun.
+- `FamilyFoundryRoundtripHarness` now owns the required build A → save/close/reopen → capture from A → build/save/reopen
+  B chain. The test compares captured serialization, types, parameter values, named planes, dimensions, and solid
+  bounds, and rejects undeclared family parameters, `DataStorage`, or extensible-storage entities.
+- Proof: `Minimal_box_roundtrips_from_reopened_Revit_state_without_metadata` passes 1/1 in FreshRevitProcess 2025;
+  source compile passes with zero errors. RRD was not contacted.
+
+Next slice: prove the portable reference/plane/frame vocabulary needed before arrays, nested vanes, and connector pucks
+can share one spatial language. Keep each addition tied to a checked-in example; do not expose generic transforms first.
 
 ## Outcome
 

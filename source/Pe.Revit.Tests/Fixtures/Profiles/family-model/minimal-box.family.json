@@ -6,9 +6,9 @@
     "placement": "Unhosted"
   },
   "familyParameters": {
-    "Width": { "dataType": "Length", "value": "12in" },
-    "Depth": { "dataType": "Length", "value": "8in" },
-    "Height": { "dataType": "Length", "value": "6in" }
+    "Width": { "dataType": "Length (Common)", "value": "12in" },
+    "Depth": { "dataType": "Length (Common)", "value": "8in" },
+    "Height": { "dataType": "Length (Common)", "value": "6in" }
   },
   "types": { "Default": {} },
   "solids": {

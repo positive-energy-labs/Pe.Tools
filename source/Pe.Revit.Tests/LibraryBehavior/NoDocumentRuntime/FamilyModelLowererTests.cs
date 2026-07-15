@@ -49,9 +49,9 @@ public sealed class FamilyModelLowererTests {
                 Placement = FamilyModelPlacement.Unhosted
             },
             FamilyParameters = new Dictionary<string, FamilyModelFamilyParameter>(StringComparer.Ordinal) {
-                ["Width"] = new() { DataType = "Length", Value = "12in" },
-                ["Depth"] = new() { DataType = "Length", Value = "8in" },
-                ["Height"] = new() { DataType = "Length", Value = "6in" }
+                ["Width"] = new() { DataType = "Length (Common)", Value = "12in" },
+                ["Depth"] = new() { DataType = "Length (Common)", Value = "8in" },
+                ["Height"] = new() { DataType = "Length (Common)", Value = "6in" }
             },
             Types = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal) {
                 ["Default"] = new(StringComparer.Ordinal),
