@@ -151,7 +151,7 @@ function App() {
           <div className="flex items-center gap-2">
             <span className="size-2 rounded-full bg-primary" />
             <span className="text-sm font-semibold tracking-tight text-foreground">
-              Positive Energy (beta.5)
+              Positive Energy
             </span>
           </div>
           <div className="flex items-center gap-3">

@@ -2,7 +2,7 @@
   "product": "Pe.Tools",
   "vendor": "Positive Energy",
   "releases": "positive-energy-labs/Pe.Tools",
-  "version": "0.6.11-beta.5",
+  "version": "0.6.12",
   "release": {
     "artifacts": ["RevitBundle", "Msi", "InstallZip"],
     "smokeService": "host",
