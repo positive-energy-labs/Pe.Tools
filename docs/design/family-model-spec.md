@@ -56,6 +56,8 @@ capture it from a saved/reopened document into a new `FamilyModel` without acces
   `unmodeled`, never recovery metadata.
 - The minimal family-frame prism decompiles from observable named planes and associations. Logical solid identity is
   recovered from the generated `<slug>.left/.right/.back/.front/.top` plane names, not from ElementIds or hidden state.
+- `roomCalculationPoint` is implemented at its locked minimal surface: omitted or `{ "enabled": true }`. Apply uses the
+  existing one-foot host-derived convention; capture recognizes that exact observable state and quarantines deviations.
 - FFManager no longer injects `_FOUNDRY LAST PROCESSED AT`. FFMigrator was intentionally left unchanged and bulk
   migration was not rerun.
 - `FamilyFoundryRoundtripHarness` now owns the required build A → save/close/reopen → capture from A → build/save/reopen

@@ -19,5 +19,6 @@
       "depth": "param:Depth",
       "height": "param:Height"
     }
-  }
+  },
+  "roomCalculationPoint": { "enabled": true }
 }

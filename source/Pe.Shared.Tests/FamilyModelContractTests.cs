@@ -104,4 +104,19 @@ public sealed class FamilyModelContractTests {
         Assert.That(result.Diagnostics.Select(item => item.Code),
             Does.Contain(FamilyModelDiagnosticCodes.UnmodeledState));
     }
+
+    [Test]
+    public void Disabled_room_calculation_point_is_omission_not_another_mode() {
+        var model = FamilyModelJson.Parse(MinimalBoxJson).Value!;
+        var invalid = new FamilyModel {
+            Family = model.Family,
+            FamilyParameters = model.FamilyParameters,
+            Types = model.Types,
+            Solids = model.Solids,
+            RoomCalculationPoint = new FamilyModelRoomCalculationPoint { Enabled = false }
+        };
+
+        Assert.That(FamilyModelValidator.Validate(invalid).Select(item => item.Code),
+            Does.Contain(FamilyModelDiagnosticCodes.InvalidRoomCalculationPoint));
+    }
 }
