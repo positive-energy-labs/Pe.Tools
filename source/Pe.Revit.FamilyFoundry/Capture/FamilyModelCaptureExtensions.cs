@@ -58,6 +58,7 @@ public static class FamilyModelCaptureExtensions {
         var frames = new Dictionary<string, FamilyModelFrame>(StringComparer.Ordinal);
         var connectors = ProjectConnectors(document, snapshot.AuthoredParamDrivenSolids, solids, frames,
             unmodeled);
+        var composition = ProjectComposition(document, unmodeled);
         var roomCalculationPoint = ProjectRoomCalculationPoint(document, placement, unmodeled);
         AddUnmodeledObservableState(document, snapshot, unmodeled);
         return new FamilyModel {
@@ -73,11 +74,167 @@ public static class FamilyModelCaptureExtensions {
             Planes = planes,
             Frames = frames,
             Solids = solids,
+            NestedFamilies = composition.NestedFamilies,
             Connectors = connectors,
+            Arrays = composition.Arrays,
             RoomCalculationPoint = roomCalculationPoint,
             Unmodeled = unmodeled
         };
     }
+
+    private static ProjectedComposition ProjectComposition(
+        Document document,
+        ICollection<FamilyModelUnmodeledFact> unmodeled
+    ) {
+        var arrays = new FilteredElementCollector(document)
+            .OfClass(typeof(LinearArray))
+            .Cast<LinearArray>()
+            .ToList();
+        if (arrays.Count == 0)
+            return new ProjectedComposition(
+                new Dictionary<string, FamilyModelNestedFamily>(StringComparer.Ordinal),
+                new Dictionary<string, FamilyModelArray>(StringComparer.Ordinal));
+
+        var nestedFamilies = new Dictionary<string, FamilyModelNestedFamily>(StringComparer.Ordinal);
+        var projectedArrays = new Dictionary<string, FamilyModelArray>(StringComparer.Ordinal);
+        foreach (var pair in arrays.GroupBy(array => array.GetOriginalMemberIds().Single())) {
+            var halves = pair.ToList();
+            if (halves.Count != 2 || halves.Any(array => array.Label == null)) {
+                AddUnmodeledArray(unmodeled, pair.Key, "array-is-not-centered-two-half-topology");
+                continue;
+            }
+
+            var seed = GetSingleNestedFamily(document, pair.Key);
+            if (seed == null) {
+                AddUnmodeledArray(unmodeled, pair.Key, "array-center-is-not-one-nested-family");
+                continue;
+            }
+
+            var dependencySlug = ToLogicalSlug(seed.Symbol.Family.Name);
+            if (string.IsNullOrWhiteSpace(dependencySlug) ||
+                nestedFamilies.ContainsKey(dependencySlug) ||
+                projectedArrays.ContainsKey(dependencySlug)) {
+                AddUnmodeledArray(unmodeled, pair.Key, "nested-family-identity-is-not-unique");
+                continue;
+            }
+
+            var endpoints = halves.Select(array => GetArrayEndpoint(document, array, seed)).ToList();
+            if (endpoints.Any(endpoint => endpoint == null)) {
+                AddUnmodeledArray(unmodeled, pair.Key, "array-endpoint-is-not-observable");
+                continue;
+            }
+
+            var resolvedEndpoints = endpoints.Select(endpoint => endpoint!).ToList();
+            var axis = InferPlanAxis(seed, resolvedEndpoints);
+            if (axis == null) {
+                AddUnmodeledArray(unmodeled, pair.Key, "array-axis-is-not-planar-and-centered");
+                continue;
+            }
+
+            var ordered = resolvedEndpoints
+                .OrderBy(endpoint => AxisCoordinate(endpoint.Point, axis))
+                .ToList();
+            var startLimit = FindAlignedLimitPlane(document, ordered[0].Instance);
+            var endLimit = FindAlignedLimitPlane(document, ordered[1].Instance);
+            if (startLimit == null || endLimit == null) {
+                AddUnmodeledArray(unmodeled, pair.Key, "array-endpoint-limit-alignment-not-found");
+                continue;
+            }
+
+            nestedFamilies[dependencySlug] = new FamilyModelNestedFamily {
+                Family = $"dependency:{dependencySlug}",
+                Type = seed.Symbol.Name,
+                Frame = "frame:family",
+                ParameterBindings = seed.Parameters
+                    .Cast<Parameter>()
+                    .Select(parameter => (
+                        Target: parameter.Definition?.Name,
+                        Source: document.FamilyManager.GetAssociatedFamilyParameter(parameter)?.Definition?.Name))
+                    .Where(binding => !string.IsNullOrWhiteSpace(binding.Target) &&
+                                      !string.IsNullOrWhiteSpace(binding.Source))
+                    .ToDictionary(
+                        binding => binding.Target!,
+                        binding => $"param:{binding.Source}",
+                        StringComparer.Ordinal)
+            };
+            projectedArrays[dependencySlug] = new FamilyModelArray {
+                Kind = FamilyModelArrayKind.CenteredLinear,
+                Member = $"nested:{dependencySlug}",
+                Axis = axis,
+                HalfCount = $"param:{halves[0].Label.Definition.Name}",
+                Limits = new FamilyModelArrayLimits {
+                    Start = $"plane:{startLimit.Name}",
+                    End = $"plane:{endLimit.Name}"
+                }
+            };
+        }
+
+        return new ProjectedComposition(nestedFamilies, projectedArrays);
+    }
+
+    private static FamilyInstance? GetSingleNestedFamily(Document document, ElementId memberId) {
+        var element = document.GetElement(memberId);
+        return element switch {
+            Group group => group.GetMemberIds().Select(document.GetElement).OfType<FamilyInstance>().SingleOrDefault(),
+            FamilyInstance familyInstance => familyInstance,
+            _ => null
+        };
+    }
+
+    private static ArrayEndpoint? GetArrayEndpoint(
+        Document document,
+        LinearArray array,
+        FamilyInstance seed
+    ) => array.GetCopiedMemberIds()
+        .Select(id => (MemberId: id, Instance: GetSingleNestedFamily(document, id)))
+        .Where(item => item.Instance?.Location is LocationPoint)
+        .Select(item => new ArrayEndpoint(
+            item.Instance!,
+            ((LocationPoint)item.Instance!.Location).Point))
+        .OrderByDescending(item => item.Point.DistanceTo(((LocationPoint)seed.Location).Point))
+        .FirstOrDefault();
+
+    private static string? InferPlanAxis(FamilyInstance seed, IReadOnlyList<ArrayEndpoint> endpoints) {
+        if (seed.Location is not LocationPoint seedLocation || endpoints.Count != 2)
+            return null;
+        var deltas = endpoints.Select(endpoint => endpoint.Point - seedLocation.Point).ToList();
+        var xDominant = deltas.All(delta => Math.Abs(delta.X) > Math.Abs(delta.Y) && Math.Abs(delta.Z) < 1e-6);
+        var yDominant = deltas.All(delta => Math.Abs(delta.Y) > Math.Abs(delta.X) && Math.Abs(delta.Z) < 1e-6);
+        if (!xDominant && !yDominant)
+            return null;
+        var coordinates = xDominant ? deltas.Select(delta => delta.X) : deltas.Select(delta => delta.Y);
+        var values = coordinates.ToList();
+        if (values.Min() >= -1e-6 || values.Max() <= 1e-6)
+            return null;
+        return xDominant ? "+X" : "+Y";
+    }
+
+    private static double AxisCoordinate(XYZ point, string axis) =>
+        axis.EndsWith("X", StringComparison.Ordinal) ? point.X : point.Y;
+
+    private static ReferencePlane? FindAlignedLimitPlane(Document document, FamilyInstance endpoint) =>
+        new FilteredElementCollector(document)
+            .OfClass(typeof(Dimension))
+            .Cast<Dimension>()
+            .Select(dimension => dimension.References
+                .Cast<Reference>()
+                .Select(reference => document.GetElement(reference.ElementId))
+                .ToList())
+            .Where(elements => elements.OfType<FamilyInstance>().Any(instance => instance.Id == endpoint.Id))
+            .SelectMany(elements => elements.OfType<ReferencePlane>())
+            .FirstOrDefault(plane => plane.Name is not "Center (Left/Right)" and not "Center (Front/Back)");
+
+    private static void AddUnmodeledArray(
+        ICollection<FamilyModelUnmodeledFact> unmodeled,
+        ElementId originalMemberId,
+        string reason
+    ) => unmodeled.Add(new FamilyModelUnmodeledFact {
+        Reason = reason,
+        Path = "$.arrays",
+        Facts = new Dictionary<string, string>(StringComparer.Ordinal) {
+            ["originalMemberId"] = originalMemberId.Value().ToString()
+        }
+    });
 
     private static Dictionary<string, FamilyModelPlane> ProjectPlanes(
         AuthoredParamDrivenSolidsSettings? authored,
@@ -331,7 +488,10 @@ public static class FamilyModelCaptureExtensions {
 
         var observedExtrusions = new FilteredElementCollector(document)
             .OfClass(typeof(Extrusion))
-            .GetElementCount();
+            .Cast<Extrusion>()
+            // Face/work-plane templates carry a category-less 8x8x1 host placeholder extrusion. Match that exact
+            // installed-template artifact; ordinary authored extrusions may also have a null Category.
+            .Count(extrusion => !IsFaceHostPlaceholderExtrusion(document, extrusion));
         var recognizedConnectorStubs = RawConnectorUnitInference.MatchOwnedStubs(document)
             .Values
             .Select(match => match.Extrusion.Id)
@@ -354,6 +514,20 @@ public static class FamilyModelCaptureExtensions {
         });
     }
 
+    private static bool IsFaceHostPlaceholderExtrusion(Document document, Extrusion extrusion) {
+        if (document.OwnerFamily.FamilyPlacementType != FamilyPlacementType.WorkPlaneBased ||
+            extrusion.Category != null ||
+            !string.Equals(extrusion.Sketch?.SketchPlane?.Name, "Ref. Level", StringComparison.Ordinal))
+            return false;
+        var bounds = extrusion.get_BoundingBox(null);
+        if (bounds == null)
+            return false;
+        var size = bounds.Max - bounds.Min;
+        return Math.Abs(size.X - 8.0) < 1e-6 &&
+               Math.Abs(size.Y - 8.0) < 1e-6 &&
+               Math.Abs(size.Z - 1.0) < 1e-6;
+    }
+
     private static string InferTemplate(
         string category,
         FamilyModelPlacement placement,
@@ -362,8 +536,13 @@ public static class FamilyModelCaptureExtensions {
         // Revit does not retain the source .rft path in an RFA. Capture therefore recognizes only proven PE
         // template conventions from observable category + placement; it never writes recovery metadata.
         if (placement == FamilyModelPlacement.Unhosted &&
-            string.Equals(category, "Generic Models", StringComparison.OrdinalIgnoreCase))
+            (string.Equals(category, "Generic Models", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(category, "Air Terminals", StringComparison.OrdinalIgnoreCase)))
             return "Generic Model";
+        if (placement == FamilyModelPlacement.FaceHosted &&
+            (string.Equals(category, "Generic Models", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(category, "Air Terminals", StringComparison.OrdinalIgnoreCase)))
+            return "Generic Model face based";
 
         unmodeled.Add(new FamilyModelUnmodeledFact {
             Reason = "template-convention-unknown",
@@ -554,4 +733,9 @@ public static class FamilyModelCaptureExtensions {
                 : RevitLabelCatalog.GetLabelForPropertyGroup(parameter.PropertiesGroup);
 
     private sealed record ProjectedAssignment(string? UniformValue);
+    private sealed record ProjectedComposition(
+        Dictionary<string, FamilyModelNestedFamily> NestedFamilies,
+        Dictionary<string, FamilyModelArray> Arrays
+    );
+    private sealed record ArrayEndpoint(FamilyInstance Instance, XYZ Point);
 }

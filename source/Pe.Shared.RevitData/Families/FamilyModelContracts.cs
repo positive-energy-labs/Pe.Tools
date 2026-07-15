@@ -35,8 +35,14 @@ public sealed class FamilyModel {
     [JsonProperty("solids")]
     public Dictionary<string, FamilyModelSolid> Solids { get; init; } = new(StringComparer.Ordinal);
 
+    [JsonProperty("nestedFamilies")]
+    public Dictionary<string, FamilyModelNestedFamily> NestedFamilies { get; init; } = new(StringComparer.Ordinal);
+
     [JsonProperty("connectors")]
     public Dictionary<string, FamilyModelConnector> Connectors { get; init; } = new(StringComparer.Ordinal);
+
+    [JsonProperty("arrays")]
+    public Dictionary<string, FamilyModelArray> Arrays { get; init; } = new(StringComparer.Ordinal);
 
     [JsonProperty("roomCalculationPoint", NullValueHandling = NullValueHandling.Ignore)]
     public FamilyModelRoomCalculationPoint? RoomCalculationPoint { get; init; }
@@ -187,6 +193,60 @@ public enum FamilySolidKind {
 }
 
 [JsonObject(MemberSerialization.OptIn)]
+public sealed class FamilyModelNestedFamily {
+    [JsonProperty("label")]
+    public string? Label { get; init; }
+
+    [JsonProperty("family", Required = Required.Always)]
+    public string Family { get; init; } = string.Empty;
+
+    [JsonProperty("type", Required = Required.Always)]
+    public string Type { get; init; } = string.Empty;
+
+    [JsonProperty("frame", Required = Required.Always)]
+    public string Frame { get; init; } = string.Empty;
+
+    [JsonProperty("parameterBindings")]
+    public Dictionary<string, string> ParameterBindings { get; init; } = new(StringComparer.Ordinal);
+}
+
+[JsonObject(MemberSerialization.OptIn)]
+public sealed class FamilyModelArray {
+    [JsonProperty("label")]
+    public string? Label { get; init; }
+
+    [JsonProperty("kind", Required = Required.Always)]
+    [JsonConverter(typeof(StringEnumConverter))]
+    public FamilyModelArrayKind Kind { get; init; }
+
+    [JsonProperty("member", Required = Required.Always)]
+    public string Member { get; init; } = string.Empty;
+
+    [JsonProperty("axis", Required = Required.Always)]
+    public string Axis { get; init; } = string.Empty;
+
+    [JsonProperty("halfCount", Required = Required.Always)]
+    public string HalfCount { get; init; } = string.Empty;
+
+    [JsonProperty("limits", Required = Required.Always)]
+    public FamilyModelArrayLimits Limits { get; init; } = new();
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
+public enum FamilyModelArrayKind {
+    CenteredLinear
+}
+
+[JsonObject(MemberSerialization.OptIn)]
+public sealed class FamilyModelArrayLimits {
+    [JsonProperty("start", Required = Required.Always)]
+    public string Start { get; init; } = string.Empty;
+
+    [JsonProperty("end", Required = Required.Always)]
+    public string End { get; init; } = string.Empty;
+}
+
+[JsonObject(MemberSerialization.OptIn)]
 public sealed class FamilyModelConnector {
     [JsonProperty("label")]
     public string? Label { get; init; }
@@ -272,6 +332,8 @@ public static class FamilyModelDiagnosticCodes {
     public const string InvalidPlane = "invalid-plane";
     public const string InvalidFrame = "invalid-frame";
     public const string InvalidConnector = "invalid-connector";
+    public const string InvalidNestedFamily = "invalid-nested-family";
+    public const string InvalidArray = "invalid-array";
 }
 
 public sealed record FamilyModelDiagnostic(string Code, string Path, string Message);
@@ -333,7 +395,10 @@ public static class FamilyModelValidator {
         ValidatePlanes(model.Planes, model.Solids, new HashSet<string>(parameters.Keys, StringComparer.Ordinal), diagnostics);
         ValidateFrames(model.Frames, model.Planes, model.Solids, diagnostics);
         ValidateSolids(model.Solids, new HashSet<string>(parameters.Keys, StringComparer.Ordinal), diagnostics);
+        ValidateNestedFamilies(model.NestedFamilies, model.Frames,
+            new HashSet<string>(parameters.Keys, StringComparer.Ordinal), diagnostics);
         ValidateConnectors(model.Connectors, model.Frames, new HashSet<string>(parameters.Keys, StringComparer.Ordinal), diagnostics);
+        ValidateArrays(model.Arrays, model.NestedFamilies, model.Planes, model.FamilyParameters, diagnostics);
         if (model.RoomCalculationPoint is { Enabled: false }) {
             diagnostics.Add(new FamilyModelDiagnostic(
                 FamilyModelDiagnosticCodes.InvalidRoomCalculationPoint,
@@ -459,6 +524,113 @@ public static class FamilyModelValidator {
                 }
             }
         }
+    }
+
+    private static void ValidateNestedFamilies(
+        IReadOnlyDictionary<string, FamilyModelNestedFamily> nestedFamilies,
+        IReadOnlyDictionary<string, FamilyModelFrame> frames,
+        ISet<string> parameterNames,
+        ICollection<FamilyModelDiagnostic> diagnostics
+    ) {
+        foreach (var pair in nestedFamilies) {
+            var path = $"$.nestedFamilies.{pair.Key}";
+            var nested = pair.Value;
+            Require(pair.Key, path, "Nested family slug", diagnostics);
+            Require(nested.Type, $"{path}.type", "Nested family type", diagnostics);
+
+            if (!PortableFamilyReference.TryParse(nested.Family, out var dependency) ||
+                dependency.Kind != PortableFamilyReferenceKind.Dependency ||
+                !string.Equals(dependency.Target, pair.Key, StringComparison.Ordinal)) {
+                diagnostics.Add(new FamilyModelDiagnostic(
+                    FamilyModelDiagnosticCodes.InvalidNestedFamily,
+                    $"{path}.family",
+                    $"Nested family '{pair.Key}' must use the observable dependency identity 'dependency:{pair.Key}'."));
+            }
+
+            if (!string.Equals(nested.Frame, BuiltInFamilyFrame, StringComparison.Ordinal)) {
+                diagnostics.Add(new FamilyModelDiagnostic(
+                    FamilyModelDiagnosticCodes.UnsupportedFrame,
+                    $"{path}.frame",
+                    "Centered nested families currently use only frame:family."));
+            }
+
+            foreach (var binding in nested.ParameterBindings) {
+                if (!PortableFamilyReference.TryParse(binding.Value, out var source) ||
+                    source.Kind != PortableFamilyReferenceKind.Parameter ||
+                    !parameterNames.Contains(source.Target)) {
+                    diagnostics.Add(new FamilyModelDiagnostic(
+                        FamilyModelDiagnosticCodes.InvalidNestedFamily,
+                        $"{path}.parameterBindings.{binding.Key}",
+                        $"Binding source '{binding.Value}' must reference a declared host parameter."));
+                }
+            }
+        }
+    }
+
+    private static void ValidateArrays(
+        IReadOnlyDictionary<string, FamilyModelArray> arrays,
+        IReadOnlyDictionary<string, FamilyModelNestedFamily> nestedFamilies,
+        IReadOnlyDictionary<string, FamilyModelPlane> planes,
+        IReadOnlyDictionary<string, FamilyModelFamilyParameter> familyParameters,
+        ICollection<FamilyModelDiagnostic> diagnostics
+    ) {
+        foreach (var pair in arrays) {
+            var path = $"$.arrays.{pair.Key}";
+            var array = pair.Value;
+            Require(pair.Key, path, "Array slug", diagnostics);
+            if (!PortableFamilyReference.TryParse(array.Member, out var member) ||
+                member.Kind != PortableFamilyReferenceKind.NestedFamily ||
+                !nestedFamilies.ContainsKey(member.Target) ||
+                !string.Equals(member.Target, pair.Key, StringComparison.Ordinal)) {
+                diagnostics.Add(new FamilyModelDiagnostic(
+                    FamilyModelDiagnosticCodes.InvalidArray,
+                    $"{path}.member",
+                    $"CenteredLinear array '{pair.Key}' must repeat nested:{pair.Key}."));
+            }
+
+            ValidateAxis(array.Axis, $"{path}.axis", diagnostics);
+            if (array.Axis is not ("+X" or "-X" or "+Y" or "-Y")) {
+                diagnostics.Add(new FamilyModelDiagnostic(
+                    FamilyModelDiagnosticCodes.InvalidArray,
+                    $"{path}.axis",
+                    "CenteredLinear currently supports the proven family-plan axes +X, -X, +Y, and -Y."));
+            }
+            if (!PortableFamilyReference.TryParse(array.HalfCount, out var halfCount) ||
+                halfCount.Kind != PortableFamilyReferenceKind.Parameter ||
+                !familyParameters.TryGetValue(halfCount.Target, out var halfCountParameter) ||
+                !string.Equals(halfCountParameter.DataType, "Integer", StringComparison.OrdinalIgnoreCase)) {
+                diagnostics.Add(new FamilyModelDiagnostic(
+                    FamilyModelDiagnosticCodes.InvalidArray,
+                    $"{path}.halfCount",
+                    $"Half count '{array.HalfCount}' must reference a declared Integer family parameter."));
+            }
+
+            ValidateArrayLimit(array.Limits.Start, $"{path}.limits.start", planes, diagnostics);
+            ValidateArrayLimit(array.Limits.End, $"{path}.limits.end", planes, diagnostics);
+            if (string.Equals(array.Limits.Start, array.Limits.End, StringComparison.Ordinal)) {
+                diagnostics.Add(new FamilyModelDiagnostic(
+                    FamilyModelDiagnosticCodes.InvalidArray,
+                    $"{path}.limits",
+                    "CenteredLinear start and end limits must be different planes."));
+            }
+        }
+    }
+
+    private static void ValidateArrayLimit(
+        string text,
+        string path,
+        IReadOnlyDictionary<string, FamilyModelPlane> planes,
+        ICollection<FamilyModelDiagnostic> diagnostics
+    ) {
+        if (PortableFamilyReference.TryParse(text, out var reference) &&
+            reference.Kind == PortableFamilyReferenceKind.Plane &&
+            planes.ContainsKey(reference.Target))
+            return;
+
+        diagnostics.Add(new FamilyModelDiagnostic(
+            FamilyModelDiagnosticCodes.InvalidArray,
+            path,
+            $"Array limit '{text}' must reference a declared plane."));
     }
 
     private static void ValidateConnectorFrameDirection(

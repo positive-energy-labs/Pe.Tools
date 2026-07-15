@@ -1,7 +1,9 @@
 using Autodesk.Revit.ApplicationServices;
 using Autodesk.Revit.DB.ExtensibleStorage;
 using Newtonsoft.Json;
+using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.FamilyFoundry.Capture;
+using Pe.Shared.RevitData.Families;
 
 namespace Pe.Revit.Tests;
 
@@ -101,6 +103,145 @@ public sealed class FamilyModelRoundtripTests {
         } finally {
             artifact?.CloseDocuments();
         }
+    }
+
+    [Test]
+    public void Grd_centered_array_replays_the_two_half_array_convention() {
+        var fixturePath = RevitFamilyFixtureHarness.GetProfileFixturePath(
+            Path.Combine("family-model", "pe-grd-vane.family.json"));
+        var parsed = FamilyModelJson.Parse(File.ReadAllText(fixturePath));
+        Assert.That(parsed.Diagnostics, Is.Empty,
+            string.Join(Environment.NewLine, parsed.Diagnostics.Select(item => item.Message)));
+        Document? document = null;
+        try {
+            document = FamilyModelBuilder.Build(
+                this._application,
+                parsed.Value!,
+                Path.GetDirectoryName(fixturePath)).Document;
+            var arrays = new FilteredElementCollector(document)
+                .OfClass(typeof(LinearArray))
+                .Cast<LinearArray>()
+                .ToList();
+            Assert.That(arrays, Has.Count.EqualTo(2));
+            Assert.That(arrays.Select(array => array.Label?.Definition.Name),
+                Is.All.EqualTo("_calc vane half count"));
+            Assert.That(arrays.Select(array => array.GetOriginalMemberIds().Single()).Distinct().Count(),
+                Is.EqualTo(1), "Both native half-arrays must share one center member.");
+
+            var seedGroup = document.GetElement(arrays[0].GetOriginalMemberIds().Single()) as Group;
+            var seed = seedGroup!.GetMemberIds().Select(document.GetElement).OfType<FamilyInstance>().Single();
+            var nestedLength = seed.LookupParameter("_vane length")!;
+            Assert.That(document.FamilyManager.GetAssociatedFamilyParameter(nestedLength)?.Definition.Name,
+                Is.EqualTo("PE_M_Grd_OpenLength"));
+
+            var halfCount = document.FamilyManager.get_Parameter("_calc vane half count")!;
+            var showVanes = document.FamilyManager.get_Parameter("_show vanes")!;
+            var expected = new Dictionary<string, int>(StringComparer.Ordinal) {
+                ["No Vanes"] = 0,
+                ["Single Vane"] = 1,
+                ["Fifteen Vanes"] = 8,
+                ["Thirty Seven Vanes"] = 19
+            };
+            foreach (var (typeName, expectedHalfCount) in expected) {
+                using var transaction = new Transaction(document, $"Flex {typeName}");
+                _ = transaction.Start();
+                document.FamilyManager.CurrentType = document.FamilyManager.Types
+                    .Cast<FamilyType>()
+                    .Single(type => string.Equals(type.Name, typeName, StringComparison.Ordinal));
+                document.Regenerate();
+                TestContext.Progress.WriteLine(
+                    $"{typeName}: show={document.FamilyManager.CurrentType.AsInteger(showVanes)}, " +
+                    $"half={document.FamilyManager.CurrentType.AsInteger(halfCount)}");
+                Assert.That(document.FamilyManager.CurrentType.AsInteger(halfCount), Is.EqualTo(expectedHalfCount),
+                    $"{typeName}; show={document.FamilyManager.CurrentType.AsInteger(showVanes)}");
+                Assert.That(arrays.Select(array => array.NumMembers), Is.All.EqualTo(expectedHalfCount), typeName);
+                var limitYs = new FilteredElementCollector(document)
+                    .OfClass(typeof(ReferencePlane))
+                    .Cast<ReferencePlane>()
+                    .Where(plane => plane.Name is "opening.Front" or "opening.Back")
+                    .Select(plane => plane.GetPlane().Origin.Y)
+                    .OrderBy(value => value)
+                    .ToList();
+                var copiedYs = arrays
+                    .SelectMany(array => array.GetCopiedMemberIds())
+                    .Select(id => document.GetElement(id))
+                    .OfType<Group>()
+                    .Select(group => ((LocationPoint)group.Location).Point.Y)
+                    .ToList();
+                Assert.That(copiedYs.Min(), Is.EqualTo(limitYs[0]).Within(1e-6), $"{typeName} start lock");
+                Assert.That(copiedYs.Max(), Is.EqualTo(limitYs[1]).Within(1e-6), $"{typeName} end lock");
+                Assert.That(copiedYs, Is.All.InRange(limitYs[0] - 1e-6, limitYs[1] + 1e-6),
+                    $"{typeName} members must fill inward between limits");
+                _ = transaction.RollBack();
+            }
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(document);
+        }
+    }
+
+    [Test]
+    public void Grd_and_vane_dependency_roundtrip_without_recovery_metadata() {
+        FamilyModelRoundtripArtifact? vane = null;
+        FamilyModelRoundtripArtifact? grd = null;
+        try {
+            vane = FamilyFoundryRoundtripHarness.RunFamilyModelRoundtrip(
+                this._application,
+                Path.Combine("family-model", "dependencies", "vane.family.json"),
+                $"{nameof(this.Grd_and_vane_dependency_roundtrip_without_recovery_metadata)}-vane");
+            grd = FamilyFoundryRoundtripHarness.RunFamilyModelRoundtrip(
+                this._application,
+                Path.Combine("family-model", "pe-grd-vane.family.json"),
+                $"{nameof(this.Grd_and_vane_dependency_roundtrip_without_recovery_metadata)}-grd");
+
+            Assert.That(vane.CapturedFromA.Unmodeled, Is.Empty,
+                JsonConvert.SerializeObject(vane.CapturedFromA.Unmodeled, Formatting.Indented));
+            Assert.That(grd.CapturedFromA.Unmodeled, Is.Empty,
+                JsonConvert.SerializeObject(grd.CapturedFromA.Unmodeled, Formatting.Indented));
+            Assert.That(grd.CapturedFromA.NestedFamilies.Keys, Is.EqualTo(new[] { "vane" }));
+            Assert.That(grd.CapturedFromA.Arrays.Keys, Is.EqualTo(new[] { "vane" }));
+            Assert.That(grd.CapturedFromA.Arrays["vane"].HalfCount,
+                Is.EqualTo("param:_calc vane half count"));
+            Assert.That(grd.CapturedFromA.Arrays["vane"].Limits.Start,
+                Is.EqualTo("plane:opening.Front"));
+            Assert.That(grd.CapturedFromA.Arrays["vane"].Limits.End,
+                Is.EqualTo("plane:opening.Back"));
+            Assert.That(grd.CapturedFromA.Family.Placement, Is.EqualTo(FamilyModelPlacement.FaceHosted));
+            AssertRoomPointFacesOpening(grd.ReopenedA);
+            AssertRoomPointFacesOpening(grd.ReopenedB);
+            AssertNoPersistedMetadata(vane.ReopenedA);
+            AssertNoPersistedMetadata(vane.ReopenedB);
+            AssertNoPersistedMetadata(grd.ReopenedA);
+            AssertNoPersistedMetadata(grd.ReopenedB);
+
+            var capturedB = grd.ReopenedB.CaptureFamilyModel();
+            Assert.That(capturedB.Unmodeled, Is.Empty,
+                JsonConvert.SerializeObject(capturedB.Unmodeled, Formatting.Indented));
+            Assert.That(
+                JsonConvert.SerializeObject(capturedB, Formatting.Indented),
+                Is.EqualTo(JsonConvert.SerializeObject(grd.CapturedFromA, Formatting.Indented)));
+        } finally {
+            vane?.CloseDocuments();
+            grd?.CloseDocuments();
+        }
+    }
+
+    private static void AssertRoomPointFacesOpening(Document document) {
+        var expected = new XYZ(0, -1, 0);
+        var single = new FilteredElementCollector(document)
+            .OfClass(typeof(SpatialElementCalculationPoint))
+            .Cast<SpatialElementCalculationPoint>()
+            .ToList();
+        var fromTo = new FilteredElementCollector(document)
+            .OfClass(typeof(SpatialElementFromToCalculationPoints))
+            .Cast<SpatialElementFromToCalculationPoints>()
+            .ToList();
+        Assert.That(single.Count + fromTo.Count, Is.GreaterThan(0));
+        Assert.That(single.All(point => point.Position.IsAlmostEqualTo(expected, 1e-6)), Is.True,
+            "GRD calculation point must extend one foot from the opening side, never through the back.");
+        Assert.That(fromTo.All(point =>
+                point.FromPosition.IsAlmostEqualTo(expected.Negate(), 1e-6) &&
+                point.ToPosition.IsAlmostEqualTo(expected, 1e-6)),
+            Is.True);
     }
 
 
