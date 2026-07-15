@@ -10,7 +10,7 @@ export type RuntimeJsonValue =
 
 export type RuntimeJsonObject = { [key: string]: RuntimeJsonValue };
 
-export type RuntimeProtocol = "tui" | "acp" | "ag-ui" | "test";
+export type RuntimeProtocol = "tui" | "acp" | "ag-ui" | "test" | "web";
 
 export type RuntimeToolStatus = "streaming_input" | "running" | "pending_approval" | "suspended";
 

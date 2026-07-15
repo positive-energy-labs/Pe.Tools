@@ -1,10 +1,12 @@
 import { Deferred, Effect, Layer } from "effect";
 import type { Server } from "node:http";
 import type { ViteDevServer } from "vite-plus";
+import { capture } from "@pe/runtime";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { chooseServicePort } from "@pe/host-contracts/pe-service-host";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { productRoot } from "@pe/host-contracts/service-identity";
+import { resolveHostVersion } from "./host-lifecycle.ts";
 import { makeHttpLive, MastraRuntimeLive, resolveWebRoot } from "./app.ts";
 import { hostOwnership } from "./host-ownership.ts";
 
@@ -19,6 +21,9 @@ export const hostProgram = <A, E, R>(options: {
   Effect.scoped(
     Effect.gen(function* () {
       yield* options.beforeHost;
+      yield* Effect.sync(() =>
+        capture("app_boot", { component: "host", version: resolveHostVersion() }),
+      );
       const port = yield* Effect.promise(() =>
         chooseServicePort(productRoot(), hostOwnership.serviceName, preferredPort),
       );

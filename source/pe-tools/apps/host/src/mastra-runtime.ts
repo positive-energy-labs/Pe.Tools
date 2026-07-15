@@ -130,7 +130,7 @@ export const MastraRuntimeLive = Layer.effect(
         const runtime = await (async () => {
           for (let attempt = 1; ; attempt += 1) {
             try {
-              return await createPeaRuntime({ hostBaseUrl });
+              return await createPeaRuntime({ hostBaseUrl, protocol: "web" });
             } catch (error) {
               if (attempt >= 10 || !isThreadLockShaped(error)) throw error;
               await new Promise((resolve) => setTimeout(resolve, 2000));

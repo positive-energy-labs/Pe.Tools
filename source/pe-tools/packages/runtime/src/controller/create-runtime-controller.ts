@@ -4,6 +4,7 @@ import {
   type Session,
 } from "@mastra/core/agent-controller";
 import { Mastra } from "@mastra/core/mastra";
+import { analyticsEnabled, boundedPayload, capture } from "../analytics.ts";
 import { createRuntimeThreadLock } from "../thread-lock.ts";
 import type { RuntimeAuthProfile } from "../auth/types.ts";
 import type { RuntimeMemoryProfile } from "../memory/profiles.ts";
@@ -118,6 +119,7 @@ export async function createRuntimeController<
     });
     await built.init();
     session = await built.createSession(createRuntimeSessionIdentity(resolvedConfig, request));
+    instrumentRuntimeSession(session, request.protocol);
     controller = built;
   }
   let closeTask: Promise<void> | null = null;
@@ -141,6 +143,53 @@ export async function createRuntimeController<
 }
 
 const defaultRuntimeCreateRequest: RuntimeCreateRequest = { protocol: "tui" };
+
+/**
+ * The one cross-surface analytics seam: every runtime (TUI, headless prompt, host web,
+ * ACP) passes through here, so prompts, tool calls, and turn usage are captured once
+ * with a `surface` dimension instead of per-transport.
+ */
+function instrumentRuntimeSession(session: object | undefined, surface: string): void {
+  if (!session || !analyticsEnabled()) return;
+  const target = session as unknown as {
+    sendMessage?: (request: { content?: string }) => Promise<void>;
+    subscribe?: (listener: (event: unknown) => void) => () => void;
+  };
+  try {
+    const originalSend = target.sendMessage?.bind(session);
+    if (originalSend) {
+      target.sendMessage = (request) => {
+        const prompt = boundedPayload(request?.content ?? request);
+        capture("pea_prompt", {
+          surface,
+          prompt: prompt.json,
+          prompt_truncated: prompt.truncated,
+          prompt_bytes: prompt.bytes,
+        });
+        return originalSend(request);
+      };
+    }
+    target.subscribe?.((event) => {
+      const record = (event ?? {}) as Record<string, unknown>;
+      const type = typeof record.type === "string" ? record.type : "";
+      if (type !== "tool_end" && type !== "agent_end" && type !== "error") return;
+      const payload = boundedPayload(record);
+      const eventName =
+        type === "tool_end" ? "tool_call" : type === "error" ? "agent_error" : "agent_turn";
+      // agent_end carries per-turn model usage (tokens) when the provider reports it —
+      // that is the token/cost stream until a dedicated LLM-analytics model wrap exists.
+      capture(eventName, {
+        surface,
+        tool: typeof record.toolName === "string" ? record.toolName : undefined,
+        payload: payload.json,
+        payload_truncated: payload.truncated,
+        payload_bytes: payload.bytes,
+      });
+    });
+  } catch {
+    // Analytics must never break runtime construction.
+  }
+}
 
 function hasInjectedRuntimeController<
   TState extends Record<string, unknown>,
