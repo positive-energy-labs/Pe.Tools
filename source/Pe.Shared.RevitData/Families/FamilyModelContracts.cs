@@ -26,8 +26,17 @@ public sealed class FamilyModel {
     [JsonProperty("types")]
     public Dictionary<string, Dictionary<string, string>> Types { get; init; } = new(StringComparer.Ordinal);
 
+    [JsonProperty("planes")]
+    public Dictionary<string, FamilyModelPlane> Planes { get; init; } = new(StringComparer.Ordinal);
+
+    [JsonProperty("frames")]
+    public Dictionary<string, FamilyModelFrame> Frames { get; init; } = new(StringComparer.Ordinal);
+
     [JsonProperty("solids")]
     public Dictionary<string, FamilyModelSolid> Solids { get; init; } = new(StringComparer.Ordinal);
+
+    [JsonProperty("connectors")]
+    public Dictionary<string, FamilyModelConnector> Connectors { get; init; } = new(StringComparer.Ordinal);
 
     [JsonProperty("roomCalculationPoint", NullValueHandling = NullValueHandling.Ignore)]
     public FamilyModelRoomCalculationPoint? RoomCalculationPoint { get; init; }
@@ -40,6 +49,43 @@ public sealed class FamilyModel {
 public sealed class FamilyModelRoomCalculationPoint {
     [JsonProperty("enabled", Required = Required.Always)]
     public bool Enabled { get; init; }
+}
+
+[JsonObject(MemberSerialization.OptIn)]
+public sealed class FamilyModelPlane {
+    [JsonProperty("label")]
+    public string? Label { get; init; }
+
+    [JsonProperty("from", Required = Required.Always)]
+    public string From { get; init; } = string.Empty;
+
+    [JsonProperty("by", Required = Required.Always)]
+    public string By { get; init; } = string.Empty;
+
+    [JsonProperty("direction", Required = Required.Always)]
+    [JsonConverter(typeof(StringEnumConverter))]
+    public FamilyModelOffsetDirection Direction { get; init; }
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
+public enum FamilyModelOffsetDirection {
+    Out,
+    In
+}
+
+[JsonObject(MemberSerialization.OptIn)]
+public sealed class FamilyModelFrame {
+    [JsonProperty("label")]
+    public string? Label { get; init; }
+
+    [JsonProperty("origin", Required = Required.Always)]
+    public List<string> Origin { get; init; } = [];
+
+    [JsonProperty("normal", Required = Required.Always)]
+    public string Normal { get; init; } = string.Empty;
+
+    [JsonProperty("up", Required = Required.Always)]
+    public string Up { get; init; } = string.Empty;
 }
 
 [JsonObject(MemberSerialization.OptIn)]
@@ -140,6 +186,76 @@ public enum FamilySolidKind {
     VoidCylinder
 }
 
+[JsonObject(MemberSerialization.OptIn)]
+public sealed class FamilyModelConnector {
+    [JsonProperty("label")]
+    public string? Label { get; init; }
+
+    [JsonProperty("domain", Required = Required.Always)]
+    [JsonConverter(typeof(StringEnumConverter))]
+    public FamilyConnectorDomain Domain { get; init; }
+
+    [JsonProperty("frame", Required = Required.Always)]
+    public string Frame { get; init; } = string.Empty;
+
+    [JsonProperty("shape", Required = Required.Always)]
+    [JsonConverter(typeof(StringEnumConverter))]
+    public FamilyConnectorShape Shape { get; init; }
+
+    [JsonProperty("diameter")]
+    public string? Diameter { get; init; }
+
+    [JsonProperty("width")]
+    public string? Width { get; init; }
+
+    [JsonProperty("height")]
+    public string? Height { get; init; }
+
+    [JsonProperty("stub", Required = Required.Always)]
+    public FamilyConnectorStub Stub { get; init; } = new();
+
+    [JsonProperty("systemType", Required = Required.Always)]
+    public string SystemType { get; init; } = string.Empty;
+
+    [JsonProperty("flowDirection")]
+    public string? FlowDirection { get; init; }
+
+    [JsonProperty("flowConfiguration")]
+    public string? FlowConfiguration { get; init; }
+
+    [JsonProperty("lossMethod")]
+    public string? LossMethod { get; init; }
+
+    [JsonProperty("parameterBindings")]
+    public Dictionary<string, string> ParameterBindings { get; init; } = new(StringComparer.Ordinal);
+}
+
+[JsonObject(MemberSerialization.OptIn)]
+public sealed class FamilyConnectorStub {
+    [JsonProperty("depth", Required = Required.Always)]
+    public string Depth { get; init; } = string.Empty;
+
+    [JsonProperty("direction", Required = Required.Always)]
+    [JsonConverter(typeof(StringEnumConverter))]
+    public FamilyModelOffsetDirection Direction { get; init; }
+
+    [JsonProperty("isSolid")]
+    public bool? IsSolid { get; init; }
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
+public enum FamilyConnectorDomain {
+    Duct,
+    Pipe,
+    Electrical
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
+public enum FamilyConnectorShape {
+    Round,
+    Rectangular
+}
+
 public static class FamilyModelDiagnosticCodes {
     public const string InvalidJson = "invalid-json";
     public const string Required = "required";
@@ -153,6 +269,9 @@ public static class FamilyModelDiagnosticCodes {
     public const string InvalidDriver = "invalid-driver";
     public const string UnmodeledState = "unmodeled-state";
     public const string InvalidRoomCalculationPoint = "invalid-room-calculation-point";
+    public const string InvalidPlane = "invalid-plane";
+    public const string InvalidFrame = "invalid-frame";
+    public const string InvalidConnector = "invalid-connector";
 }
 
 public sealed record FamilyModelDiagnostic(string Code, string Path, string Message);
@@ -211,7 +330,10 @@ public static class FamilyModelValidator {
             .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
 
         ValidateTypes(model.Types, parameters, diagnostics);
+        ValidatePlanes(model.Planes, model.Solids, new HashSet<string>(parameters.Keys, StringComparer.Ordinal), diagnostics);
+        ValidateFrames(model.Frames, model.Planes, model.Solids, diagnostics);
         ValidateSolids(model.Solids, new HashSet<string>(parameters.Keys, StringComparer.Ordinal), diagnostics);
+        ValidateConnectors(model.Connectors, model.Frames, new HashSet<string>(parameters.Keys, StringComparer.Ordinal), diagnostics);
         if (model.RoomCalculationPoint is { Enabled: false }) {
             diagnostics.Add(new FamilyModelDiagnostic(
                 FamilyModelDiagnosticCodes.InvalidRoomCalculationPoint,
@@ -226,6 +348,240 @@ public static class FamilyModelValidator {
         }
         return diagnostics;
     }
+
+    private static void ValidatePlanes(
+        IReadOnlyDictionary<string, FamilyModelPlane> planes,
+        IReadOnlyDictionary<string, FamilyModelSolid> solids,
+        ISet<string> parameterNames,
+        ICollection<FamilyModelDiagnostic> diagnostics
+    ) {
+        foreach (var pair in planes) {
+            var path = $"$.planes.{pair.Key}";
+            Require(pair.Key, path, "Plane slug", diagnostics);
+            ValidatePlaneOrFaceReference(pair.Value.From, $"{path}.from", planes.Keys, solids, diagnostics);
+            ValidateLengthDriver(pair.Value.By, $"{path}.by", parameterNames, diagnostics);
+        }
+    }
+
+    private static void ValidateFrames(
+        IReadOnlyDictionary<string, FamilyModelFrame> frames,
+        IReadOnlyDictionary<string, FamilyModelPlane> planes,
+        IReadOnlyDictionary<string, FamilyModelSolid> solids,
+        ICollection<FamilyModelDiagnostic> diagnostics
+    ) {
+        foreach (var pair in frames) {
+            var frame = pair.Value;
+            var path = $"$.frames.{pair.Key}";
+            Require(pair.Key, path, "Frame slug", diagnostics);
+            if (frame.Origin.Count != 3) {
+                diagnostics.Add(new FamilyModelDiagnostic(
+                    FamilyModelDiagnosticCodes.InvalidFrame,
+                    $"{path}.origin",
+                    "Frame origin must be the intersection of exactly three observable plane/face references."));
+            }
+
+            foreach (var (reference, index) in frame.Origin.Select((value, index) => (value, index)))
+                ValidatePlaneOrFaceReference(reference, $"{path}.origin[{index}]", planes.Keys, solids, diagnostics);
+
+            ValidateAxis(frame.Normal, $"{path}.normal", diagnostics);
+            ValidateAxis(frame.Up, $"{path}.up", diagnostics);
+            if (string.Equals(frame.Normal, frame.Up, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(frame.Normal, NegateAxis(frame.Up), StringComparison.OrdinalIgnoreCase)) {
+                diagnostics.Add(new FamilyModelDiagnostic(
+                    FamilyModelDiagnosticCodes.InvalidFrame,
+                    path,
+                    "Frame normal and up axes must be perpendicular."));
+            }
+        }
+    }
+
+    private static void ValidateConnectors(
+        IReadOnlyDictionary<string, FamilyModelConnector> connectors,
+        IReadOnlyDictionary<string, FamilyModelFrame> frames,
+        ISet<string> parameterNames,
+        ICollection<FamilyModelDiagnostic> diagnostics
+    ) {
+        var bindingTargets = new HashSet<string>(StringComparer.Ordinal) {
+            "Voltage", "NumberOfPoles", "ApparentPower", "MinimumCircuitAmpacity"
+        };
+        foreach (var pair in connectors) {
+            var connector = pair.Value;
+            var path = $"$.connectors.{pair.Key}";
+            Require(pair.Key, path, "Connector slug", diagnostics);
+            if (!PortableFamilyReference.TryParse(connector.Frame, out var frameReference) ||
+                frameReference.Kind != PortableFamilyReferenceKind.Frame ||
+                !frames.ContainsKey(frameReference.Target)) {
+                diagnostics.Add(new FamilyModelDiagnostic(
+                    FamilyModelDiagnosticCodes.InvalidConnector,
+                    $"{path}.frame",
+                    $"Connector frame '{connector.Frame}' must reference a declared frame."));
+            } else {
+                ValidateConnectorFrameDirection(
+                    connector,
+                    frames[frameReference.Target],
+                    path,
+                    diagnostics);
+            }
+
+            Require(connector.SystemType, $"{path}.systemType", "Connector system type", diagnostics);
+            ValidateLengthDriver(connector.Stub.Depth, $"{path}.stub.depth", parameterNames, diagnostics);
+            if (connector.Shape == FamilyConnectorShape.Round) {
+                ValidateRequiredDriver(connector.Diameter, "diameter", path, parameterNames, diagnostics);
+                RejectDriver(connector.Width, "width", path, diagnostics);
+                RejectDriver(connector.Height, "height", path, diagnostics);
+            } else {
+                ValidateRequiredDriver(connector.Width, "width", path, parameterNames, diagnostics);
+                ValidateRequiredDriver(connector.Height, "height", path, parameterNames, diagnostics);
+                RejectDriver(connector.Diameter, "diameter", path, diagnostics);
+                if (connector.Domain == FamilyConnectorDomain.Pipe) {
+                    diagnostics.Add(new FamilyModelDiagnostic(
+                        FamilyModelDiagnosticCodes.InvalidConnector,
+                        $"{path}.shape",
+                        "Pipe Connectors must be Round."));
+                }
+            }
+
+            foreach (var binding in connector.ParameterBindings) {
+                if (!bindingTargets.Contains(binding.Key)) {
+                    diagnostics.Add(new FamilyModelDiagnostic(
+                        FamilyModelDiagnosticCodes.InvalidConnector,
+                        $"{path}.parameterBindings.{binding.Key}",
+                        $"Connector parameter binding target '{binding.Key}' is not supported."));
+                }
+
+                if (!PortableFamilyReference.TryParse(binding.Value, out var source) ||
+                    source.Kind != PortableFamilyReferenceKind.Parameter ||
+                    !parameterNames.Contains(source.Target)) {
+                    diagnostics.Add(new FamilyModelDiagnostic(
+                        FamilyModelDiagnosticCodes.InvalidConnector,
+                        $"{path}.parameterBindings.{binding.Key}",
+                        $"Binding source '{binding.Value}' must reference a declared parameter."));
+                }
+            }
+        }
+    }
+
+    private static void ValidateConnectorFrameDirection(
+        FamilyModelConnector connector,
+        FamilyModelFrame frame,
+        string path,
+        ICollection<FamilyModelDiagnostic> diagnostics
+    ) {
+        if (frame.Origin.Count == 0 ||
+            !PortableFamilyReference.TryParse(frame.Origin[0], out var faceReference) ||
+            faceReference.Kind != PortableFamilyReferenceKind.Face)
+            return;
+
+        var separator = faceReference.Target.LastIndexOf('.');
+        var faceName = separator < 0 ? faceReference.Target : faceReference.Target[(separator + 1)..];
+        var outward = faceName.ToUpperInvariant() switch {
+            "FRONT" => "+Y",
+            "BACK" => "-Y",
+            "LEFT" => "-X",
+            "RIGHT" => "+X",
+            "TOP" => "+Z",
+            "BOTTOM" => "-Z",
+            _ => null
+        };
+        if (outward == null)
+            return;
+
+        var expected = connector.Stub.Direction == FamilyModelOffsetDirection.Out
+            ? outward
+            : NegateAxis(outward);
+        if (string.Equals(frame.Normal, expected, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        diagnostics.Add(new FamilyModelDiagnostic(
+            FamilyModelDiagnosticCodes.InvalidConnector,
+            $"{path}.frame",
+            $"Connector frame normal '{frame.Normal}' conflicts with {connector.Stub.Direction} from '{frame.Origin[0]}'; expected '{expected}'."));
+    }
+
+    private static void ValidateRequiredDriver(
+        string? value,
+        string name,
+        string path,
+        ISet<string> parameterNames,
+        ICollection<FamilyModelDiagnostic> diagnostics
+    ) {
+        if (string.IsNullOrWhiteSpace(value)) {
+            diagnostics.Add(new FamilyModelDiagnostic(
+                FamilyModelDiagnosticCodes.InvalidConnector,
+                $"{path}.{name}",
+                $"Connector requires {name}."));
+            return;
+        }
+
+        ValidateLengthDriver(value!, $"{path}.{name}", parameterNames, diagnostics);
+    }
+
+    private static void RejectDriver(
+        string? value,
+        string name,
+        string path,
+        ICollection<FamilyModelDiagnostic> diagnostics
+    ) {
+        if (!string.IsNullOrWhiteSpace(value)) {
+            diagnostics.Add(new FamilyModelDiagnostic(
+                FamilyModelDiagnosticCodes.InvalidConnector,
+                $"{path}.{name}",
+                $"Connector shape cannot define {name}."));
+        }
+    }
+
+    private static void ValidatePlaneOrFaceReference(
+        string value,
+        string path,
+        IEnumerable<string> planeSlugs,
+        IReadOnlyDictionary<string, FamilyModelSolid> solids,
+        ICollection<FamilyModelDiagnostic> diagnostics
+    ) {
+        if (!PortableFamilyReference.TryParse(value, out var reference)) {
+            diagnostics.Add(new FamilyModelDiagnostic(FamilyModelDiagnosticCodes.InvalidReference, path,
+                $"'{value}' is not a plane or face reference."));
+            return;
+        }
+
+        if (reference.Kind == PortableFamilyReferenceKind.Plane &&
+            (reference.Target.StartsWith("family.", StringComparison.Ordinal) ||
+             planeSlugs.Contains(reference.Target, StringComparer.Ordinal)))
+            return;
+
+        if (reference.Kind == PortableFamilyReferenceKind.Face &&
+            solids.TryGetValue(reference.Target, out var solid) &&
+            GetSolidFaces(solid.Kind).Contains(reference.Member, StringComparer.Ordinal) &&
+            !string.Equals(reference.Member, "Side", StringComparison.Ordinal))
+            return;
+
+        diagnostics.Add(new FamilyModelDiagnostic(FamilyModelDiagnosticCodes.InvalidReference, path,
+            $"Reference '{value}' does not resolve to a declared plane/solid face."));
+    }
+
+    private static IReadOnlyList<string> GetSolidFaces(FamilySolidKind kind) =>
+        kind is FamilySolidKind.Prism or FamilySolidKind.VoidPrism
+            ? ["Front", "Back", "Left", "Right", "Top", "Bottom"]
+            : ["Top", "Bottom", "Side"];
+
+    private static void ValidateAxis(
+        string axis,
+        string path,
+        ICollection<FamilyModelDiagnostic> diagnostics
+    ) {
+        if (axis is "+X" or "-X" or "+Y" or "-Y" or "+Z" or "-Z")
+            return;
+
+        diagnostics.Add(new FamilyModelDiagnostic(
+            FamilyModelDiagnosticCodes.InvalidFrame,
+            path,
+            $"Axis '{axis}' must be one of +X, -X, +Y, -Y, +Z, -Z."));
+    }
+
+    private static string NegateAxis(string axis) => axis.StartsWith("-", StringComparison.Ordinal)
+        ? $"+{axis[1..]}"
+        : axis.StartsWith("+", StringComparison.Ordinal)
+            ? $"-{axis[1..]}"
+            : axis;
 
     private static void ValidateParameterMap<TParameter>(
         IReadOnlyDictionary<string, TParameter> parameters,

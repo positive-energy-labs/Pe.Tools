@@ -115,6 +115,11 @@ public sealed class AuthoredConnectorConfigSpec {
 public sealed class AuthoredConnectorSpec {
     public string Name { get; init; } = string.Empty;
 
+    // FamilyModel's universal frame is lowered through this legacy model without widening the old JSON surface.
+    // These are compiler-only axes; persisted truth remains the portable family.json.
+    [JsonIgnore] public string? FrameNormal { get; init; }
+    [JsonIgnore] public string? FrameUp { get; init; }
+
     [JsonConverter(typeof(StringEnumConverter))]
     public ParamDrivenConnectorDomain Domain { get; init; }
 

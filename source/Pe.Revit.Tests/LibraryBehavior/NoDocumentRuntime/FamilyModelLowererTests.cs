@@ -76,8 +76,10 @@ public sealed class FamilyModelLowererTests {
         Assert.That(result.FamilyTypeNames, Is.EqualTo(new[] { "Default", "Wide" }));
         Assert.That(result.Profile!.FamilyParameters.Select(item => item.Name),
             Is.EqualTo(new[] { "Width", "Depth", "Height" }));
+        Assert.That(result.Profile.FamilyParameters.Single(item => item.Name == "Width").Value, Is.Null);
         Assert.That(result.Profile.PerTypeAssignmentsTable, Has.Count.EqualTo(1));
         Assert.That(result.Profile.PerTypeAssignmentsTable[0].Parameter, Is.EqualTo("Width"));
+        Assert.That(result.Profile.PerTypeAssignmentsTable[0].ValuesByType["Default"]!.ToString(), Is.EqualTo("12in"));
         Assert.That(result.Profile.PerTypeAssignmentsTable[0].ValuesByType["Wide"]!.ToString(), Is.EqualTo("24in"));
 
         var prism = result.Profile.ParamDrivenSolids.Prisms.Single();
@@ -118,5 +120,79 @@ public sealed class FamilyModelLowererTests {
         Assert.That(cylinder.IsSolid, Is.False);
         Assert.That(cylinder.Diameter.By, Is.EqualTo("1in"));
         Assert.That(cylinder.Height.InlinePlane!.By, Is.EqualTo("0.5in"));
+    }
+
+    [Test]
+    public void Plane_frame_and_engineering_connector_lower_to_the_existing_stub_compiler() {
+        var model = new FamilyModel {
+            Family = new FamilyModelHeader {
+                Name = "FF Connector Probe",
+                Category = "Generic Models",
+                Template = "Generic Model",
+                Placement = FamilyModelPlacement.Unhosted
+            },
+            FamilyParameters = new Dictionary<string, FamilyModelFamilyParameter>(StringComparer.Ordinal) {
+                ["Width"] = new() { DataType = "Length (Common)", Value = "12in" },
+                ["Depth"] = new() { DataType = "Length (Common)", Value = "8in" },
+                ["Height"] = new() { DataType = "Length (Common)", Value = "6in" },
+                ["Pipe Elevation"] = new() { DataType = "Length (Common)", Value = "3in" },
+                ["Pipe Diameter"] = new() { DataType = "Length (Common)", Value = "1in" },
+                ["Stub Depth"] = new() { DataType = "Length (Common)", Value = "1in" }
+            },
+            Solids = new Dictionary<string, FamilyModelSolid>(StringComparer.Ordinal) {
+                ["body"] = new() {
+                    Kind = FamilySolidKind.Prism,
+                    Frame = "frame:family",
+                    Width = "param:Width",
+                    Depth = "param:Depth",
+                    Height = "param:Height"
+                }
+            },
+            Planes = new Dictionary<string, FamilyModelPlane>(StringComparer.Ordinal) {
+                ["pipe-elevation"] = new() {
+                    From = "face:body.Bottom",
+                    By = "param:Pipe Elevation",
+                    Direction = FamilyModelOffsetDirection.Out
+                }
+            },
+            Frames = new Dictionary<string, FamilyModelFrame>(StringComparer.Ordinal) {
+                ["pipe"] = new() {
+                    Origin = ["face:body.Left", "plane:family.CenterFB", "plane:pipe-elevation"],
+                    Normal = "-X",
+                    Up = "+Z"
+                }
+            },
+            Connectors = new Dictionary<string, FamilyModelConnector>(StringComparer.Ordinal) {
+                ["pipe"] = new() {
+                    Domain = FamilyConnectorDomain.Pipe,
+                    Frame = "frame:pipe",
+                    Shape = FamilyConnectorShape.Round,
+                    Diameter = "param:Pipe Diameter",
+                    Stub = new FamilyConnectorStub {
+                        Depth = "param:Stub Depth",
+                        Direction = FamilyModelOffsetDirection.In
+                    },
+                    SystemType = "OtherPipe",
+                    FlowDirection = "Out"
+                }
+            }
+        };
+
+        var result = FamilyModelLowerer.Lower(model);
+
+        Assert.That(result.Diagnostics, Is.Empty,
+            string.Join(Environment.NewLine, result.Diagnostics.Select(item => item.Message)));
+        Assert.That(result.Profile!.ParamDrivenSolids.Planes["pipe-elevation"].From, Is.EqualTo("@Bottom"));
+        var connector = result.Profile.ParamDrivenSolids.Connectors.Single();
+        Assert.That(connector.Name, Is.EqualTo("pipe"));
+        Assert.That(connector.Face, Is.EqualTo("plane:body.left"));
+        Assert.That(connector.Round!.Center,
+            Is.EqualTo(new[] { "@CenterFB", "plane:pipe-elevation" }));
+        Assert.That(connector.Depth.Dir, Is.EqualTo("in"));
+
+        var compiled = AuthoredParamDrivenSolidsCompiler.Compile(result.Profile.ParamDrivenSolids);
+        Assert.That(compiled.CanExecute, Is.True,
+            string.Join(Environment.NewLine, compiled.Diagnostics.Select(item => item.ToDisplayMessage())));
+        Assert.That(compiled.Connectors.Connectors, Has.Count.EqualTo(1));
     }
 }

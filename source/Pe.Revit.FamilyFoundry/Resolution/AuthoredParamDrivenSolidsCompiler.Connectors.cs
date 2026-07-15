@@ -84,6 +84,8 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
             HostFacePlaneName = hostFacePlaneName,
             DepthDirection = depthDirection,
             DepthDriver = depthDriver,
+            FrameNormal = connector.FrameNormal,
+            FrameUp = connector.FrameUp,
             RectangularStub = new ConstrainedRectangleExtrusionSnapshot {
                 Name = stubSolidName,
                 IsSolid = connector.IsSolid,

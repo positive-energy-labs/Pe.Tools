@@ -1,9 +1,28 @@
 # Family Model (`family.json`) — design spec
 
-Status: implementation contract, Phase 3 in progress. Captures the design review + constraint digest of 2026-07-15.
+Status: implementation contract, Phase 4 in progress. Captures the design review + constraint digest of 2026-07-15.
 Owner surfaces: FamilyFoundry (FF). Consumers: FFManager, FFMigrator, capture, replay, Pea, host operations, web preview.
 
 ## Implementation ledger
+
+### 2026-07-15 — Phase 3 complete
+
+- Checked in `family-model-showcase.family.json` plus a short engineer/agent walkthrough. It covers three types,
+  a formula, offset planes, solid and void prisms/cylinders, four explicit frames, round/rectangular duct, pipe,
+  electrical Connectors, inward/outward stubs, parameter associations, and the fixed room calculation point.
+- `frame.normal` and `frame.up` now control the resulting Connector orientation while the Revit sketch plane remains
+  associated with its driving reference plane. Recreating an equivalent free sketch plane looked correct once but
+  detached the stub during type flex; the associated-plane rule is now called out at the implementation hotspot.
+- Capture derives the frame and face-relative stub direction from the observable Connector coordinate system. Revit
+  can choose either direction initially and can swap extrusion endpoints, so replay explicitly aligns both frame axes
+  before capture treats them as portable state.
+- Capture now recovers the main parametric body alongside Connector stubs, electrical round-stub diameter, and the
+  stub-depth family-parameter association. It reports every unmatched extrusion through `unmodeled`.
+- FreshRevitProcess 2025 proves exact A -> capture -> B -> capture JSON convergence, no DataStorage/extensible
+  storage/undeclared parameters, and equal runtime planes, constraints, solids, voids, Connector frames/sizes/config,
+  and geometry while flexing Compact, Standard, and Tall. The Phase 2 minimal-box proof remains green.
+
+Next: reproduce and capture the checked-in GRD/vane topology before admitting the single `CenteredLinear` array shape.
 
 ### 2026-07-15 — Phase 0 baseline
 
