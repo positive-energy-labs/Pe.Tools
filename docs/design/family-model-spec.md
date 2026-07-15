@@ -1,9 +1,28 @@
 # Family Model (`family.json`) — design spec
 
-Status: implementation contract, Phase 4 in progress. Captures the design review + constraint digest of 2026-07-15.
+Status: implementation contract, Phase 4 visual gate pending; Phase 5 public-API spike closed. Captures the design review
+and constraint digest of 2026-07-15.
 Owner surfaces: FamilyFoundry (FF). Consumers: FFManager, FFMigrator, capture, replay, Pea, host operations, web preview.
 
 ## Implementation ledger
+
+### 2026-07-15 — Phase 5 public-API spike closed
+
+- The hand-authored puck constitution is understood and checked in as the exact Revit 2025 compiler resource. Its
+  reference line, picked-endpoint work plane, angular dimension, diameter/visibility associations, and face-hosted
+  Connector flex correctly at 0°, 10°, and 90°.
+- Revit's public API cannot recreate the picked reference-line endpoint as the extrusion work plane: every public
+  `SketchPlane.Create` route rejects the available reference-line references as non-planar. This is the native-resource
+  boundary; no metadata or hidden recovery state is used.
+- A generated host with three loaded puck instances still stalls at the real bath/shower 90° → 0° type transition.
+  Removing compiler-added center-plane constraints to match the source topology did not resolve it. The generated
+  plumbing compiler path is therefore not checked in or represented as supported authored syntax.
+- Pipe Connector Fixture Units is independently non-replayable through the public API: both the capability check and
+  direct association call reject it.
+
+Decision: stop the spike, ship `Resources/Native/2025/puck.rfa`, and continue the remaining Family Model work. Resume
+plumbing composition only with a new concrete native-hosting recipe or a user-guided recreation sequence—not further
+speculative API permutations.
 
 ### 2026-07-15 — Phase 4 structural and black-box proof complete
 
