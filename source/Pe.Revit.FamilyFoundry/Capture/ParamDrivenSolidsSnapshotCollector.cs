@@ -1216,7 +1216,13 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
                 if (curve is Line line) {
                     var p0 = line.GetEndPoint(0);
                     var p1 = line.GetEndPoint(1);
+                    // A sketch edge also lies on the sketch plane itself. Revit's collector order is not
+                    // stable, so an unrestricted FirstOrDefault can assign every edge to @Bottom and erase
+                    // the two-dimensional control topology. A profile controller must be orthogonal to the
+                    // sketch plane; that observable geometric rule survives save/reopen and void cuts.
                     var plane = planes.FirstOrDefault(candidate =>
+                        (sketchNormal == null ||
+                         Math.Abs(candidate.Normal.Normalize().DotProduct(sketchNormal)) <= DotOrthoTolerance) &&
                         IsPointOnPlane(p0, candidate) && IsPointOnPlane(p1, candidate));
                     if (plane == null)
                         continue;
@@ -1368,12 +1374,21 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
 
     private static string GetParallelPlaneGroupKey(XYZ normal) {
         var normalized = normal.Normalize();
-        if (normalized.Z < 0 ||
-            (Math.Abs(normalized.Z) <= PlaneTolerance && normalized.Y < 0) ||
-            (Math.Abs(normalized.Z) <= PlaneTolerance && Math.Abs(normalized.Y) <= PlaneTolerance && normalized.X < 0))
+        // Revit returns almost-axis-aligned normals with small nonzero components. Canonicalizing by
+        // lexicographic sign lets that noise split opposite faces into different parallel groups. The
+        // dominant component is the stable geometric axis; force only its sign positive.
+        var dominant = new[] { normalized.X, normalized.Y, normalized.Z }
+            .OrderByDescending(component => Math.Abs(component))
+            .First();
+        if (dominant < 0)
             normalized = normalized.Negate();
 
-        return $"{Math.Round(normalized.X, 3)}|{Math.Round(normalized.Y, 3)}|{Math.Round(normalized.Z, 3)}";
+        return $"{RoundNormalComponent(normalized.X)}|{RoundNormalComponent(normalized.Y)}|{RoundNormalComponent(normalized.Z)}";
+    }
+
+    private static double RoundNormalComponent(double component) {
+        var rounded = Math.Round(component, 3);
+        return rounded == 0 ? 0d : rounded; // Collapse IEEE -0 so equivalent planes share a key.
     }
 
     private static bool IsPointOnPlane(XYZ point, ReferencePlane plane) {

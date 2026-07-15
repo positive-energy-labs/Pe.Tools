@@ -30,19 +30,19 @@ public static class FamilyModelLowerer {
                 Tooltip = pair.Value.Tooltip,
                 PropertiesGroup = pair.Value.PropertiesGroup,
                 IsInstance = pair.Value.IsInstance,
-                Value = pair.Value.Value,
+                Value = HasTypeOverrides(model, pair.Key) ? null : pair.Value.Value,
                 Formula = pair.Value.Formula
             }).ToList(),
             SharedParameters = model.SharedParameters.Select(pair => new DesiredSharedParameterDeclaration {
                 Name = pair.Key,
                 PropertiesGroup = pair.Value.PropertiesGroup,
                 IsInstance = pair.Value.IsInstance,
-                Value = pair.Value.Value,
+                Value = HasTypeOverrides(model, pair.Key) ? null : pair.Value.Value,
                 Formula = pair.Value.Formula,
                 SourceNames = pair.Value.MappedFrom.ToList()
             }).ToList(),
             PerTypeAssignmentsTable = LowerTypeAssignments(model),
-            ParamDrivenSolids = LowerSolids(model.Solids),
+            ParamDrivenSolids = LowerParamDrivenSolids(model),
             AddRoomDingler = new AddRoomDinglerSettings {
                 Enabled = model.RoomCalculationPoint?.Enabled == true
             }
@@ -55,15 +55,22 @@ public static class FamilyModelLowerer {
 
     private static List<DesiredPerTypeAssignmentRow> LowerTypeAssignments(FamilyModel model) {
         var valuesByParameter = new Dictionary<string, IDictionary<string, JToken>>(StringComparer.Ordinal);
-        foreach (var type in model.Types) {
-            foreach (var assignment in type.Value) {
-                if (!valuesByParameter.TryGetValue(assignment.Key, out var values)) {
-                    values = new Dictionary<string, JToken>(StringComparer.Ordinal);
-                    valuesByParameter.Add(assignment.Key, values);
-                }
+        var parameters = model.FamilyParameters
+            .Select(pair => new KeyValuePair<string, FamilyModelParameter>(pair.Key, pair.Value))
+            .Concat(model.SharedParameters.Select(pair =>
+                new KeyValuePair<string, FamilyModelParameter>(pair.Key, pair.Value)))
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
 
-                values.Add(type.Key, JToken.FromObject(assignment.Value));
+        foreach (var parameter in parameters.Where(pair => HasTypeOverrides(model, pair.Key))) {
+            var values = new Dictionary<string, JToken>(StringComparer.Ordinal);
+            foreach (var type in model.Types) {
+                if (type.Value.TryGetValue(parameter.Key, out var overrideValue))
+                    values[type.Key] = JToken.FromObject(overrideValue);
+                else if (parameter.Value.Value != null)
+                    values[type.Key] = JToken.FromObject(parameter.Value.Value);
             }
+
+            valuesByParameter[parameter.Key] = values;
         }
 
         return model.FamilyParameters.Keys
@@ -76,13 +83,14 @@ public static class FamilyModelLowerer {
             .ToList();
     }
 
-    private static AuthoredParamDrivenSolidsSettings LowerSolids(
-        IReadOnlyDictionary<string, FamilyModelSolid> solids
-    ) {
+    private static bool HasTypeOverrides(FamilyModel model, string parameterName) =>
+        model.Types.Values.Any(values => values.ContainsKey(parameterName));
+
+    private static AuthoredParamDrivenSolidsSettings LowerParamDrivenSolids(FamilyModel model) {
         var prisms = new List<AuthoredPrismSpec>();
         var cylinders = new List<AuthoredCylinderSpec>();
 
-        foreach (var pair in solids) {
+        foreach (var pair in model.Solids) {
             var slug = pair.Key;
             var solid = pair.Value;
             if (solid.Kind is FamilySolidKind.Prism or FamilySolidKind.VoidPrism) {
@@ -113,8 +121,113 @@ public static class FamilyModelLowerer {
 
         return new AuthoredParamDrivenSolidsSettings {
             Frame = ParamDrivenFamilyFrameKind.NonHosted,
+            Planes = model.Planes.ToDictionary(
+                pair => pair.Key,
+                pair => new AuthoredPlaneSpec {
+                    From = ResolvePlaneReference(pair.Value.From),
+                    By = NormalizeLengthDriver(pair.Value.By),
+                    Dir = pair.Value.Direction == FamilyModelOffsetDirection.Out ? "out" : "in"
+                },
+                StringComparer.Ordinal),
             Prisms = prisms,
-            Cylinders = cylinders
+            Cylinders = cylinders,
+            Connectors = LowerConnectors(model)
+        };
+    }
+
+    private static List<AuthoredConnectorSpec> LowerConnectors(FamilyModel model) => model.Connectors
+        .Select(pair => {
+            var slug = pair.Key;
+            var connector = pair.Value;
+            _ = PortableFamilyReference.TryParse(connector.Frame, out var frameReference);
+            var frame = model.Frames[frameReference.Target];
+            var origin = frame.Origin.Select(ResolvePlaneReference).ToList();
+            var bindings = connector.ParameterBindings.Select(binding => {
+                _ = Enum.TryParse<ConnectorParameterKey>(binding.Key, out var target);
+                _ = PortableFamilyReference.TryParse(binding.Value, out var source);
+                return new ConnectorBindingSpec { Target = target, SourceParameter = source.Target };
+            }).ToList();
+
+            return new AuthoredConnectorSpec {
+                // Logical connector slugs are written into observable connector/stub names so capture can recover
+                // identity without IDs or Family Foundry metadata. Label remains display-only.
+                Name = slug,
+                FrameNormal = frame.Normal,
+                FrameUp = frame.Up,
+                Domain = connector.Domain switch {
+                    FamilyConnectorDomain.Duct => ParamDrivenConnectorDomain.Duct,
+                    FamilyConnectorDomain.Pipe => ParamDrivenConnectorDomain.Pipe,
+                    FamilyConnectorDomain.Electrical => ParamDrivenConnectorDomain.Electrical,
+                    _ => throw new ArgumentOutOfRangeException()
+                },
+                Face = origin[0],
+                Depth = new AuthoredDepthSpec {
+                    By = NormalizeLengthDriver(connector.Stub.Depth),
+                    Dir = connector.Stub.Direction == FamilyModelOffsetDirection.Out ? "out" : "in"
+                },
+                IsSolid = connector.Stub.IsSolid ?? true,
+                Round = connector.Shape == FamilyConnectorShape.Round
+                    ? new AuthoredRoundConnectorGeometrySpec {
+                        Center = origin.Skip(1).ToList(),
+                        Diameter = new AuthoredMeasureSpec { By = NormalizeLengthDriver(connector.Diameter!) }
+                    }
+                    : null,
+                Rect = connector.Shape == FamilyConnectorShape.Rectangular
+                    ? new AuthoredRectConnectorGeometrySpec {
+                        Center = origin.Skip(1).ToList(),
+                        Width = new AuthoredCenterMeasureSpec {
+                            About = origin[1], By = NormalizeLengthDriver(connector.Width!)
+                        },
+                        Length = new AuthoredCenterMeasureSpec {
+                            About = origin[2], By = NormalizeLengthDriver(connector.Height!)
+                        }
+                    }
+                    : null,
+                Bindings = new ConnectorBindingsSpec { Parameters = bindings },
+                Config = new AuthoredConnectorConfigSpec {
+                    SystemType = connector.SystemType,
+                    FlowDirection = connector.FlowDirection ?? DefaultFlowDirection(connector.Domain),
+                    FlowConfiguration = connector.FlowConfiguration ?? "Preset",
+                    LossMethod = connector.LossMethod ?? "NotDefined"
+                }
+            };
+        })
+        .ToList();
+
+    private static string DefaultFlowDirection(FamilyConnectorDomain domain) => domain switch {
+        FamilyConnectorDomain.Duct => "Out",
+        FamilyConnectorDomain.Pipe => "Bidirectional",
+        FamilyConnectorDomain.Electrical => string.Empty,
+        _ => throw new ArgumentOutOfRangeException(nameof(domain), domain, null)
+    };
+
+    private static string ResolvePlaneReference(string referenceText) {
+        _ = PortableFamilyReference.TryParse(referenceText, out var reference);
+        if (reference.Kind == PortableFamilyReferenceKind.Plane) {
+            if (!reference.Target.StartsWith("family.", StringComparison.Ordinal))
+                return $"plane:{reference.Target}";
+
+            return reference.Target["family.".Length..] switch {
+                "CenterLR" => "@CenterLR",
+                "CenterFB" => "@CenterFB",
+                "Bottom" => "@Bottom",
+                "Top" => "@Top",
+                "Left" => "@Left",
+                "Right" => "@Right",
+                "Front" => "@Front",
+                "Back" => "@Back",
+                var member => throw new InvalidOperationException($"Unknown family plane '{member}'.")
+            };
+        }
+
+        return reference.Member switch {
+            "Bottom" => "@Bottom",
+            "Top" => $"plane:{reference.Target}.top",
+            "Left" => $"plane:{reference.Target}.left",
+            "Right" => $"plane:{reference.Target}.right",
+            "Front" => $"plane:{reference.Target}.front",
+            "Back" => $"plane:{reference.Target}.back",
+            _ => throw new InvalidOperationException($"Solid face '{referenceText}' is not planar in v1.")
         };
     }
 

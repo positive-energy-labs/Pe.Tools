@@ -84,12 +84,89 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
             return;
         }
 
+        if (!OrientConnectorFrame(doc.Document, connector, spec, logs, key))
+            return;
+
         ApplyStubIntrinsicAssociations(doc, stubResult.Extrusion, spec, logs, key);
         ApplyDomainConfiguration(connector, spec, logs, key);
         ApplyConnectorIntrinsicAssociations(doc, connector, spec, logs, key);
         ApplyParameterBindings(doc, connector, spec, logs, key);
         doc.Document.Regenerate();
         logs.Add(new LogEntry(key).Success("Created hosted connector unit."));
+    }
+
+    private static bool OrientConnectorFrame(
+        Document doc,
+        ConnectorElement connector,
+        CompiledParamDrivenConnectorSpec spec,
+        ICollection<LogEntry> logs,
+        string key
+    ) {
+        if (string.IsNullOrWhiteSpace(spec.FrameNormal))
+            return true;
+
+        if (!TryParseFrameAxis(spec.FrameNormal, out var expected)) {
+            logs.Add(new LogEntry(key).Error($"Connector frame normal '{spec.FrameNormal}' was invalid."));
+            return false;
+        }
+
+        var actual = connector.CoordinateSystem?.BasisZ;
+        if (actual == null || actual.IsZeroLength()) {
+            logs.Add(new LogEntry(key).Error("Connector did not expose a usable normal after creation."));
+            return false;
+        }
+
+        if (actual.Normalize().DotProduct(expected) < 0.0) {
+            connector.FlipDirection();
+            doc.Regenerate();
+            actual = connector.CoordinateSystem?.BasisZ;
+        }
+
+        if (actual == null || actual.IsZeroLength() || actual.Normalize().DotProduct(expected) < 0.99) {
+            logs.Add(new LogEntry(key).Error(
+                $"Connector normal could not be aligned to frame normal '{spec.FrameNormal}'."));
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(spec.FrameUp))
+            return true;
+
+        if (!TryParseFrameAxis(spec.FrameUp, out var expectedUp)) {
+            logs.Add(new LogEntry(key).Error($"Connector frame up axis '{spec.FrameUp}' was invalid."));
+            return false;
+        }
+
+        var actualUp = connector.CoordinateSystem?.BasisY;
+        if (actualUp == null || actualUp.IsZeroLength()) {
+            logs.Add(new LogEntry(key).Error("Connector did not expose a usable up axis after creation."));
+            return false;
+        }
+
+        var rotationAxis = expected;
+        var rotationAngle = Enumerable.Range(0, 4)
+            .Select(index => index * (Math.PI / 2.0))
+            .OrderBy(angle => {
+                var rotation = Transform.CreateRotationAtPoint(rotationAxis, angle, XYZ.Zero);
+                return 1.0 - rotation.OfVector(actualUp.Normalize()).DotProduct(expectedUp);
+            })
+            .First();
+        if (Math.Abs(rotationAngle) > 1e-9) {
+            ElementTransformUtils.RotateElement(
+                doc,
+                connector.Id,
+                Line.CreateBound(connector.Origin, connector.Origin + rotationAxis),
+                rotationAngle);
+            doc.Regenerate();
+        }
+
+        actualUp = connector.CoordinateSystem?.BasisY;
+        if (actualUp == null || actualUp.IsZeroLength() || actualUp.Normalize().DotProduct(expectedUp) < 0.99) {
+            logs.Add(new LogEntry(key).Error(
+                $"Connector up axis could not be aligned to frame up '{spec.FrameUp}'."));
+            return false;
+        }
+
+        return true;
     }
 
     private static CompiledParamDrivenConnectorSpec BuildExecutableStubSpec(
@@ -147,6 +224,8 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
                 HostFacePlaneName = spec.HostFacePlaneName,
                 DepthDirection = spec.DepthDirection,
                 DepthDriver = spec.DepthDriver,
+                FrameNormal = spec.FrameNormal,
+                FrameUp = spec.FrameUp,
                 RectangularStub = new ConstrainedRectangleExtrusionSnapshot {
                     Name = spec.RectangularStub.Name,
                     IsSolid = spec.RectangularStub.IsSolid,
@@ -185,6 +264,8 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
             HostFacePlaneName = spec.HostFacePlaneName,
             DepthDirection = spec.DepthDirection,
             DepthDriver = spec.DepthDriver,
+            FrameNormal = spec.FrameNormal,
+            FrameUp = spec.FrameUp,
             RoundStub = new ConstrainedCircleExtrusionSnapshot {
                 Name = spec.RoundStub.Name,
                 IsSolid = spec.RoundStub.IsSolid,
@@ -255,6 +336,29 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
         ISet<string> flippedHostPlanes
     ) {
         _ = flippedHostPlanes;
+
+        if (!string.IsNullOrWhiteSpace(spec.FrameNormal)) {
+            var framePlaneName = spec.HostFacePlaneName.StartsWith("__OFFSET__|", StringComparison.Ordinal)
+                ? spec.HostFacePlaneName.Split(new[] { '|' }, 4).ElementAtOrDefault(1)
+                : spec.RectangularStub?.SketchPlaneName ?? spec.RoundStub?.SketchPlaneName;
+            if (!TryParseFrameAxis(spec.FrameNormal, out var frameNormal) ||
+                string.IsNullOrWhiteSpace(framePlaneName)) {
+                logs.Add(new LogEntry(key).Error(
+                    $"Connector frame normal '{spec.FrameNormal}' or host plane was invalid."));
+                return null;
+            }
+
+            var frameSketchPlane = TryCreateFrameSketchPlane(doc, framePlaneName.Trim(), frameNormal);
+            if (frameSketchPlane == null) {
+                logs.Add(new LogEntry(key).Error(
+                    $"Failed to orient connector sketch plane '{framePlaneName}' to frame normal '{spec.FrameNormal}'."));
+                return null;
+            }
+
+            logs.Add(new LogEntry(key).Success(
+                $"Resolved connector sketch plane '{framePlaneName}'; frame axes are applied after creation."));
+            return frameSketchPlane;
+        }
 
         var requiresFlippedNormal = spec.DepthDirection == OffsetDirection.Negative;
         var hostOffset = 0.0;
@@ -360,6 +464,52 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
         logs.Add(new LogEntry(key).Success(
             $"Resolved connector sketch plane override '{sketchPlaneName}' with offset {hostOffset.ToString("G6", CultureInfo.InvariantCulture)} and flippedNormal={requiresFlippedNormal}."));
         return sketchPlane;
+    }
+
+    private static bool TryParseFrameAxis(string value, out XYZ axis) {
+        axis = value.Trim().ToUpperInvariant() switch {
+            "+X" => XYZ.BasisX,
+            "-X" => XYZ.BasisX.Negate(),
+            "+Y" => XYZ.BasisY,
+            "-Y" => XYZ.BasisY.Negate(),
+            "+Z" => XYZ.BasisZ,
+            "-Z" => XYZ.BasisZ.Negate(),
+            _ => XYZ.Zero
+        };
+        return !axis.IsZeroLength();
+    }
+
+    private static SketchPlane? TryCreateFrameSketchPlane(Document doc, string planeName, XYZ frameNormal) {
+        var referencePlane = new FilteredElementCollector(doc)
+            .OfClass(typeof(ReferencePlane))
+            .Cast<ReferencePlane>()
+            .FirstOrDefault(plane => string.Equals(plane.Name, planeName, StringComparison.Ordinal));
+        if (referencePlane != null) {
+            try {
+                // The ElementId overload preserves the association. Creating a SketchPlane from an equivalent
+                // Plane freezes its origin at the current type, and every later type flex moves the reference
+                // plane while leaving the connector stub behind. FrameNormal is applied to the connector after
+                // creation; it must never cost the parametric association that makes the unit portable.
+                return SketchPlane.Create(doc, referencePlane.Id);
+            } catch {
+                return null;
+            }
+        }
+
+        var origin = new FilteredElementCollector(doc)
+            .OfClass(typeof(SketchPlane))
+            .Cast<SketchPlane>()
+            .Where(plane => string.Equals(plane.Name, planeName, StringComparison.Ordinal))
+            .Select(plane => plane.GetPlane().Origin)
+            .FirstOrDefault();
+        if (origin == null)
+            return null;
+
+        try {
+            return SketchPlane.Create(doc, Plane.CreateByNormalAndOrigin(frameNormal, origin));
+        } catch {
+            return null;
+        }
     }
 
     private static SketchPlane? TryResolveHostFaceSketchPlane(

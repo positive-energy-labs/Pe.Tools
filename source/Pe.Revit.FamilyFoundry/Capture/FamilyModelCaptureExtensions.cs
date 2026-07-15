@@ -1,6 +1,7 @@
 using Autodesk.Revit.DB.Architecture;
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.FamilyFoundry.Apply;
+using Pe.Revit.FamilyFoundry.Helpers;
 using Pe.Shared.RevitData.Families;
 
 namespace Pe.Revit.FamilyFoundry.Capture;
@@ -53,6 +54,10 @@ public static class FamilyModelCaptureExtensions {
         }
 
         var solids = ProjectSolids(snapshot.AuthoredParamDrivenSolids, unmodeled);
+        var planes = ProjectPlanes(snapshot.AuthoredParamDrivenSolids, solids, unmodeled);
+        var frames = new Dictionary<string, FamilyModelFrame>(StringComparer.Ordinal);
+        var connectors = ProjectConnectors(document, snapshot.AuthoredParamDrivenSolids, solids, frames,
+            unmodeled);
         var roomCalculationPoint = ProjectRoomCalculationPoint(document, placement, unmodeled);
         AddUnmodeledObservableState(document, snapshot, unmodeled);
         return new FamilyModel {
@@ -65,11 +70,207 @@ public static class FamilyModelCaptureExtensions {
             FamilyParameters = familyParameters,
             SharedParameters = sharedParameters,
             Types = types,
+            Planes = planes,
+            Frames = frames,
             Solids = solids,
+            Connectors = connectors,
             RoomCalculationPoint = roomCalculationPoint,
             Unmodeled = unmodeled
         };
     }
+
+    private static Dictionary<string, FamilyModelPlane> ProjectPlanes(
+        AuthoredParamDrivenSolidsSettings? authored,
+        IReadOnlyDictionary<string, FamilyModelSolid> solids,
+        ICollection<FamilyModelUnmodeledFact> unmodeled
+    ) {
+        var result = new Dictionary<string, FamilyModelPlane>(StringComparer.Ordinal);
+        if (authored == null)
+            return result;
+
+        foreach (var pair in authored.Planes) {
+            if (!TryProjectPlaneReference(pair.Value.From, solids, preferSolidFace: false, out var from)) {
+                AddUnmodeledConstituent(unmodeled, "plane-reference-not-portable", pair.Key, pair.Value.From);
+                continue;
+            }
+
+            result[pair.Key] = new FamilyModelPlane {
+                From = from,
+                By = pair.Value.By,
+                Direction = string.Equals(pair.Value.Dir, "in", StringComparison.OrdinalIgnoreCase)
+                    ? FamilyModelOffsetDirection.In
+                    : FamilyModelOffsetDirection.Out
+            };
+        }
+
+        return result;
+    }
+
+    private static Dictionary<string, FamilyModelConnector> ProjectConnectors(
+        Document document,
+        AuthoredParamDrivenSolidsSettings? authored,
+        IReadOnlyDictionary<string, FamilyModelSolid> solids,
+        IDictionary<string, FamilyModelFrame> frames,
+        ICollection<FamilyModelUnmodeledFact> unmodeled
+    ) {
+        var result = new Dictionary<string, FamilyModelConnector>(StringComparer.Ordinal);
+        if (authored == null)
+            return result;
+
+        foreach (var connector in authored.Connectors) {
+            // Revit connector elements expose generic names ("Pipe Connector", "Pipe Connector 2") rather than
+            // the authored key. Normalize that observable ordering deterministically; do not smuggle the old key.
+            var slug = ToLogicalSlug(connector.Name);
+            var geometry = (Round: connector.Round, Rect: connector.Rect);
+            var center = geometry.Round?.Center ?? geometry.Rect?.Center;
+            if (string.IsNullOrWhiteSpace(slug) || center?.Count != 2 ||
+                !TryProjectPlaneReference(connector.Face, solids, preferSolidFace: true, out var face) ||
+                !TryProjectPlaneReference(center[0], solids, preferSolidFace: false, out var center1) ||
+                !TryProjectPlaneReference(center[1], solids, preferSolidFace: false, out var center2)) {
+                AddUnmodeledConstituent(unmodeled, "connector-frame-not-portable", slug, connector.Face);
+                continue;
+            }
+
+            var normal = connector.FrameNormal ?? InferAxis(document, connector.Face);
+            var up = connector.FrameUp ?? (normal.EndsWith("Z", StringComparison.Ordinal) ? "+Y" : "+Z");
+            frames[slug] = new FamilyModelFrame {
+                Origin = [face, center1, center2],
+                Normal = normal,
+                Up = up
+            };
+
+            result[slug] = new FamilyModelConnector {
+                Domain = connector.Domain switch {
+                    ParamDrivenConnectorDomain.Duct => FamilyConnectorDomain.Duct,
+                    ParamDrivenConnectorDomain.Pipe => FamilyConnectorDomain.Pipe,
+                    ParamDrivenConnectorDomain.Electrical => FamilyConnectorDomain.Electrical,
+                    _ => throw new ArgumentOutOfRangeException()
+                },
+                Frame = $"frame:{slug}",
+                Shape = geometry.Round != null ? FamilyConnectorShape.Round : FamilyConnectorShape.Rectangular,
+                Diameter = geometry.Round?.Diameter.By,
+                Width = geometry.Rect?.Width.By,
+                Height = geometry.Rect?.Length.By,
+                Stub = new FamilyConnectorStub {
+                    Depth = connector.Depth.By,
+                    Direction = string.Equals(connector.Depth.Dir, "in", StringComparison.OrdinalIgnoreCase)
+                        ? FamilyModelOffsetDirection.In
+                        : FamilyModelOffsetDirection.Out,
+                    IsSolid = connector.IsSolid ? null : false
+                },
+                SystemType = connector.Config.SystemType,
+                FlowDirection = string.IsNullOrWhiteSpace(connector.Config.FlowDirection)
+                    ? null
+                    : connector.Config.FlowDirection,
+                FlowConfiguration = connector.Domain == ParamDrivenConnectorDomain.Duct
+                    ? connector.Config.FlowConfiguration
+                    : null,
+                LossMethod = connector.Domain == ParamDrivenConnectorDomain.Duct
+                    ? connector.Config.LossMethod
+                    : null,
+                ParameterBindings = connector.Bindings.Parameters.ToDictionary(
+                    binding => binding.Target.ToString(),
+                    binding => $"param:{binding.SourceParameter}",
+                    StringComparer.Ordinal)
+            };
+        }
+
+        return result;
+    }
+
+    private static string ToLogicalSlug(string value) {
+        var characters = value.Trim()
+            .Select(character => char.IsLetterOrDigit(character) ? char.ToLowerInvariant(character) : '-')
+            .ToArray();
+        var collapsed = string.Join("-", new string(characters)
+            .Split(['-'], StringSplitOptions.RemoveEmptyEntries));
+        return collapsed;
+    }
+
+    private static bool TryProjectPlaneReference(
+        string authoredReference,
+        IReadOnlyDictionary<string, FamilyModelSolid> solids,
+        bool preferSolidFace,
+        out string portableReference
+    ) {
+        portableReference = string.Empty;
+        var reference = authoredReference.Trim();
+        var builtIn = reference switch {
+            "@CenterLR" => "plane:family.CenterLR",
+            "@CenterFB" => "plane:family.CenterFB",
+            "@Bottom" => "plane:family.Bottom",
+            "@Top" => "plane:family.Top",
+            "@Left" => "plane:family.Left",
+            "@Right" => "plane:family.Right",
+            "@Front" => "plane:family.Front",
+            "@Back" => "plane:family.Back",
+            _ => null
+        };
+        if (builtIn != null) {
+            if (preferSolidFace && reference == "@Bottom" && solids.Count == 1)
+                portableReference = $"face:{solids.Keys.Single()}.Bottom";
+            else
+                portableReference = builtIn;
+            return true;
+        }
+
+        if (!reference.StartsWith("plane:", StringComparison.Ordinal))
+            return false;
+
+        var planeName = reference["plane:".Length..];
+        if (preferSolidFace) {
+            foreach (var solid in solids.Keys) {
+                foreach (var face in new[] { "Top", "Left", "Right", "Front", "Back" }) {
+                    if (!string.Equals(planeName, $"{solid}.{face.ToLowerInvariant()}", StringComparison.Ordinal))
+                        continue;
+
+                    portableReference = $"face:{solid}.{face}";
+                    return true;
+                }
+            }
+        }
+
+        portableReference = $"plane:{planeName}";
+        return true;
+    }
+
+    private static string InferAxis(Document document, string authoredPlaneReference) {
+        if (authoredPlaneReference == "@Bottom")
+            return "+Z";
+
+        var planeName = authoredPlaneReference.StartsWith("plane:", StringComparison.Ordinal)
+            ? authoredPlaneReference["plane:".Length..]
+            : authoredPlaneReference.TrimStart('@');
+        var plane = new FilteredElementCollector(document)
+            .OfClass(typeof(ReferencePlane))
+            .Cast<ReferencePlane>()
+            .FirstOrDefault(item => string.Equals(item.Name, planeName, StringComparison.Ordinal));
+        if (plane == null)
+            return "+Z";
+
+        var normal = plane.Normal.Normalize();
+        var components = new[] {
+            (Value: normal.X, Axis: "X"),
+            (Value: normal.Y, Axis: "Y"),
+            (Value: normal.Z, Axis: "Z")
+        };
+        var dominant = components.MaxBy(item => Math.Abs(item.Value));
+        return $"{(dominant.Value < 0 ? "-" : "+")}{dominant.Axis}";
+    }
+
+    private static void AddUnmodeledConstituent(
+        ICollection<FamilyModelUnmodeledFact> unmodeled,
+        string reason,
+        string slug,
+        string observedReference
+    ) => unmodeled.Add(new FamilyModelUnmodeledFact {
+        Reason = reason,
+        Path = "$.unmodeled",
+        Facts = new Dictionary<string, string>(StringComparer.Ordinal) {
+            ["slug"] = slug,
+            ["observedReference"] = observedReference
+        }
+    });
 
     private static FamilyModelRoomCalculationPoint? ProjectRoomCalculationPoint(
         Document document,
@@ -125,13 +326,18 @@ public static class FamilyModelCaptureExtensions {
         }
 
         var authored = snapshot.AuthoredParamDrivenSolids;
-        if (authored == null || authored.Connectors.Count != 0)
+        if (authored == null)
             return;
 
         var observedExtrusions = new FilteredElementCollector(document)
             .OfClass(typeof(Extrusion))
             .GetElementCount();
-        var recognizedExtrusions = authored.Prisms.Count + authored.Cylinders.Count;
+        var recognizedConnectorStubs = RawConnectorUnitInference.MatchOwnedStubs(document)
+            .Values
+            .Select(match => match.Extrusion.Id)
+            .Distinct()
+            .Count();
+        var recognizedExtrusions = authored.Prisms.Count + authored.Cylinders.Count + recognizedConnectorStubs;
         if (observedExtrusions == recognizedExtrusions)
             return;
 
@@ -142,7 +348,8 @@ public static class FamilyModelCaptureExtensions {
             Path = "$.solids",
             Facts = new Dictionary<string, string>(StringComparer.Ordinal) {
                 ["observed"] = observedExtrusions.ToString(),
-                ["recognized"] = recognizedExtrusions.ToString()
+                ["recognized"] = recognizedExtrusions.ToString(),
+                ["connectorStubs"] = recognizedConnectorStubs.ToString()
             }
         });
     }
@@ -219,14 +426,12 @@ public static class FamilyModelCaptureExtensions {
             AddSolid(result, unmodeled, slug, solid);
         }
 
-        if (authored.Planes.Count > 0 || authored.Spans.Count > 0 || authored.Connectors.Count > 0) {
+        if (authored.Spans.Count > 0) {
             unmodeled.Add(new FamilyModelUnmodeledFact {
                 Reason = "param-driven-constituents-not-yet-modeled",
                 Path = "$.solids",
                 Facts = new Dictionary<string, string>(StringComparer.Ordinal) {
-                    ["planes"] = authored.Planes.Count.ToString(),
-                    ["spans"] = authored.Spans.Count.ToString(),
-                    ["connectors"] = authored.Connectors.Count.ToString()
+                    ["spans"] = authored.Spans.Count.ToString()
                 }
             });
         }
