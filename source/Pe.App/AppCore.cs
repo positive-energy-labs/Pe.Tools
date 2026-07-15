@@ -1,6 +1,7 @@
 using Autodesk.Revit.DB.Events;
 using Autodesk.Revit.DB.ExtensibleStorage;
 using Autodesk.Revit.UI;
+using Pe.App.Analytics;
 using Pe.App.Host;
 using Pe.App.Services.AutoTag;
 using Pe.App.Tasks;
@@ -19,6 +20,7 @@ using Serilog.Core;
 using Serilog.Events;
 using Serilog.Formatting.Display;
 using System.IO;
+using System.Reflection;
 
 namespace Pe.App;
 
@@ -47,6 +49,7 @@ public sealed class AppCore : IPePayload {
         DocumentTrackerAccessor.Current = documents;
         DocumentCacheMaintenance.Wire(documents);
         documents.ViewActivated += (doc, viewId) => MruViewBuffer.Instance.RecordViewActivation(doc, viewId);
+        documents.ViewActivated += (doc, _) => PostHogAnalytics.CurrentDocumentTitle = doc.Title;
         documents.Closed += key => MruViewBuffer.Instance.RemoveDocumentViews(key);
         documents.Changed += OnDocumentChanged;
 
@@ -55,6 +58,15 @@ public sealed class AppCore : IPePayload {
         RevitTaskAccessor.RunAsync = action => revitTaskQueue.Run(_ => action());
 
         CreateLogger();
+
+        PostHogAnalytics.Initialize();
+        PostHogAnalytics.Capture("app_boot", new Dictionary<string, object?> {
+            ["component"] = "revit",
+            ["version"] = typeof(AppCore).Assembly
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
+            ["revit_version"] = context.Application.ControlledApplication.VersionNumber,
+        });
+        Autodesk.Windows.ComponentManager.ItemExecuted += OnRibbonItemExecuted;
 
         HostRuntime.Initialize(
             revitTaskQueue,
@@ -90,6 +102,7 @@ public sealed class AppCore : IPePayload {
     }
 
     public void Shutdown() {
+        Autodesk.Windows.ComponentManager.ItemExecuted -= OnRibbonItemExecuted;
         DocumentTrackerAccessor.Current = null;
 
         this._bridgeConnectionSupervisor?.Dispose();
@@ -102,6 +115,21 @@ public sealed class AppCore : IPePayload {
         this._revitTaskQueue?.Dispose();
         this._revitTaskQueue = null;
         Log.CloseAndFlush();
+    }
+
+    /// <summary>
+    ///     Ribbon buttons bind Revit straight to command classes (no runtime wrapper), so click
+    ///     analytics hook the one UI-level seam: AdWindows item execution, filtered to our commands.
+    /// </summary>
+    private static void OnRibbonItemExecuted(object? sender,
+        Autodesk.Internal.Windows.RibbonItemExecutedEventArgs e) {
+        var id = e.Item?.Id;
+        if (id == null || !id.Contains("Pe.App.Commands")) return;
+        PostHogAnalytics.Capture("ribbon_click", new Dictionary<string, object?> {
+            ["component"] = "revit",
+            ["command"] = e.Item?.Text,
+            ["command_id"] = id,
+        });
     }
 
     private static void OnDocumentChanged(TrackedDocument tracked, DocumentChangedEventArgs e) {
@@ -132,6 +160,7 @@ public sealed class AppCore : IPePayload {
         Log.Logger = new LoggerConfiguration()
             .WriteTo.Sink(new RevitAppLogSink(appLogFile, outputTemplate), LogEventLevel.Debug)
             .WriteTo.Sink(new DebugLogSink(outputTemplate), LogEventLevel.Debug)
+            .WriteTo.Sink(new PostHogExceptionSink(), LogEventLevel.Error)
             .MinimumLevel.Debug()
             .CreateLogger();
 

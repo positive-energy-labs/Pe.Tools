@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect";
+import { boundedPayload, capture } from "@pe/runtime";
 import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
 import { RevitBridge, BridgeError, NoRevitSession, type BridgeSessionView } from "./bridge.ts";
 import { apsAuthLogin, apsAuthLogout, apsAuthStatus, apsAuthToken } from "./aps-auth.ts";
@@ -30,8 +31,10 @@ import type { HostErrorKind } from "@pe/host-contracts/contracts";
  * untouched — the Revit side owns validation, so runtime-registered ops need
  * zero host changes. Errors are problem-JSON with a real HTTP status.
  */
-export const callRoute = HttpRouter.add("POST", "/call", (req) =>
-  Effect.gen(function* () {
+export const callRoute = HttpRouter.add("POST", "/call", (req) => {
+  // Set once dispatch begins so the catch below can attribute failures to the op.
+  let op: { key: string; request: unknown; tsOnly: boolean; startedAt: number } | undefined;
+  return Effect.gen(function* () {
     const body = yield* req.json.pipe(Effect.mapError(() => invalidBody("unreadable JSON body")));
     if (!isRecord(body) || typeof body.key !== "string")
       return yield* Effect.fail(invalidBody("body must be { key: string, request?: object }"));
@@ -52,21 +55,48 @@ export const callRoute = HttpRouter.add("POST", "/call", (req) =>
       const sessions = yield* bridge.list;
       if (sessions.length > 1) return yield* Effect.fail(ambiguousBridgeTarget(sessions));
     }
+    op = { key, request, tsOnly: isTsOnlyOperationKey(key), startedAt: Date.now() };
     const result = isTsOnlyOperationKey(key)
       ? yield* dispatchTsOnlyOperation(key, request, bridgeSessionId, bridge)
       : yield* bridge.invoke(key, request ?? {}, bridgeSessionId);
+    captureHostOp(op, { ok: true, output: result });
     return Response.jsonUnsafe(result ?? null);
   }).pipe(
-    Effect.catch((error) =>
-      Effect.succeed(
+    Effect.catch((error) => {
+      if (op) captureHostOp(op, { ok: false, problem: toProblem(error) });
+      return Effect.succeed(
         Response.jsonUnsafe(toProblem(error), {
           status: toProblem(error).status,
           headers: { "content-type": "application/problem+json" },
         }),
-      ),
-    ),
-  ),
-);
+      );
+    }),
+  );
+});
+
+/** Full-fidelity op analytics (input and output, size-bounded) — the host_op event. */
+function captureHostOp(
+  op: { key: string; request: unknown; tsOnly: boolean; startedAt: number },
+  outcome:
+    | { ok: true; output: unknown }
+    | { ok: false; problem: { kind: string; message: string } },
+): void {
+  const input = boundedPayload(op.request ?? null);
+  const output = boundedPayload(outcome.ok ? (outcome.output ?? null) : outcome.problem);
+  capture("host_op", {
+    op: op.key,
+    ts_only: op.tsOnly,
+    ok: outcome.ok,
+    error_kind: outcome.ok ? undefined : outcome.problem.kind,
+    duration_ms: Date.now() - op.startedAt,
+    input: input.json,
+    input_truncated: input.truncated,
+    input_bytes: input.bytes,
+    output: output.json,
+    output_truncated: output.truncated,
+    output_bytes: output.bytes,
+  });
+}
 
 export class InvalidHostRequest {
   readonly _tag = "InvalidHostRequest";
