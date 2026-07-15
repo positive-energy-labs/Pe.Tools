@@ -2,6 +2,7 @@ import { getRouteApi } from "@tanstack/react-router";
 
 import { TargetChip } from "#/components/target-chip";
 import { mintSelector, sessionLabel, type TargetSelector } from "#/host/target";
+import { CHAT_CONSUMER, readScoped, scopeKey, type TargetScope } from "#/host/target-scope";
 import { chipDescriptor, LaneBadge, LiveDot, resolutionReadout, toneColor } from "#/host/target-ui";
 import { useTarget, useWorldLog, type WorldEvent } from "#/host/use-target";
 
@@ -9,14 +10,21 @@ import { useTarget, useWorldLog, type WorldEvent } from "#/host/use-target";
  * Chat-wired target surfaces. The pin is the `target` search param (a selector, retained like
  * `thread`); resolution is live against the broker session list. One hook, three reflections:
  * the composer chip, the world-lane section, and the mapdial rail/ticks in the Lens.
+ *
+ * The chat is one SCOPE — (thread, _chat) — read through host/target-scope.ts. Today its selector
+ * persists in the `?target` URL param: a one-entry TargetBook. When cross-tab sync / multi-plugin
+ * tenancy / per-thread persistence land, a synced thread-keyed book replaces this backend and
+ * scope callers here don't change. ponytail: single-scope URL backend until a second tab/plugin exists.
  */
 
 const chatRoute = getRouteApi("/chat");
 
 export function useChatTarget() {
-  const { target } = chatRoute.useSearch();
+  const { thread, target } = chatRoute.useSearch();
   const navigate = chatRoute.useNavigate();
-  const selector: TargetSelector = target ?? "";
+  const scope: TargetScope = { threadId: thread ?? "", consumerId: CHAT_CONSUMER };
+  const book = target ? { [scopeKey(scope)]: target } : {};
+  const selector: TargetSelector = readScoped(book, scope);
   const { resolution, sessions } = useTarget(selector);
   const worldLog = useWorldLog(sessions);
   const pin = (next: TargetSelector) =>
