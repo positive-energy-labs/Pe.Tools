@@ -11,7 +11,7 @@
 // The runtime service file the SERVICE writes when it binds and deletes on graceful shutdown:
 //   <appBase>/state/service/<name>.json =
 //     { schemaVersion, instanceId, pid, processStartUtc, port, version, lane, token }
-//   <appBase>/state/service/<name>.log  = the spawned service's captured stdout+stderr (truncated at each spawn)
+//   <appBase>/state/service/<name>.log  = spawned stdout+stderr plus supervisor breadcrumbs (append-only)
 // Discovery is file-based: the port the service actually bound is authoritative; a manifest's
 // preferredPort is only a hint and is never hardcoded by a client. The shutdown endpoint is authorized
 // by the file's per-launch token, sent BOTH as the header `X-Pe-Service-Token` and in the JSON body
@@ -23,7 +23,7 @@
 // exe path. Loopback-only, always.
 
 import { spawn } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, openSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync } from "node:fs";
 import { mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -106,10 +106,13 @@ const SHUTDOWN_TIMEOUT_MS = 1_000;
 const PORT_RELEASE_TIMEOUT_MS = 5_000;
 const POLL_INTERVAL_MS = 250;
 const DEFAULT_STARTUP_TIMEOUT_MS = 15_000;
+const LEASE_PATH_ENV = "PE_SERVICE_LEASE_PATH";
+const LEASE_TOKEN_ENV = "PE_SERVICE_LEASE_TOKEN";
 
 interface ServiceLease {
   readonly path: string;
   readonly token: string;
+  readonly inherited: boolean;
 }
 
 async function acquireServiceLease(
@@ -119,17 +122,34 @@ async function acquireServiceLease(
 ): Promise<ServiceLease | null> {
   const path = join(appBase, "state", "service", `${name}.lock`);
   await mkdir(dirname(path), { recursive: true });
+  const inheritedPath = process.env[LEASE_PATH_ENV];
+  const inheritedToken = process.env[LEASE_TOKEN_ENV];
+  // appBase may be a junction alias, so verify the inherited capability against this path's lock
+  // contents instead of requiring path-string equality.
+  if (inheritedPath && inheritedToken) {
+    try {
+      const owner = JSON.parse(await readFile(path, "utf8")) as { token?: unknown };
+      if (owner.token === inheritedToken) {
+        delete process.env[LEASE_PATH_ENV];
+        delete process.env[LEASE_TOKEN_ENV];
+        return { path, token: inheritedToken, inherited: true };
+      }
+    } catch {}
+  }
   const deadline = Date.now() + timeoutMs;
   do {
     const token = randomUUID();
     try {
       const handle = await open(path, "wx");
       try {
-        await handle.writeFile(JSON.stringify({ pid: process.pid, token }), "utf8");
+        await handle.writeFile(
+          JSON.stringify({ pid: process.pid, token, acquiredUtc: new Date().toISOString() }),
+          "utf8",
+        );
       } finally {
         await handle.close();
       }
-      return { path, token };
+      return { path, token, inherited: false };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") return null;
       if (await leaseOwnerIsGone(path)) {
@@ -143,10 +163,26 @@ async function acquireServiceLease(
 }
 
 async function releaseServiceLease(lease: ServiceLease): Promise<void> {
+  if (lease.inherited) return;
   try {
     const owner = JSON.parse(await readFile(lease.path, "utf8")) as { token?: unknown };
     if (owner.token === lease.token) await rm(lease.path, { force: true });
   } catch {}
+}
+
+async function describeLeaseOwner(path: string): Promise<string> {
+  try {
+    const owner = JSON.parse(await readFile(path, "utf8")) as {
+      pid?: unknown;
+      acquiredUtc?: unknown;
+    };
+    return (
+      ` (lock '${path}' owner pid ${typeof owner.pid === "number" ? owner.pid : "unknown"}` +
+      `${typeof owner.acquiredUtc === "string" ? `, acquired ${owner.acquiredUtc}` : ""})`
+    );
+  } catch (error) {
+    return ` (lock '${path}' owner unreadable: ${describe(error)})`;
+  }
 }
 
 async function leaseOwnerIsGone(path: string): Promise<boolean> {
@@ -299,7 +335,13 @@ export async function ensureRunning(
     };
   const timeoutMs = opts.timeoutMs ?? DEFAULT_STARTUP_TIMEOUT_MS;
   const lease = await acquireServiceLease(appBase, name, timeoutMs);
-  if (!lease) return { state: "failed", reason: `service '${name}' is busy in another supervisor` };
+  if (!lease) {
+    const path = join(appBase, "state", "service", `${name}.lock`);
+    return {
+      state: "failed",
+      reason: `service '${name}' is busy in another supervisor${await describeLeaseOwner(path)}`,
+    };
+  }
   try {
     const existing = await readServiceFile(appBase, name);
     if (existing) {
@@ -323,7 +365,7 @@ export async function ensureRunning(
       if (current && !(await deleteServiceFile(appBase, name, existing.instanceId)))
         return { state: "failed", reason: `service '${name}' state could not be cleared; retry` };
     }
-    return await spawnAndWait(appBase, name, opts);
+    return await spawnAndWait(appBase, name, opts, lease);
   } finally {
     await releaseServiceLease(lease);
   }
@@ -362,10 +404,20 @@ export async function takeOver(
     };
   const timeoutMs = opts.timeoutMs ?? DEFAULT_STARTUP_TIMEOUT_MS;
   const lease = await acquireServiceLease(appBase, name, timeoutMs);
-  if (!lease) return { outcome: "failed", reason: `service '${name}' is busy in another supervisor` };
+  if (!lease) {
+    const path = join(appBase, "state", "service", `${name}.lock`);
+    return {
+      outcome: "failed",
+      reason: `service '${name}' is busy in another supervisor${await describeLeaseOwner(path)}`,
+    };
+  }
   try {
     const existing = await readServiceFile(appBase, name);
-    if (!existing || existing.instanceId === identity.instanceId || !(await recordedProcessAlive(existing))) {
+    if (
+      !existing ||
+      existing.instanceId === identity.instanceId ||
+      !(await recordedProcessAlive(existing))
+    ) {
       // No verified foreign owner: clear a stale file naming a dead owner, then install our identity.
       if (existing && existing.instanceId !== identity.instanceId)
         await deleteServiceFile(appBase, name, existing.instanceId);
@@ -443,7 +495,10 @@ function matches(
   expectedExecutablePath: string | undefined,
 ): boolean {
   if (file.executablePath === undefined) return false;
-  if (expectedExecutablePath !== undefined && !samePath(file.executablePath, expectedExecutablePath))
+  if (
+    expectedExecutablePath !== undefined &&
+    !samePath(file.executablePath, expectedExecutablePath)
+  )
     return false;
   const versionOk = expectedVersion === undefined || file.version === expectedVersion;
   return versionOk && file.lane.toLowerCase() === lane.toLowerCase();
@@ -475,14 +530,19 @@ async function spawnAndWait(
   appBase: string,
   name: string,
   opts: EnsureRunningOptions,
+  lease: ServiceLease,
 ): Promise<EnsureRunningResult> {
-  // Capture the detached service's stdout+stderr to state/service/<name>.log (truncated at each
-  // spawn) so a service that dies before writing its file leaves a diagnosable trail.
+  // Capture detached stdout+stderr and preserve every retry with a supervisor breadcrumb.
   const logPath = join(appBase, "state", "service", `${name}.log`);
   let logFd: number;
   try {
     mkdirSync(dirname(logPath), { recursive: true });
-    logFd = openSync(logPath, "w");
+    appendFileSync(
+      logPath,
+      `\n[${new Date().toISOString()}] supervisor pid=${process.pid} spawning '${opts.entryPath}' lane=${opts.lane}\n`,
+      "utf8",
+    );
+    logFd = openSync(logPath, "a");
   } catch (error) {
     return {
       state: "failed",
@@ -496,7 +556,13 @@ async function spawnAndWait(
       cwd: dirname(opts.entryPath),
       detached: true,
       stdio: ["ignore", logFd, logFd],
-      env: { ...process.env, ...opts.spawnEnv, PE_LANE: opts.lane },
+      env: {
+        ...process.env,
+        ...opts.spawnEnv,
+        PE_LANE: opts.lane,
+        [LEASE_PATH_ENV]: lease.path,
+        [LEASE_TOKEN_ENV]: lease.token,
+      },
     });
     await new Promise<void>((resolve, reject) => {
       const onSpawn = () => {
@@ -524,7 +590,8 @@ async function spawnAndWait(
     const file = await readServiceFile(appBase, name);
     if (!file) continue;
     if (!(await probeHealth(file.port, opts.health))) continue;
-    if (matches(file, opts.expectedVersion, opts.lane, opts.entryPath)) return { state: "started", file };
+    if (matches(file, opts.expectedVersion, opts.lane, opts.entryPath))
+      return { state: "started", file };
   }
   const cleaned = child?.pid ? await killByPid(appBase, child.pid, childStartUtc) : false;
   const timedOutFile = await readServiceFile(appBase, name);

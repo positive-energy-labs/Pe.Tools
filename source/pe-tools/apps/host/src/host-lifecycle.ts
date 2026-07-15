@@ -89,6 +89,9 @@ export const ServiceFileLive = Layer.effectDiscard(
     const address = server.address;
     const port = address._tag === "TcpAddress" ? address.port : 0;
     const appBase = productRoot();
+    console.log(
+      `pe-host service claim requested name=${hostProcessIdentity.serviceName} leaseHandoff=${Boolean(process.env.PE_SERVICE_LEASE_PATH)}`,
+    );
     const handle = yield* Effect.acquireRelease(
       Effect.promise(() => claimServiceHost(appBase, buildHostDescriptor(port))).pipe(
         Effect.flatMap((result) =>
@@ -99,6 +102,7 @@ export const ServiceFileLive = Layer.effectDiscard(
       ),
       (handle) => Effect.promise(() => handle.release()),
     );
+    console.log(`pe-host service claim acquired pid=${handle.serviceFile.pid} port=${port}`);
     yield* Deferred.succeed(handleDeferred, handle);
   }),
 );
