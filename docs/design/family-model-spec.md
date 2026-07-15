@@ -189,7 +189,7 @@ Canonical profiles live under `source/Pe.Revit.Tests/Fixtures/Profiles/family-mo
 - `pe-bath-shower.family.json` — plumbing fixture with cold/hot/drain Pipe Connectors, inline puck stubs, parameter associations, and an upward room calculation point that resolves the containing room.
 - `pe-wc-urinal-bidet.family.json` — the corresponding WC/urinal/bidet fixture with the same composition and upward-room contract.
 - `family-model-showcase.family.json` — one contrived educational family exercising every supported param-driven-solids primitive and Connector profile. A sibling `family-model-showcase.md` explains the sections progressively without duplicating the JSON into several near-identical profiles.
-- `dependencies/` — portable nested vane/puck family models required by those profiles. Generated `.rfa` files and screenshots remain test artifacts, not checked-in sources of truth.
+- `dependencies/` — portable nested vane family models required by those profiles. The rotatable puck is the one native exception: Family Foundry ships a target-year `puck.rfa` compiler resource because Revit's public API cannot recreate its reference-line-picked extrusion work plane. Screenshots and other generated `.rfa` files remain test artifacts.
 
 Each profile gets one focused roundtrip test. The tests reuse and deepen `FamilyFoundryRoundtripHarness`; they do not create a second harness or retest the bulk migrator.
 
@@ -277,7 +277,8 @@ Exit gate: GRD profile roundtrips with empty `unmodeled` for the declared contra
 
 Scope:
 
-- implement the minimal inline Connector-stub compiler over the portable puck dependency;
+- implement the minimal inline Connector-stub compiler over the target-year native puck compiler resource;
+- keep the UI-only work-plane association behind the compiler; do not expose a native-family path in authored settings;
 - implement/capture nested transforms, hosting, visibility, and parameter associations required by the plumbing fixtures;
 - author Bath-Shower and WC-Urinal-Bidet profiles;
 - run the puck-angle experiment. If the existing convention does not make the real Connector rotate, report that observable limitation; do not persist metadata or widen the public API merely to force symmetry.

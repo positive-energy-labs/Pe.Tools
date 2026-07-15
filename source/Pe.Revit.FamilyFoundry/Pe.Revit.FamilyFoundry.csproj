@@ -23,4 +23,12 @@
         <ProjectReference Include="..\Pe.Revit.Ui\Pe.Revit.Ui.csproj"/>
     </ItemGroup>
 
+    <ItemGroup>
+        <EmbeddedResource
+                Include="Resources\Native\$(RevitVersion)\puck.rfa"
+                Condition="Exists('Resources\Native\$(RevitVersion)\puck.rfa')"
+                LogicalName="Pe.Revit.FamilyFoundry.Resources.Native.$(RevitVersion).puck.rfa"
+        />
+    </ItemGroup>
+
 </Project>
