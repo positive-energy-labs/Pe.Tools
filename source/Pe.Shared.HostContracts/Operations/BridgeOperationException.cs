@@ -1,8 +1,8 @@
-﻿using Pe.Shared.HostContracts.SettingsStorage;
+using Pe.Shared.HostContracts.SettingsStorage;
 
-namespace Pe.Revit.Global.Services.Host;
+namespace Pe.Shared.HostContracts.Operations;
 
-internal sealed class BridgeOperationException(
+public sealed class BridgeOperationException(
     int statusCode,
     string message,
     IReadOnlyList<ValidationIssue>? issues = null
@@ -11,7 +11,7 @@ internal sealed class BridgeOperationException(
     public int StatusCode { get; } = statusCode;
 }
 
-internal static class BridgeOperationExceptions {
+public static class BridgeOperationExceptions {
     public const int BadRequestStatusCode = 400;
     public const int ConflictStatusCode = 409;
     public const int UnexpectedStatusCode = 500;
@@ -33,14 +33,7 @@ internal static class BridgeOperationExceptions {
     ) => new(
         UnexpectedStatusCode,
         exception.Message,
-        [
-            Issue(
-                "$",
-                issueCode,
-                exception.Message,
-                suggestion
-            )
-        ]
+        [Issue("$", issueCode, exception.Message, suggestion)]
     );
 
     public static ValidationIssue Issue(

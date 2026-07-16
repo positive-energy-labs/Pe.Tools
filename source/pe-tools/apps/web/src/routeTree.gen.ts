@@ -14,6 +14,7 @@ import { Route as ScheduleGridRouteImport } from "./routes/schedule-grid";
 import { Route as ParameterLinksRouteImport } from "./routes/parameter-links";
 import { Route as OpsRouteImport } from "./routes/ops";
 import { Route as FamilyTypesRouteImport } from "./routes/family-types";
+import { Route as FamilyModelRouteImport } from "./routes/family-model";
 import { Route as FamilyMatrixRouteImport } from "./routes/family-matrix";
 import { Route as FamilyDocRouteImport } from "./routes/family-doc";
 import { Route as FamilyAuditRouteImport } from "./routes/family-audit";
@@ -53,6 +54,11 @@ const OpsRoute = OpsRouteImport.update({
 const FamilyTypesRoute = FamilyTypesRouteImport.update({
   id: "/family-types",
   path: "/family-types",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const FamilyModelRoute = FamilyModelRouteImport.update({
+  id: "/family-model",
+  path: "/family-model",
   getParentRoute: () => rootRouteImport,
 } as any);
 const FamilyMatrixRoute = FamilyMatrixRouteImport.update({
@@ -139,6 +145,7 @@ export interface FileRoutesByFullPath {
   "/family-audit": typeof FamilyAuditRoute;
   "/family-doc": typeof FamilyDocRoute;
   "/family-matrix": typeof FamilyMatrixRoute;
+  "/family-model": typeof FamilyModelRoute;
   "/family-types": typeof FamilyTypesRoute;
   "/ops": typeof OpsRoute;
   "/parameter-links": typeof ParameterLinksRoute;
@@ -161,6 +168,7 @@ export interface FileRoutesByTo {
   "/family-audit": typeof FamilyAuditRoute;
   "/family-doc": typeof FamilyDocRoute;
   "/family-matrix": typeof FamilyMatrixRoute;
+  "/family-model": typeof FamilyModelRoute;
   "/family-types": typeof FamilyTypesRoute;
   "/ops": typeof OpsRoute;
   "/parameter-links": typeof ParameterLinksRoute;
@@ -184,6 +192,7 @@ export interface FileRoutesById {
   "/family-audit": typeof FamilyAuditRoute;
   "/family-doc": typeof FamilyDocRoute;
   "/family-matrix": typeof FamilyMatrixRoute;
+  "/family-model": typeof FamilyModelRoute;
   "/family-types": typeof FamilyTypesRoute;
   "/ops": typeof OpsRoute;
   "/parameter-links": typeof ParameterLinksRoute;
@@ -208,6 +217,7 @@ export interface FileRouteTypes {
     | "/family-audit"
     | "/family-doc"
     | "/family-matrix"
+    | "/family-model"
     | "/family-types"
     | "/ops"
     | "/parameter-links"
@@ -230,6 +240,7 @@ export interface FileRouteTypes {
     | "/family-audit"
     | "/family-doc"
     | "/family-matrix"
+    | "/family-model"
     | "/family-types"
     | "/ops"
     | "/parameter-links"
@@ -252,6 +263,7 @@ export interface FileRouteTypes {
     | "/family-audit"
     | "/family-doc"
     | "/family-matrix"
+    | "/family-model"
     | "/family-types"
     | "/ops"
     | "/parameter-links"
@@ -275,6 +287,7 @@ export interface RootRouteChildren {
   FamilyAuditRoute: typeof FamilyAuditRoute;
   FamilyDocRoute: typeof FamilyDocRoute;
   FamilyMatrixRoute: typeof FamilyMatrixRoute;
+  FamilyModelRoute: typeof FamilyModelRoute;
   FamilyTypesRoute: typeof FamilyTypesRoute;
   OpsRoute: typeof OpsRoute;
   ParameterLinksRoute: typeof ParameterLinksRoute;
@@ -324,6 +337,13 @@ declare module "@tanstack/react-router" {
       path: "/family-types";
       fullPath: "/family-types";
       preLoaderRoute: typeof FamilyTypesRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/family-model": {
+      id: "/family-model";
+      path: "/family-model";
+      fullPath: "/family-model";
+      preLoaderRoute: typeof FamilyModelRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/family-matrix": {
@@ -453,6 +473,7 @@ const rootRouteChildren: RootRouteChildren = {
   FamilyAuditRoute: FamilyAuditRoute,
   FamilyDocRoute: FamilyDocRoute,
   FamilyMatrixRoute: FamilyMatrixRoute,
+  FamilyModelRoute: FamilyModelRoute,
   FamilyTypesRoute: FamilyTypesRoute,
   OpsRoute: OpsRoute,
   ParameterLinksRoute: ParameterLinksRoute,

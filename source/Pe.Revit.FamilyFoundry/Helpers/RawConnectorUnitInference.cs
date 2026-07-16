@@ -31,6 +31,12 @@ internal static partial class RawConnectorUnitInference {
         if (coordinateSystem == null || !TryGetAxis(coordinateSystem.BasisZ, out var faceAxis))
             return null;
 
+        // Electrical ConnectorElement.Shape is not a reliable description of the authored visual stub. Scoring it
+        // as rectangular can claim the equipment body itself. For electrical only, infer the smallest centered
+        // extrusion touching the connector plane; the connector/stub coupling is observable even though Shape is not.
+        if (connector.Domain == Domain.DomainElectrical)
+            return TryMatchElectricalStub(connector, extrusions, faceAxis);
+
         var connectorSize = GetConnectorSize(connector);
         var best = extrusions
             .Select(extrusion => TryScoreExtrusion(connector, extrusion, faceAxis, connectorSize))
@@ -39,6 +45,45 @@ internal static partial class RawConnectorUnitInference {
             .FirstOrDefault();
 
         return best?.Match;
+    }
+
+    private static RawConnectorStubMatch? TryMatchElectricalStub(
+        ConnectorElement connector,
+        IReadOnlyList<Extrusion> extrusions,
+        DominantAxis faceAxis
+    ) {
+        return extrusions
+            .Select(extrusion => {
+                var boundingBox = extrusion.get_BoundingBox(null);
+                if (boundingBox == null || (!IsRoundExtrusion(extrusion) && !IsRectangularExtrusion(extrusion)))
+                    return null;
+
+                var planeDistance = GetHostPlaneDistance(connector.Origin, faceAxis, boundingBox);
+                if (planeDistance > PlaneDistanceTolerance)
+                    return null;
+
+                var axes = GetPerpendicularAxes(faceAxis);
+                var primaryExtent = GetAxisExtent(boundingBox, axes[0]);
+                var secondaryExtent = GetAxisExtent(boundingBox, axes[1]);
+                var score = (planeDistance * 1000.0) +
+                            GetInPlaneCenterDistance(connector.Origin, faceAxis, boundingBox) +
+                            (primaryExtent * secondaryExtent);
+                return new ScoredStubMatch(
+                    score,
+                    new RawConnectorStubMatch(
+                        extrusion,
+                        faceAxis,
+                        axes[0],
+                        axes[1],
+                        ToBasisVector(axes[0]),
+                        ToBasisVector(axes[1]),
+                        primaryExtent,
+                        secondaryExtent));
+            })
+            .Where(candidate => candidate != null)
+            .OrderBy(candidate => candidate!.Score)
+            .FirstOrDefault()
+            ?.Match;
     }
 
     public static double ScoreOrderedRectangularConnectorCandidate(

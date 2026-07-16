@@ -5,7 +5,10 @@ internal static class FamilyFoundryRuntimeProbe {
         if (!familyDocument.IsFamilyDocument)
             throw new InvalidOperationException("Expected a family document.");
 
-        familyDocument.Regenerate();
+        // Reopened RFAs are already regenerated and are intentionally inspected read-only. Revit forbids an
+        // explicit Regenerate outside a transaction, while apply-time callers may already own one.
+        if (familyDocument.IsModifiable)
+            familyDocument.Regenerate();
 
         var currentType = familyDocument.FamilyManager.CurrentType
                           ?? throw new InvalidOperationException("The family document had no current type.");

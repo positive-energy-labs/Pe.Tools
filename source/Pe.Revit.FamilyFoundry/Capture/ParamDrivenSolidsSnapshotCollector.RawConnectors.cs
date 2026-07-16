@@ -97,6 +97,8 @@ public partial class ParamDrivenSolidsSnapshotCollector {
         var normal = coordinateSystem.BasisZ.Normalize();
         if (!RawConnectorUnitInference.TryGetAxis(normal, out var faceAxis))
             return null;
+        var frameNormal = FormatSignedAxis(normal, faceAxis);
+        var frameUp = FormatSignedAxis(coordinateSystem.BasisY.Normalize());
 
         var centerAxes = RawConnectorUnitInference.GetPerpendicularAxes(faceAxis);
         if (!anchors.ContainsKey(faceAxis) ||
@@ -128,7 +130,33 @@ public partial class ParamDrivenSolidsSnapshotCollector {
             string.IsNullOrWhiteSpace(center2Ref))
             return null;
 
+        depthDir = ResolveFaceRelativeDepthDirection(
+            faceRef,
+            normal,
+            depthDir);
+
         var config = BuildConfig(connector, domain);
+
+        if (domain == ParamDrivenConnectorDomain.Electrical &&
+            stubMatch != null &&
+            IsCircleProfile(stubMatch.Extrusion.Sketch.Profile)) {
+            var diameter = TryGetCircleDiameterParameter(stubMatch.Extrusion, doc, out var diameterParameter)
+                ? ToAuthoredLength(diameterParameter)
+                : ToAuthoredLiteral((stubMatch.PrimaryExtent + stubMatch.SecondaryExtent) / 2.0);
+            return new AuthoredConnectorSpec {
+                Name = name,
+                FrameNormal = frameNormal,
+                FrameUp = frameUp,
+                Domain = domain,
+                Face = faceRef,
+                Depth = new AuthoredDepthSpec { By = depthBy, Dir = depthDir },
+                Round = new AuthoredRoundConnectorGeometrySpec {
+                    Center = [center1Ref, center2Ref],
+                    Diameter = new AuthoredMeasureSpec { By = diameter }
+                },
+                Config = config
+            };
+        }
 
         if (connector.Shape == ConnectorProfileType.Round) {
             if (!TryGetRoundDiameter(connector, out var diameter))
@@ -136,6 +164,8 @@ public partial class ParamDrivenSolidsSnapshotCollector {
 
             return new AuthoredConnectorSpec {
                 Name = name,
+                FrameNormal = frameNormal,
+                FrameUp = frameUp,
                 Domain = domain,
                 Face = faceRef,
                 Depth = new AuthoredDepthSpec { By = depthBy, Dir = depthDir },
@@ -180,6 +210,8 @@ public partial class ParamDrivenSolidsSnapshotCollector {
 
         return new AuthoredConnectorSpec {
             Name = name,
+            FrameNormal = frameNormal,
+            FrameUp = frameUp,
             Domain = domain,
             Face = faceRef,
             Depth = new AuthoredDepthSpec { By = depthBy, Dir = depthDir },
@@ -197,6 +229,47 @@ public partial class ParamDrivenSolidsSnapshotCollector {
             Config = config
         };
     }
+
+    private static string ResolveFaceRelativeDepthDirection(
+        string faceReference,
+        XYZ connectorNormal,
+        string fallback
+    ) {
+        var name = faceReference.StartsWith("plane:", StringComparison.OrdinalIgnoreCase)
+            ? faceReference["plane:".Length..]
+            : faceReference.TrimStart('@');
+        var separator = name.LastIndexOf('.');
+        var faceName = separator < 0 ? name : name[(separator + 1)..];
+        var outward = faceName.ToUpperInvariant() switch {
+            "FRONT" => XYZ.BasisY,
+            "BACK" => XYZ.BasisY.Negate(),
+            "LEFT" => XYZ.BasisX.Negate(),
+            "RIGHT" => XYZ.BasisX,
+            "TOP" => XYZ.BasisZ,
+            "BOTTOM" => XYZ.BasisZ.Negate(),
+            _ => null
+        };
+        if (outward == null)
+            return fallback;
+
+        if (connectorNormal.IsZeroLength())
+            return fallback;
+
+        // BasisZ is the actual MEP direction and therefore the observable frame normal. Replay explicitly aligns
+        // every ConnectorElement to this axis; deriving direction from stub endpoints would still be unstable
+        // because Revit can swap extrusion start/end faces while preserving the connector.
+        return connectorNormal.Normalize().DotProduct(outward) >= 0 ? "out" : "in";
+    }
+
+    private static string FormatSignedAxis(XYZ vector) {
+        if (!RawConnectorUnitInference.TryGetAxis(vector, out var axis))
+            throw new InvalidOperationException($"Connector frame axis '{vector}' was not orthogonal.");
+
+        return FormatSignedAxis(vector, axis);
+    }
+
+    private static string FormatSignedAxis(XYZ vector, DominantAxis axis) =>
+        $"{(GetAxisCoordinate(vector, axis) < 0.0 ? "-" : "+")}{axis}";
 
     private static string GetAssociatedOrLiteralMeasure(
         Document doc,
@@ -404,10 +477,14 @@ public partial class ParamDrivenSolidsSnapshotCollector {
             SignedDistanceToPlane(ReplaceAxisCoordinate(connector.Origin, faceAxis, resolvedTerminalCoord),
                 anchorPlane);
         depthDir = terminalSigned >= baseSigned ? "out" : "in";
-        depthBy = Math.Abs(baseSigned) <= AuthoredOffsetTolerance
-            ? GetAssociatedOrLiteralMeasure(doc, stubMatch.Extrusion, BuiltInParameter.EXTRUSION_END_PARAM,
-                depthMagnitude)
-            : ToAuthoredLiteral(depthMagnitude);
+        // Host-face offset and stub depth are independent. A top/side-hosted stub has a nonzero baseSigned
+        // relative to the family origin, but its intrinsic end-offset association is still the portable depth
+        // driver. Falling back to a literal here silently discarded that association after save/reopen.
+        depthBy = GetAssociatedOrLiteralMeasure(
+            doc,
+            stubMatch.Extrusion,
+            BuiltInParameter.EXTRUSION_END_PARAM,
+            depthMagnitude);
         return true;
     }
 

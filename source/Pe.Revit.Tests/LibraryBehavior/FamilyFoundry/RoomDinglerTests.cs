@@ -1,10 +1,12 @@
 using Autodesk.Revit.DB.Architecture;
 using Autodesk.Revit.DB.Structure;
 using Pe.Revit.Extensions.FamDocument;
+using Pe.Revit.DocumentData.AgentContext;
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Revit.FamilyFoundry.Profiles;
+using Pe.Shared.RevitData.Families;
 using System.Globalization;
 
 namespace Pe.Revit.Tests.LibraryBehavior.FamilyFoundry;
@@ -54,6 +56,83 @@ public sealed class RoomDinglerTests {
     [Test]
     public void Wall_hosted_room_dingler_processed_family_instance_resolves_placed_room(UIApplication uiApplication) =>
         AssertRoomDinglerProcessedFamilyInstanceResolvesPlacedRoom(RoomDinglerHostKind.WallHosted, uiApplication);
+
+    [Test]
+    public void Generated_grd_opens_into_the_room_and_exports_visual_proof(UIApplication uiApplication) {
+        var application = uiApplication.Application;
+        var fixturePath = RevitFamilyFixtureHarness.GetProfileFixturePath(
+            Path.Combine("family-model", "pe-grd-vane.family.json"));
+        var parsed = FamilyModelJson.Parse(File.ReadAllText(fixturePath));
+        Assert.That(parsed.Diagnostics, Is.Empty,
+            string.Join(Environment.NewLine, parsed.Diagnostics.Select(item => item.Message)));
+        var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(
+            nameof(this.Generated_grd_opens_into_the_room_and_exports_visual_proof));
+        var familyDocument = FamilyModelBuilder.Build(
+            application,
+            parsed.Value!,
+            Path.GetDirectoryName(fixturePath)).Document;
+        Document? projectDocument = RevitFamilyFixtureHarness.CreateProjectDocument(application);
+        UIDocument? activeProject = null;
+
+        try {
+            var familyPath = RevitFamilyFixtureHarness.SaveDocumentCopy(
+                familyDocument, outputDirectory, "PE GRD Supply");
+            var loadedFamily = RevitFamilyFixtureHarness.LoadFamilyIntoProject(
+                application, projectDocument, familyPath);
+            FamilyInstance instance;
+            Room room;
+            Wall hostWall;
+            using (var transaction = new Transaction(projectDocument, "Place GRD room proof")) {
+                _ = transaction.Start();
+                (room, hostWall) = BuildSingleRoom(projectDocument);
+                var symbol = loadedFamily.GetFamilySymbolIds()
+                    .Select(id => (FamilySymbol)projectDocument.GetElement(id))
+                    .Single(item => item.Name == "Thirty Seven Vanes");
+                if (!symbol.IsActive)
+                    symbol.Activate();
+                instance = PlaceFaceHostedInstance(projectDocument, symbol, hostWall);
+                projectDocument.Regenerate();
+                _ = transaction.Commit();
+            }
+
+            var openingSide = instance.GetSpatialElementCalculationPoint();
+            var wallCenter = ((LocationCurve)hostWall.Location).Curve.Project(openingSide).XYZPoint;
+            var backSide = wallCenter + (wallCenter - openingSide);
+            Assert.Multiple(() => {
+                Assert.That(instance.HasSpatialElementCalculationPoint, Is.True);
+                Assert.That(projectDocument.GetRoomAtPoint(openingSide)?.Id, Is.EqualTo(room.Id),
+                    "The GRD calculation point must extend into the opening-side room.");
+                Assert.That(projectDocument.GetRoomAtPoint(backSide), Is.Null,
+                    "The point mirrored across the host wall must remain outside the room.");
+            });
+
+            var projectPath = RevitFamilyFixtureHarness.SaveDocumentCopy(
+                projectDocument, outputDirectory, "GRD Room Proof");
+            RevitFamilyFixtureHarness.CloseDocument(projectDocument);
+            projectDocument = null;
+            activeProject = uiApplication.OpenAndActivateDocument(projectPath);
+            projectDocument = activeProject.Document;
+            var view = new FilteredElementCollector(projectDocument)
+                .OfClass(typeof(ViewPlan))
+                .Cast<ViewPlan>()
+                .First(item => !item.IsTemplate && item.ViewType == ViewType.FloorPlan);
+            activeProject.ActiveView = view;
+            activeProject.RefreshActiveView();
+            var wholeImage = RevitViewImageExporter.Export(projectDocument, view, 1600);
+            Assert.That(wholeImage.ByteSize, Is.GreaterThan(0), wholeImage.FilePath);
+            var proofPath = Path.Combine(
+                Path.GetDirectoryName(typeof(RoomDinglerTests).Assembly.Location)!,
+                "visual-proof",
+                "grd-room-proof.png");
+            Directory.CreateDirectory(Path.GetDirectoryName(proofPath)!);
+            File.Copy(wholeImage.FilePath, proofPath, true);
+            TestContext.Progress.WriteLine($"[PE_FF_VISUAL_PROOF] {proofPath}");
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(familyDocument);
+            if (activeProject == null)
+                RevitFamilyFixtureHarness.CloseDocument(projectDocument);
+        }
+    }
 
     private static void AssertRoomDinglerProcessedFamilyInstanceResolvesPlacedRoom(
         RoomDinglerHostKind hostKind,
@@ -190,6 +269,7 @@ public sealed class RoomDinglerTests {
         var reference = HostObjectUtils.GetSideFaces(hostWall, ShellLayerType.Interior).First();
         return document.Create.NewFamilyInstance(reference, new XYZ(0, 5, 4), XYZ.BasisZ, symbol);
     }
+
 }
 
 public enum RoomDinglerHostKind {

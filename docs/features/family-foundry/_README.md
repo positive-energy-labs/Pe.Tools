@@ -22,13 +22,13 @@ Durable authoring rules:
 
 - Desired/declarative state is the only external parameter authoring model for Manager and Migrator.
 - Legacy per-operation settings such as add-family-params, set-known-params, add-and-map-shared-params, and filter-APS-params are internal compiled execution details, not public profile options.
-- Portable authored parameter declarations live in `Pe.Shared.RevitData` as Revit-assembly-free, stringly, flat DTOs. Family Foundry may derive or wrap them, but it should not own duplicate common fields such as `Name`, `GroupType`, `IsInstance`, `Value`, or `Formula`.
-- Shared and local family parameters are authored in separate top-level declaration arrays.
+- Portable `FamilyModel` and its authored parameter specs live in `Pe.Shared.RevitData.Families` as Revit-assembly-free DTOs. Family Foundry owns lowering/capture/apply, not a duplicate authored model.
+- Shared and local family parameters are authored in separate top-level exact-name maps. The map key is the Revit parameter name; the value never repeats it.
 - Parameter identity for family authoring is the parameter name. Revit family documents cannot contain duplicate family parameter names, so authored settings resolve by name and fail loudly on ambiguous or undeclared references.
 - Shared parameter declarations are name-first. Authored FF profiles must not expose `SharedGuid`, `Identity`, `DataType`, or `Tooltip` for shared parameters; those facts come only from resolved shared-parameter definitions.
 - Family parameter declarations may author `DataType` and `Tooltip`. Existing family parameter datatype changes are intentionally not migrated in this model.
 - Inline `Value` and `Formula` on parameter declarations are allowed for global assignments. They are mutually exclusive and compile into internal assignment settings.
-- Per-type values stay centralized and table-shaped: one fixed `Parameter` column plus dynamic family-type columns. Do not add inline per-parameter per-type authoring unless a future design replaces the table as the profile surface.
+- Family types are an exact-name map whose values are parameter-name/value maps. Empty types remain explicit. The old `DesiredPerTypeAssignmentRow` table is a compiled execution detail only.
 - FF-specific migration metadata such as `SourceNames`, `OnlyAddIfSourceExists`, and `MappingStrategy` stays FF-owned, not in portable shared RevitData contracts.
 - Schema/LSP behavior is an overlay on the portable model, not a reason to keep the model FF-owned. `Pe.Revit.FamilyFoundry`/`Pe.Revit.SettingsRuntime` register value domains, dataset providers, examples, UI metadata, and strict field rejection for the shared DTOs.
 - Mapping data includes remain supported for mapping-data only. Do not expand include support to param-driven solids until that API stabilizes.

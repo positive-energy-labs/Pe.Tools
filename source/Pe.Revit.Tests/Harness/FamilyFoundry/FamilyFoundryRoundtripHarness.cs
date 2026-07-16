@@ -1,11 +1,64 @@
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.Apply;
+using Pe.Revit.FamilyFoundry.Capture;
 using Pe.Revit.FamilyFoundry.Profiles;
 using Pe.Revit.FamilyFoundry.Resolution;
+using Pe.Shared.RevitData.Families;
 
 namespace Pe.Revit.Tests;
 
 internal static class FamilyFoundryRoundtripHarness {
+    public static FamilyModelRoundtripArtifact RunFamilyModelRoundtrip(
+        Application application,
+        string fixtureRelativePath,
+        string testName
+    ) {
+        var fixturePath = RevitFamilyFixtureHarness.GetProfileFixturePath(fixtureRelativePath);
+        var parsed = FamilyModelJson.Parse(File.ReadAllText(fixturePath));
+        Assert.That(parsed.Value, Is.Not.Null,
+            string.Join(Environment.NewLine, parsed.Diagnostics.Select(diagnostic => diagnostic.Message)));
+        Assert.That(parsed.Diagnostics, Is.Empty);
+        var authored = parsed.Value!;
+        var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(testName);
+
+        Document? buildA = null;
+        Document? reopenedA = null;
+        Document? buildB = null;
+        Document? reopenedB = null;
+        try {
+            var modelDirectory = Path.GetDirectoryName(fixturePath);
+            buildA = FamilyModelBuilder.Build(application, authored, modelDirectory).Document;
+            var savedAPath = RevitFamilyFixtureHarness.SaveDocumentCopy(buildA, outputDirectory, "A");
+            RevitFamilyFixtureHarness.CloseDocument(buildA);
+            buildA = null;
+
+            reopenedA = RevitFamilyFixtureHarness.OpenFamilyDocument(application, savedAPath);
+            // This is the black-box boundary: capture receives only the reopened RFA, never authored/compiler state.
+            var captured = reopenedA.CaptureFamilyModel();
+            buildB = FamilyModelBuilder.Build(application, captured, modelDirectory).Document;
+            var savedBPath = RevitFamilyFixtureHarness.SaveDocumentCopy(buildB, outputDirectory, "B");
+            RevitFamilyFixtureHarness.CloseDocument(buildB);
+            buildB = null;
+
+            reopenedB = RevitFamilyFixtureHarness.OpenFamilyDocument(application, savedBPath);
+            var artifact = new FamilyModelRoundtripArtifact(
+                authored,
+                captured,
+                savedAPath,
+                savedBPath,
+                reopenedA,
+                reopenedB);
+            reopenedA = null;
+            reopenedB = null;
+            return artifact;
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(buildA);
+            RevitFamilyFixtureHarness.CloseDocument(reopenedA);
+            RevitFamilyFixtureHarness.CloseDocument(buildB);
+            RevitFamilyFixtureHarness.CloseDocument(reopenedB);
+        }
+    }
+
     public static RoundtripArtifact RunProfileFixtureRoundtrip(
         Application application,
         string fixtureFileName,
