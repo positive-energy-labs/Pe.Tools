@@ -39,9 +39,9 @@ internal static class FamilyModelBridgeOps {
 
     private static FamilyModelCaptureData CaptureActiveFamily() {
         var document = RevitUiSession.CurrentUIApplication.ActiveUIDocument?.Document
-                       ?? throw new InvalidOperationException("No active Revit document.");
+                       ?? throw BridgeOperationExceptions.Conflict("No active Revit document.");
         if (!document.IsFamilyDocument)
-            throw new InvalidOperationException("The active Revit document is not a family document.");
+            throw BridgeOperationExceptions.Conflict("The active Revit document is not a family document.");
 
         var model = document.CaptureFamilyModel();
         return new FamilyModelCaptureData(
@@ -51,7 +51,7 @@ internal static class FamilyModelBridgeOps {
     }
 
     private static FamilyModelBuildData BuildFamily(FamilyModelBuildRequest request) {
-        var outputPath = Path.GetFullPath(request.OutputPath);
+        var outputPath = ResolvePath(request.OutputPath, nameof(request.OutputPath));
         if (!string.Equals(Path.GetExtension(outputPath), ".rfa", StringComparison.OrdinalIgnoreCase))
             throw BridgeOperationExceptions.BadRequest("OutputPath must end in .rfa.");
         if (File.Exists(outputPath) && !request.Overwrite)
@@ -65,21 +65,25 @@ internal static class FamilyModelBridgeOps {
 
         var modelDirectory = string.IsNullOrWhiteSpace(request.ModelDirectory)
             ? null
-            : Path.GetFullPath(request.ModelDirectory);
-        var result = FamilyModelBuilder.Build(
+            : ResolvePath(request.ModelDirectory, nameof(request.ModelDirectory));
+        var result = FamilyModelBuilder.BuildAndSave(
             RevitUiSession.CurrentUIApplication.Application,
             parsed.Value,
-            modelDirectory);
+            outputPath,
+            modelDirectory,
+            request.Overwrite);
+        return new FamilyModelBuildData(parsed.Value.Family.Name, outputPath, result.TemplatePath);
+    }
+
+    private static string ResolvePath(string? path, string field) {
+        if (string.IsNullOrWhiteSpace(path))
+            throw BridgeOperationExceptions.BadRequest($"{field} is required.");
+
         try {
-            Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
-            result.Document.SaveAs(outputPath, new SaveAsOptions {
-                OverwriteExistingFile = request.Overwrite,
-                Compact = true,
-                MaximumBackups = 1
-            });
-            return new FamilyModelBuildData(parsed.Value.Family.Name, outputPath, result.TemplatePath);
-        } finally {
-            _ = result.Document.Close(false);
+            return Path.GetFullPath(path);
+        } catch (Exception exception) when (exception is ArgumentException or NotSupportedException or
+                                            PathTooLongException) {
+            throw BridgeOperationExceptions.BadRequest($"{field} is invalid: {exception.Message}");
         }
     }
 

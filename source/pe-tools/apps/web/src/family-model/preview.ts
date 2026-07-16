@@ -3,12 +3,12 @@ export interface FamilyModelDocument {
   familyParameters?: Record<string, ParameterSpec>;
   sharedParameters?: Record<string, ParameterSpec>;
   types?: Record<string, Record<string, string>>;
-  planes?: Record<string, unknown>;
-  frames?: Record<string, unknown>;
+  planes?: Record<string, PlaneSpec>;
+  frames?: Record<string, FrameSpec>;
   solids?: Record<string, SolidSpec>;
-  nestedFamilies?: Record<string, unknown>;
+  nestedFamilies?: Record<string, NestedFamilySpec>;
   connectors?: Record<string, ConnectorSpec>;
-  arrays?: Record<string, unknown>;
+  arrays?: Record<string, ArraySpec>;
   roomCalculationPoint?: { enabled: boolean };
   unmodeled?: unknown[];
 }
@@ -19,18 +19,60 @@ interface ParameterSpec {
 }
 
 interface SolidSpec {
+  label?: string;
   kind: string;
-  frame?: string;
+  frame: string;
   width?: string;
   depth?: string;
   height?: string;
   diameter?: string;
 }
 
+interface PlaneSpec {
+  label?: string;
+  from: string;
+  by: string;
+  direction: string;
+}
+
+interface FrameSpec {
+  label?: string;
+  origin: string[];
+  normal: string;
+  up: string;
+}
+
+interface NestedFamilySpec {
+  label?: string;
+  family: string;
+  type: string;
+  frame: string;
+  parameterBindings?: Record<string, string>;
+}
+
 interface ConnectorSpec {
+  label?: string;
   domain: string;
   shape: string;
   frame: string;
+  diameter?: string;
+  width?: string;
+  height?: string;
+  stub: { depth: string; direction: string; isSolid?: boolean };
+  systemType: string;
+  flowDirection?: string;
+  flowConfiguration?: string;
+  lossMethod?: string;
+  parameterBindings?: Record<string, string>;
+}
+
+interface ArraySpec {
+  label?: string;
+  kind: string;
+  member: string;
+  axis: string;
+  halfCount: string;
+  limits: { start: string; end: string };
 }
 
 export interface PreviewSolid {
@@ -47,7 +89,10 @@ export interface FamilyModelPreview {
   typeName: string;
   parameters: Record<string, number | string>;
   solids: PreviewSolid[];
-  groups: ReadonlyArray<{ label: string; names: string[] }>;
+  constituents: ReadonlyArray<{
+    label: string;
+    items: ReadonlyArray<{ name: string; facts: string[] }>;
+  }>;
   warnings: string[];
 }
 
@@ -125,22 +170,100 @@ export function buildFamilyModelPreview(
     ];
   });
 
+  const bindings = (value?: Record<string, string>) =>
+    Object.entries(value ?? {}).map(([target, source]) => `${target} ← ${source}`);
+  const facts = (...values: Array<string | undefined | false>) =>
+    values.filter((value): value is string => Boolean(value));
+  const constituents = [
+    {
+      label: "Planes",
+      items: Object.entries(model.planes ?? {}).map(([name, plane]) => ({
+        name,
+        facts: facts(plane.label, `from ${plane.from}`, `${plane.direction} by ${plane.by}`),
+      })),
+    },
+    {
+      label: "Frames",
+      items: Object.entries(model.frames ?? {}).map(([name, frame]) => ({
+        name,
+        facts: facts(
+          frame.label,
+          `origin ${frame.origin.join(" ∩ ")}`,
+          `normal ${frame.normal}`,
+          `up ${frame.up}`,
+        ),
+      })),
+    },
+    {
+      label: "Solids",
+      items: Object.entries(model.solids ?? {}).map(([name, solid]) => ({
+        name,
+        facts: facts(
+          solid.label,
+          solid.kind,
+          solid.frame,
+          solid.width && `W ${solid.width}`,
+          solid.depth && `D ${solid.depth}`,
+          solid.height && `H ${solid.height}`,
+          solid.diameter && `Ø ${solid.diameter}`,
+        ),
+      })),
+    },
+    {
+      label: "Nested families",
+      items: Object.entries(model.nestedFamilies ?? {}).map(([name, nested]) => ({
+        name,
+        facts: facts(
+          nested.label,
+          nested.family,
+          `type ${nested.type}`,
+          nested.frame,
+          ...bindings(nested.parameterBindings),
+        ),
+      })),
+    },
+    {
+      label: "Connectors",
+      items: Object.entries(model.connectors ?? {}).map(([name, connector]) => ({
+        name,
+        facts: facts(
+          connector.label,
+          `${connector.domain} / ${connector.shape}`,
+          connector.frame,
+          connector.diameter && `Ø ${connector.diameter}`,
+          connector.width && `W ${connector.width}`,
+          connector.height && `H ${connector.height}`,
+          `stub ${connector.stub.direction} ${connector.stub.depth}${connector.stub.isSolid ? " solid" : ""}`,
+          `system ${connector.systemType}`,
+          connector.flowDirection && `flow ${connector.flowDirection}`,
+          connector.flowConfiguration && `configuration ${connector.flowConfiguration}`,
+          connector.lossMethod && `loss ${connector.lossMethod}`,
+          ...bindings(connector.parameterBindings),
+        ),
+      })),
+    },
+    {
+      label: "Arrays",
+      items: Object.entries(model.arrays ?? {}).map(([name, array]) => ({
+        name,
+        facts: facts(
+          array.label,
+          array.kind,
+          `member ${array.member}`,
+          `axis ${array.axis}`,
+          `half-count ${array.halfCount}`,
+          `limits ${array.limits.start} → ${array.limits.end}`,
+        ),
+      })),
+    },
+  ];
+
   return {
     model,
     typeName,
     parameters,
     solids,
-    groups: [
-      ["Planes", model.planes],
-      ["Frames", model.frames],
-      ["Solids", model.solids],
-      ["Nested", model.nestedFamilies],
-      ["Connectors", model.connectors],
-      ["Arrays", model.arrays],
-    ].map(([label, entries]) => ({
-      label: label as string,
-      names: Object.keys((entries as Record<string, unknown> | undefined) ?? {}),
-    })),
+    constituents,
     warnings: [
       ...warnings,
       ...(model.unmodeled?.length
