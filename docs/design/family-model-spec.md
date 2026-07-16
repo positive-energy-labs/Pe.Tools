@@ -15,9 +15,10 @@ Owner surfaces: FamilyFoundry (FF). Consumers: FFManager, FFMigrator, capture, r
 - The exact source sandbox `ff-family-model-r25` built the minimal box, showcase, and GRD/vane profiles through the
   public `revit.apply.family-model` operation. It opened all three RFAs sequentially, applied 1/3/3 type edits with zero
   failures, and captured the final active states under `.artifacts/family-model-walkthrough/`.
-- The walkthrough used generation `20260716050108509`, PID `20688`, and build stamp `94429ce46b0a`; the SDK armed
-  no-save and stopped that exact sandbox gracefully. The three generated RFAs and PNGs are disposable evidence, not
-  checked-in source.
+- The final walkthrough used generation `20260716051617431`, PID `47512`, and build stamp `bb06e2ab44d4`; the SDK
+  armed no-save and stopped that exact sandbox gracefully. The generated RFAs, PNGs, and full validation/build/flex/
+  before-after snapshot transcript are retained under `.artifacts/family-model-walkthrough/`, with
+  `walkthrough-report.json` as the entrypoint. They are disposable evidence, not checked-in source.
 
 ### 2026-07-15 — Phase 7 product surface complete
 

@@ -113,59 +113,6 @@ export namespace FamilyEditorSnapshot {
   }
 }
 
-/** Build a new target-year Revit family from portable family.json and save it to an explicit .rfa output path. */
-export namespace FamilyModelBuild {
-  export namespace Req {
-    export interface Request {
-      modelJson: string;
-      outputPath: string;
-      modelDirectory?: null | string;
-      overwrite?: boolean;
-    }
-  }
-  export namespace Res {
-    export interface Response {
-      familyName: string;
-      outputPath: string;
-      templatePath: string;
-    }
-  }
-}
-
-/** Capture the active Revit family document as portable family.json authored truth, including explicit unmodeled diagnostics. */
-export namespace FamilyModelCapture {
-  export namespace Req {
-    export interface Request {}
-  }
-  export namespace Res {
-    export interface Response {
-      familyName: string;
-      modelJson: string;
-      unmodeledCount: number;
-    }
-  }
-}
-
-/** Validate family.json with the authoritative portable Family Model parser and return path-addressed diagnostics. */
-export namespace FamilyModelValidate {
-  export namespace Req {
-    export interface Request {
-      modelJson: string;
-    }
-  }
-  export namespace Res {
-    export interface Response {
-      valid: boolean;
-      issues: FamilyModelValidationIssue[];
-    }
-    export interface FamilyModelValidationIssue {
-      code: string;
-      path: string;
-      message: string;
-    }
-  }
-}
-
 /** List every bridge operation this Revit session supports, with JSON Schemas for request and response payloads. */
 export namespace HostOpsCatalog {
   export namespace Req {
@@ -279,6 +226,25 @@ export namespace RevitApplyDocumentOpen {
   }
 }
 
+/** Build a new target-year Revit family from portable family.json and save it to an explicit .rfa output path. */
+export namespace RevitApplyFamilyModel {
+  export namespace Req {
+    export interface Request {
+      modelJson: string;
+      outputPath: string;
+      modelDirectory?: null | string;
+      overwrite?: boolean;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      familyName: string;
+      outputPath: string;
+      templatePath: string;
+    }
+  }
+}
+
 /** Preview or atomically replace the model-owned parameter-link profile and reconcile its changed target values. */
 export namespace RevitApplyParameterLinks {
   export namespace Req {
@@ -294,16 +260,17 @@ export namespace RevitApplyParameterLinks {
     }
     export interface ParameterLinkProfile {
       formatVersion?: number;
-      definitions?: ParameterLinkDefinition[];
-      assignments?: ParameterLinkAssignment[];
+      definitions: ParameterLinkDefinition[];
+      assignments: ParameterLinkAssignment[];
     }
     export interface ParameterLinkDefinition {
-      id?: string;
-      sourceCategoryId?: number;
-      sourceParameter?: ParameterReference;
+      id: string;
+      sourceCategoryId: number;
+      sourceParameter: ParameterReference;
       sourceScope?: ParameterLinkSourceScope;
-      relationship?: ParameterLinkRelationship;
-      targetParameter?: ParameterReference;
+      relationship: ParameterLinkRelationship;
+      targetParameter: ParameterReference;
+      targetOverride?: null | ParameterLinkTargetOverride;
       reducer?: ParameterLinkReducer;
     }
     export interface ParameterReference {
@@ -319,9 +286,13 @@ export namespace RevitApplyParameterLinks {
       sharedGuid?: null | string;
       parameterElementId?: number | null;
     }
+    export interface ParameterLinkTargetOverride {
+      enabledParameter: ParameterReference;
+      valueParameter: ParameterReference;
+    }
     export interface ParameterLinkAssignment {
-      id?: string;
-      definitionId?: string;
+      id: string;
+      definitionId: string;
       enabled?: boolean;
       sourceElementUniqueIds?: string[];
     }
@@ -352,6 +323,7 @@ export namespace RevitApplyParameterLinks {
       sourceScope: ParameterLinkSourceScope;
       relationship: ParameterLinkRelationship;
       targetParameter: ParameterReference;
+      targetOverride?: null | ParameterLinkTargetOverride;
       reducer: ParameterLinkReducer;
     }
     export interface ParameterReference {
@@ -366,6 +338,10 @@ export namespace RevitApplyParameterLinks {
       builtInParameterId?: number | null;
       sharedGuid?: null | string;
       parameterElementId?: number | null;
+    }
+    export interface ParameterLinkTargetOverride {
+      enabledParameter: ParameterReference;
+      valueParameter: ParameterReference;
     }
     export interface ParameterLinkAssignment {
       id: string;
@@ -388,6 +364,9 @@ export namespace RevitApplyParameterLinks {
       targetElementName?: null | string;
       targetParameter: ParameterIdentity;
       currentValue: ParameterLinkValue;
+      linkedValue: ParameterLinkValue;
+      overrideValue?: null | ParameterLinkValue;
+      overrideApplied: boolean;
       proposedValue: ParameterLinkValue;
       changed: boolean;
     }
@@ -610,7 +589,9 @@ export namespace RevitCatalogElectricalCircuits {
     export type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
     export type RequestedParameterValueSource = "None" | "Instance" | "Type";
     export type ElectricalNearbyProxyCandidateMatchReason =
-      "NearbyIdentityCandidate" | "RequestedParameterIdentityMatch" | "MarkIdentityMatch";
+      | "NearbyIdentityCandidate"
+      | "RequestedParameterIdentityMatch"
+      | "MarkIdentityMatch";
     export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
 
     export interface Response {
@@ -1325,7 +1306,13 @@ export namespace RevitCatalogProjectBrowser {
     export type ProjectBrowserResultView = "Summary" | "Folders" | "Items";
     export type ProjectBrowserSection = "Views" | "Sheets" | "Schedules";
     export type RevitAgentContextHandleKind =
-      "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
+      | "Document"
+      | "View"
+      | "Sheet"
+      | "Element"
+      | "Schedule"
+      | "Category"
+      | "Family";
     export type RevitAgentContextProvenanceKind =
       | "ActiveDocument"
       | "OpenDocument"
@@ -1470,7 +1457,13 @@ export namespace RevitCatalogProjectIndex {
   }
   export namespace Res {
     export type RevitAgentContextHandleKind =
-      "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
+      | "Document"
+      | "View"
+      | "Sheet"
+      | "Element"
+      | "Schedule"
+      | "Category"
+      | "Family";
     export type RevitAgentContextProvenanceKind =
       | "ActiveDocument"
       | "OpenDocument"
@@ -1914,6 +1907,40 @@ export namespace RevitContextDocumentSession {
   }
 }
 
+/** Capture the active Revit family document as portable family.json authored truth, including explicit unmodeled diagnostics. */
+export namespace RevitContextFamilyModel {
+  export namespace Req {
+    export interface Request {}
+  }
+  export namespace Res {
+    export interface Response {
+      familyName: string;
+      modelJson: string;
+      unmodeledCount: number;
+    }
+  }
+}
+
+/** Validate family.json with the authoritative portable Family Model parser and return path-addressed diagnostics. */
+export namespace RevitContextFamilyModelValidation {
+  export namespace Req {
+    export interface Request {
+      modelJson: string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      valid: boolean;
+      issues: FamilyModelValidationIssue[];
+    }
+    export interface FamilyModelValidationIssue {
+      code: string;
+      path: string;
+      message: string;
+    }
+  }
+}
+
 /** THE orientation call: compact current document, active view or sheet, selection, browser counts, and visible-category context. Call this first; escalate to project-index for names/handles, visible-summary for element handles, or document-session for multi-document facts. */
 export namespace RevitContextSummary {
   export namespace Req {
@@ -1921,7 +1948,13 @@ export namespace RevitContextSummary {
   }
   export namespace Res {
     export type RevitAgentContextHandleKind =
-      "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
+      | "Document"
+      | "View"
+      | "Sheet"
+      | "Element"
+      | "Schedule"
+      | "Category"
+      | "Family";
     export type RevitAgentContextProvenanceKind =
       | "ActiveDocument"
       | "OpenDocument"
@@ -2079,7 +2112,13 @@ export namespace RevitContextViewImage {
   }
   export namespace Res {
     export type RevitAgentContextHandleKind =
-      "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
+      | "Document"
+      | "View"
+      | "Sheet"
+      | "Element"
+      | "Schedule"
+      | "Category"
+      | "Family";
 
     export interface Response {
       view: RevitAgentContextHandle;
@@ -2128,7 +2167,13 @@ export namespace RevitContextViewRenderingState {
   }
   export namespace Res {
     export type RevitAgentContextHandleKind =
-      "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
+      | "Document"
+      | "View"
+      | "Sheet"
+      | "Element"
+      | "Schedule"
+      | "Category"
+      | "Family";
     export type RevitAgentContextProvenanceKind =
       | "ActiveDocument"
       | "OpenDocument"
@@ -2272,7 +2317,13 @@ export namespace RevitContextVisibleSummary {
   }
   export namespace Res {
     export type RevitAgentContextHandleKind =
-      "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
+      | "Document"
+      | "View"
+      | "Sheet"
+      | "Element"
+      | "Schedule"
+      | "Category"
+      | "Family";
     export type RevitAgentContextProvenanceKind =
       | "ActiveDocument"
       | "OpenDocument"
@@ -2689,6 +2740,7 @@ export namespace RevitDetailParameterLinks {
       sourceScope: ParameterLinkSourceScope;
       relationship: ParameterLinkRelationship;
       targetParameter: ParameterReference;
+      targetOverride?: null | ParameterLinkTargetOverride;
       reducer: ParameterLinkReducer;
     }
     export interface ParameterReference {
@@ -2703,6 +2755,10 @@ export namespace RevitDetailParameterLinks {
       builtInParameterId?: number | null;
       sharedGuid?: null | string;
       parameterElementId?: number | null;
+    }
+    export interface ParameterLinkTargetOverride {
+      enabledParameter: ParameterReference;
+      valueParameter: ParameterReference;
     }
     export interface ParameterLinkAssignment {
       id: string;
@@ -2725,6 +2781,9 @@ export namespace RevitDetailParameterLinks {
       targetElementName?: null | string;
       targetParameter: ParameterIdentity;
       currentValue: ParameterLinkValue;
+      linkedValue: ParameterLinkValue;
+      overrideValue?: null | ParameterLinkValue;
+      overrideApplied: boolean;
       proposedValue: ParameterLinkValue;
       changed: boolean;
     }
@@ -2802,7 +2861,11 @@ export namespace RevitDetailSchedules {
     export type ScheduleRenderedRowBindingKind = "None" | "SingleSubject" | "MultipleSubjects";
     export type ScheduleRenderedRowSubjectResolutionStatus = "NotApplicable" | "NonBindable" | "Unbound" | "Bound";
     export type ScheduleRenderedRowSubjectResolutionReason =
-      "None" | "NonDataRow" | "NoVisibleSubjects" | "NoComparableValues" | "HeuristicMismatch";
+      | "None"
+      | "NonDataRow"
+      | "NoVisibleSubjects"
+      | "NoComparableValues"
+      | "HeuristicMismatch";
     export type RequestedParameterStorageType = "None" | "String" | "Integer" | "Double" | "ElementId";
     /**
      * Why a schedule cell has no writable parameter behind it.
@@ -2987,10 +3050,22 @@ export namespace RevitDetailSheets {
   }
   export namespace Res {
     export type RevitAgentContextHandleKind =
-      "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
+      | "Document"
+      | "View"
+      | "Sheet"
+      | "Element"
+      | "Schedule"
+      | "Category"
+      | "Family";
     export type ProjectBrowserSection = "Views" | "Sheets" | "Schedules";
     export type SheetAnchorKind =
-      "TitleBlock" | "Viewport" | "ScheduleInstance" | "TextNote" | "GenericAnnotation" | "RasterImage" | "ImportInstance";
+      | "TitleBlock"
+      | "Viewport"
+      | "ScheduleInstance"
+      | "TextNote"
+      | "GenericAnnotation"
+      | "RasterImage"
+      | "ImportInstance";
     export type RevitAgentContextProvenanceKind =
       | "ActiveDocument"
       | "OpenDocument"
@@ -3127,7 +3202,11 @@ export namespace RevitMatrixLoadedFamilies {
   export namespace Res {
     export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
     export type LoadedFamilyParameterKind =
-      "Unknown" | "FamilyParameter" | "SharedParameter" | "ProjectParameter" | "ProjectSharedParameter";
+      | "Unknown"
+      | "FamilyParameter"
+      | "SharedParameter"
+      | "ProjectParameter"
+      | "ProjectSharedParameter";
     export type LoadedFamilyParameterPresence = "Unresolved" | "Family" | "FamilyAndProjectBinding" | "ProjectBindingOnly";
     export type FormulaState = "None" | "Present" | "NotApplicable" | "Unknown";
     export type ExcludedParameterReason = "UnresolvedClassification" | "ProjectObservedBuiltIn";
@@ -3639,7 +3718,13 @@ export namespace RevitMatrixScheduleProfiles {
 export namespace RevitResolveReferences {
   export namespace Req {
     export type RevitAgentContextHandleKind =
-      "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
+      | "Document"
+      | "View"
+      | "Sheet"
+      | "Element"
+      | "Schedule"
+      | "Category"
+      | "Family";
 
     export interface Request {
       referenceText: string;
@@ -3652,7 +3737,13 @@ export namespace RevitResolveReferences {
   }
   export namespace Res {
     export type RevitAgentContextHandleKind =
-      "Document" | "View" | "Sheet" | "Element" | "Schedule" | "Category" | "Family";
+      | "Document"
+      | "View"
+      | "Sheet"
+      | "Element"
+      | "Schedule"
+      | "Category"
+      | "Family";
     export type RevitAgentContextProvenanceKind =
       | "ActiveDocument"
       | "OpenDocument"
@@ -4059,12 +4150,10 @@ export interface HostOps {
   "family.editor.apply": { request: FamilyEditorApply.Req.Request; response: FamilyEditorApply.Res.Response };
   "family.editor.open": { request: FamilyEditorOpen.Req.Request; response: FamilyEditorOpen.Res.Response };
   "family.editor.snapshot": { request: FamilyEditorSnapshot.Req.Request; response: FamilyEditorSnapshot.Res.Response };
-  "revit.apply.family-model": { request: FamilyModelBuild.Req.Request; response: FamilyModelBuild.Res.Response };
-  "revit.context.family-model": { request: FamilyModelCapture.Req.Request; response: FamilyModelCapture.Res.Response };
-  "revit.context.family-model.validation": { request: FamilyModelValidate.Req.Request; response: FamilyModelValidate.Res.Response };
   "host.ops.catalog": { request: HostOpsCatalog.Req.Request; response: HostOpsCatalog.Res.Response };
   "revit.apply.command.execute": { request: RevitApplyCommandExecute.Req.Request; response: RevitApplyCommandExecute.Res.Response };
   "revit.apply.document.open": { request: RevitApplyDocumentOpen.Req.Request; response: RevitApplyDocumentOpen.Res.Response };
+  "revit.apply.family-model": { request: RevitApplyFamilyModel.Req.Request; response: RevitApplyFamilyModel.Res.Response };
   "revit.apply.parameter-links": { request: RevitApplyParameterLinks.Req.Request; response: RevitApplyParameterLinks.Res.Response };
   "revit.apply.parameter-values": { request: RevitApplyParameterValues.Req.Request; response: RevitApplyParameterValues.Res.Response };
   "revit.apply.parameters-service-cache.refresh": { request: RevitApplyParametersServiceCacheRefresh.Req.Request; response: RevitApplyParametersServiceCacheRefresh.Res.Response };
@@ -4082,6 +4171,8 @@ export interface HostOps {
   "revit.catalog.project-index": { request: RevitCatalogProjectIndex.Req.Request; response: RevitCatalogProjectIndex.Res.Response };
   "revit.catalog.schedules": { request: RevitCatalogSchedules.Req.Request; response: RevitCatalogSchedules.Res.Response };
   "revit.context.document-session": { request: RevitContextDocumentSession.Req.Request; response: RevitContextDocumentSession.Res.Response };
+  "revit.context.family-model": { request: RevitContextFamilyModel.Req.Request; response: RevitContextFamilyModel.Res.Response };
+  "revit.context.family-model.validation": { request: RevitContextFamilyModelValidation.Req.Request; response: RevitContextFamilyModelValidation.Res.Response };
   "revit.context.summary": { request: RevitContextSummary.Req.Request; response: RevitContextSummary.Res.Response };
   "revit.context.view-image": { request: RevitContextViewImage.Req.Request; response: RevitContextViewImage.Res.Response };
   "revit.context.view-rendering-state": { request: RevitContextViewRenderingState.Req.Request; response: RevitContextViewRenderingState.Res.Response };
@@ -4113,12 +4204,10 @@ export const hostOpKeys = [
   "family.editor.apply",
   "family.editor.open",
   "family.editor.snapshot",
-  "revit.apply.family-model",
-  "revit.context.family-model",
-  "revit.context.family-model.validation",
   "host.ops.catalog",
   "revit.apply.command.execute",
   "revit.apply.document.open",
+  "revit.apply.family-model",
   "revit.apply.parameter-links",
   "revit.apply.parameter-values",
   "revit.apply.parameters-service-cache.refresh",
@@ -4136,6 +4225,8 @@ export const hostOpKeys = [
   "revit.catalog.project-index",
   "revit.catalog.schedules",
   "revit.context.document-session",
+  "revit.context.family-model",
+  "revit.context.family-model.validation",
   "revit.context.summary",
   "revit.context.view-image",
   "revit.context.view-rendering-state",
