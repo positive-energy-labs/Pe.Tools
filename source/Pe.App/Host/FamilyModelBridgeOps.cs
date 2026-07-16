@@ -34,6 +34,15 @@ internal static class FamilyModelBridgeOps {
     }
 
     private static FamilyModelValidateData ValidateFamilyModel(FamilyModelValidateRequest request) {
+        if (string.IsNullOrWhiteSpace(request.ModelJson)) {
+            return new FamilyModelValidateData(false, [
+                new FamilyModelValidationIssue(
+                    FamilyModelDiagnosticCodes.Required,
+                    "$",
+                    "ModelJson is required.")
+            ]);
+        }
+
         var parsed = FamilyModelJson.Parse(request.ModelJson);
         return new FamilyModelValidateData(
             parsed.Value != null && parsed.Diagnostics.Count == 0,
@@ -43,6 +52,9 @@ internal static class FamilyModelBridgeOps {
     }
 
     private static FamilyModelBuildData BuildFamily(FamilyModelBuildRequest request) {
+        if (string.IsNullOrWhiteSpace(request.ModelJson))
+            throw BridgeOperationExceptions.BadRequest("ModelJson is required.");
+
         var outputPath = ResolvePath(request.OutputPath, nameof(request.OutputPath));
         if (!string.Equals(Path.GetExtension(outputPath), ".rfa", StringComparison.OrdinalIgnoreCase))
             throw BridgeOperationExceptions.BadRequest("OutputPath must end in .rfa.");
