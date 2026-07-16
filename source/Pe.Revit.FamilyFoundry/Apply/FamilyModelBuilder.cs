@@ -12,6 +12,8 @@ public sealed record FamilyModelBuildResult(
     string TemplatePath
 );
 
+public sealed record FamilyModelSaveResult(string TemplatePath);
+
 /// <summary>
 ///     Creates a new family from portable authored truth. This is intentionally a new-document API: applying
 ///     geometry onto an arbitrary existing family is not a supported FFManager v1 promise.
@@ -35,6 +37,27 @@ public static class FamilyModelBuilder {
         FamilyModel model,
         string? modelDirectory
     ) => Build(application, model, modelDirectory, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+
+    public static FamilyModelSaveResult BuildAndSave(
+        Application application,
+        FamilyModel model,
+        string outputPath,
+        string? modelDirectory = null,
+        bool overwrite = false
+    ) {
+        var result = Build(application, model, modelDirectory);
+        try {
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+            result.Document.SaveAs(outputPath, new SaveAsOptions {
+                OverwriteExistingFile = overwrite,
+                Compact = true,
+                MaximumBackups = 1
+            });
+            return new FamilyModelSaveResult(result.TemplatePath);
+        } finally {
+            _ = result.Document.Close(false);
+        }
+    }
 
     private static FamilyModelBuildResult Build(
         Application application,

@@ -257,21 +257,26 @@ function PreviewBoard({
               Constituent register
             </p>
             <div className="space-y-3">
-              {preview.groups
-                .filter((group) => group.names.length)
+              {preview.constituents
+                .filter((group) => group.items.length)
                 .map((group) => (
                   <div key={group.label}>
                     <span className="font-mono text-[9px] uppercase tracking-widest text-[#6d5b26]">
                       {group.label}
                     </span>
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {group.names.map((name) => (
-                        <span
-                          key={name}
-                          className="border border-[#14211c]/45 bg-[#f2f0dc]/80 px-1.5 py-0.5 font-mono text-[10px]"
+                    <div className="mt-1 grid gap-1.5">
+                      {group.items.map((item) => (
+                        <div
+                          key={item.name}
+                          className="border border-[#14211c]/45 bg-[#f2f0dc]/80 px-2 py-1.5"
                         >
-                          {name}
-                        </span>
+                          <div className="font-mono text-[10px] font-bold">{item.name}</div>
+                          <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 font-mono text-[9px] text-[#596b5f]">
+                            {item.facts.map((fact) => (
+                              <span key={fact}>{fact}</span>
+                            ))}
+                          </div>
+                        </div>
                       ))}
                     </div>
                   </div>
