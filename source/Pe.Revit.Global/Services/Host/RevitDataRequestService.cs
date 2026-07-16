@@ -1396,7 +1396,11 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
             var box = document.GetElement(id)?.get_BoundingBox(view) ?? document.GetElement(id)?.get_BoundingBox(null);
             if (box is null) continue;
             if (union is null) {
-                union = new BoundingBoxXYZ { Min = box.Transform.OfPoint(box.Min), Max = box.Transform.OfPoint(box.Max) };
+                union = new BoundingBoxXYZ {
+                    Transform = Transform.Identity,
+                    Min = box.Transform.OfPoint(box.Min),
+                    Max = box.Transform.OfPoint(box.Max)
+                };
             } else {
                 var min = box.Transform.OfPoint(box.Min);
                 var max = box.Transform.OfPoint(box.Max);
