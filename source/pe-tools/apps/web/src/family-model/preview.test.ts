@@ -38,4 +38,31 @@ describe("family model preview", () => {
     expect(preview.groups.find((group) => group.label === "Connectors")?.names).toEqual(["supply"]);
     expect(preview.warnings).toEqual([]);
   });
+
+  it("warns instead of guessing solids in unsupported spatial frames", () => {
+    const preview = buildFamilyModelPreview(
+      parseFamilyModel(
+        JSON.stringify({
+          family: {
+            name: "Offset",
+            category: "Generic Models",
+            template: "Generic Model",
+            placement: "Unhosted",
+          },
+          solids: {
+            offset: {
+              kind: "Prism",
+              frame: "frame:offset",
+              width: "12in",
+              depth: "8in",
+              height: "6in",
+            },
+          },
+        }),
+      ),
+    );
+
+    expect(preview.solids).toEqual([]);
+    expect(preview.warnings).toContain("Spatial frame not previewed: offset uses frame:offset");
+  });
 });

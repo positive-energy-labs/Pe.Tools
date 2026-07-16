@@ -36,6 +36,7 @@ function FamilyModelRoute() {
   const [source, setSource] = useState(STARTER);
   const [selectedType, setSelectedType] = useState<string>();
   const [outputPath, setOutputPath] = useState("");
+  const [modelDirectory, setModelDirectory] = useState("");
   const [status, setStatus] = useState<string>();
   const [busy, setBusy] = useState(false);
   const parsed = useMemo(() => {
@@ -73,6 +74,7 @@ function FamilyModelRoute() {
       const result = await callHostRpc("family.model.build", {
         modelJson: source,
         outputPath,
+        modelDirectory: modelDirectory.trim() || undefined,
         overwrite: false,
       });
       setStatus(`Built ${result.familyName} → ${result.outputPath}`);
@@ -139,12 +141,22 @@ function FamilyModelRoute() {
             className="h-[56vh] min-h-[420px] w-full resize-y bg-transparent p-4 font-mono text-[12px] leading-5 text-[#d9dfc5] outline-none selection:bg-[#d9a441]/35"
           />
           <div className="grid gap-2 border-t border-[#9dc88d]/20 p-3 sm:grid-cols-[1fr_auto]">
-            <Input
-              value={outputPath}
-              onChange={(event) => setOutputPath(event.target.value)}
-              placeholder="C:\\...\\family.rfa"
-              className="border-[#9dc88d]/25 bg-black/20 font-mono text-xs"
-            />
+            <div className="grid gap-2">
+              <Input
+                value={outputPath}
+                onChange={(event) => setOutputPath(event.target.value)}
+                placeholder="Output: C:\\...\\family.rfa"
+                aria-label="RFA output path"
+                className="border-[#9dc88d]/25 bg-black/20 font-mono text-xs"
+              />
+              <Input
+                value={modelDirectory}
+                onChange={(event) => setModelDirectory(event.target.value)}
+                placeholder="Model folder (required when family.json has dependencies)"
+                aria-label="Family Model directory"
+                className="border-[#9dc88d]/25 bg-black/20 font-mono text-xs"
+              />
+            </div>
             <Button
               variant="outline"
               onClick={() => void build()}
@@ -221,7 +233,7 @@ function PreviewBoard({
         <div className="border-b-2 border-[#14211c] p-5 lg:border-b-0 lg:border-r-2">
           <PlanSvg preview={preview} />
           <p className="mt-3 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#596b5f]">
-            <Box className="size-3" /> Plan projection · dimensions in inches
+            <Box className="size-3" /> Family-frame extents · dimensions in inches
           </p>
         </div>
         <div className="divide-y-2 divide-[#14211c]">
@@ -331,18 +343,6 @@ function PlanSvg({ preview }: { preview: FamilyModelPreview }) {
           >
             <title>{solid.name}</title>
           </rect>
-        );
-      })}
-      {Object.keys(preview.model.connectors ?? {}).map((name, index, all) => {
-        const angle = (Math.PI * 2 * index) / all.length;
-        return (
-          <g
-            key={name}
-            transform={`translate(${160 + Math.cos(angle) * 138} ${160 + Math.sin(angle) * 138})`}
-          >
-            <circle r="7" fill="#d9a441" stroke="#14211c" strokeWidth="2" />
-            <title>{name}</title>
-          </g>
         );
       })}
       {preview.solids.length === 0 && (
