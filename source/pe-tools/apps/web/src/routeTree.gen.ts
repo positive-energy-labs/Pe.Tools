@@ -28,6 +28,7 @@ import { Route as PocSidepaneRouteImport } from "./routes/poc.sidepane";
 import { Route as PocFamilyPluginRouteImport } from "./routes/poc.family-plugin";
 import { Route as PocFamilyLensRouteImport } from "./routes/poc.family-lens";
 import { Route as PocDialRouteImport } from "./routes/poc.dial";
+import { Route as DocsTargetRouteImport } from "./routes/docs.target";
 import { Route as DemoTanstackQueryRouteImport } from "./routes/demo/tanstack-query";
 import { Route as BetaFamilyPluginRouteImport } from "./routes/beta.family-plugin";
 import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
@@ -129,6 +130,11 @@ const PocDialRoute = PocDialRouteImport.update({
   path: "/poc/dial",
   getParentRoute: () => rootRouteImport,
 } as any);
+const DocsTargetRoute = DocsTargetRouteImport.update({
+  id: "/docs/target",
+  path: "/docs/target",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const DemoTanstackQueryRoute = DemoTanstackQueryRouteImport.update({
   id: "/demo/tanstack-query",
   path: "/demo/tanstack-query",
@@ -171,6 +177,7 @@ export interface FileRoutesByFullPath {
   "/settings": typeof SettingsRoute;
   "/beta/family-plugin": typeof BetaFamilyPluginRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
+  "/docs/target": typeof DocsTargetRoute;
   "/poc/dial": typeof PocDialRoute;
   "/poc/family-lens": typeof PocFamilyLensRoute;
   "/poc/family-plugin": typeof PocFamilyPluginRoute;
@@ -197,6 +204,7 @@ export interface FileRoutesByTo {
   "/settings": typeof SettingsRoute;
   "/beta/family-plugin": typeof BetaFamilyPluginRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
+  "/docs/target": typeof DocsTargetRoute;
   "/poc/dial": typeof PocDialRoute;
   "/poc/family-lens": typeof PocFamilyLensRoute;
   "/poc/family-plugin": typeof PocFamilyPluginRoute;
@@ -224,6 +232,7 @@ export interface FileRoutesById {
   "/settings": typeof SettingsRoute;
   "/beta/family-plugin": typeof BetaFamilyPluginRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
+  "/docs/target": typeof DocsTargetRoute;
   "/poc/dial": typeof PocDialRoute;
   "/poc/family-lens": typeof PocFamilyLensRoute;
   "/poc/family-plugin": typeof PocFamilyPluginRoute;
@@ -252,6 +261,7 @@ export interface FileRouteTypes {
     | "/settings"
     | "/beta/family-plugin"
     | "/demo/tanstack-query"
+    | "/docs/target"
     | "/poc/dial"
     | "/poc/family-lens"
     | "/poc/family-plugin"
@@ -278,6 +288,7 @@ export interface FileRouteTypes {
     | "/settings"
     | "/beta/family-plugin"
     | "/demo/tanstack-query"
+    | "/docs/target"
     | "/poc/dial"
     | "/poc/family-lens"
     | "/poc/family-plugin"
@@ -304,6 +315,7 @@ export interface FileRouteTypes {
     | "/settings"
     | "/beta/family-plugin"
     | "/demo/tanstack-query"
+    | "/docs/target"
     | "/poc/dial"
     | "/poc/family-lens"
     | "/poc/family-plugin"
@@ -331,6 +343,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute;
   BetaFamilyPluginRoute: typeof BetaFamilyPluginRoute;
   DemoTanstackQueryRoute: typeof DemoTanstackQueryRoute;
+  DocsTargetRoute: typeof DocsTargetRoute;
   PocDialRoute: typeof PocDialRoute;
   PocFamilyLensRoute: typeof PocFamilyLensRoute;
   PocFamilyPluginRoute: typeof PocFamilyPluginRoute;
@@ -476,6 +489,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof PocDialRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/docs/target": {
+      id: "/docs/target";
+      path: "/docs/target";
+      fullPath: "/docs/target";
+      preLoaderRoute: typeof DocsTargetRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/demo/tanstack-query": {
       id: "/demo/tanstack-query";
       path: "/demo/tanstack-query";
@@ -541,6 +561,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   BetaFamilyPluginRoute: BetaFamilyPluginRoute,
   DemoTanstackQueryRoute: DemoTanstackQueryRoute,
+  DocsTargetRoute: DocsTargetRoute,
   PocDialRoute: PocDialRoute,
   PocFamilyLensRoute: PocFamilyLensRoute,
   PocFamilyPluginRoute: PocFamilyPluginRoute,
