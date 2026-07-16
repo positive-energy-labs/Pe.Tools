@@ -71,8 +71,15 @@ This handoff was completed on `codex/family-model`:
   Pea receives both operations through its existing generic public-operation surface.
 - The final review moved operation DTOs to `Pe.Shared.HostContracts`, uses structured bridge errors and the shared Revit
   scheduler, adds the dependency-directory input needed by GRD, and removes guessed Connector/spatial geometry.
+- Review closure maps missing/invalid paths and family-document preconditions to structured host errors, moves the
+  build/save/close choreography behind `FamilyModelBuilder.BuildAndSave`, and renders authored facts for every v1
+  constituent instead of name-only chips.
 - The final FreshRevitProcess 2025 `FamilyModelRoundtripTests` run passes 4/4.
 - The durable spec now closes Phases 4, 6, and 7 and treats the Phase 5 puck result as the supported public-API boundary.
+- Phase 8 ran in the exact `ff-family-model-r25` source sandbox (generation `20260716050108509`, PID `20688`, build
+  stamp `94429ce46b0a`). Public host operations built and opened the minimal box, showcase, and GRD/vane RFAs
+  sequentially; type flex applied 1/3/3 edits with zero failures. Final RFAs and PNGs are under
+  `.artifacts/family-model-walkthrough/`. The SDK armed no-save and stopped the exact sandbox gracefully.
 
 Machine-local note: the stale Revit 2023 manifest that pointed to a missing loader was renamed to
 `%APPDATA%\Autodesk\Revit\Addins\2023\00-Pe.App.addin.disabled` so FreshRevitProcess could start without its modal error.
