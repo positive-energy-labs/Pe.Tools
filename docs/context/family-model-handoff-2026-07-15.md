@@ -66,14 +66,15 @@ This handoff was completed on `codex/family-model`:
   metadata. The accepted image is `.artifacts/build/Pe.Revit.Tests/Debug.R25.Tests/visual-proof/grd-room-proof.png`.
 - Installed-year proof covers 2023–2026. Revit 2023/2024 pass default-state portable roundtrips but natively reject a
   centered-array half-count of zero; this is recorded as a precise compatibility limitation, not a model workaround.
-- Added typed `family.model.capture` and `family.model.build` host operations, generated TypeScript contracts, and a
+- Added typed `revit.context.family-model` and `revit.apply.family-model` host operations, generated TypeScript contracts, and a
   dumb `/family-model` Manager page with JSON editing, type preview, named constituents, capture, and explicit-path build.
   Pea receives both operations through its existing generic public-operation surface.
 - The final review moved operation DTOs to `Pe.Shared.HostContracts`, uses structured bridge errors and the shared Revit
   scheduler, adds the dependency-directory input needed by GRD, and removes guessed Connector/spatial geometry.
 - Review closure maps missing/invalid paths and family-document preconditions to structured host errors, moves the
   build/save/close choreography behind `FamilyModelBuilder.BuildAndSave`, and renders authored facts for every v1
-  constituent instead of name-only chips.
+  constituent instead of name-only chips. The Manager validates through `revit.context.family-model.validation` and
+  preserves formulas/references/units verbatim rather than implementing a second semantic evaluator in TypeScript.
 - The final FreshRevitProcess 2025 `FamilyModelRoundtripTests` run passes 4/4.
 - The durable spec now closes Phases 4, 6, and 7 and treats the Phase 5 puck result as the supported public-API boundary.
 - Phase 8 ran in the exact `ff-family-model-r25` source sandbox (generation `20260716050108509`, PID `20688`, build

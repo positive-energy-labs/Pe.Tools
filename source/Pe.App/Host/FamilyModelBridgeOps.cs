@@ -11,31 +11,14 @@ using System.IO;
 namespace Pe.App.Host;
 
 internal static class FamilyModelBridgeOps {
-    public static readonly BridgeOp Capture =
-        BridgeOp.Create<FamilyModelCaptureRequest, FamilyModelCaptureData>(
-            "family.model.capture",
-            "Capture Family Model",
-            HostOperationAgentMetadata.Create(
-                "Capture the active Revit family document as portable family.json authored truth, including explicit unmodeled diagnostics.",
-                ["family-model", "family-json", "capture", "roundtrip", "family-foundry"],
-                requiresActiveDocument: true
-            ),
-            static (_, _, ct) => PaletteThreading.RunRevitAsync(CaptureActiveFamily, ct)
-        );
+    public static readonly BridgeOp Capture = FamilyModelHostOperations.Capture(
+        static (_, _, ct) => PaletteThreading.RunRevitAsync(CaptureActiveFamily, ct));
 
-    public static readonly BridgeOp Build =
-        BridgeOp.Create<FamilyModelBuildRequest, FamilyModelBuildData>(
-            "family.model.build",
-            "Build Family Model",
-            HostOperationAgentMetadata.Create(
-                "Build a new target-year Revit family from portable family.json and save it to an explicit .rfa output path.",
-                ["family-model", "family-json", "build", "replay", "family-foundry", "manager"],
-                HostOperationIntent.Mutate,
-                requiresActiveDocument: false,
-                costTier: HostOperationCostTier.Mutation
-            ),
-            static (request, _, ct) => PaletteThreading.RunRevitAsync(() => BuildFamily(request), ct)
-        );
+    public static readonly BridgeOp Validate = FamilyModelHostOperations.Validate(
+        static (request, _, _) => Task.FromResult(ValidateFamilyModel(request)));
+
+    public static readonly BridgeOp Build = FamilyModelHostOperations.Build(
+        static (request, _, ct) => PaletteThreading.RunRevitAsync(() => BuildFamily(request), ct));
 
     private static FamilyModelCaptureData CaptureActiveFamily() {
         var document = RevitUiSession.CurrentUIApplication.ActiveUIDocument?.Document
@@ -48,6 +31,15 @@ internal static class FamilyModelBridgeOps {
             model.Family.Name,
             JsonConvert.SerializeObject(model, Formatting.Indented),
             model.Unmodeled.Count);
+    }
+
+    private static FamilyModelValidateData ValidateFamilyModel(FamilyModelValidateRequest request) {
+        var parsed = FamilyModelJson.Parse(request.ModelJson);
+        return new FamilyModelValidateData(
+            parsed.Value != null && parsed.Diagnostics.Count == 0,
+            parsed.Diagnostics
+                .Select(issue => new FamilyModelValidationIssue(issue.Code, issue.Path, issue.Message))
+                .ToList());
     }
 
     private static FamilyModelBuildData BuildFamily(FamilyModelBuildRequest request) {
@@ -66,12 +58,18 @@ internal static class FamilyModelBridgeOps {
         var modelDirectory = string.IsNullOrWhiteSpace(request.ModelDirectory)
             ? null
             : ResolvePath(request.ModelDirectory, nameof(request.ModelDirectory));
-        var result = FamilyModelBuilder.BuildAndSave(
-            RevitUiSession.CurrentUIApplication.Application,
-            parsed.Value,
-            outputPath,
-            modelDirectory,
-            request.Overwrite);
+        FamilyModelSaveResult result;
+        try {
+            result = FamilyModelBuilder.BuildAndSave(
+                RevitUiSession.CurrentUIApplication.Application,
+                parsed.Value,
+                outputPath,
+                modelDirectory,
+                request.Overwrite);
+        } catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or
+                                            FileNotFoundException or DirectoryNotFoundException) {
+            throw BridgeOperationExceptions.BadRequest(exception.Message);
+        }
         return new FamilyModelBuildData(parsed.Value.Family.Name, outputPath, result.TemplatePath);
     }
 
