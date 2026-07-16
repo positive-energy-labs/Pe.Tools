@@ -53,7 +53,7 @@ function FamilyModelRoute() {
     setBusy(true);
     setStatus(undefined);
     try {
-      const result = await callHostRpc("revit.context.family-model", {});
+      const result = await callHostRpc("revit.detail.family-model", {});
       setSource(result.modelJson);
       setSelectedType(undefined);
       setStatus(`Captured ${result.familyName} · ${result.unmodeledCount} unmodeled`);
@@ -65,7 +65,7 @@ function FamilyModelRoute() {
   }
 
   async function validateSource() {
-    const result = await callHostRpc("revit.context.family-model.validation", {
+    const result = await callHostRpc("revit.detail.family-model.validation", {
       modelJson: source,
     });
     if (!result.valid) {

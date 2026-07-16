@@ -31,8 +31,8 @@ public sealed record FamilyModelBuildData(
 );
 
 public static class FamilyModelHostOperations {
-    public const string CaptureKey = "revit.context.family-model";
-    public const string ValidateKey = "revit.context.family-model.validation";
+    public const string CaptureKey = "revit.detail.family-model";
+    public const string ValidateKey = "revit.detail.family-model.validation";
     public const string BuildKey = "revit.apply.family-model";
 
     public static BridgeOp Capture(

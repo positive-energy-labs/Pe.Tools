@@ -15,14 +15,14 @@ Owner surfaces: FamilyFoundry (FF). Consumers: FFManager, FFMigrator, capture, r
 - The exact source sandbox `ff-family-model-r25` built the minimal box, showcase, and GRD/vane profiles through the
   public `revit.apply.family-model` operation. It opened all three RFAs sequentially, applied 1/3/3 type edits with zero
   failures, and captured the final active states under `.artifacts/family-model-walkthrough/`.
-- The final walkthrough used generation `20260716051617431`, PID `47512`, and build stamp `bb06e2ab44d4`; the SDK
+- The final walkthrough used generation `20260716052344454`, PID `41160`, and build stamp `6580a841097a`; the SDK
   armed no-save and stopped that exact sandbox gracefully. The generated RFAs, PNGs, and full validation/build/flex/
   before-after snapshot transcript are retained under `.artifacts/family-model-walkthrough/`, with
   `walkthrough-report.json` as the entrypoint. They are disposable evidence, not checked-in source.
 
 ### 2026-07-15 — Phase 7 product surface complete
 
-- `revit.context.family-model` and `revit.apply.family-model` are public typed bridge operations discovered from the `Pe.App`
+- `revit.detail.family-model` and `revit.apply.family-model` are public typed bridge operations discovered from the `Pe.App`
   shell. They schedule through the existing Revit task queue and delegate capture/build behavior to the document-owned
   Family Model APIs; no parallel compiler or package cycle was added.
 - The generated TypeScript host contract exposes those operations to the host and Pea's generic operation caller.
