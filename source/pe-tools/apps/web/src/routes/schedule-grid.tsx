@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { Check, CheckCheck, List, Loader2, RefreshCw, RotateCcw, Sparkles, X } from "lucide-react";
 import { useState } from "react";
 
@@ -7,20 +7,26 @@ import {
   type ScheduleGridDocument,
   scheduleCellKey,
   scheduleGridRouteState,
+  splitScheduleCellKey,
 } from "@pe/agent-contracts";
 
+import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
+import { Input } from "#/components/ui/input";
+import { PickList } from "#/components/ui/pick-list";
+import { SidePane } from "#/components/ui/side-pane";
+import { ValueDiff } from "#/components/ui/value-diff";
 import { HostConnectionPill } from "#/host/issues";
 import { cn } from "#/lib/utils";
 import { useRouteState } from "#/workbench/route-state";
 
 /**
- * /schedule-grid — a web surface for editing any Revit schedule collaboratively. The catalog
- * rail lists every schedule in the document (the `catalog` command); picking one reads it
- * into the snapshot with cell binding handles. pea proposes cell values; the engineer
- * reviews, stages, and pushes back to Revit. All state lives in the route-state document,
- * written through the dispatcher as `actor:"human"`. Cells carry a proposal → staged → pushed
- * trichotomy rendered as a visible current → proposed diff; only the human can push.
+ * /schedule-grid — a web surface for editing any Revit schedule collaboratively. The rail
+ * (SidePane + PickList) lists every schedule in the document; filter + ↑/↓ + Enter opens one
+ * into the grid with cell binding handles. pea proposes cell values; the engineer reviews in
+ * the grid or the pending-changes strip, stages, and pushes back to Revit. All state lives in
+ * the route-state document, written through the dispatcher as `actor:"human"`. Cells carry a
+ * proposal → staged → pushed trichotomy rendered as ValueDiff; only the human can push.
  */
 export const Route = createFileRoute("/schedule-grid")({
   component: ScheduleGridRoute,
@@ -46,6 +52,9 @@ function ScheduleGridRoute() {
   const proposalCount = Object.values(cells).filter(
     (cell) => cell.proposal != null && cell.staged == null,
   ).length;
+  const pending = Object.entries(cells).filter(
+    ([, cell]) => cell.proposal != null || cell.staged != null,
+  );
   const pushable = stagedCount > 0 && attention === 0;
 
   const run = async (kind: "catalog" | "refresh" | "push", input: Record<string, unknown> = {}) => {
@@ -67,7 +76,6 @@ function ScheduleGridRoute() {
       { path: ["cells", key, "staged"], value: { value } },
       { path: ["cells", key, "review"], value: "good" },
     ]);
-  const approve = (key: string, value: string) => stageValue(key, value);
   const deny = (key: string) =>
     void apply([
       { path: ["cells", key, "proposal"] },
@@ -84,56 +92,64 @@ function ScheduleGridRoute() {
     setEdit(null);
   };
 
+  const columnHeader = (columnNumber: number) =>
+    snapshot?.columns.find((column) => column.columnNumber === columnNumber)?.headerText ??
+    `col ${columnNumber}`;
+  const currentText = (key: string) => {
+    const { rowNumber, columnNumber } = splitScheduleCellKey(key);
+    const row = snapshot?.rows.find((candidate) => candidate.rowNumber === rowNumber);
+    const columnIndex =
+      snapshot?.columns.findIndex((column) => column.columnNumber === columnNumber) ?? -1;
+    const binding = row?.bindings.find((candidate) => candidate.columnNumber === columnNumber);
+    return binding?.displayValue ?? (columnIndex >= 0 ? (row?.values[columnIndex] ?? null) : null);
+  };
+
   return (
-    <main className="flex h-screen flex-col overflow-hidden bg-[var(--paper)]">
-      <header className="shrink-0 border-b border-[var(--line-2)] px-5 pb-2.5 pt-3">
+    <main className="flex h-screen flex-col overflow-hidden bg-background">
+      <header className="shrink-0 border-b border-border px-4 pb-2 pt-2.5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-baseline gap-3">
-            <h1 className="font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight">
+          <div className="flex min-w-0 items-baseline gap-3">
+            <h1 className="truncate font-pe-display text-lg font-semibold tracking-tight">
               {snapshot?.scheduleName ?? "Schedules"}
             </h1>
-            <span className="text-xs text-[var(--slate)]">
+            <span className="tele text-muted-foreground">
               {snapshot
-                ? `${snapshot.columns.length} column${snapshot.columns.length === 1 ? "" : "s"} · ${
-                    snapshot.rows.length
-                  } row${snapshot.rows.length === 1 ? "" : "s"}${
+                ? `${snapshot.columns.length}×${snapshot.rows.length}${
                     snapshot.truncated ? " · truncated" : ""
                   }${snapshot.takenAt ? ` · read ${timeAgo(snapshot.takenAt)}` : ""}`
                 : hydrated
-                  ? "no schedule read"
+                  ? "no schedule open"
                   : "connecting…"}
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
             <HostConnectionPill connected={connected} label="Connected" />
             {peaActive && (
-              <span className="tele-label inline-flex items-center gap-1.5 rounded-sm border-[0.5px] border-[var(--pea-line)] bg-[var(--pea-tint)] px-2 py-0.5 text-[var(--cat-green)]">
+              <span className="tele-label inline-flex items-center gap-1.5 rounded-[var(--radius)] border border-[var(--pea-line)] bg-[var(--pea-tint)] px-2 py-0.5 text-[var(--pe-green)]">
                 <Sparkles className="size-3 animate-pulse" />
                 pea working
               </span>
             )}
-
             <Button
               variant="outline"
               size="sm"
-              disabled={busy != null}
-              onClick={() => void run("refresh")}
-              title="Read the schedule view currently active in Revit"
+              disabled={busy != null || !snapshot}
+              onClick={() => void run("refresh", { scheduleId: snapshot?.scheduleId })}
+              title="Re-read this schedule from Revit"
             >
               <RefreshCw className={busy === "refresh" ? "animate-spin" : ""} />
-              {snapshot ? "Re-read" : "Read active view"}
+              Re-read
             </Button>
-
             <Button
               size="sm"
               disabled={!pushable || busy != null}
               onClick={() => void run("push")}
               title={
                 stagedCount === 0
-                  ? "nothing staged"
+                  ? "Nothing staged yet — approve a proposal or edit a cell"
                   : attention > 0
-                    ? `${attention} cell${attention === 1 ? "" : "s"} need attention`
+                    ? `${attention} staged cell${attention === 1 ? "" : "s"} need review first`
                     : undefined
               }
             >
@@ -142,198 +158,232 @@ function ScheduleGridRoute() {
             </Button>
           </div>
         </div>
-
-        <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[11px]">
-          <span className="text-[var(--slate)]">
-            {proposalCount} open proposal{proposalCount === 1 ? "" : "s"} · {stagedCount} staged
-          </span>
-          {attention > 0 && (
-            <span className="text-[var(--cat-clay)]">
-              {attention} cell{attention === 1 ? "" : "s"} need attention
-            </span>
-          )}
-          {error && <span className="text-[var(--fail)]">{error}</span>}
-          <Link
-            className="ml-auto font-medium text-[var(--pe-blue)] hover:underline"
-            to="/chat"
-            search={(previous) => ({ ...previous, plugin: "schedule-grid" })}
-          >
-            Open chat
-          </Link>
-        </div>
+        {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <SchedulePicker
-          catalog={catalog}
-          activeScheduleId={snapshot?.scheduleId ?? null}
-          busy={busy}
-          onList={() => void run("catalog")}
-          onPick={(scheduleId) => void run("refresh", { scheduleId })}
-        />
-
-        <div className="min-h-0 flex-1 overflow-auto p-4">
-          {snapshot ? (
-            <table className="border-collapse text-left text-xs">
-              <thead className="sticky top-0 z-10 bg-[var(--paper-2)]">
-                <tr>
-                  <th className="tele-label border-b border-[var(--line)] px-2 py-1.5 text-[var(--slate)]">
-                    #
-                  </th>
-                  {snapshot.columns.map((column) => (
-                    <th
-                      key={column.columnNumber}
-                      className="tele-label border-b border-l border-[var(--line-soft)] px-2 py-1.5 text-[var(--slate)]"
-                    >
-                      {column.headerText}
-                      {column.isCalculated && <ColBadge label="calc" />}
-                      {column.isCombinedParameter && <ColBadge label="comb" />}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {snapshot.rows.map((row) => (
-                  <tr key={row.rowNumber} className="border-b border-[var(--line-soft)]">
-                    <td
-                      className="tele whitespace-nowrap px-2 py-1 text-right text-[var(--slate)]"
-                      title={`row ${row.rowNumber} · ${row.kind} · subjects=[${row.subjectIds.join(",")}]`}
-                    >
-                      {row.rowNumber}
-                      {row.subjectIds.length > 1 ? ` ×${row.subjectIds.length}` : ""}
-                    </td>
-                    {snapshot.columns.map((column, columnIndex) => {
-                      const key = scheduleCellKey(row.rowNumber, column.columnNumber);
-                      const binding = row.bindings.find(
-                        (candidate) => candidate.columnNumber === column.columnNumber,
-                      );
-                      return (
-                        <Cell
-                          key={column.columnNumber}
-                          cellKey={key}
-                          text={row.values[columnIndex] ?? ""}
-                          binding={binding}
-                          cell={cells[key]}
-                          editing={edit?.key === key ? edit.value : null}
-                          onEditStart={() =>
-                            binding?.isEditable && binding.blocker === "None"
-                              ? setEdit({
-                                  key,
-                                  value: cells[key]?.staged?.value ?? row.values[columnIndex] ?? "",
-                                })
-                              : undefined
-                          }
-                          onEditChange={(value) => setEdit({ key, value })}
-                          onEditCommit={commitEdit}
-                          onEditCancel={() => setEdit(null)}
-                          onApprove={approve}
-                          onDeny={deny}
-                          onUndo={undo}
-                        />
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <SidePane
+          side="left"
+          storageKey="schedule-grid:rail"
+          minWidth={220}
+          defaultWidth={264}
+          header={
+            <div className="flex items-center justify-between gap-2">
+              <span className="section-label">
+                Schedules
+                {catalog && (
+                  <span className="tele ml-1.5 normal-case text-muted-foreground">
+                    {catalog.schedules.length}
+                    {catalog.takenAt ? ` · ${timeAgo(catalog.takenAt)}` : ""}
+                  </span>
+                )}
+              </span>
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                title="Re-list the document's schedules"
+                disabled={busy != null}
+                onClick={() => void run("catalog")}
+              >
+                {busy === "catalog" ? <Loader2 className="animate-spin" /> : <List />}
+              </Button>
+            </div>
+          }
+        >
+          {catalog == null ? (
+            <div className="px-3 py-3">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy != null}
+                onClick={() => void run("catalog")}
+              >
+                {busy === "catalog" ? <Loader2 className="animate-spin" /> : <List />}
+                List schedules
+              </Button>
+              <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                Reads every schedule in the document so you (or pea) can open any of them.
+              </p>
+            </div>
           ) : (
-            <p className="text-sm text-[var(--slate)]">
-              {hydrated
-                ? "No schedule read yet. Pick one from the rail, or open a schedule view in Revit and press Read active view."
-                : "Connecting to the workbench…"}
-            </p>
+            <PickList
+              items={catalog.schedules.map((entry) => ({
+                id: String(entry.scheduleId),
+                label: entry.name,
+                group: entry.categoryName ?? "Other",
+                // ponytail: Summary projection reports 0 rows for every schedule — show counts only when computed
+                meta: entry.rowCount > 0 ? entry.rowCount : undefined,
+                hint: `id ${entry.scheduleId}${entry.isPlacedOnSheet ? " · placed on sheet" : ""}`,
+              }))}
+              activeId={snapshot ? String(snapshot.scheduleId) : null}
+              onPick={(id) => void run("refresh", { scheduleId: Number(id) })}
+              placeholder="Filter schedules…"
+              disabled={busy != null}
+              emptyNote="No schedules in the document."
+              className="h-full"
+            />
           )}
-        </div>
+        </SidePane>
+
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 overflow-auto p-3">
+            {snapshot ? (
+              <ScheduleTable
+                snapshot={snapshot}
+                cells={cells}
+                edit={edit}
+                setEdit={setEdit}
+                commitEdit={commitEdit}
+                stageValue={stageValue}
+                deny={deny}
+                undo={undo}
+              />
+            ) : (
+              <div className="grid h-full place-items-center">
+                <div className="max-w-sm text-center">
+                  <p className="text-sm text-foreground">
+                    {hydrated ? "Open a schedule to start editing" : "Connecting to the workbench…"}
+                  </p>
+                  {hydrated && (
+                    <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                      Pick one from the rail (type to filter, ↑/↓ then Enter), or ask pea — it can
+                      list, open, and propose; only you can push.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {pending.length > 0 && snapshot && (
+            <PendingStrip
+              pending={pending}
+              proposalCount={proposalCount}
+              stagedCount={stagedCount}
+              attention={attention}
+              columnHeader={columnHeader}
+              currentText={currentText}
+              stageValue={stageValue}
+              deny={deny}
+              undo={undo}
+            />
+          )}
+        </section>
       </div>
     </main>
   );
 }
 
-/** The catalog rail — every schedule in the document, grouped by category; pick to read. */
-function SchedulePicker({
-  catalog,
-  activeScheduleId,
-  busy,
-  onList,
-  onPick,
+/* ── the grid — dense hairline table, tele values, trichotomy tints ─────────── */
+
+function ScheduleTable({
+  snapshot,
+  cells,
+  edit,
+  setEdit,
+  commitEdit,
+  stageValue,
+  deny,
+  undo,
 }: {
-  catalog: ScheduleGridDocument["catalog"];
-  activeScheduleId: number | null;
-  busy: string | null;
-  onList: () => void;
-  onPick: (scheduleId: number) => void;
+  snapshot: NonNullable<ScheduleGridDocument["snapshot"]>;
+  cells: Record<string, CellState>;
+  edit: { key: string; value: string } | null;
+  setEdit: (edit: { key: string; value: string } | null) => void;
+  commitEdit: () => void;
+  stageValue: (key: string, value: string) => void;
+  deny: (key: string) => void;
+  undo: (key: string) => void;
 }) {
-  const groups = new Map<string, NonNullable<typeof catalog>["schedules"]>();
-  for (const entry of catalog?.schedules ?? []) {
-    const category = entry.categoryName ?? "Other";
-    groups.set(category, [...(groups.get(category) ?? []), entry]);
-  }
-
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-r border-[var(--line-2)]">
-      <div className="flex items-center justify-between gap-2 border-b border-[var(--line-soft)] px-3 py-2">
-        <span className="tele-label text-[10px] text-[var(--slate)]">
-          schedules{catalog ? ` · ${catalog.schedules.length}` : ""}
-          {catalog?.takenAt ? ` · ${timeAgo(catalog.takenAt)}` : ""}
-        </span>
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          title="List every schedule in the document"
-          disabled={busy != null}
-          onClick={onList}
-        >
-          {busy === "catalog" ? <Loader2 className="animate-spin" /> : <List />}
-        </Button>
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto py-1">
-        {catalog == null ? (
-          <div className="px-3 py-2">
-            <Button size="sm" variant="outline" disabled={busy != null} onClick={onList}>
-              <List /> List schedules
-            </Button>
-            <p className="mt-1.5 text-[10px] leading-relaxed text-[var(--slate)]">
-              Reads the document's schedule catalog so you (or pea) can open any of them.
-            </p>
-          </div>
-        ) : catalog.schedules.length === 0 ? (
-          <p className="px-3 py-2 text-[11px] text-[var(--slate)]">No schedules in the document.</p>
-        ) : (
-          [...groups.entries()].map(([category, entries]) => (
-            <div key={category} className="mb-1">
-              <p className="tele-label px-3 pb-0.5 pt-1.5 text-[9px] text-[var(--lichen)]">
-                {category}
-              </p>
-              {entries.map((entry) => {
-                const active = entry.scheduleId === activeScheduleId;
+    <div className="inline-block min-w-0 max-w-full overflow-auto rounded-[var(--radius)] border border-border bg-card">
+      <table className="border-collapse text-xs">
+        <thead className="sticky top-0 z-10">
+          <tr>
+            <th className="tele-label border-b border-border bg-muted px-2.5 py-1.5 text-right font-normal text-muted-foreground">
+              #
+            </th>
+            {snapshot.columns.map((column) => (
+              <th
+                key={column.columnNumber}
+                className="tele-label border-b border-l border-border bg-muted px-2.5 py-1.5 text-left font-normal text-muted-foreground"
+              >
+                {column.headerText}
+                {column.isCalculated && (
+                  <Badge variant="kiln" className="ml-1.5 align-middle">
+                    calc
+                  </Badge>
+                )}
+                {column.isCombinedParameter && (
+                  <Badge variant="kiln" className="ml-1.5 align-middle">
+                    comb
+                  </Badge>
+                )}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {snapshot.rows.map((row) => (
+            <tr key={row.rowNumber}>
+              <td
+                className="tele whitespace-nowrap border-b border-[var(--line-soft)] px-2.5 py-1 text-right text-muted-foreground"
+                title={`row ${row.rowNumber} · ${row.kind}${row.subjectIds.length > 0 ? ` · elements [${row.subjectIds.join(",")}]` : ""}`}
+              >
+                {row.rowNumber}
+                {row.subjectIds.length > 1 ? ` ×${row.subjectIds.length}` : ""}
+              </td>
+              {snapshot.columns.map((column, columnIndex) => {
+                const key = scheduleCellKey(row.rowNumber, column.columnNumber);
+                const binding = row.bindings.find(
+                  (candidate) => candidate.columnNumber === column.columnNumber,
+                );
                 return (
-                  <button
-                    key={entry.scheduleId}
-                    type="button"
-                    disabled={busy != null}
-                    onClick={() => onPick(entry.scheduleId)}
-                    title={`id ${entry.scheduleId}${entry.isPlacedOnSheet ? " · placed on sheet" : ""}`}
-                    className={cn(
-                      "flex w-full items-baseline gap-2 px-3 py-1 text-left text-[11px] hover:bg-[var(--pe-blue)]/8",
-                      active
-                        ? "border-l-2 border-[var(--pe-blue)] bg-[var(--pe-blue)]/8 font-medium text-[var(--pe-blue)]"
-                        : "border-l-2 border-transparent text-[var(--clay-ink)]",
-                    )}
-                  >
-                    <span className="min-w-0 flex-1 truncate">{entry.name}</span>
-                    <span className="tele shrink-0 text-[9px] text-[var(--slate)]">
-                      {entry.rowCount}
-                    </span>
-                  </button>
+                  <Cell
+                    key={column.columnNumber}
+                    cellKey={key}
+                    text={row.values[columnIndex] ?? ""}
+                    binding={binding}
+                    cell={cells[key]}
+                    editing={edit?.key === key ? edit.value : null}
+                    onEditStart={() =>
+                      binding?.isEditable && binding.blocker === "None"
+                        ? setEdit({
+                            key,
+                            value: cells[key]?.staged?.value ?? row.values[columnIndex] ?? "",
+                          })
+                        : undefined
+                    }
+                    onEditChange={(value) => setEdit({ key, value })}
+                    onEditCommit={commitEdit}
+                    onEditCancel={() => setEdit(null)}
+                    onApprove={stageValue}
+                    onDeny={deny}
+                    onUndo={undo}
+                  />
                 );
               })}
-            </div>
-          ))
-        )}
-      </div>
-    </aside>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
+}
+
+interface CellProps {
+  cellKey: string;
+  text: string;
+  binding: ScheduleCellBinding | undefined;
+  cell: CellState | undefined;
+  editing: string | null;
+  onEditStart: () => void;
+  onEditChange: (value: string) => void;
+  onEditCommit: () => void;
+  onEditCancel: () => void;
+  onApprove: (key: string, value: string) => void;
+  onDeny: (key: string) => void;
+  onUndo: (key: string) => void;
 }
 
 function Cell({
@@ -360,7 +410,6 @@ function Cell({
     : proposal
       ? String(cell?.proposal?.value ?? "")
       : null;
-  const showDiff = next != null && next !== current;
 
   const tooltip = binding
     ? [
@@ -377,92 +426,77 @@ function Cell({
 
   return (
     <td
+      id={`cell-${cellKey}`}
       className={cn(
-        "border-l border-[var(--line-soft)] px-2 py-1 align-top",
-        !editable && "bg-[var(--paper-2)]/40 text-[var(--slate)]",
-        editable && "cursor-text",
+        "border-b border-l border-[var(--line-soft)] px-2.5 py-1 align-top",
+        !editable && "bg-muted/40 text-muted-foreground",
+        editable && "cursor-text hover:bg-primary/5",
         staged && "bg-cat-green/12",
         proposal && "bg-cat-clay/12",
-        attention && "bg-destructive/12",
+        attention && "bg-destructive/10",
       )}
       title={tooltip}
       onClick={editing == null && !proposal ? onEditStart : undefined}
     >
       {editing != null ? (
-        <input
+        <Input
           autoFocus
           value={editing}
-          onChange={(e) => onEditChange(e.target.value)}
+          onChange={(event) => onEditChange(event.target.value)}
           onBlur={onEditCancel}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") onEditCommit();
-            else if (e.key === "Escape") onEditCancel();
+          onKeyDown={(event) => {
+            if (event.key === "Enter") onEditCommit();
+            else if (event.key === "Escape") onEditCancel();
           }}
-          className="tele w-full min-w-16 rounded-none border-[0.5px] border-[var(--pe-blue)] bg-[var(--paper)] px-1 outline-none"
+          className="tele h-6 min-w-20 rounded-none border-primary bg-background px-1"
         />
       ) : (
-        <div className="flex items-start gap-1">
-          <span className="tele min-w-8 whitespace-pre-wrap">
-            {showDiff && (
-              <span className="mr-1 text-[var(--slate)] line-through opacity-70">
-                {current || "—"}
-              </span>
+        <div className="flex items-start gap-1.5">
+          <ValueDiff
+            from={next != null ? current : null}
+            to={next ?? current}
+            className={cn(
+              "min-w-8 whitespace-pre-wrap",
+              staged && "font-medium text-cat-green",
+              proposal && "font-medium text-cat-clay",
             )}
+          />
+          {binding?.isTypeParameter && (
             <span
-              className={cn(
-                staged && "font-medium text-[var(--cat-green)]",
-                proposal && "font-medium text-[var(--cat-clay)]",
-              )}
+              className="tele-label text-cat-kiln"
+              title="type parameter — shared across rows of this type"
             >
-              {(next ?? current) || "—"}
+              T
             </span>
-            {binding?.isTypeParameter && (
-              <span
-                className="tele-label ml-1 align-super text-[var(--cat-kiln)]"
-                title="type parameter — shared across rows of this type"
-              >
-                T
-              </span>
-            )}
-          </span>
+          )}
           <span className="ml-auto flex shrink-0 items-center gap-0.5">
             {proposal ? (
               <>
-                <button
-                  type="button"
+                <CellAction
                   title={`Deny — ${cell?.proposal?.note ?? "pea proposal"}`}
-                  className="text-[var(--slate)] hover:text-[var(--fail)]"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeny(cellKey);
-                  }}
+                  hover="hover:text-destructive"
+                  onClick={() => onDeny(cellKey)}
                 >
                   <X className="size-3.5" />
-                </button>
-                <button
-                  type="button"
-                  title={`Approve → stage "${cell?.proposal?.value ?? ""}"`}
-                  className="text-[var(--slate)] hover:text-[var(--cat-green)]"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onApprove(cellKey, (cell?.proposal?.value as string | undefined) ?? "");
-                  }}
+                </CellAction>
+                <CellAction
+                  title={`Approve and stage "${cell?.proposal?.value ?? ""}"`}
+                  hover="hover:text-cat-green"
+                  onClick={() =>
+                    onApprove(cellKey, (cell?.proposal?.value as string | undefined) ?? "")
+                  }
                 >
                   <Check className="size-3.5" />
-                </button>
+                </CellAction>
               </>
             ) : staged ? (
-              <button
-                type="button"
+              <CellAction
                 title="Undo stage"
-                className="text-[var(--slate)] hover:text-[var(--clay-ink)]"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onUndo(cellKey);
-                }}
+                hover="hover:text-foreground"
+                onClick={() => onUndo(cellKey)}
               >
                 <RotateCcw className="size-3.5" />
-              </button>
+              </CellAction>
             ) : null}
           </span>
         </div>
@@ -471,26 +505,136 @@ function Cell({
   );
 }
 
-interface CellProps {
-  cellKey: string;
-  text: string;
-  binding: ScheduleCellBinding | undefined;
-  cell: CellState | undefined;
-  editing: string | null;
-  onEditStart: () => void;
-  onEditChange: (value: string) => void;
-  onEditCommit: () => void;
-  onEditCancel: () => void;
-  onApprove: (key: string, value: string) => void;
-  onDeny: (key: string) => void;
-  onUndo: (key: string) => void;
+function CellAction({
+  title,
+  hover,
+  onClick,
+  children,
+}: {
+  title: string;
+  hover: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      className={cn("text-muted-foreground", hover)}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+    >
+      {children}
+    </button>
+  );
 }
 
-function ColBadge({ label }: { label: string }) {
+/* ── pending-changes strip — every open diff in one reviewable line each ────── */
+
+function PendingStrip({
+  pending,
+  proposalCount,
+  stagedCount,
+  attention,
+  columnHeader,
+  currentText,
+  stageValue,
+  deny,
+  undo,
+}: {
+  pending: [string, CellState][];
+  proposalCount: number;
+  stagedCount: number;
+  attention: number;
+  columnHeader: (columnNumber: number) => string;
+  currentText: (key: string) => string | null;
+  stageValue: (key: string, value: string) => void;
+  deny: (key: string) => void;
+  undo: (key: string) => void;
+}) {
   return (
-    <span className="tele-label ml-1 rounded-sm border-[0.5px] border-cat-clay/25 bg-cat-clay/12 px-1 text-[var(--cat-clay)]">
-      {label}
-    </span>
+    <div className="shrink-0 border-t border-border bg-card">
+      <div className="flex items-baseline gap-3 border-b border-[var(--line-soft)] px-3 py-1.5">
+        <span className="section-label">Pending changes</span>
+        <span className="tele text-muted-foreground">
+          {proposalCount} proposed · {stagedCount} staged
+          {attention > 0 ? ` · ${attention} need review` : ""}
+        </span>
+        <span className="ml-auto text-[11px] text-muted-foreground">
+          Pea can propose; only you can push.
+        </span>
+      </div>
+      <div className="max-h-36 overflow-y-auto">
+        {pending.map(([key, cell]) => {
+          const { rowNumber, columnNumber } = splitScheduleCellKey(key);
+          const isStaged = cell.staged != null;
+          const next = isStaged ? (cell.staged?.value ?? "") : String(cell.proposal?.value ?? "");
+          return (
+            <div
+              key={key}
+              className="flex items-center gap-3 border-b border-[var(--line-soft)] px-3 py-1 last:border-b-0"
+            >
+              <button
+                type="button"
+                className="flex min-w-0 shrink-0 items-baseline gap-1.5 text-left hover:underline"
+                title="Show this cell in the grid"
+                onClick={() =>
+                  document
+                    .getElementById(`cell-${key}`)
+                    ?.scrollIntoView({ block: "center", behavior: "smooth" })
+                }
+              >
+                <span className="max-w-44 truncate text-xs font-medium">
+                  {columnHeader(columnNumber)}
+                </span>
+                <span className="tele text-[10px] text-muted-foreground">r{rowNumber}</span>
+              </button>
+              <ValueDiff
+                from={currentText(key)}
+                to={next}
+                className={cn(
+                  "min-w-0 flex-1 truncate",
+                  isStaged ? "text-cat-green" : "text-cat-clay",
+                )}
+              />
+              {!isStaged && cell.proposal?.note && (
+                <span className="hidden max-w-56 truncate text-[11px] text-muted-foreground sm:block">
+                  {cell.proposal.note}
+                </span>
+              )}
+              <span className="flex shrink-0 items-center gap-0.5">
+                {isStaged ? (
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    title="Undo stage"
+                    onClick={() => undo(key)}
+                  >
+                    <RotateCcw />
+                  </Button>
+                ) : (
+                  <>
+                    <Button size="icon-sm" variant="ghost" title="Deny" onClick={() => deny(key)}>
+                      <X />
+                    </Button>
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      title="Approve and stage"
+                      onClick={() => stageValue(key, String(cell.proposal?.value ?? ""))}
+                    >
+                      <Check />
+                    </Button>
+                  </>
+                )}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
