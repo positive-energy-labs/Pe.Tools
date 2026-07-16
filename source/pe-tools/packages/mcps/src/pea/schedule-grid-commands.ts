@@ -1,8 +1,10 @@
 /**
  * /schedule-grid command handlers — the side-effectful work the agent write mask forbids.
  *
- * `refresh` reads one rendered Revit schedule (revit.detail.schedules, Rows +
- * includeBindings) into the snapshot, carrying each cell's binding handle. `push`
+ * `catalog` lists every schedule in the document (revit.catalog.schedules, Summary)
+ * so either actor can choose one. `refresh` reads one rendered Revit schedule
+ * (revit.detail.schedules, Rows + includeBindings) into the snapshot, carrying each
+ * cell's binding handle; resolving a different schedule clears the cells. `push`
  * (human only) redeems every staged cell's binding handle — target element ids +
  * parameter id — through revit.apply.parameter-values in one host-owned transaction,
  * folds successes into the snapshot, and clears those cells; failures stay staged.
@@ -14,11 +16,16 @@ import {
   type ScheduleGridDocument,
   defineCommitCommand,
   resolveTarget,
+  scheduleCatalogSchema,
   scheduleGridSnapshotSchema,
   splitScheduleCellKey,
 } from "@pe/agent-contracts";
 import type { RouteStateCommandHandlers } from "@pe/agent-contracts";
-import type { RevitApplyParameterValues, RevitDetailSchedules } from "@pe/host-contracts/generated";
+import type {
+  RevitApplyParameterValues,
+  RevitCatalogSchedules,
+  RevitDetailSchedules,
+} from "@pe/host-contracts/generated";
 
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
@@ -41,6 +48,38 @@ export function createScheduleGridCommandHandlers(
   const caller = (target?: string) => new HostRpcCaller({ hostBaseUrl, bridgeSessionId: target });
 
   return {
+    catalog: async (input, ctx) => {
+      const target = resolveTarget(input, ctx.getDoc());
+      let response: RevitCatalogSchedules.Res.Response;
+      try {
+        response = await caller(target).call("revit.catalog.schedules", {
+          projection: { view: "Summary" },
+          budget: { maxEntries: 500 },
+        });
+      } catch (error) {
+        throw new Error(
+          `revit.catalog.schedules failed (${message(error)}). The op may not be registered on this host, or no document is open.`,
+        );
+      }
+
+      const document = ctx.getDoc();
+      document.catalog = scheduleCatalogSchema.parse({
+        documentTitle: document.snapshot?.documentTitle,
+        schedules: response.entries
+          .filter((entry) => !entry.isTemplate)
+          .map((entry) => ({
+            scheduleId: entry.scheduleId,
+            name: entry.name,
+            categoryName: entry.categoryName,
+            rowCount: entry.visibleBodyRowCount,
+            isPlacedOnSheet: entry.isPlacedOnSheet,
+          })),
+        takenAt: new Date().toISOString(),
+      });
+      await ctx.setDoc(document);
+      return { scheduleCount: document.catalog.schedules.length };
+    },
+
     refresh: async (input, ctx) => {
       const { scheduleName, scheduleId, maxRows } = (input ?? {}) as RefreshInput;
       const target = resolveTarget(input, ctx.getDoc());
@@ -102,8 +141,12 @@ export function createScheduleGridCommandHandlers(
         takenAt: new Date().toISOString(),
       });
 
-      // Preserve existing cells: getDoc returns the whole document; we replace only the snapshot.
+      // Re-reading the same schedule preserves cells; a different schedule clears them —
+      // cell keys are row/column positions and would misapply against the new bindings.
       const document = ctx.getDoc();
+      const previousScheduleId = document.snapshot?.scheduleId;
+      if (previousScheduleId != null && previousScheduleId !== snapshot.scheduleId)
+        document.cells = {};
       document.snapshot = snapshot;
       await ctx.setDoc(document);
 

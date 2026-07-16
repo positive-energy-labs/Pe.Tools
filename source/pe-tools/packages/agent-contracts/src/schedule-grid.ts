@@ -21,6 +21,24 @@ import {
 export const scheduleGridCellSchema = trichotomyCellSchema(z.string());
 export type ScheduleGridCell = z.infer<typeof scheduleGridCellSchema>;
 
+/* ── Catalog (revit.catalog.schedules, Summary) — every schedule in the document ── */
+
+export const scheduleCatalogEntrySchema = z.object({
+  scheduleId: z.number().int(),
+  name: z.string(),
+  categoryName: z.string().nullish(),
+  rowCount: z.number().int().default(0),
+  isPlacedOnSheet: z.boolean().default(false),
+});
+export type ScheduleCatalogEntry = z.infer<typeof scheduleCatalogEntrySchema>;
+
+export const scheduleCatalogSchema = z.object({
+  documentTitle: z.string().nullish(),
+  schedules: z.array(scheduleCatalogEntrySchema),
+  takenAt: z.string().nullish(),
+});
+export type ScheduleCatalog = z.infer<typeof scheduleCatalogSchema>;
+
 /* ── Snapshot (revit.detail.schedules, Rows + includeBindings) ─────────────── */
 
 export const scheduleColumnSchema = z.object({
@@ -74,6 +92,8 @@ export type ScheduleGridSnapshot = z.infer<typeof scheduleGridSnapshotSchema>;
 export const scheduleGridDocumentSchema = z
   .object({
     binding: routeBindingSchema,
+    /** Every schedule in the bound document — the picker both actors choose from. */
+    catalog: scheduleCatalogSchema.nullish(),
     snapshot: scheduleGridSnapshotSchema.nullish(),
     /** `${rowNumber}::${columnNumber}` -> cell trichotomy state. */
     cells: z.record(z.string(), scheduleGridCellSchema).default({}),
@@ -92,9 +112,16 @@ export const scheduleGridRouteState = defineRouteState({
   schema: scheduleGridDocumentSchema,
   agentWriteMask: trichotomyAgentMask(),
   commands: {
+    catalog: {
+      description:
+        "List every schedule in the bound document (id, name, category, row count) into the catalog, so either actor can choose which schedule to open with refresh.",
+      input: z.object({ target: z.string().optional() }),
+      actor: "any",
+      recoversExternal: true,
+    },
     refresh: {
       description:
-        "Read a schedule (by name/id, or the current active view when omitted) into the snapshot with cell binding handles. Existing proposals and review marks are preserved.",
+        "Read a schedule (by name/id, or the current active view when omitted) into the snapshot with cell binding handles. Re-reading the same schedule preserves proposals and review marks; resolving a different schedule clears them (cell keys are row/column positions and do not transfer).",
       input: z.object({
         scheduleName: z.string().optional(),
         scheduleId: z.number().int().optional(),
