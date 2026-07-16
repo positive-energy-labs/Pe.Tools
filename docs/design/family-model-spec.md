@@ -7,6 +7,33 @@ Owner surfaces: FamilyFoundry (FF). Consumers: FFManager, FFMigrator, capture, r
 
 ## Implementation ledger
 
+### 2026-07-16 — /family surface convergence (Phase 10)
+
+- `/family` is THE surface for one authored family.json: anatomy triptych + type flex matrix +
+  grounded spec-sheet pane, replacing `/beta/family-plugin` and the POC routes. `/family-model`
+  redirects there. The legacy `/family-types` route remains, demoted, as the live-family
+  incremental-edit surface until the "where did seeded info come from / where does it push"
+  questions are resolved; `/family` is authored-document-only — live families enter via capture.
+- Sibling slice `route:family` beside `route:settings`: spec doc (markdown blocks + parser image
+  ids, geometry stays in the parse cache) and the Revit evidence projection stamped with
+  `from { origin: capture|build, capturedAt, target, documentId, documentVersionToken }`. The UI
+  compares the stamp against the open snapshot's version token and renders fresh vs STALE —
+  stale evidence is shown, never silently trusted. Pea's agent write mask on this slice is empty;
+  it acts through `parse_spec` / `capture_evidence` / `build_evidence` commands.
+- Settings field addresses are RFC 6901 JSON Pointers (`/types/Standard/Body Width`), not
+  dot-joined paths — spec-sheet property names carry periods. `settingsFieldSegments` decodes,
+  `settingsFieldPointer` encodes; non-pointer keys hard-fail.
+- Proposals carry multi-citation provenance: `proposal.sources` is an array of markdown-coordinate
+  refs (`blockId` may be a parsed block or a parser-extracted image). The doc pane draws only
+  citations that resolve to parser geometry — measured (solid) vs estimated (dashed) vs image
+  (measured) — and lists unresolved citations explicitly rather than guessing a box.
+- `revit.apply.family-model` returns the evidence projection with the build (snapshot extracted
+  while the built document is open), so one call proves the saved revision. The TS generated
+  mirror regenerates against a live session at the next live loop.
+- Document enumeration reuses the existing `settings.tree` operation; no new list op.
+- `route:family` is the second consumer of the target model (`consumerId`-shaped scope): the
+  /family control bar hosts the target chip and binds via the substrate `bind` command.
+
 ### 2026-07-16 — Phase 9 authoring/evidence convergence complete
 
 - `FamilyFoundry/models` is a first-class settings root. The beta Family Model route and chat plugin project the same

@@ -6,12 +6,14 @@
 import type { z } from "zod";
 import type { RouteStateCommandHandlers, RouteStateSpec } from "@pe/agent-contracts";
 import {
+  familyRouteState,
   familyTypesRouteState,
   parameterLinksRouteState,
   scheduleGridRouteState,
   settingsRouteState,
 } from "@pe/agent-contracts";
 
+import { createFamilyCommandHandlers } from "./family-commands.ts";
 import {
   createFamilyTypesCommandHandlers,
   createParameterLinksCommandHandlers,
@@ -38,6 +40,7 @@ export function createRouteRegistrations(
   options: { hostBaseUrl?: string } = {},
 ): RouteRegistration[] {
   return [
+    entry(familyRouteState, createFamilyCommandHandlers(options)),
     entry(familyTypesRouteState, createFamilyTypesCommandHandlers(options)),
     entry(parameterLinksRouteState, createParameterLinksCommandHandlers(options)),
     entry(settingsRouteState, createSettingsCommandHandlers(options)),

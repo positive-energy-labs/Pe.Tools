@@ -4,6 +4,7 @@ export * from "./route-state.ts";
 export * from "./trichotomy.ts";
 export * from "./commit.ts";
 export * from "./family-types.ts";
+export * from "./family.ts";
 export * from "./parameter-links.ts";
 export * from "./settings.ts";
 export * from "./schedule-grid.ts";

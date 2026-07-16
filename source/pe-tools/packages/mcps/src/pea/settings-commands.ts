@@ -251,7 +251,7 @@ function spliceFields(
   }
 }
 
-/** Apply one explicit set/delete edit at a dot-path. */
+/** Apply one explicit set/delete edit at a field pointer's segments. */
 function applyFieldEdit(
   root: Record<string, unknown>,
   segments: string[],

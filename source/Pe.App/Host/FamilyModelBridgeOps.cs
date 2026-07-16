@@ -66,7 +66,8 @@ internal static class FamilyModelBridgeOps {
                                             FileNotFoundException or DirectoryNotFoundException) {
             throw BridgeOperationExceptions.BadRequest(exception.Message);
         }
-        return new FamilyModelBuildData(parsed.Value.Family.Name, outputPath, result.TemplatePath);
+        var evidence = FamilyModelEvidenceProjector.Project(parsed.Value, result.Snapshot);
+        return new FamilyModelBuildData(parsed.Value.Family.Name, outputPath, result.TemplatePath, evidence);
     }
 
     private static string ResolvePath(string? path, string field) {

@@ -4,6 +4,7 @@ import {
   type FamilyTypesDocument,
   type ParameterLinksDocument,
   cellSummary,
+  familyRouteState,
   familyTypesRouteState,
   parameterLinksRouteState,
   readRouteState,
@@ -19,6 +20,7 @@ import { Button } from "#/components/ui/button";
 import { useWorkbench } from "./provider";
 import { type RouteStateWriteResult, useRouteState, writeRouteState } from "./route-state";
 import { CellTrichotomyReviewer } from "./trichotomy-reviewer";
+import { FamilyChatPlugin } from "./plugins/family-chat-plugin";
 import { ScheduleGridChatPlugin } from "./plugins/schedule-grid-chat-plugin";
 import { SettingsChatPlugin } from "./plugins/settings-chat-plugin";
 
@@ -52,6 +54,10 @@ const routeChatPluginList: RouteChatPluginRegistration[] = [
   {
     spec: settingsRouteState,
     Renderer: SettingsChatPlugin,
+  },
+  {
+    spec: familyRouteState,
+    Renderer: FamilyChatPlugin,
   },
   {
     spec: scheduleGridRouteState,

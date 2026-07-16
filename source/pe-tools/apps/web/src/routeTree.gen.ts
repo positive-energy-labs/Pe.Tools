@@ -18,6 +18,7 @@ import { Route as FamilyModelRouteImport } from "./routes/family-model";
 import { Route as FamilyMatrixRouteImport } from "./routes/family-matrix";
 import { Route as FamilyDocRouteImport } from "./routes/family-doc";
 import { Route as FamilyAuditRouteImport } from "./routes/family-audit";
+import { Route as FamilyRouteImport } from "./routes/family";
 import { Route as DocLabRouteImport } from "./routes/doc-lab";
 import { Route as DesignSystemRouteImport } from "./routes/design-system";
 import { Route as ChatRouteImport } from "./routes/chat";
@@ -25,12 +26,10 @@ import { Route as IndexRouteImport } from "./routes/index";
 import { Route as PocTypeRouteImport } from "./routes/poc.type";
 import { Route as PocSurfacesRouteImport } from "./routes/poc.surfaces";
 import { Route as PocSidepaneRouteImport } from "./routes/poc.sidepane";
-import { Route as PocFamilyPluginRouteImport } from "./routes/poc.family-plugin";
 import { Route as PocFamilyLensRouteImport } from "./routes/poc.family-lens";
 import { Route as PocDialRouteImport } from "./routes/poc.dial";
 import { Route as DocsTargetRouteImport } from "./routes/docs.target";
 import { Route as DemoTanstackQueryRouteImport } from "./routes/demo/tanstack-query";
-import { Route as BetaFamilyPluginRouteImport } from "./routes/beta.family-plugin";
 import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
 import { Route as ApiPdfAuditMapRouteImport } from "./routes/api/pdf-audit/map";
 import { Route as ApiPdfAuditParseParseIdRouteImport } from "./routes/api/pdf-audit/parse.$parseId";
@@ -80,6 +79,11 @@ const FamilyAuditRoute = FamilyAuditRouteImport.update({
   path: "/family-audit",
   getParentRoute: () => rootRouteImport,
 } as any);
+const FamilyRoute = FamilyRouteImport.update({
+  id: "/family",
+  path: "/family",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const DocLabRoute = DocLabRouteImport.update({
   id: "/doc-lab",
   path: "/doc-lab",
@@ -115,11 +119,6 @@ const PocSidepaneRoute = PocSidepaneRouteImport.update({
   path: "/poc/sidepane",
   getParentRoute: () => rootRouteImport,
 } as any);
-const PocFamilyPluginRoute = PocFamilyPluginRouteImport.update({
-  id: "/poc/family-plugin",
-  path: "/poc/family-plugin",
-  getParentRoute: () => rootRouteImport,
-} as any);
 const PocFamilyLensRoute = PocFamilyLensRouteImport.update({
   id: "/poc/family-lens",
   path: "/poc/family-lens",
@@ -138,11 +137,6 @@ const DocsTargetRoute = DocsTargetRouteImport.update({
 const DemoTanstackQueryRoute = DemoTanstackQueryRouteImport.update({
   id: "/demo/tanstack-query",
   path: "/demo/tanstack-query",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const BetaFamilyPluginRoute = BetaFamilyPluginRouteImport.update({
-  id: "/beta/family-plugin",
-  path: "/beta/family-plugin",
   getParentRoute: () => rootRouteImport,
 } as any);
 const ApiPdfAuditParseRoute = ApiPdfAuditParseRouteImport.update({
@@ -166,6 +160,7 @@ export interface FileRoutesByFullPath {
   "/chat": typeof ChatRoute;
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
+  "/family": typeof FamilyRoute;
   "/family-audit": typeof FamilyAuditRoute;
   "/family-doc": typeof FamilyDocRoute;
   "/family-matrix": typeof FamilyMatrixRoute;
@@ -175,12 +170,10 @@ export interface FileRoutesByFullPath {
   "/parameter-links": typeof ParameterLinksRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
-  "/beta/family-plugin": typeof BetaFamilyPluginRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
   "/docs/target": typeof DocsTargetRoute;
   "/poc/dial": typeof PocDialRoute;
   "/poc/family-lens": typeof PocFamilyLensRoute;
-  "/poc/family-plugin": typeof PocFamilyPluginRoute;
   "/poc/sidepane": typeof PocSidepaneRoute;
   "/poc/surfaces": typeof PocSurfacesRoute;
   "/poc/type": typeof PocTypeRoute;
@@ -193,6 +186,7 @@ export interface FileRoutesByTo {
   "/chat": typeof ChatRoute;
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
+  "/family": typeof FamilyRoute;
   "/family-audit": typeof FamilyAuditRoute;
   "/family-doc": typeof FamilyDocRoute;
   "/family-matrix": typeof FamilyMatrixRoute;
@@ -202,12 +196,10 @@ export interface FileRoutesByTo {
   "/parameter-links": typeof ParameterLinksRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
-  "/beta/family-plugin": typeof BetaFamilyPluginRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
   "/docs/target": typeof DocsTargetRoute;
   "/poc/dial": typeof PocDialRoute;
   "/poc/family-lens": typeof PocFamilyLensRoute;
-  "/poc/family-plugin": typeof PocFamilyPluginRoute;
   "/poc/sidepane": typeof PocSidepaneRoute;
   "/poc/surfaces": typeof PocSurfacesRoute;
   "/poc/type": typeof PocTypeRoute;
@@ -221,6 +213,7 @@ export interface FileRoutesById {
   "/chat": typeof ChatRoute;
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
+  "/family": typeof FamilyRoute;
   "/family-audit": typeof FamilyAuditRoute;
   "/family-doc": typeof FamilyDocRoute;
   "/family-matrix": typeof FamilyMatrixRoute;
@@ -230,12 +223,10 @@ export interface FileRoutesById {
   "/parameter-links": typeof ParameterLinksRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
-  "/beta/family-plugin": typeof BetaFamilyPluginRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
   "/docs/target": typeof DocsTargetRoute;
   "/poc/dial": typeof PocDialRoute;
   "/poc/family-lens": typeof PocFamilyLensRoute;
-  "/poc/family-plugin": typeof PocFamilyPluginRoute;
   "/poc/sidepane": typeof PocSidepaneRoute;
   "/poc/surfaces": typeof PocSurfacesRoute;
   "/poc/type": typeof PocTypeRoute;
@@ -250,6 +241,7 @@ export interface FileRouteTypes {
     | "/chat"
     | "/design-system"
     | "/doc-lab"
+    | "/family"
     | "/family-audit"
     | "/family-doc"
     | "/family-matrix"
@@ -259,12 +251,10 @@ export interface FileRouteTypes {
     | "/parameter-links"
     | "/schedule-grid"
     | "/settings"
-    | "/beta/family-plugin"
     | "/demo/tanstack-query"
     | "/docs/target"
     | "/poc/dial"
     | "/poc/family-lens"
-    | "/poc/family-plugin"
     | "/poc/sidepane"
     | "/poc/surfaces"
     | "/poc/type"
@@ -277,6 +267,7 @@ export interface FileRouteTypes {
     | "/chat"
     | "/design-system"
     | "/doc-lab"
+    | "/family"
     | "/family-audit"
     | "/family-doc"
     | "/family-matrix"
@@ -286,12 +277,10 @@ export interface FileRouteTypes {
     | "/parameter-links"
     | "/schedule-grid"
     | "/settings"
-    | "/beta/family-plugin"
     | "/demo/tanstack-query"
     | "/docs/target"
     | "/poc/dial"
     | "/poc/family-lens"
-    | "/poc/family-plugin"
     | "/poc/sidepane"
     | "/poc/surfaces"
     | "/poc/type"
@@ -304,6 +293,7 @@ export interface FileRouteTypes {
     | "/chat"
     | "/design-system"
     | "/doc-lab"
+    | "/family"
     | "/family-audit"
     | "/family-doc"
     | "/family-matrix"
@@ -313,12 +303,10 @@ export interface FileRouteTypes {
     | "/parameter-links"
     | "/schedule-grid"
     | "/settings"
-    | "/beta/family-plugin"
     | "/demo/tanstack-query"
     | "/docs/target"
     | "/poc/dial"
     | "/poc/family-lens"
-    | "/poc/family-plugin"
     | "/poc/sidepane"
     | "/poc/surfaces"
     | "/poc/type"
@@ -332,6 +320,7 @@ export interface RootRouteChildren {
   ChatRoute: typeof ChatRoute;
   DesignSystemRoute: typeof DesignSystemRoute;
   DocLabRoute: typeof DocLabRoute;
+  FamilyRoute: typeof FamilyRoute;
   FamilyAuditRoute: typeof FamilyAuditRoute;
   FamilyDocRoute: typeof FamilyDocRoute;
   FamilyMatrixRoute: typeof FamilyMatrixRoute;
@@ -341,12 +330,10 @@ export interface RootRouteChildren {
   ParameterLinksRoute: typeof ParameterLinksRoute;
   ScheduleGridRoute: typeof ScheduleGridRoute;
   SettingsRoute: typeof SettingsRoute;
-  BetaFamilyPluginRoute: typeof BetaFamilyPluginRoute;
   DemoTanstackQueryRoute: typeof DemoTanstackQueryRoute;
   DocsTargetRoute: typeof DocsTargetRoute;
   PocDialRoute: typeof PocDialRoute;
   PocFamilyLensRoute: typeof PocFamilyLensRoute;
-  PocFamilyPluginRoute: typeof PocFamilyPluginRoute;
   PocSidepaneRoute: typeof PocSidepaneRoute;
   PocSurfacesRoute: typeof PocSurfacesRoute;
   PocTypeRoute: typeof PocTypeRoute;
@@ -419,6 +406,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof FamilyAuditRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/family": {
+      id: "/family";
+      path: "/family";
+      fullPath: "/family";
+      preLoaderRoute: typeof FamilyRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/doc-lab": {
       id: "/doc-lab";
       path: "/doc-lab";
@@ -468,13 +462,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof PocSidepaneRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/poc/family-plugin": {
-      id: "/poc/family-plugin";
-      path: "/poc/family-plugin";
-      fullPath: "/poc/family-plugin";
-      preLoaderRoute: typeof PocFamilyPluginRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
     "/poc/family-lens": {
       id: "/poc/family-lens";
       path: "/poc/family-lens";
@@ -501,13 +488,6 @@ declare module "@tanstack/react-router" {
       path: "/demo/tanstack-query";
       fullPath: "/demo/tanstack-query";
       preLoaderRoute: typeof DemoTanstackQueryRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/beta/family-plugin": {
-      id: "/beta/family-plugin";
-      path: "/beta/family-plugin";
-      fullPath: "/beta/family-plugin";
-      preLoaderRoute: typeof BetaFamilyPluginRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/api/pdf-audit/parse": {
@@ -550,6 +530,7 @@ const rootRouteChildren: RootRouteChildren = {
   ChatRoute: ChatRoute,
   DesignSystemRoute: DesignSystemRoute,
   DocLabRoute: DocLabRoute,
+  FamilyRoute: FamilyRoute,
   FamilyAuditRoute: FamilyAuditRoute,
   FamilyDocRoute: FamilyDocRoute,
   FamilyMatrixRoute: FamilyMatrixRoute,
@@ -559,12 +540,10 @@ const rootRouteChildren: RootRouteChildren = {
   ParameterLinksRoute: ParameterLinksRoute,
   ScheduleGridRoute: ScheduleGridRoute,
   SettingsRoute: SettingsRoute,
-  BetaFamilyPluginRoute: BetaFamilyPluginRoute,
   DemoTanstackQueryRoute: DemoTanstackQueryRoute,
   DocsTargetRoute: DocsTargetRoute,
   PocDialRoute: PocDialRoute,
   PocFamilyLensRoute: PocFamilyLensRoute,
-  PocFamilyPluginRoute: PocFamilyPluginRoute,
   PocSidepaneRoute: PocSidepaneRoute,
   PocSurfacesRoute: PocSurfacesRoute,
   PocTypeRoute: PocTypeRoute,

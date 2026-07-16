@@ -5,6 +5,7 @@ import { Check, CheckCheck, RefreshCw, RotateCcw, ShieldCheck, Sparkles, X } fro
 import {
   type SettingsFieldState,
   type SettingsRouteDocument,
+  settingsFieldPointer,
   settingsFieldSegments,
   settingsRouteState,
 } from "@pe/agent-contracts";
@@ -28,7 +29,7 @@ import { RouteWorkspaceShell } from "#/workbench/route-workspace-shell";
  *
  * All collaborative state lives in the `route:settings` document: pea opens a
  * schema-backed host settings file into the snapshot and proposes field values
- * (dot-paths into the parsed raw JSON); the engineer reviews, stages, validates, and
+ * (JSON Pointers into the parsed raw JSON); the engineer reviews, stages, validates, and
  * saves. Writes go through the route-state dispatcher as `actor:"human"` — pea's
  * proposals arrive identically over SSE. The picker still speaks the host directly
  * (settings.workspaces / settings.tree) to choose which document `open` targets.
@@ -493,15 +494,15 @@ function safeParse(rawContent: string | null | undefined): Record<string, unknow
   }
 }
 
-/** Every leaf JSON path (dot-joined). Objects recurse; arrays/primitives are leaves. */
-function flattenLeafPaths(value: Record<string, unknown>, prefix = ""): string[] {
+/** Every leaf JSON Pointer. Objects recurse; arrays/primitives are leaves. */
+function flattenLeafPaths(value: Record<string, unknown>, prefix: string[] = []): string[] {
   const out: string[] = [];
   for (const [key, child] of Object.entries(value)) {
-    const path = prefix ? `${prefix}.${key}` : key;
+    const segments = [...prefix, key];
     if (child != null && typeof child === "object" && !Array.isArray(child)) {
-      out.push(...flattenLeafPaths(child as Record<string, unknown>, path));
+      out.push(...flattenLeafPaths(child as Record<string, unknown>, segments));
     } else {
-      out.push(path);
+      out.push(settingsFieldPointer(segments));
     }
   }
   return out;
