@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { AlertTriangle, ArrowLeft, Box, Braces, Hammer, ScanLine } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Braces, CheckCircle2, Hammer, ScanLine } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Button } from "#/components/ui/button";
@@ -38,6 +38,7 @@ function FamilyModelRoute() {
   const [outputPath, setOutputPath] = useState("");
   const [modelDirectory, setModelDirectory] = useState("");
   const [status, setStatus] = useState<string>();
+  const [validatedSource, setValidatedSource] = useState<string>();
   const [busy, setBusy] = useState(false);
   const parsed = useMemo(() => {
     try {
@@ -52,10 +53,36 @@ function FamilyModelRoute() {
     setBusy(true);
     setStatus(undefined);
     try {
-      const result = await callHostRpc("family.model.capture", {});
+      const result = await callHostRpc("revit.context.family-model", {});
       setSource(result.modelJson);
       setSelectedType(undefined);
       setStatus(`Captured ${result.familyName} · ${result.unmodeledCount} unmodeled`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function validateSource() {
+    const result = await callHostRpc("revit.context.family-model.validation", {
+      modelJson: source,
+    });
+    if (!result.valid) {
+      setValidatedSource(undefined);
+      setStatus(result.issues.map((issue) => `${issue.path}: ${issue.message}`).join(" · "));
+      return false;
+    }
+    setValidatedSource(source);
+    setStatus("Family Model is valid against the authoritative C# contract.");
+    return true;
+  }
+
+  async function validate() {
+    setBusy(true);
+    setStatus(undefined);
+    try {
+      await validateSource();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
@@ -71,7 +98,8 @@ function FamilyModelRoute() {
     setBusy(true);
     setStatus(undefined);
     try {
-      const result = await callHostRpc("family.model.build", {
+      if (!(await validateSource())) return;
+      const result = await callHostRpc("revit.apply.family-model", {
         modelJson: source,
         outputPath,
         modelDirectory: modelDirectory.trim() || undefined,
@@ -157,18 +185,33 @@ function FamilyModelRoute() {
                 className="border-[#9dc88d]/25 bg-black/20 font-mono text-xs"
               />
             </div>
-            <Button
-              variant="outline"
-              onClick={() => void build()}
-              disabled={busy || Boolean(parsed.error)}
-              className="border-[#d9a441]/50 text-[#efbd57] hover:bg-[#d9a441]/10 hover:text-[#ffd27a]"
-            >
-              <Hammer className="size-4" /> Build RFA
-            </Button>
+            <div className="flex gap-2 sm:flex-col">
+              <Button
+                variant="outline"
+                onClick={() => void validate()}
+                disabled={busy || Boolean(parsed.error)}
+                className="border-[#9dc88d]/50 text-[#c8e7bb] hover:bg-[#9dc88d]/10 hover:text-[#e3f7da]"
+              >
+                <CheckCircle2 className="size-4" /> Validate
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => void build()}
+                disabled={busy || Boolean(parsed.error)}
+                className="border-[#d9a441]/50 text-[#efbd57] hover:bg-[#d9a441]/10 hover:text-[#ffd27a]"
+              >
+                <Hammer className="size-4" /> Build RFA
+              </Button>
+            </div>
           </div>
           {status && (
             <p className="border-t border-[#9dc88d]/15 px-4 py-2 font-mono text-[11px] text-[#c8d9bc]">
               {status}
+            </p>
+          )}
+          {validatedSource === source && (
+            <p className="border-t border-[#9dc88d]/15 px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-[#9dc88d]">
+              Authoritative contract validated
             </p>
           )}
         </section>
@@ -201,7 +244,7 @@ function PreviewBoard({
   selectedType?: string;
   onType: (value: string) => void;
 }) {
-  const typeNames = Object.keys(preview.model.types ?? {});
+  const typeNames = preview.typeNames;
   return (
     <section className="relative overflow-hidden rounded-sm border border-[#9dc88d]/25 bg-[#e7e5cf] text-[#14211c] shadow-2xl shadow-black/30">
       <div className="pointer-events-none absolute inset-0 opacity-30 [background-image:linear-gradient(#587361_1px,transparent_1px),linear-gradient(90deg,#587361_1px,transparent_1px)] [background-size:24px_24px]" />
@@ -209,10 +252,10 @@ function PreviewBoard({
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#6d5b26]">
-              {preview.model.family.category} · {preview.model.family.placement}
+              {preview.family.category} · {preview.family.placement}
             </p>
             <h2 className="mt-1 text-3xl font-black uppercase tracking-[-0.04em]">
-              {preview.model.family.name}
+              {preview.family.name}
             </h2>
           </div>
           {typeNames.length > 0 && (
@@ -231,10 +274,18 @@ function PreviewBoard({
       </div>
       <div className="relative grid gap-0 lg:grid-cols-[1.15fr_0.85fr]">
         <div className="border-b-2 border-[#14211c] p-5 lg:border-b-0 lg:border-r-2">
-          <PlanSvg preview={preview} />
-          <p className="mt-3 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#596b5f]">
-            <Box className="size-3" /> Family-frame extents · dimensions in inches
-          </p>
+          <div className="grid min-h-72 place-items-center border-2 border-[#14211c] bg-[#f2f0dc]/70 p-8 text-center">
+            <div>
+              <Braces className="mx-auto mb-4 size-10 text-[#6d5b26]" />
+              <p className="font-mono text-xs font-bold uppercase tracking-[0.2em]">
+                Authored model register
+              </p>
+              <p className="mx-auto mt-3 max-w-sm text-xs leading-relaxed text-[#596b5f]">
+                Values, references, formulas, units, and frames are shown exactly as authored. C#
+                owns validation and lowering; this board does not infer geometry.
+              </p>
+            </div>
+          </div>
         </div>
         <div className="divide-y-2 divide-[#14211c]">
           <div className="p-4">
@@ -242,11 +293,13 @@ function PreviewBoard({
               Parameters / {preview.typeName}
             </p>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-              {Object.entries(preview.parameters).map(([name, value]) => (
-                <div key={name} className="contents">
-                  <span className="truncate text-xs">{name}</span>
+              {preview.parameters.map((parameter) => (
+                <div key={parameter.name} className="contents">
+                  <span className="truncate text-xs" title={parameter.origin}>
+                    {parameter.name}
+                  </span>
                   <span className="text-right font-mono text-xs font-bold">
-                    {typeof value === "number" ? `${Number(value.toFixed(3))}″` : value}
+                    {parameter.authored}
                   </span>
                 </div>
               ))}
@@ -298,82 +351,5 @@ function PreviewBoard({
         </div>
       </div>
     </section>
-  );
-}
-
-function PlanSvg({ preview }: { preview: FamilyModelPreview }) {
-  const extents = preview.solids.flatMap((solid) => [
-    solid.width ?? solid.diameter ?? 1,
-    solid.depth ?? solid.diameter ?? 1,
-  ]);
-  const max = Math.max(1, ...extents);
-  const scale = 250 / max;
-  return (
-    <svg
-      viewBox="0 0 320 320"
-      role="img"
-      aria-label={`Plan preview of ${preview.model.family.name}`}
-      className="mx-auto aspect-square max-h-[470px] w-full"
-    >
-      <path d="M160 20V300M20 160H300" stroke="#587361" strokeWidth="1" strokeDasharray="5 5" />
-      {preview.solids.map((solid) => {
-        const diameter = (solid.diameter ?? 0) * scale;
-        const width = (solid.width ?? solid.diameter ?? 1) * scale;
-        const depth = (solid.depth ?? solid.diameter ?? 1) * scale;
-        const voided = solid.kind.startsWith("Void");
-        return solid.kind.includes("Cylinder") ? (
-          <circle
-            key={solid.name}
-            cx="160"
-            cy="160"
-            r={diameter / 2}
-            fill={voided ? "#e7e5cf" : "#9dc88d55"}
-            stroke="#14211c"
-            strokeWidth="2"
-            strokeDasharray={voided ? "7 5" : undefined}
-          >
-            <title>{solid.name}</title>
-          </circle>
-        ) : (
-          <rect
-            key={solid.name}
-            x={160 - width / 2}
-            y={160 - depth / 2}
-            width={width}
-            height={depth}
-            fill={voided ? "#e7e5cf" : "#9dc88d55"}
-            stroke="#14211c"
-            strokeWidth="2"
-            strokeDasharray={voided ? "7 5" : undefined}
-          >
-            <title>{solid.name}</title>
-          </rect>
-        );
-      })}
-      {preview.solids.length === 0 && (
-        <text
-          x="160"
-          y="154"
-          textAnchor="middle"
-          fontFamily="monospace"
-          fontSize="11"
-          fill="#596b5f"
-        >
-          NO DIRECT SOLIDS
-        </text>
-      )}
-      {preview.solids.length === 0 && (
-        <text
-          x="160"
-          y="172"
-          textAnchor="middle"
-          fontFamily="monospace"
-          fontSize="10"
-          fill="#6d5b26"
-        >
-          SEE CONSTITUENT REGISTER
-        </text>
-      )}
-    </svg>
   );
 }

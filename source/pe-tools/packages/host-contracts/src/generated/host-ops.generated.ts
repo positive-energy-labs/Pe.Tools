@@ -146,6 +146,26 @@ export namespace FamilyModelCapture {
   }
 }
 
+/** Validate family.json with the authoritative portable Family Model parser and return path-addressed diagnostics. */
+export namespace FamilyModelValidate {
+  export namespace Req {
+    export interface Request {
+      modelJson: string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      valid: boolean;
+      issues: FamilyModelValidationIssue[];
+    }
+    export interface FamilyModelValidationIssue {
+      code: string;
+      path: string;
+      message: string;
+    }
+  }
+}
+
 /** List every bridge operation this Revit session supports, with JSON Schemas for request and response payloads. */
 export namespace HostOpsCatalog {
   export namespace Req {
@@ -4039,8 +4059,9 @@ export interface HostOps {
   "family.editor.apply": { request: FamilyEditorApply.Req.Request; response: FamilyEditorApply.Res.Response };
   "family.editor.open": { request: FamilyEditorOpen.Req.Request; response: FamilyEditorOpen.Res.Response };
   "family.editor.snapshot": { request: FamilyEditorSnapshot.Req.Request; response: FamilyEditorSnapshot.Res.Response };
-  "family.model.build": { request: FamilyModelBuild.Req.Request; response: FamilyModelBuild.Res.Response };
-  "family.model.capture": { request: FamilyModelCapture.Req.Request; response: FamilyModelCapture.Res.Response };
+  "revit.apply.family-model": { request: FamilyModelBuild.Req.Request; response: FamilyModelBuild.Res.Response };
+  "revit.context.family-model": { request: FamilyModelCapture.Req.Request; response: FamilyModelCapture.Res.Response };
+  "revit.context.family-model.validation": { request: FamilyModelValidate.Req.Request; response: FamilyModelValidate.Res.Response };
   "host.ops.catalog": { request: HostOpsCatalog.Req.Request; response: HostOpsCatalog.Res.Response };
   "revit.apply.command.execute": { request: RevitApplyCommandExecute.Req.Request; response: RevitApplyCommandExecute.Res.Response };
   "revit.apply.document.open": { request: RevitApplyDocumentOpen.Req.Request; response: RevitApplyDocumentOpen.Res.Response };
@@ -4092,8 +4113,9 @@ export const hostOpKeys = [
   "family.editor.apply",
   "family.editor.open",
   "family.editor.snapshot",
-  "family.model.build",
-  "family.model.capture",
+  "revit.apply.family-model",
+  "revit.context.family-model",
+  "revit.context.family-model.validation",
   "host.ops.catalog",
   "revit.apply.command.execute",
   "revit.apply.document.open",

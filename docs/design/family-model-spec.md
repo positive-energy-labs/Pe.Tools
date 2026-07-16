@@ -13,7 +13,7 @@ Owner surfaces: FamilyFoundry (FF). Consumers: FFManager, FFMigrator, capture, r
 - The separate GRD room fixture proves the opening-side calculation point structurally and retains the final exported
   image under `.artifacts/build/Pe.Revit.Tests/Debug.R25.Tests/visual-proof/grd-room-proof.png`.
 - The exact source sandbox `ff-family-model-r25` built the minimal box, showcase, and GRD/vane profiles through the
-  public `family.model.build` operation. It opened all three RFAs sequentially, applied 1/3/3 type edits with zero
+  public `revit.apply.family-model` operation. It opened all three RFAs sequentially, applied 1/3/3 type edits with zero
   failures, and captured the final active states under `.artifacts/family-model-walkthrough/`.
 - The walkthrough used generation `20260716050108509`, PID `20688`, and build stamp `94429ce46b0a`; the SDK armed
   no-save and stopped that exact sandbox gracefully. The three generated RFAs and PNGs are disposable evidence, not
@@ -21,14 +21,14 @@ Owner surfaces: FamilyFoundry (FF). Consumers: FFManager, FFMigrator, capture, r
 
 ### 2026-07-15 — Phase 7 product surface complete
 
-- `family.model.capture` and `family.model.build` are public typed bridge operations discovered from the `Pe.App`
+- `revit.context.family-model` and `revit.apply.family-model` are public typed bridge operations discovered from the `Pe.App`
   shell. They schedule through the existing Revit task queue and delegate capture/build behavior to the document-owned
   Family Model APIs; no parallel compiler or package cycle was added.
 - The generated TypeScript host contract exposes those operations to the host and Pea's generic operation caller.
-- `/family-model` is the intentionally dumb Manager surface: open or edit `family.json`, select a type, inspect named
-  constituents and family-frame extents, capture the active family, and build to an explicit `.rfa` path plus dependency
-  directory when required. Unsupported formulas, spatial frames, and `unmodeled` facts remain visible warnings rather
-  than guessed geometry.
+- `/family-model` is the intentionally dumb Manager surface: open or edit `family.json`, select a type, inspect authored
+  values and named constituents, validate through the authoritative C# model, capture the active family, and build to an
+  explicit `.rfa` path plus dependency directory when required. It preserves formulas, references, frames, and units as
+  authored strings and never guesses geometry.
 - Focused preview tests, TypeScript compilation, host-contract tests, and the `Pe.App` source compile are the no-RRD
   proof. Live capture/build remains normal product-runtime proof, not a prerequisite for the portable compiler contract.
 
@@ -363,7 +363,8 @@ Scope:
 - expose the schema/model through Manager, capture/replay, Pea/host contracts, and the FF web plugin surface;
 - render every constituent in the implemented v1 contract directly from `family.json`: params, planes, frame origins
   including face references, solids, nested families and bindings, Connectors and stubs, and centered arrays;
-- evaluate only the portable literal/ref/arithmetic subset. Unsupported Revit formulas and `unmodeled` facts render warnings, never guessed geometry.
+- preserve literals, references, formulas, and units as authored strings; validation and lowering stay in the shared C#
+  model, while `unmodeled` facts remain visible warnings and the browser never guesses geometry.
 
 Proof: the supported profiles hydrate through the shared schema/model, compile through the host surface, and render the
 same named constituents as the Revit proof artifacts.

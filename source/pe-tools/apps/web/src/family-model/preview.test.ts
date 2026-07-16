@@ -3,7 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { buildFamilyModelPreview, parseFamilyModel } from "./preview";
 
 describe("family model preview", () => {
-  it("resolves type values, portable lengths, formulas, and named constituents", () => {
+  it("preserves authored overrides, formulas, references, and constituent facts", () => {
     const preview = buildFamilyModelPreview(
       parseFamilyModel(
         JSON.stringify({
@@ -22,6 +22,7 @@ describe("family model preview", () => {
           solids: {
             body: {
               kind: "Prism",
+              frame: "frame:family",
               width: "param:Width",
               depth: "1/2ft",
               height: "param:Double Height",
@@ -49,8 +50,14 @@ describe("family model preview", () => {
       "Tall",
     );
 
-    expect(preview.parameters.Height).toBe(36);
-    expect(preview.solids[0]).toMatchObject({ width: 12, depth: 6, height: 72 });
+    expect(preview.parameters.find((parameter) => parameter.name === "Height")).toEqual({
+      name: "Height",
+      authored: "3ft",
+      origin: "Tall override",
+    });
+    expect(
+      preview.parameters.find((parameter) => parameter.name === "Double Height")?.authored,
+    ).toBe("= Height * 2");
     expect(
       preview.constituents.find((group) => group.label === "Connectors")?.items[0],
     ).toMatchObject({
@@ -60,10 +67,9 @@ describe("family model preview", () => {
     expect(
       preview.constituents.find((group) => group.label === "Frames")?.items[0].facts,
     ).toContain("origin face:body.Front ∩ plane:family.CenterLeftRight ∩ plane:family.RefLevel");
-    expect(preview.warnings).toEqual([]);
   });
 
-  it("warns instead of guessing solids in unsupported spatial frames", () => {
+  it("shows authored spatial frames without inferring geometry", () => {
     const preview = buildFamilyModelPreview(
       parseFamilyModel(
         JSON.stringify({
@@ -86,7 +92,13 @@ describe("family model preview", () => {
       ),
     );
 
-    expect(preview.solids).toEqual([]);
-    expect(preview.warnings).toContain("Spatial frame not previewed: offset uses frame:offset");
+    expect(preview.constituents.find((group) => group.label === "Solids")?.items[0].facts).toEqual([
+      "Prism",
+      "frame:offset",
+      "W 12in",
+      "D 8in",
+      "H 6in",
+    ]);
+    expect(preview.warnings).toEqual([]);
   });
 });
