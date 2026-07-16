@@ -1,23 +1,42 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
+import {
+  type SettingsProposalSource,
+  familyRouteState,
+  settingsFieldPointer,
+  settingsFieldSegments,
+  settingsRouteState,
+} from "@pe/agent-contracts";
 import { ThemeToggle } from "#/components/ThemeToggle";
+import { TargetChip } from "#/components/target-chip";
+import {
+  type CitationTarget,
+  FamilyDocPane,
+  resolveCitations,
+  useFamilyGrounding,
+} from "#/family/doc-pane";
+import { familyModelPlaneOffset, familyModelPrismFaceCoordinate } from "#/family-model/preview";
+import { useTreeQuery } from "#/host/queries";
+import { useTarget } from "#/host/use-target";
+import { useRouteState } from "#/workbench/route-state";
 
-export const Route = createFileRoute("/poc/family-plugin")({ component: Page });
+export const Route = createFileRoute("/family")({ component: Page });
 
 /* ------------------------------------------------------------------------------------------------
- * POC iteration 2: the Family Model chat plugin.
- *   ANATOMY SHEET v2 · true-scale orthographic triptych (front/side/plan) drawn by the dumb
- *     evaluator — params → arithmetic → plane intersection → face lookup. No camera, no mesh,
- *     no guessed geometry. Ghost outlines compare the other types at the same scale.
- *   TYPE FLEX MATRIX · kept from round 1 (the keeper) — value/override/formula trichotomy.
- * One shared editable family.json drives both; the flex type flexes everything.
- * Round-1 wiring board lives in git history (unusable at real parameter counts).
+ * /family — THE surface for one authored family.json.
+ *   route:settings owns the document (snapshot, field trichotomy, validate/save lifecycle).
+ *   route:family owns the sibling context: spec doc (OCR blocks + image ids) and Revit
+ *   evidence (resolved per-type values, provenance-stamped for staleness).
+ * Anatomy sheet (true-scale triptych) + type flex matrix + grounded doc pane, one hover
+ * vocabulary across all three: cell ↔ constituent ↔ cited document region.
  * ---------------------------------------------------------------------------------------------- */
 
-// ── model types (v1 authored shape, loosely typed for the POC) ──────────────────────────────────
+// ── model types (v1 authored shape, loosely typed for the projection) ───────────────────────────
 interface ParamSpec {
   dataType: string;
+  propertiesGroup?: string;
+  resolvedValues?: Record<string, string>;
   value?: string;
   formula?: string;
 }
@@ -53,7 +72,6 @@ interface ConnectorSpec {
   stub?: StubSpec;
   systemType?: string;
   flowDirection?: string;
-  parameterBindings?: Record<string, string>;
 }
 interface NestedSpec {
   family: string;
@@ -83,205 +101,17 @@ interface FamilyModel {
   unmodeled?: unknown[];
 }
 
-// ── mock data: the two checked-in fixture profiles, verbatim ────────────────────────────────────
-const SHOWCASE: FamilyModel = {
-  family: {
-    name: "PE Family Model Showcase",
-    category: "Generic Models",
-    template: "Generic Model",
-    placement: "Unhosted",
-  },
-  familyParameters: {
-    "Body Width": { dataType: "Length (Common)", value: "24in" },
-    "Body Depth": { dataType: "Length (Common)", value: "18in" },
-    "Body Height": { dataType: "Length (Common)", value: "30in" },
-    "Top Diameter": { dataType: "Length (Common)", value: "8in" },
-    "Top Height": { dataType: "Length (Common)", value: "4in" },
-    "Slot Width": { dataType: "Length (Common)", value: "6in" },
-    "Slot Depth": { dataType: "Length (Common)", value: "4in" },
-    "Slot Height": { dataType: "Length (Common)", value: "12in" },
-    "Core Diameter": { dataType: "Length (Common)", value: "3in" },
-    "Core Height": { dataType: "Length (Common)", formula: "Body Height + Top Height" },
-    "Return Elevation": { dataType: "Length (Common)", value: "15in" },
-    "Pipe Elevation": { dataType: "Length (Common)", value: "8in" },
-    "Electrical Elevation": { dataType: "Length (Common)", value: "20in" },
-    "Round Duct Diameter": { dataType: "Length (Common)", value: "6in" },
-    "Rect Duct Width": { dataType: "Length (Common)", value: "10in" },
-    "Rect Duct Height": { dataType: "Length (Common)", value: "6in" },
-    "Pipe Diameter": { dataType: "Length (Common)", value: "1in" },
-    "Electrical Diameter": { dataType: "Length (Common)", value: "1in" },
-    "Stub Depth": { dataType: "Length (Common)", value: "2in" },
-  },
-  types: {
-    Compact: { "Body Width": "18in", "Body Depth": "14in", "Body Height": "24in" },
-    Standard: {},
-    Tall: { "Body Height": "42in", "Return Elevation": "24in", "Electrical Elevation": "32in" },
-  },
-  planes: {
-    "return-elevation": {
-      from: "plane:family.Bottom",
-      by: "param:Return Elevation",
-      direction: "Out",
-    },
-    "pipe-elevation": { from: "plane:family.Bottom", by: "param:Pipe Elevation", direction: "Out" },
-    "electrical-elevation": {
-      from: "plane:family.Bottom",
-      by: "param:Electrical Elevation",
-      direction: "Out",
-    },
-  },
-  frames: {
-    "supply-air": {
-      origin: ["face:body.Top", "plane:family.CenterLR", "plane:family.CenterFB"],
-      normal: "+Z",
-      up: "+Y",
-    },
-    "return-air": {
-      origin: ["face:body.Back", "plane:family.CenterLR", "plane:return-elevation"],
-      normal: "+Y",
-      up: "+Z",
-    },
-    condensate: {
-      origin: ["face:body.Left", "plane:family.CenterFB", "plane:pipe-elevation"],
-      normal: "+X",
-      up: "+Z",
-    },
-    power: {
-      origin: ["face:body.Right", "plane:family.CenterFB", "plane:electrical-elevation"],
-      normal: "+X",
-      up: "+Z",
-    },
-  },
-  solids: {
-    body: {
-      kind: "Prism",
-      frame: "frame:family",
-      width: "param:Body Width",
-      depth: "param:Body Depth",
-      height: "param:Body Height",
-    },
-    "top-neck": {
-      kind: "Cylinder",
-      frame: "frame:family",
-      diameter: "param:Top Diameter",
-      height: "param:Top Height",
-    },
-    "access-slot": {
-      kind: "VoidPrism",
-      frame: "frame:family",
-      width: "param:Slot Width",
-      depth: "param:Slot Depth",
-      height: "param:Slot Height",
-    },
-    "core-bore": {
-      kind: "VoidCylinder",
-      frame: "frame:family",
-      diameter: "param:Core Diameter",
-      height: "param:Core Height",
-    },
-  },
-  connectors: {
-    "supply-air": {
-      domain: "Duct",
-      frame: "frame:supply-air",
-      shape: "Round",
-      diameter: "param:Round Duct Diameter",
-      stub: { depth: "param:Stub Depth", direction: "Out" },
-      systemType: "SupplyAir",
-      flowDirection: "Out",
-    },
-    "return-air": {
-      domain: "Duct",
-      frame: "frame:return-air",
-      shape: "Rectangular",
-      width: "param:Rect Duct Width",
-      height: "param:Rect Duct Height",
-      stub: { depth: "param:Stub Depth", direction: "In" },
-      systemType: "ReturnAir",
-      flowDirection: "In",
-    },
-    condensate: {
-      domain: "Pipe",
-      frame: "frame:condensate",
-      shape: "Round",
-      diameter: "param:Pipe Diameter",
-      stub: { depth: "param:Stub Depth", direction: "In" },
-      systemType: "Sanitary",
-      flowDirection: "Out",
-    },
-    power: {
-      domain: "Electrical",
-      frame: "frame:power",
-      shape: "Round",
-      diameter: "param:Electrical Diameter",
-      stub: { depth: "param:Stub Depth", direction: "Out" },
-      systemType: "PowerBalanced",
-    },
-  },
-  roomCalculationPoint: { enabled: true },
+type FieldState = {
+  proposal?: {
+    value?: unknown;
+    delete?: true;
+    note?: string | null;
+    confidence?: "high" | "low" | null;
+    sources?: SettingsProposalSource[] | null;
+  } | null;
+  staged?: { value?: unknown; delete?: true } | null;
+  review?: string;
 };
-
-const GRD: FamilyModel = {
-  family: {
-    name: "PE GRD Supply",
-    category: "Air Terminals",
-    template: "Generic Model face based",
-    placement: "FaceHosted",
-  },
-  familyParameters: {
-    PE_M_Grd_OpenLength: { dataType: "Length (Common)", value: "24in" },
-    PE_M_Grd_OpenWidth: { dataType: "Length (Common)", value: "12in" },
-    "_opening half width": { dataType: "Length (Common)", formula: "PE_M_Grd_OpenWidth / 2" },
-    "_vane spacing": { dataType: "Length (Common)", value: "3in" },
-    "_show vanes": { dataType: "Integer", value: "1" },
-    "_calc vane half count": {
-      dataType: "Integer",
-      formula: "if(_show vanes = 0, 0, roundup((PE_M_Grd_OpenWidth / 2) / _vane spacing))",
-    },
-  },
-  types: {
-    "No Vanes": { "_show vanes": "0" },
-    "Single Vane": { PE_M_Grd_OpenWidth: "6in", "_vane spacing": "3in" },
-    "Fifteen Vanes": { PE_M_Grd_OpenWidth: "30in", "_vane spacing": "2in" },
-    "Thirty Seven Vanes": { PE_M_Grd_OpenWidth: "37in", "_vane spacing": "1in" },
-  },
-  planes: {
-    "opening.Front": {
-      from: "plane:family.CenterFB",
-      by: "param:_opening half width",
-      direction: "Out",
-    },
-    "opening.Back": {
-      from: "plane:family.CenterFB",
-      by: "param:_opening half width",
-      direction: "In",
-    },
-  },
-  nestedFamilies: {
-    vane: {
-      family: "dependency:vane",
-      type: "type one",
-      frame: "frame:family",
-      parameterBindings: { "_vane length": "param:PE_M_Grd_OpenLength" },
-    },
-  },
-  arrays: {
-    vane: {
-      kind: "CenteredLinear",
-      member: "nested:vane",
-      axis: "+Y",
-      halfCount: "param:_calc vane half count",
-      limits: { start: "plane:opening.Front", end: "plane:opening.Back" },
-    },
-  },
-  roomCalculationPoint: { enabled: true },
-};
-
-const PROFILES = {
-  showcase: SHOWCASE,
-  grd: GRD,
-} as const;
-type ProfileKey = keyof typeof PROFILES;
 
 // ── portable-literal + reference helpers ────────────────────────────────────────────────────────
 function inches(text: string | undefined): number | null {
@@ -312,26 +142,20 @@ function resolveParam(
   if (override != null) return { text: override, source: "override" };
   const spec = paramSpec(model, name);
   if (!spec) return { text: "—", source: "missing" };
-  if (spec.formula != null) return { text: `= ${spec.formula}`, source: "formula" };
+  if (spec.formula != null)
+    return { text: spec.resolvedValues?.[typeName] ?? `= ${spec.formula}`, source: "formula" };
   return { text: spec.value ?? "—", source: "value" };
 }
 
-/** Resolve a dimension field that is either a param ref or a portable literal. */
 function resolveDim(model: FamilyModel, typeName: string, raw: string | undefined) {
   if (!raw) return null;
   const param = paramRef(raw);
-  if (!param)
-    return {
-      label: raw,
-      text: raw,
-      source: "value" as ValueSource,
-      param: null,
-    };
+  if (!param) return { label: raw, text: raw, source: "value" as ValueSource, param: null };
   const resolved = resolveParam(model, typeName, param);
   return { label: raw, ...resolved, param };
 }
 
-// ── immutable edits ──────────────────────────────────────────────────────────────────────────────
+// ── immutable edits (staged via route:settings field patches) ───────────────────────────────────
 type Update = (fn: (model: FamilyModel) => FamilyModel) => void;
 
 const setParamValue = (model: FamilyModel, name: string, value: string): FamilyModel => {
@@ -438,13 +262,11 @@ function evalLen(model: FamilyModel, typeName: string, raw: string | undefined):
   const param = paramRef(raw);
   if (!param) return inches(raw);
   const resolved = resolveParam(model, typeName, param);
-  return resolved.source === "formula" || resolved.source === "missing"
-    ? null
-    : inches(resolved.text);
+  return resolved.source === "missing" ? null : inches(resolved.text);
 }
 
 // ponytail: v1 lowering convention — solids centered on the family center planes, sitting ON
-// family.Bottom (FamilyModelLowerer emits On="@Bottom" + PositiveHeight). Faces resolve from that.
+// family.Bottom, +Y is Front (normative dumb-evaluator rules + conformance vectors).
 function solidGeos(model: FamilyModel, typeName: string): SolidGeo[] {
   return Object.entries(model.solids ?? {}).map(([slug, solid]) => ({
     slug,
@@ -462,11 +284,13 @@ function planeGeos(model: FamilyModel, typeName: string): PlaneGeo[] {
     const param = paramRef(plane.by);
     const spec = param ? paramSpec(model, param) : undefined;
     const value = evalLen(model, typeName, plane.by);
-    const sign = plane.direction === "In" ? -1 : 1;
     return {
       slug,
       axis: DATUM_AXIS[plane.from] ?? null,
-      offset: value == null ? null : value * sign,
+      offset:
+        value == null
+          ? null
+          : familyModelPlaneOffset(plane.direction === "In" ? "In" : "Out", value),
       param,
       editable: spec != null && spec.formula == null,
       text: param ? resolveParam(model, typeName, param).text : plane.by,
@@ -477,24 +301,9 @@ function planeGeos(model: FamilyModel, typeName: string): PlaneGeo[] {
 function faceCoord(solids: SolidGeo[], ref: string): { axis: Axis; value: number | null } | null {
   const [slug, face] = ref.slice("face:".length).split(".");
   const solid = solids.find((entry) => entry.slug === slug);
-  if (!solid) return null;
-  const half = (value: number | null) => (value == null ? null : value / 2);
-  switch (face) {
-    case "Top":
-      return { axis: "z", value: solid.h };
-    case "Bottom":
-      return { axis: "z", value: 0 };
-    case "Left":
-      return { axis: "x", value: half(solid.w) == null ? null : -(half(solid.w) as number) };
-    case "Right":
-      return { axis: "x", value: half(solid.w) };
-    case "Front":
-      return { axis: "y", value: half(solid.d) == null ? null : -(half(solid.d) as number) };
-    case "Back":
-      return { axis: "y", value: half(solid.d) };
-    default:
-      return null; // Cylinder Side has no single coordinate
-  }
+  if (!solid || solid.w == null || solid.d == null || solid.h == null) return null;
+  const coordinate = familyModelPrismFaceCoordinate(face, solid.w, solid.d, solid.h);
+  return coordinate ? { axis: coordinate.axis, value: coordinate.coordinate } : null;
 }
 
 function frameGeos(model: FamilyModel, solids: SolidGeo[], planes: PlaneGeo[]): FrameGeo[] {
@@ -558,6 +367,28 @@ function usedByIndex(model: FamilyModel): Record<string, string[]> {
       if (limit?.startsWith("plane:") && !DATUM_AXIS[limit])
         add(`pl:${limit.slice(6)}`, `array:${slug}`);
   return index;
+}
+
+/** Every param name a constituent's dims reference — links hover to matrix cells + citations. */
+function constituentParams(model: FamilyModel, hovered: string | null): string[] {
+  if (!hovered) return [];
+  const [kind, slug] = [
+    hovered.slice(0, hovered.indexOf(":")),
+    hovered.slice(hovered.indexOf(":") + 1),
+  ];
+  const refs: (string | undefined)[] = [];
+  if (kind === "s") {
+    const solid = model.solids?.[slug];
+    refs.push(solid?.width, solid?.depth, solid?.height, solid?.diameter);
+  } else if (kind === "pl") {
+    refs.push(model.planes?.[slug]?.by);
+  } else if (kind === "c") {
+    const connector = model.connectors?.[slug];
+    refs.push(connector?.diameter, connector?.width, connector?.height, connector?.stub?.depth);
+  } else if (kind === "a") {
+    refs.push(model.arrays?.[slug]?.halfCount);
+  }
+  return refs.map((ref) => paramRef(ref)).filter((name): name is string => name != null);
 }
 
 // ── the triptych ────────────────────────────────────────────────────────────────────────────────
@@ -717,7 +548,6 @@ function Triptych({
               className="rounded-[2px] border border-[var(--line)] bg-[var(--paper-2)]/30"
               onMouseLeave={() => onHover(null)}
             >
-              {/* family datums — hairline crosses through origin */}
               <line
                 x1={X(0)}
                 y1={M}
@@ -735,7 +565,6 @@ function Triptych({
                 strokeDasharray="2 4"
               />
 
-              {/* ghost types — same scale, outline only */}
               {sheet.ghosts.map((ghost) =>
                 ghost.solids
                   .filter((geo) => !geo.isVoid)
@@ -754,7 +583,6 @@ function Triptych({
                   }),
               )}
 
-              {/* solids — true scale, voids dashed */}
               {sheet.solids.map((geo) => {
                 const rect = solidRect(geo);
                 if (!rect) return null;
@@ -791,7 +619,6 @@ function Triptych({
                 );
               })}
 
-              {/* named planes — drawn in every view where they project as a line; draggable */}
               {sheet.planes.map((plane) => {
                 if (!plane.axis || plane.offset == null) return null;
                 const id = `pl:${plane.slug}`;
@@ -834,7 +661,6 @@ function Triptych({
                 );
               })}
 
-              {/* connectors — face-on shows the true-size shape; edge-on shows the stub */}
               {sheet.conns.map((conn) => {
                 const id = `c:${conn.slug}`;
                 const color = DOMAIN_COLOR[conn.domain] ?? "var(--slate)";
@@ -846,12 +672,8 @@ function Triptych({
                 const u = conn.pos[view.u];
                 const v = conn.pos[view.v];
                 if (u == null || v == null) return null;
-                const shared = {
-                  opacity: dimIf(id),
-                  onMouseEnter: () => onHover(id),
-                };
+                const shared = { opacity: dimIf(id), onMouseEnter: () => onHover(id) };
                 if (axis === view.depth) {
-                  // face-on: the connector face at true size
                   if (conn.shape === "Round" && conn.w != null)
                     return (
                       <circle
@@ -883,7 +705,6 @@ function Triptych({
                     );
                   return null;
                 }
-                // edge-on: stub + size tick along the normal
                 const stubLen = conn.stub ?? 3;
                 const dir = sign * (conn.stubDir === "In" ? -1 : 1);
                 const size = conn.w ?? 2;
@@ -935,7 +756,6 @@ function Triptych({
                 );
               })}
 
-              {/* room calculation point — fixed PE convention, rendered honestly */}
               {sheet.rcp && sheet.rcp[view.u] != null && sheet.rcp[view.v] != null && (
                 <g opacity={dimIf("rcp")} onMouseEnter={() => onHover("rcp")}>
                   <line
@@ -980,7 +800,7 @@ function Caption({
 }) {
   const line = (() => {
     if (!hovered)
-      return "hover anything — drawing, card, or plane — to read its authored reference chain";
+      return "hover anything — drawing, card, plane, or matrix cell — to read its authored reference chain";
     const [kind, slug] = [
       hovered.slice(0, hovered.indexOf(":")),
       hovered.slice(hovered.indexOf(":") + 1),
@@ -1106,12 +926,15 @@ function AnatomySheet({
   model,
   typeName,
   update,
+  hovered,
+  onHover,
 }: {
   model: FamilyModel;
   typeName: string;
   update: Update;
+  hovered: string | null;
+  onHover: (id: string | null) => void;
 }) {
-  const [hovered, setHovered] = useState<string | null>(null);
   const usedBy = useMemo(() => usedByIndex(model), [model]);
   const ghosts = Object.keys(model.types).filter((name) => name !== typeName);
   const formulaPlanes = planeGeos(model, typeName).filter((plane) => plane.offset == null);
@@ -1142,7 +965,7 @@ function AnatomySheet({
         typeName={typeName}
         update={update}
         hovered={hovered}
-        onHover={setHovered}
+        onHover={onHover}
       />
       <Caption model={model} typeName={typeName} hovered={hovered} usedBy={usedBy} />
 
@@ -1152,7 +975,7 @@ function AnatomySheet({
             <p key={plane.slug} className="font-mono text-[10px] text-[var(--kiln)]">
               ─ ─ plane {plane.slug} · {plane.text}{" "}
               <span className="text-[var(--slate)]">
-                (formula-driven — web v1 does not evaluate, so it is not drawn)
+                (formula-driven — capture or build evidence to draw it)
               </span>
             </p>
           ))}
@@ -1167,7 +990,7 @@ function AnatomySheet({
             title={slug}
             tag={solid.kind}
             hovered={hovered}
-            onHover={setHovered}
+            onHover={onHover}
           >
             {(["width", "depth", "height", "diameter"] as const).map((field) => (
               <DimChip
@@ -1189,7 +1012,7 @@ function AnatomySheet({
             title={slug}
             tag={`${connector.domain} · ${connector.shape}`}
             hovered={hovered}
-            onHover={setHovered}
+            onHover={onHover}
             accent={DOMAIN_COLOR[connector.domain] ?? "var(--slate)"}
           >
             <DimChip
@@ -1237,7 +1060,7 @@ function AnatomySheet({
             title={slug}
             tag={`nested · ${spec.family}`}
             hovered={hovered}
-            onHover={setHovered}
+            onHover={onHover}
           >
             <div className="w-full space-y-0.5 font-mono text-[10px] text-[var(--slate)]">
               {spec.type && <div>type “{spec.type}”</div>}
@@ -1256,7 +1079,7 @@ function AnatomySheet({
             title={`${slug} ×2n−1`}
             tag={`${spec.kind} · ${spec.axis}`}
             hovered={hovered}
-            onHover={setHovered}
+            onHover={onHover}
           >
             <div className="w-full space-y-0.5 font-mono text-[10px] text-[var(--slate)]">
               <div>
@@ -1279,8 +1102,8 @@ function AnatomySheet({
         <button
           type="button"
           onClick={() => update(toggleRcp)}
-          onMouseEnter={() => setHovered("rcp")}
-          onMouseLeave={() => setHovered(null)}
+          onMouseEnter={() => onHover("rcp")}
+          onMouseLeave={() => onHover(null)}
           className="rounded-[2px] border border-[var(--line)] px-1.5 py-0.5 font-mono text-[10px] hover:border-[var(--pe-blue)]"
           title='The entire authored surface is { "enabled": true } — direction and offset are the fixed PE convention'
         >
@@ -1350,58 +1173,33 @@ function EditableValue({
   );
 }
 
-function PluginCard({
-  mvp,
-  action,
-  hint,
-  children,
-}: {
-  mvp: string;
-  action: string;
-  hint: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-[2px] border border-[var(--line)] bg-[var(--paper)] px-3 py-2.5 text-xs shadow-sm">
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="font-semibold text-[var(--clay-ink)]">Family Model · {mvp}</span>
-        <span className="tele-label text-[var(--lichen)]">{action}</span>
-      </div>
-      <div className="mt-2">{children}</div>
-      <div className="mt-2 border-t border-[var(--line-soft)] pt-1.5 text-[10px] text-[var(--slate)]">
-        {hint}
-      </div>
-    </div>
-  );
-}
-
-function SectionIntro({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="mb-3">
-      <p className="tele-label text-[11px] tracking-[0.22em] text-[var(--clay-ink)]">{title}</p>
-      <p className="mt-1 max-w-3xl text-[13px] leading-relaxed text-[var(--slate)]">{children}</p>
-    </div>
-  );
-}
-
 // ═══════════════════════════════════════ TYPE FLEX MATRIX ═══════════════════════════════════════
+/** Field-state-aware matrix: each cell consults route:settings fields (by JSON Pointer)
+ * so Pea proposals (dashed, with citation count), staged edits (solid green), and
+ * attention marks render in place. Hovering a cited cell grounds it in the doc pane. */
 function TypeMatrix({
   model,
   typeName,
   onType,
   update,
+  fields,
+  onCite,
+  onReview,
 }: {
   model: FamilyModel;
   typeName: string;
   onType: (name: string) => void;
   update: Update;
+  fields: Record<string, FieldState>;
+  onCite: (context: { label: string; sources: SettingsProposalSource[] } | null) => void;
+  onReview: (pointer: string, action: "approve" | "deny") => void;
 }) {
   const [newType, setNewType] = useState("");
   const typeNames = Object.keys(model.types);
   const groups: Array<[string, Record<string, ParamSpec>]> = [
-    ["family", model.familyParameters],
-    ...(model.sharedParameters ? [["shared", model.sharedParameters] as const] : []),
-  ] as Array<[string, Record<string, ParamSpec>]>;
+    ...groupParameters("family", model.familyParameters),
+    ...(model.sharedParameters ? groupParameters("shared", model.sharedParameters) : []),
+  ];
 
   return (
     <div className="overflow-x-auto">
@@ -1439,7 +1237,7 @@ function TypeMatrix({
         </thead>
         <tbody>
           {groups.map(([origin, specs]) => (
-            <FragmentRows
+            <ParamRows
               key={origin}
               origin={origin}
               specs={specs}
@@ -1447,6 +1245,9 @@ function TypeMatrix({
               typeNames={typeNames}
               selected={typeName}
               update={update}
+              fields={fields}
+              onCite={onCite}
+              onReview={onReview}
             />
           ))}
         </tbody>
@@ -1472,13 +1273,38 @@ function TypeMatrix({
   );
 }
 
-function FragmentRows({
+function groupParameters(
+  origin: string,
+  specs: Record<string, ParamSpec>,
+): Array<[string, Record<string, ParamSpec>]> {
+  const grouped = new Map<string, Record<string, ParamSpec>>();
+  for (const [name, spec] of Object.entries(specs)) {
+    const label = spec.propertiesGroup?.trim() || "Other";
+    grouped.set(label, { ...grouped.get(label), [name]: spec });
+  }
+  return [...grouped].map(([label, entries]) => [`${origin} · ${label}`, entries]);
+}
+
+/** One matrix cell's field decorations, derived from route:settings field state. */
+function cellField(fields: Record<string, FieldState>, segments: string[]) {
+  const pointer = settingsFieldPointer(segments);
+  const field = fields[pointer];
+  const staged = field?.staged != null;
+  const proposal = !staged && field?.proposal != null ? field.proposal : null;
+  const sources = (proposal?.sources ?? []) as SettingsProposalSource[];
+  return { pointer, field, staged, proposal, sources, attention: field?.review === "attention" };
+}
+
+function ParamRows({
   origin,
   specs,
   model,
   typeNames,
   selected,
   update,
+  fields,
+  onCite,
+  onReview,
 }: {
   origin: string;
   specs: Record<string, ParamSpec>;
@@ -1486,7 +1312,11 @@ function FragmentRows({
   typeNames: string[];
   selected: string;
   update: Update;
+  fields: Record<string, FieldState>;
+  onCite: (context: { label: string; sources: SettingsProposalSource[] } | null) => void;
+  onReview: (pointer: string, action: "approve" | "deny") => void;
 }) {
+  const section = origin.startsWith("shared") ? "sharedParameters" : "familyParameters";
   return (
     <>
       <tr>
@@ -1496,6 +1326,7 @@ function FragmentRows({
       </tr>
       {Object.entries(specs).map(([name, spec]) => {
         const isFormula = spec.formula != null;
+        const familyCell = cellField(fields, [section, name, "value"]);
         return (
           <tr key={name} className="border-b border-[var(--line-soft)]">
             <td className="max-w-48 truncate py-1 pr-3" title={spec.dataType}>
@@ -1513,10 +1344,13 @@ function FragmentRows({
                   = {spec.formula}
                 </span>
               ) : (
-                <EditableValue
+                <CellValue
                   value={spec.value ?? "—"}
+                  cell={familyCell}
+                  label={`${name} · family value`}
                   onCommit={(next) => update((current) => setParamValue(current, name, next))}
-                  className="text-[11px]"
+                  onCite={onCite}
+                  onReview={onReview}
                 />
               )}
             </td>
@@ -1533,17 +1367,21 @@ function FragmentRows({
                     <span className="font-mono text-[10px] text-[var(--kiln)]/60">locked</span>
                   </td>
                 );
+              const typeCell = cellField(fields, ["types", typeName, name]);
               return (
                 <td key={typeName} className={`px-2 py-1 text-right ${highlight}`}>
                   {override != null ? (
                     <span className="inline-flex items-center gap-1">
-                      <EditableValue
+                      <CellValue
                         value={override}
-                        title={`override · ${typeName}`}
+                        cell={typeCell}
+                        label={`${name} · ${typeName}`}
                         onCommit={(next) =>
                           update((current) => setOverride(current, typeName, name, next))
                         }
-                        className="text-[11px] font-semibold text-[var(--pe-blue)]"
+                        onCite={onCite}
+                        onReview={onReview}
+                        strong
                       />
                       <button
                         type="button"
@@ -1556,6 +1394,21 @@ function FragmentRows({
                         ×
                       </button>
                     </span>
+                  ) : typeCell.proposal != null ? (
+                    <CellValue
+                      value={
+                        typeof typeCell.proposal.value === "string"
+                          ? typeCell.proposal.value
+                          : JSON.stringify(typeCell.proposal.value) || "—"
+                      }
+                      cell={typeCell}
+                      label={`${name} · ${typeName}`}
+                      onCommit={(next) =>
+                        update((current) => setOverride(current, typeName, name, next))
+                      }
+                      onCite={onCite}
+                      onReview={onReview}
+                    />
                   ) : (
                     <button
                       type="button"
@@ -1578,129 +1431,696 @@ function FragmentRows({
   );
 }
 
+/** A value cell with trichotomy decoration: staged (solid green), open proposal
+ * (dashed pea + ✓/✕ + citation count), attention (clay). Hover grounds citations. */
+function CellValue({
+  value,
+  cell,
+  label,
+  onCommit,
+  onCite,
+  onReview,
+  strong,
+}: {
+  value: string;
+  cell: ReturnType<typeof cellField>;
+  label: string;
+  onCommit: (next: string) => void;
+  onCite: (context: { label: string; sources: SettingsProposalSource[] } | null) => void;
+  onReview: (pointer: string, action: "approve" | "deny") => void;
+  strong?: boolean;
+}) {
+  const tone = cell.attention
+    ? "text-[var(--kiln)]"
+    : cell.staged
+      ? "text-[var(--lichen)] font-semibold"
+      : cell.proposal
+        ? "text-[var(--pe-blue)]"
+        : strong
+          ? "text-[var(--pe-blue)] font-semibold"
+          : "";
+  const wrap = cell.proposal
+    ? "rounded-[2px] border border-dashed border-[var(--pe-blue)] bg-[var(--pe-blue)]/5 px-0.5"
+    : cell.staged
+      ? "rounded-[2px] border border-[var(--lichen)]/60 bg-[var(--lichen)]/5 px-0.5"
+      : "";
+  return (
+    <span
+      className={`inline-flex items-center gap-1 ${wrap}`}
+      onMouseEnter={() =>
+        cell.sources.length > 0
+          ? onCite({ label: `${label} → ${value}`, sources: cell.sources })
+          : null
+      }
+      onMouseLeave={() => (cell.sources.length > 0 ? onCite(null) : null)}
+    >
+      <EditableValue
+        value={value}
+        title={
+          cell.staged
+            ? `${label} · staged (unsaved)`
+            : cell.proposal
+              ? `${label} · proposed by pea${cell.proposal.note ? ` — ${cell.proposal.note}` : ""}`
+              : label
+        }
+        onCommit={onCommit}
+        className={`text-[11px] ${tone}`}
+      />
+      {cell.sources.length > 0 && (
+        <span
+          className="font-mono text-[9px] text-[var(--pe-blue)]"
+          title={`${cell.sources.length} document citation${cell.sources.length === 1 ? "" : "s"} — hover to ground`}
+        >
+          ¶{cell.sources.length}
+        </span>
+      )}
+      {cell.proposal && (
+        <>
+          <button
+            type="button"
+            title="Accept proposal — stage it"
+            className="text-[var(--lichen)] hover:font-bold"
+            onClick={() => onReview(cell.pointer, "approve")}
+          >
+            ✓
+          </button>
+          <button
+            type="button"
+            title="Reject proposal"
+            className="text-[var(--slate)] hover:text-[var(--fail)]"
+            onClick={() => onReview(cell.pointer, "deny")}
+          >
+            ✕
+          </button>
+        </>
+      )}
+    </span>
+  );
+}
+
 // ═══════════════════════════════════════════ PAGE ═══════════════════════════════════════════════
+const FAMILY_MODULE = { moduleKey: "FamilyFoundry", rootKey: "models" };
+
+const MINIMAL_TEMPLATE = (name: string) =>
+  JSON.stringify(
+    {
+      family: {
+        name,
+        category: "Generic Models",
+        template: "Generic Model",
+        placement: "Unhosted",
+      },
+      familyParameters: {
+        Width: { dataType: "Length (Common)", value: "24in" },
+        Depth: { dataType: "Length (Common)", value: "18in" },
+        Height: { dataType: "Length (Common)", value: "30in" },
+      },
+      types: { Standard: {} },
+      solids: {
+        body: {
+          kind: "Prism",
+          frame: "frame:family",
+          width: "param:Width",
+          depth: "param:Depth",
+          height: "param:Height",
+        },
+      },
+    },
+    null,
+    2,
+  );
+
+function parseModel(
+  rawContent: string | undefined,
+  fields: Record<string, FieldState>,
+): FamilyModel | null {
+  if (!rawContent) return null;
+  try {
+    const parsed = JSON.parse(rawContent) as Record<string, unknown>;
+    delete parsed.$schema;
+    for (const [pointer, field] of Object.entries(fields)) {
+      if (field.staged != null) {
+        applyJsonEdit(parsed, settingsFieldSegments(pointer), field.staged);
+      }
+    }
+    return parsed as unknown as FamilyModel;
+  } catch {
+    return null;
+  }
+}
+
+function applyJsonEdit(
+  root: Record<string, unknown>,
+  segments: string[],
+  edit: { value?: unknown; delete?: true },
+) {
+  let cursor = root;
+  for (const segment of segments.slice(0, -1)) {
+    const child = cursor[segment];
+    if (child == null || typeof child !== "object" || Array.isArray(child)) cursor[segment] = {};
+    cursor = cursor[segment] as Record<string, unknown>;
+  }
+  if (segments.length === 0) return;
+  const leaf = segments.at(-1)!;
+  if (edit.delete === true) delete cursor[leaf];
+  else cursor[leaf] = edit.value;
+}
+
+type JsonEdit = { value: unknown } | { delete: true };
+
+function changedLeaves(
+  before: unknown,
+  after: unknown,
+  prefix: string[] = [],
+): Array<[string[], JsonEdit]> {
+  if (Object.is(before, after)) return [];
+  if (
+    before != null &&
+    after != null &&
+    typeof before === "object" &&
+    typeof after === "object" &&
+    !Array.isArray(before) &&
+    !Array.isArray(after)
+  ) {
+    const keys = new Set([
+      ...Object.keys(before as Record<string, unknown>),
+      ...Object.keys(after as Record<string, unknown>),
+    ]);
+    return [...keys].flatMap((key) =>
+      changedLeaves(
+        (before as Record<string, unknown>)[key],
+        (after as Record<string, unknown>)[key],
+        [...prefix, key],
+      ),
+    );
+  }
+  if (prefix.length === 0) return [];
+  return [[prefix, after === undefined ? { delete: true } : { value: after }]];
+}
+
+/** Inject formula resolved values from evidence into the model for the preview. */
+function withEvidence(model: FamilyModel, evidence: EvidenceSlice | null): FamilyModel {
+  if (!evidence) return model;
+  const next = structuredClone(model);
+  for (const parameter of evidence.parameters) {
+    const spec = next.familyParameters[parameter.name] ?? next.sharedParameters?.[parameter.name];
+    if (!spec?.formula) continue;
+    spec.resolvedValues = {};
+    for (const [typeName, resolved] of Object.entries(parameter.valuesPerType)) {
+      if (resolved.value != null) spec.resolvedValues[typeName] = resolved.value;
+    }
+  }
+  return next;
+}
+
+type EvidenceSlice = {
+  typeNames: string[];
+  parameters: Array<{
+    name: string;
+    valuesPerType: Record<string, { value?: string | null }>;
+  }>;
+  diagnostics: unknown[];
+  from: {
+    origin: string;
+    capturedAt: string;
+    documentVersionToken?: string | null;
+    familyName: string;
+    rfaPath?: string | null;
+  };
+};
+
 function Page() {
-  const [profileKey, setProfileKey] = useState<ProfileKey>("showcase");
-  const [models, setModels] = useState<Record<ProfileKey, FamilyModel>>({ ...PROFILES });
-  const [selectedTypes, setSelectedTypes] = useState<Record<ProfileKey, string>>({
-    showcase: "Standard",
-    grd: "Fifteen Vanes",
+  const settings = useRouteState(settingsRouteState);
+  const family = useRouteState(familyRouteState);
+  const [mode, setMode] = useState<"full" | "parameters">("full");
+  const [selectedType, setSelectedType] = useState<string>("");
+  const [hovered, setHovered] = useState<string | null>(null);
+  const [cite, setCite] = useState<{ label: string; sources: SettingsProposalSource[] } | null>(
+    null,
+  );
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [parsing, setParsing] = useState(false);
+
+  const snapshot = settings.slice?.snapshot;
+  const isFamilyDocument =
+    snapshot?.documentId.moduleKey === FAMILY_MODULE.moduleKey &&
+    snapshot.documentId.rootKey === FAMILY_MODULE.rootKey;
+  const fields = (settings.slice?.fields ?? {}) as Record<string, FieldState>;
+  const model = useMemo(
+    () => (isFamilyDocument ? parseModel(snapshot?.rawContent, fields) : null),
+    [isFamilyDocument, snapshot?.rawContent, fields],
+  );
+
+  const evidence = (family.slice?.evidence ?? null) as EvidenceSlice | null;
+  const evidenceFresh =
+    evidence != null &&
+    (evidence.from.documentVersionToken == null ||
+      evidence.from.documentVersionToken === snapshot?.versionToken);
+  const previewModel = useMemo(
+    () => (model ? withEvidence(model, evidence) : null),
+    [model, evidence],
+  );
+
+  const typeName =
+    model && Object.hasOwn(model.types, selectedType)
+      ? selectedType
+      : (Object.keys(model?.types ?? {})[0] ?? "");
+
+  // ── target: this route is the second consumer of the target model ─────────
+  const boundTarget = family.slice?.binding?.target ?? "";
+  const { sessions } = useTarget(boundTarget);
+
+  // ── documents list: the existing settings.tree op already enumerates a root ─
+  const treeQuery = useTreeQuery({
+    ...FAMILY_MODULE,
+    subDirectory: "",
+    recursive: true,
+    includeFragments: false,
+    includeSchemas: false,
   });
-  const model = models[profileKey];
-  const typeName = selectedTypes[profileKey];
-  const update: Update = (fn) =>
-    setModels((state) => ({ ...state, [profileKey]: fn(state[profileKey]) }));
-  const setType = (name: string) => setSelectedTypes((state) => ({ ...state, [profileKey]: name }));
-  const dirty = model !== PROFILES[profileKey];
+  const documents = useMemo(
+    () =>
+      (treeQuery.data?.files ?? [])
+        .filter((entry) => entry.relativePath.toLowerCase().endsWith(".json"))
+        .map((entry) => entry.relativePath),
+    [treeQuery.data?.files],
+  );
+
+  const openDocument = async (relativePath: string) => {
+    setBusy("open");
+    setError(null);
+    const result = await settings.command("open", {
+      documentId: { ...FAMILY_MODULE, relativePath },
+    });
+    if (!result.ok) setError(result.error ?? result.hint ?? "Could not open document.");
+    setBusy(null);
+  };
+
+  const createDocument = async (name: string) => {
+    const relativePath = name.trim().replace(/\s+/g, "-").toLowerCase();
+    if (!relativePath) return;
+    setBusy("create");
+    setError(null);
+    const result = await settings.command("create", {
+      documentId: { ...FAMILY_MODULE, relativePath },
+      rawContent: MINIMAL_TEMPLATE(name.trim()),
+    });
+    if (!result.ok) setError(result.error ?? result.hint ?? "Could not create document.");
+    else await treeQuery.refetch();
+    setBusy(null);
+  };
+
+  // ── edits: diff → JSON Pointer patches into route:settings fields ─────────
+  const update: Update = (fn) => {
+    if (!model) return;
+    const next = fn(model);
+    const patches = changedLeaves(model, next).flatMap(([segments, edit]) => {
+      const pointer = settingsFieldPointer(segments);
+      return [
+        { path: ["fields", pointer, "staged"], value: edit },
+        { path: ["fields", pointer, "review"], value: "good" },
+      ];
+    });
+    if (patches.length > 0) void settings.apply(patches);
+  };
+
+  const review = (pointer: string, action: "approve" | "deny") => {
+    const field = fields[pointer];
+    if (action === "approve" && field?.proposal != null) {
+      const edit =
+        field.proposal.delete === true ? { delete: true } : { value: field.proposal.value };
+      void settings.apply([
+        { path: ["fields", pointer, "staged"], value: edit },
+        { path: ["fields", pointer, "review"], value: "good" },
+      ]);
+    } else {
+      void settings.apply([
+        { path: ["fields", pointer, "proposal"] },
+        { path: ["fields", pointer, "review"], value: "none" },
+      ]);
+    }
+  };
+
+  const run = async (name: "validate" | "save") => {
+    setBusy(name);
+    setError(null);
+    const result = await settings.command(
+      name,
+      name === "validate" ? { includeProposals: false } : {},
+    );
+    if (!result.ok) setError(result.error ?? result.hint ?? `${name} failed.`);
+    setBusy(null);
+  };
+
+  const discardStaged = async () => {
+    const patches = Object.keys(fields).flatMap((pointer) => [
+      { path: ["fields", pointer, "staged"] },
+      { path: ["fields", pointer, "review"], value: "none" },
+    ]);
+    if (patches.length > 0) await settings.apply(patches);
+    await settings.command("refresh", {});
+  };
+
+  const captureEvidence = async () => {
+    setBusy("capture");
+    setError(null);
+    const result = await family.command("capture_evidence", {});
+    if (!result.ok) setError(result.error ?? result.hint ?? "Capture failed.");
+    setBusy(null);
+  };
+
+  const buildEvidence = async () => {
+    if (!snapshot) return;
+    setBusy("build");
+    setError(null);
+    const result = await family.command("build_evidence", {
+      documentId: snapshot.documentId,
+    });
+    if (!result.ok) setError(result.error ?? result.hint ?? "Build failed.");
+    setBusy(null);
+  };
+
+  const parseSpec = async (input: { url?: string; file?: File }) => {
+    setParsing(true);
+    setError(null);
+    try {
+      if (input.file) {
+        // Client-side upload: hit the parse endpoint directly, then patch doc blocks.
+        const form = new FormData();
+        form.append("file", input.file);
+        const response = await fetch("/api/pdf-audit/parse", { method: "POST", body: form });
+        const payload = (await response.json()) as {
+          error?: string;
+          jobId?: string;
+          fileName?: string;
+          blocks?: Array<{ id: string; page: number; kind: string; md: string }>;
+          images?: Array<{ id: string; page: number; category: string }>;
+        };
+        if (!response.ok || payload.error) throw new Error(payload.error ?? "parse failed");
+        await family.apply([
+          {
+            path: ["doc"],
+            value: {
+              parseId: payload.jobId,
+              fileName: payload.fileName,
+              blocks: (payload.blocks ?? []).map(({ id, page, kind, md }) => ({
+                id,
+                page,
+                kind,
+                md,
+              })),
+              images: (payload.images ?? []).map(({ id, page, category }) => ({
+                id,
+                page,
+                category,
+              })),
+            },
+          },
+        ]);
+      } else if (input.url) {
+        const result = await family.command("parse_spec", { url: input.url });
+        if (!result.ok) throw new Error(result.error ?? result.hint ?? "parse failed");
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setParsing(false);
+    }
+  };
+
+  // ── grounding: hover context or constituent citations ─────────────────────
+  const { grounding } = useFamilyGrounding(family.slice?.doc?.parseId);
+  const hoveredParams = model ? constituentParams(model, hovered) : [];
+  const constituentCite = useMemo(() => {
+    if (!model || hoveredParams.length === 0) return null;
+    for (const name of hoveredParams) {
+      for (const segments of [
+        ["familyParameters", name, "value"],
+        ["types", typeName, name],
+      ]) {
+        const pointer = settingsFieldPointer(segments);
+        const sources = (fields[pointer]?.proposal?.sources ?? []) as SettingsProposalSource[];
+        if (sources.length > 0) return { label: `${name} (via ${hovered})`, sources };
+      }
+    }
+    return null;
+  }, [model, hoveredParams, typeName, fields, hovered]);
+  const activeCite = cite ?? constituentCite;
+  const citations: CitationTarget[] = useMemo(
+    () => resolveCitations(grounding, activeCite?.sources).resolved,
+    [grounding, activeCite],
+  );
+  const unresolvedCitations = useMemo(
+    () => resolveCitations(grounding, activeCite?.sources).unresolved,
+    [grounding, activeCite],
+  );
+
+  const stagedCount = Object.values(fields).filter((field) => field.staged != null).length;
+  const proposalCount = Object.values(fields).filter(
+    (field) => field.staged == null && field.proposal != null,
+  ).length;
+  const showDocPane = mode === "parameters" || family.slice?.doc != null || parsing;
 
   return (
-    <main className="min-h-screen bg-[var(--paper)] text-[var(--foreground)]">
-      <div className="mx-auto max-w-[1160px] px-5 py-6">
-        <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="tele-label text-[10px] tracking-[0.3em] text-[var(--clay-ink)]">
-              POC / FAMILY MODEL CHAT PLUGIN — ITERATION 2
-            </p>
-            <h1 className="mt-1 text-xl font-semibold tracking-tight">
-              The anatomy sheet, drawn to scale
-            </h1>
-            <p className="mt-2 max-w-3xl text-[13px] leading-relaxed text-[var(--slate)]">
-              Round 2, branched from the anatomy sheet. Everything drawable in{" "}
-              <code>family.json</code> is drawable by arithmetic — solids sit on family.Bottom
-              centered on the family planes, faces and named planes pin frame origins, connectors
-              inherit them. So the sheet now draws three true-scale orthographic views from that
-              math alone: no camera, no mesh, no three.js, and nothing the dumb evaluator can&apos;t
-              justify. One scale across all views and all types — relative size is the point.
-            </p>
-          </div>
-          <ThemeToggle />
-        </header>
+    <main className="flex h-screen flex-col bg-[var(--paper)] text-[var(--foreground)]">
+      {/* ── control bar ─────────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] bg-[var(--paper)]/95 px-4 py-2">
+        <span className="tele-label text-[10px] tracking-[0.3em] text-[var(--clay-ink)]">
+          FAMILY
+        </span>
+        <select
+          value={isFamilyDocument ? snapshot?.documentId.relativePath : ""}
+          onChange={(event) => event.target.value && void openDocument(event.target.value)}
+          className="rounded-[2px] border border-[var(--line)] bg-transparent px-1.5 py-0.5 text-[11px] outline-none focus:border-[var(--pe-blue)]"
+        >
+          <option value="">
+            {documents.length === 0 ? "no documents yet" : "open a family document…"}
+          </option>
+          {documents.map((path) => (
+            <option key={path} value={path}>
+              {path}
+            </option>
+          ))}
+        </select>
+        <NewDocument onCreate={createDocument} busy={busy != null} />
+        <span className="mx-1 h-4 w-px bg-[var(--line-2)]" />
 
-        <div className="sticky top-0 z-10 mb-5 flex flex-wrap items-center gap-2 rounded-[2px] border border-[var(--line)] bg-[var(--paper)]/95 px-3 py-2 backdrop-blur">
-          {(Object.keys(PROFILES) as ProfileKey[]).map((key) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setProfileKey(key)}
-              className={`rounded-[2px] border px-2 py-0.5 text-[11px] ${
-                key === profileKey
-                  ? "border-[var(--clay-ink)] font-semibold text-[var(--clay-ink)]"
-                  : "border-[var(--line)] text-[var(--slate)] hover:border-[var(--line-2)]"
-              }`}
-            >
-              {PROFILES[key].family.name}
-            </button>
-          ))}
-          <span className="mx-1 h-4 w-px bg-[var(--line-2)]" />
-          <span className="tele-label text-[9px] text-[var(--slate)]">flex type</span>
-          {Object.keys(model.types).map((name) => (
-            <button
-              key={name}
-              type="button"
-              onClick={() => setType(name)}
-              className={`rounded-[2px] px-1.5 py-0.5 font-mono text-[10px] ${
-                name === typeName
-                  ? "bg-[var(--pe-blue)] text-white"
-                  : "text-[var(--slate)] hover:bg-[var(--pe-blue)]/10"
-              }`}
-            >
-              {name}
-            </button>
-          ))}
-          {dirty && (
-            <button
-              type="button"
-              onClick={() =>
-                setModels((state) => ({ ...state, [profileKey]: PROFILES[profileKey] }))
-              }
-              className="ml-auto rounded-[2px] border border-[var(--line)] px-2 py-0.5 text-[10px] text-[var(--fail)] hover:border-[var(--fail)]"
-            >
-              reset edits
-            </button>
+        {model && (
+          <>
+            <span className="tele-label text-[9px] text-[var(--slate)]">flex</span>
+            {Object.keys(model.types).map((name) => (
+              <button
+                key={name}
+                type="button"
+                onClick={() => setSelectedType(name)}
+                className={`rounded-[2px] px-1.5 py-0.5 font-mono text-[10px] ${
+                  name === typeName
+                    ? "bg-[var(--pe-blue)] text-white"
+                    : "text-[var(--slate)] hover:bg-[var(--pe-blue)]/10"
+                }`}
+              >
+                {name}
+              </button>
+            ))}
+            <span className="mx-1 h-4 w-px bg-[var(--line-2)]" />
+          </>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setMode(mode === "full" ? "parameters" : "full")}
+          className="rounded-[2px] border border-[var(--line)] px-2 py-0.5 text-[10px] text-[var(--slate)] hover:border-[var(--pe-blue)]"
+          title="Parameters-only mode: hide the anatomy sheet, give the matrix and spec sheet the full page"
+        >
+          {mode === "full" ? "parameters only" : "full anatomy"}
+        </button>
+
+        <span className="ml-auto" />
+        {proposalCount > 0 && (
+          <span className="font-mono text-[10px] text-[var(--pe-blue)]">
+            {proposalCount} open proposal{proposalCount === 1 ? "" : "s"}
+          </span>
+        )}
+        {stagedCount > 0 && (
+          <button
+            type="button"
+            onClick={() => void discardStaged()}
+            className="rounded-[2px] border border-[var(--line)] px-2 py-0.5 text-[10px] text-[var(--fail)] hover:border-[var(--fail)]"
+          >
+            discard {stagedCount}
+          </button>
+        )}
+        <button
+          type="button"
+          disabled={!isFamilyDocument || busy != null}
+          onClick={() => void run("validate")}
+          className="rounded-[2px] border border-[var(--line)] px-2 py-0.5 text-[10px] text-[var(--slate)] disabled:opacity-40"
+        >
+          validate
+        </button>
+        <button
+          type="button"
+          disabled={!isFamilyDocument || stagedCount === 0 || busy != null}
+          onClick={() => void run("save")}
+          className="rounded-[2px] bg-[var(--pe-blue)] px-2 py-0.5 text-[10px] text-white disabled:opacity-40"
+        >
+          save {stagedCount || ""}
+        </button>
+        <span className="mx-1 h-4 w-px bg-[var(--line-2)]" />
+        <button
+          type="button"
+          disabled={busy != null}
+          onClick={() => void captureEvidence()}
+          title="Read the family open in the bound Revit session into evidence"
+          className="rounded-[2px] border border-[var(--line)] px-2 py-0.5 text-[10px] text-[var(--slate)] disabled:opacity-40"
+        >
+          capture
+        </button>
+        <button
+          type="button"
+          disabled={!isFamilyDocument || busy != null || stagedCount > 0}
+          onClick={() => void buildEvidence()}
+          title={
+            stagedCount > 0
+              ? "Save staged edits first — builds prove the saved revision"
+              : "Build the saved document to an .rfa and refresh evidence"
+          }
+          className="rounded-[2px] border border-[var(--line)] px-2 py-0.5 text-[10px] text-[var(--slate)] disabled:opacity-40"
+        >
+          build
+        </button>
+        <TargetChip
+          selector={boundTarget}
+          sessions={sessions}
+          onPin={(selector) => void family.command("bind", { target: selector || null })}
+          consumerLabel="family workspace"
+        />
+        <ThemeToggle />
+      </div>
+
+      {/* ── status strip ────────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center gap-3 border-b border-[var(--line-soft)] px-4 py-1 text-[10px] text-[var(--slate)]">
+        <span>
+          document:{" "}
+          <strong className="text-[var(--clay-ink)]">
+            {isFamilyDocument ? snapshot?.documentId.relativePath : "none open"}
+          </strong>
+        </span>
+        <span>version: {snapshot?.versionToken ?? "—"}</span>
+        <span>
+          validation:{" "}
+          {snapshot?.validation
+            ? snapshot.validation.isValid
+              ? "valid"
+              : `${snapshot.validation.issues.length} issue(s)`
+            : "not run"}
+        </span>
+        {evidence && (
+          <span
+            className={evidenceFresh ? "text-[var(--lichen)]" : "text-[var(--kiln)]"}
+            title={
+              evidenceFresh
+                ? `Evidence from ${evidence.from.origin} of ${evidence.from.familyName} at ${evidence.from.capturedAt}`
+                : "Evidence was produced from an older revision of this document — build again to refresh"
+            }
+          >
+            evidence: {evidence.from.origin} · {evidence.parameters.length} params ·{" "}
+            {evidenceFresh ? "fresh" : "STALE"}
+          </span>
+        )}
+        {error && <span className="text-[var(--fail)]">{error}</span>}
+      </div>
+
+      {/* ── body ────────────────────────────────────────────────────────────── */}
+      <div className="flex min-h-0 flex-1">
+        <div className="min-w-0 flex-1 overflow-y-auto px-4 py-3">
+          {!model ? (
+            <div className="grid h-full place-items-center text-sm text-[var(--slate)]">
+              <div className="text-center">
+                <p>Open a family document, or create one to start.</p>
+                <p className="mt-1 text-[11px]">
+                  Pea shares this exact document — ask it to capture the active Revit family or
+                  draft one from a spec sheet.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {mode === "full" && previewModel && (
+                <AnatomySheet
+                  model={previewModel}
+                  typeName={typeName}
+                  update={update}
+                  hovered={hovered}
+                  onHover={setHovered}
+                />
+              )}
+              <TypeMatrix
+                model={previewModel ?? model}
+                typeName={typeName}
+                onType={setSelectedType}
+                update={update}
+                fields={fields}
+                onCite={setCite}
+                onReview={review}
+              />
+              <details className="rounded-[2px] border border-[var(--line)] bg-[var(--paper-2)]/40 px-3 py-2">
+                <summary className="tele-label cursor-pointer text-[10px] text-[var(--clay-ink)]">
+                  AUTHORED TRUTH — the family.json all exhibits are editing
+                </summary>
+                <pre className="mt-2 max-h-96 overflow-auto font-mono text-[10px] leading-4 text-[var(--slate)]">
+                  {JSON.stringify(model, null, 2)}
+                </pre>
+              </details>
+            </div>
           )}
         </div>
 
-        <section className="mb-8">
-          <SectionIntro title="ANATOMY SHEET v2 — TRUE-SCALE TRIPTYCH">
-            Front, side, and plan share one scale, so a 1in pipe connector reads as small as it is
-            against a 24in body. Ghost outlines are the <i>other</i> types at the same scale — flex
-            a type and watch the family breathe. Planes stay draggable (writing the driving
-            parameter back as a type override); hover anything to read its authored reference chain
-            in the caption; the cards below are the same objects, editable.
-          </SectionIntro>
-          <PluginCard
-            mvp="anatomy"
-            action="Review"
-            hint="Every mark is authored state or plane-intersection arithmetic. Formula-driven geometry is listed, not guessed."
-          >
-            <AnatomySheet model={model} typeName={typeName} update={update} />
-          </PluginCard>
-        </section>
-
-        <section className="mb-8">
-          <SectionIntro title="TYPE FLEX MATRIX — THE KEEPER">
-            Unchanged from round 1. Inherited / override / formula-locked as visible cell states;
-            value XOR formula never offered; empty types stay visible as ∅ columns. Click a type
-            header to flex the triptych above.
-          </SectionIntro>
-          <PluginCard
-            mvp="type flex"
-            action="Review"
-            hint="Candidate to replace the current family-types route surface — route naming TBD."
-          >
-            <TypeMatrix model={model} typeName={typeName} onType={setType} update={update} />
-          </PluginCard>
-        </section>
-
-        <details className="mb-10 rounded-[2px] border border-[var(--line)] bg-[var(--paper-2)]/40 px-3 py-2">
-          <summary className="tele-label cursor-pointer text-[10px] text-[var(--clay-ink)]">
-            AUTHORED TRUTH — the family.json both exhibits are editing
-          </summary>
-          <pre className="mt-2 max-h-96 overflow-auto font-mono text-[10px] leading-4 text-[var(--slate)]">
-            {JSON.stringify(model, null, 2)}
-          </pre>
-        </details>
+        {showDocPane && (
+          <div className="w-[42%] min-w-[380px] shrink-0">
+            <FamilyDocPane
+              grounding={grounding}
+              citations={citations}
+              unresolved={unresolvedCitations}
+              caption={activeCite?.label ?? null}
+              onParse={(input) => void parseSpec(input)}
+              parsing={parsing}
+            />
+          </div>
+        )}
       </div>
     </main>
+  );
+}
+
+function NewDocument({ onCreate, busy }: { onCreate: (name: string) => void; busy: boolean }) {
+  const [name, setName] = useState("");
+  return (
+    <span className="inline-flex items-center gap-1">
+      <input
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && name.trim()) {
+            onCreate(name.trim());
+            setName("");
+          }
+        }}
+        placeholder="new family name…"
+        className="w-36 rounded-[2px] border border-[var(--line)] bg-transparent px-1.5 py-0.5 text-[11px] outline-none focus:border-[var(--pe-blue)]"
+      />
+      <button
+        type="button"
+        disabled={!name.trim() || busy}
+        onClick={() => {
+          onCreate(name.trim());
+          setName("");
+        }}
+        className="rounded-[2px] border border-[var(--line)] px-1.5 py-0.5 text-[10px] hover:border-[var(--pe-blue)] disabled:opacity-40"
+      >
+        create
+      </button>
+    </span>
   );
 }

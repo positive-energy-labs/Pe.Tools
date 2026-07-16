@@ -109,7 +109,7 @@ test("open preserves existing fields (proposals/staged survive a re-open)", asyn
     binding: { target: null },
     snapshot: null,
     fields: {
-      "revit.units": { proposal: { value: "in", by: "pea" }, review: "none" },
+      "/revit/units": { proposal: { value: "in", by: "pea" }, review: "none" },
     },
     savedAt: null,
   };
@@ -122,7 +122,7 @@ test("open preserves existing fields (proposals/staged survive a re-open)", asyn
       );
     },
   );
-  expect(document.fields["revit.units"]?.proposal?.value).toBe("in");
+  expect(document.fields["/revit/units"]?.proposal?.value).toBe("in");
 });
 
 test("refresh without an open document throws a hint to run open first", async () => {
@@ -145,12 +145,12 @@ test("validate splices staged values only; proposals join in with includeProposa
       takenAt: null,
     },
     fields: {
-      "revit.units": {
+      "/revit/units": {
         proposal: { value: "cm", by: "pea" },
         staged: { value: "in" },
         review: "good",
       },
-      "revit.scale": { proposal: { value: 48, by: "pea" }, review: "none" },
+      "/revit/scale": { proposal: { value: 48, by: "pea" }, review: "none" },
     },
     savedAt: null,
   };
@@ -195,7 +195,7 @@ test("save can delete an authored JSON property without a sentinel value", async
       takenAt: null,
     },
     fields: {
-      "types.Wide.Width": { staged: { delete: true }, review: "good" },
+      "/types/Wide/Width": { staged: { delete: true }, review: "good" },
     },
     savedAt: null,
   };
@@ -274,7 +274,7 @@ test("save splices staged fields, sends the captured token, folds the result, an
       takenAt: null,
     },
     fields: {
-      "revit.units": {
+      "/revit/units": {
         proposal: { value: "in", by: "pea" },
         staged: { value: "in" },
         review: "good",
@@ -318,7 +318,7 @@ test("save splices staged fields, sends the captured token, folds the result, an
   expect(document.snapshot?.composedContent).toBe(
     `composed:${JSON.stringify({ revit: { units: "in" } }, null, 2)}`,
   );
-  expect(document.fields["revit.units"]).toEqual({ review: "none" });
+  expect(document.fields["/revit/units"]).toEqual({ review: "none" });
   expect(document.savedAt).toBeTruthy();
 });
 
@@ -335,7 +335,7 @@ test("save on a host conflict throws with the conflict message and a refresh hin
       takenAt: null,
     },
     fields: {
-      a: { staged: { value: 1 }, review: "good" },
+      "/a": { staged: { value: 1 }, review: "good" },
     },
     savedAt: null,
   };
@@ -357,7 +357,7 @@ test("save on a host conflict throws with the conflict message and a refresh hin
     ),
   ).rejects.toThrow(/newer version on disk[\s\S]*refresh/i);
   // Staged field is untouched so the human can refresh and retry.
-  expect(document.fields["a"]?.staged != null).toBe(true);
+  expect(document.fields["/a"]?.staged != null).toBe(true);
 });
 
 test("save blocks when a staged field still needs attention", async () => {

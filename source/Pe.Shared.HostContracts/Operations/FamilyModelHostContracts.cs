@@ -21,7 +21,8 @@ public sealed record FamilyModelBuildRequest(
 public sealed record FamilyModelBuildData(
     string FamilyName,
     string OutputPath,
-    string TemplatePath
+    string TemplatePath,
+    FamilyModelEvidence Evidence
 );
 
 public static class FamilyModelHostOperations {

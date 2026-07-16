@@ -2,8 +2,10 @@
  * /settings document — collaborative state for schema-backed host settings authoring.
  *
  * Third instance of the proposal → staged → committed trichotomy (after family-types
- * cells and parameter-links draft/preview/apply). Fields are addressed by dot-joined
- * JSON paths into the settings document's parsed raw content (e.g. "revit.units.length").
+ * cells and parameter-links draft/preview/apply). Fields are addressed by RFC 6901
+ * JSON Pointers into the settings document's parsed raw content (e.g.
+ * "/revit/units/length") — pointer escaping means property names may contain periods
+ * and slashes (spec-sheet values like "M.2 Depth" address cleanly).
  * Pea proposes field values; the human stages them; the human-only `save` command
  * splices staged values into the raw content and writes through `settings.document.save`
  * with the optimistic-concurrency version token captured at open/refresh.
@@ -32,12 +34,26 @@ const settingsFieldEditSchema = z
     error: "a settings edit cannot both set and delete the property",
   });
 
+/** One document citation for a proposed value, in markdown coordinates — pea never
+ * sees a bbox. `blockId` may reference a parsed block OR a parser-extracted image;
+ * the UI resolves geometry (measured/estimated) and refuses to draw what it can't. */
+export const settingsProposalSourceSchema = z.object({
+  blockId: z.string(),
+  rowIdx: z.number().int().nonnegative().optional(),
+  colIdx: z.number().int().nonnegative().optional(),
+  note: z.string().nullish(),
+});
+export type SettingsProposalSource = z.infer<typeof settingsProposalSourceSchema>;
+
 export const settingsFieldStateSchema = z.object({
   proposal: settingsFieldEditSchema
     .extend({
       by: z.enum(["pea", "human"]).default("pea"),
       note: z.string().nullish(),
       confidence: z.enum(["high", "low"]).nullish(),
+      /** Multi-citation: one value may be grounded by several regions (a table
+       * cell AND a figure). Order is presentation order. */
+      sources: z.array(settingsProposalSourceSchema).nullish(),
     })
     .nullish(),
   staged: settingsFieldEditSchema.nullish(),
@@ -85,7 +101,7 @@ export const settingsRouteDocumentSchema = z
   .object({
     binding: routeBindingSchema,
     snapshot: settingsSnapshotSchema.nullish(),
-    /** field path -> trichotomy state. Paths are dot-joined keys into the parsed raw JSON. */
+    /** field pointer -> trichotomy state. Keys are RFC 6901 JSON Pointers into the parsed raw JSON. */
     fields: z.record(z.string(), settingsFieldStateSchema).default({}),
     savedAt: z.string().nullish(),
   })
@@ -142,7 +158,22 @@ export const settingsRouteState = defineRouteState({
   },
 });
 
-/** Split a dot-joined settings field path into JSON segments. */
-export function settingsFieldSegments(path: string): string[] {
-  return path.split(".").filter((segment) => segment.length > 0);
+/** Decode an RFC 6901 JSON Pointer field key into property segments. */
+export function settingsFieldSegments(pointer: string): string[] {
+  if (pointer === "") return [];
+  if (!pointer.startsWith("/"))
+    throw new Error(
+      `Settings field keys are JSON Pointers and must start with "/" — got "${pointer}".`,
+    );
+  return pointer
+    .slice(1)
+    .split("/")
+    .map((segment) => segment.replaceAll("~1", "/").replaceAll("~0", "~"));
+}
+
+/** Encode property segments as an RFC 6901 JSON Pointer field key. */
+export function settingsFieldPointer(segments: string[]): string {
+  return segments
+    .map((segment) => `/${segment.replaceAll("~", "~0").replaceAll("/", "~1")}`)
+    .join("");
 }

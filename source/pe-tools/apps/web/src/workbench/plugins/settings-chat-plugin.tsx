@@ -44,7 +44,7 @@ export function SettingsChatPlugin({
         <Metric value={summary.attention} label="need attention" issue />
         <Link
           className="ml-auto font-medium text-[var(--pe-blue)] hover:underline"
-          to={isFamilyModel ? "/beta/family-plugin" : "/chat"}
+          to={isFamilyModel ? "/family" : "/chat"}
           search={isFamilyModel ? undefined : (previous) => ({ ...previous, plugin: "settings" })}
         >
           Open workspace
