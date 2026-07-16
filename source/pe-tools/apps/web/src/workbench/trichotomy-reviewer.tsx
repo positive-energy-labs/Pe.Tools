@@ -26,8 +26,13 @@ export interface ReviewerCell {
   // `value` is optional because the settings/schedule schemas widen the proposal to an
   // index-signature object (the trichotomy extension-spread wart); a required `value`
   // would reject them. TrichotomyCellLike-compatible so `cellSummary` accepts these cells.
-  proposal?: { value?: unknown; confidence?: "high" | "low" | null; note?: string | null } | null;
-  staged?: { value: unknown } | null;
+  proposal?: {
+    value?: unknown;
+    delete?: true;
+    confidence?: "high" | "low" | null;
+    note?: string | null;
+  } | null;
+  staged?: { value?: unknown; delete?: true } | null;
   review: CellReview;
 }
 
@@ -89,7 +94,14 @@ export function CellTrichotomyReviewer({
   const approve = (key: string, cell: ReviewerCell) =>
     void write(key, "apply", {
       patches: [
-        { path: [segment, key, "staged"], value: { value: cell.proposal?.value } },
+        // Stage the proposal's edit verbatim — settings proposals may be { delete: true }.
+        {
+          path: [segment, key, "staged"],
+          value:
+            cell.proposal != null && "delete" in cell.proposal && cell.proposal.delete === true
+              ? { delete: true }
+              : { value: cell.proposal?.value },
+        },
         { path: [segment, key, "review"], value: "good" },
       ],
     });

@@ -219,9 +219,10 @@ const saveSettingsDocumentToDisk = Effect.fnUntraced(function* (
     "settings.document.save",
   );
   const conflictDetected =
-    request.expectedVersionToken != null &&
-    currentVersionToken != null &&
-    request.expectedVersionToken.value !== currentVersionToken.value;
+    (request.createOnly === true && currentVersionToken != null) ||
+    (request.expectedVersionToken != null &&
+      currentVersionToken != null &&
+      request.expectedVersionToken.value !== currentVersionToken.value);
 
   if (conflictDetected) {
     return {
@@ -233,7 +234,10 @@ const saveSettingsDocumentToDisk = Effect.fnUntraced(function* (
       ),
       writeApplied: false,
       conflictDetected,
-      conflictMessage: `Settings document '${stableDocumentId(request.documentId)}' changed on disk.`,
+      conflictMessage:
+        request.createOnly === true
+          ? `Settings document '${stableDocumentId(request.documentId)}' already exists.`
+          : `Settings document '${stableDocumentId(request.documentId)}' changed on disk.`,
       validation: materialized.validation,
     } satisfies SaveSettingsDocumentResult;
   }
@@ -294,6 +298,7 @@ const openSettingsDocumentFromDisk = Effect.fnUntraced(function* (
       backend: "ts-local-disk",
       compositionPolicy: request.includeComposedContent ? "module-scoped" : "not-requested",
       schemaValidation: materialized.schemaValidation,
+      semanticValidation: materialized.semanticValidation,
     },
   } satisfies SettingsDocumentSnapshot;
 });
@@ -312,15 +317,11 @@ const materializeDocument = Effect.fnUntraced(function* (
       dependencies: [],
       schemaJson: null,
       schemaValidation: "not-run",
+      semanticValidation: "not-run",
       validation: { isValid: false, issues: [parsed.issue] },
     };
 
-  const composition = yield* composeForRead(
-    documentId,
-    parsed.value,
-    module,
-    includeComposedContent,
-  );
+  const composition = yield* composeForRead(documentId, parsed.value, module, true);
   const schemaValidation = yield* validateWithProviderSchema(
     documentId,
     composition.value ?? parsed.value,
@@ -330,7 +331,16 @@ const materializeDocument = Effect.fnUntraced(function* (
     "schemaJson" in schemaValidation && typeof schemaValidation.schemaJson === "string"
       ? schemaValidation.schemaJson
       : null;
-  const issues = [...composition.issues, ...schemaValidation.issues];
+  const structuralIssues = [...composition.issues, ...schemaValidation.issues];
+  const semanticValidation = structuralIssues.some((issue) => issue.severity === "error")
+    ? { issues: [] as SettingsValidationIssue[], status: "not-run" }
+    : yield* validateWithFeatureSemantics(
+        documentId,
+        rawContent,
+        composition.value ?? parsed.value,
+        ctx,
+      );
+  const issues = [...structuralIssues, ...semanticValidation.issues];
   return {
     composedContent:
       includeComposedContent && composition.value != null
@@ -339,6 +349,7 @@ const materializeDocument = Effect.fnUntraced(function* (
     dependencies: composition.dependencies,
     schemaJson,
     schemaValidation: schemaValidation.status,
+    semanticValidation: semanticValidation.status,
     validation: { isValid: !issues.some((issue) => issue.severity === "error"), issues },
   };
 });
@@ -424,6 +435,76 @@ const validateWithProviderSchema = Effect.fnUntraced(function* (
 
   return { ...validateWithSchemaJson(schemaJson, value), schemaJson };
 });
+
+const validateWithFeatureSemantics = Effect.fnUntraced(function* (
+  documentId: SettingsDocumentId,
+  rawContent: string,
+  composedValue: unknown,
+  ctx: SettingsRuntimeContext,
+) {
+  if (!ctx.invokeBridge) return { issues: [] as SettingsValidationIssue[], status: "unavailable" };
+
+  const result = yield* Effect.result(
+    ctx.invokeBridge(
+      "settings.document.semantic-validation",
+      {
+        moduleKey: documentId.moduleKey,
+        rootKey: documentId.rootKey,
+        relativePath: documentId.relativePath,
+        rawContent,
+        composedContent: normalizeJsonTrailingNewline(JSON.stringify(composedValue, null, 2)),
+      },
+      ctx.bridgeSessionId,
+    ),
+  );
+  if (result._tag === "Failure")
+    return {
+      issues: [
+        {
+          path: "$",
+          code: "SemanticValidatorUnavailable",
+          severity: "warning",
+          message: errorMessage(result.failure),
+          suggestion: "Connect the matching Revit session and retry.",
+        },
+      ] satisfies SettingsValidationIssue[],
+      status: "provider-error",
+    };
+
+  const response = normalizeSemanticValidation(result.success);
+  return {
+    issues: response.issues,
+    status: response.isConfigured ? "configured" : "not-configured",
+  };
+});
+
+function normalizeSemanticValidation(value: unknown): {
+  isConfigured: boolean;
+  issues: SettingsValidationIssue[];
+} {
+  if (!isRecord(value)) return { isConfigured: false, issues: [] };
+
+  const issues = Array.isArray(value.issues)
+    ? value.issues.flatMap((candidate) => {
+        if (!isRecord(candidate) || typeof candidate.message !== "string") return [];
+        return [
+          {
+            path:
+              typeof candidate.instancePath === "string"
+                ? candidate.instancePath
+                : typeof candidate.path === "string"
+                  ? candidate.path
+                  : "$",
+            code: typeof candidate.code === "string" ? candidate.code : "SemanticValidation",
+            severity: typeof candidate.severity === "string" ? candidate.severity : "error",
+            message: candidate.message,
+            suggestion: typeof candidate.suggestion === "string" ? candidate.suggestion : null,
+          },
+        ];
+      })
+    : [];
+  return { isConfigured: value.isConfigured === true, issues };
+}
 
 function validateWithSchemaJson(schemaJson: string, value: unknown) {
   const { validate, errorMessage: compileErrorMessage } = compileSchema(schemaJson);

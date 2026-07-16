@@ -1,0 +1,67 @@
+{
+  "axes": {
+    "+X": "right",
+    "+Y": "front",
+    "+Z": "up"
+  },
+  "planes": [
+    {
+      "direction": "Out",
+      "distance": 4,
+      "coordinate": 4
+    },
+    {
+      "direction": "In",
+      "distance": 4,
+      "coordinate": -4
+    }
+  ],
+  "prism": {
+    "width": 24,
+    "depth": 10,
+    "height": 7,
+    "faces": {
+      "Left": -12,
+      "Right": 12,
+      "Back": -5,
+      "Front": 5,
+      "Bottom": 0,
+      "Top": 7
+    }
+  },
+  "cylinder": {
+    "diameter": 8,
+    "height": 5,
+    "bounds": {
+      "x": [-4, 4],
+      "y": [-4, 4],
+      "z": [0, 5]
+    }
+  },
+  "frame": {
+    "origin": [
+      "face:body.Front",
+      "plane:family.CenterLR",
+      "plane:service-elevation"
+    ],
+    "coordinate": {
+      "x": 0,
+      "y": 5,
+      "z": 4
+    }
+  },
+  "centeredLinear": [
+    {
+      "halfCount": 1,
+      "total": 1
+    },
+    {
+      "halfCount": 8,
+      "total": 15
+    },
+    {
+      "halfCount": 19,
+      "total": 37
+    }
+  ]
+}

@@ -17,6 +17,9 @@ public interface IBridgeOperationContext {
 
 public interface ISettingsBridgeService {
     Task<SchemaData> GetSchemaAsync(SchemaRequest request, CancellationToken cancellationToken);
+    Task<SettingsDocumentSemanticValidationData> ValidateSettingsDocumentSemanticsAsync(
+        ValidateSettingsDocumentSemanticsRequest request,
+        CancellationToken cancellationToken);
     Task<FieldOptionsData> GetFieldOptionsAsync(FieldOptionsRequest request, string? connectionId, CancellationToken cancellationToken);
     Task<GetSettingsModuleCatalogBridgeResponse> GetSettingsModuleCatalogAsync(CancellationToken cancellationToken);
     Task<ParameterCatalogData> GetParameterCatalogAsync(ParameterCatalogRequest request, string? connectionId, CancellationToken cancellationToken);

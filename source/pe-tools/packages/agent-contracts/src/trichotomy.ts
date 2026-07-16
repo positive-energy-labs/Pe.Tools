@@ -57,7 +57,7 @@ export function trichotomyAgentMask(cellsSegment = "cells"): string[][] {
 
 export interface TrichotomyCellLike {
   proposal?: { confidence?: "high" | "low" | null | undefined } | null | undefined;
-  staged?: { value: unknown } | null | undefined;
+  staged?: { value?: unknown } | null | undefined;
   review: CellReview;
 }
 

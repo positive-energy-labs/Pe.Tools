@@ -30,6 +30,14 @@ public record ValidateSettingsRequest(
     string SettingsJson
 );
 
+public record ValidateSettingsDocumentSemanticsRequest(
+    string ModuleKey,
+    string RootKey,
+    string RelativePath,
+    string RawContent,
+    string ComposedContent
+);
+
 public record ValidationIssue(
     string InstancePath,
     string? SchemaPath,
@@ -66,5 +74,10 @@ public record FieldOptionsData(
 
 public record ValidationData(
     bool IsValid,
+    List<ValidationIssue> Issues
+);
+
+public record SettingsDocumentSemanticValidationData(
+    bool IsConfigured,
     List<ValidationIssue> Issues
 );

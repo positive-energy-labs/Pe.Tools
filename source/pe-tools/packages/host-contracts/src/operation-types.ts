@@ -269,6 +269,7 @@ export type SaveSettingsDocumentRequest = Schema.Schema.Type<
 >;
 
 export const saveSettingsDocumentRequestSchema = Schema.Struct({
+  createOnly: Schema.optional(Schema.Boolean),
   documentId: settingsDocumentIdSchema,
   expectedVersionToken: Schema.optional(Schema.NullOr(settingsVersionTokenSchema)),
   rawContent: Schema.String,

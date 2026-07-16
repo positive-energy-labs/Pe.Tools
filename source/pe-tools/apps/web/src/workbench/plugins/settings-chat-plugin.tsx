@@ -19,6 +19,9 @@ export function SettingsChatPlugin({
   active,
 }: RouteChatPluginProps) {
   const document = readRouteState(sessionState, settingsRouteState);
+  const isFamilyModel =
+    document?.snapshot?.documentId.moduleKey === "FamilyFoundry" &&
+    document.snapshot.documentId.rootKey === "models";
   const fields = document?.fields ?? {};
   const summary = cellSummary(fields);
   const openProposals = Object.values(fields).filter(
@@ -31,15 +34,18 @@ export function SettingsChatPlugin({
   if (active && !reviewable) return null;
 
   return (
-    <InlineRoutePlugin title="Settings" action={actionLabel(toolName, args, running)}>
+    <InlineRoutePlugin
+      title={isFamilyModel ? "Family Model" : "Settings"}
+      action={actionLabel(toolName, args, running)}
+    >
       <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
         <Metric value={openProposals} label="open proposals" />
         <Metric value={summary.staged} label="staged" />
         <Metric value={summary.attention} label="need attention" issue />
         <Link
           className="ml-auto font-medium text-[var(--pe-blue)] hover:underline"
-          to="/chat"
-          search={(previous) => ({ ...previous, plugin: "settings" })}
+          to={isFamilyModel ? "/beta/family-plugin" : "/chat"}
+          search={isFamilyModel ? undefined : (previous) => ({ ...previous, plugin: "settings" })}
         >
           Open workspace
         </Link>

@@ -4,6 +4,7 @@ using Pe.Revit.SettingsRuntime.Json;
 using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
 using Pe.Revit.SettingsRuntime.Json.SchemaProviders;
+using Pe.Revit.SettingsRuntime.Validation;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.RevitData;
@@ -151,6 +152,26 @@ public class RequestService : ISettingsBridgeService {
                 );
             }
         }, cancellationToken);
+
+    public Task<SettingsDocumentSemanticValidationData> ValidateSettingsDocumentSemanticsAsync(
+        ValidateSettingsDocumentSemanticsRequest request,
+        CancellationToken cancellationToken
+    ) {
+        var binding = this._moduleRegistry.ResolveRootBinding(request.ModuleKey, request.RootKey);
+        var configured = SettingsDocumentValidatorRegistry.Shared.TryValidate(
+            binding.SettingsType,
+            new SettingsDocumentValidationContext(request.RawContent, request.ComposedContent),
+            out var issues);
+        return Task.FromResult(new SettingsDocumentSemanticValidationData(
+            configured,
+            issues.Select(issue => new ValidationIssue(
+                issue.Path,
+                null,
+                issue.Code,
+                issue.Severity,
+                issue.Message,
+                issue.Suggestion)).ToList()));
+    }
 
     public Task<SchemaData> GetLoadedFamiliesFilterSchemaAsync(CancellationToken cancellationToken) =>
         this.EnqueueAsync(() => {

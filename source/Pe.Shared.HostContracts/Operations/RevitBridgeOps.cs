@@ -71,6 +71,18 @@ public static class RevitBridgeOps {
             static (request, context, ct) => context.Settings.GetSettingsModuleCatalogAsync(ct)
         );
 
+    public static readonly BridgeOp SettingsDocumentSemanticValidation =
+        BridgeOp.CreateInternal<ValidateSettingsDocumentSemanticsRequest, SettingsDocumentSemanticValidationData>(
+            "settings.document.semantic-validation",
+            "Validate Settings Document Semantics",
+            HostOperationAgentMetadata.Create(
+                "Run the registered typed feature validator for a settings document after host-owned structural validation.",
+                new[] { "settings", "validation", "semantic", "internal" },
+                requiresActiveDocument: false
+            ),
+            static (request, context, ct) => context.Settings.ValidateSettingsDocumentSemanticsAsync(request, ct)
+        );
+
     public static readonly BridgeOp ParameterCatalog =
         BridgeOp.Create<ParameterCatalogRequest, ParameterCatalogData>(
             "settings.parameter-catalog",

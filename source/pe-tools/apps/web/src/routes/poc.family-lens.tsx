@@ -316,15 +316,7 @@ function KindDot({ kind }: { kind: ParamKind }) {
 }
 
 /** Compact value distribution: top buckets as chips, outliers kiln, missing count last. */
-function DistStrip({
-  lens,
-  param,
-  max = 4,
-}: {
-  lens: LensState;
-  param: string;
-  max?: number;
-}) {
+function DistStrip({ lens, param, max = 4 }: { lens: LensState; param: string; max?: number }) {
   const buckets = lens.dist(param);
   const missing = lens.rows.length - buckets.reduce((n, [, m]) => n + m.length, 0);
   const shown = buckets.slice(0, max);
@@ -356,7 +348,10 @@ function DistStrip({
         </span>
       )}
       {missing > 0 && (
-        <span className="font-mono text-[9px] text-[var(--slate)]/60" title="rows without this parameter">
+        <span
+          className="font-mono text-[9px] text-[var(--slate)]/60"
+          title="rows without this parameter"
+        >
           ∅×{missing}
         </span>
       )}
@@ -506,8 +501,8 @@ function LensPopover({ lens }: { lens: LensState }) {
                   )}
                 </div>
                 <p className="mt-1 text-[10px] text-[var(--slate)]">
-                  strips show each parameter's value distribution across all {lens.rows.length}{" "}
-                  rows — consensus is one big chip, drift is many, kiln is a lone outlier
+                  strips show each parameter's value distribution across all {lens.rows.length} rows
+                  — consensus is one big chip, drift is many, kiln is a lone outlier
                 </p>
               </div>
 
@@ -696,9 +691,7 @@ function ReticleGrid({ lens }: { lens: LensState }) {
 
   /** Collapsed family: one summary cell per column — consensus value, or the spread. */
   const renderSummaryCell = (fam: FamilySnap, famRows: RowRef[], param: string) => {
-    const values = famRows
-      .map((r) => lens.valueOf(r, param))
-      .filter((v): v is string => v != null);
+    const values = famRows.map((r) => lens.valueOf(r, param)).filter((v): v is string => v != null);
     const distinct = Array.from(new Set(values));
     const colHot = reticle?.param === param;
     return (
@@ -709,9 +702,7 @@ function ReticleGrid({ lens }: { lens: LensState }) {
         }`}
         title={
           distinct.length > 1
-            ? famRows
-                .map((r) => `${r.typeName}: ${lens.valueOf(r, param) ?? "—"}`)
-                .join("\n")
+            ? famRows.map((r) => `${r.typeName}: ${lens.valueOf(r, param) ?? "—"}`).join("\n")
             : undefined
         }
       >
@@ -1025,9 +1016,7 @@ function Page() {
             <p className="tele-label text-[10px] tracking-[0.3em] text-[var(--clay-ink)]">
               POC / FAMILY LENS — PLUGIN SHAPE
             </p>
-            <h1 className="mt-1 text-xl font-semibold tracking-tight">
-              Reticle grid workspace
-            </h1>
+            <h1 className="mt-1 text-xl font-semibold tracking-tight">Reticle grid workspace</h1>
             <p className="mt-1 max-w-3xl text-[12px] leading-relaxed text-[var(--slate)]">
               The plugin as it would ship: the grid is the surface, curation lives behind the lens
               button, drafts review in the dock. Same state model — snapshot + lens + drafts.

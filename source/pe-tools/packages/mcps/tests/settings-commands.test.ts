@@ -8,7 +8,7 @@ import { createSettingsCommandHandlers } from "../src/pea/settings-commands.ts";
  * pins the host contract the handler depends on without a live host.
  */
 
-type HostResponder = (key: string, request: unknown) => unknown;
+type HostResponder = (key: string, request: unknown, headers: Headers) => unknown;
 
 async function withHost<T>(responder: HostResponder, run: () => Promise<T>): Promise<T> {
   const originalFetch = globalThis.fetch;
@@ -20,10 +20,13 @@ async function withHost<T>(responder: HostResponder, run: () => Promise<T>): Pro
     if (typeof rawBody !== "string") throw new Error("expected JSON request body");
     const body = JSON.parse(rawBody) as { key: string; request: unknown };
     calls.push(body);
-    return new Response(JSON.stringify(responder(body.key, body.request)), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify(responder(body.key, body.request, new Headers(init?.headers))),
+      {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      },
+    );
   };
   try {
     return await run();
@@ -80,6 +83,25 @@ test("open maps the host snapshot into the route document, flattening the versio
   expect(document.snapshot?.modifiedUtc).toBe("2026-07-13T00:00:00Z");
   expect(document.snapshot?.validation?.isValid).toBe(true);
   expect(document.snapshot?.takenAt).toBeTruthy();
+});
+
+test("settings commands target the route binding when module discovery needs a Revit session", async () => {
+  const document = emptyDocument();
+  document.binding.target = "sandbox:family-model";
+  let targeted = "";
+  await withHost(
+    (_key, _request, headers) => {
+      targeted = headers.get("x-pe-bridge-session-id") ?? "";
+      return openResponse("{}");
+    },
+    async () => {
+      await handlers().open(
+        { documentId: DOCUMENT_ID },
+        { getDoc: () => document, setDoc: async (next) => void Object.assign(document, next) },
+      );
+    },
+  );
+  expect(targeted).toBe("sandbox:family-model");
 });
 
 test("open preserves existing fields (proposals/staged survive a re-open)", async () => {
@@ -160,6 +182,54 @@ test("validate splices staged values only; proposals join in with includeProposa
   expect(JSON.parse(seen[1] as string)).toEqual({ revit: { units: "in", scale: 48 } });
 });
 
+test("save can delete an authored JSON property without a sentinel value", async () => {
+  const document: SettingsRouteDocument = {
+    binding: { target: null },
+    snapshot: {
+      documentId: DOCUMENT_ID,
+      rawContent: '{"types":{"Wide":{"Width":"24in","Depth":"10in"}}}',
+      composedContent: null,
+      versionToken: "v1",
+      modifiedUtc: null,
+      validation: { isValid: true, issues: [] },
+      takenAt: null,
+    },
+    fields: {
+      "types.Wide.Width": { staged: { delete: true }, review: "good" },
+    },
+    savedAt: null,
+  };
+  let savedRaw = "";
+
+  await withHost(
+    (key, request) => {
+      if (key === "settings.document.save") {
+        savedRaw = (request as { rawContent: string }).rawContent;
+        return {
+          conflictDetected: false,
+          writeApplied: true,
+          metadata: {
+            documentId: DOCUMENT_ID,
+            kind: "Authoring",
+            modifiedUtc: "2026-07-13T01:00:00Z",
+            versionToken: { value: "v2" },
+          },
+          validation: { isValid: true, issues: [] },
+        };
+      }
+      if (key === "settings.document.open") return openResponse(savedRaw, "v2");
+      throw new Error(`unexpected op ${key}`);
+    },
+    async () =>
+      handlers().save(
+        {},
+        { getDoc: () => document, setDoc: async (next) => void Object.assign(document, next) },
+      ),
+  );
+
+  expect(JSON.parse(savedRaw)).toEqual({ types: { Wide: { Depth: "10in" } } });
+});
+
 test("validate folds the host result into the snapshot", async () => {
   const document: SettingsRouteDocument = {
     binding: { target: null },
@@ -230,6 +300,7 @@ test("save splices staged fields, sends the captured token, folds the result, an
           validation: { isValid: true, issues: [] },
         };
       }
+      if (key === "settings.document.open") return openResponse(savedRequest!.rawContent, "v2");
       throw new Error(`unexpected op ${key}`);
     },
     async () => {
@@ -244,6 +315,9 @@ test("save splices staged fields, sends the captured token, folds the result, an
   expect(savedRequest!.expectedVersionToken).toEqual({ value: "v1" });
   expect(document.snapshot?.versionToken).toBe("v2");
   expect(document.snapshot?.rawContent).toBe(JSON.stringify({ revit: { units: "in" } }, null, 2));
+  expect(document.snapshot?.composedContent).toBe(
+    `composed:${JSON.stringify({ revit: { units: "in" } }, null, 2)}`,
+  );
   expect(document.fields["revit.units"]).toEqual({ review: "none" });
   expect(document.savedAt).toBeTruthy();
 });

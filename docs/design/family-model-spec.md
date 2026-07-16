@@ -1,10 +1,34 @@
 # Family Model (`family.json`) — design spec
 
-Status: implementation complete; Phase 5 is a documented public-API boundary and the Phase 8 source-sandbox
-walkthrough is proven. Captures the design review and constraint digest of 2026-07-15.
+Status: v1 and v1.1 implementation complete; Phase 5 is a documented public-API boundary, the Phase 8
+source-sandbox walkthrough is proven, and Phase 9 converges disk, UI, Pea, scripts, validation, and Revit evidence on
+one Family Model/settings language. Captures the design review and constraint digest of 2026-07-15 through 2026-07-16.
 Owner surfaces: FamilyFoundry (FF). Consumers: FFManager, FFMigrator, capture, replay, Pea, host operations, web preview.
 
 ## Implementation ledger
+
+### 2026-07-16 — Phase 9 authoring/evidence convergence complete
+
+- `FamilyFoundry/models` is a first-class settings root. The beta Family Model route and chat plugin project the same
+  `SettingsDocumentId`, authored/composed content, validation, version token, proposals, and staged review state used
+  by Pea and scripts. The specialized renderer owns no Family Foundry semantics.
+- `settings.document.validate` remains the single public PE JSON validation operation. The TS settings host composes
+  structural and feature-semantic issues; a small internal validator registry in `Pe.Revit.SettingsRuntime` supplies
+  Family Model semantics without publishing a Family-specific validation operation.
+- `revit.detail.family-model` returns resolved per-type value/source/provenance evidence beside authored `modelJson`.
+  C# and TypeScript consume one checked-in evaluator conformance vector for axes, face coordinates, primitive bounds,
+  frame origins, and centered-array math.
+- The settings route gained create-only document creation, explicit property deletion, and bound-session routing.
+  Successful saves re-open the canonical document so raw content, composed content, validation, and version metadata
+  cannot describe different revisions.
+- The former POC is now `/beta/family-plugin`; `/family-model` redirects there. Educational presets and the GRD
+  showcase remain, while document lifecycle, validation, and save flow come from the generic settings route.
+- Live Pea thread `5e0b53e5-bb7e-4236-8682-fbb85abe8df6` created
+  `FamilyFoundry/models/proof/pea-live-width-20260716-v2`, proposed Width changes, stopped at the human save boundary,
+  and then consumed the human-approved `21in` document. Pea called `revit.apply.family-model`,
+  `revit.apply.document.open`, and `revit.detail.family-model`, all explicitly targeted to
+  `sandbox:ff-family-model-r25`. Revit evidence returned Width `1' - 9"` with source `AuthoredGlobal`, provenance
+  `Exact`, and zero unmodeled diagnostics.
 
 ### 2026-07-15 — Phase 8 automated gates complete
 
@@ -176,9 +200,11 @@ One portable **Family Package** — `family.json` + recursive `dependencies/` + 
 - an MEP engineer or agent can write by hand with only schema/LSP help (boxes, cylinders, Connectors first);
 - a web view can render with a dumb evaluator (params → arithmetic → plane intersection → face lookup), zero Revit semantics;
 - a scanner can understand at a glance (what is it → knobs → shape → connections);
+- UI, Pea, scripts, and disk authoring address the same settings document and speak the same Family Model language;
 - rebuilds behaviorally-equivalent families across Revit years. ElementIds, byte identity, and Revit-generated artifacts (array groups, equality dims) are **evidence, never authored state**.
 
-Pipeline: capture → model (+ ambiguity diagnostics) → validate/flex/web preview → compile → Revit apply → snapshot + structural diff + images. Snapshots/images are checkpoints, never a second source of truth.
+Pipeline: open/capture → authored model → validate → resolve/flex → evidence projection → compile → Revit apply →
+snapshot + structural diff + images. Evidence, snapshots, and images are checkpoints, never a second source of truth.
 
 Roundtrip is the north star, not a reason to falsify compatibility. Capture and replay may use only portable authored
 state plus observable Revit family state. **Never persist Family Foundry metadata in extensible storage, hidden family
@@ -212,6 +238,131 @@ expressed without it.
 11. **Room calculation point is first-class**: `roomCalculationPoint` section in the model. User surface stays exactly `{ "enabled": true }`. The intentional PE convention remains fixed at a one-foot offset with direction inferred per placement type (Unhosted → +Z, FaceHosted/WallHosted → −Y), as `AddRoomDingler` does today. The compiled plan and snapshot express the resolved direction using the same Frame vocabulary as other spatial constituents, but authored settings expose no frame, direction, or offset override. Capture projects the PE default back to `{ "enabled": true }`; a non-default configuration is `unmodeled` until a real family proves that another public shape is necessary.
 12. **Minimal-surface rule** governs everything above: users author only what they must; anything else is an internal heuristic with a diagnostic, or deferred entirely. The canonical doc example is the **minimal family** (~15 lines: name, category, template, one param, one prism); the full sink example comes second.
 13. **Document order = reader order**: definitions first (`family` header, parameters, `types`, `planes`, `frames`), content second (`solids`, `nestedFamilies`, `connectors`, `arrays`, `symbolics`, `companions`, `roomCalculationPoint`), quarantine last (`associations`, `unmodeled`). Every content section optional.
+14. **Properties-group metadata is already the parameter grouping contract.** `familyParameters.*.propertiesGroup` and
+    `sharedParameters.*.propertiesGroup` remain optional, LSP-completable value-domain fields. UIs group the parameter
+    matrix and anatomy register by this value, with an ungrouped fallback. Do not add a second UI-only grouping field.
+15. **Types stay metadata-free in v1.1.** The first type in document order is the initial preview type. Do not add
+    `default`, description, tags, or constituent visibility syntax until a checked-in family requires one of them.
+16. **V1 solid placement is explicit and intentionally narrow.** Every solid uses `frame:family`, is centered on the
+    family left/right and front/back planes, starts on the family bottom plane, and extends in the positive family Z
+    direction. Non-family-frame solid placement and type-conditional constituent existence are unsupported, not
+    inferred. Add either only with a checked-in roundtrip example.
+
+## Authored model and evidence model
+
+`family.json` stays authored truth. Do not add evaluated formulas, resolved coordinates, generated array members,
+capture confidence, or Revit identifiers to it.
+
+Family Foundry also exposes a typed **Family Model evidence projection** for consumers that need comparison and
+contextual clues without reimplementing Revit behavior. The projection is returned by Family Model detail/capture
+work and may be persisted under `proof/`; it is never accepted as build input.
+
+The minimum evidence contract is:
+
+- resolved parameter values by family type, preserving the authored parameter and type names;
+- value source: authored global value, authored type override, formula, Revit/default state, or unresolved;
+- formula text when the source is formula, plus the resolved display/portable value when Revit can report one;
+- path-addressed diagnostics with provenance (`exact`, `inferred`, or `unresolved`) and an optional confidence/message;
+- enough resolved parameter values for a dumb consumer to evaluate declared planes, solids, frames, Connectors, and
+  centered-array member counts without parsing Revit formulas.
+
+The evidence projection does not need a second geometry model. Consumers combine it with `family.json` and the
+normative evaluator rules below. If a value cannot be represented portably, return it as unresolved with a diagnostic
+rather than inventing a literal.
+
+### Normative dumb-evaluator rules
+
+The portable evaluator contract is part of the Family Model specification, not folklore in the C# lowerer:
+
+- family axes are right-handed: +X is right, +Y is Front, and +Z is up; Back is -Y. This follows the current lowerer,
+  which emits the back depth plane as the negative `@CenterFB` span and the front plane as the positive span;
+- the built-in family planes are `@CenterLR` at X=0, `@CenterFB` at Y=0, and `@Bottom` at Z=0;
+- `direction: Out` moves along the referenced plane's portable positive normal; `In` reverses it. The conformance
+  vectors lock the built-in and derived-plane normals so consumers never infer them from labels;
+- prism width is symmetric about `@CenterLR`, depth is symmetric about `@CenterFB`, and height runs from `@Bottom`
+  toward +Z;
+- cylinder center is the intersection of `@CenterLR` and `@CenterFB`; height runs from `@Bottom` toward +Z;
+- named faces resolve from those bounds; frame origins resolve after planes and faces; arrays resolve after their
+  member, axis, limit planes, and half-count;
+- formula text is opaque to browser/agent evaluators. They use resolved evidence when available and otherwise mark the
+  dependent value unresolved.
+
+Keep one checked-in conformance-vector file beside the portable literal/reference vectors. It must cover axis signs,
+plane `Out`/`In`, prism/cylinder bounds, face coordinates, frame origins, and `CenteredLinear total = 2n - 1`.
+
+## Settings-document and host-operation architecture
+
+The Family Model editor is a projection over a settings document, not the owner of a separate file format or storage
+API. Disk files under the Windows Documents known folder (including OneDrive redirection), the Family Model UI, Pea,
+and scripts use the same `SettingsDocumentId`, raw content, composed content, validation result, and version token.
+
+Register `FamilyModel` as its own settings root under a feature-named Family Foundry module. Do not rename the existing
+command-named FFManager/FFMigrator roots in this slice. The exact disk shape remains the generic settings layout:
+
+```text
+Documents/Pe.Tools/settings/<family-foundry-module>/<models-root>/<relative-path>.json
+```
+
+The public lifecycle is:
+
+```text
+settings.document.open
+settings.document.validate
+settings.document.save
+```
+
+- `settings.document.open` is the single read path for UI, Pea, scripts, and disk-backed chat work.
+- `settings.document.validate` is the single public validation operation for all PE JSON. The dedicated
+  `revit.detail.family-model.validation` operation is removed once Family Model validation is routed through it.
+- `settings.document.save` owns optimistic concurrency and writes the same file an external editor opens. Saving a
+  draft may return validation errors; build/apply must refuse structurally or semantically invalid content.
+- The Family Model chat plugin stages and saves through these operations. It must not write paths directly or invent a
+  second Family Model document state.
+
+Family-specific host operations remain only for reusable Revit abilities:
+
+- `revit.detail.family-model` captures the active family and returns authored `ModelJson` plus evidence/provenance.
+- `revit.apply.family-model` builds an explicit authored `ModelJson` to an explicit `.rfa` path.
+
+These operations remain JSON/script-friendly and do not require the UI renderer. A UI may join settings open/validate/
+save with detail/apply, but the host does not expose a page-shaped Family Model endpoint.
+
+### Validation ownership
+
+One validation result merges three distinct phases:
+
+| Phase | Meaning | Example | Owner |
+| --- | --- | --- | --- |
+| Structural | JSON syntax and generated-schema shape | required field, enum, unknown property | settings host + schema |
+| Semantic | deterministic meaning inside the authored/composed document | missing reference, formula/type override conflict | feature validator |
+| Contextual | compatibility with the connected Revit document/session | template or system type availability | feature validator using Revit context |
+
+`settings.document.validate` always runs structural validation. It then invokes a registered feature validator for the
+bound settings type when one exists. Family Foundry registers `FamilyModelJson.Parse`/`FamilyModelValidator`; Settings
+Runtime does not learn Family Model rules.
+
+The internal validation request carries both raw and composed content. Raw content is required for duplicate-key and
+strict-member detection; semantic validation normally inspects composed content. Contextual validation reports
+`unavailable` when its required Revit context does not exist rather than marking the document invalid.
+
+Keep `ISettingsRootBinding` structural. The smallest acceptable Settings Runtime extension is a registry of validation
+functions keyed by bound settings type; do not add feature behavior to `Pe.Shared.StorageRuntime`.
+
+### Schema, field options, and UI discovery
+
+JSON Schema remains the shared structural/LSP contract. Standard JSON language servers provide completion, hover,
+examples, and structural errors; semantic/contextual diagnostics come from `settings.document.validate`. Do not build
+a custom language server in this slice.
+
+- `FieldOptionItem.Metadata` describes an option: identity, datatype, category, compatibility facts, or other context a
+  UI/agent can display. It does not encode the relationship graph or choose the Family Model page.
+- property-level `x-ui` continues to describe generic rendering such as sections, advanced fields, and the type matrix.
+- a root-level `x-ui.renderer = "family-model"` may select the specialized projection. Unknown renderers fall back to
+  the generic settings editor/raw JSON editor. Renderer metadata contains no Family Foundry business logic.
+
+This preserves progressive enhancement: disk editors get LSP, generic settings clients get schema-driven editing,
+the Family Model plugin gets the rich relationship/comparison view, and Pea gets the same document and operations
+without needing any renderer.
 
 ## Manager / Migrator split
 
@@ -382,9 +533,45 @@ Scope:
 
 Exit gate: the checked-in profiles and tests are green, artifacts are linked from the family reports, and the examples are ready for the user/agent visual-function walkthrough.
 
+### Phase 9 — v1.1 authoring and evidence convergence (complete)
+
+Scope:
+
+- register `FamilyModel` as a first-class settings root without renaming legacy FF command roots;
+- route the Family Model UI and chat plugin through `settings.document.open/validate/save`, including version-token
+  conflicts and disk persistence;
+- route Family Model semantic diagnostics through `settings.document.validate` and remove the dedicated validation op;
+- add the minimum settings-type validator registry in `Pe.Revit.SettingsRuntime`, leaving root bindings structural;
+- return the minimum resolved per-type/provenance evidence from `revit.detail.family-model`;
+- make the specialized UI consume authored content plus evidence, group parameters by existing `propertiesGroup`, and
+  follow the normative evaluator/conformance rules;
+- add root renderer discovery only if the generic settings shell needs it; otherwise route by the known Family Model
+  settings root and defer the metadata change.
+
+Proof:
+
+- the same checked-in `family.json` opens from disk, the Family Model UI, and Pea with one `SettingsDocumentId`;
+- LSP/schema, settings validation, UI diagnostics, and build rejection agree on invalid structural/semantic examples;
+- a chat edit saves through optimistic concurrency and is immediately visible to disk and UI readers;
+- the GRD evidence projection exposes formula-resolved values for every tested type, allowing the UI to render opening
+  planes and `2n - 1` vane counts without evaluating formulas;
+- the dumb evaluator conformance vectors pass in C# and TypeScript.
+
+Completion evidence:
+
+- Pea created and edited the same disk-backed settings document exposed to the beta UI; human review staged,
+  validated, and saved Pea's proposed Width through the generic route commands.
+- The final save advanced the version token and returned authored and composed Width as the same `21in` value.
+- Pea used that exact saved `rawContent` to build and open a real Revit 2025 family in the SDK-owned sandbox.
+- `revit.detail.family-model` read the reopened RFA and returned exact Width evidence of `1' - 9"` (21 inches), with
+  no unmodeled diagnostics. The user-owned RRD was not targeted.
+
+Exit gate: disk, UI, Pea, and scripts use the same authored language and settings lifecycle; specialized UI behavior is
+a replaceable projection, and no Family Foundry rule lives in TypeScript schema/UI metadata.
+
 ## Goal completion criteria
 
-The implementation goal is complete when:
+The v1 implementation goal is complete when:
 
 1. the supported profiles, required dependency models, and educational walkthrough are checked in;
 2. each profile passes black-box A → capture → B roundtrip tests without hidden metadata;
@@ -393,6 +580,9 @@ The implementation goal is complete when:
 4. the supported contract passes the installed Revit-year matrix or reports explicit convention incompatibilities;
 5. Manager, capture/replay, Pea/host contracts, and web preview consume the same model vocabulary;
 6. no work remains that is required for the agreed examples or their walkthrough.
+
+The v1.1 convergence goal is complete when Phase 9's exit gate and proof are satisfied. It does not require the larger
+settings refactors listed below.
 
 ## Explicit non-goals
 
@@ -404,6 +594,10 @@ The implementation goal is complete when:
 - Encoding unsupported roundtrip semantics in extensible storage, hidden parameters, `DataStorage`, or other metadata.
 - Expanding room-calculation-point direction/offset authoring beyond `{ "enabled": true }`.
 - Building a Revit formula parser for web preview in v1.
+- Building a custom JSON language server for semantic diagnostics.
+- Adding resolved values, provenance, confidence, or generated geometry to authored `family.json`.
+- Adding type descriptions/default flags or type-conditional constituent existence without a checked-in family.
+- Renaming or migrating every command-named settings module/root as part of Family Model convergence.
 - Adding `symbolics` or `companions` before those sections exist in the portable C# contract and roundtrip proof. They
   remain future authored vocabulary, not silently accepted v1 JSON.
 - Adding generalized geometry, placement, or preset knobs without a checked-in example that needs them.
@@ -413,3 +607,24 @@ The implementation goal is complete when:
 - Preset re-recognition on capture (deferred, see #8).
 - Puck-angle → Connector-orientation coupling (Phase 5 experiment, see #7).
 - Clearance-box as a Migrator generalized op: only if it can be expressed without per-family frame authoring.
+
+## Larger settings refactors to revisit after Phase 9
+
+These are credible architecture candidates, but none is required to complete the immediate Family Model spec:
+
+- replace command-named settings modules (`CmdFFManager`, `CmdFFMigrator`, and siblings) with feature/workflow names
+  and provide an explicit migration plan for existing disk paths;
+- decide whether root-level renderer metadata belongs in generated JSON Schema, the settings root descriptor, or a
+  separate capability descriptor after a second specialized settings editor exists;
+- normalize validation issue phase/provenance/severity across all settings consumers rather than adding Family
+  Model-only fields;
+- reconcile `settings.document.save`'s intentional invalid-draft writes with Pea's current assumption that invalid
+  writes are rejected, then document one product-wide save contract;
+- replace dot-joined settings field addresses with JSON Pointer or another escaped path contract before settings keys
+  containing periods or other path punctuation must be edited collaboratively;
+- remove or redesign the unused `ValidateSettingsRequest`/`ValidationData` bridge DTOs once the internal semantic
+  validation transport is selected;
+- consider offline/cached schema delivery only after live `$schema` URLs cause a proven disconnected-authoring problem.
+- decide whether headless `pea --prompt` should attach to the host agent-controller session or whether route workspaces
+  need an explicit product-workspace authorization scope. Today host-owned chat threads can use the shared route state,
+  while independently created headless runtime thread IDs are intentionally not authorized by that host workspace.
