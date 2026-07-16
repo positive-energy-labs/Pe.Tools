@@ -29,6 +29,7 @@ import { Route as PocFamilyPluginRouteImport } from "./routes/poc.family-plugin"
 import { Route as PocFamilyLensRouteImport } from "./routes/poc.family-lens";
 import { Route as PocDialRouteImport } from "./routes/poc.dial";
 import { Route as DemoTanstackQueryRouteImport } from "./routes/demo/tanstack-query";
+import { Route as BetaFamilyPluginRouteImport } from "./routes/beta.family-plugin";
 import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
 import { Route as ApiPdfAuditMapRouteImport } from "./routes/api/pdf-audit/map";
 import { Route as ApiPdfAuditParseParseIdRouteImport } from "./routes/api/pdf-audit/parse.$parseId";
@@ -133,6 +134,11 @@ const DemoTanstackQueryRoute = DemoTanstackQueryRouteImport.update({
   path: "/demo/tanstack-query",
   getParentRoute: () => rootRouteImport,
 } as any);
+const BetaFamilyPluginRoute = BetaFamilyPluginRouteImport.update({
+  id: "/beta/family-plugin",
+  path: "/beta/family-plugin",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const ApiPdfAuditParseRoute = ApiPdfAuditParseRouteImport.update({
   id: "/api/pdf-audit/parse",
   path: "/api/pdf-audit/parse",
@@ -163,6 +169,7 @@ export interface FileRoutesByFullPath {
   "/parameter-links": typeof ParameterLinksRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
+  "/beta/family-plugin": typeof BetaFamilyPluginRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
   "/poc/dial": typeof PocDialRoute;
   "/poc/family-lens": typeof PocFamilyLensRoute;
@@ -188,6 +195,7 @@ export interface FileRoutesByTo {
   "/parameter-links": typeof ParameterLinksRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
+  "/beta/family-plugin": typeof BetaFamilyPluginRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
   "/poc/dial": typeof PocDialRoute;
   "/poc/family-lens": typeof PocFamilyLensRoute;
@@ -214,6 +222,7 @@ export interface FileRoutesById {
   "/parameter-links": typeof ParameterLinksRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
+  "/beta/family-plugin": typeof BetaFamilyPluginRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
   "/poc/dial": typeof PocDialRoute;
   "/poc/family-lens": typeof PocFamilyLensRoute;
@@ -241,6 +250,7 @@ export interface FileRouteTypes {
     | "/parameter-links"
     | "/schedule-grid"
     | "/settings"
+    | "/beta/family-plugin"
     | "/demo/tanstack-query"
     | "/poc/dial"
     | "/poc/family-lens"
@@ -266,6 +276,7 @@ export interface FileRouteTypes {
     | "/parameter-links"
     | "/schedule-grid"
     | "/settings"
+    | "/beta/family-plugin"
     | "/demo/tanstack-query"
     | "/poc/dial"
     | "/poc/family-lens"
@@ -291,6 +302,7 @@ export interface FileRouteTypes {
     | "/parameter-links"
     | "/schedule-grid"
     | "/settings"
+    | "/beta/family-plugin"
     | "/demo/tanstack-query"
     | "/poc/dial"
     | "/poc/family-lens"
@@ -317,6 +329,7 @@ export interface RootRouteChildren {
   ParameterLinksRoute: typeof ParameterLinksRoute;
   ScheduleGridRoute: typeof ScheduleGridRoute;
   SettingsRoute: typeof SettingsRoute;
+  BetaFamilyPluginRoute: typeof BetaFamilyPluginRoute;
   DemoTanstackQueryRoute: typeof DemoTanstackQueryRoute;
   PocDialRoute: typeof PocDialRoute;
   PocFamilyLensRoute: typeof PocFamilyLensRoute;
@@ -470,6 +483,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof DemoTanstackQueryRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/beta/family-plugin": {
+      id: "/beta/family-plugin";
+      path: "/beta/family-plugin";
+      fullPath: "/beta/family-plugin";
+      preLoaderRoute: typeof BetaFamilyPluginRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/api/pdf-audit/parse": {
       id: "/api/pdf-audit/parse";
       path: "/api/pdf-audit/parse";
@@ -519,6 +539,7 @@ const rootRouteChildren: RootRouteChildren = {
   ParameterLinksRoute: ParameterLinksRoute,
   ScheduleGridRoute: ScheduleGridRoute,
   SettingsRoute: SettingsRoute,
+  BetaFamilyPluginRoute: BetaFamilyPluginRoute,
   DemoTanstackQueryRoute: DemoTanstackQueryRoute,
   PocDialRoute: PocDialRoute,
   PocFamilyLensRoute: PocFamilyLensRoute,

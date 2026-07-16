@@ -102,10 +102,7 @@ const agentUnavailableResponse = async () =>
  */
 const recordMastraDegrade = (error: unknown) =>
   Effect.gen(function* () {
-    yield* Effect.logError(
-      "Mastra runtime failed to start; agent surface degraded to 503",
-      error,
-    );
+    yield* Effect.logError("Mastra runtime failed to start; agent surface degraded to 503", error);
     const detail = formatInitError(error);
     setAgentRuntimeStatus({ available: false, error: detail });
     yield* persistMastraInitError(detail);

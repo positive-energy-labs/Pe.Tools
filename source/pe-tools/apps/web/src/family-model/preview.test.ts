@@ -1,6 +1,15 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vite-plus/test";
 
-import { buildFamilyModelPreview, parseFamilyModel } from "./preview";
+import {
+  buildFamilyModelPreview,
+  centeredLinearTotal,
+  familyModelCylinderBounds,
+  familyModelPlaneOffset,
+  familyModelPrismFaceCoordinate,
+  parseFamilyModel,
+} from "./preview";
 
 describe("family model preview", () => {
   it("preserves authored overrides, formulas, references, and constituent facts", () => {
@@ -100,5 +109,60 @@ describe("family model preview", () => {
       "H 6in",
     ]);
     expect(preview.warnings).toEqual([]);
+  });
+
+  it("matches the shared dumb-evaluator conformance vectors", () => {
+    const path = new URL(
+      "../../../../../Pe.Revit.Tests/Fixtures/Profiles/family-model-evaluator.conformance.json",
+      import.meta.url,
+    );
+    const vectors = JSON.parse(readFileSync(path, "utf8")) as {
+      planes: Array<{ direction: "In" | "Out"; distance: number; coordinate: number }>;
+      prism: {
+        width: number;
+        depth: number;
+        height: number;
+        faces: Record<string, number>;
+      };
+      cylinder: {
+        diameter: number;
+        height: number;
+        bounds: Record<"x" | "y" | "z", [number, number]>;
+      };
+      frame: {
+        coordinate: Record<"x" | "y" | "z", number>;
+      };
+      centeredLinear: Array<{ halfCount: number; total: number }>;
+    };
+
+    for (const vector of vectors.planes) {
+      expect(familyModelPlaneOffset(vector.direction, vector.distance)).toBe(vector.coordinate);
+    }
+    for (const [face, coordinate] of Object.entries(vectors.prism.faces)) {
+      expect(
+        familyModelPrismFaceCoordinate(
+          face,
+          vectors.prism.width,
+          vectors.prism.depth,
+          vectors.prism.height,
+        )?.coordinate,
+      ).toBe(coordinate);
+    }
+    expect(familyModelCylinderBounds(vectors.cylinder.diameter, vectors.cylinder.height)).toEqual(
+      vectors.cylinder.bounds,
+    );
+    expect({
+      x: 0,
+      y: familyModelPrismFaceCoordinate(
+        "Front",
+        vectors.prism.width,
+        vectors.prism.depth,
+        vectors.prism.height,
+      )?.coordinate,
+      z: familyModelPlaneOffset("Out", vectors.planes[0].distance),
+    }).toEqual(vectors.frame.coordinate);
+    for (const vector of vectors.centeredLinear) {
+      expect(centeredLinearTotal(vector.halfCount)).toBe(vector.total);
+    }
   });
 });

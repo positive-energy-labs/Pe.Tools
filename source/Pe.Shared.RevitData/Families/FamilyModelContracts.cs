@@ -351,6 +351,8 @@ public static class FamilyModelJson {
             var token = JToken.Parse(json, new JsonLoadSettings {
                 DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error
             });
+            if (token is JObject document)
+                document.Remove("$schema");
             var serializer = JsonSerializer.Create(new JsonSerializerSettings {
                 MissingMemberHandling = MissingMemberHandling.Error
             });

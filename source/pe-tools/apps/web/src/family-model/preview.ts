@@ -1,5 +1,51 @@
 type JsonObject = Record<string, unknown>;
 
+export type FamilyModelAxis = "x" | "y" | "z";
+
+export function familyModelPlaneOffset(direction: "In" | "Out", distance: number): number {
+  return direction === "In" ? -distance : distance;
+}
+
+export function familyModelPrismFaceCoordinate(
+  face: string,
+  width: number,
+  depth: number,
+  height: number,
+): { axis: FamilyModelAxis; coordinate: number } | null {
+  switch (face) {
+    case "Left":
+      return { axis: "x", coordinate: -width / 2 };
+    case "Right":
+      return { axis: "x", coordinate: width / 2 };
+    case "Back":
+      return { axis: "y", coordinate: -depth / 2 };
+    case "Front":
+      return { axis: "y", coordinate: depth / 2 };
+    case "Bottom":
+      return { axis: "z", coordinate: 0 };
+    case "Top":
+      return { axis: "z", coordinate: height };
+    default:
+      return null;
+  }
+}
+
+export function familyModelCylinderBounds(
+  diameter: number,
+  height: number,
+): Record<FamilyModelAxis, [number, number]> {
+  const radius = diameter / 2;
+  return {
+    x: [-radius, radius],
+    y: [-radius, radius],
+    z: [0, height],
+  };
+}
+
+export function centeredLinearTotal(halfCount: number): number {
+  return 2 * halfCount - 1;
+}
+
 export interface FamilyModelPreview {
   source: JsonObject;
   family: { name: string; category: string; template: string; placement: string };

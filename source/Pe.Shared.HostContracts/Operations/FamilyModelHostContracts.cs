@@ -1,3 +1,5 @@
+using Pe.Shared.RevitData.Families;
+
 namespace Pe.Shared.HostContracts.Operations;
 
 public sealed record FamilyModelCaptureRequest;
@@ -5,16 +7,8 @@ public sealed record FamilyModelCaptureRequest;
 public sealed record FamilyModelCaptureData(
     string FamilyName,
     string ModelJson,
-    int UnmodeledCount
-);
-
-public sealed record FamilyModelValidateRequest(string ModelJson);
-
-public sealed record FamilyModelValidationIssue(string Code, string Path, string Message);
-
-public sealed record FamilyModelValidateData(
-    bool Valid,
-    IReadOnlyList<FamilyModelValidationIssue> Issues
+    int UnmodeledCount,
+    FamilyModelEvidence Evidence
 );
 
 public sealed record FamilyModelBuildRequest(
@@ -32,7 +26,6 @@ public sealed record FamilyModelBuildData(
 
 public static class FamilyModelHostOperations {
     public const string CaptureKey = "revit.detail.family-model";
-    public const string ValidateKey = "revit.detail.family-model.validation";
     public const string BuildKey = "revit.apply.family-model";
 
     public static BridgeOp Capture(
@@ -44,19 +37,6 @@ public static class FamilyModelHostOperations {
             "Capture the active Revit family document as portable family.json authored truth, including explicit unmodeled diagnostics.",
             ["family-model", "family-json", "capture", "roundtrip", "family-foundry"],
             requiresActiveDocument: true
-        ),
-        handler
-    );
-
-    public static BridgeOp Validate(
-        Func<FamilyModelValidateRequest, IBridgeOperationContext, CancellationToken, Task<FamilyModelValidateData>> handler
-    ) => BridgeOp.Create(
-        ValidateKey,
-        "Validate Family Model",
-        HostOperationAgentMetadata.Create(
-            "Validate family.json with the authoritative portable Family Model parser and return path-addressed diagnostics.",
-            ["family-model", "family-json", "validate", "diagnostics", "family-foundry"],
-            requiresActiveDocument: false
         ),
         handler
     );

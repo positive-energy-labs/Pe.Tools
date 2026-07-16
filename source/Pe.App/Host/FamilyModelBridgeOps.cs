@@ -1,5 +1,6 @@
 using Autodesk.Revit.DB;
 using Newtonsoft.Json;
+using Pe.Revit.DocumentData.Families.Extraction;
 using Pe.Revit.Extensions.ProjDocument;
 using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.FamilyFoundry.Capture;
@@ -14,9 +15,6 @@ internal static class FamilyModelBridgeOps {
     public static readonly BridgeOp Capture = FamilyModelHostOperations.Capture(
         static (_, _, ct) => PaletteThreading.RunRevitAsync(CaptureActiveFamily, ct));
 
-    public static readonly BridgeOp Validate = FamilyModelHostOperations.Validate(
-        static (request, _, _) => Task.FromResult(ValidateFamilyModel(request)));
-
     public static readonly BridgeOp Build = FamilyModelHostOperations.Build(
         static (request, _, ct) => PaletteThreading.RunRevitAsync(() => BuildFamily(request), ct));
 
@@ -27,28 +25,14 @@ internal static class FamilyModelBridgeOps {
             throw BridgeOperationExceptions.Conflict("The active Revit document is not a family document.");
 
         var model = document.CaptureFamilyModel();
+        var evidence = FamilyModelEvidenceProjector.Project(
+            model,
+            FamilySnapshotExtractor.ExtractFromFamilyDocument(document));
         return new FamilyModelCaptureData(
             model.Family.Name,
             JsonConvert.SerializeObject(model, Formatting.Indented),
-            model.Unmodeled.Count);
-    }
-
-    private static FamilyModelValidateData ValidateFamilyModel(FamilyModelValidateRequest request) {
-        if (string.IsNullOrWhiteSpace(request.ModelJson)) {
-            return new FamilyModelValidateData(false, [
-                new FamilyModelValidationIssue(
-                    FamilyModelDiagnosticCodes.Required,
-                    "$",
-                    "ModelJson is required.")
-            ]);
-        }
-
-        var parsed = FamilyModelJson.Parse(request.ModelJson);
-        return new FamilyModelValidateData(
-            parsed.Value != null && parsed.Diagnostics.Count == 0,
-            parsed.Diagnostics
-                .Select(issue => new FamilyModelValidationIssue(issue.Code, issue.Path, issue.Message))
-                .ToList());
+            model.Unmodeled.Count,
+            evidence);
     }
 
     private static FamilyModelBuildData BuildFamily(FamilyModelBuildRequest request) {

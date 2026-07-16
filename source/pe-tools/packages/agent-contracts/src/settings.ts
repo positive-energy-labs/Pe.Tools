@@ -11,16 +11,38 @@
 import { z } from "zod";
 import { defineRouteState, routeBindingSchema } from "./route-state.ts";
 import {
+  cellReviewSchema,
   LOW_CONFIDENCE_REFINE_ERROR,
   lowConfidenceIsFlagged,
   trichotomyAgentMask,
-  trichotomyCellSchema,
 } from "./trichotomy.ts";
 
-/* ── Field trichotomy — the shared core with JSON values. The staged presence
-   object (`{ value } | null`) replaces the old staged+hasStaged sidecar wart. ── */
+/* ── Field trichotomy — settings keep the shared proposal/staged/review shape.
+   A staged `{ value }` assigns JSON; `{ delete: true }` removes the property. ── */
 
-export const settingsFieldStateSchema = trichotomyCellSchema(z.unknown());
+const settingsFieldEditSchema = z
+  .object({
+    value: z.unknown().optional(),
+    delete: z.literal(true).optional(),
+  })
+  .refine((edit) => edit.delete === true || Object.hasOwn(edit, "value"), {
+    error: "a settings edit must set a value or delete the property",
+  })
+  .refine((edit) => !(edit.delete === true && Object.hasOwn(edit, "value")), {
+    error: "a settings edit cannot both set and delete the property",
+  });
+
+export const settingsFieldStateSchema = z.object({
+  proposal: settingsFieldEditSchema
+    .extend({
+      by: z.enum(["pea", "human"]).default("pea"),
+      note: z.string().nullish(),
+      confidence: z.enum(["high", "low"]).nullish(),
+    })
+    .nullish(),
+  staged: settingsFieldEditSchema.nullish(),
+  review: cellReviewSchema.default("none"),
+});
 export type SettingsFieldState = z.infer<typeof settingsFieldStateSchema>;
 
 /* ── Open-document snapshot (settings.document.open / refresh) ─────────────── */
@@ -80,6 +102,16 @@ export const settingsRouteState = defineRouteState({
   schema: settingsRouteDocumentSchema,
   agentWriteMask: trichotomyAgentMask("fields"),
   commands: {
+    create: {
+      description:
+        "Create a new settings document from raw JSON, then open the exact saved document into the shared snapshot. Fails if the path already exists.",
+      input: z.object({
+        documentId: settingsDocumentIdSchema,
+        rawContent: z.string(),
+      }),
+      actor: "any",
+      mutatesExternal: true,
+    },
     open: {
       description:
         "Open a settings document (module/root/relative path) into the snapshot: raw + composed content, version token, and validation. Existing proposals are preserved.",

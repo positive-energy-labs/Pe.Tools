@@ -1,12 +1,15 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.SchemaDefinitions;
 using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Revit.SettingsRuntime.Json;
 using Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
 using Pe.Revit.SettingsRuntime.Json.ValueDomains;
+using Pe.Revit.SettingsRuntime.Validation;
 using Pe.Shared.RevitData.Families;
 using Pe.Shared.StorageRuntime.Capabilities;
+using Pe.Shared.StorageRuntime.Modules;
 
 namespace Pe.Revit.Tests;
 
@@ -37,6 +40,133 @@ public sealed class FamilyModelLowererTests {
             Is.True);
         Assert.That(definition.Bindings[nameof(FamilyModelHeader.Category)].ValueDomain!.Key,
             Is.EqualTo(ValueDomainKeys.CategoryNames));
+    }
+
+    [Test]
+    public void Family_model_is_a_first_class_settings_root_with_authoritative_semantic_validation() {
+        var registry = new SettingsRuntimeRegistry();
+        registry.RegisterModules(FamilyFoundrySettingsRegistration.StructuralModules);
+        registry.RegisterRootBindings(FamilyFoundrySettingsRegistration.RootBindings);
+
+        var binding = registry.ResolveRootBinding(
+            FamilyModelSettingsRegistration.ModuleKey,
+            FamilyModelSettingsRegistration.RootKey);
+        Assert.That(binding.SettingsType, Is.EqualTo(typeof(FamilyModel)));
+
+        var invalid = """
+                      {
+                        "$schema": "http://127.0.0.1:5180/schemas/settings/FamilyFoundry/models.json",
+                        "family": {
+                          "name": "Invalid",
+                          "category": "Generic Models",
+                          "template": "Generic Model",
+                          "placement": "Unhosted"
+                        },
+                        "solids": {
+                          "body": {
+                            "kind": "Prism",
+                            "frame": "frame:missing",
+                            "width": "1ft",
+                            "depth": "1ft",
+                            "height": "1ft"
+                          }
+                        }
+                      }
+                      """;
+        var configured = SettingsDocumentValidatorRegistry.Shared.TryValidate(
+            binding.SettingsType,
+            new SettingsDocumentValidationContext(invalid, invalid),
+            out var issues);
+
+        Assert.That(configured, Is.True);
+        Assert.That(issues.Select(issue => issue.Code), Does.Contain(FamilyModelDiagnosticCodes.UnsupportedFrame));
+        Assert.That(FamilyModelJson.Parse(invalid).Value, Is.Not.Null,
+            "settings-owned $schema metadata must not invalidate the authored Family Model");
+
+        const string composed = """
+                                {
+                                  "family": {
+                                    "name": "Composed",
+                                    "category": "Generic Models",
+                                    "template": "Generic Model",
+                                    "placement": "Unhosted"
+                                  },
+                                  "solids": {
+                                    "body": {
+                                      "kind": "Prism",
+                                      "frame": "frame:family",
+                                      "width": "1ft",
+                                      "depth": "1ft",
+                                      "height": "1ft"
+                                    }
+                                  }
+                                }
+                                """;
+        _ = SettingsDocumentValidatorRegistry.Shared.TryValidate(
+            binding.SettingsType,
+            new SettingsDocumentValidationContext(invalid, composed),
+            out var composedIssues);
+        Assert.That(composedIssues, Is.Empty,
+            "strict raw parsing and semantic composed validation are separate phases");
+    }
+
+    [Test]
+    public void Portable_evaluator_conventions_match_the_shared_vectors() {
+        using var stream = typeof(FamilyModelLowererTests).Assembly.GetManifestResourceStream(
+            "Pe.Revit.Tests.FamilyModelEvaluatorConformance.json");
+        Assert.That(stream, Is.Not.Null);
+        using var reader = new StreamReader(stream!);
+        var vectors = JObject.Parse(reader.ReadToEnd());
+
+        foreach (var vector in vectors["planes"]!.Children<JObject>()) {
+            var direction = Enum.Parse<FamilyModelOffsetDirection>(vector.Value<string>("direction")!);
+            Assert.That(
+                FamilyModelEvaluatorConventions.Offset(vector.Value<double>("distance"), direction),
+                Is.EqualTo(vector.Value<double>("coordinate")));
+        }
+
+        var prism = (JObject)vectors["prism"]!;
+        foreach (var face in ((JObject)prism["faces"]!).Properties()) {
+            var actual = FamilyModelEvaluatorConventions.ResolvePrismFace(
+                face.Name,
+                prism.Value<double>("width"),
+                prism.Value<double>("depth"),
+                prism.Value<double>("height"));
+            Assert.That(actual.Coordinate, Is.EqualTo(face.Value.Value<double>()), face.Name);
+        }
+
+        var cylinder = (JObject)vectors["cylinder"]!;
+        var cylinderBounds = FamilyModelEvaluatorConventions.ResolveCylinderBounds(
+            cylinder.Value<double>("diameter"),
+            cylinder.Value<double>("height"));
+        var expectedBounds = (JObject)cylinder["bounds"]!;
+        Assert.That(
+            new[] { cylinderBounds.X.Minimum, cylinderBounds.X.Maximum },
+            Is.EqualTo(expectedBounds["x"]!.Values<double>()));
+        Assert.That(
+            new[] { cylinderBounds.Y.Minimum, cylinderBounds.Y.Maximum },
+            Is.EqualTo(expectedBounds["y"]!.Values<double>()));
+        Assert.That(
+            new[] { cylinderBounds.Z.Minimum, cylinderBounds.Z.Maximum },
+            Is.EqualTo(expectedBounds["z"]!.Values<double>()));
+
+        var expectedFrame = (JObject)vectors["frame"]!["coordinate"]!;
+        var front = FamilyModelEvaluatorConventions.ResolvePrismFace(
+            "Front",
+            prism.Value<double>("width"),
+            prism.Value<double>("depth"),
+            prism.Value<double>("height"));
+        Assert.That(0, Is.EqualTo(expectedFrame.Value<double>("x")));
+        Assert.That(front.Coordinate, Is.EqualTo(expectedFrame.Value<double>("y")));
+        Assert.That(
+            FamilyModelEvaluatorConventions.Offset(4, FamilyModelOffsetDirection.Out),
+            Is.EqualTo(expectedFrame.Value<double>("z")));
+
+        foreach (var vector in vectors["centeredLinear"]!.Children<JObject>()) {
+            Assert.That(
+                FamilyModelEvaluatorConventions.CenteredLinearTotal(vector.Value<int>("halfCount")),
+                Is.EqualTo(vector.Value<int>("total")));
+        }
     }
 
     [Test]
@@ -195,4 +325,5 @@ public sealed class FamilyModelLowererTests {
             string.Join(Environment.NewLine, compiled.Diagnostics.Select(item => item.ToDisplayMessage())));
         Assert.That(compiled.Connectors.Connectors, Has.Count.EqualTo(1));
     }
+
 }

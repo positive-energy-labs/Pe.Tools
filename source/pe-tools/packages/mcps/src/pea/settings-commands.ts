@@ -11,6 +11,7 @@ import {
   type SettingsDocumentId,
   type SettingsRouteDocument,
   type SettingsSnapshot,
+  resolveTarget,
   settingsFieldSegments,
   stagedEntries,
 } from "@pe/agent-contracts";
@@ -30,12 +31,38 @@ export function createSettingsCommandHandlers(
   options: { hostBaseUrl?: string } = {},
 ): RouteStateCommandHandlers<SettingsRouteDocument> {
   const hostBaseUrl = resolveHostBaseUrl(options.hostBaseUrl);
-  const caller = () => new HostRpcCaller({ hostBaseUrl });
+  const caller = (target?: string) => new HostRpcCaller({ hostBaseUrl, bridgeSessionId: target });
 
   return {
+    create: async (input, ctx) => {
+      const { documentId, rawContent } = input as {
+        documentId: SettingsDocumentId;
+        rawContent: string;
+      };
+      const rpc = caller(resolveTarget(input, ctx.getDoc()));
+      const result = await rpc.call("settings.document.save", {
+        documentId: toHostDocumentId(documentId),
+        rawContent,
+        createOnly: true,
+      });
+      if (result.conflictDetected)
+        throw new Error(
+          `Create conflict: ${result.conflictMessage ?? "the settings document already exists"}. Open the existing document or choose a new relative path.`,
+        );
+      if (!result.writeApplied) throw new Error("The settings document was not created.");
+
+      const snapshot = await openSnapshot(rpc, documentId);
+      const document = ctx.getDoc();
+      document.snapshot = snapshot;
+      document.fields = {};
+      document.savedAt = new Date().toISOString();
+      await ctx.setDoc(document);
+      return summarizeSnapshot(snapshot);
+    },
+
     open: async (input, ctx) => {
       const { documentId } = input as { documentId: SettingsDocumentId };
-      const snapshot = await openSnapshot(caller(), documentId);
+      const snapshot = await openSnapshot(caller(resolveTarget(input, ctx.getDoc())), documentId);
       const document = ctx.getDoc();
       document.snapshot = snapshot; // Preserve existing fields (proposals/staged).
       await ctx.setDoc(document);
@@ -50,7 +77,7 @@ export function createSettingsCommandHandlers(
           "No settings document is open. Run the `open` command with a documentId (module/root/relative path) first.",
         );
       }
-      const snapshot = await openSnapshot(caller(), documentId);
+      const snapshot = await openSnapshot(caller(resolveTarget(_input, document)), documentId);
       const latest = ctx.getDoc();
       latest.snapshot = snapshot;
       await ctx.setDoc(latest);
@@ -71,10 +98,13 @@ export function createSettingsCommandHandlers(
 
       let validation;
       try {
-        validation = await caller().call("settings.document.validate", {
-          documentId: toHostDocumentId(snapshot.documentId),
-          rawContent,
-        });
+        validation = await caller(resolveTarget(input, document)).call(
+          "settings.document.validate",
+          {
+            documentId: toHostDocumentId(snapshot.documentId),
+            rawContent,
+          },
+        );
       } catch (error) {
         throw new Error(`settings.document.validate failed (${message(error)}).`);
       }
@@ -104,13 +134,14 @@ export function createSettingsCommandHandlers(
 
       const parsed = parseRawContent(snapshot.rawContent);
       for (const [path, field] of stagedPaths) {
-        spliceValue(parsed, settingsFieldSegments(path), field.staged?.value);
+        applyFieldEdit(parsed, settingsFieldSegments(path), field.staged!);
       }
       const rawContent = JSON.stringify(parsed, null, 2);
 
+      const rpc = caller(resolveTarget(_input, document));
       let result;
       try {
-        result = await caller().call("settings.document.save", {
+        result = await rpc.call("settings.document.save", {
           documentId: toHostDocumentId(snapshot.documentId),
           rawContent,
           expectedVersionToken:
@@ -135,16 +166,11 @@ export function createSettingsCommandHandlers(
         );
       }
 
-      // Success: fold metadata/validation, adopt the saved raw content, and clear the
-      // fields we just wrote (failed/partial saves aren't possible here — it's one write).
+      // Re-open after the write so raw, composed, validation, and metadata describe the
+      // same canonical document (including any injected `$schema` or fragment expansion).
+      const savedSnapshot = await openSnapshot(rpc, snapshot.documentId);
       const latest = ctx.getDoc();
-      if (latest.snapshot) {
-        latest.snapshot.rawContent = rawContent;
-        latest.snapshot.versionToken = result.metadata.versionToken?.value ?? null;
-        latest.snapshot.modifiedUtc = result.metadata.modifiedUtc ?? null;
-        latest.snapshot.validation = toRouteValidation(result.validation);
-        latest.snapshot.takenAt = new Date().toISOString();
-      }
+      latest.snapshot = savedSnapshot;
       for (const [path] of stagedPaths) {
         latest.fields[path] = { review: "none" };
       }
@@ -219,14 +245,18 @@ function spliceFields(
     if (segments.length === 0) continue;
     // Proposal first, staged wins — staged is the human-promoted value.
     if (options.includeProposals && field.proposal != null) {
-      spliceValue(root, segments, field.proposal.value);
+      applyFieldEdit(root, segments, field.proposal);
     }
-    if (field.staged != null) spliceValue(root, segments, field.staged.value);
+    if (field.staged != null) applyFieldEdit(root, segments, field.staged);
   }
 }
 
-/** Set `value` at a dot-path's segments, creating intermediate objects as needed. */
-function spliceValue(root: Record<string, unknown>, segments: string[], value: unknown) {
+/** Apply one explicit set/delete edit at a dot-path. */
+function applyFieldEdit(
+  root: Record<string, unknown>,
+  segments: string[],
+  edit: { value?: unknown; delete?: true },
+) {
   if (segments.length === 0) return;
   let cursor = root;
   for (let i = 0; i < segments.length - 1; i += 1) {
@@ -237,7 +267,9 @@ function spliceValue(root: Record<string, unknown>, segments: string[], value: u
     }
     cursor = cursor[key] as Record<string, unknown>;
   }
-  cursor[segments[segments.length - 1]] = value;
+  const leaf = segments[segments.length - 1];
+  if (edit.delete === true) delete cursor[leaf];
+  else cursor[leaf] = edit.value;
 }
 
 /** Host validation is a readonly Effect struct; the route document wants a plain mutable copy. */

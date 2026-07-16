@@ -312,6 +312,84 @@ test("settings validation uses bridge schema json", async () => {
   }
 });
 
+test("settings create-only save refuses to overwrite an existing document", async () => {
+  const profile = withTempUserProfile();
+  try {
+    const request = {
+      documentId: {
+        moduleKey: "Global",
+        rootKey: "fragments",
+        relativePath: "create-only",
+      },
+      rawContent: '{"version":1}',
+      createOnly: true,
+    };
+    expect((await runDispatch(saveSettingsDocument(request))).writeApplied).toBe(true);
+
+    const conflict = await runDispatch(
+      saveSettingsDocument({ ...request, rawContent: '{"version":2}' }),
+    );
+    expect(conflict.writeApplied).toBe(false);
+    expect(conflict.conflictDetected).toBe(true);
+    expect(conflict.conflictMessage).toContain("already exists");
+  } finally {
+    profile.dispose();
+  }
+});
+
+test("settings validation merges registered semantic diagnostics after structural validation", async () => {
+  const result = await runDispatch(
+    validateSettingsDocument(
+      {
+        documentId: {
+          moduleKey: "FamilyFoundry",
+          rootKey: "models",
+          relativePath: "showcase",
+        },
+        rawContent: '{"family":{"name":"Showcase"}}',
+      },
+      {
+        invokeBridge: (operationKey) => {
+          if (operationKey === "settings.module-catalog")
+            return Effect.succeed({
+              modules: [
+                {
+                  moduleKey: "FamilyFoundry",
+                  defaultRootKey: "models",
+                  roots: [{ rootKey: "models", displayName: "Family Models" }],
+                  storageOptions: { includeRoots: [], presetRoots: [] },
+                },
+              ],
+            });
+          if (operationKey === "settings.schema")
+            return Effect.succeed({ schemaJson: '{"type":"object"}' });
+          return Effect.succeed({
+            isConfigured: true,
+            issues: [
+              {
+                instancePath: "$.solids.body.frame",
+                schemaPath: null,
+                code: "unsupported-frame",
+                severity: "error",
+                message: "Frame is not declared.",
+                suggestion: null,
+              },
+            ],
+          });
+        },
+      },
+    ),
+  );
+
+  expect(result.isValid).toBe(false);
+  expect(result.issues).toContainEqual(
+    expect.objectContaining({
+      code: "unsupported-frame",
+      path: "$.solids.body.frame",
+    }),
+  );
+});
+
 test("settings workspaces calls internal module catalog without fake payload", async () => {
   const seen: unknown[] = [];
   const result = await runDispatch(
