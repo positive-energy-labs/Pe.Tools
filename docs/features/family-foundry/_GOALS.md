@@ -14,7 +14,7 @@ Make Family Foundry outputs the canonical transparency surface for authoring, de
 
 - Keep Manager and Migrator output shapes aligned even when their command workflows differ.
 - Make desired/declarative state the only external FF parameter authoring model; compile it into operation queues as an internal execution detail.
-- Optimize the profile language for direct hand authoring: flat declarations, inline global values/formulas, centralized per-type tables, mapping-data includes, and readable `param:<token>` solids references.
+- Optimize `family.json` for direct hand authoring: exact-name maps, inline global values/formulas, per-type objects, portable literals, and readable typed references such as `param:<exact Revit name>`.
 - Treat `run-summary.json`, `family-report.json`, snapshot diffs, projections, and compiled plan artifacts as part of the FF contract.
 - Make new FF features define their proof surface up front instead of adding ad hoc debug output later.
 - Let tests assert on structural artifacts, not just logs.
@@ -22,8 +22,8 @@ Make Family Foundry outputs the canonical transparency surface for authoring, de
 ## Integration Goals
 
 - Keep cross-package ownership clear:
-  - Settings catalog owns authored profile types and profile projection seams.
-  - Family Foundry owns runtime execution, capture, and artifact writing.
+  - `Pe.Shared.RevitData.Families` owns the portable Family Model contract.
+  - Family Foundry owns lowering, runtime execution, capture, projection, and artifact writing.
   - App commands consume the shared FF artifact model instead of inventing command-specific output formats.
 - Make the output model discoverable to humans and agents without relying on cursor-rule files.
 

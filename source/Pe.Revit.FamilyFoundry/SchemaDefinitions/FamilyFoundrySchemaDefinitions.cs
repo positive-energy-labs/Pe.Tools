@@ -3,6 +3,7 @@ using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
 using Pe.Revit.SettingsRuntime.Json.SchemaProviders;
+using Pe.Shared.RevitData.Families;
 using Pe.Shared.StorageRuntime.Capabilities;
 using System.Runtime.CompilerServices;
 
@@ -139,6 +140,28 @@ internal sealed class DesiredPerTypeAssignmentRowSchemaDefinition : SettingsSche
             property => property.UseValueDomain(ValueDomainKeys.SharedParameterNames));
 }
 
+internal sealed class FamilyModelHeaderSchemaDefinition : SettingsSchemaDefinition<FamilyModelHeader> {
+    public override void Configure(ISettingsSchemaBuilder<FamilyModelHeader> builder) =>
+        builder.Property(item => item.Category,
+            property => property.UseValueDomain(ValueDomainKeys.CategoryNames));
+}
+
+internal sealed class FamilyModelFamilyParameterSchemaDefinition
+    : SettingsSchemaDefinition<FamilyModelFamilyParameter> {
+    public override void Configure(ISettingsSchemaBuilder<FamilyModelFamilyParameter> builder) {
+        builder.Property(item => item.DataType, property => property.UseValueDomain(ValueDomainKeys.SpecNames));
+        builder.Property(item => item.PropertiesGroup,
+            property => property.UseValueDomain(ValueDomainKeys.PropertyGroupNames));
+    }
+}
+
+internal sealed class FamilyModelSharedParameterSchemaDefinition
+    : SettingsSchemaDefinition<FamilyModelSharedParameter> {
+    public override void Configure(ISettingsSchemaBuilder<FamilyModelSharedParameter> builder) =>
+        builder.Property(item => item.PropertiesGroup,
+            property => property.UseValueDomain(ValueDomainKeys.PropertyGroupNames));
+}
+
 internal sealed class DeleteParamsSettingsSchemaDefinition : SettingsSchemaDefinition<DeleteParamsSettings> {
     public override void Configure(ISettingsSchemaBuilder<DeleteParamsSettings> builder) =>
         builder.Property(item => item.Names, property =>
@@ -187,6 +210,9 @@ public static class FamilyFoundrySchemaDefinitionBootstrapper {
             SettingsSchemaDefinitionRegistry.Shared.Register(new DesiredSharedParameterDeclarationSchemaDefinition());
             SettingsSchemaDefinitionRegistry.Shared.Register(new DesiredFamilyParameterDeclarationSchemaDefinition());
             SettingsSchemaDefinitionRegistry.Shared.Register(new DesiredPerTypeAssignmentRowSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new FamilyModelHeaderSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new FamilyModelFamilyParameterSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new FamilyModelSharedParameterSchemaDefinition());
             SettingsSchemaDefinitionRegistry.Shared.Register(new DeleteParamsSettingsSchemaDefinition());
             SettingsSchemaDefinitionRegistry.Shared.Register(new MakeElecConnectorParametersSchemaDefinition());
             _registered = true;

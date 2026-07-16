@@ -20,6 +20,8 @@ public sealed class CompiledParamDrivenConnectorSpec {
     public OffsetDirection DepthDirection { get; init; } = OffsetDirection.Positive;
 
     [JsonIgnore] public LengthDriverSpec DepthDriver { get; init; } = LengthDriverSpec.None;
+    [JsonIgnore] public string? FrameNormal { get; init; }
+    [JsonIgnore] public string? FrameUp { get; init; }
 
     public ConstrainedRectangleExtrusionSnapshot? RectangularStub { get; init; }
     public ConstrainedCircleExtrusionSnapshot? RoundStub { get; init; }
