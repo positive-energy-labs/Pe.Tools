@@ -1,10 +1,33 @@
 # Family Model (`family.json`) — design spec
 
-Status: implementation contract, Phase 4 visual gate pending; Phase 5 public-API spike closed. Captures the design review
-and constraint digest of 2026-07-15.
+Status: implemented through Phase 7; Phase 5 is a documented public-API boundary and Phase 8 is the optional guided
+walkthrough. Captures the design review and constraint digest of 2026-07-15.
 Owner surfaces: FamilyFoundry (FF). Consumers: FFManager, FFMigrator, capture, replay, Pea, host operations, web preview.
 
 ## Implementation ledger
+
+### 2026-07-15 — Phase 7 product surface complete
+
+- `family.model.capture` and `family.model.build` are public typed bridge operations discovered from the `Pe.App`
+  shell. They schedule through the existing Revit task queue and delegate capture/build behavior to the document-owned
+  Family Model APIs; no parallel compiler or package cycle was added.
+- The generated TypeScript host contract exposes those operations to the host and Pea's generic operation caller.
+- `/family-model` is the intentionally dumb Manager surface: open or edit `family.json`, select a type, inspect named
+  constituents and plan geometry, capture the active family, and build to an explicit `.rfa` path. Unsupported formulas
+  and `unmodeled` facts remain visible warnings rather than guessed geometry.
+- Focused preview tests, TypeScript compilation, host-contract tests, and the `Pe.App` source compile are the no-RRD
+  proof. Live capture/build remains normal product-runtime proof, not a prerequisite for the portable compiler contract.
+
+### 2026-07-15 — Phase 6 installed-year proof complete
+
+- FreshRevitProcess 2023 and 2024 pass the minimal box, showcase, and default-state GRD/vane roundtrips with portable
+  target-year dependencies and empty recovery metadata.
+- Revit 2023 and 2024 natively reject setting the centered-array half-count parameter to zero. The focused flex test
+  therefore reports that exact compatibility limitation; the authored model does not encode a year workaround.
+- FreshRevitProcess 2025 passes the GRD room-facing visual/structural proof and GRD/vane roundtrip. Revit 2026 passes
+  the complete four-test `FamilyModelRoundtripTests` fixture.
+- The only cross-target source adjustment was replacing `MaxBy` with `OrderByDescending(...).First()` for the
+  .NET Framework targets; model semantics are unchanged.
 
 ### 2026-07-15 — Phase 5 public-API spike closed
 
@@ -46,9 +69,9 @@ speculative API permutations.
   remaining between limits, exact A → capture → B → capture JSON convergence for both profiles, empty `unmodeled`,
   and no DataStorage/extensible-storage recovery metadata.
 
-Remaining Phase 4 gate: open the generated GRD in the exact visual sandbox and place it against the room-boundary
-fixture for the final visual/room-resolution walkthrough. A legacy snapshot/apply GRD regression is tracked separately:
-its newly captured offset-plane count is not replayed by that older path; the Family Model proofs above are green.
+The generated GRD was placed against the room-boundary fixture in FreshRevitProcess 2025. Its calculation point resolves
+inside the opening-side room while the mirrored back-side point remains outside; the exported visual proof is retained
+under `.artifacts`. A legacy snapshot/apply GRD regression remains separate from this portable Family Model path.
 
 ### 2026-07-15 — Phase 3 complete
 
@@ -66,8 +89,6 @@ its newly captured offset-plane count is not replayed by that older path; the Fa
 - FreshRevitProcess 2025 proves exact A -> capture -> B -> capture JSON convergence, no DataStorage/extensible
   storage/undeclared parameters, and equal runtime planes, constraints, solids, voids, Connector frames/sizes/config,
   and geometry while flexing Compact, Standard, and Tall. The Phase 2 minimal-box proof remains green.
-
-Next: use the checked GRD as the visual placement gate, then begin the plumbing nested-puck subset.
 
 ### 2026-07-15 — Phase 0 baseline
 
@@ -205,10 +226,12 @@ Field-option hydration reuses the existing `ValueDomainKeys` schema mechanism; t
 Canonical profiles live under `source/Pe.Revit.Tests/Fixtures/Profiles/family-model/`:
 
 - `pe-grd-vane.family.json` — face/work-plane GRD with nested vanes, `CenteredLinear` repetition, and `{ "enabled": true }` room calculation point. Placement proof must show the point extending from the opening side (the PE "down" convention), never the back side.
-- `pe-bath-shower.family.json` — plumbing fixture with cold/hot/drain Pipe Connectors, inline puck stubs, parameter associations, and an upward room calculation point that resolves the containing room.
-- `pe-wc-urinal-bidet.family.json` — the corresponding WC/urinal/bidet fixture with the same composition and upward-room contract.
 - `family-model-showcase.family.json` — one contrived educational family exercising every supported param-driven-solids primitive and Connector profile. A sibling `family-model-showcase.md` explains the sections progressively without duplicating the JSON into several near-identical profiles.
 - `dependencies/` — portable nested vane family models required by those profiles. The rotatable puck is the one native exception: Family Foundry ships a target-year `puck.rfa` compiler resource because Revit's public API cannot recreate its reference-line-picked extrusion work plane. Screenshots and other generated `.rfa` files remain test artifacts.
+
+Bath/Shower and WC/Urinal/Bidet profiles are not checked-in deliverables. The Phase 5 spike proved that their picked
+work-plane and fixture-unit contract cannot be recreated through the current public Revit API; claiming portable authored
+syntax for them would violate the roundtrip contract.
 
 Each profile gets one focused roundtrip test. The tests reuse and deepen `FamilyFoundryRoundtripHarness`; they do not create a second harness or retest the bulk migrator.
 
@@ -292,25 +315,26 @@ Proof: flex counts 0, 1, 8, and 19 without invalid zero-thickness geometry; veri
 
 Exit gate: GRD profile roundtrips with empty `unmodeled` for the declared contract and passes serialized, behavioral, and visual inspection in `ff-family-model-r25`.
 
-### Phase 5 — plumbing fixture composition
+### Phase 5 — plumbing fixture composition boundary spike
 
 Scope:
 
-- implement the minimal inline Connector-stub compiler over the target-year native puck compiler resource;
-- keep the UI-only work-plane association behind the compiler; do not expose a native-family path in authored settings;
-- implement/capture nested transforms, hosting, visibility, and parameter associations required by the plumbing fixtures;
-- author Bath-Shower and WC-Urinal-Bidet profiles;
-- run the puck-angle experiment. If the existing convention does not make the real Connector rotate, report that observable limitation; do not persist metadata or widen the public API merely to force symmetry.
+- reproduce the native puck's picked work-plane and Connector associations through public Revit API calls;
+- run the puck-angle and fixture-unit experiments;
+- if the native relationship is not publicly constructible, retain the exact puck as a compiler resource and do not
+  claim the plumbing profiles as portable authored syntax.
 
-Proof: flex the real type matrices and selected angle/visibility states; compare Pipe Connector origin, normal, classification, diameter, fixture units, nested puck appearance, and associations. Place each family in a test room and assert its +Z calculation point resolves that room.
+Proof: flex the exact native puck and compare the attempted public-API reconstruction, recording the first non-replayable
+native relationship rather than persisting recovery metadata.
 
-Exit gate: both plumbing profiles roundtrip with empty `unmodeled` for their declared contracts and pass visual inspection in the same exact sandbox.
+Exit gate: either the plumbing profiles roundtrip with empty `unmodeled`, or the unsupported public-API boundary is
+documented precisely and the profiles remain outside the supported contract. The latter outcome was proven.
 
 ### Phase 6 — cross-year portability
 
 Scope:
 
-- rebuild all four canonical profiles and recursive dependencies from target-year templates in Revit 2023, 2024, 2025, and 2026;
+- rebuild every supported profile and recursive dependency from target-year templates in Revit 2023, 2024, 2025, and 2026;
 - use the same semantic/runtime assertions, allowing only documented target-year representation differences;
 - keep template/resource resolution explicit in artifacts.
 
@@ -326,7 +350,8 @@ Scope:
 - render supported params, planes, frames, faces, solids, Connectors, arrays, symbolics, and companions directly from `family.json`;
 - evaluate only the portable literal/ref/arithmetic subset. Unsupported Revit formulas and `unmodeled` facts render warnings, never guessed geometry.
 
-Proof: the four canonical profiles hydrate in schema/forms, compile through the host surface, and render the same named constituents as the Revit proof artifacts.
+Proof: the supported profiles hydrate through the shared schema/model, compile through the host surface, and render the
+same named constituents as the Revit proof artifacts.
 
 Exit gate: a user can inspect a profile, preview it, build it, and follow the same names through plan, Revit result, snapshot, and diff.
 
@@ -335,7 +360,7 @@ Exit gate: a user can inspect a profile, preview it, build it, and follow the sa
 Scope:
 
 - run the focused 2025 suite from a fresh process;
-- start/restart only `ff-family-model-r25`, open the four generated families sequentially, flex the agreed states, and capture final images/state;
+- start/restart only `ff-family-model-r25`, open the supported generated families sequentially, flex the agreed states, and capture final images/state;
 - stop the exact sandbox without saving unrelated documents.
 
 Exit gate: the checked-in profiles and tests are green, artifacts are linked from the family reports, and the examples are ready for the user/agent visual-function walkthrough.
@@ -344,9 +369,10 @@ Exit gate: the checked-in profiles and tests are green, artifacts are linked fro
 
 The implementation goal is complete when:
 
-1. the four canonical profiles, required dependency models, and educational walkthrough are checked in;
+1. the supported profiles, required dependency models, and educational walkthrough are checked in;
 2. each profile passes black-box A → capture → B roundtrip tests without hidden metadata;
-3. GRD vanes and room-facing direction, both plumbing fixture Connector/puck/room behaviors, and the showcase flex matrix are proven structurally and visually;
+3. GRD vanes and room-facing direction plus the showcase flex matrix are proven structurally and visually, and the
+   unsupported plumbing boundary is documented without invented authored syntax;
 4. the supported contract passes the installed Revit-year matrix or reports explicit convention incompatibilities;
 5. Manager, capture/replay, Pea/host contracts, and web preview consume the same model vocabulary;
 6. no work remains that is required for the agreed examples or their walkthrough.

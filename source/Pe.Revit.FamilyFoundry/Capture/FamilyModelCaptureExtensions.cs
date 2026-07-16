@@ -411,7 +411,7 @@ public static class FamilyModelCaptureExtensions {
             (Value: normal.Y, Axis: "Y"),
             (Value: normal.Z, Axis: "Z")
         };
-        var dominant = components.MaxBy(item => Math.Abs(item.Value));
+        var dominant = components.OrderByDescending(item => Math.Abs(item.Value)).First();
         return $"{(dominant.Value < 0 ? "-" : "+")}{dominant.Axis}";
     }
 

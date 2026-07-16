@@ -4,6 +4,7 @@ import {
   ArrowUpRight,
   DownloadCloud,
   FileScan,
+  Boxes,
   LoaderCircle,
   MessageSquare,
   PencilRuler,
@@ -80,6 +81,14 @@ function UpdateButton() {
 export const Route = createFileRoute("/")({ component: App });
 
 const TOOLS = [
+  {
+    to: "/family-model",
+    title: "Family Model",
+    label: "Family Foundry",
+    icon: Boxes,
+    description:
+      "Inspect portable family.json, preview named geometry and connectors, capture an open family, or build a target-year RFA.",
+  },
   {
     to: "/chat",
     title: "Chat",
