@@ -1,17 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { ThemeToggle } from "#/components/ThemeToggle";
 
 export const Route = createFileRoute("/poc/family-plugin")({ component: Page });
 
 /* ------------------------------------------------------------------------------------------------
- * POC: three MVP variations of a Family Model chat plugin, judged on one page.
- *   MVP 1 — WIRING BOARD   · the reference micro-DSL drawn as a patch bay (relations)
- *   MVP 2 — TYPE FLEX MATRIX · value / override / formula trichotomy as visible state (state)
- *   MVP 3 — ANATOMY SHEET  · document-order ledger with draggable planes (taxonomy/grouping)
- * Self-contained, mock data = the two checked-in fixture profiles. Every exhibit reads AND writes
- * the same in-memory family.json; the selected type flexes all three at once (docs/target style).
+ * POC iteration 2: the Family Model chat plugin.
+ *   ANATOMY SHEET v2 · true-scale orthographic triptych (front/side/plan) drawn by the dumb
+ *     evaluator — params → arithmetic → plane intersection → face lookup. No camera, no mesh,
+ *     no guessed geometry. Ghost outlines compare the other types at the same scale.
+ *   TYPE FLEX MATRIX · kept from round 1 (the keeper) — value/override/formula trichotomy.
+ * One shared editable family.json drives both; the flex type flexes everything.
+ * Round-1 wiring board lives in git history (unusable at real parameter counts).
  * ---------------------------------------------------------------------------------------------- */
 
 // ── model types (v1 authored shape, loosely typed for the POC) ──────────────────────────────────
@@ -385,6 +386,927 @@ const toggleRcp = (model: FamilyModel): FamilyModel => ({
   roomCalculationPoint: { enabled: !(model.roomCalculationPoint?.enabled ?? false) },
 });
 
+// ── the dumb evaluator: params → arithmetic → plane intersection → face lookup ──────────────────
+type Axis = "x" | "y" | "z";
+interface Vec3 {
+  x: number | null;
+  y: number | null;
+  z: number | null;
+}
+interface SolidGeo {
+  slug: string;
+  kind: string;
+  isVoid: boolean;
+  isCyl: boolean;
+  w: number | null;
+  d: number | null;
+  h: number | null;
+}
+interface PlaneGeo {
+  slug: string;
+  axis: Axis | null;
+  offset: number | null;
+  param: string | null;
+  editable: boolean;
+  text: string;
+}
+interface FrameGeo {
+  slug: string;
+  pos: Vec3;
+  normal: string;
+}
+interface ConnGeo {
+  slug: string;
+  domain: string;
+  shape: string;
+  pos: Vec3;
+  normal: string;
+  w: number | null;
+  h: number | null;
+  stub: number | null;
+  stubDir: string | undefined;
+}
+
+const DATUM_AXIS: Record<string, Axis> = {
+  "plane:family.Bottom": "z",
+  "plane:family.CenterFB": "y",
+  "plane:family.CenterLR": "x",
+};
+
+function evalLen(model: FamilyModel, typeName: string, raw: string | undefined): number | null {
+  if (!raw) return null;
+  const param = paramRef(raw);
+  if (!param) return inches(raw);
+  const resolved = resolveParam(model, typeName, param);
+  return resolved.source === "formula" || resolved.source === "missing"
+    ? null
+    : inches(resolved.text);
+}
+
+// ponytail: v1 lowering convention — solids centered on the family center planes, sitting ON
+// family.Bottom (FamilyModelLowerer emits On="@Bottom" + PositiveHeight). Faces resolve from that.
+function solidGeos(model: FamilyModel, typeName: string): SolidGeo[] {
+  return Object.entries(model.solids ?? {}).map(([slug, solid]) => ({
+    slug,
+    kind: solid.kind,
+    isVoid: solid.kind.startsWith("Void"),
+    isCyl: solid.kind.endsWith("Cylinder"),
+    w: evalLen(model, typeName, solid.width ?? solid.diameter),
+    d: evalLen(model, typeName, solid.depth ?? solid.diameter),
+    h: evalLen(model, typeName, solid.height),
+  }));
+}
+
+function planeGeos(model: FamilyModel, typeName: string): PlaneGeo[] {
+  return Object.entries(model.planes ?? {}).map(([slug, plane]) => {
+    const param = paramRef(plane.by);
+    const spec = param ? paramSpec(model, param) : undefined;
+    const value = evalLen(model, typeName, plane.by);
+    const sign = plane.direction === "In" ? -1 : 1;
+    return {
+      slug,
+      axis: DATUM_AXIS[plane.from] ?? null,
+      offset: value == null ? null : value * sign,
+      param,
+      editable: spec != null && spec.formula == null,
+      text: param ? resolveParam(model, typeName, param).text : plane.by,
+    };
+  });
+}
+
+function faceCoord(solids: SolidGeo[], ref: string): { axis: Axis; value: number | null } | null {
+  const [slug, face] = ref.slice("face:".length).split(".");
+  const solid = solids.find((entry) => entry.slug === slug);
+  if (!solid) return null;
+  const half = (value: number | null) => (value == null ? null : value / 2);
+  switch (face) {
+    case "Top":
+      return { axis: "z", value: solid.h };
+    case "Bottom":
+      return { axis: "z", value: 0 };
+    case "Left":
+      return { axis: "x", value: half(solid.w) == null ? null : -(half(solid.w) as number) };
+    case "Right":
+      return { axis: "x", value: half(solid.w) };
+    case "Front":
+      return { axis: "y", value: half(solid.d) == null ? null : -(half(solid.d) as number) };
+    case "Back":
+      return { axis: "y", value: half(solid.d) };
+    default:
+      return null; // Cylinder Side has no single coordinate
+  }
+}
+
+function frameGeos(model: FamilyModel, solids: SolidGeo[], planes: PlaneGeo[]): FrameGeo[] {
+  return Object.entries(model.frames ?? {}).map(([slug, frame]) => {
+    const pos: Vec3 = { x: null, y: null, z: null };
+    for (const ref of frame.origin) {
+      if (ref.startsWith("face:")) {
+        const coordinate = faceCoord(solids, ref);
+        if (coordinate) pos[coordinate.axis] = coordinate.value;
+      } else if (DATUM_AXIS[ref]) {
+        pos[DATUM_AXIS[ref]] = 0;
+      } else if (ref.startsWith("plane:")) {
+        const plane = planes.find((entry) => entry.slug === ref.slice("plane:".length));
+        if (plane?.axis) pos[plane.axis] = plane.offset;
+      }
+    }
+    return { slug, pos, normal: frame.normal };
+  });
+}
+
+function connGeos(model: FamilyModel, typeName: string, frames: FrameGeo[]): ConnGeo[] {
+  return Object.entries(model.connectors ?? {}).map(([slug, connector]) => {
+    const frame =
+      connector.frame === "frame:family"
+        ? { pos: { x: 0, y: 0, z: 0 }, normal: "+Z" }
+        : (frames.find((entry) => entry.slug === connector.frame.slice("frame:".length)) ?? {
+            pos: { x: null, y: null, z: null },
+            normal: "+Z",
+          });
+    const round = connector.shape === "Round";
+    const diameter = evalLen(model, typeName, connector.diameter);
+    return {
+      slug,
+      domain: connector.domain,
+      shape: connector.shape,
+      pos: frame.pos,
+      normal: frame.normal,
+      w: round ? diameter : evalLen(model, typeName, connector.width),
+      h: round ? diameter : evalLen(model, typeName, connector.height),
+      stub: evalLen(model, typeName, connector.stub?.depth),
+      stubDir: connector.stub?.direction,
+    };
+  });
+}
+
+/** Reverse reference index — who uses each constituent. Feeds the relationship caption. */
+function usedByIndex(model: FamilyModel): Record<string, string[]> {
+  const index: Record<string, string[]> = {};
+  const add = (id: string, user: string) => (index[id] = [...(index[id] ?? []), user]);
+  for (const [slug, frame] of Object.entries(model.frames ?? {}))
+    for (const ref of frame.origin) {
+      if (ref.startsWith("face:")) add(`s:${ref.slice(5).split(".")[0]}`, `frame:${slug}`);
+      else if (ref.startsWith("plane:") && !DATUM_AXIS[ref])
+        add(`pl:${ref.slice(6)}`, `frame:${slug}`);
+    }
+  for (const [slug, connector] of Object.entries(model.connectors ?? {}))
+    if (connector.frame !== "frame:family")
+      add(`f:${connector.frame.slice(6)}`, `connector:${slug}`);
+  for (const [slug, arraySpec] of Object.entries(model.arrays ?? {}))
+    for (const limit of [arraySpec.limits?.start, arraySpec.limits?.end])
+      if (limit?.startsWith("plane:") && !DATUM_AXIS[limit])
+        add(`pl:${limit.slice(6)}`, `array:${slug}`);
+  return index;
+}
+
+// ── the triptych ────────────────────────────────────────────────────────────────────────────────
+interface ViewDef {
+  key: string;
+  label: string;
+  u: Axis;
+  v: Axis;
+  depth: Axis;
+}
+const VIEWS: ViewDef[] = [
+  { key: "front", label: "FRONT · looking −Y", u: "x", v: "z", depth: "y" },
+  { key: "side", label: "SIDE · looking +X", u: "y", v: "z", depth: "x" },
+  { key: "plan", label: "PLAN · looking −Z", u: "x", v: "y", depth: "z" },
+];
+
+const DOMAIN_COLOR: Record<string, string> = {
+  Duct: "var(--pe-blue)",
+  Pipe: "var(--lichen)",
+  Electrical: "var(--kiln)",
+};
+
+const NORMAL_RE = /^([+-])([XYZ])$/;
+
+interface Sheet {
+  solids: SolidGeo[];
+  planes: PlaneGeo[];
+  frames: FrameGeo[];
+  conns: ConnGeo[];
+  ghosts: Array<{ typeName: string; solids: SolidGeo[] }>;
+  rcp: Vec3 | null;
+}
+
+function buildSheet(model: FamilyModel, typeName: string): Sheet {
+  const solids = solidGeos(model, typeName);
+  const planes = planeGeos(model, typeName);
+  const frames = frameGeos(model, solids, planes);
+  const conns = connGeos(model, typeName, frames);
+  const ghosts = Object.keys(model.types)
+    .filter((name) => name !== typeName)
+    .map((name) => ({ typeName: name, solids: solidGeos(model, name) }));
+  // ponytail: fixed PE room-point convention — 12in, Unhosted → +Z, hosted → −Y (AddRoomDingler)
+  const rcp = model.roomCalculationPoint?.enabled
+    ? model.family.placement === "Unhosted"
+      ? { x: 0, y: 0, z: 12 }
+      : { x: 0, y: -12, z: 0 }
+    : null;
+  return { solids, planes, frames, conns, ghosts, rcp };
+}
+
+/** One shared world bbox (incl. ghosts) → one px/in factor → true relative scale everywhere. */
+function bounds(sheet: Sheet): Record<Axis, [number, number]> {
+  const extent: Record<Axis, number[]> = { x: [], y: [], z: [] };
+  const solid = (geo: SolidGeo) => {
+    if (geo.w != null) extent.x.push(-geo.w / 2, geo.w / 2);
+    if (geo.d != null) extent.y.push(-geo.d / 2, geo.d / 2);
+    if (geo.h != null) extent.z.push(0, geo.h);
+  };
+  sheet.solids.forEach(solid);
+  for (const ghost of sheet.ghosts) ghost.solids.forEach(solid);
+  for (const plane of sheet.planes)
+    if (plane.axis && plane.offset != null) extent[plane.axis].push(plane.offset);
+  for (const conn of sheet.conns)
+    for (const axis of ["x", "y", "z"] as Axis[]) {
+      const p = conn.pos[axis];
+      if (p != null) extent[axis].push(p - (conn.stub ?? 0) - 2, p + (conn.stub ?? 0) + 2);
+    }
+  if (sheet.rcp)
+    for (const axis of ["x", "y", "z"] as Axis[])
+      if (sheet.rcp[axis] != null) extent[axis].push(sheet.rcp[axis] as number);
+  const range = (values: number[]): [number, number] => {
+    if (values.length === 0) return [-12, 12];
+    const lo = Math.min(...values);
+    const hi = Math.max(...values);
+    const pad = Math.max(3, (hi - lo) * 0.14);
+    return [lo - pad, hi + pad];
+  };
+  return { x: range(extent.x), y: range(extent.y), z: range(extent.z) };
+}
+
+function Triptych({
+  model,
+  typeName,
+  update,
+  hovered,
+  onHover,
+}: {
+  model: FamilyModel;
+  typeName: string;
+  update: Update;
+  hovered: string | null;
+  onHover: (id: string | null) => void;
+}) {
+  const sheet = useMemo(() => buildSheet(model, typeName), [model, typeName]);
+  const box = useMemo(() => bounds(sheet), [sheet]);
+  const VIEW_W = 258;
+  const VIEW_H = 258;
+  const M = 14;
+  const scale = Math.min(
+    ...VIEWS.flatMap((view) => [
+      (VIEW_W - 2 * M) / (box[view.u][1] - box[view.u][0]),
+      (VIEW_H - 2 * M) / (box[view.v][1] - box[view.v][0]),
+    ]),
+  );
+
+  const dimIf = (id: string) => (hovered && hovered !== id ? 0.3 : 1);
+
+  return (
+    <div className="flex flex-wrap gap-3">
+      {VIEWS.map((view) => {
+        const [uMin, uMax] = box[view.u];
+        const [vMin, vMax] = box[view.v];
+        const cx = (VIEW_W - 2 * M - (uMax - uMin) * scale) / 2;
+        const cy = (VIEW_H - 2 * M - (vMax - vMin) * scale) / 2;
+        const X = (u: number) => M + cx + (u - uMin) * scale;
+        const Y = (v: number) => VIEW_H - M - cy - (v - vMin) * scale;
+
+        const solidRect = (geo: SolidGeo) => {
+          const du = view.u === "x" ? geo.w : view.u === "y" ? geo.d : null;
+          const dv = view.v === "z" ? geo.h : view.v === "y" ? geo.d : null;
+          if (du == null || dv == null) return null;
+          const u0 = -du / 2;
+          const v0 = view.v === "z" ? 0 : -dv / 2;
+          return { x: X(u0), y: Y(v0 + dv), w: du * scale, h: dv * scale };
+        };
+
+        const dragPlane = (plane: PlaneGeo) => (event: React.PointerEvent<SVGGElement>) => {
+          if (!plane.editable || !plane.param || !plane.axis) return;
+          event.currentTarget.setPointerCapture(event.pointerId);
+          const svg = event.currentTarget.ownerSVGElement;
+          const along = plane.axis === view.u ? "u" : "v";
+          const move = (pointer: PointerEvent) => {
+            const rect = svg?.getBoundingClientRect();
+            if (!rect) return;
+            const world =
+              along === "u"
+                ? uMin + (pointer.clientX - rect.left - M - cx) / scale
+                : vMin + (VIEW_H - (pointer.clientY - rect.top) - M - cy) / scale;
+            const value = Math.max(0.5, Math.abs(world));
+            update((current) =>
+              setOverride(current, typeName, plane.param as string, fmtIn(value)),
+            );
+          };
+          const up = () => {
+            window.removeEventListener("pointermove", move);
+            window.removeEventListener("pointerup", up);
+          };
+          window.addEventListener("pointermove", move);
+          window.addEventListener("pointerup", up);
+        };
+
+        return (
+          <div key={view.key}>
+            <svg
+              width={VIEW_W}
+              height={VIEW_H}
+              className="rounded-[2px] border border-[var(--line)] bg-[var(--paper-2)]/30"
+              onMouseLeave={() => onHover(null)}
+            >
+              {/* family datums — hairline crosses through origin */}
+              <line
+                x1={X(0)}
+                y1={M}
+                x2={X(0)}
+                y2={VIEW_H - M}
+                stroke="var(--line)"
+                strokeDasharray="2 4"
+              />
+              <line
+                x1={M}
+                y1={Y(0)}
+                x2={VIEW_W - M}
+                y2={Y(0)}
+                stroke="var(--line)"
+                strokeDasharray="2 4"
+              />
+
+              {/* ghost types — same scale, outline only */}
+              {sheet.ghosts.map((ghost) =>
+                ghost.solids
+                  .filter((geo) => !geo.isVoid)
+                  .map((geo) => {
+                    const rect = solidRect(geo);
+                    return rect ? (
+                      <rect
+                        key={`${ghost.typeName}:${geo.slug}`}
+                        {...{ x: rect.x, y: rect.y, width: rect.w, height: rect.h }}
+                        fill="none"
+                        stroke="var(--slate)"
+                        strokeWidth={0.75}
+                        opacity={0.22}
+                      />
+                    ) : null;
+                  }),
+              )}
+
+              {/* solids — true scale, voids dashed */}
+              {sheet.solids.map((geo) => {
+                const rect = solidRect(geo);
+                if (!rect) return null;
+                const id = `s:${geo.slug}`;
+                const active = hovered === id;
+                if (view.key === "plan" && geo.isCyl && geo.w != null)
+                  return (
+                    <circle
+                      key={geo.slug}
+                      cx={X(0)}
+                      cy={Y(0)}
+                      r={(geo.w / 2) * scale}
+                      fill={geo.isVoid ? "none" : "var(--clay-ink)"}
+                      fillOpacity={geo.isVoid ? 0 : 0.07}
+                      stroke={active ? "var(--pe-blue)" : "var(--clay-ink)"}
+                      strokeWidth={active ? 1.8 : 1}
+                      strokeDasharray={geo.isVoid ? "4 3" : undefined}
+                      opacity={dimIf(id)}
+                      onMouseEnter={() => onHover(id)}
+                    />
+                  );
+                return (
+                  <rect
+                    key={geo.slug}
+                    {...{ x: rect.x, y: rect.y, width: rect.w, height: rect.h }}
+                    fill={geo.isVoid ? "none" : "var(--clay-ink)"}
+                    fillOpacity={geo.isVoid ? 0 : 0.07}
+                    stroke={hovered === id ? "var(--pe-blue)" : "var(--clay-ink)"}
+                    strokeWidth={hovered === id ? 1.8 : 1}
+                    strokeDasharray={geo.isVoid ? "4 3" : undefined}
+                    opacity={dimIf(id)}
+                    onMouseEnter={() => onHover(id)}
+                  />
+                );
+              })}
+
+              {/* named planes — drawn in every view where they project as a line; draggable */}
+              {sheet.planes.map((plane) => {
+                if (!plane.axis || plane.offset == null) return null;
+                const id = `pl:${plane.slug}`;
+                const overridden =
+                  plane.param != null && model.types[typeName]?.[plane.param] != null;
+                const stroke = overridden ? "var(--pe-blue)" : "var(--lichen)";
+                let line: { x1: number; y1: number; x2: number; y2: number } | null = null;
+                if (plane.axis === view.u)
+                  line = { x1: X(plane.offset), y1: M, x2: X(plane.offset), y2: VIEW_H - M };
+                else if (plane.axis === view.v)
+                  line = { x1: M, y1: Y(plane.offset), x2: VIEW_W - M, y2: Y(plane.offset) };
+                if (!line) return null;
+                return (
+                  <g
+                    key={plane.slug}
+                    opacity={dimIf(id)}
+                    onMouseEnter={() => onHover(id)}
+                    onPointerDown={dragPlane(plane)}
+                    style={{
+                      cursor: plane.editable
+                        ? plane.axis === view.u
+                          ? "ew-resize"
+                          : "ns-resize"
+                        : undefined,
+                    }}
+                  >
+                    <line {...line} stroke="transparent" strokeWidth={11} />
+                    <line {...line} stroke={stroke} strokeWidth={hovered === id ? 2 : 1.1} />
+                    {view.key !== "plan" && plane.axis === "z" && (
+                      <text x={line.x1 + 3} y={line.y1 - 3} fontSize={8} fill={stroke}>
+                        {plane.slug} {plane.text}
+                      </text>
+                    )}
+                    {plane.axis !== "z" && plane.axis === view.u && (
+                      <text x={line.x1 + 3} y={M + 8} fontSize={8} fill={stroke}>
+                        {plane.slug}
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+
+              {/* connectors — face-on shows the true-size shape; edge-on shows the stub */}
+              {sheet.conns.map((conn) => {
+                const id = `c:${conn.slug}`;
+                const color = DOMAIN_COLOR[conn.domain] ?? "var(--slate)";
+                const normal = NORMAL_RE.exec(conn.normal);
+                if (!normal) return null;
+                const [, signText, axisText] = normal;
+                const axis = axisText.toLowerCase() as Axis;
+                const sign = signText === "-" ? -1 : 1;
+                const u = conn.pos[view.u];
+                const v = conn.pos[view.v];
+                if (u == null || v == null) return null;
+                const shared = {
+                  opacity: dimIf(id),
+                  onMouseEnter: () => onHover(id),
+                };
+                if (axis === view.depth) {
+                  // face-on: the connector face at true size
+                  if (conn.shape === "Round" && conn.w != null)
+                    return (
+                      <circle
+                        key={conn.slug}
+                        cx={X(u)}
+                        cy={Y(v)}
+                        r={(conn.w / 2) * scale}
+                        fill={color}
+                        fillOpacity={0.14}
+                        stroke={color}
+                        strokeWidth={hovered === id ? 2 : 1.2}
+                        {...shared}
+                      />
+                    );
+                  if (conn.w != null && conn.h != null)
+                    return (
+                      <rect
+                        key={conn.slug}
+                        x={X(u - conn.w / 2)}
+                        y={Y(v + conn.h / 2)}
+                        width={conn.w * scale}
+                        height={conn.h * scale}
+                        fill={color}
+                        fillOpacity={0.14}
+                        stroke={color}
+                        strokeWidth={hovered === id ? 2 : 1.2}
+                        {...shared}
+                      />
+                    );
+                  return null;
+                }
+                // edge-on: stub + size tick along the normal
+                const stubLen = conn.stub ?? 3;
+                const dir = sign * (conn.stubDir === "In" ? -1 : 1);
+                const size = conn.w ?? 2;
+                const isU = axis === view.u;
+                const tip = isU ? X(u + dir * stubLen) : Y(v + dir * stubLen);
+                const base = isU ? X(u) : Y(v);
+                return (
+                  <g key={conn.slug} {...shared}>
+                    {isU ? (
+                      <>
+                        <line
+                          x1={base}
+                          y1={Y(v)}
+                          x2={tip}
+                          y2={Y(v)}
+                          stroke={color}
+                          strokeWidth={hovered === id ? 2.4 : 1.6}
+                        />
+                        <line
+                          x1={base}
+                          y1={Y(v - size / 2)}
+                          x2={base}
+                          y2={Y(v + size / 2)}
+                          stroke={color}
+                          strokeWidth={hovered === id ? 2.4 : 1.6}
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <line
+                          x1={X(u)}
+                          y1={base}
+                          x2={X(u)}
+                          y2={tip}
+                          stroke={color}
+                          strokeWidth={hovered === id ? 2.4 : 1.6}
+                        />
+                        <line
+                          x1={X(u - size / 2)}
+                          y1={base}
+                          x2={X(u + size / 2)}
+                          y2={base}
+                          stroke={color}
+                          strokeWidth={hovered === id ? 2.4 : 1.6}
+                        />
+                      </>
+                    )}
+                  </g>
+                );
+              })}
+
+              {/* room calculation point — fixed PE convention, rendered honestly */}
+              {sheet.rcp && sheet.rcp[view.u] != null && sheet.rcp[view.v] != null && (
+                <g opacity={dimIf("rcp")} onMouseEnter={() => onHover("rcp")}>
+                  <line
+                    x1={X(0)}
+                    y1={Y(0)}
+                    x2={X(sheet.rcp[view.u] as number)}
+                    y2={Y(sheet.rcp[view.v] as number)}
+                    stroke="var(--kiln)"
+                    strokeDasharray="1.5 3"
+                  />
+                  <circle
+                    cx={X(sheet.rcp[view.u] as number)}
+                    cy={Y(sheet.rcp[view.v] as number)}
+                    r={3.5}
+                    fill="var(--kiln)"
+                  />
+                </g>
+              )}
+
+              <text x={M} y={VIEW_H - 4} fontSize={8} fill="var(--slate)" className="tele-label">
+                {view.label}
+              </text>
+            </svg>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Relationship caption — the authored reference chain of whatever is hovered. */
+function Caption({
+  model,
+  typeName,
+  hovered,
+  usedBy,
+}: {
+  model: FamilyModel;
+  typeName: string;
+  hovered: string | null;
+  usedBy: Record<string, string[]>;
+}) {
+  const line = (() => {
+    if (!hovered)
+      return "hover anything — drawing, card, or plane — to read its authored reference chain";
+    const [kind, slug] = [
+      hovered.slice(0, hovered.indexOf(":")),
+      hovered.slice(hovered.indexOf(":") + 1),
+    ];
+    const users = usedBy[hovered]?.join(" · ");
+    if (hovered === "rcp")
+      return `roomCalculationPoint · authored surface is exactly { enabled: true } · rendered at the fixed PE convention (12in, ${model.family.placement === "Unhosted" ? "+Z" : "−Y"})`;
+    if (kind === "s") {
+      const solid = model.solids?.[slug];
+      const dims = (["width", "depth", "height", "diameter"] as const)
+        .filter((field) => solid?.[field])
+        .map((field) => `${field} ${solid?.[field]}`)
+        .join(" · ");
+      return `solid ${slug} · ${solid?.kind} · ${dims}${users ? ` · faces used by ${users}` : ""}`;
+    }
+    if (kind === "pl") {
+      const plane = model.planes?.[slug];
+      return `plane ${slug} · from ${plane?.from} · by ${plane?.by} (${resolveParam(model, typeName, paramRef(plane?.by) ?? "").text}) · ${plane?.direction}${users ? ` · used by ${users}` : ""}`;
+    }
+    if (kind === "c") {
+      const connector = model.connectors?.[slug];
+      const frame = model.frames?.[connector?.frame.slice("frame:".length) ?? ""];
+      const origin = frame ? frame.origin.join(" ∩ ") : connector?.frame;
+      return `connector ${slug} · ${connector?.domain}/${connector?.shape} · origin = ${origin} · ${
+        connector?.diameter
+          ? `Ø ${connector.diameter}`
+          : `${connector?.width} × ${connector?.height}`
+      }${connector?.stub ? ` · stub ${connector.stub.direction} ${connector.stub.depth}` : ""}`;
+    }
+    return hovered;
+  })();
+  return (
+    <p className="mt-2 min-h-8 rounded-[2px] border border-[var(--line-soft)] bg-[var(--paper-2)]/40 px-2 py-1.5 font-mono text-[10px] leading-relaxed text-[var(--slate)]">
+      {line}
+    </p>
+  );
+}
+
+// ── editable register (cards under the triptych) ────────────────────────────────────────────────
+function DimChip({
+  label,
+  raw,
+  model,
+  typeName,
+  update,
+  onLiteral,
+}: {
+  label: string;
+  raw: string | undefined;
+  model: FamilyModel;
+  typeName: string;
+  update: Update;
+  onLiteral?: (next: string) => void;
+}) {
+  const dim = resolveDim(model, typeName, raw);
+  if (!dim) return null;
+  const editable = dim.source !== "formula" && (dim.param != null || onLiteral != null);
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-[2px] border border-[var(--line)] bg-[var(--paper-2)]/50 px-1 py-0.5"
+      title={dim.param ? `param:${dim.param}` : "literal"}
+    >
+      <span className="tele-label text-[8px] text-[var(--slate)]">{label}</span>
+      {editable ? (
+        <EditableValue
+          value={dim.text}
+          onCommit={(next) =>
+            dim.param
+              ? update((current) =>
+                  current.types[typeName]?.[dim.param as string] != null
+                    ? setOverride(current, typeName, dim.param as string, next)
+                    : setParamValue(current, dim.param as string, next),
+                )
+              : onLiteral?.(next)
+          }
+          className={`text-[10px] ${dim.source === "override" ? "text-[var(--pe-blue)]" : ""}`}
+        />
+      ) : (
+        <span className="font-mono text-[10px] text-[var(--kiln)]">{dim.text}</span>
+      )}
+    </span>
+  );
+}
+
+function RegisterCard({
+  id,
+  title,
+  tag,
+  hovered,
+  onHover,
+  accent,
+  children,
+}: {
+  id: string;
+  title: string;
+  tag: string;
+  hovered: string | null;
+  onHover: (id: string | null) => void;
+  accent?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className="rounded-[2px] border p-2 transition-opacity"
+      style={{
+        borderColor: hovered === id ? "var(--pe-blue)" : "var(--line)",
+        boxShadow: accent ? `inset 3px 0 0 ${accent}` : undefined,
+        opacity: hovered && hovered !== id ? 0.45 : 1,
+      }}
+      onMouseEnter={() => onHover(id)}
+      onMouseLeave={() => onHover(null)}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="font-mono text-[11px] font-semibold">{title}</span>
+        <span className="tele-label text-[9px] text-[var(--slate)]">{tag}</span>
+      </div>
+      <div className="mt-1 flex flex-wrap items-center gap-1">{children}</div>
+    </div>
+  );
+}
+
+function AnatomySheet({
+  model,
+  typeName,
+  update,
+}: {
+  model: FamilyModel;
+  typeName: string;
+  update: Update;
+}) {
+  const [hovered, setHovered] = useState<string | null>(null);
+  const usedBy = useMemo(() => usedByIndex(model), [model]);
+  const ghosts = Object.keys(model.types).filter((name) => name !== typeName);
+  const formulaPlanes = planeGeos(model, typeName).filter((plane) => plane.offset == null);
+  const unmodeled = model.unmodeled ?? [];
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <EditableValue
+          value={model.family.name}
+          onCommit={(next) =>
+            update((current) => ({ ...current, family: { ...current.family, name: next } }))
+          }
+          className="text-sm font-semibold text-[var(--clay-ink)]"
+        />
+        <span className="tele-label text-[10px] text-[var(--slate)]">
+          {model.family.category} · {model.family.template} · {model.family.placement}
+        </span>
+        {ghosts.length > 0 && (
+          <span className="ml-auto text-[10px] text-[var(--slate)]">
+            ghost outlines: {ghosts.join(" · ")} — same scale, for comparison
+          </span>
+        )}
+      </div>
+
+      <Triptych
+        model={model}
+        typeName={typeName}
+        update={update}
+        hovered={hovered}
+        onHover={setHovered}
+      />
+      <Caption model={model} typeName={typeName} hovered={hovered} usedBy={usedBy} />
+
+      {formulaPlanes.length > 0 && (
+        <div className="space-y-0.5">
+          {formulaPlanes.map((plane) => (
+            <p key={plane.slug} className="font-mono text-[10px] text-[var(--kiln)]">
+              ─ ─ plane {plane.slug} · {plane.text}{" "}
+              <span className="text-[var(--slate)]">
+                (formula-driven — web v1 does not evaluate, so it is not drawn)
+              </span>
+            </p>
+          ))}
+        </div>
+      )}
+
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        {Object.entries(model.solids ?? {}).map(([slug, solid]) => (
+          <RegisterCard
+            key={slug}
+            id={`s:${slug}`}
+            title={slug}
+            tag={solid.kind}
+            hovered={hovered}
+            onHover={setHovered}
+          >
+            {(["width", "depth", "height", "diameter"] as const).map((field) => (
+              <DimChip
+                key={field}
+                label={field === "diameter" ? "Ø" : field[0].toUpperCase()}
+                raw={solid[field]}
+                model={model}
+                typeName={typeName}
+                update={update}
+                onLiteral={(next) => update((current) => setSolidDim(current, slug, field, next))}
+              />
+            ))}
+          </RegisterCard>
+        ))}
+        {Object.entries(model.connectors ?? {}).map(([slug, connector]) => (
+          <RegisterCard
+            key={slug}
+            id={`c:${slug}`}
+            title={slug}
+            tag={`${connector.domain} · ${connector.shape}`}
+            hovered={hovered}
+            onHover={setHovered}
+            accent={DOMAIN_COLOR[connector.domain] ?? "var(--slate)"}
+          >
+            <DimChip
+              label="Ø"
+              raw={connector.diameter}
+              model={model}
+              typeName={typeName}
+              update={update}
+            />
+            <DimChip
+              label="W"
+              raw={connector.width}
+              model={model}
+              typeName={typeName}
+              update={update}
+            />
+            <DimChip
+              label="H"
+              raw={connector.height}
+              model={model}
+              typeName={typeName}
+              update={update}
+            />
+            {connector.stub && (
+              <button
+                type="button"
+                onClick={() => update((current) => toggleStub(current, slug))}
+                title="Stub direction — click to flip In/Out"
+                className="rounded-[2px] border border-[var(--line)] px-1 py-0.5 font-mono text-[9px] hover:border-[var(--pe-blue)]"
+              >
+                stub {connector.stub.direction === "Out" ? "▸ Out" : "◂ In"}
+              </button>
+            )}
+            {connector.systemType && (
+              <span className="px-1 font-mono text-[9px] text-[var(--slate)]">
+                {connector.systemType}
+              </span>
+            )}
+          </RegisterCard>
+        ))}
+        {Object.entries(model.nestedFamilies ?? {}).map(([slug, spec]) => (
+          <RegisterCard
+            key={slug}
+            id={`n:${slug}`}
+            title={slug}
+            tag={`nested · ${spec.family}`}
+            hovered={hovered}
+            onHover={setHovered}
+          >
+            <div className="w-full space-y-0.5 font-mono text-[10px] text-[var(--slate)]">
+              {spec.type && <div>type “{spec.type}”</div>}
+              {Object.entries(spec.parameterBindings ?? {}).map(([target, source]) => (
+                <div key={target}>
+                  {target} ← <span className="text-[var(--pe-blue)]">{source}</span>
+                </div>
+              ))}
+            </div>
+          </RegisterCard>
+        ))}
+        {Object.entries(model.arrays ?? {}).map(([slug, spec]) => (
+          <RegisterCard
+            key={slug}
+            id={`a:${slug}`}
+            title={`${slug} ×2n−1`}
+            tag={`${spec.kind} · ${spec.axis}`}
+            hovered={hovered}
+            onHover={setHovered}
+          >
+            <div className="w-full space-y-0.5 font-mono text-[10px] text-[var(--slate)]">
+              <div>
+                member <span className="text-[var(--pe-blue)]">{spec.member}</span>
+              </div>
+              <div>
+                half-count <span className="text-[var(--kiln)]">{spec.halfCount}</span>
+              </div>
+              {spec.limits && (
+                <div>
+                  limits {spec.limits.start} → {spec.limits.end}
+                </div>
+              )}
+            </div>
+          </RegisterCard>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 border-t border-[var(--line-soft)] pt-2">
+        <button
+          type="button"
+          onClick={() => update(toggleRcp)}
+          onMouseEnter={() => setHovered("rcp")}
+          onMouseLeave={() => setHovered(null)}
+          className="rounded-[2px] border border-[var(--line)] px-1.5 py-0.5 font-mono text-[10px] hover:border-[var(--pe-blue)]"
+          title='The entire authored surface is { "enabled": true } — direction and offset are the fixed PE convention'
+        >
+          roomCalculationPoint ·{" "}
+          <span
+            className={
+              model.roomCalculationPoint?.enabled ? "text-[var(--pe-blue)]" : "text-[var(--slate)]"
+            }
+          >
+            {model.roomCalculationPoint?.enabled ? "enabled" : "off"}
+          </span>
+        </button>
+        {unmodeled.length === 0 ? (
+          <span className="font-mono text-[10px] text-[var(--lichen)]">
+            unmodeled ∅ — roundtrip equivalence claimable for this contract
+          </span>
+        ) : (
+          <span className="font-mono text-[10px] text-[var(--clay-ink)]">
+            unmodeled ×{unmodeled.length} — captured facts the schema cannot replay
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── tiny shared UI ───────────────────────────────────────────────────────────────────────────────
 function EditableValue({
   value,
@@ -462,274 +1384,7 @@ function SectionIntro({ title, children }: { title: string; children: React.Reac
   );
 }
 
-// ════════════════════════════════════════ MVP 1 — WIRING BOARD ══════════════════════════════════
-interface Node {
-  id: string;
-  col: number;
-  title: string;
-  sub: string;
-  param?: string; // editable parameter name, when the node IS a parameter
-}
-interface Edge {
-  from: string;
-  to: string;
-  kind: "param" | "plane" | "face" | "frame" | "nested";
-}
-
-const EDGE_COLOR: Record<Edge["kind"], string> = {
-  param: "var(--pe-blue)",
-  plane: "var(--lichen)",
-  face: "var(--clay-ink)",
-  frame: "var(--kiln)",
-  nested: "var(--slate)",
-};
-
-const COLUMNS = ["parameters", "planes", "solids", "frames", "content"];
-
-function buildGraph(model: FamilyModel): { nodes: Node[]; edges: Edge[] } {
-  const nodes: Node[] = [];
-  const edges: Edge[] = [];
-  const push = (edge: Edge | null) => edge && edges.push(edge);
-  const paramEdge = (raw: string | undefined, to: string): Edge | null => {
-    const name = raw ? paramRef(raw) : null;
-    return name ? { from: `p:${name}`, to, kind: "param" } : null;
-  };
-
-  for (const [name, spec] of [
-    ...Object.entries(model.familyParameters),
-    ...Object.entries(model.sharedParameters ?? {}),
-  ])
-    nodes.push({
-      id: `p:${name}`,
-      col: 0,
-      title: name,
-      sub: spec.formula != null ? "ƒ formula" : (spec.value ?? ""),
-      param: name,
-    });
-
-  for (const [slug, plane] of Object.entries(model.planes ?? {})) {
-    nodes.push({
-      id: `pl:${slug}`,
-      col: 1,
-      title: slug,
-      sub: `${plane.from.replace("plane:", "")} · ${plane.direction}`,
-    });
-    push(paramEdge(plane.by, `pl:${slug}`));
-  }
-
-  for (const [slug, solid] of Object.entries(model.solids ?? {})) {
-    nodes.push({ id: `s:${slug}`, col: 2, title: slug, sub: solid.kind });
-    for (const field of ["width", "depth", "height", "diameter"] as const)
-      push(paramEdge(solid[field], `s:${slug}`));
-  }
-
-  for (const [slug, frame] of Object.entries(model.frames ?? {})) {
-    nodes.push({ id: `f:${slug}`, col: 3, title: slug, sub: `n ${frame.normal} · up ${frame.up}` });
-    for (const origin of frame.origin) {
-      if (origin.startsWith("face:"))
-        push({ from: `s:${origin.slice(5).split(".")[0]}`, to: `f:${slug}`, kind: "face" });
-      else if (origin.startsWith("plane:") && !origin.startsWith("plane:family."))
-        push({ from: `pl:${origin.slice(6)}`, to: `f:${slug}`, kind: "plane" });
-    }
-  }
-
-  for (const [slug, connector] of Object.entries(model.connectors ?? {})) {
-    const id = `c:${slug}`;
-    nodes.push({ id, col: 4, title: slug, sub: `${connector.domain} connector` });
-    if (connector.frame !== "frame:family")
-      push({ from: `f:${connector.frame.slice(6)}`, to: id, kind: "frame" });
-    for (const raw of [
-      connector.diameter,
-      connector.width,
-      connector.height,
-      connector.stub?.depth,
-      ...Object.values(connector.parameterBindings ?? {}),
-    ])
-      push(paramEdge(raw, id));
-  }
-
-  for (const [slug, nested] of Object.entries(model.nestedFamilies ?? {})) {
-    const id = `n:${slug}`;
-    nodes.push({ id, col: 4, title: slug, sub: `nested · ${nested.family.slice(11)}` });
-    for (const raw of Object.values(nested.parameterBindings ?? {})) push(paramEdge(raw, id));
-  }
-
-  for (const [slug, arraySpec] of Object.entries(model.arrays ?? {})) {
-    const id = `a:${slug}`;
-    nodes.push({ id, col: 4, title: `${slug} ×`, sub: `${arraySpec.kind} · ${arraySpec.axis}` });
-    push(paramEdge(arraySpec.halfCount, id));
-    if (arraySpec.member.startsWith("nested:"))
-      push({ from: `n:${arraySpec.member.slice(7)}`, to: id, kind: "nested" });
-    for (const limit of [arraySpec.limits?.start, arraySpec.limits?.end])
-      if (limit?.startsWith("plane:") && !limit.startsWith("plane:family."))
-        push({ from: `pl:${limit.slice(6)}`, to: id, kind: "plane" });
-  }
-
-  return { nodes, edges };
-}
-
-/** Ancestors ∪ descendants of one node — NOT the connected component, which lights up everything. */
-function cone(edges: Edge[], start: string): Set<string> {
-  const walk = (direction: "up" | "down") => {
-    const reached = new Set([start]);
-    let grew = true;
-    while (grew) {
-      grew = false;
-      for (const edge of edges) {
-        const [ahead, behind] = direction === "down" ? [edge.from, edge.to] : [edge.to, edge.from];
-        if (reached.has(ahead) && !reached.has(behind)) {
-          reached.add(behind);
-          grew = true;
-        }
-      }
-    }
-    return reached;
-  };
-  return new Set([...walk("up"), ...walk("down")]);
-}
-
-const PAD = 10;
-const COL_W = 190;
-const COL_GAP = 26;
-const NODE_H = 30;
-const PITCH = 36;
-const HEAD = 26;
-
-function WiringBoard({
-  model,
-  typeName,
-  update,
-}: {
-  model: FamilyModel;
-  typeName: string;
-  update: Update;
-}) {
-  const { nodes, edges } = useMemo(() => buildGraph(model), [model]);
-  const [hover, setHover] = useState<string | null>(null);
-  const lit = useMemo(() => (hover ? cone(edges, hover) : null), [edges, hover]);
-
-  const byColumn = COLUMNS.map((_, col) => nodes.filter((node) => node.col === col));
-  const position = new Map<string, { x: number; y: number }>();
-  for (const [col, columnNodes] of byColumn.entries())
-    for (const [idx, node] of columnNodes.entries())
-      position.set(node.id, { x: PAD + col * (COL_W + COL_GAP), y: HEAD + idx * PITCH });
-
-  const width = PAD * 2 + COLUMNS.length * COL_W + (COLUMNS.length - 1) * COL_GAP;
-  const height = HEAD + Math.max(...byColumn.map((column) => column.length)) * PITCH + PAD;
-
-  const editResolved = (name: string, next: string) =>
-    update((current) =>
-      current.types[typeName]?.[name] != null
-        ? setOverride(current, typeName, name, next)
-        : setParamValue(current, name, next),
-    );
-
-  return (
-    <div className="overflow-x-auto">
-      <div className="relative" style={{ width, height }}>
-        <svg width={width} height={height} className="absolute inset-0" aria-hidden>
-          {edges.map((edge) => {
-            const from = position.get(edge.from);
-            const to = position.get(edge.to);
-            if (!from || !to) return null;
-            const x1 = from.x + COL_W;
-            const y1 = from.y + NODE_H / 2;
-            const x2 = to.x;
-            const y2 = to.y + NODE_H / 2;
-            const bend = Math.max(30, (x2 - x1) / 2);
-            const dim = lit && !(lit.has(edge.from) && lit.has(edge.to));
-            return (
-              <path
-                key={`${edge.from}→${edge.to}`}
-                d={`M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`}
-                fill="none"
-                stroke={EDGE_COLOR[edge.kind]}
-                strokeWidth={dim ? 1 : 1.6}
-                opacity={dim ? 0.12 : 0.75}
-              />
-            );
-          })}
-        </svg>
-        {COLUMNS.map((label, col) => (
-          <span
-            key={label}
-            className="tele-label absolute text-[10px] text-[var(--slate)]"
-            style={{ left: PAD + col * (COL_W + COL_GAP), top: 2 }}
-          >
-            {label}
-          </span>
-        ))}
-        {nodes.map((node) => {
-          const spot = position.get(node.id);
-          if (!spot) return null;
-          const dim = lit && !lit.has(node.id);
-          const resolved = node.param ? resolveParam(model, typeName, node.param) : null;
-          return (
-            <div
-              key={node.id}
-              onMouseEnter={() => setHover(node.id)}
-              onMouseLeave={() => setHover(null)}
-              className="absolute flex items-center justify-between gap-1 rounded-[2px] border bg-[var(--paper)] px-1.5"
-              style={{
-                left: spot.x,
-                top: spot.y,
-                width: COL_W,
-                height: NODE_H,
-                opacity: dim ? 0.28 : 1,
-                borderColor:
-                  hover === node.id
-                    ? "var(--pe-blue)"
-                    : resolved?.source === "override"
-                      ? "color-mix(in srgb, var(--pe-blue) 55%, transparent)"
-                      : "var(--line-2)",
-              }}
-            >
-              <span className="truncate text-[11px] leading-none" title={node.title}>
-                {node.title}
-              </span>
-              {resolved ? (
-                resolved.source === "formula" ? (
-                  <span
-                    className="shrink-0 font-mono text-[10px] text-[var(--kiln)]"
-                    title={resolved.text}
-                  >
-                    ƒ
-                  </span>
-                ) : (
-                  <EditableValue
-                    value={resolved.text}
-                    title={
-                      resolved.source === "override"
-                        ? `override · ${typeName}`
-                        : "family value — click to edit"
-                    }
-                    onCommit={(next) => node.param && editResolved(node.param, next)}
-                    className={`shrink-0 text-[10px] ${resolved.source === "override" ? "text-[var(--pe-blue)]" : "text-[var(--slate)]"}`}
-                  />
-                )
-              ) : (
-                <span className="shrink-0 truncate font-mono text-[9px] text-[var(--slate)]">
-                  {node.sub}
-                </span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-[var(--slate)]">
-        {(Object.keys(EDGE_COLOR) as Edge["kind"][]).map((kind) => (
-          <span key={kind} className="inline-flex items-center gap-1.5">
-            <span className="h-[2px] w-4" style={{ background: EDGE_COLOR[kind] }} />
-            {kind}:
-          </span>
-        ))}
-        <span className="ml-auto">hover a node to trace its dependency cone</span>
-      </div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════ MVP 2 — TYPE FLEX MATRIX ═══════════════════════════════
+// ═══════════════════════════════════════ TYPE FLEX MATRIX ═══════════════════════════════════════
 function TypeMatrix({
   model,
   typeName,
@@ -923,508 +1578,6 @@ function FragmentRows({
   );
 }
 
-// ═══════════════════════════════════════ MVP 3 — ANATOMY SHEET ══════════════════════════════════
-function PlaneRuler({
-  model,
-  typeName,
-  update,
-}: {
-  model: FamilyModel;
-  typeName: string;
-  update: Update;
-}) {
-  const svgRef = useRef<SVGSVGElement>(null);
-  const planes = Object.entries(model.planes ?? {}).map(([slug, plane]) => {
-    const param = paramRef(plane.by);
-    const resolved = param ? resolveParam(model, typeName, param) : null;
-    const value = resolved && resolved.source !== "formula" ? inches(resolved.text) : null;
-    return { slug, plane, param, resolved, value };
-  });
-  const positioned = planes.filter((entry) => entry.value != null);
-  const formulaPlanes = planes.filter((entry) => entry.value == null);
-  const from = planes[0]?.plane.from.replace("plane:", "") ?? "family datum";
-
-  const bodyHeight = inches(
-    resolveDim(model, typeName, model.solids?.body?.height)?.text ?? undefined,
-  );
-  const maxIn = Math.max(...positioned.map((entry) => entry.value ?? 0), bodyHeight ?? 0, 12) * 1.2;
-  const H = 240;
-  const W = 300;
-  const yOf = (v: number) => H - 16 - (v / maxIn) * (H - 32);
-
-  const drag = (param: string) => (event: React.PointerEvent<SVGGElement>) => {
-    event.currentTarget.setPointerCapture(event.pointerId);
-    const move = (pointer: PointerEvent) => {
-      const rect = svgRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const value = Math.max(0.5, ((H - 16 - (pointer.clientY - rect.top)) / (H - 32)) * maxIn);
-      update((current) => setOverride(current, typeName, param, fmtIn(value)));
-    };
-    const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-  };
-
-  if (planes.length === 0) return null;
-  return (
-    <div>
-      <p className="tele-label mb-1 text-[9px] text-[var(--lichen)]">
-        planes · axis + param-driven offset from {from}
-      </p>
-      <svg
-        ref={svgRef}
-        width={W}
-        height={H}
-        className="rounded-[2px] border border-[var(--line)] bg-[var(--paper-2)]/40"
-      >
-        {bodyHeight != null && (
-          <rect
-            x={20}
-            y={yOf(bodyHeight)}
-            width={70}
-            height={H - 16 - yOf(bodyHeight)}
-            fill="var(--slate)"
-            opacity={0.1}
-          />
-        )}
-        {bodyHeight != null && (
-          <text x={24} y={yOf(bodyHeight) + 12} fontSize={8} fill="var(--slate)">
-            body · {fmtIn(bodyHeight)}
-          </text>
-        )}
-        <line x1={16} y1={H - 16} x2={W - 12} y2={H - 16} stroke="var(--line-2)" />
-        <text x={W - 14} y={H - 6} fontSize={8} textAnchor="end" fill="var(--slate)">
-          {from} = 0
-        </text>
-        {positioned.map(({ slug, param, resolved, value }) => {
-          const y = yOf(value ?? 0);
-          const overridden = resolved?.source === "override";
-          return (
-            <g
-              key={slug}
-              onPointerDown={param ? drag(param) : undefined}
-              style={{ cursor: "ns-resize" }}
-            >
-              <line x1={16} y1={y} x2={W - 12} y2={y} stroke="transparent" strokeWidth={12} />
-              <line
-                x1={16}
-                y1={y}
-                x2={W - 12}
-                y2={y}
-                stroke={overridden ? "var(--pe-blue)" : "var(--lichen)"}
-                strokeWidth={1.5}
-              />
-              <text x={100} y={y - 4} fontSize={9} fill="var(--clay-ink)">
-                {slug} · {resolved?.text}
-                {overridden ? ` · override ${typeName}` : ""}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
-      <p className="mt-1 text-[10px] text-[var(--slate)]">
-        drag a plane — it writes the driving parameter as a <b>{typeName}</b> override
-      </p>
-      {formulaPlanes.length > 0 && (
-        <div className="mt-1 space-y-0.5">
-          {formulaPlanes.map(({ slug, resolved, plane }) => (
-            <p key={slug} className="font-mono text-[10px] text-[var(--kiln)]">
-              ─ ─ {slug} · {resolved?.text} · {plane.direction}{" "}
-              <span className="text-[var(--slate)]">(formula — web v1 does not evaluate)</span>
-            </p>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function DimChip({
-  label,
-  raw,
-  model,
-  typeName,
-  update,
-  onLiteral,
-}: {
-  label: string;
-  raw: string | undefined;
-  model: FamilyModel;
-  typeName: string;
-  update: Update;
-  onLiteral?: (next: string) => void;
-}) {
-  const dim = resolveDim(model, typeName, raw);
-  if (!dim) return null;
-  const editable = dim.source !== "formula" && (dim.param != null || onLiteral != null);
-  return (
-    <span
-      className="inline-flex items-center gap-1 rounded-[2px] border border-[var(--line)] bg-[var(--paper-2)]/50 px-1 py-0.5"
-      title={dim.param ? `param:${dim.param}` : "literal"}
-    >
-      <span className="tele-label text-[8px] text-[var(--slate)]">{label}</span>
-      {editable ? (
-        <EditableValue
-          value={dim.text}
-          onCommit={(next) =>
-            dim.param
-              ? update((current) =>
-                  current.types[typeName]?.[dim.param as string] != null
-                    ? setOverride(current, typeName, dim.param as string, next)
-                    : setParamValue(current, dim.param as string, next),
-                )
-              : onLiteral?.(next)
-          }
-          className={`text-[10px] ${dim.source === "override" ? "text-[var(--pe-blue)]" : ""}`}
-        />
-      ) : (
-        <span className="font-mono text-[10px] text-[var(--kiln)]">{dim.text}</span>
-      )}
-    </span>
-  );
-}
-
-const PRISM_FACES = ["Top", "Bottom", "Left", "Right", "Front", "Back"];
-const CYL_FACES = ["Top", "Bottom", "Side"];
-
-function SolidCard({
-  slug,
-  solid,
-  model,
-  typeName,
-  update,
-  usedFaces,
-}: {
-  slug: string;
-  solid: SolidSpec;
-  model: FamilyModel;
-  typeName: string;
-  update: Update;
-  usedFaces: Set<string>;
-}) {
-  const isVoid = solid.kind.startsWith("Void");
-  const isCylinder = solid.kind.endsWith("Cylinder");
-  const faces = isCylinder ? CYL_FACES : PRISM_FACES;
-  return (
-    <div
-      className={`rounded-[2px] border p-2 ${isVoid ? "border-dashed border-[var(--line-2)]" : "border-[var(--line)]"}`}
-    >
-      <div className="flex items-baseline justify-between">
-        <span className="font-mono text-[11px] font-semibold">{slug}</span>
-        <span
-          className={`tele-label text-[9px] ${isVoid ? "text-[var(--fail)]" : "text-[var(--slate)]"}`}
-        >
-          {solid.kind}
-        </span>
-      </div>
-      <svg width={110} height={70} className="mx-auto mt-1 block">
-        {isCylinder ? (
-          <ellipse
-            cx={55}
-            cy={35}
-            rx={30}
-            ry={26}
-            fill="none"
-            stroke="var(--clay-ink)"
-            strokeWidth={1.2}
-            strokeDasharray={isVoid ? "4 3" : undefined}
-          />
-        ) : (
-          <rect
-            x={25}
-            y={10}
-            width={60}
-            height={50}
-            fill="none"
-            stroke="var(--clay-ink)"
-            strokeWidth={1.2}
-            strokeDasharray={isVoid ? "4 3" : undefined}
-          />
-        )}
-      </svg>
-      <div className="mt-1 flex flex-wrap gap-1">
-        {(["width", "depth", "height", "diameter"] as const).map((field) => (
-          <DimChip
-            key={field}
-            label={field === "diameter" ? "Ø" : field[0].toUpperCase()}
-            raw={solid[field]}
-            model={model}
-            typeName={typeName}
-            update={update}
-            onLiteral={(next) => update((current) => setSolidDim(current, slug, field, next))}
-          />
-        ))}
-      </div>
-      <div className="mt-1.5 flex flex-wrap gap-1">
-        {faces.map((face) => {
-          const used = usedFaces.has(`${slug}.${face}`);
-          return (
-            <span
-              key={face}
-              className={`rounded-[2px] px-1 py-px font-mono text-[8px] ${
-                used
-                  ? "bg-[var(--clay-ink)]/15 font-bold text-[var(--clay-ink)]"
-                  : "text-[var(--slate)]/60"
-              }`}
-              title={
-                used ? `face:${slug}.${face} is referenced by a frame` : `face:${slug}.${face}`
-              }
-            >
-              {face}
-            </span>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-const DOMAIN_COLOR: Record<string, string> = {
-  Duct: "var(--pe-blue)",
-  Pipe: "var(--lichen)",
-  Electrical: "var(--kiln)",
-};
-
-function ConnectorCard({
-  slug,
-  connector,
-  model,
-  typeName,
-  update,
-}: {
-  slug: string;
-  connector: ConnectorSpec;
-  model: FamilyModel;
-  typeName: string;
-  update: Update;
-}) {
-  return (
-    <div
-      className="rounded-[2px] border border-[var(--line)] p-2"
-      style={{ borderLeft: `3px solid ${DOMAIN_COLOR[connector.domain] ?? "var(--slate)"}` }}
-    >
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="font-mono text-[11px] font-semibold">{slug}</span>
-        <span className="tele-label text-[9px] text-[var(--slate)]">
-          {connector.domain} · {connector.shape}
-        </span>
-      </div>
-      <div className="mt-1 flex flex-wrap items-center gap-1">
-        <span className="rounded-[2px] bg-[var(--kiln)]/10 px-1 py-0.5 font-mono text-[9px] text-[var(--kiln)]">
-          {connector.frame}
-        </span>
-        <DimChip
-          label="Ø"
-          raw={connector.diameter}
-          model={model}
-          typeName={typeName}
-          update={update}
-        />
-        <DimChip
-          label="W"
-          raw={connector.width}
-          model={model}
-          typeName={typeName}
-          update={update}
-        />
-        <DimChip
-          label="H"
-          raw={connector.height}
-          model={model}
-          typeName={typeName}
-          update={update}
-        />
-        {connector.stub && (
-          <button
-            type="button"
-            onClick={() => update((current) => toggleStub(current, slug))}
-            title="Stub direction — click to flip In/Out"
-            className="rounded-[2px] border border-[var(--line)] px-1 py-0.5 font-mono text-[9px] hover:border-[var(--pe-blue)]"
-          >
-            stub {connector.stub.direction === "Out" ? "▸ Out" : "◂ In"}
-          </button>
-        )}
-        {connector.systemType && (
-          <span className="px-1 font-mono text-[9px] text-[var(--slate)]">
-            {connector.systemType}
-          </span>
-        )}
-        {connector.flowDirection && (
-          <span className="px-1 font-mono text-[9px] text-[var(--slate)]">
-            flow {connector.flowDirection}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function AnatomySheet({
-  model,
-  typeName,
-  update,
-}: {
-  model: FamilyModel;
-  typeName: string;
-  update: Update;
-}) {
-  const usedFaces = new Set(
-    Object.values(model.frames ?? {})
-      .flatMap((frame) => frame.origin)
-      .filter((origin) => origin.startsWith("face:"))
-      .map((origin) => origin.slice(5)),
-  );
-  const solids = Object.entries(model.solids ?? {});
-  const connectors = Object.entries(model.connectors ?? {});
-  const nested = Object.entries(model.nestedFamilies ?? {});
-  const arrays = Object.entries(model.arrays ?? {});
-  const unmodeled = model.unmodeled ?? [];
-
-  return (
-    <div className="space-y-3">
-      {/* definitions — the family header, document order first */}
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <EditableValue
-          value={model.family.name}
-          onCommit={(next) =>
-            update((current) => ({ ...current, family: { ...current.family, name: next } }))
-          }
-          className="text-sm font-semibold text-[var(--clay-ink)]"
-        />
-        <span className="tele-label text-[10px] text-[var(--slate)]">
-          {model.family.category} · {model.family.template} · {model.family.placement}
-        </span>
-      </div>
-
-      <div className="grid gap-3 lg:grid-cols-[300px_1fr]">
-        <PlaneRuler model={model} typeName={typeName} update={update} />
-        <div className="space-y-3">
-          {solids.length > 0 && (
-            <div>
-              <p className="tele-label mb-1 text-[9px] text-[var(--lichen)]">
-                solids · closed v1 vocabulary, named faces are the reference surface
-              </p>
-              <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
-                {solids.map(([slug, solid]) => (
-                  <SolidCard
-                    key={slug}
-                    slug={slug}
-                    solid={solid}
-                    model={model}
-                    typeName={typeName}
-                    update={update}
-                    usedFaces={usedFaces}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-          {connectors.length > 0 && (
-            <div>
-              <p className="tele-label mb-1 text-[9px] text-[var(--lichen)]">
-                connectors · engineer vocabulary, stub authored inline
-              </p>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {connectors.map(([slug, connector]) => (
-                  <ConnectorCard
-                    key={slug}
-                    slug={slug}
-                    connector={connector}
-                    model={model}
-                    typeName={typeName}
-                    update={update}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-          {(nested.length > 0 || arrays.length > 0) && (
-            <div>
-              <p className="tele-label mb-1 text-[9px] text-[var(--lichen)]">
-                nested families &amp; arrays
-              </p>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {nested.map(([slug, spec]) => (
-                  <div key={slug} className="rounded-[2px] border border-[var(--line)] p-2">
-                    <div className="flex items-baseline justify-between">
-                      <span className="font-mono text-[11px] font-semibold">{slug}</span>
-                      <span className="tele-label text-[9px] text-[var(--slate)]">
-                        nested · {spec.family}
-                      </span>
-                    </div>
-                    <div className="mt-1 space-y-0.5 font-mono text-[10px] text-[var(--slate)]">
-                      {spec.type && <div>type “{spec.type}”</div>}
-                      {Object.entries(spec.parameterBindings ?? {}).map(([target, source]) => (
-                        <div key={target}>
-                          {target} ← <span className="text-[var(--pe-blue)]">{source}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-                {arrays.map(([slug, spec]) => (
-                  <div key={slug} className="rounded-[2px] border border-[var(--line)] p-2">
-                    <div className="flex items-baseline justify-between">
-                      <span className="font-mono text-[11px] font-semibold">{slug} ×2n−1</span>
-                      <span className="tele-label text-[9px] text-[var(--slate)]">
-                        {spec.kind} · {spec.axis}
-                      </span>
-                    </div>
-                    <div className="mt-1 space-y-0.5 font-mono text-[10px] text-[var(--slate)]">
-                      <div>
-                        member <span className="text-[var(--pe-blue)]">{spec.member}</span>
-                      </div>
-                      <div>
-                        half-count <span className="text-[var(--kiln)]">{spec.halfCount}</span>
-                      </div>
-                      {spec.limits && (
-                        <div>
-                          limits {spec.limits.start} → {spec.limits.end}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* quarantine — honesty ledger, document order last */}
-      <div className="flex flex-wrap items-center gap-3 border-t border-[var(--line-soft)] pt-2">
-        <button
-          type="button"
-          onClick={() => update(toggleRcp)}
-          className="rounded-[2px] border border-[var(--line)] px-1.5 py-0.5 font-mono text-[10px] hover:border-[var(--pe-blue)]"
-          title='The entire authored surface is { "enabled": true } — direction and offset are the fixed PE convention'
-        >
-          roomCalculationPoint ·{" "}
-          <span
-            className={
-              model.roomCalculationPoint?.enabled ? "text-[var(--pe-blue)]" : "text-[var(--slate)]"
-            }
-          >
-            {model.roomCalculationPoint?.enabled ? "enabled" : "off"}
-          </span>
-        </button>
-        {unmodeled.length === 0 ? (
-          <span className="font-mono text-[10px] text-[var(--lichen)]">
-            unmodeled ∅ — roundtrip equivalence claimable for this contract
-          </span>
-        ) : (
-          <span className="font-mono text-[10px] text-[var(--clay-ink)]">
-            unmodeled ×{unmodeled.length} — captured facts the schema cannot replay
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ═══════════════════════════════════════════ PAGE ═══════════════════════════════════════════════
 function Page() {
   const [profileKey, setProfileKey] = useState<ProfileKey>("showcase");
@@ -1446,23 +1599,23 @@ function Page() {
         <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="tele-label text-[10px] tracking-[0.3em] text-[var(--clay-ink)]">
-              POC / FAMILY MODEL CHAT PLUGIN — 3 MVPS
+              POC / FAMILY MODEL CHAT PLUGIN — ITERATION 2
             </p>
             <h1 className="mt-1 text-xl font-semibold tracking-tight">
-              One family.json, three ways to hold it
+              The anatomy sheet, drawn to scale
             </h1>
             <p className="mt-2 max-w-3xl text-[13px] leading-relaxed text-[var(--slate)]">
-              Three MVP shapes for the chat plugin Pea shows when it touches a Family Model. Every
-              exhibit below reads <i>and writes</i> the same in-memory <code>family.json</code> —
-              edit in any one and the others move, because the authored model is the only truth.
-              Values, formulas, references, and units stay authored strings; nothing here evaluates
-              formulas or guesses geometry.
+              Round 2, branched from the anatomy sheet. Everything drawable in{" "}
+              <code>family.json</code> is drawable by arithmetic — solids sit on family.Bottom
+              centered on the family planes, faces and named planes pin frame origins, connectors
+              inherit them. So the sheet now draws three true-scale orthographic views from that
+              math alone: no camera, no mesh, no three.js, and nothing the dumb evaluator can&apos;t
+              justify. One scale across all views and all types — relative size is the point.
             </p>
           </div>
           <ThemeToggle />
         </header>
 
-        {/* shared controls — the one resolution every exhibit derives from */}
         <div className="sticky top-0 z-10 mb-5 flex flex-wrap items-center gap-2 rounded-[2px] border border-[var(--line)] bg-[var(--paper)]/95 px-3 py-2 backdrop-blur">
           {(Object.keys(PROFILES) as ProfileKey[]).map((key) => (
             <button
@@ -1508,62 +1661,40 @@ function Page() {
         </div>
 
         <section className="mb-8">
-          <SectionIntro title="MVP 1 — WIRING BOARD">
-            The reference micro-DSL (<code>param:</code>, <code>plane:</code>, <code>face:</code>,{" "}
-            <code>frame:</code>) is the family&apos;s entire relationship system — so draw it as a
-            patch bay. Hover any node to trace its full dependency cone; click a parameter value to
-            edit it in place. Formula parameters carry{" "}
-            <span className="font-mono text-[var(--kiln)]">ƒ</span> and stay read-only: web v1
-            renders formulas, it never evaluates them.
-          </SectionIntro>
-          <PluginCard
-            mvp="wiring"
-            action="Draft update"
-            hint="Pea can propose parameter edits; the wires show what each edit will reach. Only you build."
-          >
-            <WiringBoard model={model} typeName={typeName} update={update} />
-          </PluginCard>
-        </section>
-
-        <section className="mb-8">
-          <SectionIntro title="MVP 2 — TYPE FLEX MATRIX">
-            The per-type object model made visible. Each cell is one of three states: an{" "}
-            <span className="font-mono text-[var(--slate)]">inherited</span> family value (dashed on
-            hover), a solid-blue{" "}
-            <span className="font-semibold text-[var(--pe-blue)]">override</span>, or{" "}
-            <span className="font-mono text-[var(--kiln)]">locked</span> because the parameter is
-            formula-driven — value XOR formula is a schema rule, so the UI never offers the illegal
-            cell. Click a type header to flex every exhibit on the page.
-          </SectionIntro>
-          <PluginCard
-            mvp="type flex"
-            action="Review"
-            hint="Empty types render as ∅ columns on purpose — visible and preserved, exactly like the JSON."
-          >
-            <TypeMatrix model={model} typeName={typeName} onType={setType} update={update} />
-          </PluginCard>
-        </section>
-
-        <section className="mb-8">
-          <SectionIntro title="MVP 3 — ANATOMY SHEET">
-            family.json in document order: definitions, content, quarantine. Planes are axis +
-            param-driven offset only — which is why the dumb evaluator can place them: drag a plane
-            and it writes the driving parameter back as a type override. Solids show their closed
-            face vocabulary with frame-referenced faces lit; connectors carry their stub inline; the{" "}
-            <code>unmodeled</code> ledger closes the sheet honestly.
+          <SectionIntro title="ANATOMY SHEET v2 — TRUE-SCALE TRIPTYCH">
+            Front, side, and plan share one scale, so a 1in pipe connector reads as small as it is
+            against a 24in body. Ghost outlines are the <i>other</i> types at the same scale — flex
+            a type and watch the family breathe. Planes stay draggable (writing the driving
+            parameter back as a type override); hover anything to read its authored reference chain
+            in the caption; the cards below are the same objects, editable.
           </SectionIntro>
           <PluginCard
             mvp="anatomy"
-            action="Read"
-            hint="Everything shown is authored state or a fact derived by arithmetic — no Revit semantics in the browser."
+            action="Review"
+            hint="Every mark is authored state or plane-intersection arithmetic. Formula-driven geometry is listed, not guessed."
           >
             <AnatomySheet model={model} typeName={typeName} update={update} />
           </PluginCard>
         </section>
 
+        <section className="mb-8">
+          <SectionIntro title="TYPE FLEX MATRIX — THE KEEPER">
+            Unchanged from round 1. Inherited / override / formula-locked as visible cell states;
+            value XOR formula never offered; empty types stay visible as ∅ columns. Click a type
+            header to flex the triptych above.
+          </SectionIntro>
+          <PluginCard
+            mvp="type flex"
+            action="Review"
+            hint="Candidate to replace the current family-types route surface — route naming TBD."
+          >
+            <TypeMatrix model={model} typeName={typeName} onType={setType} update={update} />
+          </PluginCard>
+        </section>
+
         <details className="mb-10 rounded-[2px] border border-[var(--line)] bg-[var(--paper-2)]/40 px-3 py-2">
           <summary className="tele-label cursor-pointer text-[10px] text-[var(--clay-ink)]">
-            AUTHORED TRUTH — the family.json all three exhibits are editing
+            AUTHORED TRUTH — the family.json both exhibits are editing
           </summary>
           <pre className="mt-2 max-h-96 overflow-auto font-mono text-[10px] leading-4 text-[var(--slate)]">
             {JSON.stringify(model, null, 2)}
