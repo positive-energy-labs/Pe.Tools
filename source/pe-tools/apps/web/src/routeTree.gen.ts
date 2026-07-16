@@ -29,6 +29,7 @@ import { Route as PocSidepaneRouteImport } from "./routes/poc.sidepane";
 import { Route as PocFamilyLensRouteImport } from "./routes/poc.family-lens";
 import { Route as PocDialRouteImport } from "./routes/poc.dial";
 import { Route as DocsTargetRouteImport } from "./routes/docs.target";
+import { Route as DocsRuntimeRouteImport } from "./routes/docs.runtime";
 import { Route as DemoTanstackQueryRouteImport } from "./routes/demo/tanstack-query";
 import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
 import { Route as ApiPdfAuditMapRouteImport } from "./routes/api/pdf-audit/map";
@@ -134,6 +135,11 @@ const DocsTargetRoute = DocsTargetRouteImport.update({
   path: "/docs/target",
   getParentRoute: () => rootRouteImport,
 } as any);
+const DocsRuntimeRoute = DocsRuntimeRouteImport.update({
+  id: "/docs/runtime",
+  path: "/docs/runtime",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const DemoTanstackQueryRoute = DemoTanstackQueryRouteImport.update({
   id: "/demo/tanstack-query",
   path: "/demo/tanstack-query",
@@ -171,6 +177,7 @@ export interface FileRoutesByFullPath {
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
+  "/docs/runtime": typeof DocsRuntimeRoute;
   "/docs/target": typeof DocsTargetRoute;
   "/poc/dial": typeof PocDialRoute;
   "/poc/family-lens": typeof PocFamilyLensRoute;
@@ -197,6 +204,7 @@ export interface FileRoutesByTo {
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
+  "/docs/runtime": typeof DocsRuntimeRoute;
   "/docs/target": typeof DocsTargetRoute;
   "/poc/dial": typeof PocDialRoute;
   "/poc/family-lens": typeof PocFamilyLensRoute;
@@ -224,6 +232,7 @@ export interface FileRoutesById {
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
+  "/docs/runtime": typeof DocsRuntimeRoute;
   "/docs/target": typeof DocsTargetRoute;
   "/poc/dial": typeof PocDialRoute;
   "/poc/family-lens": typeof PocFamilyLensRoute;
@@ -252,6 +261,7 @@ export interface FileRouteTypes {
     | "/schedule-grid"
     | "/settings"
     | "/demo/tanstack-query"
+    | "/docs/runtime"
     | "/docs/target"
     | "/poc/dial"
     | "/poc/family-lens"
@@ -278,6 +288,7 @@ export interface FileRouteTypes {
     | "/schedule-grid"
     | "/settings"
     | "/demo/tanstack-query"
+    | "/docs/runtime"
     | "/docs/target"
     | "/poc/dial"
     | "/poc/family-lens"
@@ -304,6 +315,7 @@ export interface FileRouteTypes {
     | "/schedule-grid"
     | "/settings"
     | "/demo/tanstack-query"
+    | "/docs/runtime"
     | "/docs/target"
     | "/poc/dial"
     | "/poc/family-lens"
@@ -331,6 +343,7 @@ export interface RootRouteChildren {
   ScheduleGridRoute: typeof ScheduleGridRoute;
   SettingsRoute: typeof SettingsRoute;
   DemoTanstackQueryRoute: typeof DemoTanstackQueryRoute;
+  DocsRuntimeRoute: typeof DocsRuntimeRoute;
   DocsTargetRoute: typeof DocsTargetRoute;
   PocDialRoute: typeof PocDialRoute;
   PocFamilyLensRoute: typeof PocFamilyLensRoute;
@@ -483,6 +496,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof DocsTargetRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/docs/runtime": {
+      id: "/docs/runtime";
+      path: "/docs/runtime";
+      fullPath: "/docs/runtime";
+      preLoaderRoute: typeof DocsRuntimeRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/demo/tanstack-query": {
       id: "/demo/tanstack-query";
       path: "/demo/tanstack-query";
@@ -541,6 +561,7 @@ const rootRouteChildren: RootRouteChildren = {
   ScheduleGridRoute: ScheduleGridRoute,
   SettingsRoute: SettingsRoute,
   DemoTanstackQueryRoute: DemoTanstackQueryRoute,
+  DocsRuntimeRoute: DocsRuntimeRoute,
   DocsTargetRoute: DocsTargetRoute,
   PocDialRoute: PocDialRoute,
   PocFamilyLensRoute: PocFamilyLensRoute,
