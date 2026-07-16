@@ -79,7 +79,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "#/components/ui/select";
+import { PickList } from "#/components/ui/pick-list";
 import { SidePane } from "#/components/ui/side-pane";
+import { ValueDiff } from "#/components/ui/value-diff";
 import { Switch } from "#/components/ui/switch";
 import { Textarea } from "#/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
@@ -560,6 +562,7 @@ function Primitives() {
       <OverlaysBlock />
       <CommandBlock />
       <SidePaneBlock />
+      <PickListBlock />
     </Spec>
   );
 }
@@ -870,6 +873,52 @@ function SidePaneBlock() {
   );
 }
 
+function PickListBlock() {
+  const [picked, setPicked] = useState("42");
+  return (
+    <Group label="PickList — choose one from many (rail body)" wrap="block">
+      <div className="flex h-64 overflow-hidden rounded-[var(--radius)] border border-border">
+        <div className="w-60 border-r border-border">
+          <PickList
+            items={[
+              { id: "42", label: "Pump Schedule", group: "Mechanical Equipment", meta: 12 },
+              { id: "43", label: "Fan Schedule", group: "Mechanical Equipment", meta: 8 },
+              { id: "44", label: "Boiler Schedule", group: "Mechanical Equipment" },
+              {
+                id: "51",
+                label: "Plumbing Fixture Schedule",
+                group: "Plumbing Fixtures",
+                meta: 31,
+              },
+              { id: "52", label: "Water Supply Fixture Units (WSFU)", group: "Plumbing Fixtures" },
+              {
+                id: "61",
+                label: "Lighting Fixture Schedule",
+                group: "Lighting Fixtures",
+                meta: 24,
+              },
+            ]}
+            activeId={picked}
+            onPick={setPicked}
+            placeholder="Filter schedules…"
+            className="h-full"
+          />
+        </div>
+        <section className="min-w-0 flex-1 p-5">
+          <p className="max-w-prose text-[13px] leading-relaxed text-muted-foreground">
+            Type to narrow, ↑/↓ to move, Enter picks (the top match if you haven't moved), Escape
+            clears. The blue left edge marks the open item; groups are section labels. Pair with
+            SidePane, which owns collapse and width — PickList draws no chrome of its own.
+          </p>
+          <p className="tele mt-3 text-muted-foreground">
+            picked → <span className="text-foreground">{picked}</span>
+          </p>
+        </section>
+      </div>
+    </Group>
+  );
+}
+
 /* ── 04 · patterns ──────────────────────────────────────────────────────────── */
 
 function Patterns() {
@@ -881,6 +930,7 @@ function Patterns() {
     >
       <TelemetryRows />
       <HairlineTable />
+      <TrichotomyStates />
       <StatusStrip />
       <BalancedStatPanel />
       <ChatSurfaces />
@@ -971,6 +1021,52 @@ function HairlineTable() {
           </div>
         ))}
       </div>
+    </Group>
+  );
+}
+
+/** Trichotomy cell states: how a co-edited value looks in every stage of proposal → staged → pushed. */
+function TrichotomyStates() {
+  const states = [
+    {
+      label: "proposed (pea)",
+      cell: <ValueDiff from="100 VA" to="150 VA" className="font-medium text-cat-clay" />,
+      tint: "bg-cat-clay/12",
+    },
+    {
+      label: "staged (you)",
+      cell: <ValueDiff from="100 VA" to="150 VA" className="font-medium text-cat-green" />,
+      tint: "bg-cat-green/12",
+    },
+    {
+      label: "needs review",
+      cell: <ValueDiff from="100 VA" to="150 VA" className="font-medium" />,
+      tint: "bg-destructive/10",
+    },
+    {
+      label: "blocked (read-only)",
+      cell: <span className="tele text-muted-foreground">100 VA</span>,
+      tint: "bg-muted/40",
+    },
+  ] as const;
+  return (
+    <Group label="Trichotomy cell states (ValueDiff)" wrap="block">
+      <div className="flex max-w-2xl flex-col overflow-hidden rounded-[var(--radius)] border border-border bg-card sm:flex-row">
+        {states.map((state, i) => (
+          <div
+            key={state.label}
+            className={`flex-1 px-3 py-2 ${state.tint} ${i > 0 ? "border-t border-border sm:border-l sm:border-t-0" : ""}`}
+          >
+            <div>{state.cell}</div>
+            <div className="tele-label mt-1 text-muted-foreground">{state.label}</div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 text-[11px] text-muted-foreground">
+        ValueDiff is the one way a change is written: struck current → proposed, all mono. Clay =
+        pea proposed, green = human staged, destructive tint = staged but flagged, muted = the
+        binding refuses writes.
+      </p>
     </Group>
   );
 }

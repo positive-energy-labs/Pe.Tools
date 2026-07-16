@@ -6,6 +6,8 @@ import {
 } from "@pe/agent-contracts";
 import { Link } from "@tanstack/react-router";
 
+import { ValueDiff } from "#/components/ui/value-diff";
+
 import {
   InlineRoutePlugin,
   Metric,
@@ -104,17 +106,7 @@ export function ScheduleGridChatPlugin({
           renderValue={(value, key) => {
             const next =
               typeof value === "string" ? value : value == null ? "" : JSON.stringify(value);
-            const current = currentValue(key);
-            if (current == null || current === next) return next || "—";
-            return (
-              <span className="tele tabular-nums">
-                <span className="text-[var(--slate)] line-through opacity-70">
-                  {current || "—"}
-                </span>
-                <span className="mx-1 text-[var(--lichen)]">→</span>
-                <span className="text-[var(--clay-ink)]">{next || "—"}</span>
-              </span>
-            );
+            return <ValueDiff from={currentValue(key)} to={next} />;
           }}
         />
       ) : null}
