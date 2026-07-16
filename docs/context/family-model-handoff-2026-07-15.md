@@ -69,6 +69,9 @@ This handoff was completed on `codex/family-model`:
 - Added typed `family.model.capture` and `family.model.build` host operations, generated TypeScript contracts, and a
   dumb `/family-model` Manager page with JSON editing, type preview, named constituents, capture, and explicit-path build.
   Pea receives both operations through its existing generic public-operation surface.
+- The final review moved operation DTOs to `Pe.Shared.HostContracts`, uses structured bridge errors and the shared Revit
+  scheduler, adds the dependency-directory input needed by GRD, and removes guessed Connector/spatial geometry.
+- The final FreshRevitProcess 2025 `FamilyModelRoundtripTests` run passes 4/4.
 - The durable spec now closes Phases 4, 6, and 7 and treats the Phase 5 puck result as the supported public-API boundary.
 
 Machine-local note: the stale Revit 2023 manifest that pointed to a missing loader was renamed to

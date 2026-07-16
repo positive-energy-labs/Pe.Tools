@@ -20,6 +20,7 @@ interface ParameterSpec {
 
 interface SolidSpec {
   kind: string;
+  frame?: string;
   width?: string;
   depth?: string;
   height?: string;
@@ -103,14 +104,26 @@ export function buildFamilyModelPreview(
       : parsePortableNumber(reference);
     return typeof value === "number" ? value : undefined;
   };
-  const solids = Object.entries(model.solids ?? {}).map(([name, solid]) => ({
-    name,
-    kind: solid.kind,
-    width: dimension(solid.width),
-    depth: dimension(solid.depth),
-    height: dimension(solid.height),
-    diameter: dimension(solid.diameter),
-  }));
+  const solids = Object.entries(model.solids ?? {}).flatMap(([name, solid]) => {
+    if (solid.frame && solid.frame !== "frame:family") {
+      warnings.add(`Spatial frame not previewed: ${name} uses ${solid.frame}`);
+      return [];
+    }
+    if (!["Prism", "VoidPrism", "Cylinder", "VoidCylinder"].includes(solid.kind)) {
+      warnings.add(`Solid kind not previewed: ${name} uses ${solid.kind}`);
+      return [];
+    }
+    return [
+      {
+        name,
+        kind: solid.kind,
+        width: dimension(solid.width),
+        depth: dimension(solid.depth),
+        height: dimension(solid.height),
+        diameter: dimension(solid.diameter),
+      },
+    ];
+  });
 
   return {
     model,
@@ -142,10 +155,10 @@ function evaluateFormula(
   resolve: (atom: string) => number | string | undefined,
 ): number | undefined {
   const match = formula.match(/^(.+?)\s*([+*/-])\s*(.+)$/);
-  if (!match)
-    return typeof resolve(formula.trim()) === "number"
-      ? (resolve(formula.trim()) as number)
-      : undefined;
+  if (!match) {
+    const value = resolve(formula.trim());
+    return typeof value === "number" ? value : undefined;
+  }
   const left = resolve(match[1].trim());
   const right = resolve(match[3].trim());
   if (typeof left !== "number" || typeof right !== "number") return undefined;

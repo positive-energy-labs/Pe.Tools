@@ -20,7 +20,7 @@ internal static class FamilyModelBridgeOps {
                 ["family-model", "family-json", "capture", "roundtrip", "family-foundry"],
                 requiresActiveDocument: true
             ),
-            static (_, _, _) => RunInRevitAsync(CaptureActiveFamily)
+            static (_, _, ct) => PaletteThreading.RunRevitAsync(CaptureActiveFamily, ct)
         );
 
     public static readonly BridgeOp Build =
@@ -34,7 +34,7 @@ internal static class FamilyModelBridgeOps {
                 requiresActiveDocument: false,
                 costTier: HostOperationCostTier.Mutation
             ),
-            static (request, _, _) => RunInRevitAsync(() => BuildFamily(request))
+            static (request, _, ct) => PaletteThreading.RunRevitAsync(() => BuildFamily(request), ct)
         );
 
     private static FamilyModelCaptureData CaptureActiveFamily() {
@@ -53,14 +53,15 @@ internal static class FamilyModelBridgeOps {
     private static FamilyModelBuildData BuildFamily(FamilyModelBuildRequest request) {
         var outputPath = Path.GetFullPath(request.OutputPath);
         if (!string.Equals(Path.GetExtension(outputPath), ".rfa", StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException("OutputPath must end in .rfa.", nameof(request));
+            throw BridgeOperationExceptions.BadRequest("OutputPath must end in .rfa.");
         if (File.Exists(outputPath) && !request.Overwrite)
-            throw new IOException($"Output family already exists: '{outputPath}'. Set overwrite=true to replace it.");
+            throw BridgeOperationExceptions.Conflict(
+                $"Output family already exists: '{outputPath}'. Set overwrite=true to replace it.");
 
         var parsed = FamilyModelJson.Parse(request.ModelJson);
         if (parsed.Value == null || parsed.Diagnostics.Count != 0)
-            throw new ArgumentException(string.Join(Environment.NewLine,
-                parsed.Diagnostics.Select(item => $"{item.Path}: {item.Message}")), nameof(request));
+            throw BridgeOperationExceptions.BadRequest(string.Join(Environment.NewLine,
+                parsed.Diagnostics.Select(item => $"{item.Path}: {item.Message}")));
 
         var modelDirectory = string.IsNullOrWhiteSpace(request.ModelDirectory)
             ? null
@@ -82,11 +83,4 @@ internal static class FamilyModelBridgeOps {
         }
     }
 
-    private static async Task<T> RunInRevitAsync<T>(Func<T> action) {
-        var run = RevitTaskAccessor.RunAsync
-                  ?? throw new InvalidOperationException("The Revit task queue is not configured.");
-        var result = default(T);
-        await run(() => result = action());
-        return result!;
-    }
 }

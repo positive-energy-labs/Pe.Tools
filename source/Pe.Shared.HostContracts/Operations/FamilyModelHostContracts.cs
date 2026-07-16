@@ -1,4 +1,4 @@
-namespace Pe.Shared.RevitData.Families;
+namespace Pe.Shared.HostContracts.Operations;
 
 public sealed record FamilyModelCaptureRequest;
 

@@ -1,10 +1,20 @@
 # Family Model (`family.json`) — design spec
 
-Status: implemented through Phase 7; Phase 5 is a documented public-API boundary and Phase 8 is the optional guided
-walkthrough. Captures the design review and constraint digest of 2026-07-15.
+Status: implementation complete; Phase 5 is a documented public-API boundary. The automated Phase 8 gates are green;
+only the optional guided presentation remains. Captures the design review and constraint digest of 2026-07-15.
 Owner surfaces: FamilyFoundry (FF). Consumers: FFManager, FFMigrator, capture, replay, Pea, host operations, web preview.
 
 ## Implementation ledger
+
+### 2026-07-15 — Phase 8 automated gates complete
+
+- FreshRevitProcess 2025 passes all four `FamilyModelRoundtripTests`: minimal box, showcase, centered GRD array, and
+  recursive GRD/vane dependency roundtrip.
+- The separate GRD room fixture proves the opening-side calculation point structurally and retains the final exported
+  image under `.artifacts/build/Pe.Revit.Tests/Debug.R25.Tests/visual-proof/grd-room-proof.png`.
+- The checked-in showcase walkthrough, web production build, and named constituent register are ready for a guided
+  presentation. Opening the generated families together with the user is presentation work, not an unverified compiler
+  requirement.
 
 ### 2026-07-15 — Phase 7 product surface complete
 
@@ -13,8 +23,9 @@ Owner surfaces: FamilyFoundry (FF). Consumers: FFManager, FFMigrator, capture, r
   Family Model APIs; no parallel compiler or package cycle was added.
 - The generated TypeScript host contract exposes those operations to the host and Pea's generic operation caller.
 - `/family-model` is the intentionally dumb Manager surface: open or edit `family.json`, select a type, inspect named
-  constituents and plan geometry, capture the active family, and build to an explicit `.rfa` path. Unsupported formulas
-  and `unmodeled` facts remain visible warnings rather than guessed geometry.
+  constituents and family-frame extents, capture the active family, and build to an explicit `.rfa` path plus dependency
+  directory when required. Unsupported formulas, spatial frames, and `unmodeled` facts remain visible warnings rather
+  than guessed geometry.
 - Focused preview tests, TypeScript compilation, host-contract tests, and the `Pe.App` source compile are the no-RRD
   proof. Live capture/build remains normal product-runtime proof, not a prerequisite for the portable compiler contract.
 
