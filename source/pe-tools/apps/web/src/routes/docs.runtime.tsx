@@ -2,9 +2,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 
 import { ThemeToggle } from "#/components/ThemeToggle";
-import type { SessionLane } from "#/host/target";
+import type { SessionFacts, SessionLane } from "#/host/target";
 import { ageLabel, LaneBadge, laneVar } from "#/host/target-ui";
-import { useTarget } from "#/host/use-target";
+import { useTarget, useWorldLog } from "#/host/use-target";
 
 export const Route = createFileRoute("/docs/runtime")({ component: DocsRuntime });
 
@@ -1038,6 +1038,741 @@ function BigPicture() {
   );
 }
 
+// ── the world composer ──────────────────────────────────────────────────────────────────────────
+// The intuition machine: assemble any machine state (a user Revit, several rrds, several
+// sandboxes, two years, drift, a release) and the picture re-derives selectors, loader eras,
+// and refusals from the same rules the SDK enforces. Presets load states; the live tab feeds
+// the identical picture from useTarget/useWorldLog.
+
+const ERA = {
+  old: { hash: "1A21DA…", color: "var(--cat-kiln)" },
+  new: { hash: "DDB756…", color: "var(--pe-blue)" },
+} as const;
+type EraKey = keyof typeof ERA;
+
+interface WorldState {
+  user: boolean; // the user's installed Revit 2025
+  rrd24: boolean;
+  rrd25: boolean;
+  sb24: number; // source sandboxes per year
+  sb25: number;
+  sbInst: number; // installed-payload sandboxes (2025)
+  drift: boolean; // checkout builds a NEWER loader than the install owns
+  released: boolean; // install apply ran with the new loader — receipt realigned
+}
+
+interface WorldProc {
+  id: string;
+  lane: SessionLane;
+  year: "2024" | "2025";
+  title: string;
+  payloadHome: "product" | "checkout" | "generation";
+  era: EraKey;
+  refused: boolean;
+  live?: SessionFacts;
+}
+
+/** The whole teaching model in one derivation. Rules mirror the SDK:
+ *  - the install receipt owns the 2025 selector; its era is the installed loader's;
+ *  - 2024 has no receipt owner — the first descriptor deploy fills it from the checkout;
+ *  - a SOURCE deploy is refused when its staged selector differs from an occupied slot;
+ *  - installed-payload sandboxes stage the receipt's own selector — identical, always reused.
+ *  ponytail: declarative eras (no deploy ordering) — enough for every scripted incident. */
+function deriveWorld(w: WorldState): {
+  procs: WorldProc[];
+  selectors: { year: "2024" | "2025"; era: EraKey | null; owner: string }[];
+  refusals: string[];
+} {
+  const installedEra: EraKey = w.released ? "new" : "old";
+  const checkoutEra: EraKey = w.drift || w.released ? "new" : "old";
+  const sel25 = { year: "2025" as const, era: installedEra, owner: "install receipt 0.6.x" };
+  const any24 = w.rrd24 || w.sb24 > 0;
+  const sel24 = {
+    year: "2024" as const,
+    era: any24 ? checkoutEra : null,
+    owner: any24 ? "sandbox/rrd deploy (free slot)" : "(empty slot)",
+  };
+  const selEra = (year: "2024" | "2025") => (year === "2024" ? sel24.era : sel25.era);
+
+  const procs: WorldProc[] = [];
+  if (w.user)
+    procs.push({
+      id: "user",
+      lane: "installed",
+      year: "2025",
+      title: "user's revit",
+      payloadHome: "product",
+      era: installedEra,
+      refused: false,
+    });
+  for (const year of ["2024", "2025"] as const) {
+    if (year === "2024" ? w.rrd24 : w.rrd25)
+      procs.push({
+        id: `rrd${year}`,
+        lane: "rrd",
+        year,
+        title: `rrd debug ${year}`,
+        payloadHome: "checkout",
+        era: checkoutEra,
+        refused: selEra(year) !== null && selEra(year) !== checkoutEra,
+      });
+    const n = year === "2024" ? w.sb24 : w.sb25;
+    for (let i = 0; i < n; i += 1)
+      procs.push({
+        id: `sb${year}-${i}`,
+        lane: "sandbox",
+        year,
+        title: `sandbox:${year === "2024" ? "fam" : "lab"}-${i + 1}`,
+        payloadHome: "generation",
+        era: checkoutEra,
+        refused: selEra(year) !== null && selEra(year) !== checkoutEra,
+      });
+  }
+  for (let i = 0; i < w.sbInst; i += 1)
+    procs.push({
+      id: `sbi-${i}`,
+      lane: "sandbox",
+      year: "2025",
+      title: `sandbox:inst-${i + 1} (installed payload)`,
+      payloadHome: "product",
+      era: installedEra,
+      refused: false, // stages the receipt's own selector — byte-identical, reused
+    });
+
+  const refusals = procs
+    .filter((p) => p.refused)
+    .map(
+      (p) =>
+        `${p.title}: staged selector (→ ${ERA[p.era].hash}) differs from the ${p.year} slot (→ ${
+          ERA[selEra(p.year) as EraKey].hash
+        }, ${p.year === "2025" ? "receipt-owned" : "deployed"}) — refused to overwrite.`,
+    );
+  return { procs, selectors: [sel24, sel25], refusals };
+}
+
+const WORLD_PRESETS: { key: string; label: string; caption: string; state: WorldState }[] = [
+  {
+    key: "fresh",
+    label: "fresh install",
+    caption: "One user Revit. Selector, loader, current.txt — everything agrees.",
+    state: {
+      user: true,
+      rrd24: false,
+      rrd25: false,
+      sb24: 0,
+      sb25: 0,
+      sbInst: 0,
+      drift: false,
+      released: false,
+    },
+  },
+  {
+    key: "dev",
+    label: "dev day",
+    caption: "User Revit + an rrd from the checkout. Two lanes, one selector, zero contention.",
+    state: {
+      user: true,
+      rrd24: false,
+      rrd25: true,
+      sb24: 0,
+      sb25: 0,
+      sbInst: 0,
+      drift: false,
+      released: false,
+    },
+  },
+  {
+    key: "drift",
+    label: "loader drift",
+    caption: "git pull changed the loader source. Nothing on disk moved — the drift is latent.",
+    state: {
+      user: true,
+      rrd24: false,
+      rrd25: true,
+      sb24: 0,
+      sb25: 0,
+      sbInst: 0,
+      drift: true,
+      released: false,
+    },
+  },
+  {
+    key: "refusal",
+    label: "the refusal",
+    caption:
+      "Drift meets an occupied slot: the 2025 sandbox is refused at the door; 2024 (free slot) deploys fine.",
+    state: {
+      user: true,
+      rrd24: false,
+      rrd25: false,
+      sb24: 1,
+      sb25: 1,
+      sbInst: 0,
+      drift: true,
+      released: false,
+    },
+  },
+  {
+    key: "workaround",
+    label: "the workaround",
+    caption:
+      "An installed-payload sandbox stages the receipt's OWN selector — identical, reused, immune to drift.",
+    state: {
+      user: true,
+      rrd24: false,
+      rrd25: false,
+      sb24: 0,
+      sb25: 1,
+      sbInst: 1,
+      drift: true,
+      released: false,
+    },
+  },
+  {
+    key: "release",
+    label: "release closes it",
+    caption:
+      "install apply realigns the receipt with the checkout. Same sandbox, same command — now reuse-if-identical.",
+    state: {
+      user: true,
+      rrd24: false,
+      rrd25: false,
+      sb24: 0,
+      sb25: 1,
+      sbInst: 0,
+      drift: true,
+      released: true,
+    },
+  },
+  {
+    key: "busy",
+    label: "the busy machine",
+    caption:
+      "Everything at once: a user Revit, two rrds, three sandboxes, two years, mid-drift. Trace any wire.",
+    state: {
+      user: true,
+      rrd24: true,
+      rrd25: true,
+      sb24: 2,
+      sb25: 1,
+      sbInst: 0,
+      drift: true,
+      released: false,
+    },
+  },
+];
+
+const HOME_META = {
+  product: { title: "installed product", sub: "current.txt → versions\\<v>\\<year>" },
+  checkout: { title: "your checkout", sub: "bin\\… + runtime.json (EnC-patchable)" },
+  generation: { title: "sandbox generations", sub: "sdk\\sandboxes\\<id>\\generations\\<ts>" },
+} as const;
+
+/** BigPicture generalized: N processes, per-year selectors, one loader node per era in use. */
+function WorldPicture({
+  procs,
+  selectors,
+  onPick,
+  picked,
+}: {
+  procs: WorldProc[];
+  selectors: { year: "2024" | "2025"; era: EraKey | null; owner: string }[];
+  onPick: (id: string | null) => void;
+  picked: string | null;
+}) {
+  const COL_W = 148;
+  const W = Math.max(760, procs.length * COL_W + 40);
+  const H = 470;
+  const px = (i: number) => 20 + i * COL_W;
+  const pc = (i: number) => px(i) + (COL_W - 8) / 2;
+
+  const activeSelectors = selectors.filter(
+    (s) => s.era !== null || procs.some((p) => p.year === s.year),
+  );
+  const selX = (year: string) => {
+    if (activeSelectors.length > 1) {
+      // Two years in play: pin the selector nodes apart so they never stack.
+      const idx = activeSelectors.findIndex((s) => s.year === year);
+      return W / 2 - 280 + idx * 300;
+    }
+    const cols = procs.map((p, i) => (p.year === year ? pc(i) : null)).filter((v) => v != null);
+    const mid = cols.length ? cols.reduce((a, b) => a + b, 0) / cols.length : W / 2;
+    return Math.min(Math.max(mid - 130, 12), W - 272);
+  };
+  const erasInUse = [...new Set(procs.filter((p) => !p.refused).map((p) => p.era))] as EraKey[];
+  const loaderX = (era: EraKey) =>
+    erasInUse.length === 1 ? W / 2 - 130 : W / 2 - 280 + erasInUse.indexOf(era) * 300;
+  const homes = Object.keys(HOME_META) as (keyof typeof HOME_META)[];
+  const homeX = (h: string) => W / 2 - 390 + homes.indexOf(h as keyof typeof HOME_META) * 270;
+
+  const dim = (id: string) => (picked !== null && picked !== id ? 0.22 : 1);
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <svg width={W} height={H} style={{ display: "block", fontFamily: "var(--font-pe-mono)" }}>
+        {/* wires */}
+        {procs.map((p, i) => {
+          const sx = selX(p.year) + 130;
+          const color = p.refused ? "var(--cat-clay)" : laneVar(p.lane);
+          return (
+            <g key={`w-${p.id}`} opacity={dim(p.id)}>
+              <path
+                d={`M ${pc(i)} 66 C ${pc(i)} 100, ${sx} 110, ${sx} ${p.refused ? 120 : 136}`}
+                fill="none"
+                stroke={picked === p.id ? color : p.refused ? "var(--cat-clay)" : "var(--line-2)"}
+                strokeWidth={picked === p.id ? 1.8 : 1.1}
+                strokeDasharray={p.lane === "installed" ? undefined : "5 3"}
+              />
+              {p.refused && (
+                <text x={sx} y={132} textAnchor="middle" fontSize={11} fill="var(--cat-clay)">
+                  ✕
+                </text>
+              )}
+              {!p.refused && (
+                <path
+                  d={`M ${loaderX(p.era) + 130} 258 C ${loaderX(p.era) + 130} 300, ${
+                    homeX(p.payloadHome) + 125
+                  } 320, ${homeX(p.payloadHome) + 125} 344`}
+                  fill="none"
+                  stroke={picked === p.id ? color : "var(--line-2)"}
+                  strokeWidth={picked === p.id ? 1.8 : 0.9}
+                  strokeDasharray={p.lane === "installed" ? undefined : "5 3"}
+                />
+              )}
+            </g>
+          );
+        })}
+        {/* selector → loader wires */}
+        {activeSelectors.map(
+          (s) =>
+            s.era && (
+              <line
+                key={`sl-${s.year}`}
+                x1={selX(s.year) + 130}
+                y1={182}
+                x2={loaderX(s.era) + 130}
+                y2={214}
+                stroke={ERA[s.era].color}
+                strokeWidth={1.1}
+                opacity={0.6}
+              />
+            ),
+        )}
+
+        {/* process boxes */}
+        {procs.map((p, i) => (
+          <g
+            key={p.id}
+            opacity={dim(p.id)}
+            style={{ cursor: "pointer" }}
+            onClick={() => onPick(picked === p.id ? null : p.id)}
+          >
+            <rect
+              x={px(i)}
+              y={8}
+              width={COL_W - 8}
+              height={58}
+              rx={2}
+              fill="var(--card)"
+              stroke={
+                p.refused ? "var(--cat-clay)" : picked === p.id ? laneVar(p.lane) : "var(--line)"
+              }
+              strokeWidth={picked === p.id || p.refused ? 1.2 : 0.6}
+              strokeDasharray={p.refused ? "4 3" : undefined}
+            />
+            <circle cx={px(i) + 11} cy={22} r={3} fill={laneVar(p.lane)} />
+            <text x={px(i) + 19} y={25} fontSize={9} fontWeight={600} fill="var(--foreground)">
+              {p.title}
+            </text>
+            <text x={px(i) + 10} y={41} fontSize={8} fill="var(--muted-foreground)">
+              revit {p.year}
+              {p.live ? ` · pid ${p.live.processId}` : ""}
+            </text>
+            <text
+              x={px(i) + 10}
+              y={56}
+              fontSize={8}
+              fill={p.refused ? "var(--cat-clay)" : ERA[p.era].color}
+            >
+              {p.refused ? "REFUSED at the door" : `wants loader ${ERA[p.era].hash}`}
+            </text>
+          </g>
+        ))}
+
+        {/* selector nodes (one per year in play) */}
+        {activeSelectors.map((s) => (
+          <g key={s.year}>
+            <rect
+              x={selX(s.year)}
+              y={136}
+              width={260}
+              height={46}
+              rx={2}
+              fill="var(--paper-3)"
+              stroke={s.era ? ERA[s.era].color : "var(--line)"}
+              strokeWidth={0.8}
+            />
+            <text
+              x={selX(s.year) + 130}
+              y={153}
+              textAnchor="middle"
+              fontSize={9}
+              fontWeight={600}
+              fill="var(--foreground)"
+            >
+              Addins\{s.year}\00-Pe.App.addin {s.era ? `→ ${ERA[s.era].hash}` : "(empty)"}
+            </text>
+            <text
+              x={selX(s.year) + 130}
+              y={170}
+              textAnchor="middle"
+              fontSize={8}
+              fill="var(--muted-foreground)"
+            >
+              {s.owner}
+            </text>
+          </g>
+        ))}
+
+        {/* loader nodes — one per era in use */}
+        {erasInUse.map((era) => (
+          <g key={era}>
+            <rect
+              x={loaderX(era)}
+              y={214}
+              width={260}
+              height={44}
+              rx={2}
+              fill="var(--card)"
+              stroke={ERA[era].color}
+              strokeWidth={0.8}
+            />
+            <text
+              x={loaderX(era) + 130}
+              y={231}
+              textAnchor="middle"
+              fontSize={9}
+              fontWeight={600}
+              fill={ERA[era].color}
+            >
+              Pe.Revit.Loader.{ERA[era].hash}.dll
+            </text>
+            <text
+              x={loaderX(era) + 130}
+              y={247}
+              textAnchor="middle"
+              fontSize={8}
+              fill="var(--muted-foreground)"
+            >
+              one question: is PE_REVIT_SESSION_DESCRIPTOR set?
+            </text>
+          </g>
+        ))}
+
+        {/* payload homes */}
+        {homes.map((h) => {
+          const used = procs.some((p) => !p.refused && p.payloadHome === h);
+          return (
+            <g key={h} opacity={used ? 1 : 0.3}>
+              <rect
+                x={homeX(h)}
+                y={344}
+                width={250}
+                height={52}
+                rx={2}
+                fill="var(--card)"
+                stroke="var(--line)"
+                strokeWidth={0.6}
+              />
+              <text
+                x={homeX(h) + 12}
+                y={363}
+                fontSize={9}
+                fontWeight={600}
+                fill="var(--foreground)"
+              >
+                {HOME_META[h].title}
+              </text>
+              <text x={homeX(h) + 12} y={380} fontSize={8} fill="var(--muted-foreground)">
+                {HOME_META[h].sub}
+              </text>
+            </g>
+          );
+        })}
+
+        <text x={20} y={H - 40} fontSize={8.5} fill="var(--muted-foreground)">
+          dashed = descriptor-launched · solid = the descriptor-less default · clay ✕ =
+          SelectorUnavailable
+        </text>
+        <text x={20} y={H - 26} fontSize={8.5} fill="var(--muted-foreground)">
+          hash-named loaders never fight — the only contended byte is each year's one 00- selector.
+        </text>
+      </svg>
+    </div>
+  );
+}
+
+function Chip({
+  on,
+  color,
+  label,
+  onClick,
+}: {
+  on: boolean;
+  color: string;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="tele px-2 py-0.5"
+      style={{
+        fontSize: 10.5,
+        borderRadius: 2,
+        border: on ? `1px solid ${color}` : "1px solid var(--line)",
+        color: on ? color : "var(--muted-foreground)",
+        background: on ? `color-mix(in srgb, ${color} 7%, transparent)` : "transparent",
+        cursor: "pointer",
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function Counter({
+  value,
+  color,
+  label,
+  onChange,
+}: {
+  value: number;
+  color: string;
+  label: string;
+  onChange: (n: number) => void;
+}) {
+  return (
+    <span
+      className="tele inline-flex items-center gap-1 px-1.5 py-0.5"
+      style={{
+        fontSize: 10.5,
+        borderRadius: 2,
+        border: value > 0 ? `1px solid ${color}` : "1px solid var(--line)",
+        color: value > 0 ? color : "var(--muted-foreground)",
+        background: value > 0 ? `color-mix(in srgb, ${color} 7%, transparent)` : "transparent",
+      }}
+    >
+      <button onClick={() => onChange(Math.max(0, value - 1))} style={{ cursor: "pointer" }}>
+        −
+      </button>
+      {label} ×{value}
+      <button onClick={() => onChange(Math.min(3, value + 1))} style={{ cursor: "pointer" }}>
+        +
+      </button>
+    </span>
+  );
+}
+
+const LIVE_HOME: Record<string, WorldProc["payloadHome"]> = {
+  installed: "product",
+  rrd: "checkout",
+  sandbox: "generation",
+  unknown: "product",
+};
+
+function WorldComposer() {
+  const [tab, setTab] = useState<"compose" | "live">("compose");
+  const [state, setState] = useState<WorldState>(WORLD_PRESETS[3].state);
+  const [preset, setPreset] = useState<string | null>("refusal");
+  const [picked, setPicked] = useState<string | null>(null);
+  const { sessions } = useTarget("");
+  const worldLog = useWorldLog(sessions);
+
+  const composed = useMemo(() => deriveWorld(state), [state]);
+  const live = useMemo(
+    () => ({
+      procs: sessions.map((s, i) => ({
+        id: s.sessionId,
+        lane: s.lane,
+        // The broker doesn't report the Revit year yet (see ledger) — drawn as 2025, honestly labeled.
+        year: "2025" as const,
+        title: s.sandboxId
+          ? `sandbox:${s.sandboxId}`
+          : (s.activeDocumentTitle ?? `session ${i + 1}`),
+        payloadHome: LIVE_HOME[s.lane] ?? ("product" as const),
+        era: "new" as const,
+        refused: false,
+        live: s,
+      })),
+      selectors: [{ year: "2025" as const, era: "new" as const, owner: "your real Addins folder" }],
+      refusals: [] as string[],
+    }),
+    [sessions],
+  );
+
+  const world = tab === "live" ? live : composed;
+  const set = (patch: Partial<WorldState>) => {
+    setState((s) => ({ ...s, ...patch }));
+    setPreset(null);
+  };
+  const activePreset = WORLD_PRESETS.find((p) => p.key === preset);
+
+  return (
+    <div>
+      {/* tabs + presets */}
+      <div className="mb-2 flex flex-wrap items-center gap-1.5">
+        {(["compose", "live"] as const).map((t) => (
+          <Chip
+            key={t}
+            on={tab === t}
+            color="var(--pe-blue)"
+            label={
+              t === "compose" ? "compose a machine" : `live — this machine (${sessions.length})`
+            }
+            onClick={() => setTab(t)}
+          />
+        ))}
+        <span className="mx-1 h-4 w-px" style={{ background: "var(--line-2)" }} />
+        {tab === "compose" &&
+          WORLD_PRESETS.map((p) => (
+            <Chip
+              key={p.key}
+              on={preset === p.key}
+              color={p.key === "refusal" ? "var(--cat-clay)" : "var(--cat-green)"}
+              label={p.label}
+              onClick={() => {
+                setState(p.state);
+                setPreset(p.key);
+                setPicked(null);
+              }}
+            />
+          ))}
+      </div>
+
+      {/* composer controls */}
+      {tab === "compose" && (
+        <div className="mb-2 flex flex-wrap items-center gap-1.5">
+          <Chip
+            on={state.user}
+            color={laneVar("installed")}
+            label="user revit 2025"
+            onClick={() => set({ user: !state.user })}
+          />
+          <Chip
+            on={state.rrd24}
+            color={laneVar("rrd")}
+            label="rrd 2024"
+            onClick={() => set({ rrd24: !state.rrd24 })}
+          />
+          <Chip
+            on={state.rrd25}
+            color={laneVar("rrd")}
+            label="rrd 2025"
+            onClick={() => set({ rrd25: !state.rrd25 })}
+          />
+          <Counter
+            value={state.sb24}
+            color={laneVar("sandbox")}
+            label="sandbox 2024"
+            onChange={(n) => set({ sb24: n })}
+          />
+          <Counter
+            value={state.sb25}
+            color={laneVar("sandbox")}
+            label="sandbox 2025"
+            onChange={(n) => set({ sb25: n })}
+          />
+          <Counter
+            value={state.sbInst}
+            color={laneVar("sandbox")}
+            label="sandbox (installed payload)"
+            onChange={(n) => set({ sbInst: n })}
+          />
+          <span className="mx-1 h-4 w-px" style={{ background: "var(--line-2)" }} />
+          <Chip
+            on={state.drift}
+            color="var(--cat-kiln)"
+            label="loader drift (checkout ahead)"
+            onClick={() => set({ drift: !state.drift })}
+          />
+          <Chip
+            on={state.released}
+            color="var(--cat-green)"
+            label="release + install apply"
+            onClick={() => set({ released: !state.released })}
+          />
+        </div>
+      )}
+
+      {/* caption / refusals */}
+      {tab === "compose" && activePreset && (
+        <p className="mb-1 max-w-[90ch] text-[12px]" style={{ color: "var(--muted-foreground)" }}>
+          {activePreset.caption}
+        </p>
+      )}
+      {world.refusals.map((r) => (
+        <div
+          key={r}
+          className="mb-1 px-3 py-1.5 font-[var(--font-pe-mono)]"
+          style={{
+            fontSize: 10,
+            color: "var(--foreground)",
+            border: "1px solid var(--cat-clay)",
+            background: "color-mix(in srgb, var(--cat-clay) 5%, var(--card))",
+            borderRadius: 2,
+          }}
+        >
+          <span style={{ color: "var(--cat-clay)" }}>SelectorUnavailable · </span>
+          {r}
+        </div>
+      ))}
+      {tab === "live" && sessions.length === 0 && (
+        <div
+          className="mb-1 px-3 py-2 font-[var(--font-pe-mono)]"
+          style={{ fontSize: 10, color: "var(--muted-foreground)" }}
+        >
+          NO SESSIONS — attach a Revit (or start a sandbox) and this picture fills in live.
+        </div>
+      )}
+
+      <WorldPicture
+        procs={world.procs}
+        selectors={world.selectors}
+        picked={picked}
+        onPick={setPicked}
+      />
+
+      {/* live extras: the session strip + world-event ticks */}
+      {tab === "live" && (
+        <div className="mt-2">
+          <LiveWorld />
+          {worldLog.length > 0 && (
+            <div
+              className="mt-1 px-3 py-1.5"
+              style={{
+                border: "0.5px solid var(--line)",
+                background: "var(--card)",
+                borderRadius: 2,
+              }}
+            >
+              {worldLog.slice(-6).map((e) => (
+                <div
+                  key={`${e.atMs}-${e.sessionId}-${e.kind}`}
+                  className="font-[var(--font-pe-mono)]"
+                  style={{ fontSize: 9, color: "var(--muted-foreground)", lineHeight: "1.7" }}
+                >
+                  {ageLabel(e.atMs, Date.now())} · {e.kind} · {e.label}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── boot decision ───────────────────────────────────────────────────────────────────────────────
 // The loader's OnStartup, as a traceable path. Modes highlight the branch each lane takes.
 
@@ -1577,16 +2312,27 @@ function DocsRuntime() {
           </div>
         </section>
 
-        {/* ── the whole machine ─────────────────────────────────────────────────────────────── */}
+        {/* ── the shape ─────────────────────────────────────────────────────────────────────── */}
         <section className="mb-10">
-          <SectionLabel label="the whole machine, one picture" />
+          <SectionLabel label="the shape — one of each lane" />
           <p className="mb-2 max-w-[76ch] text-[12px]" style={{ color: "var(--muted-foreground)" }}>
-            The shape everything below zooms into: any number of Revit processes funnel through{" "}
-            <em>one</em> selector and <em>one</em> loader, then fan out to three payload homes based
-            on a single env var. Click a process or payload to trace its lane end to end — solid
-            means the descriptor-less default, dashed means descriptor-launched.
+            Every process funnels through <em>one</em> selector and <em>one</em> loader, then fans
+            out on a single env var. Click anything to trace its lane.
           </p>
           <BigPicture />
+        </section>
+
+        {/* ── the world composer ────────────────────────────────────────────────────────────── */}
+        <section className="mb-10">
+          <SectionLabel label="the world composer — build a machine, watch the rules" />
+          <p className="mb-2 max-w-[86ch] text-[12px]" style={{ color: "var(--muted-foreground)" }}>
+            Same picture, any number of processes, two years. Add rrds and sandboxes, toggle
+            <em> drift</em> and <em>release</em>, and the selectors, loader eras, and refusals
+            re-derive from the SDK's own rules. The <em>live</em> tab renders this machine's real
+            sessions through the identical picture (the same <code>useTarget</code> the product
+            uses).
+          </p>
+          <WorldComposer />
         </section>
 
         {/* ── boot decision ─────────────────────────────────────────────────────────────────── */}
@@ -1604,11 +2350,8 @@ function DocsRuntime() {
         <section className="mb-10">
           <SectionLabel label="the machine in motion" />
           <p className="mb-3 max-w-[78ch] text-[12px]" style={{ color: "var(--muted-foreground)" }}>
-            A scripted machine, reenacting a real week: install 0.6.14, run normally, debug with hot
-            reload, pull an SDK that changed the loader, watch a 2024 sandbox deploy freely and a
-            2025 one get <em>refused</em>, stop the sandbox, and close the drift with a release.
-            Scrub the steps; the atlas pulses what was written (●) and struck what was pruned (✕).
-            Click any file for its full lifecycle and citation.
+            The composer's <em>refusal</em> preset, as a real week on disk. Scrub the steps; ● was
+            written this step, ✕ was pruned. Click any file for its lifecycle and citation.
           </p>
 
           <div className="mb-2 flex flex-wrap items-center gap-3">
@@ -1729,64 +2472,79 @@ function DocsRuntime() {
 
         {/* ── lifecycle table ───────────────────────────────────────────────────────────────── */}
         <section className="mb-10">
-          <SectionLabel label="lifecycle reference — every artifact, birth to death" />
-          <div style={{ overflowX: "auto" }}>
-            <table
-              className="w-full border-collapse"
-              style={{ border: "0.5px solid var(--line)", minWidth: 720 }}
+          <details>
+            <summary
+              className="mb-1.5 cursor-pointer font-[var(--font-pe-mono)]"
+              style={{ fontSize: 10, letterSpacing: "0.06em", color: "var(--foreground)" }}
             >
-              <thead>
-                <tr style={{ borderBottom: "0.5px solid var(--line)" }}>
-                  {["artifact", "written by", "updated", "dies"].map((h) => (
-                    <th
-                      key={h}
-                      className="px-3 py-1.5 text-left font-[var(--font-pe-mono)]"
-                      style={{
-                        fontSize: 9,
-                        letterSpacing: "0.06em",
-                        color: "var(--muted-foreground)",
-                      }}
-                    >
-                      {h.toUpperCase()}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {LIFECYCLE_ROWS.map((r) => (
-                  <tr key={r.artifact} style={{ borderBottom: "0.5px solid var(--line-soft)" }}>
-                    <td
-                      className="px-3 py-1.5 font-[var(--font-pe-mono)]"
-                      style={{ fontSize: 10.5, color: "var(--pe-blue)", whiteSpace: "nowrap" }}
-                    >
-                      {r.artifact}
-                    </td>
-                    <td className="px-3 py-1.5 text-[11px]" style={{ color: "var(--foreground)" }}>
-                      {r.written}
-                    </td>
-                    <td
-                      className="px-3 py-1.5 text-[11px]"
-                      style={{ color: "var(--muted-foreground)" }}
-                    >
-                      {r.updated}
-                    </td>
-                    <td
-                      className="px-3 py-1.5 text-[11px]"
-                      style={{ color: "var(--muted-foreground)" }}
-                    >
-                      {r.dies}
-                    </td>
+              LIFECYCLE REFERENCE — EVERY ARTIFACT, BIRTH TO DEATH
+            </summary>
+            <div style={{ overflowX: "auto" }}>
+              <table
+                className="w-full border-collapse"
+                style={{ border: "0.5px solid var(--line)", minWidth: 720 }}
+              >
+                <thead>
+                  <tr style={{ borderBottom: "0.5px solid var(--line)" }}>
+                    {["artifact", "written by", "updated", "dies"].map((h) => (
+                      <th
+                        key={h}
+                        className="px-3 py-1.5 text-left font-[var(--font-pe-mono)]"
+                        style={{
+                          fontSize: 9,
+                          letterSpacing: "0.06em",
+                          color: "var(--muted-foreground)",
+                        }}
+                      >
+                        {h.toUpperCase()}
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {LIFECYCLE_ROWS.map((r) => (
+                    <tr key={r.artifact} style={{ borderBottom: "0.5px solid var(--line-soft)" }}>
+                      <td
+                        className="px-3 py-1.5 font-[var(--font-pe-mono)]"
+                        style={{ fontSize: 10.5, color: "var(--pe-blue)", whiteSpace: "nowrap" }}
+                      >
+                        {r.artifact}
+                      </td>
+                      <td
+                        className="px-3 py-1.5 text-[11px]"
+                        style={{ color: "var(--foreground)" }}
+                      >
+                        {r.written}
+                      </td>
+                      <td
+                        className="px-3 py-1.5 text-[11px]"
+                        style={{ color: "var(--muted-foreground)" }}
+                      >
+                        {r.updated}
+                      </td>
+                      <td
+                        className="px-3 py-1.5 text-[11px]"
+                        style={{ color: "var(--muted-foreground)" }}
+                      >
+                        {r.dies}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
         </section>
 
-        {/* ── glossary + live ───────────────────────────────────────────────────────────────── */}
-        <section className="mb-10 grid gap-6 lg:grid-cols-2">
-          <div>
-            <SectionLabel label="vocabulary" />
+        {/* ── glossary ──────────────────────────────────────────────────────────────────────── */}
+        <section className="mb-10">
+          <details>
+            <summary
+              className="mb-1.5 cursor-pointer font-[var(--font-pe-mono)]"
+              style={{ fontSize: 10, letterSpacing: "0.06em", color: "var(--foreground)" }}
+            >
+              VOCABULARY
+            </summary>
             <table className="w-full border-collapse" style={{ border: "0.5px solid var(--line)" }}>
               <tbody>
                 {GLOSSARY.map(([term, def]) => (
@@ -1807,18 +2565,7 @@ function DocsRuntime() {
                 ))}
               </tbody>
             </table>
-          </div>
-          <div>
-            <SectionLabel label="your machine, right now" />
-            <p
-              className="mb-2 max-w-[56ch] text-[12px]"
-              style={{ color: "var(--muted-foreground)" }}
-            >
-              Live from the broker (the same <code>useTarget</code> the product uses; updates ride
-              the /events stream). Each attached session is one instance of the story above.
-            </p>
-            <LiveWorld />
-          </div>
+          </details>
         </section>
 
         {/* ── ledger ────────────────────────────────────────────────────────────────────────── */}
