@@ -46,8 +46,10 @@ export interface CellTrichotomyReviewerProps {
   reviewHint: string;
   /** Per-key row label (route-specific: field path / row·col / param·type). */
   renderLabel: (key: string, cell: ReviewerCell) => ReactNode;
-  /** Value renderer (defaults to a string cast; settings passes a JSON-aware display). */
-  renderValue?: (value: unknown) => ReactNode;
+  /** Value renderer (defaults to a string cast; settings passes a JSON-aware display).
+   * Receives the key + cell so routes can render context-aware displays (e.g. a
+   * current → proposed diff resolved from their snapshot). */
+  renderValue?: (value: unknown, key: string, cell: ReviewerCell) => ReactNode;
 }
 
 export function CellTrichotomyReviewer({
@@ -121,7 +123,7 @@ export function CellTrichotomyReviewer({
                   {renderLabel(key, cell)}
                 </div>
                 <div className="truncate text-[var(--slate)]">
-                  {renderValue(staged ? cell.staged?.value : cell.proposal?.value)}
+                  {renderValue(staged ? cell.staged?.value : cell.proposal?.value, key, cell)}
                 </div>
                 {!staged && (cell.proposal?.confidence || cell.proposal?.note) ? (
                   <div className="truncate text-[10px] text-[var(--lichen)]">

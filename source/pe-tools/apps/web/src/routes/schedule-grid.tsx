@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Check, CheckCheck, Loader2, RefreshCw, RotateCcw, Sparkles, X } from "lucide-react";
+import { Check, CheckCheck, List, Loader2, RefreshCw, RotateCcw, Sparkles, X } from "lucide-react";
 import { useState } from "react";
 
 import {
@@ -15,11 +15,12 @@ import { cn } from "#/lib/utils";
 import { useRouteState } from "#/workbench/route-state";
 
 /**
- * /schedule-grid — a web surface for editing one Revit schedule collaboratively. pea reads
- * the schedule into the `route:schedule-grid` snapshot and proposes cell values; the engineer
+ * /schedule-grid — a web surface for editing any Revit schedule collaboratively. The catalog
+ * rail lists every schedule in the document (the `catalog` command); picking one reads it
+ * into the snapshot with cell binding handles. pea proposes cell values; the engineer
  * reviews, stages, and pushes back to Revit. All state lives in the route-state document,
  * written through the dispatcher as `actor:"human"`. Cells carry a proposal → staged → pushed
- * trichotomy; only the human can push. Lean working slice, not a spreadsheet product.
+ * trichotomy rendered as a visible current → proposed diff; only the human can push.
  */
 export const Route = createFileRoute("/schedule-grid")({
   component: ScheduleGridRoute,
@@ -32,11 +33,11 @@ function ScheduleGridRoute() {
     useRouteState(scheduleGridRouteState);
   const document = slice;
   const snapshot = document?.snapshot ?? null;
+  const catalog = document?.catalog ?? null;
   const cells = document?.cells ?? {};
 
-  const [busy, setBusy] = useState<null | "refresh" | "push">(null);
+  const [busy, setBusy] = useState<null | "catalog" | "refresh" | "push">(null);
   const [error, setError] = useState<string | null>(null);
-  const [scheduleName, setScheduleName] = useState("");
   const [edit, setEdit] = useState<{ key: string; value: string } | null>(null);
 
   const staged = Object.entries(cells).filter(([, cell]) => cell.staged != null);
@@ -47,14 +48,11 @@ function ScheduleGridRoute() {
   ).length;
   const pushable = stagedCount > 0 && attention === 0;
 
-  const run = async (kind: "refresh" | "push") => {
+  const run = async (kind: "catalog" | "refresh" | "push", input: Record<string, unknown> = {}) => {
     setBusy(kind);
     setError(null);
     try {
-      const result = await command(
-        kind,
-        kind === "refresh" && scheduleName.trim() ? { scheduleName: scheduleName.trim() } : {},
-      );
+      const result = await command(kind, input);
       if (!result.ok) setError(result.error ?? result.hint ?? `${kind} failed.`);
       else setError(pushFailureNote(result.result));
     } catch (caught) {
@@ -92,7 +90,7 @@ function ScheduleGridRoute() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-baseline gap-3">
             <h1 className="font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight">
-              {snapshot?.scheduleName ?? "Schedule Grid"}
+              {snapshot?.scheduleName ?? "Schedules"}
             </h1>
             <span className="text-xs text-[var(--slate)]">
               {snapshot
@@ -116,21 +114,15 @@ function ScheduleGridRoute() {
               </span>
             )}
 
-            <input
-              value={scheduleName}
-              onChange={(e) => setScheduleName(e.target.value)}
-              placeholder="active view"
-              className="h-8 w-40 rounded-sm border-[0.5px] border-[var(--line)] bg-[var(--paper)] px-2 text-xs outline-none focus:border-[var(--pe-blue)]"
-              title="Schedule name to read; blank reads the current active schedule view"
-            />
             <Button
               variant="outline"
               size="sm"
               disabled={busy != null}
               onClick={() => void run("refresh")}
+              title="Read the schedule view currently active in Revit"
             >
               <RefreshCw className={busy === "refresh" ? "animate-spin" : ""} />
-              {snapshot ? "Re-read" : "Read schedule"}
+              {snapshot ? "Re-read" : "Read active view"}
             </Button>
 
             <Button
@@ -171,79 +163,176 @@ function ScheduleGridRoute() {
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-auto p-4">
-        {snapshot ? (
-          <table className="border-collapse text-left text-xs">
-            <thead className="sticky top-0 z-10 bg-[var(--paper-2)]">
-              <tr>
-                <th className="tele-label border-b border-[var(--line)] px-2 py-1.5 text-[var(--slate)]">
-                  #
-                </th>
-                {snapshot.columns.map((column) => (
-                  <th
-                    key={column.columnNumber}
-                    className="tele-label border-b border-l border-[var(--line-soft)] px-2 py-1.5 text-[var(--slate)]"
-                  >
-                    {column.headerText}
-                    {column.isCalculated && <ColBadge label="calc" />}
-                    {column.isCombinedParameter && <ColBadge label="comb" />}
+      <div className="flex min-h-0 flex-1">
+        <SchedulePicker
+          catalog={catalog}
+          activeScheduleId={snapshot?.scheduleId ?? null}
+          busy={busy}
+          onList={() => void run("catalog")}
+          onPick={(scheduleId) => void run("refresh", { scheduleId })}
+        />
+
+        <div className="min-h-0 flex-1 overflow-auto p-4">
+          {snapshot ? (
+            <table className="border-collapse text-left text-xs">
+              <thead className="sticky top-0 z-10 bg-[var(--paper-2)]">
+                <tr>
+                  <th className="tele-label border-b border-[var(--line)] px-2 py-1.5 text-[var(--slate)]">
+                    #
                   </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {snapshot.rows.map((row) => (
-                <tr key={row.rowNumber} className="border-b border-[var(--line-soft)]">
-                  <td
-                    className="tele whitespace-nowrap px-2 py-1 text-right text-[var(--slate)]"
-                    title={`row ${row.rowNumber} · ${row.kind} · subjects=[${row.subjectIds.join(",")}]`}
-                  >
-                    {row.rowNumber}
-                    {row.subjectIds.length > 1 ? ` ×${row.subjectIds.length}` : ""}
-                  </td>
-                  {snapshot.columns.map((column, columnIndex) => {
-                    const key = scheduleCellKey(row.rowNumber, column.columnNumber);
-                    const binding = row.bindings.find(
-                      (candidate) => candidate.columnNumber === column.columnNumber,
-                    );
-                    return (
-                      <Cell
-                        key={column.columnNumber}
-                        cellKey={key}
-                        text={row.values[columnIndex] ?? ""}
-                        binding={binding}
-                        cell={cells[key]}
-                        editing={edit?.key === key ? edit.value : null}
-                        onEditStart={() =>
-                          binding?.isEditable && binding.blocker === "None"
-                            ? setEdit({
-                                key,
-                                value: cells[key]?.staged?.value ?? row.values[columnIndex] ?? "",
-                              })
-                            : undefined
-                        }
-                        onEditChange={(value) => setEdit({ key, value })}
-                        onEditCommit={commitEdit}
-                        onEditCancel={() => setEdit(null)}
-                        onApprove={approve}
-                        onDeny={deny}
-                        onUndo={undo}
-                      />
-                    );
-                  })}
+                  {snapshot.columns.map((column) => (
+                    <th
+                      key={column.columnNumber}
+                      className="tele-label border-b border-l border-[var(--line-soft)] px-2 py-1.5 text-[var(--slate)]"
+                    >
+                      {column.headerText}
+                      {column.isCalculated && <ColBadge label="calc" />}
+                      {column.isCombinedParameter && <ColBadge label="comb" />}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p className="text-sm text-[var(--slate)]">
-            {hydrated
-              ? "No schedule read yet. Open a schedule view in Revit and press Read schedule (or name one)."
-              : "Connecting to the workbench…"}
-          </p>
-        )}
+              </thead>
+              <tbody>
+                {snapshot.rows.map((row) => (
+                  <tr key={row.rowNumber} className="border-b border-[var(--line-soft)]">
+                    <td
+                      className="tele whitespace-nowrap px-2 py-1 text-right text-[var(--slate)]"
+                      title={`row ${row.rowNumber} · ${row.kind} · subjects=[${row.subjectIds.join(",")}]`}
+                    >
+                      {row.rowNumber}
+                      {row.subjectIds.length > 1 ? ` ×${row.subjectIds.length}` : ""}
+                    </td>
+                    {snapshot.columns.map((column, columnIndex) => {
+                      const key = scheduleCellKey(row.rowNumber, column.columnNumber);
+                      const binding = row.bindings.find(
+                        (candidate) => candidate.columnNumber === column.columnNumber,
+                      );
+                      return (
+                        <Cell
+                          key={column.columnNumber}
+                          cellKey={key}
+                          text={row.values[columnIndex] ?? ""}
+                          binding={binding}
+                          cell={cells[key]}
+                          editing={edit?.key === key ? edit.value : null}
+                          onEditStart={() =>
+                            binding?.isEditable && binding.blocker === "None"
+                              ? setEdit({
+                                  key,
+                                  value: cells[key]?.staged?.value ?? row.values[columnIndex] ?? "",
+                                })
+                              : undefined
+                          }
+                          onEditChange={(value) => setEdit({ key, value })}
+                          onEditCommit={commitEdit}
+                          onEditCancel={() => setEdit(null)}
+                          onApprove={approve}
+                          onDeny={deny}
+                          onUndo={undo}
+                        />
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="text-sm text-[var(--slate)]">
+              {hydrated
+                ? "No schedule read yet. Pick one from the rail, or open a schedule view in Revit and press Read active view."
+                : "Connecting to the workbench…"}
+            </p>
+          )}
+        </div>
       </div>
     </main>
+  );
+}
+
+/** The catalog rail — every schedule in the document, grouped by category; pick to read. */
+function SchedulePicker({
+  catalog,
+  activeScheduleId,
+  busy,
+  onList,
+  onPick,
+}: {
+  catalog: ScheduleGridDocument["catalog"];
+  activeScheduleId: number | null;
+  busy: string | null;
+  onList: () => void;
+  onPick: (scheduleId: number) => void;
+}) {
+  const groups = new Map<string, NonNullable<typeof catalog>["schedules"]>();
+  for (const entry of catalog?.schedules ?? []) {
+    const category = entry.categoryName ?? "Other";
+    groups.set(category, [...(groups.get(category) ?? []), entry]);
+  }
+
+  return (
+    <aside className="flex w-60 shrink-0 flex-col border-r border-[var(--line-2)]">
+      <div className="flex items-center justify-between gap-2 border-b border-[var(--line-soft)] px-3 py-2">
+        <span className="tele-label text-[10px] text-[var(--slate)]">
+          schedules{catalog ? ` · ${catalog.schedules.length}` : ""}
+          {catalog?.takenAt ? ` · ${timeAgo(catalog.takenAt)}` : ""}
+        </span>
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          title="List every schedule in the document"
+          disabled={busy != null}
+          onClick={onList}
+        >
+          {busy === "catalog" ? <Loader2 className="animate-spin" /> : <List />}
+        </Button>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto py-1">
+        {catalog == null ? (
+          <div className="px-3 py-2">
+            <Button size="sm" variant="outline" disabled={busy != null} onClick={onList}>
+              <List /> List schedules
+            </Button>
+            <p className="mt-1.5 text-[10px] leading-relaxed text-[var(--slate)]">
+              Reads the document's schedule catalog so you (or pea) can open any of them.
+            </p>
+          </div>
+        ) : catalog.schedules.length === 0 ? (
+          <p className="px-3 py-2 text-[11px] text-[var(--slate)]">No schedules in the document.</p>
+        ) : (
+          [...groups.entries()].map(([category, entries]) => (
+            <div key={category} className="mb-1">
+              <p className="tele-label px-3 pb-0.5 pt-1.5 text-[9px] text-[var(--lichen)]">
+                {category}
+              </p>
+              {entries.map((entry) => {
+                const active = entry.scheduleId === activeScheduleId;
+                return (
+                  <button
+                    key={entry.scheduleId}
+                    type="button"
+                    disabled={busy != null}
+                    onClick={() => onPick(entry.scheduleId)}
+                    title={`id ${entry.scheduleId}${entry.isPlacedOnSheet ? " · placed on sheet" : ""}`}
+                    className={cn(
+                      "flex w-full items-baseline gap-2 px-3 py-1 text-left text-[11px] hover:bg-[var(--pe-blue)]/8",
+                      active
+                        ? "border-l-2 border-[var(--pe-blue)] bg-[var(--pe-blue)]/8 font-medium text-[var(--pe-blue)]"
+                        : "border-l-2 border-transparent text-[var(--clay-ink)]",
+                    )}
+                  >
+                    <span className="min-w-0 flex-1 truncate">{entry.name}</span>
+                    <span className="tele shrink-0 text-[9px] text-[var(--slate)]">
+                      {entry.rowCount}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ))
+        )}
+      </div>
+    </aside>
   );
 }
 
@@ -265,7 +354,13 @@ function Cell({
   const proposal = !staged && cell?.proposal != null;
   const attention = cell?.review === "attention";
   const editable = binding?.isEditable === true && binding.blocker === "None";
-  const display = staged ? cell?.staged?.value : (binding?.displayValue ?? text);
+  const current = binding?.displayValue ?? text;
+  const next = staged
+    ? (cell?.staged?.value ?? "")
+    : proposal
+      ? String(cell?.proposal?.value ?? "")
+      : null;
+  const showDiff = next != null && next !== current;
 
   const tooltip = binding
     ? [
@@ -274,6 +369,7 @@ function Cell({
         `targets: [${binding.targetElementIds.join(",")}]`,
         binding.blocker !== "None" ? `blocker: ${binding.blocker}` : null,
         binding.hasMixedValues ? "mixed values" : null,
+        proposal && cell?.proposal?.note ? `pea: ${cell.proposal.note}` : null,
       ]
         .filter(Boolean)
         .join("\n")
@@ -306,14 +402,20 @@ function Cell({
         />
       ) : (
         <div className="flex items-start gap-1">
-          <span
-            className={cn(
-              "tele min-w-8 whitespace-pre-wrap",
-              staged && "font-medium text-[var(--cat-green)]",
-              proposal && "text-[var(--cat-clay)]",
+          <span className="tele min-w-8 whitespace-pre-wrap">
+            {showDiff && (
+              <span className="mr-1 text-[var(--slate)] line-through opacity-70">
+                {current || "—"}
+              </span>
             )}
-          >
-            {display || "—"}
+            <span
+              className={cn(
+                staged && "font-medium text-[var(--cat-green)]",
+                proposal && "font-medium text-[var(--cat-clay)]",
+              )}
+            >
+              {(next ?? current) || "—"}
+            </span>
             {binding?.isTypeParameter && (
               <span
                 className="tele-label ml-1 align-super text-[var(--cat-kiln)]"

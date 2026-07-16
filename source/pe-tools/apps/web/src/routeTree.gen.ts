@@ -25,6 +25,8 @@ import { Route as IndexRouteImport } from "./routes/index";
 import { Route as PocTypeRouteImport } from "./routes/poc.type";
 import { Route as PocSurfacesRouteImport } from "./routes/poc.surfaces";
 import { Route as PocSidepaneRouteImport } from "./routes/poc.sidepane";
+import { Route as PocFamilyPluginRouteImport } from "./routes/poc.family-plugin";
+import { Route as PocFamilyLensRouteImport } from "./routes/poc.family-lens";
 import { Route as PocDialRouteImport } from "./routes/poc.dial";
 import { Route as DemoTanstackQueryRouteImport } from "./routes/demo/tanstack-query";
 import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
@@ -111,6 +113,16 @@ const PocSidepaneRoute = PocSidepaneRouteImport.update({
   path: "/poc/sidepane",
   getParentRoute: () => rootRouteImport,
 } as any);
+const PocFamilyPluginRoute = PocFamilyPluginRouteImport.update({
+  id: "/poc/family-plugin",
+  path: "/poc/family-plugin",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PocFamilyLensRoute = PocFamilyLensRouteImport.update({
+  id: "/poc/family-lens",
+  path: "/poc/family-lens",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const PocDialRoute = PocDialRouteImport.update({
   id: "/poc/dial",
   path: "/poc/dial",
@@ -153,6 +165,8 @@ export interface FileRoutesByFullPath {
   "/settings": typeof SettingsRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
   "/poc/dial": typeof PocDialRoute;
+  "/poc/family-lens": typeof PocFamilyLensRoute;
+  "/poc/family-plugin": typeof PocFamilyPluginRoute;
   "/poc/sidepane": typeof PocSidepaneRoute;
   "/poc/surfaces": typeof PocSurfacesRoute;
   "/poc/type": typeof PocTypeRoute;
@@ -176,6 +190,8 @@ export interface FileRoutesByTo {
   "/settings": typeof SettingsRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
   "/poc/dial": typeof PocDialRoute;
+  "/poc/family-lens": typeof PocFamilyLensRoute;
+  "/poc/family-plugin": typeof PocFamilyPluginRoute;
   "/poc/sidepane": typeof PocSidepaneRoute;
   "/poc/surfaces": typeof PocSurfacesRoute;
   "/poc/type": typeof PocTypeRoute;
@@ -200,6 +216,8 @@ export interface FileRoutesById {
   "/settings": typeof SettingsRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
   "/poc/dial": typeof PocDialRoute;
+  "/poc/family-lens": typeof PocFamilyLensRoute;
+  "/poc/family-plugin": typeof PocFamilyPluginRoute;
   "/poc/sidepane": typeof PocSidepaneRoute;
   "/poc/surfaces": typeof PocSurfacesRoute;
   "/poc/type": typeof PocTypeRoute;
@@ -225,6 +243,8 @@ export interface FileRouteTypes {
     | "/settings"
     | "/demo/tanstack-query"
     | "/poc/dial"
+    | "/poc/family-lens"
+    | "/poc/family-plugin"
     | "/poc/sidepane"
     | "/poc/surfaces"
     | "/poc/type"
@@ -248,6 +268,8 @@ export interface FileRouteTypes {
     | "/settings"
     | "/demo/tanstack-query"
     | "/poc/dial"
+    | "/poc/family-lens"
+    | "/poc/family-plugin"
     | "/poc/sidepane"
     | "/poc/surfaces"
     | "/poc/type"
@@ -271,6 +293,8 @@ export interface FileRouteTypes {
     | "/settings"
     | "/demo/tanstack-query"
     | "/poc/dial"
+    | "/poc/family-lens"
+    | "/poc/family-plugin"
     | "/poc/sidepane"
     | "/poc/surfaces"
     | "/poc/type"
@@ -295,6 +319,8 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute;
   DemoTanstackQueryRoute: typeof DemoTanstackQueryRoute;
   PocDialRoute: typeof PocDialRoute;
+  PocFamilyLensRoute: typeof PocFamilyLensRoute;
+  PocFamilyPluginRoute: typeof PocFamilyPluginRoute;
   PocSidepaneRoute: typeof PocSidepaneRoute;
   PocSurfacesRoute: typeof PocSurfacesRoute;
   PocTypeRoute: typeof PocTypeRoute;
@@ -416,6 +442,20 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof PocSidepaneRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/poc/family-plugin": {
+      id: "/poc/family-plugin";
+      path: "/poc/family-plugin";
+      fullPath: "/poc/family-plugin";
+      preLoaderRoute: typeof PocFamilyPluginRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/poc/family-lens": {
+      id: "/poc/family-lens";
+      path: "/poc/family-lens";
+      fullPath: "/poc/family-lens";
+      preLoaderRoute: typeof PocFamilyLensRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/poc/dial": {
       id: "/poc/dial";
       path: "/poc/dial";
@@ -481,6 +521,8 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   DemoTanstackQueryRoute: DemoTanstackQueryRoute,
   PocDialRoute: PocDialRoute,
+  PocFamilyLensRoute: PocFamilyLensRoute,
+  PocFamilyPluginRoute: PocFamilyPluginRoute,
   PocSidepaneRoute: PocSidepaneRoute,
   PocSurfacesRoute: PocSurfacesRoute,
   PocTypeRoute: PocTypeRoute,

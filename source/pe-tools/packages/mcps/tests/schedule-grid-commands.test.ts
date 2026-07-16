@@ -97,6 +97,77 @@ function detailResponse() {
   };
 }
 
+test("catalog lists non-template schedules into doc.catalog", async () => {
+  const requests: { key: string; request: unknown }[] = [];
+  const { handlers, restore } = withHostCall((key, request) => {
+    requests.push({ key, request });
+    return {
+      entries: [
+        {
+          scheduleId: 42,
+          scheduleUniqueId: "uid-42",
+          name: "Panel Schedule",
+          categoryName: "Electrical Equipment",
+          isTemplate: false,
+          isPlacedOnSheet: true,
+          visibleBodyRowCount: 12,
+        },
+        {
+          scheduleId: 43,
+          scheduleUniqueId: "uid-43",
+          name: "Template",
+          categoryName: null,
+          isTemplate: true,
+          isPlacedOnSheet: false,
+          visibleBodyRowCount: 0,
+        },
+      ],
+      issues: [],
+      page: null,
+      summary: null,
+    };
+  });
+  const document = emptyDoc();
+  try {
+    const result = await handlers.catalog({}, ctxFor(document));
+
+    expect(requests[0]?.key).toBe("revit.catalog.schedules");
+    expect(document.catalog?.schedules).toEqual([
+      {
+        scheduleId: 42,
+        name: "Panel Schedule",
+        categoryName: "Electrical Equipment",
+        rowCount: 12,
+        isPlacedOnSheet: true,
+      },
+    ]);
+    expect(document.catalog?.takenAt).toBeTruthy();
+    expect(result).toEqual({ scheduleCount: 1 });
+  } finally {
+    restore();
+  }
+});
+
+test("refresh preserves cells on a same-schedule re-read and clears them on a switch", async () => {
+  const { handlers, restore } = withHostCall(() => detailResponse());
+  const document = emptyDoc();
+  const key = scheduleCellKey(1, 2);
+  document.cells[key] = { proposal: { value: "150 VA", by: "pea" }, review: "none" };
+  try {
+    // Same schedule (42 → 42): cells survive the re-read.
+    document.snapshot = detailResponse().entries[0] as unknown as ScheduleGridDocument["snapshot"];
+    await handlers.refresh({}, ctxFor(document));
+    expect(document.cells[key]).toBeTruthy();
+
+    // Different schedule (99 → 42): positional cell keys would misapply — cleared.
+    document.snapshot!.scheduleId = 99;
+    await handlers.refresh({}, ctxFor(document));
+    expect(document.cells).toEqual({});
+  } finally {
+    restore();
+  }
+});
+
 test("refresh maps the first resolved schedule entry onto the snapshot", async () => {
   const requests: { key: string; request: unknown }[] = [];
   const { handlers, restore } = withHostCall((key, request) => {
@@ -235,7 +306,9 @@ test("push blocks when a staged cell still needs review", async () => {
 
 test("command input schemas accept the web client payloads", () => {
   const commands = scheduleGridRouteState.commands;
+  expect(commands.catalog.input.safeParse({}).success).toBe(true);
   expect(commands.refresh.input.safeParse({}).success).toBe(true);
+  expect(commands.refresh.input.safeParse({ scheduleId: 42 }).success).toBe(true);
   expect(commands.refresh.input.safeParse({ scheduleName: "Panel", maxRows: 50 }).success).toBe(
     true,
   );

@@ -15,9 +15,10 @@ import {
 import { CellTrichotomyReviewer } from "../trichotomy-reviewer";
 
 /**
- * Inline chat card + reviewer for the /schedule-grid route. Mirrors FamilyTypesChatPlugin:
- * the compact card shows counts; when active (the authoritative end-of-chat dock) it lists
- * every proposal/staged cell with row + column labels and lets the human approve → stage,
+ * Inline chat card + reviewer for the /schedule-grid route. The compact card names the
+ * schedule under edit (with snapshot freshness) and shows counts; when active (the
+ * authoritative end-of-chat dock) it lists every proposal/staged cell as a
+ * current → proposed diff resolved from the snapshot, and lets the human approve → stage,
  * deny, undo, and push — each a human-actor write through the route-state dispatcher.
  */
 export function ScheduleGridChatPlugin({
@@ -28,6 +29,7 @@ export function ScheduleGridChatPlugin({
   active,
 }: RouteChatPluginProps) {
   const document = readRouteState(sessionState, scheduleGridRouteState);
+  const snapshot = document?.snapshot ?? null;
   const cells = document?.cells ?? {};
   const summary = cellSummary(cells);
   const openProposals = Object.values(cells).filter(
@@ -40,12 +42,36 @@ export function ScheduleGridChatPlugin({
   if (active && !reviewable) return null;
 
   const columnLabel = (columnNumber: number) =>
-    document?.snapshot?.columns.find((column) => column.columnNumber === columnNumber)
-      ?.headerText ?? `col ${columnNumber}`;
+    snapshot?.columns.find((column) => column.columnNumber === columnNumber)?.headerText ??
+    `col ${columnNumber}`;
+
+  /** What Revit currently shows in this cell — the "from" side of the diff. */
+  const currentValue = (key: string): string | null => {
+    if (!snapshot) return null;
+    const { rowNumber, columnNumber } = splitScheduleCellKey(key);
+    const row = snapshot.rows.find((candidate) => candidate.rowNumber === rowNumber);
+    if (!row) return null;
+    const binding = row.bindings.find((candidate) => candidate.columnNumber === columnNumber);
+    const columnIndex = snapshot.columns.findIndex(
+      (column) => column.columnNumber === columnNumber,
+    );
+    return binding?.displayValue ?? (columnIndex >= 0 ? (row.values[columnIndex] ?? null) : null);
+  };
 
   return (
     <InlineRoutePlugin title="Schedule Grid" action={actionLabel(toolName, args, running)}>
       <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
+        {snapshot ? (
+          <span className="min-w-0 truncate font-medium text-[var(--clay-ink)]">
+            {snapshot.scheduleName}
+            <span className="tele-label ml-1.5 font-normal text-[var(--lichen)]">
+              {snapshot.rows.length}×{snapshot.columns.length}
+              {snapshot.takenAt ? ` · read ${timeAgo(snapshot.takenAt)}` : ""}
+            </span>
+          </span>
+        ) : (
+          <span className="text-[var(--slate)]">no schedule read</span>
+        )}
         <Metric value={openProposals} label="open proposals" />
         <Metric value={summary.staged} label="staged" />
         <Metric value={summary.attention} label="need attention" issue />
@@ -75,8 +101,32 @@ export function ScheduleGridChatPlugin({
               </>
             );
           }}
+          renderValue={(value, key) => {
+            const next =
+              typeof value === "string" ? value : value == null ? "" : JSON.stringify(value);
+            const current = currentValue(key);
+            if (current == null || current === next) return next || "—";
+            return (
+              <span className="tele tabular-nums">
+                <span className="text-[var(--slate)] line-through opacity-70">
+                  {current || "—"}
+                </span>
+                <span className="mx-1 text-[var(--lichen)]">→</span>
+                <span className="text-[var(--clay-ink)]">{next || "—"}</span>
+              </span>
+            );
+          }}
         />
       ) : null}
     </InlineRoutePlugin>
   );
+}
+
+function timeAgo(iso: string): string {
+  const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (Number.isNaN(min)) return "";
+  if (min < 1) return "just now";
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.round(min / 60);
+  return hr < 24 ? `${hr}h ago` : `${Math.round(hr / 24)}d ago`;
 }
