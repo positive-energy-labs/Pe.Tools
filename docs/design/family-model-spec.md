@@ -1,7 +1,7 @@
 # Family Model (`family.json`) — design spec
 
-Status: implementation complete; Phase 5 is a documented public-API boundary. The automated Phase 8 gates are green;
-only the optional guided presentation remains. Captures the design review and constraint digest of 2026-07-15.
+Status: implementation complete; Phase 5 is a documented public-API boundary and the Phase 8 source-sandbox
+walkthrough is proven. Captures the design review and constraint digest of 2026-07-15.
 Owner surfaces: FamilyFoundry (FF). Consumers: FFManager, FFMigrator, capture, replay, Pea, host operations, web preview.
 
 ## Implementation ledger
@@ -12,9 +12,12 @@ Owner surfaces: FamilyFoundry (FF). Consumers: FFManager, FFMigrator, capture, r
   recursive GRD/vane dependency roundtrip.
 - The separate GRD room fixture proves the opening-side calculation point structurally and retains the final exported
   image under `.artifacts/build/Pe.Revit.Tests/Debug.R25.Tests/visual-proof/grd-room-proof.png`.
-- The checked-in showcase walkthrough, web production build, and named constituent register are ready for a guided
-  presentation. Opening the generated families together with the user is presentation work, not an unverified compiler
-  requirement.
+- The exact source sandbox `ff-family-model-r25` built the minimal box, showcase, and GRD/vane profiles through the
+  public `family.model.build` operation. It opened all three RFAs sequentially, applied 1/3/3 type edits with zero
+  failures, and captured the final active states under `.artifacts/family-model-walkthrough/`.
+- The walkthrough used generation `20260716050108509`, PID `20688`, and build stamp `94429ce46b0a`; the SDK armed
+  no-save and stopped that exact sandbox gracefully. The three generated RFAs and PNGs are disposable evidence, not
+  checked-in source.
 
 ### 2026-07-15 — Phase 7 product surface complete
 
@@ -358,7 +361,8 @@ Exit gate: cross-year results are summarized in proof artifacts and no year reli
 Scope:
 
 - expose the schema/model through Manager, capture/replay, Pea/host contracts, and the FF web plugin surface;
-- render supported params, planes, frames, faces, solids, Connectors, arrays, symbolics, and companions directly from `family.json`;
+- render every constituent in the implemented v1 contract directly from `family.json`: params, planes, frame origins
+  including face references, solids, nested families and bindings, Connectors and stubs, and centered arrays;
 - evaluate only the portable literal/ref/arithmetic subset. Unsupported Revit formulas and `unmodeled` facts render warnings, never guessed geometry.
 
 Proof: the supported profiles hydrate through the shared schema/model, compile through the host surface, and render the
@@ -398,6 +402,8 @@ The implementation goal is complete when:
 - Encoding unsupported roundtrip semantics in extensible storage, hidden parameters, `DataStorage`, or other metadata.
 - Expanding room-calculation-point direction/offset authoring beyond `{ "enabled": true }`.
 - Building a Revit formula parser for web preview in v1.
+- Adding `symbolics` or `companions` before those sections exist in the portable C# contract and roundtrip proof. They
+  remain future authored vocabulary, not silently accepted v1 JSON.
 - Adding generalized geometry, placement, or preset knobs without a checked-in example that needs them.
 
 ## Open items
