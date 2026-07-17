@@ -62,6 +62,7 @@ const config = defineConfig(({ mode }) => {
           "/ops": options,
           "/schemas": options,
           "/host": options,
+          "/sessions": options,
           "/pe": options,
           "/api/agent-controller": options,
         };

@@ -9,6 +9,7 @@ import {
   settingsRouteState,
 } from "@pe/agent-contracts";
 import { ThemeToggle } from "#/components/ThemeToggle";
+import { RfaChip, RvtChip } from "#/components/document-chips";
 import { TargetChip } from "#/components/target-chip";
 import {
   type CitationTarget,
@@ -1558,6 +1559,11 @@ function parseModel(
   try {
     const parsed = JSON.parse(rawContent) as Record<string, unknown>;
     delete parsed.$schema;
+    // A schema-invalid or partial document (mid-authoring, agent proposal) must render,
+    // not crash the route — default the collections the render tree iterates.
+    parsed.family ??= { name: "", category: "", template: "", placement: "" };
+    parsed.familyParameters ??= {};
+    parsed.types ??= {};
     for (const [pointer, field] of Object.entries(fields)) {
       if (field.staged != null) {
         applyJsonEdit(parsed, settingsFieldSegments(pointer), field.staged);
@@ -1692,13 +1698,16 @@ function Page() {
   const { sessions } = useTarget(boundTarget);
 
   // ── documents list: the existing settings.tree op already enumerates a root ─
-  const treeQuery = useTreeQuery({
-    ...FAMILY_MODULE,
-    subDirectory: "",
-    recursive: true,
-    includeFragments: false,
-    includeSchemas: false,
-  });
+  const treeQuery = useTreeQuery(
+    {
+      ...FAMILY_MODULE,
+      subDirectory: "",
+      recursive: true,
+      includeFragments: false,
+      includeSchemas: false,
+    },
+    { bridgeSessionId: boundTarget || undefined },
+  );
   const documents = useMemo(
     () =>
       (treeQuery.data?.files ?? [])
@@ -1712,6 +1721,7 @@ function Page() {
     setError(null);
     const result = await settings.command("open", {
       documentId: { ...FAMILY_MODULE, relativePath },
+      target: boundTarget || undefined,
     });
     if (!result.ok) setError(result.error ?? result.hint ?? "Could not open document.");
     setBusy(null);
@@ -1725,6 +1735,7 @@ function Page() {
     const result = await settings.command("create", {
       documentId: { ...FAMILY_MODULE, relativePath },
       rawContent: MINIMAL_TEMPLATE(name.trim()),
+      target: boundTarget || undefined,
     });
     if (!result.ok) setError(result.error ?? result.hint ?? "Could not create document.");
     else await treeQuery.refetch();
@@ -1767,7 +1778,9 @@ function Page() {
     setError(null);
     const result = await settings.command(
       name,
-      name === "validate" ? { includeProposals: false } : {},
+      name === "validate"
+        ? { includeProposals: false, target: boundTarget || undefined }
+        : { target: boundTarget || undefined },
     );
     if (!result.ok) setError(result.error ?? result.hint ?? `${name} failed.`);
     setBusy(null);
@@ -1779,7 +1792,7 @@ function Page() {
       { path: ["fields", pointer, "review"], value: "none" },
     ]);
     if (patches.length > 0) await settings.apply(patches);
-    await settings.command("refresh", {});
+    await settings.command("refresh", { target: boundTarget || undefined });
   };
 
   const captureEvidence = async () => {
@@ -1805,10 +1818,12 @@ function Page() {
     setParsing(true);
     setError(null);
     try {
-      if (input.file) {
-        // Client-side upload: hit the parse endpoint directly, then patch doc blocks.
+      if (input.file || input.url) {
+        // Client-side parse: the endpoint lives on this origin, so both file uploads and
+        // URLs go direct — the host-side parse_spec command can't reach the web server.
         const form = new FormData();
-        form.append("file", input.file);
+        if (input.file) form.append("file", input.file);
+        else form.append("url", input.url!);
         const response = await fetch("/api/pdf-audit/parse", { method: "POST", body: form });
         const payload = (await response.json()) as {
           error?: string;
@@ -1838,9 +1853,6 @@ function Page() {
             },
           },
         ]);
-      } else if (input.url) {
-        const result = await family.command("parse_spec", { url: input.url });
-        if (!result.ok) throw new Error(result.error ?? result.hint ?? "parse failed");
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -1993,9 +2005,16 @@ function Page() {
         <TargetChip
           selector={boundTarget}
           sessions={sessions}
-          onPin={(selector) => void family.command("bind", { target: selector || null })}
+          onPin={(selector) => {
+            // The settings slice runs the document commands; it needs the same session
+            // binding as the family slice or FamilyFoundry module discovery fails.
+            void family.command("bind", { target: selector || null });
+            void settings.command("bind", { target: selector || null });
+          }}
           consumerLabel="family workspace"
         />
+        <RvtChip target={boundTarget} />
+        <RfaChip target={boundTarget} />
         <ThemeToggle />
       </div>
 

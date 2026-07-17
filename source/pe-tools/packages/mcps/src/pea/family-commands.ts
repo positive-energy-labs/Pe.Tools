@@ -6,6 +6,8 @@
  * commands only feed the sibling `route:family` slice (spec doc blocks + evidence
  * with origin stamps). Evidence is never build input — it is proof beside the model.
  */
+import { resolve } from "node:path";
+
 import {
   type FamilyDocument,
   type RouteStateCommandHandlers,
@@ -37,8 +39,10 @@ export function createFamilyCommandHandlers(
 ): RouteStateCommandHandlers<FamilyDocument> {
   const hostBaseUrl = resolveHostBaseUrl(options.hostBaseUrl);
   const caller = (target?: string) => new HostRpcCaller({ hostBaseUrl, bridgeSessionId: target });
-  const untyped = (target?: string) =>
-    caller(target).call as (key: string, request?: unknown) => Promise<unknown>;
+  const untyped = (target?: string) => {
+    const rpc = caller(target);
+    return rpc.call.bind(rpc) as (key: string, request?: unknown) => Promise<unknown>;
+  };
 
   return {
     parse_spec: async (input, ctx) => {
@@ -154,8 +158,10 @@ export function createFamilyCommandHandlers(
         includeComposedContent: false,
       })) as { rawContent: string; metadata?: { versionToken?: { value?: string } | null } };
 
+      // Resolve host-side: Revit resolves relative paths against ITS cwd (Program Files → denied).
       const rfaPath =
-        outputPath ?? `.artifacts/tmp/family/${documentId.relativePath.replace(/\//g, "-")}.rfa`;
+        outputPath ??
+        resolve(`.artifacts/tmp/family/${documentId.relativePath.replace(/\//g, "-")}.rfa`);
 
       let built: { familyName?: string; outputPath?: string; evidence?: EvidencePayload };
       try {
