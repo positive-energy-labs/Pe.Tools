@@ -1,20 +1,29 @@
 import { Deferred, Effect, Layer } from "effect";
-import { HOST_PORT } from "./host-ownership.ts";
+import type { Server } from "node:http";
+import type { ViteDevServer } from "vite-plus";
 import { makeHttpLive, MastraRuntimeLive, resolveWebRoot } from "./app.ts";
+import { chooseHostPort } from "./host-port.ts";
 import type { ServiceHostHandle } from "./pe-service-host.ts";
 
 /** The shared host lifecycle used by both installed startup and source web development. */
-export const hostProgram = <A, E, R>(beforeHost: Effect.Effect<A, E, R>) =>
+export const hostProgram = <A, E, R>(options: {
+  readonly beforeHost: Effect.Effect<A, E, R>;
+  readonly nodeServer?: Server;
+  readonly viteServer?: ViteDevServer;
+}) =>
   Effect.scoped(
     Effect.gen(function* () {
-      yield* beforeHost;
+      yield* options.beforeHost;
+      const port = yield* Effect.promise(chooseHostPort);
 
       // The service-file identity + eviction is SDK-owned (D3): ServiceFileLive claims it on bind and
       // publishes the claim handle here. No pre-bind takeover, no locally minted token.
       const latch = yield* Deferred.make<void>();
       const handle = yield* Deferred.make<ServiceHostHandle>();
       const HttpLive = makeHttpLive({
-        port: HOST_PORT,
+        port,
+        nodeServer: options.nodeServer,
+        viteServer: options.viteServer,
         mastraLayer: MastraRuntimeLive,
         lifecycle: { latch, handle },
         webRoot: resolveWebRoot(),
@@ -29,7 +38,7 @@ export const hostProgram = <A, E, R>(beforeHost: Effect.Effect<A, E, R>) =>
       // Last pre-bind breadcrumb: the HTTP layer is about to launch. The bound "Listening on ..."
       // line follows once NodeHttpServer binds; a gap between these two in host.log localizes a hang
       // or crash to the layer build (e.g. bridge/service-claim/tenant) rather than earlier startup.
-      console.log(`pe-host binding http://127.0.0.1:${HOST_PORT}`);
+      console.log(`pe-host binding http://127.0.0.1:${port || "dynamic"}`);
       yield* Effect.raceFirst(Layer.launch(HttpLive), Deferred.await(latch));
     }),
   );

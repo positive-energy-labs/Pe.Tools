@@ -21,6 +21,11 @@
       "types": "./src/generated/host-ops.generated.ts",
       "import": "./src/generated/host-ops.generated.ts",
       "default": "./src/generated/host-ops.generated.ts"
+    },
+    "./service-identity": {
+      "types": "./src/service-identity.ts",
+      "import": "./src/service-identity.ts",
+      "default": "./src/service-identity.ts"
     }
   },
   "publishConfig": {

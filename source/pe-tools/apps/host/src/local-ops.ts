@@ -76,6 +76,7 @@ export function getHostStatus(bridge: BridgeSessionView) {
     lane: hostOwnership.lane,
     processId: hostOwnership.processId,
     runtimeIdentity: RUNTIME_IDENTITY,
+    serviceName: hostOwnership.serviceName,
     sourceRoot: hostOwnership.sourceRoot,
   } satisfies HostProbeData);
 }

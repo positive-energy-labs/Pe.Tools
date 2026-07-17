@@ -223,10 +223,11 @@ The acceptance contract and machine proof live in `Pe.Revit.Sdk/RUNTIME_ACCEPTAN
 
 ```mermaid
 flowchart LR
-  Web["Vite web dev server<br/>usually :3000"] -->|proxy| Host["Pe.Host<br/>service-file baseUrl"]
-  Pea["Pea / MCP / raw caller"] -->|baseUrl + selector header| Host
-  Host -->|bridgeSessionId = rrd:*| RRD["Rider/RRD Revit"]
-  Host -->|bridgeSessionId = sandbox:*| RoutedSandbox["host-registered SDK sandbox"]
+  Web["Browser"] --> SourceHost["Worktree Pe.Host<br/>Effect + Vite on one dynamic port"]
+  Pea["Pea / MCP / raw caller"] -->|service-file baseUrl + selector| SourceHost
+  SourceHost -->|bridgeSessionId = rrd:*| RRD["Rider/RRD Revit"]
+  SourceHost -->|bridgeSessionId = sandbox:*| RoutedSandbox["source SDK sandbox"]
+  InstalledHost["Installed Pe.Host<br/>separate dynamic port"] --> InstalledSandbox["installed SDK sandbox"]
   SDK["pe-revit sandbox<br/>private SDK bridge /status"] --> Sandbox["SDK-ready sandbox Revit"]
   Fresh["pe-revit test fresh"] --> FreshRevit["test-owned FreshRevitProcess"]
   Sandbox -. "Pe.Tools registration joins this lane" .-> RoutedSandbox
@@ -237,7 +238,7 @@ host/session route between them. The SDK proves the sandbox's process, generatio
 private readiness endpoint; it does not know about `Pe.Host`. Product callers therefore carry two
 independent coordinates:
 
-- `baseUrl` locates the one Pe.Host service incarnation using the SDK service primitive's actual bound port.
+- `baseUrl` locates the Pe.Host incarnation for one installed lane or source worktree using the SDK service primitive's actual bound port.
 - `bridgeSessionId` selects one Revit process inside that host and travels in `x-pe-bridge-session-id`.
 
 Never infer one coordinate from the other. Typegen, Pea, browser operations, raw calls, settings,
@@ -300,12 +301,13 @@ an interim adapter over Pe.Tools-specific APS workflows. It is not a web or host
 Source-linked web dev is one command and one Node application process:
 
 - `pnpm --dir source/pe-tools dev` runs the watched source `@pe/host` entrypoint.
-- That entrypoint acquires a programmatic Vite server on `http://127.0.0.1:5173` and the Effect host on `http://127.0.0.1:5180` in one lifecycle scope.
-- React edits use Vite HMR without restarting the process. Host edits restart the whole process, so both listeners converge together.
-- The host keeps its tokenized installed-host takeover. Vite uses a strict port and fails clearly when `5173` is occupied.
-- Automatic installed-service startup cannot evict a terminal-owned dev host during the takeover race; stop dev with its owning terminal.
+- It creates one Node `http.Server`; Effect owns product APIs/WebSockets and the final dev fallback delegates to Vite/TanStack middleware and HMR.
+- The server reuses its last available port or binds an ephemeral one. The SDK service file is the URL authority; there is no Vite proxy or second listener.
+- Each checkout owns `host-source-<hash-of-canonical-source-root>.json`. Different worktrees coexist; the installed lane remains `host.json` and coexists with every source host.
+- `--take-over-host` replaces only an older incarnation with the same service name. The candidate binds a free port first, claims ownership, shuts down the incumbent, then initializes product state.
+- React edits use Vite HMR without restarting the process. Host edits restart the whole process and normally reclaim the worktree's preferred port.
 
-The Vite proxy is part of this dev lane. It forwards host-backed paths (`/call`, `/events`, `/ops`, `/schemas`, `/host`, `/pe`, and `/api/agent-controller`) to `PE_TOOLS_HOST_BASE_URL` or `http://127.0.0.1:5180`. The browser remains same-origin with the website; there is no secondary workbench URL, browser token, or query-parameter routing.
+The browser remains same-origin because the literal server owns both surfaces. Revit, Pea, MCPs, and spawned sandboxes receive or discover that worktree's service-file URL; callers never assume `5180`.
 
 Installed/product web behavior is separate: the installed host serves the built SPA itself. The source dev entrypoint is not installed-lane proof.
 

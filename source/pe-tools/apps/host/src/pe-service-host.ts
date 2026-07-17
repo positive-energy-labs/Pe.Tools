@@ -45,9 +45,9 @@ export interface ReplacementPolicy {
 }
 
 /**
- * The preserved replacement policy (D3): a dev host replaces an installed host automatically; a dev host
- * replaces another dev host only with the explicit takeover flag; an installed host reclaims a stale
- * installed owner (it is spawned precisely to become the sole owner). `takeOverHost` is the product's
+ * Replacement is scoped by service name. Installed and source-worktree hosts normally have different
+ * names, so they coexist. Within one name, a dev host replaces another dev host only with the explicit
+ * takeover flag; an installed host reclaims a stale installed owner. `takeOverHost` is the product's
  * `--take-over-host` flag.
  */
 export function hostReplacementPolicy(lane: string, takeOverHost = false): ReplacementPolicy {

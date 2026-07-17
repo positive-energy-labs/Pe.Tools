@@ -11,6 +11,7 @@ import {
   type ServiceHostDescriptor,
   type ServiceHostHandle,
 } from "./pe-service-host.ts";
+import { rememberHostPort } from "./host-port.ts";
 
 // The dev script (`pnpm dev`) passes this to authorize a dev-over-dev takeover; it becomes
 // `hostReplacementPolicy` DATA (SDK-owned), not local probe logic (IPC-SEAM-SPEC D3).
@@ -58,12 +59,12 @@ export function resolveHostVersion(): string {
  * process's own image (the D2 identity signal the installed-lane C# supervisor matches on:
  * `process.execPath` of the SEA host equals the resolved installed entry). `sourceRoot` is recorded
  * on the dev lane only, so the C# dev-lane reuse rule can match a healthy dev host by its checkout
- * rather than by its (node) executable. Replacement policy is DATA (SDK-owned `hostReplacementPolicy`):
- * a dev host evicts an installed host automatically, another dev host only with `--take-over-host`.
+ * rather than by its (node) executable. Installed and source hosts have different names; a source
+ * host replaces only its own worktree's prior incarnation, and only with `--take-over-host`.
  */
 function buildHostDescriptor(port: number): ServiceHostDescriptor {
   return {
-    name: hostProcessIdentity.serviceName,
+    name: hostOwnership.serviceName,
     lane: hostOwnership.lane,
     version: resolveHostVersion(),
     port,
@@ -75,7 +76,7 @@ function buildHostDescriptor(port: number): ServiceHostDescriptor {
 }
 
 /**
- * Claims sole ownership of `state/service/host.json` on start via the SDK `claimServiceHost`
+ * Claims sole ownership of this runtime's service file on start via the SDK `claimServiceHost`
  * primitive (D3): it writes the identity file with the ACTUAL bound port, evicts a policy-permitted
  * incumbent end-to-end (SDK-owned — no local probe/takeover), and its handle deletes the file on
  * graceful shutdown. Depends on `HttpServer` so it runs after bind (the bound port is authoritative,
@@ -89,8 +90,10 @@ export const ServiceFileLive = Layer.effectDiscard(
     const address = server.address;
     const port = address._tag === "TcpAddress" ? address.port : 0;
     const appBase = productRoot();
+    process.env[hostProcessIdentity.hostBaseUrlVariable] = `http://127.0.0.1:${port}`;
+    process.env[hostProcessIdentity.serviceNameVariable] = hostOwnership.serviceName;
     console.log(
-      `pe-host service claim requested name=${hostProcessIdentity.serviceName} leaseHandoff=${Boolean(process.env.PE_SERVICE_LEASE_PATH)}`,
+      `pe-host service claim requested name=${hostOwnership.serviceName} leaseHandoff=${Boolean(process.env.PE_SERVICE_LEASE_PATH)}`,
     );
     const handle = yield* Effect.acquireRelease(
       Effect.promise(() => claimServiceHost(appBase, buildHostDescriptor(port))).pipe(
@@ -102,6 +105,7 @@ export const ServiceFileLive = Layer.effectDiscard(
       ),
       (handle) => Effect.promise(() => handle.release()),
     );
+    yield* Effect.result(Effect.promise(() => rememberHostPort(port)));
     console.log(`pe-host service claim acquired pid=${handle.serviceFile.pid} port=${port}`);
     yield* Deferred.succeed(handleDeferred, handle);
   }),

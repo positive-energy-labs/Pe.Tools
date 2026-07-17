@@ -6,7 +6,7 @@ import { HttpServer } from "effect/unstable/http";
 import { expect, test } from "vite-plus/test";
 import { makeHttpLive } from "../src/app.ts";
 import { MastraRuntime } from "../src/mastra-runtime.ts";
-import { productRoot } from "../src/host-ownership.ts";
+import { hostOwnership, productRoot } from "../src/host-ownership.ts";
 import type { ServiceHostHandle } from "../src/pe-service-host.ts";
 import { readServiceFile } from "../src/pe-service.ts";
 
@@ -66,7 +66,7 @@ test("mastra init defect degrades to 503 without taking the host down", async ()
 
   try {
     // (1) the service claim IS written despite the tenant defect — the host became healthy.
-    const file = await waitFor(() => readServiceFile(appBase, "host"));
+    const file = await waitFor(() => readServiceFile(appBase, hostOwnership.serviceName));
     expect(file.port).toBeGreaterThan(0);
     expect(file.token).toMatch(/^[0-9a-f-]{36}$/);
     expect(file.pid).toBe(process.pid);
@@ -97,7 +97,7 @@ test("mastra init defect degrades to 503 without taking the host down", async ()
     expect(shutdown.status).toBe(200);
 
     await done;
-    expect(await readServiceFile(appBase, "host")).toBeNull();
+    expect(await readServiceFile(appBase, hostOwnership.serviceName)).toBeNull();
   } finally {
     await done.catch(() => {});
     if (prevLocalAppData === undefined) delete process.env.LOCALAPPDATA;

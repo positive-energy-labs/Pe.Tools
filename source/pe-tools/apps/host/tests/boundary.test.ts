@@ -5,7 +5,7 @@ import { Deferred, Effect, Layer } from "effect";
 import { expect, test } from "vite-plus/test";
 import { HOST_RPC_BRIDGE_SESSION_HEADER } from "@pe/host-contracts/operation-types";
 import { makeHttpLive } from "../src/app.ts";
-import { productRoot } from "../src/host-ownership.ts";
+import { hostOwnership, productRoot } from "../src/host-ownership.ts";
 import { MastraRuntime } from "../src/mastra-runtime.ts";
 import type { ServiceHostHandle } from "../src/pe-service-host.ts";
 import { readServiceFile } from "../src/pe-service.ts";
@@ -76,7 +76,7 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
 
   try {
     // (1) service file exists with the ACTUAL bound port + token.
-    const file = await waitFor(() => readServiceFile(appBase, "host"));
+    const file = await waitFor(() => readServiceFile(appBase, hostOwnership.serviceName));
     expect(file.port).toBeGreaterThan(0);
     expect(file.token).toMatch(/^[0-9a-f-]{36}$/);
     expect(file.pid).toBe(process.pid);
@@ -151,7 +151,7 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
 
     await done; // scope teardown: graceful server close + service-file delete.
 
-    expect(await readServiceFile(appBase, "host")).toBeNull();
+    expect(await readServiceFile(appBase, hostOwnership.serviceName)).toBeNull();
     await expect(fetch(`${base}/host/status`)).rejects.toBeDefined();
   } finally {
     await done.catch(() => {});

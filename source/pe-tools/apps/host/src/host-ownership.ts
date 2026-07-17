@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import { join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { hostProcessIdentity, productIdentity } from "@pe/host-contracts/contracts";
+import { hostServiceName } from "@pe/host-contracts/service-identity";
 
 export type HostLane = "dev" | "installed";
 
@@ -9,20 +10,15 @@ export type HostOwnership = {
   readonly executablePath: string;
   readonly lane: HostLane;
   readonly processId: number;
+  readonly serviceName: string;
   readonly sourceRoot: string | null;
 };
 
-const HOST_BASE_URL =
-  process.env[hostProcessIdentity.hostBaseUrlVariable] ?? hostProcessIdentity.defaultHostBaseUrl;
-
-// The preferred/fixed listen port. Discovery is file-based (the SDK claim records the ACTUAL bound
-// port in state/service/host.json); this is only the bind hint and the dev-web proxy target.
-export const HOST_PORT = Number(new URL(HOST_BASE_URL).port || "5180");
 export const hostOwnership = resolveHostOwnership();
 
 /**
  * Product root under `%LOCALAPPDATA%\<vendor>\<product>` — the A10 service-file `appBase`
- * (`state/service/host.json` lives beneath it) and the install-receipt root. Resolved lazily so
+ * (`state/service/<service-name>.json` lives beneath it) and the install-receipt root. Resolved lazily so
  * tests can redirect it via `LOCALAPPDATA`.
  */
 export function productRoot(): string {
@@ -34,11 +30,21 @@ export function productRoot(): string {
 }
 
 function resolveHostOwnership(): HostOwnership {
+  const lane = resolveHostLane();
+  const sourceRoot = lane === "dev" ? resolveSourceRoot() : null;
+  const serviceName = hostServiceName(lane, sourceRoot);
+  const configuredServiceName = process.env[hostProcessIdentity.serviceNameVariable]?.trim();
+  if (configuredServiceName && configuredServiceName !== serviceName)
+    throw new Error(
+      `${hostProcessIdentity.serviceNameVariable}=${JSON.stringify(configuredServiceName)} does not match ` +
+        `${lane} runtime identity ${JSON.stringify(serviceName)}.`,
+    );
   return {
     executablePath: process.execPath,
-    lane: resolveHostLane(),
+    lane,
     processId: process.pid,
-    sourceRoot: resolveSourceRoot(),
+    serviceName,
+    sourceRoot,
   };
 }
 
@@ -57,23 +63,13 @@ function resolveHostLane(): HostLane {
 
 function resolveSourceRoot(): string | null {
   if (hostOwnershipEnvironmentSource()) return hostOwnershipEnvironmentSource();
-  const modulePath = currentModulePath();
-  if (!modulePath) return null;
+  const modulePath = normalize(fileURLToPath(import.meta.url));
   const marker = `${normalize("apps/host/src").toLowerCase()}\\`;
-  const normalized = normalize(modulePath);
-  const index = normalized.toLowerCase().indexOf(marker);
-  return index >= 0 ? normalized.slice(0, index - 1) : null;
+  const index = modulePath.toLowerCase().indexOf(marker);
+  return index >= 0 ? modulePath.slice(0, index - 1) : null;
 }
 
 function hostOwnershipEnvironmentSource(): string | null {
   const value = process.env.PE_TOOLS_HOST_SOURCE_DIR?.trim();
   return value || null;
-}
-
-function currentModulePath(): string | null {
-  try {
-    return fileURLToPath(import.meta.url);
-  } catch {
-    return null;
-  }
 }

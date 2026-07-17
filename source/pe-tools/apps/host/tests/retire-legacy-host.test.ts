@@ -8,6 +8,7 @@ test("legacy flat-layout host is retired, versioned host never is", () => {
     false,
   );
   expect(isLegacyHostPath(`${root}\\BIN\\HOST\\VERSIONS\\0.6.12\\PE.HOST.EXE`)).toBe(false);
+  expect(isLegacyHostPath(`${root}\\dev\\bin\\host\\Pe.Host.exe`)).toBe(false);
   // Non-host processes and non-exact names never match.
   expect(isLegacyHostPath("C:\\somewhere\\Pe.Host.exe.bak")).toBe(false);
   expect(isLegacyHostPath("C:\\somewhere\\NotPe.Host.exe2")).toBe(false);

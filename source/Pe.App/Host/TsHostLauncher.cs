@@ -1,6 +1,6 @@
 using Pe.Revit.Loader;
-using Pe.Shared.Product;
 using Pe.Shared.HostContracts;
+using Pe.Shared.Product;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
@@ -8,17 +8,9 @@ using System.Net.Http;
 namespace Pe.App.Host;
 
 internal static class TsHostLauncher {
-    private const string HostServiceName = HostProcessIdentity.ServiceName;
-
-    // PE_LANE is the SDK-owned single lane signal the TS host reads (host-ownership.ts
-    // resolveHostLane). The dev-lane launcher sets it here; the installed lane rides
-    // InstalledProduct.EnsureRunning, which sets PE_LANE itself. The retired PE_TOOLS_HOST_LANE
-    // product variable is gone (IPC-SEAM-SPEC D7).
     private const string LaneEnvironmentVariable = "PE_LANE";
-
-    // Canonical dev launch spelling. The manifest's host `dev` field is the source of truth (D5,
-    // read through the loader); this is only the fallback when the checkout manifest cannot be read.
-    private const string DevHostCommandFallback = "vp run @pe/host#start";
+    private const string SourceDirectoryEnvironmentVariable = "PE_TOOLS_HOST_SOURCE_DIR";
+    private const string DevHostCommandFallback = "vp run @pe/host#dev";
 
     private static readonly HttpClient HttpClient = new() {
         Timeout = TimeSpan.FromMilliseconds(HostRuntimeDefaults.DefaultHostProbeTimeoutMs)
@@ -26,69 +18,66 @@ internal static class TsHostLauncher {
 
     public static TsHostLaunchResult EnsureRunning() {
         try {
-            // Identity + liveness come from the runtime service file + SDK ProbeHealth, never the
-            // /host/status body (D4 — /host/status is diagnostics only). A healthy DEV host is the shared
-            // host: no Revit payload — an installed sandbox beside a dev RRD included — evicts it (D4/D6).
-            // This replaces the old status-body short-circuit that treated any listener as "already up".
-            var file = ServiceFile.Read(ResolveAppBase(), HostServiceName);
-            if (file is not null
-                && string.Equals(file.Lane, "dev", StringComparison.OrdinalIgnoreCase)
-                && ProbeHealth(file.Port)) {
-                return new TsHostLaunchResult(
-                    true,
-                    true,
-                    false,
-                    $"Sharing the running dev host: {DescribeFile(file)}"
-                );
+            var runtime = PeRuntimeContext.Resolve();
+            var serviceName = ResolveServiceName(runtime);
+            var appBase = ResolveAppBase();
+
+            if (runtime.RuntimeLane == ProductRuntimeLane.Dev) {
+                var file = ServiceFile.Read(appBase, serviceName);
+                if (file is not null && ProbeHealth(file.Port) && MatchesDevTarget(file, runtime))
+                    return Publish(
+                        serviceName,
+                        new TsHostLaunchResult(
+                            true,
+                            true,
+                            false,
+                            $"Sharing this checkout's running dev host: {DescribeFile(file)}",
+                            file.Port
+                        )
+                    );
             }
 
-            // Installed lane: the SDK service primitive owns discover/probe/spawn from the manifest's
-            // `service` block and the runtime service file — no hardcoded port, file-based identity
-            // (ServiceFile.Read + Matches + ProbeHealth). Dev lane stays hand-rolled (dev is not the
-            // SDK's job: source `vp run`, dev-host reuse, installed-host takeover).
-            var deployment = PeRuntimeContext.Deployment;
-            return deployment is not null
-                ? EnsureInstalledHostRunning(deployment)
-                : EnsureDevHostRunning(PeRuntimeContext.Resolve());
+            var result = PeRuntimeContext.Deployment is { } deployment
+                ? EnsureInstalledHostRunning(deployment, serviceName)
+                : EnsureDevHostRunning(runtime, serviceName);
+            return Publish(serviceName, result);
         } catch (Exception ex) {
             return new TsHostLaunchResult(false, false, false, ex.Message);
         }
     }
 
-    /// <summary>
-    ///     Resolve the base URL every in-process host caller (bridge WS, POST /call, schema fetch) should
-    ///     use. Prefers the actual bound port from the runtime service file (A10); falls back to
-    ///     <c>PE_TOOLS_HOST_BASE_URL</c> / the 5180 default when no service file is present (before the
-    ///     host has bound).
-    /// </summary>
     public static string ResolveHostBaseUrl() {
-        var port = ServiceFile.Read(ResolveAppBase(), HostServiceName)?.Port;
+        var runtime = PeRuntimeContext.Resolve();
+        var serviceName = ResolveServiceName(runtime);
+        var port = ServiceFile.Read(ResolveAppBase(), serviceName)?.Port;
         return port is int value
             ? $"http://127.0.0.1:{value}"
             : HostProcessIdentity.ResolveHostBaseUrl();
     }
 
+    private static string ResolveServiceName(PeRuntimeTarget runtime) =>
+        HostProcessIdentity.ResolveServiceName(
+            runtime.RuntimeLane,
+            runtime.SourceHostWorkingDirectory
+        );
+
     private static string ResolveAppBase() =>
         PeRuntimeContext.Deployment?.AppBase ?? ProductRuntimeLayout.ForCurrentUser().RootPath;
 
-    private static TsHostLaunchResult EnsureInstalledHostRunning(InstalledProduct deployment) {
-        // No PE_LANE guard and no legacy 8s timeout: the loader pins this deployment's lane to
-        // "installed" (SDK D1), and the SDK default startup budget (15s) fits a host that boots
-        // the Mastra runtime (D11). EnsureRunning does file-based identity + ProbeHealth + spawn.
-        var result = deployment.EnsureRunning(HostServiceName);
-        if (!result.Ok || result.File is null) {
+    private static TsHostLaunchResult EnsureInstalledHostRunning(
+        InstalledProduct deployment,
+        string serviceName
+    ) {
+        var result = deployment.EnsureRunning(serviceName);
+        if (!result.Ok || result.File is null)
             return new TsHostLaunchResult(
                 false,
                 false,
                 false,
                 result.Reason ?? "Host service could not be started."
             );
-        }
 
-        // Downstream host-URL consumers (bridge, /call, schemas) resolve the bound port from the
-        // service file via HostProcessIdentity.ResolveHostBaseUrl — no env-var republication.
         var baseUrl = $"http://127.0.0.1:{result.File.Port}";
-
         var alreadyRunning = result.State == ServiceRunState.Running;
         return new TsHostLaunchResult(
             true,
@@ -96,67 +85,67 @@ internal static class TsHostLauncher {
             !alreadyRunning,
             alreadyRunning
                 ? $"Matching host service is already listening: {baseUrl}"
-                : $"Started host service: {baseUrl}"
-            );
+                : $"Started host service: {baseUrl}",
+            result.File.Port
+        );
     }
 
-    private static TsHostLaunchResult EnsureDevHostRunning(PeRuntimeTarget runtimeResolution) {
-        var hostExecutablePath = runtimeResolution.HostExecutablePath;
-        if (!File.Exists(hostExecutablePath)) {
-            if (runtimeResolution.SourceHostWorkingDirectory is { } sourceHostWorkingDirectory)
-                return StartAndWait(
-                    CreateSourceStartInfo(sourceHostWorkingDirectory),
-                    runtimeResolution
-                );
-
+    private static TsHostLaunchResult EnsureDevHostRunning(
+        PeRuntimeTarget runtime,
+        string serviceName
+    ) {
+        if (runtime.SourceHostWorkingDirectory is not { } sourceHostWorkingDirectory)
             return new TsHostLaunchResult(
                 false,
                 false,
                 false,
-                $"{runtimeResolution.RuntimeLane} TS host was not found: {hostExecutablePath}"
+                "The dev host requires a checkout source root."
             );
-        }
 
         return StartAndWait(
-            CreateStartInfo(runtimeResolution),
-            runtimeResolution
+            CreateSourceStartInfo(sourceHostWorkingDirectory, serviceName),
+            runtime,
+            serviceName
         );
     }
 
-    private static ProcessStartInfo CreateStartInfo(PeRuntimeTarget runtimeResolution) {
-        var startInfo = new ProcessStartInfo(runtimeResolution.HostExecutablePath) {
-            WorkingDirectory = Path.GetDirectoryName(runtimeResolution.HostExecutablePath) ?? AppContext.BaseDirectory,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        startInfo.EnvironmentVariables[LaneEnvironmentVariable] = ToHostLane(runtimeResolution.RuntimeLane);
-        return startInfo;
-    }
-
-    private static ProcessStartInfo CreateSourceStartInfo(string workingDirectory) {
-        // A clean dev checkout may not have a staged Pe.Host.exe. The dev launch command is
-        // manifest-declared (D5): read the host payload's `dev` field from the checkout's
-        // product.payloads.json through the loader instead of hardcoding the spelling, and spawn it
-        // in-process (no shelling out to the pe-revit CLI). Launching source is not a build/converge
-        // action and must never mutate the live Revit session.
+    private static ProcessStartInfo CreateSourceStartInfo(
+        string workingDirectory,
+        string serviceName
+    ) {
         var (fileName, arguments) = ResolveDevHostCommand(workingDirectory);
         var startInfo = new ProcessStartInfo(fileName, arguments) {
             WorkingDirectory = workingDirectory,
             UseShellExecute = false,
             CreateNoWindow = true
         };
-        startInfo.EnvironmentVariables[LaneEnvironmentVariable] = "dev";
-        startInfo.EnvironmentVariables["PE_TOOLS_HOST_SOURCE_DIR"] = workingDirectory;
+        ApplyRuntimeEnvironment(
+            startInfo,
+            ProductRuntimeLane.Dev,
+            workingDirectory,
+            serviceName
+        );
         return startInfo;
     }
 
-    // The dev host working dir is <checkoutRoot>/source/pe-tools; the manifest lives at the checkout
-    // root. Read the host payload's `dev` command via the loader (D5 {root}-substitution grammar) and
-    // split it into an executable + argument string for an in-process spawn.
+    private static void ApplyRuntimeEnvironment(
+        ProcessStartInfo startInfo,
+        ProductRuntimeLane lane,
+        string? sourceRoot,
+        string serviceName
+    ) {
+        startInfo.EnvironmentVariables[LaneEnvironmentVariable] = ToHostLane(lane);
+        startInfo.EnvironmentVariables[HostProcessIdentity.ServiceNameVariable] = serviceName;
+        if (sourceRoot is not null)
+            startInfo.EnvironmentVariables[SourceDirectoryEnvironmentVariable] = sourceRoot;
+    }
+
     private static (string FileName, string Arguments) ResolveDevHostCommand(string workingDirectory) {
         var checkoutRoot = Path.GetFullPath(Path.Combine(workingDirectory, "..", ".."));
-        var command = InstalledProduct.Open(checkoutRoot)?.DevCommand(HostServiceName, checkoutRoot)
-                      ?? DevHostCommandFallback;
+        var command = InstalledProduct.Open(checkoutRoot)?.DevCommand(
+            HostProcessIdentity.ServiceName,
+            checkoutRoot
+        ) ?? DevHostCommandFallback;
         var trimmed = command.Trim();
         var split = trimmed.IndexOf(' ');
         return split < 0
@@ -166,50 +155,54 @@ internal static class TsHostLauncher {
 
     private static TsHostLaunchResult StartAndWait(
         ProcessStartInfo startInfo,
-        PeRuntimeTarget runtimeResolution
+        PeRuntimeTarget runtime,
+        string serviceName
     ) {
         var appBase = ResolveAppBase();
         var process = Process.Start(startInfo);
-        var timeout = TimeSpan.FromMilliseconds(HostRuntimeDefaults.DefaultHostStartupTimeoutMs);
+        var timeout = TimeSpan.FromSeconds(45);
         var deadlineUtc = DateTime.UtcNow + timeout;
         while (DateTime.UtcNow < deadlineUtc) {
             Thread.Sleep(250);
-            // Poll the service file (file appears → probe), not the HTTP status body (D4). A startup
-            // timeout now means "no healthy dev service file appeared", not "status never answered".
-            var file = ServiceFile.Read(appBase, HostServiceName);
-            if (file is null) continue;
-            if (!ProbeHealth(file.Port)) continue;
-            if (MatchesDevTarget(file, runtimeResolution))
-                return new TsHostLaunchResult(
-                    true,
-                    false,
-                    true,
-                    $"Started matching TS host: {DescribeFile(file)}"
-                );
+            var file = ServiceFile.Read(appBase, serviceName);
+            if (file is null || !ProbeHealth(file.Port) || !MatchesDevTarget(file, runtime))
+                continue;
+            return new TsHostLaunchResult(
+                true,
+                false,
+                true,
+                $"Started matching TS host: {DescribeFile(file)}",
+                file.Port
+            );
         }
 
         return new TsHostLaunchResult(
             false,
             false,
             true,
-            $"Started TS host process {process?.Id.ToString() ?? "unknown"}, but no healthy dev service file appeared within {timeout.TotalSeconds:0.#} seconds."
+            $"Started TS host process {process?.Id.ToString() ?? "unknown"}, but no healthy '{serviceName}' service file appeared within {timeout.TotalSeconds:0.#} seconds."
         );
     }
 
-    // Dev-lane identity from the service file (D4): the file's lane is dev AND the running image is this
-    // checkout's host — a staged Pe.Host.exe (executablePath match) or a source `vp run` from this
-    // checkout (sourceRoot match, set from PE_TOOLS_HOST_SOURCE_DIR = the working dir). The dev host's
-    // own executablePath is node/vp, so sourceRoot is the load-bearing dev-lane signal.
-    private static bool MatchesDevTarget(ServiceFile file, PeRuntimeTarget runtimeResolution) {
-        if (!string.Equals(file.Lane, ToHostLane(runtimeResolution.RuntimeLane), StringComparison.OrdinalIgnoreCase))
-            return false;
-        if (PathsEqual(file.ExecutablePath, runtimeResolution.HostExecutablePath))
-            return true;
-        return runtimeResolution.SourceHostWorkingDirectory is { } dir && PathsEqual(file.SourceRoot, dir);
+    private static TsHostLaunchResult Publish(string serviceName, TsHostLaunchResult result) {
+        if (!result.Success || result.Port is not int port)
+            return result;
+        Environment.SetEnvironmentVariable(HostProcessIdentity.ServiceNameVariable, serviceName);
+        Environment.SetEnvironmentVariable(
+            HostProcessIdentity.HostBaseUrlVariable,
+            $"http://127.0.0.1:{port}"
+        );
+        return result;
     }
 
-    // SDK-parity health probe: a loopback GET on the file's ACTUAL bound port (never a hardcoded port,
-    // never the /host/status body). 2xx/3xx ⇒ up. Mirrors InstalledProduct.ProbeHealth.
+    private static bool MatchesDevTarget(ServiceFile file, PeRuntimeTarget runtime) {
+        if (!string.Equals(file.Lane, ToHostLane(runtime.RuntimeLane), StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (PathsEqual(file.ExecutablePath, runtime.HostExecutablePath))
+            return true;
+        return runtime.SourceHostWorkingDirectory is { } dir && PathsEqual(file.SourceRoot, dir);
+    }
+
     private static bool ProbeHealth(int port) {
         try {
             using var response = HttpClient
@@ -254,5 +247,6 @@ internal sealed record TsHostLaunchResult(
     bool Success,
     bool AlreadyRunning,
     bool StartedProcess,
-    string Message
+    string Message,
+    int? Port = null
 );
