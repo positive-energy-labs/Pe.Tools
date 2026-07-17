@@ -69,12 +69,24 @@ const routeChatPlugins = Object.fromEntries(
   routeChatPluginList.map((registration) => [registration.spec.route, registration]),
 ) as Record<string, RouteChatPluginRegistration>;
 
-/** Route names hostable as chat workspace plugins — derived from the registry. */
-export const CHAT_PLUGIN_ROUTES = Object.keys(routeChatPlugins) as [string, ...string[]];
-export type ChatPluginRoute = keyof typeof routeChatPlugins;
+/**
+ * Workspace-only plugins: iframed routes with NO route-state slice and NO inline tool card —
+ * pea has no route tools for them by design (instances lifecycle is user-click or pe_sandbox
+ * MCP only, never a route command).
+ */
+const workspaceOnlyPlugins: Record<string, string> = {
+  instances: "Instances",
+};
+
+/** Route names hostable as chat workspace plugins — registry + workspace-only routes. */
+export const CHAT_PLUGIN_ROUTES = [
+  ...Object.keys(routeChatPlugins),
+  ...Object.keys(workspaceOnlyPlugins),
+] as [string, ...string[]];
+export type ChatPluginRoute = string;
 
 export function chatPluginTitle(route: string): string {
-  return routeChatPlugins[route]?.spec.title ?? route;
+  return routeChatPlugins[route]?.spec.title ?? workspaceOnlyPlugins[route] ?? route;
 }
 
 export function selectRouteChatPlugin(

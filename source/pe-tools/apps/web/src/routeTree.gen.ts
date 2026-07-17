@@ -13,6 +13,7 @@ import { Route as SettingsRouteImport } from "./routes/settings";
 import { Route as ScheduleGridRouteImport } from "./routes/schedule-grid";
 import { Route as ParameterLinksRouteImport } from "./routes/parameter-links";
 import { Route as OpsRouteImport } from "./routes/ops";
+import { Route as InstancesRouteImport } from "./routes/instances";
 import { Route as FamilyTypesRouteImport } from "./routes/family-types";
 import { Route as FamilyModelRouteImport } from "./routes/family-model";
 import { Route as FamilyMatrixRouteImport } from "./routes/family-matrix";
@@ -26,8 +27,17 @@ import { Route as IndexRouteImport } from "./routes/index";
 import { Route as PocTypeRouteImport } from "./routes/poc.type";
 import { Route as PocSurfacesRouteImport } from "./routes/poc.surfaces";
 import { Route as PocSidepaneRouteImport } from "./routes/poc.sidepane";
+import { Route as PocSentenceChatRouteImport } from "./routes/poc.sentence-chat";
+import { Route as PocInstancesDRouteImport } from "./routes/poc.instances-d";
+import { Route as PocInstancesCRouteImport } from "./routes/poc.instances-c";
+import { Route as PocInstancesBRouteImport } from "./routes/poc.instances-b";
+import { Route as PocInstancesARouteImport } from "./routes/poc.instances-a";
+import { Route as PocInstancesRouteImport } from "./routes/poc.instances";
 import { Route as PocFamilyLensRouteImport } from "./routes/poc.family-lens";
 import { Route as PocDialRouteImport } from "./routes/poc.dial";
+import { Route as PocChipCRouteImport } from "./routes/poc.chip-c";
+import { Route as PocChipBRouteImport } from "./routes/poc.chip-b";
+import { Route as PocChipARouteImport } from "./routes/poc.chip-a";
 import { Route as DocsTargetRouteImport } from "./routes/docs.target";
 import { Route as DocsRuntimeRouteImport } from "./routes/docs.runtime";
 import { Route as DemoTanstackQueryRouteImport } from "./routes/demo/tanstack-query";
@@ -53,6 +63,11 @@ const ParameterLinksRoute = ParameterLinksRouteImport.update({
 const OpsRoute = OpsRouteImport.update({
   id: "/ops",
   path: "/ops",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const InstancesRoute = InstancesRouteImport.update({
+  id: "/instances",
+  path: "/instances",
   getParentRoute: () => rootRouteImport,
 } as any);
 const FamilyTypesRoute = FamilyTypesRouteImport.update({
@@ -120,6 +135,36 @@ const PocSidepaneRoute = PocSidepaneRouteImport.update({
   path: "/poc/sidepane",
   getParentRoute: () => rootRouteImport,
 } as any);
+const PocSentenceChatRoute = PocSentenceChatRouteImport.update({
+  id: "/poc/sentence-chat",
+  path: "/poc/sentence-chat",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PocInstancesDRoute = PocInstancesDRouteImport.update({
+  id: "/poc/instances-d",
+  path: "/poc/instances-d",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PocInstancesCRoute = PocInstancesCRouteImport.update({
+  id: "/poc/instances-c",
+  path: "/poc/instances-c",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PocInstancesBRoute = PocInstancesBRouteImport.update({
+  id: "/poc/instances-b",
+  path: "/poc/instances-b",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PocInstancesARoute = PocInstancesARouteImport.update({
+  id: "/poc/instances-a",
+  path: "/poc/instances-a",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PocInstancesRoute = PocInstancesRouteImport.update({
+  id: "/poc/instances",
+  path: "/poc/instances",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const PocFamilyLensRoute = PocFamilyLensRouteImport.update({
   id: "/poc/family-lens",
   path: "/poc/family-lens",
@@ -128,6 +173,21 @@ const PocFamilyLensRoute = PocFamilyLensRouteImport.update({
 const PocDialRoute = PocDialRouteImport.update({
   id: "/poc/dial",
   path: "/poc/dial",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PocChipCRoute = PocChipCRouteImport.update({
+  id: "/poc/chip-c",
+  path: "/poc/chip-c",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PocChipBRoute = PocChipBRouteImport.update({
+  id: "/poc/chip-b",
+  path: "/poc/chip-b",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PocChipARoute = PocChipARouteImport.update({
+  id: "/poc/chip-a",
+  path: "/poc/chip-a",
   getParentRoute: () => rootRouteImport,
 } as any);
 const DocsTargetRoute = DocsTargetRouteImport.update({
@@ -172,6 +232,7 @@ export interface FileRoutesByFullPath {
   "/family-matrix": typeof FamilyMatrixRoute;
   "/family-model": typeof FamilyModelRoute;
   "/family-types": typeof FamilyTypesRoute;
+  "/instances": typeof InstancesRoute;
   "/ops": typeof OpsRoute;
   "/parameter-links": typeof ParameterLinksRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
@@ -179,8 +240,17 @@ export interface FileRoutesByFullPath {
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
   "/docs/runtime": typeof DocsRuntimeRoute;
   "/docs/target": typeof DocsTargetRoute;
+  "/poc/chip-a": typeof PocChipARoute;
+  "/poc/chip-b": typeof PocChipBRoute;
+  "/poc/chip-c": typeof PocChipCRoute;
   "/poc/dial": typeof PocDialRoute;
   "/poc/family-lens": typeof PocFamilyLensRoute;
+  "/poc/instances": typeof PocInstancesRoute;
+  "/poc/instances-a": typeof PocInstancesARoute;
+  "/poc/instances-b": typeof PocInstancesBRoute;
+  "/poc/instances-c": typeof PocInstancesCRoute;
+  "/poc/instances-d": typeof PocInstancesDRoute;
+  "/poc/sentence-chat": typeof PocSentenceChatRoute;
   "/poc/sidepane": typeof PocSidepaneRoute;
   "/poc/surfaces": typeof PocSurfacesRoute;
   "/poc/type": typeof PocTypeRoute;
@@ -199,6 +269,7 @@ export interface FileRoutesByTo {
   "/family-matrix": typeof FamilyMatrixRoute;
   "/family-model": typeof FamilyModelRoute;
   "/family-types": typeof FamilyTypesRoute;
+  "/instances": typeof InstancesRoute;
   "/ops": typeof OpsRoute;
   "/parameter-links": typeof ParameterLinksRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
@@ -206,8 +277,17 @@ export interface FileRoutesByTo {
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
   "/docs/runtime": typeof DocsRuntimeRoute;
   "/docs/target": typeof DocsTargetRoute;
+  "/poc/chip-a": typeof PocChipARoute;
+  "/poc/chip-b": typeof PocChipBRoute;
+  "/poc/chip-c": typeof PocChipCRoute;
   "/poc/dial": typeof PocDialRoute;
   "/poc/family-lens": typeof PocFamilyLensRoute;
+  "/poc/instances": typeof PocInstancesRoute;
+  "/poc/instances-a": typeof PocInstancesARoute;
+  "/poc/instances-b": typeof PocInstancesBRoute;
+  "/poc/instances-c": typeof PocInstancesCRoute;
+  "/poc/instances-d": typeof PocInstancesDRoute;
+  "/poc/sentence-chat": typeof PocSentenceChatRoute;
   "/poc/sidepane": typeof PocSidepaneRoute;
   "/poc/surfaces": typeof PocSurfacesRoute;
   "/poc/type": typeof PocTypeRoute;
@@ -227,6 +307,7 @@ export interface FileRoutesById {
   "/family-matrix": typeof FamilyMatrixRoute;
   "/family-model": typeof FamilyModelRoute;
   "/family-types": typeof FamilyTypesRoute;
+  "/instances": typeof InstancesRoute;
   "/ops": typeof OpsRoute;
   "/parameter-links": typeof ParameterLinksRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
@@ -234,8 +315,17 @@ export interface FileRoutesById {
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
   "/docs/runtime": typeof DocsRuntimeRoute;
   "/docs/target": typeof DocsTargetRoute;
+  "/poc/chip-a": typeof PocChipARoute;
+  "/poc/chip-b": typeof PocChipBRoute;
+  "/poc/chip-c": typeof PocChipCRoute;
   "/poc/dial": typeof PocDialRoute;
   "/poc/family-lens": typeof PocFamilyLensRoute;
+  "/poc/instances": typeof PocInstancesRoute;
+  "/poc/instances-a": typeof PocInstancesARoute;
+  "/poc/instances-b": typeof PocInstancesBRoute;
+  "/poc/instances-c": typeof PocInstancesCRoute;
+  "/poc/instances-d": typeof PocInstancesDRoute;
+  "/poc/sentence-chat": typeof PocSentenceChatRoute;
   "/poc/sidepane": typeof PocSidepaneRoute;
   "/poc/surfaces": typeof PocSurfacesRoute;
   "/poc/type": typeof PocTypeRoute;
@@ -256,6 +346,7 @@ export interface FileRouteTypes {
     | "/family-matrix"
     | "/family-model"
     | "/family-types"
+    | "/instances"
     | "/ops"
     | "/parameter-links"
     | "/schedule-grid"
@@ -263,8 +354,17 @@ export interface FileRouteTypes {
     | "/demo/tanstack-query"
     | "/docs/runtime"
     | "/docs/target"
+    | "/poc/chip-a"
+    | "/poc/chip-b"
+    | "/poc/chip-c"
     | "/poc/dial"
     | "/poc/family-lens"
+    | "/poc/instances"
+    | "/poc/instances-a"
+    | "/poc/instances-b"
+    | "/poc/instances-c"
+    | "/poc/instances-d"
+    | "/poc/sentence-chat"
     | "/poc/sidepane"
     | "/poc/surfaces"
     | "/poc/type"
@@ -283,6 +383,7 @@ export interface FileRouteTypes {
     | "/family-matrix"
     | "/family-model"
     | "/family-types"
+    | "/instances"
     | "/ops"
     | "/parameter-links"
     | "/schedule-grid"
@@ -290,8 +391,17 @@ export interface FileRouteTypes {
     | "/demo/tanstack-query"
     | "/docs/runtime"
     | "/docs/target"
+    | "/poc/chip-a"
+    | "/poc/chip-b"
+    | "/poc/chip-c"
     | "/poc/dial"
     | "/poc/family-lens"
+    | "/poc/instances"
+    | "/poc/instances-a"
+    | "/poc/instances-b"
+    | "/poc/instances-c"
+    | "/poc/instances-d"
+    | "/poc/sentence-chat"
     | "/poc/sidepane"
     | "/poc/surfaces"
     | "/poc/type"
@@ -310,6 +420,7 @@ export interface FileRouteTypes {
     | "/family-matrix"
     | "/family-model"
     | "/family-types"
+    | "/instances"
     | "/ops"
     | "/parameter-links"
     | "/schedule-grid"
@@ -317,8 +428,17 @@ export interface FileRouteTypes {
     | "/demo/tanstack-query"
     | "/docs/runtime"
     | "/docs/target"
+    | "/poc/chip-a"
+    | "/poc/chip-b"
+    | "/poc/chip-c"
     | "/poc/dial"
     | "/poc/family-lens"
+    | "/poc/instances"
+    | "/poc/instances-a"
+    | "/poc/instances-b"
+    | "/poc/instances-c"
+    | "/poc/instances-d"
+    | "/poc/sentence-chat"
     | "/poc/sidepane"
     | "/poc/surfaces"
     | "/poc/type"
@@ -338,6 +458,7 @@ export interface RootRouteChildren {
   FamilyMatrixRoute: typeof FamilyMatrixRoute;
   FamilyModelRoute: typeof FamilyModelRoute;
   FamilyTypesRoute: typeof FamilyTypesRoute;
+  InstancesRoute: typeof InstancesRoute;
   OpsRoute: typeof OpsRoute;
   ParameterLinksRoute: typeof ParameterLinksRoute;
   ScheduleGridRoute: typeof ScheduleGridRoute;
@@ -345,8 +466,17 @@ export interface RootRouteChildren {
   DemoTanstackQueryRoute: typeof DemoTanstackQueryRoute;
   DocsRuntimeRoute: typeof DocsRuntimeRoute;
   DocsTargetRoute: typeof DocsTargetRoute;
+  PocChipARoute: typeof PocChipARoute;
+  PocChipBRoute: typeof PocChipBRoute;
+  PocChipCRoute: typeof PocChipCRoute;
   PocDialRoute: typeof PocDialRoute;
   PocFamilyLensRoute: typeof PocFamilyLensRoute;
+  PocInstancesRoute: typeof PocInstancesRoute;
+  PocInstancesARoute: typeof PocInstancesARoute;
+  PocInstancesBRoute: typeof PocInstancesBRoute;
+  PocInstancesCRoute: typeof PocInstancesCRoute;
+  PocInstancesDRoute: typeof PocInstancesDRoute;
+  PocSentenceChatRoute: typeof PocSentenceChatRoute;
   PocSidepaneRoute: typeof PocSidepaneRoute;
   PocSurfacesRoute: typeof PocSurfacesRoute;
   PocTypeRoute: typeof PocTypeRoute;
@@ -382,6 +512,13 @@ declare module "@tanstack/react-router" {
       path: "/ops";
       fullPath: "/ops";
       preLoaderRoute: typeof OpsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/instances": {
+      id: "/instances";
+      path: "/instances";
+      fullPath: "/instances";
+      preLoaderRoute: typeof InstancesRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/family-types": {
@@ -475,6 +612,48 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof PocSidepaneRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/poc/sentence-chat": {
+      id: "/poc/sentence-chat";
+      path: "/poc/sentence-chat";
+      fullPath: "/poc/sentence-chat";
+      preLoaderRoute: typeof PocSentenceChatRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/poc/instances-d": {
+      id: "/poc/instances-d";
+      path: "/poc/instances-d";
+      fullPath: "/poc/instances-d";
+      preLoaderRoute: typeof PocInstancesDRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/poc/instances-c": {
+      id: "/poc/instances-c";
+      path: "/poc/instances-c";
+      fullPath: "/poc/instances-c";
+      preLoaderRoute: typeof PocInstancesCRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/poc/instances-b": {
+      id: "/poc/instances-b";
+      path: "/poc/instances-b";
+      fullPath: "/poc/instances-b";
+      preLoaderRoute: typeof PocInstancesBRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/poc/instances-a": {
+      id: "/poc/instances-a";
+      path: "/poc/instances-a";
+      fullPath: "/poc/instances-a";
+      preLoaderRoute: typeof PocInstancesARouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/poc/instances": {
+      id: "/poc/instances";
+      path: "/poc/instances";
+      fullPath: "/poc/instances";
+      preLoaderRoute: typeof PocInstancesRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/poc/family-lens": {
       id: "/poc/family-lens";
       path: "/poc/family-lens";
@@ -487,6 +666,27 @@ declare module "@tanstack/react-router" {
       path: "/poc/dial";
       fullPath: "/poc/dial";
       preLoaderRoute: typeof PocDialRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/poc/chip-c": {
+      id: "/poc/chip-c";
+      path: "/poc/chip-c";
+      fullPath: "/poc/chip-c";
+      preLoaderRoute: typeof PocChipCRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/poc/chip-b": {
+      id: "/poc/chip-b";
+      path: "/poc/chip-b";
+      fullPath: "/poc/chip-b";
+      preLoaderRoute: typeof PocChipBRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/poc/chip-a": {
+      id: "/poc/chip-a";
+      path: "/poc/chip-a";
+      fullPath: "/poc/chip-a";
+      preLoaderRoute: typeof PocChipARouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/docs/target": {
@@ -556,6 +756,7 @@ const rootRouteChildren: RootRouteChildren = {
   FamilyMatrixRoute: FamilyMatrixRoute,
   FamilyModelRoute: FamilyModelRoute,
   FamilyTypesRoute: FamilyTypesRoute,
+  InstancesRoute: InstancesRoute,
   OpsRoute: OpsRoute,
   ParameterLinksRoute: ParameterLinksRoute,
   ScheduleGridRoute: ScheduleGridRoute,
@@ -563,8 +764,17 @@ const rootRouteChildren: RootRouteChildren = {
   DemoTanstackQueryRoute: DemoTanstackQueryRoute,
   DocsRuntimeRoute: DocsRuntimeRoute,
   DocsTargetRoute: DocsTargetRoute,
+  PocChipARoute: PocChipARoute,
+  PocChipBRoute: PocChipBRoute,
+  PocChipCRoute: PocChipCRoute,
   PocDialRoute: PocDialRoute,
   PocFamilyLensRoute: PocFamilyLensRoute,
+  PocInstancesRoute: PocInstancesRoute,
+  PocInstancesARoute: PocInstancesARoute,
+  PocInstancesBRoute: PocInstancesBRoute,
+  PocInstancesCRoute: PocInstancesCRoute,
+  PocInstancesDRoute: PocInstancesDRoute,
+  PocSentenceChatRoute: PocSentenceChatRoute,
   PocSidepaneRoute: PocSidepaneRoute,
   PocSurfacesRoute: PocSurfacesRoute,
   PocTypeRoute: PocTypeRoute,

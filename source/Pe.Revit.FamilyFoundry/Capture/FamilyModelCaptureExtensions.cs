@@ -63,7 +63,11 @@ public static class FamilyModelCaptureExtensions {
         AddUnmodeledObservableState(document, snapshot, unmodeled);
         return new FamilyModel {
             Family = new FamilyModelHeader {
-                Name = document.OwnerFamily.Name,
+                // OwnerFamily.Name is empty for family documents opened from an .rfa on disk; the
+                // document title (file name) is the observable family name in that case.
+                Name = string.IsNullOrWhiteSpace(document.OwnerFamily.Name)
+                    ? System.IO.Path.GetFileNameWithoutExtension(document.Title)
+                    : document.OwnerFamily.Name,
                 Category = category,
                 Template = template,
                 Placement = placement

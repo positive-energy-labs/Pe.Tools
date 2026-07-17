@@ -237,10 +237,45 @@ export namespace RevitApplyFamilyModel {
     }
   }
   export namespace Res {
+    export type FamilyModelValueSource =
+      | "AuthoredGlobal"
+      | "AuthoredTypeOverride"
+      | "Formula"
+      | "RevitDefault"
+      | "Unresolved";
+    export type FamilyModelEvidenceProvenance = "Exact" | "Inferred" | "Unresolved";
+
     export interface Response {
       familyName: string;
       outputPath: string;
       templatePath: string;
+      evidence: FamilyModelEvidence;
+    }
+    export interface FamilyModelEvidence {
+      typeNames: string[];
+      parameters: FamilyModelParameterEvidence[];
+      diagnostics: FamilyModelEvidenceDiagnostic[];
+    }
+    export interface FamilyModelParameterEvidence {
+      name: string;
+      isShared: boolean;
+      propertiesGroup?: null | string;
+      valuesPerType: {
+        [k: string]: FamilyModelResolvedValue;
+      };
+    }
+    export interface FamilyModelResolvedValue {
+      value?: null | string;
+      source: FamilyModelValueSource;
+      provenance: FamilyModelEvidenceProvenance;
+      formula?: null | string;
+    }
+    export interface FamilyModelEvidenceDiagnostic {
+      code: string;
+      path: string;
+      message: string;
+      provenance: FamilyModelEvidenceProvenance;
+      confidence?: null | number;
     }
   }
 }

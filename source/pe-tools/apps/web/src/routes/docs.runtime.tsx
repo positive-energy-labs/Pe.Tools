@@ -29,29 +29,28 @@ const ZONES: { key: ZoneKey; title: string; root: string; blurb: string }[] = [
     key: "checkout",
     title: "your checkout",
     root: "C:\\…\\Pe.Tools (source tree)",
-    blurb:
-      "Exists only on dev machines. What it builds — including the loader's bytes, and therefore its hash — moves with every commit.",
+    blurb: "Dev machines only. Pins the SDK version — and whether loaders get dev-signed.",
   },
   {
     key: "addins",
     title: "revit's door",
     root: "%APPDATA%\\Autodesk\\Revit\\Addins\\<year>",
     blurb:
-      "The only place Revit looks. Shared by every lane — which is why writes here are guarded by ownership checks, not just file locks.",
+      "The only place Revit looks. One folder, every lane — so writes are guarded by ownership, not locks.",
   },
   {
     key: "product",
     title: "installed product",
     root: "%LOCALAPPDATA%\\Positive Energy\\Pe.Tools",
     blurb:
-      "What users have. One canonical version; current.txt is the commit point and is always written last (ADR-0001).",
+      "What users have. One canonical version; current.txt is the commit point, always written last.",
   },
   {
     key: "sdk",
     title: "sdk state",
     root: "%LOCALAPPDATA%\\Pe.Revit.Sdk",
     blurb:
-      "Sandbox registry, immutable generations, bridge journals, locks. Dev-machine bookkeeping — never read by Revit itself, only by the CLI and the bridge.",
+      "Sandbox registry + generations + journals. Revit never reads this; only the CLI and bridge do. Doesn't exist on user machines.",
   },
 ];
 
@@ -66,6 +65,7 @@ interface FileSpec {
   writer: string;
   lifecycle: string;
   cite: string;
+  content?: (step: number) => string[];
 }
 
 const FILES: FileSpec[] = [
@@ -80,8 +80,8 @@ const FILES: FileSpec[] = [
     updateAt: [5],
     writer: "you (git)",
     lifecycle:
-      "The loader dll's filename embeds a SHA-256 of its own bytes, so every loader-code change mints a new hash. Nothing on disk moves until something deploys — drift is latent until a deploy meets an occupied slot.",
-    cite: "InstallCommand.cs:2205 (LoaderShimFileName)",
+      "Your checkout has no loader source — the loader ships pre-built in the pinned SDK package. Each dev build re-stamps it (rename per product, dev-sign if dev-sign.props exists, hash). The filename hex is the SHA-256 of the final bytes, so a signature alone mints a “different” loader. Nothing moves on disk until a deploy meets an occupied slot.",
+    cite: "Publish.targets:58-98 (PeBuildIsolatedLoader) · Commands.cs:975",
   },
   {
     id: "c-out",
@@ -91,8 +91,13 @@ const FILES: FileSpec[] = [
     addAt: 3,
     writer: "build (PeWriteRuntimeDescriptor)",
     lifecycle:
-      "The runtime descriptor is an immutable launch receipt written by the build, never post-edited. The RRD payload loads from here via Assembly.LoadFrom in the default context — the one context Hot Reload can patch.",
+      "Immutable launch receipt, written by the build, never edited. RRD loads from here via LoadFrom in the default context — the only context hot reload can patch.",
     cite: "Pe.Revit.Publish.targets:250-289 · PayloadHost.cs:19-25",
+    content: () => [
+      "Pe.App.runtime.json:",
+      '  { "lane": "dev", "payloadSource": "source",',
+      '    "path": "…\\\\bin\\\\Pe.App\\\\Debug.R25" }',
+    ],
   },
   {
     id: "c-hotep",
@@ -103,7 +108,7 @@ const FILES: FileSpec[] = [
     updateAt: [4],
     writer: "loader (HotReloadEndpoint)",
     lifecycle:
-      "Endpoint contract file: descriptor path with .runtime.json → .hotreload.json. Written when the in-process endpoint starts, rewritten with each applied EnC generation, deleted on endpoint Dispose.",
+      "Endpoint contract: address + token + EnC generation. Rewritten per applied edit; deleted on shutdown.",
     cite: "HotReloadEndpoint.cs:16-17,76,254",
   },
   // addins 2025
@@ -116,8 +121,14 @@ const FILES: FileSpec[] = [
     updateAt: [9],
     writer: "install apply · sandbox deploy · rrd deploy",
     lifecycle:
-      "THE selector: the one manifest Revit reads for this product+year (00- sorts first, so its loader wins the process-wide bind). Bound to exactly one loader hash. Install writes it receipt-owned; a sandbox may reuse it if byte/routing-identical, deploy into an empty slot, or is refused if it differs.",
+      "This .addin file IS the selector. Revit reads it first (00- sorts first); it names exactly one loader hash. Install writes it receipt-owned; a sandbox reuses it (identical), fills an empty slot, or is refused (differs).",
     cite: "SandboxCommand.cs:1082-1091 (priority) · 1044-1071 (reuse) · 1061-1067 (refuse)",
+    content: (s) => [
+      '<AddIn Type="Application">',
+      `  <Assembly>Pe.App\\Pe.Revit.Loader.${s >= 9 ? "DDB756" : "1A21DA"}….dll</Assembly>`,
+      "  <FullClassName>Pe.Revit.Loader.LoaderApplication</FullClassName>",
+      "  <AddInId>43B12CEC-8FCF-4E33-…</AddInId>",
+    ],
   },
   {
     id: "a25-shim1",
@@ -128,8 +139,8 @@ const FILES: FileSpec[] = [
     removeAt: 9,
     writer: "install apply (StageLoaderShim)",
     lifecycle:
-      "Content-addressed loader shim. Never rewritten in place: a new loader lands beside it under its own hash, so a running Revit keeps loading the old file until restart. Superseded hashes are pruned only after the manifest flips, lock-tolerantly.",
-    cite: "InstallCommand.cs:2149-2181 · 2189-2203 (prune)",
+      "The hex name = SHA-256 of the whole file. A signature lives INSIDE the dll (Authenticode block) and is hashed too — sign it and it becomes a “different loader”. Never rewritten in place: new hashes land beside it; superseded ones are pruned after the manifest flips.",
+    cite: "InstallCommand.cs:2149-2205 · 2189-2203 (prune)",
   },
   {
     id: "a25-shim2",
@@ -139,7 +150,7 @@ const FILES: FileSpec[] = [
     addAt: 9,
     writer: "install apply (release 0.7.0)",
     lifecycle:
-      "The new hash coexisting with the old during the flip. Hash-named files never contend — the contention is only ever over the single 00- selector that names one of them.",
+      "New hash beside the old — hash-named files never fight. Only the one selector manifest is contested.",
     cite: "InstallCommand.cs:2149-2155",
   },
   {
@@ -150,7 +161,7 @@ const FILES: FileSpec[] = [
     addAt: 1,
     writer: "install apply (copied only if absent)",
     lifecycle:
-      "The two-assembly shim design: the hashed dll is a tiny renamed bootstrap that forwards OnStartup/OnShutdown to this fixed-name contract assembly, so every product shares one contract ABI. Left in place if locked.",
+      "The hashed dll is a tiny bootstrap that forwards to this fixed-name contract, so all products share one ABI. Copied only if absent.",
     cite: "Loader.Bootstrap/LoaderApplication.cs:11-17 · InstallCommand.cs:2163-2170",
   },
   {
@@ -162,8 +173,13 @@ const FILES: FileSpec[] = [
     updateAt: [9],
     writer: "install apply · build (atomic)",
     lifecycle:
-      "Three flat fields telling the loader where the installed payload root is. Read with a regex, not a JSON library — net48 Revit has no BCL JSON. Rewritten atomically.",
+      "Three fields pointing at the installed payload root. Read with a regex — net48 Revit has no JSON library.",
     cite: "LoaderApplication.cs:47-55 · InstallCommand.cs:2172-2179",
+    content: () => [
+      '{ "schemaVersion": 2,',
+      '  "payloadRoot": "…\\\\Positive Energy\\\\Pe.Tools\\\\addin",',
+      '  "assembly": "Pe.App", "entryType": "Pe.App.AppCore" }',
+    ],
   },
   // addins 2024
   {
@@ -174,8 +190,8 @@ const FILES: FileSpec[] = [
     addAt: 6,
     writer: "sandbox deploy (EnsureSelector)",
     lifecycle:
-      "Deployed by the sandbox CLI into an empty year slot, under a per-year file lock. It persists after the sandbox stops — deliberately: one selector serves every future descriptor-launched process, and a descriptor-less Revit just falls through it to current.txt (or no-ops).",
-    cite: "SandboxCommand.cs:1010-1104 · locks :1019-1030",
+      "Deployed by the sandbox CLI into an empty year. Persists after stop — the next sandbox reuses it, and a descriptor-less Revit falls through it to current.txt (or no-ops).",
+    cite: "SandboxCommand.cs:1010-1104",
   },
   {
     id: "a24-shim",
@@ -185,7 +201,7 @@ const FILES: FileSpec[] = [
     addAt: 6,
     writer: "sandbox deploy",
     lifecycle:
-      "The build stages these inside the generation (PeStageSandboxSelector); only the CLI publishes them to shared Addins. An interrupted deploy that left the loader + manifest but no loader.json is self-healed by copying just the missing file — never replacing a receipt-owned byte.",
+      "Staged by the build inside the generation; only the CLI publishes to shared Addins. Interrupted deploys self-heal by copying just the missing file — never replacing a receipt-owned byte.",
     cite: "Publish.targets:202-245 · SandboxCommand.cs:1046-1060",
   },
   // product
@@ -209,8 +225,15 @@ const FILES: FileSpec[] = [
     updateAt: [9],
     writer: "install apply (schema 2)",
     lifecycle:
-      "The exact-file inventory of what the install owns — this is what makes a selector 'receipt-owned' and what verify/remove read (destination-driven, checkout-free). Skipped on touchless re-apply when everything is already current.",
+      "sha256 inventory of every file the install owns. “Receipt-owned” is why overwrites become refusals instead of races.",
     cite: "InstallCommand.cs:1016-1028 · 995-1000",
+    content: (s) => [
+      `{ "releaseVersion": "${s >= 9 ? "0.7.0" : "0.6.14"}",`,
+      '  "files": [',
+      `    { "path": "…2025\\\\00-Pe.App.addin", "sha256": "…" },   ← owns the selector`,
+      `    { "path": "…Pe.Revit.Loader.${s >= 9 ? "DDB756" : "1A21DA"}….dll", "sha256": "…" },`,
+      "    …×5906 ] }",
+    ],
   },
   {
     id: "p-v614",
@@ -221,7 +244,7 @@ const FILES: FileSpec[] = [
     removeAt: 9,
     writer: "install apply (mirror + StagedMarker)",
     lifecycle:
-      "Version dirs are transaction staging, not retained fallback: a new version is staged alongside, the pointer flips, and noncanonical versions are pruned. A running Revit stays pinned to whatever it loaded until restart.",
+      "Version dirs are staging, not fallback: new version lands alongside, pointer flips, old is pruned. A running Revit keeps what it loaded until restart.",
     cite: "InstallCommand.cs:859-862 · 2240-2252 (PruneVersions) · 795-796",
   },
   {
@@ -244,8 +267,9 @@ const FILES: FileSpec[] = [
     updateAt: [9],
     writer: "install apply — “sole canonical commit, always last”",
     lifecycle:
-      "The single pointer that makes a version real. Written after payloads, manifest, receipt, and selector — so a crash mid-install leaves the old version live (ADR-0001). Read exactly once at Revit startup; there is no live swap. The value must be one safe path segment — a hostile pointer can't traverse.",
+      "The pointer that makes a version real — always the last write, so a crash leaves the old version live. Read once per Revit start; no live swap.",
     cite: "InstallCommand.cs:1031 · InstalledProduct.cs:205-221 · LoaderApplication.cs:9-14",
+    content: (s) => [s >= 9 ? "0.7.0" : "0.6.14"],
   },
   // sdk
   {
@@ -258,8 +282,14 @@ const FILES: FileSpec[] = [
     updateAt: [8],
     writer: "sandbox start/stop (atomic tmp+rename)",
     lifecycle:
-      "The logical registry entry for sandbox:fam-lab. Identity is the tuple (pid, processStartUtcTicks, exe) — stop verifies it before touching anything, so an OS-reused pid is refused, never killed. Persists across stop; a corrupt one is replaced by the next start.",
+      "The registry entry for sandbox:fam-lab. Stop verifies (pid, startUtc, exe) before touching anything — an OS-reused pid is refused, never killed. Survives stop.",
     cite: "SandboxCommand.cs:1423-1471 · 1516-1526 (identity) · 653-704 (StopCore)",
+    content: (s) => [
+      '{ "pid": 9204, "processStartUtcTicks": 638…,',
+      '  "revitExecutable": "…\\\\Revit 2024\\\\Revit.exe",',
+      '  "generation": "20260716T101503…"' + (s >= 8 ? "," : " }"),
+      ...(s >= 8 ? ['  "stoppedAtUtc": "2026-07-16T18:42:07Z" }'] : []),
+    ],
   },
   {
     id: "s-gen1",
@@ -269,8 +299,14 @@ const FILES: FileSpec[] = [
     addAt: 6,
     writer: "sandbox start (MaterializeSource)",
     lifecycle:
-      "One immutable folder per materialization — every start/restart gets a fresh generation even at the same build stamp (buildStamp is provenance, never identity). Never mutated, never cleaned by stop. Restart materializes the NEW generation completely before stopping the old process, so failure preserves the old session.",
+      "One immutable folder per start/restart; never mutated, never cleaned by stop. Restart builds the new generation fully before stopping the old process, so failure preserves the old session.",
     cite: "SandboxCommand.cs:997-1008 · 719-775 · SPEC.md:149-151",
+    content: () => [
+      "payload\\Pe.App.runtime.json:",
+      '  { "lane": "sandbox", "sandboxId": "fam-lab",',
+      '    "payloadSource": "source", "path": "…\\\\payload" }',
+      "selector\\00-Pe.App.addin  → loader DDB756… (staged)",
+    ],
   },
   {
     id: "s-gen2",
@@ -280,7 +316,7 @@ const FILES: FileSpec[] = [
     addAt: 7,
     writer: "sandbox start (2025 attempt)",
     lifecycle:
-      "Materialization succeeded — the refusal happens later, at EnsureSelector, when the staged selector meets a receipt-owned one that differs. The generation stays on disk like any other; no Addins byte was written.",
+      "Built fine — the refusal happens later, at the Addins door. Nothing shared was written; the generation stays on disk like any other.",
     cite: "SandboxCommand.cs:1061-1067 (SelectorUnavailable)",
   },
   {
@@ -291,7 +327,7 @@ const FILES: FileSpec[] = [
     addAt: 6,
     writer: "bridge (in-process, at runtime)",
     lifecycle:
-      "Written by the running session's bridge. 'SDK-ready' is proven here: sandbox wait polls until the pid's port file exists and /status answers as OUR pid with OUR descriptor. Pid-named; dead pids are sweepable.",
+      "Written by the running session's bridge. “SDK-ready” = this port file exists and /status answers as our pid + descriptor.",
     cite: "SandboxCommand.cs:1216-1222 (SdkReady) · SPEC.md:94-95",
   },
 ];
@@ -327,8 +363,8 @@ const PROCS: Proc[] = [
     payload: () => "installed 0.6.14 · lane pinned “installed”",
     note: (s) =>
       s >= 9
-        ? "Still serving 0.6.14 — current.txt is read once at boot, so the 0.7.0 flip lands at this process's next restart. No live swap, ever."
-        : "The user's Revit. The lane is pinned “installed” by the code path itself, never inferred from markers.",
+        ? "Still serving 0.6.14 — current.txt is read once at boot. The flip lands at next restart."
+        : "The user's Revit. Lane pinned by the code path, never inferred.",
   },
   {
     id: "rrd",
@@ -349,8 +385,8 @@ const PROCS: Proc[] = [
     payload: (s) => `src build · EnC generation ${s >= 4 ? "2" : "1"}`,
     note: (s) =>
       s >= 4
-        ? "The emitter saw your save (100 ms mtime poll), compiled an EnC delta, POSTed it to /apply; MetadataUpdater.ApplyUpdate mutated the loaded module in place. No reload, no new files — method-body edits only."
-        : "Rider round-trip debugging: debugger + Hot Reload against a source payload. Minutes to restart, often holding a real model — which is why the SDK never controls this process.",
+        ? "The emitter saw your save, sent a delta, ApplyUpdate patched the loaded module. No reload, no new files."
+        : "Debugger + hot reload on a source payload. User-owned; the SDK never controls this process.",
   },
   {
     id: "sbx",
@@ -369,7 +405,7 @@ const PROCS: Proc[] = [
     ],
     payload: () => "generation 20260716T101503 · sandbox:fam-lab",
     note: () =>
-      "SDK-spawned, agent-owned, disposable. Launched via ShellExecute with the descriptor env var — no journal-file trickery. Born with a ready selector (sandbox:fam-lab) for the targeting layer above.",
+      "Agent-owned, disposable. Its isolation IS the env var + payload living in the generation — no separate Addins folder exists.",
   },
 ];
 
@@ -390,7 +426,7 @@ const STEPS: Step[] = [
     title: "clean machine",
     actor: "—",
     caption:
-      "Nothing anywhere. Revit would scan Addins\\<year>, find no Pe manifest, and boot without us. Everything below is written by exactly three actors: the installer, the build, and the sandbox CLI — Revit itself only ever reads.",
+      "Nothing anywhere. Three actors write everything below — installer, build, sandbox CLI. Revit only ever reads.",
   },
   {
     key: "install",
@@ -398,7 +434,7 @@ const STEPS: Step[] = [
     actor: "installer",
     cmd: "pe install apply",
     caption:
-      "Order is the whole design: payload mirrored into versions\\0.6.14\\2025 → loader shim staged under its content hash (1A21DA…) → selector manifest flipped atomically → manifest copy → receipt → current.txt LAST. A crash at any earlier line leaves the old world live. The receipt records every file it owns, by sha256 — that ownership is enforced later.",
+      "Order is the design: payload → loader (1A21DA…, unsigned) → selector → receipt → current.txt LAST. A crash anywhere earlier leaves the old world live. The receipt lists every owned file by sha256 — that ownership bites later.",
   },
   {
     key: "open",
@@ -406,7 +442,7 @@ const STEPS: Step[] = [
     actor: "the user",
     cmd: "double-click Revit 2025",
     caption:
-      "Zero writes. Revit reads the selector, loads the hashed loader; the bootstrap forwards to the contract dll; loader.json points at the payload root; no PE_REVIT_SESSION_DESCRIPTOR in the environment → read current.txt once → load 0.6.14 in an isolated, non-collectible AssemblyLoadContext. If anything throws, the loader journals LoaderStartupFailed and returns Succeeded — fail-inert, never a startup dialog.",
+      "Zero writes. Selector → loader → no env var → current.txt (read once) → 0.6.14 in an isolated ALC. This is the ONLY path user machines ever take. Errors journal and go inert — never a startup dialog.",
   },
   {
     key: "rrd",
@@ -414,7 +450,7 @@ const STEPS: Step[] = [
     actor: "you + rider",
     cmd: "F5 (debug from checkout)",
     caption:
-      "The build writes the payload + runtime descriptor into your checkout's bin and deploys the worktree selector — which finds the installed selector byte-identical (same loader era) and reuses it untouched. Revit launches with the descriptor env var: same loader dll, different verdict. Two lanes now share one selector file.",
+      "The build re-stamps the SDK package's pre-built loader (it is NOT compiled from your checkout), finds the installed selector identical → reuses it untouched. Revit launches with the descriptor env var: same loader, different verdict.",
   },
   {
     key: "hot",
@@ -422,7 +458,7 @@ const STEPS: Step[] = [
     actor: "emitter",
     cmd: "(automatic — 100 ms poll)",
     caption:
-      "Hot reload touches no shared zone. The out-of-process emitter owns the Roslyn EmitBaseline chain, computes an EnC delta from your edit, and POSTs {metadata, il, pdb} to the loader's token-authed loopback endpoint; MetadataUpdater.ApplyUpdate patches the already-loaded module. Same MVID, same assembly, new method bodies. Structural edits are rude edits — those need a restart.",
+      "No shared files touched. The emitter compiles your edit into a delta and POSTs it to the loader's loopback endpoint; ApplyUpdate patches the loaded module in place. Method-body edits only — structural edits need a restart.",
   },
   {
     key: "drift",
@@ -430,7 +466,7 @@ const STEPS: Step[] = [
     actor: "you (git pull)",
     cmd: "git pull … loader source changed",
     caption:
-      "Your checkout now builds loader DDB756… instead of 1A21DA…. Read the atlas: NOTHING else changed. Drift is not an event on disk — it's a latent disagreement between what your source builds and what the receipt owns, invisible until a deploy meets an occupied slot.",
+      "Your builds now stamp loader DDB756… instead of 1A21DA… (new SDK pin here — a dev signature alone does the same). Read the atlas: NOTHING else changed. Drift is latent until a deploy meets an occupied slot.",
   },
   {
     key: "sbx24",
@@ -438,7 +474,7 @@ const STEPS: Step[] = [
     actor: "sdk cli",
     cmd: "pe sandbox start --project Pe.App --year 2024 --id fam-lab",
     caption:
-      "Materialize: a fresh immutable generation (payload + descriptor + staged selector) under sandboxes\\fam-lab. Deploy: the 2024 Addins slot is empty — no receipt owns it — so the CLI publishes the DDB756… selector under a per-year lock. Launch: ShellExecute with PE_REVIT_SESSION_DESCRIPTOR pointing into the generation. `sandbox wait` then proves SDK-ready via the pid's bridge port file.",
+      "Materialize an immutable generation → 2024's slot is empty, so the CLI deploys the selector → launch Revit with the env var pointing into the generation. That env var IS the sandbox's isolation — there is no second Addins folder.",
   },
   {
     key: "sbx25",
@@ -448,7 +484,7 @@ const STEPS: Step[] = [
     refusal:
       "SelectorUnavailable — receipt-owned priority selector 2025\\00-Pe.App.addin (→ 1A21DA…) differs from this source candidate (→ DDB756…); refused to overwrite it.",
     caption:
-      "The generation materialized fine. The refusal is at the Addins door: EnsureSelector compares the staged selector against the deployed one — manifest identity fields, loader byte SHA, loader.json routing — and they differ, and the deployed one belongs to the install receipt. Overwriting would repoint the USER's Revit at an unreceipted loader. Killing open Revits changes nothing: this is ownership + content, not a file lock.",
+      "The generation built fine — the refusal is at the Addins door: staged selector ≠ deployed selector, and the deployed one is receipt-owned. Overwriting would repoint the USER's Revit. Not a lock — killing Revits changes nothing. The real trap: if the difference is a dev signature (as diagnosed here 2026-07-16 — code was identical), releasing can NEVER fix it: dists ship unsigned, dev builds sign.",
   },
   {
     key: "stop",
@@ -456,7 +492,7 @@ const STEPS: Step[] = [
     actor: "sdk cli",
     cmd: "pe sandbox stop --id fam-lab",
     caption:
-      "Stop verifies the identity tuple (pid + startUtc + exe) so it can never kill a stranger, arms no-save through the bridge (dirty scratch docs are discarded; workshared/cloud models are neither synced nor relinquished), closes gracefully, then updates state.json with stoppedAtUtc. What persists: state.json, every generation, the 2024 selector. Stop never un-deploys — the next sandbox reuses the selector for free.",
+      "Verify identity tuple → arm no-save (dirty docs discarded) → close gracefully. What persists: state.json, every generation, the 2024 selector. The process was the only ephemeral thing — stop never un-deploys.",
   },
   {
     key: "release",
@@ -464,7 +500,7 @@ const STEPS: Step[] = [
     actor: "installer",
     cmd: "pe release --build … && pe install apply",
     caption:
-      "The close. New payload staged; loader DDB756… lands BESIDE 1A21DA… (hash-named files never fight); selector flips to DDB756…; current.txt flips last; superseded loader and version pruned. Installed product and source checkout now agree on the loader hash — a 2025 source sandbox would hit reuse-if-identical. The still-running installed Revit keeps serving 0.6.14 until its next restart: pointers are read once, at boot.",
+      "New loader lands BESIDE the old; selector flips; current.txt flips last; old pruned. Install and checkout now agree — a 2025 sandbox would hit reuse. The running Revit keeps 0.6.14 until restart: pointers are read once, at boot.",
   },
 ];
 
@@ -600,6 +636,27 @@ function FileInspector({ id, step }: { id: string; step: number }) {
           written by: {f.writer}
         </span>
       </div>
+      {f.content ? (
+        <div
+          className="mt-1.5 px-2 py-1.5"
+          style={{ background: "var(--paper-3)", borderRadius: 1, overflowX: "auto" }}
+        >
+          {f.content(step).map((line, i) => (
+            <div
+              key={i}
+              className="font-[var(--font-pe-mono)]"
+              style={{
+                fontSize: 9.5,
+                lineHeight: "1.6",
+                whiteSpace: "pre",
+                color: "var(--foreground)",
+              }}
+            >
+              {line}
+            </div>
+          ))}
+        </div>
+      ) : null}
       <p
         className="m-0 mt-1 max-w-[100ch] text-[11.5px] leading-snug"
         style={{ color: "var(--foreground)" }}
@@ -2084,37 +2141,517 @@ const LIFECYCLE_ROWS: { artifact: string; written: string; updated: string; dies
 
 // ── glossary ────────────────────────────────────────────────────────────────────────────────────
 
-const GLOSSARY: [string, string][] = [
+// ── the nouns — every abstract term is a real file ──────────────────────────────────────────────
+// Paths and contents below are transcribed from a real machine (2026-07-16), abridged. Click a
+// noun to light up what it points at; the whole page is these files changing.
+
+interface Noun {
+  id: string;
+  term: string;
+  path: string;
+  content: string[];
+  blurb: string;
+  relates: { to: string; how: string }[];
+}
+
+const NOUNS: Noun[] = [
+  {
+    id: "selector",
+    term: "selector",
+    path: "%APPDATA%\\Autodesk\\Revit\\Addins\\2025\\00-Pe.App.addin",
+    content: [
+      '<AddIn Type="Application">',
+      "  <Assembly>Pe.App\\Pe.Revit.Loader.1A21DA30….dll</Assembly>",
+      "  <FullClassName>Pe.Revit.Loader.LoaderApplication</FullClassName>",
+      "  <AddInId>43B12CEC-8FCF-4E33-…</AddInId>",
+    ],
+    blurb:
+      "The one file Revit reads for a product+year (00- sorts first). Its whole job is one line: name one loader by hash.",
+    relates: [
+      { to: "loader", how: "names exactly one loader dll, by content hash" },
+      {
+        to: "receipt",
+        how: "when the installer wrote it, the receipt owns it — sandboxes then refuse to overwrite",
+      },
+    ],
+  },
+  {
+    id: "loader",
+    term: "loader (bootstrap)",
+    path: "…\\Addins\\2025\\Pe.App\\Pe.Revit.Loader.<sha256>.dll",
+    content: [
+      "MZ… (6-8 KB of IL: forward OnStartup → contract)",
+      "± Authenticode block: CN=Pe.Revit.Sdk Dev Code Signing",
+      "filename hex = SHA-256 of ALL bytes above (sig included)",
+    ],
+    blurb:
+      "The tiny dll Revit actually loads. Ships pre-built in the SDK package; every build re-stamps it (rename · maybe sign · hash).",
+    relates: [
+      { to: "contract", how: "forwards straight to the fixed-name contract" },
+      { to: "selector", how: "reachable only if a selector names its hash" },
+    ],
+  },
+  {
+    id: "contract",
+    term: "loader (contract)",
+    path: "…\\Addins\\2025\\Pe.App\\Pe.Revit.Loader.dll",
+    content: [
+      "the real logic, fixed name, shared ABI:",
+      "  env PE_REVIT_SESSION_DESCRIPTOR set? → read descriptor",
+      "  else → read current.txt once → load installed payload",
+    ],
+    blurb: "Where the lane decision actually happens. Byte-identical across lanes.",
+    relates: [
+      { to: "descriptor", how: "reads + validates it when the env var is set" },
+      { to: "current", how: "falls through to it when the env var is absent" },
+      { to: "loaderjson", how: "reads it to find the installed payload root" },
+    ],
+  },
+  {
+    id: "loaderjson",
+    term: "loader.json",
+    path: "…\\Addins\\2025\\Pe.App\\loader.json",
+    content: [
+      '{ "schemaVersion": 2,',
+      '  "payloadRoot": "…\\\\Positive Energy\\\\Pe.Tools\\\\addin",',
+      '  "assembly": "Pe.App", "entryType": "Pe.App.AppCore" }',
+    ],
+    blurb: "Three fields: where the installed payload lives and what to instantiate.",
+    relates: [{ to: "payload", how: "points at the versions root the payload lives under" }],
+  },
+  {
+    id: "current",
+    term: "current.txt",
+    path: "%LOCALAPPDATA%\\Positive Energy\\Pe.Tools\\current.txt",
+    content: ["0.6.15"],
+    blurb:
+      "One line. The install's commit point — written last, read once per Revit start. Flip it and the next boot is the new version.",
+    relates: [
+      { to: "payload", how: "selects versions\\0.6.15\\<year> as the live payload" },
+      { to: "receipt", how: "written only after the receipt — crash-safety ordering" },
+    ],
+  },
+  {
+    id: "payload",
+    term: "payload",
+    path: "…\\Pe.Tools\\addin\\versions\\0.6.15\\2025\\Pe.App.dll (+ deps)",
+    content: ["the actual product — ribbon, commands, bridge"],
+    blurb:
+      "What you think of as Pe.App. Everything else on this page exists to pick which copy of this loads.",
+    relates: [{ to: "descriptor", how: "dev/sandbox payloads carry their descriptor beside them" }],
+  },
+  {
+    id: "receipt",
+    term: "receipt",
+    path: "…\\Pe.Tools\\install.receipt.json",
+    content: [
+      '{ "releaseVersion": "0.6.15",',
+      '  "files": [ { "path": "…00-Pe.App.addin", "sha256": "…" }, ×5906 ] }',
+    ],
+    blurb:
+      "sha256 inventory of every file the install owns. “Receipt-owned” = sandboxes must not touch.",
+    relates: [{ to: "selector", how: "listing the selector is what arms the refusal" }],
+  },
+  {
+    id: "descriptor",
+    term: "descriptor",
+    path: "<payload dir>\\Pe.App.runtime.json  (named by PE_REVIT_SESSION_DESCRIPTOR)",
+    content: [
+      '{ "lane": "sandbox", "sandboxId": "pe.app-25",',
+      '  "payloadSource": "source", "path": "…generations\\\\<ts>\\\\payload" }',
+    ],
+    blurb:
+      "An immutable launch receipt. Its presence (via one env var) is the entire difference between lanes.",
+    relates: [
+      { to: "generation", how: "sandbox descriptors live inside, and point at, a generation" },
+      { to: "contract", how: "read once at boot; never re-read, never edited" },
+    ],
+  },
+  {
+    id: "generation",
+    term: "generation",
+    path: "%LOCALAPPDATA%\\Pe.Revit.Sdk\\sandboxes\\pe.app-25\\generations\\20260716212558641\\",
+    content: [
+      "payload\\   (frozen build + descriptor)",
+      "selector\\  (staged, byte-compared at deploy)",
+      "bin\\ obj\\  (build scratch)",
+    ],
+    blurb:
+      "One immutable folder per sandbox start, built from a checkout. Never mutated; survives stop.",
+    relates: [
+      { to: "descriptor", how: "contains the descriptor the process is launched with" },
+      {
+        to: "selector",
+        how: "its staged selector must byte-match the deployed one, or deploy into an empty year",
+      },
+    ],
+  },
+  {
+    id: "state",
+    term: "state.json",
+    path: "…\\Pe.Revit.Sdk\\sandboxes\\pe.app-25\\state.json",
+    content: [
+      '{ "pid": 9204, "processStartUtcTicks": …,',
+      '  "revitExecutable": "…Revit.exe", "generation": "20260716…" }',
+    ],
+    blurb:
+      "The sandbox registry entry. Stop verifies this identity tuple before touching anything.",
+    relates: [{ to: "generation", how: "records which generation the live process runs" }],
+  },
+  {
+    id: "devsign",
+    term: "dev-sign.props",
+    path: "%LOCALAPPDATA%\\Pe.Revit.Sdk\\dev-sign.props",
+    content: [
+      "<PeDevSignSubject>CN=Pe.Revit.Sdk Dev Code Signing</…>",
+      "<PeCodeSignThumbprint>DBE820C8…</…>",
+    ],
+    blurb:
+      "Exists only on dev machines (pe-revit dev-sign init). Silently signs every dev-built loader — which changes its hash.",
+    relates: [
+      {
+        to: "loader",
+        how: "adds the Authenticode block → a different sha256 → a “different” loader",
+      },
+      {
+        to: "selector",
+        how: "the root cause of refuse-if-differing against an unsigned installed selector",
+      },
+    ],
+  },
+];
+
+function Nouns() {
+  const [sel, setSel] = useState<string | null>(null);
+  const selected = NOUNS.find((n) => n.id === sel);
+  const relatedIds = new Set(selected?.relates.map((r) => r.to) ?? []);
+  return (
+    <div>
+      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+        {NOUNS.map((n) => {
+          const isSel = sel === n.id;
+          const isRel = relatedIds.has(n.id);
+          return (
+            <button
+              key={n.id}
+              onClick={() => setSel(isSel ? null : n.id)}
+              className="text-left"
+              style={{
+                border: isSel
+                  ? "1px solid var(--pe-blue)"
+                  : isRel
+                    ? "1px solid color-mix(in srgb, var(--pe-blue) 45%, transparent)"
+                    : "0.5px solid var(--line)",
+                background: "var(--card)",
+                borderRadius: 2,
+                cursor: "pointer",
+                opacity: sel !== null && !isSel && !isRel ? 0.45 : 1,
+                transition: "opacity .12s ease, border-color .12s ease",
+              }}
+            >
+              <div
+                className="flex items-baseline justify-between gap-2 px-2 py-1"
+                style={{ borderBottom: "0.5px solid var(--line-soft)" }}
+              >
+                <span className="text-[11.5px] font-semibold" style={{ color: "var(--pe-blue)" }}>
+                  {n.term}
+                </span>
+              </div>
+              <div
+                className="truncate px-2 pt-1 font-[var(--font-pe-mono)]"
+                style={{ fontSize: 8, color: "var(--muted-foreground)" }}
+                title={n.path}
+              >
+                {n.path}
+              </div>
+              <div
+                className="mx-2 my-1 px-1.5 py-1"
+                style={{ background: "var(--paper-3)", borderRadius: 1, overflowX: "hidden" }}
+              >
+                {n.content.map((line, i) => (
+                  <div
+                    key={i}
+                    className="truncate font-[var(--font-pe-mono)]"
+                    style={{ fontSize: 8.5, lineHeight: "1.5", color: "var(--foreground)" }}
+                  >
+                    {line}
+                  </div>
+                ))}
+              </div>
+              <p
+                className="m-0 px-2 pb-1.5 text-[10.5px] leading-snug"
+                style={{ color: "var(--muted-foreground)" }}
+              >
+                {n.blurb}
+              </p>
+            </button>
+          );
+        })}
+      </div>
+      <div
+        className="mt-1.5 px-3 py-1.5"
+        style={{
+          border: "0.5px solid var(--line)",
+          background: "var(--paper-3)",
+          borderRadius: 2,
+          minHeight: 30,
+        }}
+      >
+        {selected ? (
+          selected.relates.map((r) => (
+            <div key={r.to} className="py-0.5 text-[11px]" style={{ color: "var(--foreground)" }}>
+              <span className="font-[var(--font-pe-mono)]" style={{ color: "var(--pe-blue)" }}>
+                {selected.term} → {NOUNS.find((n) => n.id === r.to)?.term}
+              </span>{" "}
+              — {r.how}
+            </div>
+          ))
+        ) : (
+          <span className="text-[10.5px]" style={{ color: "var(--muted-foreground)" }}>
+            click a noun — contents above are transcribed from this machine, abridged
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── two worlds, one door — lanes, checkouts, and signing ────────────────────────────────────────
+// The dev/user split drawn whole. Grounded: RRD is primary-checkout-only (SPEC.md:125); worktrees
+// get concurrency via sandboxes (RUNTIME_ACCEPTANCE.md:99); release forces PeDevSignDisabled=true
+// (Commands.cs:975); dev-sign.props sets PeCodeSignThumbprint so dev builds sign
+// (Publish.targets:84-87); the sandbox lane WANTS signing to skip Revit's unsigned-addin dialog
+// (SandboxCommand.cs:1171).
+
+const SIGNING_ROWS: { who: string; stamp: string; hash: string; why: string }[] = [
+  {
+    who: "release / pack",
+    stamp:
+      "unsigned — PeDevSignDisabled=true is forced (real Authenticode cert only if PeCodeSignPfx/Thumbprint is configured)",
+    hash: "1A21DA…",
+    why: "ships clean to users; never inherits a machine-local cert",
+  },
+  {
+    who: "dev build + dev-sign.props",
+    stamp: "signed: CN=Pe.Revit.Sdk Dev Code Signing (dev-sign.props sets PeCodeSignThumbprint)",
+    hash: "DDB756…",
+    why: "sandboxes want a signed loader so Revit never shows the unsigned-addin dialog mid-automation",
+  },
+  {
+    who: "dev build, no dev-sign.props",
+    stamp: "unsigned — byte-identical to the release loader at the same SDK pin",
+    hash: "1A21DA…",
+    why: "the PeDevSignDisabled=true escape hatch (honored since beta.97) — rarely needed now that install apply dev-signs on dev machines",
+  },
+];
+
+function TwoWorlds() {
+  const mono = (size: number, color = "var(--muted-foreground)") =>
+    ({ fontSize: size, color }) as const;
+  const box = (accent?: string) =>
+    ({
+      border: accent ? `1px solid ${accent}` : "0.5px solid var(--line)",
+      background: "var(--card)",
+      borderRadius: 2,
+    }) as const;
+  return (
+    <div>
+      <div className="grid gap-3 lg:grid-cols-[1fr_auto_1fr]">
+        {/* dev machine */}
+        <div style={box()}>
+          <div className="px-2.5 py-1.5" style={{ borderBottom: "0.5px solid var(--line-soft)" }}>
+            <span className="text-[11.5px] font-semibold" style={{ color: "var(--foreground)" }}>
+              your machine — many builders, one install
+            </span>
+          </div>
+          <div className="grid gap-2 p-2.5">
+            <div className="px-2 py-1.5" style={{ borderLeft: "2px solid var(--cat-green)" }}>
+              <div className="font-[var(--font-pe-mono)]" style={mono(9.5, "var(--foreground)")}>
+                primary checkout → RRD
+              </div>
+              <p className="m-0 text-[10.5px]" style={{ color: "var(--muted-foreground)" }}>
+                The one checkout allowed to debug interactively (hot reload, debugger). RRD is
+                primary-checkout-only, by rule.
+              </p>
+            </div>
+            <div className="px-2 py-1.5" style={{ borderLeft: "2px solid var(--cat-green)" }}>
+              <div className="font-[var(--font-pe-mono)]" style={mono(9.5, "var(--foreground)")}>
+                worktree checkouts → sandboxes
+              </div>
+              <p className="m-0 text-[10.5px]" style={{ color: "var(--muted-foreground)" }}>
+                This is the SDK's headline trick: every git worktree can build + launch its own
+                sandboxed Revit, concurrently — each gets an immutable generation, its own pid, its
+                own descriptor. Agents develop in parallel without touching your RRD.
+              </p>
+            </div>
+            <div className="px-2 py-1.5" style={{ borderLeft: "2px solid var(--cat-slate)" }}>
+              <div className="font-[var(--font-pe-mono)]" style={mono(9.5, "var(--foreground)")}>
+                installed product (also here!)
+              </div>
+              <p className="m-0 text-[10.5px]" style={{ color: "var(--muted-foreground)" }}>
+                You install releases too — so your machine is the only place where dist artifacts
+                and source builds meet. Every collision on this page lives here.
+              </p>
+            </div>
+            <div className="px-2 py-1.5" style={{ borderLeft: "2px solid var(--cat-kiln)" }}>
+              <div className="font-[var(--font-pe-mono)]" style={mono(9.5, "var(--cat-kiln)")}>
+                dev-sign.props — the invisible variable
+              </div>
+              <p className="m-0 text-[10.5px]" style={{ color: "var(--muted-foreground)" }}>
+                Present → every loader you build is dev-signed (different bytes, different hash).
+                Absent → your builds match dist exactly. Nothing else on the machine tells you which
+                world you're in.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* the door */}
+        <div
+          className="flex flex-col items-center justify-center gap-1 px-3 py-4"
+          style={{ ...box("var(--pe-blue)"), minWidth: 150 }}
+        >
+          <span className="font-[var(--font-pe-mono)]" style={mono(9, "var(--pe-blue)")}>
+            THE ONE DOOR
+          </span>
+          <span
+            className="text-center font-[var(--font-pe-mono)]"
+            style={mono(8.5, "var(--foreground)")}
+          >
+            Addins\&lt;year&gt;\
+            <br />
+            00-Pe.App.addin
+          </span>
+          <span className="text-center text-[9.5px]" style={{ color: "var(--muted-foreground)" }}>
+            every lane passes through it; it checks loaders byte-for-byte — a signature is a
+            different passport
+          </span>
+        </div>
+
+        {/* user machine */}
+        <div style={box()}>
+          <div className="px-2.5 py-1.5" style={{ borderBottom: "0.5px solid var(--line-soft)" }}>
+            <span className="text-[11.5px] font-semibold" style={{ color: "var(--foreground)" }}>
+              a user's machine — one writer, one path
+            </span>
+          </div>
+          <div className="grid gap-2 p-2.5">
+            <div className="px-2 py-1.5" style={{ borderLeft: "2px solid var(--cat-slate)" }}>
+              <div className="font-[var(--font-pe-mono)]" style={mono(9.5, "var(--foreground)")}>
+                installer only
+              </div>
+              <p className="m-0 text-[10.5px]" style={{ color: "var(--muted-foreground)" }}>
+                No checkouts, no builds, no SDK state dir, no dev-sign.props, no descriptor env var
+                — those things don't exist here. The installer copies one pre-made loader + payload;
+                done.
+              </p>
+            </div>
+            <div className="px-2 py-1.5" style={{ borderLeft: "2px solid var(--cat-slate)" }}>
+              <div className="font-[var(--font-pe-mono)]" style={mono(9.5, "var(--foreground)")}>
+                every boot = the same path
+              </div>
+              <p className="m-0 text-[10.5px]" style={{ color: "var(--muted-foreground)" }}>
+                selector → loader → no env var → current.txt → installed payload. The refusal
+                machinery exists to protect THIS Revit from dev-lane writes; users never see it
+                fire.
+              </p>
+            </div>
+            <div className="px-2 py-1.5" style={{ borderLeft: "2px solid var(--cat-slate)" }}>
+              <div className="font-[var(--font-pe-mono)]" style={mono(9.5, "var(--foreground)")}>
+                signing, from here
+              </div>
+              <p className="m-0 text-[10.5px]" style={{ color: "var(--muted-foreground)" }}>
+                The shipped loader is unsigned today (a real Authenticode cert slots in via
+                PeCodeSignPfx/Thumbprint at release). Dev signatures never reach users.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* signing matrix */}
+      <div className="mt-3" style={{ overflowX: "auto" }}>
+        <table
+          className="w-full border-collapse"
+          style={{ border: "0.5px solid var(--line)", minWidth: 680 }}
+        >
+          <thead>
+            <tr style={{ borderBottom: "0.5px solid var(--line)" }}>
+              {["who builds the loader", "stamp inside the dll", "hash", "why"].map((h) => (
+                <th
+                  key={h}
+                  className="px-3 py-1.5 text-left font-[var(--font-pe-mono)]"
+                  style={{ fontSize: 9, letterSpacing: "0.06em", color: "var(--muted-foreground)" }}
+                >
+                  {h.toUpperCase()}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {SIGNING_ROWS.map((r) => (
+              <tr key={r.who} style={{ borderBottom: "0.5px solid var(--line-soft)" }}>
+                <td
+                  className="px-3 py-1.5 font-[var(--font-pe-mono)]"
+                  style={{ fontSize: 10, color: "var(--foreground)", whiteSpace: "nowrap" }}
+                >
+                  {r.who}
+                </td>
+                <td className="px-3 py-1.5 text-[10.5px]" style={{ color: "var(--foreground)" }}>
+                  {r.stamp}
+                </td>
+                <td
+                  className="px-3 py-1.5 font-[var(--font-pe-mono)]"
+                  style={{ fontSize: 10, color: "var(--pe-blue)" }}
+                >
+                  {r.hash}
+                </td>
+                <td
+                  className="px-3 py-1.5 text-[10.5px]"
+                  style={{ color: "var(--muted-foreground)" }}
+                >
+                  {r.why}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="m-0 mt-1 text-[10.5px]" style={{ color: "var(--muted-foreground)" }}>
+          Same commit, three stamps, two hashes — and the door compares hashes. That table is the
+          entire 2025 refusal. Cites: Commands.cs:975 · Publish.targets:58-98 ·
+          SandboxCommand.cs:1171.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── misreadings — wrong models this page exists to replace ─────────────────────────────────────
+
+const MISREADINGS: [string, string][] = [
   [
-    "lane",
-    "the runtime mode of one Revit session: installed · dev/rrd · sandbox. Decided at boot by the loader, pinned, never inferred afterward.",
+    "“the selector is some registry / config thing”",
+    "it's a file: Addins\\<year>\\00-Pe.App.addin. That .addin manifest IS the selector.",
   ],
-  ["payload", "the real Pe.App assembly the loader loads and delegates IExternalApplication to."],
   [
-    "loader",
-    "the tiny shim Revit actually loads. Hash-named bootstrap + fixed-name contract. Decides the lane; the Revit analogue of PathShim.",
+    "“the loader is compiled from my checkout”",
+    "it ships pre-built inside the pinned SDK package. Dev builds only re-stamp it: rename per product, dev-sign if dev-sign.props exists, hash.",
   ],
   [
-    "selector",
-    "Addins\\<year>\\00-Pe.App.addin + its loader dir — the single routing artifact Revit reads. One per product+year; the only contended file in the system.",
+    "“the hex in the filename encodes a signature”",
+    "the signature lives INSIDE the dll (Authenticode block); the hex is the SHA-256 of the whole file, signature included — which is exactly why signing mints a “new” loader.",
   ],
   [
-    "descriptor",
-    "a *.runtime.json launch receipt named by PE_REVIT_SESSION_DESCRIPTOR. Immutable; its presence IS the difference between lanes.",
+    "“a sandbox gets its own Addins folder”",
+    "there is only one Addins. Isolation = the PE_REVIT_SESSION_DESCRIPTOR env var + the payload living in the generation folder. Per-process environment, not per-folder.",
   ],
   [
-    "receipt",
-    "install.receipt.json — the exact-file (sha256) inventory of what the install owns. “Receipt-owned” is what makes overwrite a refusal instead of a race.",
-  ],
-  ["generation (sandbox)", "one immutable build-output folder per sandbox materialization."],
-  ["generation (EnC)", "the hot-reload delta counter on a loaded module. Unrelated to the above."],
-  [
-    "slot",
-    "a fixed indirection class (Slots.SlotNN) ribbon buttons target — commands route through slots so payload types never leak into Revit's UI registry.",
+    "“user machines do some of this too”",
+    "users never build, never sign, never see a descriptor. Installer copies one pre-made loader; every boot takes the current.txt path. The whole sandbox/signing story is dev-machine-only.",
   ],
   [
-    "rrd",
-    "Rider round-trip debugging — the interactive dev lane: debugger + hot reload against a source payload, user-owned, never controlled by the SDK.",
+    "“closing Revit will release the refusal”",
+    "the refusal is ownership + content (receipt vs bytes), not a file lock. Nothing running matters.",
   ],
 ];
 
@@ -2206,8 +2743,12 @@ const LEDGER: { state: "truth" | "next" | "open"; text: string }[] = [
     text: "bridge.sessions.list carries buildStamp + loader hash per session, so the live strip can show payload provenance (installed 0.6.14 vs src@8455251) instead of just lane.",
   },
   {
+    state: "truth",
+    text: "The real 2025 refusal (2026-07-16) was dev-signing, not code drift — RESOLVED in SDK beta.97: install apply now dev-signs the deployed loader on machines with dev-sign.props (sign-at-install), refusals name their cause (identity / signature / bytes / routing, state selector-refused), and verify no longer loops on legacy-overlaps-payload. Residual pin-skew refusals are honest and fixed by rebuilding the dist + apply.",
+  },
+  {
     state: "open",
-    text: "Selector co-ownership: side-by-side loader hashes with per-descriptor routing would dissolve the refuse-if-differing case entirely. Today's answer is “release after loader changes”; once the loader stops churning, the whole drift class goes quiet on its own.",
+    text: "Selector identity should ignore signatures (hash the pre-signature image). Until then, every dev machine with an installed product + dev-sign.props re-hits this refusal, and releasing can't close it.",
   },
   {
     state: "open",
@@ -2275,11 +2816,10 @@ function DocsRuntime() {
               <a href="/docs/target" style={{ color: "var(--pe-blue)" }}>
                 docs/target
               </a>
-              : that page explains which session a call reaches; this one explains how a session
-              with a given lane comes to exist at all. One loader, one selector per year, one
-              pointer file — and three actors (installer, build, sandbox CLI) writing to four places
-              on disk. Revit itself only ever <em>reads</em>. Every claim is cited to Pe.Revit.Sdk
-              source (beta.96, 02ad1bb).
+              : that page is <em>which session gets the call</em>; this one is{" "}
+              <em>how each kind of session comes to exist</em>. Three writers (installer, build,
+              sandbox CLI), four places on disk, and Revit only ever reads. Claims cite Pe.Revit.Sdk
+              source (beta.96).
             </p>
           </div>
           <ThemeToggle />
@@ -2300,16 +2840,50 @@ function DocsRuntime() {
               className="m-0 max-w-[100ch] text-[13px] leading-relaxed"
               style={{ color: "var(--foreground)" }}
             >
-              Revit loads exactly one thing — a hash-named <strong>loader</strong> shim, named by
-              the <strong>selector</strong> manifest in the shared Addins folder. At boot, the
-              loader asks one question: <em>is PE_REVIT_SESSION_DESCRIPTOR set?</em> If yes, the
-              named <strong>descriptor</strong> file dictates lane and payload (rrd or sandbox). If
-              no, it reads <strong>current.txt</strong> once and loads the{" "}
-              <strong>installed</strong> payload. That single indirection is how one Addins folder
-              serves your everyday Revit, your debug session, and any number of sandboxes at the
-              same time.
+              Revit loads one thing: a hash-named <strong>loader</strong> dll, named by the{" "}
+              <strong>selector</strong> (the <code>00-Pe.App.addin</code> file). The loader asks one
+              question — <em>is PE_REVIT_SESSION_DESCRIPTOR set?</em> Yes → that{" "}
+              <strong>descriptor</strong> file picks the payload (rrd or sandbox). No →{" "}
+              <strong>current.txt</strong>, once → installed. One env var is the entire difference
+              between your Revit, your debug session, and every sandbox.
             </p>
           </div>
+        </section>
+
+        {/* ── the nouns ─────────────────────────────────────────────────────────────────────── */}
+        <section className="mb-10">
+          <SectionLabel label="the nouns — every term is a real file" />
+          <p className="mb-2 max-w-[80ch] text-[12px]" style={{ color: "var(--muted-foreground)" }}>
+            Nothing here is abstract. Each concept is one file (or folder) with a path and contents
+            you can open right now. Click a noun to see what it points at — everything on this page
+            is just these files changing.
+          </p>
+          <Nouns />
+        </section>
+
+        {/* ── misreadings ───────────────────────────────────────────────────────────────────── */}
+        <section className="mb-10">
+          <SectionLabel label="not this — the wrong models, corrected" />
+          <table className="w-full border-collapse" style={{ border: "0.5px solid var(--line)" }}>
+            <tbody>
+              {MISREADINGS.map(([wrong, right]) => (
+                <tr key={wrong} style={{ borderBottom: "0.5px solid var(--line-soft)" }}>
+                  <td
+                    className="px-3 py-1.5 align-top text-[11px]"
+                    style={{ color: "var(--cat-clay)", width: "34%" }}
+                  >
+                    {wrong}
+                  </td>
+                  <td
+                    className="px-3 py-1.5 text-[11.5px] leading-snug"
+                    style={{ color: "var(--foreground)" }}
+                  >
+                    {right}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </section>
 
         {/* ── the shape ─────────────────────────────────────────────────────────────────────── */}
@@ -2320,6 +2894,18 @@ function DocsRuntime() {
             out on a single env var. Click anything to trace its lane.
           </p>
           <BigPicture />
+        </section>
+
+        {/* ── two worlds ────────────────────────────────────────────────────────────────────── */}
+        <section className="mb-10">
+          <SectionLabel label="two worlds, one door — lanes, checkouts, signing" />
+          <p className="mb-2 max-w-[80ch] text-[12px]" style={{ color: "var(--muted-foreground)" }}>
+            The dev/user split, drawn whole. A user's machine has one writer and one boot path. Your
+            machine has many builders — a primary checkout (RRD), any number of worktree checkouts
+            (each spawning its own sandbox, concurrently), AND an installed release — all sharing
+            one Addins door. Signing is the invisible variable that decides whether they agree.
+          </p>
+          <TwoWorlds />
         </section>
 
         {/* ── the world composer ────────────────────────────────────────────────────────────── */}
@@ -2533,38 +3119,6 @@ function DocsRuntime() {
                 </tbody>
               </table>
             </div>
-          </details>
-        </section>
-
-        {/* ── glossary ──────────────────────────────────────────────────────────────────────── */}
-        <section className="mb-10">
-          <details>
-            <summary
-              className="mb-1.5 cursor-pointer font-[var(--font-pe-mono)]"
-              style={{ fontSize: 10, letterSpacing: "0.06em", color: "var(--foreground)" }}
-            >
-              VOCABULARY
-            </summary>
-            <table className="w-full border-collapse" style={{ border: "0.5px solid var(--line)" }}>
-              <tbody>
-                {GLOSSARY.map(([term, def]) => (
-                  <tr key={term} style={{ borderBottom: "0.5px solid var(--line-soft)" }}>
-                    <td
-                      className="px-3 py-1.5 align-top font-[var(--font-pe-mono)]"
-                      style={{ fontSize: 10.5, color: "var(--pe-blue)", whiteSpace: "nowrap" }}
-                    >
-                      {term}
-                    </td>
-                    <td
-                      className="px-3 py-1.5 text-[11px] leading-snug"
-                      style={{ color: "var(--foreground)" }}
-                    >
-                      {def}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </details>
         </section>
 

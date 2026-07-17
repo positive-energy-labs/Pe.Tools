@@ -124,6 +124,7 @@ export const settingsRouteState = defineRouteState({
       input: z.object({
         documentId: settingsDocumentIdSchema,
         rawContent: z.string(),
+        target: z.string().optional(),
       }),
       actor: "any",
       mutatesExternal: true,
@@ -131,27 +132,27 @@ export const settingsRouteState = defineRouteState({
     open: {
       description:
         "Open a settings document (module/root/relative path) into the snapshot: raw + composed content, version token, and validation. Existing proposals are preserved.",
-      input: z.object({ documentId: settingsDocumentIdSchema }),
+      input: z.object({ documentId: settingsDocumentIdSchema, target: z.string().optional() }),
       actor: "any",
       recoversExternal: true,
     },
     refresh: {
       description:
         "Re-read the currently open settings document (fresh raw content, version token, validation). Proposals and staged values are preserved.",
-      input: z.object({}),
+      input: z.object({ target: z.string().optional() }),
       actor: "any",
       recoversExternal: true,
     },
     validate: {
       description:
         "Validate the document with staged values spliced in (and proposals too when includeProposals is true) without saving. Use this to prove a proposal is schema-valid before the human stages it.",
-      input: z.object({ includeProposals: z.boolean().optional() }),
+      input: z.object({ includeProposals: z.boolean().optional(), target: z.string().optional() }),
       actor: "any",
     },
     save: {
       description:
         "HUMAN ONLY. Splice every staged field into the raw content and save through settings.document.save with the captured version token. Successful saves fold into the snapshot and clear staged fields; conflicts and validation failures leave them staged.",
-      input: z.object({}),
+      input: z.object({ target: z.string().optional() }),
       actor: "human",
       mutatesExternal: true,
     },
