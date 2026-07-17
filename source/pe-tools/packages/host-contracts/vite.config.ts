@@ -2,7 +2,11 @@ import { defineConfig } from "vite-plus";
 
 export default defineConfig({
   pack: {
-    entry: ["src/contracts/index.ts", "src/effect/host-effect.generated.ts"],
+    entry: [
+      "src/contracts/index.ts",
+      "src/effect/host-effect.generated.ts",
+      "src/service-identity.ts",
+    ],
     dts: {
       tsgo: true,
     },

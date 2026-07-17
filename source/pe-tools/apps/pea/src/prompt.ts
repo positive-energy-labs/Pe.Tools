@@ -10,6 +10,7 @@
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 import { readFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import path from "node:path";
@@ -42,12 +43,21 @@ import {
   resolvePeaSkillPaths,
   resolveWorkspaceKey,
 } from "@pe/mcps";
-import { hostProcessIdentity } from "@pe/host-contracts/contracts";
-import { HostCallError } from "@pe/host-contracts/operation-types";
-import { ensureRunning } from "../../host/src/pe-service.ts";
+import { hostProcessIdentity, productIdentity } from "@pe/host-contracts/contracts";
+import { sourceHostServiceName } from "@pe/host-contracts/service-identity";
+import { ensureRunning, readServiceFile } from "../../host/src/pe-service.ts";
 
 const peaConfigDir = ".pea";
 const runtimeCloseTimeoutMs = 5000;
+const sourceHostStartupTimeoutMs = 45_000;
+
+function productRoot(): string {
+  return path.join(
+    process.env.LOCALAPPDATA ?? path.join(homedir(), "AppData", "Local"),
+    productIdentity.vendorName,
+    productIdentity.productName,
+  );
+}
 export const defaultPeaPromptTimeoutSeconds = 900;
 
 // Progress breadcrumbs on stderr: off by default so `pea --prompt --json` stays pipe-clean.
@@ -297,46 +307,58 @@ async function ensureTsHostRunning(hostBaseUrl: string): Promise<string> {
     return `http://127.0.0.1:${result.file.port}`;
   }
 
-  const client = new HostRpcCaller({ hostBaseUrl });
-  try {
-    await client.call("host.status");
-    return hostBaseUrl;
-  } catch (error) {
-    // HostRpcCaller also wraps transport failures as HostCallError(status=0). Only a real HTTP
-    // response proves that a service owns this endpoint; status 0 must enter service supervision.
-    if (error instanceof HostCallError && error.status > 0) return hostBaseUrl;
-  }
+  const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+  const serviceName = sourceHostServiceName(sourceRoot);
+  const appBase = productRoot();
+  const discovered = await readServiceFile(appBase, serviceName);
+  const currentBaseUrl = discovered ? `http://127.0.0.1:${discovered.port}` : hostBaseUrl;
+  if (await probeHost(currentBaseUrl)) return currentBaseUrl;
 
-  const cwd = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
   const override = process.env.PE_TOOLS_HOST_LAUNCH_COMMAND?.trim();
   const command = override ?? "vp";
-  const args = override ? [] : ["run", "@pe/host#start"];
+  const args = override ? [] : ["run", "@pe/host#dev"];
   const child = spawn(command, args, {
-    cwd,
+    cwd: sourceRoot,
     detached: true,
+    env: {
+      ...process.env,
+      PE_LANE: "dev",
+      PE_TOOLS_HOST_SOURCE_DIR: sourceRoot,
+      [hostProcessIdentity.serviceNameVariable]: serviceName,
+    },
     shell: true,
     stdio: "ignore",
     windowsHide: true,
   });
   child.unref();
 
-  const deadline = Date.now() + 12_000;
+  const deadline = Date.now() + sourceHostStartupTimeoutMs;
   let lastError: unknown;
   while (Date.now() < deadline) {
     await delay(250);
     try {
-      await client.call("host.status");
-      return hostBaseUrl;
+      const file = await readServiceFile(appBase, serviceName);
+      if (!file) continue;
+      const baseUrl = `http://127.0.0.1:${file.port}`;
+      if (await probeHost(baseUrl)) return baseUrl;
     } catch (error) {
       lastError = error;
-      if (error instanceof HostCallError && error.status > 0) return hostBaseUrl;
     }
   }
 
   const detail = lastError instanceof Error ? lastError.message : "unknown error";
   throw new Error(
-    `Started @pe/host via \`${command} ${args.join(" ")}\`, but it did not become reachable at ${hostBaseUrl} within 12 seconds. Last probe error: ${detail}`,
+    `Started @pe/host via \`${command} ${args.join(" ")}\`, but '${serviceName}' did not become reachable within ${sourceHostStartupTimeoutMs / 1000} seconds. Last probe error: ${detail}`,
   );
+}
+
+async function probeHost(baseUrl: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${baseUrl.replace(/\/$/, "")}${hostProcessIdentity.healthPath}`);
+    return response.status < 400;
+  } catch {
+    return false;
+  }
 }
 
 async function resolveInstalledHostLaunch(): Promise<{

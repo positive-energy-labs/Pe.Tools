@@ -81,7 +81,7 @@
       "name": "host",
       "source": "source/pe-tools/apps/host/dist-installed",
       "entry": "Pe.Host.exe",
-      "dev": "vp run @pe/host#start",
+      "dev": "vp run @pe/host#dev",
       "build": "pnpm --dir source/pe-tools --filter @pe/host build:payload",
       "service": {
         "preferredPort": 5180,

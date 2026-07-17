@@ -1,4 +1,6 @@
 using Newtonsoft.Json.Linq;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Pe.Shared.Product;
 
@@ -6,10 +8,10 @@ public static class HostProcessIdentity {
     public const string DirectoryName = ProductPathNames.HostDirectoryName;
     public const string ExecutableName = "Pe.Host.exe";
 
-    // Service identity mirrored into the manifest host payload and the TS contract (guarded by
-    // product-mirror.test.ts). ServiceName is the SDK service-file key (state/service/host.json);
+    // The installed service is "host"; source hosts derive a stable key from their checkout root.
     // HealthPath/ShutdownPath are the loopback routes the SDK primitive probes and authorizes.
     public const string ServiceName = "host";
+    public const string ServiceNameVariable = "PE_TOOLS_HOST_SERVICE_NAME";
     public const string HealthPath = "/host/status";
     public const string ShutdownPath = "/admin/shutdown";
 
@@ -29,9 +31,28 @@ public static class HostProcessIdentity {
         ?? TryReadServiceFileBaseUrl()
         ?? DefaultHostBaseUrl;
 
+    public static string ResolveServiceName(ProductRuntimeLane lane, string? sourceRoot) {
+        if (lane == ProductRuntimeLane.Installed)
+            return ServiceName;
+        if (string.IsNullOrWhiteSpace(sourceRoot))
+            throw new ArgumentException("A dev host requires a source root for service identity.", nameof(sourceRoot));
+        return SourceServiceName(sourceRoot!);
+    }
+
+    public static string SourceServiceName(string sourceRoot) {
+        var normalized = Path.GetFullPath(sourceRoot)
+            .Replace('\\', '/')
+            .TrimEnd('/')
+            .ToLowerInvariant();
+        using var sha256 = SHA256.Create();
+        var hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(normalized));
+        var suffix = BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant().Substring(0, 12);
+        return $"{ServiceName}-source-{suffix}";
+    }
+
     /// <summary>
     ///     The actual bound port from the SDK runtime service file
-    ///     (<c>state/service/host.json</c>), rewritten by the host on every bind and deleted on
+    ///     (<c>state/service/&lt;service-name&gt;.json</c>), rewritten by the host on every bind and deleted on
     ///     graceful exit — so it can never go stale the way a process-env copy did. Port-only
     ///     projection; full schema validation stays with the SDK's ServiceFile/pe-service.
     ///     NOTE: this is intentionally a minimal hand-rolled projection rather than the SDK
@@ -42,10 +63,14 @@ public static class HostProcessIdentity {
     /// </summary>
     private static string? TryReadServiceFileBaseUrl() {
         try {
+            var serviceName = FirstNonBlank(
+                Environment.GetEnvironmentVariable(ServiceNameVariable),
+                ServiceName
+            )!;
             var path = Path.Combine(
                 ProductRuntimeLayout.ForCurrentUser().State.RootPath,
                 "service",
-                "host.json"
+                $"{serviceName}.json"
             );
             if (!File.Exists(path))
                 return null;

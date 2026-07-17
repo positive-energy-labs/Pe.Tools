@@ -63,6 +63,7 @@ test("exports generic operation request and response typing", () => {
     disconnectReason: null,
     hostContractVersion: 0,
     runtimeIdentity: "test",
+    serviceName: "host",
   } satisfies HostOpResponse<"host.status">;
   expect(noRequest).toEqual({});
   expect(recentDocumentsRequest.revitYear).toBe("2025");
@@ -179,6 +180,7 @@ test("exports TS-only admin operation schemas", () => {
     disconnectReason: null,
     hostContractVersion: 34,
     runtimeIdentity: "test",
+    serviceName: "host",
   });
   expect(decoded.bridgeIsConnected).toBe(false);
 

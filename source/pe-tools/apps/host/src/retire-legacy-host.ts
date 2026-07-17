@@ -10,7 +10,11 @@ import { Effect } from "effect";
 /** Legacy = a Pe.Host.exe running OUTSIDE the versioned root (old flat bin\host layout). */
 export function isLegacyHostPath(executablePath: string): boolean {
   const normalized = executablePath.toLowerCase();
-  return normalized.endsWith("\\pe.host.exe") && !normalized.includes("\\bin\\host\\versions\\");
+  return (
+    normalized.endsWith("\\pe.host.exe") &&
+    !normalized.includes("\\bin\\host\\versions\\") &&
+    !normalized.includes("\\dev\\bin\\host\\")
+  );
 }
 
 const listHostProcesses = (): Promise<ReadonlyArray<{ pid: number; path: string }>> =>

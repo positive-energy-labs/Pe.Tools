@@ -2,7 +2,7 @@ import { Effect, Layer, Stream } from "effect";
 import { HttpRouter, HttpServer, HttpServerResponse as Response } from "effect/unstable/http";
 import { NodeHttpClient, NodeHttpServer, NodeServices } from "@effect/platform-node";
 import { readFileSync } from "node:fs";
-import { createServer } from "node:http";
+import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { BRIDGE_PATH, hostProcessIdentity } from "@pe/host-contracts/contracts";
@@ -18,6 +18,8 @@ import { sandboxesRoute } from "./sandbox-route.ts";
 import { adminShutdownRoute, HostLifecycle, ServiceFileLive } from "./host-lifecycle.ts";
 import { MastraMountLive, MastraRuntime, withMastraDegrade } from "./mastra-runtime.ts";
 import { staticSpaLayer } from "./static-spa.ts";
+import { viteWebLayer } from "./vite-web.ts";
+import type { ViteDevServer } from "vite-plus";
 
 export { MastraRuntimeLive } from "./mastra-runtime.ts";
 export { resolveWebRoot } from "./static-spa.ts";
@@ -212,6 +214,10 @@ const InstallGcLive = Layer.effectDiscard(
 export interface HttpLiveOptions {
   /** Preferred listen port (0 = ephemeral, used by the boundary test). */
   readonly port: number;
+  /** Optional shared Node listener; dev gives the same object to Vite middleware/HMR. */
+  readonly nodeServer?: Server;
+  /** Programmatic Vite server in dev; installed mode leaves this absent and serves static files. */
+  readonly viteServer?: ViteDevServer;
   /**
    * The Mastra tenant layer; the boundary test swaps a trivial stub (RIn = never) for the real
    * runtime (RIn = HttpServer). `HttpServer` is satisfied by the shared `NodeHttpServer.layer`.
@@ -235,6 +241,15 @@ export interface HttpLiveOptions {
  * Mastra tenant (bound loopback -> hostBaseUrl), and the service-file writer.
  */
 export function makeHttpLive(options: HttpLiveOptions) {
+  const ServerLive = NodeHttpServer.layer(() => options.nodeServer ?? createServer(), {
+    host: "127.0.0.1",
+    port: options.port,
+  });
+  const ClaimedServerLive = Layer.mergeAll(
+    ServerLive,
+    ServiceFileLive.pipe(Layer.provide(ServerLive)),
+  );
+
   const AppLive = Layer.mergeAll(
     bridgeWsRoute,
     bridgeEventsRoute,
@@ -246,19 +261,16 @@ export function makeHttpLive(options: HttpLiveOptions) {
     adminShutdownRoute,
     sandboxesRoute,
     callRoute,
-    ServiceFileLive,
     MastraMountLive,
-    staticSpaLayer(options.webRoot),
+    options.viteServer ? viteWebLayer(options.viteServer) : staticSpaLayer(options.webRoot),
     ...(options.includeInstallGc === false ? [] : [InstallGcLive]),
   );
 
   return HttpRouter.serve(AppLive).pipe(
-    // Provide the tenant BEFORE the server layer so its own HttpServer requirement bubbles up and
-    // is satisfied by the same NodeHttpServer.layer below (one bound server, shared). `withMastraDegrade`
-    // makes the service claim (a merge sibling) structurally independent of agent-runtime boot: any
-    // tenant build failure — failure OR defect — degrades to a 503 tenant instead of collapsing the merge.
+    // ClaimedServerLive binds and completes takeover before the tenant opens shared product state.
+    // The tenant still receives that same HttpServer, and any runtime failure degrades only /pe/*.
     Layer.provide(withMastraDegrade(options.mastraLayer)),
-    Layer.provide(NodeHttpServer.layer(createServer, { host: "127.0.0.1", port: options.port })),
+    Layer.provide(ClaimedServerLive),
     Layer.provide(NodeHttpClient.layerUndici),
     Layer.provide(RevitBridgeLive),
     Layer.provide(Layer.succeed(HostLifecycle, options.lifecycle)),

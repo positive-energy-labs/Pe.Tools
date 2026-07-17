@@ -1,9 +1,11 @@
 import { spawn } from "node:child_process";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { productIdentity } from "@pe/host-contracts/contracts";
+import { sourceHostServiceName } from "@pe/host-contracts/service-identity";
 import {
   acceptancePlan,
   isRecord,
@@ -35,14 +37,17 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../.
 const addinProject = join(repoRoot, "source", "Pe.App", "Pe.App.csproj");
 const testProject = join(repoRoot, "source", "Pe.Revit.Tests", "Pe.Revit.Tests.csproj");
 const testFilter = "Name~Reports_runtime_assembly_load_paths";
-const serviceFile = join(
-  process.env.LOCALAPPDATA ?? "",
-  "Positive Energy",
-  "Pe.Tools",
-  "state",
-  "service",
-  "host.json",
+type HostLane = "source" | "installed";
+const sourceRoot = join(repoRoot, "source", "pe-tools");
+const appBase = join(
+  process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"),
+  productIdentity.vendorName,
+  productIdentity.productName,
 );
+const serviceFiles: Record<HostLane, string> = {
+  source: join(appBase, "state", "service", `${sourceHostServiceName(sourceRoot)}.json`),
+  installed: join(appBase, "state", "service", "host.json"),
+};
 const installedShims = join(process.env.LOCALAPPDATA ?? "", "Positive Energy", "Pe.Tools", "shims");
 
 export async function runAcceptance(options: RunOptions): Promise<void> {
@@ -104,7 +109,7 @@ class AcceptanceRun {
 
   async showcase(): Promise<void> {
     await this.gate("pea-chat", async () => {
-      const host = await this.waitForHost();
+      const host = await this.waitForHost("source");
       const chat = await fetch(`http://127.0.0.1:${host.port}/chat`);
       requireThat(chat.ok, `/chat returned ${chat.status}`);
       const id = `pea-showcase-${this.runId}`;
@@ -496,21 +501,45 @@ class AcceptanceRun {
 
   private async routingAndService(): Promise<void> {
     requireThat(this.sourceId && this.installedId, "routing needs both sandboxes");
-    const service = JSON.parse(await readFile(serviceFile, "utf8"));
-    const host = await this.waitForHost();
-    requireThat(
-      service.schemaVersion === 2 && service.pid === host.pid && service.port === host.port,
-      "service file and host status disagree",
-    );
-    for (const key of ["instanceId", "processStartUtc", "version", "lane", "token"])
-      requireThat(service[key] !== undefined, `service file lacks ${key}`);
-    await this.record("06-service", { service, host });
+    const sourceService = JSON.parse(await readFile(serviceFiles.source, "utf8"));
+    const installedService = JSON.parse(await readFile(serviceFiles.installed, "utf8"));
+    const sourceHost = await this.waitForHost("source");
+    const installedHost = await this.waitForHost("installed");
+    for (const [lane, service, host] of [
+      ["source", sourceService, sourceHost],
+      ["installed", installedService, installedHost],
+    ] as const) {
+      requireThat(
+        service.schemaVersion === 2 && service.pid === host.pid && service.port === host.port,
+        `${lane} service file and host status disagree`,
+      );
+      for (const key of ["instanceId", "processStartUtc", "version", "lane", "token"])
+        requireThat(service[key] !== undefined, `${lane} service file lacks ${key}`);
+    }
+    await this.record("06-service", {
+      source: { service: sourceService, host: sourceHost },
+      installed: { service: installedService, host: installedHost },
+    });
 
-    const sessions = await this.call("06-sessions", "bridge.sessions.list", {}, "user", [200]);
-    const rows = sessionRows(sessions.body);
-    const source = rows.find((row) => row.sandboxId === this.sourceId);
-    const installed = rows.find((row) => row.sandboxId === this.installedId);
-    requireThat(source && installed, "host did not register both sandboxes");
+    const sourceSessions = await this.call(
+      "06-source-sessions",
+      "bridge.sessions.list",
+      {},
+      "user",
+      [200],
+    );
+    const installedSessions = await this.call(
+      "06-installed-sessions",
+      "bridge.sessions.list",
+      {},
+      `sandbox:${this.installedId}`,
+      [200],
+    );
+    const source = sessionRows(sourceSessions.body).find((row) => row.sandboxId === this.sourceId);
+    const installed = sessionRows(installedSessions.body).find(
+      (row) => row.sandboxId === this.installedId,
+    );
+    requireThat(source && installed, "each lane did not register its sandbox");
 
     const omitted = await this.call("06-omitted", "revit.context.summary", {}, undefined, [409]);
     requireThat(omitted.status === 409, "omitted selector did not reject ambiguity");
@@ -825,7 +854,7 @@ class AcceptanceRun {
     selector?: string,
     expected = [200],
   ): Promise<{ status: number; body: unknown }> {
-    const host = await this.waitForHost();
+    const host = await this.waitForHost(this.hostLaneForSelector(selector));
     const response = await fetch(`http://127.0.0.1:${host.port}/call`, {
       method: "POST",
       headers: {
@@ -851,12 +880,18 @@ class AcceptanceRun {
     return result;
   }
 
-  private async waitForHost(): Promise<Record<string, unknown> & { port: number; pid: number }> {
+  private hostLaneForSelector(selector?: string): HostLane {
+    return this.installedId && selector === `sandbox:${this.installedId}` ? "installed" : "source";
+  }
+
+  private async waitForHost(
+    lane: HostLane = "source",
+  ): Promise<Record<string, unknown> & { port: number; pid: number }> {
     const deadline = Date.now() + 120_000;
     let last = "service file missing";
     while (Date.now() < deadline) {
       try {
-        const service = JSON.parse(await readFile(serviceFile, "utf8"));
+        const service = JSON.parse(await readFile(serviceFiles[lane], "utf8"));
         const response = await fetch(`http://127.0.0.1:${service.port}/host/status`, {
           signal: AbortSignal.timeout(3_000),
         });
@@ -870,7 +905,7 @@ class AcceptanceRun {
       }
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 1_000));
     }
-    throw new Error(`Pe.Tools host was not ready: ${last}`);
+    throw new Error(`Pe.Tools ${lane} host was not ready: ${last}`);
   }
 
   private async waitForRoutedSession(label: string, selector: string): Promise<void> {

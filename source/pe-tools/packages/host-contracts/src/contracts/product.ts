@@ -31,6 +31,7 @@ export const hostProcessIdentity = {
   directoryName: "host",
   executableName: "Pe.Host.exe",
   serviceName: "host",
+  serviceNameVariable: "PE_TOOLS_HOST_SERVICE_NAME",
   healthPath: "/host/status",
   shutdownPath: "/admin/shutdown",
   frontendBaseUrlVariable: "PE_TOOLS_FRONTEND_BASE_URL",

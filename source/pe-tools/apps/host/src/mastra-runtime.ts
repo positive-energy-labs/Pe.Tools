@@ -195,9 +195,9 @@ export const MastraRuntimeLive = Layer.effect(
  * ever collapse the merged layer. Interruption-only causes are teardown, not a degrade, so they are
  * not reported.
  */
-export const withMastraDegrade = (
-  mastraLayer: Layer.Layer<MastraRuntime, unknown, HttpServer.HttpServer>,
-): Layer.Layer<MastraRuntime, never, HttpServer.HttpServer> =>
+export const withMastraDegrade = <R>(
+  mastraLayer: Layer.Layer<MastraRuntime, unknown, R>,
+): Layer.Layer<MastraRuntime, never, R> =>
   mastraLayer.pipe(
     Layer.catchCause((cause) =>
       Layer.effect(

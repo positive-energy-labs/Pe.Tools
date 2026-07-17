@@ -226,6 +226,26 @@ public sealed class DeploymentRuntimeContractTests {
     }
 
     [Test]
+    public void Host_service_identity_is_installed_global_and_dev_checkout_scoped() {
+        const string sourceRoot = @"C:\Users\Alice\Repo\source\pe-tools\";
+
+        Assert.Multiple(() => {
+            Assert.That(
+                HostProcessIdentity.ResolveServiceName(ProductRuntimeLane.Installed, null),
+                Is.EqualTo("host")
+            );
+            Assert.That(
+                HostProcessIdentity.ResolveServiceName(ProductRuntimeLane.Dev, sourceRoot),
+                Is.EqualTo("host-source-a3684ea655f3")
+            );
+            Assert.That(
+                HostProcessIdentity.SourceServiceName(sourceRoot.ToLowerInvariant()),
+                Is.EqualTo(HostProcessIdentity.SourceServiceName(sourceRoot))
+            );
+        });
+    }
+
+    [Test]
     public void Installed_product_grammar_resolves_the_host_executable_and_pea_launcher() {
         // Consumer-side pin: the installed lane resolves host/pea through Pe.Revit.Loader's
         // InstalledProduct, so this fixtures a minimal install root (as `pe-revit install apply`

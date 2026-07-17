@@ -452,6 +452,7 @@ export const hostProbeDataSchema = Schema.Struct({
   lane: Schema.optional(Schema.Literals(["dev", "installed"])),
   processId: Schema.optional(Schema.Number),
   runtimeIdentity: Schema.String,
+  serviceName: Schema.String,
   sourceRoot: Schema.optional(Schema.NullOr(Schema.String)),
 });
 

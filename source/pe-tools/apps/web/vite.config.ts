@@ -48,26 +48,6 @@ const config = defineConfig(({ mode }) => {
         consolePiping: { enabled: false },
       }) as never,
     ],
-    // Dev proxy to the squashed Effect host (port 5180), which serves the SPA and
-    // absorbs the former Mastra agent server. Single same-origin target, no rewrites,
-    // no token injection. Installed builds have the host serve the SPA directly, so this
-    // proxy is dev-only. ponytail: one target for every host-backed path the app uses.
-    server: {
-      proxy: (() => {
-        const target = process.env.PE_TOOLS_HOST_BASE_URL ?? "http://127.0.0.1:5180";
-        const options = { target, changeOrigin: true } as const;
-        return {
-          "/call": options,
-          "/events": options,
-          "/ops": options,
-          "/schemas": options,
-          "/host": options,
-          "/sessions": options,
-          "/pe": options,
-          "/api/agent-controller": options,
-        };
-      })(),
-    },
     resolve: { tsconfigPaths: true, dedupe: ["react", "react-dom"] },
     // assistant-ui ships React-Compiler output (`useMemoCache`); under TanStack Start's
     // multi-environment optimizer it can bind to a different React prebundle than react-dom's
