@@ -1,9 +1,14 @@
 import { Deferred, Effect, Layer } from "effect";
 import type { Server } from "node:http";
 import type { ViteDevServer } from "vite-plus";
+import { hostProcessIdentity } from "@pe/host-contracts/contracts";
+import { chooseServicePort } from "@pe/host-contracts/pe-service-host";
+import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
+import { productRoot } from "@pe/host-contracts/service-identity";
 import { makeHttpLive, MastraRuntimeLive, resolveWebRoot } from "./app.ts";
-import { chooseHostPort } from "./host-port.ts";
-import type { ServiceHostHandle } from "./pe-service-host.ts";
+import { hostOwnership } from "./host-ownership.ts";
+
+const preferredPort = Number(new URL(hostProcessIdentity.defaultHostBaseUrl).port);
 
 /** The shared host lifecycle used by both installed startup and source web development. */
 export const hostProgram = <A, E, R>(options: {
@@ -14,7 +19,9 @@ export const hostProgram = <A, E, R>(options: {
   Effect.scoped(
     Effect.gen(function* () {
       yield* options.beforeHost;
-      const port = yield* Effect.promise(chooseHostPort);
+      const port = yield* Effect.promise(() =>
+        chooseServicePort(productRoot(), hostOwnership.serviceName, preferredPort),
+      );
 
       // The service-file identity + eviction is SDK-owned (D3): ServiceFileLive claims it on bind and
       // publishes the claim handle here. No pre-bind takeover, no locally minted token.

@@ -1,11 +1,11 @@
 import { spawn } from "node:child_process";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { productIdentity } from "@pe/host-contracts/contracts";
-import { sourceHostServiceName } from "@pe/host-contracts/service-identity";
+import { serviceFilePath } from "@pe/host-contracts/pe-service";
+import { productRoot, sourceHostServiceName } from "@pe/host-contracts/service-identity";
 import {
   acceptancePlan,
   isRecord,
@@ -39,16 +39,12 @@ const testProject = join(repoRoot, "source", "Pe.Revit.Tests", "Pe.Revit.Tests.c
 const testFilter = "Name~Reports_runtime_assembly_load_paths";
 type HostLane = "source" | "installed";
 const sourceRoot = join(repoRoot, "source", "pe-tools");
-const appBase = join(
-  process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"),
-  productIdentity.vendorName,
-  productIdentity.productName,
-);
+const appBase = productRoot();
 const serviceFiles: Record<HostLane, string> = {
-  source: join(appBase, "state", "service", `${sourceHostServiceName(sourceRoot)}.json`),
-  installed: join(appBase, "state", "service", "host.json"),
+  source: serviceFilePath(appBase, sourceHostServiceName(sourceRoot)),
+  installed: serviceFilePath(appBase, "host"),
 };
-const installedShims = join(process.env.LOCALAPPDATA ?? "", "Positive Energy", "Pe.Tools", "shims");
+const installedShims = join(appBase, "shims");
 
 export async function runAcceptance(options: RunOptions): Promise<void> {
   requireThat(

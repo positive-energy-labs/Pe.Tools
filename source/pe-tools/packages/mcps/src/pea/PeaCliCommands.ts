@@ -406,8 +406,9 @@ export class PeaCliCommands {
 const commonArgs = {
   host: {
     type: "string",
-    description: "Host base URL.",
-    default: resolveHostBaseUrl(),
+    description: "Host base URL (default: this worktree's live host service file).",
+    // No eager default: resolution happens per command run, so a stopped host cannot crash
+    // module load, and the URL is re-discovered fresh on every invocation.
   },
   bridgeSessionId: {
     type: "string",

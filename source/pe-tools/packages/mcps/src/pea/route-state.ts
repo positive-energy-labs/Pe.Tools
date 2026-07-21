@@ -23,8 +23,10 @@ function dispatcherBaseUrl(): string {
 }
 
 async function getJson(path: string): Promise<unknown> {
-  const base = dispatcherBaseUrl();
+  // Discovery can fail (no running dev host for this worktree); that failure is the hint.
+  let base = "";
   try {
+    base = dispatcherBaseUrl();
     const response = await fetch(`${base}${path}`);
     const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
     if (!response.ok) {
@@ -34,14 +36,17 @@ async function getJson(path: string): Promise<unknown> {
   } catch (error) {
     return {
       isError: true,
-      content: `Couldn't reach RouteWorkspace at ${base} (${message(error)}). Is the host running?`,
+      content: base
+        ? `Couldn't reach RouteWorkspace at ${base} (${message(error)}). Is the host running?`
+        : message(error),
     };
   }
 }
 
 async function postJson(path: string, body: unknown): Promise<unknown> {
-  const base = dispatcherBaseUrl();
+  let base = "";
   try {
+    base = dispatcherBaseUrl();
     const response = await fetch(`${base}${path}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -55,7 +60,9 @@ async function postJson(path: string, body: unknown): Promise<unknown> {
   } catch (error) {
     return {
       isError: true,
-      content: `Couldn't reach RouteWorkspace at ${base} (${message(error)}).`,
+      content: base
+        ? `Couldn't reach RouteWorkspace at ${base} (${message(error)}).`
+        : message(error),
     };
   }
 }

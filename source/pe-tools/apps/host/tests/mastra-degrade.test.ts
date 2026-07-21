@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+﻿import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Deferred, Effect, Layer } from "effect";
@@ -7,14 +7,14 @@ import { expect, test } from "vite-plus/test";
 import { makeHttpLive } from "../src/app.ts";
 import { MastraRuntime } from "../src/mastra-runtime.ts";
 import { hostOwnership, productRoot } from "../src/host-ownership.ts";
-import type { ServiceHostHandle } from "../src/pe-service-host.ts";
-import { readServiceFile } from "../src/pe-service.ts";
+import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
+import { readServiceFile } from "@pe/host-contracts/pe-service";
 
 /**
  * The degrade-path boundary test. A broken agent runtime must NOT take the host down: the SDK
  * supervisor treats a missing service claim as "'host' did not become healthy within 15s", so an
  * agent-runtime init defect that collapses `makeHttpLive`'s merged layer is the primary beta-user
- * failure. Here the injected `mastraLayer` throws a DEFECT during build — the case the tenant's own
+ * failure. Here the injected `mastraLayer` throws a DEFECT during build â€” the case the tenant's own
  * failure-only `Effect.catch` cannot recover, and exactly what escaped it in the shipped SEA
  * (`TypeError: (void 0) is not a function`). We assert the composition-boundary containment
  * (`withMastraDegrade`) holds: the host still binds, the service claim IS written, and every agent
@@ -65,7 +65,7 @@ test("mastra init defect degrades to 503 without taking the host down", async ()
   const done = Effect.runPromise(program);
 
   try {
-    // (1) the service claim IS written despite the tenant defect — the host became healthy.
+    // (1) the service claim IS written despite the tenant defect â€” the host became healthy.
     const file = await waitFor(() => readServiceFile(appBase, hostOwnership.serviceName));
     expect(file.port).toBeGreaterThan(0);
     expect(file.token).toMatch(/^[0-9a-f-]{36}$/);

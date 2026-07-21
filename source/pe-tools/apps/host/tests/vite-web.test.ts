@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+﻿import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer as createNodeServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,8 +8,8 @@ import { expect, test } from "vite-plus/test";
 import { makeHttpLive } from "../src/app.ts";
 import { hostOwnership, productRoot } from "../src/host-ownership.ts";
 import { MastraRuntime } from "../src/mastra-runtime.ts";
-import type { ServiceHostHandle } from "../src/pe-service-host.ts";
-import { readServiceFile } from "../src/pe-service.ts";
+import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
+import { readServiceFile } from "@pe/host-contracts/pe-service";
 import { VITE_HMR_PATH } from "../src/vite-web.ts";
 
 const StubMastraLive = Layer.succeed(MastraRuntime, {

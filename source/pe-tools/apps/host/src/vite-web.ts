@@ -14,11 +14,23 @@ type NodeBackedRequest = HttpServerRequest.HttpServerRequest & {
   readonly resolvedResponse: ServerResponse;
 };
 
-const viteHmrRoute = HttpRouter.add("GET", VITE_HMR_PATH, Effect.never);
+// HMR is a WebSocket handled directly on the shared Node server ('upgrade' never reaches the
+// router); a plain GET here is a stray client, so answer 426 instead of parking a fiber forever.
+const viteHmrRoute = HttpRouter.add(
+  "GET",
+  VITE_HMR_PATH,
+  Effect.succeed(Response.empty({ status: 426 })),
+);
 
 function runViteMiddleware(request: HttpServerRequest.HttpServerRequest, vite: ViteDevServer) {
   const nodeRequest = request as NodeBackedRequest;
   const nodeResponse = nodeRequest.resolvedResponse;
+  // `source`/`resolvedResponse` are effect/unstable internals, not public contract — fail loudly
+  // (not with a hung request) the day a version bump renames them.
+  if (!nodeRequest.source || !nodeResponse)
+    return Effect.die(
+      new Error("vite-web: HttpServerRequest is not Node-backed; effect http internals changed."),
+    );
 
   return Effect.callback<Response.HttpServerResponse, Error>((resume, signal) => {
     let settled = false;

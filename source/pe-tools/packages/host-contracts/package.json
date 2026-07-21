@@ -26,6 +26,16 @@
       "types": "./src/service-identity.ts",
       "import": "./src/service-identity.ts",
       "default": "./src/service-identity.ts"
+    },
+    "./pe-service": {
+      "types": "./src/vendor/pe-service.ts",
+      "import": "./src/vendor/pe-service.ts",
+      "default": "./src/vendor/pe-service.ts"
+    },
+    "./pe-service-host": {
+      "types": "./src/vendor/pe-service-host.ts",
+      "import": "./src/vendor/pe-service-host.ts",
+      "default": "./src/vendor/pe-service-host.ts"
     }
   },
   "publishConfig": {

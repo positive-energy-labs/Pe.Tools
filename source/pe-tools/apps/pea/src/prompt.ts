@@ -8,9 +8,7 @@
  * agent-free and harnesses talk to Pea through this CLI mode instead.
  */
 import { createHash } from "node:crypto";
-import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { homedir } from "node:os";
 import { readFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import path from "node:path";
@@ -38,26 +36,18 @@ import {
   materializeBundledPeaSkills,
   peaProductToolProfile,
   peaProductTools,
-  resolveHostBaseUrl,
   resolvePeaProductHomePath,
   resolvePeaSkillPaths,
   resolveWorkspaceKey,
 } from "@pe/mcps";
-import { hostProcessIdentity, productIdentity } from "@pe/host-contracts/contracts";
+import { hostProcessIdentity } from "@pe/host-contracts/contracts";
+import { productRoot } from "@pe/host-contracts/service-identity";
 import { sourceHostServiceName } from "@pe/host-contracts/service-identity";
-import { ensureRunning, readServiceFile } from "../../host/src/pe-service.ts";
+import { ensureRunning } from "@pe/host-contracts/pe-service";
 
 const peaConfigDir = ".pea";
 const runtimeCloseTimeoutMs = 5000;
 const sourceHostStartupTimeoutMs = 45_000;
-
-function productRoot(): string {
-  return path.join(
-    process.env.LOCALAPPDATA ?? path.join(homedir(), "AppData", "Local"),
-    productIdentity.vendorName,
-    productIdentity.productName,
-  );
-}
 export const defaultPeaPromptTimeoutSeconds = 900;
 
 // Progress breadcrumbs on stderr: off by default so `pea --prompt --json` stays pipe-clean.
@@ -191,7 +181,7 @@ function withTimeout<T>(task: Promise<T> | T, timeoutMs: number): Promise<T> {
 }
 
 async function createPeaPromptRuntime(request: PeaPromptRequest): Promise<PeaPromptRuntime> {
-  const hostBaseUrl = await ensureTsHostRunning(resolveHostBaseUrl());
+  const hostBaseUrl = await ensureTsHostRunning();
   const workspaceKey = resolveWorkspaceKey();
   configurePeaProductToolContext({ hostBaseUrl, workspaceKey });
 
@@ -289,7 +279,10 @@ async function resolvePeaPromptCwd(hostBaseUrl: string, workspaceKey: string): P
   }
 }
 
-async function ensureTsHostRunning(hostBaseUrl: string): Promise<string> {
+async function ensureTsHostRunning(): Promise<string> {
+  const explicit = process.env[hostProcessIdentity.hostBaseUrlVariable]?.trim();
+  if (explicit) return explicit;
+
   // An installed caller must supervise the installed incarnation even when a healthy dev host
   // currently owns the preferred port. The service primitive performs the authenticated takeover.
   const installed = await resolveInstalledHostLaunch();
@@ -307,58 +300,36 @@ async function ensureTsHostRunning(hostBaseUrl: string): Promise<string> {
     return `http://127.0.0.1:${result.file.port}`;
   }
 
+  // Dev lane: one SDK ensureRunning pass scoped to THIS worktree's service name — discover a healthy
+  // same-checkout host (matchSourceRoot), evict a stale one, or spawn the source spelling and wait.
+  // Never the shared default port, which may belong to another worktree's host.
+  // ponytail: #dev boots middleware-mode Vite that this headless lane never uses; split a web-less
+  // #start entry if the cold-start budget (45s) ever matters here.
   const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
   const serviceName = sourceHostServiceName(sourceRoot);
-  const appBase = productRoot();
-  const discovered = await readServiceFile(appBase, serviceName);
-  const currentBaseUrl = discovered ? `http://127.0.0.1:${discovered.port}` : hostBaseUrl;
-  if (await probeHost(currentBaseUrl)) return currentBaseUrl;
-
   const override = process.env.PE_TOOLS_HOST_LAUNCH_COMMAND?.trim();
-  const command = override ?? "vp";
-  const args = override ? [] : ["run", "@pe/host#dev"];
-  const child = spawn(command, args, {
-    cwd: sourceRoot,
-    detached: true,
-    env: {
-      ...process.env,
-      PE_LANE: "dev",
+  const result = await ensureRunning(productRoot(), serviceName, {
+    spawnCommand: {
+      command: override ?? "vp",
+      args: override ? [] : ["run", "@pe/host#dev"],
+      cwd: sourceRoot,
+      shell: true,
+    },
+    matchSourceRoot: sourceRoot,
+    health: hostProcessIdentity.healthPath,
+    shutdown: hostProcessIdentity.shutdownPath,
+    lane: "dev",
+    timeoutMs: sourceHostStartupTimeoutMs,
+    spawnEnv: {
       PE_TOOLS_HOST_SOURCE_DIR: sourceRoot,
       [hostProcessIdentity.serviceNameVariable]: serviceName,
     },
-    shell: true,
-    stdio: "ignore",
-    windowsHide: true,
   });
-  child.unref();
-
-  const deadline = Date.now() + sourceHostStartupTimeoutMs;
-  let lastError: unknown;
-  while (Date.now() < deadline) {
-    await delay(250);
-    try {
-      const file = await readServiceFile(appBase, serviceName);
-      if (!file) continue;
-      const baseUrl = `http://127.0.0.1:${file.port}`;
-      if (await probeHost(baseUrl)) return baseUrl;
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  const detail = lastError instanceof Error ? lastError.message : "unknown error";
-  throw new Error(
-    `Started @pe/host via \`${command} ${args.join(" ")}\`, but '${serviceName}' did not become reachable within ${sourceHostStartupTimeoutMs / 1000} seconds. Last probe error: ${detail}`,
-  );
-}
-
-async function probeHost(baseUrl: string): Promise<boolean> {
-  try {
-    const response = await fetch(`${baseUrl.replace(/\/$/, "")}${hostProcessIdentity.healthPath}`);
-    return response.status < 400;
-  } catch {
-    return false;
-  }
+  if (result.state === "failed")
+    throw new Error(
+      `Unable to start this worktree's dev host ('${serviceName}'): ${result.reason}`,
+    );
+  return `http://127.0.0.1:${result.file.port}`;
 }
 
 async function resolveInstalledHostLaunch(): Promise<{

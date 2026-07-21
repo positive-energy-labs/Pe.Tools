@@ -22,10 +22,14 @@
 // host replaces an installed host automatically; a dev host replaces another dev host only with an
 // explicit takeover flag.
 
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
+import { dirname, join } from "node:path";
 import {
   createServiceFile,
   createServiceToken,
   deleteServiceFile,
+  discoverService,
   isAuthorizedShutdown,
   isRecordedOwnerAlive,
   readServiceFile,
@@ -45,9 +49,9 @@ export interface ReplacementPolicy {
 }
 
 /**
- * Replacement is scoped by service name. Installed and source-worktree hosts normally have different
- * names, so they coexist. Within one name, a dev host replaces another dev host only with the explicit
- * takeover flag; an installed host reclaims a stale installed owner. `takeOverHost` is the product's
+ * The preserved replacement policy (D3): a dev host replaces an installed host automatically; a dev host
+ * replaces another dev host only with the explicit takeover flag; an installed host reclaims a stale
+ * installed owner (it is spawned precisely to become the sole owner). `takeOverHost` is the product's
  * `--take-over-host` flag.
  */
 export function hostReplacementPolicy(lane: string, takeOverHost = false): ReplacementPolicy {
@@ -163,6 +167,63 @@ function makeHandle(appBase: string, name: string, serviceFile: ServiceFile): Se
     serviceFile,
     release: () => deleteServiceFile(appBase, name, serviceFile.instanceId).then(() => {}),
   };
+}
+
+// --- Port preference ----------------------------------------------------------------------------
+// A claimant binds BEFORE claiming (the bound port is authoritative), but stable URLs across
+// restarts matter for browsers and long-lived callers. The preference file
+// `state/service/<name>.port` remembers the last bound port; it is a HINT (like a manifest's
+// preferredPort), never an address — discovery stays file-based on the service file.
+
+function portPreferencePath(appBase: string, name: string): string {
+  return join(appBase, "state", "service", `${name}.port`);
+}
+
+/**
+ * Choose the port a claimant should bind BEFORE claiming `name`:
+ *   - a verified-live same-name incumbent ⇒ 0 — this launch is a takeover candidate and must bind
+ *     elsewhere first (claim, evict, then serve);
+ *   - otherwise the remembered last-bound port (falling back to `preferredPort`) when it is free;
+ *   - taken or invalid ⇒ 0 (ephemeral).
+ * Probe-then-bind TOCTOU is accepted: a lost race fails the caller's own bind loudly, which is the
+ * honest outcome for two first-ever claimants racing one preferred port.
+ */
+export async function chooseServicePort(
+  appBase: string,
+  name: string,
+  preferredPort: number,
+): Promise<number> {
+  if (await discoverService(appBase, name, { verifyOwner: true })) return 0;
+  let preferred = preferredPort;
+  try {
+    const remembered = Number.parseInt(
+      (await readFile(portPreferencePath(appBase, name), "utf8")).trim(),
+      10,
+    );
+    if (Number.isInteger(remembered) && remembered > 0 && remembered <= 65_535)
+      preferred = remembered;
+  } catch {}
+  if (!Number.isInteger(preferred) || preferred <= 0 || preferred > 65_535) return 0;
+  return (await portIsFree(preferred)) ? preferred : 0;
+}
+
+/** Record the ACTUALLY bound port as the preference for the next launch. Call after a successful claim. */
+export async function rememberServicePort(
+  appBase: string,
+  name: string,
+  port: number,
+): Promise<void> {
+  const path = portPreferencePath(appBase, name);
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, String(port), "utf8");
+}
+
+function portIsFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const probe = createServer();
+    probe.once("error", () => resolve(false));
+    probe.listen(port, "127.0.0.1", () => probe.close(() => resolve(true)));
+  });
 }
 
 // --- Shutdown route helpers --------------------------------------------------------------------
