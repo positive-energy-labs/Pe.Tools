@@ -1,9 +1,7 @@
 using Pe.Revit.Loader;
-using Pe.Shared.HostContracts;
 using Pe.Shared.Product;
 using System.Diagnostics;
 using System.IO;
-using System.Net.Http;
 
 namespace Pe.App.Host;
 
@@ -12,35 +10,29 @@ internal static class TsHostLauncher {
     private const string SourceDirectoryEnvironmentVariable = "PE_TOOLS_HOST_SOURCE_DIR";
     private const string DevHostCommandFallback = "vp run @pe/host#dev";
 
-    private static readonly HttpClient HttpClient = new() {
-        Timeout = TimeSpan.FromMilliseconds(HostRuntimeDefaults.DefaultHostProbeTimeoutMs)
-    };
-
     public static TsHostLaunchResult EnsureRunning() {
         try {
             var runtime = PeRuntimeContext.Resolve();
             var serviceName = ResolveServiceName(runtime);
+            // Pin only the process-local NAME; the port/base-URL is re-read from the service file
+            // on every resolve so a takeover/restart can never leave a stale address behind.
+            HostProcessIdentity.ConfiguredServiceName = serviceName;
             var appBase = ResolveAppBase();
 
             if (runtime.RuntimeLane == ProductRuntimeLane.Dev) {
                 var file = ServiceFile.Read(appBase, serviceName);
                 if (file is not null && ProbeHealth(file.Port) && MatchesDevTarget(file, runtime))
-                    return Publish(
-                        serviceName,
-                        new TsHostLaunchResult(
-                            true,
-                            true,
-                            false,
-                            $"Sharing this checkout's running dev host: {DescribeFile(file)}",
-                            file.Port
-                        )
+                    return new TsHostLaunchResult(
+                        true,
+                        true,
+                        false,
+                        $"Sharing this checkout's running dev host: {DescribeFile(file)}"
                     );
             }
 
-            var result = PeRuntimeContext.Deployment is { } deployment
+            return PeRuntimeContext.Deployment is { } deployment
                 ? EnsureInstalledHostRunning(deployment, serviceName)
                 : EnsureDevHostRunning(runtime, serviceName);
-            return Publish(serviceName, result);
         } catch (Exception ex) {
             return new TsHostLaunchResult(false, false, false, ex.Message);
         }
@@ -85,8 +77,7 @@ internal static class TsHostLauncher {
             !alreadyRunning,
             alreadyRunning
                 ? $"Matching host service is already listening: {baseUrl}"
-                : $"Started host service: {baseUrl}",
-            result.File.Port
+                : $"Started host service: {baseUrl}"
         );
     }
 
@@ -171,8 +162,7 @@ internal static class TsHostLauncher {
                 true,
                 false,
                 true,
-                $"Started matching TS host: {DescribeFile(file)}",
-                file.Port
+                $"Started matching TS host: {DescribeFile(file)}"
             );
         }
 
@@ -184,17 +174,6 @@ internal static class TsHostLauncher {
         );
     }
 
-    private static TsHostLaunchResult Publish(string serviceName, TsHostLaunchResult result) {
-        if (!result.Success || result.Port is not int port)
-            return result;
-        Environment.SetEnvironmentVariable(HostProcessIdentity.ServiceNameVariable, serviceName);
-        Environment.SetEnvironmentVariable(
-            HostProcessIdentity.HostBaseUrlVariable,
-            $"http://127.0.0.1:{port}"
-        );
-        return result;
-    }
-
     private static bool MatchesDevTarget(ServiceFile file, PeRuntimeTarget runtime) {
         if (!string.Equals(file.Lane, ToHostLane(runtime.RuntimeLane), StringComparison.OrdinalIgnoreCase))
             return false;
@@ -203,16 +182,9 @@ internal static class TsHostLauncher {
         return runtime.SourceHostWorkingDirectory is { } dir && PathsEqual(file.SourceRoot, dir);
     }
 
-    private static bool ProbeHealth(int port) {
-        try {
-            using var response = HttpClient
-                .GetAsync($"http://127.0.0.1:{port}{HostProcessIdentity.HealthPath}")
-                .GetAwaiter().GetResult();
-            return (int)response.StatusCode < 400;
-        } catch {
-            return false;
-        }
-    }
+    // SDK-owned probe (public since beta.98) — one implementation, never re-rolled per consumer.
+    private static bool ProbeHealth(int port) =>
+        InstalledProduct.ProbeHealth(port, HostProcessIdentity.HealthPath);
 
     private static string ToHostLane(ProductRuntimeLane lane) => lane switch {
         ProductRuntimeLane.Dev => "dev",
@@ -247,6 +219,5 @@ internal sealed record TsHostLaunchResult(
     bool Success,
     bool AlreadyRunning,
     bool StartedProcess,
-    string Message,
-    int? Port = null
+    string Message
 );

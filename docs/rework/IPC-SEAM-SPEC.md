@@ -24,7 +24,10 @@ one launch.
 
 Touches: SDK `Pe.Revit.Loader/InstalledService.cs` (`ServiceFile` record + JSON fields), SDK
 `clients/ts/pe-service.ts`, the `scripts/service-parity.mjs` harness, and re-vendoring into
-Pe.Tools `apps/host/src/pe-service.ts` (byte-identical — never reformat vendored files).
+Pe.Tools `packages/host-contracts/src/vendor/pe-service.ts` (content-identical; the repo's LF
+normalization is the only permitted delta — never reformat vendored files). The vendored service
+pair lives in `@pe/host-contracts` (exports `./pe-service`, `./pe-service-host`) because host, pea,
+and mcps all consume it; `pe-revit-cli.ts` remains host-only in `apps/host/src`.
 
 ## D3 — PeServiceHost: SDK-owned primitives, SDK-owned eviction
 
@@ -153,9 +156,11 @@ beta.90). Pe.Tools phase-2 (this branch) pinned + re-vendored beta.90 and adopte
 
 ## Known hazards for implementing agents
 
-- Vendored SDK files (`apps/host/src/pe-service.ts`, `apps/host/src/pe-revit-cli.ts`) must stay
-  **byte-identical** to the SDK sources. `vp check --fix` will try to reformat them — revert if it
-  does. Product-specific glue goes in adapters (`pe-revit-launch.ts` pattern).
+- Vendored SDK files (`packages/host-contracts/src/vendor/pe-service.ts` + `pe-service-host.ts`,
+  `apps/host/src/pe-revit-cli.ts`) must stay **content-identical** to the SDK sources (LF
+  normalization is the one permitted delta). `vp check --fix` reformatting beyond EOLs means the
+  SDK source must be fixed and re-vendored — never fork the copy. Product-specific glue goes in
+  adapters (`pe-revit-launch.ts` pattern) or the policy layer (`service-identity.ts`).
 - `vp` binary: run from the package dir via `../../node_modules/.bin/vp`; tsgolint currently can't
   start on this machine (node not on the Windows PATH it uses) — pre-existing, not a signal.
 - The lane/URL first tranche (PE_LANE-first read, env-republication deletion, mirror test,

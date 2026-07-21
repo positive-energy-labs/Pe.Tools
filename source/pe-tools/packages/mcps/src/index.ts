@@ -17,7 +17,11 @@ export {
 } from "./pea/index.ts";
 export type { RouteRegistration } from "./pea/index.ts";
 export type { PeaCliCommandOptions } from "./pea/PeaCliCommands.ts";
-export { resolveHostBaseUrl, resolveWorkspaceKey } from "./shared/host-config.ts";
+export {
+  discoverHostBaseUrl,
+  resolveHostBaseUrl,
+  resolveWorkspaceKey,
+} from "./shared/host-config.ts";
 export { HostRpcCaller } from "./shared/host-rpc-caller.ts";
 export { peaProductToolCatalog } from "./tool-metadata.ts";
 export {

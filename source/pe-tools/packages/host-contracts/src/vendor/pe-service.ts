@@ -23,10 +23,10 @@
 // exe path. Loopback-only, always.
 
 import { spawn } from "node:child_process";
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync } from "node:fs";
-import { mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { randomUUID } from "node:crypto";
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync } from "node:fs";
+import { mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
+import { createHash, randomUUID } from "node:crypto";
 
 export const SERVICE_FILE_SCHEMA_VERSION = 2;
 const SHUTDOWN_TOKEN_HEADER = "x-pe-service-token";
@@ -53,9 +53,36 @@ export interface ServiceFile {
   readonly sourceRoot?: string;
 }
 
+/**
+ * A non-exe launch spelling for {@link ensureRunning} — how a SOURCE service starts (`vp run …`,
+ * `pnpm dev`, …). The spawned process must still satisfy the service contract: bind loopback, claim
+ * its service file with the ACTUAL bound port, delete it on graceful exit.
+ */
+export interface ServiceSpawnCommand {
+  /** The command (absolute path, or a PATH-resolved name when `shell` is set — .cmd shims need shell). */
+  readonly command: string;
+  readonly args?: readonly string[];
+  /** Working directory for the spawn — a dev checkout root, typically. */
+  readonly cwd: string;
+  /** Run through the platform shell (required for .cmd/.bat shims on Windows). */
+  readonly shell?: boolean;
+}
+
 export interface EnsureRunningOptions {
-  /** The resolved launchable entry (an absolute path to the service exe). Spawned detached. */
-  readonly entryPath: string;
+  /**
+   * The resolved launchable entry (an absolute path to the service exe). Spawned detached. Optional
+   * when `spawnCommand` supplies the launch spelling instead; still used for the D2 identity match
+   * when present.
+   */
+  readonly entryPath?: string;
+  /** Source-lane launch spelling; when present it is spawned INSTEAD of `entryPath`. */
+  readonly spawnCommand?: ServiceSpawnCommand;
+  /**
+   * Source-lane identity match: the service file matches when its `sourceRoot` names this checkout
+   * (case/separator-insensitive) and the lane/version checks pass — replacing the `executablePath`
+   * equality rule, which cannot hold for source runs (their image is the runtime, not the service).
+   */
+  readonly matchSourceRoot?: string;
   /** GET path returning 2xx/3xx when up, e.g. "/host/status". Required — without it we cannot verify. */
   readonly health: string;
   /** POST path for a token-authenticated graceful stop, e.g. "/admin/shutdown". Managed tier only. */
@@ -207,34 +234,133 @@ export async function readServiceFile(appBase: string, name: string): Promise<Se
   const path = serviceFilePath(appBase, name);
   try {
     if (!existsSync(path)) return null;
-    const raw = JSON.parse(await readFile(path, "utf8")) as Partial<ServiceFile>;
-    if (
-      raw.schemaVersion !== SERVICE_FILE_SCHEMA_VERSION ||
-      typeof raw.instanceId !== "string" ||
-      !raw.instanceId ||
-      typeof raw.processStartUtc !== "string" ||
-      !raw.processStartUtc ||
-      typeof raw.pid !== "number" ||
-      typeof raw.port !== "number"
-    )
-      return null;
-    // executablePath / sourceRoot are additive (D2): absent ⇒ omitted (never a rejection), and the key
-    // order (after token) mirrors the C# emitter so the cross-language byte-golden holds.
-    return {
-      schemaVersion: SERVICE_FILE_SCHEMA_VERSION,
-      instanceId: raw.instanceId,
-      pid: raw.pid,
-      processStartUtc: raw.processStartUtc,
-      port: raw.port,
-      version: typeof raw.version === "string" ? raw.version : "",
-      lane: typeof raw.lane === "string" ? raw.lane : "",
-      token: typeof raw.token === "string" ? raw.token : "",
-      ...(typeof raw.executablePath === "string" ? { executablePath: raw.executablePath } : {}),
-      ...(typeof raw.sourceRoot === "string" ? { sourceRoot: raw.sourceRoot } : {}),
-    };
+    return validateServiceFile(JSON.parse(await readFile(path, "utf8")) as Partial<ServiceFile>);
   } catch {
     return null;
   }
+}
+
+/** Sync {@link readServiceFile} for synchronous resolution paths (CLI arg defaults etc.). */
+export function readServiceFileSync(appBase: string, name: string): ServiceFile | null {
+  const path = serviceFilePath(appBase, name);
+  try {
+    if (!existsSync(path)) return null;
+    return validateServiceFile(JSON.parse(readFileSync(path, "utf8")) as Partial<ServiceFile>);
+  } catch {
+    return null;
+  }
+}
+
+function validateServiceFile(raw: Partial<ServiceFile>): ServiceFile | null {
+  if (
+    raw.schemaVersion !== SERVICE_FILE_SCHEMA_VERSION ||
+    typeof raw.instanceId !== "string" ||
+    !raw.instanceId ||
+    typeof raw.processStartUtc !== "string" ||
+    !raw.processStartUtc ||
+    typeof raw.pid !== "number" ||
+    typeof raw.port !== "number"
+  )
+    return null;
+  // executablePath / sourceRoot are additive (D2): absent ⇒ omitted (never a rejection), and the key
+  // order (after token) mirrors the C# emitter so the cross-language byte-golden holds.
+  return {
+    schemaVersion: SERVICE_FILE_SCHEMA_VERSION,
+    instanceId: raw.instanceId,
+    pid: raw.pid,
+    processStartUtc: raw.processStartUtc,
+    port: raw.port,
+    version: typeof raw.version === "string" ? raw.version : "",
+    lane: typeof raw.lane === "string" ? raw.lane : "",
+    token: typeof raw.token === "string" ? raw.token : "",
+    ...(typeof raw.executablePath === "string" ? { executablePath: raw.executablePath } : {}),
+    ...(typeof raw.sourceRoot === "string" ? { sourceRoot: raw.sourceRoot } : {}),
+  };
+}
+
+/**
+ * Discovery projection over the service file: the file IFF its recorded owner still looks alive.
+ * The default check is pid-existence only — cheap enough for per-call URL resolution; a reused pid
+ * can alias briefly, and the caller's next HTTP request is the real probe. Pass `verifyOwner: true`
+ * for the full pid+start-time verification (spawns a process query — reserve it for decisions that
+ * must never mistake a reused pid for the owner, e.g. port choice before a claim). A dead owner's
+ * leftover file reads as null — never as an address.
+ */
+export async function discoverService(
+  appBase: string,
+  name: string,
+  opts?: { readonly verifyOwner?: boolean },
+): Promise<ServiceFile | null> {
+  const file = await readServiceFile(appBase, name);
+  if (!file) return null;
+  if (opts?.verifyOwner) return (await recordedProcessAlive(file)) ? file : null;
+  return (await pidIsAlive(file.pid)) ? file : null;
+}
+
+/** Sync {@link discoverService} (pid-existence check only) for synchronous resolution paths. */
+export function discoverServiceSync(appBase: string, name: string): ServiceFile | null {
+  const file = readServiceFileSync(appBase, name);
+  if (!file) return null;
+  try {
+    process.kill(file.pid, 0); // signal 0 = existence probe
+    return file;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Delete service files under `appBase` whose recorded owner is verifiably gone (full pid+start-time
+ * verification — a live owner is never swept, and a reused pid never protects a corpse). Scope with
+ * `prefix` (service-name prefix) and `exclude` (exact names to leave alone, e.g. the caller's own
+ * claim). Unreadable files are left in place — deletion needs proof of death, and an unparseable
+ * file is a diagnostic (`pe-revit service list` flags it), not proof. `.port` preference and `.log`
+ * files are untouched. Returns the swept names.
+ */
+export async function sweepDeadServiceFiles(
+  appBase: string,
+  opts?: { readonly prefix?: string; readonly exclude?: readonly string[] },
+): Promise<string[]> {
+  let entries: string[];
+  try {
+    entries = await readdir(join(appBase, "state", "service"));
+  } catch {
+    return [];
+  }
+  const swept: string[] = [];
+  for (const entry of entries) {
+    if (!entry.endsWith(".json")) continue;
+    const name = entry.slice(0, -".json".length);
+    if (!isSafeServiceName(name)) continue;
+    if (opts?.prefix !== undefined && !name.startsWith(opts.prefix)) continue;
+    if (opts?.exclude?.includes(name)) continue;
+    const file = await readServiceFile(appBase, name);
+    if (!file || (await recordedProcessAlive(file))) continue;
+    await rm(serviceFilePath(appBase, name), { force: true }).catch(() => {});
+    swept.push(name);
+  }
+  return swept;
+}
+
+// --- Worktree-scoped service identity ------------------------------------------------------------
+// A service run from SOURCE derives its name from its checkout root so multiple worktrees coexist
+// under one appBase: `<baseName>-source-<sha256(normalized root)[:12]>`. The normalization and hash
+// are a cross-language byte contract (clients/contract-vectors.json `sourceServiceName` cases) —
+// the C# client (clients/csharp) MUST produce identical names or a supervisor polls a file its
+// service will never write.
+
+/** Canonical checkout-root form for identity hashing: absolute, forward slashes, no trailing slash, lowercase. */
+export function normalizeSourceRoot(sourceRoot: string): string {
+  return resolve(sourceRoot).replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+/** Worktree-scoped service name for a source-run service: `<baseName>-source-<12 hex>`. */
+export function sourceServiceName(baseName: string, sourceRoot: string): string {
+  const digest = createHash("sha256")
+    .update(normalizeSourceRoot(sourceRoot), "utf8")
+    .digest("hex")
+    .slice(0, 12);
+  return `${baseName}-source-${digest}`;
 }
 
 /** Write the service file (services call this on bind; tests plant fixtures). Creates state/service/. */
@@ -325,6 +451,8 @@ export async function ensureRunning(
 ): Promise<EnsureRunningResult> {
   if (!isSafeServiceName(name))
     return { state: "failed", reason: `payload '${name}' is not a safe service name` };
+  if (opts.entryPath === undefined && opts.spawnCommand === undefined)
+    return { state: "failed", reason: "ensureRunning needs an entryPath or a spawnCommand" };
   if (
     !isLoopbackPath(opts.health) ||
     (opts.shutdown !== undefined && !isLoopbackPath(opts.shutdown))
@@ -346,7 +474,7 @@ export async function ensureRunning(
     const existing = await readServiceFile(appBase, name);
     if (existing) {
       const stopped = (await probeHealth(existing.port, opts.health))
-        ? matches(existing, opts.expectedVersion, opts.lane, opts.entryPath)
+        ? matches(existing, opts.expectedVersion, opts.lane, opts.entryPath, opts.matchSourceRoot)
           ? null
           : await shutDown(appBase, existing, opts)
         : await killByPid(appBase, existing);
@@ -488,20 +616,31 @@ async function waitForVerifiedExit(file: ServiceFile, timeoutMs: number): Promis
 // "spawn/replace fresh", and the replacement rewrites the file with the field so it self-heals in one
 // launch. When present, executablePath must equal the resolved launchable (case/separator-insensitive)
 // on top of the version+lane check. Mirrors Pe.Revit.Loader.InstalledProduct.Matches.
+// Source-lane variant: `matchSourceRoot` swaps the executablePath rule for a `sourceRoot` equality —
+// a source service's image is its runtime (node/vp), so the checkout IS the identity signal.
 function matches(
   file: ServiceFile,
   expectedVersion: string | undefined,
   lane: string,
   expectedExecutablePath: string | undefined,
+  matchSourceRoot?: string,
 ): boolean {
+  const versionOk = expectedVersion === undefined || file.version === expectedVersion;
+  const laneOk = file.lane.toLowerCase() === lane.toLowerCase();
+  if (matchSourceRoot !== undefined)
+    return (
+      file.sourceRoot !== undefined &&
+      samePath(file.sourceRoot, matchSourceRoot) &&
+      versionOk &&
+      laneOk
+    );
   if (file.executablePath === undefined) return false;
   if (
     expectedExecutablePath !== undefined &&
     !samePath(file.executablePath, expectedExecutablePath)
   )
     return false;
-  const versionOk = expectedVersion === undefined || file.version === expectedVersion;
-  return versionOk && file.lane.toLowerCase() === lane.toLowerCase();
+  return versionOk && laneOk;
 }
 
 function samePath(a: string, b: string): boolean {
@@ -533,13 +672,16 @@ async function spawnAndWait(
   lease: ServiceLease,
 ): Promise<EnsureRunningResult> {
   // Capture detached stdout+stderr and preserve every retry with a supervisor breadcrumb.
+  const launchSpelling = opts.spawnCommand
+    ? `${opts.spawnCommand.command} ${(opts.spawnCommand.args ?? []).join(" ")}`.trim()
+    : opts.entryPath!;
   const logPath = join(appBase, "state", "service", `${name}.log`);
   let logFd: number;
   try {
     mkdirSync(dirname(logPath), { recursive: true });
     appendFileSync(
       logPath,
-      `\n[${new Date().toISOString()}] supervisor pid=${process.pid} spawning '${opts.entryPath}' lane=${opts.lane}\n`,
+      `\n[${new Date().toISOString()}] supervisor pid=${process.pid} spawning '${launchSpelling}' lane=${opts.lane}\n`,
       "utf8",
     );
     logFd = openSync(logPath, "a");
@@ -552,18 +694,27 @@ async function spawnAndWait(
   let child: ReturnType<typeof spawn> | undefined;
   const childStartUtc = new Date().toISOString();
   try {
-    child = spawn(opts.entryPath, [...(opts.spawnArgs ?? [])], {
-      cwd: dirname(opts.entryPath),
-      detached: true,
-      stdio: ["ignore", logFd, logFd],
-      env: {
-        ...process.env,
-        ...opts.spawnEnv,
-        PE_LANE: opts.lane,
-        [LEASE_PATH_ENV]: lease.path,
-        [LEASE_TOKEN_ENV]: lease.token,
-      },
-    });
+    const spawnEnv = {
+      ...process.env,
+      ...opts.spawnEnv,
+      PE_LANE: opts.lane,
+      [LEASE_PATH_ENV]: lease.path,
+      [LEASE_TOKEN_ENV]: lease.token,
+    };
+    child = opts.spawnCommand
+      ? spawn(opts.spawnCommand.command, [...(opts.spawnCommand.args ?? [])], {
+          cwd: opts.spawnCommand.cwd,
+          shell: opts.spawnCommand.shell ?? false,
+          detached: true,
+          stdio: ["ignore", logFd, logFd],
+          env: spawnEnv,
+        })
+      : spawn(opts.entryPath!, [...(opts.spawnArgs ?? [])], {
+          cwd: dirname(opts.entryPath!),
+          detached: true,
+          stdio: ["ignore", logFd, logFd],
+          env: spawnEnv,
+        });
     await new Promise<void>((resolve, reject) => {
       const onSpawn = () => {
         child!.off("error", onError);
@@ -578,7 +729,7 @@ async function spawnAndWait(
     });
     child.unref(); // detached: we never hold the child — the OS/service owns its lifetime
   } catch (error) {
-    return { state: "failed", reason: `failed to start '${opts.entryPath}': ${describe(error)}` };
+    return { state: "failed", reason: `failed to start '${launchSpelling}': ${describe(error)}` };
   } finally {
     closeSync(logFd); // the child dup'd both fds at spawn; the parent must not keep the log open
   }
@@ -590,7 +741,7 @@ async function spawnAndWait(
     const file = await readServiceFile(appBase, name);
     if (!file) continue;
     if (!(await probeHealth(file.port, opts.health))) continue;
-    if (matches(file, opts.expectedVersion, opts.lane, opts.entryPath))
+    if (matches(file, opts.expectedVersion, opts.lane, opts.entryPath, opts.matchSourceRoot))
       return { state: "started", file };
   }
   const cleaned = child?.pid ? await killByPid(appBase, child.pid, childStartUtc) : false;

@@ -1,5 +1,5 @@
 import { cli, define } from "gunshi";
-import { PeaCliCommands, resolveHostBaseUrl, resolveWorkspaceKey } from "@pe/mcps";
+import { PeaCliCommands, discoverHostBaseUrl, resolveWorkspaceKey } from "@pe/mcps";
 import type { PeaRuntimeAuthSource } from "./runtime.ts";
 
 export async function runPeaMain(args = process.argv.slice(2)): Promise<void> {
@@ -68,7 +68,7 @@ export function createPeaCliCommand() {
       });
 
       console.log("Run `pea --help` to list product commands.");
-      console.log(`host      ${resolveHostBaseUrl()}`);
+      console.log(`host      ${discoverHostBaseUrl() ?? "(not running — vp run @pe/host#dev)"}`);
       console.log(`workspace ${resolveWorkspaceKey()}`);
     },
   });

@@ -1,6 +1,4 @@
-using Newtonsoft.Json.Linq;
-using System.Security.Cryptography;
-using System.Text;
+using Pe.Revit.ServiceClient;
 
 namespace Pe.Shared.Product;
 
@@ -31,6 +29,16 @@ public static class HostProcessIdentity {
         ?? TryReadServiceFileBaseUrl()
         ?? DefaultHostBaseUrl;
 
+    /// <summary>
+    ///     Process-local service-name pin set by the lane-aware launcher (TsHostLauncher) so the
+    ///     platform-neutral callers here (bridge, /call client) read THIS runtime's service file.
+    ///     Deliberately a static, NOT an environment variable: env vars leak to child processes
+    ///     (e.g. an installed sandbox spawned from a dev session) and would pin them to the wrong
+    ///     worktree. Only the stable NAME is pinned — the port is re-read from the service file on
+    ///     every resolve, so a host takeover/restart can never leave a stale address behind.
+    /// </summary>
+    public static string? ConfiguredServiceName { get; set; }
+
     public static string ResolveServiceName(ProductRuntimeLane lane, string? sourceRoot) {
         if (lane == ProductRuntimeLane.Installed)
             return ServiceName;
@@ -39,44 +47,30 @@ public static class HostProcessIdentity {
         return SourceServiceName(sourceRoot!);
     }
 
-    public static string SourceServiceName(string sourceRoot) {
-        var normalized = Path.GetFullPath(sourceRoot)
-            .Replace('\\', '/')
-            .TrimEnd('/')
-            .ToLowerInvariant();
-        using var sha256 = SHA256.Create();
-        var hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(normalized));
-        var suffix = BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant().Substring(0, 12);
-        return $"{ServiceName}-source-{suffix}";
-    }
+    /// <summary>Worktree-scoped dev-host name — the hash is SDK-owned (vendored
+    /// <see cref="PeServiceDiscovery"/>, byte-stable with the TS client via contract vectors).</summary>
+    public static string SourceServiceName(string sourceRoot) =>
+        PeServiceDiscovery.SourceServiceName(ServiceName, sourceRoot);
 
     /// <summary>
-    ///     The actual bound port from the SDK runtime service file
-    ///     (<c>state/service/&lt;service-name&gt;.json</c>), rewritten by the host on every bind and deleted on
-    ///     graceful exit — so it can never go stale the way a process-env copy did. Port-only
-    ///     projection; full schema validation stays with the SDK's ServiceFile/pe-service.
-    ///     NOTE: this is intentionally a minimal hand-rolled projection rather than the SDK
-    ///     <c>ServiceFile.Read</c> reader — Pe.Shared.Product is a platform-neutral Shared project
-    ///     and the SDK build guard forbids it referencing the Revit-flavored Pe.Revit.Loader. The
-    ///     authoritative <c>ServiceFile.Read</c> path lives in TsHostLauncher (Pe.App), which may
-    ///     reference the loader. See D8 in docs/rework/IPC-SEAM-SPEC.md.
+    ///     The actual bound port from the SDK runtime service file, via the vendored
+    ///     platform-neutral discovery client (<see cref="PeServiceDiscovery"/> — the D8 answer:
+    ///     Pe.Shared.Product cannot reference the Revit-flavored Pe.Revit.Loader, so the SDK ships
+    ///     this read-only client for exactly this seam). Liveness-checked: a crashed host's
+    ///     leftover file reads as null, never as an address.
     /// </summary>
     private static string? TryReadServiceFileBaseUrl() {
         try {
             var serviceName = FirstNonBlank(
+                ConfiguredServiceName,
                 Environment.GetEnvironmentVariable(ServiceNameVariable),
                 ServiceName
             )!;
-            var path = Path.Combine(
-                ProductRuntimeLayout.ForCurrentUser().State.RootPath,
-                "service",
-                $"{serviceName}.json"
+            var discovered = PeServiceDiscovery.TryDiscover(
+                ProductRuntimeLayout.ForCurrentUser().RootPath,
+                serviceName
             );
-            if (!File.Exists(path))
-                return null;
-
-            var port = JObject.Parse(File.ReadAllText(path)).Value<int?>("port");
-            return port is int value ? $"http://127.0.0.1:{value}" : null;
+            return discovered is null ? null : $"http://127.0.0.1:{discovered.Port}";
         } catch {
             return null;
         }

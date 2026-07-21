@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+﻿import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Deferred, Effect, Layer } from "effect";
@@ -7,8 +7,8 @@ import { HOST_RPC_BRIDGE_SESSION_HEADER } from "@pe/host-contracts/operation-typ
 import { makeHttpLive } from "../src/app.ts";
 import { hostOwnership, productRoot } from "../src/host-ownership.ts";
 import { MastraRuntime } from "../src/mastra-runtime.ts";
-import type { ServiceHostHandle } from "../src/pe-service-host.ts";
-import { readServiceFile } from "../src/pe-service.ts";
+import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
+import { readServiceFile } from "@pe/host-contracts/pe-service";
 
 /**
  * The one vertical boundary test (owner's philosophy: one seam test, no unit sprawl). It boots the
@@ -16,7 +16,7 @@ import { readServiceFile } from "../src/pe-service.ts";
  * shaped fetch), then asserts the whole seam: service file, status, static SPA fallback, the Mastra
  * mount at its absolute path, and graceful token-authorized shutdown. The real pea runtime is
  * proven offline by `@pe/runtime`'s own `buildAgentControllerApp` test; here we only exercise the
- * host's mount/lifecycle plumbing, so the tenant is stubbed (keeps this hermetic — no product-home
+ * host's mount/lifecycle plumbing, so the tenant is stubbed (keeps this hermetic â€” no product-home
  * writes, no model/auth). InstallGc is disabled so the test never spawns the install kernel.
  */
 const StubMastraLive = Layer.succeed(MastraRuntime, {
@@ -84,7 +84,7 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
 
     const base = `http://127.0.0.1:${file.port}`;
 
-    // (2) GET /host/status → 200 (confirms the recorded port is the real bound one).
+    // (2) GET /host/status â†’ 200 (confirms the recorded port is the real bound one).
     const status = await fetch(`${base}/host/status`);
     expect(status.status).toBe(200);
     expect(((await status.json()) as { lane?: string }).lane).toBe("dev");
@@ -105,7 +105,7 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
     expect(conflictingOps.status).toBe(400);
 
     // (2b) /call envelope rejects unknown top-level body keys. A `bridgeSessionId` in the body
-    // once silently mis-routed to the user's live Revit — it must 400 and point at the header.
+    // once silently mis-routed to the user's live Revit â€” it must 400 and point at the header.
     const misTargeted = await fetch(`${base}/call`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -116,7 +116,7 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
     expect(misTargetedBody.message).toContain("bridgeSessionId");
     expect(misTargetedBody.message).toContain(HOST_RPC_BRIDGE_SESSION_HEADER);
 
-    // A clean TS-only envelope still passes the key gate (no Revit session → Disconnected, not 400).
+    // A clean TS-only envelope still passes the key gate (no Revit session â†’ Disconnected, not 400).
     const cleanCall = await fetch(`${base}/call`, {
       method: "POST",
       headers: { "content-type": "application/json" },

@@ -302,7 +302,7 @@ Source-linked web dev is one command and one Node application process:
 
 - `pnpm --dir source/pe-tools dev` runs the watched source `@pe/host` entrypoint.
 - It creates one Node `http.Server`; Effect owns product APIs/WebSockets and the final dev fallback delegates to Vite/TanStack middleware and HMR.
-- The server reuses its last available port or binds an ephemeral one. The SDK service file is the URL authority; there is no Vite proxy or second listener.
+- The server reuses its last available port or binds an ephemeral one. The SDK service file is the URL authority; there is no Vite proxy or second listener. A service file counts only while its pid is alive — crashed leftovers are never routed to (dev discovery fails fast instead of falling back to a default port) and are swept on the next host start.
 - Each checkout owns `host-source-<hash-of-canonical-source-root>.json`. Different worktrees coexist; the installed lane remains `host.json` and coexists with every source host.
 - `--take-over-host` replaces only an older incarnation with the same service name. The candidate binds a free port first, claims ownership, shuts down the incumbent, then initializes product state.
 - React edits use Vite HMR without restarting the process. Host edits restart the whole process and normally reclaim the worktree's preferred port.

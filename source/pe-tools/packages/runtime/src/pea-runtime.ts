@@ -13,7 +13,6 @@ import {
   materializeBundledPeaSkills,
   peaProductToolProfile,
   peaProductTools,
-  resolveHostBaseUrl,
   resolvePeaProductHomePath,
   resolvePeaSkillPaths,
   resolveWorkspaceKey,
@@ -73,9 +72,10 @@ export async function createPeaRuntime(
 ): Promise<PeaRuntimeHandle> {
   const productHomePath = resolvePeaProductHomePath();
   const workspaceRoot = path.resolve(options.workspaceRoot ?? productHomePath);
-  const hostBaseUrl = resolveHostBaseUrl(options.hostBaseUrl);
+  // Seed only the EXPLICIT host override; the product tools resolve the live URL per call, so a
+  // host restart on a new port (or a host started after pea) is picked up without reconstruction.
   const workspaceKey = resolveWorkspaceKey(options.workspaceKey);
-  configurePeaProductToolContext({ hostBaseUrl, workspaceKey });
+  configurePeaProductToolContext({ hostBaseUrl: options.hostBaseUrl, workspaceKey });
 
   const authStorageContext = await createMastraCodeAuthStorageContext();
   const authStorage = authStorageContext.storage;

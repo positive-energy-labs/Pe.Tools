@@ -1,8 +1,9 @@
-import { homedir } from "node:os";
-import { join, normalize } from "node:path";
+import { normalize } from "node:path";
 import { fileURLToPath } from "node:url";
-import { hostProcessIdentity, productIdentity } from "@pe/host-contracts/contracts";
+import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { hostServiceName } from "@pe/host-contracts/service-identity";
+
+export { productRoot } from "@pe/host-contracts/service-identity";
 
 export type HostLane = "dev" | "installed";
 
@@ -15,19 +16,6 @@ export type HostOwnership = {
 };
 
 export const hostOwnership = resolveHostOwnership();
-
-/**
- * Product root under `%LOCALAPPDATA%\<vendor>\<product>` — the A10 service-file `appBase`
- * (`state/service/<service-name>.json` lives beneath it) and the install-receipt root. Resolved lazily so
- * tests can redirect it via `LOCALAPPDATA`.
- */
-export function productRoot(): string {
-  return join(
-    process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"),
-    productIdentity.vendorName,
-    productIdentity.productName,
-  );
-}
 
 function resolveHostOwnership(): HostOwnership {
   const lane = resolveHostLane();

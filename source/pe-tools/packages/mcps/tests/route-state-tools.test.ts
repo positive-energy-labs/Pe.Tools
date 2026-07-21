@@ -8,6 +8,10 @@ type ExecutableTool = {
 };
 
 test("route-state tools keep discovery shallow and scope detail and writes to the active thread", async () => {
+  // Explicit override: this test asserts URL routing, not host discovery (which requires a live
+  // service file and would correctly fail without a running worktree host).
+  const originalBaseUrl = process.env.PE_TOOLS_HOST_BASE_URL;
+  process.env.PE_TOOLS_HOST_BASE_URL = "http://127.0.0.1:9";
   const originalFetch = globalThis.fetch;
   const calls: Array<{ method: string; url: URL }> = [];
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
@@ -62,6 +66,8 @@ test("route-state tools keep discovery shallow and scope detail and writes to th
     expect(calls).toHaveLength(5);
   } finally {
     globalThis.fetch = originalFetch;
+    if (originalBaseUrl === undefined) delete process.env.PE_TOOLS_HOST_BASE_URL;
+    else process.env.PE_TOOLS_HOST_BASE_URL = originalBaseUrl;
   }
 });
 

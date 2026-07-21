@@ -3,15 +3,16 @@ import { join } from "node:path";
 import { Context, Deferred, Effect, Layer } from "effect";
 import { HttpRouter, HttpServer, HttpServerResponse as Response } from "effect/unstable/http";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
-import { hostOwnership, productRoot } from "./host-ownership.ts";
+import { sweepDeadServiceFiles } from "@pe/host-contracts/pe-service";
 import {
   authorizeShutdownFor,
   claimServiceHost,
   hostReplacementPolicy,
+  rememberServicePort,
   type ServiceHostDescriptor,
   type ServiceHostHandle,
-} from "./pe-service-host.ts";
-import { rememberHostPort } from "./host-port.ts";
+} from "@pe/host-contracts/pe-service-host";
+import { hostOwnership, productRoot } from "./host-ownership.ts";
 
 // The dev script (`pnpm dev`) passes this to authorize a dev-over-dev takeover; it becomes
 // `hostReplacementPolicy` DATA (SDK-owned), not local probe logic (IPC-SEAM-SPEC D3).
@@ -105,7 +106,19 @@ export const ServiceFileLive = Layer.effectDiscard(
       ),
       (handle) => Effect.promise(() => handle.release()),
     );
-    yield* Effect.result(Effect.promise(() => rememberHostPort(port)));
+    yield* Effect.result(
+      Effect.promise(() => rememberServicePort(appBase, hostOwnership.serviceName, port)),
+    );
+    // Hygiene: other worktrees' crashed hosts leave corpses; sweep dead host-source-* files (never
+    // our own live claim, never the installed "host", never unreadable files — those are doctor's).
+    yield* Effect.result(
+      Effect.promise(() =>
+        sweepDeadServiceFiles(appBase, {
+          prefix: `${hostProcessIdentity.serviceName}-source-`,
+          exclude: [hostOwnership.serviceName],
+        }),
+      ),
+    );
     console.log(`pe-host service claim acquired pid=${handle.serviceFile.pid} port=${port}`);
     yield* Deferred.succeed(handleDeferred, handle);
   }),
