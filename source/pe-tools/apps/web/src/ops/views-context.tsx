@@ -119,35 +119,68 @@ function ContextSummaryView({ data }: OpViewProps) {
   const returnedCount = asNumber(selection.returnedElementCount) ?? 0;
   const sheetPlacements = activeView ? asRecords(activeView.sheetPlacements) : [];
 
+  const docPath = activeDoc && asString(activeDoc.path);
+
   return (
     <div className="flex flex-col gap-5">
-      {/* title bar: document + active view, like Revit's window chrome distilled */}
+      {/* hero: document identity large, chips beneath, active-view stage line —
+          Revit's window chrome distilled to a title block */}
       <div
-        className="min-w-0 px-3 py-2"
+        className="min-w-0 px-4 py-3"
         style={{ border: "0.5px solid var(--line-2)", borderRadius: 2 }}
       >
-        <div className="flex min-w-0 items-baseline gap-2">
+        <div className="tele-label text-[10px] tracking-[0.3em] text-muted-foreground">
+          DOCUMENT
+        </div>
+        <div className="mt-0.5 flex min-w-0 items-baseline gap-2">
           <span
-            className="min-w-0 truncate text-sm font-semibold"
+            className="min-w-0 truncate text-lg font-semibold leading-tight"
             title={activeDoc ? text(activeDoc.title) : undefined}
           >
             {activeDoc ? text(activeDoc.title) : "no active document"}
           </span>
           {activeDoc && (
-            <span className="tele-label text-muted-foreground">{docKind(activeDoc)}</span>
+            <span className="tele-label shrink-0 text-muted-foreground">{docKind(activeDoc)}</span>
           )}
-          {activeDoc?.isWorkshared === true && <Chip hue="slate">workshared</Chip>}
-          {activeDoc?.isModelInCloud === true && <Chip hue="blue">cloud</Chip>}
-          {activeDoc?.isReadOnly === true && <Chip hue="kiln">read-only</Chip>}
         </div>
+        {docPath && (
+          <div className="tele mt-0.5 text-[10px] text-muted-foreground" title={docPath}>
+            {truncateMiddle(docPath, 72)}
+          </div>
+        )}
+        {activeDoc && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+            {activeDoc.isWorkshared === true && <Chip hue="slate">workshared</Chip>}
+            {activeDoc.isModelInCloud === true && <Chip hue="blue">cloud</Chip>}
+            {activeDoc.isReadOnly === true && <Chip hue="kiln">read-only</Chip>}
+            {activeDoc.isModifiable === false && activeDoc.isReadOnly !== true && (
+              <Chip hue="kiln">not modifiable</Chip>
+            )}
+          </div>
+        )}
+
+        {/* stage line: where the camera is right now */}
         {activeView && (
-          <div className="mt-1 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <div
+            className="mt-2.5 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 pt-2"
+            style={{ borderTop: "0.5px solid var(--line-soft)" }}
+          >
+            <span className="tele-label text-[10px] text-muted-foreground">ON STAGE</span>
             <Chip hue={activeView.isSheet === true ? "green" : "blue"}>
               {text(activeView.viewType)}
             </Chip>
-            <span className="min-w-0 truncate text-xs">{text(activeView.title)}</span>
+            <span
+              className="min-w-0 truncate text-xs font-medium"
+              title={text(activeView.title)}
+            >
+              {text(activeView.title)}
+            </span>
             <MonoNote>1:{text(activeView.scale)}</MonoNote>
-            {asString(activeView.levelName) && <MonoNote>{text(activeView.levelName)}</MonoNote>}
+            {asString(activeView.levelName) && (
+              <Chip hue="slate" title="level">
+                {text(activeView.levelName)}
+              </Chip>
+            )}
             {asString(activeView.viewTemplateName) && (
               <Chip hue="lichen" title="view template">
                 {text(activeView.viewTemplateName)}
@@ -632,72 +665,140 @@ function ViewRenderingStateView({ data }: OpViewProps) {
 
 /* ── revit.resolve.references — resolution testimony ──────────────────────── */
 
+/** Thin normalized score bar + raw tele number. Scores are ints with no fixed
+ * ceiling, so the bar is honest only relative to the best score in this set. */
+function ScoreBar({ score, max, muted }: { score: number; max: number; muted: boolean }) {
+  const frac = max > 0 ? Math.max(0, Math.min(1, score / max)) : 0;
+  const color = muted ? "var(--cat-kiln)" : "var(--pe-blue)";
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1.5" title={`score ${score} of max ${max} in this set`}>
+      <span
+        className="inline-block"
+        style={{
+          width: 72,
+          height: 3,
+          borderRadius: 1,
+          background: "color-mix(in srgb, var(--line-2) 60%, transparent)",
+        }}
+      >
+        <span
+          className="block h-full"
+          style={{ width: `${frac * 100}%`, borderRadius: 1, background: color }}
+        />
+      </span>
+      <span className="tele text-[10px]" style={{ color: muted ? "var(--cat-kiln)" : undefined }}>
+        {score}
+      </span>
+    </span>
+  );
+}
+
 function ResolveReferencesView({ data }: OpViewProps) {
   const res = asRecord(data);
   if (!res || !Array.isArray(res.candidates)) {
     return <EmptyState note="unrecognized response shape" />;
   }
-  const candidates = asRecords(res.candidates);
+  const candidates = [...asRecords(res.candidates)].sort(
+    (a, b) => (asNumber(b.score) ?? 0) - (asNumber(a.score) ?? 0),
+  );
   const candidateCount = asNumber(res.candidateCount) ?? candidates.length;
   const ambiguous = candidateCount > 1;
+  const maxScore = candidates.reduce((acc, c) => Math.max(acc, asNumber(c.score) ?? 0), 0);
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-baseline gap-2">
-        <span className="text-sm">“{text(res.referenceText)}”</span>
-        <MonoNote hue={ambiguous ? "kiln" : candidateCount === 1 ? "green" : "clay"}>
-          {candidateCount === 0
-            ? "no matches"
-            : candidateCount === 1
-              ? "resolved"
-              : `${candidateCount} candidates — ambiguous`}
-        </MonoNote>
+      {/* testimony header: the phrase under interrogation */}
+      <div className="min-w-0">
+        <div className="tele-label text-[10px] tracking-[0.3em] text-muted-foreground">
+          REFERENCE
+        </div>
+        <div className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-2">
+          <span className="min-w-0 text-base font-medium leading-snug">
+            “{text(res.referenceText)}”
+          </span>
+          <MonoNote hue={ambiguous ? "kiln" : candidateCount === 1 ? "green" : "clay"}>
+            {candidateCount === 0
+              ? "no matches"
+              : candidateCount === 1
+                ? "resolved"
+                : `${candidateCount} candidates — ambiguous`}
+          </MonoNote>
+        </div>
       </div>
 
       {candidates.length === 0 ? (
         <EmptyState note="nothing in the model matched this reference" />
       ) : (
-        <div className="flex flex-col">
+        <div className="flex flex-col" style={{ border: "0.5px solid var(--line)", borderRadius: 2 }}>
           {candidates.map((candidate, i) => {
             const handle = asRecord(candidate.handle);
             const related = asRecords(candidate.relatedHandles);
-            const provenance = provenanceDescriptions(candidate.provenance);
+            const provenance = asRecords(candidate.provenance);
             const score = asNumber(candidate.score);
+            const top = i === 0;
             return (
               <div
                 key={handle ? `${handleId(handle)}-${i}` : i}
                 className="flex min-w-0 flex-col gap-1 px-2.5 py-2"
                 style={{
-                  borderBottom: "0.5px solid var(--line-soft)",
-                  borderLeft:
-                    ambiguous && i > 0 ? "2px solid var(--cat-kiln)" : "2px solid transparent",
+                  borderBottom: i < candidates.length - 1 ? "0.5px solid var(--line-soft)" : undefined,
+                  borderLeft: top
+                    ? "2px solid var(--pe-blue)"
+                    : ambiguous
+                      ? "2px solid var(--cat-kiln)"
+                      : "2px solid transparent",
+                  background: top
+                    ? "color-mix(in srgb, var(--pe-blue) 4%, transparent)"
+                    : undefined,
                 }}
               >
                 <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                  <span className="text-xs text-muted-foreground">→</span>
+                  <span className="tele w-6 shrink-0 text-[10px] text-muted-foreground">
+                    #{i + 1}
+                  </span>
                   {handle && <HandleChip handle={handle} />}
-                  <span className="min-w-0 truncate text-xs">{text(candidate.label)}</span>
+                  <span className={`min-w-0 truncate text-xs ${top ? "font-medium" : ""}`}>
+                    {text(candidate.label)}
+                  </span>
                   {handle && <MonoNote>{handleId(handle)}</MonoNote>}
                   {score !== undefined && (
-                    <MonoNote hue={ambiguous && i > 0 ? "kiln" : undefined}>score {score}</MonoNote>
+                    <span className="ml-auto">
+                      <ScoreBar score={score} max={maxScore} muted={!top && ambiguous} />
+                    </span>
                   )}
                 </div>
                 {related.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-1 pl-5">
+                  <div className="flex flex-wrap items-center gap-1 pl-6">
                     {related.map((rel, j) => (
                       <HandleChip key={j} handle={rel} />
                     ))}
                   </div>
                 )}
                 {provenance.length > 0 && (
-                  <div className="pl-5">
-                    <Provenance>{provenance.join(" · ")}</Provenance>
-                  </div>
+                  <details className="pl-6">
+                    <summary className="tele cursor-pointer select-none text-[10px] text-muted-foreground">
+                      provenance ({provenance.length})
+                    </summary>
+                    <div className="mt-0.5 flex flex-col gap-0.5">
+                      {provenance.map((p, j) => (
+                        <Provenance key={j}>
+                          {asString(p.kind) ? `${text(p.kind)} — ` : ""}
+                          {text(p.description) || text(p)}
+                        </Provenance>
+                      ))}
+                    </div>
+                  </details>
                 )}
               </div>
             );
           })}
         </div>
+      )}
+      {candidates.length > 0 && (
+        <Provenance>
+          ranked by score, descending · bars normalized against the best score in this set (
+          {maxScore}) — scores are relative evidence, not absolute confidence
+        </Provenance>
       )}
       <IssueLines issues={res.issues} />
     </div>

@@ -17,8 +17,10 @@ import { useFieldOptions } from "#/host/field-options";
 import { type HostIssue, HostIssuePanel, toHostIssue } from "#/host/issues";
 import { useBridgeSessionsListQuery, useHostOp } from "#/host/queries";
 import { cn } from "#/lib/utils";
+import { syntheticOps } from "#/ops/glance";
 import { opViews } from "#/ops/op-views";
 import { type CatHue, Chip, MonoNote } from "#/ops/primitives";
+import { type SyntheticOp, SyntheticRunner } from "#/ops/synthetic";
 
 export const Route = createFileRoute("/ops")({ component: OpsPlayground });
 
@@ -90,6 +92,7 @@ function costHue(tier: string | undefined): CatHue {
 function OpsPlayground() {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<HostOperationCatalogEntry | undefined>();
+  const [selectedGlance, setSelectedGlance] = useState<SyntheticOp | undefined>();
   const [args, setArgs] = useState("{}");
   const [mode, setMode] = useState<"form" | "raw">("raw");
   const [formValues, setFormValues] = useState<Record<string, unknown>>({});
@@ -142,6 +145,7 @@ function OpsPlayground() {
     const nextSchema = requestJsonSchema(op);
     const nextArgs = op.requestExamples?.[0]?.json ?? op.safeDefaultRequestJson ?? "{}";
     setSelected(op);
+    setSelectedGlance(undefined);
     setRequestSeed(nextArgs, nextSchema);
     setMode(nextSchema ? "form" : "raw");
     setResult(undefined);
@@ -214,6 +218,47 @@ function OpsPlayground() {
           />
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto pb-4">
+          {/* Glance: synthetic composed surfaces, pinned above the raw op domains. */}
+          {!query.trim() && syntheticOps.length > 0 && (
+            <section>
+              <h2
+                className="section-label sticky top-0 z-10 px-3 pb-1 pt-3"
+                style={{ background: "var(--background)" }}
+              >
+                Glance
+                <span className="tele ml-1.5 text-[9px] text-muted-foreground">
+                  {syntheticOps.length}
+                </span>
+              </h2>
+              <ul className="px-1">
+                {syntheticOps.map((glance) => {
+                  const active = selectedGlance?.key === glance.key;
+                  return (
+                    <li key={glance.key}>
+                      <button
+                        onClick={() => {
+                          setSelectedGlance(glance);
+                          setSelected(undefined);
+                        }}
+                        className={cn(
+                          "w-full rounded-[2px] px-2 py-1 text-left transition-colors hover:bg-muted",
+                          active && "bg-muted",
+                        )}
+                        style={active ? { boxShadow: "inset 2px 0 0 var(--pe-blue)" } : undefined}
+                      >
+                        <div className="min-w-0 truncate text-xs font-medium">
+                          {glance.displayName}
+                        </div>
+                        <div className="tele truncate text-[9px] text-muted-foreground">
+                          {glance.key}
+                        </div>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
           {grouped.map(({ domain, ops: members }) => (
             <section key={domain}>
               <h2
@@ -288,7 +333,25 @@ function OpsPlayground() {
 
       {/* Detail / runner */}
       <section className="min-h-0 overflow-y-auto p-4">
-        {!selected ? (
+        {selectedGlance ? (
+          <div className="mx-auto flex max-w-4xl flex-col gap-4">
+            <header>
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-base font-semibold">{selectedGlance.displayName}</h1>
+                <Chip hue="lichen">synthetic</Chip>
+              </div>
+              <p className="tele mt-0.5 text-[10px] text-muted-foreground">{selectedGlance.key}</p>
+              <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{selectedGlance.blurb}</p>
+              {selectedGlance.contractNote && (
+                <p className="mt-1 max-w-2xl text-xs text-muted-foreground">
+                  <span className="tele-label mr-1 text-[9px] text-cat-kiln">contract</span>
+                  {selectedGlance.contractNote}
+                </p>
+              )}
+            </header>
+            <SyntheticRunner op={selectedGlance} bridgeSessionId={bridgeSessionId} />
+          </div>
+        ) : !selected ? (
           <p className="text-sm text-muted-foreground">
             Pick a host op. The list is the live session catalog (<code>host.ops.catalog</code>);
             calls go through <code>/call</code> (default <code>localhost:5180</code>).

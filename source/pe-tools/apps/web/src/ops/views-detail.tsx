@@ -138,7 +138,7 @@ const ANCHOR_HUES = {
   TitleBlock: "slate",
 } as const;
 
-function SheetCanvas({ entry }: { entry: RevitDetailSheets.Res.SheetDetailEntry }) {
+export function SheetCanvas({ entry }: { entry: RevitDetailSheets.Res.SheetDetailEntry }) {
   const withBounds = entry.anchors.filter((a) => a.bounds != null);
   const titleBlock = withBounds.find((a) => a.kind === "TitleBlock");
   const frameSource = titleBlock?.bounds ?? null;

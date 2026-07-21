@@ -1,0 +1,271 @@
+import { useEffect, useMemo, useState } from "react";
+import type { RevitDetailSheets } from "@pe/host-contracts/generated";
+import { Chip, EmptyState, MonoNote, OpSection, Provenance } from "#/ops/primitives";
+import { asNumber, asRecord, asRecords, asString } from "#/ops/registry";
+import type { SyntheticOp, SyntheticViewProps } from "#/ops/synthetic";
+import { SheetCanvas } from "#/ops/views-detail";
+
+/**
+ * glance.drawing-set — the wall of sheets an architect pins up. The full sheet
+ * list comes from revit.catalog.project-index (Sheets section); a bounded
+ * staged revit.detail.sheets call fetches anchor geometry for one sheet per
+ * series (plus the richest remainder) to render mini titleblock thumbnails.
+ */
+
+const DETAIL_BUDGET = 10;
+
+type SheetListing = {
+  sheetNumber: string;
+  sheetName: string;
+  uniqueId?: string;
+  placedViewCount: number;
+  placedScheduleCount: number;
+};
+
+type Series = { prefix: string; sheets: SheetListing[] };
+
+/** Series = leading non-digit run of the sheet number ("M", "E", "xP", "-"). */
+function seriesPrefix(sheetNumber: string): string {
+  const m = /^[^\d]+/.exec(sheetNumber.trim());
+  return m ? m[0] : sheetNumber.trim() || "?";
+}
+
+function narrowSheetList(indexResult: unknown): { sheets: SheetListing[]; total?: number } {
+  const rec = asRecord(indexResult);
+  if (!rec) return { sheets: [] };
+  const summary = asRecord(rec.summary);
+  const sheets = asRecords(rec.sheets).flatMap((s) => {
+    const sheetNumber = asString(s.sheetNumber);
+    const sheetName = asString(s.sheetName);
+    if (sheetNumber == null || sheetName == null) return [];
+    return [
+      {
+        sheetNumber,
+        sheetName,
+        uniqueId: asString(asRecord(s.handle)?.uniqueId),
+        placedViewCount: asNumber(s.placedViewCount) ?? 0,
+        placedScheduleCount: asNumber(s.placedScheduleCount) ?? 0,
+      },
+    ];
+  });
+  return { sheets, total: asNumber(summary?.sheetCount) };
+}
+
+function groupBySeries(sheets: SheetListing[]): Series[] {
+  const order: string[] = [];
+  const byPrefix = new Map<string, SheetListing[]>();
+  for (const sheet of sheets) {
+    const prefix = seriesPrefix(sheet.sheetNumber);
+    if (!byPrefix.has(prefix)) {
+      byPrefix.set(prefix, []);
+      order.push(prefix);
+    }
+    byPrefix.get(prefix)?.push(sheet);
+  }
+  return order.map((prefix) => ({ prefix, sheets: byPrefix.get(prefix) ?? [] }));
+}
+
+/** One sheet per series first (richest by placed content), then the richest
+ * remainder, up to DETAIL_BUDGET — deterministic and honest about the cap. */
+function chooseDetailTargets(series: Series[]): string[] {
+  const richness = (s: SheetListing) => s.placedViewCount + s.placedScheduleCount;
+  const chosen: string[] = [];
+  for (const group of series) {
+    if (chosen.length >= DETAIL_BUDGET) break;
+    const best = [...group.sheets].sort((a, b) => richness(b) - richness(a))[0];
+    if (best) chosen.push(best.sheetNumber);
+  }
+  const rest = series
+    .flatMap((g) => g.sheets)
+    .filter((s) => !chosen.includes(s.sheetNumber))
+    .sort((a, b) => richness(b) - richness(a));
+  for (const sheet of rest) {
+    if (chosen.length >= DETAIL_BUDGET) break;
+    chosen.push(sheet.sheetNumber);
+  }
+  return chosen;
+}
+
+/** Empty titleblock frame for sheets not in the detail budget — Arch D landscape. */
+function EmptyFrame() {
+  return (
+    <div
+      aria-hidden
+      style={{
+        aspectRatio: "3 / 2",
+        border: "0.5px dashed var(--line-2)",
+        borderRadius: 0,
+      }}
+    />
+  );
+}
+
+function Thumbnail({
+  sheet,
+  entry,
+  selected,
+  onSelect,
+}: {
+  sheet: SheetListing;
+  entry?: RevitDetailSheets.Res.SheetDetailEntry;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="flex min-w-0 flex-col gap-1 p-1.5 text-left hover:bg-muted/60"
+      style={{
+        border: selected ? "0.5px solid var(--pe-blue)" : "0.5px solid var(--line)",
+        borderRadius: 2,
+        background: selected ? "color-mix(in srgb, var(--pe-blue) 6%, transparent)" : undefined,
+      }}
+      title={
+        entry
+          ? `${sheet.sheetNumber} — ${sheet.sheetName}`
+          : `${sheet.sheetNumber} — ${sheet.sheetName} (not detailed: outside the ${DETAIL_BUDGET}-sheet budget)`
+      }
+    >
+      {entry ? <SheetCanvas entry={entry} /> : <EmptyFrame />}
+      <span className="tele truncate text-[10px]">{sheet.sheetNumber}</span>
+      {entry && (
+        <span className="truncate text-[11px] text-muted-foreground">{sheet.sheetName}</span>
+      )}
+    </button>
+  );
+}
+
+function DrawingSetView({ results, observedAtMs, call }: SyntheticViewProps) {
+  const { sheets, total } = useMemo(
+    () => narrowSheetList(results["revit.catalog.project-index"]),
+    [results],
+  );
+  const series = useMemo(() => groupBySeries(sheets), [sheets]);
+  const targets = useMemo(() => chooseDetailTargets(series), [series]);
+
+  const [details, setDetails] = useState<Map<string, RevitDetailSheets.Res.SheetDetailEntry>>();
+  const [detailError, setDetailError] = useState<string>();
+  const [selected, setSelected] = useState<string>();
+
+  useEffect(() => {
+    if (targets.length === 0) return;
+    let cancelled = false;
+    setDetails(undefined);
+    setDetailError(undefined);
+    void call("revit.detail.sheets", {
+      references: { sheetNumbers: targets },
+      projection: {
+        view: "Anchors",
+        includeTitleBlocks: true,
+        includeViewports: true,
+        includeScheduleInstances: true,
+        includeTextNotes: true,
+        includeBoundingBoxes: true,
+      },
+      budget: { maxEntries: targets.length, maxSamplesPerEntry: 80 },
+    }).then(
+      (data) => {
+        if (cancelled) return;
+        const rec = asRecord(data);
+        if (!rec || !Array.isArray(rec.sheets)) {
+          setDetailError("unrecognized revit.detail.sheets response shape");
+          return;
+        }
+        const res = rec as unknown as RevitDetailSheets.Res.Response;
+        setDetails(new Map(res.sheets.map((entry) => [entry.summary.sheetNumber, entry])));
+      },
+      (error: unknown) => {
+        if (!cancelled) setDetailError(error instanceof Error ? error.message : String(error));
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [targets, call]);
+
+  if (sheets.length === 0) return <EmptyState note="no sheets in the project index" />;
+
+  const selectedSheet = sheets.find((s) => s.sheetNumber === selected);
+  const selectedEntry = selected != null ? details?.get(selected) : undefined;
+
+  return (
+    <div className="flex flex-col gap-4">
+      {series.map((group) => (
+        <OpSection
+          key={group.prefix}
+          label={`${group.prefix} series`}
+          aside={<MonoNote>{group.sheets.length} sheets</MonoNote>}
+        >
+          <div
+            className="grid gap-2"
+            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))" }}
+          >
+            {group.sheets.map((sheet) => (
+              <Thumbnail
+                key={sheet.uniqueId ?? sheet.sheetNumber}
+                sheet={sheet}
+                entry={details?.get(sheet.sheetNumber)}
+                selected={selected === sheet.sheetNumber}
+                onSelect={() => setSelected(sheet.sheetNumber)}
+              />
+            ))}
+          </div>
+        </OpSection>
+      ))}
+
+      {selectedSheet && (
+        <OpSection
+          label={`${selectedSheet.sheetNumber} — ${selectedSheet.sheetName}`}
+          aside={
+            selectedEntry ? (
+              <>
+                <Chip hue="blue">{selectedEntry.summary.viewportCount} views</Chip>
+                <Chip hue="green">{selectedEntry.summary.scheduleInstanceCount} schedules</Chip>
+                <Chip hue="kiln">{selectedEntry.summary.textNoteCount} notes</Chip>
+              </>
+            ) : undefined
+          }
+        >
+          {selectedEntry ? (
+            <SheetCanvas entry={selectedEntry} />
+          ) : (
+            <EmptyState
+              note={`${selectedSheet.sheetNumber} was not detailed — outside the ${DETAIL_BUDGET}-sheet anchor budget`}
+            />
+          )}
+        </OpSection>
+      )}
+      {!selectedSheet && <MonoNote>select a thumbnail to enlarge its anchor map</MonoNote>}
+
+      {detailError && <MonoNote hue="clay">detail fetch failed: {detailError}</MonoNote>}
+      <Provenance>
+        {details ? details.size : detailError ? 0 : "…"} of {total ?? sheets.length} sheets
+        detailed (anchor geometry; budget {DETAIL_BUDGET}, one per series then richest remainder) ·
+        remaining sheets render as empty frames · obs{" "}
+        {observedAtMs ? new Date(observedAtMs).toLocaleTimeString() : "—"}
+      </Provenance>
+    </div>
+  );
+}
+
+export const drawingSetOps: SyntheticOp[] = [
+  {
+    key: "glance.drawing-set",
+    displayName: "The drawing set",
+    blurb: "what this project's deliverable looks like — the wall of sheets pinned up by series",
+    contractNote:
+      "wants revit.catalog.sheets: flat sheet list with series grouping + per-sheet anchor thumbnails in one bounded call; today it takes project-index (Sheets) + a staged N-sheet detail.sheets batch",
+    deps: [
+      {
+        key: "revit.catalog.project-index",
+        request: {
+          sections: ["Sheets"],
+          projection: { view: "Handles" },
+          budget: { maxEntries: 100, maxSamplesPerEntry: 10 },
+        },
+      },
+    ],
+    View: DrawingSetView,
+  },
+];
