@@ -21,7 +21,11 @@ NodeRuntime.runMain(
               configFile: path.join(webRoot, "vite.config.ts"),
               server: {
                 middlewareMode: true,
-                hmr: { server: nodeServer, path: VITE_HMR_PATH },
+                // ponytail: PE_DEV_NO_HMR for WS-less clients (agent browser proxies) — the
+                // vite client otherwise reload-loops when the HMR upgrade can't connect.
+                hmr: process.env.PE_DEV_NO_HMR
+                  ? false
+                  : { server: nodeServer, path: VITE_HMR_PATH },
               },
             }),
           catch: (error) => (error instanceof Error ? error : new Error(String(error))),

@@ -19,6 +19,7 @@ import { LocalOpError, localOpHttpStatus } from "./local-error.ts";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   isTsOnlyOperationKey,
+  tsOnlyOperationCatalog,
   tsOnlyOperationSchemas,
   type TsOnlyOperationKey,
 } from "@pe/host-contracts/operation-types";
@@ -30,9 +31,43 @@ import type { HostErrorKind } from "@pe/host-contracts/contracts";
  * untouched — the Revit side owns validation, so runtime-registered ops need
  * zero host changes. Errors are problem-JSON with a real HTTP status.
  */
+// ponytail: dev-only escape — PE_TOOLS_CALL_FORWARD=<base-url> makes this host a pure
+// /call proxy (e.g. to the installed host that owns the Revit bridge) while still serving
+// the checkout's web UI with HMR. Delete when sandbox-lane sessions can dial a dev host.
+const CALL_FORWARD_BASE = process.env.PE_TOOLS_CALL_FORWARD?.trim().replace(/\/$/, "");
+
 export const callRoute = HttpRouter.add("POST", "/call", (req) =>
   Effect.gen(function* () {
     const body = yield* req.json.pipe(Effect.mapError(() => invalidBody("unreadable JSON body")));
+    if (CALL_FORWARD_BASE) {
+      const sessionHeader = req.headers[HOST_RPC_BRIDGE_SESSION_HEADER]?.trim();
+      const forwarded = yield* Effect.tryPromise({
+        try: async () => {
+          const response = await fetch(`${CALL_FORWARD_BASE}/call`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              ...(sessionHeader ? { [HOST_RPC_BRIDGE_SESSION_HEADER]: sessionHeader } : {}),
+            },
+            body: JSON.stringify(body),
+          });
+          return { status: response.status, json: (await response.json()) as unknown };
+        },
+        catch: (cause) => new BridgeError(`call forward to ${CALL_FORWARD_BASE} failed: ${String(cause)}`, 503),
+      });
+      // Merge this checkout's TS-only catalog entries into a forwarded catalog so the ops
+      // page lists both surfaces (the forward target may run an older TS-only set).
+      if (body.key === "host.ops.catalog" && forwarded.status === 200) {
+        const catalog = forwarded.json as { operations?: { key?: string }[] };
+        if (Array.isArray(catalog.operations)) {
+          const seen = new Set(catalog.operations.map((op) => op.key));
+          catalog.operations.push(
+            ...tsOnlyOperationCatalog.filter((entry) => !seen.has(entry.key)),
+          );
+        }
+      }
+      return Response.jsonUnsafe(forwarded.json ?? null, { status: forwarded.status });
+    }
     if (!isRecord(body) || typeof body.key !== "string")
       return yield* Effect.fail(invalidBody("body must be { key: string, request?: object }"));
     // The /call envelope is exactly { key, request? }. Reject any other top-level key so
