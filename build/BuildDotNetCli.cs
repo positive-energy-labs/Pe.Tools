@@ -57,7 +57,7 @@ internal static partial class BuildDotNetCli {
         process.ErrorDataReceived += (_, e) => AddLine(standardError, e.Data);
 
         if (!process.Start())
-            throw new DotNetCommandException(FormatCommand(arguments), -1, [], ["Failed to start dotnet process."]);
+            throw new DotNetCommandException(FormatCommand(arguments), -1, [], ["Failed to start dotnet process."], []);
 
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
@@ -84,10 +84,10 @@ internal static partial class BuildDotNetCli {
             "--configuration",
             configuration,
             "--nologo",
-            // minimal, not quiet: quiet swallowed the MSB4115 that broke pack for weeks —
-            // errors must reach the captured output the DotNetCommandException reports.
+            // Successful output stays buffered, while normal verbosity preserves external-tool
+            // failures that minimal reduces to a bare "Build FAILED."
             "--verbosity",
-            "minimal",
+            "normal",
             "-p:WarningLevel=0"
         };
 
@@ -103,25 +103,39 @@ internal static partial class BuildDotNetCli {
 
     private static string QuoteIfNeeded(string argument) => argument.Any(char.IsWhiteSpace) ? $"\"{argument}\"" : argument;
 
-    private sealed partial class DotNetCommandException(string command, int exitCode, IReadOnlyCollection<string> output, IReadOnlyCollection<string> errors) : Exception(BuildMessage(command, exitCode, output, errors)) {
+    private sealed partial class DotNetCommandException(
+        string command,
+        int exitCode,
+        IReadOnlyCollection<string> output,
+        IReadOnlyCollection<string> errors,
+        IReadOnlyCollection<string> warnings
+    ) : Exception(BuildMessage(command, exitCode, output, errors, warnings)) {
         public override string ToString() => Message;
 
         public static DotNetCommandException Create(IReadOnlyCollection<string> arguments, int exitCode, IReadOnlyCollection<string> standardOutput, IReadOnlyCollection<string> standardError) {
             var combined = standardError.Concat(standardOutput).ToArray();
             var errors = combined.Where(IsBuildError).Distinct().Take(12).ToArray();
             var warnings = combined.Where(IsBuildWarning).Distinct().Take(5).ToArray();
-            var output = errors.Length == 0
-                ? combined.Where(line => !IsBuildWarning(line)).Distinct().Take(12).ToArray()
-                : warnings;
+            var output = combined
+                .Where(line => !IsBuildError(line) && !IsBuildWarning(line))
+                .Distinct()
+                .TakeLast(80)
+                .ToArray();
 
-            return new DotNetCommandException(FormatCommand(arguments), exitCode, output, errors);
+            return new DotNetCommandException(FormatCommand(arguments), exitCode, output, errors, warnings);
         }
 
-        private static bool IsBuildError(string line) => ErrorRegex().IsMatch(line) || line.Contains("Build FAILED", StringComparison.OrdinalIgnoreCase);
+        private static bool IsBuildError(string line) => ErrorRegex().IsMatch(line);
 
         private static bool IsBuildWarning(string line) => WarningRegex().IsMatch(line);
 
-        private static string BuildMessage(string command, int exitCode, IReadOnlyCollection<string> output, IReadOnlyCollection<string> errors) {
+        private static string BuildMessage(
+            string command,
+            int exitCode,
+            IReadOnlyCollection<string> output,
+            IReadOnlyCollection<string> errors,
+            IReadOnlyCollection<string> warnings
+        ) {
             var lines = new List<string> {
                 $"dotnet command failed with exit code {exitCode}.",
                 "Input: " + command
@@ -133,8 +147,13 @@ internal static partial class BuildDotNetCli {
             }
 
             if (output.Count > 0) {
-                lines.Add(errors.Count > 0 ? "Warnings:" : "Output:");
+                lines.Add("Output:");
                 lines.AddRange(output.Select(line => "  " + SingleLine(line)));
+            }
+
+            if (warnings.Count > 0) {
+                lines.Add("Warnings:");
+                lines.AddRange(warnings.Select(warning => "  " + SingleLine(warning)));
             }
 
             return string.Join(Environment.NewLine, lines);
