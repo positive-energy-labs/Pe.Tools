@@ -3,7 +3,11 @@ import { dirname, isAbsolute, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { hostProcessIdentity, scriptingWorkspaceIdentity } from "@pe/host-contracts/contracts";
 import { discoverServiceSync } from "@pe/host-contracts/pe-service";
-import { hostServiceName, productRoot } from "@pe/host-contracts/service-identity";
+import {
+  devHostSourceDir,
+  hostServiceName,
+  productRoot,
+} from "@pe/host-contracts/service-identity";
 import { firstNonBlank } from "./cli-values.ts";
 
 /**
@@ -31,11 +35,17 @@ function sourceRootFromModule(): string | null {
  * Identity by location, like git. Precedence: spawn-plumbing env (a supervisor telling the child
  * it just spawned who it is — never user configuration) → cwd walk (an agent working in a worktree
  * automatically addresses that worktree's host) → module path (last resort: where this code lives).
+ * Every candidate is mapped through {@link devHostSourceDir} — the service-name hash is over the
+ * host's `source/pe-tools` dir, NEVER the checkout root, and every deriver must agree byte-for-byte.
  */
 function resolveLaneAndRoot(): { lane: "dev" | "installed"; sourceRoot: string | null } {
   const configured = process.env.PE_LANE?.trim().toLowerCase();
   const envSourceRoot = process.env.PE_TOOLS_HOST_SOURCE_DIR?.trim() || null;
-  const located = envSourceRoot ?? checkoutRootFrom(process.cwd()) ?? sourceRootFromModule();
+  const cwdRoot = checkoutRootFrom(process.cwd());
+  const located =
+    (envSourceRoot ? (devHostSourceDir(envSourceRoot) ?? envSourceRoot) : null) ??
+    (cwdRoot ? devHostSourceDir(cwdRoot) : null) ??
+    sourceRootFromModule();
   const lane =
     configured === "installed"
       ? ("installed" as const)
@@ -56,11 +66,13 @@ function laneTokenBaseUrl(token: string): string | null | undefined {
     const live = discoverServiceSync(productRoot(), hostServiceName("installed", null));
     return live ? `http://127.0.0.1:${live.port}` : hostProcessIdentity.defaultHostBaseUrl;
   }
+  const walked =
+    token.toLowerCase() !== "dev" && isAbsolute(token) ? checkoutRootFrom(token) : null;
   const root =
     token.toLowerCase() === "dev"
       ? resolveLaneAndRoot().sourceRoot
-      : isAbsolute(token)
-        ? checkoutRootFrom(token)
+      : walked
+        ? devHostSourceDir(walked)
         : null;
   if (!root) {
     throw new Error(
