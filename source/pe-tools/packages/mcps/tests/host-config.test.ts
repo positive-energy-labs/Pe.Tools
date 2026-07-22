@@ -2,6 +2,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
+import { devHostSourceDir, sourceHostServiceName } from "@pe/host-contracts/service-identity";
 import { checkoutRootFrom, discoverHostBaseUrl } from "../src/shared/host-config.ts";
 
 function fakeCheckout(): string {
@@ -9,6 +10,8 @@ function fakeCheckout(): string {
   mkdirSync(join(root, ".git"));
   writeFileSync(join(root, "Pe.Tools.slnx"), "");
   mkdirSync(join(root, "source", "deep"), { recursive: true });
+  mkdirSync(join(root, "source", "pe-tools", "apps", "host"), { recursive: true });
+  writeFileSync(join(root, "source", "pe-tools", "apps", "host", "package.json"), "{}");
   return root;
 }
 
@@ -16,6 +19,27 @@ test("checkoutRootFrom walks up to the .git + Pe.Tools.slnx root", () => {
   const root = fakeCheckout();
   expect(checkoutRootFrom(join(root, "source", "deep"))).toBe(root);
   expect(checkoutRootFrom(root)).toBe(root);
+});
+
+// The 2026-07-22 regression: the MCP hashed the checkout ROOT while the host and C# side hash
+// `<root>/source/pe-tools` — different service names, so discovery could never match. The mapping
+// helper is the single agreement point; the derived name must equal the host-side derivation.
+test("checkout root maps to the host source dir and hashes to the host's service name", () => {
+  const root = fakeCheckout();
+  const hostDir = devHostSourceDir(root);
+  expect(hostDir).toBe(join(root, "source", "pe-tools"));
+  // Idempotent: the host source dir passes through unchanged.
+  expect(devHostSourceDir(hostDir!)).toBe(hostDir);
+  expect(sourceHostServiceName(hostDir!)).toBe(
+    sourceHostServiceName(join(root, "source", "pe-tools")),
+  );
+});
+
+test("a checkout without the host layout maps to null, never a wrong name", () => {
+  const bare = mkdtempSync(join(tmpdir(), "pe-bare-checkout-"));
+  mkdirSync(join(bare, ".git"));
+  writeFileSync(join(bare, "Pe.Tools.slnx"), "");
+  expect(devHostSourceDir(bare)).toBeNull();
 });
 
 test("checkoutRootFrom returns null outside any checkout", () => {

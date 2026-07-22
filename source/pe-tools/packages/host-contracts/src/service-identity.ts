@@ -2,6 +2,7 @@
 // (./vendor/pe-service.ts). Naming mechanics (the worktree hash, a cross-language contract with the
 // SDK's C# client) live in the SDK; this module owns only what is Pe.Tools-specific: the product
 // root and the lane→name mapping.
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { hostProcessIdentity, productIdentity } from "./contracts/product.ts";
@@ -25,6 +26,20 @@ export function productRoot(): string {
 /** Worktree-scoped dev-host name for a checkout root (SDK hash — byte-stable across languages). */
 export function sourceHostServiceName(sourceRoot: string): string {
   return sourceServiceName(hostProcessIdentity.serviceName, sourceRoot);
+}
+
+/**
+ * The ONE identity input for a dev host: a Pe.Tools checkout root maps to `<root>/source/pe-tools`,
+ * the directory the host runs from and hashes its service name over. Mirror of the C# side
+ * (ProductDevelopmentRuntimeLayout.ResolveSourceHostWorkingDirectory), including the package.json
+ * existence check — every deriver (host, MCP clients, C# launcher) must pass THIS through
+ * `hostServiceName`, never the checkout root itself, or the names disagree by construction.
+ * Idempotent: a path that already is the host source dir passes through.
+ */
+export function devHostSourceDir(checkoutRoot: string): string | null {
+  if (existsSync(join(checkoutRoot, "apps", "host", "package.json"))) return checkoutRoot;
+  const candidate = join(checkoutRoot, "source", "pe-tools");
+  return existsSync(join(candidate, "apps", "host", "package.json")) ? candidate : null;
 }
 
 /**
