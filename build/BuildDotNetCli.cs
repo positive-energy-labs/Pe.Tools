@@ -84,8 +84,10 @@ internal static partial class BuildDotNetCli {
             "--configuration",
             configuration,
             "--nologo",
+            // minimal, not quiet: quiet swallowed the MSB4115 that broke pack for weeks —
+            // errors must reach the captured output the DotNetCommandException reports.
             "--verbosity",
-            "quiet",
+            "minimal",
             "-p:WarningLevel=0"
         };
 

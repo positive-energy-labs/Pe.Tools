@@ -44,6 +44,13 @@ public sealed class CreateBundleModule(IOptions<BuildOptions> buildOptions) : Mo
         if (File.Exists(bundleZipPath))
             File.Delete(bundleZipPath);
 
+        // A -p year list can only travel %3B-escaped (raw ; is MSB1006), and SDK <= beta.98
+        // item-splits break on the escaped form (one mega-year, Configuration=Release.R2023;2024;…).
+        // Multi-year here always means the full matrix, which Directory.Build.props already
+        // declares with cleanly splitting semicolons — so only pass a single narrowed year.
+        (string, string?)[] yearProperties = revitYears.Length == 1
+            ? [("PeRevitYears", revitYears[0].ToString())]
+            : [];
         await BuildDotNetCli.BuildTargetQuietAsync(
             context,
             appProjectPath,
@@ -53,7 +60,7 @@ public sealed class CreateBundleModule(IOptions<BuildOptions> buildOptions) : Mo
                 ("PeIsolatedBuild", "true"),
                 ("DeployAddin", "false"),
                 ("LaunchRevit", "false"),
-                ("PeRevitYears", string.Join(";", revitYears)),
+                .. yearProperties,
                 ("PePublishStagingRoot", publishStagingRoot),
                 ("PeBundleStagingDir", bundleStagingDir),
                 ("PeBundleZipPath", bundleZipPath),
