@@ -5,7 +5,6 @@ using Pe.Revit.Tasks;
 using Pe.Revit.FamilyFoundry.DesiredState;
 using Pe.Revit.Global;
 using Pe.Revit.DocumentData.Parameters;
-using Pe.Revit.Global.Utils.Files;
 using Pe.Revit.SettingsRuntime.Json;
 using System.Globalization;
 
@@ -394,24 +393,9 @@ internal static class RevitFamilyFixtureHarness {
             throw new ArgumentNullException(nameof(document));
         if (definitionSpec == null)
             throw new ArgumentNullException(nameof(definitionSpec));
-        if (string.IsNullOrWhiteSpace(definitionSpec.Name))
-            throw new ArgumentException("Shared parameter name is required.", nameof(definitionSpec));
 
         using var tempSharedParamFile = new TempSharedParamFile(document);
-        var definitionGroup = tempSharedParamFile.DefinitionFile.Groups.get_Item(definitionSpec.GroupName)
-                              ?? tempSharedParamFile.DefinitionFile.Groups.Create(definitionSpec.GroupName);
-        var existing = definitionGroup.Definitions.get_Item(definitionSpec.Name) as ExternalDefinition;
-        if (existing != null)
-            return existing;
-
-        var options = new ExternalDefinitionCreationOptions(definitionSpec.Name, definitionSpec.DataType) {
-            Description = definitionSpec.Description,
-            Visible = definitionSpec.Visible
-        };
-        if (definitionSpec.Guid.HasValue && definitionSpec.Guid.Value != Guid.Empty)
-            options.GUID = definitionSpec.Guid.Value;
-
-        return (ExternalDefinition)definitionGroup.Definitions.Create(options);
+        return SharedParameterBinder.EnsureDefinition(tempSharedParamFile, definitionSpec);
     }
 
     public static FamilyParameter AddSharedFamilyParameter(
@@ -426,18 +410,7 @@ internal static class RevitFamilyFixtureHarness {
             throw new InvalidOperationException("Expected a family document.");
 
         using var tempSharedParamFile = new TempSharedParamFile(familyDocument);
-        var definitionGroup = tempSharedParamFile.DefinitionFile.Groups.get_Item(definitionSpec.GroupName)
-                              ?? tempSharedParamFile.DefinitionFile.Groups.Create(definitionSpec.GroupName);
-        var externalDefinition = definitionGroup.Definitions.get_Item(definitionSpec.Name) as ExternalDefinition;
-        if (externalDefinition == null) {
-            var options = new ExternalDefinitionCreationOptions(definitionSpec.Name, definitionSpec.DataType) {
-                Description = definitionSpec.Description,
-                Visible = definitionSpec.Visible
-            };
-            if (definitionSpec.Guid.HasValue && definitionSpec.Guid.Value != Guid.Empty)
-                options.GUID = definitionSpec.Guid.Value;
-            externalDefinition = (ExternalDefinition)definitionGroup.Definitions.Create(options);
-        }
+        var externalDefinition = SharedParameterBinder.EnsureDefinition(tempSharedParamFile, definitionSpec);
 
         var familyDoc = new FamilyDocument(familyDocument);
         return familyDoc.AddSharedParameter(new SharedParameterDefinition(
@@ -472,24 +445,10 @@ internal static class RevitFamilyFixtureHarness {
         if (definition == null)
             throw new ArgumentNullException(nameof(definition));
 
-        var categorySet = projectDocument.Application.Create.NewCategorySet();
-        foreach (var builtInCategory in categories.Distinct()) {
-            var category = Category.GetCategory(projectDocument, builtInCategory);
-            if (category != null)
-                _ = categorySet.Insert(category);
-        }
-
-        ElementBinding binding = isInstance
-            ? projectDocument.Application.Create.NewInstanceBinding(categorySet)
-            : projectDocument.Application.Create.NewTypeBinding(categorySet);
-
         using var transaction = new Transaction(projectDocument, $"Bind parameter: {definition.Name}");
         _ = transaction.Start();
-        var map = projectDocument.ParameterBindings;
-        var exists = map.Contains(definition);
-        var success = !exists
-            ? map.Insert(definition, binding, groupTypeId)
-            : map.ReInsert(definition, binding, groupTypeId);
+        var exists = projectDocument.ParameterBindings.Contains(definition);
+        var success = SharedParameterBinder.Bind(projectDocument, definition, categories, isInstance, groupTypeId);
         _ = transaction.Commit();
 
         return (exists, success, definition.GetType().Name);
@@ -918,14 +877,6 @@ internal static class RevitFamilyFixtureHarness {
         string DataTypeId
     );
 
-    internal sealed record SharedDefinitionSpec(
-        string Name,
-        ForgeTypeId DataType,
-        string GroupName = "TempGroup",
-        string Description = "",
-        Guid? Guid = null,
-        bool Visible = true
-    );
 
     internal sealed record ProjectBindingProbe(
         string Name,

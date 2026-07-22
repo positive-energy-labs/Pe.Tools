@@ -49,7 +49,7 @@ public sealed class ParameterCollectionArtifactCollectorTests {
 
             var sharedDefinition = RevitFamilyFixtureHarness.CreateSharedParameterDefinition(
                 projectDocument,
-                new RevitFamilyFixtureHarness.SharedDefinitionSpec(
+                new SharedDefinitionSpec(
                     sharedParameterName,
                     SpecTypeId.String.Text,
                     "DaAutomation",

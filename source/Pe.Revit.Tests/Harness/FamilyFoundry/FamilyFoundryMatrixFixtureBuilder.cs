@@ -139,7 +139,7 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
             throw new InvalidOperationException($"Failed to bind shared metadata parameter '{MetadataProjectBoundShared}'.");
     }
 
-    private static RevitFamilyFixtureHarness.SharedDefinitionSpec MetadataSharedTypeTextDefinition() =>
+    private static SharedDefinitionSpec MetadataSharedTypeTextDefinition() =>
         new(
             MetadataSharedTypeText,
             SpecTypeId.String.Text,
@@ -147,7 +147,7 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
             MetadataSharedTypeTextDescription,
             MetadataSharedTypeTextGuid);
 
-    private static RevitFamilyFixtureHarness.SharedDefinitionSpec MetadataSharedInstanceLengthDefinition() =>
+    private static SharedDefinitionSpec MetadataSharedInstanceLengthDefinition() =>
         new(
             MetadataSharedInstanceLength,
             SpecTypeId.Length,
@@ -155,7 +155,7 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
             MetadataSharedInstanceLengthDescription,
             MetadataSharedInstanceLengthGuid);
 
-    private static RevitFamilyFixtureHarness.SharedDefinitionSpec MetadataProjectBoundSharedDefinition() =>
+    private static SharedDefinitionSpec MetadataProjectBoundSharedDefinition() =>
         new(
             MetadataProjectBoundShared,
             SpecTypeId.String.Text,

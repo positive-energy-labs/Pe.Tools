@@ -11,7 +11,7 @@ public sealed class ParameterDefinitionResolutionTests {
         UIApplication uiApplication) {
         var application = uiApplication.Application;
         var sharedGuid = Guid.NewGuid();
-        var externalSpec = new RevitFamilyFixtureHarness.SharedDefinitionSpec(
+        var externalSpec = new SharedDefinitionSpec(
             SharedParameterName,
             SpecTypeId.String.Text,
             "DefinitionResolution",
@@ -100,7 +100,7 @@ public sealed class ParameterDefinitionResolutionTests {
     public void Shared_family_parameter_resolution_is_guid_stable_and_stays_family_scoped(UIApplication uiApplication) {
         var application = uiApplication.Application;
         var sharedGuid = Guid.NewGuid();
-        var sharedSpec = new RevitFamilyFixtureHarness.SharedDefinitionSpec(
+        var sharedSpec = new SharedDefinitionSpec(
             "_PE_FamilyScoped_Shared",
             SpecTypeId.String.Text,
             "DefinitionResolution",

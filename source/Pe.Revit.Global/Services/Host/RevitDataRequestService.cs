@@ -7,7 +7,9 @@ using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.Extensions.FamManager;
 using Pe.Revit.DocumentData.ProjectBrowser;
 using Pe.Revit.DocumentData.ProjectIndex;
+using Pe.Revit.DocumentData.Schedules.Apply;
 using Pe.Revit.DocumentData.Schedules.Collect;
+using Pe.Revit.DocumentData.Schedules.DataTables;
 using Pe.Revit.DocumentData.Selection;
 using Pe.Revit.DocumentData.Sheets;
 using Pe.Revit.Extensions.FamDocument;
@@ -81,6 +83,14 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
     public Task<ParameterValueApplyData> ApplyParameterValuesAsync(
         ParameterValueApplyRequest request, CancellationToken cancellationToken
     ) => this.EnqueueAsync(() => this.ApplyParameterValuesCore(request), cancellationToken);
+
+    public Task<ScheduleApplyData> ApplyScheduleAsync(
+        ScheduleApplyRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.ApplyScheduleCore(request), cancellationToken);
+
+    public Task<DataTableDetailData> GetDataTablesAsync(
+        DataTableDetailRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.GetDataTablesCore(request), cancellationToken);
 
     public Task<ParameterLinksData> GetParameterLinksAsync(
         ParameterLinksDetailRequest request, CancellationToken cancellationToken
@@ -501,6 +511,80 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
                 ex,
                 "Verify the active document is writable and the edits reference valid binding handles, then retry."
             );
+        }
+    }
+
+    private ScheduleApplyData ApplyScheduleCore(ScheduleApplyRequest request) {
+        var document = GetSupportedActiveDocument(RevitBridgeOps.ScheduleApply.Definition);
+        if ((request.Table == null) == (request.Profile == null)) {
+            throw BridgeOperationExceptions.BadRequest(
+                "Exactly one of 'table' or 'profile' must be set.");
+        }
+
+        if (!request.DryRun && document.IsReadOnly) {
+            throw BridgeOperationExceptions.Conflict(
+                "Active document is read-only.",
+                [BridgeOperationExceptions.Issue(
+                    "$",
+                    "ScheduleApplyDocumentReadOnly",
+                    "Active document is read-only.",
+                    "Open a writable project document and retry, or use dryRun=true.")]);
+        }
+
+        try {
+            using var sandbox = DocumentSandbox.BeginCommit(document, "Pe Apply Schedule");
+            var warnings = new List<string>();
+
+            ScheduleApplyData result;
+            ViewSchedule schedule;
+            if (request.Table != null) {
+                result = DataTableEngine.Apply(document, request.Table, warnings);
+                schedule = (ViewSchedule)document.GetElement(result.Table!.ScheduleId.ToElementId());
+            } else {
+                var creation = ScheduleHelper.CreateSchedule(document, request.Profile!);
+                schedule = creation.Schedule;
+                warnings.AddRange(creation.Warnings);
+                result = new ScheduleApplyData {
+                    Profile = new ScheduleApplyProfileSummary(
+                        creation.ScheduleName,
+                        schedule.Id.Value(),
+                        schedule.UniqueId) {
+                        AppliedFields = creation.AppliedFields.Select(field => field.ParameterName).ToList(),
+                        SkippedFields = creation.SkippedFields
+                    },
+                    Warnings = warnings
+                };
+            }
+
+            if (request.Placement != null)
+                result = result with { Placement = DataTableEngine.Place(document, schedule, request.Placement) };
+
+            // DryRun validates the full apply inside the transaction, then rolls back on dispose.
+            if (!request.DryRun)
+                sandbox.Complete();
+
+            return result with { DryRun = request.DryRun };
+        } catch (BridgeOperationException) {
+            throw;
+        } catch (ArgumentException ex) {
+            throw BridgeOperationExceptions.BadRequest(ex.Message);
+        } catch (Exception ex) {
+            throw BridgeOperationExceptions.Unexpected(
+                "ScheduleApplyException",
+                ex,
+                "Verify the active document is a writable project document and the spec references valid sheets/columns, then retry.");
+        }
+    }
+
+    private DataTableDetailData GetDataTablesCore(DataTableDetailRequest request) {
+        var document = GetSupportedActiveDocument(RevitBridgeOps.DataTablesDetail.Definition);
+        try {
+            return DataTableEngine.CollectAll(document, request);
+        } catch (Exception ex) {
+            throw BridgeOperationExceptions.Unexpected(
+                "DataTableDetailException",
+                ex,
+                "Verify the active document is a project document and retry.");
         }
     }
 

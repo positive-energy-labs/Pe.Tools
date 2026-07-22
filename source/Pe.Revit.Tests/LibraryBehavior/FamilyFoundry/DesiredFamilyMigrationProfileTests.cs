@@ -3,7 +3,6 @@ using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.FamilyFoundry.DesiredState;
 using Pe.Revit.Global.Services.Aps;
-using Pe.Revit.Global.Utils.Files;
 using Pe.Shared.RevitData;
 using Pe.Shared.StorageRuntime;
 using ParamModel = Pe.Revit.Global.Services.Aps.ParametersApi.Parameters;
@@ -351,12 +350,11 @@ public sealed class DesiredFamilyMigrationProfileTests {
     }
 
     private static SharedParameterDefinition CreateTestSharedParameterDefinition(TempSharedParamFile tempSharedParamFile) {
-        var options = new ExternalDefinitionCreationOptions("PE_FF_TestSharedValue", SpecTypeId.String.Text) {
-            GUID = TestSharedParameterGuid,
-            Description = "Desired migration shared parameter fixture."
-        };
-        var definition = tempSharedParamFile.TempGroup.Definitions.get_Item("PE_FF_TestSharedValue") as ExternalDefinition
-                         ?? (ExternalDefinition)tempSharedParamFile.TempGroup.Definitions.Create(options);
+        var definition = SharedParameterBinder.EnsureDefinition(tempSharedParamFile, new SharedDefinitionSpec(
+            "PE_FF_TestSharedValue",
+            SpecTypeId.String.Text,
+            Description: "Desired migration shared parameter fixture.",
+            Guid: TestSharedParameterGuid));
         return new SharedParameterDefinition(definition, GroupTypeId.IdentityData, false);
     }
 }

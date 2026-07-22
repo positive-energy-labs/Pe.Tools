@@ -513,7 +513,7 @@ public sealed class ParameterLinksBehaviorTests {
     ) {
         var definition = RevitFamilyFixtureHarness.CreateSharedParameterDefinition(
             document,
-            new RevitFamilyFixtureHarness.SharedDefinitionSpec(
+            new SharedDefinitionSpec(
                 name,
                 dataType,
                 "ParameterLinks",

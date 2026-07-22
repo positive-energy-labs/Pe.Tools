@@ -1,6 +1,6 @@
 using Autodesk.Revit.ApplicationServices;
 
-namespace Pe.Revit.Global.Utils.Files;
+namespace Pe.Revit.Parameters;
 
 /// <summary>
 ///     Wrapper for temporary shared parameter files that automatically cleans up on disposal.
