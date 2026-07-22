@@ -62,7 +62,7 @@ public sealed class SharedParameterMergeMatrixTests {
         var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(
             $"{nameof(Same_guid_shared_parameter_merge_matrix_observes_project_group_precedence_and_family_instance_precedence)}_{testCase.Name}");
         var sharedGuid = Guid.NewGuid();
-        var sharedSpec = new RevitFamilyFixtureHarness.SharedDefinitionSpec(
+        var sharedSpec = new SharedDefinitionSpec(
             $"_PE_MergeMatrix_{testCase.Name}",
             testCase.DataType,
             "MergeMatrix",
@@ -134,7 +134,7 @@ public sealed class SharedParameterMergeMatrixTests {
     private static void AuthorProjectThenFamily(
         Document projectDocument,
         Document familyDocument,
-        RevitFamilyFixtureHarness.SharedDefinitionSpec sharedSpec,
+        SharedDefinitionSpec sharedSpec,
         MergeMatrixCase testCase
     ) {
         var projectDefinition = RevitFamilyFixtureHarness.CreateSharedParameterDefinition(projectDocument, sharedSpec);
@@ -158,7 +158,7 @@ public sealed class SharedParameterMergeMatrixTests {
     private static void AuthorFamilyThenProject(
         Document projectDocument,
         Document familyDocument,
-        RevitFamilyFixtureHarness.SharedDefinitionSpec sharedSpec,
+        SharedDefinitionSpec sharedSpec,
         MergeMatrixCase testCase
     ) {
         using (var transaction = new Transaction(familyDocument, $"Author family parameter {testCase.Name}")) {

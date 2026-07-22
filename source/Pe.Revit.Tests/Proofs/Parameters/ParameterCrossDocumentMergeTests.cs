@@ -11,7 +11,7 @@ public sealed class ParameterCrossDocumentMergeTests {
             nameof(this
                 .Shared_parameter_with_same_guid_merges_across_project_and_family_documents_but_can_keep_family_specific_instance_setting));
         var sharedGuid = Guid.NewGuid();
-        var sharedSpec = new RevitFamilyFixtureHarness.SharedDefinitionSpec(
+        var sharedSpec = new SharedDefinitionSpec(
             "_PE_CrossDoc_SharedGuid",
             SpecTypeId.String.Text,
             "CrossDocMerge",
@@ -89,13 +89,13 @@ public sealed class ParameterCrossDocumentMergeTests {
             nameof(this
                 .Same_name_different_guid_shared_parameters_remain_distinct_across_project_and_family_documents));
         const string parameterName = "_PE_CrossDoc_SameNameDifferentGuid";
-        var projectSpec = new RevitFamilyFixtureHarness.SharedDefinitionSpec(
+        var projectSpec = new SharedDefinitionSpec(
             parameterName,
             SpecTypeId.String.Text,
             "CrossDocMerge",
             "Project-side shared parameter.",
             Guid.NewGuid());
-        var familySpec = new RevitFamilyFixtureHarness.SharedDefinitionSpec(
+        var familySpec = new SharedDefinitionSpec(
             parameterName,
             SpecTypeId.String.Text,
             "CrossDocMerge",
@@ -166,7 +166,7 @@ public sealed class ParameterCrossDocumentMergeTests {
         var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(
             nameof(this.Same_name_different_datatype_parameters_can_coexist_across_project_and_family_documents));
         const string parameterName = "_PE_CrossDoc_SameNameDifferentDatatype";
-        var projectSpec = new RevitFamilyFixtureHarness.SharedDefinitionSpec(
+        var projectSpec = new SharedDefinitionSpec(
             parameterName,
             SpecTypeId.String.Text,
             "CrossDocMerge",

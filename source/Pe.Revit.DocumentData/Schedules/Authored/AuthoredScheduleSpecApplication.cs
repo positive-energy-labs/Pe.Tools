@@ -240,14 +240,7 @@ internal static class AuthoredScheduleSpecApplication {
     private static List<string> ApplyProperties(this ScheduleFieldSpec spec, ScheduleField field) {
         var warnings = new List<string>();
 
-        if (!string.IsNullOrEmpty(spec.ColumnHeaderOverride))
-            field.ColumnHeading = spec.ColumnHeaderOverride;
-
-        field.IsHidden = spec.IsHidden;
-
-        if (spec.ColumnWidth > 0)
-            field.SheetColumnWidth = spec.ColumnWidth.Value;
-
+        field.ApplyColumnBasics(spec.ColumnHeaderOverride, spec.IsHidden, spec.ColumnWidth);
         field.HorizontalAlignment = spec.HorizontalAlignment.ToRevit();
 
         var displayType = spec.DisplayType.ToRevit();

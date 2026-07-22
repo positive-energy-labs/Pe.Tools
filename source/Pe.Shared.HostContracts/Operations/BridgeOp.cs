@@ -45,6 +45,8 @@ public interface IRevitDataService {
     Task<FamilyEditorOpenData> OpenFamilyEditorAsync(FamilyEditorOpenRequest request, CancellationToken cancellationToken);
     Task<FamilyEditorApplyData> ApplyFamilyEditorEditsAsync(FamilyEditorApplyRequest request, CancellationToken cancellationToken);
     Task<ParameterValueApplyData> ApplyParameterValuesAsync(ParameterValueApplyRequest request, CancellationToken cancellationToken);
+    Task<ScheduleApplyData> ApplyScheduleAsync(ScheduleApplyRequest request, CancellationToken cancellationToken);
+    Task<DataTableDetailData> GetDataTablesAsync(DataTableDetailRequest request, CancellationToken cancellationToken);
     Task<ParameterLinksData> GetParameterLinksAsync(ParameterLinksDetailRequest request, CancellationToken cancellationToken);
     Task<ParameterLinksData> ApplyParameterLinksAsync(ParameterLinksApplyRequest request, CancellationToken cancellationToken);
     Task<ScheduleCoverageData> GetScheduleCoverageAsync(ScheduleCoverageRequest request, CancellationToken cancellationToken);

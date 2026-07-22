@@ -458,6 +458,62 @@ public static class RevitBridgeOps {
             static (request, context, ct) => context.RevitData.ApplyParameterValuesAsync(request, ct)
         );
 
+    public static readonly BridgeOp ScheduleApply =
+        BridgeOp.Create<ScheduleApplyRequest, ScheduleApplyData>(
+            "revit.apply.schedule",
+            "Apply Schedule",
+            HostOperationAgentMetadata.Create(
+                "Create or update a schedule in one host-owned transaction. Two lanes: 'table' upserts a synthetic data table (a key schedule whose rows are freely user-editable and whose cells are shared parameters on stable row elements — ideal for arbitrary agent-authored tables like design conditions or install notes); 'profile' creates a regular element-driven schedule from an authored schedule profile. Either lane can also place the schedule on a sheet.",
+                new[] { "schedules", "data-table", "key-schedule", "table", "apply", "create", "upsert", "rows", "sheet-placement", "mutation" },
+                intent: HostOperationIntent.Mutate,
+                requiresActiveDocument: true,
+                costTier: HostOperationCostTier.Mutation,
+                requestExamples: [
+                    Example(
+                        "design-conditions data table on a sheet",
+                        "Upserts rows by stable key; users can edit every cell in Revit afterward. Number columns take invariant-culture strings; units belong in headings.",
+                        """
+                        { "table": { "name": "ASHRAE Design Conditions", "columns": [{ "heading": "Condition" }, { "heading": "Value (°F)", "kind": "Number" }], "rows": [{ "key": "cooling-db", "values": ["Cooling Design DB", "94.1"] }, { "key": "heating-db", "values": ["Heating Design DB", "12.3"] }] }, "placement": { "sheet": "M-001" } }
+                        """
+                    ),
+                    Example(
+                        "regular schedule from an authored profile",
+                        "Creates a new element-driven schedule from a schedule profile (same shape revit.matrix.schedule-profiles reads).",
+                        """
+                        { "profile": { "name": "Mechanical Equipment", "categoryName": "Mechanical Equipment", "fields": [{ "fieldName": "Mark" }, { "fieldName": "Type Comments" }] } }
+                        """
+                    )
+                ],
+                callGuidance: [
+                    "Exactly one of table or profile per call. Table applies are idempotent upserts keyed by table name + row key: re-running refreshes cell values, missing rows are deleted only with pruneMissingRows=true, and user edits to un-touched cells survive.",
+                    "Read current table state (including user edits and row element uniqueIds for parameter-links) with revit.detail.data-tables before re-applying. Use dryRun=true to validate without persisting; returned element handles are discarded ids in that mode."
+                ]
+            ),
+            static (request, context, ct) => context.RevitData.ApplyScheduleAsync(request, ct)
+        );
+
+    public static readonly BridgeOp DataTablesDetail =
+        BridgeOp.Create<DataTableDetailRequest, DataTableDetailData>(
+            "revit.detail.data-tables",
+            "Inspect Data Tables",
+            HostOperationAgentMetadata.Create(
+                "Read every synthetic data table (or specific ones by name): columns, current cell values including user edits, stable row element ids/uniqueIds, and sheet placements. Row uniqueIds are the addressing surface for parameter-links and external table UIs.",
+                new[] { "schedules", "data-table", "key-schedule", "rows", "values", "handles", "sheet-placement" },
+                requiresActiveDocument: true,
+                requestExamples: [
+                    Example(
+                        "all data tables",
+                        "Empty request lists every data table with values and handles.",
+                        """{ }"""
+                    )
+                ],
+                callGuidance: [
+                    "Data tables are key schedules on the Pe data-table category; regular schedules never appear here. Use revit.catalog.schedules for those."
+                ]
+            ),
+            static (request, context, ct) => context.RevitData.GetDataTablesAsync(request, ct)
+        );
+
     public static readonly BridgeOp ParameterLinksDetail =
         BridgeOp.Create<ParameterLinksDetailRequest, ParameterLinksData>(
             "revit.detail.parameter-links",

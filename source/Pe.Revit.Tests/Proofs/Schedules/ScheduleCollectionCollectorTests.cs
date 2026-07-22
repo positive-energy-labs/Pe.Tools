@@ -568,7 +568,7 @@ public sealed class ScheduleCollectionCollectorTests {
 
             var sharedDefinition = RevitFamilyFixtureHarness.CreateSharedParameterDefinition(
                 projectDocument,
-                new RevitFamilyFixtureHarness.SharedDefinitionSpec(
+                new SharedDefinitionSpec(
                     parameterName,
                     SpecTypeId.AirFlow,
                     "Schedules",
@@ -723,7 +723,7 @@ public sealed class ScheduleCollectionCollectorTests {
     ) {
         var sharedDefinition = RevitFamilyFixtureHarness.CreateSharedParameterDefinition(
             projectDocument,
-            new RevitFamilyFixtureHarness.SharedDefinitionSpec(
+            new SharedDefinitionSpec(
                 "Discipline",
                 SpecTypeId.String.Text,
                 "Schedules",

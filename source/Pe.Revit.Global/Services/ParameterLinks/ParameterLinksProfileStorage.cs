@@ -1,5 +1,5 @@
 using Newtonsoft.Json;
-using Pe.Revit.Global.Utils.Files;
+using Pe.Revit.Parameters;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Serialization;
 using RevitDocument = Autodesk.Revit.DB.Document;
@@ -49,29 +49,16 @@ internal sealed class ParameterLinksProfileStorage {
         if (existing != null)
             return existing;
 
-        var sharedParameter = SharedParameterElement.Lookup(document, ProfileParameterGuid);
-        using var tempFile = sharedParameter == null ? new TempSharedParamFile(document) : null;
-        Definition definition = sharedParameter?.GetDefinition()
-            ?? tempFile!.TempGroup.Definitions.Create(new ExternalDefinitionCreationOptions(
+        _ = SharedParameterBinder.EnsureProjectBinding(
+            document,
+            new SharedDefinitionSpec(
                 ProfileParameterName,
-                SpecTypeId.String.Text) {
-                GUID = ProfileParameterGuid,
-                Visible = false,
-                UserModifiable = false,
-                Description = "Versioned Pe.Tools parameter-link profile."
-            });
-
-        var categories = document.Application.Create.NewCategorySet();
-        var projectInformation = Category.GetCategory(document, BuiltInCategory.OST_ProjectInformation)
-            ?? throw new InvalidOperationException("Project Information category is unavailable.");
-        _ = categories.Insert(projectInformation);
-        var binding = document.Application.Create.NewInstanceBinding(categories);
-        var bindings = document.ParameterBindings;
-        var bound = bindings.Contains(definition)
-            ? bindings.ReInsert(definition, binding, GroupTypeId.Data)
-            : bindings.Insert(definition, binding, GroupTypeId.Data);
-        if (!bound)
-            throw new InvalidOperationException($"Could not bind '{ProfileParameterName}' to Project Information.");
+                SpecTypeId.String.Text,
+                Description: "Versioned Pe.Tools parameter-link profile.",
+                Guid: ProfileParameterGuid,
+                Visible: false,
+                UserModifiable: false),
+            [BuiltInCategory.OST_ProjectInformation]);
 
         document.Regenerate();
         return document.ProjectInformation?.get_Parameter(ProfileParameterGuid)

@@ -5,9 +5,9 @@ public sealed class ParameterCollisionMatrixTests {
     private sealed record CollisionMatrixCase(
         string Name,
         bool AuthorProjectFirst,
-        RevitFamilyFixtureHarness.SharedDefinitionSpec ProjectSpec,
+        SharedDefinitionSpec ProjectSpec,
         RevitFamilyFixtureHarness.ParameterDefinitionSpec? FamilyPlainSpec,
-        RevitFamilyFixtureHarness.SharedDefinitionSpec? FamilySharedSpec,
+        SharedDefinitionSpec? FamilySharedSpec,
         string ExpectedProjectIdentityKind,
         string ExpectedFamilyIdentityKind,
         bool ExpectDistinctSharedGuids,
@@ -28,14 +28,14 @@ public sealed class ParameterCollisionMatrixTests {
             new CollisionMatrixCase(
                 "project_first__same_name__different_shared_guid",
                 true,
-                new RevitFamilyFixtureHarness.SharedDefinitionSpec(
+                new SharedDefinitionSpec(
                     sameNameDifferentGuid,
                     SpecTypeId.String.Text,
                     "CollisionMatrix",
                     "Project-side shared parameter.",
                     Guid.NewGuid()),
                 null,
-                new RevitFamilyFixtureHarness.SharedDefinitionSpec(
+                new SharedDefinitionSpec(
                     sameNameDifferentGuid,
                     SpecTypeId.String.Text,
                     "CollisionMatrix",
@@ -52,14 +52,14 @@ public sealed class ParameterCollisionMatrixTests {
             new CollisionMatrixCase(
                 "family_first__same_name__different_shared_guid",
                 false,
-                new RevitFamilyFixtureHarness.SharedDefinitionSpec(
+                new SharedDefinitionSpec(
                     sameNameDifferentGuid,
                     SpecTypeId.String.Text,
                     "CollisionMatrix",
                     "Project-side shared parameter authored second.",
                     Guid.NewGuid()),
                 null,
-                new RevitFamilyFixtureHarness.SharedDefinitionSpec(
+                new SharedDefinitionSpec(
                     sameNameDifferentGuid,
                     SpecTypeId.String.Text,
                     "CollisionMatrix",
@@ -76,7 +76,7 @@ public sealed class ParameterCollisionMatrixTests {
             new CollisionMatrixCase(
                 "project_first__same_name__different_datatype",
                 true,
-                new RevitFamilyFixtureHarness.SharedDefinitionSpec(
+                new SharedDefinitionSpec(
                     sameNameDifferentDatatype,
                     SpecTypeId.String.Text,
                     "CollisionMatrix",
@@ -99,7 +99,7 @@ public sealed class ParameterCollisionMatrixTests {
             new CollisionMatrixCase(
                 "family_first__same_name__different_datatype",
                 false,
-                new RevitFamilyFixtureHarness.SharedDefinitionSpec(
+                new SharedDefinitionSpec(
                     sameNameDifferentDatatype,
                     SpecTypeId.String.Text,
                     "CollisionMatrix",
@@ -225,7 +225,7 @@ public sealed class ParameterCollisionMatrixTests {
 
     private static void AuthorProject(
         Document projectDocument,
-        RevitFamilyFixtureHarness.SharedDefinitionSpec projectSpec
+        SharedDefinitionSpec projectSpec
     ) {
         var projectDefinition = RevitFamilyFixtureHarness.CreateSharedParameterDefinition(projectDocument, projectSpec);
         RevitFamilyFixtureHarness.AddOrUpdateProjectParameterBinding(
