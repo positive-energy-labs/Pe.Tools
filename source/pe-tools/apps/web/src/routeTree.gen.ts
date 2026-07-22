@@ -22,6 +22,7 @@ import { Route as FamilyAuditRouteImport } from "./routes/family-audit";
 import { Route as FamilyRouteImport } from "./routes/family";
 import { Route as DocLabRouteImport } from "./routes/doc-lab";
 import { Route as DesignSystemRouteImport } from "./routes/design-system";
+import { Route as DataTablesRouteImport } from "./routes/data-tables";
 import { Route as ChatRouteImport } from "./routes/chat";
 import { Route as IndexRouteImport } from "./routes/index";
 import { Route as PocTypeRouteImport } from "./routes/poc.type";
@@ -108,6 +109,11 @@ const DocLabRoute = DocLabRouteImport.update({
 const DesignSystemRoute = DesignSystemRouteImport.update({
   id: "/design-system",
   path: "/design-system",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const DataTablesRoute = DataTablesRouteImport.update({
+  id: "/data-tables",
+  path: "/data-tables",
   getParentRoute: () => rootRouteImport,
 } as any);
 const ChatRoute = ChatRouteImport.update({
@@ -224,6 +230,7 @@ const ApiPdfAuditParseParseIdRoute = ApiPdfAuditParseParseIdRouteImport.update({
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
   "/chat": typeof ChatRoute;
+  "/data-tables": typeof DataTablesRoute;
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
   "/family": typeof FamilyRoute;
@@ -261,6 +268,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   "/": typeof IndexRoute;
   "/chat": typeof ChatRoute;
+  "/data-tables": typeof DataTablesRoute;
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
   "/family": typeof FamilyRoute;
@@ -299,6 +307,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport;
   "/": typeof IndexRoute;
   "/chat": typeof ChatRoute;
+  "/data-tables": typeof DataTablesRoute;
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
   "/family": typeof FamilyRoute;
@@ -338,6 +347,7 @@ export interface FileRouteTypes {
   fullPaths:
     | "/"
     | "/chat"
+    | "/data-tables"
     | "/design-system"
     | "/doc-lab"
     | "/family"
@@ -375,6 +385,7 @@ export interface FileRouteTypes {
   to:
     | "/"
     | "/chat"
+    | "/data-tables"
     | "/design-system"
     | "/doc-lab"
     | "/family"
@@ -412,6 +423,7 @@ export interface FileRouteTypes {
     | "__root__"
     | "/"
     | "/chat"
+    | "/data-tables"
     | "/design-system"
     | "/doc-lab"
     | "/family"
@@ -450,6 +462,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute;
   ChatRoute: typeof ChatRoute;
+  DataTablesRoute: typeof DataTablesRoute;
   DesignSystemRoute: typeof DesignSystemRoute;
   DocLabRoute: typeof DocLabRoute;
   FamilyRoute: typeof FamilyRoute;
@@ -575,6 +588,13 @@ declare module "@tanstack/react-router" {
       path: "/design-system";
       fullPath: "/design-system";
       preLoaderRoute: typeof DesignSystemRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/data-tables": {
+      id: "/data-tables";
+      path: "/data-tables";
+      fullPath: "/data-tables";
+      preLoaderRoute: typeof DataTablesRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/chat": {
@@ -748,6 +768,7 @@ const ApiPdfAuditParseRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ChatRoute: ChatRoute,
+  DataTablesRoute: DataTablesRoute,
   DesignSystemRoute: DesignSystemRoute,
   DocLabRoute: DocLabRoute,
   FamilyRoute: FamilyRoute,
