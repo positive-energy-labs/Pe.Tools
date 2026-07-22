@@ -329,6 +329,14 @@ One PATH entry — the product shims dir — is the condoned way onto PATH; ever
 file in that dir. A shim runs dev when ITS `{name}.dev.txt` exists (written by `dev link`), installed
 otherwise; `--installed` / `PE_LANE=installed` forces the installed target.
 
+Worktree identity is by location, like git: clients derive their checkout root by walking up from
+cwd (`.git` + `Pe.Tools.slnx`), so an agent working in a worktree automatically addresses that
+worktree's dev host — no env vars. `PE_LANE` / `PE_TOOLS_HOST_SOURCE_DIR` are spawn plumbing (a
+supervisor telling its child who it is), never user configuration. To target explicitly, `--host`
+(and `PE_TOOLS_HOST_BASE_URL`) accept a URL or a lane token: `installed`, `dev` (this location's
+worktree), or a path inside any checkout. `pe-revit service list` is the phone book;
+`pe-revit sessions` lists Revit sessions across lanes machine-wide.
+
 If you used the old flow on this machine, clean up once: delete `%LOCALAPPDATA%\Positive Energy\Pe.Tools\bin\pea\*.cmd`
 and remove the `bin\pea` / Pe.Dev.Cli output-dir entries from your user PATH (the SDK never writes those).
 
