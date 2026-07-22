@@ -29,6 +29,21 @@ NodeRuntime.runMain(
         (server) => Effect.promise(() => server.close()),
       );
 
+      // Effect's NodeHttpServer registers its own unconditional 'upgrade' listener that routes
+      // every WebSocket handshake through the router — which answers vite's HMR handshake with
+      // the 426 stray-client route and kills the socket, so the web client reload-loops forever.
+      // Vite registered its HMR listener in createViteServer above; shield the HMR path from any
+      // listener registered after this point so vite alone owns those sockets.
+      const register = nodeServer.on.bind(nodeServer);
+      const shielded =
+        (listener: (...args: unknown[]) => void) =>
+        (req: { url?: string }, ...rest: unknown[]) => {
+          if (req.url?.startsWith(VITE_HMR_PATH)) return;
+          listener(req, ...rest);
+        };
+      nodeServer.on = nodeServer.addListener = ((event: string, listener: never) =>
+        register(event, event === "upgrade" ? shielded(listener) : listener)) as never;
+
       yield* hostProgram({
         beforeHost: Effect.void,
         nodeServer,
