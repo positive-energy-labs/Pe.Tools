@@ -16,7 +16,7 @@ Owns the repo-level pack and publish automation.
 - `BuildArtifactLayout.cs` - repo-local `.artifacts` topology: build, publish, staging, package, installer, and tools roots.
 - `ProductLayoutAuthority.cs` - build/install projection authority that composes repo root, `Pe.Shared.Product` layout, artifact layout, and SDK installer payload paths.
 - `Modules/CreateBundleModule.cs` - publishes the Revit matrix once for both desktop and installer packaging.
-- `Modules/CreateAutomationBundleModule.cs`, `Modules/CreateInstallerModule.cs` - remaining package outputs.
+- `Modules/CreateInstallerModule.cs` - remaining package outputs. (`Modules/CreateAutomationBundleModule.cs` is preserved-for-posterity: unregistered, no pack target — the automation worker is unused.)
 - `Modules/ValidateSolutionParityModule.cs` - `.slnx` parity validation without treating `.slnx` as build truth.
 
 ## Validation
@@ -40,9 +40,9 @@ See `../BUILD.md` for the complete build/runtime decision table. This executable
   Host and Pea, then consumes that Revit output. The checked
   `product.payloads.json` goes unchanged to SDK `pe-revit install package` and `pe-revit msi`; do not
   restore product-owned manifest rewriting or zip composition.
-- `CreateAutomationBundleModule` selects the worker/year matrix and delegates each engine artifact to
-  SDK `PeCreateAppBundle`; do not restore `Autodesk.PackageBuilder`, manual `.addin`/bundle XML, or zip
-  composition here.
+- `CreateAutomationBundleModule` (preserved-for-posterity, unregistered) selects the worker/year
+  matrix and delegates each engine artifact to SDK `PeCreateAppBundle`; do not restore
+  `Autodesk.PackageBuilder`, manual `.addin`/bundle XML, or zip composition here.
 - `./build` owns the isolated build mode and writes to `.artifacts/...` through `ProductLayoutAuthority` / `BuildArtifactLayout`.
 - The default Revit target remains `Debug.R25`.
 - `--configuration <BuildType>` narrows ordinary desktop/automation packaging to one selected
