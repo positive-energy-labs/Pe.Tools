@@ -20,6 +20,30 @@ export const readFileStringOrEmpty = Effect.fnUntraced(function* (
   return result._tag === "Success" ? result.success : "";
 });
 
+/**
+ * BOM-aware text read for files whose encoding the writer owns — Revit writes
+ * Revit.ini as UTF-16 LE, which a plain UTF-8 decode turns into NUL-interleaved
+ * garbage that silently matches nothing.
+ */
+export const readFileStringBomAwareOrEmpty = Effect.fnUntraced(function* (
+  path: string,
+  operationKey: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const result = yield* Effect.result(
+    fs.readFile(path).pipe(Effect.mapError((error) => localOpFileError(operationKey, error))),
+  );
+  if (result._tag === "Failure") return "";
+  const bytes = Buffer.from(result.success);
+  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe)
+    return bytes.subarray(2).toString("utf16le");
+  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff)
+    return bytes.subarray(2).swap16().toString("utf16le");
+  if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf)
+    return bytes.subarray(3).toString("utf8");
+  return bytes.toString("utf8");
+});
+
 export const writeFileStringAtomic = Effect.fnUntraced(function* (
   path: string,
   content: string,
