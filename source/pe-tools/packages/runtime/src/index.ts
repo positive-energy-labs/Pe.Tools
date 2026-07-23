@@ -1,4 +1,5 @@
 export * from "./runtime.ts";
+export * from "./analytics.ts";
 export * from "./acp-server.ts";
 export * from "./agent-controller-web.ts";
 export * from "./route-workspace.ts";

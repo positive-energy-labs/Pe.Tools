@@ -3,6 +3,12 @@
   "vendor": "Positive Energy",
   "releases": "positive-energy-labs/Pe.Tools",
   "version": "0.6.16",
+  "telemetry": {
+    "posthog": {
+      "apiKey": "phc_xKiWciccdu558TVAT6ohYZ5tRQYGboW4WxF47na9QKTo",
+      "host": "https://us.i.posthog.com"
+    }
+  },
   "release": {
     "artifacts": ["RevitBundle", "Msi", "InstallZip"],
     "smokeService": "host",
