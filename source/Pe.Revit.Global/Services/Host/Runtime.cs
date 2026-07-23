@@ -78,7 +78,10 @@ public static class HostRuntime {
 
             moduleRegistry = _moduleRegistry;
             revitTaskQueue = _revitTaskQueue;
-            connectionOptions = _connectionOptions;
+            // Re-resolve on every connect: the lane-aware launcher pins the service name and the
+            // service file's port can change under takeover/restart. The Initialize-time snapshot
+            // predates both, so reusing it dialed the installed host from dev sessions.
+            connectionOptions = _connectionOptions = BridgeConnectionOptions.FromEnvironment();
             previousAgent = _agent;
             _agent = null;
         }
