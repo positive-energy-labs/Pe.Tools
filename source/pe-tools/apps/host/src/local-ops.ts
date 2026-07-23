@@ -26,7 +26,12 @@ import {
   type SettingsWorkspacesData,
 } from "@pe/host-contracts/operation-types";
 import type { BridgeSessionView } from "./bridge.ts";
-import { readDirectoryEntriesOrEmpty, readFileStringOrEmpty, statOrNull } from "./files/index.ts";
+import {
+  readDirectoryEntriesOrEmpty,
+  readFileStringBomAwareOrEmpty,
+  readFileStringOrEmpty,
+  statOrNull,
+} from "./files/index.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { productSettingsRootPath } from "./product-paths.ts";
 export {
@@ -301,7 +306,10 @@ function normalizeRecentDocumentsRequest(
 ): Required<RevitRecentDocumentsRequest> {
   return {
     includeRegistryMru: input.includeRegistryMru === true,
-    localFilesOnly: input.localFilesOnly !== false,
+    // Default false: cloud models are first-class recents (cld:// rows carry the
+    // guids revit.apply.document.open needs); hiding them made the op useless on
+    // cloud-first machines.
+    localFilesOnly: input.localFilesOnly === true,
     revitYear: input.revitYear ?? null,
   };
 }
@@ -341,7 +349,8 @@ const collectRecentDocumentsFromRevitIniFile: (
   directory: string,
   revitYear: string,
 ) => RecentDocumentsEffect = Effect.fnUntraced(function* (directory: string, revitYear: string) {
-  const text = yield* readFileStringOrEmpty(
+  // Revit writes Revit.ini as UTF-16 LE; a UTF-8 read silently parses zero entries.
+  const text = yield* readFileStringBomAwareOrEmpty(
     join(directory, "Revit.ini"),
     "revit.catalog.recent-documents",
   );
@@ -511,7 +520,9 @@ function getRecentDocumentPathKind(path: string): RevitRecentDocumentPathKind {
 function getRecentDocumentTitle(path: string, pathKind: RevitRecentDocumentPathKind): string {
   if (pathKind === RevitRecentDocumentPathKind.LocalPath) return basename(path);
   const separatorIndex = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
-  return decodeURIComponent(separatorIndex >= 0 ? path.slice(separatorIndex + 1) : path);
+  const segment = decodeURIComponent(separatorIndex >= 0 ? path.slice(separatorIndex + 1) : path);
+  // cld:// segments embed the model guid before the display name: {guid}Name.rvt
+  return segment.replace(/^\{[0-9a-fA-F-]{36}\}/, "");
 }
 
 function getRevitYear(name: string): string | null {
