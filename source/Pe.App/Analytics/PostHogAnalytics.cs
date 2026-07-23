@@ -30,17 +30,34 @@ internal static class PostHogAnalytics {
 
     internal static void Initialize() {
         try {
-            var path = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                "Pe.Tools", "settings", "Global", "settings.json");
-            if (!File.Exists(path)) return;
-            var posthog = JObject.Parse(File.ReadAllText(path))["posthog"];
-            var apiKey = posthog?["apiKey"]?.ToString()?.Trim();
-            if (string.IsNullOrEmpty(apiKey)) return;
-            _apiKey = apiKey;
-            _host = posthog?["host"]?.ToString()?.TrimEnd('/') ?? _host;
+            // Installed product manifest is AUTHORITATIVE (the key rides the release, so
+            // installed machines need zero settings seeding); Documents settings.json stays
+            // the dev/override fallback. Mirrors analytics.ts — resolution order must match.
+            var manifest = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Positive Energy", "Pe.Tools", "product.payloads.json");
+            if (!TryAdopt(manifest, root => root["telemetry"]?["posthog"])) {
+                var settings = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    "Pe.Tools", "settings", "Global", "settings.json");
+                TryAdopt(settings, root => root["posthog"]);
+            }
         } catch {
             // Analytics must never affect startup.
+        }
+    }
+
+    private static bool TryAdopt(string path, Func<JObject, JToken?> select) {
+        try {
+            if (!File.Exists(path)) return false;
+            var posthog = select(JObject.Parse(File.ReadAllText(path)));
+            var apiKey = posthog?["apiKey"]?.ToString()?.Trim();
+            if (string.IsNullOrEmpty(apiKey)) return false;
+            _apiKey = apiKey;
+            _host = posthog?["host"]?.ToString()?.TrimEnd('/') ?? _host;
+            return true;
+        } catch {
+            return false;
         }
     }
 

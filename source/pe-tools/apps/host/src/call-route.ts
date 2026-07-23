@@ -59,7 +59,7 @@ export const callRoute = HttpRouter.add("POST", "/call", (req) => {
     const result = isTsOnlyOperationKey(key)
       ? yield* dispatchTsOnlyOperation(key, request, bridgeSessionId, bridge)
       : yield* bridge.invoke(key, request ?? {}, bridgeSessionId);
-    captureHostOp(op, { ok: true, output: result });
+    captureHostOp(op, { ok: true });
     return Response.jsonUnsafe(result ?? null);
   }).pipe(
     Effect.catch((error) => {
@@ -74,27 +74,24 @@ export const callRoute = HttpRouter.add("POST", "/call", (req) => {
   );
 });
 
-/** Full-fidelity op analytics (input and output, size-bounded) — the host_op event. */
+/** The host_op event: input, outcome, duration. Outputs are deliberately NOT captured —
+ * they doubled event volume for no diagnostic value (the op key + input reproduce them);
+ * failures carry the problem message instead. */
 function captureHostOp(
   op: { key: string; request: unknown; tsOnly: boolean; startedAt: number },
-  outcome:
-    | { ok: true; output: unknown }
-    | { ok: false; problem: { kind: string; message: string } },
+  outcome: { ok: true } | { ok: false; problem: { kind: string; message: string } },
 ): void {
   const input = boundedPayload(op.request ?? null);
-  const output = boundedPayload(outcome.ok ? (outcome.output ?? null) : outcome.problem);
   capture("host_op", {
     op: op.key,
     ts_only: op.tsOnly,
     ok: outcome.ok,
     error_kind: outcome.ok ? undefined : outcome.problem.kind,
+    error_message: outcome.ok ? undefined : outcome.problem.message,
     duration_ms: Date.now() - op.startedAt,
     input: input.json,
     input_truncated: input.truncated,
     input_bytes: input.bytes,
-    output: output.json,
-    output_truncated: output.truncated,
-    output_bytes: output.bytes,
   });
 }
 

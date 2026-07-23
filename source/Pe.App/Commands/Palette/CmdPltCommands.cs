@@ -1,5 +1,6 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
+using Pe.App.Analytics;
 using Pe.App.Commands.Palette.CommandPalette;
 using Pe.App.Commands.Palette.TaskPalette;
 using Pe.App.Tasks;
@@ -59,6 +60,7 @@ public class CmdPltCommands : IExternalCommand {
                                 Execute = item => {
                                     if (item is not PostableCommandItem command) return;
                                     var (success, error) = Revit.Global.Lib.Commands.Execute(uiapp, command.Command);
+                                    CaptureAction("commands", command.Command.Value, success);
                                     if (error is not null) Log.Error("Error: " + error.Message + error.StackTrace);
                                     if (success) commandHelper.UpdateCommandUsage(command.Command);
                                 },
@@ -82,9 +84,11 @@ public class CmdPltCommands : IExternalCommand {
                                         Console.WriteLine($"Executing task: {task.Task.Name}");
                                         task.Task.Execute(uiapp);
                                         Console.WriteLine($"Task '{task.Task.Name}' completed\n");
+                                        CaptureAction("tasks", task.Id, ok: true);
                                     } catch (Exception ex) {
                                         Console.WriteLine($"Task '{task.Task.Name}' failed: {ex.Message}");
                                         Console.WriteLine(ex.StackTrace);
+                                        CaptureAction("tasks", task.Id, ok: false);
                                     }
                                 }
                             }
@@ -95,15 +99,17 @@ public class CmdPltCommands : IExternalCommand {
                             new PaletteAction<IPaletteListItem> {
                                 Name = "Run — safe (changes discarded)",
                                 Execute = item => {
-                                    if (item is PodScriptTaskItem pod)
-                                        PodScriptRunner.Run(uiapp, pod, ScriptPermissionMode.ReadOnly);
+                                    if (item is not PodScriptTaskItem pod) return;
+                                    CaptureAction("scripts", pod.Id, mode: "read-only");
+                                    PodScriptRunner.Run(uiapp, pod, ScriptPermissionMode.ReadOnly);
                                 }
                             },
                             new PaletteAction<IPaletteListItem> {
                                 Name = "Run — full (can modify model)",
                                 Execute = item => {
-                                    if (item is PodScriptTaskItem pod)
-                                        PodScriptRunner.Run(uiapp, pod, ScriptPermissionMode.WriteTransaction);
+                                    if (item is not PodScriptTaskItem pod) return;
+                                    CaptureAction("scripts", pod.Id, mode: "write");
+                                    PodScriptRunner.Run(uiapp, pod, ScriptPermissionMode.WriteTransaction);
                                 }
                             }
                         ) { FilterKeySelector = item => (item as PodScriptTaskItem)?.PodName ?? string.Empty }
@@ -117,6 +123,21 @@ public class CmdPltCommands : IExternalCommand {
             throw new InvalidOperationException($"Error opening command palette: {ex.Message}");
         }
     }
+
+    /// <summary>
+    ///     The Do palette is the one funnel for command/task/script intent (ribbon buttons are
+    ///     migrating into Tasks), so its actions are the single palette_action analytics seam —
+    ///     ribbon_click covers the ribbon until that migration lands.
+    /// </summary>
+    private static void CaptureAction(string tab, string item, bool? ok = null, string? mode = null) =>
+        PostHogAnalytics.Capture("palette_action", new Dictionary<string, object?> {
+            ["component"] = "revit",
+            ["palette"] = "do",
+            ["tab"] = tab,
+            ["item"] = item,
+            ["ok"] = ok,
+            ["mode"] = mode,
+        });
 
     /// <summary>
     ///     Every entrypoint of every valid pod becomes a palette item. Invalid pods are skipped
