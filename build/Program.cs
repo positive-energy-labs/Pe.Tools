@@ -79,9 +79,6 @@ if (parsedArgs.Commands.Contains("pack")) {
     if (parsedArgs.PackTargets.Contains(PackTarget.Desktop))
         _ = builder.Services.AddModule<CreateBundleModule>();
 
-    if (parsedArgs.PackTargets.Contains(PackTarget.Automation))
-        _ = builder.Services.AddModule<CreateAutomationBundleModule>();
-
     if (parsedArgs.PackTargets.Contains(PackTarget.Installer))
         _ = builder.Services.AddModule<CreateInstallerModule>();
 }
@@ -249,8 +246,10 @@ namespace Build {
     ) {
         private static readonly HashSet<string> SupportedCommands =
             ["pack", "publish"];
+        // Automation appbundles are preserved-for-posterity (CreateAutomationBundleModule stays
+        // in-tree, unregistered): the worker is unused and nothing in release.artifacts needs it.
         private static readonly HashSet<string> SupportedPackTargets =
-            new(StringComparer.OrdinalIgnoreCase) { "all", "desktop", "installer", "automation" };
+            new(StringComparer.OrdinalIgnoreCase) { "all", "desktop", "installer" };
 
         public static BuildCliArguments Parse(IReadOnlyList<string> args) {
             string? configuration = null;
@@ -278,7 +277,7 @@ namespace Build {
             }
 
             if (commands.Count == 0)
-                throw new ArgumentException("Expected at least one command. Supported commands: pack, publish. Pack targets: desktop, installer, automation, all.");
+                throw new ArgumentException("Expected at least one command. Supported commands: pack, publish. Pack targets: desktop, installer, all.");
 
             var unsupportedCommands = commands
                 .Where(command => !SupportedCommands.Contains(command))
@@ -286,10 +285,10 @@ namespace Build {
                 .ToArray();
             if (unsupportedCommands.Length > 0)
                 throw new ArgumentException(
-                    $"Unsupported command(s): {string.Join(", ", unsupportedCommands)}. Supported commands: pack, publish. Pack targets: desktop, installer, automation, all.");
+                    $"Unsupported command(s): {string.Join(", ", unsupportedCommands)}. Supported commands: pack, publish. Pack targets: desktop, installer, all.");
 
             if (explicitPackTargets.Count > 0 && !commands.Contains("pack"))
-                throw new ArgumentException("Pack targets require the pack command. Use: pack desktop, pack installer, pack automation, or pack all.");
+                throw new ArgumentException("Pack targets require the pack command. Use: pack desktop, pack installer, or pack all.");
 
             var packTargets = ResolvePackTargets(explicitPackTargets);
 
@@ -304,13 +303,12 @@ namespace Build {
             "all" => PackTarget.All,
             "desktop" => PackTarget.Desktop,
             "installer" => PackTarget.Installer,
-            "automation" => PackTarget.Automation,
             _ => throw new ArgumentOutOfRangeException(nameof(value), value, null)
         };
 
         private static HashSet<PackTarget> ResolvePackTargets(HashSet<PackTarget> explicitPackTargets) {
             if (explicitPackTargets.Count == 0 || explicitPackTargets.Contains(PackTarget.All))
-                return [PackTarget.Desktop, PackTarget.Installer, PackTarget.Automation];
+                return [PackTarget.Desktop, PackTarget.Installer];
 
             return explicitPackTargets;
         }
@@ -319,7 +317,6 @@ namespace Build {
     internal enum PackTarget {
         All,
         Desktop,
-        Installer,
-        Automation
+        Installer
     }
 }
