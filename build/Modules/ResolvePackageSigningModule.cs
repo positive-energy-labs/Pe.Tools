@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Reflection.PortableExecutable;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
@@ -25,6 +26,10 @@ public sealed class ResolvePackageSigningModule : Module<PackageSigningResult> {
         if (!string.IsNullOrWhiteSpace(configuredThumbprint) || !string.IsNullOrWhiteSpace(configuredPfx)) {
             context.Logger.LogInformation("Using explicitly configured package signing identity.");
             return PackageSigningResult.Configured(configuredThumbprint, configuredPfx);
+        }
+        if (string.Equals(Environment.GetEnvironmentVariable("PeDistributionBuild"), "true", StringComparison.OrdinalIgnoreCase)) {
+            context.Logger.LogInformation("No production signing identity configured; distribution payloads will be unsigned.");
+            return PackageSigningResult.Unsigned();
         }
 
         var rootDirectory = context.Git().RootDirectory.Path;
@@ -81,8 +86,11 @@ public sealed class ResolvePackageSigningModule : Module<PackageSigningResult> {
 public sealed record PackageSigningResult(
     string? Thumbprint,
     string? SignToolPath,
-    IReadOnlyCollection<(string Name, string? Value)> BuildProperties
+    IReadOnlyCollection<(string Name, string? Value)> BuildProperties,
+    bool IsUnsigned
 ) {
+    private const string DevelopmentSigningSubject = "CN=Pe.Revit.Sdk Dev Code Signing";
+
     public static PackageSigningResult Development(string thumbprint, string signToolPath) => new(
         thumbprint,
         signToolPath,
@@ -90,8 +98,11 @@ public sealed record PackageSigningResult(
             ("PeCodeSignThumbprint", thumbprint),
             ("PeSignToolPath", signToolPath),
             ("PeSignTimestamp", "false")
-        ]
+        ],
+        false
     );
+
+    public static PackageSigningResult Unsigned() => new(null, ResolveSignToolPath(), [], true);
 
     public static PackageSigningResult Configured(string? thumbprint, string? pfx) {
         var properties = new List<(string Name, string? Value)>();
@@ -103,7 +114,8 @@ public sealed record PackageSigningResult(
         return new PackageSigningResult(
             thumbprint,
             signToolPath,
-            properties
+            properties,
+            false
         );
     }
 
@@ -147,13 +159,22 @@ public sealed record PackageSigningResult(
         if (!File.Exists(payload) || selectors.Length != 1)
             throw new InvalidOperationException($"Expected one published Pe.App payload and selector under '{appDirectory}'.");
 
-        VerifySignedFile(payload, RequiresTimestamp());
-        VerifySignedFile(selectors[0], RequiresTimestamp());
+        if (IsUnsigned) {
+            VerifyUnsignedFile(payload);
+            VerifyUnsignedFile(selectors[0]);
+        } else {
+            VerifySignedFile(payload, RequiresTimestamp());
+            VerifySignedFile(selectors[0], RequiresTimestamp());
+        }
     }
 
     public void SignAndVerifyFile(string path) {
         if (!File.Exists(path))
             throw new FileNotFoundException("Package signing input was not found.", path);
+        if (IsUnsigned) {
+            VerifyUnsignedFile(path);
+            return;
+        }
         if (string.IsNullOrWhiteSpace(SignToolPath) || !File.Exists(SignToolPath))
             throw new InvalidOperationException($"PeSignToolPath must identify signtool.exe: '{SignToolPath}'.");
 
@@ -224,6 +245,17 @@ public sealed record PackageSigningResult(
     }
 
     public void VerifyTimestampedFile(string path) => VerifySignedFile(path, requireTimestamp: true);
+
+    private static void VerifyUnsignedFile(string path) {
+        if (!string.Equals(Path.GetExtension(path), ".exe", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(Path.GetExtension(path), ".dll", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        using var stream = File.OpenRead(path);
+        using var pe = new PEReader(stream);
+        if (pe.PEHeaders.PEHeader?.CertificateTableDirectory.Size > 0)
+            throw new InvalidOperationException($"Unsigned distribution payload contains an Authenticode certificate table: '{path}'.");
+    }
 
     public void VerifyReleaseInstallZip(string path, string expectedVersion, IReadOnlyCollection<string> expectedYears) {
         using var archive = ZipFile.OpenRead(path);
@@ -328,6 +360,11 @@ public sealed record PackageSigningResult(
         }
 
         using (certificate) {
+            if (requireTimestamp
+                && certificate.Subject.Contains(DevelopmentSigningSubject, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    $"Distribution payload '{path}' is signed by the SDK development certificate."
+                );
             if (!string.IsNullOrWhiteSpace(Thumbprint)
                 && !string.Equals(certificate.Thumbprint, Thumbprint, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException(

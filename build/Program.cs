@@ -43,9 +43,15 @@ try {
     return;
 }
 
-if (parsedArgs.Commands.Contains("publish")
-    && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("PeCodeSignThumbprint"))
-    && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("PeCodeSignPfx"))) {
+var isPublish = parsedArgs.Commands.Contains("publish");
+var isDistributionBuild = isPublish
+    || string.Equals(Environment.GetEnvironmentVariable("PeDistributionBuild"), "true", StringComparison.OrdinalIgnoreCase);
+var hasConfiguredSigningIdentity =
+    !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("PeCodeSignThumbprint"))
+    || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("PeCodeSignPfx"));
+
+if (isPublish
+    && !hasConfiguredSigningIdentity) {
 #pragma warning disable ConsoleUse
     using var standardError = new StreamWriter(Console.OpenStandardError());
     standardError.WriteLine("Publish requires an explicit production PeCodeSignThumbprint or PeCodeSignPfx; the local SDK development certificate is acceptance-only.");
@@ -53,11 +59,12 @@ if (parsedArgs.Commands.Contains("publish")
     Environment.ExitCode = 1;
     return;
 }
-if (parsedArgs.Commands.Contains("publish")
+if (isDistributionBuild
+    && hasConfiguredSigningIdentity
     && string.Equals(Environment.GetEnvironmentVariable("PeSignTimestamp"), "false", StringComparison.OrdinalIgnoreCase)) {
 #pragma warning disable ConsoleUse
     using var standardError = new StreamWriter(Console.OpenStandardError());
-    standardError.WriteLine("Publish requires RFC3161 timestamping; PeSignTimestamp=false is development-only.");
+    standardError.WriteLine("Distribution signing requires RFC3161 timestamping; PeSignTimestamp=false is development-only.");
 #pragma warning restore ConsoleUse
     Environment.ExitCode = 1;
     return;

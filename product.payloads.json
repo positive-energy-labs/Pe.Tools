@@ -10,6 +10,7 @@
     }
   },
   "release": {
+    "build": "dotnet run --project build -- pack",
     "artifacts": ["RevitBundle", "Msi", "InstallZip"],
     "smokeService": "host",
     "smokePaths": [

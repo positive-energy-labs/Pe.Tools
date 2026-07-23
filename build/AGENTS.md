@@ -15,8 +15,8 @@ Owns the repo-level pack and publish automation.
 - `Modules/ResolveBuildLayoutModule.cs` - resolves the build-side `ProductLayoutAuthority`.
 - `BuildArtifactLayout.cs` - repo-local `.artifacts` topology: build, publish, staging, package, installer, and tools roots.
 - `ProductLayoutAuthority.cs` - build/install projection authority that composes repo root, `Pe.Shared.Product` layout, artifact layout, and SDK installer payload paths.
-- `Modules/PublishRevitAddinModule.cs` - isolated Revit add-in publish staging for bundle/installer packaging.
-- `Modules/CreateBundleModule.cs`, `Modules/CreateAutomationBundleModule.cs`, `Modules/CreateInstallerModule.cs` - package outputs.
+- `Modules/CreateBundleModule.cs` - publishes the Revit matrix once for both desktop and installer packaging.
+- `Modules/CreateAutomationBundleModule.cs`, `Modules/CreateInstallerModule.cs` - remaining package outputs.
 - `Modules/ValidateSolutionParityModule.cs` - `.slnx` parity validation without treating `.slnx` as build truth.
 
 ## Validation
@@ -36,7 +36,8 @@ See `../BUILD.md` for the complete build/runtime decision table. This executable
 - `Pe.Revit.Versioning` owns Revit suffixes and Design Automation eligibility outside MSBuild.
 - `Pe.Shared.Product` owns durable product identity and local runtime/user layout; `ProductLayoutAuthority` owns repo/build/install projection from that product truth.
 - `BuildArtifactLayout` owns `.artifacts/...` path math. Do not recreate `.artifacts`, `packages`, `publish`, `staging`, or installer output roots in modules.
-- `CreateInstallerModule` builds product-specific host/Pea/Revit sources. The checked
+- `CreateBundleModule` builds the product-specific Revit source once; `CreateInstallerModule` builds
+  Host and Pea, then consumes that Revit output. The checked
   `product.payloads.json` goes unchanged to SDK `pe-revit install package` and `pe-revit msi`; do not
   restore product-owned manifest rewriting or zip composition.
 - `CreateAutomationBundleModule` selects the worker/year matrix and delegates each engine artifact to
@@ -47,7 +48,7 @@ See `../BUILD.md` for the complete build/runtime decision table. This executable
 - `--configuration <BuildType>` narrows ordinary desktop/automation packaging to one selected
   configuration such as `Release.R25`. Installer packaging is the exception: releases must contain
   the complete `Directory.Build.props` year matrix and reject `--configuration`.
-- Revit publish roots under `.artifacts/publish/revit/...` are staged by `pack`.
+- Installer Revit publish roots under `.artifacts/publish/installer/revit/...` are staged by `pack`.
 - `.slnx` is IDE organization and parity input only; it is not the build-matrix source of truth.
 - `.slnx` and configuration strings are compatibility surfaces, not the intended orchestration authority.
 - Successful `./build` output does not mean the live Revit session has fresh runtime assemblies.

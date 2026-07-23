@@ -13,6 +13,7 @@ namespace Build.Modules;
 [DependsOn<ResolveBuildMatrixModule>]
 [DependsOn<ResolveBuildLayoutModule>]
 [DependsOn<ResolvePackageSigningModule>]
+[DependsOn<CleanProjectModule>(Optional = true)]
 public sealed class CreateBundleModule(IOptions<BuildOptions> buildOptions) : Module {
     protected override async Task ExecuteModuleAsync(IModuleContext context, CancellationToken cancellationToken) {
         var versioningResult = await context.GetModule<ResolveVersioningModule>();
@@ -39,7 +40,7 @@ public sealed class CreateBundleModule(IOptions<BuildOptions> buildOptions) : Mo
         Directory.CreateDirectory(layout.Artifacts.BundlePackagesRoot);
         var bundleZipPath = Path.Combine(layout.Artifacts.BundlePackagesRoot, $"{appAssemblyName}.bundle.zip");
         var bundleStagingDir = Path.Combine(layout.Artifacts.PackagesRoot, ".stage", "revit-bundles", $"{appAssemblyName}.bundle");
-        var publishStagingRoot = Path.Combine(layout.Artifacts.PackagesRoot, ".stage", "revit-addins", appAssemblyName);
+        var publishStagingRoot = layout.GetSdkInstallerRevitPayloadRoot();
 
         if (File.Exists(bundleZipPath))
             File.Delete(bundleZipPath);
@@ -70,6 +71,9 @@ public sealed class CreateBundleModule(IOptions<BuildOptions> buildOptions) : Mo
             ],
             cancellationToken
         ).ConfigureAwait(false);
+
+        foreach (var year in revitYears)
+            signing.VerifyPublishedAddin(Path.Combine(publishStagingRoot, year.ToString()));
 
         if (Directory.Exists(bundleStagingDir))
             Directory.Delete(bundleStagingDir, true);

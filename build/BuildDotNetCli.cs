@@ -84,6 +84,7 @@ internal static partial class BuildDotNetCli {
             "--configuration",
             configuration,
             "--nologo",
+            "--maxcpucount",
             // Successful output stays buffered, while normal verbosity preserves external-tool
             // failures that minimal reduces to a bare "Build FAILED."
             "--verbosity",
