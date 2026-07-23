@@ -102,18 +102,38 @@ function baseProperties(): Record<string, unknown> {
 }
 
 function loadConfig(): AnalyticsConfig | null {
+  // The installed product manifest is AUTHORITATIVE: the key rides the release
+  // (product.payloads.json, copied into the installed root by the SDK apply kernel), so
+  // installed machines need zero settings-file seeding. settings.json stays as the
+  // dev/override fallback for checkouts without an installed product.
+  type PostHogShape = { apiKey?: string; host?: string };
+  const manifest = readJson(installedManifestPath()) as
+    | { telemetry?: { posthog?: PostHogShape } }
+    | undefined;
+  const settings = readJson(globalSettingsPath()) as { posthog?: PostHogShape } | undefined;
+  return fromShape(manifest?.telemetry?.posthog) ?? fromShape(settings?.posthog);
+}
+
+function fromShape(posthog: { apiKey?: string; host?: string } | undefined): AnalyticsConfig | null {
+  const apiKey = posthog?.apiKey?.trim();
+  if (!apiKey) return null;
+  return { apiKey, host: (posthog?.host ?? "https://us.i.posthog.com").replace(/\/$/, "") };
+}
+
+function readJson(path: string): unknown {
   try {
-    const raw = readFileSync(globalSettingsPath(), "utf8");
-    const parsed = JSON.parse(raw) as { posthog?: { apiKey?: string; host?: string } };
-    const apiKey = parsed.posthog?.apiKey?.trim();
-    if (!apiKey) return null;
-    return {
-      apiKey,
-      host: (parsed.posthog?.host ?? "https://us.i.posthog.com").replace(/\/$/, ""),
-    };
+    return JSON.parse(readFileSync(path, "utf8"));
   } catch {
-    return null;
+    return undefined;
   }
+}
+
+// Mirrors the SDK's installed layout (%LOCALAPPDATA%\<vendor>\<product>\product.payloads.json).
+// Kept local for the same reason as globalSettingsPath: runtime cannot import host code.
+function installedManifestPath(): string {
+  const localAppData =
+    process.env.LOCALAPPDATA ?? join(process.env.USERPROFILE ?? "", "AppData", "Local");
+  return join(localAppData, "Positive Energy", "Pe.Tools", "product.payloads.json");
 }
 
 // Mirrors apps/host/src/product-paths.ts (Documents may be OneDrive-redirected on
