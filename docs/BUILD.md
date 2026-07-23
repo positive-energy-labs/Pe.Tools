@@ -59,7 +59,7 @@ Verified mechanics:
 
 - Isolated builds redirect outputs into `.artifacts/build/...`.
 - Non-isolated builds keep package-local `obj/$(Configuration)` intermediates.
-- `Pe.App` isolated package builds publish into `.artifacts/publish/revit/$(Configuration)`.
+- Full `pack` publishes Pe.App once into `.artifacts/publish/installer/revit/<year>`.
 - Repo guards disable `DeployAddin` and `LaunchRevit` during isolated terminal builds.
 - `.Tests` configurations force off `DeployAddin` and `LaunchRevit`.
 - Non-release interactive builds pin `AssemblyInformationalVersion` to stable `dev` to reduce hot-reload baseline churn from generated metadata.
@@ -169,12 +169,20 @@ Package outputs:
 - Portable install package: `.artifacts/packages/installers/Pe.Tools.<version>.install.zip`
 - Installer: `.artifacts/packages/installers/*.msi`
 
-`CreateInstallerModule` owns the product-specific source builds (Pe.App year staging and the
-host/Pea SEA payloads) plus the product release-signing boundary. SDK `pe-revit install package`
+`CreateBundleModule` owns the Pe.App year staging used by both transports.
+`CreateInstallerModule` owns the host/Pea SEA payload builds plus the product release-signing
+boundary. SDK `pe-revit install package`
 copies the manifest-declared sources into the portable zip and writes its release receipt;
 `pe-revit msi` consumes the same checked manifest and emits the MSI. Pe.Tools then signs that final
 MSI and refreshes only the receipt's MSI SHA-256 so the receipt describes the bytes that will be
 published. Pe.Tools does not rewrite a transport manifest or build zip topology.
+
+The SDK bundle target publishes the Revit year matrix once into the installer manifest's source
+root; the desktop bundle and installer transports consume those same bytes. The SDK builds the
+independent year configurations in parallel. Installer packaging likewise builds Host and Pea
+concurrently, then composes the install zip and MSI concurrently from their immutable payload
+sources. The temporary SEA input bundles are removed after executable signing because they are
+build inputs, not installed runtime files.
 
 On Windows, installer packaging rebuilds each Vite+ bundle with Node's direct SEA builder using a
 temporary Node copy whose existing Authenticode signature has been removed. It then signs and
@@ -183,9 +191,9 @@ malformed signature table and makes SignTool fail with `0x800700C1`.
 
 Installer packaging is deliberately complete-family: it rejects `--configuration`, requires every
 `Directory.Build.props` Revit year publish root, and requires the manifest `years` transport contract
-to match that matrix exactly. Before each year, it clears that exact isolated `Pe.App` release output
-so stale build trees cannot enter the payload. Other pack targets may still use `--configuration` for
-a narrow artifact.
+to match that matrix exactly. The SDK clears the shared Revit staging root once before parallel year
+builds so stale payloads cannot survive while concurrent outputs remain isolated by year. Other pack
+targets may still use `--configuration` for a narrow artifact.
 
 `CreateAutomationBundleModule` likewise supplies only Pe.Tools policy: the worker project, eligible
 year matrix, output root, and product version. SDK `PeCreateAppBundle` builds each engine lane and
@@ -196,6 +204,19 @@ move Pe.Tools workflow semantics into the SDK or restore product-owned appbundle
 ### Publish is a GitHub release workflow
 
 The build pipeline has a `publish` command, but its module publishes release assets through GitHub and is skipped without a GitHub token. Treat it as CI/release-lane behavior, not a normal local validation command. Publish requires a production certificate through `PeCodeSignThumbprint` or `PeCodeSignPfx`; PFX use also requires `PE_CODESIGN_PFX_PASSWORD`. RFC 3161 timestamping is mandatory (`PeSignTimestamp=false` is rejected); `PeSignTimestampUrl` may override the default timestamp service.
+
+Without an explicitly configured signing identity, local `pack` initializes the SDK development
+certificate and signs its PE/MSI outputs without a timestamp. Those artifacts are acceptance-only:
+they validate the complete signing and packaging mechanics on a developer machine that trusts the
+certificate, but must not be distributed. `pack publish` rebuilds with the explicitly configured,
+timestamped production identity and verifies the release artifacts before upload.
+
+The SDK-owned `pe-revit release --build` path invokes this repo's existing `pack` command through
+the manifest's `release.build` entry. SDK distribution mode bypasses the local development
+certificate and verifies that reconstructed PE payloads are unsigned when no production identity
+is configured. With `PeCodeSignThumbprint` or `PeCodeSignPfx`, the same path signs and verifies the
+payloads with mandatory timestamping. The SDK also refuses any staged binary carrying its
+development certificate, so the invalid local-certificate state cannot ship.
 
 ```powershell
 dotnet run --project .\build\Build.csproj -c Release -- pack publish

@@ -20,13 +20,13 @@ using File = ModularPipelines.FileSystem.File;
 namespace Build.Modules;
 
 /// <summary>
-///     Build the product-specific host, Pea, and Revit payload sources, then delegate the portable
-///     install package and MSI transports to the SDK from the checked-in manifest.
+///     Build the product-specific Host and Pea sources, consume the Revit payload from
+///     CreateBundleModule, then delegate both installer transports to the SDK.
 /// </summary>
 [DependsOn<ResolveVersioningModule>]
 [DependsOn<ResolveBuildMatrixModule>]
 [DependsOn<ResolveBuildLayoutModule>]
-[DependsOn<PublishRevitAddinModule>]
+[DependsOn<CreateBundleModule>]
 [DependsOn<ResolvePackageSigningModule>]
 public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) : Module {
     private const string SourceManifestFileName = "product.payloads.json";
@@ -58,9 +58,12 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
             );
         var configurations = matrix.PackConfigurations.ToArray();
         ValidateManifestYears(sourceManifestPath, configurations);
-        var targetDirectories = configurations
-            .Select(layout.GetRevitPublishDirectory)
-            .ToArray();
+        var revitPayloadRoot = layout.GetSdkInstallerRevitPayloadRoot();
+        var targetDirectories = configurations.Select(configuration => {
+            RevitVersionCatalog.TryResolveFromConfiguration(configuration, out var spec)
+                .ShouldBeTrue($"Installer configuration '{configuration}' does not map to a Revit year.");
+            return Path.Combine(revitPayloadRoot, spec.Year.ToString());
+        }).ToArray();
 
         var missingDirectories = targetDirectories.Where(path => !Directory.Exists(path)).ToArray();
         missingDirectories.ShouldBeEmpty(
@@ -71,14 +74,13 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
             targetDirectories.Length,
             string.Join(", ", targetDirectories)
         );
-        _ = StageRevitPayload(context, layout, configurations);
-
         var unsignedNode = PrepareUnsignedNode(signing);
         try {
-            await PublishRuntimeAsync(context, hostPackageDirectory, signing, unsignedNode, cancellationToken);
-
             var peaPackageDirectory = rootDirectory.GetFolder("source").GetFolder("pe-tools").GetFolder("apps").GetFolder("pea");
-            await PublishPeaAsync(context, peaPackageDirectory, signing, unsignedNode, cancellationToken);
+            await Task.WhenAll(
+                PublishRuntimeAsync(context, hostPackageDirectory, signing, unsignedNode, cancellationToken),
+                PublishPeaAsync(context, peaPackageDirectory, signing, unsignedNode, cancellationToken)
+            );
         } finally {
             Directory.Delete(Path.GetDirectoryName(unsignedNode)!, recursive: true);
         }
@@ -94,7 +96,7 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         }
 
         var installPackagePath = layout.GetInstallPackagePath(versioning.Version);
-        await context.Shell.Command.ExecuteCommandLineTool(
+        var installPackageTask = context.Shell.Command.ExecuteCommandLineTool(
             new GenericCommandLineToolOptions("dotnet") {
                 Arguments = [
                     "tool", "run", "pe-revit", "--", "install", "package",
@@ -104,7 +106,6 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
             new CommandExecutionOptions { WorkingDirectory = rootDirectory.Path },
             cancellationToken
         );
-        context.Summary.KeyValue("Artifacts", "Install package", installPackagePath);
 
         context.Logger.LogInformation(
             "Running SDK MSI helper. Manifest={Manifest}; output={Output}",
@@ -123,7 +124,7 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         if (versioning.IsPrerelease)
             msiArguments.Add("--allow-prerelease-msi");
 
-        await context.Shell.Command.ExecuteCommandLineTool(
+        var msiTask = context.Shell.Command.ExecuteCommandLineTool(
             new GenericCommandLineToolOptions("dotnet") {
                 Arguments = [.. msiArguments]
             },
@@ -132,6 +133,8 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
             },
             cancellationToken
         );
+        await Task.WhenAll(installPackageTask, msiTask);
+        context.Summary.KeyValue("Artifacts", "Install package", installPackagePath);
 
         context.Logger.LogInformation("SDK MSI helper finished. Scanning output directory.");
         var outputFiles = Directory.EnumerateFiles(sdkInstallerOutputRoot, "*.msi", SearchOption.TopDirectoryOnly)
@@ -175,6 +178,7 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         System.IO.File.Exists(builtHostExecutable)
             .ShouldBeTrue($"TS host executable build did not create {builtHostExecutable}");
         signing.SignAndVerifyFile(builtHostExecutable);
+        Directory.Delete(Path.Combine(builtHostDirectory, "bundle"), recursive: true);
 
         runtimePublishDirectory.GetFiles(file => file.Exists)
             .ShouldNotBeEmpty("Failed to publish the shared runtime for installer packaging.");
@@ -212,6 +216,7 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
         System.IO.File.Exists(builtPeaExecutable)
             .ShouldBeTrue($"TS pea executable build did not create {builtPeaExecutable}");
         signing.SignAndVerifyFile(builtPeaExecutable);
+        Directory.Delete(Path.Combine(builtPeaDirectory, "bundle"), recursive: true);
 
         peaPublishDirectory.GetFiles(file => file.Exists)
             .ShouldNotBeEmpty("Failed to publish the pea runtime for installer packaging.");
@@ -300,42 +305,4 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
             receipt.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
     }
 
-    private static Folder StageRevitPayload(
-        IModuleContext context,
-        ProductLayoutAuthority layout,
-        IReadOnlyCollection<string> configurations
-    ) {
-        var payloadRoot = new Folder(layout.GetSdkInstallerRevitPayloadRoot());
-        if (Directory.Exists(payloadRoot.Path))
-            Directory.Delete(payloadRoot.Path, true);
-
-        Directory.CreateDirectory(payloadRoot.Path);
-        foreach (var configuration in configurations) {
-            RevitVersionCatalog.TryResolveFromConfiguration(configuration, out var spec)
-                .ShouldBeTrue($"Installer configuration '{configuration}' does not map to a Revit year.");
-
-            var source = layout.GetRevitPublishDirectory(configuration);
-            Directory.Exists(source).ShouldBeTrue($"No Revit publish content was found for {configuration}: {source}");
-
-            var destination = Path.Combine(payloadRoot.Path, spec.Year.ToString());
-            CopyDirectory(source, destination);
-            context.Logger.LogInformation(
-                "Staged Revit add-in payload for {Configuration}: {Source} -> {Destination}",
-                configuration,
-                source,
-                destination
-            );
-        }
-
-        return payloadRoot;
-    }
-
-    private static void CopyDirectory(string source, string destination) {
-        Directory.CreateDirectory(destination);
-        foreach (var directory in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
-            Directory.CreateDirectory(Path.Combine(destination, Path.GetRelativePath(source, directory)));
-
-        foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
-            System.IO.File.Copy(file, Path.Combine(destination, Path.GetRelativePath(source, file)), true);
-    }
 }

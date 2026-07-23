@@ -16,9 +16,6 @@ public sealed record ProductLayoutAuthority(
         );
     }
 
-    public string GetRevitPublishDirectory(string configuration) =>
-        Path.Combine(this.Artifacts.PublishRoot, "revit", configuration);
-
     public string GetSdkInstallerRevitPayloadRoot() =>
         Path.Combine(this.Artifacts.PublishRoot, "installer", "revit");
 
