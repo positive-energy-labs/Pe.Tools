@@ -480,7 +480,7 @@ public static class RevitBridgeOps {
                         "regular schedule from an authored profile",
                         "Creates a new element-driven schedule from a schedule profile (same shape revit.matrix.schedule-profiles reads).",
                         """
-                        { "profile": { "name": "Mechanical Equipment", "categoryName": "Mechanical Equipment", "fields": [{ "fieldName": "Mark" }, { "fieldName": "Type Comments" }] } }
+                        { "profile": { "name": "Mechanical Equipment", "categoryName": "Mechanical Equipment", "fields": [{ "parameterName": "Mark" }, { "parameterName": "Type Comments" }] } }
                         """
                     )
                 ],
