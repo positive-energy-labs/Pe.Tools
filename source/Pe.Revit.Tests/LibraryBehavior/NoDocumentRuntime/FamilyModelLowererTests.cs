@@ -119,7 +119,8 @@ public sealed class FamilyModelLowererTests {
         var vectors = JObject.Parse(reader.ReadToEnd());
 
         foreach (var vector in vectors["planes"]!.Children<JObject>()) {
-            var direction = Enum.Parse<FamilyModelOffsetDirection>(vector.Value<string>("direction")!);
+            var direction = (FamilyModelOffsetDirection)Enum.Parse(
+                typeof(FamilyModelOffsetDirection), vector.Value<string>("direction")!);
             Assert.That(
                 FamilyModelEvaluatorConventions.Offset(vector.Value<double>("distance"), direction),
                 Is.EqualTo(vector.Value<double>("coordinate")));
