@@ -46,7 +46,11 @@ public sealed class AppCore : IPePayload {
         var documents = context.Documents;
         DocumentTrackerAccessor.Current = documents;
         DocumentCacheMaintenance.Wire(documents);
-        documents.ViewActivated += (doc, viewId) => MruViewBuffer.Instance.RecordViewActivation(doc, viewId);
+        documents.ViewActivated += (doc, viewId) => {
+            MruViewBuffer.Instance.RecordViewActivation(doc, viewId);
+            // Tab coloring hooks lazily here: the docking manager only exists once a document is open.
+            RevitTabColorizer.EnsureStarted();
+        };
         documents.Closed += key => MruViewBuffer.Instance.RemoveDocumentViews(key);
         documents.Changed += OnDocumentChanged;
 
@@ -90,6 +94,7 @@ public sealed class AppCore : IPePayload {
     }
 
     public void Shutdown() {
+        RevitTabColorizer.Stop(); // unhook LayoutUpdated from Revit's docking manager (leaked handles are not fine)
         DocumentTrackerAccessor.Current = null;
 
         this._bridgeConnectionSupervisor?.Dispose();
