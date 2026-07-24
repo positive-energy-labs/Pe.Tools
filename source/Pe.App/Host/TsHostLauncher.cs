@@ -93,6 +93,16 @@ internal static class TsHostLauncher {
                 "The dev host requires a checkout source root."
             );
 
+        // Fresh worktrees don't share node_modules; without this the spawned host dies instantly
+        // and the supervisor blind-waits 45s per attempt with no cause in the message.
+        if (!Directory.Exists(Path.Combine(sourceHostWorkingDirectory, "node_modules")))
+            return new TsHostLaunchResult(
+                false,
+                false,
+                false,
+                $"The dev host source at '{sourceHostWorkingDirectory}' has no node_modules; run `pnpm install` in that directory, then retry."
+            );
+
         return StartAndWait(
             CreateSourceStartInfo(sourceHostWorkingDirectory, serviceName),
             runtime,
@@ -155,6 +165,15 @@ internal static class TsHostLauncher {
         var deadlineUtc = DateTime.UtcNow + timeout;
         while (DateTime.UtcNow < deadlineUtc) {
             Thread.Sleep(250);
+            // A detach-style wrapper exits 0 after handing off, so only a nonzero exit is proof of
+            // failure worth cutting the wait short for.
+            if (process is { HasExited: true, ExitCode: not 0 })
+                return new TsHostLaunchResult(
+                    false,
+                    false,
+                    true,
+                    $"TS host process {process.Id} exited with code {process.ExitCode} before a healthy '{serviceName}' service file appeared. Run the dev host command manually in '{startInfo.WorkingDirectory}' to see its error output."
+                );
             var file = ServiceFile.Read(appBase, serviceName);
             if (file is null || !ProbeHealth(file.Port) || !MatchesDevTarget(file, runtime))
                 continue;
