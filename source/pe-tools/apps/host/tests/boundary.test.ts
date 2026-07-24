@@ -51,8 +51,10 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
   writeFileSync(join(webDir, "a.txt"), "alpha");
 
   const prevLocalAppData = process.env.LOCALAPPDATA;
+  const prevPeRevitCmd = process.env.PE_REVIT_CMD;
   const prevWebDist = process.env.PE_TOOLS_WEB_DIST;
   process.env.LOCALAPPDATA = localAppData;
+  process.env.PE_REVIT_CMD = process.execPath;
   process.env.PE_TOOLS_WEB_DIST = webDir;
   // appBase is resolved the same way the running host resolves it (LOCALAPPDATA now = temp).
   const appBase = productRoot();
@@ -138,7 +140,13 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
     expect(info.status).toBe(200);
     expect(await info.json()).toMatchObject({ controllerId: "pea" });
 
-    // (5) graceful shutdown: the SDK claim token authorizes, then the server stops + file deleted.
+    // (5) self-update must acknowledge before the install child completes. The real child advances
+    // the host pointer and shuts this process down, so awaiting it would destroy the HTTP response.
+    const update = await fetch(`${base}/host/update`, { method: "POST" });
+    expect(update.status).toBe(202);
+    expect(await update.json()).toMatchObject({ accepted: true });
+
+    // (6) graceful shutdown: the SDK claim token authorizes, then the server stops + file deleted.
     const shutdown = await fetch(`${base}/admin/shutdown`, {
       method: "POST",
       headers: {
@@ -157,6 +165,8 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
     await done.catch(() => {});
     if (prevLocalAppData === undefined) delete process.env.LOCALAPPDATA;
     else process.env.LOCALAPPDATA = prevLocalAppData;
+    if (prevPeRevitCmd === undefined) delete process.env.PE_REVIT_CMD;
+    else process.env.PE_REVIT_CMD = prevPeRevitCmd;
     if (prevWebDist === undefined) delete process.env.PE_TOOLS_WEB_DIST;
     else process.env.PE_TOOLS_WEB_DIST = prevWebDist;
     rmSync(localAppData, { recursive: true, force: true });

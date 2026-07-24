@@ -1,6 +1,7 @@
 import { Effect, Layer, Stream } from "effect";
 import { HttpRouter, HttpServer, HttpServerResponse as Response } from "effect/unstable/http";
 import { NodeHttpClient, NodeHttpServer, NodeServices } from "@effect/platform-node";
+import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
@@ -13,9 +14,10 @@ import {
   tsOnlyOperationCatalog,
 } from "@pe/host-contracts/operation-types";
 import { callRoute } from "./call-route.ts";
-import { installRoot, peRevitLauncher, validatePeRevitEnvelope } from "./pe-revit-launch.ts";
+import { installRoot, peRevitLauncher } from "./pe-revit-launch.ts";
 import { sandboxesRoute } from "./sandbox-route.ts";
 import { adminShutdownRoute, HostLifecycle, ServiceFileLive } from "./host-lifecycle.ts";
+import { hostOwnership } from "./host-ownership.ts";
 import { MastraMountLive, MastraRuntime, withMastraDegrade } from "./mastra-runtime.ts";
 import { staticSpaLayer } from "./static-spa.ts";
 import { viteWebLayer } from "./vite-web.ts";
@@ -133,50 +135,106 @@ const hostStatusRoute = HttpRouter.add("GET", hostProcessIdentity.healthPath, ()
   }),
 );
 
-// One-click update: run the install kernel's consume verb against the latest published
-// release. The pointer flip makes every open Revit live-swap via the loader; the host itself
-// is NOT updated here (its own exe is running — host self-update is a VersionedApp follow-up).
+// One-click update starts the installed kernel without awaiting it: the add-in is staged for the
+// next Revit start, while the versioned host restarts onto the new pointer.
+type InstallReceipt = {
+  releaseVersion?: string;
+  releasesRepo?: string;
+  appliedAtUtc?: string;
+};
+
+function readInstallReceipt(): InstallReceipt | null {
+  try {
+    return JSON.parse(
+      readFileSync(join(installRoot(), "install.receipt.json"), "utf8"),
+    ) as InstallReceipt;
+  } catch {
+    return null;
+  }
+}
+
 const hostUpdateRoute = HttpRouter.add("POST", "/host/update", () =>
-  Effect.gen(function* () {
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const launch = peRevitLauncher();
-    const args = ["install", "apply", "--release", "latest", "--json"] as const;
-    const result = yield* Effect.result(
-      spawner.string(ChildProcess.make(launch.cmd, [...launch.args, ...args], { cwd: launch.cwd })),
-    );
-    if (result._tag === "Success") {
-      // stdout is the kernel's JSON envelope (verb/actions/verdicts) — pass it through verbatim.
-      try {
-        return Response.text(validatePeRevitEnvelope(result.success, args, launch), {
-          headers: { "content-type": "application/json" },
+  Effect.tryPromise({
+    try: async () => {
+      const launch = peRevitLauncher();
+      const args = ["install", "apply", "--release", "latest", "--json"] as const;
+      await new Promise<void>((resolve, reject) => {
+        const child = spawn(launch.cmd, [...launch.args, ...args], {
+          cwd: launch.cwd,
+          detached: true,
+          stdio: "ignore",
+          windowsHide: true,
         });
-      } catch (error) {
-        return yield* Response.json({ ok: false, error: String(error) }, { status: 500 });
-      }
-    }
-    return yield* Response.json({ ok: false, error: String(result.failure) }, { status: 500 });
-  }),
+        child.once("error", reject);
+        child.once("spawn", () => {
+          child.removeAllListeners("error");
+          child.on("error", (error) => console.error("pe-revit update child failed", error));
+          child.unref();
+          resolve();
+        });
+      });
+      return Response.jsonUnsafe({ accepted: true }, { status: 202 });
+    },
+    catch: (error) => error,
+  }).pipe(
+    Effect.catch((error) =>
+      Response.json({ accepted: false, error: String(error) }, { status: 500 }),
+    ),
+  ),
 );
 
 // Installed-version readout for the web Update button — the kernel's receipt is the truth.
 const hostInstallRoute = HttpRouter.add("GET", "/host/install", () =>
   Effect.sync(() => {
-    try {
-      const receipt = JSON.parse(
-        readFileSync(join(installRoot(), "install.receipt.json"), "utf8"),
-      ) as { releaseVersion?: string; releasesRepo?: string; appliedAtUtc?: string };
+    const receipt = readInstallReceipt();
+    return Response.jsonUnsafe({
+      installed: receipt !== null,
+      releaseVersion: receipt?.releaseVersion ?? null,
+      releasesRepo: receipt?.releasesRepo ?? null,
+      appliedAtUtc: receipt?.appliedAtUtc ?? null,
+    });
+  }),
+);
+
+// Match `install apply --release latest`: GitHub's latest stable release is the authority.
+const hostUpdateStatusRoute = HttpRouter.add("GET", "/host/update", () =>
+  Effect.promise(async () => {
+    const receipt = readInstallReceipt();
+    const installedVersion = receipt?.releaseVersion ?? null;
+    if (hostOwnership.lane !== "installed" || !receipt?.releasesRepo)
       return Response.jsonUnsafe({
-        installed: true,
-        releaseVersion: receipt.releaseVersion ?? null,
-        releasesRepo: receipt.releasesRepo ?? null,
-        appliedAtUtc: receipt.appliedAtUtc ?? null,
+        installedVersion,
+        latestVersion: null,
+        updateAvailable: false,
       });
-    } catch {
+
+    try {
+      const repo = receipt.releasesRepo;
+      if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo))
+        throw new Error("installed receipt has an invalid releasesRepo");
+      const latest = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
+        headers: {
+          accept: "application/vnd.github+json",
+          "user-agent": "Pe.Tools",
+        },
+      });
+      if (!latest.ok) throw new Error(`GitHub latest release returned ${latest.status}`);
+      const tag = ((await latest.json()) as { tag_name?: unknown }).tag_name;
+      if (typeof tag !== "string" || !tag.trim()) throw new Error("latest release has no tag");
+      const latestVersion = tag.replace(/^v/i, "");
       return Response.jsonUnsafe({
-        installed: false,
-        releaseVersion: null,
-        releasesRepo: null,
-        appliedAtUtc: null,
+        installedVersion,
+        latestVersion,
+        // ponytail: exact equality matches the latest-only installer. Add semver ordering only if
+        // locally-ahead or prerelease installs become supported.
+        updateAvailable: installedVersion !== latestVersion,
+      });
+    } catch (error) {
+      return Response.jsonUnsafe({
+        installedVersion,
+        latestVersion: null,
+        updateAvailable: false,
+        error: String(error),
       });
     }
   }),
@@ -257,6 +315,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
     settingsSchemaRoute,
     hostStatusRoute,
     hostUpdateRoute,
+    hostUpdateStatusRoute,
     hostInstallRoute,
     adminShutdownRoute,
     sandboxesRoute,

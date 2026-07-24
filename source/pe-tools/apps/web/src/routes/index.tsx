@@ -17,37 +17,69 @@ import { ThemeToggle } from "#/components/ThemeToggle";
 import { Button } from "#/components/ui/button";
 import { Card } from "#/components/ui/card";
 
-/** One-click update: the host runs `pe-revit install apply --release latest`; open Revit
- * sessions live-swap via the loader when the version pointer flips. */
+type InstallStatus = {
+  installed: boolean;
+  releaseVersion: string | null;
+};
+
+async function readInstallStatus(): Promise<InstallStatus> {
+  const response = await fetch("/host/install");
+  if (!response.ok) throw new Error(`install status failed (${response.status})`);
+  return response.json() as Promise<InstallStatus>;
+}
+
+async function waitForVersionChange(previousVersion: string | null): Promise<string> {
+  const deadline = Date.now() + 180_000;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    try {
+      const next = await readInstallStatus();
+      if (next.releaseVersion && next.releaseVersion !== previousVersion)
+        return next.releaseVersion;
+    } catch {
+      // The old host exits after commit; retry until its replacement owns the service.
+    }
+  }
+  throw new Error("Update started, but the new host did not come back within 3 minutes.");
+}
+
+/** Acknowledge the update before the versioned host restarts, then poll the receipt until the
+ * replacement host proves the new release. The Revit add-in remains staged until Revit restarts. */
 function UpdateButton() {
   const installed = useQuery({
     queryKey: ["host-install"],
-    queryFn: async () =>
-      (await fetch("/host/install")).json() as Promise<{
-        installed: boolean;
-        releaseVersion: string | null;
-      }>,
+    queryFn: readInstallStatus,
+  });
+  const available = useQuery({
+    queryKey: ["host-update"],
+    queryFn: async () => {
+      const response = await fetch("/host/update");
+      if (!response.ok) throw new Error(`update check failed (${response.status})`);
+      return response.json() as Promise<{
+        installedVersion: string | null;
+        latestVersion: string | null;
+        updateAvailable: boolean;
+        error?: string;
+      }>;
+    },
   });
   const update = useMutation({
     mutationFn: async () => {
+      const previousVersion =
+        installed.data?.releaseVersion ?? available.data?.installedVersion ?? null;
+      if (!previousVersion) throw new Error("Installed version is not available.");
       const res = await fetch("/host/update", { method: "POST" });
-      // The relayed pe-revit envelope: { result: {...}, diagnostics: [{code, detail}] }.
-      // Pre-envelope CLIs returned the payload at the top level — read both shapes.
-      const raw = (await res.json()) as {
-        ok?: boolean;
-        releaseVersion?: string;
+      const body = (await res.json()) as {
+        accepted?: boolean;
         error?: string;
-        result?: { ok?: boolean; releaseVersion?: string };
-        diagnostics?: ReadonlyArray<{ code?: string; detail?: string }>;
       };
-      const body = { ...raw, ...raw.result };
-      if (!res.ok || body.ok === false)
-        throw new Error(
-          body.error ?? raw.diagnostics?.[0]?.detail ?? `update failed (${res.status})`,
-        );
-      return body;
+      if (!res.ok || body.accepted !== true)
+        throw new Error(body.error ?? `update failed (${res.status})`);
+      return { releaseVersion: await waitForVersionChange(previousVersion) };
     },
-    onSuccess: () => installed.refetch(),
+    onSuccess: async () => {
+      await Promise.all([installed.refetch(), available.refetch()]);
+    },
   });
 
   return (
@@ -55,10 +87,13 @@ function UpdateButton() {
       {installed.data?.releaseVersion && (
         <span className="text-xs text-muted-foreground">v{installed.data.releaseVersion}</span>
       )}
+      {available.data?.error && (
+        <span className="text-xs text-muted-foreground">update check unavailable</span>
+      )}
       {update.isSuccess && (
         <span className="text-xs text-muted-foreground">
-          updated to {update.data.releaseVersion ?? "latest"} — takes effect when Revit restarts;
-          open sessions keep their current version
+          updated to {update.data.releaseVersion} — staged for the next Revit start; this Revit
+          keeps its loaded version
         </span>
       )}
       {update.isError && (
@@ -66,14 +101,18 @@ function UpdateButton() {
           {String(update.error?.message ?? update.error)}
         </span>
       )}
-      <Button size="sm" onClick={() => update.mutate()} disabled={update.isPending}>
-        {update.isPending ? (
-          <LoaderCircle className="size-4 animate-spin" />
-        ) : (
-          <DownloadCloud className="size-4" />
+      {installed.data?.releaseVersion &&
+        (available.data?.updateAvailable || update.isPending) &&
+        !update.isSuccess && (
+          <Button size="sm" onClick={() => update.mutate()} disabled={update.isPending}>
+            {update.isPending ? (
+              <LoaderCircle className="size-4 animate-spin" />
+            ) : (
+              <DownloadCloud className="size-4" />
+            )}
+            {update.isPending ? "Updating…" : "Update"}
+          </Button>
         )}
-        {update.isPending ? "Updating…" : "Update"}
-      </Button>
     </div>
   );
 }
