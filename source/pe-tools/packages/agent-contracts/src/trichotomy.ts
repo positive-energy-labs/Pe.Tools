@@ -85,6 +85,33 @@ export function stagedEntries<TCell extends TrichotomyCellLike>(
   return Object.entries(cells).filter(([, cell]) => cell.staged != null);
 }
 
+/**
+ * Deep trichotomy count over ANY route document shape (cells records, field maps,
+ * nested drafts): a node counts as a cell when it owns a `proposal` or `staged` key.
+ * The sentence grammar's "waiting on your review — N proposed" derives from this.
+ */
+export function documentTrichotomySummary(doc: unknown): CellSummary {
+  const summary: CellSummary = { proposals: 0, staged: 0, good: 0, attention: 0 };
+  const visit = (node: unknown): void => {
+    if (typeof node !== "object" || node === null) return;
+    if (Array.isArray(node)) {
+      for (const item of node) visit(item);
+      return;
+    }
+    const record = node as Record<string, unknown>;
+    if (Object.hasOwn(record, "proposal") || Object.hasOwn(record, "staged")) {
+      if (record.proposal != null) summary.proposals += 1;
+      if (record.staged != null) summary.staged += 1;
+      if (record.review === "good") summary.good += 1;
+      if (record.review === "attention") summary.attention += 1;
+      return; // a cell's interior is values, not more cells
+    }
+    for (const value of Object.values(record)) visit(value);
+  };
+  visit(doc);
+  return summary;
+}
+
 /** Document refine predicate: a low-confidence proposal that isn't flagged is a silent risk. */
 export function lowConfidenceIsFlagged(cells: Record<string, TrichotomyCellLike>): boolean {
   return Object.values(cells).every(
