@@ -310,12 +310,14 @@ export function discoverServiceSync(appBase: string, name: string): ServiceFile 
 }
 
 /**
- * Delete service files under `appBase` whose recorded owner is verifiably gone (full pid+start-time
- * verification — a live owner is never swept, and a reused pid never protects a corpse). Scope with
- * `prefix` (service-name prefix) and `exclude` (exact names to leave alone, e.g. the caller's own
- * claim). Unreadable files are left in place — deletion needs proof of death, and an unparseable
- * file is a diagnostic (`pe-revit service list` flags it), not proof. `.port` preference and `.log`
- * files are untouched. Returns the swept names.
+ * Delete service files under `appBase` whose recorded owner is VERIFIABLY gone — proof of death only:
+ * the pid has vanished, or it is alive with a different start time (the OS reused it). An owner whose
+ * identity cannot be read (a slow/failed process query, access denied) is NOT proof — the file is
+ * kept, because sweeping on a failed probe deletes a LIVE host's identity (the 2026-07-24 worktree
+ * dev-host incident). Scope with `prefix` (service-name prefix) and `exclude` (exact names to leave
+ * alone, e.g. the caller's own claim). Unreadable files are left in place — an unparseable file is a
+ * diagnostic (`pe-revit service list` flags it), not proof. `.port` preference and `.log` files are
+ * untouched. Returns the swept names.
  */
 export async function sweepDeadServiceFiles(
   appBase: string,
@@ -335,7 +337,7 @@ export async function sweepDeadServiceFiles(
     if (opts?.prefix !== undefined && !name.startsWith(opts.prefix)) continue;
     if (opts?.exclude?.includes(name)) continue;
     const file = await readServiceFile(appBase, name);
-    if (!file || (await recordedProcessAlive(file))) continue;
+    if (!file || !(await recordedOwnerVerifiablyGone(file))) continue;
     await rm(serviceFilePath(appBase, name), { force: true }).catch(() => {});
     swept.push(name);
   }
@@ -590,6 +592,22 @@ async function recordedProcessAlive(file: ServiceFile): Promise<boolean> {
   const identity = await pidIdentity(file.pid);
   if (!identity) return false;
   return Math.abs(Date.parse(identity.startUtc) - Date.parse(file.processStartUtc)) <= 2_000;
+}
+
+/**
+ * Proof of death — the DELETION gate ({@link sweepDeadServiceFiles}). True only when the recorded
+ * owner is verifiably gone: the pid has vanished, or it is alive with a start time that differs by
+ * more than clock slop (the OS reused the pid; the recorded process is gone). NOT the negation of
+ * {@link recordedProcessAlive}: an identity that cannot be read (a failed/timed-out process query,
+ * access denied, an unparseable timestamp) returns FALSE here — unverifiable is not proof, and
+ * treating it as death is how a live host's service file gets swept out from under it.
+ */
+async function recordedOwnerVerifiablyGone(file: ServiceFile): Promise<boolean> {
+  if (!(await pidIsAlive(file.pid))) return true; // pid vanished ⇒ dead, no identity read needed
+  const identity = await pidIdentity(file.pid);
+  if (!identity) return false; // pid exists but unverifiable ⇒ never proof of death
+  const driftMs = Math.abs(Date.parse(identity.startUtc) - Date.parse(file.processStartUtc));
+  return Number.isFinite(driftMs) && driftMs > 2_000; // reused pid ⇒ dead; unparseable ⇒ not proof
 }
 
 /**
