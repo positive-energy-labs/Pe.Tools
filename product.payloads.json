@@ -2,7 +2,7 @@
   "product": "Pe.Tools",
   "vendor": "Positive Energy",
   "releases": "positive-energy-labs/Pe.Tools",
-  "version": "0.6.18",
+  "version": "0.6.19",
   "telemetry": {
     "posthog": {
       "apiKey": "phc_xKiWciccdu558TVAT6ohYZ5tRQYGboW4WxF47na9QKTo",
