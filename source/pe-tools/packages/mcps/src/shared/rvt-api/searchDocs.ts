@@ -1,3 +1,4 @@
+import { searchLocalDocs } from "./local-docs.ts";
 import { type SearchResult, SearchResultTypes } from "./validators.ts";
 import { z } from "zod";
 
@@ -7,6 +8,11 @@ export async function searchWrapper(
   max: number,
   types: ReadonlyArray<(typeof SearchResultTypes)[number]> = SearchResultTypes,
 ): Promise<SearchResult[]> {
+  // Local-first: the doc XML shipped with the user's Revit install, BM25-indexed.
+  // Web search is the fallback for machines without a matching install.
+  const local = searchLocalDocs(query, year, max, types);
+  if (local) return local;
+
   const results1 = await searchRvtDocsCom(query, year, max * 2, types);
   const results2 = await searchRevitApiDocsCom(query, year, max * 2, types);
 

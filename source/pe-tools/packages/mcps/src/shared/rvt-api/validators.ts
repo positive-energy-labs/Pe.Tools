@@ -24,12 +24,31 @@ export const SearchResultTypes = [
 export const defaultRevitApiDocsYear = 2025;
 export const defaultRevitApiMaxResults = 10;
 
+export const usageExampleSchema = z.object({
+  file: z.string().describe("Absolute path to a local source file using this API member."),
+  startLine: z.number(),
+  endLine: z.number(),
+  enclosing: z.string().describe("Fully qualified enclosing member containing the usage."),
+});
+
 export const searchResultSchema = z.object({
   title: z.string(),
   description: z.string().optional(),
   namespace: z.string().optional(),
   type: z.enum(SearchResultTypes).or(z.string()),
-  url: z.string(),
+  url: z
+    .string()
+    .describe("rvtdocs slug, or local:<memberId> for results from the local install index."),
+  memberId: z.string().optional().describe(".NET doc-comment ID (local results only)."),
+  summary: z.string().optional(),
+  remarks: z.string().optional(),
+  since: z.string().optional().describe("First Revit version exposing this member."),
+  examples: z
+    .array(usageExampleSchema)
+    .optional()
+    .describe(
+      "Local source files using this member. Read the file at the line range for a full, uncut example.",
+    ),
   extractedText: z
     .string()
     .optional()
@@ -111,21 +130,10 @@ export const toolInputArgSchemas = {
     .describe(`Filter results by type: ${SearchResultTypes.join(", ")}`),
   queryString: z
     .string()
-    .refine((val) => {
-      const trimmed = val.trim();
-      const base = "[a-zA-Z][a-zA-Z0-9_]*";
-      const simpleStringPattern = new RegExp(`^${base}$`);
-      const classMemberPattern = new RegExp(`^${base}\\.${base}$`);
-      const constructorPattern = new RegExp(`^${base}\\(${base}(?:,\\s${base})*\\)$`);
-
-      return (
-        simpleStringPattern.test(trimmed) ||
-        classMemberPattern.test(trimmed) ||
-        constructorPattern.test(trimmed)
-      );
-    }, `Must match one of: "AnyName", "Class.Member", or "Constructor(arg1, ...". Only single spaces allowed, and only after commas.`)
+    .trim()
+    .min(2)
     .describe(
-      `Search query for Revit API entities. Valid formats: "AnyName", "Class.Member" (2025+ only), or "Constructor(arg1, ...". NOT a phrase, sentence, or natural language query.`,
+      `Search query for Revit API entities. Identifiers ("FilteredElementCollector", "Wall.Flip") and natural-language phrases ("join geometry family document") both work — phrases rank by BM25 over names, summaries, and remarks when a local Revit install index is available.`,
     ),
 };
 
