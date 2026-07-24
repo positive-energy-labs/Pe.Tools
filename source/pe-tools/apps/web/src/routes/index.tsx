@@ -71,11 +71,15 @@ function UpdateButton() {
       const res = await fetch("/host/update", { method: "POST" });
       const body = (await res.json()) as {
         accepted?: boolean;
+        reason?: string;
+        installedVersion?: string | null;
         error?: string;
       };
+      if (res.status === 409 && body.reason === "already-current" && body.installedVersion)
+        return { changed: false, releaseVersion: body.installedVersion };
       if (!res.ok || body.accepted !== true)
         throw new Error(body.error ?? `update failed (${res.status})`);
-      return { releaseVersion: await waitForVersionChange(previousVersion) };
+      return { changed: true, releaseVersion: await waitForVersionChange(previousVersion) };
     },
     onSuccess: async () => {
       await Promise.all([installed.refetch(), available.refetch()]);
@@ -92,8 +96,9 @@ function UpdateButton() {
       )}
       {update.isSuccess && (
         <span className="text-xs text-muted-foreground">
-          updated to {update.data.releaseVersion} — staged for the next Revit start; this Revit
-          keeps its loaded version
+          {update.data.changed
+            ? `updated to ${update.data.releaseVersion} — staged for the next Revit start; this Revit keeps its loaded version`
+            : `already on the latest version (${update.data.releaseVersion})`}
         </span>
       )}
       {update.isError && (
@@ -212,7 +217,7 @@ function App() {
       <main className="page-wrap py-16">
         <section className="max-w-2xl">
           <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Internal tools
+            Internal tools · Update proof 0.6.21
           </p>
           <h1 className="font-pe-display text-5xl font-semibold leading-tight tracking-tight text-foreground">
             Healthy people, healthy planet.

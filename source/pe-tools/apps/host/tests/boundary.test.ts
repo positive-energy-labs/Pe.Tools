@@ -140,11 +140,18 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
     expect(info.status).toBe(200);
     expect(await info.json()).toMatchObject({ controllerId: "pea" });
 
-    // (5) self-update must acknowledge before the install child completes. The real child advances
-    // the host pointer and shuts this process down, so awaiting it would destroy the HTTP response.
+    // (5) the server is authoritative: a client cannot launch update when this lane has no update.
+    const updateStatus = await fetch(`${base}/host/update`);
+    expect(updateStatus.status).toBe(200);
+    expect(await updateStatus.json()).toMatchObject({ updateAvailable: false });
+
     const update = await fetch(`${base}/host/update`, { method: "POST" });
-    expect(update.status).toBe(202);
-    expect(await update.json()).toMatchObject({ accepted: true });
+    expect(update.status).toBe(409);
+    expect(await update.json()).toMatchObject({
+      accepted: false,
+      reason: "update-unavailable",
+      updateAvailable: false,
+    });
 
     // (6) graceful shutdown: the SDK claim token authorizes, then the server stops + file deleted.
     const shutdown = await fetch(`${base}/admin/shutdown`, {
