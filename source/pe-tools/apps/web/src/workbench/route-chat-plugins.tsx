@@ -85,6 +85,11 @@ export const CHAT_PLUGIN_ROUTES = [
 ] as [string, ...string[]];
 export type ChatPluginRoute = string;
 
+/** Registration for a plugin route, when it has a route-state slice (workspace-only routes don't). */
+export function chatPluginRegistration(route: string): RouteChatPluginRegistration | undefined {
+  return routeChatPlugins[route];
+}
+
 export function chatPluginTitle(route: string): string {
   return routeChatPlugins[route]?.spec.title ?? workspaceOnlyPlugins[route] ?? route;
 }

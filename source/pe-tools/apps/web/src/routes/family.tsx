@@ -10,7 +10,7 @@ import {
 } from "@pe/agent-contracts";
 import { ThemeToggle } from "#/components/ThemeToggle";
 import { RfaChip, RvtChip } from "#/components/document-chips";
-import { TargetChip } from "#/components/target-chip";
+import { PluginSentence } from "#/components/plugin-sentence";
 import {
   type CitationTarget,
   FamilyDocPane,
@@ -19,7 +19,6 @@ import {
 } from "#/family/doc-pane";
 import { familyModelPlaneOffset, familyModelPrismFaceCoordinate } from "#/family-model/preview";
 import { useTreeQuery } from "#/host/queries";
-import { useTarget } from "#/host/use-target";
 import { useRouteState } from "#/workbench/route-state";
 
 export const Route = createFileRoute("/family")({ component: Page });
@@ -1693,9 +1692,8 @@ function Page() {
       ? selectedType
       : (Object.keys(model?.types ?? {})[0] ?? "");
 
-  // ── target: this route is the second consumer of the target model ─────────
+  // ── target: bound selector; resolution now lives inside the sentence's world slot ──
   const boundTarget = family.slice?.binding?.target ?? "";
-  const { sessions } = useTarget(boundTarget);
 
   // ── documents list: the existing settings.tree op already enumerates a root ─
   const treeQuery = useTreeQuery(
@@ -1901,20 +1899,22 @@ function Page() {
         <span className="tele-label text-[10px] tracking-[0.3em] text-[var(--clay-ink)]">
           FAMILY
         </span>
-        <select
-          value={isFamilyDocument ? snapshot?.documentId.relativePath : ""}
-          onChange={(event) => event.target.value && void openDocument(event.target.value)}
-          className="rounded-[2px] border border-[var(--line)] bg-transparent px-1.5 py-0.5 text-[11px] outline-none focus:border-[var(--pe-blue)]"
-        >
-          <option value="">
-            {documents.length === 0 ? "no documents yet" : "open a family document…"}
-          </option>
-          {documents.map((path) => (
-            <option key={path} value={path}>
-              {path}
-            </option>
-          ))}
-        </select>
+        {/* the sentence, posture 2 — doc + world slots stay clickable on this human surface */}
+        <PluginSentence
+          verb="editing"
+          documentLabel={isFamilyDocument ? (snapshot?.documentId.relativePath ?? null) : null}
+          documents={documents}
+          onPickDocument={(path) => void openDocument(path)}
+          target={boundTarget}
+          onBind={(selector) => {
+            // The settings slice runs the document commands; it needs the same session
+            // binding as the family slice or FamilyFoundry module discovery fails.
+            void family.command("bind", { target: selector });
+            void settings.command("bind", { target: selector });
+          }}
+          staged={{ proposals: proposalCount, staged: stagedCount, good: 0, attention: 0 }}
+          busy={busy != null}
+        />
         <NewDocument onCreate={createDocument} busy={busy != null} />
         <span className="mx-1 h-4 w-px bg-[var(--line-2)]" />
 
@@ -2002,17 +2002,7 @@ function Page() {
         >
           build
         </button>
-        <TargetChip
-          selector={boundTarget}
-          sessions={sessions}
-          onPin={(selector) => {
-            // The settings slice runs the document commands; it needs the same session
-            // binding as the family slice or FamilyFoundry module discovery fails.
-            void family.command("bind", { target: selector || null });
-            void settings.command("bind", { target: selector || null });
-          }}
-          consumerLabel="family workspace"
-        />
+        {/* target chip retired here — the sentence's world slot is the binding control */}
         <RvtChip target={boundTarget} />
         <RfaChip target={boundTarget} />
         <ThemeToggle />

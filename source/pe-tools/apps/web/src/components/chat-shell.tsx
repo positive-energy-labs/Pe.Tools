@@ -13,7 +13,8 @@ import { ContextRibbon, useCacheView } from "#/workbench/world";
 import { Button } from "#/components/ui/button";
 import { SidePane } from "#/components/ui/side-pane";
 import { X } from "lucide-react";
-import { chatPluginTitle } from "#/workbench/route-chat-plugins";
+import { chatPluginRegistration, chatPluginTitle } from "#/workbench/route-chat-plugins";
+import { ChatSentence } from "#/components/chat-sentence";
 import "#/workbench/lens.css";
 
 /** Routes hostable as chat workspace plugins; the iframe src is `/${plugin}`.
@@ -24,12 +25,14 @@ import type { ChatPluginRoute } from "#/workbench/route-chat-plugins";
 export function ChatShell({
   initialTurn,
   plugin,
+  target,
   onTurnChange,
   onPluginClose,
   promptSeed,
 }: {
   initialTurn?: number;
   plugin?: ChatPluginRoute;
+  target?: string;
   onTurnChange?: (turn: number | undefined) => void;
   onPluginClose?: () => void;
   promptSeed?: string;
@@ -40,6 +43,7 @@ export function ChatShell({
         <Surface
           initialTurn={initialTurn}
           plugin={plugin}
+          target={target}
           promptSeed={promptSeed}
           onTurnChange={onTurnChange}
           onPluginClose={onPluginClose}
@@ -52,12 +56,14 @@ export function ChatShell({
 function Surface({
   initialTurn,
   plugin,
+  target,
   onTurnChange,
   onPluginClose,
   promptSeed,
 }: {
   initialTurn?: number;
   plugin?: ChatPluginRoute;
+  target?: string;
   onTurnChange?: (turn: number | undefined) => void;
   onPluginClose?: () => void;
   promptSeed?: string;
@@ -165,6 +171,13 @@ function Surface({
               data-s={chrome.status}
             />
             <span className="truncate text-sm font-semibold">{chrome.threadLabel}</span>
+          </div>
+          {/* pea's testimony — the sentence, posture 1 (read-only) */}
+          <div className="flex min-w-0 flex-1 justify-end">
+            <ChatSentence
+              target={target}
+              spec={plugin ? chatPluginRegistration(plugin)?.spec : undefined}
+            />
           </div>
         </header>
 
