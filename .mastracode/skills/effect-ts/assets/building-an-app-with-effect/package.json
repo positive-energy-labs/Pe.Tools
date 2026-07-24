@@ -1,0 +1,21 @@
+{
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.3.0",
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "build": "pnpm --recursive --if-present build",
+    "check": "pnpm --recursive --if-present check"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2",
+    "tsx": "^4.19.2",
+    "vite": "^7.0.0"
+  },
+  "dependencies": {
+    "effect": "^3.17.9",
+    "@effect/platform": "^0.90.6",
+    "@effect/platform-node": "^0.96.0",
+    "@effect-atom/atom-react": "^0.1.15"
+  }
+}

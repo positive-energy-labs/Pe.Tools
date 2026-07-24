@@ -1,0 +1,3 @@
+display_name: Effect.ts
+short_description: Build Effect apps with effect-atom, streams, websockets, SSE, and bundled examples.
+default_prompt: Use Effect.ts patterns to design or implement the requested TypeScript workflow, loading only the relevant bundled references and examples.
