@@ -32,6 +32,10 @@ public record ProjectIndexRequest {
     public RevitDataOutputBudget? Budget { get; init; }
 }
 
+// The named counts are matched counts: they reflect the request's filters (placed-only
+// views/schedules by default) before pagination. ProjectTotals carries the unfiltered
+// non-template document totals so "65 matched of 373 in project" is stateable from one
+// response instead of a cross-op join with revit.context.summary.
 public record ProjectIndexSummary(
     int LevelCount,
     int SheetCount,
@@ -39,7 +43,8 @@ public record ProjectIndexSummary(
     int ScheduleCount,
     int CategoryCount,
     int FamilyCount,
-    bool Truncated
+    bool Truncated,
+    RevitAgentBrowserSummary? ProjectTotals = null
 );
 
 public record ProjectIndexLevelEntry(

@@ -228,7 +228,19 @@ function searchHostOperations(
   const queryTerms = normalizeQuery(options.query);
   const limit = Math.min(Math.max(options.limit ?? 8, 1), 50);
   const verbosity = options.verbosity ?? "compact";
-  const matchedOperations = operations
+  // Progressive discovery (ADR 0003): a bare browse surfaces only the
+  // DefaultVisible orient tier; the rest of the catalog stays reachable by
+  // query, an explicit visibility filter, or any other filter the caller set.
+  const browsing =
+    queryTerms.length === 0 &&
+    !options.visibility &&
+    !options.domain?.trim() &&
+    !options.intent &&
+    options.requiresActiveDocument == null;
+  const searchable = browsing
+    ? operations.filter((operation) => operation.visibility === "DefaultVisible")
+    : operations;
+  const matchedOperations = searchable
     .filter((operation) => matchesFilters(operation, options))
     .map((operation) => ({ operation, score: scoreOperation(operation, queryTerms) }))
     .filter(({ score }) => queryTerms.length === 0 || score > 0);
@@ -236,13 +248,33 @@ function searchHostOperations(
   if (matchedOperations.length === 0 && shouldHintScriptExecuteTool(options, queryTerms))
     return [scriptExecuteToolHint];
 
-  return matchedOperations
+  const results = matchedOperations
     .sort(
       (left, right) =>
         right.score - left.score || left.operation.key.localeCompare(right.operation.key),
     )
     .slice(0, limit)
     .map(({ operation }) => toSearchResult(operation, verbosity));
+  const hiddenCount = operations.length - searchable.length;
+  if (browsing && hiddenCount > 0) results.push(createHiddenTierHint(hiddenCount));
+  return results;
+}
+
+// Synthetic row (same pattern as scriptExecuteToolHint): tells the agent the
+// default surface is deliberately small and how to escalate, so hiding tiers
+// never reads as "the catalog only has N operations".
+function createHiddenTierHint(hiddenCount: number): HostOperationSearchResult {
+  return {
+    key: "catalog.more-operations",
+    displayName: `${hiddenCount} more operations (not shown)`,
+    description: `This default listing shows only the orient tier. ${hiddenCount} more operations are searchable: pass a query describing the capability you need, or filter by visibility (EscalationVisible, ExpertOnly), domain, or intent.`,
+    safety: "read",
+    requestTypeName: "n/a",
+    responseTypeName: "n/a",
+    requestHint: "n/a",
+    usageHint:
+      'host_operation_search query="<capability>" — or visibility=EscalationVisible to list the escalation tier.',
+  };
 }
 
 // Mutation searches that match no catalog operation fall back to scripting, which

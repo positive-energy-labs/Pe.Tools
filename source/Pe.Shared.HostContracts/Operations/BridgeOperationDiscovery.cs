@@ -220,7 +220,7 @@ public static class BridgeOpRegistry {
             return false;
         if (!string.Equals(parts[0], "revit", StringComparison.Ordinal))
             return false;
-        return parts[1] is "context" or "catalog" or "matrix" or "detail" or "resolve" or "apply"
+        return parts[1] is "glance" or "context" or "catalog" or "matrix" or "detail" or "resolve" or "apply"
             && !string.IsNullOrWhiteSpace(parts[2])
             && (parts.Length == 3 || !string.IsNullOrWhiteSpace(parts[3]));
     }

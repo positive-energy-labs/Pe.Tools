@@ -68,6 +68,8 @@ public interface IRevitDataService {
     Task<RevitDocumentSessionContextData> GetRevitDocumentSessionContextAsync(CancellationToken cancellationToken);
     Task<OpenRevitDocumentData> OpenRevitDocumentAsync(OpenRevitDocumentRequest request, CancellationToken cancellationToken);
     Task<RevitAgentContextSummaryData> GetRevitAgentContextSummaryAsync(CancellationToken cancellationToken);
+    Task<GlanceModelData> GetGlanceModelAsync(CancellationToken cancellationToken);
+    Task<GlanceAttentionData> GetGlanceAttentionAsync(CancellationToken cancellationToken);
     Task<RevitAgentContextResolveData> ResolveRevitAgentContextAsync(RevitAgentContextResolveRequest request, CancellationToken cancellationToken);
     Task<RevitAgentVisibleContextData> GetRevitAgentVisibleContextAsync(RevitAgentVisibleContextRequest request, CancellationToken cancellationToken);
     Task<RevitAgentViewRenderingStateData> GetRevitAgentViewRenderingStateAsync(

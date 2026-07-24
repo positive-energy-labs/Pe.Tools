@@ -175,15 +175,23 @@ public record RevitAgentContextResolveData(
     List<RevitDataIssue> Issues
 );
 
+// Limits are nullable so an omitted field survives any deserializer as "unset"
+// (constructor defaults are lost on some wire paths and 0 would clamp to the
+// minimum, silently under-reporting). Collectors substitute the generous
+// defaults documented per field; only explicit out-of-range values warn.
 public record RevitAgentVisibleContextRequest(
-    int MaxCategories = 12,
+    // default 12
+    int? MaxCategories = null,
     List<string>? CategoryNames = null,
-    int MaxSampleElementsPerCategory = 0,
+    // default 0
+    int? MaxSampleElementsPerCategory = null,
     RevitAgentVisibleContextScope Scope = RevitAgentVisibleContextScope.ActiveViewVisible,
     List<long>? ViewIds = null,
     List<string>? ViewUniqueIds = null,
-    int MaxViews = 10,
-    int MaxElementHandlesPerCategory = 0,
+    // default 10
+    int? MaxViews = null,
+    // default 0
+    int? MaxElementHandlesPerCategory = null,
     bool ReturnElementHandlesOnly = false,
     RevitAgentVisibleProjection Projection = RevitAgentVisibleProjection.Counts
 );
@@ -196,15 +204,22 @@ public record RevitAgentVisibleContextData(
     List<RevitAgentVisibleViewSummary>? Views = null
 );
 
+// Nullable limits for the same reason as RevitAgentVisibleContextRequest:
+// omitted must mean "use the generous default", never "clamp to minimum".
 public record RevitAgentViewRenderingStateRequest(
     RevitAgentViewRenderingScope Scope = RevitAgentViewRenderingScope.ActiveView,
     List<long>? ViewIds = null,
     List<string>? ViewUniqueIds = null,
-    int MaxViews = 6,
-    int MaxFiltersPerView = 60,
-    int MaxHiddenCategoriesPerView = 40,
-    int MaxLinksPerView = 25,
-    int MaxWorksetsPerView = 40
+    // default 6
+    int? MaxViews = null,
+    // default 60
+    int? MaxFiltersPerView = null,
+    // default 40
+    int? MaxHiddenCategoriesPerView = null,
+    // default 25
+    int? MaxLinksPerView = null,
+    // default 40
+    int? MaxWorksetsPerView = null
 );
 
 public record RevitAgentObservedViewState(

@@ -56,11 +56,12 @@ export const callRoute = HttpRouter.add("POST", "/call", (req) => {
           });
           return { status: response.status, json: (await response.json()) as unknown };
         },
-        catch: (cause) => new BridgeError(`call forward to ${CALL_FORWARD_BASE} failed: ${String(cause)}`, 503),
+        catch: (cause) =>
+          new BridgeError(`call forward to ${CALL_FORWARD_BASE} failed: ${String(cause)}`, 503),
       });
       // Merge this checkout's TS-only catalog entries into a forwarded catalog so the ops
       // page lists both surfaces (the forward target may run an older TS-only set).
-      if (body.key === "host.ops.catalog" && forwarded.status === 200) {
+      if (isRecord(body) && body.key === "host.ops.catalog" && forwarded.status === 200) {
         const catalog = forwarded.json as { operations?: { key?: string }[] };
         if (Array.isArray(catalog.operations)) {
           const seen = new Set(catalog.operations.map((op) => op.key));
@@ -167,6 +168,16 @@ export const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
   switch (key) {
     case "host.status":
       return yield* Effect.flatMap(bridge.snapshot(bridgeSessionId), getHostStatus);
+    case "host.topology": {
+      // The operator's map: host identity + all sessions in one snapshot (ADR 0003).
+      const host = yield* Effect.flatMap(bridge.snapshot(bridgeSessionId), getHostStatus);
+      const sessions = yield* listBridgeSessions(bridge.list);
+      return {
+        observedAtUtc: new Date().toISOString(),
+        host,
+        sessions: sessions.sessions,
+      };
+    }
     case "bridge.sessions.summary":
       return yield* Effect.flatMap(bridge.snapshot(bridgeSessionId), getBridgeSessionSummary);
     case "bridge.sessions.list":

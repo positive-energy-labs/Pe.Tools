@@ -901,6 +901,40 @@ public static class RevitBridgeOps {
             static (request, context, ct) => context.RevitData.OpenRevitDocumentAsync(request, ct)
         );
 
+    public static readonly BridgeOp GlanceModel =
+        BridgeOp.Create<NoRequest, GlanceModelData>(
+            "revit.glance.model",
+            "Model at a Glance",
+            HostOperationAgentMetadata.Create(
+                "One bounded 'what IS this model' packet: document identity, true project totals (views/sheets/schedules/families), levels, sheet-number series, family composition by category, and parameter-binding health. Summaries are complete, never truncated; observedAtUtc stamps freshness. Escalate to project-index for names/handles or loaded-families for rows.",
+                new[] { "glance", "model", "orientation", "totals", "composition", "discipline", "levels", "sheet-series", "binding-health", "start-here" },
+                requiresActiveDocument: true,
+                costTier: HostOperationCostTier.Bounded,
+                callGuidance: [
+                    "Call this once per document to orient before catalog/detail escalation; sheetNumberSeries is inference input, so label any discipline claim as inferred.",
+                    "This packet has no row lists by design — use returned totals to size budgets for project-index or loaded-families follow-ups."
+                ]
+            ),
+            static (request, context, ct) => context.RevitData.GetGlanceModelAsync(ct)
+        );
+
+    public static readonly BridgeOp GlanceAttention =
+        BridgeOp.Create<NoRequest, GlanceAttentionData>(
+            "revit.glance.attention",
+            "Screen at a Glance",
+            HostOperationAgentMetadata.Create(
+                "One bounded 'what is on the user's screen' packet: active-view identity, observed view state, visible category composition (counts, generous bounds), and the verbatim trust strip (confidenceWarnings, apiLimitations, notInspected). observedAtUtc stamps freshness. Escalate to visible-summary for element handles or view-rendering-state for multi-view comparison.",
+                new[] { "glance", "attention", "screen", "active-view", "visible", "trust", "what-user-sees", "start-here" },
+                requiresActiveDocument: true,
+                costTier: HostOperationCostTier.Bounded,
+                callGuidance: [
+                    "Call this before answering anything about what the user is looking at; quote the trust strip instead of claiming pixel-perfect visibility.",
+                    "This packet returns counts, not element handles — escalate to revit.context.visible-summary with projection=Handles when exact elements are needed."
+                ]
+            ),
+            static (request, context, ct) => context.RevitData.GetGlanceAttentionAsync(ct)
+        );
+
     public static readonly BridgeOp RevitAgentContextSummary =
         BridgeOp.Create<NoRequest, RevitAgentContextSummaryData>(
             "revit.context.summary",

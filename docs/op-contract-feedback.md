@@ -1,5 +1,11 @@
 # Op-contract feedback from the /ops UI build
 
+> **Status 2026-07-24** — [ADR 0003](adr/0003-read-envelope-and-glance-tier.md) adopted the
+> envelope law and glance tier. Landed: `revit.glance.model` (first-class, DefaultVisible,
+> observedAtUtc), project-index summary `projectTotals`, nullable request limits (no more
+> clamp-to-minimum / self-flagging warnings), and default-visible-only browse in
+> `host_operation_search`. Everything else below remains open.
+
 Harvested while building curated readonly views for every host op (branch
 `worktree-ops-ui`, live-verified against a 2025 sandbox with the MEP template).
 The forcing function: a UI can only render what the contract returns. Every gap

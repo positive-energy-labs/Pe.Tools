@@ -456,6 +456,17 @@ export const hostProbeDataSchema = Schema.Struct({
   sourceRoot: Schema.optional(Schema.NullOr(Schema.String)),
 });
 
+// The operator's map (ADR 0003 glance tier, host-side): host identity + every
+// connected session in one snapshot, replacing the host.status + bridge.sessions.list
+// client-side join. observedAtUtc is host clock — topology is a transport fact.
+export const hostTopologyDataSchema = Schema.Struct({
+  observedAtUtc: Schema.String,
+  host: hostProbeDataSchema,
+  sessions: bridgeSessionsListSchema.fields.sessions,
+});
+
+export type HostTopologyData = Schema.Schema.Type<typeof hostTopologyDataSchema>;
+
 export type HostResourceFileStateData = Schema.Schema.Type<typeof hostResourceFileStateDataSchema>;
 
 export const hostResourceFileStateDataSchema = Schema.Struct({
@@ -542,6 +553,9 @@ export const tsOnlyOperationSchemas = {
   },
   "host.status": {
     response: hostProbeDataSchema,
+  },
+  "host.topology": {
+    response: hostTopologyDataSchema,
   },
   "logs.tail": {
     request: hostLogsRequestSchema,
@@ -644,7 +658,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "Settings Workspaces",
     description: "Settings workspaces available to author, with their modules and roots.",
     intent: "Read",
-    visibility: "DefaultVisible",
+    visibility: "EscalationVisible",
     costTier: "Cheap",
     requestTypeName: "NoRequest",
     responseTypeName: "SettingsWorkspacesData",
@@ -657,7 +671,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     description:
       "Browse the settings document tree (profiles, fragments, schemas) for a module and root.",
     intent: "Read",
-    visibility: "DefaultVisible",
+    visibility: "EscalationVisible",
     costTier: "Cheap",
     requestTypeName: "SettingsTreeRequest",
     responseTypeName: "SettingsDiscoveryResult",
@@ -670,7 +684,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     description:
       "Open a settings document: raw + composed content, metadata, dependencies, and validation.",
     intent: "Read",
-    visibility: "DefaultVisible",
+    visibility: "EscalationVisible",
     costTier: "Bounded",
     requestTypeName: "OpenSettingsDocumentRequest",
     responseTypeName: "SettingsDocumentSnapshot",
@@ -694,7 +708,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "Validate Settings Document",
     description: "Validate settings document content against its schema without saving.",
     intent: "Read",
-    visibility: "DefaultVisible",
+    visibility: "EscalationVisible",
     costTier: "Bounded",
     requestTypeName: "ValidateSettingsDocumentRequest",
     responseTypeName: "SettingsValidationResult",
@@ -707,7 +721,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     description:
       "Save a settings document with optimistic concurrency (version token); reports conflicts and validation.",
     intent: "Mutate",
-    visibility: "DefaultVisible",
+    visibility: "EscalationVisible",
     costTier: "Mutation",
     requestTypeName: "SaveSettingsDocumentRequest",
     responseTypeName: "SaveSettingsDocumentResult",
@@ -720,7 +734,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     description:
       "Autodesk Platform Services persisted-token status for the requested scope profile.",
     intent: "Read",
-    visibility: "DefaultVisible",
+    visibility: "EscalationVisible",
     costTier: "Cheap",
     requestTypeName: "ApsTokenRequest",
     responseTypeName: "ApsPersistedTokenStatus",
@@ -732,7 +746,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "APS Auth Login",
     description: "Begin an Autodesk Platform Services auth flow and persist the resulting token.",
     intent: "Mutate",
-    visibility: "DefaultVisible",
+    visibility: "EscalationVisible",
     costTier: "Bounded",
     requestTypeName: "ApsTokenRequest",
     responseTypeName: "ApsPersistedTokenStatus",
@@ -744,7 +758,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "APS Auth Logout",
     description: "Clear the persisted Autodesk Platform Services token.",
     intent: "Mutate",
-    visibility: "DefaultVisible",
+    visibility: "EscalationVisible",
     costTier: "Cheap",
     requestTypeName: "NoRequest",
     responseTypeName: "ApsLogoutResult",
@@ -762,6 +776,20 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     requestTypeName: "ApsTokenRequest",
     responseTypeName: "ApsTokenResult",
     searchTerms: ["aps", "autodesk", "token", "access token", "scope"],
+  },
+  {
+    key: "host.topology",
+    origin: "host-local",
+    displayName: "Session Topology",
+    description:
+      "The operator's map in one snapshot: host identity/health plus every connected Revit session (lane, sandbox id, pid, open documents). Replaces the host.status + bridge.sessions.list join; observedAtUtc stamps freshness (host clock).",
+    intent: "Read",
+    visibility: "DefaultVisible",
+    costTier: "Cheap",
+    requiresActiveDocument: false,
+    requestTypeName: "NoRequest",
+    responseTypeName: "HostTopologyData",
+    searchTerms: ["topology", "sessions", "glance", "operator", "map", "connected", "lanes"],
   },
   {
     key: "host.status",

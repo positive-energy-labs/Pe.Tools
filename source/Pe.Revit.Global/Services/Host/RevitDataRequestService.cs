@@ -3,6 +3,7 @@ using Autodesk.Revit.UI.Events;
 using Pe.Revit.DocumentData.AgentContext;
 using Pe.Revit.DocumentData.Electrical;
 using Pe.Revit.DocumentData.Families.Loaded.Collectors;
+using Pe.Revit.DocumentData.Glance;
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.Extensions.FamManager;
 using Pe.Revit.DocumentData.ProjectBrowser;
@@ -148,6 +149,12 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
 
     public Task<RevitAgentContextSummaryData> GetRevitAgentContextSummaryAsync(CancellationToken cancellationToken) =>
         this.EnqueueAsync(this.GetRevitAgentContextSummaryCore, cancellationToken);
+
+    public Task<GlanceModelData> GetGlanceModelAsync(CancellationToken cancellationToken) =>
+        this.EnqueueAsync(GetGlanceModelCore, cancellationToken);
+
+    public Task<GlanceAttentionData> GetGlanceAttentionAsync(CancellationToken cancellationToken) =>
+        this.EnqueueAsync(GetGlanceAttentionCore, cancellationToken);
 
     public Task<RevitAgentContextResolveData> ResolveRevitAgentContextAsync(
         RevitAgentContextResolveRequest request, CancellationToken cancellationToken
@@ -1223,6 +1230,41 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
                 _ => DetachFromCentralOption.DoNotDetach
             }
         };
+
+    private static GlanceModelData GetGlanceModelCore() {
+        var document = GetSupportedActiveDocument(RevitBridgeOps.GlanceModel.Definition);
+        try {
+            var documentSummary = CreateDocumentSessionContext().ActiveDocument
+                ?? throw new InvalidOperationException("Active document summary unavailable.");
+            return GlanceModelCollector.Collect(document, documentSummary);
+        } catch (BridgeOperationException) {
+            throw;
+        } catch (Exception ex) {
+            throw BridgeOperationExceptions.Unexpected(
+                "GlanceModelException",
+                ex,
+                "Verify a Revit document is active and retry."
+            );
+        }
+    }
+
+    private static GlanceAttentionData GetGlanceAttentionCore() {
+        var document = GetSupportedActiveDocument(RevitBridgeOps.GlanceAttention.Definition);
+        try {
+            return GlanceAttentionCollector.Collect(
+                document,
+                RevitUiSession.CurrentUIApplication.GetActiveView()
+            );
+        } catch (BridgeOperationException) {
+            throw;
+        } catch (Exception ex) {
+            throw BridgeOperationExceptions.Unexpected(
+                "GlanceAttentionException",
+                ex,
+                "Verify a Revit document and active view are available, then retry."
+            );
+        }
+    }
 
     private RevitAgentContextSummaryData GetRevitAgentContextSummaryCore() {
         var document = GetSupportedActiveDocument(RevitBridgeOps.RevitAgentContextSummary.Definition);
