@@ -143,6 +143,13 @@ type InstallReceipt = {
   appliedAtUtc?: string;
 };
 
+type HostUpdateStatus = {
+  installedVersion: string | null;
+  latestVersion: string | null;
+  updateAvailable: boolean;
+  error?: string;
+};
+
 function readInstallReceipt(): InstallReceipt | null {
   try {
     return JSON.parse(
@@ -153,15 +160,69 @@ function readInstallReceipt(): InstallReceipt | null {
   }
 }
 
+// Match `install apply --release latest`: GitHub's latest stable release is the authority.
+async function readHostUpdateStatus(): Promise<HostUpdateStatus> {
+  const receipt = readInstallReceipt();
+  const installedVersion = receipt?.releaseVersion ?? null;
+  if (hostOwnership.lane !== "installed" || !receipt?.releasesRepo)
+    return { installedVersion, latestVersion: null, updateAvailable: false };
+
+  try {
+    const repo = receipt.releasesRepo;
+    if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo))
+      throw new Error("installed receipt has an invalid releasesRepo");
+    const latest = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
+      headers: {
+        accept: "application/vnd.github+json",
+        "user-agent": "Pe.Tools",
+      },
+    });
+    if (!latest.ok) throw new Error(`GitHub latest release returned ${latest.status}`);
+    const tag = ((await latest.json()) as { tag_name?: unknown }).tag_name;
+    if (typeof tag !== "string" || !tag.trim()) throw new Error("latest release has no tag");
+    const latestVersion = tag.replace(/^v/i, "");
+    return {
+      installedVersion,
+      latestVersion,
+      // ponytail: exact equality matches the latest-only installer. Add semver ordering only if
+      // locally-ahead or prerelease installs become supported.
+      updateAvailable: installedVersion !== latestVersion,
+    };
+  } catch (error) {
+    return {
+      installedVersion,
+      latestVersion: null,
+      updateAvailable: false,
+      error: String(error),
+    };
+  }
+}
+
 const hostUpdateRoute = HttpRouter.add("POST", "/host/update", () =>
   Effect.tryPromise({
     try: async () => {
+      const status = await readHostUpdateStatus();
+      if (!status.updateAvailable)
+        return Response.jsonUnsafe(
+          {
+            accepted: false,
+            reason:
+              status.installedVersion !== null && status.installedVersion === status.latestVersion
+                ? "already-current"
+                : "update-unavailable",
+            ...status,
+          },
+          { status: 409 },
+        );
+
       const launch = peRevitLauncher();
       const args = ["install", "apply", "--release", "latest", "--json"] as const;
       await new Promise<void>((resolve, reject) => {
         const child = spawn(launch.cmd, [...launch.args, ...args], {
           cwd: launch.cwd,
-          detached: true,
+          // Windows detached children get their own console window. A normal unreferenced child
+          // survives this host's planned shutdown without flashing Windows Terminal.
+          detached: process.platform !== "win32",
           stdio: "ignore",
           windowsHide: true,
         });
@@ -196,48 +257,8 @@ const hostInstallRoute = HttpRouter.add("GET", "/host/install", () =>
   }),
 );
 
-// Match `install apply --release latest`: GitHub's latest stable release is the authority.
 const hostUpdateStatusRoute = HttpRouter.add("GET", "/host/update", () =>
-  Effect.promise(async () => {
-    const receipt = readInstallReceipt();
-    const installedVersion = receipt?.releaseVersion ?? null;
-    if (hostOwnership.lane !== "installed" || !receipt?.releasesRepo)
-      return Response.jsonUnsafe({
-        installedVersion,
-        latestVersion: null,
-        updateAvailable: false,
-      });
-
-    try {
-      const repo = receipt.releasesRepo;
-      if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo))
-        throw new Error("installed receipt has an invalid releasesRepo");
-      const latest = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
-        headers: {
-          accept: "application/vnd.github+json",
-          "user-agent": "Pe.Tools",
-        },
-      });
-      if (!latest.ok) throw new Error(`GitHub latest release returned ${latest.status}`);
-      const tag = ((await latest.json()) as { tag_name?: unknown }).tag_name;
-      if (typeof tag !== "string" || !tag.trim()) throw new Error("latest release has no tag");
-      const latestVersion = tag.replace(/^v/i, "");
-      return Response.jsonUnsafe({
-        installedVersion,
-        latestVersion,
-        // ponytail: exact equality matches the latest-only installer. Add semver ordering only if
-        // locally-ahead or prerelease installs become supported.
-        updateAvailable: installedVersion !== latestVersion,
-      });
-    } catch (error) {
-      return Response.jsonUnsafe({
-        installedVersion,
-        latestVersion: null,
-        updateAvailable: false,
-        error: String(error),
-      });
-    }
-  }),
+  Effect.promise(async () => Response.jsonUnsafe(await readHostUpdateStatus())),
 );
 
 // Routine cleanup, always on: the kernel's `install gc` prunes version dirs (keep 3), sweeps
