@@ -35,7 +35,8 @@ export function useChatTarget() {
   return { selector, resolution, sessions, worldLog, pin };
 }
 
-/** The composer control-row chip. */
+/** Kept unmounted: the sentence's world slot is now the chat's one bind control, but this
+ * chip's resolution-readout ideas are worth revisiting. */
 export function ChatTargetChip() {
   const { selector, sessions, pin } = useChatTarget();
   return <TargetChip selector={selector} sessions={sessions} onPin={pin} dropUp />;

@@ -1,41 +1,50 @@
 /**
- * PluginSentence — posture 2 of the sentence grammar: the interactive header a
- * collaborative route mounts. Same grammar the chat sentence speaks, but the
- * nouns stay clickable: the document slot opens the route's own pick list, the
- * world clause opens a bind picker over live sessions. Plugins are human
- * surfaces; choosing happens here, never in the chat lane.
+ * Sentence — THE targeting surface. Every surface that talks to Revit (chat,
+ * chat plugins, plugin routes) targets through this one grammar: an optional
+ * document slot and the world clause slot, both clickable. Targeting is the
+ * CORE; status is an EXTENSION — callers inject a status prefix (pea's live
+ * activity in chat, staged-proposal counts in plugins) and the nouns stay
+ * clickable underneath whatever the prefix says.
  */
 import { useEffect, useRef, useState } from "react";
-import type { CellSummary } from "@pe/agent-contracts";
 
 import { useFleet } from "#/host/fleet";
 import { mintSelector, resolveTarget, sessionLabel } from "#/host/target";
 
-export interface PluginSentenceProps {
-  /** Resting verb, e.g. "editing". */
-  verb: string;
-  /** Selected document label; null renders the placeholder slot. */
-  documentLabel: string | null;
-  /** Pick list for the document slot (route-owned vocabulary, e.g. relative paths). */
-  documents: string[];
-  onPickDocument: (path: string) => void;
-  /** Bound target selector ("" = unbound/implicit) and the bind writer. */
+export type SentenceTone = "rest" | "active" | "awaiting" | "committed" | "failed";
+
+export const TONE_COLOR: Record<SentenceTone, string> = {
+  rest: "var(--muted-foreground)",
+  active: "var(--cat-kiln)",
+  awaiting: "var(--pe-blue)",
+  committed: "var(--pe-blue)",
+  failed: "var(--cat-clay)",
+};
+
+export interface SentenceProps {
+  /** Status prefix — the extension point. Chat injects pea's testimony; plugins inject staged counts. */
+  prefix: string;
+  prefixTone?: SentenceTone;
+  /** Document slot renders only when `documents` is provided (plugin surfaces). */
+  documentLabel?: string | null;
+  documents?: string[];
+  onPickDocument?: (path: string) => void;
+  /** Bound target selector ("" = unbound/implicit) and the bind writer. null = unbind. */
   target: string;
   onBind: (selector: string | null) => void;
-  staged: CellSummary;
   busy?: boolean;
 }
 
 function Slot({
   text,
   placeholder,
-  open,
   onClick,
+  open,
 }: {
   text: string | null;
   placeholder: string;
-  open: boolean;
   onClick: () => void;
+  open: boolean;
 }) {
   return (
     <button
@@ -78,16 +87,16 @@ function Popover({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function PluginSentence({
-  verb,
+export function Sentence({
+  prefix,
+  prefixTone = "rest",
   documentLabel,
   documents,
   onPickDocument,
   target,
   onBind,
-  staged,
   busy,
-}: PluginSentenceProps) {
+}: SentenceProps) {
   const [openSlot, setOpenSlot] = useState<"doc" | "world" | null>(null);
   const [query, setQuery] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
@@ -102,12 +111,8 @@ export function PluginSentence({
     return () => document.removeEventListener("mousedown", onDown);
   }, [openSlot]);
 
+  const hasDocSlot = documents !== undefined;
   const resolution = resolveTarget(sessions, target);
-  const prefix =
-    staged.proposals > 0
-      ? `reviewing ${staged.proposals} proposal${staged.proposals === 1 ? "" : "s"} on`
-      : verb;
-  const prefixColor = staged.proposals > 0 ? "var(--pe-blue)" : "var(--muted-foreground)";
 
   const clauseText =
     resolution.kind === "resolved"
@@ -127,18 +132,41 @@ export function PluginSentence({
         style={{ border: "0.5px solid var(--line-2)", borderRadius: 2, opacity: busy ? 0.6 : 1 }}
       >
         <span className="flex items-baseline gap-1 truncate" style={{ whiteSpace: "nowrap" }}>
-          <span className="tele" style={{ fontSize: 11, color: prefixColor }}>
-            {prefix}{" "}
-          </span>
-          <Slot
-            text={documentLabel}
-            placeholder="pick a document"
-            open={openSlot === "doc"}
-            onClick={() => setOpenSlot(openSlot === "doc" ? null : "doc")}
-          />
+          {hasDocSlot && !documentLabel ? (
+            <>
+              <span className="tele" style={{ fontSize: 11, color: "var(--muted-foreground)" }}>
+                nothing open —{" "}
+              </span>
+              <Slot
+                text={null}
+                placeholder="pick a document"
+                open={openSlot === "doc"}
+                onClick={() => setOpenSlot(openSlot === "doc" ? null : "doc")}
+              />
+              <span className="tele" style={{ fontSize: 11, color: "var(--muted-foreground)" }}>
+                {" "}
+                to begin
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="tele" style={{ fontSize: 11, color: TONE_COLOR[prefixTone], transition: "color 0.6s" }}>
+                {prefix}{" "}
+              </span>
+              {hasDocSlot ? (
+                <Slot
+                  text={documentLabel ?? null}
+                  placeholder="pick a document"
+                  open={openSlot === "doc"}
+                  onClick={() => setOpenSlot(openSlot === "doc" ? null : "doc")}
+                />
+              ) : null}
+            </>
+          )}
           <button
             type="button"
             className="tele"
+            title="which world this surface speaks to — click to bind"
             style={{
               fontSize: 11,
               padding: 0,
@@ -149,7 +177,6 @@ export function PluginSentence({
               color: resolution.kind === "resolved" ? "var(--muted-foreground)" : "var(--pe-blue)",
               whiteSpace: "nowrap",
             }}
-            title="which Revit world this workspace speaks to — click to re-bind"
             onClick={(event) => {
               event.stopPropagation();
               setOpenSlot(openSlot === "world" ? null : "world");
@@ -160,7 +187,7 @@ export function PluginSentence({
         </span>
       </div>
 
-      {openSlot === "doc" ? (
+      {openSlot === "doc" && documents !== undefined ? (
         <Popover>
           <input
             value={query}
@@ -193,7 +220,7 @@ export function PluginSentence({
                       : undefined,
                 }}
                 onClick={() => {
-                  onPickDocument(path);
+                  onPickDocument?.(path);
                   setOpenSlot(null);
                 }}
               >
@@ -211,7 +238,7 @@ export function PluginSentence({
       {openSlot === "world" ? (
         <Popover>
           <div className="tele pb-0.5" style={{ fontSize: 8, color: "var(--muted-foreground)" }}>
-            BIND — which world this workspace speaks to
+            BIND — which world this surface speaks to
           </div>
           {sessions.map((session) => (
             <div

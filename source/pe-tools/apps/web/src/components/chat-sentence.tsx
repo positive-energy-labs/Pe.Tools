@@ -1,10 +1,11 @@
 /**
- * ChatSentence — pea's testimony, posture 1 of the sentence grammar.
+ * ChatSentence — the chat lane's mount of THE sentence (components/sentence.tsx).
  *
- * Read-only: pea routes to documents and worlds; this line narrates actor +
- * verb-status + target and never offers a choice (choosing lives in the plugin
- * sentence's slots). Derivation is pure (`sentenceText`) over the workbench
- * snapshot, the fleet, and the open plugin's trichotomy counts.
+ * Targeting is the sentence's core: the world clause is the chat's one bind
+ * control, writing the `?target` pin through useChatTarget. Pea's testimony is
+ * the status EXTENSION: `sentenceText` derives a pure status line (actor +
+ * verb-status + target) from the workbench snapshot, the fleet, and the open
+ * plugin's trichotomy counts, and feeds it in as the prefix.
  */
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -16,22 +17,22 @@ import {
 } from "@pe/agent-contracts";
 import type { z } from "zod";
 
-import { useFleet, worldClause } from "#/host/fleet";
-import { selectorLabel } from "#/host/target";
+import { useChatTarget } from "#/components/chat-target";
+import { Sentence, type SentenceTone } from "#/components/sentence";
 import { useWorkbench } from "#/workbench/provider";
 import { useRouteState } from "#/workbench/route-state";
 
 const COMMIT_RELAX_MS = 4_000;
 const FAIL_RELAX_MS = 8_000;
 
-export type SentenceTone = "rest" | "active" | "awaiting" | "committed" | "failed";
+export type { SentenceTone };
 
 export interface SentenceLine {
   text: string;
   tone: SentenceTone;
 }
 
-/** The whole grammar: one gerund + a status prefix + optional world clause. */
+/** The status grammar: one gerund + a status prefix + optional world clause. Pure. */
 export function sentenceText(input: {
   snapshot: SentenceSnapshot;
   clause: string;
@@ -72,28 +73,8 @@ export function sentenceText(input: {
       text: `pea is waiting on your review — ${staged.proposals} proposed${staged.staged ? `, ${staged.staged} staged` : ""}`,
       tone: "awaiting",
     };
-  if (target) return { text: `resting — pinned to ${selectorLabel(target)}${clause}`, tone: "rest" };
+  if (target) return { text: "resting — pinned", tone: "rest" };
   return { text: "pea is idle — nothing in flight", tone: "rest" };
-}
-
-const TONE_COLOR: Record<SentenceTone, string> = {
-  rest: "var(--muted-foreground)",
-  active: "var(--cat-kiln)",
-  awaiting: "var(--pe-blue)",
-  committed: "var(--pe-blue)",
-  failed: "var(--cat-clay)",
-};
-
-function SentenceLineView({ line }: { line: SentenceLine }) {
-  return (
-    <span
-      className="tele min-w-0 truncate"
-      style={{ fontSize: 11, color: TONE_COLOR[line.tone], transition: "color 0.6s" }}
-      title="read-only — pea routes to documents; this line is testimony, not a control"
-    >
-      {line.text}
-    </span>
-  );
 }
 
 /** Re-render heartbeat so relax timers elapse without an event. */
@@ -106,28 +87,40 @@ function useNowMs(): number {
   return nowMs;
 }
 
-function useSentence(staged: CellSummary | null, target?: string): SentenceLine {
+function useStatusLine(staged: CellSummary | null, target: string): SentenceLine {
   const { debug } = useWorkbench();
   const snapshot = useMemo(() => selectSentenceSnapshot(debug.state), [debug.state]);
-  const { worlds } = useFleet();
   const nowMs = useNowMs();
-  const clause = target ? worldClause(worlds, target) : "";
-  return sentenceText({ snapshot, clause, target, staged, nowMs });
+  // The world clause is the sentence's own slot now — the status line stays clause-free.
+  return sentenceText({ snapshot, clause: "", target: target || undefined, staged, nowMs });
 }
 
-export function ChatSentence({ target, spec }: { target?: string; spec?: RouteStateSpec<z.ZodType> }) {
-  return spec ? <WithRouteDoc target={target} spec={spec} /> : <Plain target={target} />;
+export function ChatSentence({ spec }: { spec?: RouteStateSpec<z.ZodType> }) {
+  return spec ? <WithRouteDoc spec={spec} /> : <Plain />;
 }
 
-function Plain({ target }: { target?: string }) {
-  return <SentenceLineView line={useSentence(null, target)} />;
+function ChatMount({ staged }: { staged: CellSummary | null }) {
+  const { selector, pin } = useChatTarget();
+  const line = useStatusLine(staged, selector);
+  return (
+    <Sentence
+      prefix={line.text}
+      prefixTone={line.tone}
+      target={selector}
+      onBind={(next) => pin(next ?? "")}
+    />
+  );
 }
 
-function WithRouteDoc({ target, spec }: { target?: string; spec: RouteStateSpec<z.ZodType> }) {
+function Plain() {
+  return <ChatMount staged={null} />;
+}
+
+function WithRouteDoc({ spec }: { spec: RouteStateSpec<z.ZodType> }) {
   const route = useRouteState(spec);
   const staged = useMemo(
     () => (route.slice == null ? null : documentTrichotomySummary(route.slice)),
     [route.slice],
   );
-  return <SentenceLineView line={useSentence(staged, target)} />;
+  return <ChatMount staged={staged} />;
 }

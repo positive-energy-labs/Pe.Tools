@@ -25,14 +25,12 @@ import type { ChatPluginRoute } from "#/workbench/route-chat-plugins";
 export function ChatShell({
   initialTurn,
   plugin,
-  target,
   onTurnChange,
   onPluginClose,
   promptSeed,
 }: {
   initialTurn?: number;
   plugin?: ChatPluginRoute;
-  target?: string;
   onTurnChange?: (turn: number | undefined) => void;
   onPluginClose?: () => void;
   promptSeed?: string;
@@ -43,7 +41,6 @@ export function ChatShell({
         <Surface
           initialTurn={initialTurn}
           plugin={plugin}
-          target={target}
           promptSeed={promptSeed}
           onTurnChange={onTurnChange}
           onPluginClose={onPluginClose}
@@ -56,14 +53,12 @@ export function ChatShell({
 function Surface({
   initialTurn,
   plugin,
-  target,
   onTurnChange,
   onPluginClose,
   promptSeed,
 }: {
   initialTurn?: number;
   plugin?: ChatPluginRoute;
-  target?: string;
   onTurnChange?: (turn: number | undefined) => void;
   onPluginClose?: () => void;
   promptSeed?: string;
@@ -172,12 +167,9 @@ function Surface({
             />
             <span className="truncate text-sm font-semibold">{chrome.threadLabel}</span>
           </div>
-          {/* pea's testimony — the sentence, posture 1 (read-only) */}
+          {/* THE sentence — pea's testimony as prefix, the world slot as the chat's one bind control */}
           <div className="flex min-w-0 flex-1 justify-end">
-            <ChatSentence
-              target={target}
-              spec={plugin ? chatPluginRegistration(plugin)?.spec : undefined}
-            />
+            <ChatSentence spec={plugin ? chatPluginRegistration(plugin)?.spec : undefined} />
           </div>
         </header>
 

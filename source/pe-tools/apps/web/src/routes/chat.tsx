@@ -48,7 +48,7 @@ export const Route = createFileRoute("/chat")({
 });
 
 function RouteComponent() {
-  const { plugin, prompt, turn, target } = Route.useSearch();
+  const { plugin, prompt, turn } = Route.useSearch();
   const navigate = useNavigate({ from: "/chat" });
   // Debounce the scroll-driven turn → URL write: scrolling fires turn changes every frame, and each
   // navigate re-renders the route. ~1s lag keeps the shareable URL fresh without thrashing the router
@@ -74,7 +74,6 @@ function RouteComponent() {
       <ChatShell
         initialTurn={turn}
         plugin={plugin}
-        target={target}
         promptSeed={prompt}
         onTurnChange={setTurn}
         onPluginClose={() => void navigate({ search: (prev) => ({ ...prev, plugin: undefined }) })}

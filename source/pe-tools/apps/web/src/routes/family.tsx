@@ -10,7 +10,7 @@ import {
 } from "@pe/agent-contracts";
 import { ThemeToggle } from "#/components/ThemeToggle";
 import { RfaChip, RvtChip } from "#/components/document-chips";
-import { PluginSentence } from "#/components/plugin-sentence";
+import { Sentence } from "#/components/sentence";
 import {
   type CitationTarget,
   FamilyDocPane,
@@ -1899,9 +1899,14 @@ function Page() {
         <span className="tele-label text-[10px] tracking-[0.3em] text-[var(--clay-ink)]">
           FAMILY
         </span>
-        {/* the sentence, posture 2 — doc + world slots stay clickable on this human surface */}
-        <PluginSentence
-          verb="editing"
+        {/* THE sentence — doc + world slots stay clickable; staged counts feed the status prefix */}
+        <Sentence
+          prefix={
+            proposalCount > 0
+              ? `reviewing ${proposalCount} proposal${proposalCount === 1 ? "" : "s"} on`
+              : "editing"
+          }
+          prefixTone={proposalCount > 0 ? "awaiting" : "rest"}
           documentLabel={isFamilyDocument ? (snapshot?.documentId.relativePath ?? null) : null}
           documents={documents}
           onPickDocument={(path) => void openDocument(path)}
@@ -1912,7 +1917,6 @@ function Page() {
             void family.command("bind", { target: selector });
             void settings.command("bind", { target: selector });
           }}
-          staged={{ proposals: proposalCount, staged: stagedCount, good: 0, attention: 0 }}
           busy={busy != null}
         />
         <NewDocument onCreate={createDocument} busy={busy != null} />
