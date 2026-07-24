@@ -40,6 +40,7 @@ public class CmdPltMruViews : IExternalCommand {
             new PaletteOptions<MruViewPaletteItem> {
                 SearchConfig = null, // Disable search for MRU palette
                 CustomKeyBindings = customKeys,
+                Tray = new PaletteTray { Content = CreateColoringToggle() },
                 ViewModelMutator = vm => {
                     // Select second item (first is current view, second is previous)
                     if (vm.FilteredItems.Count > 1) vm.SelectedIndex = 1;
@@ -66,6 +67,42 @@ public class CmdPltMruViews : IExternalCommand {
             });
         window.Show();
     }
+
+    /// <summary>Tab-coloring controls: on/off, and whole-tab fill vs top bar only.</summary>
+    private static System.Windows.Controls.StackPanel CreateColoringToggle() {
+        var enabled = new System.Windows.Controls.CheckBox {
+            Content = "Color Revit tabs",
+            IsChecked = DocumentColorLedger.TabColoringEnabled,
+            Margin = new System.Windows.Thickness(8, 4, 8, 2)
+        };
+        enabled.Checked += (_, _) => {
+            DocumentColorLedger.TabColoringEnabled = true;
+            RevitTabColorizer.EnsureStarted();
+        };
+        enabled.Unchecked += (_, _) => {
+            DocumentColorLedger.TabColoringEnabled = false;
+            RevitTabColorizer.Stop();
+        };
+
+        var wholeTab = new System.Windows.Controls.CheckBox {
+            Content = "Fill whole tab (vs top bar only)",
+            IsChecked = DocumentColorLedger.WholeTabFill,
+            Margin = new System.Windows.Thickness(8, 2, 8, 4)
+        };
+        wholeTab.Checked += (_, _) => {
+            DocumentColorLedger.WholeTabFill = true;
+            RevitTabColorizer.Refresh();
+        };
+        wholeTab.Unchecked += (_, _) => {
+            DocumentColorLedger.WholeTabFill = false;
+            RevitTabColorizer.Refresh();
+        };
+
+        var panel = new System.Windows.Controls.StackPanel();
+        panel.Children.Add(enabled);
+        panel.Children.Add(wholeTab);
+        return panel;
+    }
 }
 
 /// <summary>
@@ -74,7 +111,7 @@ public class CmdPltMruViews : IExternalCommand {
 public class MruViewPaletteItem : IPaletteListItem {
     public MruViewPaletteItem(View view) {
         this.View = view;
-        this.ItemColor = DocumentColors.Get(view.Document);
+        this.ItemColor = DocumentColorLedger.GetColor(view.Document);
     }
 
     public View View { get; }
