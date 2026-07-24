@@ -217,7 +217,7 @@ function App() {
       <main className="page-wrap py-16">
         <section className="max-w-2xl">
           <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Internal tools · Update proof 0.6.21
+            Internal tools · Update proof 0.6.22
           </p>
           <h1 className="font-pe-display text-5xl font-semibold leading-tight tracking-tight text-foreground">
             Healthy people, healthy planet.
