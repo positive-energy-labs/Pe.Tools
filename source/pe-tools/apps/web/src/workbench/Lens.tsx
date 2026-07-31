@@ -136,6 +136,9 @@ export function Lens({
   const initialTurnRef = useRef(initialTurn);
   initialTurnRef.current = initialTurn;
   const tailFollowRef = useRef<TailFollowState>(initialTurn ? "detached" : "following");
+  // Coarse mirror of tailFollowRef for the mapdial's jump-to-tail button (renders only on
+  // attach/detach edges — setState with the same value bails out).
+  const [following, setFollowing] = useState(!initialTurn);
   const scrollTopRef = useRef(0);
   const initialScrollRef = useRef({ key: "", done: false });
   // assistant-ui mounts the moment sections a tick after we render (and again on edits),
@@ -208,6 +211,14 @@ export function Lens({
     window.addEventListener("pointerup", up);
   }, []);
 
+  // Jump-to-tail: re-attach follow and scroll to the bottom (the re-measure snap keeps it there).
+  const scrollToTail = useCallback(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    tailFollowRef.current = "following";
+    scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
+  }, []);
+
   // The single scroll controller: candlestick + bands + chat stubs + pinned fisheye cards.
   // Mutates refs only (no per-frame React render). Re-measures on resize and on row changes.
   useEffect(() => {
@@ -278,6 +289,7 @@ export function Lens({
         turnRef.current = nextTurn;
         onTurnChange?.(nextTurn);
       }
+      setFollowing(tailFollowRef.current === "following");
 
       strip.style.transform = `translateY(${focalG - SCALE * (s + FOCAL * V)}px)`;
 
@@ -544,6 +556,18 @@ export function Lens({
             <div className="cs-cap" ref={capBotRef} />
             <div className="cs-focal" ref={csFocalRef} />
             <div className="caret" ref={caretRef} />
+            {!following && moments.length > 0 ? (
+              <button
+                type="button"
+                className="mapdial-tail"
+                title="Jump to latest"
+                aria-label="Jump to latest"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={scrollToTail}
+              >
+                ↓
+              </button>
+            ) : null}
           </div>
 
           {/* display:contents so the Root box vanishes from layout — `.lens-chat` stays the

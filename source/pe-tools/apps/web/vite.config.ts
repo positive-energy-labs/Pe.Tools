@@ -146,11 +146,15 @@ async function sendResponse(
   res: {
     statusCode: number;
     statusMessage: string;
+    headersSent: boolean;
     setHeader(name: string, value: string): void;
     end(data?: Buffer): void;
   },
   response: Response,
 ) {
+  // The SSR fetch can resolve after the response was already answered elsewhere (client abort,
+  // another middleware) — writing then throws "Cannot set headers after they are sent".
+  if (res.headersSent) return;
   res.statusCode = response.status;
   res.statusMessage = response.statusText;
   response.headers.forEach((value, key) => res.setHeader(key, value));

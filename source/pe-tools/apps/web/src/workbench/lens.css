@@ -215,6 +215,30 @@
   pointer-events: none;
   z-index: 5;
 }
+/* jump-to-tail — shown only while detached from the live tail */
+.mapdial-tail {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 0.5px solid var(--line);
+  border-radius: 2px;
+  background: var(--paper-3);
+  color: var(--pe-blue);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 6;
+}
+.mapdial-tail:hover {
+  background: var(--paper-2, var(--paper-3));
+  border-color: var(--pe-blue);
+}
 
 /* chat — near plane, the real scroll. The composer floats over the bottom; pad the tail by its
    live height (+ the pb-4 gap below it) so the last turn always clears the input box. */
