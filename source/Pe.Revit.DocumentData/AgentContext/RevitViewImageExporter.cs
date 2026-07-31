@@ -10,6 +10,7 @@ namespace Pe.Revit.DocumentData.AgentContext;
 ///     hide/isolate all apply. Never creates or permanently mutates views.
 ///     Whole-view capture needs no transaction (safe on read-only documents); focus capture
 ///     sets a temporary crop box (clearing any scope box) then restores it (editable doc only).
+///     Sheet-filtered schedules get their filter temporarily lifted the same way (editable doc only).
 /// </summary>
 public static class RevitViewImageExporter {
     public static RevitViewImageData Export(Document document, View view, int pixelSize) {
@@ -28,8 +29,18 @@ public static class RevitViewImageExporter {
         if (document.IsReadOnly)
             throw new InvalidOperationException("Focus capture needs an editable document (it sets a temporary crop box).");
 
-        // set → export → restore with committed transactions, NOT a rolled-back TransactionGroup:
-        // ExportImage inside an open group renders the pre-group state (verified live on projectA).
+        // set → export → restore with committed transactions, NOT a rollback that unwinds itself.
+        // What ExportImage renders relative to in-flight transactions was live-proven twice
+        // (project-a 2026-07, Old_Template spike 2026-07-30, Revit 2025) and splits by change kind:
+        //   - inside an open TransactionGroup: pre-group state, even after inner commits — never usable;
+        //   - inside an open plain Transaction + Regenerate: element/annotation mutations and
+        //     ScheduleDefinition.IsFilteredBySheet flips DO render (DocumentSandbox.BeginRollback is
+        //     viable for those — see the sheeted-schedule path);
+        //   - CropBox writes do NOT render until committed — which forces THIS committed dance,
+        //     restore transaction and all. Do not "simplify" it back to a rollback sandbox.
+        // Perf is not a reason to prefer either shape: a commit regenerates just like an explicit
+        // Regenerate, and both regen + rollback are noise next to the export itself (measured
+        // 2-6ms + 12-23ms vs ~300ms export on a small model).
         // A scope box assigned to the view LOCKS its crop to the scope-box extent — a CropBox
         // write is silently ignored (verified: crop snaps back). So clear the scope box for the
         // duration, then restore it; a scope box drives graphics-free geometry, so clearing it
@@ -70,7 +81,9 @@ public static class RevitViewImageExporter {
 
     /// <summary>
     ///     Sheeted-schedule capture: export the sheet, then pixel-crop to the schedule
-    ///     instance's outline. WYSIWYG — the schedule renders exactly as placed.
+    ///     instance's outline. When the schedule is filtered by sheet, the filter is
+    ///     temporarily lifted (set → export → restore, like focus capture) so the image
+    ///     shows the FULL schedule, not the one-sheet slice the placement happens to render.
     /// </summary>
     public static RevitViewImageData ExportSheetedSchedule(
         Document document,
@@ -79,7 +92,43 @@ public static class RevitViewImageExporter {
         double marginPercent,
         int pixelSize
     ) {
+        var schedule = (ViewSchedule)document.GetElement(instance.ScheduleId);
+        if (!schedule.Definition.IsFilteredBySheet)
+            return ExportSheetedScheduleCore(document, sheet, instance, marginPercent, pixelSize);
+
+        if (document.IsReadOnly)
+            throw new InvalidOperationException(
+                "This schedule is filtered by sheet; capturing its full contents needs an editable document (the filter is temporarily lifted during export).");
+
+        // Unlike CropBox, an UNCOMMITTED IsFilteredBySheet flip does render in ExportImage
+        // (live-proven 2026-07-30, Revit 2025), so this lift could equally run inside one
+        // DocumentSandbox.BeginRollback (auto-unwind, no undo-stack entries, PeSandbox::-prefixed
+        // churn the bridge ignores). Perf does not separate the shapes — commits regenerate too,
+        // and flip-regen (2-6ms) + rollback (12-23ms) are noise against the ~300ms export.
+        // Committed set → export → restore is kept for symmetry with the crop path above, where
+        // it is the only shape that works.
+        RunCropTransaction(document, "PE lift schedule sheet filter",
+            () => schedule.Definition.IsFilteredBySheet = false);
+        try {
+            // Re-fetch: the instance regrows to full contents once the filter is lifted.
+            var fullInstance = (ScheduleSheetInstance)document.GetElement(instance.Id);
+            return ExportSheetedScheduleCore(document, sheet, fullInstance, marginPercent, pixelSize);
+        } finally {
+            RunCropTransaction(document, "PE restore schedule sheet filter",
+                () => schedule.Definition.IsFilteredBySheet = true);
+        }
+    }
+
+    private static RevitViewImageData ExportSheetedScheduleCore(
+        Document document,
+        ViewSheet sheet,
+        ScheduleSheetInstance instance,
+        double marginPercent,
+        int pixelSize
+    ) {
         // ponytail: union of split-schedule segments on this sheet, not per-segment capture.
+        // ponytail: an unfiltered instance can grow past the sheet outline; crop clamps to the
+        // exported image, so overflow rows clip — temp oversized sheet if that bites in practice.
         var box = instance.get_BoundingBox(sheet)
                   ?? throw new InvalidOperationException($"Schedule instance {instance.Id.Value()} has no bounding box on sheet '{sheet.SheetNumber}'.");
         var outline = sheet.Outline;
