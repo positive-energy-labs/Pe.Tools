@@ -30,9 +30,78 @@ public static class Detector
         var obst = (bool[])seedInk.Clone();
         Close(obst, W, H, (float)(opt.GapSealFt / 2.0 / opt.CellFt));
 
+        if (opt.SealDoorHeads)
+        {
+            // Lintel cells: low covered headroom with a markedly taller covered cell nearby. The
+            // "nearby" dilation covers the doorway strip depth (wall thickness) at CellFt scale.
+            var tallCore = new bool[n];
+            for (int i = 0; i < n; i++)
+                tallCore[i] = !float.IsNaN(hf.FloorZ[i]) && !float.IsNaN(hf.CeilZ[i])
+                              && hf.CeilZ[i] - hf.FloorZ[i] > opt.DoorHeadMaxFt + opt.DoorHeadContrastFt;
+            var dist = Chamfer(tallCore, W, H, false);
+            var tall = new bool[n];
+            for (int i = 0; i < n; i++) tall[i] = dist[i] <= 3f + 1e-4f;
+            int sealed_ = 0;
+            for (int i = 0; i < n; i++)
+            {
+                if (obst[i] || !tall[i]) continue;
+                if (float.IsNaN(hf.FloorZ[i]) || float.IsNaN(hf.CeilZ[i])) continue;
+                double head = hf.CeilZ[i] - hf.FloorZ[i];
+                if (head >= opt.MinHeadroomFt && head <= opt.DoorHeadMaxFt) { obst[i] = true; sealed_++; }
+            }
+            log($"[detect] door-head seal: {sealed_ * opt.CellFt * opt.CellFt:F0} sf of lintel cells became obstruction");
+        }
+
+        if (opt.SealWallRunGaps)
+        {
+            // Headerless doorways (framing models): a gap counts as a door only when it is a short
+            // colinear break between two solid ink runs. Scanning H, V and both diagonals covers
+            // rotated wings; diagonal walls >= 2 cells thick stay contiguous along 45-degree lines.
+            int maxGap = (int)Math.Round(opt.DoorGapMaxFt / opt.CellFt);
+            int minRun = (int)Math.Round(opt.DoorJambMinFt / opt.CellFt);
+            var filled = new bool[n];
+            void Scan(int sx, int sy, int dx, int dy)
+            {
+                int x = sx, y = sy;
+                var line = new List<int>();
+                while (x >= 0 && x < W && y >= 0 && y < H) { line.Add(y * W + x); x += dx; y += dy; }
+                int i0 = 0;
+                var segs = new List<(bool Ink, int Start, int Len)>();
+                while (i0 < line.Count)
+                {
+                    bool ink = obst[line[i0]];
+                    int j = i0;
+                    while (j < line.Count && obst[line[j]] == ink) j++;
+                    segs.Add((ink, i0, j - i0));
+                    i0 = j;
+                }
+                for (int s = 1; s + 1 < segs.Count; s++)
+                {
+                    var (ink, start, len) = segs[s];
+                    if (ink || len > maxGap) continue;
+                    if (segs[s - 1].Len >= minRun && segs[s + 1].Len >= minRun)
+                        for (int k = start; k < start + len; k++) filled[line[k]] = true;
+                }
+            }
+            for (int y = 0; y < H; y++) Scan(0, y, 1, 0);
+            for (int x = 0; x < W; x++) Scan(x, 0, 0, 1);
+            for (int x = 0; x < W; x++) Scan(x, 0, 1, 1);
+            for (int y = 1; y < H; y++) Scan(0, y, 1, 1);
+            for (int x = 0; x < W; x++) Scan(x, 0, -1, 1);
+            for (int y = 1; y < H; y++) Scan(W - 1, y, -1, 1);
+            int nFilled = 0;
+            for (int i = 0; i < n; i++) if (filled[i] && !obst[i]) { obst[i] = true; nFilled++; }
+            log($"[detect] wall-run gap seal: {nFilled * opt.CellFt * opt.CellFt:F0} sf of doorway gaps became obstruction");
+        }
+
         var open = new bool[n];
         for (int i = 0; i < n; i++)
+        {
             open[i] = !obst[i] && !float.IsNaN(hf.FloorZ[i]) && Math.Abs(hf.FloorZ[i] - lvlZ) <= opt.FloorTolFt;
+            if (open[i] && opt.RequireCeiling)
+                open[i] = !float.IsNaN(hf.CeilZ[i]) && hf.CeilZ[i] - hf.FloorZ[i] >= opt.MinHeadroomFt
+                          && hf.CeilZ[i] < lvlZ + opt.StoryCapFt;
+        }
 
         // label connected candidate regions (4-neighborhood); track border contact + ceiling stats
         var label = new int[n];
@@ -50,7 +119,7 @@ public static class Detector
             {
                 int c = q.Dequeue(); sizes[nReg]++;
                 if (!float.IsNaN(hf.CeilZ[c]) && hf.CeilZ[c] - hf.FloorZ[c] >= opt.MinHeadroomFt
-                    && hf.CeilZ[c] < lvlZ + 14) ceilOkCounts[nReg]++;
+                    && hf.CeilZ[c] < lvlZ + opt.StoryCapFt) ceilOkCounts[nReg]++;
                 int cx = c % W, cy = c / W;
                 if (cx == 0 || cy == 0 || cx == W - 1 || cy == H - 1) touchesBorder[nReg] = true;
                 if (cx > 0 && open[c - 1] && label[c - 1] == 0) { label[c - 1] = nReg; q.Enqueue(c - 1); }

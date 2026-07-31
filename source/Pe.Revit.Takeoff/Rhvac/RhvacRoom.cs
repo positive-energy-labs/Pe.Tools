@@ -1,6 +1,21 @@
 namespace Pe.Revit.Takeoff.Rhvac;
 
-/// <summary>RHVAC's eight wall-facing directions, clockwise from north.</summary>
+// RHVAC is purely mathematical and area-based; nothing here is a drawing. Conventions below were
+// validated 2026-07-24 against the firm's most complex real project (projectA, 150 rooms) —
+// see README.md in this folder for the .r10 format spec and the verification evidence.
+//
+// Firm conventions (all confirmed in real files):
+// - Rooms and floor/roof rows store AREA in the length field with width 1 ("area x 1"), purely to
+//   make manual entry and auditing easy. Walls are the exception: real length x height segments.
+// - Vaulted/sloped ceilings are entered as a volume-preserving AVERAGE height; RHVAC's sloped
+//   ceiling feature is unused (0 of 150 project-a rooms).
+// - Roof rows carry a pitch allowance in the RHVAC width field (1.2 on under-roof rooms). Kept
+//   here as AreaMultiplier so exported files stay auditable the way engineers expect.
+// - Interior rooms (no exterior exposure) are the norm, not the edge case: ~half of project-a rooms
+//   have placeholder zero rows for walls/floors/glass. In this shape absence is an EMPTY list;
+//   the file adapter writes RHVAC's zero placeholder rows.
+
+/// <summary>RHVAC's eight wall-facing directions, clockwise from north (codes 0-7, verified).</summary>
 public enum RhvacWallDirection
 {
     North = 0,
@@ -13,22 +28,34 @@ public enum RhvacWallDirection
     NorthWest = 7,
 }
 
-/// <summary>A named RHVAC construction assembly and its effective U-value.</summary>
+/// <summary>
+/// A named construction assembly. RHVAC files have no catalog table: every room row carries the
+/// full material payload inline (description, construction material, category/group/CLTD codes,
+/// U-value). Name is free text and acts as the lookup key the file adapter uses to clone those
+/// code fields from an existing row in the target file, so it must match an assembly the engineer
+/// has already used there. UValue is written as-is and should agree with that assembly.
+/// </summary>
 public sealed record RhvacAssembly(string Name, double UValue);
 
-/// <summary>One RHVAC floor row. Multiple rows may approximate a non-rectangular room.</summary>
+/// <summary>
+/// One floor row: an exposed-floor area plus the exposed slab-edge perimeter. Area 0 with a
+/// positive perimeter is real data (slab-edge loss only). Rooms over conditioned space have no
+/// floor rows at all.
+/// </summary>
 public sealed record RhvacFloor(
     RhvacAssembly Assembly,
-    double LengthFeet,
-    double WidthFeet,
+    double AreaSquareFeet,
     double ExposedPerimeterFeet
 );
 
-/// <summary>One horizontal, upward-facing RHVAC roof/ceiling row.</summary>
+/// <summary>
+/// One roof/ceiling row: the plan ceiling area under roof or exposed ceiling. AreaMultiplier is
+/// written to RHVAC's roof width field (firm uses 1.2 as a pitch allowance, 1.0 for flat).
+/// </summary>
 public sealed record RhvacRoof(
     RhvacAssembly Assembly,
-    double LengthFeet,
-    double WidthFeet
+    double AreaSquareFeet,
+    double AreaMultiplier = 1.0
 );
 
 public sealed record RhvacWindow(
@@ -39,16 +66,17 @@ public sealed record RhvacWindow(
     int Occurrences = 1
 );
 
+/// <summary>RHVAC doors have no occurrences field; repeat a door as multiple entries.</summary>
 public sealed record RhvacDoor(
     RhvacAssembly Assembly,
     double WidthFeet,
-    double HeightFeet,
-    int Occurrences = 1
+    double HeightFeet
 );
 
 /// <summary>
-/// One exterior thermal wall. Openings are nested under their host wall; an RHVAC file adapter
-/// is responsible for converting that relationship to RHVAC wall-reference ordinals.
+/// One exterior thermal wall segment: real length x height, unlike the area-based floors/roofs.
+/// Openings are nested under their host wall; the file adapter converts that relationship to
+/// RHVAC's 1-based wall-reference ordinals.
 /// </summary>
 public sealed class RhvacWall
 {
@@ -59,7 +87,7 @@ public sealed class RhvacWall
         RhvacWallDirection direction
     )
     {
-        this.Assembly = assembly ?? throw new ArgumentNullException(nameof(assembly));
+        this.Assembly = assembly;
         this.LengthFeet = lengthFeet;
         this.HeightFeet = heightFeet;
         this.Direction = direction;
@@ -74,7 +102,7 @@ public sealed class RhvacWall
 }
 
 public sealed record RhvacInternalLoads(
-    double People = 0,
+    int People = 0,
     double SensibleEquipmentBtuh = 0,
     double LatentEquipmentBtuh = 0,
     double LightingWatts = 0
@@ -83,8 +111,9 @@ public sealed record RhvacInternalLoads(
 public sealed record RhvacRoomValidationIssue(string Path, string Message);
 
 /// <summary>
-/// The preliminary room shape shared by Revit takeoff producers and future RHVAC adapters.
-/// Dimensions use feet, areas use square feet, and loads use the units named on each member.
+/// The room shape shared by Revit takeoff producers and the RHVAC file adapter. Dimensions use
+/// feet, areas use square feet. CeilingHeightFeet is the volume-preserving average for vaulted
+/// spaces. Empty Floors/Walls/Roofs mean no exposure of that kind (interior rooms are common).
 /// </summary>
 public sealed class RhvacRoom
 {
@@ -135,19 +164,18 @@ internal static class RhvacRoomValidator
         NonNegative(room.InternalLoads.LatentEquipmentBtuh, "room.internalLoads.latentEquipmentBtuh", issues);
         NonNegative(room.InternalLoads.LightingWatts, "room.internalLoads.lightingWatts", issues);
 
-        if (room.Floors.Count == 0)
-            issues.Add(new RhvacRoomValidationIssue("room.floors", "At least one floor is required."));
-        if (room.Walls.Count == 0)
-            issues.Add(new RhvacRoomValidationIssue("room.walls", "At least one wall is required."));
-
         for (var index = 0; index < room.Floors.Count; index++)
         {
             var floor = room.Floors[index];
             var path = $"room.floors[{index}]";
             Assembly(floor.Assembly, $"{path}.assembly", issues);
-            Positive(floor.LengthFeet, $"{path}.lengthFeet", issues);
-            Positive(floor.WidthFeet, $"{path}.widthFeet", issues);
+            NonNegative(floor.AreaSquareFeet, $"{path}.areaSquareFeet", issues);
             NonNegative(floor.ExposedPerimeterFeet, $"{path}.exposedPerimeterFeet", issues);
+            if (floor.AreaSquareFeet == 0 && floor.ExposedPerimeterFeet == 0)
+                issues.Add(new RhvacRoomValidationIssue(
+                    path,
+                    "Floor area or exposed perimeter must be greater than zero."
+                ));
         }
 
         for (var index = 0; index < room.Roofs.Count; index++)
@@ -155,21 +183,23 @@ internal static class RhvacRoomValidator
             var roof = room.Roofs[index];
             var path = $"room.roofs[{index}]";
             Assembly(roof.Assembly, $"{path}.assembly", issues);
-            Positive(roof.LengthFeet, $"{path}.lengthFeet", issues);
-            Positive(roof.WidthFeet, $"{path}.widthFeet", issues);
+            Positive(roof.AreaSquareFeet, $"{path}.areaSquareFeet", issues);
+            Positive(roof.AreaMultiplier, $"{path}.areaMultiplier", issues);
         }
 
         for (var index = 0; index < room.Walls.Count; index++)
             Wall(room.Walls[index], index, issues);
 
-        var floorArea = room.Floors.Sum(floor => floor.LengthFeet * floor.WidthFeet);
-        var areaTolerance = Math.Max(1, room.AreaSquareFeet * 0.01);
-        if (room.Floors.Count > 0 && IsFinitePositive(floorArea)
-            && Math.Abs(floorArea - room.AreaSquareFeet) > areaTolerance)
+        // Floor rows describe exposed area and may cover only part of a room. Real data has slack:
+        // project-a room 110 totals 478 sf against a 491 sf room, so only reject impossible overshoot.
+        var floorArea = room.Floors.Sum(floor => floor.AreaSquareFeet);
+        var areaTolerance = Math.Max(1, room.AreaSquareFeet * 0.05);
+        if (IsFinitePositive(floorArea)
+            && floorArea - room.AreaSquareFeet > areaTolerance)
         {
             issues.Add(new RhvacRoomValidationIssue(
                 "room.floors",
-                $"Floor area {floorArea:F2} sf does not match room area {room.AreaSquareFeet:F2} sf."
+                $"Floor area {floorArea:F2} sf exceeds room area {room.AreaSquareFeet:F2} sf."
             ));
         }
 
@@ -205,13 +235,12 @@ internal static class RhvacRoomValidator
             Assembly(door.Assembly, $"{openingPath}.assembly", issues);
             Positive(door.WidthFeet, $"{openingPath}.widthFeet", issues);
             Positive(door.HeightFeet, $"{openingPath}.heightFeet", issues);
-            Positive(door.Occurrences, $"{openingPath}.occurrences", issues);
         }
 
         var grossArea = wall.LengthFeet * wall.HeightFeet;
         var openingArea =
             wall.Windows.Sum(window => window.WidthFeet * window.HeightFeet * window.Occurrences)
-            + wall.Doors.Sum(door => door.WidthFeet * door.HeightFeet * door.Occurrences);
+            + wall.Doors.Sum(door => door.WidthFeet * door.HeightFeet);
         if (IsFinitePositive(grossArea) && openingArea > grossArea)
         {
             issues.Add(new RhvacRoomValidationIssue(

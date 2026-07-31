@@ -1,0 +1,3 @@
+# Candidate takeoffs and scorecards are per-run outputs, not fixtures.
+*/candidate.rooms.json
+*/scorecard.*

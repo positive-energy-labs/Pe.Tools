@@ -29,6 +29,32 @@ public sealed class TakeoffOptions
                                             // a per-cell boundary (see Detector header).
     public double MinCompactness = 0.09;    // 4*pi*area/perimeter^2; project-a' valid long circulation
                                             // room is 0.095, while exterior snakes are <= 0.041.
+    public bool RequireCeiling = false;     // EXPERIMENT (2026-07-24 falsification loop): ceiling
+                                            // presence joins the per-cell existence mask, so
+                                            // terraces/aprons never join a region and an envelope
+                                            // ink leak cannot flood the interior to the crop
+                                            // border. Contradicts the "region gate only" doctrine
+                                            // above deliberately — measuring, not assuming.
+    public bool SealDoorHeads = false;      // EXPERIMENT: a doorway reads in the heightfield as a
+                                            // short strip whose CeilZ is the lintel (~7-8 ft) while
+                                            // flanking cells carry the full ceiling. Cells with
+                                            // headroom <= DoorHeadMaxFt that sit within a few cells
+                                            // of markedly taller ones become obstruction, sealing
+                                            // openings from geometry instead of header-band ink.
+    public double DoorHeadMaxFt = 8.75;     // max headroom that can still be a door/opening lintel
+    public double DoorHeadContrastFt = 1.5; // neighbor must be at least this much taller to call
+                                            // the low cell a lintel (protects genuinely low rooms)
+    public bool SealWallRunGaps = false;    // EXPERIMENT: close a short gap in the obstruction
+                                            // mask only when it is a colinear break in a wall run
+                                            // (a headerless doorway), scanning H, V and both 45s —
+                                            // framing models have no lintel geometry to find.
+    public double DoorGapMaxFt = 4.5;       // widest colinear break that can still be a doorway
+    public double DoorJambMinFt = 2.0;      // ink run required on BOTH sides to call it a doorway
+    public double StoryCapFt = 14.0;        // ceiling search cap above the level plane (was a
+                                            // hardcode; double-height spaces and attic roofs need
+                                            // more, stair voids argue for less — per-level policy)
+    public double CeilingCloseFt = 0;       // close gaps <= this in the ceiling mask (rafter-only
+                                            // roofs read patchy at framing stage; attic policy)
     public double PartitionFillFt = 1.0;    // safety cap for assigning connected wall ink to the
                                             // nearest accepted region; not a wall-width guarantee
     public double MaxEnclosedResidualSqft = 25; // re-solve small fully enclosed wall/grid pockets;
