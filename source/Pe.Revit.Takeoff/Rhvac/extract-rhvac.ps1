@@ -6,9 +6,14 @@
 # Loads are RHVAC's own persisted results (last calculation by the app): per-room supply CFM,
 # per-system Calculated* load breakdowns, building totals. Zero placeholder rows are dropped —
 # absence of exposure is an empty list, matching RhvacRoom semantics.
+#
+# -Assemblies instead emits the distinct assembly names per category (walls/roofs/floors/glass/
+# doors) with their U-values (glass: + SHGC), first occurrence in Identifier order — the same row
+# export-rhvac.ps1 clones Manual-J code fields from. This is the editor's assembly picker source.
 param(
     [Parameter(Mandatory)][string]$Path,
-    [Parameter(Mandatory)][string]$Output
+    [Parameter(Mandatory)][string]$Output,
+    [switch]$Assemblies
 )
 
 Add-Type -AssemblyName System.Data
@@ -57,6 +62,42 @@ $connection = [System.Data.Odbc.OdbcConnection]::new(
 
 try {
     $connection.Open()
+
+    if ($Assemblies) {
+        # Distinct assemblies per category, first-seen in Identifier order (matching the seed row
+        # export-rhvac.ps1 would clone from). U-value read with trimmed-parallel-array semantics.
+        $assemblyAdapter = [System.Data.Odbc.OdbcDataAdapter]::new('SELECT * FROM [Room] ORDER BY Identifier', $connection)
+        $assemblyTable = [System.Data.DataTable]::new()
+        [void]$assemblyAdapter.Fill($assemblyTable)
+        $assemblyAdapter.Dispose()
+        $listing = [ordered]@{ sourceFile = [IO.Path]::GetFileName($Path) }
+        foreach ($category in @(
+                @{ Key = 'floors'; Prefix = 'Floor' }, @{ Key = 'roofs'; Prefix = 'Roof' },
+                @{ Key = 'walls'; Prefix = 'Wall' }, @{ Key = 'glass'; Prefix = 'Glass' },
+                @{ Key = 'doors'; Prefix = 'Door' })) {
+            $seen = [ordered]@{}
+            foreach ($row in $assemblyTable.Rows) {
+                # @(): PowerShell unwraps one-element returns; indexing a bare string yields chars.
+                $names = @(Read-Serialized $row["$($category.Prefix)Description"])
+                $uValues = @(Read-Serialized $row["$($category.Prefix)UValue"])
+                $shgcs = @(if ($category.Prefix -eq 'Glass') { Read-Serialized $row['GlassSHGC'] })
+                for ($i = 0; $i -lt $names.Count; $i++) {
+                    $name = [string]$names[$i]
+                    if ([string]::IsNullOrWhiteSpace($name) -or $seen.Contains($name)) { continue }
+                    $entry = [ordered]@{
+                        name = $name
+                        uValue = [double](Row-Value $uValues $i 0)
+                    }
+                    if ($category.Prefix -eq 'Glass') { $entry.shgc = [double](Row-Value $shgcs $i 0) }
+                    $seen[$name] = $entry
+                }
+            }
+            $listing[$category.Key] = @($seen.Values)
+        }
+        $listing | ConvertTo-Json -Depth 4 | Out-File -LiteralPath $Output -Encoding utf8
+        "ASSEMBLIES $(($listing.Keys | Where-Object { $_ -ne 'sourceFile' } | ForEach-Object { $listing[$_].Count } | Measure-Object -Sum).Sum) distinct -> $Output"
+        return
+    }
 
     $adapter = [System.Data.Odbc.OdbcDataAdapter]::new('SELECT * FROM [Room] ORDER BY Number', $connection)
     $roomTable = [System.Data.DataTable]::new()
@@ -153,6 +194,7 @@ try {
         }
 
         [ordered]@{
+            identifier = [int]$row['Identifier']   # autonumber PK, the edit lane's row target
             number = [int]$row['Number']
             name = [string]$row['Description']
             systemNumber = [int]$row['SystemNumber']

@@ -85,6 +85,53 @@ file first.**
 5. **Write LONGCHAR columns (`Description`, `RoomNotesPlainText`) after the blob update**: Jet's
    bulk LONGBINARY update mangles adjacent LONGCHAR values (observed live on both).
 
+## Edit lane (update/delete by PK, proven in the project-a round-trip 2026-07-31)
+
+`export-rhvac.ps1 -EditsJson edits.json -Source original.r10 -Output copy.r10` (same 32-bit lane).
+The source is always copied to the output first and the copy edited; the original is never written
+in place. `edits.json`:
+
+```
+{ "updates": [ <RhvacRoom shape + "Identifier": <Room autonumber PK>> ], "deletes": [ <PK> ] }
+```
+
+- **Target by `Identifier`** (the autonumber PK from the extract), never by `Number` — they diverge.
+- **Update rewrites only the modeled columns**: `Number`, `Description`, `SystemNumber`,
+  `ZoneNumber`, `Length`/`Width` (area × 1), `Height`, `PeopleNumber`, `LightingWatts`,
+  `EquipmentSensible`, `EquipmentLatent`, and the five category blob groups. Every other column —
+  stored loads, `Occurrences`, `CalculationMode`, notes — stays untouched: the file remains truth
+  for everything the editor does not model. `RoomNotes`/`RoomNotesPlainText` are read before the
+  blob write and rewritten verbatim after it (the Jet LONGCHAR-mangling trap below), verified with
+  planted notes.
+- **Assemblies work like the insert lane**: the assembly `Name` must already be used somewhere in
+  the file; Manual-J code fields are cloned from the first row (in `Identifier` order) using that
+  description. An update therefore re-normalizes a row's material code fields to that seed row —
+  description and U-value are the editor's truth, the invisible code fields follow the seed.
+- **Blob regeneration compacts ordinals**: zero placeholder rows mixed between real walls are not
+  reproduced, so glass/door wall references are renumbered to the compacted 1..N order the editor
+  sent. Projection-stable for rooms without padding; rooms with padding re-extract with compacted
+  ordinals.
+- **Delete semantics** (schema investigated on projectA): the only table referencing rooms is
+  `TabularManualDDuctsize` — `RoomIdentifier` (int) plus `ReturnRunoutRoomIdentifiers` (a comma
+  list), both by Identifier. Delete refuses with a clear error if any duct-sizing row references
+  the room (detach it in RHVAC first); otherwise `DELETE FROM [Room]` is clean. `Results`/`System`
+  hold building/system aggregates with no room references — they simply go stale until RHVAC
+  recalculates, like after any edit. `General.LastVisitedRoom` is a UI cursor and is left alone.
+  Deleted rooms leave a gap in `Number`; renumbering is the engineer's call, not the exporter's.
+- Jet gotcha: `Number` is a reserved word in `UPDATE ... SET` — always write `[Number]`.
+
+Runnable proof: `eval/rhvac/edit-check.ps1` (any shell; it spawns the 32-bit lane) round-trips the
+real project-a file — extract → edit one room's area + a wall length + a glass width, delete one room
+→ re-extract → asserts the projection diff is exactly the intended changes and all other rooms,
+systems, and building totals are projection-identical.
+
+## Assemblies listing (the editor's picker)
+
+`extract-rhvac.ps1 -Path project.r10 -Output assemblies.json -Assemblies` emits the distinct
+assembly names per category (floors/roofs/walls/glass/doors) with their U-values (glass: + SHGC),
+first occurrence in Identifier order — the same seed row the export/edit lanes clone code fields
+from. The editor only offers these; it never invents assemblies.
+
 ## Stored calculation results (the eval oracle)
 
 Real files persist RHVAC's last calculation, all SQL-queryable (verified on projectA, 150 rooms /
@@ -153,10 +200,12 @@ truth.
 ## This folder
 
 - `RhvacRoom.cs` — the C# contract takeoff producers build and validate against.
-- `export-rhvac.ps1` — the JSON → .r10 engine. Must run 32-bit; the header documents the JSON
-  contract (System.Text.Json defaults of `RhvacRoom[]`: PascalCase, enums as ints).
-- `extract-rhvac.ps1` — the .r10 → JSON oracle extractor: per-room inputs (zero placeholder rows
-  dropped, trimmed parallel arrays normalized) plus the stored loads above. 32-bit lane.
+- `export-rhvac.ps1` — the JSON → .r10 engine: insert lane (`-RoomsJson`/`-Template`) and edit
+  lane (`-EditsJson`/`-Source`, see "Edit lane"). Must run 32-bit; the header documents both JSON
+  contracts (System.Text.Json defaults of `RhvacRoom[]`: PascalCase, enums as ints).
+- `extract-rhvac.ps1` — the .r10 → JSON oracle extractor: per-room inputs including the
+  `identifier` PK (zero placeholder rows dropped, trimmed parallel arrays normalized) plus the
+  stored loads above; `-Assemblies` for the distinct-assembly listing. 32-bit lane.
 
 Residual gap: automated verification stops at SQL read-back of the written file. "RHVAC opens and
 calculates it" was proven manually for the Belmont probe room and stays a manual check per export.

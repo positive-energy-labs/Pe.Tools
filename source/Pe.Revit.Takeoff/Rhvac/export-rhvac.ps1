@@ -1,15 +1,27 @@
-# JSON -> RHVAC .r10 export engine. See README.md in this folder for the format spec.
+# JSON -> RHVAC .r10 engine: insert lane (takeoff export) + edit lane (update/delete by room PK).
+# See README.md in this folder for the format spec.
 #
 # MUST run 32-bit (r10 files are Access 97 Jet; only the WOW64 Jet driver opens them):
 #   C:\Windows\SysWOW64\WindowsPowerShell\v1.0\powershell.exe -File export-rhvac.ps1 `
-#       -RoomsJson rooms.json -Template project.r10 -Output out.r10
+#       -RoomsJson rooms.json -Template project.r10 -Output out.r10     # insert new rooms
+#   C:\Windows\SysWOW64\WindowsPowerShell\v1.0\powershell.exe -File export-rhvac.ps1 `
+#       -EditsJson edits.json -Source project.r10 -Output out.r10       # edit existing rooms
 #
 # RoomsJson is a System.Text.Json serialization of Pe.Revit.Takeoff.Rhvac.RhvacRoom[]
-# (PascalCase properties, enums as ints). Every assembly Name must already be used somewhere in
-# the template file; its Manual-J code fields are cloned from that row (see README "Materials").
+# (PascalCase properties, enums as ints). EditsJson is
+#   { "updates": [ <RhvacRoom shape + "Identifier": <Room autonumber PK>> ], "deletes": [ <PK> ] }
+# Updates rewrite only the modeled columns (Number/Description/scalars + the five category blob
+# groups); every other column in the row stays untouched — the file remains truth for everything
+# the editor does not model. Deletes refuse if duct-design rows reference the room (see README).
+# Both lanes copy the input file and write the copy; the original is never written in place.
+# Every assembly Name must already be used somewhere in the target file; its Manual-J code fields
+# are cloned from the first row using it (see README "Materials").
+[CmdletBinding(DefaultParameterSetName = 'Insert')]
 param(
-    [Parameter(Mandatory)][string]$RoomsJson,
-    [Parameter(Mandatory)][string]$Template,
+    [Parameter(Mandatory, ParameterSetName = 'Insert')][string]$RoomsJson,
+    [Parameter(Mandatory, ParameterSetName = 'Insert')][string]$Template,
+    [Parameter(Mandatory, ParameterSetName = 'Edit')][string]$EditsJson,
+    [Parameter(Mandatory, ParameterSetName = 'Edit')][string]$Source,
     [Parameter(Mandatory)][string]$Output
 )
 
@@ -17,6 +29,7 @@ Add-Type -AssemblyName System.Data
 $ErrorActionPreference = 'Stop'
 if ([IntPtr]::Size -ne 4) { throw 'Run under 32-bit PowerShell (SysWOW64); the Jet driver is 32-bit only.' }
 $ansi = [Text.Encoding]::Default
+$isEdit = $PSCmdlet.ParameterSetName -eq 'Edit'
 
 # --- VB6 variant array blob codec (spec in README.md) ---
 
@@ -126,15 +139,24 @@ $placeholderZeroColumns = @{
     Door = @('DoorDescription', 'DoorConstructionMaterial', 'DoorUValue', 'DoorWidth', 'DoorHeight', 'DoorReference')
 }
 
-$rooms = Get-Content -LiteralPath $RoomsJson -Raw | ConvertFrom-Json
-if ($null -eq $rooms) { throw "No rooms in $RoomsJson" }
-$rooms = @($rooms)
+if ($isEdit) {
+    $edits = Get-Content -LiteralPath $EditsJson -Raw | ConvertFrom-Json
+    $updates = @(); if ($edits.PSObject.Properties['updates']) { $updates = @($edits.updates) }
+    $deletes = @(); if ($edits.PSObject.Properties['deletes']) { $deletes = @($edits.deletes) }
+    if ($updates.Count -eq 0 -and $deletes.Count -eq 0) { throw "No updates or deletes in $EditsJson" }
+    $inputFile = $Source
+} else {
+    $rooms = Get-Content -LiteralPath $RoomsJson -Raw | ConvertFrom-Json
+    if ($null -eq $rooms) { throw "No rooms in $RoomsJson" }
+    $rooms = @($rooms)
+    $inputFile = $Template
+}
 
-$templatePath = [IO.Path]::GetFullPath($Template)
+$inputPath = [IO.Path]::GetFullPath($inputFile)
 $outputPath = [IO.Path]::GetFullPath($Output)
-if ($templatePath -eq $outputPath) { throw 'Template and output must differ; the original is never written in place.' }
-if (![IO.File]::Exists($templatePath)) { throw "Template does not exist: $templatePath" }
-Copy-Item -LiteralPath $templatePath -Destination $outputPath -Force
+if ($inputPath -eq $outputPath) { throw 'Input and output must differ; the original is never written in place.' }
+if (![IO.File]::Exists($inputPath)) { throw "Input file does not exist: $inputPath" }
+Copy-Item -LiteralPath $inputPath -Destination $outputPath -Force
 
 $connection = [System.Data.Odbc.OdbcConnection]::new(
     "Driver={Microsoft Access Driver (*.mdb)};Dbq=$outputPath;Uid=Admin;Pwd=;")
@@ -149,8 +171,10 @@ try {
     $command.CommandText = 'SELECT Identifier, Number, FloorDescription, RoofDescription, WallDescription, GlassDescription, DoorDescription FROM [Room] ORDER BY Identifier'
     $reader = $command.ExecuteReader()
     $existingNumbers = [Collections.Generic.HashSet[int]]::new()
+    $numberByIdentifier = @{}
     while ($reader.Read()) {
         [void]$existingNumbers.Add($reader.GetInt32(1))
+        $numberByIdentifier[$reader.GetInt32(0)] = $reader.GetInt32(1)
         foreach ($category in 'Floor', 'Roof', 'Wall', 'Glass', 'Door') {
             if (!$seedIndex.ContainsKey($category)) { $seedIndex[$category] = @{} }
             $decoded = Read-Serialized $reader.GetValue($reader.GetOrdinal("${category}Description"))
@@ -170,7 +194,7 @@ try {
     function Get-SeedValue([string]$category, [string]$assemblyName, [string]$column) {
         # Returns @{ VariantType; Value } for one material column of the seed row matching the assembly.
         if (!$seedIndex[$category].ContainsKey($assemblyName)) {
-            throw "Assembly '$assemblyName' ($category) is not used anywhere in the template; the engineer must add it to a room first."
+            throw "Assembly '$assemblyName' ($category) is not used anywhere in the target file; the engineer must add it to a room first."
         }
         $seed = $seedIndex[$category][$assemblyName]
         $cacheKey = "$($seed.Identifier)"
@@ -241,10 +265,8 @@ try {
     $single = [uint16]0x2004
     $integer = [uint16]0x2003
 
-    foreach ($room in $rooms) {
-        if ($existingNumbers.Contains([int]$room.Number)) { throw "Room number $($room.Number) already exists in the template." }
-        [void]$existingNumbers.Add([int]$room.Number)
-
+    function Build-RoomBlobs([object]$room) {
+        # The five category blob groups for one RhvacRoom-shaped object; shared by both lanes.
         $blobs = @{}
         if (@($room.Floors).Count -eq 0) { $blobs += Build-PlaceholderBlobs 'Floor' }
         else {
@@ -302,75 +324,27 @@ try {
                 DoorReference = @{ Type = $integer; Values = @($doorRows | ForEach-Object { [int]$_[1] }) }
             }
         }
+        return @{ Blobs = $blobs; Walls = $walls; GlassRows = $glassRows; DoorRows = $doorRows }
+    }
 
-        $transaction = $connection.BeginTransaction()
-
-        $insert = $connection.CreateCommand()
-        $insert.Transaction = $transaction
-        $insert.CommandText = "INSERT INTO [Room] ([Number], [Description], $quotedDefaults) SELECT ?, ?, $quotedDefaults FROM [DefaultRoom]"
-        [void]$insert.Parameters.Add('@number', [System.Data.Odbc.OdbcType]::Int)
-        [void]$insert.Parameters.Add('@description', [System.Data.Odbc.OdbcType]::VarChar, 255)
-        $insert.Parameters[0].Value = [int]$room.Number
-        $insert.Parameters[1].Value = [string]$room.Name
-        if ($insert.ExecuteNonQuery() -ne 1) { throw "Insert failed for room $($room.Number)" }
-        $insert.Dispose()
-
-        $identity = $connection.CreateCommand()
-        $identity.Transaction = $transaction
-        $identity.CommandText = 'SELECT MAX(Identifier) FROM [Room]'
-        $identifier = [int]$identity.ExecuteScalar()
-        $identity.Dispose()
-
-        $loads = $room.InternalLoads
-        $scalar = $connection.CreateCommand()
-        $scalar.Transaction = $transaction
-        $scalar.CommandText = @'
-UPDATE [Room]
-SET SystemNumber = ?, ZoneNumber = ?, Length = ?, Width = 1, Height = ?,
-    PeopleNumber = ?, LightingWatts = ?, EquipmentSensible = ?, EquipmentLatent = ?,
-    Occurrences = 1, CalculationMode = 0
-WHERE Identifier = ?
-'@
-        foreach ($value in @([int]$room.SystemNumber, [int]$room.ZoneNumber, [double]$room.AreaSquareFeet,
-                [double]$room.CeilingHeightFeet, [int]$loads.People, [int][Math]::Round($loads.LightingWatts),
-                [double]$loads.SensibleEquipmentBtuh, [double]$loads.LatentEquipmentBtuh, $identifier)) {
-            $parameter = $scalar.CreateParameter()
-            $parameter.Value = $value
-            [void]$scalar.Parameters.Add($parameter)
+    function Write-RoomBlobColumns([object]$transaction, [int]$identifier, [hashtable]$blobs, [string]$label) {
+        if ($blobs.Count -eq 0) { return }
+        $columns = @($blobs.Keys | Sort-Object)
+        $update = $connection.CreateCommand()
+        $update.Transaction = $transaction
+        $update.CommandText = "UPDATE [Room] SET $((($columns | ForEach-Object { ""[$_] = ?"" }) -join ', ')) WHERE Identifier = ?"
+        foreach ($column in $columns) {
+            $bytes = [byte[]]$blobs[$column]
+            [void]$update.Parameters.Add("@$column", [System.Data.Odbc.OdbcType]::Image, $bytes.Length)
+            $update.Parameters[$update.Parameters.Count - 1].Value = $bytes
         }
-        if ($scalar.ExecuteNonQuery() -ne 1) { throw "Scalar update failed for room $($room.Number)" }
-        $scalar.Dispose()
+        [void]$update.Parameters.Add('@identifier', [System.Data.Odbc.OdbcType]::Int)
+        $update.Parameters[$update.Parameters.Count - 1].Value = $identifier
+        if ($update.ExecuteNonQuery() -ne 1) { throw "Blob update failed for room $label" }
+        $update.Dispose()
+    }
 
-        if ($blobs.Count -gt 0) {
-            $columns = @($blobs.Keys | Sort-Object)
-            $update = $connection.CreateCommand()
-            $update.Transaction = $transaction
-            $update.CommandText = "UPDATE [Room] SET $((($columns | ForEach-Object { ""[$_] = ?"" }) -join ', ')) WHERE Identifier = ?"
-            foreach ($column in $columns) {
-                $bytes = [byte[]]$blobs[$column]
-                [void]$update.Parameters.Add("@$column", [System.Data.Odbc.OdbcType]::Image, $bytes.Length)
-                $update.Parameters[$update.Parameters.Count - 1].Value = $bytes
-            }
-            [void]$update.Parameters.Add('@identifier', [System.Data.Odbc.OdbcType]::Int)
-            $update.Parameters[$update.Parameters.Count - 1].Value = $identifier
-            if ($update.ExecuteNonQuery() -ne 1) { throw "Blob update failed for room $($room.Number)" }
-            $update.Dispose()
-        }
-
-        # Jet's bulk LONGBINARY update mangles adjacent LONGCHAR values; write them after the blobs.
-        $name = $connection.CreateCommand()
-        $name.Transaction = $transaction
-        $name.CommandText = "UPDATE [Room] SET [Description] = ?, [RoomNotesPlainText] = 'Exported by Pe.Revit.Takeoff' WHERE [Identifier] = ?"
-        [void]$name.Parameters.Add('@description', [System.Data.Odbc.OdbcType]::VarChar, 255)
-        [void]$name.Parameters.Add('@identifier', [System.Data.Odbc.OdbcType]::Int)
-        $name.Parameters[0].Value = [string]$room.Name
-        $name.Parameters[1].Value = $identifier
-        if ($name.ExecuteNonQuery() -ne 1) { throw "Name update failed for room $($room.Number)" }
-        $name.Dispose()
-
-        $transaction.Commit()
-        $transaction.Dispose()
-
+    function Assert-RoomReadBack([int]$identifier, [object]$room, [hashtable]$built) {
         # Read-back verification: counts and references must match the input exactly.
         $verify = $connection.CreateCommand()
         $verify.CommandText = "SELECT Number, Description, Length, Height, WallLength, WallDirection, GlassReference, DoorReference FROM [Room] WHERE Identifier = $identifier"
@@ -387,8 +361,8 @@ WHERE Identifier = ?
         if ($backNumber -ne [int]$room.Number -or $backName -ne [string]$room.Name) {
             throw "Read-back mismatch for room $($room.Number): number/name"
         }
-        if ($walls.Count -gt 0) {
-            $expectedDirections = (@($walls | ForEach-Object { [int]$_.Direction }) -join ',')
+        if ($built.Walls.Count -gt 0) {
+            $expectedDirections = (@($built.Walls | ForEach-Object { [int]$_.Direction }) -join ',')
             if (($backDirections.Values -join ',') -ne $expectedDirections) {
                 throw "Read-back mismatch for room $($room.Number): wall directions"
             }
@@ -399,15 +373,175 @@ WHERE Identifier = ?
                 throw "Read-back mismatch for room $($room.Number): expected zero placeholder wall, got [$($backWalls.Values -join ',')]"
             }
         }
-        if ($glassRows.Count -gt 0 -and (($backGlassRefs.Values -join ',') -ne (@($glassRows | ForEach-Object { $_[1] }) -join ','))) {
+        if ($built.GlassRows.Count -gt 0 -and (($backGlassRefs.Values -join ',') -ne (@($built.GlassRows | ForEach-Object { $_[1] }) -join ','))) {
             throw "Read-back mismatch for room $($room.Number): glass references"
         }
-        if ($doorRows.Count -gt 0 -and (($backDoorRefs.Values -join ',') -ne (@($doorRows | ForEach-Object { $_[1] }) -join ','))) {
+        if ($built.DoorRows.Count -gt 0 -and (($backDoorRefs.Values -join ',') -ne (@($built.DoorRows | ForEach-Object { $_[1] }) -join ','))) {
             throw "Read-back mismatch for room $($room.Number): door references"
         }
-        "Room $($room.Number) '$($room.Name)': walls=$($walls.Count) glass=$($glassRows.Count) doors=$($doorRows.Count) floors=$(@($room.Floors).Count) roofs=$(@($room.Roofs).Count) OK"
     }
-    "EXPORTED $($rooms.Count) room(s) -> $outputPath"
+
+    if ($isEdit) {
+        foreach ($room in $updates) {
+            $identifier = [int]$room.Identifier
+            if (!$numberByIdentifier.ContainsKey($identifier)) { throw "No room with Identifier $identifier in $inputPath" }
+            foreach ($pair in @($numberByIdentifier.GetEnumerator())) {
+                if ($pair.Key -ne $identifier -and $pair.Value -eq [int]$room.Number) {
+                    throw "Room number $($room.Number) already belongs to Identifier $($pair.Key)."
+                }
+            }
+            $built = Build-RoomBlobs $room
+
+            # Jet's bulk LONGBINARY update mangles adjacent LONGCHAR values, so read the room's
+            # notes up front and rewrite them verbatim after the blob write (Description gets the
+            # edited name).
+            $notesCommand = $connection.CreateCommand()
+            $notesCommand.CommandText = "SELECT RoomNotes, RoomNotesPlainText FROM [Room] WHERE Identifier = $identifier"
+            $notesReader = $notesCommand.ExecuteReader()
+            [void]$notesReader.Read()
+            $roomNotes = $notesReader.GetValue(0)
+            $roomNotesPlain = $notesReader.GetValue(1)
+            $notesReader.Dispose()
+            $notesCommand.Dispose()
+
+            $transaction = $connection.BeginTransaction()
+
+            $scalar = $connection.CreateCommand()
+            $scalar.Transaction = $transaction
+            # [Number] must be bracketed: it is a Jet reserved word in SET position.
+            $scalar.CommandText = @'
+UPDATE [Room]
+SET [Number] = ?, [SystemNumber] = ?, [ZoneNumber] = ?, [Length] = ?, [Width] = 1, [Height] = ?,
+    [PeopleNumber] = ?, [LightingWatts] = ?, [EquipmentSensible] = ?, [EquipmentLatent] = ?
+WHERE [Identifier] = ?
+'@
+            $loads = $room.InternalLoads
+            foreach ($value in @([int]$room.Number, [int]$room.SystemNumber, [int]$room.ZoneNumber,
+                    [double]$room.AreaSquareFeet, [double]$room.CeilingHeightFeet, [int]$loads.People,
+                    [double]$loads.LightingWatts, [double]$loads.SensibleEquipmentBtuh,
+                    [double]$loads.LatentEquipmentBtuh, $identifier)) {
+                $parameter = $scalar.CreateParameter()
+                $parameter.Value = $value
+                [void]$scalar.Parameters.Add($parameter)
+            }
+            if ($scalar.ExecuteNonQuery() -ne 1) { throw "Scalar update failed for room Identifier $identifier" }
+            $scalar.Dispose()
+
+            Write-RoomBlobColumns $transaction $identifier $built.Blobs "Identifier $identifier"
+
+            $name = $connection.CreateCommand()
+            $name.Transaction = $transaction
+            $name.CommandText = 'UPDATE [Room] SET [Description] = ?, [RoomNotes] = ?, [RoomNotesPlainText] = ? WHERE [Identifier] = ?'
+            [void]$name.Parameters.Add('@description', [System.Data.Odbc.OdbcType]::VarChar, 255)
+            [void]$name.Parameters.Add('@notes', [System.Data.Odbc.OdbcType]::Text)
+            [void]$name.Parameters.Add('@notesPlain', [System.Data.Odbc.OdbcType]::Text)
+            [void]$name.Parameters.Add('@identifier', [System.Data.Odbc.OdbcType]::Int)
+            $name.Parameters[0].Value = [string]$room.Name
+            $name.Parameters[1].Value = $roomNotes
+            $name.Parameters[2].Value = $roomNotesPlain
+            $name.Parameters[3].Value = $identifier
+            if ($name.ExecuteNonQuery() -ne 1) { throw "Name update failed for room Identifier $identifier" }
+            $name.Dispose()
+
+            $transaction.Commit()
+            $transaction.Dispose()
+
+            Assert-RoomReadBack $identifier $room $built
+            $numberByIdentifier[$identifier] = [int]$room.Number
+            "Updated Identifier=$identifier number=$($room.Number) '$($room.Name)': walls=$($built.Walls.Count) glass=$($built.GlassRows.Count) doors=$($built.DoorRows.Count) floors=$(@($room.Floors).Count) roofs=$(@($room.Roofs).Count) OK"
+        }
+
+        foreach ($identifierRaw in $deletes) {
+            $identifier = [int]$identifierRaw
+            if (!$numberByIdentifier.ContainsKey($identifier)) { throw "No room with Identifier $identifier in $inputPath" }
+
+            # Duct sizing rows (TabularManualDDuctsize) reference rooms by Identifier — a direct
+            # RoomIdentifier plus a comma-list ReturnRunoutRoomIdentifiers. Deleting a referenced
+            # room would silently corrupt the duct design, so refuse: the engineer detaches the
+            # room in RHVAC's duct sizing first. (Nothing else references rooms; see README.)
+            $referenceCommand = $connection.CreateCommand()
+            $referenceCommand.CommandText = "SELECT COUNT(*) FROM [TabularManualDDuctsize] WHERE RoomIdentifier = $identifier OR (',' + ReturnRunoutRoomIdentifiers + ',') LIKE '%,$identifier,%'"
+            $referenceCount = [int]$referenceCommand.ExecuteScalar()
+            $referenceCommand.Dispose()
+            if ($referenceCount -gt 0) {
+                throw "Room Identifier $identifier is referenced by $referenceCount duct sizing row(s); detach it in RHVAC's duct sizing before deleting."
+            }
+
+            $delete = $connection.CreateCommand()
+            $delete.CommandText = "DELETE FROM [Room] WHERE Identifier = $identifier"
+            if ($delete.ExecuteNonQuery() -ne 1) { throw "Delete failed for room Identifier $identifier" }
+            $delete.Dispose()
+            $numberByIdentifier.Remove($identifier)
+            "Deleted Identifier=$identifier"
+        }
+        "EDITED $($updates.Count) update(s), $($deletes.Count) delete(s) -> $outputPath"
+    }
+    else {
+        foreach ($room in $rooms) {
+            if ($existingNumbers.Contains([int]$room.Number)) { throw "Room number $($room.Number) already exists in the template." }
+            [void]$existingNumbers.Add([int]$room.Number)
+
+            $built = Build-RoomBlobs $room
+
+            $transaction = $connection.BeginTransaction()
+
+            $insert = $connection.CreateCommand()
+            $insert.Transaction = $transaction
+            $insert.CommandText = "INSERT INTO [Room] ([Number], [Description], $quotedDefaults) SELECT ?, ?, $quotedDefaults FROM [DefaultRoom]"
+            [void]$insert.Parameters.Add('@number', [System.Data.Odbc.OdbcType]::Int)
+            [void]$insert.Parameters.Add('@description', [System.Data.Odbc.OdbcType]::VarChar, 255)
+            $insert.Parameters[0].Value = [int]$room.Number
+            $insert.Parameters[1].Value = [string]$room.Name
+            if ($insert.ExecuteNonQuery() -ne 1) { throw "Insert failed for room $($room.Number)" }
+            $insert.Dispose()
+
+            $identity = $connection.CreateCommand()
+            $identity.Transaction = $transaction
+            $identity.CommandText = 'SELECT MAX(Identifier) FROM [Room]'
+            $identifier = [int]$identity.ExecuteScalar()
+            $identity.Dispose()
+
+            $loads = $room.InternalLoads
+            $scalar = $connection.CreateCommand()
+            $scalar.Transaction = $transaction
+            $scalar.CommandText = @'
+UPDATE [Room]
+SET SystemNumber = ?, ZoneNumber = ?, Length = ?, Width = 1, Height = ?,
+    PeopleNumber = ?, LightingWatts = ?, EquipmentSensible = ?, EquipmentLatent = ?,
+    Occurrences = 1, CalculationMode = 0
+WHERE Identifier = ?
+'@
+            foreach ($value in @([int]$room.SystemNumber, [int]$room.ZoneNumber, [double]$room.AreaSquareFeet,
+                    [double]$room.CeilingHeightFeet, [int]$loads.People, [int][Math]::Round($loads.LightingWatts),
+                    [double]$loads.SensibleEquipmentBtuh, [double]$loads.LatentEquipmentBtuh, $identifier)) {
+                $parameter = $scalar.CreateParameter()
+                $parameter.Value = $value
+                [void]$scalar.Parameters.Add($parameter)
+            }
+            if ($scalar.ExecuteNonQuery() -ne 1) { throw "Scalar update failed for room $($room.Number)" }
+            $scalar.Dispose()
+
+            Write-RoomBlobColumns $transaction $identifier $built.Blobs "$($room.Number)"
+
+            # Jet's bulk LONGBINARY update mangles adjacent LONGCHAR values; write them after the blobs.
+            $name = $connection.CreateCommand()
+            $name.Transaction = $transaction
+            $name.CommandText = "UPDATE [Room] SET [Description] = ?, [RoomNotesPlainText] = 'Exported by Pe.Revit.Takeoff' WHERE [Identifier] = ?"
+            [void]$name.Parameters.Add('@description', [System.Data.Odbc.OdbcType]::VarChar, 255)
+            [void]$name.Parameters.Add('@identifier', [System.Data.Odbc.OdbcType]::Int)
+            $name.Parameters[0].Value = [string]$room.Name
+            $name.Parameters[1].Value = $identifier
+            if ($name.ExecuteNonQuery() -ne 1) { throw "Name update failed for room $($room.Number)" }
+            $name.Dispose()
+
+            $transaction.Commit()
+            $transaction.Dispose()
+
+            Assert-RoomReadBack $identifier $room $built
+            "Room $($room.Number) '$($room.Name)': walls=$($built.Walls.Count) glass=$($built.GlassRows.Count) doors=$($built.DoorRows.Count) floors=$(@($room.Floors).Count) roofs=$(@($room.Roofs).Count) OK"
+        }
+        "EXPORTED $($rooms.Count) room(s) -> $outputPath"
+    }
 } finally {
     $connection.Dispose()
 }
