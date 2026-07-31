@@ -259,7 +259,7 @@ async function createPeaPromptRuntime(request: PeaPromptRequest): Promise<PeaPro
 }
 
 const peaPromptInstructions = `You are Positive Energy Agent, Pea: the deployed Revit/operator workbench for MEP, BIM, and architecture practitioners.
-Use Pea product tools to inspect host/Revit state, run approved scripts, and produce operator-facing answers. Stay inside the deployed product posture: do not inspect repo source or present build/Rider/RRD internals as user-facing facts. Prefer small observable steps, say what you verified, and be explicit when live Revit evidence is unavailable.`;
+Use Pea product tools to inspect host/Revit state, run approved scripts, and produce operator-facing answers. Stay inside the deployed product posture: do not inspect repo source or present build/dev-lane internals as user-facing facts. Prefer small observable steps, say what you verified, and be explicit when live Revit evidence is unavailable.`;
 
 async function resolvePeaPromptCwd(hostBaseUrl: string, workspaceKey: string): Promise<string> {
   // Bootstrap always targets the user's session: with sandboxes connected an untargeted
@@ -303,15 +303,18 @@ async function ensureTsHostRunning(): Promise<string> {
   // Dev lane: one SDK ensureRunning pass scoped to THIS worktree's service name — discover a healthy
   // same-checkout host (matchSourceRoot), evict a stale one, or spawn the source spelling and wait.
   // Never the shared default port, which may belong to another worktree's host.
-  // ponytail: #dev boots middleware-mode Vite that this headless lane never uses; split a web-less
-  // #start entry if the cold-start budget (45s) ever matters here.
+  // #attach, never #dev: a supervisor-style spawn must not carry --take-over-host (evicting a
+  // healthy incumbent livelocks respawn-vs-respawn) nor node --watch (refused spawns must exit,
+  // not linger as orphaned watchers). Takeover stays a human spelling (`pnpm dev`).
+  // ponytail: it still boots middleware-mode Vite this headless lane never uses; split a web-less
+  // entry if the cold-start budget (45s) ever matters here.
   const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
   const serviceName = sourceHostServiceName(sourceRoot);
   const override = process.env.PE_TOOLS_HOST_LAUNCH_COMMAND?.trim();
   const result = await ensureRunning(productRoot(), serviceName, {
     spawnCommand: {
       command: override ?? "vp",
-      args: override ? [] : ["run", "@pe/host#dev"],
+      args: override ? [] : ["run", "@pe/host#attach"],
       cwd: sourceRoot,
       shell: true,
     },

@@ -3,7 +3,11 @@ import { join } from "node:path";
 import { Context, Deferred, Effect, Layer } from "effect";
 import { HttpRouter, HttpServer, HttpServerResponse as Response } from "effect/unstable/http";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
-import { sweepDeadServiceFiles } from "@pe/host-contracts/pe-service";
+import {
+  isRecordedOwnerAlive,
+  readServiceFile,
+  sweepDeadServiceFiles,
+} from "@pe/host-contracts/pe-service";
 import {
   authorizeShutdownFor,
   claimServiceHost,
@@ -16,7 +20,7 @@ import { hostOwnership, productRoot } from "./host-ownership.ts";
 
 // The dev script (`pnpm dev`) passes this to authorize a dev-over-dev takeover; it becomes
 // `hostReplacementPolicy` DATA (SDK-owned), not local probe logic (IPC-SEAM-SPEC D3).
-const DEV_TAKEOVER_ARGUMENT = "--take-over-host";
+export const DEV_TAKEOVER_ARGUMENT = "--take-over-host";
 
 /**
  * Lifecycle handles shared between the launch root and the request handlers (Pillar 3):
@@ -74,6 +78,52 @@ function buildHostDescriptor(port: number): ServiceHostDescriptor {
     shutdown: hostProcessIdentity.shutdownPath,
     policy: hostReplacementPolicy(hostOwnership.lane, process.argv.includes(DEV_TAKEOVER_ARGUMENT)),
   };
+}
+
+/**
+ * Cooperative token shutdown of a live service-file owner (the same wire shape the SDK's takeOver
+ * uses), waiting for verified exit. Best-effort: a refusal returns and leaves downstream layers
+ * (SDK claim, Mastra thread-lock retry) to report the contention honestly.
+ *
+ * A dev host runs this BEFORE binding (see host-program.ts) against two incumbents:
+ *  - its own same-name predecessor (gated on `--take-over-host`, mirroring the D3 dev-over-dev
+ *    policy) — pre-bind eviction lets `chooseServicePort` reuse the remembered port instead of
+ *    drifting to an ephemeral one on every takeover;
+ *  - the installed host: per-worktree source names removed the same-name eviction that used to
+ *    resolve their contention on the shared pea Mastra thread (ThreadLockError -> 503 degrade),
+ *    so the D3 "dev replaces installed automatically" rule is restored here.
+ */
+export async function evictLiveHost(appBase: string, name: string, why: string): Promise<void> {
+  const incumbent = await readServiceFile(appBase, name);
+  if (!incumbent || !(await isRecordedOwnerAlive(incumbent))) return;
+  // A just-claimed live incumbent is a concurrent spawn, not a wedged predecessor: sandbox
+  // supervisors respawn the host on every bridge drop, and each takeover drops the bridge, so
+  // evicting fresh claims livelocks the service (observed: 396 orphaned watchers, ~12s claim
+  // churn, no host ever answering). Let the fresh incumbent win; this claim will be refused and
+  // this spawn exits. Intentional dev-over-dev takeover of an older host still evicts. Defense
+  // in depth: supervisors now spawn `@pe/host#attach` (no takeover flag), so only a human
+  // `pnpm dev` reaches this eviction at all.
+  const incumbentAgeMs = Date.now() - Date.parse(incumbent.processStartUtc);
+  if (Number.isFinite(incumbentAgeMs) && incumbentAgeMs < 60_000) {
+    console.log(
+      `pe-host not evicting ${name} pid=${incumbent.pid} (claimed ${Math.round(incumbentAgeMs / 1000)}s ago; concurrent spawn)`,
+    );
+    return;
+  }
+  console.log(`pe-host evicting ${name} pid=${incumbent.pid} port=${incumbent.port} (${why})`);
+  try {
+    await fetch(`http://127.0.0.1:${incumbent.port}${hostProcessIdentity.shutdownPath}`, {
+      method: "POST",
+      headers: { "x-pe-service-token": incumbent.token, "content-type": "application/json" },
+      body: JSON.stringify({ token: incumbent.token }),
+      signal: AbortSignal.timeout(5_000),
+    });
+  } catch {
+    return; // ponytail: unreachable/refusing incumbent — the SDK claim / Mastra retry reports it
+  }
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline && (await isRecordedOwnerAlive(incumbent)))
+    await new Promise((resolve) => setTimeout(resolve, 500));
 }
 
 /**

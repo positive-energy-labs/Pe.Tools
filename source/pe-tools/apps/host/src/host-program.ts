@@ -6,7 +6,7 @@ import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { chooseServicePort } from "@pe/host-contracts/pe-service-host";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { productRoot } from "@pe/host-contracts/service-identity";
-import { resolveHostVersion } from "./host-lifecycle.ts";
+import { DEV_TAKEOVER_ARGUMENT, evictLiveHost, resolveHostVersion } from "./host-lifecycle.ts";
 import { makeHttpLive, MastraRuntimeLive, resolveWebRoot } from "./app.ts";
 import { hostOwnership } from "./host-ownership.ts";
 
@@ -24,6 +24,16 @@ export const hostProgram = <A, E, R>(options: {
       yield* Effect.sync(() =>
         capture("app_boot", { component: "host", version: resolveHostVersion() }),
       );
+      // Pre-bind evictions (dev lane, see evictLiveHost): clearing the same-name predecessor BEFORE
+      // chooseServicePort lets it reuse the remembered port (stable dev URL) instead of drifting to
+      // an ephemeral one; the installed host goes too, or it holds the shared pea Mastra thread.
+      if (hostOwnership.lane === "dev") {
+        yield* Effect.promise(async () => {
+          if (process.argv.includes(DEV_TAKEOVER_ARGUMENT))
+            await evictLiveHost(productRoot(), hostOwnership.serviceName, "dev takeover");
+          await evictLiveHost(productRoot(), hostProcessIdentity.serviceName, "shared pea thread");
+        });
+      }
       const port = yield* Effect.promise(() =>
         chooseServicePort(productRoot(), hostOwnership.serviceName, preferredPort),
       );

@@ -8,7 +8,10 @@ namespace Pe.App.Host;
 internal static class TsHostLauncher {
     private const string LaneEnvironmentVariable = "PE_LANE";
     private const string SourceDirectoryEnvironmentVariable = "PE_TOOLS_HOST_SOURCE_DIR";
-    private const string DevHostCommandFallback = "vp run @pe/host#dev";
+    // Attach spelling, NOT #dev: a supervisor spawn must never carry --take-over-host (evicting a
+    // healthy incumbent drops every session's bridge and livelocks respawn-vs-respawn) and must not
+    // run under node --watch (a refused-claim spawn has to exit, not linger as an orphaned watcher).
+    private const string DevHostCommandFallback = "vp run @pe/host#attach";
 
     public static TsHostLaunchResult EnsureRunning() {
         try {
