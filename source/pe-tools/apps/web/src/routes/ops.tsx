@@ -33,6 +33,7 @@ type HostOperationCatalogEntry = {
   costTier?: string;
   visibility?: string;
   requiresActiveDocument?: boolean;
+  supportedActiveDocumentKind?: string;
   description?: string;
   searchTerms?: readonly string[];
   requestExamples?: readonly { name: string; description: string; json: string }[];
@@ -374,6 +375,14 @@ function OpsPlayground() {
                     active doc
                   </Chip>
                 )}
+                {selected.supportedActiveDocumentKind &&
+                  selected.supportedActiveDocumentKind !== "Any" && (
+                    <Chip hue="kiln" title="supported active document kind">
+                      {selected.supportedActiveDocumentKind === "FamilyOnly"
+                        ? "family only"
+                        : "project only"}
+                    </Chip>
+                  )}
               </div>
               <p className="tele mt-0.5 text-[10px] text-muted-foreground">{selected.key}</p>
               {selected.description && (

@@ -129,6 +129,7 @@ export namespace HostOpsCatalog {
       costTier: string;
       visibility: string;
       requiresActiveDocument: boolean;
+      supportedActiveDocumentKind: string;
       description: string;
       searchTerms: string[];
       requestExamples: HostOperationRequestExample[];

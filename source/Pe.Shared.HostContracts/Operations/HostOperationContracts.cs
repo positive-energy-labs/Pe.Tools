@@ -18,6 +18,15 @@ public enum HostOperationVisibility {
     ExpertOnly
 }
 
+// Which active document kind a bridge-backed operation supports (see AGENTS.md
+// "supported active document kind"). Metadata/gating signal only — request scopes
+// (selection, active view, handles) stay separate.
+public enum HostOperationActiveDocumentKind {
+    Any,
+    ProjectOnly,
+    FamilyOnly
+}
+
 // Machine-readable failure classification the host emits in problem.extensions.kind,
 // so callers classify errors from a C#-owned taxonomy instead of regexing messages.
 public enum HostErrorKind {
@@ -39,6 +48,7 @@ public sealed record HostOperationAgentMetadata(
     IReadOnlyList<string> SearchTerms,
     HostOperationIntent Intent,
     bool RequiresActiveDocument,
+    HostOperationActiveDocumentKind SupportedActiveDocumentKind,
     HostOperationCostTier CostTier,
     HostOperationVisibility Visibility,
     IReadOnlyList<HostOperationRequestExample> RequestExamples,
@@ -54,12 +64,14 @@ public sealed record HostOperationAgentMetadata(
         HostOperationVisibility? visibility = null,
         IReadOnlyList<HostOperationRequestExample>? requestExamples = null,
         string? safeDefaultRequestJson = null,
-        IReadOnlyList<string>? callGuidance = null
+        IReadOnlyList<string>? callGuidance = null,
+        HostOperationActiveDocumentKind supportedActiveDocumentKind = HostOperationActiveDocumentKind.Any
     ) => new(
         description,
         searchTerms ?? Array.Empty<string>(),
         intent,
         requiresActiveDocument,
+        supportedActiveDocumentKind,
         costTier ?? InferCostTier(intent),
         visibility ?? HostOperationVisibility.EscalationVisible,
         requestExamples ?? Array.Empty<HostOperationRequestExample>(),

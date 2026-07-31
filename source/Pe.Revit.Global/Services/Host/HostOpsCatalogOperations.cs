@@ -39,6 +39,7 @@ internal static class HostOpsCatalogOperations {
             metadata.CostTier.ToString(),
             metadata.Visibility.ToString(),
             metadata.RequiresActiveDocument,
+            metadata.SupportedActiveDocumentKind.ToString(),
             metadata.Description,
             metadata.SearchTerms,
             metadata.RequestExamples,

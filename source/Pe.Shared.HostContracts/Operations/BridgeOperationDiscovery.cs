@@ -20,6 +20,8 @@ public sealed class BridgeOperationAttribute(string key) : Attribute {
     public string[]? SearchTerms { get; init; }
     public HostOperationIntent Intent { get; init; } = HostOperationIntent.Read;
     public bool RequiresActiveDocument { get; init; } = true;
+    public HostOperationActiveDocumentKind SupportedActiveDocumentKind { get; init; } =
+        HostOperationActiveDocumentKind.Any;
 }
 
 /// <summary>
@@ -140,7 +142,8 @@ public static class BridgeOpRegistry {
             attribute.Description ?? attribute.DisplayName ?? attribute.Key,
             attribute.SearchTerms,
             attribute.Intent,
-            attribute.RequiresActiveDocument
+            attribute.RequiresActiveDocument,
+            supportedActiveDocumentKind: attribute.SupportedActiveDocumentKind
         );
         var create = typeof(BridgeOp)
             .GetMethods(BindingFlags.Public | BindingFlags.Static)
@@ -233,6 +236,7 @@ public sealed record HostOpsCatalogEntry(
     string CostTier,
     string Visibility,
     bool RequiresActiveDocument,
+    string SupportedActiveDocumentKind,
     string Description,
     IReadOnlyList<string> SearchTerms,
     IReadOnlyList<HostOperationRequestExample> RequestExamples,

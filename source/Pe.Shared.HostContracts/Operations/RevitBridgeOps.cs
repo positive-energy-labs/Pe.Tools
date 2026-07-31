@@ -391,7 +391,8 @@ public static class RevitBridgeOps {
             HostOperationAgentMetadata.Create(
                 "Read parameters, types, formulas, and display values from the active family editor document.",
                 new[] { "family-editor", "family", "parameters", "types", "formulas", "snapshot" },
-                requiresActiveDocument: true
+                requiresActiveDocument: true,
+                supportedActiveDocumentKind: HostOperationActiveDocumentKind.FamilyOnly
             ),
             static (request, context, ct) => context.RevitData.GetFamilyEditorSnapshotAsync(request, ct)
         );
@@ -405,7 +406,8 @@ public static class RevitBridgeOps {
                 new[] { "family-editor", "family", "open", "edit-family", "activate" },
                 intent: HostOperationIntent.Mutate,
                 requiresActiveDocument: true,
-                costTier: HostOperationCostTier.Mutation
+                costTier: HostOperationCostTier.Mutation,
+                supportedActiveDocumentKind: HostOperationActiveDocumentKind.ProjectOnly
             ),
             static (request, context, ct) => context.RevitData.OpenFamilyEditorAsync(request, ct)
         );
@@ -419,7 +421,8 @@ public static class RevitBridgeOps {
                 new[] { "family-editor", "family", "parameters", "apply", "formulas", "mutation" },
                 intent: HostOperationIntent.Mutate,
                 requiresActiveDocument: true,
-                costTier: HostOperationCostTier.Mutation
+                costTier: HostOperationCostTier.Mutation,
+                supportedActiveDocumentKind: HostOperationActiveDocumentKind.FamilyOnly
             ),
             static (request, context, ct) => context.RevitData.ApplyFamilyEditorEditsAsync(request, ct)
         );
