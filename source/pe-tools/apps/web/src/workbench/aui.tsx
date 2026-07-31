@@ -20,7 +20,7 @@ import {
   type ToolCallMessagePartComponent,
 } from "@assistant-ui/react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
-import type { WorkbenchState } from "@pe/agent-contracts";
+import { toolTitle, type WorkbenchState } from "@pe/agent-contracts";
 import { Check, ChevronRight, GitFork, X } from "lucide-react";
 import { useWorkbench } from "./provider";
 import { isRenderable, workbenchToThreadMessages } from "./aui-adapter";
@@ -386,7 +386,7 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
       {/* lens-marker kept as CSS: focal/hover emphasis is driven by `.lens-moment.focal` (geometry).
           Hybrid row: identifiers left, machine-measured status right-aligned in the telemetry tier. */}
       <div className={`lens-marker tool ${tone}`}>
-        <span>⌗ {toolName}</span>
+        <span>⌗ {toolTitle(toolName)}</span>
         {target ? <code>{target}</code> : null}
         <span
           className={`tele-label ml-auto ${

@@ -102,7 +102,8 @@ export const Route = createFileRoute("/design-system")({ component: DesignSystem
    The page runs under the `.ds-canon` scope: box-shadows suppressed in-tree and
    `--border` re-pointed at `--line-2`, so every in-tree surface is a foreground-
    alpha hairline that flips with the theme for free (the Hairline treatment that
-   won poc.surfaces). Portaled overlays (dialog/menu/select/tooltip) render at
+   won the 2026-07 surface POC round; see branch quarry/poc-2026-07). Portaled
+   overlays (dialog/menu/select/tooltip) render at
    <body>, out of scope — their own ring is intentional elevation off the page.
    ──────────────────────────────────────────────────────────────────────────── */
 const CANON_CSS = `
@@ -1085,7 +1086,7 @@ function StatusStrip() {
   );
 }
 
-/** Balanced-budget stat panel — adapted from poc.dial's winning "balanced" intensity. */
+/** Balanced-budget stat panel — the winning "balanced" color intensity from the 2026-07 dial POC round (branch quarry/poc-2026-07). */
 function BalancedStatPanel() {
   const stats = [
     { k: "elements", v: "1,901" },

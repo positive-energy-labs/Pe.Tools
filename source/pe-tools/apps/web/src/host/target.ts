@@ -12,13 +12,14 @@
  */
 
 /**
- * Lane = payload provenance, reported at registration, never identity.
- * rrd = the user-owned Rider/hot-reload debug session (source payload); installed = the product
- * payload from installed roots; sandbox = an SDK-spawned disposable process. "unknown" mirrors
- * the host: a session that reported no lane never matches the `user` selector (a pre-identity
- * payload must stay unreachable through user vocabulary).
+ * Lane = payload provenance, reported at registration, never identity. SDK vocabulary
+ * verbatim (SPEC.md): dev = the user-owned hot-reload session (source payload, driven by
+ * `pe-revit live`); installed = the product payload from installed roots; sandbox = an
+ * SDK-spawned disposable process. "unknown" mirrors the host: a session that reported no
+ * lane never matches the `user` selector (a pre-identity payload must stay unreachable
+ * through user vocabulary).
  */
-export type SessionLane = "rrd" | "sandbox" | "installed" | "unknown";
+export type SessionLane = "dev" | "sandbox" | "installed" | "unknown";
 
 /** One Revit process incarnation, as observed by the broker. Projection of bridge session summary. */
 export interface SessionFacts {
@@ -36,8 +37,8 @@ export interface SessionFacts {
 /**
  * Selector grammar — must stay in lockstep with host TARGET_SYNTAX (bridge.ts:133).
  * ""             implicit: sole session or nothing
- * "user"         the user's Revit (lane rrd or installed)
- * "rrd"          lane rrd
+ * "user"         the user's Revit (lane dev or installed)
+ * "dev"          lane dev
  * "sandbox:<id>" sandbox by id
  * "<digits>"     pid
  * anything else  raw session id
@@ -58,8 +59,8 @@ export type TargetResolution =
   | { kind: "unresolved"; selector: TargetSelector; reason: "no-sessions" | "no-match" };
 
 function matches(session: SessionFacts, selector: TargetSelector): boolean {
-  if (selector === "user") return session.lane === "rrd" || session.lane === "installed";
-  if (selector === "rrd") return session.lane === "rrd";
+  if (selector === "user") return session.lane === "dev" || session.lane === "installed";
+  if (selector === "dev") return session.lane === "dev";
   if (selector.startsWith("sandbox:"))
     return session.sandboxId === selector.slice("sandbox:".length);
   if (/^\d+$/.test(selector)) return session.processId === Number(selector);
@@ -90,13 +91,13 @@ export function resolveTarget(
 /**
  * Mint the selector a UI writes when the user pins a session. Prefers the most
  * stable selector that is unambiguous in the CURRENT world: sandboxes pin by
- * sandbox id; the user's Revit pins as `user` when it's the only rrd/installed
+ * sandbox id; the user's Revit pins as `user` when it's the only dev/installed
  * session (survives restarts), else falls back to pid.
  */
 export function mintSelector(session: SessionFacts, all: readonly SessionFacts[]): TargetSelector {
   if (session.lane === "sandbox" && session.sandboxId) return `sandbox:${session.sandboxId}`;
-  const userLike = all.filter((s) => s.lane === "rrd" || s.lane === "installed");
-  if ((session.lane === "rrd" || session.lane === "installed") && userLike.length === 1)
+  const userLike = all.filter((s) => s.lane === "dev" || s.lane === "installed");
+  if ((session.lane === "dev" || session.lane === "installed") && userLike.length === 1)
     return "user";
   return String(session.processId);
 }
@@ -110,6 +111,8 @@ export function fromBridgeSessions(
     sandboxId?: string | null;
     processId?: number | null;
     activeDocumentTitle?: string | null;
+    activeDocumentIsFamilyDocument?: boolean | null;
+    activeDocumentObservedAtUnixMs?: number | null;
     openDocumentCount: number;
   }[],
 ): SessionFacts[] {
@@ -118,11 +121,13 @@ export function fromBridgeSessions(
     .map((e) => ({
       sessionId: e.sessionId,
       processId: e.processId ?? 0,
-      lane: (e.lane === "rrd" || e.lane === "sandbox" || e.lane === "installed"
+      lane: (e.lane === "dev" || e.lane === "sandbox" || e.lane === "installed"
         ? e.lane
         : "unknown") as SessionLane,
       sandboxId: e.sandboxId ?? undefined,
       activeDocumentTitle: e.activeDocumentTitle ?? undefined,
+      activeDocumentIsFamilyDocument: e.activeDocumentIsFamilyDocument ?? undefined,
+      observedAtUnixMs: e.activeDocumentObservedAtUnixMs ?? undefined,
       openDocumentCount: e.openDocumentCount,
     }));
 }

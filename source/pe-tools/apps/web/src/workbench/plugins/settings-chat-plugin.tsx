@@ -35,7 +35,7 @@ export function SettingsChatPlugin({
 
   return (
     <InlineRoutePlugin
-      title={isFamilyModel ? "Family Model" : "Settings"}
+      title={isFamilyModel ? "Family Model" : settingsRouteState.title}
       action={actionLabel(toolName, args, running)}
     >
       <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">

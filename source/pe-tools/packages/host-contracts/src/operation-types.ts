@@ -412,7 +412,10 @@ export const bridgeSessionsListSchema = Schema.Struct({
   sessions: Schema.Array(
     Schema.Struct({
       activeDocumentTitle: Schema.optional(Schema.NullOr(Schema.String)),
-      // Observed facts reported at registration: normalized lane (rrd | sandbox | installed),
+      activeDocumentIsFamilyDocument: Schema.optional(Schema.NullOr(Schema.Boolean)),
+      // Observation time of the active-document facts — an observation, never computed staleness.
+      activeDocumentObservedAtUnixMs: Schema.optional(Schema.NullOr(Schema.Number)),
+      // Observed facts reported at registration: normalized lane (dev | sandbox | installed),
       // logical sandbox id, and the LOADED payload's build stamp. The host never computes
       // staleness from these — the SDK owns desired-state/freshness.
       buildStamp: Schema.optional(Schema.NullOr(Schema.String)),

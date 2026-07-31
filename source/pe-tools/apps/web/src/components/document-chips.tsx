@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
+import { DocGroup, DocRow } from "#/components/doc-picker";
 import { callHostRpc } from "#/host/client";
 import { HOST_QUERY_KEY, useHostOp } from "#/host/queries";
 import type { RevitRecentDocumentEntry } from "@pe/host-contracts/operation-types";
@@ -41,6 +42,23 @@ function recentByExtension(
       return true;
     })
     .sort((a, b) => (a.rank ?? Number.MAX_SAFE_INTEGER) - (b.rank ?? Number.MAX_SAFE_INTEGER));
+}
+
+/** Recents grouped by Revit year, newest year first; rank order preserved within a year. */
+function byYear(entries: RevitRecentDocumentEntry[]): [string, RevitRecentDocumentEntry[]][] {
+  const groups = new Map<string, RevitRecentDocumentEntry[]>();
+  for (const doc of entries) {
+    const year = doc.revitYear ? String(doc.revitYear) : "?";
+    groups.set(year, [...(groups.get(year) ?? []), doc]);
+  }
+  return [...groups.entries()].sort(([a], [b]) => b.localeCompare(a));
+}
+
+/** Titles of documents open in the bound session — the "open now" telegraph. */
+function openTitles(
+  session: { openDocuments: readonly { title: string }[] } | undefined,
+): Set<string> | undefined {
+  return session ? new Set(session.openDocuments.map((doc) => doc.title)) : undefined;
 }
 
 /** Chip shell: tiny extension label + value, dropdown panel below, outside-click close. */
@@ -137,40 +155,6 @@ function PanelHeader({ label, detail }: { label: string; detail: string }) {
   );
 }
 
-function PanelRow({
-  primary,
-  secondary,
-  onClick,
-  disabled,
-}: {
-  primary: string;
-  secondary?: string;
-  onClick: () => void;
-  disabled: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      className="flex w-full items-baseline justify-between gap-2 px-3 py-1.5 text-left hover:bg-[var(--pe-blue)]/5 disabled:opacity-40"
-      style={{ borderBottom: "0.5px solid var(--line-soft)" }}
-    >
-      <span className="truncate" style={{ fontSize: 12, color: "var(--foreground)" }}>
-        {primary}
-      </span>
-      {secondary ? (
-        <span
-          className="shrink-0 whitespace-nowrap font-[var(--font-pe-mono)]"
-          style={{ fontSize: 9, color: "var(--muted-foreground)" }}
-        >
-          {secondary}
-        </span>
-      ) : null}
-    </button>
-  );
-}
-
 function PanelNote({ text, tone = "muted" }: { text: string; tone?: "muted" | "error" }) {
   return (
     <div
@@ -251,25 +235,32 @@ export function RvtChip({ target }: { target: string }) {
       {recents.isPending ? <PanelNote text="loading recent documents…" /> : null}
       {recents.error ? <PanelNote tone="error" text={errorText(recents.error)} /> : null}
       {recents.data && entries.length === 0 ? <PanelNote text="no recent .rvt files" /> : null}
-      <div className="max-h-72 overflow-y-auto">
-        {entries.map((doc) => (
-          <PanelRow
-            key={doc.path}
-            primary={doc.title}
-            secondary={`R${doc.revitYear}`}
-            disabled={busy}
-            onClick={() =>
-              void run(
-                () =>
-                  callHostRpc(
-                    "revit.apply.document.open",
-                    { path: doc.path },
-                    { bridgeSessionId: target },
-                  ),
-                () => setOpen(false),
-              )
-            }
-          />
+      <div className="max-h-72 overflow-y-auto pb-1">
+        {byYear(entries).map(([year, docs]) => (
+          <div key={year}>
+            <DocGroup label={`Revit ${year}`} aside={String(docs.length)} />
+            {docs.map((doc) => (
+              <DocRow
+                key={doc.path}
+                ext="rvt"
+                label={doc.title}
+                sub={openTitles(session.data)?.has(doc.title) ? "open now" : undefined}
+                selected={doc.title === projectTitle}
+                disabled={busy}
+                onPick={() =>
+                  void run(
+                    () =>
+                      callHostRpc(
+                        "revit.apply.document.open",
+                        { path: doc.path },
+                        { bridgeSessionId: target },
+                      ),
+                    () => setOpen(false),
+                  )
+                }
+              />
+            ))}
+          </div>
         ))}
       </div>
     </DocChip>
@@ -348,15 +339,16 @@ export function RfaChip({ target }: { target: string }) {
       {actionError ? <PanelNote tone="error" text={actionError} /> : null}
       {source.isPending ? <PanelNote text="loading…" /> : null}
       {source.error ? <PanelNote tone="error" text={errorText(source.error)} /> : null}
-      <div className="max-h-72 overflow-y-auto">
+      <div className="max-h-72 overflow-y-auto pb-1">
         {hasProject
           ? families.map((family) => (
-              <PanelRow
+              <DocRow
                 key={family.familyId}
-                primary={family.familyName}
-                secondary={`${family.categoryName} · ${family.typeCount} type${family.typeCount === 1 ? "" : "s"}`}
+                label={family.familyName}
+                sub={`${family.categoryName} · ${family.typeCount} type${family.typeCount === 1 ? "" : "s"}`}
+                selected={family.familyName === familyTitle}
                 disabled={busy}
-                onClick={() =>
+                onPick={() =>
                   void run(
                     () =>
                       callHostRpc(
@@ -369,24 +361,29 @@ export function RfaChip({ target }: { target: string }) {
                 }
               />
             ))
-          : recentEntries.map((doc) => (
-              <PanelRow
-                key={doc.path}
-                primary={doc.title}
-                secondary={`R${doc.revitYear}`}
-                disabled={busy}
-                onClick={() =>
-                  void run(
-                    () =>
-                      callHostRpc(
-                        "revit.apply.document.open",
-                        { path: doc.path },
-                        { bridgeSessionId: target },
-                      ),
-                    () => setOpen(false),
-                  )
-                }
-              />
+          : byYear(recentEntries).map(([year, docs]) => (
+              <div key={year}>
+                <DocGroup label={`Revit ${year}`} aside={String(docs.length)} />
+                {docs.map((doc) => (
+                  <DocRow
+                    key={doc.path}
+                    ext="rfa"
+                    label={doc.title}
+                    disabled={busy}
+                    onPick={() =>
+                      void run(
+                        () =>
+                          callHostRpc(
+                            "revit.apply.document.open",
+                            { path: doc.path },
+                            { bridgeSessionId: target },
+                          ),
+                        () => setOpen(false),
+                      )
+                    }
+                  />
+                ))}
+              </div>
             ))}
         {source.data && (hasProject ? families : recentEntries).length === 0 ? (
           <PanelNote text={needle ? "no matches" : "nothing to list"} />

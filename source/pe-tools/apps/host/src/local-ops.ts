@@ -140,6 +140,9 @@ export const listBridgeSessions = Effect.fnUntraced(function* (
       .filter((bridge) => bridge.connected && bridge.sessionId)
       .map((bridge) => ({
         activeDocumentTitle: bridge.state?.activeDocumentTitle ?? null,
+        activeDocumentIsFamilyDocument: bridge.state?.activeDocumentIsFamilyDocument ?? null,
+        // Observation time of the active-document facts — an observation, never computed staleness.
+        activeDocumentObservedAtUnixMs: bridge.state?.activeDocumentObservedAtUnixMs ?? null,
         // Observed facts only: the lane/buildStamp the session reported. Never staleness.
         buildStamp: bridge.buildStamp ?? null,
         connected: true,

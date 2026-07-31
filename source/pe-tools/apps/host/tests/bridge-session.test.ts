@@ -16,7 +16,7 @@ function candidate(overrides: Partial<SessionTargetCandidate>): SessionTargetCan
   };
 }
 
-const rrd = candidate({ sessionId: "session-rrd", processId: 111, lane: "rrd" });
+const dev = candidate({ sessionId: "session-dev", processId: 111, lane: "dev" });
 const installed = candidate({ sessionId: "session-inst", processId: 222, lane: "installed" });
 const sandbox = candidate({
   sessionId: "session-sbx",
@@ -55,9 +55,9 @@ test("session id is absent without process identity (uuid fallback stays)", () =
   expect(computeBridgeSessionId({ processId: 4242, processStartUtcUnixMs: 0 })).toBeNull();
 });
 
-test("lane normalizes SDK 'dev' into the registered rrd vocabulary", () => {
-  expect(normalizeSessionLane("dev")).toBe("rrd");
-  expect(normalizeSessionLane("Dev")).toBe("rrd");
+test("lane keeps the SDK vocabulary verbatim, case/whitespace-normalized", () => {
+  expect(normalizeSessionLane("dev")).toBe("dev");
+  expect(normalizeSessionLane("Dev")).toBe("dev");
   expect(normalizeSessionLane("installed")).toBe("installed");
   expect(normalizeSessionLane("Sandbox")).toBe("sandbox");
   expect(normalizeSessionLane(null)).toBeNull();
@@ -67,61 +67,61 @@ test("lane normalizes SDK 'dev' into the registered rrd vocabulary", () => {
 test("untargeted resolution: none, implicit single, hard-fail on several", () => {
   expect(resolveSessionTarget([], undefined)._tag).toBe("none");
 
-  const single = resolveSessionTarget([rrd], undefined);
-  expect(single).toMatchObject({ _tag: "found", session: rrd });
+  const single = resolveSessionTarget([dev], undefined);
+  expect(single).toMatchObject({ _tag: "found", session: dev });
 
-  const ambiguous = resolveSessionTarget([rrd, installed], undefined);
+  const ambiguous = resolveSessionTarget([dev, installed], undefined);
   expect(ambiguous._tag).toBe("error");
   if (ambiguous._tag === "error") {
     expect(ambiguous.statusCode).toBe(409);
-    expect(ambiguous.message).toContain("rrd holds the user's live docs");
-    expect(ambiguous.message).toContain("session-rrd");
+    expect(ambiguous.message).toContain("holds their live docs");
+    expect(ambiguous.message).toContain("session-dev");
     expect(ambiguous.message).toContain("session-inst");
     expect(ambiguous.message).toContain("target=");
   }
 });
 
-test("'rrd' succeeds only when exactly one rrd session exists", () => {
-  expect(resolveSessionTarget([rrd, installed], "rrd")).toMatchObject({
+test("'dev' succeeds only when exactly one dev session exists", () => {
+  expect(resolveSessionTarget([dev, installed], "dev")).toMatchObject({
     _tag: "found",
-    session: rrd,
+    session: dev,
   });
-  expect(resolveSessionTarget([installed], "rrd")).toMatchObject({
+  expect(resolveSessionTarget([installed], "dev")).toMatchObject({
     _tag: "error",
     statusCode: 404,
   });
-  const twoRrd = resolveSessionTarget(
-    [rrd, candidate({ sessionId: "session-rrd2", processId: 112, lane: "rrd" })],
-    "rrd",
+  const twoDev = resolveSessionTarget(
+    [dev, candidate({ sessionId: "session-dev2", processId: 112, lane: "dev" })],
+    "dev",
   );
-  expect(twoRrd).toMatchObject({ _tag: "error", statusCode: 409 });
+  expect(twoDev).toMatchObject({ _tag: "error", statusCode: 409 });
 });
 
 test("'sandbox:<id>' resolves the current process session for that logical sandbox", () => {
-  expect(resolveSessionTarget([rrd, sandbox], "sandbox:scratch-a")).toMatchObject({
+  expect(resolveSessionTarget([dev, sandbox], "sandbox:scratch-a")).toMatchObject({
     _tag: "found",
     session: sandbox,
   });
-  expect(resolveSessionTarget([rrd, sandbox], "sandbox:missing")).toMatchObject({
+  expect(resolveSessionTarget([dev, sandbox], "sandbox:missing")).toMatchObject({
     _tag: "error",
     statusCode: 404,
   });
 });
 
 test("pid and raw session id target one process incarnation", () => {
-  expect(resolveSessionTarget([rrd, installed], "222")).toMatchObject({
+  expect(resolveSessionTarget([dev, installed], "222")).toMatchObject({
     _tag: "found",
     session: installed,
   });
-  expect(resolveSessionTarget([rrd, installed], "999")).toMatchObject({
+  expect(resolveSessionTarget([dev, installed], "999")).toMatchObject({
     _tag: "error",
     statusCode: 404,
   });
-  expect(resolveSessionTarget([rrd, installed], "session-rrd")).toMatchObject({
+  expect(resolveSessionTarget([dev, installed], "session-dev")).toMatchObject({
     _tag: "found",
-    session: rrd,
+    session: dev,
   });
-  const miss = resolveSessionTarget([rrd, installed], "session-unknown");
+  const miss = resolveSessionTarget([dev, installed], "session-unknown");
   expect(miss).toMatchObject({ _tag: "error", statusCode: 404 });
   if (miss._tag === "error") expect(miss.message).toContain("target=");
 });

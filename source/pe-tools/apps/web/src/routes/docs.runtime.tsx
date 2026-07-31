@@ -14,8 +14,10 @@ export const Route = createFileRoute("/docs/runtime")({ component: DocsRuntime }
  * them, when they persist, when they're reused, when they die.
  *
  * Every assertion here is grounded in Pe.Revit.Sdk source; citations name file:line as of
- * beta.96 (commit 02ad1bb). The scripted scenario reenacts a real incident: a source-built
- * sandbox refused at the 2025 Addins door by a receipt-owned selector from installed 0.6.14.
+ * beta.97. The scripted scenario reenacts a real (now historical) incident: a source-built
+ * sandbox refused at the 2025 Addins door by a receipt-owned selector from installed 0.6.14 —
+ * resolved in beta.97 by sign-at-install (install apply dev-signs the deployed loader on dev
+ * machines), kept here as teaching material.
  * ---------------------------------------------------------------------------------------------- */
 
 // ── the disk model ──────────────────────────────────────────────────────────────────────────────
@@ -91,7 +93,7 @@ const FILES: FileSpec[] = [
     addAt: 3,
     writer: "build (PeWriteRuntimeDescriptor)",
     lifecycle:
-      "Immutable launch receipt, written by the build, never edited. RRD loads from here via LoadFrom in the default context — the only context hot reload can patch.",
+      "Immutable launch receipt, written by the build, never edited. The dev session loads from here via LoadFrom in the default context — the only context hot reload can patch.",
     cite: "Pe.Revit.Publish.targets:250-289 · PayloadHost.cs:19-25",
     content: () => [
       "Pe.App.runtime.json:",
@@ -119,7 +121,7 @@ const FILES: FileSpec[] = [
     label: (s) => `2025\\00-Pe.App.addin → Pe.Revit.Loader.${s >= 9 ? "DDB756" : "1A21DA"}….dll`,
     addAt: 1,
     updateAt: [9],
-    writer: "install apply · sandbox deploy · rrd deploy",
+    writer: "install apply · sandbox deploy · dev deploy",
     lifecycle:
       "This .addin file IS the selector. Revit reads it first (00- sorts first); it names exactly one loader hash. Install writes it receipt-owned; a sandbox reuses it (identical), fills an empty slot, or is refused (differs).",
     cite: "SandboxCommand.cs:1082-1091 (priority) · 1044-1071 (reuse) · 1061-1067 (refuse)",
@@ -367,8 +369,8 @@ const PROCS: Proc[] = [
         : "The user's Revit. Lane pinned by the code path, never inferred.",
   },
   {
-    id: "rrd",
-    lane: "rrd",
+    id: "dev",
+    lane: "dev",
     pid: 7444,
     year: "2025",
     from: 3,
@@ -386,7 +388,7 @@ const PROCS: Proc[] = [
     note: (s) =>
       s >= 4
         ? "The emitter saw your save, sent a delta, ApplyUpdate patched the loaded module. No reload, no new files."
-        : "Debugger + hot reload on a source payload. User-owned; the SDK never controls this process.",
+        : "Hot reload on a source payload — the session `pe-revit live` drives. User-owned and protected; the live loop converges it, never blindly restarts it.",
   },
   {
     id: "sbx",
@@ -445,10 +447,10 @@ const STEPS: Step[] = [
       "Zero writes. Selector → loader → no env var → current.txt (read once) → 0.6.14 in an isolated ALC. This is the ONLY path user machines ever take. Errors journal and go inert — never a startup dialog.",
   },
   {
-    key: "rrd",
-    title: "rrd session starts",
-    actor: "you + rider",
-    cmd: "F5 (debug from checkout)",
+    key: "dev",
+    title: "dev session starts",
+    actor: "you + pe-revit live",
+    cmd: "pe-revit live converge",
     caption:
       "The build re-stamps the SDK package's pre-built loader (it is NOT compiled from your checkout), finds the installed selector identical → reuses it untouched. Revit launches with the descriptor env var: same loader, different verdict.",
   },
@@ -484,7 +486,7 @@ const STEPS: Step[] = [
     refusal:
       "SelectorUnavailable — receipt-owned priority selector 2025\\00-Pe.App.addin (→ 1A21DA…) differs from this source candidate (→ DDB756…); refused to overwrite it.",
     caption:
-      "The generation built fine — the refusal is at the Addins door: staged selector ≠ deployed selector, and the deployed one is receipt-owned. Overwriting would repoint the USER's Revit. Not a lock — killing Revits changes nothing. The real trap: if the difference is a dev signature (as diagnosed here 2026-07-16 — code was identical), releasing can NEVER fix it: dists ship unsigned, dev builds sign.",
+      "The generation built fine — the refusal is at the Addins door: staged selector ≠ deployed selector, and the deployed one is receipt-owned. Overwriting would repoint the USER's Revit. Not a lock — killing Revits changes nothing. The trap as it stood at beta.96: a dev signature alone (as diagnosed 2026-07-16 — code was identical) meant releasing could never fix it, because dists shipped unsigned while dev builds signed. RESOLVED in beta.97: install apply now dev-signs the deployed loader on dev machines (sign-at-install), so install and checkout stamp the same bytes.",
   },
   {
     key: "stop",
@@ -797,7 +799,7 @@ const BP_W = 880;
 const BP_H = 560;
 const BP_LANES: { lane: SessionLane; col: number }[] = [
   { lane: "installed", col: 0 },
-  { lane: "rrd", col: 1 },
+  { lane: "dev", col: 1 },
   { lane: "sandbox", col: 2 },
 ];
 const bpColX = (col: number) => 25 + col * 295; // box x (w=240)
@@ -811,8 +813,8 @@ interface BpProcBox {
 const BP_PROCS: BpProcBox[] = [
   { lane: "installed", title: "revit.exe — the user's", env: "(no PE_ env vars)" },
   {
-    lane: "rrd",
-    title: "revit.exe — rrd debug",
+    lane: "dev",
+    title: "revit.exe — dev session",
     env: "PE_REVIT_SESSION_DESCRIPTOR + PE_HOT_RELOAD",
   },
   { lane: "sandbox", title: "revit.exe — sandbox:fam-lab", env: "PE_REVIT_SESSION_DESCRIPTOR" },
@@ -832,10 +834,10 @@ const BP_PAYLOADS: BpPayloadBox[] = [
     writer: "written by: pe install apply",
   },
   {
-    lane: "rrd",
+    lane: "dev",
     title: "your checkout",
     lines: ["bin\\…\\Pe.App.dll + Pe.App.runtime.json", "hot-reload deltas patch it in memory"],
-    writer: "written by: the build (F5)",
+    writer: "written by: the build (pe-revit live)",
   },
   {
     lane: "sandbox",
@@ -850,7 +852,7 @@ const BP_PAYLOADS: BpPayloadBox[] = [
 
 const BP_FORKS: Partial<Record<SessionLane, string>> = {
   installed: "no descriptor → read current.txt (once)",
-  rrd: "descriptor: lane dev → LoadFrom (EnC-eligible)",
+  dev: "descriptor: lane dev → LoadFrom (EnC-eligible)",
   sandbox: "descriptor: lane sandbox → frozen payload",
 };
 
@@ -1096,7 +1098,7 @@ function BigPicture() {
 }
 
 // ── the world composer ──────────────────────────────────────────────────────────────────────────
-// The intuition machine: assemble any machine state (a user Revit, several rrds, several
+// The intuition machine: assemble any machine state (a user Revit, several dev sessions, several
 // sandboxes, two years, drift, a release) and the picture re-derives selectors, loader eras,
 // and refusals from the same rules the SDK enforces. Presets load states; the live tab feeds
 // the identical picture from useTarget/useWorldLog.
@@ -1109,8 +1111,8 @@ type EraKey = keyof typeof ERA;
 
 interface WorldState {
   user: boolean; // the user's installed Revit 2025
-  rrd24: boolean;
-  rrd25: boolean;
+  dev24: boolean;
+  dev25: boolean;
   sb24: number; // source sandboxes per year
   sb25: number;
   sbInst: number; // installed-payload sandboxes (2025)
@@ -1143,11 +1145,11 @@ function deriveWorld(w: WorldState): {
   const installedEra: EraKey = w.released ? "new" : "old";
   const checkoutEra: EraKey = w.drift || w.released ? "new" : "old";
   const sel25 = { year: "2025" as const, era: installedEra, owner: "install receipt 0.6.x" };
-  const any24 = w.rrd24 || w.sb24 > 0;
+  const any24 = w.dev24 || w.sb24 > 0;
   const sel24 = {
     year: "2024" as const,
     era: any24 ? checkoutEra : null,
-    owner: any24 ? "sandbox/rrd deploy (free slot)" : "(empty slot)",
+    owner: any24 ? "sandbox/dev deploy (free slot)" : "(empty slot)",
   };
   const selEra = (year: "2024" | "2025") => (year === "2024" ? sel24.era : sel25.era);
 
@@ -1163,12 +1165,12 @@ function deriveWorld(w: WorldState): {
       refused: false,
     });
   for (const year of ["2024", "2025"] as const) {
-    if (year === "2024" ? w.rrd24 : w.rrd25)
+    if (year === "2024" ? w.dev24 : w.dev25)
       procs.push({
-        id: `rrd${year}`,
-        lane: "rrd",
+        id: `dev${year}`,
+        lane: "dev",
         year,
-        title: `rrd debug ${year}`,
+        title: `dev session ${year}`,
         payloadHome: "checkout",
         era: checkoutEra,
         refused: selEra(year) !== null && selEra(year) !== checkoutEra,
@@ -1214,8 +1216,8 @@ const WORLD_PRESETS: { key: string; label: string; caption: string; state: World
     caption: "One user Revit. Selector, loader, current.txt — everything agrees.",
     state: {
       user: true,
-      rrd24: false,
-      rrd25: false,
+      dev24: false,
+      dev25: false,
       sb24: 0,
       sb25: 0,
       sbInst: 0,
@@ -1226,11 +1228,12 @@ const WORLD_PRESETS: { key: string; label: string; caption: string; state: World
   {
     key: "dev",
     label: "dev day",
-    caption: "User Revit + an rrd from the checkout. Two lanes, one selector, zero contention.",
+    caption:
+      "User Revit + a dev session from the checkout. Two lanes, one selector, zero contention.",
     state: {
       user: true,
-      rrd24: false,
-      rrd25: true,
+      dev24: false,
+      dev25: true,
       sb24: 0,
       sb25: 0,
       sbInst: 0,
@@ -1244,8 +1247,8 @@ const WORLD_PRESETS: { key: string; label: string; caption: string; state: World
     caption: "git pull changed the loader source. Nothing on disk moved — the drift is latent.",
     state: {
       user: true,
-      rrd24: false,
-      rrd25: true,
+      dev24: false,
+      dev25: true,
       sb24: 0,
       sb25: 0,
       sbInst: 0,
@@ -1255,13 +1258,13 @@ const WORLD_PRESETS: { key: string; label: string; caption: string; state: World
   },
   {
     key: "refusal",
-    label: "the refusal",
+    label: "the refusal (historical)",
     caption:
-      "Drift meets an occupied slot: the 2025 sandbox is refused at the door; 2024 (free slot) deploys fine.",
+      "Drift meets an occupied slot: the 2025 sandbox is refused at the door; 2024 (free slot) deploys fine. The signature-only variant of this (2026-07-16) is resolved since beta.97 — sign-at-install keeps install and checkout stamps aligned.",
     state: {
       user: true,
-      rrd24: false,
-      rrd25: false,
+      dev24: false,
+      dev25: false,
       sb24: 1,
       sb25: 1,
       sbInst: 0,
@@ -1276,8 +1279,8 @@ const WORLD_PRESETS: { key: string; label: string; caption: string; state: World
       "An installed-payload sandbox stages the receipt's OWN selector — identical, reused, immune to drift.",
     state: {
       user: true,
-      rrd24: false,
-      rrd25: false,
+      dev24: false,
+      dev25: false,
       sb24: 0,
       sb25: 1,
       sbInst: 1,
@@ -1292,8 +1295,8 @@ const WORLD_PRESETS: { key: string; label: string; caption: string; state: World
       "install apply realigns the receipt with the checkout. Same sandbox, same command — now reuse-if-identical.",
     state: {
       user: true,
-      rrd24: false,
-      rrd25: false,
+      dev24: false,
+      dev25: false,
       sb24: 0,
       sb25: 1,
       sbInst: 0,
@@ -1305,11 +1308,11 @@ const WORLD_PRESETS: { key: string; label: string; caption: string; state: World
     key: "busy",
     label: "the busy machine",
     caption:
-      "Everything at once: a user Revit, two rrds, three sandboxes, two years, mid-drift. Trace any wire.",
+      "Everything at once: a user Revit, two dev sessions, three sandboxes, two years, mid-drift. Trace any wire.",
     state: {
       user: true,
-      rrd24: true,
-      rrd25: true,
+      dev24: true,
+      dev25: true,
       sb24: 2,
       sb25: 1,
       sbInst: 0,
@@ -1633,7 +1636,7 @@ function Counter({
 
 const LIVE_HOME: Record<string, WorldProc["payloadHome"]> = {
   installed: "product",
-  rrd: "checkout",
+  dev: "checkout",
   sandbox: "generation",
   unknown: "product",
 };
@@ -1717,16 +1720,16 @@ function WorldComposer() {
             onClick={() => set({ user: !state.user })}
           />
           <Chip
-            on={state.rrd24}
-            color={laneVar("rrd")}
-            label="rrd 2024"
-            onClick={() => set({ rrd24: !state.rrd24 })}
+            on={state.dev24}
+            color={laneVar("dev")}
+            label="dev 2024"
+            onClick={() => set({ dev24: !state.dev24 })}
           />
           <Chip
-            on={state.rrd25}
-            color={laneVar("rrd")}
-            label="rrd 2025"
-            onClick={() => set({ rrd25: !state.rrd25 })}
+            on={state.dev25}
+            color={laneVar("dev")}
+            label="dev 2025"
+            onClick={() => set({ dev25: !state.dev25 })}
           />
           <Counter
             value={state.sb24}
@@ -1833,11 +1836,11 @@ function WorldComposer() {
 // ── boot decision ───────────────────────────────────────────────────────────────────────────────
 // The loader's OnStartup, as a traceable path. Modes highlight the branch each lane takes.
 
-type BootMode = "installed" | "rrd" | "sandbox-source" | "sandbox-installed";
+type BootMode = "installed" | "dev" | "sandbox-source" | "sandbox-installed";
 
 const BOOT_MODES: { key: BootMode; label: string; lane: SessionLane }[] = [
   { key: "installed", label: "normal (no descriptor)", lane: "installed" },
-  { key: "rrd", label: "rrd (dev descriptor)", lane: "rrd" },
+  { key: "dev", label: "dev (checkout descriptor)", lane: "dev" },
   { key: "sandbox-source", label: "sandbox · source", lane: "sandbox" },
   { key: "sandbox-installed", label: "sandbox · installed payload", lane: "sandbox" },
 ];
@@ -1848,7 +1851,7 @@ interface BootNode {
   modes: BootMode[]; // which modes pass through this node
 }
 
-const ALL: BootMode[] = ["installed", "rrd", "sandbox-source", "sandbox-installed"];
+const ALL: BootMode[] = ["installed", "dev", "sandbox-source", "sandbox-installed"];
 
 const BOOT_NODES: BootNode[] = [
   {
@@ -1874,12 +1877,12 @@ const BOOT_NODES: BootNode[] = [
   {
     text: "YES → read + validate the *.runtime.json: lane ∈ {dev, sandbox} only (installed is definitionally descriptor-LESS); sandbox requires sandboxId; a descriptor naming a DIFFERENT product's assembly is ignored and that product falls through to its own current.txt",
     cite: "SessionDescriptor.cs:54-99",
-    modes: ["rrd", "sandbox-source", "sandbox-installed"],
+    modes: ["dev", "sandbox-source", "sandbox-installed"],
   },
   {
     text: "payloadSource=source → Assembly.LoadFrom the descriptor's payload in the DEFAULT context — the only context Hot Reload can patch",
     cite: "PayloadHost.cs:19-25",
-    modes: ["rrd", "sandbox-source"],
+    modes: ["dev", "sandbox-source"],
   },
   {
     text: "payloadSource=installed → resolve the installed version dir via the receipt, isolated ALC (fresh process, shipped bytes)",
@@ -1889,7 +1892,7 @@ const BOOT_NODES: BootNode[] = [
   {
     text: "PE_HOT_RELOAD=1 and net8 (2025+)? → start token-authed loopback /apply endpoint, write .hotreload.json beside the descriptor",
     cite: "HotReloadEndpoint.cs:14-18,44-51",
-    modes: ["rrd", "sandbox-source"],
+    modes: ["dev", "sandbox-source"],
   },
   {
     text: "NO descriptor → read current.txt ONCE → versions\\<v>\\<year> → non-collectible ALC “pe-payload:<dir>” (net48: one AppDomain.AssemblyResolve hook routes per requesting payload) · lane pinned “installed”",
@@ -2090,7 +2093,7 @@ const LIFECYCLE_ROWS: { artifact: string; written: string; updated: string; dies
   },
   {
     artifact: "selector (00-….addin)",
-    written: "install apply (receipt-owned) · sandbox/rrd deploy into a free slot",
+    written: "install apply (receipt-owned) · sandbox/dev deploy into a free slot",
     updated:
       "atomic replace on version flip; refused if a differing receipt-owned one occupies the slot",
     dies: "install remove — never on sandbox stop",
@@ -2417,7 +2420,7 @@ function Nouns() {
 }
 
 // ── two worlds, one door — lanes, checkouts, and signing ────────────────────────────────────────
-// The dev/user split drawn whole. Grounded: RRD is primary-checkout-only (SPEC.md:125); worktrees
+// The dev/user split drawn whole. Grounded: the dev session is primary-checkout-only (SPEC.md:125); worktrees
 // get concurrency via sandboxes (RUNTIME_ACCEPTANCE.md:99); release forces PeDevSignDisabled=true
 // (Commands.cs:975); dev-sign.props sets PeCodeSignThumbprint so dev builds sign
 // (Publish.targets:84-87); the sandbox lane WANTS signing to skip Revit's unsigned-addin dialog
@@ -2467,10 +2470,11 @@ function TwoWorlds() {
           <div className="grid gap-2 p-2.5">
             <div className="px-2 py-1.5" style={{ borderLeft: "2px solid var(--cat-green)" }}>
               <div className="font-[var(--font-pe-mono)]" style={mono(9.5, "var(--foreground)")}>
-                primary checkout → RRD
+                primary checkout → the dev session
               </div>
               <p className="m-0 text-[10.5px]" style={{ color: "var(--muted-foreground)" }}>
-                The one checkout allowed to debug interactively (hot reload, debugger). RRD is
+                The one checkout allowed to run the live loop — hot reload driven by `pe-revit
+                live`, which also installs the VS Code extension. The dev session is
                 primary-checkout-only, by rule.
               </p>
             </div>
@@ -2481,7 +2485,7 @@ function TwoWorlds() {
               <p className="m-0 text-[10.5px]" style={{ color: "var(--muted-foreground)" }}>
                 This is the SDK's headline trick: every git worktree can build + launch its own
                 sandboxed Revit, concurrently — each gets an immutable generation, its own pid, its
-                own descriptor. Agents develop in parallel without touching your RRD.
+                own descriptor. Agents develop in parallel without touching your dev session.
               </p>
             </div>
             <div className="px-2 py-1.5" style={{ borderLeft: "2px solid var(--cat-slate)" }}>
@@ -2660,7 +2664,7 @@ const MISREADINGS: [string, string][] = [
 const LANE_STORY: Record<string, string> = {
   installed:
     "took the descriptor-less path: current.txt → installed payload (step 2 of the scenario)",
-  rrd: "descriptor-launched from a checkout, hot-reload endpoint live (step 3)",
+  dev: "descriptor-launched from a checkout, hot-reload endpoint live (step 3)",
   sandbox: "descriptor-launched from an immutable generation (step 6)",
   unknown:
     "registered without a lane — a pre-identity payload; unreachable via user vocabulary, by design",
@@ -2732,7 +2736,7 @@ function LiveWorld() {
 const LEDGER: { state: "truth" | "next" | "open"; text: string }[] = [
   {
     state: "truth",
-    text: "This page's scenario is scripted, but every rule it demonstrates is cited to SDK source at beta.96. If the SDK moves, the citations are the tripwire.",
+    text: "This page's scenario is scripted, but every rule it demonstrates is cited to SDK source at beta.97. If the SDK moves, the citations are the tripwire.",
   },
   {
     state: "next",
@@ -2748,11 +2752,11 @@ const LEDGER: { state: "truth" | "next" | "open"; text: string }[] = [
   },
   {
     state: "open",
-    text: "Selector identity should ignore signatures (hash the pre-signature image). Until then, every dev machine with an installed product + dev-sign.props re-hits this refusal, and releasing can't close it.",
+    text: "Selector identity should ignore signatures (hash the pre-signature image). Sign-at-install (beta.97) closes the routine dev-machine case; the deeper fix would make a signature a non-event for identity entirely.",
   },
   {
     state: "open",
-    text: "User-facing cut: hide the checkout zone and rrd lane behind a “dev machine” toggle — installed + sandbox is the whole story a Pe.Tools user needs.",
+    text: "User-facing cut: hide the checkout zone and dev lane behind a “dev machine” toggle — installed + sandbox is the whole story a Pe.Tools user needs.",
   },
 ];
 
@@ -2819,7 +2823,7 @@ function DocsRuntime() {
               : that page is <em>which session gets the call</em>; this one is{" "}
               <em>how each kind of session comes to exist</em>. Three writers (installer, build,
               sandbox CLI), four places on disk, and Revit only ever reads. Claims cite Pe.Revit.Sdk
-              source (beta.96).
+              source (beta.97).
             </p>
           </div>
           <ThemeToggle />
@@ -2843,9 +2847,9 @@ function DocsRuntime() {
               Revit loads one thing: a hash-named <strong>loader</strong> dll, named by the{" "}
               <strong>selector</strong> (the <code>00-Pe.App.addin</code> file). The loader asks one
               question — <em>is PE_REVIT_SESSION_DESCRIPTOR set?</em> Yes → that{" "}
-              <strong>descriptor</strong> file picks the payload (rrd or sandbox). No →{" "}
+              <strong>descriptor</strong> file picks the payload (dev or sandbox). No →{" "}
               <strong>current.txt</strong>, once → installed. One env var is the entire difference
-              between your Revit, your debug session, and every sandbox.
+              between your Revit, your dev session, and every sandbox.
             </p>
           </div>
         </section>
@@ -2901,7 +2905,8 @@ function DocsRuntime() {
           <SectionLabel label="two worlds, one door — lanes, checkouts, signing" />
           <p className="mb-2 max-w-[80ch] text-[12px]" style={{ color: "var(--muted-foreground)" }}>
             The dev/user split, drawn whole. A user's machine has one writer and one boot path. Your
-            machine has many builders — a primary checkout (RRD), any number of worktree checkouts
+            machine has many builders — a primary checkout (the dev session), any number of worktree
+            checkouts
             (each spawning its own sandbox, concurrently), AND an installed release — all sharing
             one Addins door. Signing is the invisible variable that decides whether they agree.
           </p>
@@ -2912,7 +2917,7 @@ function DocsRuntime() {
         <section className="mb-10">
           <SectionLabel label="the world composer — build a machine, watch the rules" />
           <p className="mb-2 max-w-[86ch] text-[12px]" style={{ color: "var(--muted-foreground)" }}>
-            Same picture, any number of processes, two years. Add rrds and sandboxes, toggle
+            Same picture, any number of processes, two years. Add dev sessions and sandboxes, toggle
             <em> drift</em> and <em>release</em>, and the selectors, loader eras, and refusals
             re-derive from the SDK's own rules. The <em>live</em> tab renders this machine's real
             sessions through the identical picture (the same <code>useTarget</code> the product
@@ -2936,8 +2941,10 @@ function DocsRuntime() {
         <section className="mb-10">
           <SectionLabel label="the machine in motion" />
           <p className="mb-3 max-w-[78ch] text-[12px]" style={{ color: "var(--muted-foreground)" }}>
-            The composer's <em>refusal</em> preset, as a real week on disk. Scrub the steps; ● was
-            written this step, ✕ was pruned. Click any file for its lifecycle and citation.
+            The composer's <em>refusal</em> preset, as a real week on disk — the 2026-07-16
+            incident, since resolved by sign-at-install in beta.97; kept because it teaches the
+            ownership rules. Scrub the steps; ● was written this step, ✕ was pruned. Click any file
+            for its lifecycle and citation.
           </p>
 
           <div className="mb-2 flex flex-wrap items-center gap-3">

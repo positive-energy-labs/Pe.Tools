@@ -8,7 +8,8 @@
  */
 import { useEffect, useRef, useState } from "react";
 
-import { useFleet } from "#/host/fleet";
+import { DocRow, extOf } from "#/components/doc-picker";
+import { useFleet, worldClause, worldName } from "#/host/fleet";
 import { mintSelector, resolveTarget, sessionLabel } from "#/host/target";
 
 export type SentenceTone = "rest" | "active" | "awaiting" | "committed" | "failed";
@@ -113,16 +114,7 @@ export function Sentence({
 
   const hasDocSlot = documents !== undefined;
   const resolution = resolveTarget(sessions, target);
-
-  const clauseText =
-    resolution.kind === "resolved"
-      ? ` in ${resolution.session.lane === "sandbox" ? `a live world (${resolution.session.sandboxId})` : "your Revit"}`
-      : resolution.kind === "ambiguous"
-        ? " in … several worlds — pick one"
-        : sessions.length === 0
-          ? " — no world is running"
-          : " — pick a world";
-
+  const clauseText = worldClause(worlds, target);
   const bootingWorlds = worlds.filter((world) => world.phase === "booting");
 
   return (
@@ -206,26 +198,16 @@ export function Sentence({
           {documents
             .filter((path) => path.toLowerCase().includes(query.toLowerCase()))
             .map((path) => (
-              <div
+              <DocRow
                 key={path}
-                className="truncate py-1"
-                style={{
-                  cursor: "pointer",
-                  borderBottom: "0.5px solid var(--line-soft)",
-                  fontSize: 11.5,
-                  color: "var(--foreground)",
-                  background:
-                    path === documentLabel
-                      ? "color-mix(in srgb, var(--pe-blue) 5%, transparent)"
-                      : undefined,
-                }}
-                onClick={() => {
+                ext={extOf(path)}
+                label={path}
+                selected={path === documentLabel}
+                onPick={() => {
                   onPickDocument?.(path);
                   setOpenSlot(null);
                 }}
-              >
-                {path}
-              </div>
+              />
             ))}
           {documents.length === 0 ? (
             <div className="tele py-1" style={{ fontSize: 10, color: "var(--muted-foreground)" }}>
@@ -251,7 +233,7 @@ export function Sentence({
               }}
             >
               <span className="tele" style={{ fontSize: 10, color: "var(--foreground)" }}>
-                {session.lane === "sandbox" ? (session.sandboxId ?? session.sessionId) : "your Revit"}
+                {worldName(session)}
               </span>{" "}
               <span className="tele" style={{ fontSize: 9, color: "var(--muted-foreground)" }}>
                 {sessionLabel(session)} · pid {session.processId}

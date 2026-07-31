@@ -1,14 +1,12 @@
 /**
  * Fleet — one fusion of every Revit world the client can observe: bridge-connected
  * sessions (strongest truth) + the sandbox registry (covers the boot window before a
- * bridge connection exists). Pure functions so POCs and tests exercise the full state
- * space without a host; `useFleet` binds them to the live queries.
+ * bridge connection exists, and the killed tail after one dies). Pure functions so
+ * POCs and tests exercise the full state space without a host; `useFleet` binds them
+ * to the live queries.
  *
  * The sentence grammar's world clause derives from here — the same facts /instances
  * renders, spoken instead of tabled.
- *
- * ponytail: instances.tsx still builds its own display rows from the same two queries;
- * fold it onto fuseFleet when that route is next touched.
  */
 import { useQuery } from "@tanstack/react-query";
 
@@ -24,6 +22,7 @@ export interface SandboxRegistryEntry {
   year?: string | null;
   startedAtUtc?: string | null;
   stoppedAtUtc?: string | null;
+  firstFailureEvent?: { message?: string } | null;
 }
 
 export type WorldPhase = "live" | "booting" | "unresponsive" | "dead";
@@ -39,23 +38,42 @@ export interface WorldFacts {
   activeDocumentTitle?: string;
   openDocumentCount: number;
   session?: SessionFacts;
+  /** The raw registry entry, when the sandbox registry knows this world. */
+  registry?: SandboxRegistryEntry;
 }
 
-const BOOTING_STATES = new Set(["materialized", "booting", "ready"]);
+// "materialized" is deployed-but-never-started (no pid) — startable, not booting; it
+// belongs with the dead tail, not the boot window.
+const BOOTING_STATES = new Set(["booting", "ready"]);
+
+/** The one human name for a session's world: sandbox id, or "your Revit". */
+export function worldName(session: SessionFacts): string {
+  return session.lane === "sandbox" ? (session.sandboxId ?? session.sessionId) : "your Revit";
+}
+
+export const PHASE_COLOR: Record<WorldPhase, string> = {
+  live: "var(--pe-blue)",
+  booting: "var(--cat-kiln)",
+  unresponsive: "var(--cat-clay)",
+  dead: "var(--muted-foreground)",
+};
 
 /** Bridge sessions win; registry entries not bridge-connected fill the boot/death tail. */
 export function fuseFleet(
   sessions: readonly SessionFacts[],
   registry: readonly SandboxRegistryEntry[],
 ): WorldFacts[] {
+  const byId = new Map(registry.map((entry) => [entry.id, entry]));
   const worlds: WorldFacts[] = sessions.map((session) => ({
     id: session.lane === "sandbox" ? (session.sandboxId ?? session.sessionId) : "user",
     kind: session.lane === "sandbox" ? "sandbox" : "user",
     phase: "live",
+    year: (session.sandboxId ? byId.get(session.sandboxId)?.year : null) ?? undefined,
     pid: session.processId,
     activeDocumentTitle: session.activeDocumentTitle,
     openDocumentCount: session.openDocumentCount,
     session,
+    registry: session.sandboxId ? byId.get(session.sandboxId) : undefined,
   }));
   const connected = new Set(worlds.map((world) => world.id));
   for (const entry of registry) {
@@ -71,6 +89,7 @@ export function fuseFleet(
       year: entry.year ?? undefined,
       pid: entry.pid ?? undefined,
       openDocumentCount: 0,
+      registry: entry,
     });
   }
   return worlds;
@@ -79,13 +98,11 @@ export function fuseFleet(
 /**
  * The world clause: what the sentence appends after a target. Speaks derivation
  * truth ("still booting", "gone"), never offers a choice — choosing is the plugin
- * sentence's job via its own slots.
+ * sentence's job via its own slots. Total over every resolution state.
  */
 export function worldClause(worlds: readonly WorldFacts[], selector: TargetSelector): string {
-  const resolution = resolveTarget(
-    worlds.flatMap((world) => (world.session ? [world.session] : [])),
-    selector,
-  );
+  const sessions = worlds.flatMap((world) => (world.session ? [world.session] : []));
+  const resolution = resolveTarget(sessions, selector);
   if (resolution.kind === "resolved") {
     const world = worlds.find((w) => w.session?.sessionId === resolution.session.sessionId);
     const name = world?.kind === "user" ? "your Revit" : `a live world (${world?.id})`;
@@ -95,17 +112,17 @@ export function worldClause(worlds: readonly WorldFacts[], selector: TargetSelec
     const world = worlds.find((w) => w.id === selector.slice("sandbox:".length));
     if (world?.phase === "booting") return " in a world that is still booting";
     if (world?.phase === "unresponsive") return " — its world is unresponsive";
-    if (world?.phase === "dead" || !world) return " — its world is gone";
+    return " — its world is gone";
   }
-  if (resolution.kind === "unresolved" && resolution.reason === "no-sessions")
-    return " — no world is running";
-  if (resolution.kind === "ambiguous") return "";
-  return "";
+  if (resolution.kind === "ambiguous") return " in … several worlds — pick one";
+  if (resolution.reason === "no-sessions") return " — no world is running";
+  return " — its world is gone"; // dangling pid/session pin: the process died
 }
 
 export function useSandboxRegistryQuery() {
   // Under HOST_QUERY_KEY so root SSE invalidation refetches it; the interval covers
   // the boot window where no bridge events exist yet.
+  // ponytail: 5s poll, always on while mounted; a start-scoped poll if it ever matters.
   return useQuery({
     queryKey: [...HOST_QUERY_KEY, "", "sessions.sandboxes", ""],
     queryFn: async (): Promise<SandboxRegistryEntry[]> => {

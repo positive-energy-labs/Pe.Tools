@@ -76,6 +76,59 @@ export function deriveOpActivity(key: string): Activity {
   return { verb: "editing", gerund: "editing", target: tail };
 }
 
+/**
+ * Lay-user tool titles — the alias extension point. Add a row here to rename a tool on
+ * every chip/trace surface at once; unlisted tools fall back to title-cased wire names.
+ */
+export const TOOL_TITLES: Record<string, string> = {
+  pe_status: "Status check",
+  pe_logs: "Read logs",
+  pe_sandbox: "Tend the worlds",
+  host_operation_search: "Find a capability",
+  host_operation_call: "Revit operation",
+  request_access: "Ask for access",
+  read_image: "Look at an image",
+  capture_view: "Capture a view",
+  revit_api_docs_search: "Search the Revit docs",
+  revit_api_docs_fetch: "Read the Revit docs",
+  script_bootstrap: "Draft a script",
+  script_execute: "Run a script",
+  route_state_read: "Read the workspace",
+  route_state_apply: "Suggest workspace changes",
+  route_command: "Workspace command",
+};
+
+/** Human title for a tool call. Alias first, else Title Cased wire name. */
+export function toolTitle(toolName: string): string {
+  return (
+    TOOL_TITLES[toolName] ??
+    toolName
+      .split("_")
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ")
+  );
+}
+
+/** Short action label for a route-plugin tool card ("Read", "Draft update", "Apply"). */
+export function actionLabel(toolName: string, args: unknown, running: boolean): string {
+  const parsed = parseArgs(args);
+  const command = str(parsed, "command");
+  const action =
+    toolName === "route_state_read"
+      ? "Read"
+      : toolName === "route_state_apply"
+        ? "Draft update"
+        : command === "refresh"
+          ? "Refresh"
+          : command === "preview"
+            ? "Preview"
+            : command === "apply"
+              ? "Apply"
+              : (command ?? "Command");
+  return running ? `${action} in progress` : action;
+}
+
 const SANDBOX_GERUND: Record<string, string> = {
   start: "booting a world",
   restart: "rebooting a world",

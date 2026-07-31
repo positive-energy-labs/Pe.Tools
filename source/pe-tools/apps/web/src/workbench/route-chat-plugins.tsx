@@ -3,6 +3,7 @@ import type { z } from "zod";
 import {
   type FamilyTypesDocument,
   type ParameterLinksDocument,
+  actionLabel,
   cellSummary,
   familyRouteState,
   familyTypesRouteState,
@@ -201,7 +202,7 @@ function ParameterLinksChatPlugin({
   };
 
   return (
-    <InlineRoutePlugin title="Parameter Links" action={actionLabel(toolName, args, running)}>
+    <InlineRoutePlugin title={parameterLinksRouteState.title} action={actionLabel(toolName, args, running)}>
       <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
         <Metric value={profile?.definitions.length ?? 0} label="definitions" />
         <Metric value={profile?.assignments.length ?? 0} label="assignments" />
@@ -345,7 +346,7 @@ function FamilyTypesChatPlugin({
   if (active && !reviewable) return null;
 
   return (
-    <InlineRoutePlugin title="Family Types" action={actionLabel(toolName, args, running)}>
+    <InlineRoutePlugin title={familyTypesRouteState.title} action={actionLabel(toolName, args, running)}>
       <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
         <Metric value={openProposals} label="open proposals" />
         <Metric value={summary.staged} label="staged" />
@@ -447,22 +448,7 @@ export function Metric({
   );
 }
 
-export function actionLabel(toolName: string, args: unknown, running: boolean): string {
-  const command = isRecord(args) && typeof args.command === "string" ? args.command : null;
-  const action =
-    toolName === "route_state_read"
-      ? "Read"
-      : toolName === "route_state_apply"
-        ? "Draft update"
-        : command === "refresh"
-          ? "Refresh"
-          : command === "preview"
-            ? "Preview"
-            : command === "apply"
-              ? "Apply"
-              : (command ?? "Command");
-  return running ? `${action} in progress` : action;
-}
+export { actionLabel };
 
 function displayParameterLinkValue(value: {
   displayValue?: string | null;

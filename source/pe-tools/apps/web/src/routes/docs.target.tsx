@@ -25,9 +25,10 @@ export const Route = createFileRoute("/docs/target")({ component: DocsTarget });
 /* ------------------------------------------------------------------------------------------------
  * docs/target — session & document targeting: the model, its states, and where each surface
  * reflects it. Doubles as the design exercise it grew from: a scripted world timeline drives one
- * resolveTarget() and every exhibit below is a reflection of that single resolution. The composer
- * chip exhibit renders the REAL product component (components/target-chip.tsx) against the
- * scripted world; the patch bay and worldline are explanatory instruments.
+ * resolveTarget() and every exhibit below is a reflection of that single resolution. In the
+ * product, THE SENTENCE (components/sentence.tsx) is the one targeting surface; the chip exhibit
+ * renders the RETIRED TargetChip (components/target-chip.tsx, kept unmounted) against the
+ * scripted world as an instrument; the patch bay and worldline are explanatory instruments.
  *
  * Self-contained data; the model and visual vocabulary are imported from #/host/target(-ui) —
  * the same modules the product uses — so this page cannot drift from the shipped behavior.
@@ -157,8 +158,8 @@ const STEPS: WorldStep[] = [
 
 const SELECTOR_ROWS: [string, string][] = [
   ["(empty)", "implicit — the sole session, or refuse when there are several"],
-  ["user", "the user's Revit (lane rrd or installed)"],
-  ["rrd", "the rrd lane specifically"],
+  ["user", "the user's Revit (lane dev or installed)"],
+  ["dev", "the dev lane specifically"],
   ["sandbox:<id>", "a sandbox by logical id"],
   ["<digits>", "a process id"],
   ["anything else", "a raw session id (dies with the process — UIs never store these)"],
@@ -206,7 +207,7 @@ const ANATOMY: AnatomyProcess[] = [
     facts: {
       sessionId: "7f21bd",
       processId: 7444,
-      lane: "rrd",
+      lane: "dev",
       activeDocumentTitle: "Annex-B.rvt",
       openDocumentCount: 1,
       observedAtUnixMs: T0 - 9000,
@@ -214,7 +215,7 @@ const ANATOMY: AnatomyProcess[] = [
     buildStamp: "src@8455251",
     docs: [{ title: "Annex-B.rvt", active: true }],
     blurb:
-      "The user-owned Rider/hot-reload debug session, running a source-built payload. Minutes to restart and often holding a real model, so it is protected: attached proof only, deliberately.",
+      "The user-owned dev session — hot reload driven by `pe-revit live`, running a source-built payload. Minutes to restart and often holding a real model, so it is protected: attached proof only, deliberately.",
   },
   {
     facts: {
@@ -237,9 +238,9 @@ const LENS_SELECTORS: { sel: TargetSelector; note: string }[] = [
   { sel: "", note: "auto — three sessions, so resolution refuses; nothing gets touched" },
   {
     sel: "user",
-    note: "matches lanes rrd + installed. With BOTH running, `user` is itself ambiguous — pin by pid, or keep one user-lane Revit alive",
+    note: "matches lanes dev + installed. With BOTH running, `user` is itself ambiguous — pin by pid, or keep one user-lane Revit alive",
   },
-  { sel: "rrd", note: "the debug session only" },
+  { sel: "dev", note: "the hot-reload dev session only" },
   { sel: "sandbox:fam-lab", note: "the sandbox, by the id it was minted with" },
   { sel: "4128", note: "a pid — always unambiguous, never survives a restart" },
   {
@@ -476,15 +477,15 @@ const END_STATE: { state: "decided" | "shipped" | "next" | "open"; text: string 
   },
   {
     state: "shipped",
-    text: "Web surfaces store selectors, never ids, and resolve through one pure function. The chip, its patch-bay picker, the world-lane readout, and the thread rail are reflections of that single resolution.",
+    text: "Web surfaces store selectors, never ids, and resolve through one pure function. The sentence's world clause, the world-lane readout, and the /instances rows are reflections of that single resolution.",
   },
   {
     state: "next",
     text: "The agent inherits the chat pin: tool calls default their bridgeSessionId to the ?target selector; explicit per-call overrides stay legal and are stamped visibly in the transcript.",
   },
   {
-    state: "next",
-    text: "/ops and /family-matrix adopt TargetChip + a ?target param and delete their hand-rolled session selects.",
+    state: "shipped",
+    text: "TargetChip is retired from chat (kept unmounted): the sentence's world slot is THE one bind control, its clause spoken by worldClause over fuseFleet (host/fleet.ts), and /instances rows derive from the same fleet fusion.",
   },
   {
     state: "open",
@@ -1153,6 +1154,12 @@ function DocsTarget() {
                 ))}
               </tbody>
             </table>
+            <p className="mt-2 max-w-[54ch] text-[11px]" style={{ color: "var(--muted-foreground)" }}>
+              These states cover sessions the bridge can see. The sentence's world clause speaks one
+              grammar wider: fusing the sandbox registry (`host/fleet.ts`) adds world phases —
+              booting (“in a world that is still booting”), unresponsive, gone — so a pin over a
+              world mid-boot or post-mortem still reads as a sentence, not a bare dangling state.
+            </p>
           </div>
         </section>
 
@@ -1223,15 +1230,19 @@ function DocsTarget() {
 
         <div className="grid gap-8 lg:grid-cols-2">
           <section>
-            <SectionLabel label="composer chip — the product surface" />
+            <SectionLabel label="the sentence — the product surface (chip retired)" />
             <p
               className="mb-2 max-w-[60ch] text-[11px] leading-snug"
               style={{ color: "var(--muted-foreground)" }}
             >
-              The chip lives in the chat control row next to model and access, and on any route that
-              targets a session. Its picker is a one-consumer patch bay: the wire gutter on the left
-              draws this surface's relationship to each session. This exhibit renders the shipped
-              component (`components/target-chip.tsx`).
+              In the product, THE SENTENCE (`components/sentence.tsx` — mounted by
+              `chat-sentence.tsx` in chat, `routes/family.tsx` in plugins) is the one targeting
+              surface: pea's testimony is the status prefix, and the world clause is the chat's one
+              bind control, spoken from the fleet fusion (`host/fleet.ts`). The chip below is the
+              RETIRED predecessor (`chat-target.tsx`: kept unmounted), rendered here as an
+              instrument — its picker draws the wire-gutter relationship the sentence compresses
+              into a clause, and the sentence needs the live fleet, which a scripted world can't
+              feed honestly.
             </p>
             <ComposerExhibit
               selector={chatSelector}

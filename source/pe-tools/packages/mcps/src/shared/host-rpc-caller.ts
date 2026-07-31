@@ -71,7 +71,7 @@ async function loadCatalog(
 ): Promise<HostOperationDefinition[]> {
   const base = trimTrailingSlash(hostBaseUrl);
   // A catalog describes one Revit process. Sharing it across selectors can make Pea discover an
-  // operation in RRD and then invoke it in a sandbox where that contract does not exist.
+  // operation in the dev session and then invoke it in a sandbox where that contract does not exist.
   const cacheKey = `${base}\0${bridgeSessionId ?? ""}`;
   const cached = catalogCache.get(cacheKey);
   if (cached && Date.now() - cached.at < CATALOG_TTL_MS) return cached.ops;

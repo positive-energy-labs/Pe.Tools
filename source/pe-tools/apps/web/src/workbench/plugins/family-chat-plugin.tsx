@@ -22,7 +22,7 @@ export function FamilyChatPlugin({ toolName, args, sessionState, running }: Rout
       evidence.from.documentVersionToken === settings?.snapshot?.versionToken);
 
   return (
-    <InlineRoutePlugin title="Family" action={actionLabel(toolName, args, running)}>
+    <InlineRoutePlugin title={familyRouteState.title} action={actionLabel(toolName, args, running)}>
       <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
         <Metric value={document?.doc?.blocks.length ?? 0} label="doc blocks" />
         <Metric value={document?.doc?.images?.length ?? 0} label="doc images" />

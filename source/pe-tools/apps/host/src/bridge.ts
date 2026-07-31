@@ -19,8 +19,9 @@ type Session = {
   readonly pending: Ref.Ref<BridgePendingRequest | null>; // single in-flight mailbox
   readonly sessionId: string;
   readonly processId: number;
-  // Observed selector metadata, never identity. lane is normalized ("dev" → "rrd"); buildStamp is
-  // the LOADED payload's stamp as reported at registration — the host never computes staleness.
+  // Observed selector metadata, never identity. lane is the SDK vocabulary verbatim
+  // (dev | sandbox | installed); buildStamp is the LOADED payload's stamp as reported at
+  // registration — the host never computes staleness.
   readonly lane: string | null;
   readonly sandboxId: string | null;
   readonly buildStamp: string | null;
@@ -96,14 +97,13 @@ export function computeBridgeSessionId(registration: {
 }
 
 /**
- * Registered lane vocabulary: rrd | sandbox | installed. Descriptor-launched dev sessions report
- * the SDK lane string "dev"; in the broker's vocabulary that is the rrd session (Rider/Hot Reload
- * — it holds the user's live docs). The wire field stays verbatim; only the broker maps it.
+ * Registered lane vocabulary is the SDK's, verbatim: dev | sandbox | installed (SPEC.md
+ * "Lane vocabulary is dev/sandbox/installed on every surface"). The dev lane is the
+ * hot-reload session driven by `pe-revit live` — it holds the user's live docs.
  */
 export function normalizeSessionLane(lane: string | null | undefined): string | null {
   const normalized = lane?.trim().toLowerCase();
-  if (!normalized) return null;
-  return normalized === "dev" ? "rrd" : normalized;
+  return normalized || null;
 }
 
 export type SessionTargetCandidate = {
@@ -131,11 +131,11 @@ function describeSessions(sessions: readonly SessionTargetCandidate[]): string {
 }
 
 const TARGET_SYNTAX =
-  "Target one with target=<selector>: 'user' (the user's own session — it holds their live docs), 'rrd' (the Rider dev session — rrd holds the user's live docs), 'sandbox:<id>', a pid, or a session id.";
+  "Target one with target=<selector>: 'user' (the user's own session — it holds their live docs), 'dev' (the hot-reload dev session specifically), 'sandbox:<id>', a pid, or a session id.";
 
 /**
  * The sole target-resolution choke point. Selector grammar: `sandbox:<id>` → the current process
- * session for that logical sandbox; `rrd` → succeeds only when exactly one rrd session exists;
+ * session for that logical sandbox; `dev` → succeeds only when exactly one dev session exists;
  * all digits → pid; anything else → raw session id (one process incarnation). Untargeted with one
  * session is implicit (ergonomic and safe); untargeted with several HARD-FAILS immediately with
  * the listing — read-only status/list surfaces aggregate via `list` instead, never through here.
@@ -176,11 +176,11 @@ export function resolveSessionTarget<S extends SessionTargetCandidate>(
 
   // Pea's world is "the user's session + sandboxes" — `user` selects the one session on a
   // KNOWN user lane without the caller ever speaking lane vocabulary (dev pea may target a
-  // user session that is rrd underneath; that stays invisible to it). Identity-less sessions
-  // (lane unknown — e.g. a pre-identity payload running inside a sandbox) never match: `user`
-  // fails closed rather than guess.
+  // user session that is dev-lane underneath; that stays invisible to it). Identity-less
+  // sessions (lane unknown — e.g. a pre-identity payload running inside a sandbox) never
+  // match: `user` fails closed rather than guess.
   if (selector.toLowerCase() === "user") {
-    const matches = sessions.filter((s) => s.lane === "rrd" || s.lane === "installed");
+    const matches = sessions.filter((s) => s.lane === "dev" || s.lane === "installed");
     if (matches.length === 1) return { _tag: "found", session: matches[0] };
     if (matches.length === 0)
       return {
@@ -195,19 +195,19 @@ export function resolveSessionTarget<S extends SessionTargetCandidate>(
     };
   }
 
-  if (selector.toLowerCase() === "rrd") {
-    const matches = sessions.filter((s) => s.lane === "rrd");
+  if (selector.toLowerCase() === "dev") {
+    const matches = sessions.filter((s) => s.lane === "dev");
     if (matches.length === 1) return { _tag: "found", session: matches[0] };
     if (matches.length === 0)
       return {
         _tag: "error",
         statusCode: 404,
-        message: `No rrd session is connected. Connected sessions: ${listing}`,
+        message: `No dev session is connected. Connected sessions: ${listing}`,
       };
     return {
       _tag: "error",
       statusCode: 409,
-      message: `'rrd' is ambiguous: ${matches.length} rrd sessions are connected. Target a pid or session id. Connected sessions: ${listing}`,
+      message: `'dev' is ambiguous: ${matches.length} dev sessions are connected. Target a pid or session id. Connected sessions: ${listing}`,
     };
   }
 

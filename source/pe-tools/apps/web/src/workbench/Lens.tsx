@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import type {
-  WorkbenchObservationMemoryEntry,
-  WorkbenchState,
-  WorkbenchToolCall,
+import {
+  toolTitle,
+  type WorkbenchObservationMemoryEntry,
+  type WorkbenchState,
+  type WorkbenchToolCall,
 } from "@pe/agent-contracts";
 import { ThreadPrimitive, type ThreadMessageLike } from "@assistant-ui/react";
 import { modeDepth, type Mode } from "./depth";
@@ -757,7 +758,7 @@ function CellHeader({ cell }: { cell: TraceCell }) {
     const duration = toolDuration(call);
     return (
       <div className="h">
-        <span className="h-title">{call.title}</span>
+        <span className="h-title">{toolTitle(call.title)}</span>
         {call.status || duration ? (
           <span className="h-meta">
             {call.status ? (
