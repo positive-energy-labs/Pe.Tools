@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from "./routes/__root";
 import { Route as SettingsRouteImport } from "./routes/settings";
 import { Route as ScheduleGridRouteImport } from "./routes/schedule-grid";
+import { Route as RhvacRouteImport } from "./routes/rhvac";
 import { Route as ParameterLinksRouteImport } from "./routes/parameter-links";
 import { Route as OpsRouteImport } from "./routes/ops";
 import { Route as InstancesRouteImport } from "./routes/instances";
@@ -54,6 +55,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const ScheduleGridRoute = ScheduleGridRouteImport.update({
   id: "/schedule-grid",
   path: "/schedule-grid",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const RhvacRoute = RhvacRouteImport.update({
+  id: "/rhvac",
+  path: "/rhvac",
   getParentRoute: () => rootRouteImport,
 } as any);
 const ParameterLinksRoute = ParameterLinksRouteImport.update({
@@ -242,6 +248,7 @@ export interface FileRoutesByFullPath {
   "/instances": typeof InstancesRoute;
   "/ops": typeof OpsRoute;
   "/parameter-links": typeof ParameterLinksRoute;
+  "/rhvac": typeof RhvacRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
@@ -280,6 +287,7 @@ export interface FileRoutesByTo {
   "/instances": typeof InstancesRoute;
   "/ops": typeof OpsRoute;
   "/parameter-links": typeof ParameterLinksRoute;
+  "/rhvac": typeof RhvacRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
@@ -319,6 +327,7 @@ export interface FileRoutesById {
   "/instances": typeof InstancesRoute;
   "/ops": typeof OpsRoute;
   "/parameter-links": typeof ParameterLinksRoute;
+  "/rhvac": typeof RhvacRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
   "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
@@ -359,6 +368,7 @@ export interface FileRouteTypes {
     | "/instances"
     | "/ops"
     | "/parameter-links"
+    | "/rhvac"
     | "/schedule-grid"
     | "/settings"
     | "/demo/tanstack-query"
@@ -397,6 +407,7 @@ export interface FileRouteTypes {
     | "/instances"
     | "/ops"
     | "/parameter-links"
+    | "/rhvac"
     | "/schedule-grid"
     | "/settings"
     | "/demo/tanstack-query"
@@ -435,6 +446,7 @@ export interface FileRouteTypes {
     | "/instances"
     | "/ops"
     | "/parameter-links"
+    | "/rhvac"
     | "/schedule-grid"
     | "/settings"
     | "/demo/tanstack-query"
@@ -474,6 +486,7 @@ export interface RootRouteChildren {
   InstancesRoute: typeof InstancesRoute;
   OpsRoute: typeof OpsRoute;
   ParameterLinksRoute: typeof ParameterLinksRoute;
+  RhvacRoute: typeof RhvacRoute;
   ScheduleGridRoute: typeof ScheduleGridRoute;
   SettingsRoute: typeof SettingsRoute;
   DemoTanstackQueryRoute: typeof DemoTanstackQueryRoute;
@@ -511,6 +524,13 @@ declare module "@tanstack/react-router" {
       path: "/schedule-grid";
       fullPath: "/schedule-grid";
       preLoaderRoute: typeof ScheduleGridRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/rhvac": {
+      id: "/rhvac";
+      path: "/rhvac";
+      fullPath: "/rhvac";
+      preLoaderRoute: typeof RhvacRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/parameter-links": {
@@ -780,6 +800,7 @@ const rootRouteChildren: RootRouteChildren = {
   InstancesRoute: InstancesRoute,
   OpsRoute: OpsRoute,
   ParameterLinksRoute: ParameterLinksRoute,
+  RhvacRoute: RhvacRoute,
   ScheduleGridRoute: ScheduleGridRoute,
   SettingsRoute: SettingsRoute,
   DemoTanstackQueryRoute: DemoTanstackQueryRoute,
