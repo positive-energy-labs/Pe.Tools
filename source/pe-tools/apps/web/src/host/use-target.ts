@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { worldName } from "#/host/fleet";
 import { useBridgeSessionsListQuery } from "#/host/queries";
 import {
   fromBridgeSessions,
@@ -62,7 +63,7 @@ export function useWorldLog(sessions: SessionFacts[]): WorldEvent[] {
           atMs,
           kind: "session-appeared",
           sessionId: id,
-          label: `${s.lane === "sandbox" ? (s.sandboxId ?? "sandbox") : "user"} · ${s.activeDocumentTitle ?? `Revit ${s.processId}`} connected`,
+          label: `${worldName(s)} · ${s.activeDocumentTitle ?? `Revit ${s.processId}`} connected`,
         });
       } else if (old.activeDocumentTitle !== s.activeDocumentTitle) {
         events.push({

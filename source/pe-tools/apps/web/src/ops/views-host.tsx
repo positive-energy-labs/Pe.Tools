@@ -30,7 +30,7 @@ import {
  * not controls: every surface renders observed facts with honest empty states.
  */
 
-const LANES: readonly SessionLane[] = ["rrd", "sandbox", "installed", "unknown"];
+const LANES: readonly SessionLane[] = ["dev", "sandbox", "installed", "unknown"];
 
 function laneOf(value: unknown): SessionLane {
   return LANES.find((lane) => lane === value) ?? "unknown";
@@ -49,7 +49,7 @@ function HostStatusView({ data }: OpViewProps) {
       label="host"
       aside={
         <span className="flex items-center gap-1.5">
-          <LiveDot tone="implicit" lane={connected ? "rrd" : "unknown"} />
+          <LiveDot tone="implicit" lane={connected ? "dev" : "unknown"} />
           <MonoNote hue={connected ? "green" : "kiln"}>
             {connected ? "bridge connected" : "bridge down"}
           </MonoNote>

@@ -5,6 +5,10 @@
 > observedAtUtc), project-index summary `projectTotals`, nullable request limits (no more
 > clamp-to-minimum / self-flagging warnings), and default-visible-only browse in
 > `host_operation_search`. Everything else below remains open.
+>
+> **Status 2026-07-31** — `revit.glance.attention` and `host.topology` are also first-class,
+> and the /ops glance views now run on the real ops (the 4-call / 3-call / 2+N-call synthetic
+> fan-outs are deleted; topology still stages per-session documents client-side).
 
 Harvested while building curated readonly views for every host op (branch
 `worktree-ops-ui`, live-verified against a 2025 sandbox with the MEP template).
@@ -100,10 +104,9 @@ The `glance.*` synthetic ops in `apps/web/src/ops/glance/` are prototypes of
 contracts that don't exist yet — each fans out 2–4 real ops client-side and
 composes one surface. Every one of them is an argument for a first-class op:
 
-- **glance.model → one bounded "what is this model" packet → 4 calls, 3
-  truncation dialects** — doc identity + true totals + family composition +
-  binding health wants a first-class `revit.glance.model`. Specific gaps found
-  while composing it:
+- **glance.model → one bounded "what is this model" packet → SATISFIED** —
+  `revit.glance.model` is first-class and the /ops view runs on it (2026-07-31).
+  Original gaps found while composing the prototype, kept for the record:
   - `revit.catalog.project-index` `summary` counts reflect the *truncated
     page* (viewCount 65 on a default call) while `context.summary.browser`
     says 373 for the same document — summary should carry true project totals
@@ -117,12 +120,11 @@ composes one surface. Every one of them is an argument for a first-class op:
     with the difference unnamed — contracts should say what each counts.
   - Nothing anywhere carries document discipline; the hero infers M/E/P from
     sheet-number series and must label it "inferred".
-- **glance.attention → trustworthy "what's on screen" → defaults that
-  self-sabotage** — `revit.context.visible-summary` with omitted limits clamps
-  to the *minimum* ("MaxCategories must be between 1 and 50; using 1"),
-  silently under-reporting the view; and `view-rendering-state` emits an
-  `AgentContextRequestLimitAdjusted` warning even when the caller supplied no
-  request at all. Defaults should be generous and never self-flag.
+- **glance.attention → trustworthy "what's on screen" → SATISFIED** —
+  `revit.glance.attention` is first-class (active view + view state + visible
+  composition + trust strip in one packet) and the /ops view runs on it
+  (2026-07-31). The original clamp-to-minimum / self-flagging defaults were
+  fixed by the ADR 0003 nullable-limits change.
 - **glance.drawing-set → the wall of sheets → no sheet-list op, no thumbnail
   weight** — there is no `revit.catalog.sheets`; the list rides along in
   project-index with handles the glance doesn't need. And thumbnails need
@@ -130,10 +132,12 @@ composes one surface. Every one of them is an argument for a first-class op:
   projection (titleblock + viewport bounds only) would make all 42 affordable.
   Sheet entries also lack a first-class series/discipline field (UI parses
   the sheet-number prefix, an untrusted heuristic).
-- **glance.session-topology → the operator's map → 2 + N calls** — wants
-  `host.topology` (host identity + sessions + per-session documents in one
-  snapshot). Found along the way: `host.status` doesn't return the host's own
-  port/baseUrl; `bridge.sessions.list` omits the per-session
-  `activeDocumentObservedAtUnixMs` that `target.ts` already expects; and the
-  resolve lineup's coarse int scores (six of eight candidates tied at 4) can't
-  drive a discriminating ranking — finer scores or an explicit rank field.
+- **glance.session-topology → the operator's map → PARTLY SATISFIED** —
+  `host.topology` is first-class (host identity + all sessions, observedAtUtc)
+  and the /ops view runs on it (2026-07-31). Still open: per-session documents
+  are not in the snapshot (the view stages 1 + N
+  `revit.context.document-session` calls); `host.status`/`host.topology` don't
+  return the host's own port/baseUrl (session entries now carry
+  `activeDocumentObservedAtUnixMs`, live-verified 2026-07-31); and the resolve
+  lineup's coarse int scores (six of eight candidates tied at 4) can't drive a
+  discriminating ranking — finer scores or an explicit rank field.

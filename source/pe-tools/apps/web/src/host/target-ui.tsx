@@ -15,7 +15,7 @@ import {
 
 export const LANE_CAT: Record<SessionLane, string> = {
   installed: "slate",
-  rrd: "green",
+  dev: "green",
   sandbox: "lichen",
   unknown: "kiln", // attention hue — an unlaned session is unreachable via `user`
 };

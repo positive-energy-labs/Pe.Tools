@@ -15,7 +15,7 @@ import type { SyntheticOp, SyntheticViewProps } from "#/ops/synthetic";
 const DOC_FETCH_BOUND = 12;
 
 function asLane(value: unknown): SessionLane {
-  return value === "rrd" || value === "sandbox" || value === "installed" ? value : "unknown";
+  return value === "dev" || value === "sandbox" || value === "installed" ? value : "unknown";
 }
 
 /* ── staged per-session document fetch ────────────────────────────────────── */
@@ -148,7 +148,13 @@ function DocumentLeaf({ doc }: { doc: Record<string, unknown> }) {
   );
 }
 
-function SessionNode({ session, docFetch }: { session: Record<string, unknown>; docFetch?: DocFetch }) {
+function SessionNode({
+  session,
+  docFetch,
+}: {
+  session: Record<string, unknown>;
+  docFetch?: DocFetch;
+}) {
   const connected = session.connected === true;
   const lane = asLane(session.lane);
   const sandboxId = asString(session.sandboxId);
@@ -199,10 +205,15 @@ function SessionNode({ session, docFetch }: { session: Record<string, unknown>; 
         )}
         {connected &&
           docFetch?.state === "ok" &&
-          docFetch.docs.map((doc, i) => <DocumentLeaf key={text(doc.documentKey) || i} doc={doc} />)}
-        {connected && docFetch?.state === "ok" && !docFetch.hasActive && docFetch.docs.length > 0 && (
-          <MonoNote hue="kiln">no active document — open but none focused</MonoNote>
-        )}
+          docFetch.docs.map((doc, i) => (
+            <DocumentLeaf key={text(doc.documentKey) || i} doc={doc} />
+          ))}
+        {connected &&
+          docFetch?.state === "ok" &&
+          !docFetch.hasActive &&
+          docFetch.docs.length > 0 && (
+            <MonoNote hue="kiln">no active document — open but none focused</MonoNote>
+          )}
       </div>
     </div>
   );
@@ -211,9 +222,10 @@ function SessionNode({ session, docFetch }: { session: Record<string, unknown>; 
 /* ── the map ──────────────────────────────────────────────────────────────── */
 
 function SessionTopologyView({ results, observedAtMs }: SyntheticViewProps) {
-  const host = asRecord(results["host.status"]);
-  const sessionsRes = asRecord(results["bridge.sessions.list"]);
-  const sessions = sessionsRes ? asRecords(sessionsRes.sessions) : [];
+  const topology = asRecord(results["host.topology"]);
+  const host = topology ? asRecord(topology.host) : undefined;
+  const sessions = topology ? asRecords(topology.sessions) : [];
+  const observedAtUtc = topology ? asString(topology.observedAtUtc) : undefined;
 
   const connectedIds = sessions
     .filter((s) => s.connected === true)
@@ -221,7 +233,7 @@ function SessionTopologyView({ results, observedAtMs }: SyntheticViewProps) {
     .filter((id): id is string => !!id);
   const docFetches = useSessionDocuments(connectedIds);
 
-  if (!host && !sessionsRes) return <EmptyState note="unrecognized response shape" />;
+  if (!topology) return <EmptyState note="unrecognized host.topology shape" />;
 
   const fetched = Math.min(connectedIds.length, DOC_FETCH_BOUND);
 
@@ -262,10 +274,15 @@ function SessionTopologyView({ results, observedAtMs }: SyntheticViewProps) {
       </div>
 
       <Provenance>
-        documents staged per session via revit.context.document-session · {fetched} of{" "}
-        {connectedIds.length} connected sessions queried (bound {DOC_FETCH_BOUND}) · disconnected
-        sessions shown from last bridge summary, not re-queried · obs{" "}
-        {observedAtMs ? new Date(observedAtMs).toLocaleTimeString() : "—"}
+        host + sessions from one host.topology snapshot · obs{" "}
+        {observedAtUtc
+          ? new Date(observedAtUtc).toLocaleTimeString()
+          : observedAtMs
+            ? new Date(observedAtMs).toLocaleTimeString()
+            : "—"}{" "}
+        (host clock) · documents staged per session via revit.context.document-session · {fetched}{" "}
+        of {connectedIds.length} connected sessions queried (bound {DOC_FETCH_BOUND}) · disconnected
+        sessions shown from last bridge summary, not re-queried
       </Provenance>
     </div>
   );
@@ -277,11 +294,8 @@ export const topologyOps: SyntheticOp[] = [
     displayName: "The operator's map",
     blurb: "what machinery is alive right now and who talks to whom?",
     contractNote:
-      "wants a first-class host.topology op: host identity + port + sessions + per-session documents in one snapshot (today: 2 + N calls, and SyntheticViewProps.call can't retarget session scope)",
-    deps: [
-      { key: "host.status" },
-      { key: "bridge.sessions.list", optional: true },
-    ],
+      "host.topology landed (ADR 0003): host identity + sessions in one snapshot. Still client-staged: per-session documents (1 + N calls) — the contract doesn't carry them yet, nor the host's own port/baseUrl.",
+    deps: [{ key: "host.topology" }],
     View: SessionTopologyView,
   },
 ];
