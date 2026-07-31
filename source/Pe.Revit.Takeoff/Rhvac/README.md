@@ -207,5 +207,9 @@ truth.
   `identifier` PK (zero placeholder rows dropped, trimmed parallel arrays normalized) plus the
   stored loads above; `-Assemblies` for the distinct-assembly listing. 32-bit lane.
 
+Both scripts are also exposed as host local ops (`rhvac.open` / `rhvac.assemblies` /
+`rhvac.save` / `rhvac.takeoff`, dev-lane hosts only) — see
+`source/pe-tools/apps/host/src/rhvac-ops.ts`; the `/rhvac` web editor calls them.
+
 Residual gap: automated verification stops at SQL read-back of the written file. "RHVAC opens and
 calculates it" was proven manually for the Belmont probe room and stays a manual check per export.

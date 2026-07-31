@@ -518,6 +518,139 @@ export const hostSessionSummaryDataSchema = Schema.Struct({
   workbenchResources: hostWorkbenchResourcesDataSchema,
 });
 
+// --- RHVAC .r10 ops (TS-owned; spawn the repo's 32-bit Jet scripts) ------------
+// The extract projection is the camelCase JSON emitted by
+// source/Pe.Revit.Takeoff/Rhvac/extract-rhvac.ps1 — these schemas mirror it, not
+// the C# RhvacRoom write shape (the host converts on save).
+
+export const rhvacPathRequestSchema = Schema.Struct({
+  /** Absolute host-visible path to the .r10 project file. */
+  path: Schema.String,
+});
+export type RhvacPathRequest = Schema.Schema.Type<typeof rhvacPathRequestSchema>;
+
+export const rhvacAssemblyOptionSchema = Schema.Struct({
+  name: Schema.String,
+  uValue: Schema.Number,
+  shgc: Schema.optional(Schema.Number),
+});
+
+export const rhvacAssemblyCatalogSchema = Schema.Struct({
+  sourceFile: Schema.optional(Schema.String),
+  floors: Schema.Array(rhvacAssemblyOptionSchema),
+  roofs: Schema.Array(rhvacAssemblyOptionSchema),
+  walls: Schema.Array(rhvacAssemblyOptionSchema),
+  glass: Schema.Array(rhvacAssemblyOptionSchema),
+  doors: Schema.Array(rhvacAssemblyOptionSchema),
+});
+export type RhvacAssemblyCatalogData = Schema.Schema.Type<typeof rhvacAssemblyCatalogSchema>;
+
+export const rhvacRoomSchema = Schema.Struct({
+  /** Room autonumber PK — the edit lane's row target; distinct from `number`. */
+  identifier: Schema.Number,
+  number: Schema.Number,
+  name: Schema.String,
+  systemNumber: Schema.Number,
+  zoneNumber: Schema.Number,
+  areaSquareFeet: Schema.Number,
+  ceilingHeightFeet: Schema.Number,
+  people: Schema.Number,
+  lightingWatts: Schema.Number,
+  equipmentSensibleBtuh: Schema.Number,
+  equipmentLatentBtuh: Schema.Number,
+  /** Stored RHVAC calc outputs — read-only, ignored on save. */
+  loads: Schema.optional(Schema.Record(Schema.String, Schema.Number)),
+  floors: Schema.Array(
+    Schema.Struct({
+      assembly: Schema.String,
+      uValue: Schema.Number,
+      areaSquareFeet: Schema.Number,
+      exposedPerimeterFeet: Schema.Number,
+    }),
+  ),
+  roofs: Schema.Array(
+    Schema.Struct({
+      assembly: Schema.String,
+      uValue: Schema.Number,
+      areaSquareFeet: Schema.Number,
+      areaMultiplier: Schema.Number,
+    }),
+  ),
+  walls: Schema.Array(
+    Schema.Struct({
+      /** 1-based wall ordinal — glass/doors point at this via wallReference. */
+      index1: Schema.Number,
+      assembly: Schema.String,
+      uValue: Schema.Number,
+      lengthFeet: Schema.Number,
+      heightFeet: Schema.Number,
+      direction: Schema.Number,
+    }),
+  ),
+  glass: Schema.Array(
+    Schema.Struct({
+      assembly: Schema.String,
+      uValue: Schema.Number,
+      widthFeet: Schema.Number,
+      heightFeet: Schema.Number,
+      wallReference: Schema.Number,
+      shgc: Schema.Number,
+      occurrences: Schema.Number,
+    }),
+  ),
+  doors: Schema.Array(
+    Schema.Struct({
+      assembly: Schema.String,
+      uValue: Schema.Number,
+      widthFeet: Schema.Number,
+      heightFeet: Schema.Number,
+      wallReference: Schema.Number,
+    }),
+  ),
+});
+export type RhvacRoomData = Schema.Schema.Type<typeof rhvacRoomSchema>;
+
+export const rhvacExtractSchema = Schema.Struct({
+  sourceFile: Schema.String,
+  building: Schema.Record(Schema.String, Schema.Number),
+  // Systems carry `number` plus ~35 Calculated* fields; typed loosely on purpose.
+  systems: Schema.Array(Schema.Record(Schema.String, Schema.Number)),
+  rooms: Schema.Array(rhvacRoomSchema),
+});
+export type RhvacExtractData = Schema.Schema.Type<typeof rhvacExtractSchema>;
+
+export const rhvacSaveRequestSchema = Schema.Struct({
+  sourcePath: Schema.String,
+  /** Must differ from sourcePath — the original .r10 is never written in place. */
+  outputPath: Schema.String,
+  edits: Schema.Struct({
+    /** Full extract-shaped rooms (including identifier) — written back whole. */
+    updates: Schema.Array(rhvacRoomSchema),
+    /** Room identifiers (autonumber PK) to delete. */
+    deletes: Schema.Array(Schema.Number),
+  }),
+});
+export type RhvacSaveRequest = Schema.Schema.Type<typeof rhvacSaveRequestSchema>;
+
+export const rhvacSaveResultSchema = Schema.Struct({
+  outputPath: Schema.String,
+  updated: Schema.Number,
+  deleted: Schema.Number,
+});
+export type RhvacSaveResult = Schema.Schema.Type<typeof rhvacSaveResultSchema>;
+
+export const rhvacRoomMapSchema = Schema.Struct({
+  matches: Schema.Array(Schema.Struct({ oracleNumber: Schema.Number, candidate: Schema.String })),
+  skip: Schema.Array(Schema.Struct({ oracleNumber: Schema.Number, reason: Schema.String })),
+});
+
+/** Raw takeoff snapshots next to the .r10 — the client parses the TSV texts itself. */
+export const rhvacTakeoffDataSchema = Schema.Struct({
+  tsvs: Schema.Array(Schema.Struct({ name: Schema.String, text: Schema.String })),
+  roomMap: Schema.NullOr(rhvacRoomMapSchema),
+});
+export type RhvacTakeoffData = Schema.Schema.Type<typeof rhvacTakeoffDataSchema>;
+
 export const tsOnlyOperationSchemas = {
   "aps.auth.login": {
     request: apsTokenRequestSchema,
@@ -550,6 +683,22 @@ export const tsOnlyOperationSchemas = {
   "revit.catalog.recent-documents": {
     request: revitRecentDocumentsRequestSchema,
     response: revitRecentDocumentsDataSchema,
+  },
+  "rhvac.open": {
+    request: rhvacPathRequestSchema,
+    response: rhvacExtractSchema,
+  },
+  "rhvac.assemblies": {
+    request: rhvacPathRequestSchema,
+    response: rhvacAssemblyCatalogSchema,
+  },
+  "rhvac.save": {
+    request: rhvacSaveRequestSchema,
+    response: rhvacSaveResultSchema,
+  },
+  "rhvac.takeoff": {
+    request: rhvacPathRequestSchema,
+    response: rhvacTakeoffDataSchema,
   },
   "settings.document.open": {
     request: openSettingsDocumentRequestSchema,
@@ -637,6 +786,62 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
       "open recent",
       "projects",
     ],
+  },
+  {
+    key: "rhvac.open",
+    origin: "host-local",
+    displayName: "Open RHVAC Project",
+    description:
+      "Extract an Elite RHVAC .r10 Manual J project to JSON: building totals, systems, and rooms with identifiers. Runs the repo's 32-bit Jet lane; no Revit session needed.",
+    intent: "Read",
+    visibility: "DefaultVisible",
+    costTier: "Bounded",
+    requiresActiveDocument: false,
+    requestTypeName: "RhvacPathRequest",
+    responseTypeName: "RhvacExtractData",
+    searchTerms: ["rhvac", "r10", "manual j", "open", "extract", "rooms", "loads"],
+  },
+  {
+    key: "rhvac.assemblies",
+    origin: "host-local",
+    displayName: "RHVAC Assemblies",
+    description:
+      "Distinct construction assemblies per category (floors/roofs/walls/glass/doors) used in an .r10 file, with U-values (glass: + SHGC). The editor's assembly picker source.",
+    intent: "Read",
+    visibility: "DefaultVisible",
+    costTier: "Bounded",
+    requiresActiveDocument: false,
+    requestTypeName: "RhvacPathRequest",
+    responseTypeName: "RhvacAssemblyCatalogData",
+    searchTerms: ["rhvac", "r10", "assemblies", "constructions", "u-value", "materials"],
+  },
+  {
+    key: "rhvac.save",
+    origin: "host-local",
+    displayName: "Save RHVAC Edits",
+    description:
+      "Apply room updates/deletes (by identifier) to a COPY of an .r10 file — the source is never written in place. Stored loads go stale until RHVAC recalculates.",
+    intent: "Mutate",
+    visibility: "DefaultVisible",
+    costTier: "Mutation",
+    requiresActiveDocument: false,
+    requestTypeName: "RhvacSaveRequest",
+    responseTypeName: "RhvacSaveResult",
+    searchTerms: ["rhvac", "r10", "save", "edit", "update", "delete", "write"],
+  },
+  {
+    key: "rhvac.takeoff",
+    origin: "host-local",
+    displayName: "RHVAC Takeoff Snapshots",
+    description:
+      "Raw takeoff TSV snapshots (<dir>/takeoff/*.tsv) and room-map.json found next to an .r10 file. Empty result when none exist.",
+    intent: "Read",
+    visibility: "DefaultVisible",
+    costTier: "Cheap",
+    requiresActiveDocument: false,
+    requestTypeName: "RhvacPathRequest",
+    responseTypeName: "RhvacTakeoffData",
+    searchTerms: ["rhvac", "takeoff", "tsv", "room map", "plan", "polygons"],
   },
   {
     key: "settings.workspaces",

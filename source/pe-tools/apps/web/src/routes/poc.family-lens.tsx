@@ -50,11 +50,11 @@ const CORE_PARAMS: Array<{
   { name: "Air Flow", kind: "shared", gen: (f, t) => `${((hash(f + t) % 14) + 2) * 25} CFM` },
   { name: "Max Flow", kind: "shared", gen: (f, t) => `${((hash(f + t) % 14) + 6) * 50} CFM` },
   { name: "Min Flow", kind: "shared", gen: (f, t) => `${((hash(f + t) % 6) + 1) * 25} CFM` },
-  { name: "Neck Size", kind: "shared", gen: (f, t) => `${((hash(t) % 5) + 3) * 2}"ø` },
+  { name: "Neck Size", kind: "shared", gen: (_f, t) => `${((hash(t) % 5) + 3) * 2}"ø` },
   { name: "Face Width", kind: "family", gen: (f, t) => `${((hash(f + t) % 4) + 1) * 6}in` },
   { name: "Face Height", kind: "family", gen: (f, t) => `${((hash(t + f) % 3) + 1) * 6}in` },
   { name: "Static Pressure", kind: "shared", gen: (f, t) => `0.${(hash(f + t) % 8) + 1}0 in-wg` },
-  { name: "NC Rating", kind: "shared", gen: (f, t) => `NC-${((hash(t + "nc") % 5) + 3) * 5}` },
+  { name: "NC Rating", kind: "shared", gen: (_f, t) => `NC-${((hash(t + "nc") % 5) + 3) * 5}` },
   { name: "Mounting", kind: "family", gen: (f) => (hash(f) % 2 ? "Lay-in" : "Surface") },
   { name: "Frame Type", kind: "family", gen: (f) => ["Type A", "Type B", "Beveled"][hash(f) % 3] },
   { name: "Finish", kind: "shared", gen: (f) => (hash(f + "fin") % 3 ? "White" : "Mill") },
@@ -67,8 +67,8 @@ const CORE_PARAMS: Array<{
   },
   { name: "Damper", kind: "family", gen: (f) => (hash(f + "d") % 2 ? "Opposed Blade" : "None") },
   { name: "Border Width", kind: "family", gen: (f) => `${(hash(f + "b") % 2) + 1}in` },
-  { name: "Duct Width", kind: "family", gen: (f, t) => `${((hash(t + "dw") % 4) + 2) * 4}in` },
-  { name: "Duct Height", kind: "family", gen: (f, t) => `${((hash(t + "dh") % 3) + 2) * 4}in` },
+  { name: "Duct Width", kind: "family", gen: (_f, t) => `${((hash(t + "dw") % 4) + 2) * 4}in` },
+  { name: "Duct Height", kind: "family", gen: (_f, t) => `${((hash(t + "dh") % 3) + 2) * 4}in` },
   { name: "Weight", kind: "shared", gen: (f, t) => `${(hash(f + t + "w") % 20) + 4} lb` },
   { name: "Voltage", kind: "shared", gen: (f) => (hash(f + "v") % 2 ? "120 V" : "—") },
 ];
@@ -690,7 +690,7 @@ function ReticleGrid({ lens }: { lens: LensState }) {
   };
 
   /** Collapsed family: one summary cell per column — consensus value, or the spread. */
-  const renderSummaryCell = (fam: FamilySnap, famRows: RowRef[], param: string) => {
+  const renderSummaryCell = (_fam: FamilySnap, famRows: RowRef[], param: string) => {
     const values = famRows.map((r) => lens.valueOf(r, param)).filter((v): v is string => v != null);
     const distinct = Array.from(new Set(values));
     const colHot = reticle?.param === param;

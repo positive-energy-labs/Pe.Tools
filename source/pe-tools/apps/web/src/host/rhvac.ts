@@ -1,25 +1,27 @@
 /**
- * RHVAC .r10 file access over host local ops. The four `rhvac.*` ops are
- * wave-2 work on the host side — this module is the web-side contract they
- * must satisfy. Until they land, every call rejects with a HostCallError and
- * the /rhvac route degrades to its fixture lane.
+ * RHVAC .r10 file access over the four `rhvac.*` host local ops (apps/host/
+ * src/rhvac-ops.ts — TS-only ops spawning the repo's 32-bit Jet scripts).
  *
  * Contract (all paths are host-visible, e.g. G:\\projects\\job\\project.r10):
  *   rhvac.open       { path }                          → RhvacExtract
  *   rhvac.assemblies { path }                          → RhvacAssemblyCatalog
  *   rhvac.save       { sourcePath, outputPath, edits } → RhvacSaveResult
- *   rhvac.takeoff    { path }                          → RhvacTakeoffData
+ *   rhvac.takeoff    { path }                          → raw TSVs + room map
  *
- * Untyped on the wire by design (callHostDynamic) — regenerate host-typegen
- * and switch to callHostRpc once the C# ops are checked in.
+ * rhvac.takeoff takes the .r10 FILE path and returns the raw takeoff TSV texts
+ * (`<dir>/takeoff/*.tsv`) plus `<dir>/room-map.json` found next to it; parsing
+ * stays client-side (parseTakeoffTsv), matching the fixture lane. Missing
+ * takeoff data is an empty result, not an error.
  */
 import { callHostDynamic } from "#/host/client";
+import { parseTakeoffTsv } from "#/rhvac/takeoff";
 import {
   normalizeExtract,
   type RhvacAssemblyCatalog,
   type RhvacExtract,
   type RhvacRoom,
   type RhvacTakeoffData,
+  type RoomMap,
 } from "#/rhvac/types";
 
 export interface RhvacSaveEdits {
@@ -43,8 +45,14 @@ export interface RhvacSaveResult {
 }
 
 export interface RhvacTakeoffArgs {
-  /** The .r10 path (the op resolves the project's takeoff snapshots + room map from it). */
+  /** The .r10 FILE path (the op resolves `<dir>/takeoff/*.tsv` + `<dir>/room-map.json` from it). */
   path: string;
+}
+
+/** Wire shape of rhvac.takeoff — raw snapshots; the client parses the TSVs. */
+interface RhvacTakeoffWire {
+  tsvs: { name: string; text: string }[];
+  roomMap: RoomMap | null;
 }
 
 export async function rhvacOpen(path: string): Promise<RhvacExtract> {
@@ -61,5 +69,9 @@ export async function rhvacSave(args: RhvacSaveArgs): Promise<RhvacSaveResult> {
 }
 
 export async function rhvacTakeoff(args: RhvacTakeoffArgs): Promise<RhvacTakeoffData> {
-  return (await callHostDynamic("rhvac.takeoff", args)) as RhvacTakeoffData;
+  const wire = (await callHostDynamic("rhvac.takeoff", args)) as RhvacTakeoffWire;
+  return {
+    levels: wire.tsvs.map((file) => parseTakeoffTsv(file.text)),
+    roomMap: wire.roomMap ?? { matches: [], skip: [] },
+  };
 }

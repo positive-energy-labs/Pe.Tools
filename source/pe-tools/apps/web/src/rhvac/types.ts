@@ -111,9 +111,9 @@ export interface RhvacExtract {
 }
 
 /**
- * The fixture predates the `identifier` PK — assign a stable autonumber
- * (1-based room order) when the extract doesn't carry one. The wave-2 op
- * always returns real identifiers.
+ * Backstop for extracts that predate the `identifier` PK — assign a stable
+ * 1-based room-order fallback. The committed fixture and the rhvac.open op
+ * both carry real identifiers now; this only fires on stale local extracts.
  */
 export function normalizeExtract(raw: RhvacExtract): RhvacExtract {
   return {
