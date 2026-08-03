@@ -36,10 +36,12 @@ export function RoomDetail({
   onMutate,
   onClose,
 }: RoomDetailProps) {
-  const wallCount = room.walls.length;
+  // File ordinals are not contiguous (placeholder rows are omitted on extract),
+  // so validity is membership in the actual index1 set — never 1..length.
+  const wallOrdinals = room.walls.map((w) => w.index1);
   const badRefs =
-    room.glass.filter((g) => g.wallReference < 1 || g.wallReference > wallCount).length +
-    room.doors.filter((d) => d.wallReference < 1 || d.wallReference > wallCount).length;
+    room.glass.filter((g) => !wallOrdinals.includes(g.wallReference)).length +
+    room.doors.filter((d) => !wallOrdinals.includes(d.wallReference)).length;
 
   return (
     <aside className="flex w-[420px] shrink-0 flex-col border-l border-border bg-[var(--paper)]">
@@ -244,25 +246,27 @@ function AssemblyCell({
 /** Wall ordinal picker for glass/door rows — constrained to existing ordinals. */
 function WallRefCell({
   value,
-  wallCount,
+  ordinals,
   onPick,
 }: {
   value: number;
-  wallCount: number;
+  ordinals: readonly number[];
   onPick: (ordinal: number) => void;
 }) {
-  const invalid = value < 1 || value > wallCount;
+  const invalid = !ordinals.includes(value);
   return (
     <CellSelect
       value={String(value)}
       invalid={invalid}
-      title={invalid ? `wall ${value} does not exist (room has ${wallCount})` : `wall ${value}`}
+      title={
+        invalid ? `wall ${value} does not exist (walls: ${ordinals.join(", ")})` : `wall ${value}`
+      }
       onChange={(v) => onPick(Number(v))}
     >
       {invalid && <option value={String(value)}>!{value}</option>}
-      {Array.from({ length: wallCount }, (_, i) => (
-        <option key={i + 1} value={String(i + 1)}>
-          {i + 1}
+      {ordinals.map((o) => (
+        <option key={o} value={String(o)}>
+          {o}
         </option>
       ))}
     </CellSelect>
@@ -300,7 +304,7 @@ function WallsTable({
           walls: [
             ...r.walls,
             {
-              index1: r.walls.length + 1,
+              index1: Math.max(0, ...r.walls.map((w) => w.index1)) + 1,
               assembly: options[0]?.name ?? r.walls[0]?.assembly ?? "",
               uValue: options[0]?.uValue ?? r.walls[0]?.uValue ?? 0,
               lengthFeet: 10,
@@ -353,13 +357,11 @@ function WallsTable({
             </CellSelect>
           </td>
           <RemoveCell
-            title="Remove wall — later walls renumber; glass/doors pointing past the end become errors"
+            title="Remove wall — surviving ordinals stay stable; glass/doors pointing at it become errors"
             onRemove={() =>
               onMutate((r) => ({
                 ...r,
-                walls: r.walls
-                  .filter((_, wi) => wi !== i)
-                  .map((w, wi) => ({ ...w, index1: wi + 1 })),
+                walls: r.walls.filter((_, wi) => wi !== i),
               }))
             }
           />
@@ -439,7 +441,7 @@ function GlassTable({
           <td className={cn(cellTd, "w-12")}>
             <WallRefCell
               value={glass.wallReference}
-              wallCount={room.walls.length}
+              ordinals={room.walls.map((w) => w.index1)}
               onPick={(v) => setGlass(i, { wallReference: v })}
             />
           </td>
@@ -543,7 +545,7 @@ function DoorsTable({
           <td className={cn(cellTd, "w-12")}>
             <WallRefCell
               value={door.wallReference}
-              wallCount={room.walls.length}
+              ordinals={room.walls.map((w) => w.index1)}
               onPick={(v) => setDoor(i, { wallReference: v })}
             />
           </td>

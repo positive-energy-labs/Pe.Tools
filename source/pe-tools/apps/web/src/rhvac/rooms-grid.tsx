@@ -316,7 +316,9 @@ const GridRow = memo(function GridRow({
         isDeleted && "opacity-45 line-through",
       )}
       onClick={(e) => {
-        if ((e.target as HTMLElement).closest("input,select,button")) return;
+        // Editing a cell should also focus the room; only select-checkbox and
+        // row buttons (delete/undo) are focus-neutral.
+        if ((e.target as HTMLElement).closest('input[type="checkbox"],button')) return;
         onFocus(id);
       }}
     >

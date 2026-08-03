@@ -214,17 +214,20 @@ function LevelSvg({
     if (!el) return;
     draggedRef.current = false;
     const start = { x: e.clientX, y: e.clientY, view: v };
-    el.setPointerCapture(e.pointerId);
     const move = (ev: PointerEvent) => {
       const rect = el.getBoundingClientRect();
       const dx = ((ev.clientX - start.x) / rect.width) * start.view.w;
       const dy = ((ev.clientY - start.y) / rect.height) * start.view.h;
-      if (Math.abs(ev.clientX - start.x) + Math.abs(ev.clientY - start.y) > 4)
+      if (Math.abs(ev.clientX - start.x) + Math.abs(ev.clientY - start.y) > 4) {
+        // Capture only once a real drag starts — capturing on pointerdown retargets
+        // the click to the svg, so polygon onClick never fires.
+        if (!draggedRef.current) el.setPointerCapture(ev.pointerId);
         draggedRef.current = true;
+      }
       setView({ ...start.view, x: start.view.x - dx, y: start.view.y - dy });
     };
     const up = (ev: PointerEvent) => {
-      el.releasePointerCapture(ev.pointerId);
+      if (draggedRef.current) el.releasePointerCapture(ev.pointerId);
       el.removeEventListener("pointermove", move);
       el.removeEventListener("pointerup", up);
     };
