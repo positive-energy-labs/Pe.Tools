@@ -42,5 +42,5 @@ export async function loadFixtureTakeoff(): Promise<RhvacTakeoffData> {
     fetchJson<RoomMap>(manifest.roomMap),
     ...manifest.takeoff.map((name) => fetchText(name)),
   ]);
-  return { levels: tsvTexts.map(parseTakeoffTsv), roomMap };
+  return { levels: tsvTexts.map((text) => parseTakeoffTsv(text)), roomMap };
 }

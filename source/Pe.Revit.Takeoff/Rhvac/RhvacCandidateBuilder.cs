@@ -51,9 +51,15 @@ public sealed record Conventions(
 public static class RhvacCandidateBuilder
 {
     private const double MinWallEdgeFeet = 0.5; // raster stair-step slivers, not walls
+    private const double MaxRasterPitchFeet = 1.0; // finer grids are staircases; coarser data is left alone
+    private const double StairEdgeCells = 2.5; // edges up to this many grid cells are staircase steps
 
-    /// <summary>Parses one ToTsv payload (META/ROOM/POLY lines). Throws on any malformed line.</summary>
-    public static LevelTakeoff ParseTsv(string tsvText)
+    /// <summary>
+    /// Parses one ToTsv payload (META/ROOM/POLY lines). Throws on any malformed line. Unless
+    /// <paramref name="simplify"/> is false, raster staircase outlines are simplified after
+    /// validation (see SimplifyShape) so perimeter/wall lengths derive from clean segments.
+    /// </summary>
+    public static LevelTakeoff ParseTsv(string tsvText, bool simplify = true)
     {
         var ic = CultureInfo.InvariantCulture;
         string? levelName = null;
@@ -128,7 +134,206 @@ public static class RhvacCandidateBuilder
                 );
         }
 
+        if (simplify)
+            SimplifyLevelLoops(rooms);
         return new LevelTakeoff(levelName, elevation.Value, rooms);
+    }
+
+    // ── raster simplification ─────────────────────────────────────────────────────────────────
+    // The detector emits marching-squares staircase outlines on its raster grid, so diagonal
+    // walls arrive as hundreds of one-cell steps: every step edge falls under MinWallEdgeFeet
+    // (walls vanish from the envelope) and any length summed from the raw outline overstates
+    // diagonals by up to sqrt(2). Collapse collinear runs, then Douglas-Peucker with tolerance =
+    // one grid cell, derived from the data. Mirror of apps/web/src/rhvac/takeoff.ts — keep the
+    // algorithm and tolerance semantics aligned.
+
+    /// <summary>Smallest positive axis-aligned edge component across the loops = detector grid pitch.</summary>
+    private static double? DeriveGridPitch(IEnumerable<List<double[]>> loops)
+    {
+        var pitch = double.PositiveInfinity;
+        foreach (var loop in loops)
+        {
+            for (var i = 0; i < loop.Count; i++)
+            {
+                var p = loop[i];
+                var q = loop[(i + 1) % loop.Count];
+                var dx = Math.Abs(q[0] - p[0]);
+                var dy = Math.Abs(q[1] - p[1]);
+                if (dx > 1e-6 && dx < pitch)
+                    pitch = dx;
+                if (dy > 1e-6 && dy < pitch)
+                    pitch = dy;
+            }
+        }
+
+        return double.IsFinite(pitch) ? pitch : null;
+    }
+
+    private static void SimplifyLevelLoops(List<TakeoffRoomShape> rooms)
+    {
+        var pitch = DeriveGridPitch(rooms.SelectMany(room => room.Holes.Prepend(room.Outer)));
+        if (pitch is not <= MaxRasterPitchFeet)
+            return;
+        foreach (var room in rooms)
+        {
+            var (outer, holes) = SimplifyShape(room.Outer, room.Holes, pitch.Value);
+            room.Outer.Clear();
+            room.Outer.AddRange(outer);
+            room.Holes.Clear();
+            room.Holes.AddRange(holes);
+        }
+    }
+
+    /// <summary>
+    /// Simplifies a room shape, adaptively: Douglas-Peucker at one grid cell, halving the
+    /// tolerance while the shape's net area (outer minus holes — the exported truth RawSqft
+    /// cross-checks against) drifts past the gate (max of 0.5 sqft and 1%). Sawtooth slivers no
+    /// tolerance can straighten honestly fall back to an area-exact collinear collapse.
+    /// </summary>
+    private static (List<double[]> Outer, List<List<double[]>> Holes) SimplifyShape(
+        List<double[]> outer,
+        List<List<double[]>> holes,
+        double pitch
+    )
+    {
+        static double NetArea(List<double[]> o, List<List<double[]>> hs) =>
+            Math.Abs(SignedArea(o)) - hs.Sum(hole => Math.Abs(SignedArea(hole)));
+
+        var rawArea = NetArea(outer, holes);
+        var gate = Math.Max(0.5, 0.01 * Math.Abs(rawArea));
+        foreach (var tolerance in new[] { pitch, pitch / 2, pitch / 4 })
+        {
+            var simpleOuter = SimplifyOnce(outer, pitch, tolerance);
+            if (simpleOuter.Count < 3)
+                continue;
+            var simpleHoles = holes
+                .Select(hole => SimplifyOnce(hole, pitch, tolerance))
+                .Where(hole => hole.Count >= 3)
+                .ToList();
+            if (Math.Abs(NetArea(simpleOuter, simpleHoles) - rawArea) <= gate)
+                return (simpleOuter, simpleHoles);
+        }
+
+        var exactOuter = CollapseCollinear(outer);
+        var exactHoles = holes.Select(CollapseCollinear).Where(hole => hole.Count >= 3).ToList();
+        return exactOuter.Count >= 3 ? (exactOuter, exactHoles) : (outer, holes);
+    }
+
+    /// <summary>
+    /// One simplification attempt. Staircase edges (a few cells or shorter) are replaced by their
+    /// midpoints — for a uniform marching-squares staircase those lie exactly on the true wall
+    /// line, so straightening is area-unbiased (anchoring Douglas-Peucker on staircase corners
+    /// instead shaves ~pitch/2 x length off every diagonal). Long edges keep their endpoints, so
+    /// real corners stay exact. Then collinear runs collapse and Douglas-Peucker runs on the two
+    /// chains between vertex 0 and the vertex farthest from it (the split makes DP well-defined
+    /// on a ring).
+    /// </summary>
+    private static List<double[]> SimplifyOnce(List<double[]> ring, double pitch, double tolerance)
+    {
+        var stairMax = StairEdgeCells * pitch;
+        var mid = new List<double[]>(ring.Count);
+        for (var i = 0; i < ring.Count; i++)
+        {
+            var a = ring[i];
+            var b = ring[(i + 1) % ring.Count];
+            if (Math.Sqrt(((b[0] - a[0]) * (b[0] - a[0])) + ((b[1] - a[1]) * (b[1] - a[1]))) <= stairMax)
+                mid.Add(new[] { (a[0] + b[0]) / 2, (a[1] + b[1]) / 2 });
+            else
+            {
+                mid.Add(a);
+                mid.Add(b);
+            }
+        }
+
+        var pts = CollapseCollinear(mid);
+        if (pts.Count < 4)
+            return pts;
+
+        var far = 0;
+        var farDist = -1.0;
+        for (var i = 1; i < pts.Count; i++)
+        {
+            var d = Math.Sqrt(
+                ((pts[i][0] - pts[0][0]) * (pts[i][0] - pts[0][0]))
+                + ((pts[i][1] - pts[0][1]) * (pts[i][1] - pts[0][1]))
+            );
+            if (d > farDist)
+            {
+                farDist = d;
+                far = i;
+            }
+        }
+
+        var chainA = SimplifyChain(pts.GetRange(0, far + 1), tolerance);
+        var chainB = SimplifyChain(pts.GetRange(far, pts.Count - far).Append(pts[0]).ToList(), tolerance);
+        var result = chainA.Take(chainA.Count - 1).Concat(chainB.Take(chainB.Count - 1)).ToList();
+        return result.Count >= 3 ? result : pts;
+    }
+
+    /// <summary>Drops consecutive duplicates and exactly-collinear vertices — area-exact.</summary>
+    private static List<double[]> CollapseCollinear(List<double[]> ring)
+    {
+        var deduped = ring
+            .Where((p, i) =>
+            {
+                var prev = ring[(i + ring.Count - 1) % ring.Count];
+                return Math.Abs(p[0] - prev[0]) > 1e-9 || Math.Abs(p[1] - prev[1]) > 1e-9;
+            })
+            .ToList();
+        return deduped
+            .Where((p, i) =>
+            {
+                var prev = deduped[(i + deduped.Count - 1) % deduped.Count];
+                var next = deduped[(i + 1) % deduped.Count];
+                return Deviation(p, prev, next) > 1e-9;
+            })
+            .ToList();
+    }
+
+    /// <summary>Douglas-Peucker over an open chain; endpoints are always kept.</summary>
+    private static List<double[]> SimplifyChain(List<double[]> pts, double tolerance)
+    {
+        var keep = new bool[pts.Count];
+        keep[0] = keep[pts.Count - 1] = true;
+        var spans = new Stack<(int First, int Last)>();
+        spans.Push((0, pts.Count - 1));
+        while (spans.Count > 0)
+        {
+            var (first, last) = spans.Pop();
+            var maxDeviation = tolerance;
+            var split = -1;
+            for (var i = first + 1; i < last; i++)
+            {
+                var d = Deviation(pts[i], pts[first], pts[last]);
+                if (d > maxDeviation)
+                {
+                    maxDeviation = d;
+                    split = i;
+                }
+            }
+
+            if (split >= 0)
+            {
+                keep[split] = true;
+                spans.Push((first, split));
+                spans.Push((split, last));
+            }
+        }
+
+        return pts.Where((_, i) => keep[i]).ToList();
+    }
+
+    /// <summary>Perpendicular distance from p to the (a, b) line; plain distance when a≈b.</summary>
+    private static double Deviation(double[] p, double[] a, double[] b)
+    {
+        var abx = b[0] - a[0];
+        var aby = b[1] - a[1];
+        var apx = p[0] - a[0];
+        var apy = p[1] - a[1];
+        var len = Math.Sqrt((abx * abx) + (aby * aby));
+        return len < 1e-9
+            ? Math.Sqrt((apx * apx) + (apy * apy))
+            : Math.Abs((abx * apy) - (aby * apx)) / len;
     }
 
     /// <summary>Loads and validates a conventions.json.</summary>

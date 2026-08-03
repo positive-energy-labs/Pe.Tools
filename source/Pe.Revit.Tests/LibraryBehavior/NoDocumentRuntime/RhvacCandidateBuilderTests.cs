@@ -135,6 +135,53 @@ public sealed class RhvacCandidateBuilderTests
     }
 
     [Test]
+    public void ProjectA_simplification_preserves_area_and_collapses_staircases()
+    {
+        static double Shoelace(List<double[]> loop)
+        {
+            var sum = 0.0;
+            for (int i = 0, j = loop.Count - 1; i < loop.Count; j = i++)
+                sum += (loop[j][0] * loop[i][1]) - (loop[i][0] * loop[j][1]);
+            return sum / 2;
+        }
+
+        static double NetArea(TakeoffRoomShape shape) =>
+            Math.Abs(Shoelace(shape.Outer)) - shape.Holes.Sum(hole => Math.Abs(Shoelace(hole)));
+
+        var fixtureDir = RhvacEvalTests.FindFixtureDir();
+        var tsvPaths = Directory.GetFiles(Path.Combine(fixtureDir, "takeoff"), "rooms_*.tsv");
+        Assert.That(tsvPaths, Is.Not.Empty);
+
+        var rawVertices = 0;
+        var simplifiedVertices = 0;
+        foreach (var path in tsvPaths)
+        {
+            var text = File.ReadAllText(path);
+            var raw = RhvacCandidateBuilder.ParseTsv(text, simplify: false);
+            var simplified = RhvacCandidateBuilder.ParseTsv(text);
+            Assert.That(simplified.Rooms, Has.Count.EqualTo(raw.Rooms.Count));
+            for (var i = 0; i < raw.Rooms.Count; i++)
+            {
+                var before = raw.Rooms[i];
+                var after = simplified.Rooms[i];
+                // Area is the exported truth — simplification must not drift it materially.
+                var areaBefore = NetArea(before);
+                Assert.That(
+                    Math.Abs(NetArea(after) - areaBefore),
+                    Is.LessThanOrEqualTo(Math.Max(0.5, 0.01 * areaBefore)),
+                    $"{raw.LevelName}:{before.Id} area drifted."
+                );
+                Assert.That(after.Outer, Has.Count.LessThanOrEqualTo(before.Outer.Count));
+                rawVertices += before.Outer.Count;
+                simplifiedVertices += after.Outer.Count;
+            }
+        }
+
+        // Staircases of hundreds of points must come back as tens of segments.
+        Assert.That(simplifiedVertices, Is.LessThan(rawVertices / 4));
+    }
+
+    [Test]
     public void ProjectA_snapshot_builds_a_plausible_envelope()
     {
         var fixtureDir = RhvacEvalTests.FindFixtureDir();
