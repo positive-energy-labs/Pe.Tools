@@ -31,7 +31,53 @@ public static class Detector
     {
         int W = hf.W, H = hf.H, n = W * H;
         double lvlZ = levelElevation;
+        var obst = BuildObstruction(hf, seedInk, lvlZ, opt, log);
 
+        if (opt.Formulation == TakeoffFormulation.Partition)
+            return PartitionFormulation.Run(hf, obst, levelName, levelElevation, opt, log);
+
+        var open = new bool[n];
+        for (int i = 0; i < n; i++)
+        {
+            open[i] = !obst[i] && !float.IsNaN(hf.FloorZ[i]) && Math.Abs(hf.FloorZ[i] - lvlZ) <= opt.FloorTolFt;
+            if (open[i] && opt.RequireCeiling)
+                open[i] = !float.IsNaN(hf.CeilZ[i]) && hf.CeilZ[i] - hf.FloorZ[i] >= opt.MinHeadroomFt
+                          && hf.CeilZ[i] < lvlZ + opt.StoryCapFt;
+        }
+        // label connected candidate regions (4-neighborhood); track border contact + ceiling stats
+        var label = new int[n];
+        var sizes = new List<int> { 0 };
+        var ceilOkCounts = new List<int> { 0 };
+        var touchesBorder = new List<bool> { false };
+        var q = new Queue<int>();
+        int nReg = 0;
+        for (int i = 0; i < n; i++)
+        {
+            if (!open[i] || label[i] != 0) continue;
+            nReg++; sizes.Add(0); ceilOkCounts.Add(0); touchesBorder.Add(false);
+            label[i] = nReg; q.Enqueue(i);
+            while (q.Count > 0)
+            {
+                int c = q.Dequeue(); sizes[nReg]++;
+                if (!float.IsNaN(hf.CeilZ[c]) && hf.CeilZ[c] - hf.FloorZ[c] >= opt.MinHeadroomFt
+                    && hf.CeilZ[c] < lvlZ + opt.StoryCapFt) ceilOkCounts[nReg]++;
+                int cx = c % W, cy = c / W;
+                if (cx == 0 || cy == 0 || cx == W - 1 || cy == H - 1) touchesBorder[nReg] = true;
+                if (cx > 0 && open[c - 1] && label[c - 1] == 0) { label[c - 1] = nReg; q.Enqueue(c - 1); }
+                if (cx < W - 1 && open[c + 1] && label[c + 1] == 0) { label[c + 1] = nReg; q.Enqueue(c + 1); }
+                if (cy > 0 && open[c - W] && label[c - W] == 0) { label[c - W] = nReg; q.Enqueue(c - W); }
+                if (cy < H - 1 && open[c + W] && label[c + W] == 0) { label[c + W] = nReg; q.Enqueue(c + W); }
+            }
+        }
+        return FinishRegions(hf, obst, label, nReg, sizes, ceilOkCounts, touchesBorder, levelName, levelElevation, opt, log);
+    }
+
+    // Shared by both formulations and the diagnostics lane: composed seed ink -> sealed
+    // obstruction mask (stud-gap close + geometric door sealers).
+    internal static bool[] BuildObstruction(
+        Heightfield hf, bool[] seedInk, double lvlZ, TakeoffOptions opt, Action<string> log)
+    {
+        int W = hf.W, H = hf.H, n = W * H;
         var obst = (bool[])seedInk.Clone();
         Close(obst, W, H, (float)(opt.GapSealFt / 2.0 / opt.CellFt));
 
@@ -98,42 +144,14 @@ public static class Detector
             for (int i = 0; i < n; i++) if (filled[i] && !obst[i]) { obst[i] = true; nFilled++; }
             log($"[detect] wall-run gap seal: {nFilled * opt.CellFt * opt.CellFt:F0} sf of doorway gaps became obstruction");
         }
+        return obst;
+    }
 
-        var open = new bool[n];
-        for (int i = 0; i < n; i++)
-        {
-            open[i] = !obst[i] && !float.IsNaN(hf.FloorZ[i]) && Math.Abs(hf.FloorZ[i] - lvlZ) <= opt.FloorTolFt;
-            if (open[i] && opt.RequireCeiling)
-                open[i] = !float.IsNaN(hf.CeilZ[i]) && hf.CeilZ[i] - hf.FloorZ[i] >= opt.MinHeadroomFt
-                          && hf.CeilZ[i] < lvlZ + opt.StoryCapFt;
-        }
-
-        // label connected candidate regions (4-neighborhood); track border contact + ceiling stats
-        var label = new int[n];
-        var sizes = new List<int> { 0 };
-        var ceilOkCounts = new List<int> { 0 };
-        var touchesBorder = new List<bool> { false };
-        var q = new Queue<int>();
-        int nReg = 0;
-        for (int i = 0; i < n; i++)
-        {
-            if (!open[i] || label[i] != 0) continue;
-            nReg++; sizes.Add(0); ceilOkCounts.Add(0); touchesBorder.Add(false);
-            label[i] = nReg; q.Enqueue(i);
-            while (q.Count > 0)
-            {
-                int c = q.Dequeue(); sizes[nReg]++;
-                if (!float.IsNaN(hf.CeilZ[c]) && hf.CeilZ[c] - hf.FloorZ[c] >= opt.MinHeadroomFt
-                    && hf.CeilZ[c] < lvlZ + opt.StoryCapFt) ceilOkCounts[nReg]++;
-                int cx = c % W, cy = c / W;
-                if (cx == 0 || cy == 0 || cx == W - 1 || cy == H - 1) touchesBorder[nReg] = true;
-                if (cx > 0 && open[c - 1] && label[c - 1] == 0) { label[c - 1] = nReg; q.Enqueue(c - 1); }
-                if (cx < W - 1 && open[c + 1] && label[c + 1] == 0) { label[c + 1] = nReg; q.Enqueue(c + 1); }
-                if (cy > 0 && open[c - W] && label[c - W] == 0) { label[c - W] = nReg; q.Enqueue(c - W); }
-                if (cy < H - 1 && open[c + W] && label[c + W] == 0) { label[c + W] = nReg; q.Enqueue(c + W); }
-            }
-        }
-
+    private static TakeoffResult FinishRegions(
+        Heightfield hf, bool[] obst, int[] label, int nReg, List<int> sizes, List<int> ceilOkCounts,
+        List<bool> touchesBorder, string levelName, double levelElevation, TakeoffOptions opt, Action<string> log)
+    {
+        int W = hf.W, H = hf.H, n = W * H;
         double cellArea = opt.CellFt * opt.CellFt;
         foreach (int id in Enumerable.Range(1, nReg).Where(id => sizes[id] * cellArea >= opt.MinSqft))
         {
@@ -282,7 +300,7 @@ public static class Detector
         for (int i = 0; i < W * H; i++) mask[i] = d2[i] > rCells - 1e-4f;
     }
 
-    private static float[] Chamfer(bool[] mask, int W, int H, bool invert)
+    internal static float[] Chamfer(bool[] mask, int W, int H, bool invert)
     {
         const float INF = 1e9f, DIAG = 1.4142f;
         var d = new float[W * H];
@@ -311,7 +329,7 @@ public static class Detector
     }
 
     // ---- exact cell-boundary loop tracing (region on the left: outer CCW, holes CW) ----
-    private static List<List<(int x, int y)>> TraceLoops(List<int> cells, int[] label, int id, int W, int H)
+    internal static List<List<(int x, int y)>> TraceLoops(List<int> cells, int[] label, int id, int W, int H)
     {
         var edges = new Dictionary<long, List<long>>();
         void Add(int ax, int ay, int bx, int by)
@@ -365,7 +383,7 @@ public static class Detector
         return loops;
     }
 
-    private static List<double[]> CollapseCollinear(List<double[]> pts)
+    internal static List<double[]> CollapseCollinear(List<double[]> pts)
     {
         var o = new List<double[]>();
         int m = pts.Count;
@@ -378,7 +396,7 @@ public static class Detector
         return o;
     }
 
-    private static double Shoelace(List<double[]> p)
+    internal static double Shoelace(List<double[]> p)
     {
         double s = 0; int m = p.Count;
         for (int i = 0; i < m; i++) { var a = p[i]; var b = p[(i + 1) % m]; s += a[0] * b[1] - b[0] * a[1]; }
@@ -387,7 +405,7 @@ public static class Detector
 
     // chamfer distance-transform argmax inside the region = pole of inaccessibility; guaranteed
     // interior even for L-shaped rooms (a centroid is not).
-    private static int PoleOfInaccessibility(List<int> cells, int[] label, int id, int W, int H)
+    internal static int PoleOfInaccessibility(List<int> cells, int[] label, int id, int W, int H)
     {
         int bx0 = W, by0 = H, bx1 = 0, by1 = 0;
         foreach (int c in cells) { int cx = c % W, cy = c / W; if (cx < bx0) bx0 = cx; if (cx > bx1) bx1 = cx; if (cy < by0) by0 = cy; if (cy > by1) by1 = cy; }

@@ -92,8 +92,9 @@ if __name__ == "__main__":
     ap.add_argument("--ink-dir", default=LIVE, help="dir with ink_<slug>.bin")
     ap.add_argument("--out", default=None)
     ap.add_argument("--thumb", type=int, default=2000)
+    ap.add_argument("--tsv-dir", default=None, help="score any TSV dir (e.g. an offline replay dump)")
     a = ap.parse_args()
-    tsv_dir = a.ink_dir if a.live else os.path.join(REPO, "eval", "rhvac", a.project, "takeoff")
+    tsv_dir = a.tsv_dir or (a.ink_dir if a.live else os.path.join(REPO, "eval", "rhvac", a.project, "takeoff"))
     render(
         os.path.join(a.ink_dir, f"ink_{a.slug}.bin"),
         os.path.join(tsv_dir, f"rooms_{a.slug}.tsv"),

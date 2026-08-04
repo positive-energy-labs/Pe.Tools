@@ -19,6 +19,15 @@ namespace Pe.Revit.Takeoff;
 // A/B until Partition dominates the scoreboard, then dies per greenfield posture.
 public enum TakeoffFormulation { Regions, Partition }
 
+// Where partition seeds come from (one seed = one candidate space before merges/dissolution):
+// RegionCores = connected components of unobstructed domain (the Regions formulation's blobs);
+// DistanceMaxima = plateaus of the distance transform to strong boundary evidence;
+// Hybrid = cores, except a core containing >= 2 distance plateaus is seeded by those plateaus
+// instead — open-plan cores can then split along interior evidence ridges (ceiling/floor steps),
+// while evidence-free cores stay whole (measured: pure DistanceMaxima under-seeds closets/baths,
+// 41.9 vs 52.8 TOTAL).
+public enum TakeoffSeedSource { RegionCores, DistanceMaxima, Hybrid }
+
 public sealed class TakeoffOptions
 {
     public TakeoffFormulation Formulation = TakeoffFormulation.Regions;
@@ -94,6 +103,29 @@ public sealed class TakeoffOptions
                                             // seed ink) as replay_<level>.bin so detection changes
                                             // iterate OFFLINE via DetectSnapshot.Replay — see the
                                             // DetectSnapshot header for what stays live-only
+    // ---- Partition formulation knobs (Formulation = Partition; PartitionFormulation.cs) ----
+    // Mechanisms with defaults, not per-project constants: evidence weights are calibratable
+    // (eval/rhvac ground-truth wall lines), widths come from building conventions (door ~2.5 ft).
+    public TakeoffSeedSource SeedSource = TakeoffSeedSource.RegionCores;
+    public double SeedClearFt = 3.0;        // DistanceMaxima: seed plateau must sit at least this
+                                            // clear of strong evidence / domain edge
+    public double CeilStepEvidenceFt = 0.75;   // ceiling-height jump where boundary evidence starts
+    public double CeilStepSaturationFt = 2.5;  // jump size at which it saturates to CeilStepWeight
+    public double CeilStepWeight = 0.7;
+    public double FloorStepEvidenceFt = 0.35;  // floor steps (sunken rooms) as boundary evidence
+    public double FloorStepSaturationFt = 1.5;
+    public double FloorStepWeight = 0.45;      // below BoundaryEvidenceMin BY DESIGN: floor steps
+                                               // guide watershed placement but cannot certify a
+                                               // boundary (theater tiers, sunken rooms are one
+                                               // room; measured anti-signal on the attic)
+    public double BoundaryEvidenceMin = 0.5;   // a boundary edge is "backed" when either side's
+                                               // evidence reaches this
+    public double MinBoundarySupport = 0.35;   // merge two spaces when less than this fraction of
+                                               // their shared boundary is backed (open-plan flag)
+    public double LowBoundarySupportFlag = 0.6; // surviving boundary below this backing fraction
+                                                // flags both rooms low-evidence-boundary
+    public double MinFeatureWidthFt = 2.5;     // sliver dissolution: a space must be at least a
+                                               // door width wide somewhere
     public string Marker = "PE-TAKEOFF";    // stamped into Comments of everything we create
     public string? ArtifactDir;             // where TSV/PNG artifacts land (default: temp)
 }
@@ -107,6 +139,9 @@ public sealed class RoomResult
     public double MeanCeilingFt;            // heightfield deliverable; Manual J wants this
     public List<double[]> Polygon = new();  // outer loop, model coords, CCW, crisp corners
     public List<List<double[]>> Holes = new();
+    public List<string> Flags = new();      // ambiguity flags (partition formulation): open-plan
+                                            // merges, low-evidence boundaries, seedless pockets.
+                                            // Never guessed intent — surfaced for human/pea review.
 }
 
 public sealed class TakeoffResult
@@ -131,6 +166,11 @@ public sealed class TakeoffResult
             sb.AppendLine($"POLY\t{r.Id}\touter\t{PolyStr(r.Polygon)}");
             foreach (var h in r.Holes) sb.AppendLine($"POLY\t{r.Id}\thole\t{PolyStr(h)}");
         }
+        // Ambiguity flags ride as 3-column META lines: existing consumers (score-takeoff.py,
+        // RhvacCandidateBuilder.ParseTsv) ignore unknown META keys, so the format stays
+        // backward-compatible; a Regions run emits none and its TSV is byte-identical to before.
+        foreach (var r in this.Rooms.Where(r => r.Flags.Count > 0))
+            sb.AppendLine($"META\tflag\t{r.Id}:{string.Join("+", r.Flags)}");
         return sb.ToString();
     }
 
