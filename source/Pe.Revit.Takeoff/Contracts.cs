@@ -12,8 +12,16 @@ namespace Pe.Revit.Takeoff;
 // raw finish-face undershoots oracle areas 15-25%. On wall-less framing models (IFC stud soup)
 // only finish-face is directly observable; convention offsets need a wall-thickness estimate
 // (probe) or real Wall elements.
+// Detection formulation (phase-2 partition campaign, eval/rhvac/PHASE2-PARTITION.md):
+// Regions = independent region growing (phase-1 baseline); Partition = every covered-domain cell
+// is assigned to exactly one space via boundary-evidence watershed (no holes by construction,
+// shared boundaries, sliver dissolution, explicit ambiguity flags). Regions stays runnable for
+// A/B until Partition dominates the scoreboard, then dies per greenfield posture.
+public enum TakeoffFormulation { Regions, Partition }
+
 public sealed class TakeoffOptions
 {
+    public TakeoffFormulation Formulation = TakeoffFormulation.Regions;
     public string LevelNameContains = "";   // matched against host Level.Name
     public double CellFt = 0.25;            // grid resolution; 0.25 resolves stud walls
     public double MinSqft = 20;             // retain small closets/baths for Pea-human review
