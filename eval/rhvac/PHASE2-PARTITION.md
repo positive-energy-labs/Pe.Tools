@@ -165,3 +165,51 @@ construction (every domain cell is in an emitted room, a logged border drop, or 
   `ProjectAReplayDumpRun.PolicyFor`.
 - Regions-path deletion stays deferred until partition also dominates on a second model
   (single-benchmark dominance is not proof of generalization).
+
+---
+
+# Phase 3 — wall-line arrangement snapping (in flight)
+
+## Checkpoint state (2026-08-04, pre-implementation checkpoint under power-loss warning)
+
+DONE:
+- Control runs re-pinned by my own replays (not stale doc numbers):
+  - Regions replay content-identical to committed `project-a/takeoff` fixtures (EOL-only diffs from checkout).
+  - Partition pre-snap control: TOTAL 54.0, taxonomy frag:35 merge:26 miss:1 ok:26 poor:30,
+    wall 54.1% @1.5ft; per-level mIoU 0.399/0.524/0.627/0.473 (L0/L1/L2/L3). Matches phase-2 record.
+- Full source read: PartitionFormulation, Detector (TraceLoops/CollapseCollinear/BuildObstruction),
+  DetectSnapshot, ProjectAReplayDumpRun, score-takeoff.py, diag-partition.py, TakeoffReplayTests.
+
+DESIGN (settled, not yet coded) — new `source/Pe.Revit.Takeoff/BoundarySnap.cs`, called from
+PartitionFormulation emit path, gated by `TakeoffOptions.SnapBoundaries` (default true; Partition-only):
+1. Boundary NETWORK from final owner grid (emitted ids vs 0): unit edges at cell corners with
+   owner pairs; chains = maximal runs between junction nodes (degree != 2); closed chains for
+   islands. Shared by construction — each chain snapped ONCE, both rooms conform.
+2. DIRECTIONS per level: secant orientation over ~4 ft arc windows along chains, histogram (1 deg
+   bins mod 180) weighted by arc length, only windows whose edges are evidence-backed
+   (max(evidence) >= BoundaryEvidenceMin — no walls invented where evidence is absent);
+   smoothed circularly, NMS peak extraction (min share ~2%, min separation ~10 deg). DERIVED, never
+   hardcoded; sanity-log vs the known ~130.5 deg grid.
+3. RUNS: per-edge nearest-direction assignment (tol ~12 deg, backed windows only), consecutive
+   merge, absorb short raw gaps between same-dir runs, min run ~3 ft; constrained least-squares
+   line fit (direction fixed, offset = mean projection), max point deviation cap else revert raw.
+4. ARRANGEMENT: per-direction 1D clustering of run offsets (~0.6 ft tol) -> shared wall lines;
+   runs adopt cluster offset (deviation recheck).
+5. JUNCTIONS: resolved globally — intersection of the two best-supported non-parallel incident
+   lines (move cap ~1.2 ft), else projection onto the single line, else stay.
+6. REBUILD chains: line runs become straight segments meeting at line intersections (joggle
+   fallback for near-parallel/far intersections); raw runs keep original points. Rooms rebuilt by
+   traversing raster loops and substituting chain geometry (orientation-matched), so the
+   partition stays total and deterministic.
+7. GUARDS by construction: per-room area drift vs raster <= max(0.5 sqft, 1%) and simple-polygon
+   check; violations revert that room's chains to raw (iterate to fixed point, final fallback =
+   all-raw = pre-snap geometry). RawSqft/Perimeter become snapped polygon truth when snapping is on.
+Tests planned (TakeoffReplayTests): diagonal hypotenuse = exactly 3-vertex triangle polygon;
+door-gap rooms stay 4 separate; open-plan pinch (no-evidence) boundary vertices byte-unchanged
+vs SnapBoundaries=false; area-drift bound asserted on all synthetic rooms; determinism via
+existing partition TSV test. ProjectAReplayDumpRun gains PE_TAKEOFF_SNAP=0 escape for A/B.
+
+MID-FLIGHT: nothing coded yet — checkpoint landed before first edit.
+NEXT STEP: write BoundarySnap.cs exactly per the design above, add the ~10 Snap* options to
+TakeoffOptions (Contracts.cs), wire the emit path in PartitionFormulation.Run, build, green the
+26 NoDocumentRuntime tests + new synthetic tests, then replay+score vs the pinned control.
