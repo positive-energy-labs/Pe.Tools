@@ -165,6 +165,40 @@ capture-baked knobs. The loop is capture once → iterate offline → re-verify 
   sealers, MinCompactness, MinHeadroomFt, MinCeilingFrac, partition/simplify knobs) are fully
   downstream and iterate offline honestly.
 
+### First live capture: DONE (2026-08-04)
+
+The capture ran on the real project-a model (fresh sandbox Revit 2025 session `rhvac-capture-25`,
+worktree-built Pe.App, document opened detached via `revit.apply.document.open`; Prepare + Detect
+for all 5 levels, standard `LEVEL_POLICY`). All five `replay_<level>.bin` now sit next to the TSVs
+in `%USERPROFILE%\OneDrive\Documents\Pe.Tools\takeoff` — they stay LOCAL (outside the repo, like
+`projectA.local.r10`); never commit them.
+
+| Snapshot | Size | Live detect |
+|---|---|---|
+| replay_Level_0_Lower_Level.bin | 452 KB | 57 rooms / 13,162 sf |
+| replay_Level_0_Theatre.bin | 261 KB | 1 / 907 |
+| replay_Level_1_Main_Level.bin | 388 KB | 71 / 20,714 |
+| replay_Level_2_Upper_Level.bin | 547 KB | 77 / 14,376 |
+| replay_Level_3_Attic.bin | 406 KB | 49 / 5,662 |
+
+Verified, in order: (a) all 5 snapshots `DetectSnapshot.Load` cleanly; (b) the freshly emitted
+TSVs are byte-identical to the committed fixture snapshot (git-clean after the copy) — determinism
+held across a full Revit restart AND the b92fc73 Detector refactor; (c)
+`ProjectA_snapshot_replays_deterministically` self-upgraded onto the capture and passed (suite
+23/23, 0 skipped); (d) a one-off throwaway check replayed EVERY bin offline under its exact
+`LEVEL_POLICY` options and reproduced each committed TSV byte-for-byte modulo one known
+translation: `ToTsv()` emits its 3 META lines with `\n` while run-takeoff.py's fixture copy
+normalizes the whole file to CRLF, so compare with newlines normalized.
+
+Lane fact (cost half the session): a worktree source sandbox is refused while the machine's
+receipt-owned selector (`00-Pe.App.addin`, deployed by installed v0.6.23 under SDK beta.115) is
+newer — the staged per-product loader shim hashes over loader bytes + assembly + PRODUCT VERSION.
+Fix was two text pins in the worktree, both mirroring main: `global.json` Pe.Revit.Sdk
+`0.1.0-beta.113 → 0.1.0-beta.115` and `product.payloads.json` version `0.6.19 → 0.6.23`. With
+those, the staged selector byte-matches and the deployed one is reused ("selector-current").
+Offline iteration now needs no Revit at all: `dotnet test ... --filter
+"FullyQualifiedName~LibraryBehavior.NoDocumentRuntime&FullyQualifiedName!~ProjectAEvalRun"`.
+
 ## Traps (new ones from this pass — the old list in git history still applies)
 
 - **`dotnet test` in the worktree poisons the emitter**: the Pe.Revit.Ui WPF build drops a
