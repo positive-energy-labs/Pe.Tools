@@ -220,6 +220,141 @@ public sealed class TakeoffReplayTests
         });
     }
 
+    // ---- phase-3 wall-line snapping semantics (BoundarySnap.cs) ----
+
+    [Test]
+    public void Snap_keeps_door_gap_rooms_separate_with_bounded_area_drift()
+    {
+        var snap = BuildSyntheticEstate();
+        var opt = PartitionOptions();
+        var snapped = snap.Replay(opt, _ => { });
+        opt.SnapBoundaries = false;
+        var raw = snap.Replay(opt, _ => { });
+
+        // Same partition topology: door-gap rooms stay separate, nothing merges or vanishes.
+        Assert.That(snapped.Rooms, Has.Count.EqualTo(raw.Rooms.Count));
+        Assert.That(snapped.Rooms, Has.Count.EqualTo(4));
+
+        // Rectangular rooms become exact 4-vertex rectangles; the small triangle's hypotenuse
+        // straightens where the fit fits and keeps honest raw ends where full corner restoration
+        // would break the area bound (the staged guard demotes, never distorts).
+        var triSnap = snapped.Rooms.OrderBy(r => r.RawSqft).First();
+        var triRaw = raw.Rooms.OrderBy(r => r.RawSqft).First();
+        Assert.Multiple(() => {
+            Assert.That(snapped.Rooms.Count(r => r.Polygon.Count == 4), Is.GreaterThanOrEqualTo(2),
+                "axis-walled rooms must be exact rectangles");
+            Assert.That(triSnap.Polygon.Count, Is.LessThan(triRaw.Polygon.Count),
+                "hypotenuse must at least partially straighten");
+        });
+
+        // Area is exported truth: per-room drift from snapping stays within max(0.5 sqft, 1%).
+        var rawByArea = raw.Rooms.OrderBy(r => r.RawSqft).ToList();
+        var snapByArea = snapped.Rooms.OrderBy(r => r.RawSqft).ToList();
+        for (int i = 0; i < rawByArea.Count; i++)
+            Assert.That(Math.Abs(snapByArea[i].RawSqft - rawByArea[i].RawSqft),
+                Is.LessThanOrEqualTo(Math.Max(0.5, 0.01 * rawByArea[i].RawSqft)),
+                $"area drift bound violated for room {rawByArea[i].Id}");
+    }
+
+    [Test]
+    public void Snap_straightens_diagonal_wall_into_single_segment()
+    {
+        // A large diagonal-walled triangle (legs ~40 ft, ~840 sf): the 1% area bound then
+        // accommodates honest corner restoration (watershed fronts drift a couple of feet inside
+        // wall-JOINT ink), so the staircase hypotenuse must come out as exactly ONE segment —
+        // a 3-vertex triangle polygon.
+        const int W = 200, H = 120;
+        const double cell = 0.5;
+        int n = W * H;
+        var hf = new Heightfield {
+            W = W, H = H, MinX = 0, MinY = 0, CellFt = cell,
+            FloorZ = new float[n], CeilZ = new float[n],
+        };
+        for (int i = 0; i < n; i++) { hf.FloorZ[i] = float.NaN; hf.CeilZ[i] = float.NaN; }
+        for (int y = 8; y < 112; y++)
+            for (int x = 8; x < 192; x++)
+            { hf.FloorZ[y * W + x] = 0f; hf.CeilZ[y * W + x] = 9f; }
+        var ink = new bool[n];
+        void Stamp(int x0, int x1, int y0, int y1)
+        {
+            for (int y = y0; y < y1; y++)
+                for (int x = x0; x < x1; x++) ink[y * W + x] = true;
+        }
+        Stamp(8, 192, 8, 10); Stamp(8, 192, 110, 112);   // envelope south/north
+        Stamp(8, 10, 8, 112); Stamp(190, 192, 8, 112);   // envelope west/east
+        for (int t = 0; t <= 80; t++) Stamp(110 + t, 112 + t, 8 + t, 10 + t); // 45-deg diagonal
+
+        var snap = new DetectSnapshot {
+            LevelName = "Diagonal", LevelElevation = 0, CaptureOptions = "synthetic",
+            Field = hf, SeedInk = ink,
+        };
+        var opt = PartitionOptions();
+        var snapped = snap.Replay(opt, _ => { });
+        opt.SnapBoundaries = false;
+        var raw = snap.Replay(opt, _ => { });
+
+        Assert.That(snapped.Rooms, Has.Count.EqualTo(2));
+        var triSnap = snapped.Rooms.OrderBy(r => r.RawSqft).First();
+        var triRaw = raw.Rooms.OrderBy(r => r.RawSqft).First();
+        Assert.Multiple(() => {
+            Assert.That(triRaw.Polygon.Count, Is.GreaterThan(20), "control: raster staircase");
+            Assert.That(triSnap.Polygon.Count, Is.EqualTo(3), "hypotenuse must be ONE segment");
+            Assert.That(Math.Abs(triSnap.RawSqft - triRaw.RawSqft),
+                Is.LessThanOrEqualTo(Math.Max(0.5, 0.01 * triRaw.RawSqft)), "area bound");
+        });
+    }
+
+    [Test]
+    public void Snap_leaves_no_evidence_boundaries_raw()
+    {
+        // The open-plan pinch scene: the watershed boundary between the two halves crosses open
+        // floor with no wall evidence (half-foot stubs only). Snapping must NOT invent a wall
+        // there — the mid-span boundary geometry stays byte-identical to the unsnapped run,
+        // while the real (ink-backed) walls are straight lines in both runs.
+        const int W = 120, H = 28;
+        const double cell = 0.5;
+        int n = W * H;
+        var hf = new Heightfield {
+            W = W, H = H, MinX = 0, MinY = 0, CellFt = cell,
+            FloorZ = new float[n], CeilZ = new float[n],
+        };
+        for (int i = 0; i < n; i++) { hf.FloorZ[i] = float.NaN; hf.CeilZ[i] = float.NaN; }
+        for (int y = 6; y < 22; y++)
+            for (int x = 8; x < 112; x++)
+            { hf.FloorZ[y * W + x] = 0f; hf.CeilZ[y * W + x] = 9f; }
+        var ink = new bool[n];
+        void Stamp(int x0, int x1, int y0, int y1)
+        {
+            for (int y = y0; y < y1; y++)
+                for (int x = x0; x < x1; x++) ink[y * W + x] = true;
+        }
+        Stamp(8, 112, 6, 8); Stamp(8, 112, 20, 22);
+        Stamp(8, 10, 6, 22); Stamp(110, 112, 6, 22);
+        Stamp(59, 61, 8, 9); Stamp(59, 61, 19, 20);
+        var snap = new DetectSnapshot {
+            LevelName = "Open Plan", LevelElevation = 0, CaptureOptions = "synthetic",
+            Field = hf, SeedInk = ink,
+        };
+
+        var opt = PartitionOptions();
+        opt.SeedSource = TakeoffSeedSource.Hybrid;
+        var snappedRun = snap.Replay(opt, _ => { });
+        opt.SnapBoundaries = false;
+        var rawRun = snap.Replay(opt, _ => { });
+        Assert.That(snappedRun.Rooms, Has.Count.EqualTo(2));
+        Assert.That(rawRun.Rooms, Has.Count.EqualTo(2));
+
+        // Mid-span (away from the stubs' reach): the unbacked split boundary is unchanged.
+        static List<string> MidVerts(TakeoffResult r) => r.Rooms
+            .SelectMany(rm => rm.Polygon)
+            .Where(v => v[0] > 26 && v[0] < 34 && v[1] > 5 && v[1] < 9)
+            .Select(v => FormattableString.Invariant($"{v[0]:F6};{v[1]:F6}"))
+            .OrderBy(s => s, StringComparer.Ordinal)
+            .ToList();
+        Assert.That(MidVerts(snappedRun), Is.EqualTo(MidVerts(rawRun)),
+            "no-evidence boundary must stay as-is (jaggedness is information)");
+    }
+
     [Test]
     public void ProjectA_snapshot_replays_deterministically()
     {

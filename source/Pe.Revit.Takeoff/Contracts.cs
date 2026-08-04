@@ -126,6 +126,24 @@ public sealed class TakeoffOptions
                                                 // flags both rooms low-evidence-boundary
     public double MinFeatureWidthFt = 2.5;     // sliver dissolution: a space must be at least a
                                                // door width wide somewhere
+    // ---- Phase-3 wall-line snapping (Partition only; BoundarySnap.cs) ----
+    // Dominant wall directions are DERIVED per level from evidence-backed boundary orientation;
+    // boundaries snap onto a colinear line arrangement. Unbacked boundaries stay raw (jaggedness
+    // is information for the editability lane). Per-room area drift is bounded by construction.
+    public bool SnapBoundaries = true;      // snap partition boundaries to the wall-line arrangement
+    public double SnapWindowFt = 4.0;       // secant window for boundary orientation sampling
+    public double SnapDirTolDeg = 12;       // max angular distance to a dominant direction
+    public double SnapDirMinShare = 0.02;   // histogram peak must carry this share of backed length
+    public double SnapDirSepDeg = 10;       // non-max-suppression separation between peaks
+    public double SnapMinRunFt = 3.0;       // shortest boundary run that may snap to a line
+    public double SnapMaxDevFt = 0.8;       // max point deviation for a run to claim a line
+    public double SnapColinearTolFt = 0.6;  // colinear runs within this offset share ONE wall line
+    public double SnapMinBackedFrac = 0.5;  // fraction of window edges that must be evidence-backed
+    public double SnapMaxCornerMoveFt = 2.5; // cap on junction/corner movement to line
+                                             // intersections — watershed tie-breaking drifts
+                                             // inside wall-JOINT ink blobs, so the true corner
+                                             // can sit a couple of feet from the raster one;
+                                             // the per-room area guard bounds overreach
     public string Marker = "PE-TAKEOFF";    // stamped into Comments of everything we create
     public string? ArtifactDir;             // where TSV/PNG artifacts land (default: temp)
 }

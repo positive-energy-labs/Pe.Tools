@@ -102,6 +102,8 @@ public sealed class ProjectAReplayDumpRun
                 && (string.IsNullOrEmpty(seedLevels)
                     || seedLevels.Split(';').Any(snap.LevelName.Contains)))
                 opt.SeedSource = Enum.Parse<TakeoffSeedSource>(seedSource, ignoreCase: true);
+            if (Environment.GetEnvironmentVariable("PE_TAKEOFF_SNAP") == "0")
+                opt.SnapBoundaries = false; // phase-3 A/B escape: pre-snap partition output
             var lines = new List<string>();
             var result = snap.Replay(opt, lines.Add);
             string name = string.Concat(snap.LevelName.Select(ch => char.IsLetterOrDigit(ch) ? ch : '_'));
