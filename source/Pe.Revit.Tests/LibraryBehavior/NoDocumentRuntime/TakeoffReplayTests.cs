@@ -117,6 +117,109 @@ public sealed class TakeoffReplayTests
             Throws.InvalidOperationException.With.Message.Contains("CellFt"));
     }
 
+    // ---- partition formulation semantics (phase 2, eval/rhvac/PHASE2-PARTITION.md) ----
+
+    private static TakeoffOptions PartitionOptions() => new() {
+        CellFt = 0.5, Formulation = TakeoffFormulation.Partition, SealWallRunGaps = true,
+    };
+
+    [Test]
+    public void Partition_assigns_every_domain_cell_with_no_slivers_or_overlaps()
+    {
+        var snap = BuildSyntheticEstate();
+        var run = snap.Replay(PartitionOptions(), _ => { });
+
+        // The estate's domain is the full floored rectangle x[8,112) y[8,72) = 52ft x 32ft,
+        // wall/ink cells included (floor + 9-ft ceiling everywhere). Assignment totality + no
+        // overlap means the emitted room areas sum EXACTLY to the domain area — no holes by
+        // construction, wall thickness split between neighbors, nothing double-claimed.
+        const double domainSqft = 52 * 32;
+        Assert.Multiple(() => {
+            Assert.That(run.Rooms.Sum(r => r.RawSqft), Is.EqualTo(domainSqft).Within(1e-6));
+            Assert.That(run.Rooms, Has.Count.EqualTo(4)); // A, B, open-plan, diagonal triangle
+            Assert.That(run.Rooms.All(r => r.RawSqft >= new TakeoffOptions().MinSqft), Is.True,
+                "sliver dissolution must leave no under-min-area rooms");
+        });
+
+        // Shared boundaries by construction: polygon areas tile the domain (sum of outer areas
+        // minus holes equals the domain area too, so adjacent outlines cannot overlap or gap).
+        double Shoe(List<double[]> p)
+        {
+            double s = 0;
+            for (int i = 0; i < p.Count; i++)
+            { var a = p[i]; var b = p[(i + 1) % p.Count]; s += a[0] * b[1] - b[0] * a[1]; }
+            return Math.Abs(s / 2);
+        }
+        double polyArea = run.Rooms.Sum(r => Shoe(r.Polygon) - r.Holes.Sum(Shoe));
+        Assert.That(polyArea, Is.EqualTo(domainSqft).Within(1e-6));
+    }
+
+    [Test]
+    public void Partition_replay_is_deterministic()
+    {
+        string path = TempPath("estate-part.bin");
+        try
+        {
+            DetectSnapshot.Save(path, BuildSyntheticEstate());
+            var first = DetectSnapshot.Load(path).Replay(PartitionOptions(), _ => { });
+            var second = DetectSnapshot.Load(path).Replay(PartitionOptions(), _ => { });
+            Assert.That(second.ToTsv(), Is.EqualTo(first.ToTsv()));
+        }
+        finally { File.Delete(path); }
+    }
+
+    // Open-plan scene: one long 6-ft-tall space whose midpoint has only half-foot wall stubs —
+    // enough to break the seed plateau's 3-ft clearance (hybrid splits there), while the shared
+    // boundary stays ~83% unbacked by evidence, so the merge criterion re-merges the halves and
+    // FLAGS the merge; the flag must ride the TSV as a backward-compatible 3-column META line.
+    [Test]
+    public void Partition_flags_open_plan_merges()
+    {
+        const int W = 120, H = 28;
+        const double cell = 0.5;
+        int n = W * H;
+        var hf = new Heightfield {
+            W = W, H = H, MinX = 0, MinY = 0, CellFt = cell,
+            FloorZ = new float[n], CeilZ = new float[n],
+        };
+        for (int i = 0; i < n; i++) { hf.FloorZ[i] = float.NaN; hf.CeilZ[i] = float.NaN; }
+        for (int y = 6; y < 22; y++)
+            for (int x = 8; x < 112; x++)
+            { hf.FloorZ[y * W + x] = 0f; hf.CeilZ[y * W + x] = 9f; }
+        var ink = new bool[n];
+        void Stamp(int x0, int x1, int y0, int y1)
+        {
+            for (int y = y0; y < y1; y++)
+                for (int x = x0; x < x1; x++) ink[y * W + x] = true;
+        }
+        Stamp(8, 112, 6, 8); Stamp(8, 112, 20, 22);   // long north/south walls
+        Stamp(8, 10, 6, 22); Stamp(110, 112, 6, 22);  // end walls
+        Stamp(59, 61, 8, 9); Stamp(59, 61, 19, 20);   // half-foot stubs at the midpoint
+
+        var snap = new DetectSnapshot {
+            LevelName = "Open Plan", LevelElevation = 0, CaptureOptions = "synthetic",
+            Field = hf, SeedInk = ink,
+        };
+        // The watershed boundary hugs the stub pinch, so its evidence backing sits just above the
+        // default merge bar (it draws the low-evidence flag there). Semantics under test are
+        // parametric: below MinBoundarySupport the halves are ONE open-plan space, flagged.
+        var opt = PartitionOptions();
+        opt.SeedSource = TakeoffSeedSource.Hybrid;
+        var split = snap.Replay(opt, _ => { });
+        Assert.Multiple(() => {
+            Assert.That(split.Rooms, Has.Count.EqualTo(2), "the pinch must split the hybrid seeds");
+            Assert.That(split.Rooms.SelectMany(r => r.Flags), Does.Contain("low-evidence-boundary"));
+        });
+
+        opt.MinBoundarySupport = 0.75; // stricter wall-backing demand -> this boundary is open-plan
+        var strict = snap.Replay(opt, _ => { });
+        Assert.Multiple(() => {
+            Assert.That(strict.Rooms, Has.Count.EqualTo(1), "unbacked split must merge back");
+            Assert.That(strict.Rooms[0].Flags, Does.Contain("open-plan-merge"));
+            Assert.That(strict.ToTsv(), Does.Contain($"META\tflag\t{strict.Rooms[0].Id}:"));
+        });
+    }
+
     [Test]
     public void ProjectA_snapshot_replays_deterministically()
     {

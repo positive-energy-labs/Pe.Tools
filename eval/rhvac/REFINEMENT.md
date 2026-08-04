@@ -40,6 +40,13 @@ never guesses intent.
 ## State log (append per phase completion)
 
 - 2026-08-03: Bluebeam mining landed (cc80353) — per-room geometric oracle exists.
+- 2026-08-04 (eve): Phase 2 partition formulation landed offline (`Formulation = Partition`,
+  PartitionFormulation.cs): evidence-watershed assignment of every domain cell, explicit
+  open-plan merges + ambiguity flags in the TSV, sliver re-flood dissolution. Replay-measured:
+  TOTAL 52.3 -> 54.0, wall recall 43.8 -> 54.1%, missing 5 -> 1, merged 31 -> 26, attic mIoU
+  .308 -> .473; zero in-domain holes by construction. Iteration log + open-question answers in
+  PHASE2-PARTITION.md. Regions path byte-identical and still default; live regen + LEVEL_POLICY
+  mirror pending.
 - 2026-08-04: Phase 1 instrument landed — `score-takeoff.py` scoreboard (per-room IoU, coverage/
   over-detection, failure taxonomy, wall recall; <2 s) over `project-a/oracle-geometry.json`
   (22/25 sheet-pages auto-registered; 118/150 oracle rooms carry model-frame polygons — the
