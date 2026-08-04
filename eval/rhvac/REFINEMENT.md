@@ -40,3 +40,11 @@ never guesses intent.
 ## State log (append per phase completion)
 
 - 2026-08-03: Bluebeam mining landed (cc80353) — per-room geometric oracle exists.
+- 2026-08-04: Phase 1 instrument landed — `score-takeoff.py` scoreboard (per-room IoU, coverage/
+  over-detection, failure taxonomy, wall recall; <2 s) over `project-a/oracle-geometry.json`
+  (22/25 sheet-pages auto-registered; 118/150 oracle rooms carry model-frame polygons — the
+  145/150 area matches minus out-of-model structures and 3 pages awaiting manual anchors;
+  747/936 wall lines registered). Baseline: TOTAL 52.3 (ok:22 frag:30 merge:31 poor:30 miss:5),
+  wall recall 43.8% @1.5 ft — `project-a/SCOREBOARD.md`. Auto room-map: 5 curated + 26 auto-iou,
+  gated coverage 9.8%→24.7% area. Replay harness for post-Revit stages is the remaining
+  phase-1 item.

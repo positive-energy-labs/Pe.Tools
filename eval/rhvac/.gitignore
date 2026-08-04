@@ -1,6 +1,8 @@
-# Candidate takeoffs and scorecards are per-run outputs, not fixtures.
+# Candidate takeoffs, scorecards and takeoff scoreboards are per-run outputs, not fixtures.
 */candidate.rooms.json
 */scorecard.*
+*/scoreboard.txt
+*/scoreboard.json
 # Local copies of engineer originals and edit-lane self-check outputs — never committed.
 */*.r10
 */edit-check.*
