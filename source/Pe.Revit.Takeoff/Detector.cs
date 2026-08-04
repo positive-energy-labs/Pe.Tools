@@ -19,13 +19,18 @@ namespace Pe.Revit.Takeoff;
 //   corridors/halls close and fill instead of merging with "outside".
 // - FUNKY CORNERS: exact cell-boundary loops are shared after wall-ink propagation, so adjacent
 //   regions meet without independently simplified edges drifting apart.
+// OFFLINE SEAM: everything in this class is pure computation over the heightfield + ink rasters —
+// no Document, no Level, no Revit runtime. `DetectSnapshot` persists exactly these inputs so
+// region-growing/polygonization/regularization changes iterate offline against real captured
+// state (NoDocumentRuntime tests, seconds per run) instead of through live bridge runs.
 public static class Detector
 {
     public static TakeoffResult Detect(
-        Heightfield hf, bool[] seedInk, Level level, TakeoffOptions opt, Action<string> log)
+        Heightfield hf, bool[] seedInk, string levelName, double levelElevation,
+        TakeoffOptions opt, Action<string> log)
     {
         int W = hf.W, H = hf.H, n = W * H;
-        double lvlZ = level.ProjectElevation;
+        double lvlZ = levelElevation;
 
         var obst = (bool[])seedInk.Clone();
         Close(obst, W, H, (float)(opt.GapSealFt / 2.0 / opt.CellFt));
@@ -168,7 +173,7 @@ public static class Detector
             $"resolvedEnclosed={partitionStats.ResolvedEnclosedCells * cellArea:F0}sf " +
             $"sharedEdges={partitionStats.SharedEdgeCells} unclaimedInk={partitionStats.UnclaimedInkCells}");
 
-        var result = new TakeoffResult { LevelName = level.Name, LevelElevation = level.ProjectElevation };
+        var result = new TakeoffResult { LevelName = levelName, LevelElevation = levelElevation };
         int rank = 0;
         foreach (int id in acceptedIds)
         {

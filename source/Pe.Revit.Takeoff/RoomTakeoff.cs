@@ -66,7 +66,20 @@ public static class RoomTakeoff
         }
         var ink = ProjectionSeed.CaptureInk(doc, va, va2, vb, vd, crop, hf.W, hf.H, opt.CellFt, workDir, opt, log,
             floorEdge, out var kneeInk);
-        var result = Detector.Detect(hf, ink, level, opt, log);
+        if (opt.DumpReplaySnapshot)
+        {
+            // Offline-iteration capture: exactly what Detector.Detect consumes (see DetectSnapshot
+            // header for the honesty boundary). Detection changes then replay in NoDocumentRuntime
+            // tests in seconds — never tune detection through repeated bridge runs.
+            string snapPath = Path.Combine(workDir, $"replay_{Sanitize(level.Name)}.bin");
+            DetectSnapshot.Save(snapPath, new DetectSnapshot {
+                LevelName = level.Name, LevelElevation = lvlZ,
+                CaptureOptions = DetectSnapshot.CaptureOptionsOf(opt),
+                Field = hf, SeedInk = ink,
+            });
+            log($"[replay] detect-input snapshot -> {snapPath}");
+        }
+        var result = Detector.Detect(hf, ink, level.Name, level.ProjectElevation, opt, log);
         result.SeedViewA = va; result.SeedViewB = vb;
         // Boundary-evidence raster for materialization: where is a boundary REAL geometry rather
         // than an equidistance seam? Real = knee-band wall ink (doors are open at +4 ft; the header

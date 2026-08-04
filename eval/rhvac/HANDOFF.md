@@ -130,6 +130,41 @@ Offline score: `dotnet test source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug
 Live regen: `python eval/rhvac/run-takeoff.py --port <host> --session <bridge-session-id> --project project-a --levels ...` (session tricks: agent memory `worktree-lane-access`).
 Re-detection renumbers candidate ids → re-derive every `room-map.json` key after regenerating TSVs.
 
+## Offline detection loop (2026-08-04: replay harness landed)
+
+Detection iteration no longer needs live Revit once ONE capture exists. `Detector.Detect` is now
+Revit-free (takes level name + elevation instead of `Level`), and `DetectSnapshot`
+(`source/Pe.Revit.Takeoff/DetectSnapshot.cs`) persists exactly what it consumes: the heightfield
+(FloorZ/CeilZ + grid frame), the composed seed ink, the level identity, and a record of the
+capture-baked knobs. The loop is capture once → iterate offline → re-verify live occasionally.
+
+- **CAPTURE (live, once per detection-input change).** `RoomTakeoff.Detect` writes
+  `replay_<level>.bin` (gzip, ~5–15 MB/level) next to `rooms_<level>.tsv` in the Documents
+  takeoff dir by default (`TakeoffOptions.DumpReplaySnapshot = true`). The next normal snapshot
+  regen captures everything — the exact command is unchanged:
+  `python eval/rhvac/run-takeoff.py --port <host> --session <bridge-session-id> --project project-a --levels "Lower Level" "Main Level" "Upper Level" "Attic"`.
+  No pre-2026-08-04 artifact can substitute: `ink_*.bin` is post-detect evidence ink (knee|floorEdge,
+  not the seed ink Detect consumes), `floormask_*.bin` is a z-less presence mask from deleted
+  experiment code, and the seed PNGs lack the heightfield — FloorZ/CeilZ were never persisted, so
+  the harness ships synthetic-tested until the first live run.
+- **ITERATE (offline, seconds per run).** `DetectSnapshot.Load(path).Replay(opt, log)` reruns
+  everything from obstruction morphology through TSV with arbitrary `TakeoffOptions`: door
+  sealers, region growing, ceiling/compactness gates, `PartitionRegularizer`, loop tracing,
+  `ToTsv()` (same code path the live lane commits). Tests:
+  `source/Pe.Revit.Tests/LibraryBehavior/NoDocumentRuntime/TakeoffReplayTests.cs` — a synthetic
+  estate (4 rooms, two 3-ft door gaps, diagonal wall, open plan) proves determinism + option
+  sensitivity, and `ProjectA_snapshot_replays_deterministically` upgrades itself to the first real
+  `replay_*.bin` it finds in the Documents takeoff dirs (skipped until then).
+- **RE-VERIFY (live).** Everything UPSTREAM of the seam is baked at capture time; offline results
+  that touch those knobs are void and need a live re-capture: the heightfield build window
+  (`FloorTolFt`, `StoryCapFt`, `CeilingCloseFt` — CeilZ above the capture cap simply is not in
+  the file), ink composition (`KneeBandFt`/`HeaderBandFt`/`BandPairSeparationFt`/`HeaderNearFt`/
+  `SeedPixelSize`), and `CellFt` (Replay fail-fasts on mismatch). `FloorTolFt`/`StoryCapFt` are
+  half-replayable: they re-gate existing values offline (tightening is honest) but cannot admit
+  cells the capture window excluded. All other `LEVEL_POLICY` knobs (RequireCeiling, both
+  sealers, MinCompactness, MinHeadroomFt, MinCeilingFrac, partition/simplify knobs) are fully
+  downstream and iterate offline honestly.
+
 ## Traps (new ones from this pass — the old list in git history still applies)
 
 - **`dotnet test` in the worktree poisons the emitter**: the Pe.Revit.Ui WPF build drops a

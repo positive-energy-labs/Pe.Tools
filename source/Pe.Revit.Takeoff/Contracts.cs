@@ -82,6 +82,10 @@ public sealed class TakeoffOptions
                                             // minus ~2 ft. Three independent pods converged here.
     public int SeedPixelSize = 6000;        // ImageExportOptions.PixelSize for seed exports
     public string? EvidenceReferenceViewName; // production view whose graphics + orientation evidence should match
+    public bool DumpReplaySnapshot = true;  // Detect persists its post-Revit inputs (heightfield +
+                                            // seed ink) as replay_<level>.bin so detection changes
+                                            // iterate OFFLINE via DetectSnapshot.Replay — see the
+                                            // DetectSnapshot header for what stays live-only
     public string Marker = "PE-TAKEOFF";    // stamped into Comments of everything we create
     public string? ArtifactDir;             // where TSV/PNG artifacts land (default: temp)
 }
