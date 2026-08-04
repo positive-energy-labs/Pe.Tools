@@ -168,7 +168,7 @@ construction (every domain cell is in an emitted room, a logged border drop, or 
 
 ---
 
-# Phase 3 — wall-line arrangement snapping (in flight)
+# Phase 3 — wall-line arrangement snapping (complete)
 
 ## Checkpoint state (2026-08-04, pre-implementation checkpoint under power-loss warning)
 
@@ -213,3 +213,48 @@ MID-FLIGHT: nothing coded yet — checkpoint landed before first edit.
 NEXT STEP: write BoundarySnap.cs exactly per the design above, add the ~10 Snap* options to
 TakeoffOptions (Contracts.cs), wire the emit path in PartitionFormulation.Run, build, green the
 26 NoDocumentRuntime tests + new synthetic tests, then replay+score vs the pinned control.
+
+## Completion re-baseline (2026-08-05, upgraded geometric oracle)
+
+The implementation above is complete. `BoundarySnap` derives its directions from each level's
+evidence, snaps every shared chain once, and is reached only by the Partition formulation. The
+staged guard rejects touched output that fails the simple-polygon check and bounds each touched
+room's area drift by `max(0.5 sqft, 1%)`; an untouched or fully reverted room now returns its
+original raster loop byte-for-byte instead of rebuilding an equivalent but differently ordered
+invalid ring.
+
+One settled-design value changed during implementation: `SnapMaxCornerMoveFt` is 2.5 ft, not the
+provisional ~1.2 ft. The required diagonal fixture demonstrated that raster tie-breaking inside a
+wall-joint blob can put the raw corner more than 1.2 ft from the derived line intersection. Fitted
+runs still obey the 0.8 ft point-deviation cap; evidence-backed terminal stubs are separately
+bounded by the 2.5 ft corner cap and the per-room area guard.
+
+The checkpoint numbers above predate the oracle upgrade and are retained only as history. Fresh
+five-snapshot replays on the current 118-room oracle produced:
+
+| Metric | Partition, snap off (control) | Partition, snap on | Delta vs control |
+| --- | ---: | ---: | ---: |
+| TOTAL score | 54.1 | 54.1 | 0.0 |
+| High-confidence score (92 rooms) | 56.5 | 56.5 | 0.0 |
+| Wall recall at 1.5 ft | 54.1% | 53.7% | -0.4 pp |
+| Taxonomy (fragmented / merged / ok / shape-poor) | 35 / 23 / 27 / 33 | 35 / 23 / 27 / 33 | unchanged |
+| L0 mIoU (73 candidates) | 0.414 | 0.414 | 0.000 |
+| L1 mIoU (82 candidates) | 0.526 | 0.526 | 0.000 |
+| L2 mIoU (79 candidates) | 0.622 | 0.623 | +0.001 |
+| L3 mIoU (51 candidates) | 0.475 | 0.475 | 0.000 |
+
+Snap coverage was deliberately conservative: Lower 399/7,281 ft (5%), Theatre 0/804 ft,
+Main 131/12,980 ft (1%), Upper 369/7,742 ft (5%), and Attic 167/5,520 ft (3%). The A/B outputs
+kept all 285 candidate rooms. Fifty exported room areas changed; the internal unrounded guard
+accepted no drift beyond its bound. The largest ratio visible in the one-decimal TSVs is 1.006%,
+which is a rounding artifact at the limit, not the value tested by the guard.
+
+Validation: `Pe.Revit.Tests` built in `Debug.R25.Tests`; the complete
+`LibraryBehavior.NoDocumentRuntime` lane excluding `ProjectAEvalRun` passed; both Partition replay
+lanes emitted all five level TSVs and scored successfully. Synthetic checks cover shared tiling,
+bounded drift, a single-segment diagonal, preservation of unsupported boundaries, no-evidence
+byte identity, deterministic Partition replay, and Regions byte identity when the snap option is
+toggled. Production snap code contains no project-a-specific level names, angles, or constants.
+
+Outcome: Phase 3 improves selected outlines but is neutral on the headline score and slightly
+negative on mined-wall recall. That is the measured result, not a scoring win.

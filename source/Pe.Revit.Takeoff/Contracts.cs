@@ -139,11 +139,7 @@ public sealed class TakeoffOptions
     public double SnapMaxDevFt = 0.8;       // max point deviation for a run to claim a line
     public double SnapColinearTolFt = 0.6;  // colinear runs within this offset share ONE wall line
     public double SnapMinBackedFrac = 0.5;  // fraction of window edges that must be evidence-backed
-    public double SnapMaxCornerMoveFt = 2.5; // cap on junction/corner movement to line
-                                             // intersections — watershed tie-breaking drifts
-                                             // inside wall-JOINT ink blobs, so the true corner
-                                             // can sit a couple of feet from the raster one;
-                                             // the per-room area guard bounds overreach
+    public double SnapMaxCornerMoveFt = 2.5; // cap on corner and terminal-stub movement to a line
     public string Marker = "PE-TAKEOFF";    // stamped into Comments of everything we create
     public string? ArtifactDir;             // where TSV/PNG artifacts land (default: temp)
 }

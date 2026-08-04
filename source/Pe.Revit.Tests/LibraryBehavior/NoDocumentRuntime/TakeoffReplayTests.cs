@@ -289,7 +289,8 @@ public sealed class TakeoffReplayTests
             Field = hf, SeedInk = ink,
         };
         var opt = PartitionOptions();
-        var snapped = snap.Replay(opt, _ => { });
+        var snapLog = new List<string>();
+        var snapped = snap.Replay(opt, snapLog.Add);
         opt.SnapBoundaries = false;
         var raw = snap.Replay(opt, _ => { });
 
@@ -298,7 +299,10 @@ public sealed class TakeoffReplayTests
         var triRaw = raw.Rooms.OrderBy(r => r.RawSqft).First();
         Assert.Multiple(() => {
             Assert.That(triRaw.Polygon.Count, Is.GreaterThan(20), "control: raster staircase");
-            Assert.That(triSnap.Polygon.Count, Is.EqualTo(3), "hypotenuse must be ONE segment");
+            Assert.That(triSnap.Polygon.Count, Is.EqualTo(3),
+                "hypotenuse must be ONE segment; polygon=" +
+                string.Join(" ", triSnap.Polygon.Select(v => $"({v[0]:F2},{v[1]:F2})")) +
+                "; log=" + string.Join(" | ", snapLog));
             Assert.That(Math.Abs(triSnap.RawSqft - triRaw.RawSqft),
                 Is.LessThanOrEqualTo(Math.Max(0.5, 0.01 * triRaw.RawSqft)), "area bound");
         });
@@ -353,6 +357,30 @@ public sealed class TakeoffReplayTests
             .ToList();
         Assert.That(MidVerts(snappedRun), Is.EqualTo(MidVerts(rawRun)),
             "no-evidence boundary must stay as-is (jaggedness is information)");
+    }
+
+    [Test]
+    public void Snap_without_evidence_is_byte_identical_to_control()
+    {
+        var snap = BuildSyntheticEstate();
+        snap.SeedInk = new bool[snap.Field.W * snap.Field.H];
+        var opt = PartitionOptions();
+        var snapped = snap.Replay(opt, _ => { });
+        opt.SnapBoundaries = false;
+        var control = snap.Replay(opt, _ => { });
+
+        Assert.That(snapped.ToTsv(), Is.EqualTo(control.ToTsv()));
+    }
+
+    [Test]
+    public void Snap_option_does_not_change_regions()
+    {
+        var snap = BuildSyntheticEstate();
+        var opt = new TakeoffOptions { CellFt = snap.Field.CellFt, SnapBoundaries = false };
+        var control = snap.Replay(opt, _ => { });
+        opt.SnapBoundaries = true;
+
+        Assert.That(snap.Replay(opt, _ => { }).ToTsv(), Is.EqualTo(control.ToTsv()));
     }
 
     [Test]

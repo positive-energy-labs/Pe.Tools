@@ -387,36 +387,41 @@ internal static class BoundarySnap
                     ch.Runs.RemoveAt(ch.Runs.Count - 1);
                 }
             }
+        }
 
-            // terminal absorption: clamped windows at open-chain ends have arbitrary secant
-            // parity, and watershed fronts drift inside wall-JOINT ink blobs, leaving short raw
-            // stubs before the junction. When the stub itself is evidence-backed (it lives in
-            // wall ink), the fitted line is the better centerline estimate — extend the line to
-            // the junction (which then sees it as an intersection candidate). Unbacked stubs
-            // (open-plan jags) stay raw; the per-room area guard bounds any overreach.
-            bool StubBacked(Run r)
+        // Clamped secant windows leave short raw stubs at open-chain junctions. Absorb only
+        // evidence-backed stubs whose move onto the fitted line stays within the corner cap.
+        double terminalMaxFt = opt.SnapWindowFt + 2 * cellFt;
+        bool StubBacked(Chain chain, Run stub)
+        {
+            int backed = 0;
+            for (int e = stub.Start; e <= stub.End; e++)
+                if (eBacked[chain.Edges[e]]) backed++;
+            return backed >= opt.SnapMinBackedFrac * (stub.End - stub.Start + 1);
+        }
+        bool WithinCornerMove(Chain chain, Run stub, Run line)
+        {
+            double nx = -Math.Sin(dirs[line.Dir]), ny = Math.Cos(dirs[line.Dir]);
+            for (int p = stub.Start; p <= stub.End + 1; p++)
+                if (Math.Abs(chain.X[p] * nx + chain.Y[p] * ny - line.Offset) > opt.SnapMaxCornerMoveFt)
+                    return false;
+            return true;
+        }
+        foreach (var ch in chains.Where(c => !c.Closed))
+        {
+            if (ch.Runs.Count >= 2 && ch.Runs[0].Dir < 0 && ch.Runs[1].Dir >= 0
+                && (ch.Runs[0].End - ch.Runs[0].Start + 1) * cellFt <= terminalMaxFt
+                && StubBacked(ch, ch.Runs[0]) && WithinCornerMove(ch, ch.Runs[0], ch.Runs[1]))
             {
-                int backed = 0;
-                for (int e = r.Start; e <= r.End; e++)
-                    if (eBacked[ch.Edges[e]]) backed++;
-                return backed >= opt.SnapMinBackedFrac * (r.End - r.Start + 1);
+                ch.Runs[1].Start = ch.Runs[0].Start;
+                ch.Runs.RemoveAt(0);
             }
-            if (!ch.Closed)
+            if (ch.Runs.Count >= 2 && ch.Runs[^1].Dir < 0 && ch.Runs[^2].Dir >= 0
+                && (ch.Runs[^1].End - ch.Runs[^1].Start + 1) * cellFt <= terminalMaxFt
+                && StubBacked(ch, ch.Runs[^1]) && WithinCornerMove(ch, ch.Runs[^1], ch.Runs[^2]))
             {
-                if (ch.Runs.Count >= 2 && ch.Runs[0].Dir < 0 && ch.Runs[1].Dir >= 0
-                    && (ch.Runs[0].End - ch.Runs[0].Start + 1) * cellFt <= opt.SnapWindowFt
-                    && StubBacked(ch.Runs[0]))
-                {
-                    ch.Runs[1].Start = ch.Runs[0].Start;
-                    ch.Runs.RemoveAt(0);
-                }
-                if (ch.Runs.Count >= 2 && ch.Runs[^1].Dir < 0 && ch.Runs[^2].Dir >= 0
-                    && (ch.Runs[^1].End - ch.Runs[^1].Start + 1) * cellFt <= opt.SnapWindowFt
-                    && StubBacked(ch.Runs[^1]))
-                {
-                    ch.Runs[^2].End = ch.Runs[^1].End;
-                    ch.Runs.RemoveAt(ch.Runs.Count - 1);
-                }
+                ch.Runs[^2].End = ch.Runs[^1].End;
+                ch.Runs.RemoveAt(ch.Runs.Count - 1);
             }
         }
 
@@ -464,6 +469,13 @@ internal static class BoundarySnap
         }
         var loopsById = emitIds.ToDictionary(
             id => id, id => Detector.TraceLoops(cellsById[id], mapped, id, W, H));
+        var rawById = loopsById.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value
+                .Select(lp => lp.Select(v => new[] { minX + v.x * cellFt, minY + v.y * cellFt }).ToList())
+                .Select(Detector.CollapseCollinear)
+                .Where(p => p.Count >= 3)
+                .ToList());
 
         // ---- snap + guard + staged revert loop (per-chain: full -> conservative -> raw) ----
         var frozen = new HashSet<int>();
@@ -490,8 +502,6 @@ internal static class BoundarySnap
             var failures = new List<int>();
             foreach (int id in emitIds)
             {
-                var loops = AssembleLoops(loopsById[id], chains, edgeChain, eN1, eN2, nodeW);
-                var collapsed = loops.Select(Detector.CollapseCollinear).Where(p => p.Count >= 3).ToList();
                 bool touched = false;
                 foreach (int ci in roomChains[id])
                 {
@@ -501,7 +511,14 @@ internal static class BoundarySnap
                         if (jpos.ContainsKey(node)) { touched = true; break; }
                     if (touched) break;
                 }
-                if (touched && !GuardOk(collapsed, cellsById[id].Count * cellArea))
+                if (!touched)
+                {
+                    result[id] = rawById[id];
+                    continue;
+                }
+                var loops = AssembleLoops(loopsById[id], chains, edgeChain, eN1, eN2, nodeW);
+                var collapsed = loops.Select(Detector.CollapseCollinear).Where(p => p.Count >= 3).ToList();
+                if (!GuardOk(collapsed, cellsById[id].Count * cellArea))
                 { failures.Add(id); continue; }
                 result[id] = collapsed;
             }
@@ -758,7 +775,9 @@ internal static class BoundarySnap
         foreach (var p in collapsed)
             if (!IsSimple(p)) return false;
         var areas = collapsed.Select(p => Math.Abs(Detector.Shoelace(p))).ToList();
-        double outer = areas.Max();
+        int outerIndex = areas.IndexOf(areas.Max());
+        if (!RingsFormPolygon(collapsed, outerIndex)) return false;
+        double outer = areas[outerIndex];
         double net = 2 * outer - areas.Sum();
         double bound = Math.Max(MaxAreaDriftSqft, MaxAreaDriftFrac * rasterSqft);
         return Math.Abs(net - rasterSqft) <= bound;
@@ -767,16 +786,78 @@ internal static class BoundarySnap
     private static bool IsSimple(List<double[]> p)
     {
         int m = p.Count;
-        for (int i = 0; i < m; i++)
+        const double eps = 1e-9;
+        var segments = Enumerable.Range(0, m)
+            .Select(i => {
+                var start = p[i]; var end = p[(i + 1) % m];
+                return (index: i, start, end,
+                    minX: Math.Min(start[0], end[0]), maxX: Math.Max(start[0], end[0]),
+                    minY: Math.Min(start[1], end[1]), maxY: Math.Max(start[1], end[1]));
+            })
+            .OrderBy(s => s.minX).ThenBy(s => s.maxX).ThenBy(s => s.index)
+            .ToList();
+        for (int si = 0; si < m; si++)
         {
-            var a1 = p[i]; var a2 = p[(i + 1) % m];
-            for (int j = i + 2; j < m; j++)
+            var a = segments[si];
+            for (int sj = si + 1; sj < m && segments[sj].minX <= a.maxX + eps; sj++)
             {
-                if (i == 0 && j == m - 1) continue;   // adjacent via wrap
-                if (SegmentsCross(a1, a2, p[j], p[(j + 1) % m])) return false;
+                var b = segments[sj];
+                if (Math.Abs(a.index - b.index) == 1 || Math.Abs(a.index - b.index) == m - 1) continue;
+                if (b.maxY < a.minY - eps || b.minY > a.maxY + eps) continue;
+                if (SegmentsCross(a.start, a.end, b.start, b.end)) return false;
             }
         }
         return true;
+    }
+
+    private static bool RingsFormPolygon(List<List<double[]>> rings, int outerIndex)
+    {
+        var segments = rings.SelectMany((ring, ringIndex) => Enumerable.Range(0, ring.Count)
+                .Select(i => {
+                    var start = ring[i]; var end = ring[(i + 1) % ring.Count];
+                    return (ringIndex, start, end,
+                        minX: Math.Min(start[0], end[0]), maxX: Math.Max(start[0], end[0]),
+                        minY: Math.Min(start[1], end[1]), maxY: Math.Max(start[1], end[1]));
+                }))
+            .OrderBy(s => s.minX).ThenBy(s => s.maxX).ThenBy(s => s.ringIndex)
+            .ToList();
+        const double eps = 1e-9;
+        for (int i = 0; i < segments.Count; i++)
+        {
+            var a = segments[i];
+            for (int j = i + 1; j < segments.Count && segments[j].minX <= a.maxX + eps; j++)
+            {
+                var b = segments[j];
+                if (a.ringIndex == b.ringIndex) continue;
+                if (b.maxY < a.minY - eps || b.minY > a.maxY + eps) continue;
+                if (SegmentsCross(a.start, a.end, b.start, b.end)) return false;
+            }
+        }
+
+        var outer = rings[outerIndex];
+        for (int i = 0; i < rings.Count; i++)
+        {
+            if (i == outerIndex) continue;
+            if (!Contains(outer, rings[i][0])) return false;
+            for (int j = 0; j < i; j++)
+                if (j != outerIndex
+                    && (Contains(rings[i], rings[j][0]) || Contains(rings[j], rings[i][0])))
+                    return false;
+        }
+        return true;
+    }
+
+    private static bool Contains(List<double[]> ring, double[] point)
+    {
+        bool inside = false;
+        for (int i = 0, j = ring.Count - 1; i < ring.Count; j = i++)
+        {
+            var a = ring[i]; var b = ring[j];
+            if ((a[1] > point[1]) != (b[1] > point[1])
+                && point[0] < (b[0] - a[0]) * (point[1] - a[1]) / (b[1] - a[1]) + a[0])
+                inside = !inside;
+        }
+        return inside;
     }
 
     private static bool SegmentsCross(double[] a1, double[] a2, double[] b1, double[] b2)
