@@ -4,13 +4,31 @@
  * rooms that have no polygon listed separately. Click a matched polygon to
  * select that room in the grid; the focused room's polygon highlights. Plain
  * SVG: viewBox fit per level, wheel zoom about the cursor, drag to pan.
+ *
+ * Ambiguity flags (Partition formulation) get a distinct clay dashed state and
+ * a "needs decision" queue: each flag resolves with one touch — accept, or for
+ * open-plan-merge draw a split chord (two clicks on the boundary; the polygon
+ * bisects deterministically). Levels arrive already resolved; this pane only
+ * reports new resolutions upward.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "#/components/ui/button";
 import { fmtNum } from "#/rhvac/cells";
+import {
+  nearestOnRing,
+  pendingFlags,
+  type FlagResolution,
+  type PendingFlag,
+} from "#/rhvac/resolutions";
 import { levelBounds, shapeCentroid, shapePathD, type Bounds } from "#/rhvac/takeoff";
-import { candidateKey, type RhvacRoom, type RhvacTakeoffData } from "#/rhvac/types";
+import {
+  candidateKey,
+  KNOWN_FLAG_KINDS,
+  type RhvacRoom,
+  type RhvacTakeoffData,
+  type TakeoffLevel,
+} from "#/rhvac/types";
 import { cn } from "#/lib/utils";
 
 interface ViewBox {
@@ -30,7 +48,17 @@ const fitView = (bounds: Bounds): ViewBox => {
   };
 };
 
+/** In-flight split-chord draft: the room being split and its first clicked point (model coords). */
+interface SplitDraft {
+  candidateKey: string;
+  levelIndex: number;
+  roomId: string;
+  flag: string;
+  first: [number, number] | null;
+}
+
 export interface PlanPaneProps {
+  /** Already resolved — routes apply the resolutions sidecar before passing levels here. */
   takeoff: RhvacTakeoffData | null;
   takeoffError: string | null;
   rooms: RhvacRoom[];
@@ -40,11 +68,18 @@ export interface PlanPaneProps {
   skipReasonById: ReadonlyMap<number, string>;
   focusedId: number | null;
   onPickRoom: (identifier: number) => void;
+  /** Count of durable resolutions already recorded for this takeoff source. */
+  resolutionCount: number;
+  onResolve: (resolution: FlagResolution) => void;
+  onDownloadResolutions: () => void;
+  onResetResolutions: () => void;
 }
 
 export function PlanPane(props: PlanPaneProps) {
   const { takeoff, rooms, matchByCandidate, focusedId } = props;
   const [levelIndex, setLevelIndex] = useState(0);
+  const [focusedFlagKey, setFocusedFlagKey] = useState<string | null>(null);
+  const [splitDraft, setSplitDraft] = useState<SplitDraft | null>(null);
 
   const roomsById = useMemo(() => new Map(rooms.map((r) => [r.identifier, r])), [rooms]);
   const matchedIds = useMemo(() => new Set(matchByCandidate.values()), [matchByCandidate]);
@@ -52,6 +87,7 @@ export function PlanPane(props: PlanPaneProps) {
     () => rooms.filter((r) => !matchedIds.has(r.identifier)),
     [rooms, matchedIds],
   );
+  const pending = useMemo(() => (takeoff ? pendingFlags(takeoff.levels) : []), [takeoff]);
 
   if (!takeoff) {
     return (
@@ -69,6 +105,42 @@ export function PlanPane(props: PlanPaneProps) {
   const level = takeoff.levels[Math.min(levelIndex, takeoff.levels.length - 1)];
   if (!level) return <p className="p-3 text-xs text-muted-foreground">Takeoff has no levels.</p>;
 
+  const focusFlag = (flag: PendingFlag) => {
+    setLevelIndex(flag.levelIndex);
+    setFocusedFlagKey(flag.candidateKey);
+  };
+
+  const beginSplit = (flag: PendingFlag) => {
+    focusFlag(flag);
+    setSplitDraft({
+      candidateKey: flag.candidateKey,
+      levelIndex: flag.levelIndex,
+      roomId: flag.roomId,
+      flag: flag.flag,
+      first: null,
+    });
+  };
+
+  const resolve = (resolution: FlagResolution) => {
+    setSplitDraft(null);
+    setFocusedFlagKey(null);
+    props.onResolve(resolution);
+  };
+
+  const onSplitPoint = (point: [number, number]) => {
+    if (!splitDraft) return;
+    if (splitDraft.first === null) {
+      setSplitDraft({ ...splitDraft, first: point });
+      return;
+    }
+    resolve({
+      candidateKey: splitDraft.candidateKey,
+      flag: splitDraft.flag,
+      action: "split",
+      params: { a: splitDraft.first, b: point },
+    });
+  };
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 flex-wrap gap-1 border-b border-[var(--line)] px-2 py-1.5">
@@ -81,25 +153,66 @@ export function PlanPane(props: PlanPaneProps) {
             title={l.levelName}
           >
             {l.levelName.split("/").pop() ?? l.levelName}
+            {pending.some((p) => p.levelIndex === i) && (
+              <span className="ml-1 inline-block size-1.5 rounded-full bg-cat-clay" />
+            )}
           </Button>
         ))}
       </div>
 
-      <LevelSvg
-        key={level.levelName}
-        level={level}
-        roomsById={roomsById}
-        matchByCandidate={matchByCandidate}
-        focusedId={focusedId}
-        onPickRoom={props.onPickRoom}
-      />
+      <div className="relative min-h-0 flex-1">
+        <LevelSvg
+          key={level.levelName}
+          level={level}
+          roomsById={roomsById}
+          matchByCandidate={matchByCandidate}
+          focusedId={focusedId}
+          focusedFlagKey={focusedFlagKey}
+          splitDraft={splitDraft?.levelIndex === levelIndex ? splitDraft : null}
+          onPickRoom={props.onPickRoom}
+          onPickFlagged={setFocusedFlagKey}
+          onSplitPoint={onSplitPoint}
+        />
+        {splitDraft && (
+          <div className="absolute inset-x-2 bottom-2 flex items-center gap-2 rounded-[var(--radius)] border border-cat-clay/40 bg-background/95 px-2.5 py-1.5 shadow-sm">
+            <span className="tele text-cat-clay">
+              split {splitDraft.roomId} — click boundary point{" "}
+              {splitDraft.first ? "2 of 2" : "1 of 2"}
+            </span>
+            <Button
+              size="xs"
+              variant="ghost"
+              className="ml-auto"
+              onClick={() => setSplitDraft(null)}
+            >
+              cancel
+            </Button>
+          </div>
+        )}
+      </div>
 
       <div className="flex shrink-0 items-center gap-3 border-t border-[var(--line)] px-2.5 py-1">
         <LegendChip color="var(--cat-blue)" label="matched" />
         <LegendChip color="var(--cat-kiln)" label="unmatched" />
+        {pending.length > 0 && <LegendChip color="var(--cat-clay)" label="flagged" dashed />}
         <LegendChip color="var(--primary)" label="selected" />
         <span className="tele ml-auto text-muted-foreground">wheel zoom · drag pan</span>
       </div>
+
+      {(pending.length > 0 || props.resolutionCount > 0) && (
+        <FlagQueue
+          pending={pending}
+          focusedFlagKey={focusedFlagKey}
+          resolutionCount={props.resolutionCount}
+          onFocus={focusFlag}
+          onBeginSplit={beginSplit}
+          onAccept={(flag) =>
+            resolve({ candidateKey: flag.candidateKey, flag: flag.flag, action: "accept" })
+          }
+          onDownload={props.onDownloadResolutions}
+          onReset={props.onResetResolutions}
+        />
+      )}
 
       {unmatchedRooms.length > 0 && (
         <div className="max-h-40 shrink-0 overflow-y-auto border-t border-[var(--line)] px-2.5 py-1.5">
@@ -135,11 +248,90 @@ export function PlanPane(props: PlanPaneProps) {
   );
 }
 
-function LegendChip({ color, label }: { color: string; label: string }) {
+/**
+ * Compact "needs decision" queue — one row per unresolved ambiguity flag, with
+ * its one-touch resolutions inline. The detector refused to guess here; every
+ * row is a human call, recorded durably in the resolutions sidecar.
+ */
+function FlagQueue({
+  pending,
+  focusedFlagKey,
+  resolutionCount,
+  onFocus,
+  onBeginSplit,
+  onAccept,
+  onDownload,
+  onReset,
+}: {
+  pending: PendingFlag[];
+  focusedFlagKey: string | null;
+  resolutionCount: number;
+  onFocus: (flag: PendingFlag) => void;
+  onBeginSplit: (flag: PendingFlag) => void;
+  onAccept: (flag: PendingFlag) => void;
+  onDownload: () => void;
+  onReset: () => void;
+}) {
+  const counts = new Map<string, number>();
+  for (const flag of pending) counts.set(flag.flag, (counts.get(flag.flag) ?? 0) + 1);
+
+  return (
+    <div className="max-h-48 shrink-0 overflow-y-auto border-t border-cat-clay/30 bg-cat-clay/5 px-2.5 py-1.5">
+      <p className="section-label mb-1 text-cat-clay">
+        needs decision
+        <span className="tele ml-1.5 normal-case">
+          {[...counts.entries()].map(([kind, n]) => `${n} ${kind}`).join(" · ") || "none pending"}
+        </span>
+      </p>
+      <ul className="space-y-px">
+        {pending.map((flag) => (
+          <li
+            key={`${flag.candidateKey}:${flag.flag}`}
+            className={cn(
+              "flex items-center gap-1.5 rounded-[var(--radius)] px-1 py-px",
+              focusedFlagKey === flag.candidateKey && "bg-cat-clay/10",
+            )}
+          >
+            <button
+              type="button"
+              className="tele min-w-0 flex-1 truncate text-left hover:underline"
+              title={`${flag.levelName} · ${KNOWN_FLAG_KINDS[flag.flag as keyof typeof KNOWN_FLAG_KINDS] ?? flag.flag}`}
+              onClick={() => onFocus(flag)}
+            >
+              {flag.roomId} <span className="text-muted-foreground">{flag.flag}</span>{" "}
+              <span className="text-muted-foreground">{fmtNum(flag.rawSqft, 0)} sf</span>
+            </button>
+            {flag.flag === "open-plan-merge" && (
+              <Button size="xs" variant="outline" onClick={() => onBeginSplit(flag)}>
+                split
+              </Button>
+            )}
+            <Button size="xs" variant="ghost" onClick={() => onAccept(flag)}>
+              {flag.flag === "open-plan-merge" ? "keep as one" : "accept"}
+            </Button>
+          </li>
+        ))}
+      </ul>
+      {resolutionCount > 0 && (
+        <div className="mt-1 flex items-center gap-1.5 border-t border-cat-clay/20 pt-1">
+          <span className="tele text-muted-foreground">{resolutionCount} resolved</span>
+          <Button size="xs" variant="ghost" className="ml-auto" onClick={onDownload}>
+            download json
+          </Button>
+          <Button size="xs" variant="ghost" onClick={onReset}>
+            reset
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LegendChip({ color, label, dashed }: { color: string; label: string; dashed?: boolean }) {
   return (
     <span className="tele inline-flex items-center gap-1 text-muted-foreground">
       <span
-        className="inline-block size-2.5 rounded-[1px] border"
+        className={cn("inline-block size-2.5 rounded-[1px] border", dashed && "border-dashed")}
         style={{
           background: `color-mix(in srgb, ${color} 18%, transparent)`,
           borderColor: color,
@@ -155,13 +347,21 @@ function LevelSvg({
   roomsById,
   matchByCandidate,
   focusedId,
+  focusedFlagKey,
+  splitDraft,
   onPickRoom,
+  onPickFlagged,
+  onSplitPoint,
 }: {
-  level: RhvacTakeoffData["levels"][number];
+  level: TakeoffLevel;
   roomsById: ReadonlyMap<number, RhvacRoom>;
   matchByCandidate: ReadonlyMap<string, number>;
   focusedId: number | null;
+  focusedFlagKey: string | null;
+  splitDraft: SplitDraft | null;
   onPickRoom: (identifier: number) => void;
+  onPickFlagged: (candidateKey: string) => void;
+  onSplitPoint: (point: [number, number]) => void;
 }) {
   const bounds = useMemo(() => levelBounds(level), [level]);
   const initial = useMemo(() => (bounds ? fitView(bounds) : null), [bounds]);
@@ -172,10 +372,13 @@ function LevelSvg({
   const shapes = useMemo(() => {
     if (!bounds) return [];
     return level.rooms.map((shape) => {
-      const identifier = matchByCandidate.get(candidateKey(level.levelName, shape.id));
+      const key = candidateKey(level.levelName, shape.id);
+      const identifier = matchByCandidate.get(key);
       return {
         shape,
+        key,
         identifier,
+        flagged: (shape.flags?.length ?? 0) > 0,
         d: shapePathD(shape, bounds),
         centroid: shapeCentroid(shape, bounds),
       };
@@ -208,6 +411,37 @@ function LevelSvg({
     return <p className="p-3 text-xs text-muted-foreground">Level has no polygons.</p>;
   const v = view ?? initial;
   const fontSize = initial.w / 70;
+  /** Model Y is up, SVG Y is down — same mirror as takeoff.ts flipY. */
+  const toModel = (svgX: number, svgY: number): [number, number] => [
+    svgX,
+    bounds.minY + bounds.maxY - svgY,
+  ];
+  const toSvgY = (modelY: number) => bounds.minY + bounds.maxY - modelY;
+
+  /** Exact client→viewBox mapping (screen CTM honors xMidYMid letterboxing). */
+  const clientToSvg = (clientX: number, clientY: number): [number, number] => {
+    const el = svgRef.current!;
+    const ctm = el.getScreenCTM();
+    if (ctm) {
+      const p = new DOMPoint(clientX, clientY).matrixTransform(ctm.inverse());
+      return [p.x, p.y];
+    }
+    const rect = el.getBoundingClientRect();
+    return [
+      v.x + ((clientX - rect.left) / rect.width) * v.w,
+      v.y + ((clientY - rect.top) / rect.height) * v.h,
+    ];
+  };
+
+  const onSvgClick = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (!splitDraft || draggedRef.current) return;
+    const target = level.rooms.find((room) => room.id === splitDraft.roomId);
+    if (!target) return;
+    const [sx, sy] = clientToSvg(e.clientX, e.clientY);
+    // Snap the raw click to the room's outer ring so the recorded chord is
+    // deterministic against a re-parse of the same TSV.
+    onSplitPoint(nearestOnRing(target.outer, toModel(sx, sy)).point);
+  };
 
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     const el = svgRef.current;
@@ -239,28 +473,42 @@ function LevelSvg({
     <svg
       ref={svgRef}
       viewBox={`${v.x} ${v.y} ${v.w} ${v.h}`}
-      className="min-h-0 flex-1 touch-none bg-card"
+      className={cn("size-full touch-none bg-card", splitDraft && "cursor-crosshair")}
       preserveAspectRatio="xMidYMid meet"
       onPointerDown={onPointerDown}
+      onClick={onSvgClick}
       onDoubleClick={() => setView(initial)}
     >
       <title>{level.levelName}</title>
-      {shapes.map(({ shape, identifier, d, centroid }) => {
+      {shapes.map(({ shape, key, identifier, flagged, d, centroid }) => {
         const room = identifier !== undefined ? roomsById.get(identifier) : undefined;
-        const selected = identifier !== undefined && identifier === focusedId;
-        const stroke = selected ? "var(--primary)" : room ? "var(--cat-blue)" : "var(--cat-kiln)";
+        const selected =
+          (identifier !== undefined && identifier === focusedId) ||
+          (flagged && key === focusedFlagKey);
+        const stroke = selected
+          ? flagged
+            ? "var(--cat-clay)"
+            : "var(--primary)"
+          : flagged
+            ? "var(--cat-clay)"
+            : room
+              ? "var(--cat-blue)"
+              : "var(--cat-kiln)";
         const fill = selected
-          ? "color-mix(in srgb, var(--primary) 28%, transparent)"
-          : room
-            ? "color-mix(in srgb, var(--cat-blue) 12%, transparent)"
-            : "color-mix(in srgb, var(--cat-kiln) 10%, transparent)";
+          ? `color-mix(in srgb, ${flagged ? "var(--cat-clay)" : "var(--primary)"} 28%, transparent)`
+          : flagged
+            ? "color-mix(in srgb, var(--cat-clay) 12%, transparent)"
+            : room
+              ? "color-mix(in srgb, var(--cat-blue) 12%, transparent)"
+              : "color-mix(in srgb, var(--cat-kiln) 10%, transparent)";
         return (
           <g
             key={shape.id}
-            className={cn(identifier !== undefined && "cursor-pointer")}
+            className={cn((identifier !== undefined || flagged) && "cursor-pointer")}
             onClick={() => {
-              if (draggedRef.current || identifier === undefined) return;
-              onPickRoom(identifier);
+              if (draggedRef.current || splitDraft) return;
+              if (identifier !== undefined) onPickRoom(identifier);
+              else if (flagged) onPickFlagged(key);
             }}
           >
             <path
@@ -268,8 +516,9 @@ function LevelSvg({
               fillRule="evenodd"
               fill={fill}
               stroke={stroke}
-              strokeOpacity={0.6}
-              strokeWidth={selected ? 2 : 1}
+              strokeOpacity={flagged ? 0.85 : 0.6}
+              strokeWidth={selected ? 2 : flagged ? 1.5 : 1}
+              strokeDasharray={flagged ? "5 3" : undefined}
               vectorEffect="non-scaling-stroke"
             />
             {shape.rawSqft > 30 && (
@@ -292,6 +541,18 @@ function LevelSvg({
           </g>
         );
       })}
+      {splitDraft?.first && (
+        <circle
+          cx={splitDraft.first[0]}
+          cy={toSvgY(splitDraft.first[1])}
+          r={fontSize * 0.35}
+          fill="var(--cat-clay)"
+          stroke="var(--background)"
+          strokeWidth={1}
+          vectorEffect="non-scaling-stroke"
+          className="pointer-events-none"
+        />
+      )}
     </svg>
   );
 }

@@ -145,6 +145,21 @@ export interface RhvacAssemblyCatalog {
 
 // ── Takeoff plan snapshots (source of truth: RhvacCandidateBuilder.ParseTsv) ──
 
+/**
+ * Ambiguity flags emitted by the detector's Partition formulation (backward-
+ * compatible `META flag <id>:<flag+flag>` TSV lines). The detector refuses to
+ * guess intent — each flag awaits a one-touch human resolution in the plan UI.
+ * Unknown kinds are preserved verbatim (forward-compatible).
+ */
+export const KNOWN_FLAG_KINDS = {
+  "open-plan-merge":
+    "rooms merged because no wall evidence separates them — decide the split (or accept as one)",
+  "low-evidence-boundary": "boundary placed on weak evidence — accept or adjust",
+  seedless: "space with no seed room — verify it is a real room",
+} as const;
+
+export type TakeoffFlagKind = keyof typeof KNOWN_FLAG_KINDS | (string & {});
+
 export interface TakeoffRoomShape {
   id: string;
   rawSqft: number;
@@ -153,6 +168,10 @@ export interface TakeoffRoomShape {
   /** CCW outer loop, feet. */
   outer: [number, number][];
   holes: [number, number][][];
+  /** Ambiguity flags, sorted; absent when the TSV predates flags or the room is clean. */
+  flags?: TakeoffFlagKind[];
+  /** Set on rooms produced by a resolved split — the original candidate id. */
+  splitFrom?: string;
 }
 
 export interface TakeoffLevel {

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { FlaskConical, FolderOpen, Loader2, Save } from "lucide-react";
+import { Flag, FlaskConical, FolderOpen, Loader2, Save } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
 import { Button } from "#/components/ui/button";
@@ -9,8 +9,16 @@ import { rhvacAssemblies, rhvacOpen, rhvacSave, rhvacTakeoff } from "#/host/rhva
 import { deriveAssemblyCatalog } from "#/rhvac/assemblies";
 import { fmtNum } from "#/rhvac/cells";
 import { useRhvacEditor, type RhvacEditor } from "#/rhvac/editor";
-import { loadFixtureExtract, loadFixtureTakeoff } from "#/rhvac/fixture";
+import { loadFixtureExtract, loadFixtureTakeoff, loadFlagDemoTakeoff } from "#/rhvac/fixture";
 import { PlanPane } from "#/rhvac/plan-pane";
+import {
+  applyResolutions,
+  loadStoredResolutions,
+  storeResolutions,
+  toResolutionsFile,
+  upsertResolution,
+  type FlagResolution,
+} from "#/rhvac/resolutions";
 import { RoomDetail } from "#/rhvac/room-detail";
 import { RoomsGrid } from "#/rhvac/rooms-grid";
 import type {
@@ -43,6 +51,9 @@ function RhvacRoute() {
   const [catalog, setCatalog] = useState<RhvacAssemblyCatalog | null>(null);
   const [takeoff, setTakeoff] = useState<RhvacTakeoffData | null>(null);
   const [takeoffError, setTakeoffError] = useState<string | null>(null);
+  /** Keys the ambiguity-flag resolutions sidecar in localStorage (host lane: the .r10 path). */
+  const [takeoffSourceKey, setTakeoffSourceKey] = useState<string | null>(null);
+  const [resolutions, setResolutions] = useState<FlagResolution[]>([]);
   /** Original room number → identifier, frozen at load (room-map matches by original number). */
   const [identByOrigNumber, setIdentByOrigNumber] = useState<Map<number, number>>(new Map());
 
@@ -54,6 +65,13 @@ function RhvacRoute() {
     setIdentByOrigNumber(new Map(extract.rooms.map((r) => [r.number, r.identifier])));
     setSelectedIds(new Set());
     setFocusedId(null);
+  };
+
+  /** Load a takeoff and rehydrate its durable flag resolutions (per-source sidecar). */
+  const acceptTakeoff = (data: RhvacTakeoffData | null, sourceKey: string) => {
+    setTakeoff(data);
+    setTakeoffSourceKey(sourceKey);
+    setResolutions(data ? loadStoredResolutions(sourceKey) : []);
   };
 
   const openFromHost = async () => {
@@ -71,10 +89,10 @@ function RhvacRoute() {
         setCatalog(deriveAssemblyCatalog(extract));
       }
       try {
-        setTakeoff(await rhvacTakeoff({ path }));
+        acceptTakeoff(await rhvacTakeoff({ path }), path);
         setTakeoffError(null);
       } catch (caught) {
-        setTakeoff(null);
+        acceptTakeoff(null, path);
         setTakeoffError(caught instanceof Error ? caught.message : "rhvac.takeoff failed");
       }
     } catch (caught) {
@@ -84,7 +102,7 @@ function RhvacRoute() {
     }
   };
 
-  const openFixture = async () => {
+  const openFixture = async (flagDemo = false) => {
     setOpening(true);
     setOpenError(null);
     try {
@@ -92,10 +110,13 @@ function RhvacRoute() {
       acceptExtract(extract, extract.sourceFile);
       setCatalog(deriveAssemblyCatalog(extract));
       try {
-        setTakeoff(await loadFixtureTakeoff());
+        acceptTakeoff(
+          flagDemo ? await loadFlagDemoTakeoff() : await loadFixtureTakeoff(),
+          flagDemo ? "fixture:flag-demo" : "fixture:project-a",
+        );
         setTakeoffError(null);
       } catch (caught) {
-        setTakeoff(null);
+        acceptTakeoff(null, flagDemo ? "fixture:flag-demo" : "fixture:project-a");
         setTakeoffError(caught instanceof Error ? caught.message : "fixture takeoff failed");
       }
     } catch (caught) {
@@ -104,6 +125,40 @@ function RhvacRoute() {
       setOpening(false);
     }
   };
+
+  /** Levels with the durable resolutions applied — what the plan pane (and later conversion) sees. */
+  const resolvedTakeoff = useMemo(
+    () => (takeoff ? { ...takeoff, levels: applyResolutions(takeoff.levels, resolutions) } : null),
+    [takeoff, resolutions],
+  );
+
+  const onResolveFlag = useCallback(
+    (resolution: FlagResolution) => {
+      setResolutions((prev) => {
+        const next = upsertResolution(prev, resolution);
+        if (takeoffSourceKey) storeResolutions(takeoffSourceKey, next);
+        return next;
+      });
+    },
+    [takeoffSourceKey],
+  );
+
+  const onResetResolutions = useCallback(() => {
+    setResolutions([]);
+    if (takeoffSourceKey) storeResolutions(takeoffSourceKey, []);
+  }, [takeoffSourceKey]);
+
+  const onDownloadResolutions = useCallback(() => {
+    const blob = new Blob([JSON.stringify(toResolutionsFile(resolutions), null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "takeoff-resolutions.json";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }, [resolutions]);
 
   const matchByCandidate = useMemo(() => {
     const map = new Map<string, number>();
@@ -187,6 +242,16 @@ function RhvacRoute() {
             <FlaskConical />
             project-a fixture
           </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={opening}
+            title="Load a tiny synthetic takeoff WITH ambiguity flags to exercise the resolution workflow"
+            onClick={() => void openFixture(true)}
+          >
+            <Flag />
+            Flag demo
+          </Button>
         </div>
       </header>
 
@@ -233,13 +298,17 @@ function RhvacRoute() {
             header={<span className="section-label">Plan · takeoff polygons</span>}
           >
             <PlanPane
-              takeoff={takeoff}
+              takeoff={resolvedTakeoff}
               takeoffError={takeoffError}
               rooms={editor.rooms}
               matchByCandidate={matchByCandidate}
               skipReasonById={skipReasonById}
               focusedId={focusedId}
               onPickRoom={setFocusedId}
+              resolutionCount={resolutions.length}
+              onResolve={onResolveFlag}
+              onDownloadResolutions={onDownloadResolutions}
+              onResetResolutions={onResetResolutions}
             />
           </SidePane>
         </div>

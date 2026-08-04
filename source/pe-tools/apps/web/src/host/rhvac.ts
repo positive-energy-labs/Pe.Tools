@@ -14,6 +14,7 @@
  * takeoff data is an empty result, not an error.
  */
 import { callHostDynamic } from "#/host/client";
+import type { ResolutionsFile } from "#/rhvac/resolutions";
 import { parseTakeoffTsv } from "#/rhvac/takeoff";
 import {
   normalizeExtract,
@@ -66,6 +67,26 @@ export async function rhvacAssemblies(path: string): Promise<RhvacAssemblyCatalo
 
 export async function rhvacSave(args: RhvacSaveArgs): Promise<RhvacSaveResult> {
   return (await callHostDynamic("rhvac.save", args)) as RhvacSaveResult;
+}
+
+export interface RhvacTakeoffResolutionsArgs {
+  /** The .r10 FILE path — the op writes `<dir>/takeoff-resolutions.json` next to the takeoff dir. */
+  path: string;
+  resolutions: ResolutionsFile;
+}
+
+/**
+ * CONTRACT STUB — `rhvac.takeoff-resolutions` is not implemented host-side yet.
+ * Persists the ambiguity-flag resolutions sidecar (deterministic JSON, no
+ * timestamps) next to the takeoff TSVs so resolved splits/accepts replay in
+ * every session and feed back into candidate generation. Until the op lands,
+ * the UI keeps resolutions in localStorage and offers a JSON download
+ * (src/rhvac/resolutions.ts) — same graceful degradation as the other ops.
+ */
+export async function rhvacSaveTakeoffResolutions(
+  args: RhvacTakeoffResolutionsArgs,
+): Promise<{ savedPath: string }> {
+  return (await callHostDynamic("rhvac.takeoff-resolutions", args)) as { savedPath: string };
 }
 
 export async function rhvacTakeoff(args: RhvacTakeoffArgs): Promise<RhvacTakeoffData> {

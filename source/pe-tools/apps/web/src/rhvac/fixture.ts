@@ -44,3 +44,15 @@ export async function loadFixtureTakeoff(): Promise<RhvacTakeoffData> {
   ]);
   return { levels: tsvTexts.map((text) => parseTakeoffTsv(text)), roomMap };
 }
+
+export const FLAG_DEMO_SOURCE_LABEL = "flag demo (synthetic ambiguity-flag TSV)";
+
+/**
+ * Synthetic single-level takeoff WITH `META flag` lines — the committed projectA
+ * TSVs predate the Partition formulation and carry none, so this is the lane
+ * for exercising the flag-resolution workflow until a flagged re-run lands.
+ */
+export async function loadFlagDemoTakeoff(): Promise<RhvacTakeoffData> {
+  const text = await fetchText("rooms_Synthetic_Flag_Demo.tsv");
+  return { levels: [parseTakeoffTsv(text)], roomMap: { matches: [], skip: [] } };
+}

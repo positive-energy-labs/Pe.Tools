@@ -5,7 +5,7 @@
  * Display-lenient where the C# parser throws: we surface a message instead of
  * refusing the whole plan pane.
  */
-import type { TakeoffLevel, TakeoffRoomShape } from "#/rhvac/types";
+import type { TakeoffFlagKind, TakeoffLevel, TakeoffRoomShape } from "#/rhvac/types";
 
 export function parseTakeoffTsv(tsvText: string, options?: { simplify?: boolean }): TakeoffLevel {
   let levelName: string | null = null;
@@ -21,6 +21,7 @@ export function parseTakeoffTsv(tsvText: string, options?: { simplify?: boolean 
       case "META":
         if (parts[1] === "level") levelName = parts[2] ?? null;
         else if (parts[1] === "elev") elevation = Number(parts[2]);
+        else if (parts[1] === "flag") applyFlagMeta(parts[2] ?? "", byId);
         // rooms / totalSqft are display metadata; ignored.
         break;
       case "ROOM": {
@@ -57,6 +58,25 @@ export function parseTakeoffTsv(tsvText: string, options?: { simplify?: boolean 
   const kept = rooms.filter((r) => r.outer.length >= 3);
   if (options?.simplify !== false) simplifyLevelLoops(kept);
   return { levelName, elevation, rooms: kept };
+}
+
+/**
+ * Ambiguity-flag META line payload: `<roomId>:<flag+flag>` (Contracts.cs ToTsv).
+ * Lenient by design — old TSVs have no flag lines, and a flag naming a room the
+ * parser dropped (or an id we've never seen) is silently ignored, matching the
+ * "unknown META keys are skipped" contract of the other consumers.
+ */
+function applyFlagMeta(payload: string, byId: Map<string, TakeoffRoomShape>): void {
+  const colon = payload.indexOf(":");
+  if (colon <= 0) return;
+  const room = byId.get(payload.slice(0, colon));
+  if (!room) return;
+  const kinds = payload
+    .slice(colon + 1)
+    .split("+")
+    .filter((kind) => kind.length > 0) as TakeoffFlagKind[];
+  if (kinds.length === 0) return;
+  room.flags = [...new Set([...(room.flags ?? []), ...kinds])].sort();
 }
 
 function parseLoop(text: string): [number, number][] {
