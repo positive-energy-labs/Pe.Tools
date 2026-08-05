@@ -55,8 +55,7 @@ for level in args.levels:
             "WriteTransaction", 600), "PREPARE", level)
     detected = check(run_script(
         f"detect-{level}.cs",
-        f'var r = Pe.Revit.Takeoff.RoomTakeoff.Detect(doc, "{level}", WriteLine, '
-        f'new Pe.Revit.Takeoff.TakeoffOptions {{ Formulation = Pe.Revit.Takeoff.TakeoffFormulation.Partition }});\n'
+        f'var r = Pe.Revit.Takeoff.RoomTakeoff.Detect(doc, "{level}", WriteLine);\n'
         f'Result(new {{ level = r.LevelName, rooms = r.Rooms.Count, totalSqft = r.TotalSqft }});',
         "ReadOnly", 1800), "DETECT", level)
     emitted_levels.append(detected["data"]["level"])

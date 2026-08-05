@@ -61,10 +61,9 @@ with jagged-but-correctly-placed boundaries.
 
 # Implementation record (2026-08-04, offline replay campaign)
 
-Landed as `TakeoffOptions.Formulation = Partition` (`PartitionFormulation.cs`); the Regions path
-stays byte-identical (control replay of all 5 snapshots reproduces the committed fixture TSVs
-exactly, verified after the `BuildObstruction`/`FinishRegions` refactor). The offline loop is
-`ProjectAReplayDumpRun` (`PE_TAKEOFF_REPLAY_OUT` + `PE_TAKEOFF_FORMULATION=Partition`) →
+Initially landed behind `TakeoffOptions.Formulation = Partition` (`PartitionFormulation.cs`); the
+Regions path stayed byte-identical while the A/B gate was open. The offline loop is now
+`ProjectAReplayDumpRun` (`PE_TAKEOFF_REPLAY_OUT`) →
 `score-takeoff.py --takeoff-dir`; diagnostics via `Dump_partition_diagnostics`
 (`PE_TAKEOFF_DIAG_OUT`) → `diag-partition.py`.
 
@@ -163,8 +162,10 @@ construction (every domain cell is in an emitted room, a logged border drop, or 
 - run-takeoff.py LEVEL_POLICY must gain the partition policy (Theatre -> FLAT, SeedSource
   Hybrid on Main/Upper/Attic) when partition goes live; the C# mirror lives in
   `ProjectAReplayDumpRun.PolicyFor`.
-- Regions-path deletion stays deferred until partition also dominates on a second model
-  (single-benchmark dominance is not proof of generalization).
+- **Regions deleted (2026-08-05):** the pre-agreed second-model gate passed: project-a 54.1
+  Partition vs 52.4 Regions, and project-b 23.3 vs 22.0. Partition is the only formulation.
+  All seven captured replay TSVs were byte-identical before/after deletion; post-deletion scores
+  remained exactly 54.1 / 23.3.
 
 ---
 
@@ -253,8 +254,8 @@ Validation: `Pe.Revit.Tests` built in `Debug.R25.Tests`; the complete
 `LibraryBehavior.NoDocumentRuntime` lane excluding `ProjectAEvalRun` passed; both Partition replay
 lanes emitted all five level TSVs and scored successfully. Synthetic checks cover shared tiling,
 bounded drift, a single-segment diagonal, preservation of unsupported boundaries, no-evidence
-byte identity, deterministic Partition replay, and Regions byte identity when the snap option is
-toggled. Production snap code contains no project-a-specific level names, angles, or constants.
+byte identity, and deterministic Partition replay. Production snap code contains no
+project-a-specific level names, angles, or constants.
 
 Outcome: Phase 3 improves selected outlines but is neutral on the headline score and slightly
 negative on mined-wall recall. That is the measured result, not a scoring win.

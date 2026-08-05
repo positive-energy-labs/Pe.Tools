@@ -39,6 +39,9 @@ never guesses intent.
 
 ## State log (append per phase completion)
 
+- 2026-08-05: Regions formulation deleted after Partition passed the pre-agreed second-model gate:
+  project-a 54.1 vs 52.4 and project-b 23.3 vs 22.0. Seven replay TSVs stayed byte-identical across the
+  deletion; Partition is now the only detector and replay formulation.
 - 2026-08-03: Bluebeam mining landed (cc80353) — per-room geometric oracle exists.
 - 2026-08-04 (eve): Phase 2 partition formulation landed offline (`Formulation = Partition`,
   PartitionFormulation.cs): evidence-watershed assignment of every domain cell, explicit

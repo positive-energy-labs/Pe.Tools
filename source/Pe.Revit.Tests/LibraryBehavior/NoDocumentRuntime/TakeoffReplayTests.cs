@@ -3,7 +3,7 @@ using Pe.Revit.Takeoff;
 namespace Pe.Revit.Tests.LibraryBehavior.NoDocumentRuntime;
 
 // The offline detection loop: DetectSnapshot persists exactly what Detector.Detect consumes
-// (heightfield + composed seed ink + level identity); Replay reruns region detection +
+// (heightfield + composed seed ink + level identity); Replay reruns partition detection +
 // polygonization with arbitrary TakeoffOptions, no Revit anywhere. These tests prove the loop on
 // a synthetic-but-non-trivial scene (four rooms, two 3-ft door gaps, a diagonal wall, an
 // open-plan area); ProjectA_snapshot_replays_deterministically upgrades to the real captured
@@ -145,13 +145,13 @@ public sealed class TakeoffReplayTests
             Assert.That(callerOptions.BoundaryEvidenceMin, Is.EqualTo(0.77));
         });
 
-        var inferredRoof = roof.ReplayInferred(TakeoffFormulation.Partition, _ => { });
+        var inferredRoof = roof.ReplayInferred(_ => { });
         Assert.Multiple(() => {
             Assert.That(inferredRoof.Rooms, Is.Empty);
             Assert.That(inferredRoof.ToTsv(), Does.Contain("META\tprofile\tceilingCoverage="));
             Assert.That(inferredRoof.ToTsv(), Does.Contain("META\tflag\tlevel:Main Level:no-habitable-domain"));
-            Assert.That(flat.ReplayInferred(TakeoffFormulation.Partition, _ => { }).ToTsv(),
-                Is.EqualTo(flat.ReplayInferred(TakeoffFormulation.Partition, _ => { }).ToTsv()),
+            Assert.That(flat.ReplayInferred(_ => { }).ToTsv(),
+                Is.EqualTo(flat.ReplayInferred(_ => { }).ToTsv()),
                 "inferred provenance and replay output must stay deterministic");
         });
     }
@@ -164,7 +164,7 @@ public sealed class TakeoffReplayTests
             if (!float.IsNaN(attic.Field.CeilZ[i])) attic.Field.CeilZ[i] = 7 + 2 * (i % 2);
         var rawAtticCeiling = (float[])attic.Field.CeilZ.Clone();
         var atticProfile = TakeoffPolicy.InferLevelProfile(attic);
-        attic.ReplayInferred(TakeoffFormulation.Partition, _ => { });
+        attic.ReplayInferred(_ => { });
 
         var doubleHeight = BuildSyntheticEstate();
         for (int i = 0; i < doubleHeight.Field.CeilZ.Length; i++)
@@ -200,9 +200,7 @@ public sealed class TakeoffReplayTests
 
     // ---- partition formulation semantics (phase 2, eval/rhvac/PHASE2-PARTITION.md) ----
 
-    private static TakeoffOptions PartitionOptions() => new() {
-        CellFt = 0.5, Formulation = TakeoffFormulation.Partition, SealWallRunGaps = true,
-    };
+    private static TakeoffOptions PartitionOptions() => new() { CellFt = 0.5, SealWallRunGaps = true };
 
     [Test]
     public void Partition_assigns_every_domain_cell_with_no_slivers_or_overlaps()
@@ -242,8 +240,8 @@ public sealed class TakeoffReplayTests
         try
         {
             DetectSnapshot.Save(path, BuildSyntheticEstate());
-            var first = DetectSnapshot.Load(path).ReplayInferred(TakeoffFormulation.Partition, _ => { });
-            var second = DetectSnapshot.Load(path).ReplayInferred(TakeoffFormulation.Partition, _ => { });
+            var first = DetectSnapshot.Load(path).ReplayInferred(_ => { });
+            var second = DetectSnapshot.Load(path).ReplayInferred(_ => { });
             Assert.That(second.ToTsv(), Is.EqualTo(first.ToTsv()));
         }
         finally { File.Delete(path); }
@@ -468,17 +466,6 @@ public sealed class TakeoffReplayTests
         var control = snap.Replay(opt, _ => { });
 
         Assert.That(snapped.ToTsv(), Is.EqualTo(control.ToTsv()));
-    }
-
-    [Test]
-    public void Snap_option_does_not_change_regions()
-    {
-        var snap = BuildSyntheticEstate();
-        var opt = new TakeoffOptions { CellFt = snap.Field.CellFt, SnapBoundaries = false };
-        var control = snap.Replay(opt, _ => { });
-        opt.SnapBoundaries = true;
-
-        Assert.That(snap.Replay(opt, _ => { }).ToTsv(), Is.EqualTo(control.ToTsv()));
     }
 
     [Test]

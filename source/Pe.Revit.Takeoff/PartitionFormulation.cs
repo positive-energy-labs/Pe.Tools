@@ -338,8 +338,8 @@ internal static class PartitionFormulation
         return e;
     }
 
-    // Seed source A: connected components of unobstructed domain — exactly the Regions
-    // formulation's blobs, of any size (slivers dissolve later, not here).
+    // Seed source A: connected components of unobstructed domain, of any size (slivers dissolve
+    // later, not here).
     private static int[] SeedsFromCores(bool[] obst, bool[] domain, int W, int H, out int nSeeds)
     {
         int n = W * H;

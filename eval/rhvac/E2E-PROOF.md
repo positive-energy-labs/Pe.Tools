@@ -32,7 +32,6 @@ RRD session was used.
 ```powershell
 $env:PE_TAKEOFF_REPLAY_OUT = (Resolve-Path 'eval\rhvac\project-a\takeoff').Path
 $env:PE_TAKEOFF_REPLAY_FILTER = 'replay_Level_0_Lower_Level.bin;replay_Level_0_Theatre.bin;replay_Level_1_Main_Level.bin;replay_Level_2_Upper_Level.bin;replay_Level_3_Attic.bin'
-$env:PE_TAKEOFF_FORMULATION = 'Partition'
 Remove-Item Env:PE_TAKEOFF_POLICY -ErrorAction SilentlyContinue
 dotnet tool run pe-revit -- test fresh --json --filter 'FullyQualifiedName~ProjectAReplayDumpRun.Dump_replayed_tsvs' --timeout-seconds 600
 ```

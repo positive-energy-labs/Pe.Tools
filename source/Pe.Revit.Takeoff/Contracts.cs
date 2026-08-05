@@ -12,15 +12,10 @@ namespace Pe.Revit.Takeoff;
 // raw finish-face undershoots oracle areas 15-25%. On wall-less framing models (IFC stud soup)
 // only finish-face is directly observable; convention offsets need a wall-thickness estimate
 // (probe) or real Wall elements.
-// Detection formulation (phase-2 partition campaign, eval/rhvac/PHASE2-PARTITION.md):
-// Regions = independent region growing (phase-1 baseline); Partition = every covered-domain cell
-// is assigned to exactly one space via boundary-evidence watershed (no holes by construction,
-// shared boundaries, sliver dissolution, explicit ambiguity flags). Regions stays runnable for
-// A/B until Partition dominates the scoreboard, then dies per greenfield posture.
-public enum TakeoffFormulation { Regions, Partition }
-
+// Detection is a partition of the covered domain via boundary-evidence watershed: no holes,
+// shared boundaries, sliver dissolution, and explicit ambiguity flags by construction.
 // Where partition seeds come from (one seed = one candidate space before merges/dissolution):
-// RegionCores = connected components of unobstructed domain (the Regions formulation's blobs);
+// RegionCores = connected components of unobstructed domain;
 // DistanceMaxima = plateaus of the distance transform to strong boundary evidence;
 // Hybrid = cores, except a core containing >= 2 distance plateaus is seeded by those plateaus
 // instead — open-plan cores can then split along interior evidence ridges (ceiling/floor steps),
@@ -32,7 +27,6 @@ public sealed class TakeoffOptions
 {
     public bool InferLevelProfile = true;   // derive level policy from heightfield + ink; false =
                                             // caller owns every policy knob explicitly
-    public TakeoffFormulation Formulation = TakeoffFormulation.Regions;
     public string LevelNameContains = "";   // matched against host Level.Name
     public double CellFt = 0.25;            // grid resolution; 0.25 resolves stud walls
     public double MinSqft = 20;             // retain small closets/baths for Pea-human review
@@ -41,19 +35,8 @@ public sealed class TakeoffOptions
     public double GapSealFt = 1.5;          // closes stud/dash gaps in physical View3D section ink.
                                             // project-a slab sweep: 1.0 found 11 rooms, 1.5 found 45,
                                             // and 2.0 regressed to 44; larger closes damage corners.
-    public double MinCeilingFrac = 0.30;    // region gate: fraction of cells that must have a
-                                            // real ceiling (headroom >= MinHeadroomFt). Kills
-                                            // open-to-sky courtyards/terraces at REGION level —
-                                            // ceiling data is too patchy at framing stage to be
-                                            // a per-cell boundary (see Detector header).
-    public double MinCompactness = 0.09;    // 4*pi*area/perimeter^2; project-a' valid long circulation
-                                            // room is 0.095, while exterior snakes are <= 0.041.
-    public bool RequireCeiling = false;     // EXPERIMENT (2026-07-24 falsification loop): ceiling
-                                            // presence joins the per-cell existence mask, so
-                                            // terraces/aprons never join a region and an envelope
-                                            // ink leak cannot flood the interior to the crop
-                                            // border. Contradicts the "region gate only" doctrine
-                                            // above deliberately — measuring, not assuming.
+    public bool RequireCeiling = false;     // ceiling presence joins the per-cell existence mask,
+                                            // so terraces/aprons never join the partition domain
     public bool SealDoorHeads = false;      // EXPERIMENT: a doorway reads in the heightfield as a
                                             // short strip whose CeilZ is the lintel (~7-8 ft) while
                                             // flanking cells carry the full ceiling. Cells with
@@ -74,10 +57,6 @@ public sealed class TakeoffOptions
                                             // more, stair voids argue for less — per-level policy)
     public double CeilingCloseFt = 0;       // close gaps <= this in the ceiling mask (rafter-only
                                             // roofs read patchy at framing stage; attic policy)
-    public double PartitionFillFt = 1.0;    // safety cap for assigning connected wall ink to the
-                                            // nearest accepted region; not a wall-width guarantee
-    public double MaxEnclosedResidualSqft = 25; // re-solve small fully enclosed wall/grid pockets;
-                                               // larger courtyards, stairs, and voids stay empty
     public double BoundarySimplifyFt = 2.0; // physical wall-fit tolerance for raster boundary chains
     public double BandPairSeparationFt = 0.75; // vertical-consistency AND: band A is also cut this
                                                // far BELOW KneeBandFt and only ink present in BOTH
@@ -105,7 +84,7 @@ public sealed class TakeoffOptions
                                             // seed ink) as replay_<level>.bin so detection changes
                                             // iterate OFFLINE via DetectSnapshot.Replay — see the
                                             // DetectSnapshot header for what stays live-only
-    // ---- Partition formulation knobs (Formulation = Partition; PartitionFormulation.cs) ----
+    // ---- Partition formulation knobs (PartitionFormulation.cs) ----
     // Mechanisms with defaults, not per-project constants: evidence weights are calibratable
     // (eval/rhvac ground-truth wall lines), widths come from building conventions (door ~2.5 ft).
     public TakeoffSeedSource SeedSource = TakeoffSeedSource.RegionCores;
@@ -189,7 +168,7 @@ public sealed class TakeoffResult
         }
         // Ambiguity flags ride as 3-column META lines: existing consumers (score-takeoff.py,
         // RhvacCandidateBuilder.ParseTsv) ignore unknown META keys, so the format stays
-        // backward-compatible; a Regions run emits none and its TSV is byte-identical to before.
+        // backward-compatible with consumers that predate ambiguity flags.
         foreach (var r in this.Rooms.Where(r => r.Flags.Count > 0))
             sb.AppendLine($"META\tflag\t{r.Id}:{string.Join("+", r.Flags)}");
         return sb.ToString();

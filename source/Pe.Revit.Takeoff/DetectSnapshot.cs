@@ -36,11 +36,9 @@ public sealed class DetectSnapshot
         return Detector.Detect(this.Field, this.SeedInk, this.LevelName, this.LevelElevation, opt, log);
     }
 
-    public TakeoffResult ReplayInferred(
-        TakeoffFormulation formulation, Action<string> log, Action<TakeoffOptions>? configure = null)
+    public TakeoffResult ReplayInferred(Action<string> log, Action<TakeoffOptions>? configure = null)
     {
         var profile = TakeoffPolicy.InferLevelProfile(this);
-        profile.Options.Formulation = formulation;
         configure?.Invoke(profile.Options);
         ValidateReplayOptions(profile.Options);
         LogReplay(log);

@@ -60,8 +60,8 @@ Deterministic JSON — no timestamps, stable sort by `(candidateKey, flag)`:
 ## Fixtures
 
 The web-only project-a fixture contains the real Partition replay TSVs, including 10 flagged Main
-rooms and 3 flagged Upper rooms. The committed canonical eval TSVs remain the Regions scoreboard
-baseline and are not copied or re-baselined by this UI lane.
+rooms and 3 flagged Upper rooms. The committed canonical eval TSVs are also Partition outputs;
+the UI lane does not copy or re-baseline them.
 
 ## Deferred
 

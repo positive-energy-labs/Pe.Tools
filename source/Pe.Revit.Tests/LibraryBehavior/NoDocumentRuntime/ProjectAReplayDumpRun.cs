@@ -10,7 +10,6 @@ namespace Pe.Revit.Tests.LibraryBehavior.NoDocumentRuntime;
 //   $env:PE_TAKEOFF_REPLAY_OUT = "<dir>"
 //   $env:PE_TAKEOFF_REPLAY_FILTER = "replay_MAIN_LEVEL.bin;replay_ROOF_PLAN.bin" // optional
 //   $env:PE_TAKEOFF_SNAP_DIAG_OUT = "<dir>" # optional per-chain JSON
-//   $env:PE_TAKEOFF_FORMULATION = "Partition" # optional; default = Regions
 //   $env:PE_TAKEOFF_POLICY = "Stock" # optional uninferred control; default = Inferred
 public sealed class ProjectAReplayDumpRun
 {
@@ -41,10 +40,6 @@ public sealed class ProjectAReplayDumpRun
         if (bins.Count == 0)
             Assert.Ignore("no replay_*.bin captured yet; run eval/rhvac/run-takeoff.py once live");
 
-        string? formulationVar = Environment.GetEnvironmentVariable("PE_TAKEOFF_FORMULATION");
-        var formulation = string.IsNullOrEmpty(formulationVar)
-            ? TakeoffFormulation.Regions
-            : Enum.Parse<TakeoffFormulation>(formulationVar, ignoreCase: true);
         string? seedSource = Environment.GetEnvironmentVariable("PE_TAKEOFF_SEEDS");
         string? seedLevels = Environment.GetEnvironmentVariable("PE_TAKEOFF_SEED_LEVELS");
         string? snapDiagDir = Environment.GetEnvironmentVariable("PE_TAKEOFF_SNAP_DIAG_OUT");
@@ -74,12 +69,10 @@ public sealed class ProjectAReplayDumpRun
 
             TakeoffResult result;
             if (inferred)
-                result = snap.ReplayInferred(formulation, lines.Add, Configure);
+                result = snap.ReplayInferred(lines.Add, Configure);
             else
             {
-                var stock = new TakeoffOptions {
-                    CellFt = snap.Field.CellFt, Formulation = formulation, InferLevelProfile = false,
-                };
+                var stock = new TakeoffOptions { CellFt = snap.Field.CellFt, InferLevelProfile = false };
                 Configure(stock);
                 result = snap.Replay(stock, lines.Add);
             }
@@ -127,7 +120,6 @@ public sealed class ProjectAReplayDumpRun
         {
             var snap = DetectSnapshot.Load(bin);
             var opt = TakeoffPolicy.InferLevelProfile(snap).Options;
-            opt.Formulation = TakeoffFormulation.Partition;
             var obst = Detector.BuildObstruction(snap.Field, snap.SeedInk, snap.LevelElevation, opt, _ => { });
             string name = string.Concat(snap.LevelName.Select(ch => char.IsLetterOrDigit(ch) ? ch : '_'));
             PartitionFormulation.DumpDiagnostics(

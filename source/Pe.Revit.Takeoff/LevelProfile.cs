@@ -48,7 +48,6 @@ public sealed class LevelProfile
     {
         var inferred = this.Options;
         target.MinHeadroomFt = inferred.MinHeadroomFt;
-        target.MinCompactness = inferred.MinCompactness;
         target.RequireCeiling = inferred.RequireCeiling;
         target.SealDoorHeads = inferred.SealDoorHeads;
         target.SealWallRunGaps = inferred.SealWallRunGaps;
@@ -148,7 +147,6 @@ public static class TakeoffPolicy
         {
             profile.Options.RequireCeiling = true;
             profile.Options.SealDoorHeads = true;
-            profile.Options.MinCompactness = 0;
             profile.Options.SealWallRunGaps = !attic;
         }
         if (!flat && !profile.NoHabitableDomain)
@@ -156,7 +154,6 @@ public static class TakeoffPolicy
         if (attic)
         {
             profile.Options.SealDoorHeads = true;
-            profile.Options.MinCompactness = 0;
             profile.Options.SealWallRunGaps = false;
             profile.Options.MinHeadroomFt = 3.5;
             profile.Options.CeilingCloseFt = 3;
