@@ -69,3 +69,54 @@ is inspectable.
   detector to compensate for a 3.6 ft registration residual).
 - Boundary snapping (closed, editability-only).
 - project-a missing-room recovery beyond what the gates naturally give.
+
+## Iteration log (2026-08-05)
+
+Implemented `TakeoffPolicy.InferLevelProfile(DetectSnapshot)` as a pure heightfield/ink policy.
+The inference closes the detector's seed ink, flood-fills the exterior, and measures ceiling and
+habitable coverage only over enclosed floored cells. Slope, double-height, and ceiling-step/ink
+lift remain field-wide signals. Thresholds live in `LevelProfileThresholds`; no project or level
+names occur in the inference. Inferred TSVs include one deterministic `META profile` provenance
+line. A zero bounded habitable domain returns zero candidates and emits
+`META flag level:<name>:no-habitable-domain`.
+
+Profiles inferred from the five project-a snapshots:
+
+| level | ceiling / habitable / slope / double-height | step-ink lift | inferred policy |
+|---|---:|---:|---|
+| Level 0/Lower Level | .9979 / .8827 / .3044 / .0023 | 1.5181 | Flat, RegionCores, cap 14 |
+| Level 0/Theatre | .9302 / .1205 / .0807 / .0036 | 4.1986 | Flat, RegionCores, cap 14 |
+| Level 1/Main Level | .6777 / .5354 / .1502 / .0024 | 3.7078 | Flat, Hybrid, cap 14 |
+| Level 2/Upper Level | .8991 / .7955 / .1333 / .1331 | 2.7016 | Flat, Hybrid, evidence-derived cap 26 |
+| Level 3/Attic | .9725 / .4991 / .4059 / .0060 | 1.3699 | sloped, Hybrid, headroom 3.5, close 3, evidence-derived cap 27 |
+
+Parity measurements from fresh five-bin offline replays plus `score-takeoff.py`:
+
+| formulation | inferred score | required reference | result |
+|---|---:|---:|---|
+| Regions | 52.4 | 52.7 +/- 0.3 | pass at the lower bound |
+| Partition | 54.1 | 54.1 +/- 0.3 | exact pass |
+
+Theatre is the permitted stock-or-Flat ambiguity. Flat costs Regions 0.3 TOTAL versus its 52.7
+stock hand-policy control, but is required to prevent the Partition apron domain; the shared
+profile therefore keeps Flat and Partition remains exactly 54.1. Attic's derived 27 ft cap differs
+from the hand policy's 30 ft cap, but both emit 49 Regions candidates / 51 Partition candidates and
+the same .310 / .475 attic mIoU, so the smaller evidence-derived cap wins the tie.
+
+project-b generalization (exact two-bin filter, Partition): MAIN LEVEL remains 20 candidates and 23.3
+TOTAL, with 54.0% GT coverage, 40.6% outside-GT area, and the same missing-8 taxonomy. The inferred
+profile is Flat+Hybrid (`ceilingCoverage=.9565`, `habitableFraction=.9117`, step-ink lift 1.9044).
+No missing room was recovered; that hoped-for secondary effect is falsified. ROOF PLAN now emits
+0 candidates / 0 sf instead of the 2,524.6 sf false candidate and carries the required
+`no-habitable-domain` flag.
+
+Both binding gates pass, so inferred policy is now the default. The name-matched
+`ProjectAReplayDumpRun.PolicyFor` and `run-takeoff.py LEVEL_POLICY` tables were deleted; live capture
+uses a generic 30 ft evidence cap, then applies the inferred profile in the library. `Stock`
+remains only as an explicit stock-options replay control.
+
+Final source-compile/offline proof: the complete `LibraryBehavior.NoDocumentRuntime` filter,
+excluding the two explicit operational eval drivers, passed 34/34 in `Debug.R25.Tests`.
+`Partition_replay_is_deterministic` saves the synthetic snapshot and compares inferred Partition
+TSV bytes from two independent loads. The coverage-ledger check is current at 133/133 in-model
+rooms, and the replay/score Python entrypoints compile cleanly.

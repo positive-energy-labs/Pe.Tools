@@ -48,8 +48,17 @@ public static class RoomTakeoff
         var level = ResolveLevel(doc, levelNameContains);
         var (crop, va, va2, vb, vd) = LoadState(opt, level);
         string workDir = ArtifactDir(opt);
-
-        var hf = Heightfield.Build(doc, level, crop, opt, log);
+        var heightfieldOptions = opt.InferLevelProfile
+            ? new TakeoffOptions {
+                InferLevelProfile = false,
+                CellFt = opt.CellFt,
+                FloorTolFt = opt.FloorTolFt,
+                StoryCapFt = new LevelProfileThresholds().EvidenceStoryCapFt,
+                CeilingCloseFt = 0,
+            }
+            : opt;
+        string captureOptions = DetectSnapshot.CaptureOptionsOf(heightfieldOptions);
+        var hf = Heightfield.Build(doc, level, crop, heightfieldOptions, log);
         int n = hf.W * hf.H;
         // floor-slab edge: stair voids, overlooks, and the building envelope (which the header
         // band's proximity gate anchors on — eave walls under a roof slope have no knee ink)
@@ -66,6 +75,15 @@ public static class RoomTakeoff
         }
         var ink = ProjectionSeed.CaptureInk(doc, va, va2, vb, vd, crop, hf.W, hf.H, opt.CellFt, workDir, opt, log,
             floorEdge, out var kneeInk);
+        LevelProfile? appliedProfile = null;
+        if (opt.InferLevelProfile)
+        {
+            appliedProfile = TakeoffPolicy.InferLevelProfile(new DetectSnapshot {
+                LevelName = level.Name, LevelElevation = lvlZ, Field = hf, SeedInk = ink,
+            });
+            appliedProfile.ApplyPolicyTo(opt);
+            log($"[profile] {appliedProfile.Provenance}");
+        }
         if (opt.DumpReplaySnapshot)
         {
             // Offline-iteration capture: exactly what Detector.Detect consumes (see DetectSnapshot
@@ -74,12 +92,16 @@ public static class RoomTakeoff
             string snapPath = Path.Combine(workDir, $"replay_{Sanitize(level.Name)}.bin");
             DetectSnapshot.Save(snapPath, new DetectSnapshot {
                 LevelName = level.Name, LevelElevation = lvlZ,
-                CaptureOptions = DetectSnapshot.CaptureOptionsOf(opt),
+                CaptureOptions = captureOptions,
                 Field = hf, SeedInk = ink,
             });
             log($"[replay] detect-input snapshot -> {snapPath}");
         }
-        var result = Detector.Detect(hf, ink, level.Name, level.ProjectElevation, opt, log);
+        var result = appliedProfile == null
+            ? Detector.Detect(hf, ink, level.Name, level.ProjectElevation, opt, log)
+            : TakeoffPolicy.Detect(new DetectSnapshot {
+                LevelName = level.Name, LevelElevation = level.ProjectElevation, Field = hf, SeedInk = ink,
+            }, appliedProfile, log);
         result.SeedViewA = va; result.SeedViewB = vb;
         // Boundary-evidence raster for materialization: where is a boundary REAL geometry rather
         // than an equidistance seam? Real = knee-band wall ink (doors are open at +4 ft; the header

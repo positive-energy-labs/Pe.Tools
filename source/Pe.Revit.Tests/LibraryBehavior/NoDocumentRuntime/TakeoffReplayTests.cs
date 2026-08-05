@@ -117,6 +117,87 @@ public sealed class TakeoffReplayTests
             Throws.InvalidOperationException.With.Message.Contains("CellFt"));
     }
 
+    [Test]
+    public void Level_profile_uses_evidence_not_level_name()
+    {
+        var flat = BuildSyntheticEstate();
+        flat.LevelName = "ROOF PLAN"; // deliberately misleading: names are not policy evidence
+        var flatProfile = TakeoffPolicy.InferLevelProfile(flat);
+
+        var roof = BuildSyntheticEstate();
+        roof.LevelName = "Main Level"; // deliberately misleading in the opposite direction
+        for (int i = 0; i < roof.Field.CeilZ.Length; i++)
+            if (!float.IsNaN(roof.Field.FloorZ[i])) roof.Field.CeilZ[i] = roof.Field.FloorZ[i];
+        var roofProfile = TakeoffPolicy.InferLevelProfile(roof);
+        var callerOptions = new TakeoffOptions { MinSqft = 123, BoundaryEvidenceMin = 0.77 };
+        flatProfile.ApplyPolicyTo(callerOptions);
+
+        Assert.Multiple(() => {
+            Assert.That(flatProfile.CeilingCoverage, Is.EqualTo(1).Within(1e-9));
+            Assert.That(flatProfile.HabitableFraction, Is.EqualTo(1).Within(1e-9));
+            Assert.That(flatProfile.Options.RequireCeiling, Is.True);
+            Assert.That(flatProfile.Options.SealDoorHeads, Is.True);
+            Assert.That(flatProfile.Options.SealWallRunGaps, Is.True);
+            Assert.That(flatProfile.NoHabitableDomain, Is.False);
+            Assert.That(roofProfile.HabitableFraction, Is.Zero);
+            Assert.That(roofProfile.NoHabitableDomain, Is.True);
+            Assert.That(callerOptions.MinSqft, Is.EqualTo(123));
+            Assert.That(callerOptions.BoundaryEvidenceMin, Is.EqualTo(0.77));
+        });
+
+        var inferredRoof = roof.ReplayInferred(TakeoffFormulation.Partition, _ => { });
+        Assert.Multiple(() => {
+            Assert.That(inferredRoof.Rooms, Is.Empty);
+            Assert.That(inferredRoof.ToTsv(), Does.Contain("META\tprofile\tceilingCoverage="));
+            Assert.That(inferredRoof.ToTsv(), Does.Contain("META\tflag\tlevel:Main Level:no-habitable-domain"));
+            Assert.That(flat.ReplayInferred(TakeoffFormulation.Partition, _ => { }).ToTsv(),
+                Is.EqualTo(flat.ReplayInferred(TakeoffFormulation.Partition, _ => { }).ToTsv()),
+                "inferred provenance and replay output must stay deterministic");
+        });
+    }
+
+    [Test]
+    public void Level_profile_derives_attic_double_height_and_seed_policy()
+    {
+        var attic = BuildSyntheticEstate();
+        for (int i = 0; i < attic.Field.CeilZ.Length; i++)
+            if (!float.IsNaN(attic.Field.CeilZ[i])) attic.Field.CeilZ[i] = 7 + 2 * (i % 2);
+        var rawAtticCeiling = (float[])attic.Field.CeilZ.Clone();
+        var atticProfile = TakeoffPolicy.InferLevelProfile(attic);
+        attic.ReplayInferred(TakeoffFormulation.Partition, _ => { });
+
+        var doubleHeight = BuildSyntheticEstate();
+        for (int i = 0; i < doubleHeight.Field.CeilZ.Length; i++)
+            if (!float.IsNaN(doubleHeight.Field.CeilZ[i]) && i % doubleHeight.Field.W > 60)
+                doubleHeight.Field.CeilZ[i] = 20;
+        var doubleProfile = TakeoffPolicy.InferLevelProfile(doubleHeight);
+
+        var stepped = BuildSyntheticEstate();
+        for (int i = 0; i < stepped.SeedInk.Length; i++)
+            if (stepped.SeedInk[i] && !float.IsNaN(stepped.Field.CeilZ[i])) stepped.Field.CeilZ[i] = 12;
+        var hybridProfile = TakeoffPolicy.InferLevelProfile(stepped);
+        stepped.LevelElevation = -1;
+        for (int i = 0; i < stepped.Field.FloorZ.Length; i++)
+        {
+            if (!float.IsNaN(stepped.Field.FloorZ[i])) stepped.Field.FloorZ[i]--;
+            if (!float.IsNaN(stepped.Field.CeilZ[i])) stepped.Field.CeilZ[i]--;
+        }
+        var basementProfile = TakeoffPolicy.InferLevelProfile(stepped);
+
+        Assert.Multiple(() => {
+            Assert.That(atticProfile.SlopedCeilingFraction, Is.GreaterThanOrEqualTo(0.9));
+            Assert.That(atticProfile.Options.MinHeadroomFt, Is.EqualTo(3.5));
+            Assert.That(atticProfile.Options.CeilingCloseFt, Is.EqualTo(3));
+            Assert.That(atticProfile.Options.SealWallRunGaps, Is.False);
+            Assert.That(attic.Field.CeilZ, Is.EqualTo(rawAtticCeiling),
+                "profile-specific closing must not change replay evidence");
+            Assert.That(doubleProfile.DoubleHeightFraction, Is.GreaterThan(0.4));
+            Assert.That(doubleProfile.Options.StoryCapFt, Is.EqualTo(20));
+            Assert.That(hybridProfile.Options.SeedSource, Is.EqualTo(TakeoffSeedSource.Hybrid));
+            Assert.That(basementProfile.Options.SeedSource, Is.EqualTo(TakeoffSeedSource.RegionCores));
+        });
+    }
+
     // ---- partition formulation semantics (phase 2, eval/rhvac/PHASE2-PARTITION.md) ----
 
     private static TakeoffOptions PartitionOptions() => new() {
@@ -161,8 +242,8 @@ public sealed class TakeoffReplayTests
         try
         {
             DetectSnapshot.Save(path, BuildSyntheticEstate());
-            var first = DetectSnapshot.Load(path).Replay(PartitionOptions(), _ => { });
-            var second = DetectSnapshot.Load(path).Replay(PartitionOptions(), _ => { });
+            var first = DetectSnapshot.Load(path).ReplayInferred(TakeoffFormulation.Partition, _ => { });
+            var second = DetectSnapshot.Load(path).ReplayInferred(TakeoffFormulation.Partition, _ => { });
             Assert.That(second.ToTsv(), Is.EqualTo(first.ToTsv()));
         }
         finally { File.Delete(path); }

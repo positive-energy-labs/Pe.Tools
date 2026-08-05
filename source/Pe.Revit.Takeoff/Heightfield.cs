@@ -67,14 +67,19 @@ public sealed class Heightfield
         FillFloorGaps(hf, (int)Math.Ceiling(0.75 / opt.CellFt));
         // rafter-only roofs (attic): the ceiling mask is equally gappy; close it symmetrically so
         // RequireCeiling can hold on sloped levels. Off (0) by default — flat levels don't need it.
-        if (opt.CeilingCloseFt > 0)
-            FillGaps(hf.CeilZ, hf.W, hf.H, (int)Math.Ceiling(opt.CeilingCloseFt / opt.CellFt));
+        CloseCeilingGaps(hf, opt.CeilingCloseFt);
 
         int floorCells = 0;
         for (int i = 0; i < n; i++)
             if (!float.IsNaN(hf.FloorZ[i]) && Math.Abs(hf.FloorZ[i] - lvlZ) <= opt.FloorTolFt) floorCells++;
         log($"[heightfield] {hf.W}x{hf.H} elems={nElems} tris={nTris} floorCells={floorCells}");
         return hf;
+    }
+
+    internal static void CloseCeilingGaps(Heightfield hf, double closeFt)
+    {
+        if (closeFt > 0)
+            FillGaps(hf.CeilZ, hf.W, hf.H, (int)Math.Ceiling(closeFt / hf.CellFt));
     }
 
     // The envelope can span multiple links (Snowdon needed Facades+Structural to close "outside")

@@ -3,72 +3,17 @@ using Pe.Revit.Takeoff;
 
 namespace Pe.Revit.Tests.LibraryBehavior.NoDocumentRuntime;
 
-// Offline detection-loop driver: replays every captured project-a snapshot (replay_<level>.bin in
-// the Documents takeoff dir) under the same per-level policy run-takeoff.py applies live, and
-// writes the resulting rooms_<level>.tsv files to $PE_TAKEOFF_REPLAY_OUT. Score the dump with
-// `python eval/rhvac/score-takeoff.py --takeoff-dir <out>`. This is the phase-2 iteration lane:
-// change detection, dump, score — no Revit anywhere.
+// Offline detection-loop driver: replays captured snapshots under the evidence-derived library
+// policy and writes rooms_<level>.tsv files to $PE_TAKEOFF_REPLAY_OUT. Score the dump with
+// `python eval/rhvac/score-takeoff.py --takeoff-dir <out>`; no Revit is involved.
 //
 //   $env:PE_TAKEOFF_REPLAY_OUT = "<dir>"
-//   $env:PE_TAKEOFF_REPLAY_FILTER = "replay_MAIN_LEVEL.bin;replay_ROOF_PLAN.bin" // optional exact names
+//   $env:PE_TAKEOFF_REPLAY_FILTER = "replay_MAIN_LEVEL.bin;replay_ROOF_PLAN.bin" // optional
 //   $env:PE_TAKEOFF_SNAP_DIAG_OUT = "<dir>" # optional per-chain JSON
-//   $env:PE_TAKEOFF_FORMULATION = "Partition"   # optional; default = per-policy (Regions)
-//   dotnet test -c Debug.R25.Tests --filter FullyQualifiedName~ProjectAReplayDumpRun
+//   $env:PE_TAKEOFF_FORMULATION = "Partition" # optional; default = Regions
+//   $env:PE_TAKEOFF_POLICY = "Stock" # optional uninferred control; default = Inferred
 public sealed class ProjectAReplayDumpRun
 {
-    // Mirror of run-takeoff.py LEVEL_POLICY (matched by containment against the level name).
-    // Only replay-honest knobs matter here — capture-baked ones (CeilingCloseFt, StoryCapFt
-    // widening) are echoed for fidelity but cannot change what is in the bin.
-    internal static TakeoffOptions PolicyFor(string levelName, TakeoffFormulation formulation = TakeoffFormulation.Regions)
-    {
-        bool Has(string value) => levelName.Contains(value, StringComparison.OrdinalIgnoreCase);
-        TakeoffOptions Flat() => new() {
-            RequireCeiling = true, SealDoorHeads = true, SealWallRunGaps = true, MinCompactness = 0,
-        };
-        // Partition seed policy (2026-08-04 offline campaign, all measured on the project-a replay):
-        // Hybrid sub-seeding wins where ceiling-step evidence is trustworthy (L1 mIoU .495->.524,
-        // attic .459->.473, merged 31->26) and loses where it is duct/beam noise (L0 .399->.327,
-        // ceil-step wall-precision lift 1.1 vs 2.2 upstairs) — so Hybrid on Main/Upper/Attic,
-        // RegionCores on basement levels. Mirror into run-takeoff.py LEVEL_POLICY when partition
-        // goes live.
-        bool hybrid = formulation == TakeoffFormulation.Partition;
-        if (Has("Lower Level")) return Flat();
-        if (Has("Main Level"))
-        {
-            var o = Flat();
-            if (hybrid) o.SeedSource = TakeoffSeedSource.Hybrid;
-            return o;
-        }
-        // Theatre joins FLAT under the partition formulation only: its stock options worked under
-        // Regions because border-rejection ate the covered apron, but the partition needs the same
-        // RequireCeiling domain gate every other flat level uses (32k sf of fake apron rooms
-        // otherwise). Mirror into run-takeoff.py LEVEL_POLICY when partition goes live.
-        if (Has("Theatre"))
-            return formulation == TakeoffFormulation.Partition ? Flat() : new TakeoffOptions();
-        if (Has("Upper Level"))
-        {
-            var o = Flat();
-            o.StoryCapFt = 26;
-            if (hybrid) o.SeedSource = TakeoffSeedSource.Hybrid;
-            return o;
-        }
-        if (Has("Attic"))
-        {
-            var o = new TakeoffOptions {
-                RequireCeiling = true, CeilingCloseFt = 3, StoryCapFt = 30, MinHeadroomFt = 3.5,
-                SealDoorHeads = true, MinCompactness = 0,
-            };
-            if (hybrid) o.SeedSource = TakeoffSeedSource.Hybrid;
-            // Measured 2026-08-04: dropping the door-head sealer on the attic (its obstruction
-            // covers ~45% of GT interiors under sloped ceilings) REGRESSED mIoU .459 -> .401 —
-            // the sealer's splits outweigh its interior pollution. Keep it.
-            if (Environment.GetEnvironmentVariable("PE_TAKEOFF_ATTIC_NOSEAL") == "1")
-                o.SealDoorHeads = false;
-            return o;
-        }
-        return new TakeoffOptions(); // Theatre and anything unmatched: stock options
-    }
-
     internal static List<string> FindSnapshots()
     {
         string[] filter = (Environment.GetEnvironmentVariable("PE_TAKEOFF_REPLAY_FILTER") ?? "")
@@ -94,39 +39,62 @@ public sealed class ProjectAReplayDumpRun
             Assert.Ignore("set PE_TAKEOFF_REPLAY_OUT to the directory the replayed TSVs should land in");
         var bins = FindSnapshots();
         if (bins.Count == 0)
-            Assert.Ignore("no replay_*.bin captured yet — run eval/rhvac/run-takeoff.py once live");
+            Assert.Ignore("no replay_*.bin captured yet; run eval/rhvac/run-takeoff.py once live");
 
         string? formulationVar = Environment.GetEnvironmentVariable("PE_TAKEOFF_FORMULATION");
         var formulation = string.IsNullOrEmpty(formulationVar)
             ? TakeoffFormulation.Regions
             : Enum.Parse<TakeoffFormulation>(formulationVar, ignoreCase: true);
         string? seedSource = Environment.GetEnvironmentVariable("PE_TAKEOFF_SEEDS");
-        string? seedLevels = Environment.GetEnvironmentVariable("PE_TAKEOFF_SEED_LEVELS"); // e.g. "Main;Upper;Attic"
+        string? seedLevels = Environment.GetEnvironmentVariable("PE_TAKEOFF_SEED_LEVELS");
         string? snapDiagDir = Environment.GetEnvironmentVariable("PE_TAKEOFF_SNAP_DIAG_OUT");
+        string policy = Environment.GetEnvironmentVariable("PE_TAKEOFF_POLICY") ?? "Inferred";
+        bool inferred = policy.Equals("Inferred", StringComparison.OrdinalIgnoreCase);
+        if (!inferred && !policy.Equals("Stock", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("PE_TAKEOFF_POLICY must be Inferred or Stock");
         Directory.CreateDirectory(outDir);
         if (!string.IsNullOrEmpty(snapDiagDir)) Directory.CreateDirectory(snapDiagDir);
+
         foreach (string bin in bins)
         {
             var snap = DetectSnapshot.Load(bin);
-            var opt = PolicyFor(snap.LevelName, formulation);
-            opt.Formulation = formulation;
-            if (!string.IsNullOrEmpty(seedSource)
-                && (string.IsNullOrEmpty(seedLevels)
-                    || seedLevels.Split(';').Any(snap.LevelName.Contains)))
-                opt.SeedSource = Enum.Parse<TakeoffSeedSource>(seedSource, ignoreCase: true);
-            if (Environment.GetEnvironmentVariable("PE_TAKEOFF_SNAP") == "0")
-                opt.SnapBoundaries = false; // phase-3 A/B escape: pre-snap partition output
-            if (!string.IsNullOrEmpty(snapDiagDir)) opt.SnapDiagnostics = new();
             var lines = new List<string>();
-            var result = snap.Replay(opt, lines.Add);
+            TakeoffOptions? opt = null;
+            void Configure(TakeoffOptions configured)
+            {
+                opt = configured;
+                if (!string.IsNullOrEmpty(seedSource)
+                    && (string.IsNullOrEmpty(seedLevels)
+                        || seedLevels.Split(';').Any(snap.LevelName.Contains)))
+                    opt.SeedSource = Enum.Parse<TakeoffSeedSource>(seedSource, ignoreCase: true);
+                if (Environment.GetEnvironmentVariable("PE_TAKEOFF_SNAP") == "0")
+                    opt.SnapBoundaries = false;
+                if (!string.IsNullOrEmpty(snapDiagDir)) opt.SnapDiagnostics = new();
+            }
+
+            TakeoffResult result;
+            if (inferred)
+                result = snap.ReplayInferred(formulation, lines.Add, Configure);
+            else
+            {
+                var stock = new TakeoffOptions {
+                    CellFt = snap.Field.CellFt, Formulation = formulation, InferLevelProfile = false,
+                };
+                Configure(stock);
+                result = snap.Replay(stock, lines.Add);
+            }
+
+            var appliedOptions = opt
+                ?? throw new InvalidOperationException("replay policy did not supply takeoff options");
+
             string name = string.Concat(snap.LevelName.Select(ch => char.IsLetterOrDigit(ch) ? ch : '_'));
             string tsv = Path.Combine(outDir, $"rooms_{name}.tsv");
             File.WriteAllText(tsv, result.ToTsv());
-            if (opt.SnapDiagnostics != null)
+            if (appliedOptions.SnapDiagnostics != null)
             {
                 var payload = new {
                     level = snap.LevelName,
-                    chains = opt.SnapDiagnostics.Select(d => new {
+                    chains = appliedOptions.SnapDiagnostics.Select(d => new {
                         chainId = d.ChainId, labels = new[] { d.A, d.B },
                         lengthFt = d.LengthFt, snappedFt = d.SnappedFt, outcome = d.Outcome,
                         rawPoints = d.RawPoints, snappedPoints = d.SnappedPoints,
@@ -141,7 +109,7 @@ public sealed class ProjectAReplayDumpRun
             }
             lines.Add($"[dump] {snap.LevelName}: rooms={result.Rooms.Count} totalSqft={result.TotalSqft:F0} -> {tsv}");
             File.WriteAllLines(Path.Combine(outDir, $"log_{name}.txt"), lines);
-            foreach (string l in lines) TestContext.Out.WriteLine(l);
+            foreach (string line in lines) TestContext.Out.WriteLine(line);
         }
     }
 
@@ -153,13 +121,12 @@ public sealed class ProjectAReplayDumpRun
         if (string.IsNullOrEmpty(outDir))
             Assert.Ignore("set PE_TAKEOFF_DIAG_OUT to the directory the diagnostic rasters should land in");
         var bins = FindSnapshots();
-        if (bins.Count == 0)
-            Assert.Ignore("no replay_*.bin captured yet");
+        if (bins.Count == 0) Assert.Ignore("no replay_*.bin captured yet");
         Directory.CreateDirectory(outDir);
         foreach (string bin in bins)
         {
             var snap = DetectSnapshot.Load(bin);
-            var opt = PolicyFor(snap.LevelName, TakeoffFormulation.Partition);
+            var opt = TakeoffPolicy.InferLevelProfile(snap).Options;
             opt.Formulation = TakeoffFormulation.Partition;
             var obst = Detector.BuildObstruction(snap.Field, snap.SeedInk, snap.LevelElevation, opt, _ => { });
             string name = string.Concat(snap.LevelName.Select(ch => char.IsLetterOrDigit(ch) ? ch : '_'));

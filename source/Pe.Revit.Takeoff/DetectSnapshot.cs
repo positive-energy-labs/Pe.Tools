@@ -2,8 +2,8 @@ using System.IO.Compression;
 
 namespace Pe.Revit.Takeoff;
 
-// Persisted post-Revit intermediate state: exactly what Detector.Detect consumes and nothing
-// else — the heightfield rasters, the composed seed ink, and the level identity. RoomTakeoff
+// Persisted post-Revit intermediate state: exactly what evidence inference + Detector.Detect
+// consume — the raw heightfield rasters, the composed seed ink, and the level identity. RoomTakeoff
 // .Detect dumps one per live run (replay_<level>.bin, gzip); Replay() reruns region detection +
 // polygonization offline with ARBITRARY TakeoffOptions, so detection changes iterate in seconds
 // against real captured state (NoDocumentRuntime tests) instead of through live bridge runs.
@@ -12,8 +12,8 @@ namespace Pe.Revit.Takeoff;
 // exercised for real: obstruction morphology, door sealers, region growing, ceiling/compactness
 // gates, partition propagation, loop tracing, TSV. Everything UPSTREAM is baked at capture time
 // and CANNOT be re-tuned offline:
-//   - heightfield build window: FloorTolFt, StoryCapFt, CeilingCloseFt (CeilZ above the capture
-//     cap simply is not in the file; widening FloorTolFt offline cannot add floor cells)
+//   - heightfield build window: FloorTolFt, EvidenceStoryCapFt, CeilingCloseFt (CeilZ above the
+//     evidence cap simply is not in the file; widening FloorTolFt offline cannot add floor cells)
 //   - ink composition: band cut heights, BandPairSeparationFt, HeaderNearFt gating, SeedPixelSize
 //   - CellFt: the rasters are fixed-resolution; Replay fail-fasts on a mismatch
 // CaptureOptions records those baked knobs so an offline session knows what it is standing on.
@@ -31,13 +31,33 @@ public sealed class DetectSnapshot
 
     public TakeoffResult Replay(TakeoffOptions opt, Action<string> log)
     {
+        ValidateReplayOptions(opt);
+        LogReplay(log);
+        return Detector.Detect(this.Field, this.SeedInk, this.LevelName, this.LevelElevation, opt, log);
+    }
+
+    public TakeoffResult ReplayInferred(
+        TakeoffFormulation formulation, Action<string> log, Action<TakeoffOptions>? configure = null)
+    {
+        var profile = TakeoffPolicy.InferLevelProfile(this);
+        profile.Options.Formulation = formulation;
+        configure?.Invoke(profile.Options);
+        ValidateReplayOptions(profile.Options);
+        LogReplay(log);
+        log($"[profile] {profile.Provenance}");
+        return TakeoffPolicy.Detect(this, profile, log);
+    }
+
+    private void ValidateReplayOptions(TakeoffOptions opt)
+    {
         if (Math.Abs(opt.CellFt - this.Field.CellFt) > 1e-9)
             throw new InvalidOperationException(
                 $"snapshot was captured at CellFt={this.Field.CellFt} but options ask for {opt.CellFt} — " +
                 "the rasters are fixed-resolution; re-capture live to change cell size");
-        log($"[replay] level='{this.LevelName}' {this.Field.W}x{this.Field.H} capture[{this.CaptureOptions}]");
-        return Detector.Detect(this.Field, this.SeedInk, this.LevelName, this.LevelElevation, opt, log);
     }
+
+    private void LogReplay(Action<string> log) =>
+        log($"[replay] level='{this.LevelName}' {this.Field.W}x{this.Field.H} capture[{this.CaptureOptions}]");
 
     public static void Save(string path, DetectSnapshot snap)
     {
@@ -88,12 +108,25 @@ public sealed class DetectSnapshot
             $"CellFt={opt.CellFt.ToString(ic)}",
             $"FloorTolFt={opt.FloorTolFt.ToString(ic)}",
             $"StoryCapFt={opt.StoryCapFt.ToString(ic)}",
+            $"EvidenceStoryCapFt={(opt.InferLevelProfile ? new LevelProfileThresholds().EvidenceStoryCapFt : opt.StoryCapFt).ToString(ic)}",
             $"CeilingCloseFt={opt.CeilingCloseFt.ToString(ic)}",
             $"KneeBandFt={opt.KneeBandFt.ToString(ic)}",
             $"HeaderBandFt={opt.HeaderBandFt.ToString(ic)}",
             $"BandPairSeparationFt={opt.BandPairSeparationFt.ToString(ic)}",
             $"HeaderNearFt={opt.HeaderNearFt.ToString(ic)}",
             $"SeedPixelSize={opt.SeedPixelSize.ToString(ic)}");
+    }
+
+    internal double CapturedCeilingCloseFt()
+    {
+        const string prefix = "CeilingCloseFt=";
+        string? token = this.CaptureOptions.Split(' ')
+            .FirstOrDefault(value => value.StartsWith(prefix, StringComparison.Ordinal));
+        return token != null
+               && double.TryParse(token.Substring(prefix.Length), NumberStyles.Float,
+                   CultureInfo.InvariantCulture, out double value)
+            ? value
+            : 0;
     }
 
     private static byte[] FloatBytes(float[] src)

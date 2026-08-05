@@ -30,6 +30,8 @@ public enum TakeoffSeedSource { RegionCores, DistanceMaxima, Hybrid }
 
 public sealed class TakeoffOptions
 {
+    public bool InferLevelProfile = true;   // derive level policy from heightfield + ink; false =
+                                            // caller owns every policy knob explicitly
     public TakeoffFormulation Formulation = TakeoffFormulation.Regions;
     public string LevelNameContains = "";   // matched against host Level.Name
     public double CellFt = 0.25;            // grid resolution; 0.25 resolves stud walls
@@ -165,6 +167,8 @@ public sealed class TakeoffResult
     public double LevelElevation;           // ProjectElevation (internal origin)
     public List<RoomResult> Rooms = new();
     public double TotalSqft;
+    public string? ProfileProvenance;
+    public List<string> LevelFlags = new();
     public string? SeedViewA, SeedViewB;    // names of the stripped seed views (until cleanup)
     public string? EvidenceView;            // rainbow view name (after Annotate)
 
@@ -175,6 +179,8 @@ public sealed class TakeoffResult
         var ic = CultureInfo.InvariantCulture;
         var sb = new StringBuilder();
         sb.AppendLine($"META\tlevel\t{this.LevelName}\nMETA\telev\t{this.LevelElevation.ToString("F6", ic)}\nMETA\trooms\t{this.Rooms.Count}\nMETA\ttotalSqft\t{this.TotalSqft.ToString("F1", ic)}");
+        if (this.ProfileProvenance != null) sb.AppendLine($"META\tprofile\t{this.ProfileProvenance}");
+        foreach (string flag in this.LevelFlags) sb.AppendLine($"META\tflag\t{flag}");
         foreach (var r in this.Rooms)
         {
             sb.AppendLine($"ROOM\t{r.Id}\t{r.RawSqft.ToString("F1", ic)}\t{r.PerimeterFt.ToString("F1", ic)}\t{r.LabelX.ToString("F6", ic)}\t{r.LabelY.ToString("F6", ic)}\t{r.MeanCeilingFt.ToString("F2", ic)}");

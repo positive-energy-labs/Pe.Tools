@@ -45,24 +45,6 @@ def check(result, phase, level):
         sys.exit(1)
     return result
 
-# Per-level detection policy (2026-07-24 live falsification + 2026-08-04 offline partition pass):
-# flat-ceiling levels take RequireCeiling + both door sealers and drop the compactness kill-gate;
-# Upper Level raises the ceiling-search cap for double-height rooms; the attic keeps RequireCeiling
-# OFF (framing-stage roof geometry shatters the per-cell ceiling mask — see eval/rhvac/HANDOFF.md).
-FLAT = "RequireCeiling = true, SealDoorHeads = true, SealWallRunGaps = true, MinCompactness = 0"
-PARTITION = "Formulation = Pe.Revit.Takeoff.TakeoffFormulation.Partition"
-HYBRID = "SeedSource = Pe.Revit.Takeoff.TakeoffSeedSource.Hybrid"
-LEVEL_POLICY = {
-    "Lower Level": FLAT + ", " + PARTITION,
-    "Theatre": FLAT + ", " + PARTITION,
-    "Main Level": FLAT + ", " + PARTITION + ", " + HYBRID,
-    "Upper Level": FLAT + ", StoryCapFt = 26, " + PARTITION + ", " + HYBRID,
-    # Attic covered-space model: close the patchy rafter ceiling mask, search high enough for the
-    # ridge, keep knee-wall area (headroom 3.5), lintel-seal doors. Wall-run sealing measurably
-    # fragments knee-wall areas — deliberately absent. 49 rooms / 5,662 sf vs oracle 5,758 (98%).
-    "Attic": "RequireCeiling = true, CeilingCloseFt = 3, StoryCapFt = 30, MinHeadroomFt = 3.5, "
-             "SealDoorHeads = true, MinCompactness = 0, " + PARTITION + ", " + HYBRID,
-}
 
 emitted_levels = []
 for level in args.levels:
@@ -71,11 +53,10 @@ for level in args.levels:
             f"prepare-{level}.cs",
             f'Pe.Revit.Takeoff.RoomTakeoff.Prepare(doc, new Pe.Revit.Takeoff.TakeoffOptions {{ LevelNameContains = "{level}" }}, WriteLine);',
             "WriteTransaction", 600), "PREPARE", level)
-    policy = next((v for k, v in LEVEL_POLICY.items() if k.lower() in level.lower()), "")
-    opts = f'new Pe.Revit.Takeoff.TakeoffOptions {{ {policy} }}' if policy else "null"
     detected = check(run_script(
         f"detect-{level}.cs",
-        f'var r = Pe.Revit.Takeoff.RoomTakeoff.Detect(doc, "{level}", WriteLine, {opts});\n'
+        f'var r = Pe.Revit.Takeoff.RoomTakeoff.Detect(doc, "{level}", WriteLine, '
+        f'new Pe.Revit.Takeoff.TakeoffOptions {{ Formulation = Pe.Revit.Takeoff.TakeoffFormulation.Partition }});\n'
         f'Result(new {{ level = r.LevelName, rooms = r.Rooms.Count, totalSqft = r.TotalSqft }});',
         "ReadOnly", 1800), "DETECT", level)
     emitted_levels.append(detected["data"]["level"])
