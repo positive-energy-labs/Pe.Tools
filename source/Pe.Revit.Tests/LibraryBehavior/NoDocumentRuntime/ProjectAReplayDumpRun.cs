@@ -1,3 +1,4 @@
+using Newtonsoft.Json;
 using Pe.Revit.Takeoff;
 
 namespace Pe.Revit.Tests.LibraryBehavior.NoDocumentRuntime;
@@ -9,6 +10,7 @@ namespace Pe.Revit.Tests.LibraryBehavior.NoDocumentRuntime;
 // change detection, dump, score — no Revit anywhere.
 //
 //   $env:PE_TAKEOFF_REPLAY_OUT = "<dir>"
+//   $env:PE_TAKEOFF_SNAP_DIAG_OUT = "<dir>" # optional per-chain JSON
 //   $env:PE_TAKEOFF_FORMULATION = "Partition"   # optional; default = per-policy (Regions)
 //   dotnet test -c Debug.R25.Tests --filter FullyQualifiedName~ProjectAReplayDumpRun
 public sealed class ProjectAReplayDumpRun
@@ -92,7 +94,9 @@ public sealed class ProjectAReplayDumpRun
             : Enum.Parse<TakeoffFormulation>(formulationVar, ignoreCase: true);
         string? seedSource = Environment.GetEnvironmentVariable("PE_TAKEOFF_SEEDS");
         string? seedLevels = Environment.GetEnvironmentVariable("PE_TAKEOFF_SEED_LEVELS"); // e.g. "Main;Upper;Attic"
+        string? snapDiagDir = Environment.GetEnvironmentVariable("PE_TAKEOFF_SNAP_DIAG_OUT");
         Directory.CreateDirectory(outDir);
+        if (!string.IsNullOrEmpty(snapDiagDir)) Directory.CreateDirectory(snapDiagDir);
         foreach (string bin in bins)
         {
             var snap = DetectSnapshot.Load(bin);
@@ -104,11 +108,29 @@ public sealed class ProjectAReplayDumpRun
                 opt.SeedSource = Enum.Parse<TakeoffSeedSource>(seedSource, ignoreCase: true);
             if (Environment.GetEnvironmentVariable("PE_TAKEOFF_SNAP") == "0")
                 opt.SnapBoundaries = false; // phase-3 A/B escape: pre-snap partition output
+            if (!string.IsNullOrEmpty(snapDiagDir)) opt.SnapDiagnostics = new();
             var lines = new List<string>();
             var result = snap.Replay(opt, lines.Add);
             string name = string.Concat(snap.LevelName.Select(ch => char.IsLetterOrDigit(ch) ? ch : '_'));
             string tsv = Path.Combine(outDir, $"rooms_{name}.tsv");
             File.WriteAllText(tsv, result.ToTsv());
+            if (opt.SnapDiagnostics != null)
+            {
+                var payload = new {
+                    level = snap.LevelName,
+                    chains = opt.SnapDiagnostics.Select(d => new {
+                        chainId = d.ChainId, labels = new[] { d.A, d.B },
+                        lengthFt = d.LengthFt, snappedFt = d.SnappedFt, outcome = d.Outcome,
+                        rawPoints = d.RawPoints, snappedPoints = d.SnappedPoints,
+                        snappedRuns = d.SnappedRuns.Select(r => new {
+                            lengthFt = r.LengthFt, rawPoints = r.RawPoints,
+                            snappedStart = r.SnappedStart, snappedEnd = r.SnappedEnd,
+                        }),
+                    }),
+                };
+                File.WriteAllText(Path.Combine(snapDiagDir!, $"snap_{name}.json"),
+                    JsonConvert.SerializeObject(payload, Formatting.Indented));
+            }
             lines.Add($"[dump] {snap.LevelName}: rooms={result.Rooms.Count} totalSqft={result.TotalSqft:F0} -> {tsv}");
             File.WriteAllLines(Path.Combine(outDir, $"log_{name}.txt"), lines);
             foreach (string l in lines) TestContext.Out.WriteLine(l);

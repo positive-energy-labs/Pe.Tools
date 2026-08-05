@@ -258,3 +258,64 @@ toggled. Production snap code contains no project-a-specific level names, angles
 
 Outcome: Phase 3 improves selected outlines but is neutral on the headline score and slightly
 negative on mined-wall recall. That is the measured result, not a scoring win.
+
+## Completion diagnosis: rejection telemetry and upper bound (2026-08-05)
+
+`ProjectAReplayDumpRun` now accepts `PE_TAKEOFF_SNAP_DIAG_OUT` and writes one
+`snap_<level>.json` file per replay. Each chain records its full length, final outcome, raw and
+snapped points, and the raw/snapped geometry of surviving line runs. Outcomes are causal: a chain
+is `area-guard-revert` only when it had a snap candidate before guard demotion. The table assigns
+each chain's full length to one terminal outcome, so it accounts to 100%; this is deliberately
+different from the surviving snapped-RUN coverage (399/0/131/369/167 ft) reported above.
+
+| level | snapped | no direction consensus | insufficient evidence backing | deviation cap | corner cap | area guard revert | other |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Lower | 791.50 (10.87%) | 16.25 (0.22%) | 316.50 (4.35%) | 0 | 0 | 5,307.00 (72.89%) | 849.75 (11.67%) |
+| Theatre | 0 | 0 | 23.50 (2.92%) | 0 | 0 | 434.50 (54.04%) | 346.00 (43.03%) |
+| Main | 240.25 (1.85%) | 144.00 (1.11%) | 1,445.50 (11.14%) | 0 | 0 | 7,306.25 (56.29%) | 3,844.25 (29.62%) |
+| Upper | 501.25 (6.47%) | 59.75 (0.77%) | 231.25 (2.99%) | 0 | 0 | 5,011.75 (64.73%) | 1,938.50 (25.04%) |
+| Attic | 487.50 (8.83%) | 17.25 (0.31%) | 36.50 (0.66%) | 0 | 0 | 3,342.00 (60.54%) | 1,637.25 (29.66%) |
+
+All values are ft (percent of that level's boundary network). The dominant terminal rejection is
+therefore the room guard (54-73% of chain length), not direction consensus, evidence backing,
+deviation, or corner movement. `other` is the second pool (12-43%) and is predominantly assigned
+direction fragments that do not survive the 3-ft minimum-run construction. Opening the area-drift
+limit while retaining simple-polygon/ring checks still left the guard dominant, proving that most
+of this pool is invalid assembled topology rather than harmless area drift.
+
+Perpendicular offsets used the same registered mined walls as `diag-partition.py`. A surviving
+snapped run was matched to the nearest same-direction wall segment within 3 ft; raw statistics use
+the raster edges replaced by that same run. Values are length-weighted absolute feet:
+
+| level | matched run ft | snapped mean / median | raw mean / median | mean snapped-minus-raw |
+|---|---:|---:|---:|---:|
+| Lower | 159.0 | 1.094 / 0.640 | 1.068 / 0.719 | +0.026 |
+| Theatre | 0 | - | - | - |
+| Main | 26.0 | 0.386 / 0.368 | 0.376 / 0.368 | +0.010 |
+| Upper | 133.2 | 0.607 / 0.706 | 0.603 / 0.671 | +0.004 |
+| Attic | 69.8 | 1.924 / 2.014 | 1.934 / 2.018 | -0.011 |
+
+There is no systematic wall-relative correction hiding behind low coverage: snapping changes the
+mean perpendicular offset by -0.011 to +0.026 ft depending on level. That explains why more visual
+straightening need not improve the 1.5-ft wall metric.
+
+The temporary upper-bound experiment doubled `SnapMaxDevFt` (0.8 -> 1.6 ft) and
+`SnapMaxCornerMoveFt` (2.5 -> 5 ft), lowered `SnapMinBackedFrac` (0.5 -> 0.25), and opened the area
+drift limit. These settings were reverted and are not committed.
+
+| experiment | snapped-run coverage Lower / Theatre / Main / Upper / Attic | TOTAL | wall recall |
+|---|---:|---:|---:|
+| stock guarded | 5.5 / 0.0 / 1.0 / 4.8 / 3.0% | 54.1 | 53.7% |
+| relaxed, valid polygons required | 20.0 / 1.2 / 6.1 / 16.0 / 3.5% | 54.5 (+0.4) | 52.8% (-0.9 pp) |
+| no room reversion (unsafe ceiling) | 55.3 / 13.4 / 34.2 / 52.9 / 29.6% | 54.8 (+0.7) | 51.1% (-2.6 pp) |
+
+The unsafe ceiling emitted invalid rings that the stock scorer could not consume until its local
+analysis copy used generic repaired-geometry boundaries; it is not a shippable score. One genuine
+guard mechanism was also tested at stock thresholds: deduplicating shared-chain demotions per
+iteration. It reduced valid coverage (Lower 4.51%, Main 0.45%, Upper 4.61%), left TOTAL at 54.1,
+and was reverted.
+
+**Decision:** retain the conservative snapping mechanism and the telemetry, but make no feature
+change. The valid upper bound is below the ~0.5 TOTAL bar, while forced coverage buys only +0.7 by
+emitting invalid topology and further harms wall recall. On this benchmark, snapping is a
+visual/editability win, not a scoring win.

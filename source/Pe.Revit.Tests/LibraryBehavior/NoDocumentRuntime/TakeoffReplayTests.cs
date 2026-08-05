@@ -223,6 +223,23 @@ public sealed class TakeoffReplayTests
     // ---- phase-3 wall-line snapping semantics (BoundarySnap.cs) ----
 
     [Test]
+    public void Snap_diagnostics_account_for_every_boundary_chain()
+    {
+        var snap = BuildSyntheticEstate();
+        var opt = PartitionOptions();
+        var diagnostics = opt.SnapDiagnostics = new();
+
+        snap.Replay(opt, _ => { });
+
+        Assert.Multiple(() => {
+            Assert.That(diagnostics, Is.Not.Empty);
+            Assert.That(diagnostics.All(d => d.LengthFt > 0), Is.True);
+            Assert.That(diagnostics.All(d => BoundarySnapDiagnostic.Outcomes.Contains(d.Outcome)), Is.True);
+            Assert.That(diagnostics.Sum(d => d.LengthFt), Is.GreaterThan(0));
+        });
+    }
+
+    [Test]
     public void Snap_keeps_door_gap_rooms_separate_with_bounded_area_drift()
     {
         var snap = BuildSyntheticEstate();

@@ -21,6 +21,36 @@ namespace Pe.Revit.Takeoff;
 //     max(0.5 sqft, 1%); a room that would exceed it (or self-intersect) reverts its chains to
 //     raw geometry, iterating to a fixed point whose final fallback is the pre-snap raster.
 //   - DETERMINISM: fixed scan orders, sorted iteration, no randomness.
+internal sealed class BoundarySnapRunDiagnostic
+{
+    public double LengthFt;
+    public List<double[]> RawPoints = new();
+    public double[] SnappedStart = null!;
+    public double[] SnappedEnd = null!;
+}
+
+internal sealed class BoundarySnapDiagnostic
+{
+    internal const string Snapped = "snapped";
+    internal const string NoDirectionConsensus = "no-direction-consensus";
+    internal const string InsufficientEvidenceBacking = "insufficient-evidence-backing";
+    internal const string DeviationCap = "deviation-cap";
+    internal const string CornerCap = "corner-cap";
+    internal const string AreaGuardRevert = "area-guard-revert";
+    internal const string Other = "other";
+    internal static readonly HashSet<string> Outcomes = new(StringComparer.Ordinal) {
+        Snapped, NoDirectionConsensus, InsufficientEvidenceBacking, DeviationCap, CornerCap,
+        AreaGuardRevert, Other,
+    };
+
+    public int ChainId, A, B;
+    public double LengthFt, SnappedFt;
+    public string Outcome = Other;
+    public List<double[]> RawPoints = new();
+    public List<double[]> SnappedPoints = new();
+    public List<BoundarySnapRunDiagnostic> SnappedRuns = new();
+}
+
 internal static class BoundarySnap
 {
     private const double MaxAreaDriftSqft = 0.5;   // per-room drift bound: max(0.5 sqft, 1%) —
@@ -51,6 +81,8 @@ internal static class BoundarySnap
         public int Level;                       // staged fallback: 0 full snap, 1 conservative
                                                 // (no terminal extension), 2 raw
         public bool IsRaw;                      // this iteration produced raw geometry only
+        public bool HadEvidenceBacking, HadDirectionConsensus;
+        public bool HitDeviationCap, HitCornerCap, HitAreaGuard;
     }
 
     // Effective run list at a fallback level. Level 1 undoes terminal absorption: the line run
@@ -191,6 +223,7 @@ internal static class BoundarySnap
                 bf[k] = count > 0 ? (double)backed / count : 0;
                 if (bf[k] >= opt.SnapMinBackedFrac)
                 {
+                    ch.HadEvidenceBacking = true;
                     int bin = (int)(a * 180 / Math.PI) % Bins;
                     wRaw[bin] += cellFt;
                     aRaw[bin] += cellFt * (a * 180 / Math.PI);
@@ -281,6 +314,7 @@ internal static class BoundarySnap
                     if (d <= bestD) { bestD = d; best = di; }
                 }
                 ch.Dir[k] = best;
+                if (best >= 0) ch.HadDirectionConsensus = true;
             }
 
             // rotate closed chains so edge 0 sits at a direction-change boundary
@@ -347,7 +381,7 @@ internal static class BoundarySnap
                 double maxDev = 0;
                 for (int j = r.Start; j <= r.End + 1; j++)
                     maxDev = Math.Max(maxDev, Math.Abs(ch.X[j] * nx + ch.Y[j] * ny - r.Offset));
-                if (maxDev > opt.SnapMaxDevFt) r.Dir = -1;
+                if (maxDev > opt.SnapMaxDevFt) { r.Dir = -1; ch.HitDeviationCap = true; }
                 else r.Support = (r.End - r.Start + 1) * cellFt;
             }
 
@@ -404,7 +438,7 @@ internal static class BoundarySnap
             double nx = -Math.Sin(dirs[line.Dir]), ny = Math.Cos(dirs[line.Dir]);
             for (int p = stub.Start; p <= stub.End + 1; p++)
                 if (Math.Abs(chain.X[p] * nx + chain.Y[p] * ny - line.Offset) > opt.SnapMaxCornerMoveFt)
-                    return false;
+                { chain.HitCornerCap = true; return false; }
             return true;
         }
         foreach (var ch in chains.Where(c => !c.Closed))
@@ -527,7 +561,8 @@ internal static class BoundarySnap
             {
                 bool anyNew = false;
                 foreach (int ci in roomChains[id])
-                    if (chains[ci].Level < 2) { chains[ci].Level++; anyNew = true; }
+                    if (chains[ci].Level < 2)
+                    { chains[ci].HitAreaGuard = true; chains[ci].Level++; anyNew = true; }
                 if (!anyNew)
                     foreach (int ci in roomChains[id])
                     { frozen.Add(chains[ci].Nodes[0]); frozen.Add(chains[ci].Nodes[^1]); }
@@ -541,6 +576,44 @@ internal static class BoundarySnap
         log($"[snap] chains={chains.Count} boundary={totalLen:F0}ft snapped={snappedLen:F0}ft " +
             $"({(totalLen > 0 ? 100 * snappedLen / totalLen : 0):F0}%) demotedChains={demoted} " +
             $"rawChains={rawed} frozenJunctions={frozen.Count} iterations={iterations}");
+        if (opt.SnapDiagnostics != null)
+        {
+            for (int ci = 0; ci < chains.Count; ci++)
+            {
+                var ch = chains[ci];
+                var runs = EffectiveRuns(ch, ch.Level);
+                bool hadSnapCandidate = ch.Runs.Any(r => r.Dir >= 0);
+                var d = new BoundarySnapDiagnostic {
+                    ChainId = ci, A = ch.A, B = ch.B,
+                    LengthFt = ch.Edges.Count * cellFt,
+                    SnappedFt = ch.IsRaw ? 0 : runs.Where(r => r.Dir >= 0)
+                        .Sum(r => r.End - r.Start + 1) * cellFt,
+                    Outcome = !ch.IsRaw ? BoundarySnapDiagnostic.Snapped
+                        : hadSnapCandidate && ch.HitAreaGuard ? BoundarySnapDiagnostic.AreaGuardRevert
+                        : !ch.HadEvidenceBacking ? BoundarySnapDiagnostic.InsufficientEvidenceBacking
+                        : !ch.HadDirectionConsensus ? BoundarySnapDiagnostic.NoDirectionConsensus
+                        : ch.HitDeviationCap ? BoundarySnapDiagnostic.DeviationCap
+                        : ch.HitCornerCap ? BoundarySnapDiagnostic.CornerCap
+                        : BoundarySnapDiagnostic.Other,
+                    RawPoints = Enumerable.Range(0, ch.Nodes.Count)
+                        .Select(i => new[] { ch.X[i], ch.Y[i] }).ToList(),
+                    SnappedPoints = ch.Snapped.Select(p => new[] { p[0], p[1] }).ToList(),
+                };
+                if (!ch.IsRaw)
+                    foreach (var r in runs.Where(r => r.Dir >= 0))
+                    {
+                        var theta = dirs[r.Dir];
+                        d.SnappedRuns.Add(new BoundarySnapRunDiagnostic {
+                            LengthFt = (r.End - r.Start + 1) * cellFt,
+                            RawPoints = Enumerable.Range(r.Start, r.End - r.Start + 2)
+                                .Select(i => new[] { ch.X[i], ch.Y[i] }).ToList(),
+                            SnappedStart = Project(ch.X[r.Start], ch.Y[r.Start], theta, r.Offset),
+                            SnappedEnd = Project(ch.X[r.End + 1], ch.Y[r.End + 1], theta, r.Offset),
+                        });
+                    }
+                opt.SnapDiagnostics.Add(d);
+            }
+        }
         return result;
     }
 
@@ -550,11 +623,12 @@ internal static class BoundarySnap
         List<Chain> chains, HashSet<int> frozen, List<double> dirs,
         double minX, double minY, int nodeW, double cellFt, TakeoffOptions opt)
     {
-        var cand = new SortedDictionary<int, List<(double sup, int dir, double off)>>();
-        void Add(int node, Run r)
+        var cand = new SortedDictionary<int, List<(Chain ch, double sup, int dir, double off)>>();
+        void Add(int node, Chain ch, Run r)
         {
-            if (!cand.TryGetValue(node, out var list)) cand[node] = list = new List<(double, int, double)>();
-            list.Add((r.Support, r.Dir, r.Offset));
+            if (!cand.TryGetValue(node, out var list))
+                cand[node] = list = new List<(Chain, double, int, double)>();
+            list.Add((ch, r.Support, r.Dir, r.Offset));
         }
         for (int ci = 0; ci < chains.Count; ci++)
         {
@@ -563,16 +637,17 @@ internal static class BoundarySnap
             var runs = EffectiveRuns(ch, ch.Level);
             if (runs.Count == 0) continue;
             var first = runs[0];
-            if (first.Dir >= 0 && first.Start == 0) Add(ch.Nodes[0], first);
+            if (first.Dir >= 0 && first.Start == 0) Add(ch.Nodes[0], ch, first);
             var last = runs[^1];
-            if (last.Dir >= 0 && last.End == ch.Edges.Count - 1) Add(ch.Nodes[^1], last);
+            if (last.Dir >= 0 && last.End == ch.Edges.Count - 1) Add(ch.Nodes[^1], ch, last);
         }
         var jpos = new Dictionary<int, double[]>();
         foreach (var (node, rawList) in cand)
         {
             if (frozen.Contains(node)) continue;
             var list = rawList.GroupBy(t => (t.dir, t.off))
-                .Select(g => (sup: g.Max(t => t.sup), g.Key.dir, g.Key.off))
+                .Select(g => (chains: g.Select(t => t.ch).Distinct().ToList(), sup: g.Max(t => t.sup),
+                    g.Key.dir, g.Key.off))
                 .OrderByDescending(t => t.sup).ThenBy(t => t.dir).ThenBy(t => t.off).ToList();
             var best = list[0];
             double ox = minX + node % nodeW * cellFt, oy = minY + node / nodeW * cellFt;
@@ -583,13 +658,16 @@ internal static class BoundarySnap
                 if (sepDeg < MinCornerAngleDeg) continue;
                 var x = Intersect(dirs[best.dir], best.off, dirs[second.dir], second.off);
                 if (Dist(x[0], x[1], ox, oy) <= opt.SnapMaxCornerMoveFt) pos = x;
+                else foreach (var ch in best.chains.Concat(second.chains)) ch.HitCornerCap = true;
                 break;
             }
             if (pos == null)
             {
                 var pr = Project(ox, oy, dirs[best.dir], best.off);
-                if (Dist(pr[0], pr[1], ox, oy) <= opt.SnapMaxCornerMoveFt
-                    && Dist(pr[0], pr[1], ox, oy) > 1e-12) pos = pr;
+                double move = Dist(pr[0], pr[1], ox, oy);
+                if (move <= opt.SnapMaxCornerMoveFt && move > 1e-12) pos = pr;
+                else if (move > opt.SnapMaxCornerMoveFt)
+                    foreach (var ch in best.chains) ch.HitCornerCap = true;
             }
             if (pos != null) jpos[node] = pos;
         }

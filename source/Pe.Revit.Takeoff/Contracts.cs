@@ -140,6 +140,7 @@ public sealed class TakeoffOptions
     public double SnapColinearTolFt = 0.6;  // colinear runs within this offset share ONE wall line
     public double SnapMinBackedFrac = 0.5;  // fraction of window edges that must be evidence-backed
     public double SnapMaxCornerMoveFt = 2.5; // cap on corner and terminal-stub movement to a line
+    internal List<BoundarySnapDiagnostic>? SnapDiagnostics; // replay-only rejection/geometry capture
     public string Marker = "PE-TAKEOFF";    // stamped into Comments of everything we create
     public string? ArtifactDir;             // where TSV/PNG artifacts land (default: temp)
 }
