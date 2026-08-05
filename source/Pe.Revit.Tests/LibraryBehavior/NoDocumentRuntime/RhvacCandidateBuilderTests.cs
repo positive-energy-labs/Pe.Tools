@@ -135,6 +135,26 @@ public sealed class RhvacCandidateBuilderTests
     }
 
     [Test]
+    public void Grid_pitch_uses_repeated_raster_steps_not_micro_snaps_or_long_walls()
+    {
+        var loops = Enumerable.Range(0, 100)
+            .Select(index => Square($"R{index}", index * 20, 0, 10).Outer)
+            .Append(new List<double[]> {
+                new[] { 0.0, 0.0 },
+                new[] { 0.000005, 0.0 },
+                new[] { 0.250005, 0.0 },
+                new[] { 0.500005, 0.0 },
+                new[] { 0.750005, 0.0 },
+                new[] { 1.000005, 0.0 },
+                new[] { 1.000005, 0.25 },
+                new[] { 1.000005, 0.5 },
+                new[] { 0.0, 0.5 },
+            });
+
+        Assert.That(RhvacCandidateBuilder.DeriveGridPitch(loops), Is.EqualTo(0.25));
+    }
+
+    [Test]
     public void ProjectA_simplification_preserves_area_and_collapses_staircases()
     {
         static double Shoelace(List<double[]> loop)

@@ -147,10 +147,10 @@ public static class RhvacCandidateBuilder
     // one grid cell, derived from the data. Mirror of apps/web/src/rhvac/takeoff.ts — keep the
     // algorithm and tolerance semantics aligned.
 
-    /// <summary>Smallest positive axis-aligned edge component across the loops = detector grid pitch.</summary>
-    private static double? DeriveGridPitch(IEnumerable<List<double[]>> loops)
+    /// <summary>Most frequent repeated sub-limit axis component = detector grid pitch.</summary>
+    internal static double? DeriveGridPitch(IEnumerable<List<double[]>> loops)
     {
-        var pitch = double.PositiveInfinity;
+        var components = new List<double>();
         foreach (var loop in loops)
         {
             for (var i = 0; i < loop.Count; i++)
@@ -159,14 +159,21 @@ public static class RhvacCandidateBuilder
                 var q = loop[(i + 1) % loop.Count];
                 var dx = Math.Abs(q[0] - p[0]);
                 var dy = Math.Abs(q[1] - p[1]);
-                if (dx > 1e-6 && dx < pitch)
-                    pitch = dx;
-                if (dy > 1e-6 && dy < pitch)
-                    pitch = dy;
+                if (dx > 1e-6)
+                    components.Add(dx);
+                if (dy > 1e-6)
+                    components.Add(dy);
             }
         }
 
-        return double.IsFinite(pitch) ? pitch : null;
+        return components
+            .Where(component => component <= MaxRasterPitchFeet)
+            .GroupBy(component => Math.Round(component, 6, MidpointRounding.AwayFromZero))
+            .Where(group => group.Count() > 1)
+            .OrderByDescending(group => group.Count())
+            .ThenBy(group => group.Key)
+            .Select(group => (double?)group.Key)
+            .FirstOrDefault();
     }
 
     private static void SimplifyLevelLoops(List<TakeoffRoomShape> rooms)

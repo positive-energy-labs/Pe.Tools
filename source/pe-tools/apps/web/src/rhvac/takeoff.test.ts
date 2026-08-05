@@ -130,6 +130,31 @@ describe("rhvac fixture lane", () => {
     }
   });
 
+  it("derives pitch from repeated raster steps, not micro snaps or long walls", () => {
+    const cleanSquares: [number, number][][] = Array.from({ length: 100 }, (_, index) => {
+      const x = index * 20;
+      return [
+        [x, 0],
+        [x + 10, 0],
+        [x + 10, 10],
+        [x, 10],
+      ];
+    });
+    const rasterWithMicroSnap: [number, number][] = [
+      [0, 0],
+      [0.000005, 0],
+      [0.250005, 0],
+      [0.500005, 0],
+      [0.750005, 0],
+      [1.000005, 0],
+      [1.000005, 0.25],
+      [1.000005, 0.5],
+      [0, 0.5],
+    ];
+
+    expect(deriveGridPitch([...cleanSquares, rasterWithMicroSnap])).toBe(0.25);
+  });
+
   it("room-map candidates all resolve to parsed polygons, oracle numbers to rooms", () => {
     const candidates = new Set(
       levels.flatMap((level) => level.rooms.map((room) => candidateKey(level.levelName, room.id))),

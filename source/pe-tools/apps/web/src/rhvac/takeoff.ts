@@ -102,19 +102,29 @@ const MAX_RASTER_PITCH_FT = 1.0;
 /** Edges up to this many grid cells are staircase steps, not real wall runs. */
 const STAIR_EDGE_CELLS = 2.5;
 
-/** Smallest positive axis-aligned edge component across the loops = detector grid pitch. */
+/** Most frequent repeated sub-limit axis component = detector grid pitch. */
 export function deriveGridPitch(loops: [number, number][][]): number | null {
-  let pitch = Infinity;
+  const counts = new Map<number, number>();
   for (const loop of loops)
     for (let i = 0; i < loop.length; i++) {
       const [x0, y0] = loop[i]!;
       const [x1, y1] = loop[(i + 1) % loop.length]!;
       const dx = Math.abs(x1 - x0);
       const dy = Math.abs(y1 - y0);
-      if (dx > 1e-6 && dx < pitch) pitch = dx;
-      if (dy > 1e-6 && dy < pitch) pitch = dy;
+      for (const component of [dx, dy]) {
+        if (component <= 1e-6 || component > MAX_RASTER_PITCH_FT) continue;
+        const rounded = Math.round(component * 1e6) / 1e6;
+        counts.set(rounded, (counts.get(rounded) ?? 0) + 1);
+      }
     }
-  return Number.isFinite(pitch) ? pitch : null;
+  let pitch: number | null = null;
+  let frequency = 1;
+  for (const [component, count] of counts)
+    if (count > frequency || (count === frequency && (pitch === null || component < pitch))) {
+      pitch = component;
+      frequency = count;
+    }
+  return pitch;
 }
 
 function simplifyLevelLoops(rooms: TakeoffRoomShape[]): void {
