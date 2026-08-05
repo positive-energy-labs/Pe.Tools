@@ -38,14 +38,14 @@ Deterministic JSON — no timestamps, stable sort by `(candidateKey, flag)`:
 - `candidateKey` = `<levelName>:<roomId>` (types.ts `candidateKey`).
 - `params` chord endpoints are model coordinates (feet, Y up — the TSV frame), already
   snapped to the outer ring.
-- Applied after TSV parse + simplification (`applyResolutions`, `src/rhvac/resolutions.ts`):
-  pure and idempotent — a resolution whose candidate/flag no longer exists is skipped.
+- Applied after TSV parse + simplification in both TypeScript (`applyResolutions`) and C#
+  (`RhvacCandidateBuilder.ParseTsvDirectory`): pure and idempotent — a resolution whose
+  candidate/flag no longer exists is skipped.
 - Splits replace the room with `<id>.a` / `<id>.b` (larger area = `.a`; tie → smaller
   centroid), `splitFrom` carries the original id; children inherit other unresolved flags.
   Holes go to the half containing their centroid.
-- Splits affect DISPLAY + candidate polygons only — never the .r10 rooms. Conversion
-  consumes the resolved polygons later; the sidecar is also the future input for pushing
-  splits back into candidate generation.
+- Splits affect display and candidate polygons. C# candidate generation consumes the same sidecar
+  before `.r10` export, so exported rooms use the resolved polygons.
 
 ## Persistence
 
@@ -68,5 +68,4 @@ the UI lane does not copy or re-baseline them.
 - `low-evidence-boundary` nudge-to-suggested-alternative (needs the detector to emit the
   alternative geometry).
 - Nested splits (splitting a `.a`/`.b` child) and split preview line while drawing.
-- Feeding resolutions back into candidate generation (Phase 3+).
-- Naming split children into the room map / .r10 conversion.
+- Naming split children in the room map beyond deterministic `<id>.a` / `<id>.b` ids.

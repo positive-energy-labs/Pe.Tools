@@ -60,9 +60,9 @@ It now uses the exact existing `.r10` floor seed, `shortest side of floor slab i
 the same U-value 0.019. Wall, roof, slab-floor, and framed-floor seed names were all found exactly
 once in the source assembly listing.
 
-`RhvacProjectAEvalRun` is the existing offline entry point that calls `ParseTsv`, loads
-`conventions.json`, calls `RhvacCandidateBuilder.Build`, and writes `candidate.rooms.json` before
-scoring it:
+`RhvacProjectAEvalRun` is the existing offline entry point that calls `ParseTsvDirectory`, applies an
+optional sibling `takeoff-resolutions.json`, loads `conventions.json`, calls
+`RhvacCandidateBuilder.Build`, and writes `candidate.rooms.json` before scoring it:
 
 ```powershell
 $env:PE_EVAL_PROFILE = 'bootstrap'
@@ -189,9 +189,10 @@ Result: 16 files, 83/83 tests passed. Host files were untouched.
   warnings. Candidate area is 60,346 ft² versus 47,230 ft² across oracle rooms (+27.8%).
 - **Partition area rounding:** summed TSV `META totalSqft` is 60,345.5 ft²; summed one-decimal ROOM
   areas used by candidates are 60,346.4 ft², a +0.9 ft² (+0.0015%) conversion delta.
-- **Ambiguity remains unresolved:** 13 flagged rooms were exported as-is: 12 carry
-  `open-plan-merge`; 3 carry `low-evidence-boundary` (two rooms carry both). No flag is representable
-  in `.r10`, so the scratch file does not preserve those edit prompts.
+- **Flagged ambiguity is resolvable before export:** an optional sibling
+  `takeoff-resolutions.json` now applies accept/split decisions before candidate generation. This
+  recorded run had no sidecar, so 13 flagged rooms were exported as-is. `.r10` stores the resulting
+  geometry, not the unresolved edit prompts.
 - **Plan shape is lossy by design:** raw loops simplify 85.3%, then RHVAC receives scalar room area
   plus one summed exterior wall per direction, not the editable Partition polygon. The refreshed
   TSVs contain 752 excluded/non-domain void loops across 134 rooms; partition accounting still has

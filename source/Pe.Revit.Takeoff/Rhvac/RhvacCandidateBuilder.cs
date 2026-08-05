@@ -20,7 +20,11 @@ public sealed record TakeoffRoomShape(
     double MeanCeilingFt,
     List<double[]> Outer,
     List<List<double[]>> Holes
-);
+)
+{
+    public List<string> Flags { get; init; } = new();
+    public string? SplitFrom { get; init; }
+}
 
 /// <summary>One parsed takeoff TSV: a level and its rooms.</summary>
 public sealed record LevelTakeoff(string LevelName, double Elevation, List<TakeoffRoomShape> Rooms);
@@ -47,12 +51,17 @@ public sealed record Conventions(
     ConventionAssemblies Assemblies
 );
 
-/// <summary>Builds RHVAC candidate rooms from committed takeoff TSVs plus project conventions.</summary>
+/// <summary>Builds RHVAC rooms from takeoff TSVs, optional flag resolutions, and conventions.</summary>
 public static class RhvacCandidateBuilder
 {
     private const double MinWallEdgeFeet = 0.5; // raster stair-step slivers, not walls
     private const double MaxRasterPitchFeet = 1.0; // finer grids are staircases; coarser data is left alone
     private const double StairEdgeCells = 2.5; // edges up to this many grid cells are staircase steps
+
+    private sealed record ResolutionsFile(int Version, List<FlagResolution>? Resolutions);
+    private sealed record FlagResolution(string CandidateKey, string Flag, string Action, SplitParams? Params);
+    private sealed record SplitParams(double[] A, double[] B);
+    private readonly record struct RingSnap(int Edge, double T, double[] Point);
 
     /// <summary>
     /// Parses one ToTsv payload (META/ROOM/POLY lines). Throws on any malformed line. Unless
@@ -84,6 +93,8 @@ public static class RhvacCandidateBuilder
                         elevation = Parse(parts[2], lineIndex);
                     else if (parts[1] == "rooms")
                         declaredRooms = int.Parse(parts[2], ic);
+                    else if (parts[1] == "flag")
+                        ApplyFlagMeta(parts[2], byId);
                     // totalSqft is display metadata; ignored.
                     break;
                 case "ROOM" when parts.Length == 7:
@@ -137,6 +148,231 @@ public static class RhvacCandidateBuilder
         if (simplify)
             SimplifyLevelLoops(rooms);
         return new LevelTakeoff(levelName, elevation.Value, rooms);
+    }
+
+    /// <summary>
+    /// Parses every rooms_*.tsv in a takeoff directory and applies the optional
+    /// takeoff-resolutions.json beside that directory.
+    /// </summary>
+    public static List<LevelTakeoff> ParseTsvDirectory(
+        string tsvDirectory,
+        string? resolutionsPath = null,
+        bool simplify = true
+    )
+    {
+        var fullDirectory = Path.GetFullPath(tsvDirectory);
+        var levels = Directory.GetFiles(fullDirectory, "rooms_*.tsv")
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .Select(path => ParseTsv(File.ReadAllText(path), simplify))
+            .ToList();
+        var projectDirectory = Directory.GetParent(fullDirectory)?.FullName
+            ?? throw new InvalidDataException($"{fullDirectory}: takeoff directory has no parent.");
+        var sidecar = resolutionsPath ?? Path.Combine(projectDirectory, "takeoff-resolutions.json");
+        return File.Exists(sidecar) ? ApplyResolutions(levels, sidecar) : levels;
+    }
+
+    /// <summary>Pure, idempotent application of a takeoff-resolutions.json sidecar.</summary>
+    public static List<LevelTakeoff> ApplyResolutions(
+        IReadOnlyList<LevelTakeoff> levels,
+        string resolutionsPath
+    )
+    {
+        var file = JsonConvert.DeserializeObject<ResolutionsFile>(File.ReadAllText(resolutionsPath))
+            ?? throw new InvalidDataException($"{resolutionsPath}: empty resolutions file.");
+        if (file.Version != 1 || file.Resolutions is null)
+            throw new InvalidDataException($"{resolutionsPath}: expected version 1 with a resolutions array.");
+        foreach (var resolution in file.Resolutions)
+        {
+            if (string.IsNullOrEmpty(resolution.CandidateKey) || string.IsNullOrEmpty(resolution.Flag))
+                throw new InvalidDataException($"{resolutionsPath}: candidateKey and flag are required.");
+            if (resolution.Action is not ("accept" or "split"))
+                throw new InvalidDataException($"{resolutionsPath}: unknown action '{resolution.Action}'.");
+            if (resolution.Params is not null)
+            {
+                ValidatePoint(resolution.Params.A, resolutionsPath);
+                ValidatePoint(resolution.Params.B, resolutionsPath);
+            }
+        }
+
+        var byKey = file.Resolutions
+            .GroupBy(resolution => resolution.CandidateKey, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
+        return levels.Select(level => level with {
+            Rooms = level.Rooms.SelectMany(room =>
+                ApplyRoomResolutions(level.LevelName, room, byKey)).ToList(),
+        }).ToList();
+    }
+
+    private static IEnumerable<TakeoffRoomShape> ApplyRoomResolutions(
+        string levelName,
+        TakeoffRoomShape room,
+        IReadOnlyDictionary<string, List<FlagResolution>> byKey
+    )
+    {
+        if (room.Flags.Count == 0
+            || !byKey.TryGetValue($"{levelName}:{room.Id}", out var resolutions))
+            return new[] { room };
+
+        var accepted = resolutions
+            .Where(resolution => resolution.Action == "accept")
+            .Select(resolution => resolution.Flag)
+            .ToHashSet(StringComparer.Ordinal);
+        var split = resolutions.FirstOrDefault(resolution =>
+            resolution.Action == "split"
+            && resolution.Params is not null
+            && room.Flags.Contains(resolution.Flag));
+        var remaining = room.Flags.Where(flag => !accepted.Contains(flag)).ToList();
+
+        if (split?.Params is not null)
+        {
+            var halves = SplitShape(room, split.Params.A, split.Params.B);
+            if (halves is not null)
+            {
+                var childFlags = remaining.Where(flag => flag != split.Flag).ToList();
+                return halves.Select(half => half with { Flags = new List<string>(childFlags) });
+            }
+        }
+
+        return remaining.Count == room.Flags.Count
+            ? new[] { room }
+            : new[] { room with { Flags = remaining } };
+    }
+
+    private static TakeoffRoomShape[]? SplitShape(TakeoffRoomShape room, double[] a, double[] b)
+    {
+        if (room.Outer.Count < 3)
+            return null;
+        var snapA = NearestOnRing(room.Outer, a);
+        var snapB = NearestOnRing(room.Outer, b);
+        if (Distance(snapA.Point, snapB.Point) < 1e-6)
+            return null;
+
+        var half1 = Dedupe(WalkBetween(room.Outer, snapA, snapB));
+        var half2 = Dedupe(WalkBetween(room.Outer, snapB, snapA));
+        if (half1.Count < 3 || half2.Count < 3)
+            return null;
+        var area1 = Math.Abs(SignedArea(half1));
+        var area2 = Math.Abs(SignedArea(half2));
+        if (area1 < 1 || area2 < 1)
+            return null;
+
+        var holes1 = new List<List<double[]>>();
+        var holes2 = new List<List<double[]>>();
+        foreach (var hole in room.Holes)
+        {
+            var centroid = CentroidOf(hole);
+            (InsideLoop(half1, centroid[0], centroid[1]) ? holes1 : holes2).Add(hole);
+        }
+
+        TakeoffRoomShape Make(string suffix, List<double[]> outer, List<List<double[]>> holes, double grossArea) =>
+            new(
+                $"{room.Id}.{suffix}",
+                grossArea - holes.Sum(hole => Math.Abs(SignedArea(hole))),
+                RingPerimeter(outer),
+                room.MeanCeilingFt,
+                outer,
+                holes
+            ) { SplitFrom = room.SplitFrom ?? room.Id };
+
+        var centroid1 = CentroidOf(half1);
+        var centroid2 = CentroidOf(half2);
+        var firstIsA = area1 != area2
+            ? area1 > area2
+            : centroid1[0] != centroid2[0]
+                ? centroid1[0] < centroid2[0]
+                : centroid1[1] <= centroid2[1];
+        return firstIsA
+            ? new[] { Make("a", half1, holes1, area1), Make("b", half2, holes2, area2) }
+            : new[] { Make("a", half2, holes2, area2), Make("b", half1, holes1, area1) };
+    }
+
+    private static RingSnap NearestOnRing(List<double[]> ring, double[] point)
+    {
+        var best = new RingSnap(0, 0, ring[0]);
+        var bestDistance = double.PositiveInfinity;
+        for (var index = 0; index < ring.Count; index++)
+        {
+            var a = ring[index];
+            var b = ring[(index + 1) % ring.Count];
+            var dx = b[0] - a[0];
+            var dy = b[1] - a[1];
+            var lengthSquared = (dx * dx) + (dy * dy);
+            var t = lengthSquared < 1e-12
+                ? 0
+                : BclCompat.Clamp((((point[0] - a[0]) * dx) + ((point[1] - a[1]) * dy)) / lengthSquared, 0, 1);
+            var snapped = new[] { a[0] + (t * dx), a[1] + (t * dy) };
+            var distance = Distance(point, snapped);
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                best = new RingSnap(index, t, snapped);
+            }
+        }
+        return best;
+    }
+
+    private static List<double[]> WalkBetween(List<double[]> ring, RingSnap from, RingSnap to)
+    {
+        var result = new List<double[]> { from.Point };
+        if (from.Edge == to.Edge && to.T >= from.T)
+        {
+            result.Add(to.Point);
+            return result;
+        }
+        var index = (from.Edge + 1) % ring.Count;
+        for (var step = 0; step <= ring.Count; step++)
+        {
+            result.Add(ring[index]);
+            if (index == to.Edge)
+                break;
+            index = (index + 1) % ring.Count;
+        }
+        result.Add(to.Point);
+        return result;
+    }
+
+    private static List<double[]> Dedupe(List<double[]> ring) => ring
+        .Where((point, index) => Distance(point, ring[(index + ring.Count - 1) % ring.Count]) > 1e-6)
+        .ToList();
+
+    private static double[] CentroidOf(List<double[]> ring)
+    {
+        var area = 0.0;
+        var x = 0.0;
+        var y = 0.0;
+        for (var index = 0; index < ring.Count; index++)
+        {
+            var a = ring[index];
+            var b = ring[(index + 1) % ring.Count];
+            var cross = (a[0] * b[1]) - (b[0] * a[1]);
+            area += cross;
+            x += (a[0] + b[0]) * cross;
+            y += (a[1] + b[1]) * cross;
+        }
+        return Math.Abs(area) < 1e-9 ? ring[0] : new[] { x / (3 * area), y / (3 * area) };
+    }
+
+    private static double RingPerimeter(List<double[]> ring) => ring
+        .Select((point, index) => Distance(point, ring[(index + 1) % ring.Count]))
+        .Sum();
+
+    private static double Distance(double[] a, double[] b) =>
+        Math.Sqrt(((a[0] - b[0]) * (a[0] - b[0])) + ((a[1] - b[1]) * (a[1] - b[1])));
+
+    private static void ValidatePoint(double[]? point, string path)
+    {
+        if (point is not { Length: 2 } || point.Any(value => !double.IsFinite(value)))
+            throw new InvalidDataException($"{path}: split points must be finite [x, y] pairs.");
+    }
+
+    private static void ApplyFlagMeta(string payload, IReadOnlyDictionary<string, TakeoffRoomShape> byId)
+    {
+        var colon = payload.IndexOf(':');
+        if (colon <= 0 || !byId.TryGetValue(payload[..colon], out var room))
+            return;
+        foreach (var flag in payload[(colon + 1)..].Split('+').Where(flag => flag.Length > 0))
+            if (!room.Flags.Contains(flag)) room.Flags.Add(flag);
+        room.Flags.Sort(StringComparer.Ordinal);
     }
 
     // ── raster simplification ─────────────────────────────────────────────────────────────────

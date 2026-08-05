@@ -4,10 +4,9 @@
  *
  * A resolutions sidecar is deterministic JSON (no timestamps): applied to the
  * same parsed takeoff it always yields the same polygons, so it survives
- * reload, replays against re-runs, and is the future input for pushing splits
- * back into candidate generation. Resolutions affect DISPLAY + candidate
- * polygons only — they never touch the .r10 rooms; conversion consumes the
- * resolved polygons later.
+ * reload and replays against re-runs. The C# candidate builder consumes the
+ * same sidecar before .r10 export, so accepted flags and split polygons feed
+ * candidate generation without changing the source TSVs.
  *
  * Persistence is localStorage per takeoff source plus downloadable JSON; the
  * `rhvac.takeoff-resolutions` host op (src/host/rhvac.ts) persists the same

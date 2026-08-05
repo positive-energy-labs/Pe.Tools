@@ -23,8 +23,7 @@ public sealed class RhvacProjectAEvalRun
             Assert.Ignore($"No takeoff TSVs at {takeoffDir}; run a takeoff first (Rhvac/README.md).");
 
         var profileName = Environment.GetEnvironmentVariable("PE_EVAL_PROFILE") ?? "bootstrap";
-        var levels = tsvPaths
-            .Select(path => RhvacCandidateBuilder.ParseTsv(File.ReadAllText(path)))
+        var levels = RhvacCandidateBuilder.ParseTsvDirectory(takeoffDir)
             .OrderBy(level => level.Elevation)
             .ToList();
         var conventions = RhvacCandidateBuilder.LoadConventions(Path.Combine(fixtureDir, "conventions.json"));

@@ -159,9 +159,8 @@ construction (every domain cell is in an emitted room, a logged border drop, or 
   already collapsed-collinear cell chains; `BoundarySimplifyFt` is unused in partition mode).
 - The evidence field (BuildEvidence) is the natural input for dominant-direction extraction;
   note the per-level reliability measurements above before trusting attic/basement ink.
-- run-takeoff.py LEVEL_POLICY must gain the partition policy (Theatre -> FLAT, SeedSource
-  Hybrid on Main/Upper/Attic) when partition goes live; the C# mirror lives in
-  `ProjectAReplayDumpRun.PolicyFor`.
+- `run-takeoff.py` and `ProjectAReplayDumpRun` now share the inferred Partition policy; preserve
+  that parity when adding future level-policy evidence.
 - **Regions deleted (2026-08-05):** the pre-agreed second-model gate passed: project-a 54.1
   Partition vs 52.4 Regions, and project-b 23.3 vs 22.0. Partition is the only formulation.
   All seven captured replay TSVs were byte-identical before/after deletion; post-deletion scores

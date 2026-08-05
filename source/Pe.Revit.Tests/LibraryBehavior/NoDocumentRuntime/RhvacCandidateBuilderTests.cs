@@ -1,3 +1,4 @@
+using Newtonsoft.Json;
 using Pe.Revit.Takeoff.Rhvac;
 
 namespace Pe.Revit.Tests.LibraryBehavior.NoDocumentRuntime;
@@ -155,6 +156,78 @@ public sealed class RhvacCandidateBuilderTests
     }
 
     [Test]
+    public void Split_resolution_changes_candidate_output_deterministically_and_idempotently()
+    {
+        var projectDir = Path.Combine(Path.GetTempPath(), $"pe-rhvac-resolutions-{Guid.NewGuid():N}");
+        var takeoffDir = Path.Combine(projectDir, "takeoff");
+        Directory.CreateDirectory(takeoffDir);
+        var tsv = string.Join("\n", new[] {
+            "META\tlevel\tL1",
+            "META\telev\t0.000000",
+            "META\trooms\t2",
+            "META\ttotalSqft\t1300.0",
+            "ROOM\tR01\t1200.0\t140.0\t20.0\t15.0\t9.00",
+            "POLY\tR01\touter\t0;0|40;0|40;30|0;30",
+            "ROOM\tR02\t100.0\t40.0\t55.0\t5.0\t9.00",
+            "POLY\tR02\touter\t50;0|60;0|60;10|50;10",
+            "META\tflag\tR01:open-plan-merge",
+            "META\tflag\tR02:low-evidence-boundary",
+            "",
+        });
+        var sidecar = Path.Combine(projectDir, "takeoff-resolutions.json");
+
+        try
+        {
+            File.WriteAllText(Path.Combine(takeoffDir, "rooms_L1.tsv"), tsv);
+            File.WriteAllText(sidecar, """
+                {
+                  "version": 1,
+                  "resolutions": [
+                    {
+                      "candidateKey": "L1:R01",
+                      "flag": "open-plan-merge",
+                      "action": "split",
+                      "params": { "a": [15, 0], "b": [15, 30] }
+                    },
+                    {
+                      "candidateKey": "L1:R02",
+                      "flag": "low-evidence-boundary",
+                      "action": "accept"
+                    }
+                  ]
+                }
+                """);
+
+            var resolved = RhvacCandidateBuilder.ParseTsvDirectory(takeoffDir);
+            var reapplied = RhvacCandidateBuilder.ApplyResolutions(resolved, sidecar);
+            var firstCandidates = RhvacCandidateBuilder.Build(resolved, TestConventions());
+            var secondCandidates = RhvacCandidateBuilder.Build(reapplied, TestConventions());
+
+            Assert.Multiple(() => {
+                Assert.That(resolved.Single().Rooms.Select(room => room.Id),
+                    Is.EqualTo(new[] { "R01.a", "R01.b", "R02" }));
+                Assert.That(resolved.Single().Rooms.Select(room => room.RawSqft),
+                    Is.EqualTo(new[] { 750.0, 450.0, 100.0 }));
+                Assert.That(resolved.Single().Rooms.Take(2).Select(room => room.SplitFrom),
+                    Is.All.EqualTo("R01"));
+                Assert.That(resolved.Single().Rooms.SelectMany(room => room.Flags), Is.Empty);
+                Assert.That(firstCandidates.Select(room => room.Name),
+                    Is.EqualTo(new[] { "L1:R01.a", "L1:R01.b", "L1:R02" }));
+                Assert.That(JsonConvert.SerializeObject(secondCandidates),
+                    Is.EqualTo(JsonConvert.SerializeObject(firstCandidates)), "reapply must be idempotent");
+                Assert.That(
+                    JsonConvert.SerializeObject(RhvacCandidateBuilder.Build(
+                        RhvacCandidateBuilder.ParseTsvDirectory(takeoffDir), TestConventions())),
+                    Is.EqualTo(JsonConvert.SerializeObject(firstCandidates)), "fresh parse must be deterministic");
+            });
+        }
+        finally
+        {
+            if (Directory.Exists(projectDir)) Directory.Delete(projectDir, recursive: true);
+        }
+    }
+
+    [Test]
     public void ProjectA_simplification_preserves_area_and_collapses_staircases()
     {
         static double Shoelace(List<double[]> loop)
@@ -205,11 +278,11 @@ public sealed class RhvacCandidateBuilderTests
     public void ProjectA_snapshot_builds_a_plausible_envelope()
     {
         var fixtureDir = RhvacEvalTests.FindFixtureDir();
-        var tsvPaths = Directory.GetFiles(Path.Combine(fixtureDir, "takeoff"), "rooms_*.tsv");
+        var takeoffDir = Path.Combine(fixtureDir, "takeoff");
+        var tsvPaths = Directory.GetFiles(takeoffDir, "rooms_*.tsv");
         Assert.That(tsvPaths, Has.Length.EqualTo(5));
 
-        var levels = tsvPaths
-            .Select(path => RhvacCandidateBuilder.ParseTsv(File.ReadAllText(path)))
+        var levels = RhvacCandidateBuilder.ParseTsvDirectory(takeoffDir)
             .OrderBy(level => level.Elevation)
             .ToList();
         var conventions = RhvacCandidateBuilder.LoadConventions(Path.Combine(fixtureDir, "conventions.json"));

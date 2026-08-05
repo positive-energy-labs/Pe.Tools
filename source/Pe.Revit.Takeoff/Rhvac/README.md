@@ -177,9 +177,10 @@ Iterating on detection code: hot-reload via the live converge session, re-run st
 
 `RhvacCandidateBuilder` converts the committed takeoff snapshot into envelope rooms offline:
 inputs are `eval/rhvac/<project>/takeoff/rooms_*.tsv` (the `ToTsv` payloads, one per level) plus
-`conventions.json` (true north angle, slab levels, the four assembly slots, roof pitch multiplier,
-probe/raster/threshold knobs). `RhvacProjectAEvalRun` builds candidates from these and scores them;
-`candidate.rooms.json` is now a gitignored inspection artifact, not an input. Three heuristics:
+an optional sibling `takeoff-resolutions.json`, then `conventions.json` (true north angle, slab
+levels, the four assembly slots, roof pitch multiplier, probe/raster/threshold knobs).
+`RhvacProjectAEvalRun` builds candidates from these and scores them; `candidate.rooms.json` is now a
+gitignored inspection artifact, not an input. Three heuristics:
 
 - **Probe-based exterior classification**: each outer-loop edge probes outward (right-hand normal
   of the CCW loop) at `wallProbeFeet`; the edge is exterior iff the probe lands in no other room
