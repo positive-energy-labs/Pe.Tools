@@ -651,6 +651,53 @@ export const rhvacTakeoffDataSchema = Schema.Struct({
 });
 export type RhvacTakeoffData = Schema.Schema.Type<typeof rhvacTakeoffDataSchema>;
 
+export const rhvacPointSchema = Schema.Tuple([Schema.Number, Schema.Number]);
+
+export const rhvacTakeoffResolutionSchema = Schema.Struct({
+  candidateKey: Schema.String,
+  flag: Schema.String,
+  action: Schema.Literals(["accept", "split"]),
+  params: Schema.optional(Schema.Struct({ a: rhvacPointSchema, b: rhvacPointSchema })),
+});
+export type RhvacTakeoffResolution = Schema.Schema.Type<typeof rhvacTakeoffResolutionSchema>;
+
+export const rhvacResolutionsFileSchema = Schema.Struct({
+  version: Schema.Literal(1),
+  resolutions: Schema.Array(rhvacTakeoffResolutionSchema),
+});
+export type RhvacResolutionsFile = Schema.Schema.Type<typeof rhvacResolutionsFileSchema>;
+
+function compareOrdinal(a: string, b: string): number {
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
+}
+
+export const sortRhvacResolutions = (
+  resolutions: readonly RhvacTakeoffResolution[],
+): RhvacTakeoffResolution[] =>
+  [...resolutions].sort(
+    (a, b) => compareOrdinal(a.candidateKey, b.candidateKey) || compareOrdinal(a.flag, b.flag),
+  );
+
+export const rhvacTakeoffResolutionsRequestSchema = Schema.Struct({
+  /** The .r10 FILE path; the sidecar is written beside its takeoff directory. */
+  path: Schema.String,
+  /** Omit to read the existing sidecar; provide to atomically replace it. */
+  resolutions: Schema.optional(rhvacResolutionsFileSchema),
+});
+export type RhvacTakeoffResolutionsRequest = Schema.Schema.Type<
+  typeof rhvacTakeoffResolutionsRequestSchema
+>;
+
+export const rhvacTakeoffResolutionsResultSchema = Schema.Struct({
+  savedPath: Schema.String,
+  /** Null when no sidecar exists yet. */
+  resolutions: Schema.NullOr(rhvacResolutionsFileSchema),
+});
+export type RhvacTakeoffResolutionsResult = Schema.Schema.Type<
+  typeof rhvacTakeoffResolutionsResultSchema
+>;
+
 export const tsOnlyOperationSchemas = {
   "aps.auth.login": {
     request: apsTokenRequestSchema,
@@ -699,6 +746,10 @@ export const tsOnlyOperationSchemas = {
   "rhvac.takeoff": {
     request: rhvacPathRequestSchema,
     response: rhvacTakeoffDataSchema,
+  },
+  "rhvac.takeoff-resolutions": {
+    request: rhvacTakeoffResolutionsRequestSchema,
+    response: rhvacTakeoffResolutionsResultSchema,
   },
   "settings.document.open": {
     request: openSettingsDocumentRequestSchema,
@@ -842,6 +893,20 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     requestTypeName: "RhvacPathRequest",
     responseTypeName: "RhvacTakeoffData",
     searchTerms: ["rhvac", "takeoff", "tsv", "room map", "plan", "polygons"],
+  },
+  {
+    key: "rhvac.takeoff-resolutions",
+    origin: "host-local",
+    displayName: "RHVAC Takeoff Resolutions",
+    description:
+      "Read or atomically replace deterministic ambiguity-flag resolutions in takeoff-resolutions.json beside an .r10 project's takeoff directory.",
+    intent: "Mutate",
+    visibility: "DefaultVisible",
+    costTier: "Cheap",
+    requiresActiveDocument: false,
+    requestTypeName: "RhvacTakeoffResolutionsRequest",
+    responseTypeName: "RhvacTakeoffResolutionsResult",
+    searchTerms: ["rhvac", "takeoff", "resolutions", "flags", "split", "accept", "sidecar"],
   },
   {
     key: "settings.workspaces",

@@ -50,24 +50,23 @@ Deterministic JSON — no timestamps, stable sort by `(candidateKey, flag)`:
 ## Persistence
 
 - localStorage per takeoff source (`rhvac:takeoff-resolutions:<sourceKey>`; host lane keys
-  by the .r10 path, fixtures by `fixture:project-a` / `fixture:flag-demo`), rehydrated on load
-  so resolved state survives reload.
+  by the .r10 path, fixtures by `fixture:project-a`) is the fixture lane and host fallback.
 - Downloadable JSON from the queue footer.
-- `rhvac.takeoff-resolutions` host op: contract stub in `src/host/rhvac.ts`
-  (`rhvacSaveTakeoffResolutions`), unwired — will write `<dir>/takeoff-resolutions.json`
-  next to the takeoff TSVs.
+- `rhvac.takeoff-resolutions` reads and atomically writes deterministic
+  `<dir>/takeoff-resolutions.json` beside the takeoff directory. The host lane loads it with the
+  takeoff and serializes every resolve/reset write in decision order; when no sidecar exists,
+  localStorage rehydrates prior browser-only decisions.
 
 ## Fixtures
 
-The committed project-a TSVs predate flags (none emitted — flags stay optional everywhere).
-`public/rhvac-fixture/rooms_Synthetic_Flag_Demo.tsv` is a tiny synthetic level WITH flag
-lines; the "Flag demo" button on /rhvac loads it (project-a extract + synthetic takeoff) to
-exercise the full resolve → persist → reload loop today.
+The web-only project-a fixture contains the real Partition replay TSVs, including 10 flagged Main
+rooms and 3 flagged Upper rooms. The committed canonical eval TSVs remain the Regions scoreboard
+baseline and are not copied or re-baselined by this UI lane.
 
 ## Deferred
 
 - `low-evidence-boundary` nudge-to-suggested-alternative (needs the detector to emit the
   alternative geometry).
 - Nested splits (splitting a `.a`/`.b` child) and split preview line while drawing.
-- Host-op wiring + feeding resolutions back into candidate generation (Phase 3+).
+- Feeding resolutions back into candidate generation (Phase 3+).
 - Naming split children into the room map / .r10 conversion.

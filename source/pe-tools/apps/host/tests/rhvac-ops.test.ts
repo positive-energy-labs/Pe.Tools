@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Effect, FileSystem } from "effect";
@@ -12,6 +12,7 @@ import type {
   RhvacRoomData,
   RhvacSaveResult,
   RhvacTakeoffData,
+  RhvacTakeoffResolutionsResult,
 } from "@pe/host-contracts/operation-types";
 import type { RevitBridge } from "../src/bridge.ts";
 import { dispatchTsOnlyOperation } from "../src/call-route.ts";
@@ -73,6 +74,59 @@ test("rhvac ops validate inputs without touching the Jet lane", async () => {
     _tag: "LocalOpError",
     statusCode: 400,
   });
+  await expect(
+    dispatch("rhvac.takeoff-resolutions", {
+      path: "C:\\nope\\project.txt",
+      resolutions: { version: 1, resolutions: [] },
+    }),
+  ).rejects.toMatchObject({ _tag: "LocalOpError", statusCode: 400 });
+  await expect(
+    dispatch("rhvac.takeoff-resolutions", { path: "C:\\nope\\missing.r10" }),
+  ).rejects.toMatchObject({ _tag: "LocalOpError", statusCode: 404 });
+});
+
+test("rhvac.takeoff-resolutions reads and writes a deterministic sidecar", async () => {
+  const projectDir = mkdtempSync(join(tmpdir(), "pe-rhvac-resolutions-"));
+  try {
+    const input = {
+      path: join(projectDir, "project.r10"),
+      resolutions: {
+        version: 1 as const,
+        resolutions: [
+          { candidateKey: "Level 2:R09", flag: "open-plan-merge", action: "accept" as const },
+          { candidateKey: "Level 1:R03", flag: "low-evidence-boundary", action: "accept" as const },
+        ],
+      },
+    };
+    writeFileSync(input.path, "");
+    const missing = await dispatch<RhvacTakeoffResolutionsResult>("rhvac.takeoff-resolutions", {
+      path: input.path,
+    });
+    expect(missing).toEqual({
+      savedPath: join(projectDir, "takeoff-resolutions.json"),
+      resolutions: null,
+    });
+
+    const saved = await dispatch<RhvacTakeoffResolutionsResult>("rhvac.takeoff-resolutions", input);
+    expect(saved.savedPath).toBe(join(projectDir, "takeoff-resolutions.json"));
+    const expected = {
+      version: 1 as const,
+      resolutions: [input.resolutions.resolutions[1], input.resolutions.resolutions[0]],
+    };
+    expect(saved.resolutions).toEqual(expected);
+    expect(readFileSync(saved.savedPath, "utf8")).toBe(`${JSON.stringify(expected, null, 2)}\n`);
+    expect(
+      await dispatch<RhvacTakeoffResolutionsResult>("rhvac.takeoff-resolutions", {
+        path: input.path,
+      }),
+    ).toEqual(saved);
+    writeFileSync(saved.savedPath, "");
+    await expect(
+      dispatch("rhvac.takeoff-resolutions", { path: input.path }),
+    ).rejects.toBeInstanceOf(LocalOpError);
+  } finally {
+    rmSync(projectDir, { recursive: true, force: true });
+  }
 });
 
 test.skipIf(!laneAvailable)(

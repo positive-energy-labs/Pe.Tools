@@ -17,7 +17,13 @@ import {
   validateSettingsDocument,
 } from "./local-ops.ts";
 import { LocalOpError, localOpHttpStatus } from "./local-error.ts";
-import { rhvacAssemblies, rhvacOpen, rhvacSave, rhvacTakeoff } from "./rhvac-ops.ts";
+import {
+  rhvacAssemblies,
+  rhvacOpen,
+  rhvacSave,
+  rhvacTakeoff,
+  rhvacTakeoffResolutions,
+} from "./rhvac-ops.ts";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   isTsOnlyOperationKey,
@@ -187,6 +193,8 @@ export const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
       return yield* rhvacSave(yield* decodeRequest(key, request));
     case "rhvac.takeoff":
       return yield* rhvacTakeoff(yield* decodeRequest(key, request));
+    case "rhvac.takeoff-resolutions":
+      return yield* rhvacTakeoffResolutions(yield* decodeRequest(key, request));
     case "aps.auth.status":
       return yield* apsAuthStatus(yield* decodeRequest(key, request));
     case "aps.auth.login":

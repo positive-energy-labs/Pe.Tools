@@ -9,50 +9,31 @@
  * polygons only — they never touch the .r10 rooms; conversion consumes the
  * resolved polygons later.
  *
- * Persistence today is localStorage per takeoff source (fixture lane) plus a
- * downloadable JSON; the `rhvac.takeoff-resolutions` host op (src/host/
- * rhvac.ts) is the stubbed path to a real `<dir>/takeoff-resolutions.json`.
+ * Persistence is localStorage per takeoff source plus downloadable JSON; the
+ * `rhvac.takeoff-resolutions` host op (src/host/rhvac.ts) persists the same
+ * shape as `<dir>/takeoff-resolutions.json`.
  */
 import { candidateKey, type TakeoffLevel, type TakeoffRoomShape } from "#/rhvac/types";
+import {
+  sortRhvacResolutions,
+  type RhvacResolutionsFile,
+  type RhvacTakeoffResolution,
+} from "@pe/host-contracts/operation-types";
+export { sortRhvacResolutions as sortResolutions } from "@pe/host-contracts/operation-types";
 
 // ── sidecar schema ───────────────────────────────────────────────────────────
 
 /** Split chord endpoints, model coordinates (feet, Y up — the TSV frame). */
-export interface SplitParams {
-  a: [number, number];
-  b: [number, number];
-}
-
-export interface FlagResolution {
-  /** `<levelName>:<roomId>` of the flagged candidate (types.ts candidateKey). */
-  candidateKey: string;
-  flag: string;
-  /**
-   * accept — the flagged geometry is right as-is (open-plan-merge: keep as one
-   * room; low-evidence-boundary: the boundary stands).
-   * split — open-plan-merge only: bisect the polygon by the chord in `params`.
-   */
-  action: "accept" | "split";
-  params?: SplitParams;
-}
-
-export interface ResolutionsFile {
-  version: 1;
-  resolutions: FlagResolution[];
-}
-
-/** Stable order so serialized sidecars diff cleanly. */
-export const sortResolutions = (resolutions: FlagResolution[]): FlagResolution[] =>
-  [...resolutions].sort(
-    (x, y) => x.candidateKey.localeCompare(y.candidateKey) || x.flag.localeCompare(y.flag),
-  );
+export type SplitParams = NonNullable<RhvacTakeoffResolution["params"]>;
+export type FlagResolution = RhvacTakeoffResolution;
+export type ResolutionsFile = RhvacResolutionsFile;
 
 /** Replace any prior resolution of the same (candidateKey, flag), keep the rest. */
 export const upsertResolution = (
   resolutions: FlagResolution[],
   next: FlagResolution,
 ): FlagResolution[] =>
-  sortResolutions([
+  sortRhvacResolutions([
     ...resolutions.filter((r) => r.candidateKey !== next.candidateKey || r.flag !== next.flag),
     next,
   ]);
@@ -149,7 +130,7 @@ export interface RingSnap {
 }
 
 /** Closest point on the ring's boundary to p — how raw clicks become deterministic chord endpoints. */
-export function nearestOnRing(ring: [number, number][], p: [number, number]): RingSnap {
+export function nearestOnRing(ring: [number, number][], p: readonly [number, number]): RingSnap {
   let best: RingSnap = { edge: 0, t: 0, point: ring[0]! };
   let bestDist = Infinity;
   for (let i = 0; i < ring.length; i++) {
@@ -225,8 +206,8 @@ const centroidOf = (ring: [number, number][]): [number, number] => {
  */
 export function splitShape(
   room: TakeoffRoomShape,
-  a: [number, number],
-  b: [number, number],
+  a: readonly [number, number],
+  b: readonly [number, number],
 ): [TakeoffRoomShape, TakeoffRoomShape] | null {
   const ring = room.outer;
   if (ring.length < 3) return null;
@@ -309,7 +290,7 @@ export function loadStoredResolutions(sourceKey: string): FlagResolution[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as ResolutionsFile;
     return parsed.version === 1 && Array.isArray(parsed.resolutions)
-      ? sortResolutions(parsed.resolutions)
+      ? sortRhvacResolutions(parsed.resolutions)
       : [];
   } catch {
     return [];
@@ -331,5 +312,5 @@ export function storeResolutions(sourceKey: string, resolutions: FlagResolution[
 
 export const toResolutionsFile = (resolutions: FlagResolution[]): ResolutionsFile => ({
   version: 1,
-  resolutions: sortResolutions(resolutions),
+  resolutions: sortRhvacResolutions(resolutions),
 });

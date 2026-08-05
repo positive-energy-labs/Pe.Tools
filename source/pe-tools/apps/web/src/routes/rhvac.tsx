@@ -1,15 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Flag, FlaskConical, FolderOpen, Loader2, Save } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { FlaskConical, FolderOpen, Loader2, Save } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { SidePane } from "#/components/ui/side-pane";
-import { rhvacAssemblies, rhvacOpen, rhvacSave, rhvacTakeoff } from "#/host/rhvac";
+import {
+  rhvacAssemblies,
+  rhvacLoadTakeoffResolutions,
+  rhvacOpen,
+  rhvacSave,
+  rhvacSaveTakeoffResolutions,
+  rhvacTakeoff,
+} from "#/host/rhvac";
 import { deriveAssemblyCatalog } from "#/rhvac/assemblies";
 import { fmtNum } from "#/rhvac/cells";
 import { useRhvacEditor, type RhvacEditor } from "#/rhvac/editor";
-import { loadFixtureExtract, loadFixtureTakeoff, loadFlagDemoTakeoff } from "#/rhvac/fixture";
+import { loadFixtureExtract, loadFixtureTakeoff } from "#/rhvac/fixture";
 import { PlanPane } from "#/rhvac/plan-pane";
 import {
   applyResolutions,
@@ -53,7 +60,10 @@ function RhvacRoute() {
   const [takeoffError, setTakeoffError] = useState<string | null>(null);
   /** Keys the ambiguity-flag resolutions sidecar in localStorage (host lane: the .r10 path). */
   const [takeoffSourceKey, setTakeoffSourceKey] = useState<string | null>(null);
+  const [takeoffHostPath, setTakeoffHostPath] = useState<string | null>(null);
   const [resolutions, setResolutions] = useState<FlagResolution[]>([]);
+  const resolutionsRef = useRef<FlagResolution[]>([]);
+  const resolutionSaveQueue = useRef<Promise<void>>(Promise.resolve());
   /** Original room number → identifier, frozen at load (room-map matches by original number). */
   const [identByOrigNumber, setIdentByOrigNumber] = useState<Map<number, number>>(new Map());
 
@@ -68,10 +78,22 @@ function RhvacRoute() {
   };
 
   /** Load a takeoff and rehydrate its durable flag resolutions (per-source sidecar). */
-  const acceptTakeoff = (data: RhvacTakeoffData | null, sourceKey: string) => {
+  const acceptTakeoff = (
+    data: RhvacTakeoffData | null,
+    sourceKey: string,
+    hostPath: string | null = null,
+    sidecarResolutions?: readonly FlagResolution[],
+  ) => {
     setTakeoff(data);
     setTakeoffSourceKey(sourceKey);
-    setResolutions(data ? loadStoredResolutions(sourceKey) : []);
+    setTakeoffHostPath(hostPath);
+    const next = data
+      ? sidecarResolutions
+        ? [...sidecarResolutions]
+        : loadStoredResolutions(sourceKey)
+      : [];
+    resolutionsRef.current = next;
+    setResolutions(next);
   };
 
   const openFromHost = async () => {
@@ -89,10 +111,19 @@ function RhvacRoute() {
         setCatalog(deriveAssemblyCatalog(extract));
       }
       try {
-        acceptTakeoff(await rhvacTakeoff({ path }), path);
-        setTakeoffError(null);
+        const takeoffData = await rhvacTakeoff({ path });
+        try {
+          const sidecar = await rhvacLoadTakeoffResolutions(path);
+          acceptTakeoff(takeoffData, path, path, sidecar.resolutions?.resolutions);
+          setTakeoffError(null);
+        } catch (caught) {
+          acceptTakeoff(takeoffData, path);
+          setTakeoffError(
+            `${caught instanceof Error ? caught.message : "resolution sidecar failed"}; using browser fallback`,
+          );
+        }
       } catch (caught) {
-        acceptTakeoff(null, path);
+        acceptTakeoff(null, path, path);
         setTakeoffError(caught instanceof Error ? caught.message : "rhvac.takeoff failed");
       }
     } catch (caught) {
@@ -102,7 +133,7 @@ function RhvacRoute() {
     }
   };
 
-  const openFixture = async (flagDemo = false) => {
+  const openFixture = async () => {
     setOpening(true);
     setOpenError(null);
     try {
@@ -110,13 +141,10 @@ function RhvacRoute() {
       acceptExtract(extract, extract.sourceFile);
       setCatalog(deriveAssemblyCatalog(extract));
       try {
-        acceptTakeoff(
-          flagDemo ? await loadFlagDemoTakeoff() : await loadFixtureTakeoff(),
-          flagDemo ? "fixture:flag-demo" : "fixture:project-a",
-        );
+        acceptTakeoff(await loadFixtureTakeoff(), "fixture:project-a");
         setTakeoffError(null);
       } catch (caught) {
-        acceptTakeoff(null, flagDemo ? "fixture:flag-demo" : "fixture:project-a");
+        acceptTakeoff(null, "fixture:project-a");
         setTakeoffError(caught instanceof Error ? caught.message : "fixture takeoff failed");
       }
     } catch (caught) {
@@ -132,21 +160,34 @@ function RhvacRoute() {
     [takeoff, resolutions],
   );
 
-  const onResolveFlag = useCallback(
-    (resolution: FlagResolution) => {
-      setResolutions((prev) => {
-        const next = upsertResolution(prev, resolution);
-        if (takeoffSourceKey) storeResolutions(takeoffSourceKey, next);
-        return next;
-      });
+  const persistResolutions = useCallback(
+    (next: FlagResolution[]) => {
+      resolutionsRef.current = next;
+      setResolutions(next);
+      if (takeoffSourceKey) storeResolutions(takeoffSourceKey, next);
+      if (!takeoffHostPath) return;
+      resolutionSaveQueue.current = resolutionSaveQueue.current
+        .then(() =>
+          rhvacSaveTakeoffResolutions({
+            path: takeoffHostPath,
+            resolutions: toResolutionsFile(next),
+          }),
+        )
+        .then(() => setTakeoffError(null))
+        .catch((caught: unknown) =>
+          setTakeoffError(caught instanceof Error ? caught.message : "resolution save failed"),
+        );
     },
-    [takeoffSourceKey],
+    [takeoffHostPath, takeoffSourceKey],
   );
 
-  const onResetResolutions = useCallback(() => {
-    setResolutions([]);
-    if (takeoffSourceKey) storeResolutions(takeoffSourceKey, []);
-  }, [takeoffSourceKey]);
+  const onResolveFlag = useCallback(
+    (resolution: FlagResolution) =>
+      persistResolutions(upsertResolution(resolutionsRef.current, resolution)),
+    [persistResolutions],
+  );
+
+  const onResetResolutions = useCallback(() => persistResolutions([]), [persistResolutions]);
 
   const onDownloadResolutions = useCallback(() => {
     const blob = new Blob([JSON.stringify(toResolutionsFile(resolutions), null, 2)], {
@@ -241,16 +282,6 @@ function RhvacRoute() {
           >
             <FlaskConical />
             project-a fixture
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={opening}
-            title="Load a tiny synthetic takeoff WITH ambiguity flags to exercise the resolution workflow"
-            onClick={() => void openFixture(true)}
-          >
-            <Flag />
-            Flag demo
           </Button>
         </div>
       </header>

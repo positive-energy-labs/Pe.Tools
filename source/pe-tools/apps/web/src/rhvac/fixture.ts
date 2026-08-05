@@ -1,8 +1,7 @@
 /**
- * project-a dev fixture — copies of eval/rhvac/project-a/* served from
- * public/rhvac-fixture so the whole /rhvac surface is workable before the
- * wave-2 `rhvac.*` host ops land. The extract JSON is UTF-8 with BOM; strip it
- * before parsing.
+ * project-a dev fixture — the eval extract/map plus real Partition replay
+ * TSVs served from public/rhvac-fixture. The extract JSON is UTF-8 with BOM;
+ * strip it before parsing.
  */
 import { parseTakeoffTsv } from "#/rhvac/takeoff";
 import {
@@ -29,7 +28,7 @@ async function fetchText(path: string): Promise<string> {
 
 const fetchJson = async <T>(path: string): Promise<T> => JSON.parse(await fetchText(path)) as T;
 
-export const FIXTURE_SOURCE_LABEL = "project-a fixture (eval/rhvac/projectA)";
+export const FIXTURE_SOURCE_LABEL = "project-a fixture (Partition replay)";
 
 export async function loadFixtureExtract(): Promise<RhvacExtract> {
   const manifest = await fetchJson<FixtureManifest>("manifest.json");
@@ -43,16 +42,4 @@ export async function loadFixtureTakeoff(): Promise<RhvacTakeoffData> {
     ...manifest.takeoff.map((name) => fetchText(name)),
   ]);
   return { levels: tsvTexts.map((text) => parseTakeoffTsv(text)), roomMap };
-}
-
-export const FLAG_DEMO_SOURCE_LABEL = "flag demo (synthetic ambiguity-flag TSV)";
-
-/**
- * Synthetic single-level takeoff WITH `META flag` lines — the committed projectA
- * TSVs predate the Partition formulation and carry none, so this is the lane
- * for exercising the flag-resolution workflow until a flagged re-run lands.
- */
-export async function loadFlagDemoTakeoff(): Promise<RhvacTakeoffData> {
-  const text = await fetchText("rooms_Synthetic_Flag_Demo.tsv");
-  return { levels: [parseTakeoffTsv(text)], roomMap: { matches: [], skip: [] } };
 }

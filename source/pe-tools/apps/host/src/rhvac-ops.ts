@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { Effect, FileSystem, Stream } from "effect";
+import { Effect, FileSystem, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import type {
   RhvacAssemblyCatalogData,
@@ -11,11 +11,19 @@ import type {
   RhvacSaveRequest,
   RhvacSaveResult,
   RhvacTakeoffData,
+  RhvacTakeoffResolutionsRequest,
+  RhvacTakeoffResolutionsResult,
+} from "@pe/host-contracts/operation-types";
+import {
+  rhvacResolutionsFileSchema,
+  sortRhvacResolutions,
 } from "@pe/host-contracts/operation-types";
 import {
   readDirectoryEntriesOrEmpty,
+  readFileString,
   readFileStringBomAwareOrEmpty,
   statOrNull,
+  writeFileStringAtomic,
 } from "./files/index.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { LocalOpError } from "./local-error.ts";
@@ -153,6 +161,46 @@ export const rhvacTakeoff = Effect.fnUntraced(function* (input: RhvacPathRequest
     tsvs: tsvs.filter((file) => file.text.length > 0),
     roomMap,
   } satisfies RhvacTakeoffData;
+});
+
+export const rhvacTakeoffResolutions = Effect.fnUntraced(function* (
+  input: RhvacTakeoffResolutionsRequest,
+) {
+  const key = "rhvac.takeoff-resolutions";
+  yield* assertR10File(key, input.path);
+  const savedPath = join(dirname(input.path), "takeoff-resolutions.json");
+  if (input.resolutions) {
+    const resolutions = {
+      version: 1 as const,
+      resolutions: sortRhvacResolutions(input.resolutions.resolutions),
+    };
+    yield* writeFileStringAtomic(savedPath, `${JSON.stringify(resolutions, null, 2)}\n`, key);
+    return { savedPath, resolutions } satisfies RhvacTakeoffResolutionsResult;
+  }
+
+  const read = yield* Effect.result(readFileString(savedPath, key));
+  if (read._tag === "Failure") {
+    if (read.failure.statusCode === 404)
+      return { savedPath, resolutions: null } satisfies RhvacTakeoffResolutionsResult;
+    return yield* Effect.fail(read.failure);
+  }
+  const text = read.success;
+  if (!text.trim())
+    return yield* Effect.fail(new LocalOpError(key, `${savedPath} is empty; refusing fallback`));
+  const parsed = yield* parseJson(key, text, savedPath);
+  const resolutions = yield* Schema.decodeUnknownEffect(rhvacResolutionsFileSchema)(parsed).pipe(
+    Effect.mapError(
+      (error) =>
+        new LocalOpError(
+          key,
+          `${savedPath} does not match the resolutions schema: ${error.message}`,
+        ),
+    ),
+  );
+  return {
+    savedPath,
+    resolutions: { version: 1, resolutions: sortRhvacResolutions(resolutions.resolutions) },
+  } satisfies RhvacTakeoffResolutionsResult;
 });
 
 // --- edit payload conversion ---------------------------------------------------

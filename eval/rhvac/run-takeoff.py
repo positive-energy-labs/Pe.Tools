@@ -45,20 +45,23 @@ def check(result, phase, level):
         sys.exit(1)
     return result
 
-# Per-level detection policy (2026-07-24 falsification pass, all live-measured on projectA):
+# Per-level detection policy (2026-07-24 live falsification + 2026-08-04 offline partition pass):
 # flat-ceiling levels take RequireCeiling + both door sealers and drop the compactness kill-gate;
 # Upper Level raises the ceiling-search cap for double-height rooms; the attic keeps RequireCeiling
 # OFF (framing-stage roof geometry shatters the per-cell ceiling mask — see eval/rhvac/HANDOFF.md).
 FLAT = "RequireCeiling = true, SealDoorHeads = true, SealWallRunGaps = true, MinCompactness = 0"
+PARTITION = "Formulation = Pe.Revit.Takeoff.TakeoffFormulation.Partition"
+HYBRID = "SeedSource = Pe.Revit.Takeoff.TakeoffSeedSource.Hybrid"
 LEVEL_POLICY = {
-    "Lower Level": FLAT,
-    "Main Level": FLAT,
-    "Upper Level": FLAT + ", StoryCapFt = 26",
+    "Lower Level": FLAT + ", " + PARTITION,
+    "Theatre": FLAT + ", " + PARTITION,
+    "Main Level": FLAT + ", " + PARTITION + ", " + HYBRID,
+    "Upper Level": FLAT + ", StoryCapFt = 26, " + PARTITION + ", " + HYBRID,
     # Attic covered-space model: close the patchy rafter ceiling mask, search high enough for the
     # ridge, keep knee-wall area (headroom 3.5), lintel-seal doors. Wall-run sealing measurably
     # fragments knee-wall areas — deliberately absent. 49 rooms / 5,662 sf vs oracle 5,758 (98%).
     "Attic": "RequireCeiling = true, CeilingCloseFt = 3, StoryCapFt = 30, MinHeadroomFt = 3.5, "
-             "SealDoorHeads = true, MinCompactness = 0",
+             "SealDoorHeads = true, MinCompactness = 0, " + PARTITION + ", " + HYBRID,
 }
 
 emitted_levels = []
