@@ -43,6 +43,7 @@ def check(result, phase, level):
             if d["severity"] == "Error":
                 print(f"  ERROR {d['message'][:300]}", flush=True)
         sys.exit(1)
+    return result
 
 # Per-level detection policy (2026-07-24 falsification pass, all live-measured on projectA):
 # flat-ceiling levels take RequireCeiling + both door sealers and drop the compactness kill-gate;
@@ -60,19 +61,21 @@ LEVEL_POLICY = {
              "SealDoorHeads = true, MinCompactness = 0",
 }
 
+emitted_levels = []
 for level in args.levels:
     if not args.detect_only:
         check(run_script(
             f"prepare-{level}.cs",
             f'Pe.Revit.Takeoff.RoomTakeoff.Prepare(doc, new Pe.Revit.Takeoff.TakeoffOptions {{ LevelNameContains = "{level}" }}, WriteLine);',
             "WriteTransaction", 600), "PREPARE", level)
-    policy = next((v for k, v in LEVEL_POLICY.items() if k in level), "")
+    policy = next((v for k, v in LEVEL_POLICY.items() if k.lower() in level.lower()), "")
     opts = f'new Pe.Revit.Takeoff.TakeoffOptions {{ {policy} }}' if policy else "null"
-    check(run_script(
+    detected = check(run_script(
         f"detect-{level}.cs",
         f'var r = Pe.Revit.Takeoff.RoomTakeoff.Detect(doc, "{level}", WriteLine, {opts});\n'
         f'Result(new {{ level = r.LevelName, rooms = r.Rooms.Count, totalSqft = r.TotalSqft }});',
         "ReadOnly", 1800), "DETECT", level)
+    emitted_levels.append(detected["data"]["level"])
 
 # Refresh the committed TSV snapshot: the C# RhvacCandidateBuilder consumes these offline, so
 # Revit is only needed when detection output changes. NOTE: re-detection can renumber room ids;
@@ -84,14 +87,18 @@ takeoff_dir = next(d for d in [
 
 snapshot_dir = os.path.join(FIXTURE, "takeoff")
 os.makedirs(snapshot_dir, exist_ok=True)
-copied = 0
-for tsv in sorted(glob.glob(os.path.join(takeoff_dir, "rooms_*.tsv"))):
+tsvs = [os.path.join(takeoff_dir, "rooms_" + "".join(
+    ch if ch.isalnum() else "_" for ch in level) + ".tsv") for level in emitted_levels]
+for tsv in tsvs:
     with open(tsv, encoding="utf-8") as src:
         content = src.read()
     with open(os.path.join(snapshot_dir, os.path.basename(tsv)), "w", encoding="utf-8") as dst:
         dst.write(content)
-    copied += 1
 
-print(f"{copied} takeoff TSVs -> {snapshot_dir}", flush=True)
-print("next: dotnet test source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests "
-      '--filter "FullyQualifiedName~RhvacProjectAEvalRun" -v q --nologo', flush=True)
+print(f"{len(tsvs)} takeoff TSVs -> {snapshot_dir}", flush=True)
+if args.project == "project-a":
+    print("next: dotnet test source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests "
+          '--filter "FullyQualifiedName~RhvacProjectAEvalRun" -v q --nologo', flush=True)
+else:
+    print(f"next: python eval/rhvac/score-takeoff.py --project {args.project} "
+          f"--takeoff-dir {snapshot_dir}", flush=True)

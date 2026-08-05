@@ -10,6 +10,7 @@ namespace Pe.Revit.Tests.LibraryBehavior.NoDocumentRuntime;
 // change detection, dump, score — no Revit anywhere.
 //
 //   $env:PE_TAKEOFF_REPLAY_OUT = "<dir>"
+//   $env:PE_TAKEOFF_REPLAY_FILTER = "replay_MAIN_LEVEL.bin;replay_ROOF_PLAN.bin" // optional exact names
 //   $env:PE_TAKEOFF_SNAP_DIAG_OUT = "<dir>" # optional per-chain JSON
 //   $env:PE_TAKEOFF_FORMULATION = "Partition"   # optional; default = per-policy (Regions)
 //   dotnet test -c Debug.R25.Tests --filter FullyQualifiedName~ProjectAReplayDumpRun
@@ -20,6 +21,7 @@ public sealed class ProjectAReplayDumpRun
     // widening) are echoed for fidelity but cannot change what is in the bin.
     internal static TakeoffOptions PolicyFor(string levelName, TakeoffFormulation formulation = TakeoffFormulation.Regions)
     {
+        bool Has(string value) => levelName.Contains(value, StringComparison.OrdinalIgnoreCase);
         TakeoffOptions Flat() => new() {
             RequireCeiling = true, SealDoorHeads = true, SealWallRunGaps = true, MinCompactness = 0,
         };
@@ -30,8 +32,8 @@ public sealed class ProjectAReplayDumpRun
         // RegionCores on basement levels. Mirror into run-takeoff.py LEVEL_POLICY when partition
         // goes live.
         bool hybrid = formulation == TakeoffFormulation.Partition;
-        if (levelName.Contains("Lower Level")) return Flat();
-        if (levelName.Contains("Main Level"))
+        if (Has("Lower Level")) return Flat();
+        if (Has("Main Level"))
         {
             var o = Flat();
             if (hybrid) o.SeedSource = TakeoffSeedSource.Hybrid;
@@ -41,16 +43,16 @@ public sealed class ProjectAReplayDumpRun
         // Regions because border-rejection ate the covered apron, but the partition needs the same
         // RequireCeiling domain gate every other flat level uses (32k sf of fake apron rooms
         // otherwise). Mirror into run-takeoff.py LEVEL_POLICY when partition goes live.
-        if (levelName.Contains("Theatre"))
+        if (Has("Theatre"))
             return formulation == TakeoffFormulation.Partition ? Flat() : new TakeoffOptions();
-        if (levelName.Contains("Upper Level"))
+        if (Has("Upper Level"))
         {
             var o = Flat();
             o.StoryCapFt = 26;
             if (hybrid) o.SeedSource = TakeoffSeedSource.Hybrid;
             return o;
         }
-        if (levelName.Contains("Attic"))
+        if (Has("Attic"))
         {
             var o = new TakeoffOptions {
                 RequireCeiling = true, CeilingCloseFt = 3, StoryCapFt = 30, MinHeadroomFt = 3.5,
@@ -67,15 +69,21 @@ public sealed class ProjectAReplayDumpRun
         return new TakeoffOptions(); // Theatre and anything unmatched: stock options
     }
 
-    internal static List<string> FindSnapshots() =>
-        new[] {
+    internal static List<string> FindSnapshots()
+    {
+        string[] filter = (Environment.GetEnvironmentVariable("PE_TAKEOFF_REPLAY_FILTER") ?? "")
+            .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(token => token.Trim()).ToArray();
+        return new[] {
                 Environment.ExpandEnvironmentVariables(@"%USERPROFILE%\OneDrive\Documents\Pe.Tools\takeoff"),
                 Environment.ExpandEnvironmentVariables(@"%USERPROFILE%\Documents\Pe.Tools\takeoff"),
             }
             .Where(Directory.Exists)
             .SelectMany(dir => Directory.GetFiles(dir, "replay_*.bin"))
+            .Where(path => filter.Length == 0 || filter.Any(token =>
+                Path.GetFileName(path).Equals(token, StringComparison.OrdinalIgnoreCase)))
             .OrderBy(f => f, StringComparer.Ordinal)
             .ToList();
+    }
 
     [Test]
     [Explicit("Operational dump lane; needs PE_TAKEOFF_REPLAY_OUT and live-captured snapshots.")]

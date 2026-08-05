@@ -3,7 +3,7 @@
 # This is the per-room geometric feedback loop detector iteration is judged by.
 #
 #   python eval/rhvac/score-takeoff.py                       # committed snapshot in project-a/takeoff
-#   python eval/rhvac/score-takeoff.py --takeoff-dir <dir>   # a fresh run's TSVs
+#   python eval/rhvac/score-takeoff.py --project eval/rhvac/project-b --takeoff-dir <dir>
 #   python eval/rhvac/score-takeoff.py --write-room-map      # regenerate project-a/room-map.json from
 #                                                            # mutual-best IoU pairs (provenance
 #                                                            # "auto-iou"; curated entries preserved)
@@ -18,7 +18,7 @@
 #   project-a/stale-rooms.json (excluded here without code edits).
 # - Over-detection counts candidate area outside ANY ground-truth polygon, which includes real
 #   rooms whose ground truth is simply missing (15 in-model oracle rooms have no polygon).
-import argparse, json, math, os
+import argparse, json, math, os, re
 from collections import defaultdict
 
 from shapely.geometry import LineString, Polygon
@@ -40,19 +40,26 @@ WALL_HIT_FRAC = 0.7   # fraction of sample points that must hit for a wall to be
 def load_takeoff(takeoff_dir):
     """{floor: {'Level 0/Lower Level:R01': Polygon}} — floor parsed from the META level name."""
     floors = defaultdict(dict)
+    loaded = []
     for f in sorted(os.listdir(takeoff_dir)):
         if not (f.startswith("rooms_") and f.endswith(".tsv")):
             continue
-        level, polys = None, defaultdict(list)
+        level, elevation, polys = None, None, defaultdict(list)
         for line in open(os.path.join(takeoff_dir, f), encoding="utf-8"):
             p = line.rstrip("\n").split("\t")
             if p[0] == "META" and p[1] == "level":
                 level = p[2].strip()
+            elif p[0] == "META" and p[1] == "elev":
+                elevation = float(p[2])
             elif p[0] == "POLY" and p[2] == "outer":
                 polys[p[1]].append([tuple(map(float, q.split(";"))) for q in p[3].split("|")])
-        if level is None:
-            raise SystemExit(f"{f}: no META level line")
-        floor = int(level.split("Level ")[1][0])
+        if level is None or elevation is None:
+            raise SystemExit(f"{f}: no META level/elev line")
+        loaded.append((level, elevation, polys))
+    elevations = sorted({elevation for _, elevation, _ in loaded})
+    for level, elevation, polys in loaded:
+        match = re.search(r"Level\s+(\d+)", level, re.I)
+        floor = int(match.group(1)) if match else elevations.index(elevation)
         for rid, loops in polys.items():
             pg = Polygon(loops[0])
             if not pg.is_valid:
@@ -148,6 +155,8 @@ def score(takeoff_dir, geo, stale, wall_tol=WALL_TOL_FT):
         if gt_union is not None and cand_union is not None:
             cov = gt_union.intersection(cand_union).area / gt_union.area
             over = (cand_union.area - cand_union.intersection(gt_union).area) / cand_union.area
+        elif cand_union is not None:
+            over = 1.0
         # wall lane
         recalled = total = 0
         boundary = unary_union([p.exterior for p in cand_polys]) if cand_polys else None
@@ -228,10 +237,10 @@ def to_text(sb):
     return "\n".join(out) + "\n"
 
 
-def write_room_map(sb, geo, iou_min):
+def write_room_map(sb, geo, iou_min, project):
     """Regenerate room-map.json: keep curated matches + skips, add mutual-best IoU pairs."""
-    path = os.path.join(projectA, "room-map.json")
-    cur = json.load(open(path))
+    path = os.path.join(project, "room-map.json")
+    cur = json.load(open(path)) if os.path.exists(path) else {"matches": [], "skip": []}
     # regenerate: keep human-curated entries, drop previous auto-iou (their candidate ids bind to
     # whatever snapshot produced them; fresh autos below re-derive against the scored takeoff)
     kept = [m for m in cur["matches"] if m.get("provenance", "curated") != "auto-iou"]
@@ -267,11 +276,13 @@ def write_room_map(sb, geo, iou_min):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--takeoff-dir", default=os.path.join(projectA, "takeoff"))
-    ap.add_argument("--geo", default=os.path.join(projectA, "oracle-geometry.json"))
-    ap.add_argument("--stale", default=os.path.join(projectA, "stale-rooms.json"))
+    ap.add_argument("--project", default=projectA,
+                    help="project directory containing takeoff/ and oracle-geometry.json")
+    ap.add_argument("--takeoff-dir", default=None)
+    ap.add_argument("--geo", default=None)
+    ap.add_argument("--stale", default=None)
     ap.add_argument("--write-room-map", action="store_true",
-                    help="regenerate project-a/room-map.json with auto-iou matches")
+                    help="regenerate PROJECT/room-map.json with auto-iou matches")
     ap.add_argument("--iou-min", type=float, default=0.5,
                     help="mutual-best IoU threshold for --write-room-map")
     ap.add_argument("--wall-tol", type=float, default=WALL_TOL_FT,
@@ -279,16 +290,20 @@ def main():
     ap.add_argument("--quiet", action="store_true")
     a = ap.parse_args()
 
-    geo = json.load(open(a.geo))
-    stale = json.load(open(a.stale)) if os.path.exists(a.stale) else {"exclude": []}
-    sb = score(a.takeoff_dir, geo, stale, a.wall_tol)
+    project = os.path.abspath(a.project)
+    takeoff_dir = a.takeoff_dir or os.path.join(project, "takeoff")
+    geo_path = a.geo or os.path.join(project, "oracle-geometry.json")
+    stale_path = a.stale or os.path.join(project, "stale-rooms.json")
+    geo = json.load(open(geo_path))
+    stale = json.load(open(stale_path)) if os.path.exists(stale_path) else {"exclude": []}
+    sb = score(takeoff_dir, geo, stale, a.wall_tol)
     text = to_text(sb)
-    json.dump(sb, open(os.path.join(projectA, "scoreboard.json"), "w"), indent=1)
-    open(os.path.join(projectA, "scoreboard.txt"), "w", encoding="utf-8").write(text)
+    json.dump(sb, open(os.path.join(project, "scoreboard.json"), "w"), indent=1)
+    open(os.path.join(project, "scoreboard.txt"), "w", encoding="utf-8").write(text)
     if not a.quiet:
         print(text, end="")
     if a.write_room_map:
-        n = write_room_map(sb, geo, a.iou_min)
+        n = write_room_map(sb, geo, a.iou_min, project)
         print(f"room-map.json: +{n} auto-iou matches (mutual-best IoU >= {a.iou_min})")
 
 
