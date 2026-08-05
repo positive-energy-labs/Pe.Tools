@@ -2,6 +2,7 @@
 # engineer's plan PDFs into per-sheet JSON, in PDF points AND real-world feet.
 #
 #   python eval/rhvac/mine-bluebeam.py                # mine every PDF in project-a/bluebeam (+ archive/)
+#   python eval/rhvac/mine-bluebeam.py --project eval/rhvac/projectB
 #   python eval/rhvac/mine-bluebeam.py --pdf <path>   # mine one PDF
 #
 # Facts this encodes (probed 2026-08, see project-a/manual-takeoff-mining.md):
@@ -15,13 +16,12 @@
 #   room identity. Room names come from the PLAN TEXT LAYER (Revit room tags), matched by locating
 #   room-number tokens inside each polygon (pdfplumber word positions).
 # - /Square annots authored by "AutoCAD SHX Text" are CAD-export artifacts, not takeoff counts.
-import argparse, json, math, os, re, sys
+import argparse, json, math, os, re
 from collections import Counter
 
 import pikepdf
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-BLUEBEAM = os.path.join(HERE, "project-a", "bluebeam")
 
 MEASURE_ITS = {"/PolygonDimension": "area", "/LineDimension": "length", "/PolyLineDimension": "polylength"}
 
@@ -161,15 +161,18 @@ def slugify(name):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--pdf", default=None, help="mine a single PDF (default: all in project-a/bluebeam + archive)")
+    ap.add_argument("--project", default=os.path.join(HERE, "project-a"),
+                    help="project directory containing bluebeam/ (default: eval/rhvac/projectA)")
+    ap.add_argument("--pdf", default=None, help="mine a single PDF (default: all PDFs under PROJECT/bluebeam)")
     ap.add_argument("--no-tags", action="store_true", help="skip text-layer room tagging (faster)")
     a = ap.parse_args()
     if a.pdf:
         paths = [a.pdf]
     else:
+        bluebeam = os.path.join(a.project, "bluebeam")
         paths = sorted(
             os.path.join(d, f)
-            for d in (BLUEBEAM, os.path.join(BLUEBEAM, "archive"))
+            for d in (bluebeam, os.path.join(bluebeam, "archive"))
             if os.path.isdir(d)
             for f in os.listdir(d)
             if f.lower().endswith(".pdf")
