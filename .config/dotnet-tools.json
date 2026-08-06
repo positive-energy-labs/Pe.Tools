@@ -3,7 +3,7 @@
   "isRoot": true,
   "tools": {
     "pe.revit.cli": {
-      "version": "0.1.0-beta.113",
+      "version": "0.1.0-beta.115",
       "commands": ["pe-revit"]
     }
   }
