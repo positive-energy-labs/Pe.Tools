@@ -51,6 +51,30 @@ internal sealed class BoundarySnapDiagnostic
     public List<BoundarySnapRunDiagnostic> SnappedRuns = new();
 }
 
+internal sealed class BoundarySnapRoomRevertDiagnostic
+{
+    public int Iteration;
+    public List<string> Causes = new();
+    public double AreaDriftSqft, AreaDriftFrac, AreaDriftBoundSqft;
+}
+
+internal sealed class BoundarySnapRoomDiagnostic
+{
+    internal const string FullySnapped = "fully-snapped";
+    internal const string PartiallyReverted = "partially-reverted";
+    internal const string RawPinned = "raw-pinned";
+    internal const string AreaDrift = "area-drift";
+    internal const string NonSimplePolygon = "non-simple-polygon";
+    internal const string CornerAngle = "corner-angle";
+    internal const string JunctionMoveCap = "junction-move-cap";
+    internal const string IterationExhaustion = "iteration-exhaustion";
+
+    public int RoomId;
+    public string Outcome = FullySnapped;
+    public double AreaDriftSqft, AreaDriftFrac, AreaDriftBoundSqft;
+    public List<BoundarySnapRoomRevertDiagnostic> Reverts = new();
+}
+
 internal static class BoundarySnap
 {
     private const double MaxAreaDriftSqft = 0.5;   // per-room drift bound: max(0.5 sqft, 1%) —
@@ -514,6 +538,9 @@ internal static class BoundarySnap
         // ---- snap + guard + staged revert loop (per-chain: full -> conservative -> raw) ----
         var frozen = new HashSet<int>();
         var result = new Dictionary<int, List<List<double[]>>>();
+        var roomReverts = emitIds.ToDictionary(id => id, _ => new List<BoundarySnapRoomRevertDiagnostic>());
+        var roomDrift = emitIds.ToDictionary(id => id, _ => (drift: 0.0, frac: 0.0, bound: 0.0));
+        bool iterationExhausted = false;
         int iterations = 0;
         for (int iter = 0; ; iter++)
         {
@@ -521,16 +548,22 @@ internal static class BoundarySnap
             if (iter == 12)
             {
                 // final fallback: everything raw + every junction pinned == pre-snap raster
+                iterationExhausted = true;
                 foreach (var c in chains) c.Level = 2;
                 foreach (var c in chains) { frozen.Add(c.Nodes[0]); frozen.Add(c.Nodes[^1]); }
             }
-            var jpos = ResolveJunctions(chains, frozen, dirs, minX, minY, nodeW, cellFt, opt);
+            var cornerAngles = new HashSet<Chain>();
+            var junctionMoveCaps = new HashSet<Chain>();
+            var jpos = ResolveJunctions(
+                chains, frozen, dirs, minX, minY, nodeW, cellFt, opt,
+                cornerAngles, junctionMoveCaps);
             for (int ci = 0; ci < chains.Count; ci++)
             {
                 var ch = chains[ci];
                 var runs = EffectiveRuns(ch, ch.Level);
                 ch.IsRaw = ch.Level >= 2 || runs.All(r => r.Dir < 0);
-                ch.Snapped = RebuildChain(ch, runs, ch.IsRaw, jpos, dirs, opt);
+                ch.Snapped = RebuildChain(
+                    ch, runs, ch.IsRaw, jpos, dirs, opt, cornerAngles, junctionMoveCaps);
             }
             result.Clear();
             var failures = new List<int>();
@@ -552,8 +585,22 @@ internal static class BoundarySnap
                 }
                 var loops = AssembleLoops(loopsById[id], chains, edgeChain, eN1, eN2, nodeW);
                 var collapsed = loops.Select(Detector.CollapseCollinear).Where(p => p.Count >= 3).ToList();
-                if (!GuardOk(collapsed, cellsById[id].Count * cellArea))
-                { failures.Add(id); continue; }
+                string? failure = GuardFailure(collapsed, cellsById[id].Count * cellArea,
+                    out double drift, out double frac, out double bound);
+                roomDrift[id] = (drift, frac, bound);
+                if (failure != null)
+                {
+                    var causes = new List<string> { failure };
+                    var incident = roomChains[id].Select(ci => chains[ci]).ToList();
+                    if (incident.Any(cornerAngles.Contains)) causes.Add(BoundarySnapRoomDiagnostic.CornerAngle);
+                    if (incident.Any(junctionMoveCaps.Contains)) causes.Add(BoundarySnapRoomDiagnostic.JunctionMoveCap);
+                    roomReverts[id].Add(new BoundarySnapRoomRevertDiagnostic {
+                        Iteration = iter + 1, Causes = causes,
+                        AreaDriftSqft = drift, AreaDriftFrac = frac, AreaDriftBoundSqft = bound,
+                    });
+                    failures.Add(id);
+                    continue;
+                }
                 result[id] = collapsed;
             }
             if (failures.Count == 0) break;
@@ -614,6 +661,28 @@ internal static class BoundarySnap
                 opt.SnapDiagnostics.Add(d);
             }
         }
+        if (opt.SnapRoomDiagnostics != null)
+        {
+            foreach (int id in emitIds)
+            {
+                bool exactRaw = LoopsEqual(result[id], rawById[id]);
+                bool rawPinned = exactRaw && (roomReverts[id].Count > 0 || iterationExhausted);
+                if (iterationExhausted && exactRaw)
+                    roomReverts[id].Add(new BoundarySnapRoomRevertDiagnostic {
+                        Iteration = iterations,
+                        Causes = new List<string> { BoundarySnapRoomDiagnostic.IterationExhaustion },
+                    });
+                var drift = roomDrift[id];
+                opt.SnapRoomDiagnostics.Add(new BoundarySnapRoomDiagnostic {
+                    RoomId = id,
+                    Outcome = rawPinned ? BoundarySnapRoomDiagnostic.RawPinned
+                        : roomReverts[id].Count > 0 ? BoundarySnapRoomDiagnostic.PartiallyReverted
+                        : BoundarySnapRoomDiagnostic.FullySnapped,
+                    AreaDriftSqft = drift.drift, AreaDriftFrac = drift.frac,
+                    AreaDriftBoundSqft = drift.bound, Reverts = roomReverts[id],
+                });
+            }
+        }
         return result;
     }
 
@@ -621,7 +690,8 @@ internal static class BoundarySnap
     // lines (capped move), else projection onto the single incident line, else stay put.
     private static Dictionary<int, double[]> ResolveJunctions(
         List<Chain> chains, HashSet<int> frozen, List<double> dirs,
-        double minX, double minY, int nodeW, double cellFt, TakeoffOptions opt)
+        double minX, double minY, int nodeW, double cellFt, TakeoffOptions opt,
+        HashSet<Chain> cornerAngles, HashSet<Chain> junctionMoveCaps)
     {
         var cand = new SortedDictionary<int, List<(Chain ch, double sup, int dir, double off)>>();
         void Add(int node, Chain ch, Run r)
@@ -655,10 +725,15 @@ internal static class BoundarySnap
             foreach (var second in list.Skip(1))
             {
                 double sepDeg = AngDistDeg(dirs[best.dir], dirs[second.dir]);
-                if (sepDeg < MinCornerAngleDeg) continue;
+                if (sepDeg < MinCornerAngleDeg)
+                {
+                    foreach (var ch in best.chains.Concat(second.chains)) cornerAngles.Add(ch);
+                    continue;
+                }
                 var x = Intersect(dirs[best.dir], best.off, dirs[second.dir], second.off);
                 if (Dist(x[0], x[1], ox, oy) <= opt.SnapMaxCornerMoveFt) pos = x;
-                else foreach (var ch in best.chains.Concat(second.chains)) ch.HitCornerCap = true;
+                else foreach (var ch in best.chains.Concat(second.chains))
+                { ch.HitCornerCap = true; junctionMoveCaps.Add(ch); }
                 break;
             }
             if (pos == null)
@@ -667,7 +742,8 @@ internal static class BoundarySnap
                 double move = Dist(pr[0], pr[1], ox, oy);
                 if (move <= opt.SnapMaxCornerMoveFt && move > 1e-12) pos = pr;
                 else if (move > opt.SnapMaxCornerMoveFt)
-                    foreach (var ch in best.chains) ch.HitCornerCap = true;
+                    foreach (var ch in best.chains)
+                    { ch.HitCornerCap = true; junctionMoveCaps.Add(ch); }
             }
             if (pos != null) jpos[node] = pos;
         }
@@ -676,7 +752,7 @@ internal static class BoundarySnap
 
     private static List<double[]> RebuildChain(
         Chain ch, List<Run> runs, bool raw, Dictionary<int, double[]> jpos, List<double> dirs,
-        TakeoffOptions opt)
+        TakeoffOptions opt, HashSet<Chain> cornerAngles, HashSet<Chain> junctionMoveCaps)
     {
         int m = ch.Edges.Count;
         double[] P(int j) => new[] { ch.X[j], ch.Y[j] };
@@ -704,7 +780,8 @@ internal static class BoundarySnap
                 var prev = runs[(i - 1 + q) % q];
                 var cur = runs[i];
                 var t = P(cur.Start);
-                var (exit, entry) = Anchor(prev, cur, t, dirs, opt);
+                var (exit, entry) = Anchor(
+                    ch, prev, cur, t, dirs, opt, cornerAngles, junctionMoveCaps);
                 Append(exit); Append(entry);
                 if (cur.Dir < 0)
                     for (int j = cur.Start + 1; j <= cur.End; j++) Append(P(j));
@@ -731,7 +808,8 @@ internal static class BoundarySnap
             if (i > 0)
             {
                 var t = P(r.Start);
-                var (exit, entry) = Anchor(runs[i - 1], r, t, dirs, opt);
+                var (exit, entry) = Anchor(
+                    ch, runs[i - 1], r, t, dirs, opt, cornerAngles, junctionMoveCaps);
                 Append(exit); Append(entry);
             }
             if (r.Dir < 0)
@@ -746,15 +824,19 @@ internal static class BoundarySnap
     // angle intersect (capped move); near-parallel or capped-out pairs joggle via projections;
     // a line meeting raw geometry pins the transition onto the line.
     private static (double[] exit, double[] entry) Anchor(
-        Run prev, Run cur, double[] t, List<double> dirs, TakeoffOptions opt)
+        Chain ch, Run prev, Run cur, double[] t, List<double> dirs, TakeoffOptions opt,
+        HashSet<Chain> cornerAngles, HashSet<Chain> junctionMoveCaps)
     {
         if (prev.Dir >= 0 && cur.Dir >= 0)
         {
-            if (AngDistDeg(dirs[prev.Dir], dirs[cur.Dir]) >= MinCornerAngleDeg)
+            double angle = AngDistDeg(dirs[prev.Dir], dirs[cur.Dir]);
+            if (angle >= MinCornerAngleDeg)
             {
                 var x = Intersect(dirs[prev.Dir], prev.Offset, dirs[cur.Dir], cur.Offset);
                 if (Dist(x[0], x[1], t[0], t[1]) <= opt.SnapMaxCornerMoveFt) return (x, x);
+                junctionMoveCaps.Add(ch);
             }
+            else cornerAngles.Add(ch);
             return (Project(t[0], t[1], dirs[prev.Dir], prev.Offset),
                     Project(t[0], t[1], dirs[cur.Dir], cur.Offset));
         }
@@ -847,19 +929,29 @@ internal static class BoundarySnap
 
     // Per-room guard: simple polygons and area drift vs the raster partition within
     // max(0.5 sqft, 1%). Rooms failing revert their chains to raw (caller loop).
-    private static bool GuardOk(List<List<double[]>> collapsed, double rasterSqft)
+    private static string? GuardFailure(
+        List<List<double[]>> collapsed, double rasterSqft,
+        out double drift, out double frac, out double bound)
     {
-        if (collapsed.Count == 0) return false;
+        drift = frac = 0;
+        bound = Math.Max(MaxAreaDriftSqft, MaxAreaDriftFrac * rasterSqft);
+        if (collapsed.Count == 0) return BoundarySnapRoomDiagnostic.NonSimplePolygon;
         foreach (var p in collapsed)
-            if (!IsSimple(p)) return false;
+            if (!IsSimple(p)) return BoundarySnapRoomDiagnostic.NonSimplePolygon;
         var areas = collapsed.Select(p => Math.Abs(Detector.Shoelace(p))).ToList();
         int outerIndex = areas.IndexOf(areas.Max());
-        if (!RingsFormPolygon(collapsed, outerIndex)) return false;
+        if (!RingsFormPolygon(collapsed, outerIndex)) return BoundarySnapRoomDiagnostic.NonSimplePolygon;
         double outer = areas[outerIndex];
         double net = 2 * outer - areas.Sum();
-        double bound = Math.Max(MaxAreaDriftSqft, MaxAreaDriftFrac * rasterSqft);
-        return Math.Abs(net - rasterSqft) <= bound;
+        drift = Math.Abs(net - rasterSqft);
+        frac = rasterSqft > 0 ? drift / rasterSqft : 0;
+        return drift <= bound ? null : BoundarySnapRoomDiagnostic.AreaDrift;
     }
+
+    private static bool LoopsEqual(List<List<double[]>> a, List<List<double[]>> b) =>
+        a.Count == b.Count && a.Zip(b, (left, right) =>
+            left.Count == right.Count && left.Zip(right, (p, q) => p[0] == q[0] && p[1] == q[1]).All(v => v))
+            .All(v => v);
 
     private static bool IsSimple(List<double[]> p)
     {

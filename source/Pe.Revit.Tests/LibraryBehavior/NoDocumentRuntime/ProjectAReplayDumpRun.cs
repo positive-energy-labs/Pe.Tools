@@ -64,7 +64,11 @@ public sealed class ProjectAReplayDumpRun
                     opt.SeedSource = Enum.Parse<TakeoffSeedSource>(seedSource, ignoreCase: true);
                 if (Environment.GetEnvironmentVariable("PE_TAKEOFF_SNAP") == "0")
                     opt.SnapBoundaries = false;
-                if (!string.IsNullOrEmpty(snapDiagDir)) opt.SnapDiagnostics = new();
+                if (!string.IsNullOrEmpty(snapDiagDir))
+                {
+                    opt.SnapDiagnostics = new();
+                    opt.SnapRoomDiagnostics = new();
+                }
             }
 
             TakeoffResult result;
@@ -87,6 +91,16 @@ public sealed class ProjectAReplayDumpRun
             {
                 var payload = new {
                     level = snap.LevelName,
+                    rooms = appliedOptions.SnapRoomDiagnostics!.Select((d, index) => new {
+                        room = $"R{index + 1:D2}", roomId = d.RoomId, outcome = d.Outcome,
+                        areaDriftSqft = d.AreaDriftSqft, areaDriftFrac = d.AreaDriftFrac,
+                        areaDriftBoundSqft = d.AreaDriftBoundSqft,
+                        reverts = d.Reverts.Select(r => new {
+                            iteration = r.Iteration, causes = r.Causes,
+                            areaDriftSqft = r.AreaDriftSqft, areaDriftFrac = r.AreaDriftFrac,
+                            areaDriftBoundSqft = r.AreaDriftBoundSqft,
+                        }),
+                    }),
                     chains = appliedOptions.SnapDiagnostics.Select(d => new {
                         chainId = d.ChainId, labels = new[] { d.A, d.B },
                         lengthFt = d.LengthFt, snappedFt = d.SnappedFt, outcome = d.Outcome,
