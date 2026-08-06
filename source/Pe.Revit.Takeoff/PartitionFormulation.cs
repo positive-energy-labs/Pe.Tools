@@ -24,6 +24,9 @@ internal static class PartitionFormulation
     internal static TakeoffResult Run(
         Heightfield hf, bool[] obst, string levelName, double lvlZ, TakeoffOptions opt, Action<string> log)
     {
+        if (double.IsNaN(opt.MinRegionCompactness) || double.IsInfinity(opt.MinRegionCompactness)
+            || opt.MinRegionCompactness < 0 || opt.MinRegionCompactness > 1)
+            throw new ArgumentOutOfRangeException(nameof(opt.MinRegionCompactness));
         int W = hf.W, H = hf.H, n = W * H;
         double cellArea = opt.CellFt * opt.CellFt;
 
@@ -106,7 +109,7 @@ internal static class PartitionFormulation
             var area = new Dictionary<int, int>();
             for (int i = 0; i < n; i++)
                 if (owner[i] > 0) area[owner[i]] = area.GetValueOrDefault(owner[i]) + 1;
-            var widthFt = RegionWidthsFt(owner, domain, W, H, opt.CellFt);
+            var widthFt = RegionWidthsFt(owner, W, H, opt.CellFt);
             var slivers = area.Keys
                 .Where(id => area[id] * cellArea < opt.MinSqft || widthFt[id] < opt.MinFeatureWidthFt)
                 .ToHashSet();
@@ -170,6 +173,15 @@ internal static class PartitionFormulation
             .Where(id => !touchesBorder.Contains(id) && cellsById[id].Count * cellArea >= opt.MinSqft)
             .OrderByDescending(id => cellsById[id].Count).ThenBy(id => id)
             .ToList();
+        var medianWidthFt = RegionMedianWidthsFt(owner, W, H, opt.CellFt);
+        var perimeterCells = RegionPerimeterCells(owner, W, H);
+        foreach (int id in emitIds)
+        {
+            if (medianWidthFt[id] < opt.MinFeatureWidthFt) Flag(flags, id, "suspect:narrow");
+            double perimeter = perimeterCells[id] * opt.CellFt;
+            double compactness = 4 * Math.PI * cellsById[id].Count * cellArea / (perimeter * perimeter);
+            if (compactness < opt.MinRegionCompactness) Flag(flags, id, "suspect:compactness");
+        }
 
         log($"[partition] domain={domainCells * cellArea:F0}sf seeds={nSeeds} merges={nMerges} " +
             $"dissolved={dissolved} isolatedDropped={droppedIsolated} crumbs={crumbSqft:F0}sf " +
@@ -484,11 +496,33 @@ internal static class PartitionFormulation
 
     // Max feature width per region: global chamfer to region-boundary cells (a cell's nearest
     // boundary cell is always on its own region's boundary), maxed per region.
-    private static Dictionary<int, double> RegionWidthsFt(int[] owner, bool[] domain, int W, int H, double cellFt)
+    private static Dictionary<int, double> RegionWidthsFt(int[] owner, int W, int H, double cellFt)
     {
-        int n = W * H;
-        var boundary = new bool[n];
-        for (int i = 0; i < n; i++)
+        var d = RegionDepths(owner, W, H);
+        var widths = new Dictionary<int, double>();
+        for (int i = 0; i < owner.Length; i++)
+        {
+            if (owner[i] <= 0) continue;
+            double w = (2 * d[i] + 1) * cellFt;
+            if (!widths.TryGetValue(owner[i], out double cur) || w > cur) widths[owner[i]] = w;
+        }
+        return widths;
+    }
+
+    private static Dictionary<int, double> RegionMedianWidthsFt(int[] owner, int W, int H, double cellFt)
+    {
+        var d = RegionDepths(owner, W, H);
+        var depths = owner.Select((id, cell) => (id, depth: d[cell])).Where(item => item.id > 0)
+            .GroupBy(item => item.id).ToDictionary(group => group.Key,
+                group => group.Select(item => item.depth).OrderBy(value => value).ToList());
+        return depths.ToDictionary(pair => pair.Key,
+            pair => (4 * pair.Value[pair.Value.Count / 2] + 2) * cellFt);
+    }
+
+    private static float[] RegionDepths(int[] owner, int W, int H)
+    {
+        var boundary = new bool[owner.Length];
+        for (int i = 0; i < owner.Length; i++)
         {
             if (owner[i] <= 0) continue;
             int x = i % W, y = i / W;
@@ -496,15 +530,25 @@ internal static class PartitionFormulation
                           || owner[i - 1] != owner[i] || owner[i + 1] != owner[i]
                           || owner[i - W] != owner[i] || owner[i + W] != owner[i];
         }
-        var d = Detector.Chamfer(boundary, W, H, false);
-        var widths = new Dictionary<int, double>();
-        for (int i = 0; i < n; i++)
+        return Detector.Chamfer(boundary, W, H, false);
+    }
+
+    private static Dictionary<int, int> RegionPerimeterCells(int[] owner, int W, int H)
+    {
+        var perimeters = new Dictionary<int, int>();
+        for (int cell = 0; cell < owner.Length; cell++)
         {
-            if (owner[i] <= 0) continue;
-            double w = (2 * d[i] + 1) * cellFt;
-            if (!widths.TryGetValue(owner[i], out double cur) || w > cur) widths[owner[i]] = w;
+            int id = owner[cell];
+            if (id <= 0) continue;
+            int x = cell % W, y = cell / W;
+            int edges = 0;
+            if (x == 0 || owner[cell - 1] != id) edges++;
+            if (x == W - 1 || owner[cell + 1] != id) edges++;
+            if (y == 0 || owner[cell - W] != id) edges++;
+            if (y == H - 1 || owner[cell + W] != id) edges++;
+            perimeters[id] = perimeters.GetValueOrDefault(id) + edges;
         }
-        return widths;
+        return perimeters;
     }
 
     private static void Relabel(int[] owner, UnionFind uf)

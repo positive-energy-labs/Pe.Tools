@@ -324,6 +324,49 @@ public sealed class TakeoffReplayTests
         });
     }
 
+    [Test]
+    public void Partition_flags_suspect_regions_without_changing_geometry()
+    {
+        const int W = 100, H = 60;
+        const double cell = 0.5;
+        int n = W * H;
+        var hf = new Heightfield {
+            W = W, H = H, MinX = 0, MinY = 0, CellFt = cell,
+            FloorZ = Enumerable.Repeat(float.NaN, n).ToArray(),
+            CeilZ = Enumerable.Repeat(float.NaN, n).ToArray(),
+        };
+        void Floor(int x0, int x1, int y0, int y1)
+        {
+            for (int y = y0; y < y1; y++)
+                for (int x = x0; x < x1; x++)
+                { hf.FloorZ[y * W + x] = 0; hf.CeilZ[y * W + x] = 9; }
+        }
+        Floor(8, 28, 8, 28);       // ordinary 10 x 10 ft room
+        Floor(40, 43, 8, 48);      // 1.5 x 20 ft ribbon
+        Floor(40, 48, 40, 48);     // one 4 x 4 ft bulge lets it survive max-width dissolution
+        var snap = new DetectSnapshot {
+            LevelName = "Suspect", LevelElevation = 0, CaptureOptions = "synthetic",
+            Field = hf, SeedInk = new bool[n],
+        };
+        var opt = new TakeoffOptions {
+            CellFt = cell, MinSqft = 20, MinFeatureWidthFt = 2.5,
+            MinRegionCompactness = 0.25, SnapBoundaries = false,
+        };
+
+        var result = snap.Replay(opt, _ => { });
+
+        Assert.Multiple(() => {
+            Assert.That(result.Rooms, Has.Count.EqualTo(2));
+            Assert.That(result.TotalSqft, Is.EqualTo(140).Within(0.01));
+            Assert.That(result.Rooms.Single(r => r.RawSqft < 50).Flags,
+                Is.EquivalentTo(new[] { "suspect:compactness", "suspect:narrow" }));
+            Assert.That(result.Rooms.Single(r => r.RawSqft >= 50).Flags,
+                Is.Empty);
+        });
+        opt.MinRegionCompactness = double.NaN;
+        Assert.Throws<ArgumentOutOfRangeException>(() => snap.Replay(opt, _ => { }));
+    }
+
     // ---- phase-3 wall-line snapping semantics (BoundarySnap.cs) ----
 
     [Test]

@@ -45,26 +45,31 @@ GATE_WALL_RECALL_MIN = 0.8    # mined walls recalled at WALL_TOL_FT
 
 
 def load_takeoff(takeoff_dir):
-    """{floor: {'Level 0/Lower Level:R01': Polygon}} — floor parsed from the META level name."""
+    """Candidate polygons and META flags keyed by level-qualified room id."""
     floors = defaultdict(dict)
+    candidate_flags = defaultdict(set)
     loaded = []
     for f in sorted(os.listdir(takeoff_dir)):
         if not (f.startswith("rooms_") and f.endswith(".tsv")):
             continue
-        level, elevation, polys = None, None, defaultdict(list)
+        level, elevation, polys, flags = None, None, defaultdict(list), defaultdict(set)
         for line in open(os.path.join(takeoff_dir, f), encoding="utf-8"):
             p = line.rstrip("\n").split("\t")
             if p[0] == "META" and p[1] == "level":
                 level = p[2].strip()
             elif p[0] == "META" and p[1] == "elev":
                 elevation = float(p[2])
+            elif p[0] == "META" and p[1] == "flag":
+                rid, separator, payload = p[2].partition(":")
+                if separator and rid.startswith("R"):
+                    flags[rid].update(flag for flag in payload.split("+") if flag)
             elif p[0] == "POLY" and p[2] == "outer":
                 polys[p[1]].append([tuple(map(float, q.split(";"))) for q in p[3].split("|")])
         if level is None or elevation is None:
             raise SystemExit(f"{f}: no META level/elev line")
-        loaded.append((level, elevation, polys))
-    elevations = sorted({elevation for _, elevation, _ in loaded})
-    for level, elevation, polys in loaded:
+        loaded.append((level, elevation, polys, flags))
+    elevations = sorted({elevation for _, elevation, _, _ in loaded})
+    for level, elevation, polys, flags in loaded:
         match = re.search(r"Level\s+(\d+)", level, re.I)
         floor = int(match.group(1)) if match else elevations.index(elevation)
         for rid, loops in polys.items():
@@ -72,8 +77,10 @@ def load_takeoff(takeoff_dir):
             if not pg.is_valid:
                 pg = pg.buffer(0)
             if pg.area > 0:
-                floors[floor][f"{level}:{rid}"] = pg
-    return floors
+                key = f"{level}:{rid}"
+                floors[floor][key] = pg
+                candidate_flags[key].update(flags[rid])
+    return floors, candidate_flags
 
 
 def classify(gt, cands):
@@ -100,34 +107,68 @@ def classify(gt, cands):
     return None, best_iou, best_key, f"covered {covered:.0%}"  # merged/1:1 decided by caller
 
 
-def precision(floors, gts, excluded):
+def precision(floors, candidate_flags, gts, excluded):
     levels = {}
+    flag_levels = {}
     all_candidates = []
     for fl in sorted(set(floors) | {g["floor"] for g in gts.values()}):
-        fl_gts = [g["poly"] for n, g in gts.items() if g["floor"] == fl and n not in excluded]
+        fl_gts = [(n, g) for n, g in gts.items() if g["floor"] == fl and n not in excluded]
         candidates = []
         for key, cand in floors.get(fl, {}).items():
             area = cand.area
-            best_iou = 0.0
-            for gt in fl_gts:
-                intersection = cand.intersection(gt).area
-                best_iou = max(best_iou, intersection / (area + gt.area - intersection))
+            best_iou, best_gt = 0.0, None
+            for number, gt in fl_gts:
+                intersection = cand.intersection(gt["poly"]).area
+                iou = intersection / (area + gt["poly"].area - intersection)
+                if iou > best_iou:
+                    best_iou, best_gt = iou, number
+            suspect_flags = sorted(flag for flag in candidate_flags[key]
+                                   if flag.startswith("suspect:"))
             candidates.append({"candidate": key, "floor": fl, "areaSf": area,
                                "centroid": [round(cand.centroid.x, 2), round(cand.centroid.y, 2)],
-                               "bestIoU": best_iou})
+                               "bestIoU": best_iou, "bestGt": best_gt,
+                               "bestGtName": gts[best_gt]["name"] if best_gt is not None else None,
+                               "flags": sorted(candidate_flags[key]),
+                               "suspectFlags": suspect_flags})
         all_candidates.extend(candidates)
         levels[fl] = precision_rollup(len(fl_gts), candidates)
+        flag_levels[fl] = flag_quality(candidates)
     return {"levels": levels,
-            "total": precision_rollup(sum(1 for n in gts if n not in excluded), all_candidates)}
+            "total": precision_rollup(sum(1 for n in gts if n not in excluded), all_candidates),
+            "flagQuality": {"levels": flag_levels, "total": flag_quality(all_candidates)}}
+
+
+def area_histogram(candidates):
+    return {
+        "under60": sum(c["areaSf"] < 60 for c in candidates),
+        "60to150": sum(60 <= c["areaSf"] <= 150 for c in candidates),
+        "over150": sum(c["areaSf"] > 150 for c in candidates),
+    }
+
+
+def flag_quality(candidates):
+    flagged = [c for c in candidates if c["suspectFlags"]]
+    junk = [c for c in candidates if c["bestIoU"] < JUNK_IOU]
+    flagged_junk = [c for c in junk if c["suspectFlags"]]
+    small_junk = [c for c in junk if c["areaSf"] < 60]
+    flagged_small_junk = [c for c in small_junk if c["suspectFlags"]]
+    false_positives = [c for c in flagged if c["bestIoU"] >= JUNK_IOU]
+    return {
+        "flaggedCandidates": len(flagged),
+        "flaggedJunk": len(flagged_junk),
+        "precisionPct": round(100 * len(flagged_junk) / len(flagged), 1) if flagged else None,
+        "junkUnder60RecallPct": (round(100 * len(flagged_small_junk) / len(small_junk), 1)
+                                  if small_junk else None),
+        "junkRecallPct": round(100 * len(flagged_junk) / len(junk), 1) if junk else None,
+        "falsePositiveCount": len(false_positives),
+        "falsePositiveCandidates": false_positives,
+    }
 
 
 def precision_rollup(gt_count, candidates):
     junk = [c for c in candidates if c["bestIoU"] < JUNK_IOU]
-    histogram = {
-        "under60": sum(c["areaSf"] < 60 for c in junk),
-        "60to150": sum(60 <= c["areaSf"] <= 150 for c in junk),
-        "over150": sum(c["areaSf"] > 150 for c in junk),
-    }
+    flagged_junk = [c for c in junk if c["flags"]]
+    unflagged_junk = [c for c in junk if not c["flags"]]
     return {
         "gtRooms": gt_count,
         "candidates": len(candidates),
@@ -136,7 +177,11 @@ def precision_rollup(gt_count, candidates):
                                if candidates else 0.0,
         "junkCount": len(junk),
         "junkAreaSf": round(sum(c["areaSf"] for c in junk), 1),
-        "junkAreaHistogram": histogram,
+        "junkAreaHistogram": area_histogram(junk),
+        "flaggedJunkCount": len(flagged_junk),
+        "unflaggedJunkCount": len(unflagged_junk),
+        "flaggedJunkAreaHistogram": area_histogram(flagged_junk),
+        "unflaggedJunkAreaHistogram": area_histogram(unflagged_junk),
         "junkCandidates": junk,
         "worstJunkByArea": sorted(junk, key=lambda c: (-c["areaSf"], c["candidate"]))[:10],
     }
@@ -149,6 +194,7 @@ def gates(precision_out, totals):
     ok = totals["taxonomy"].get("ok", 0)
     taxonomy_fraction = ok / totals["gtRooms"] if totals["gtRooms"] else 0.0
     junk_under_60 = precision_out["total"]["junkAreaHistogram"]["under60"]
+    unflagged_junk_under_60 = precision_out["total"]["unflaggedJunkAreaHistogram"]["under60"]
     wall_fraction = ((totals["gateWallRecallPct"] or 0) / 100)
     checks = {
         "candidateGtRatioPerLevel": {
@@ -161,6 +207,11 @@ def gates(precision_out, totals):
         "zeroJunkUnder60Sf": {"passed": junk_under_60 <= GATE_JUNK_UNDER_60_MAX,
                               "actual": junk_under_60,
                               "maximum": GATE_JUNK_UNDER_60_MAX},
+        "zeroUnflaggedJunkUnder60Sf": {
+            "passed": unflagged_junk_under_60 <= GATE_JUNK_UNDER_60_MAX,
+            "actual": unflagged_junk_under_60,
+            "maximum": GATE_JUNK_UNDER_60_MAX,
+        },
         "wallRecall": {"passed": wall_fraction >= GATE_WALL_RECALL_MIN,
                        "actualPct": totals["gateWallRecallPct"],
                        "minimumPct": 100 * GATE_WALL_RECALL_MIN,
@@ -170,7 +221,7 @@ def gates(precision_out, totals):
 
 
 def score(takeoff_dir, geo, stale, wall_tol=WALL_TOL_FT):
-    floors = load_takeoff(takeoff_dir)
+    floors, candidate_flags = load_takeoff(takeoff_dir)
     excluded = {e["number"]: e.get("reason", "") for e in stale.get("exclude", [])}
     gts = {}
     for num, g in geo["rooms"].items():
@@ -283,7 +334,7 @@ def score(takeoff_dir, geo, stale, wall_tol=WALL_TOL_FT):
         "wallsTotal": walls_total,
         "wallTolFt": wall_tol,
     }
-    precision_out = precision(floors, gts, excluded)
+    precision_out = precision(floors, candidate_flags, gts, excluded)
     return {"takeoffDir": os.path.relpath(takeoff_dir, HERE).replace("\\", "/"),
             "totals": totals, "levels": levels_out,
             "precision": precision_out, "gates": gates(precision_out, totals),
@@ -314,14 +365,15 @@ def to_text(sb):
                    f"{l['wallRecallPct'] if l['wallRecallPct'] is not None else '-':>6}  {tx}")
     out.extend(["", f"PRECISION  (candidate best same-floor GT IoU; matched >= {JUNK_IOU:.2f})",
                 f"{'floor':>5} {'gt':>3} {'cand':>4} {'ratio':>5} {'match%':>6} "
-                f"{'junk':>4} {'junk sf':>8} {'<60':>4} {'60-150':>6} {'>150':>5}"])
+                f"{'junk':>4} {'flag':>4} {'unfl':>4} {'junk sf':>8} {'<60':>4} {'60-150':>6} {'>150':>5}"])
     precision_levels = list(sorted(sb["precision"]["levels"].items())) + [("TOTAL", sb["precision"]["total"])]
     for fl, p in precision_levels:
         h = p["junkAreaHistogram"]
         ratio = (f"{p['candidateGtRatio']:.2f}" if p["candidateGtRatio"] is not None
                  else ("inf" if p["candidates"] else "-"))
         out.append(f"{str(fl):>5} {p['gtRooms']:>3} {p['candidates']:>4} {ratio:>5} "
-                   f"{p['matchedCandidatePct']:>6.1f} {p['junkCount']:>4} {p['junkAreaSf']:>8.1f} "
+                   f"{p['matchedCandidatePct']:>6.1f} {p['junkCount']:>4} "
+                   f"{p['flaggedJunkCount']:>4} {p['unflaggedJunkCount']:>4} {p['junkAreaSf']:>8.1f} "
                    f"{h['under60']:>4} {h['60to150']:>6} {h['over150']:>5}")
     for fl, p in precision_levels:
         out.append(f"worst junk by area ({'total' if fl == 'TOTAL' else f'L{fl}'}):")
@@ -329,6 +381,24 @@ def to_text(sb):
             out.append(f"  L{c['floor']} {c['candidate']:<38} {c['areaSf']:>8.1f} sf  "
                        f"centroid ({c['centroid'][0]:.2f}, {c['centroid'][1]:.2f})  "
                        f"best IoU {c['bestIoU']:.3f}")
+
+    def pct(value):
+        return f"{value:.1f}" if value is not None else "-"
+
+    out.extend(["", f"SUSPECT FLAGS  (junk truth: best IoU < {JUNK_IOU:.2f})",
+                f"{'floor':>5} {'flagged':>7} {'junk':>4} {'prec%':>6} "
+                f"{'<60rec%':>8} {'allrec%':>7} {'false+':>6}"])
+    flag_levels = list(sorted(sb["precision"]["flagQuality"]["levels"].items())) + [
+        ("TOTAL", sb["precision"]["flagQuality"]["total"])]
+    for fl, quality in flag_levels:
+        out.append(f"{str(fl):>5} {quality['flaggedCandidates']:>7} {quality['flaggedJunk']:>4} "
+                   f"{pct(quality['precisionPct']):>6} {pct(quality['junkUnder60RecallPct']):>8} "
+                   f"{pct(quality['junkRecallPct']):>7} {quality['falsePositiveCount']:>6}")
+    out.append("suspect-flag false positives (matched candidates):")
+    for candidate in sb["precision"]["flagQuality"]["total"]["falsePositiveCandidates"]:
+        out.append(f"  {candidate['candidate']}  {candidate['areaSf']:.1f} sf  "
+                   f"best GT #{candidate['bestGt']} {candidate['bestGtName']}  "
+                   f"IoU {candidate['bestIoU']:.3f}  {','.join(candidate['suspectFlags'])}")
 
     g = sb["gates"]
     ratio_gate = g["checks"]["candidateGtRatioPerLevel"]
@@ -338,11 +408,13 @@ def to_text(sb):
         for fl, p in sorted(sb["precision"]["levels"].items()))
     tax = g["checks"]["taxonomyOk"]
     junk = g["checks"]["zeroJunkUnder60Sf"]
+    unflagged_junk = g["checks"]["zeroUnflaggedJunkUnder60Sf"]
     wall = g["checks"]["wallRecall"]
     out.extend(["", "GATES  (absolute; --gate exits nonzero on failure)",
                 f"{'PASS' if ratio_gate['passed'] else 'FAIL'} candidate/GT <= {ratio_gate['limit']:.1f} per level: {ratio_detail}",
                 f"{'PASS' if tax['passed'] else 'FAIL'} taxonomy ok >= {tax['minimumPct']:.0f}% of GT rooms: {tax['actualPct']:.1f}%",
                 f"{'PASS' if junk['passed'] else 'FAIL'} zero junk candidates <60 sf: {junk['actual']}",
+                f"{'PASS' if unflagged_junk['passed'] else 'FAIL'} zero UNFLAGGED junk candidates <60 sf: {unflagged_junk['actual']}",
                 f"{'PASS' if wall['passed'] else 'FAIL'} wall recall >= {wall['minimumPct']:.0f}% at {wall['toleranceFt']:.1f} ft: "
                 f"{wall['actualPct'] if wall['actualPct'] is not None else '-'}%",
                 f"OVERALL {'PASS' if g['passed'] else 'FAIL'}"])

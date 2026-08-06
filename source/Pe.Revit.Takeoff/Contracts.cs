@@ -107,6 +107,8 @@ public sealed class TakeoffOptions
                                                 // flags both rooms low-evidence-boundary
     public double MinFeatureWidthFt = 2.5;     // sliver dissolution: a space must be at least a
                                                // door width wide somewhere
+    public double MinRegionCompactness = 0.01; // flag extreme snakes; iteration-3 floor preserves
+                                               // narrow real rooms for one-touch review
     // ---- Phase-3 wall-line snapping (Partition only; BoundarySnap.cs) ----
     // Dominant wall directions are DERIVED per level from evidence-backed boundary orientation;
     // boundaries snap onto a colinear line arrangement. Unbacked boundaries stay raw (jaggedness
