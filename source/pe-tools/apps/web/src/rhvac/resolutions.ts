@@ -27,6 +27,13 @@ export type SplitParams = NonNullable<RhvacTakeoffResolution["params"]>;
 export type FlagResolution = RhvacTakeoffResolution;
 export type ResolutionsFile = RhvacResolutionsFile;
 
+export interface ResolutionApplyResult {
+  levels: TakeoffLevel[];
+  applied: number;
+  remapped: number;
+  orphaned: number;
+}
+
 /** Replace any prior resolution of the same (candidateKey, flag), keep the rest. */
 export const upsertResolution = (
   resolutions: FlagResolution[],
@@ -40,9 +47,9 @@ export const upsertResolution = (
 // ── applying resolutions to parsed levels ────────────────────────────────────
 
 /**
- * Pure and idempotent: resolutions whose candidate or flag no longer exists are
- * skipped (a split's source room is gone on the second pass; an accepted flag
- * is already removed), so apply(apply(x)) === apply(x). Splits replace the room
+ * Pure and idempotent: v1 resolves by key only; v2 verifies the key against its
+ * anchor, remaps by same-level containment, and accounts for every orphan.
+ * A split's source room is gone on the second pass, so apply(apply(x)) === apply(x). Splits replace the room
  * with `<id>.a` / `<id>.b` children (larger area = .a); children inherit the
  * room's other unresolved flags but never open-plan-merge — the split IS its
  * resolution. Nested splits (splitting a child) are deferred.
@@ -50,26 +57,75 @@ export const upsertResolution = (
 export function applyResolutions(
   levels: TakeoffLevel[],
   resolutions: FlagResolution[],
-): TakeoffLevel[] {
-  if (resolutions.length === 0) return levels;
+  version: ResolutionsFile["version"] = 1,
+): ResolutionApplyResult {
+  if (resolutions.length === 0) return { levels, applied: 0, remapped: 0, orphaned: 0 };
+  const rooms = levels.flatMap((level) =>
+    level.rooms.map((room) => ({
+      levelName: level.levelName,
+      key: candidateKey(level.levelName, room.id),
+      room,
+    })),
+  );
   const byKey = new Map<string, FlagResolution[]>();
+  const splitTargets = new Set<string>();
+  let applied = 0;
+  let remapped = 0;
+  let orphaned = 0;
   for (const resolution of resolutions) {
-    const list = byKey.get(resolution.candidateKey) ?? [];
+    const exact = rooms.find((candidate) => candidate.key === resolution.candidateKey);
+    let target = exact;
+    let wasRemapped = false;
+    if (version === 2 && !resolution.anchor) {
+      orphaned++;
+      continue;
+    }
+    if (version === 2) {
+      const validExact =
+        exact &&
+        pointInShape(resolution.anchor!.label, exact.room) &&
+        Math.abs(exact.room.rawSqft - resolution.anchor!.sqft) <= resolution.anchor!.sqft * 0.2;
+      if (!validExact) {
+        const separator = resolution.candidateKey.lastIndexOf(":");
+        const levelName = separator < 0 ? "" : resolution.candidateKey.slice(0, separator);
+        target = rooms.find(
+          (candidate) =>
+            candidate.levelName === levelName &&
+            pointInShape(resolution.anchor!.label, candidate.room),
+        );
+        wasRemapped = Boolean(target);
+      }
+    }
+    if (!target) {
+      orphaned++;
+      continue;
+    }
+    if (
+      resolution.action === "split" &&
+      (!resolution.params ||
+        splitTargets.has(target.key) ||
+        !splitShape(target.room, resolution.params.a, resolution.params.b))
+    ) {
+      orphaned++;
+      continue;
+    }
+    if (resolution.action === "split") splitTargets.add(target.key);
+    if (wasRemapped) remapped++;
+    else applied++;
+    const list = byKey.get(target.key) ?? [];
     list.push(resolution);
-    byKey.set(resolution.candidateKey, list);
+    byKey.set(target.key, list);
   }
 
-  return levels.map((level) => ({
+  const resolved = levels.map((level) => ({
     ...level,
     rooms: level.rooms.flatMap((room) => {
       const forRoom = byKey.get(candidateKey(level.levelName, room.id));
-      if (!forRoom || !room.flags?.length) return [room];
+      if (!forRoom) return [room];
 
       const accepted = new Set(forRoom.filter((r) => r.action === "accept").map((r) => r.flag));
-      const split = forRoom.find(
-        (r) => r.action === "split" && r.params && room.flags?.includes(r.flag),
-      );
-      const remaining = room.flags.filter((f) => !accepted.has(f));
+      const split = forRoom.find((r) => r.action === "split" && r.params);
+      const remaining = (room.flags ?? []).filter((f) => !accepted.has(f));
 
       if (split) {
         const halves = splitShape(room, split.params!.a, split.params!.b);
@@ -81,11 +137,12 @@ export function applyResolutions(
           }));
         }
       }
-      if (remaining.length === room.flags.length) return [room];
+      if (remaining.length === (room.flags?.length ?? 0)) return [room];
       const { flags: _dropped, ...rest } = room;
       return [remaining.length > 0 ? { ...rest, flags: remaining } : rest];
     }),
   }));
+  return { levels: resolved, applied, remapped, orphaned };
 }
 
 // ── split geometry ───────────────────────────────────────────────────────────
@@ -110,7 +167,7 @@ const ringPerimeter = (ring: [number, number][]): number => {
   return sum;
 };
 
-const pointInRing = (p: [number, number], ring: [number, number][]): boolean => {
+const pointInRing = (p: readonly [number, number], ring: [number, number][]): boolean => {
   let inside = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
     const [xi, yi] = ring[i]!;
@@ -119,6 +176,9 @@ const pointInRing = (p: [number, number], ring: [number, number][]): boolean => 
   }
   return inside;
 };
+
+const pointInShape = (point: readonly [number, number], room: TakeoffRoomShape): boolean =>
+  pointInRing(point, room.outer) && !room.holes.some((hole) => pointInRing(point, hole));
 
 export interface RingSnap {
   /** Edge index i: the snapped point lies on ring[i] → ring[i+1]. */
@@ -237,6 +297,7 @@ export function splitShape(
     rawSqft: grossArea - holeArea(holes),
     perimeterFt: ringPerimeter(outer),
     meanCeilingFt: room.meanCeilingFt,
+    label: centroidOf(outer),
     outer,
     holes,
     splitFrom: room.splitFrom ?? room.id,
@@ -260,6 +321,7 @@ export interface PendingFlag {
   candidateKey: string;
   flag: string;
   rawSqft: number;
+  anchor: NonNullable<FlagResolution["anchor"]>;
 }
 
 /** Flags still awaiting a decision, in level order then area-descending (room order). */
@@ -274,6 +336,7 @@ export function pendingFlags(levels: TakeoffLevel[]): PendingFlag[] {
           candidateKey: candidateKey(level.levelName, room.id),
           flag,
           rawSqft: room.rawSqft,
+          anchor: { label: room.label, sqft: room.rawSqft },
         })) ?? [],
     ),
   );
@@ -283,33 +346,44 @@ export function pendingFlags(levels: TakeoffLevel[]): PendingFlag[] {
 
 const storageKey = (sourceKey: string) => `rhvac:takeoff-resolutions:${sourceKey}`;
 
-export function loadStoredResolutions(sourceKey: string): FlagResolution[] {
+export function loadStoredResolutions(sourceKey: string): ResolutionsFile | null {
   try {
     const raw = localStorage.getItem(storageKey(sourceKey));
-    if (!raw) return [];
+    if (!raw) return null;
     const parsed = JSON.parse(raw) as ResolutionsFile;
-    return parsed.version === 1 && Array.isArray(parsed.resolutions)
-      ? sortRhvacResolutions(parsed.resolutions)
-      : [];
+    return (parsed.version === 1 || parsed.version === 2) && Array.isArray(parsed.resolutions)
+      ? { ...parsed, resolutions: sortRhvacResolutions(parsed.resolutions) }
+      : null;
   } catch {
-    return [];
+    return null;
   }
 }
 
-export function storeResolutions(sourceKey: string, resolutions: FlagResolution[]): void {
+export function storeResolutions(sourceKey: string, file: ResolutionsFile | null): void {
   try {
-    if (resolutions.length === 0) localStorage.removeItem(storageKey(sourceKey));
-    else
-      localStorage.setItem(
-        storageKey(sourceKey),
-        JSON.stringify(toResolutionsFile(resolutions), null, 2),
-      );
+    if (!file || file.resolutions.length === 0) localStorage.removeItem(storageKey(sourceKey));
+    else localStorage.setItem(storageKey(sourceKey), JSON.stringify(file, null, 2));
   } catch {
     // storage unavailable — resolutions still live for this session.
   }
 }
 
-export const toResolutionsFile = (resolutions: FlagResolution[]): ResolutionsFile => ({
-  version: 1,
+export const toResolutionsFile = (
+  resolutions: readonly FlagResolution[],
+  tsvSha256: Record<string, string>,
+  version: ResolutionsFile["version"] = 2,
+): ResolutionsFile => ({
+  version,
+  ...(version === 2 ? { tsvSha256: sortHashes(tsvSha256) } : {}),
   resolutions: sortRhvacResolutions(resolutions),
 });
+
+export const provenanceMismatch = (
+  sidecar: ResolutionsFile | null,
+  current: Record<string, string>,
+): boolean =>
+  sidecar?.version === 2 &&
+  JSON.stringify(sidecar.tsvSha256 ?? {}) !== JSON.stringify(sortHashes(current));
+
+const sortHashes = (hashes: Record<string, string>): Record<string, string> =>
+  Object.fromEntries(Object.entries(hashes).sort(([a], [b]) => (a === b ? 0 : a < b ? -1 : 1)));

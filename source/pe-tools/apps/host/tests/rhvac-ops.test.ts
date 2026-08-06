@@ -91,10 +91,21 @@ test("rhvac.takeoff-resolutions reads and writes a deterministic sidecar", async
     const input = {
       path: join(projectDir, "project.r10"),
       resolutions: {
-        version: 1 as const,
+        version: 2 as const,
+        tsvSha256: { "Level 2": "hash-2", "Level 1": "hash-1" },
         resolutions: [
-          { candidateKey: "Level 2:R09", flag: "open-plan-merge", action: "accept" as const },
-          { candidateKey: "Level 1:R03", flag: "low-evidence-boundary", action: "accept" as const },
+          {
+            candidateKey: "Level 2:R09",
+            flag: "open-plan-merge",
+            action: "accept" as const,
+            anchor: { label: [20, 9] as [number, number], sqft: 900 },
+          },
+          {
+            candidateKey: "Level 1:R03",
+            flag: "low-evidence-boundary",
+            action: "accept" as const,
+            anchor: { label: [10, 3] as [number, number], sqft: 300 },
+          },
         ],
       },
     };
@@ -110,7 +121,8 @@ test("rhvac.takeoff-resolutions reads and writes a deterministic sidecar", async
     const saved = await dispatch<RhvacTakeoffResolutionsResult>("rhvac.takeoff-resolutions", input);
     expect(saved.savedPath).toBe(join(projectDir, "takeoff-resolutions.json"));
     const expected = {
-      version: 1 as const,
+      version: 2 as const,
+      tsvSha256: { "Level 1": "hash-1", "Level 2": "hash-2" },
       resolutions: [input.resolutions.resolutions[1], input.resolutions.resolutions[0]],
     };
     expect(saved.resolutions).toEqual(expected);
@@ -137,6 +149,7 @@ test.skipIf(!laneAvailable)(
     for (const file of takeoff.tsvs) {
       expect(file.name.endsWith(".tsv")).toBe(true);
       expect(file.text).toContain("META\tlevel");
+      expect(file.sha256).toMatch(/^[0-9a-f]{64}$/);
     }
     expect(takeoff.roomMap).not.toBeNull();
     expect(takeoff.roomMap!.matches.length).toBeGreaterThan(0);

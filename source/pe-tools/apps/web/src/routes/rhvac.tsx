@@ -21,10 +21,12 @@ import { PlanPane } from "#/rhvac/plan-pane";
 import {
   applyResolutions,
   loadStoredResolutions,
+  provenanceMismatch,
   storeResolutions,
   toResolutionsFile,
   upsertResolution,
   type FlagResolution,
+  type ResolutionsFile,
 } from "#/rhvac/resolutions";
 import { RoomDetail } from "#/rhvac/room-detail";
 import { RoomsGrid } from "#/rhvac/rooms-grid";
@@ -62,6 +64,7 @@ function RhvacRoute() {
   const [takeoffSourceKey, setTakeoffSourceKey] = useState<string | null>(null);
   const [takeoffHostPath, setTakeoffHostPath] = useState<string | null>(null);
   const [resolutions, setResolutions] = useState<FlagResolution[]>([]);
+  const [resolutionsFile, setResolutionsFile] = useState<ResolutionsFile | null>(null);
   const resolutionsRef = useRef<FlagResolution[]>([]);
   const resolutionSaveQueue = useRef<Promise<void>>(Promise.resolve());
   /** Original room number → identifier, frozen at load (room-map matches by original number). */
@@ -82,16 +85,14 @@ function RhvacRoute() {
     data: RhvacTakeoffData | null,
     sourceKey: string,
     hostPath: string | null = null,
-    sidecarResolutions?: readonly FlagResolution[],
+    sidecar?: ResolutionsFile,
   ) => {
     setTakeoff(data);
     setTakeoffSourceKey(sourceKey);
     setTakeoffHostPath(hostPath);
-    const next = data
-      ? sidecarResolutions
-        ? [...sidecarResolutions]
-        : loadStoredResolutions(sourceKey)
-      : [];
+    const file = data ? (sidecar ?? loadStoredResolutions(sourceKey)) : null;
+    const next = file ? [...file.resolutions] : [];
+    setResolutionsFile(file);
     resolutionsRef.current = next;
     setResolutions(next);
   };
@@ -114,7 +115,7 @@ function RhvacRoute() {
         const takeoffData = await rhvacTakeoff({ path });
         try {
           const sidecar = await rhvacLoadTakeoffResolutions(path);
-          acceptTakeoff(takeoffData, path, path, sidecar.resolutions?.resolutions);
+          acceptTakeoff(takeoffData, path, path, sidecar.resolutions ?? undefined);
           setTakeoffError(null);
         } catch (caught) {
           acceptTakeoff(takeoffData, path);
@@ -155,22 +156,29 @@ function RhvacRoute() {
   };
 
   /** Levels with the durable resolutions applied — what the plan pane (and later conversion) sees. */
-  const resolvedTakeoff = useMemo(
-    () => (takeoff ? { ...takeoff, levels: applyResolutions(takeoff.levels, resolutions) } : null),
-    [takeoff, resolutions],
+  const resolutionApply = useMemo(
+    () =>
+      takeoff ? applyResolutions(takeoff.levels, resolutions, resolutionsFile?.version ?? 1) : null,
+    [takeoff, resolutions, resolutionsFile?.version],
   );
+  const resolvedTakeoff =
+    takeoff && resolutionApply ? { ...takeoff, levels: resolutionApply.levels } : null;
 
   const persistResolutions = useCallback(
     (next: FlagResolution[]) => {
       resolutionsRef.current = next;
       setResolutions(next);
-      if (takeoffSourceKey) storeResolutions(takeoffSourceKey, next);
+      const file = takeoff
+        ? toResolutionsFile(next, takeoff.tsvSha256, resolutionsFile?.version ?? 2)
+        : null;
+      setResolutionsFile(file);
+      if (takeoffSourceKey) storeResolutions(takeoffSourceKey, file);
       if (!takeoffHostPath) return;
       resolutionSaveQueue.current = resolutionSaveQueue.current
         .then(() =>
           rhvacSaveTakeoffResolutions({
             path: takeoffHostPath,
-            resolutions: toResolutionsFile(next),
+            resolutions: file!,
           }),
         )
         .then(() => setTakeoffError(null))
@@ -178,7 +186,7 @@ function RhvacRoute() {
           setTakeoffError(caught instanceof Error ? caught.message : "resolution save failed"),
         );
     },
-    [takeoffHostPath, takeoffSourceKey],
+    [resolutionsFile?.version, takeoff, takeoffHostPath, takeoffSourceKey],
   );
 
   const onResolveFlag = useCallback(
@@ -190,16 +198,25 @@ function RhvacRoute() {
   const onResetResolutions = useCallback(() => persistResolutions([]), [persistResolutions]);
 
   const onDownloadResolutions = useCallback(() => {
-    const blob = new Blob([JSON.stringify(toResolutionsFile(resolutions), null, 2)], {
-      type: "application/json",
-    });
+    const blob = new Blob(
+      [
+        JSON.stringify(
+          toResolutionsFile(resolutions, takeoff?.tsvSha256 ?? {}, resolutionsFile?.version ?? 2),
+          null,
+          2,
+        ),
+      ],
+      {
+        type: "application/json",
+      },
+    );
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
     anchor.download = "takeoff-resolutions.json";
     anchor.click();
     URL.revokeObjectURL(url);
-  }, [resolutions]);
+  }, [resolutions, resolutionsFile?.version, takeoff]);
 
   const matchByCandidate = useMemo(() => {
     const map = new Map<string, number>();
@@ -337,6 +354,11 @@ function RhvacRoute() {
               focusedId={focusedId}
               onPickRoom={setFocusedId}
               resolutionCount={resolutions.length}
+              orphanCount={resolutionApply?.orphaned ?? 0}
+              recordedAgainstOlderDetection={provenanceMismatch(
+                resolutionsFile,
+                takeoff?.tsvSha256 ?? {},
+              )}
               onResolve={onResolveFlag}
               onDownloadResolutions={onDownloadResolutions}
               onResetResolutions={onResetResolutions}

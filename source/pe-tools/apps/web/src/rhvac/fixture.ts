@@ -26,6 +26,11 @@ async function fetchText(path: string): Promise<string> {
   return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 }
 
+const sha256 = async (text: string): Promise<string> =>
+  [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)))]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+
 const fetchJson = async <T>(path: string): Promise<T> => JSON.parse(await fetchText(path)) as T;
 
 export const FIXTURE_SOURCE_LABEL = "project-a fixture (Partition replay)";
@@ -41,5 +46,11 @@ export async function loadFixtureTakeoff(): Promise<RhvacTakeoffData> {
     fetchJson<RoomMap>(manifest.roomMap),
     ...manifest.takeoff.map((name) => fetchText(name)),
   ]);
-  return { levels: tsvTexts.map((text) => parseTakeoffTsv(text)), roomMap };
+  const levels = tsvTexts.map((text) => parseTakeoffTsv(text));
+  const hashes = await Promise.all(tsvTexts.map(sha256));
+  return {
+    levels,
+    roomMap,
+    tsvSha256: Object.fromEntries(levels.map((level, index) => [level.levelName, hashes[index]!])),
+  };
 }

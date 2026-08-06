@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { Effect, FileSystem, Schema, Stream } from "effect";
@@ -148,7 +148,11 @@ export const rhvacTakeoff = Effect.fnUntraced(function* (input: RhvacPathRequest
   const tsvs = yield* Effect.all(
     tsvNames.map((name) =>
       readFileStringBomAwareOrEmpty(join(takeoffDir, name), key).pipe(
-        Effect.map((text) => ({ name, text })),
+        Effect.map((text) => ({
+          name,
+          text,
+          sha256: createHash("sha256").update(text, "utf8").digest("hex"),
+        })),
       ),
     ),
   );
@@ -171,7 +175,10 @@ export const rhvacTakeoffResolutions = Effect.fnUntraced(function* (
   const savedPath = join(dirname(input.path), "takeoff-resolutions.json");
   if (input.resolutions) {
     const resolutions = {
-      version: 1 as const,
+      version: input.resolutions.version,
+      ...(input.resolutions.tsvSha256
+        ? { tsvSha256: sortRecord(input.resolutions.tsvSha256) }
+        : {}),
       resolutions: sortRhvacResolutions(input.resolutions.resolutions),
     };
     yield* writeFileStringAtomic(savedPath, `${JSON.stringify(resolutions, null, 2)}\n`, key);
@@ -199,9 +206,16 @@ export const rhvacTakeoffResolutions = Effect.fnUntraced(function* (
   );
   return {
     savedPath,
-    resolutions: { version: 1, resolutions: sortRhvacResolutions(resolutions.resolutions) },
+    resolutions: {
+      version: resolutions.version,
+      ...(resolutions.tsvSha256 ? { tsvSha256: sortRecord(resolutions.tsvSha256) } : {}),
+      resolutions: sortRhvacResolutions(resolutions.resolutions),
+    },
   } satisfies RhvacTakeoffResolutionsResult;
 });
+
+const sortRecord = (values: Record<string, string>): Record<string, string> =>
+  Object.fromEntries(Object.entries(values).sort(([a], [b]) => (a === b ? 0 : a < b ? -1 : 1)));
 
 // --- edit payload conversion ---------------------------------------------------
 

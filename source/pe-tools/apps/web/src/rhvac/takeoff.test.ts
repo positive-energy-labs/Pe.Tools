@@ -10,7 +10,13 @@ import { join } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
 import { deriveAssemblyCatalog } from "./assemblies";
-import { applyResolutions, splitShape, type FlagResolution } from "./resolutions";
+import {
+  applyResolutions,
+  provenanceMismatch,
+  splitShape,
+  toResolutionsFile,
+  type FlagResolution,
+} from "./resolutions";
 import {
   deriveGridPitch,
   levelBounds,
@@ -21,6 +27,10 @@ import {
 import { candidateKey, normalizeExtract, type RhvacExtract, type RoomMap } from "./types";
 
 const FIXTURE_DIR = join(import.meta.dirname, "../../public/rhvac-fixture");
+const ANCHOR_FIXTURE = join(
+  import.meta.dirname,
+  "../../../../../../eval/rhvac/fixtures/sidecar-anchor-remap.json",
+);
 
 const readFixture = (name: string) => {
   const text = readFileSync(join(FIXTURE_DIR, name), "utf8");
@@ -268,14 +278,20 @@ describe("ambiguity flags + resolutions", () => {
         flag: "open-plan-merge",
         action: "split",
         params: { a: [20, 0], b: [20, 30] },
+        anchor: { label: [55, 5], sqft: 100 },
       },
-      { candidateKey: "Level 9/Flag Demo:R02", flag: "open-plan-merge", action: "accept" },
+      {
+        candidateKey: "Level 9/Flag Demo:R02",
+        flag: "open-plan-merge",
+        action: "accept",
+        anchor: { label: [20, 15], sqft: 1200 },
+      },
     ];
-    const once = applyResolutions(parse(), resolutions);
-    const twice = applyResolutions(once, resolutions);
+    const once = applyResolutions(parse(), resolutions).levels;
+    const twice = applyResolutions(once, resolutions).levels;
     expect(twice).toEqual(once);
     // Replaying against a fresh parse of the same TSV yields the same rooms.
-    expect(applyResolutions(parse(), resolutions)).toEqual(once);
+    expect(applyResolutions(parse(), resolutions).levels).toEqual(once);
 
     const rooms = new Map(once[0]!.rooms.map((r) => [r.id, r]));
     expect(rooms.has("R01")).toBe(false); // split replaced it
@@ -292,6 +308,99 @@ describe("ambiguity flags + resolutions", () => {
     const ghost: FlagResolution[] = [
       { candidateKey: "Level 9/Flag Demo:R99", flag: "open-plan-merge", action: "accept" },
     ];
-    expect(applyResolutions(levels, ghost)).toEqual(levels);
+    expect(applyResolutions(levels, ghost)).toEqual({
+      levels,
+      applied: 0,
+      remapped: 0,
+      orphaned: 1,
+    });
+  });
+
+  it("serializes v2 provenance deterministically and detects an older takeoff", () => {
+    const file = toResolutionsFile(
+      [
+        {
+          candidateKey: "L:R01",
+          flag: "seedless",
+          action: "accept",
+          anchor: { label: [5, 5], sqft: 100 },
+        },
+      ],
+      { Z: "hash-z", A: "hash-a" },
+    );
+
+    expect(file.version).toBe(2);
+    expect(Object.keys(file.tsvSha256!)).toEqual(["A", "Z"]);
+    expect(JSON.stringify(file)).not.toContain("timestamp");
+    expect(provenanceMismatch(file, { A: "hash-a", Z: "hash-z" })).toBe(false);
+    expect(provenanceMismatch(file, { A: "changed", Z: "hash-z" })).toBe(true);
+    expect(toResolutionsFile(file.resolutions, {}, 1)).toEqual({
+      version: 1,
+      resolutions: file.resolutions,
+    });
+  });
+
+  it("replays a split after its detector flag disappears", () => {
+    const level = parseFlaggedUnitTakeoff();
+    const room = level.rooms[0]!;
+    delete room.flags;
+    const result = applyResolutions(
+      [level],
+      [
+        {
+          candidateKey: candidateKey(level.levelName, room.id),
+          flag: "open-plan-merge",
+          action: "split",
+          params: { a: [15, 0], b: [15, 30] },
+        },
+      ],
+    );
+    expect(result.levels[0]!.rooms.slice(0, 2).map(({ id }) => id)).toEqual(["R01.a", "R01.b"]);
+    expect(result.applied).toBe(1);
+  });
+
+  it("remaps v2 resolutions by geometric anchor and reports every orphan", () => {
+    const fixture = JSON.parse(readFileSync(ANCHOR_FIXTURE, "utf8")) as {
+      beforeTsv: string;
+      afterTsv: string;
+      sidecar: { version: 2; resolutions: FlagResolution[] };
+      expected: {
+        applied: number;
+        remapped: number;
+        orphaned: number;
+        roomIds: string[];
+        roomSqft: number[];
+        roomLabels: [number, number][];
+      };
+    };
+
+    const before = applyResolutions(
+      [parseTakeoffTsv(fixture.beforeTsv)],
+      fixture.sidecar.resolutions,
+      fixture.sidecar.version,
+    );
+    expect({
+      applied: before.applied,
+      remapped: before.remapped,
+      orphaned: before.orphaned,
+    }).toEqual({ applied: 2, remapped: 0, orphaned: 1 });
+
+    const result = applyResolutions(
+      [parseTakeoffTsv(fixture.afterTsv)],
+      fixture.sidecar.resolutions,
+      fixture.sidecar.version,
+    );
+
+    expect({
+      applied: result.applied,
+      remapped: result.remapped,
+      orphaned: result.orphaned,
+      roomIds: result.levels[0]!.rooms.map((room) => room.id),
+      roomSqft: result.levels[0]!.rooms.map((room) => room.rawSqft),
+      roomLabels: result.levels[0]!.rooms.map((room) => room.label),
+    }).toEqual(fixture.expected);
+    expect(result.applied + result.remapped + result.orphaned).toBe(
+      fixture.sidecar.resolutions.length,
+    );
   });
 });

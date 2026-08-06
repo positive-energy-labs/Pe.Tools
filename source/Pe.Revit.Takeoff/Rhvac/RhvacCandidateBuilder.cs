@@ -23,11 +23,20 @@ public sealed record TakeoffRoomShape(
 )
 {
     public List<string> Flags { get; init; } = new();
+    public double[] Label { get; init; } = Array.Empty<double>();
     public string? SplitFrom { get; init; }
 }
 
 /// <summary>One parsed takeoff TSV: a level and its rooms.</summary>
 public sealed record LevelTakeoff(string LevelName, double Elevation, List<TakeoffRoomShape> Rooms);
+
+/// <summary>Resolved levels plus loss accounting for every sidecar decision.</summary>
+public sealed record ResolutionApplyResult(
+    List<LevelTakeoff> Levels,
+    int Applied,
+    int Remapped,
+    int Orphaned
+);
 
 /// <summary>The four assembly slots a project conversion needs (names must exist in the target .r10).</summary>
 public sealed record ConventionAssemblies(
@@ -59,8 +68,16 @@ public static class RhvacCandidateBuilder
     private const double StairEdgeCells = 2.5; // edges up to this many grid cells are staircase steps
 
     private sealed record ResolutionsFile(int Version, List<FlagResolution>? Resolutions);
-    private sealed record FlagResolution(string CandidateKey, string Flag, string Action, SplitParams? Params);
+    private sealed record FlagResolution(
+        string CandidateKey,
+        string Flag,
+        string Action,
+        SplitParams? Params,
+        ResolutionAnchor? Anchor
+    );
     private sealed record SplitParams(double[] A, double[] B);
+    private sealed record ResolutionAnchor(double[] Label, double Sqft);
+    private sealed record RoomReference(string LevelName, string Key, TakeoffRoomShape Room);
     private readonly record struct RingSnap(int Edge, double T, double[] Point);
 
     /// <summary>
@@ -105,7 +122,7 @@ public static class RhvacCandidateBuilder
                         Parse(parts[6], lineIndex),
                         new List<double[]>(),
                         new List<List<double[]>>()
-                    );
+                    ) { Label = new[] { Parse(parts[4], lineIndex), Parse(parts[5], lineIndex) } };
                     rooms.Add(room);
                     byId.Add(room.Id, room);
                     break;
@@ -154,7 +171,7 @@ public static class RhvacCandidateBuilder
     /// Parses every rooms_*.tsv in a takeoff directory and applies the optional
     /// takeoff-resolutions.json beside that directory.
     /// </summary>
-    public static List<LevelTakeoff> ParseTsvDirectory(
+    public static ResolutionApplyResult ParseTsvDirectory(
         string tsvDirectory,
         string? resolutionsPath = null,
         bool simplify = true
@@ -168,19 +185,21 @@ public static class RhvacCandidateBuilder
         var projectDirectory = Directory.GetParent(fullDirectory)?.FullName
             ?? throw new InvalidDataException($"{fullDirectory}: takeoff directory has no parent.");
         var sidecar = resolutionsPath ?? Path.Combine(projectDirectory, "takeoff-resolutions.json");
-        return File.Exists(sidecar) ? ApplyResolutions(levels, sidecar) : levels;
+        if (!File.Exists(sidecar))
+            return new ResolutionApplyResult(levels, 0, 0, 0);
+        return ApplyResolutions(levels, sidecar);
     }
 
-    /// <summary>Pure, idempotent application of a takeoff-resolutions.json sidecar.</summary>
-    public static List<LevelTakeoff> ApplyResolutions(
+    /// <summary>Pure, idempotent sidecar application with v2 anchor remapping and loss accounting.</summary>
+    public static ResolutionApplyResult ApplyResolutions(
         IReadOnlyList<LevelTakeoff> levels,
         string resolutionsPath
     )
     {
         var file = JsonConvert.DeserializeObject<ResolutionsFile>(File.ReadAllText(resolutionsPath))
             ?? throw new InvalidDataException($"{resolutionsPath}: empty resolutions file.");
-        if (file.Version != 1 || file.Resolutions is null)
-            throw new InvalidDataException($"{resolutionsPath}: expected version 1 with a resolutions array.");
+        if (file.Version is not (1 or 2) || file.Resolutions is null)
+            throw new InvalidDataException($"{resolutionsPath}: expected version 1 or 2 with a resolutions array.");
         foreach (var resolution in file.Resolutions)
         {
             if (string.IsNullOrEmpty(resolution.CandidateKey) || string.IsNullOrEmpty(resolution.Flag))
@@ -192,16 +211,82 @@ public static class RhvacCandidateBuilder
                 ValidatePoint(resolution.Params.A, resolutionsPath);
                 ValidatePoint(resolution.Params.B, resolutionsPath);
             }
+            if (resolution.Anchor is not null)
+            {
+                ValidatePoint(resolution.Anchor.Label, resolutionsPath);
+                if (!double.IsFinite(resolution.Anchor.Sqft) || resolution.Anchor.Sqft <= 0)
+                    throw new InvalidDataException($"{resolutionsPath}: anchor sqft must be positive and finite.");
+            }
         }
 
-        var byKey = file.Resolutions
-            .GroupBy(resolution => resolution.CandidateKey, StringComparer.Ordinal)
-            .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
-        return levels.Select(level => level with {
+        var rooms = levels.SelectMany(level => level.Rooms.Select(room => new RoomReference(
+            level.LevelName, $"{level.LevelName}:{room.Id}", room))).ToList();
+        var byKey = new Dictionary<string, List<FlagResolution>>(StringComparer.Ordinal);
+        var splitTargets = new HashSet<string>(StringComparer.Ordinal);
+        var applied = 0;
+        var remapped = 0;
+        var orphaned = 0;
+        foreach (var resolution in file.Resolutions)
+        {
+            var exact = rooms.FirstOrDefault(room => room.Key == resolution.CandidateKey);
+            var target = exact;
+            var wasRemapped = false;
+            var anchor = resolution.Anchor;
+            if (file.Version == 2 && anchor is null)
+            {
+                orphaned++;
+                continue;
+            }
+            if (file.Version == 2)
+            {
+                var requiredAnchor = anchor!;
+                var validExact = exact is not null
+                    && Contains(exact.Room, requiredAnchor.Label)
+                    && Math.Abs(exact.Room.RawSqft - requiredAnchor.Sqft) <= requiredAnchor.Sqft * 0.2;
+                if (!validExact)
+                {
+                    var separator = resolution.CandidateKey.LastIndexOf(':');
+                    var levelName = separator < 0 ? "" : resolution.CandidateKey[..separator];
+                    target = rooms.FirstOrDefault(room => room.LevelName == levelName
+                        && Contains(room.Room, requiredAnchor.Label));
+                    wasRemapped = target is not null;
+                }
+            }
+            if (target is null)
+            {
+                orphaned++;
+                continue;
+            }
+            if (resolution.Action == "split"
+                && (resolution.Params is null
+                    || splitTargets.Contains(target.Key)
+                    || SplitShape(target.Room, resolution.Params.A, resolution.Params.B) is null))
+            {
+                orphaned++;
+                continue;
+            }
+            if (resolution.Action == "split")
+                splitTargets.Add(target.Key);
+            if (wasRemapped) remapped++;
+            else applied++;
+            if (!byKey.TryGetValue(target.Key, out var targetResolutions))
+            {
+                targetResolutions = new List<FlagResolution>();
+                byKey.Add(target.Key, targetResolutions);
+            }
+            targetResolutions.Add(resolution);
+        }
+
+        var resolved = levels.Select(level => level with {
             Rooms = level.Rooms.SelectMany(room =>
                 ApplyRoomResolutions(level.LevelName, room, byKey)).ToList(),
         }).ToList();
+        return new ResolutionApplyResult(resolved, applied, remapped, orphaned);
     }
+
+    private static bool Contains(TakeoffRoomShape room, double[] point) =>
+        InsideLoop(room.Outer, point[0], point[1])
+        && room.Holes.All(hole => !InsideLoop(hole, point[0], point[1]));
 
     private static IEnumerable<TakeoffRoomShape> ApplyRoomResolutions(
         string levelName,
@@ -209,8 +294,7 @@ public static class RhvacCandidateBuilder
         IReadOnlyDictionary<string, List<FlagResolution>> byKey
     )
     {
-        if (room.Flags.Count == 0
-            || !byKey.TryGetValue($"{levelName}:{room.Id}", out var resolutions))
+        if (!byKey.TryGetValue($"{levelName}:{room.Id}", out var resolutions))
             return new[] { room };
 
         var accepted = resolutions
@@ -219,8 +303,7 @@ public static class RhvacCandidateBuilder
             .ToHashSet(StringComparer.Ordinal);
         var split = resolutions.FirstOrDefault(resolution =>
             resolution.Action == "split"
-            && resolution.Params is not null
-            && room.Flags.Contains(resolution.Flag));
+            && resolution.Params is not null);
         var remaining = room.Flags.Where(flag => !accepted.Contains(flag)).ToList();
 
         if (split?.Params is not null)
@@ -272,7 +355,10 @@ public static class RhvacCandidateBuilder
                 room.MeanCeilingFt,
                 outer,
                 holes
-            ) { SplitFrom = room.SplitFrom ?? room.Id };
+            ) {
+                Label = CentroidOf(outer),
+                SplitFrom = room.SplitFrom ?? room.Id,
+            };
 
         var centroid1 = CentroidOf(half1);
         var centroid2 = CentroidOf(half2);

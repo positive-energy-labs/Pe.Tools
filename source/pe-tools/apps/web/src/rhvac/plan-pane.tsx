@@ -54,6 +54,7 @@ interface SplitDraft {
   levelIndex: number;
   roomId: string;
   flag: string;
+  anchor: NonNullable<FlagResolution["anchor"]>;
   first: [number, number] | null;
 }
 
@@ -70,6 +71,8 @@ export interface PlanPaneProps {
   onPickRoom: (identifier: number) => void;
   /** Count of durable resolutions already recorded for this takeoff source. */
   resolutionCount: number;
+  orphanCount: number;
+  recordedAgainstOlderDetection: boolean;
   onResolve: (resolution: FlagResolution) => void;
   onDownloadResolutions: () => void;
   onResetResolutions: () => void;
@@ -117,6 +120,7 @@ export function PlanPane(props: PlanPaneProps) {
       levelIndex: flag.levelIndex,
       roomId: flag.roomId,
       flag: flag.flag,
+      anchor: flag.anchor,
       first: null,
     });
   };
@@ -138,6 +142,7 @@ export function PlanPane(props: PlanPaneProps) {
       flag: splitDraft.flag,
       action: "split",
       params: { a: splitDraft.first, b: point },
+      anchor: splitDraft.anchor,
     });
   };
 
@@ -204,10 +209,17 @@ export function PlanPane(props: PlanPaneProps) {
           pending={pending}
           focusedFlagKey={focusedFlagKey}
           resolutionCount={props.resolutionCount}
+          orphanCount={props.orphanCount}
+          recordedAgainstOlderDetection={props.recordedAgainstOlderDetection}
           onFocus={focusFlag}
           onBeginSplit={beginSplit}
           onAccept={(flag) =>
-            resolve({ candidateKey: flag.candidateKey, flag: flag.flag, action: "accept" })
+            resolve({
+              candidateKey: flag.candidateKey,
+              flag: flag.flag,
+              action: "accept",
+              anchor: flag.anchor,
+            })
           }
           onDownload={props.onDownloadResolutions}
           onReset={props.onResetResolutions}
@@ -257,6 +269,8 @@ function FlagQueue({
   pending,
   focusedFlagKey,
   resolutionCount,
+  orphanCount,
+  recordedAgainstOlderDetection,
   onFocus,
   onBeginSplit,
   onAccept,
@@ -266,6 +280,8 @@ function FlagQueue({
   pending: PendingFlag[];
   focusedFlagKey: string | null;
   resolutionCount: number;
+  orphanCount: number;
+  recordedAgainstOlderDetection: boolean;
   onFocus: (flag: PendingFlag) => void;
   onBeginSplit: (flag: PendingFlag) => void;
   onAccept: (flag: PendingFlag) => void;
@@ -315,6 +331,12 @@ function FlagQueue({
       {resolutionCount > 0 && (
         <div className="mt-1 flex items-center gap-1.5 border-t border-cat-clay/20 pt-1">
           <span className="tele text-muted-foreground">{resolutionCount} resolved</span>
+          <span className={cn("tele text-muted-foreground", orphanCount > 0 && "text-destructive")}>
+            {orphanCount} orphaned
+          </span>
+          {recordedAgainstOlderDetection && (
+            <span className="tele text-cat-clay">recorded against an older detection</span>
+          )}
           <Button size="xs" variant="ghost" className="ml-auto" onClick={onDownload}>
             download json
           </Button>

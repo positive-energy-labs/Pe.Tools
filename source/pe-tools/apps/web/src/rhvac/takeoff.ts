@@ -30,6 +30,7 @@ export function parseTakeoffTsv(tsvText: string, options?: { simplify?: boolean 
           id: parts[1]!,
           rawSqft: Number(parts[2]),
           perimeterFt: Number(parts[3]),
+          label: [Number(parts[4]), Number(parts[5])],
           meanCeilingFt: Number(parts[6]),
           outer: [],
           holes: [],

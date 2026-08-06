@@ -646,7 +646,9 @@ export const rhvacRoomMapSchema = Schema.Struct({
 
 /** Raw takeoff snapshots next to the .r10 — the client parses the TSV texts itself. */
 export const rhvacTakeoffDataSchema = Schema.Struct({
-  tsvs: Schema.Array(Schema.Struct({ name: Schema.String, text: Schema.String })),
+  tsvs: Schema.Array(
+    Schema.Struct({ name: Schema.String, text: Schema.String, sha256: Schema.String }),
+  ),
   roomMap: Schema.NullOr(rhvacRoomMapSchema),
 });
 export type RhvacTakeoffData = Schema.Schema.Type<typeof rhvacTakeoffDataSchema>;
@@ -658,11 +660,13 @@ export const rhvacTakeoffResolutionSchema = Schema.Struct({
   flag: Schema.String,
   action: Schema.Literals(["accept", "split"]),
   params: Schema.optional(Schema.Struct({ a: rhvacPointSchema, b: rhvacPointSchema })),
+  anchor: Schema.optional(Schema.Struct({ label: rhvacPointSchema, sqft: Schema.Number })),
 });
 export type RhvacTakeoffResolution = Schema.Schema.Type<typeof rhvacTakeoffResolutionSchema>;
 
 export const rhvacResolutionsFileSchema = Schema.Struct({
-  version: Schema.Literal(1),
+  version: Schema.Literals([1, 2]),
+  tsvSha256: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   resolutions: Schema.Array(rhvacTakeoffResolutionSchema),
 });
 export type RhvacResolutionsFile = Schema.Schema.Type<typeof rhvacResolutionsFileSchema>;

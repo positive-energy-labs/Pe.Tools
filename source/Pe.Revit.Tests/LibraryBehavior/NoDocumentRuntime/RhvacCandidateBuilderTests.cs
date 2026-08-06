@@ -170,7 +170,6 @@ public sealed class RhvacCandidateBuilderTests
             "POLY\tR01\touter\t0;0|40;0|40;30|0;30",
             "ROOM\tR02\t100.0\t40.0\t55.0\t5.0\t9.00",
             "POLY\tR02\touter\t50;0|60;0|60;10|50;10",
-            "META\tflag\tR01:open-plan-merge",
             "META\tflag\tR02:low-evidence-boundary",
             "",
         });
@@ -187,19 +186,21 @@ public sealed class RhvacCandidateBuilderTests
                       "candidateKey": "L1:R01",
                       "flag": "open-plan-merge",
                       "action": "split",
-                      "params": { "a": [15, 0], "b": [15, 30] }
+                      "params": { "a": [15, 0], "b": [15, 30] },
+                      "anchor": { "label": [55, 5], "sqft": 100 }
                     },
                     {
                       "candidateKey": "L1:R02",
                       "flag": "low-evidence-boundary",
-                      "action": "accept"
+                      "action": "accept",
+                      "anchor": { "label": [20, 15], "sqft": 1200 }
                     }
                   ]
                 }
                 """);
 
-            var resolved = RhvacCandidateBuilder.ParseTsvDirectory(takeoffDir);
-            var reapplied = RhvacCandidateBuilder.ApplyResolutions(resolved, sidecar);
+            var resolved = RhvacCandidateBuilder.ParseTsvDirectory(takeoffDir).Levels;
+            var reapplied = RhvacCandidateBuilder.ApplyResolutions(resolved, sidecar).Levels;
             var firstCandidates = RhvacCandidateBuilder.Build(resolved, TestConventions());
             var secondCandidates = RhvacCandidateBuilder.Build(reapplied, TestConventions());
 
@@ -217,7 +218,7 @@ public sealed class RhvacCandidateBuilderTests
                     Is.EqualTo(JsonConvert.SerializeObject(firstCandidates)), "reapply must be idempotent");
                 Assert.That(
                     JsonConvert.SerializeObject(RhvacCandidateBuilder.Build(
-                        RhvacCandidateBuilder.ParseTsvDirectory(takeoffDir), TestConventions())),
+                        RhvacCandidateBuilder.ParseTsvDirectory(takeoffDir).Levels, TestConventions())),
                     Is.EqualTo(JsonConvert.SerializeObject(firstCandidates)), "fresh parse must be deterministic");
             });
         }
@@ -226,6 +227,61 @@ public sealed class RhvacCandidateBuilderTests
             if (Directory.Exists(projectDir)) Directory.Delete(projectDir, recursive: true);
         }
     }
+
+    [Test]
+    public void V2_resolutions_survive_rank_reshuffle_by_geometric_anchor_without_silent_drops()
+    {
+        var fixturePath = Path.GetFullPath(Path.Combine(
+            RhvacEvalTests.FindFixtureDir(), "..", "fixtures", "sidecar-anchor-remap.json"));
+        var fixture = JsonConvert.DeserializeObject<AnchorRemapFixture>(File.ReadAllText(fixturePath))!;
+        var sidecarPath = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(sidecarPath, JsonConvert.SerializeObject(fixture.Sidecar));
+            var before = RhvacCandidateBuilder.ApplyResolutions(
+                new[] { RhvacCandidateBuilder.ParseTsv(fixture.BeforeTsv) }, sidecarPath);
+            var result = RhvacCandidateBuilder.ApplyResolutions(
+                new[] { RhvacCandidateBuilder.ParseTsv(fixture.AfterTsv) }, sidecarPath);
+
+            Assert.Multiple(() => {
+                Assert.That((before.Applied, before.Remapped, before.Orphaned),
+                    Is.EqualTo((2, 0, 1)));
+                Assert.That(result.Applied, Is.EqualTo(fixture.Expected.Applied));
+                Assert.That(result.Remapped, Is.EqualTo(fixture.Expected.Remapped));
+                Assert.That(result.Orphaned, Is.EqualTo(fixture.Expected.Orphaned));
+                Assert.That(result.Levels.Single().Rooms.Select(room => room.Id),
+                    Is.EqualTo(fixture.Expected.RoomIds));
+                Assert.That(result.Levels.Single().Rooms.Select(room => room.RawSqft),
+                    Is.EqualTo(fixture.Expected.RoomSqft));
+                Assert.That(result.Levels.Single().Rooms.Select(room => room.Label),
+                    Is.EqualTo(fixture.Expected.RoomLabels));
+                Assert.That(result.Applied + result.Remapped + result.Orphaned,
+                    Is.EqualTo(fixture.Sidecar.Resolutions.Count));
+            });
+        }
+        finally
+        {
+            File.Delete(sidecarPath);
+        }
+    }
+
+    private sealed record AnchorRemapFixture(
+        string BeforeTsv,
+        string AfterTsv,
+        AnchorRemapSidecar Sidecar,
+        AnchorRemapExpected Expected
+    );
+
+    private sealed record AnchorRemapSidecar(int Version, List<object> Resolutions);
+
+    private sealed record AnchorRemapExpected(
+        int Applied,
+        int Remapped,
+        int Orphaned,
+        List<string> RoomIds,
+        List<double> RoomSqft,
+        List<double[]> RoomLabels
+    );
 
     [Test]
     public void ProjectA_simplification_preserves_area_and_collapses_staircases()
@@ -282,7 +338,7 @@ public sealed class RhvacCandidateBuilderTests
         var tsvPaths = Directory.GetFiles(takeoffDir, "rooms_*.tsv");
         Assert.That(tsvPaths, Has.Length.EqualTo(5));
 
-        var levels = RhvacCandidateBuilder.ParseTsvDirectory(takeoffDir)
+        var levels = RhvacCandidateBuilder.ParseTsvDirectory(takeoffDir).Levels
             .OrderBy(level => level.Elevation)
             .ToList();
         var conventions = RhvacCandidateBuilder.LoadConventions(Path.Combine(fixtureDir, "conventions.json"));

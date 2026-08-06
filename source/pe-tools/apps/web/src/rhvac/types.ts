@@ -165,6 +165,8 @@ export interface TakeoffRoomShape {
   rawSqft: number;
   perimeterFt: number;
   meanCeilingFt: number;
+  /** Detector label point in model feet; stable geometric anchor for sidecar decisions. */
+  label: [number, number];
   /** CCW outer loop, feet. */
   outer: [number, number][];
   holes: [number, number][][];
@@ -200,6 +202,8 @@ export interface RoomMap {
 export interface RhvacTakeoffData {
   levels: TakeoffLevel[];
   roomMap: RoomMap;
+  /** SHA-256 of each loaded TSV, keyed by parsed level name. */
+  tsvSha256: Record<string, string>;
 }
 
 export const candidateKey = (levelName: string, roomId: string) => `${levelName}:${roomId}`;

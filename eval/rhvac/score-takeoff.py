@@ -22,8 +22,8 @@ import argparse, json, math, os, re, sys
 from collections import defaultdict
 
 import overlay
-from shapely.geometry import LineString, Polygon
-from shapely.ops import unary_union
+from shapely.geometry import LineString, Point, Polygon
+from shapely.ops import split as split_polygon, unary_union
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 projectA = os.path.join(HERE, "project-a")
@@ -48,11 +48,12 @@ def load_takeoff(takeoff_dir):
     """Candidate polygons and META flags keyed by level-qualified room id."""
     floors = defaultdict(dict)
     candidate_flags = defaultdict(set)
+    candidate_meta = {}
     loaded = []
     for f in sorted(os.listdir(takeoff_dir)):
         if not (f.startswith("rooms_") and f.endswith(".tsv")):
             continue
-        level, elevation, polys, flags = None, None, defaultdict(list), defaultdict(set)
+        level, elevation, polys, flags, rooms = None, None, defaultdict(list), defaultdict(set), {}
         for line in open(os.path.join(takeoff_dir, f), encoding="utf-8"):
             p = line.rstrip("\n").split("\t")
             if p[0] == "META" and p[1] == "level":
@@ -63,13 +64,15 @@ def load_takeoff(takeoff_dir):
                 rid, separator, payload = p[2].partition(":")
                 if separator and rid.startswith("R"):
                     flags[rid].update(flag for flag in payload.split("+") if flag)
+            elif p[0] == "ROOM":
+                rooms[p[1]] = {"sqft": float(p[2]), "label": [float(p[4]), float(p[5])]}
             elif p[0] == "POLY" and p[2] == "outer":
                 polys[p[1]].append([tuple(map(float, q.split(";"))) for q in p[3].split("|")])
         if level is None or elevation is None:
             raise SystemExit(f"{f}: no META level/elev line")
-        loaded.append((level, elevation, polys, flags))
-    elevations = sorted({elevation for _, elevation, _, _ in loaded})
-    for level, elevation, polys, flags in loaded:
+        loaded.append((level, elevation, polys, flags, rooms))
+    elevations = sorted({elevation for _, elevation, _, _, _ in loaded})
+    for level, elevation, polys, flags, rooms in loaded:
         match = re.search(r"Level\s+(\d+)", level, re.I)
         floor = int(match.group(1)) if match else elevations.index(elevation)
         for rid, loops in polys.items():
@@ -80,7 +83,100 @@ def load_takeoff(takeoff_dir):
                 key = f"{level}:{rid}"
                 floors[floor][key] = pg
                 candidate_flags[key].update(flags[rid])
-    return floors, candidate_flags
+                candidate_meta[key] = rooms[rid]
+    return floors, candidate_flags, candidate_meta
+
+
+def apply_resolutions(takeoff, sidecar):
+    """Apply v1 key-only or v2 anchor-backed accept/split decisions with loss accounting."""
+    if sidecar.get("version") not in (1, 2) or not isinstance(sidecar.get("resolutions"), list):
+        raise SystemExit("resolutions sidecar must be version 1 or 2 with a resolutions array")
+    floors, candidate_flags, candidate_meta = takeoff
+    floors = defaultdict(dict, {floor: dict(candidates) for floor, candidates in floors.items()})
+    candidate_flags = defaultdict(set, {key: set(flags) for key, flags in candidate_flags.items()})
+    candidate_meta = dict(candidate_meta)
+    accounting = {"applied": 0, "remapped": 0, "orphaned": 0}
+    touches = defaultdict(int)
+    grouped = defaultdict(list)
+    split_pieces = {}
+    split_targets = set()
+
+    for resolution in sidecar.get("resolutions", []):
+        action = resolution.get("action")
+        if not resolution.get("candidateKey") or not resolution.get("flag"):
+            raise SystemExit("each resolution requires candidateKey and flag")
+        if action not in ("accept", "split"):
+            raise SystemExit(f"unknown resolution action: {action}")
+        touches[action] += 1
+        key = resolution.get("candidateKey")
+        anchor = resolution.get("anchor") if sidecar.get("version") == 2 else None
+        if sidecar.get("version") == 2 and not anchor:
+            accounting["orphaned"] += 1
+            continue
+        target = next(((floor, key) for floor, candidates in floors.items() if key in candidates), None)
+        was_remapped = False
+        if anchor:
+            point = Point(anchor["label"])
+            exact_valid = (target is not None and floors[target[0]][target[1]].contains(point)
+                           and abs(candidate_meta[target[1]]["sqft"] - anchor["sqft"])
+                           <= anchor["sqft"] * 0.2)
+            if not exact_valid:
+                level = key.rsplit(":", 1)[0] if isinstance(key, str) and ":" in key else ""
+                target = next(((floor, candidate_key)
+                               for floor, candidates in floors.items()
+                               for candidate_key, polygon in candidates.items()
+                               if candidate_key.rsplit(":", 1)[0] == level and polygon.contains(point)), None)
+                was_remapped = target is not None
+        if target is None:
+            accounting["orphaned"] += 1
+            continue
+
+        floor, target_key = target
+        if action == "split":
+            if target_key in split_targets:
+                accounting["orphaned"] += 1
+                continue
+            params = resolution.get("params") or {}
+            try:
+                pieces = [piece for piece in split_polygon(
+                    floors[floor][target_key], LineString([params["a"], params["b"]])).geoms
+                          if isinstance(piece, Polygon) and piece.area >= 1]
+            except (KeyError, TypeError, ValueError):
+                pieces = []
+            if len(pieces) != 2:
+                accounting["orphaned"] += 1
+                continue
+            pieces.sort(key=lambda piece: (-piece.area, piece.centroid.x, piece.centroid.y))
+            split_targets.add(target_key)
+            split_pieces[target_key] = pieces
+
+        grouped[(floor, target_key)].append(resolution)
+        accounting["remapped" if was_remapped else "applied"] += 1
+
+    for (floor, target_key), resolutions in grouped.items():
+        accepted = {resolution["flag"] for resolution in resolutions
+                    if resolution["action"] == "accept"}
+        flags = candidate_flags.pop(target_key, set()) - accepted
+        split = next((resolution for resolution in resolutions
+                      if resolution["action"] == "split"), None)
+        if split is None:
+            candidate_flags[target_key] = flags
+            continue
+        flags.discard(split["flag"])
+        del floors[floor][target_key]
+        del candidate_meta[target_key]
+        for suffix, piece in zip(("a", "b"), split_pieces[target_key]):
+            child_key = f"{target_key}.{suffix}"
+            floors[floor][child_key] = piece
+            candidate_flags[child_key] = set(flags)
+            candidate_meta[child_key] = {
+                "sqft": piece.area,
+                "label": [piece.centroid.x, piece.centroid.y],
+            }
+
+    return (floors, candidate_flags, candidate_meta), {
+        "touchesByVerb": dict(sorted(touches.items())), **accounting,
+    }
 
 
 def classify(gt, cands):
@@ -220,8 +316,8 @@ def gates(precision_out, totals):
     return {"passed": all(c["passed"] for c in checks.values()), "checks": checks}
 
 
-def score(takeoff_dir, geo, stale, wall_tol=WALL_TOL_FT):
-    floors, candidate_flags = load_takeoff(takeoff_dir)
+def score(takeoff_dir, geo, stale, wall_tol=WALL_TOL_FT, takeoff=None):
+    floors, candidate_flags, _ = takeoff or load_takeoff(takeoff_dir)
     excluded = {e["number"]: e.get("reason", "") for e in stale.get("exclude", [])}
     gts = {}
     for num, g in geo["rooms"].items():
@@ -419,6 +515,16 @@ def to_text(sb):
                 f"{wall['actualPct'] if wall['actualPct'] is not None else '-'}%",
                 f"OVERALL {'PASS' if g['passed'] else 'FAIL'}"])
     out.append("")
+    if "resolutions" in sb:
+        r = sb["resolutions"]
+        out.extend([
+            "RESOLUTIONS",
+            "touches " + "  ".join(f"{verb}:{count}" for verb, count in r["touchesByVerb"].items()),
+            f"applied {r['applied']}  remapped {r['remapped']}  orphaned {r['orphaned']}",
+            f"before ratio {r['before']['candidateGtRatio']}  score {r['before']['totalScore']}",
+            f"after  ratio {r['after']['candidateGtRatio']}  score {r['after']['totalScore']}",
+            "",
+        ])
     out.append("per-room (sorted by oracle number; * = non-high confidence ground truth):")
     for n, r in sb["rooms"].items():
         conf = " " if r["confidence"] == "high" else "*"
@@ -506,6 +612,8 @@ def main():
     ap.add_argument("--ink-dir", default=overlay.LIVE,
                     help="directory containing ink_<level>.bin for automatic overlays")
     ap.add_argument("--gate", action="store_true", help="exit nonzero when an absolute gate fails")
+    ap.add_argument("--resolutions", default=None,
+                    help="apply accept/split decisions from a takeoff-resolutions.json sidecar")
     ap.add_argument("--quiet", action="store_true")
     a = ap.parse_args()
 
@@ -515,7 +623,25 @@ def main():
     stale_path = a.stale or os.path.join(project, "stale-rooms.json")
     geo = json.load(open(geo_path))
     stale = json.load(open(stale_path)) if os.path.exists(stale_path) else {"exclude": []}
-    sb = score(takeoff_dir, geo, stale, a.wall_tol)
+    takeoff = load_takeoff(takeoff_dir)
+    before = score(takeoff_dir, geo, stale, a.wall_tol, takeoff)
+    if a.resolutions:
+        sidecar = json.load(open(a.resolutions, encoding="utf-8"))
+        resolved, accounting = apply_resolutions(takeoff, sidecar)
+        sb = score(takeoff_dir, geo, stale, a.wall_tol, resolved)
+        sb["resolutions"] = {
+            **accounting,
+            "before": {
+                "candidateGtRatio": before["precision"]["total"]["candidateGtRatio"],
+                "totalScore": before["totals"]["totalScore"],
+            },
+            "after": {
+                "candidateGtRatio": sb["precision"]["total"]["candidateGtRatio"],
+                "totalScore": sb["totals"]["totalScore"],
+            },
+        }
+    else:
+        sb = before
     if os.path.abspath(takeoff_dir) == os.path.join(projectA, "takeoff"):
         game_room = sb["rooms"]["4"]
         assert (game_room["bestCandidate"] == "Level 0/Lower Level:R03"

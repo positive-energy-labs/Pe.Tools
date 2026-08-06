@@ -57,7 +57,7 @@ export interface RhvacTakeoffArgs {
 
 /** Wire shape of rhvac.takeoff — raw snapshots; the client parses the TSVs. */
 interface RhvacTakeoffWire {
-  tsvs: { name: string; text: string }[];
+  tsvs: { name: string; text: string; sha256: string }[];
   roomMap: RoomMap | null;
 }
 
@@ -99,8 +99,12 @@ export async function rhvacSaveTakeoffResolutions(
 
 export async function rhvacTakeoff(args: RhvacTakeoffArgs): Promise<RhvacTakeoffData> {
   const wire = (await callHostDynamic("rhvac.takeoff", args)) as RhvacTakeoffWire;
+  const levels = wire.tsvs.map((file) => parseTakeoffTsv(file.text));
   return {
-    levels: wire.tsvs.map((file) => parseTakeoffTsv(file.text)),
+    levels,
     roomMap: wire.roomMap ?? { matches: [], skip: [] },
+    tsvSha256: Object.fromEntries(
+      levels.map((level, index) => [level.levelName, wire.tsvs[index]!.sha256]),
+    ),
   };
 }

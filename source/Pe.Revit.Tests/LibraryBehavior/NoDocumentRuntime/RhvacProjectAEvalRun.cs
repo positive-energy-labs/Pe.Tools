@@ -23,7 +23,13 @@ public sealed class RhvacProjectAEvalRun
             Assert.Ignore($"No takeoff TSVs at {takeoffDir}; run a takeoff first (Rhvac/README.md).");
 
         var profileName = Environment.GetEnvironmentVariable("PE_EVAL_PROFILE") ?? "bootstrap";
-        var levels = RhvacCandidateBuilder.ParseTsvDirectory(takeoffDir)
+        var resolutionResult = RhvacCandidateBuilder.ParseTsvDirectory(takeoffDir);
+        TestContext.Out.WriteLine(
+            $"RESOLUTIONS applied={resolutionResult.Applied} remapped={resolutionResult.Remapped} orphaned={resolutionResult.Orphaned}");
+        if (resolutionResult.Orphaned > 0)
+            TestContext.Error.WriteLine(
+                $"WARNING: {resolutionResult.Orphaned} RHVAC resolution decision(s) are ORPHANED; review before export.");
+        var levels = resolutionResult.Levels
             .OrderBy(level => level.Elevation)
             .ToList();
         var conventions = RhvacCandidateBuilder.LoadConventions(Path.Combine(fixtureDir, "conventions.json"));
