@@ -109,22 +109,6 @@ public sealed class TakeoffOptions
                                                // door width wide somewhere
     public double MinRegionCompactness = 0.01; // flag extreme snakes; iteration-3 floor preserves
                                                // narrow real rooms for one-touch review
-    // ---- Phase-3 wall-line snapping (Partition only; BoundarySnap.cs) ----
-    // Dominant wall directions are DERIVED per level from evidence-backed boundary orientation;
-    // boundaries snap onto a colinear line arrangement. Unbacked boundaries stay raw (jaggedness
-    // is information for the editability lane). Per-room area drift is bounded by construction.
-    public bool SnapBoundaries = true;      // snap partition boundaries to the wall-line arrangement
-    public double SnapWindowFt = 4.0;       // secant window for boundary orientation sampling
-    public double SnapDirTolDeg = 12;       // max angular distance to a dominant direction
-    public double SnapDirMinShare = 0.02;   // histogram peak must carry this share of backed length
-    public double SnapDirSepDeg = 10;       // non-max-suppression separation between peaks
-    public double SnapMinRunFt = 3.0;       // shortest boundary run that may snap to a line
-    public double SnapMaxDevFt = 0.8;       // max point deviation for a run to claim a line
-    public double SnapColinearTolFt = 0.6;  // colinear runs within this offset share ONE wall line
-    public double SnapMinBackedFrac = 0.5;  // fraction of window edges that must be evidence-backed
-    public double SnapMaxCornerMoveFt = 2.5; // cap on corner and terminal-stub movement to a line
-    internal List<BoundarySnapDiagnostic>? SnapDiagnostics; // replay-only rejection/geometry capture
-    internal List<BoundarySnapRoomDiagnostic>? SnapRoomDiagnostics; // replay-only room revert census
     public string Marker = "PE-TAKEOFF";    // stamped into Comments of everything we create
     public string? ArtifactDir;             // where TSV/PNG artifacts land (default: temp)
 }

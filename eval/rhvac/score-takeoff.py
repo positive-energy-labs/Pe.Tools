@@ -18,7 +18,7 @@
 #   project-a/stale-rooms.json (excluded here without code edits).
 # - Over-detection counts candidate area outside ANY ground-truth polygon, which includes real
 #   rooms whose ground truth is simply missing (15 in-model oracle rooms have no polygon).
-import argparse, json, math, os, re, sys
+import argparse, json, math, os, re, statistics, sys
 from collections import defaultdict
 
 import overlay
@@ -83,8 +83,29 @@ def load_takeoff(takeoff_dir):
                 key = f"{level}:{rid}"
                 floors[floor][key] = pg
                 candidate_flags[key].update(flags[rid])
+                rooms[rid]["vertices"] = len(loops[0])
+                rooms[rid]["level"] = level
                 candidate_meta[key] = rooms[rid]
     return floors, candidate_flags, candidate_meta
+
+
+def straightness(candidate_meta, candidate_flags):
+    """Report polygon complexity; this is evidence, not a detector gate."""
+    levels = defaultdict(list)
+    for key, meta in candidate_meta.items():
+        levels[meta["level"]].append((meta["vertices"], "unregularized" in candidate_flags[key]))
+
+    def summarize(values):
+        counts = [vertices for vertices, _ in values]
+        return {
+            "rooms": len(values),
+            "meanVertices": round(sum(counts) / len(counts), 1),
+            "medianVertices": round(statistics.median(counts), 1),
+            "roomsLe12Pct": round(100 * sum(count <= 12 for count in counts) / len(counts), 1),
+            "unregularizedPct": round(100 * sum(flagged for _, flagged in values) / len(values), 1),
+        }
+
+    return {level: summarize(values) for level, values in sorted(levels.items())}
 
 
 def apply_resolutions(takeoff, sidecar):
@@ -164,6 +185,7 @@ def apply_resolutions(takeoff, sidecar):
             continue
         flags.discard(split["flag"])
         del floors[floor][target_key]
+        parent_meta = candidate_meta[target_key]
         del candidate_meta[target_key]
         for suffix, piece in zip(("a", "b"), split_pieces[target_key]):
             child_key = f"{target_key}.{suffix}"
@@ -172,6 +194,8 @@ def apply_resolutions(takeoff, sidecar):
             candidate_meta[child_key] = {
                 "sqft": piece.area,
                 "label": [piece.centroid.x, piece.centroid.y],
+                "vertices": len(piece.exterior.coords) - 1,
+                "level": parent_meta["level"],
             }
 
     return (floors, candidate_flags, candidate_meta), {
@@ -317,7 +341,7 @@ def gates(precision_out, totals):
 
 
 def score(takeoff_dir, geo, stale, wall_tol=WALL_TOL_FT, takeoff=None):
-    floors, candidate_flags, _ = takeoff or load_takeoff(takeoff_dir)
+    floors, candidate_flags, candidate_meta = takeoff or load_takeoff(takeoff_dir)
     excluded = {e["number"]: e.get("reason", "") for e in stale.get("exclude", [])}
     gts = {}
     for num, g in geo["rooms"].items():
@@ -433,6 +457,7 @@ def score(takeoff_dir, geo, stale, wall_tol=WALL_TOL_FT, takeoff=None):
     precision_out = precision(floors, candidate_flags, gts, excluded)
     return {"takeoffDir": os.path.relpath(takeoff_dir, HERE).replace("\\", "/"),
             "totals": totals, "levels": levels_out,
+            "straightness": straightness(candidate_meta, candidate_flags),
             "precision": precision_out, "gates": gates(precision_out, totals),
             "rooms": {str(n): rooms_out[n] for n in sorted(rooms_out)}}
 
@@ -459,6 +484,12 @@ def to_text(sb):
                    f"{l['gtAreaCoveredPct'] if l['gtAreaCoveredPct'] is not None else '-':>6} "
                    f"{l['candAreaOutsideGtPct'] if l['candAreaOutsideGtPct'] is not None else '-':>6} "
                    f"{l['wallRecallPct'] if l['wallRecallPct'] is not None else '-':>6}  {tx}")
+    out.extend(["", "STRAIGHTNESS  (report only)",
+                f"{'level':<26} {'rooms':>5} {'mean v':>7} {'median':>7} {'<=12%':>7} {'unreg%':>7}"])
+    for level, metrics in sb["straightness"].items():
+        out.append(f"{level:<26} {metrics['rooms']:>5} {metrics['meanVertices']:>7.1f} "
+                   f"{metrics['medianVertices']:>7.1f} {metrics['roomsLe12Pct']:>7.1f} "
+                   f"{metrics['unregularizedPct']:>7.1f}")
     out.extend(["", f"PRECISION  (candidate best same-floor GT IoU; matched >= {JUNK_IOU:.2f})",
                 f"{'floor':>5} {'gt':>3} {'cand':>4} {'ratio':>5} {'match%':>6} "
                 f"{'junk':>4} {'flag':>4} {'unfl':>4} {'junk sf':>8} {'<60':>4} {'60-150':>6} {'>150':>5}"])

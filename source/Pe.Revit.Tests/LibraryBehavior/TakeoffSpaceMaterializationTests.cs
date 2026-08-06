@@ -14,7 +14,7 @@ public sealed class TakeoffSpaceMaterializationTests
             Room("C", Polygon(10, 5, 20, 10)),
         };
 
-        var actual = SpaceBoundaryNetwork.Build(rooms, 1, 0)
+        var actual = SpaceBoundaryNetwork.Build(rooms)
             .Select(line => $"{line.X1},{line.Y1}->{line.X2},{line.Y2}")
             .ToArray();
 
@@ -34,7 +34,9 @@ public sealed class TakeoffSpaceMaterializationTests
             new[] { 10d, 2 }, new[] { 10d, 3 }, new[] { 9d, 3 }, new[] { 9d, 4 },
         };
 
-        var actual = SpaceBoundaryNetwork.Build([Room("A", stairSteppedTrapezoid)], 1, 1);
+        var rooms = new[] { Room("A", stairSteppedTrapezoid) };
+        SpaceBoundaryNetwork.Regularize(rooms, 1, 1, (_, _) => false);
+        var actual = SpaceBoundaryNetwork.Build(rooms);
 
         Assert.Multiple(() => {
             Assert.That(actual, Has.Count.EqualTo(4));
@@ -53,7 +55,8 @@ public sealed class TakeoffSpaceMaterializationTests
                 new[] { 5d, 8 }, new[] { 6d, 8 }, new[] { 6d, 2 }, new[] { 5d, 2 }]),
         };
 
-        var actual = SpaceBoundaryNetwork.Build(rooms, 1, 1);
+        SpaceBoundaryNetwork.Regularize(rooms, 1, 1, (_, _) => false);
+        var actual = SpaceBoundaryNetwork.Build(rooms);
 
         Assert.That(actual, Has.One.Matches<BoundaryCurve>(line =>
             Math.Abs(line.X1 - 5) < 1e-6 && Math.Abs(line.X2 - 5) < 1e-6
@@ -65,27 +68,26 @@ public sealed class TakeoffSpaceMaterializationTests
     [Test]
     public void Free_seams_emit_axis_aligned_connectors_not_diagonals()
     {
-        var unresolved = new SortedSet<string>(StringComparer.Ordinal);
-        var actual = SpaceBoundaryNetwork.Build(
-            DiagonalSeamRooms(), 1, 1, inkNear: null, unresolved, TestContext.WriteLine);
+        var rooms = DiagonalSeamRooms();
+        SpaceBoundaryNetwork.Regularize(rooms, 1, 1, (_, _) => false, TestContext.WriteLine);
+        var actual = SpaceBoundaryNetwork.Build(rooms);
 
         Assert.Multiple(() => {
             Assert.That(actual, Has.All.Matches<BoundaryCurve>(curve =>
                 Math.Abs(curve.X1 - curve.X2) < 1e-6 || Math.Abs(curve.Y1 - curve.Y2) < 1e-6));
-            Assert.That(unresolved, Is.Empty);
+            Assert.That(rooms.SelectMany(room => room.Flags), Does.Contain("ruled-seam"));
         });
     }
 
     // The same seam OVER wall ink is real off-axis geometry: the engine must not reshape it —
     // it stays raster-faithful and both owning rooms are flagged for the human/Pea loop.
     [Test]
-    public void Supported_offaxis_walls_stay_raw_and_flag_rooms_unresolved()
+    public void Supported_offaxis_walls_stay_raw_and_flag_rooms_unregularized()
     {
-        var unresolved = new SortedSet<string>(StringComparer.Ordinal);
-        SpaceBoundaryNetwork.Build(
-            DiagonalSeamRooms(), 1, 1, inkNear: (_, _) => true, unresolved, TestContext.WriteLine);
+        var rooms = DiagonalSeamRooms();
+        SpaceBoundaryNetwork.Regularize(rooms, 1, 1, (_, _) => true, TestContext.WriteLine);
 
-        Assert.That(unresolved, Is.EquivalentTo(new[] { "A", "B" }));
+        Assert.That(rooms.SelectMany(room => room.Flags), Does.Contain("unregularized"));
     }
 
     // 100x60 rectangle split by a seam that staircases (50,0)->(58,8) then runs straight up x=58.

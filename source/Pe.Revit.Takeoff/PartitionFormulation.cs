@@ -22,7 +22,8 @@ namespace Pe.Revit.Takeoff;
 internal static class PartitionFormulation
 {
     internal static TakeoffResult Run(
-        Heightfield hf, bool[] obst, string levelName, double lvlZ, TakeoffOptions opt, Action<string> log)
+        Heightfield hf, bool[] obst, bool[] seedInk, string levelName, double lvlZ,
+        TakeoffOptions opt, Action<string> log)
     {
         if (double.IsNaN(opt.MinRegionCompactness) || double.IsInfinity(opt.MinRegionCompactness)
             || opt.MinRegionCompactness < 0 || opt.MinRegionCompactness > 1)
@@ -187,33 +188,17 @@ internal static class PartitionFormulation
             $"dissolved={dissolved} isolatedDropped={droppedIsolated} crumbs={crumbSqft:F0}sf " +
             $"borderDropped={touchesBorder.Count} ({borderSqft:F0}sf) rooms={emitIds.Count}");
 
-        // ---- phase-3: snap boundaries onto the derived wall-line arrangement (BoundarySnap) ----
-        Dictionary<int, List<List<double[]>>>? snapped = null;
-        if (opt.SnapBoundaries && emitIds.Count > 0)
-        {
-            var mapped = new int[n];
-            foreach (int id in emitIds)
-                foreach (int c in cellsById[id]) mapped[c] = id;
-            snapped = BoundarySnap.Compute(
-                mapped, cellsById, emitIds, evidence, W, H, hf.MinX, hf.MinY, opt.CellFt, opt, log);
-        }
-
         var result = new TakeoffResult { LevelName = levelName, LevelElevation = lvlZ };
         int rank = 0;
         foreach (int id in emitIds)
         {
             var cells = cellsById[id];
-            List<List<double[]>> polys;
-            if (snapped != null && snapped.TryGetValue(id, out var sp)) polys = sp;
-            else
-            {
-                var loops = Detector.TraceLoops(cells, owner, id, W, H);
-                polys = loops
-                    .Select(lp => lp.Select(v => new[] { hf.MinX + v.x * opt.CellFt, hf.MinY + v.y * opt.CellFt }).ToList())
-                    .Select(Detector.CollapseCollinear)
-                    .Where(p => p.Count >= 3)
-                    .ToList();
-            }
+            var loops = Detector.TraceLoops(cells, owner, id, W, H);
+            var polys = loops
+                .Select(lp => lp.Select(v => new[] { hf.MinX + v.x * opt.CellFt, hf.MinY + v.y * opt.CellFt }).ToList())
+                .Select(Detector.CollapseCollinear)
+                .Where(p => p.Count >= 3)
+                .ToList();
             if (polys.Count == 0) continue;
             int outerIdx = 0; double best = 0;
             for (int i = 0; i < polys.Count; i++)
@@ -232,11 +217,7 @@ internal static class PartitionFormulation
                 perim += Math.Sqrt((a2[0] - b2[0]) * (a2[0] - b2[0]) + (a2[1] - b2[1]) * (a2[1] - b2[1]));
             }
             rank++;
-            // With snapping, exported area is the snapped polygon truth (net of holes) — the
-            // guard in BoundarySnap bounds its drift vs the raster partition by max(0.5 sqft, 1%).
-            double sqft = snapped != null
-                ? 2 * Math.Abs(Detector.Shoelace(outer)) - polys.Sum(p => Math.Abs(Detector.Shoelace(p)))
-                : cells.Count * cellArea;
+            double sqft = cells.Count * cellArea;
             var room = new RoomResult {
                 Id = "R" + rank.ToString("D2"),
                 RawSqft = sqft,
@@ -249,8 +230,11 @@ internal static class PartitionFormulation
             for (int i = 0; i < polys.Count; i++) if (i != outerIdx) room.Holes.Add(polys[i]);
             if (flags.TryGetValue(id, out var fl)) room.Flags.AddRange(fl);
             result.Rooms.Add(room);
-            result.TotalSqft += room.RawSqft;
         }
+        SpaceBoundaryNetwork.Regularize(
+            result.Rooms, opt.CellFt, opt.BoundarySimplifyFt,
+            InkSupport.CreateOracle(W, H, hf.MinX, hf.MinY, opt.CellFt, seedInk, 3 * opt.CellFt), log);
+        result.TotalSqft = result.Rooms.Sum(room => room.RawSqft);
         return result;
     }
 

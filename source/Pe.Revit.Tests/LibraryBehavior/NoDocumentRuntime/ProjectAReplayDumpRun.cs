@@ -1,4 +1,3 @@
-using Newtonsoft.Json;
 using Pe.Revit.Takeoff;
 
 namespace Pe.Revit.Tests.LibraryBehavior.NoDocumentRuntime;
@@ -9,7 +8,6 @@ namespace Pe.Revit.Tests.LibraryBehavior.NoDocumentRuntime;
 //
 //   $env:PE_TAKEOFF_REPLAY_OUT = "<dir>"
 //   $env:PE_TAKEOFF_REPLAY_FILTER = "replay_MAIN_LEVEL.bin;replay_ROOF_PLAN.bin" // optional
-//   $env:PE_TAKEOFF_SNAP_DIAG_OUT = "<dir>" # optional per-chain JSON
 //   $env:PE_TAKEOFF_POLICY = "Stock" # optional uninferred control; default = Inferred
 public sealed class ProjectAReplayDumpRun
 {
@@ -42,13 +40,11 @@ public sealed class ProjectAReplayDumpRun
 
         string? seedSource = Environment.GetEnvironmentVariable("PE_TAKEOFF_SEEDS");
         string? seedLevels = Environment.GetEnvironmentVariable("PE_TAKEOFF_SEED_LEVELS");
-        string? snapDiagDir = Environment.GetEnvironmentVariable("PE_TAKEOFF_SNAP_DIAG_OUT");
         string policy = Environment.GetEnvironmentVariable("PE_TAKEOFF_POLICY") ?? "Inferred";
         bool inferred = policy.Equals("Inferred", StringComparison.OrdinalIgnoreCase);
         if (!inferred && !policy.Equals("Stock", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("PE_TAKEOFF_POLICY must be Inferred or Stock");
         Directory.CreateDirectory(outDir);
-        if (!string.IsNullOrEmpty(snapDiagDir)) Directory.CreateDirectory(snapDiagDir);
 
         foreach (string bin in bins)
         {
@@ -62,13 +58,6 @@ public sealed class ProjectAReplayDumpRun
                     && (string.IsNullOrEmpty(seedLevels)
                         || seedLevels.Split(';').Any(snap.LevelName.Contains)))
                     opt.SeedSource = Enum.Parse<TakeoffSeedSource>(seedSource, ignoreCase: true);
-                if (Environment.GetEnvironmentVariable("PE_TAKEOFF_SNAP") == "0")
-                    opt.SnapBoundaries = false;
-                if (!string.IsNullOrEmpty(snapDiagDir))
-                {
-                    opt.SnapDiagnostics = new();
-                    opt.SnapRoomDiagnostics = new();
-                }
             }
 
             TakeoffResult result;
@@ -81,39 +70,9 @@ public sealed class ProjectAReplayDumpRun
                 result = snap.Replay(stock, lines.Add);
             }
 
-            var appliedOptions = opt
-                ?? throw new InvalidOperationException("replay policy did not supply takeoff options");
-
             string name = string.Concat(snap.LevelName.Select(ch => char.IsLetterOrDigit(ch) ? ch : '_'));
             string tsv = Path.Combine(outDir, $"rooms_{name}.tsv");
             File.WriteAllText(tsv, result.ToTsv());
-            if (appliedOptions.SnapDiagnostics != null)
-            {
-                var payload = new {
-                    level = snap.LevelName,
-                    rooms = appliedOptions.SnapRoomDiagnostics!.Select((d, index) => new {
-                        room = $"R{index + 1:D2}", roomId = d.RoomId, outcome = d.Outcome,
-                        areaDriftSqft = d.AreaDriftSqft, areaDriftFrac = d.AreaDriftFrac,
-                        areaDriftBoundSqft = d.AreaDriftBoundSqft,
-                        reverts = d.Reverts.Select(r => new {
-                            iteration = r.Iteration, causes = r.Causes,
-                            areaDriftSqft = r.AreaDriftSqft, areaDriftFrac = r.AreaDriftFrac,
-                            areaDriftBoundSqft = r.AreaDriftBoundSqft,
-                        }),
-                    }),
-                    chains = appliedOptions.SnapDiagnostics.Select(d => new {
-                        chainId = d.ChainId, labels = new[] { d.A, d.B },
-                        lengthFt = d.LengthFt, snappedFt = d.SnappedFt, outcome = d.Outcome,
-                        rawPoints = d.RawPoints, snappedPoints = d.SnappedPoints,
-                        snappedRuns = d.SnappedRuns.Select(r => new {
-                            lengthFt = r.LengthFt, rawPoints = r.RawPoints,
-                            snappedStart = r.SnappedStart, snappedEnd = r.SnappedEnd,
-                        }),
-                    }),
-                };
-                File.WriteAllText(Path.Combine(snapDiagDir!, $"snap_{name}.json"),
-                    JsonConvert.SerializeObject(payload, Formatting.Indented));
-            }
             lines.Add($"[dump] {snap.LevelName}: rooms={result.Rooms.Count} totalSqft={result.TotalSqft:F0} -> {tsv}");
             File.WriteAllLines(Path.Combine(outDir, $"log_{name}.txt"), lines);
             foreach (string line in lines) TestContext.Out.WriteLine(line);

@@ -60,3 +60,4 @@ never guesses intent.
   wall recall 43.8% @1.5 ft — `project-a/SCOREBOARD.md`. Auto room-map: 5 curated + 26 auto-iou,
   gated coverage 9.8%→24.7% area. Replay harness for post-Revit stages is the remaining
   phase-1 item.
+- 2026-08-06: Phase 3's `BoundarySnap` path is superseded: `SpaceBoundaryNetwork` now regularizes the full level once at partition emit, and TSV, UI, and Space materialization share that geometry.

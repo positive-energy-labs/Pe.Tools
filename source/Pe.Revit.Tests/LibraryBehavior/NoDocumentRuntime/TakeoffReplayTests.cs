@@ -350,7 +350,7 @@ public sealed class TakeoffReplayTests
         };
         var opt = new TakeoffOptions {
             CellFt = cell, MinSqft = 20, MinFeatureWidthFt = 2.5,
-            MinRegionCompactness = 0.25, SnapBoundaries = false,
+            MinRegionCompactness = 0.25,
         };
 
         var result = snap.Replay(opt, _ => { });
@@ -359,7 +359,7 @@ public sealed class TakeoffReplayTests
             Assert.That(result.Rooms, Has.Count.EqualTo(2));
             Assert.That(result.TotalSqft, Is.EqualTo(140).Within(0.01));
             Assert.That(result.Rooms.Single(r => r.RawSqft < 50).Flags,
-                Is.EquivalentTo(new[] { "suspect:compactness", "suspect:narrow" }));
+                Does.Contain("suspect:compactness").And.Contain("suspect:narrow"));
             Assert.That(result.Rooms.Single(r => r.RawSqft >= 50).Flags,
                 Is.Empty);
         });
@@ -367,174 +367,93 @@ public sealed class TakeoffReplayTests
         Assert.Throws<ArgumentOutOfRangeException>(() => snap.Replay(opt, _ => { }));
     }
 
-    // ---- phase-3 wall-line snapping semantics (BoundarySnap.cs) ----
+    // ---- detector-side shared-boundary regularization ----
 
     [Test]
-    public void Snap_diagnostics_account_for_every_boundary_chain()
+    public void Regularizer_preserves_every_raw_room_on_fallback()
     {
-        var snap = BuildSyntheticEstate();
-        var opt = PartitionOptions();
-        var diagnostics = opt.SnapDiagnostics = new();
+        var rooms = DiagonalSeamRooms();
+        var before = rooms.ToDictionary(
+            room => room.Id,
+            room => room.Polygon.SelectMany(point => point).ToArray(),
+            StringComparer.Ordinal);
 
-        snap.Replay(opt, _ => { });
+        SpaceBoundaryNetwork.Regularize(rooms, 1, 1, (_, _) => true);
 
         Assert.Multiple(() => {
-            Assert.That(diagnostics, Is.Not.Empty);
-            Assert.That(diagnostics.All(d => d.LengthFt > 0), Is.True);
-            Assert.That(diagnostics.All(d => BoundarySnapDiagnostic.Outcomes.Contains(d.Outcome)), Is.True);
-            Assert.That(diagnostics.Sum(d => d.LengthFt), Is.GreaterThan(0));
+            Assert.That(rooms.Select(room => room.Id), Is.EquivalentTo(before.Keys));
+            Assert.That(rooms, Has.All.Matches<RoomResult>(room =>
+                room.Polygon.Count >= 3
+                && room.Polygon.SelectMany(point => point).SequenceEqual(before[room.Id])));
         });
     }
 
     [Test]
-    public void Snap_keeps_door_gap_rooms_separate_with_bounded_area_drift()
+    public void Regularizer_flags_unregularized_rooms()
     {
-        var snap = BuildSyntheticEstate();
-        var opt = PartitionOptions();
-        var snapped = snap.Replay(opt, _ => { });
-        opt.SnapBoundaries = false;
-        var raw = snap.Replay(opt, _ => { });
+        var rooms = DiagonalSeamRooms();
 
-        // Same partition topology: door-gap rooms stay separate, nothing merges or vanishes.
-        Assert.That(snapped.Rooms, Has.Count.EqualTo(raw.Rooms.Count));
-        Assert.That(snapped.Rooms, Has.Count.EqualTo(4));
+        SpaceBoundaryNetwork.Regularize(rooms, 1, 1, (_, _) => true);
 
-        // Rectangular rooms become exact 4-vertex rectangles; the small triangle's hypotenuse
-        // straightens where the fit fits and keeps honest raw ends where full corner restoration
-        // would break the area bound (the staged guard demotes, never distorts).
-        var triSnap = snapped.Rooms.OrderBy(r => r.RawSqft).First();
-        var triRaw = raw.Rooms.OrderBy(r => r.RawSqft).First();
-        Assert.Multiple(() => {
-            Assert.That(snapped.Rooms.Count(r => r.Polygon.Count == 4), Is.GreaterThanOrEqualTo(2),
-                "axis-walled rooms must be exact rectangles");
-            Assert.That(triSnap.Polygon.Count, Is.LessThan(triRaw.Polygon.Count),
-                "hypotenuse must at least partially straighten");
-        });
-
-        // Area is exported truth: per-room drift from snapping stays within max(0.5 sqft, 1%).
-        var rawByArea = raw.Rooms.OrderBy(r => r.RawSqft).ToList();
-        var snapByArea = snapped.Rooms.OrderBy(r => r.RawSqft).ToList();
-        for (int i = 0; i < rawByArea.Count; i++)
-            Assert.That(Math.Abs(snapByArea[i].RawSqft - rawByArea[i].RawSqft),
-                Is.LessThanOrEqualTo(Math.Max(0.5, 0.01 * rawByArea[i].RawSqft)),
-                $"area drift bound violated for room {rawByArea[i].Id}");
+        Assert.That(rooms, Has.All.Matches<RoomResult>(room => room.Flags.Contains("unregularized")));
     }
 
     [Test]
-    public void Snap_straightens_diagonal_wall_into_single_segment()
+    public void Regularizer_area_guard_reverts_to_raw_polygon()
     {
-        // A large diagonal-walled triangle (legs ~40 ft, ~840 sf): the 1% area bound then
-        // accommodates honest corner restoration (watershed fronts drift a couple of feet inside
-        // wall-JOINT ink), so the staircase hypotenuse must come out as exactly ONE segment —
-        // a 3-vertex triangle polygon.
-        const int W = 200, H = 120;
-        const double cell = 0.5;
-        int n = W * H;
-        var hf = new Heightfield {
-            W = W, H = H, MinX = 0, MinY = 0, CellFt = cell,
-            FloorZ = new float[n], CeilZ = new float[n],
-        };
-        for (int i = 0; i < n; i++) { hf.FloorZ[i] = float.NaN; hf.CeilZ[i] = float.NaN; }
-        for (int y = 8; y < 112; y++)
-            for (int x = 8; x < 192; x++)
-            { hf.FloorZ[y * W + x] = 0f; hf.CeilZ[y * W + x] = 9f; }
-        var ink = new bool[n];
-        void Stamp(int x0, int x1, int y0, int y1)
+        var room = Room("A", [new[] { 0d, 0 }, new[] { 10d, 0 }, new[] { 10d, 10 }, new[] { 0d, 10 }]);
+        room.RawSqft = 80;
+        var raw = room.Polygon.Select(point => point.ToArray()).ToList();
+
+        SpaceBoundaryNetwork.Regularize([room], 1, 1, (_, _) => false);
+
+        Assert.Multiple(() => {
+            Assert.That(room.Polygon.SelectMany(point => point), Is.EqualTo(raw.SelectMany(point => point)));
+            Assert.That(room.RawSqft, Is.EqualTo(80));
+            Assert.That(room.Flags, Does.Contain("unregularized"));
+        });
+    }
+
+    [Test]
+    public void Regularizer_flags_ruled_seams_without_ink_support()
+    {
+        var rooms = DiagonalSeamRooms();
+
+        SpaceBoundaryNetwork.Regularize(rooms, 1, 1, (_, _) => false);
+
+        Assert.That(rooms.SelectMany(room => room.Flags), Does.Contain("ruled-seam"));
+    }
+
+    private static RoomResult[] DiagonalSeamRooms()
+    {
+        var seam = new List<double[]>();
+        for (int i = 0; i < 8; i++)
         {
-            for (int y = y0; y < y1; y++)
-                for (int x = x0; x < x1; x++) ink[y * W + x] = true;
+            seam.Add(new[] { 50d + i, 0d + i });
+            seam.Add(new[] { 50d + i, 1d + i });
         }
-        Stamp(8, 192, 8, 10); Stamp(8, 192, 110, 112);   // envelope south/north
-        Stamp(8, 10, 8, 112); Stamp(190, 192, 8, 112);   // envelope west/east
-        for (int t = 0; t <= 80; t++) Stamp(110 + t, 112 + t, 8 + t, 10 + t); // 45-deg diagonal
-
-        var snap = new DetectSnapshot {
-            LevelName = "Diagonal", LevelElevation = 0, CaptureOptions = "synthetic",
-            Field = hf, SeedInk = ink,
+        seam.Add(new[] { 58d, 8d });
+        var a = new List<double[]> { new[] { 0d, 0 }, new[] { 50d, 0 } };
+        a.AddRange(seam.Skip(1));
+        a.AddRange([new[] { 58d, 60 }, new[] { 0d, 60 }]);
+        var b = new List<double[]> {
+            new[] { 50d, 0 }, new[] { 100d, 0 }, new[] { 100d, 60 },
+            new[] { 58d, 60 }, new[] { 58d, 8 },
         };
-        var opt = PartitionOptions();
-        var snapLog = new List<string>();
-        var snapped = snap.Replay(opt, snapLog.Add);
-        opt.SnapBoundaries = false;
-        var raw = snap.Replay(opt, _ => { });
-
-        Assert.That(snapped.Rooms, Has.Count.EqualTo(2));
-        var triSnap = snapped.Rooms.OrderBy(r => r.RawSqft).First();
-        var triRaw = raw.Rooms.OrderBy(r => r.RawSqft).First();
-        Assert.Multiple(() => {
-            Assert.That(triRaw.Polygon.Count, Is.GreaterThan(20), "control: raster staircase");
-            Assert.That(triSnap.Polygon.Count, Is.EqualTo(3),
-                "hypotenuse must be ONE segment; polygon=" +
-                string.Join(" ", triSnap.Polygon.Select(v => $"({v[0]:F2},{v[1]:F2})")) +
-                "; log=" + string.Join(" | ", snapLog));
-            Assert.That(Math.Abs(triSnap.RawSqft - triRaw.RawSqft),
-                Is.LessThanOrEqualTo(Math.Max(0.5, 0.01 * triRaw.RawSqft)), "area bound");
-        });
+        b.AddRange(seam.Skip(1).Reverse().Skip(1));
+        return [Room("A", a), Room("B", b)];
     }
 
-    [Test]
-    public void Snap_leaves_no_evidence_boundaries_raw()
-    {
-        // The open-plan pinch scene: the watershed boundary between the two halves crosses open
-        // floor with no wall evidence (half-foot stubs only). Snapping must NOT invent a wall
-        // there — the mid-span boundary geometry stays byte-identical to the unsnapped run,
-        // while the real (ink-backed) walls are straight lines in both runs.
-        const int W = 120, H = 28;
-        const double cell = 0.5;
-        int n = W * H;
-        var hf = new Heightfield {
-            W = W, H = H, MinX = 0, MinY = 0, CellFt = cell,
-            FloorZ = new float[n], CeilZ = new float[n],
-        };
-        for (int i = 0; i < n; i++) { hf.FloorZ[i] = float.NaN; hf.CeilZ[i] = float.NaN; }
-        for (int y = 6; y < 22; y++)
-            for (int x = 8; x < 112; x++)
-            { hf.FloorZ[y * W + x] = 0f; hf.CeilZ[y * W + x] = 9f; }
-        var ink = new bool[n];
-        void Stamp(int x0, int x1, int y0, int y1)
-        {
-            for (int y = y0; y < y1; y++)
-                for (int x = x0; x < x1; x++) ink[y * W + x] = true;
-        }
-        Stamp(8, 112, 6, 8); Stamp(8, 112, 20, 22);
-        Stamp(8, 10, 6, 22); Stamp(110, 112, 6, 22);
-        Stamp(59, 61, 8, 9); Stamp(59, 61, 19, 20);
-        var snap = new DetectSnapshot {
-            LevelName = "Open Plan", LevelElevation = 0, CaptureOptions = "synthetic",
-            Field = hf, SeedInk = ink,
-        };
-
-        var opt = PartitionOptions();
-        opt.SeedSource = TakeoffSeedSource.Hybrid;
-        var snappedRun = snap.Replay(opt, _ => { });
-        opt.SnapBoundaries = false;
-        var rawRun = snap.Replay(opt, _ => { });
-        Assert.That(snappedRun.Rooms, Has.Count.EqualTo(2));
-        Assert.That(rawRun.Rooms, Has.Count.EqualTo(2));
-
-        // Mid-span (away from the stubs' reach): the unbacked split boundary is unchanged.
-        static List<string> MidVerts(TakeoffResult r) => r.Rooms
-            .SelectMany(rm => rm.Polygon)
-            .Where(v => v[0] > 26 && v[0] < 34 && v[1] > 5 && v[1] < 9)
-            .Select(v => FormattableString.Invariant($"{v[0]:F6};{v[1]:F6}"))
-            .OrderBy(s => s, StringComparer.Ordinal)
-            .ToList();
-        Assert.That(MidVerts(snappedRun), Is.EqualTo(MidVerts(rawRun)),
-            "no-evidence boundary must stay as-is (jaggedness is information)");
-    }
-
-    [Test]
-    public void Snap_without_evidence_is_byte_identical_to_control()
-    {
-        var snap = BuildSyntheticEstate();
-        snap.SeedInk = new bool[snap.Field.W * snap.Field.H];
-        var opt = PartitionOptions();
-        var snapped = snap.Replay(opt, _ => { });
-        opt.SnapBoundaries = false;
-        var control = snap.Replay(opt, _ => { });
-
-        Assert.That(snapped.ToTsv(), Is.EqualTo(control.ToTsv()));
-    }
+    private static RoomResult Room(string id, List<double[]> polygon) => new() {
+        Id = id,
+        RawSqft = Math.Abs(polygon.Select((point, index) => {
+            var next = polygon[(index + 1) % polygon.Count];
+            return point[0] * next[1] - next[0] * point[1];
+        }).Sum() / 2),
+        LabelX = polygon.Average(point => point[0]),
+        LabelY = polygon.Average(point => point[1]),
+        Polygon = polygon,
+    };
 
     [Test]
     public void ProjectA_snapshot_replays_deterministically()

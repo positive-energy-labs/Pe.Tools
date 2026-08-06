@@ -30,14 +30,9 @@ internal static class SpaceMaterializer
             throw new InvalidOperationException($"target level/phase already contains {existing.Count} non-takeoff Space(s)");
 
         DeleteOwned(doc, token, viewName);
+        var boundary = SpaceBoundaryNetwork.Build(result.Rooms);
+        var keptRooms = result.Rooms.ToList();
         var dropped = new SortedSet<string>(StringComparer.Ordinal);
-        var boundary = SpaceBoundaryNetwork.Build(result.Rooms, opt.CellFt, opt.BoundarySimplifyFt, inkNear, dropped, log);
-        var keptRooms = result.Rooms.Where(room => !dropped.Contains(room.Id)).ToList();
-        if (dropped.Count > 0)
-            log($"[spaces] dropped {dropped.Count}/{result.Rooms.Count} rooms as holes: " + string.Join(" ",
-                result.Rooms.Where(room => dropped.Contains(room.Id))
-                    .Select(room => $"{room.Id}@({room.LabelX:F0},{room.LabelY:F0})")));
-        if (keptRooms.Count == 0) throw new InvalidOperationException("every room dropped as unresolvable — nothing to materialize");
 
         var viewType = new FilteredElementCollector(doc).OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>()
             .First(type => type.ViewFamily == ViewFamily.FloorPlan);

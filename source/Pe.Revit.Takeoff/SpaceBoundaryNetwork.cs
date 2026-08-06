@@ -10,9 +10,9 @@ internal readonly record struct BoundaryCurve(
 // THE STRAIGHT-ONLY LAW (pull-back decided 2026-07-12 after the curve/hole-solving ambition
 // produced diagonal artifacts across whole plans): the network emits only straight segments, and
 // every segment is either ON a consensus wall line or an axis-aligned connector between wall
-// lines. Anything the priors cannot explain is emitted raster-faithful and flagged UNRESOLVED for
+// lines. Anything the priors cannot explain stays raster-faithful and is flagged unregularized for
 // the human/Pea draft loop — the engine never invents a diagonal or a curve to look finished.
-// Curved-wall support was removed wholesale; curved rooms land in the unresolved bucket.
+// Curved-wall support was removed wholesale; curved rooms keep their detector geometry.
 //
 //   1. trace paths between junction nodes (grid vertices with degree != 2), remembering which
 //      rooms own each path;
@@ -64,14 +64,13 @@ internal static class SpaceBoundaryNetwork
         public int FreeRuns, StraightSeams, CornerSeams, UnresolvedRuns;
     }
 
-    // Per-path emission buffer. Dirty paths (raster fallbacks, isolated diagonals with no wall
-    // evidence) drop their OWNING ROOMS from the result instead of shipping a bewildering shape:
-    // a visibly missing room is an easy human fix; a mangled one is not.
+    // Per-path emission buffer. A dirty path makes its owning rooms keep their raw detector loops.
     private sealed class Emitter
     {
         public readonly List<BoundaryCurve> Curves = [];
         public readonly List<string> Tags = [];
         public bool Dirty;
+        public bool RuledSeam;
 
         public void Line(Point a, Point b, string tag)
         {
@@ -84,20 +83,38 @@ internal static class SpaceBoundaryNetwork
         }
     }
 
-    internal static IReadOnlyList<BoundaryCurve> Build(
-        IEnumerable<RoomResult> rooms, double cellFt, double simplifyFt, Action<string>? log = null)
-        => Build(rooms, cellFt, simplifyFt, null, null, log);
+    // Materialization only welds the detector-owned polygons. Regularization has already happened.
+    internal static IReadOnlyList<BoundaryCurve> Build(IEnumerable<RoomResult> rooms)
+    {
+        var curves = new List<BoundaryCurve>();
+        foreach (var room in rooms)
+        foreach (var loop in new[] { room.Polygon }.Concat(room.Holes))
+        {
+            if (loop.Count < 3) throw new InvalidOperationException($"{room.Id} has a degenerate boundary loop");
+            for (int i = 0; i < loop.Count; i++)
+            {
+                var a = loop[i]; var b = loop[(i + 1) % loop.Count];
+                if (a.Length < 2 || b.Length < 2 || !IsFinite(a[0]) || !IsFinite(a[1])
+                    || !IsFinite(b[0]) || !IsFinite(b[1]))
+                    throw new InvalidOperationException($"{room.Id} has a non-finite boundary point");
+                if (Distance(new Point(a[0], a[1]), new Point(b[0], b[1])) > 0.01)
+                    curves.Add(new BoundaryCurve(a[0], a[1], b[0], b[1],
+                        (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, false));
+            }
+        }
+        return curves.Count == 0 ? [] : MergeCollinear(curves);
+    }
 
-    internal static IReadOnlyList<BoundaryCurve> Build(
-        IEnumerable<RoomResult> rooms, double cellFt, double simplifyFt,
-        Func<double, double, bool>? inkNear, ISet<string>? unresolvedRooms, Action<string>? log = null)
+    internal static void Regularize(
+        IReadOnlyList<RoomResult> rooms, double cellFt, double simplifyFt,
+        Func<double, double, bool> inkNear, Action<string>? log = null)
     {
         if (!IsFinite(cellFt) || cellFt <= 0) throw new ArgumentOutOfRangeException(nameof(cellFt));
         if (!IsFinite(simplifyFt) || simplifyFt < 0)
             throw new ArgumentOutOfRangeException(nameof(simplifyFt));
 
         var paths = TracePaths(rooms, cellFt);
-        if (paths.Count == 0) return [];
+        if (paths.Count == 0) return;
 
         double coarse = Math.Min(simplifyFt, 3.5 * cellFt);
         foreach (var path in paths) Simplify(path, coarse);
@@ -122,23 +139,201 @@ internal static class SpaceBoundaryNetwork
         }
         ClassifyOffAxis(emitters, axes, inkNear, log);
 
-        // drop, don't mangle: every room touching a dirty path vanishes wholesale (an obvious,
-        // fixable hole), and curves serving only dropped rooms vanish with it
-        var dropped = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var (path, em) in emitters)
-            if (em.Dirty) dropped.UnionWith(path.Rooms);
-        unresolvedRooms?.UnionWith(dropped);
-        var merged = MergeCollinear(emitters
-            .Where(item => item.Path.Rooms.Any(room => !dropped.Contains(room)))
-            .SelectMany(item => item.Em.Curves));
+        int regularized = 0, unregularized = 0;
+        double maxDrift = 0, maxDriftFrac = 0;
+        var fallbacks = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var room in rooms)
+        {
+            double rawSqft = room.RawSqft;
+            var owned = emitters.Where(item => item.Path.Rooms.Contains(room.Id)).ToList();
+            if (owned.Any(item => item.Em.RuledSeam)) AddFlag(room, "ruled-seam");
+            string reason;
+            List<List<Point>>? loops;
+            if (owned.Any(item => item.Em.Dirty)) { reason = "dirty-path"; loops = null; }
+            else
+            {
+                loops = TraceLoops(owned.SelectMany(item => item.Em.Curves));
+                reason = loops == null ? "loop-trace" : "";
+            }
+            if (loops == null || !TryApplyRegularizedLoops(room, loops, out double drift, out reason))
+            {
+                AddFlag(room, "unregularized");
+                fallbacks[reason] = fallbacks.GetValueOrDefault(reason) + 1;
+                unregularized++;
+                continue;
+            }
+            maxDrift = Math.Max(maxDrift, drift);
+            maxDriftFrac = Math.Max(maxDriftFrac, drift / rawSqft);
+            regularized++;
+        }
 
         string axisAngles = string.Join(",", axes.Select(axis =>
             (Math.Atan2(axis.Y, axis.X) * 180 / Math.PI).ToString("F1", CultureInfo.InvariantCulture)));
+        string fallbackCensus = string.Join(",", fallbacks.OrderBy(pair => pair.Key)
+            .Select(pair => $"{pair.Key}:{pair.Value}"));
         log?.Invoke($"[network] paths={paths.Count} axes={axes.Count}({axisAngles}deg) wallLines={wallLines} " +
                     $"freeRuns={stats.FreeRuns} straightSeams={stats.StraightSeams} " +
                     $"cornerSeams={stats.CornerSeams} unresolvedRuns={stats.UnresolvedRuns} " +
-                    $"droppedRooms={dropped.Count} curves={merged.Count}");
-        return merged;
+                    $"regularized={regularized} unregularized={unregularized} " +
+                    $"fallbacks={fallbackCensus} maxAreaDrift={maxDrift:F6}sf/{maxDriftFrac:P6}");
+    }
+
+    private static void AddFlag(RoomResult room, string flag)
+    {
+        if (!room.Flags.Contains(flag, StringComparer.Ordinal)) room.Flags.Add(flag);
+        room.Flags.Sort(StringComparer.Ordinal);
+    }
+
+    private static bool TryApplyRegularizedLoops(
+        RoomResult room, List<List<Point>> loops, out double drift, out string reason)
+    {
+        drift = 0;
+        reason = "topology";
+        loops = loops.Select(CollapseCollinear).Where(loop => loop.Count >= 3).ToList();
+        if (loops.Count == 0 || loops.Any(loop => !IsSimple(loop))) return false;
+        for (int i = 0; i < loops.Count; i++)
+            for (int j = i + 1; j < loops.Count; j++)
+                if (LoopsIntersect(loops[i], loops[j])) return false;
+
+        int outerIndex = Enumerable.Range(0, loops.Count)
+            .OrderByDescending(index => Math.Abs(Area(loops[index]))).First();
+        var outer = loops[outerIndex];
+        var holes = loops.Where((_, index) => index != outerIndex).ToList();
+        if (!Contains(outer, new Point(room.LabelX, room.LabelY))
+            || holes.Any(hole => !Contains(outer, hole[0]) || Contains(hole, new Point(room.LabelX, room.LabelY))))
+        { reason = "label"; return false; }
+
+        double area = Math.Abs(Area(outer)) - holes.Sum(hole => Math.Abs(Area(hole)));
+        if (area <= 0) return false;
+        drift = Math.Abs(area - room.RawSqft);
+        if (drift > Math.Max(0.5, 0.01 * room.RawSqft))
+        { reason = "area-guard"; return false; }
+
+        if (Area(outer) < 0) outer.Reverse();
+        foreach (var hole in holes) if (Area(hole) > 0) hole.Reverse();
+        room.Polygon = outer.Select(point => new[] { point.X, point.Y }).ToList();
+        room.Holes = holes.Select(hole => hole.Select(point => new[] { point.X, point.Y }).ToList()).ToList();
+        room.RawSqft = area;
+        room.PerimeterFt = Perimeter(outer);
+        reason = "";
+        return true;
+    }
+
+    private static List<List<Point>>? TraceLoops(IEnumerable<BoundaryCurve> source)
+    {
+        var curves = source.ToList();
+        if (curves.Count == 0) return null;
+        var adjacency = new Dictionary<VertexKey, List<int>>();
+        for (int i = 0; i < curves.Count; i++)
+        {
+            Add(Key(new Point(curves[i].X1, curves[i].Y1)), i);
+            Add(Key(new Point(curves[i].X2, curves[i].Y2)), i);
+        }
+        if (adjacency.Values.Any(edges => edges.Count != 2)) return null;
+
+        var unused = Enumerable.Range(0, curves.Count).ToHashSet();
+        var loops = new List<List<Point>>();
+        while (unused.Count > 0)
+        {
+            int edge = unused.Min();
+            var first = curves[edge];
+            var start = Key(new Point(first.X1, first.Y1));
+            var current = start;
+            var loop = new List<Point>();
+            while (true)
+            {
+                if (!unused.Remove(edge)) return null;
+                var curve = curves[edge];
+                var a = new Point(curve.X1, curve.Y1); var b = new Point(curve.X2, curve.Y2);
+                var ka = Key(a); var kb = Key(b);
+                if (current == ka) { loop.Add(a); current = kb; }
+                else if (current == kb) { loop.Add(b); current = ka; }
+                else return null;
+                if (current == start) break;
+                var next = adjacency[current].Where(unused.Contains).ToList();
+                if (next.Count != 1) return null;
+                edge = next[0];
+            }
+            loops.Add(loop);
+        }
+        return loops;
+
+        void Add(VertexKey key, int edge)
+        {
+            if (!adjacency.TryGetValue(key, out var edges)) adjacency[key] = edges = [];
+            edges.Add(edge);
+        }
+    }
+
+    private static List<Point> CollapseCollinear(List<Point> points)
+    {
+        var result = points.ToList();
+        bool changed;
+        do
+        {
+            changed = false;
+            for (int i = 0; i < result.Count && result.Count >= 3; i++)
+            {
+                var a = result[(i + result.Count - 1) % result.Count];
+                var b = result[i]; var c = result[(i + 1) % result.Count];
+                if (PerpendicularDistance(b, a, c) > 1e-6) continue;
+                result.RemoveAt(i);
+                changed = true;
+                break;
+            }
+        } while (changed);
+        return result;
+    }
+
+    private static bool IsSimple(List<Point> loop)
+    {
+        for (int i = 0; i < loop.Count; i++)
+            for (int j = i + 1; j < loop.Count; j++)
+            {
+                if (j == i + 1 || i == 0 && j == loop.Count - 1) continue;
+                if (SegmentsIntersect(loop[i], loop[(i + 1) % loop.Count],
+                                      loop[j], loop[(j + 1) % loop.Count])) return false;
+            }
+        return true;
+    }
+
+    private static bool LoopsIntersect(List<Point> a, List<Point> b) =>
+        Enumerable.Range(0, a.Count).Any(i => Enumerable.Range(0, b.Count).Any(j =>
+            SegmentsIntersect(a[i], a[(i + 1) % a.Count], b[j], b[(j + 1) % b.Count])));
+
+    private static bool SegmentsIntersect(Point a, Point b, Point c, Point d)
+    {
+        static double Cross(Point p, Point q, Point r) =>
+            (q.X - p.X) * (r.Y - p.Y) - (q.Y - p.Y) * (r.X - p.X);
+        double abC = Cross(a, b, c), abD = Cross(a, b, d);
+        double cdA = Cross(c, d, a), cdB = Cross(c, d, b);
+        static bool On(Point p, Point q, Point r) =>
+            q.X >= Math.Min(p.X, r.X) - 1e-8 && q.X <= Math.Max(p.X, r.X) + 1e-8
+            && q.Y >= Math.Min(p.Y, r.Y) - 1e-8 && q.Y <= Math.Max(p.Y, r.Y) + 1e-8;
+        if (Math.Abs(abC) <= 1e-8 && On(a, c, b) || Math.Abs(abD) <= 1e-8 && On(a, d, b)
+            || Math.Abs(cdA) <= 1e-8 && On(c, a, d) || Math.Abs(cdB) <= 1e-8 && On(c, b, d))
+            return true;
+        return (abC > 0) != (abD > 0) && (cdA > 0) != (cdB > 0);
+    }
+
+    private static double Area(IReadOnlyList<Point> loop) => loop.Select((point, index) => {
+        var next = loop[(index + 1) % loop.Count];
+        return point.X * next.Y - next.X * point.Y;
+    }).Sum() / 2;
+
+    private static double Perimeter(IReadOnlyList<Point> loop) => loop.Select((point, index) =>
+        Distance(point, loop[(index + 1) % loop.Count])).Sum();
+
+    private static bool Contains(IReadOnlyList<Point> loop, Point point)
+    {
+        bool inside = false;
+        for (int i = 0, j = loop.Count - 1; i < loop.Count; j = i++)
+        {
+            var a = loop[i]; var b = loop[j];
+            if ((a.Y > point.Y) != (b.Y > point.Y)
+                && point.X < (b.X - a.X) * (point.Y - a.Y) / (b.Y - a.Y) + a.X) inside = !inside;
+        }
+        return inside;
     }
 
     private static void Simplify(PathGeom path, double tolerance)
@@ -691,7 +886,7 @@ internal static class SpaceBoundaryNetwork
     // A free run is a stretch with no consensus wall line under it: a door opening, an open-plan
     // equidistance seam, or an off-axis/curved wall. Emit it as a straight on-axis seam or an
     // axis-aligned L connector when one fits the raster; otherwise emit the raw fitted polyline
-    // and mark the path dirty so its rooms drop as holes.
+    // and mark the path dirty so its rooms keep their raw loops.
     private static bool EmitFreeRun(
         PathGeom path, Dictionary<VertexKey, Point> resolved, List<(double X, double Y)> axes,
         Func<double, double, bool>? inkNear, int firstSegment, int segmentCount,
@@ -732,12 +927,13 @@ internal static class SpaceBoundaryNetwork
         {
             string tag = best.Length == 2 ? "seam" : "corner";
             for (int i = 1; i < best.Length; i++) em.Line(best[i - 1], best[i], tag);
+            if (!supported) em.RuledSeam = true;
             if (best.Length == 2) stats.StraightSeams++; else stats.CornerSeams++;
             return true;
         }
 
-        // raster-faithful fitted segments: never ships (the dirty path drops its rooms), but keeps
-        // the per-path curve list coherent for diagnostics
+        // Raster-faithful fitted segments keep the per-path curve list coherent for diagnostics;
+        // the dirty path makes the detector retain each owning room's raw loop.
         for (int s = 0; s < segmentCount; s++)
         {
             var a = s == 0 ? from : path.Raw[path.FitIndex[(firstSegment + s) % path.FitIndex.Count]];
@@ -753,7 +949,7 @@ internal static class SpaceBoundaryNetwork
     // as part of a supported chain — three or more consecutive off-axis segments over wall ink
     // (a real curved or angled wall traced faithfully). Isolated diagonals (a nub cap, a corner
     // bite, a resolution artifact) and unsupported diagonals mark the path dirty: their rooms
-    // drop as holes rather than shipping a shape that bewilders the user.
+    // retain their raw detector loops rather than shipping a shape that bewilders the user.
     private static void ClassifyOffAxis(
         List<(PathGeom Path, Emitter Em)> emitters, List<(double X, double Y)> axes,
         Func<double, double, bool>? inkNear, Action<string>? log)
