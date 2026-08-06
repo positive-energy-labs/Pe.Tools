@@ -345,6 +345,8 @@ public sealed class TakeoffReplayTests
         Floor(8, 28, 8, 28);       // ordinary 10 x 10 ft room
         Floor(40, 43, 8, 48);      // 1.5 x 20 ft ribbon
         Floor(40, 48, 40, 48);     // one 4 x 4 ft bulge lets it survive max-width dissolution
+        for (int i = 0; i < n; i++)
+            if (!float.IsNaN(hf.CeilZ[i])) hf.CeilZ[i] = i % 2 == 0 ? 8 : 10;
         var snap = new DetectSnapshot {
             LevelName = "Suspect", LevelElevation = 0, CaptureOptions = "synthetic",
             Field = hf, SeedInk = new bool[n],
@@ -360,11 +362,18 @@ public sealed class TakeoffReplayTests
             Assert.That(result.Rooms, Has.Count.EqualTo(2));
             Assert.That(result.TotalSqft, Is.EqualTo(140).Within(0.01));
             Assert.That(result.Rooms.Single(r => r.RawSqft < 50).Flags,
-                Does.Contain("suspect:compactness").And.Contain("suspect:narrow"));
+                Does.Contain("suspect:compactness").And.Contain("suspect:narrow")
+                    .And.Contain("suspect:ceiling-variance"));
             Assert.That(result.Rooms.Single(r => r.RawSqft >= 50).Flags,
                 Is.Empty);
         });
         opt.MinRegionCompactness = double.NaN;
+        Assert.Throws<ArgumentOutOfRangeException>(() => snap.Replay(opt, _ => { }));
+        opt.MinRegionCompactness = 0;
+        opt.MinSuspectCeilingStdDevFt = double.NaN;
+        Assert.Throws<ArgumentOutOfRangeException>(() => snap.Replay(opt, _ => { }));
+        opt.MinSuspectCeilingStdDevFt = 0.5;
+        opt.SuspectMaxSqft = -1;
         Assert.Throws<ArgumentOutOfRangeException>(() => snap.Replay(opt, _ => { }));
     }
 

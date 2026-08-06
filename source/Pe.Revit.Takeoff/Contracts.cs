@@ -111,6 +111,10 @@ public sealed class TakeoffOptions
                                                // door width wide somewhere
     public double MinRegionCompactness = 0.01; // flag extreme snakes; iteration-3 floor preserves
                                                // narrow real rooms for one-touch review
+    public double SuspectMaxSqft = 60;         // non-geometric suspect signals only target pockets,
+                                               // not ordinary rooms with varied ceilings
+    public double MinSuspectCeilingStdDevFt = 0.5; // chases/voids cross multiple ceiling bands;
+                                                   // uniform closets usually do not
     public string Marker = "PE-TAKEOFF";    // stamped into Comments of everything we create
     public string? ArtifactDir;             // where TSV/PNG artifacts land (default: temp)
 }

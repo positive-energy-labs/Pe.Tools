@@ -28,6 +28,13 @@ internal static class PartitionFormulation
         if (double.IsNaN(opt.MinRegionCompactness) || double.IsInfinity(opt.MinRegionCompactness)
             || opt.MinRegionCompactness < 0 || opt.MinRegionCompactness > 1)
             throw new ArgumentOutOfRangeException(nameof(opt.MinRegionCompactness));
+        if (double.IsNaN(opt.SuspectMaxSqft) || double.IsInfinity(opt.SuspectMaxSqft)
+            || opt.SuspectMaxSqft < 0)
+            throw new ArgumentOutOfRangeException(nameof(opt.SuspectMaxSqft));
+        if (double.IsNaN(opt.MinSuspectCeilingStdDevFt)
+            || double.IsInfinity(opt.MinSuspectCeilingStdDevFt)
+            || opt.MinSuspectCeilingStdDevFt < 0)
+            throw new ArgumentOutOfRangeException(nameof(opt.MinSuspectCeilingStdDevFt));
         int W = hf.W, H = hf.H, n = W * H;
         double cellArea = opt.CellFt * opt.CellFt;
 
@@ -176,12 +183,17 @@ internal static class PartitionFormulation
             .ToList();
         var medianWidthFt = RegionMedianWidthsFt(owner, W, H, opt.CellFt);
         var perimeterCells = RegionPerimeterCells(owner, W, H);
+        var headroom = emitIds.ToDictionary(id => id, id => HeadroomStats(cellsById[id], hf));
         foreach (int id in emitIds)
         {
             if (medianWidthFt[id] < opt.MinFeatureWidthFt) Flag(flags, id, "suspect:narrow");
             double perimeter = perimeterCells[id] * opt.CellFt;
             double compactness = 4 * Math.PI * cellsById[id].Count * cellArea / (perimeter * perimeter);
             if (compactness < opt.MinRegionCompactness) Flag(flags, id, "suspect:compactness");
+            if (cellsById[id].Count * cellArea >= opt.SuspectMaxSqft
+                || opt.MinSuspectCeilingStdDevFt == 0) continue;
+            if (headroom[id].StdDev >= opt.MinSuspectCeilingStdDevFt)
+                Flag(flags, id, "suspect:ceiling-variance");
         }
 
         log($"[partition] domain={domainCells * cellArea:F0}sf seeds={nSeeds} merges={nMerges} " +
@@ -206,9 +218,6 @@ internal static class PartitionFormulation
             var outer = polys[outerIdx];
             if (Detector.Shoelace(outer) < 0) outer.Reverse();
 
-            double ceilSum = 0; int ceilN = 0;
-            foreach (int c in cells)
-                if (!float.IsNaN(hf.CeilZ[c]) && !float.IsNaN(hf.FloorZ[c])) { ceilSum += hf.CeilZ[c] - hf.FloorZ[c]; ceilN++; }
             int lp2 = Detector.PoleOfInaccessibility(cells, owner, id, W, H);
             double perim = 0;
             for (int i = 0; i < outer.Count; i++)
@@ -224,7 +233,7 @@ internal static class PartitionFormulation
                 PerimeterFt = perim,
                 LabelX = hf.MinX + (lp2 % W + 0.5) * opt.CellFt,
                 LabelY = hf.MinY + (lp2 / W + 0.5) * opt.CellFt,
-                MeanCeilingFt = ceilN > 0 ? ceilSum / ceilN : 0,
+                MeanCeilingFt = headroom[id].Mean,
                 Polygon = outer,
             };
             for (int i = 0; i < polys.Count; i++) if (i != outerIdx) room.Holes.Add(polys[i]);
@@ -533,6 +542,23 @@ internal static class PartitionFormulation
             perimeters[id] = perimeters.GetValueOrDefault(id) + edges;
         }
         return perimeters;
+    }
+
+    private static (double Mean, double StdDev) HeadroomStats(IEnumerable<int> cells, Heightfield hf)
+    {
+        double sum = 0, sumSquares = 0;
+        int count = 0;
+        foreach (int cell in cells)
+        {
+            if (float.IsNaN(hf.FloorZ[cell]) || float.IsNaN(hf.CeilZ[cell])) continue;
+            double value = hf.CeilZ[cell] - hf.FloorZ[cell];
+            sum += value;
+            sumSquares += value * value;
+            count++;
+        }
+        if (count == 0) return (0, 0);
+        double mean = sum / count;
+        return (mean, Math.Sqrt(Math.Max(0, sumSquares / count - mean * mean)));
     }
 
     private static void Relabel(int[] owner, UnionFind uf)

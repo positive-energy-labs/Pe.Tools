@@ -41,6 +41,9 @@ JUNK_IOU = 0.2                # candidate below this best same-floor GT IoU is j
 GATE_COUNT_RATIO_MAX = 1.2    # candidates / GT rooms, on every level
 GATE_TAXONOMY_OK_MIN = 0.8    # fraction of GT rooms classified ok
 GATE_JUNK_UNDER_60_MAX = 0    # zero junk candidates smaller than 60 sf
+GATE_UNFLAGGED_JUNK_UNDER_60_MAX = 25  # review queue target
+GATE_SUSPECT_PRECISION_MIN = 0.85
+GATE_SUSPECT_FALSE_POSITIVE_MAX = 20
 GATE_WALL_RECALL_MIN = 0.8    # mined walls recalled at WALL_TOL_FT
 
 
@@ -340,6 +343,9 @@ def flag_quality(candidates):
         "precisionPct": round(100 * len(flagged_junk) / len(flagged), 1) if flagged else None,
         "junkUnder60RecallPct": (round(100 * len(flagged_small_junk) / len(small_junk), 1)
                                   if small_junk else None),
+        "junkUnder60": len(small_junk),
+        "flaggedJunkUnder60": len(flagged_small_junk),
+        "unflaggedJunkUnder60": len(small_junk) - len(flagged_small_junk),
         "junkRecallPct": round(100 * len(flagged_junk) / len(junk), 1) if junk else None,
         "falsePositiveCount": len(false_positives),
         "falsePositiveCandidates": false_positives,
@@ -376,6 +382,10 @@ def gates(precision_out, totals):
     taxonomy_fraction = ok / totals["gtRooms"] if totals["gtRooms"] else 0.0
     junk_under_60 = precision_out["total"]["junkAreaHistogram"]["under60"]
     unflagged_junk_under_60 = precision_out["total"]["unflaggedJunkAreaHistogram"]["under60"]
+    flag_quality = precision_out["flagQuality"]["total"]
+    junk_without_suspect = flag_quality["unflaggedJunkUnder60"]
+    suspect_precision = (flag_quality["flaggedJunk"] / flag_quality["flaggedCandidates"]
+                         if flag_quality["flaggedCandidates"] else 0)
     wall_fraction = ((totals["gateWallRecallPct"] or 0) / 100)
     checks = {
         "candidateGtRatioPerLevel": {
@@ -388,10 +398,25 @@ def gates(precision_out, totals):
         "zeroJunkUnder60Sf": {"passed": junk_under_60 <= GATE_JUNK_UNDER_60_MAX,
                               "actual": junk_under_60,
                               "maximum": GATE_JUNK_UNDER_60_MAX},
-        "zeroUnflaggedJunkUnder60Sf": {
-            "passed": unflagged_junk_under_60 <= GATE_JUNK_UNDER_60_MAX,
+        "unflaggedJunkUnder60Sf": {
+            "passed": unflagged_junk_under_60 <= GATE_UNFLAGGED_JUNK_UNDER_60_MAX,
             "actual": unflagged_junk_under_60,
-            "maximum": GATE_JUNK_UNDER_60_MAX,
+            "maximum": GATE_UNFLAGGED_JUNK_UNDER_60_MAX,
+        },
+        "junkWithoutSuspectFlagUnder60Sf": {
+            "passed": junk_without_suspect <= GATE_UNFLAGGED_JUNK_UNDER_60_MAX,
+            "actual": junk_without_suspect,
+            "maximum": GATE_UNFLAGGED_JUNK_UNDER_60_MAX,
+        },
+        "suspectFlagPrecision": {
+            "passed": suspect_precision >= GATE_SUSPECT_PRECISION_MIN,
+            "actualPct": round(100 * suspect_precision, 1),
+            "minimumPct": 100 * GATE_SUSPECT_PRECISION_MIN,
+        },
+        "suspectFalsePositives": {
+            "passed": flag_quality["falsePositiveCount"] <= GATE_SUSPECT_FALSE_POSITIVE_MAX,
+            "actual": flag_quality["falsePositiveCount"],
+            "maximum": GATE_SUSPECT_FALSE_POSITIVE_MAX,
         },
         "wallRecall": {"passed": wall_fraction >= GATE_WALL_RECALL_MIN,
                        "actualPct": totals["gateWallRecallPct"],
@@ -596,13 +621,19 @@ def to_text(sb):
         for fl, p in sorted(sb["precision"]["levels"].items()))
     tax = g["checks"]["taxonomyOk"]
     junk = g["checks"]["zeroJunkUnder60Sf"]
-    unflagged_junk = g["checks"]["zeroUnflaggedJunkUnder60Sf"]
+    unflagged_junk = g["checks"]["unflaggedJunkUnder60Sf"]
+    junk_without_suspect = g["checks"]["junkWithoutSuspectFlagUnder60Sf"]
+    suspect_precision = g["checks"]["suspectFlagPrecision"]
+    suspect_false_positives = g["checks"]["suspectFalsePositives"]
     wall = g["checks"]["wallRecall"]
     out.extend(["", "GATES  (absolute; --gate exits nonzero on failure)",
                 f"{'PASS' if ratio_gate['passed'] else 'FAIL'} candidate/GT <= {ratio_gate['limit']:.1f} per level: {ratio_detail}",
                 f"{'PASS' if tax['passed'] else 'FAIL'} taxonomy ok >= {tax['minimumPct']:.0f}% of GT rooms: {tax['actualPct']:.1f}%",
                 f"{'PASS' if junk['passed'] else 'FAIL'} zero junk candidates <60 sf: {junk['actual']}",
-                f"{'PASS' if unflagged_junk['passed'] else 'FAIL'} zero UNFLAGGED junk candidates <60 sf: {unflagged_junk['actual']}",
+                f"{'PASS' if unflagged_junk['passed'] else 'FAIL'} unflagged junk candidates <60 sf <= {unflagged_junk['maximum']}: {unflagged_junk['actual']}",
+                f"{'PASS' if junk_without_suspect['passed'] else 'FAIL'} junk without suspect flag <60 sf <= {junk_without_suspect['maximum']}: {junk_without_suspect['actual']}",
+                f"{'PASS' if suspect_precision['passed'] else 'FAIL'} suspect precision >= {suspect_precision['minimumPct']:.0f}%: {suspect_precision['actualPct']:.1f}%",
+                f"{'PASS' if suspect_false_positives['passed'] else 'FAIL'} suspect false positives <= {suspect_false_positives['maximum']}: {suspect_false_positives['actual']}",
                 f"{'PASS' if wall['passed'] else 'FAIL'} wall recall >= {wall['minimumPct']:.0f}% at {wall['toleranceFt']:.1f} ft: "
                 f"{wall['actualPct'] if wall['actualPct'] is not None else '-'}%",
                 f"OVERALL {'PASS' if g['passed'] else 'FAIL'}"])
