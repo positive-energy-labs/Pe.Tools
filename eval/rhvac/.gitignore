@@ -10,3 +10,4 @@
 # Bluebeam takeoff PDFs are local copies from the G: drive — mine them, never commit them.
 */bluebeam/**/*.pdf
 */bluebeam/**/*.png
+*/probe/harvest_*.json
