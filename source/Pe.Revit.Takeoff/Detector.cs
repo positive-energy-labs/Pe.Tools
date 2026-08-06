@@ -88,37 +88,6 @@ public static class Detector
         return obst;
     }
 
-    // Diagnostic that found the 8-ft door heads: BFS from a point through non-obstruction cells;
-    // if it reaches the grid border the space leaks, and the returned path shows exactly where.
-    // Render it red over the grid and the failing opening is a one-glance diagnosis.
-    public static List<(int x, int y)>? TraceLeak(bool[] obstruction, int W, int H, int startX, int startY)
-    {
-        if (startX < 0 || startY < 0 || startX >= W || startY >= H || obstruction[startY * W + startX]) return null;
-        var prev = new int[W * H];
-        for (int i = 0; i < prev.Length; i++) prev[i] = -1;
-        var q = new Queue<int>();
-        int s = startY * W + startX;
-        prev[s] = s; q.Enqueue(s);
-        int hit = -1;
-        while (q.Count > 0 && hit < 0)
-        {
-            int c = q.Dequeue();
-            int cx = c % W, cy = c / W;
-            if (cx == 0 || cy == 0 || cx == W - 1 || cy == H - 1) { hit = c; break; }
-            foreach (var d in new[] { -1, 1, -W, W })
-            {
-                int nb = c + d;
-                if (nb < 0 || nb >= W * H || prev[nb] != -1 || obstruction[nb]) continue;
-                prev[nb] = c; q.Enqueue(nb);
-            }
-        }
-        if (hit < 0) return null; // enclosed
-        var path = new List<(int, int)>();
-        for (int c = hit; c != s; c = prev[c]) path.Add((c % W, c / W));
-        path.Reverse();
-        return path;
-    }
-
     // ---- morphology: two-pass chamfer close (dilate r then erode r) ----
     private static void Close(bool[] mask, int W, int H, float rCells)
     {
