@@ -1,6 +1,6 @@
 {
-  "beforeTsv": "META\tlevel\tL1\nMETA\telev\t0.000000\nMETA\trooms\t2\nMETA\ttotalSqft\t500.0\nROOM\tR01\t100.0\t40.0\t5.0\t5.0\t9.00\nPOLY\tR01\touter\t0;0|10;0|10;10|0;10\nROOM\tR02\t400.0\t80.0\t30.0\t10.0\t9.00\nPOLY\tR02\touter\t20;0|40;0|40;20|20;20\nMETA\tflag\tR01:low-evidence-boundary\nMETA\tflag\tR02:open-plan-merge\n",
-  "afterTsv": "META\tlevel\tL1\nMETA\telev\t0.000000\nMETA\trooms\t2\nMETA\ttotalSqft\t500.0\nROOM\tR01\t400.0\t80.0\t30.0\t10.0\t9.00\nPOLY\tR01\touter\t20;0|40;0|40;20|20;20\nROOM\tR02\t100.0\t40.0\t5.0\t5.0\t9.00\nPOLY\tR02\touter\t0;0|10;0|10;10|0;10\nMETA\tflag\tR01:open-plan-merge\nMETA\tflag\tR02:low-evidence-boundary\n",
+  "beforeTsv": "META\tlevel\tL1\nMETA\telev\t0.000000\nMETA\trooms\t6\nMETA\ttotalSqft\t900.0\nROOM\tR01\t100.0\t40.0\t5.0\t5.0\t9.00\nPOLY\tR01\touter\t0;0|10;0|10;10|0;10\nROOM\tR02\t400.0\t80.0\t30.0\t10.0\t9.00\nPOLY\tR02\touter\t20;0|40;0|40;20|20;20\nROOM\tR03\t100.0\t40.0\t55.0\t5.0\t9.00\nPOLY\tR03\touter\t50;0|60;0|60;10|50;10\nROOM\tR04\t100.0\t40.0\t75.0\t5.0\t9.00\nPOLY\tR04\touter\t70;0|80;0|80;10|70;10\nROOM\tR05\t100.0\t40.0\t85.0\t5.0\t9.00\nPOLY\tR05\touter\t80;0|90;0|90;10|80;10\nROOM\tR06\t100.0\t40.0\t105.0\t5.0\t9.00\nPOLY\tR06\touter\t100;0|110;0|110;10|100;10\nMETA\tflag\tR01:low-evidence-boundary\nMETA\tflag\tR02:open-plan-merge\nMETA\tflag\tR03:seedless\nMETA\tflag\tR04:low-evidence-boundary\n",
+  "afterTsv": "META\tlevel\tL1\nMETA\telev\t0.000000\nMETA\trooms\t6\nMETA\ttotalSqft\t900.0\nROOM\tR01\t100.0\t40.0\t85.0\t5.0\t9.00\nPOLY\tR01\touter\t80;0|90;0|90;10|80;10\nROOM\tR02\t100.0\t40.0\t5.0\t5.0\t9.00\nPOLY\tR02\touter\t0;0|10;0|10;10|0;10\nROOM\tR03\t100.0\t40.0\t105.0\t5.0\t9.00\nPOLY\tR03\touter\t100;0|110;0|110;10|100;10\nROOM\tR04\t100.0\t40.0\t55.0\t5.0\t9.00\nPOLY\tR04\touter\t50;0|60;0|60;10|50;10\nROOM\tR05\t400.0\t80.0\t30.0\t10.0\t9.00\nPOLY\tR05\touter\t20;0|40;0|40;20|20;20\nROOM\tR06\t100.0\t40.0\t75.0\t5.0\t9.00\nPOLY\tR06\touter\t70;0|80;0|80;10|70;10\nMETA\tflag\tR02:low-evidence-boundary\nMETA\tflag\tR04:seedless\nMETA\tflag\tR05:open-plan-merge\nMETA\tflag\tR06:low-evidence-boundary\n",
   "sidecar": {
     "version": 2,
     "tsvSha256": {
@@ -23,17 +23,45 @@
       {
         "candidateKey": "L1:R03",
         "flag": "seedless",
+        "action": "reject",
+        "anchor": { "label": [55.0, 5.0], "sqft": 100.0 }
+      },
+      {
+        "candidateKey": "L1:R04",
+        "flag": "low-evidence-boundary",
+        "action": "merge",
+        "params": {
+          "other": "L1:R05",
+          "anchor": { "label": [85.0, 5.0], "sqft": 100.0 }
+        },
+        "anchor": { "label": [75.0, 5.0], "sqft": 100.0 }
+      },
+      {
+        "candidateKey": "L1:R06",
+        "flag": "low-evidence-boundary",
+        "action": "merge",
+        "params": {
+          "other": "L1:R99",
+          "anchor": { "label": [200.0, 5.0], "sqft": 100.0 }
+        },
+        "anchor": { "label": [105.0, 5.0], "sqft": 100.0 }
+      },
+      {
+        "candidateKey": "L1:R99",
+        "flag": "seedless",
         "action": "accept",
-        "anchor": { "label": [100.0, 100.0], "sqft": 25.0 }
+        "anchor": { "label": [300.0, 5.0], "sqft": 100.0 }
       }
     ]
   },
   "expected": {
     "applied": 0,
-    "remapped": 2,
-    "orphaned": 1,
-    "roomIds": ["R01.a", "R01.b", "R02"],
-    "roomSqft": [200.0, 200.0, 100.0],
-    "roomLabels": [[25.0, 10.0], [35.0, 10.0], [5.0, 5.0]]
+    "remapped": 4,
+    "orphaned": 2,
+    "roomIds": ["R01", "R02", "R03", "R05.a", "R05.b"],
+    "roomSqft": [200.0, 100.0, 100.0, 200.0, 200.0],
+    "roomLabels": [[85.0, 5.0], [5.0, 5.0], [105.0, 5.0], [25.0, 10.0], [35.0, 10.0]],
+    "mergedFrom": "R06",
+    "rejectedRoomId": "R04"
   }
 }

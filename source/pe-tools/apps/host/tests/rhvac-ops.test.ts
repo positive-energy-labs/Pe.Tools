@@ -15,7 +15,7 @@ import type {
   RhvacTakeoffResolutionsResult,
 } from "@pe/host-contracts/operation-types";
 import type { RevitBridge } from "../src/bridge.ts";
-import { dispatchTsOnlyOperation } from "../src/call-route.ts";
+import { dispatchTsOnlyOperation, InvalidHostRequest } from "../src/call-route.ts";
 import { LocalOpError } from "../src/local-error.ts";
 import { rhvacScriptDirectory } from "../src/rhvac-ops.ts";
 
@@ -106,10 +106,58 @@ test("rhvac.takeoff-resolutions reads and writes a deterministic sidecar", async
             action: "accept" as const,
             anchor: { label: [10, 3] as [number, number], sqft: 300 },
           },
+          {
+            candidateKey: "Level 1:R05",
+            flag: "seedless",
+            action: "reject" as const,
+            anchor: { label: [30, 5] as [number, number], sqft: 100 },
+          },
+          {
+            candidateKey: "Level 1:R04",
+            flag: "low-evidence-boundary",
+            action: "merge" as const,
+            params: {
+              other: "Level 1:R03",
+              anchor: { label: [10, 3] as [number, number], sqft: 300 },
+            },
+            anchor: { label: [20, 3] as [number, number], sqft: 200 },
+          },
         ],
       },
     };
     writeFileSync(input.path, "");
+    await expect(
+      dispatch("rhvac.takeoff-resolutions", {
+        path: input.path,
+        resolutions: {
+          version: 2,
+          resolutions: [
+            {
+              candidateKey: "Level 1:R01",
+              flag: "low-evidence-boundary",
+              action: "merge",
+              anchor: { label: [5, 5], sqft: 100 },
+            },
+          ],
+        },
+      }),
+    ).rejects.toBeInstanceOf(InvalidHostRequest);
+    await expect(
+      dispatch("rhvac.takeoff-resolutions", {
+        path: input.path,
+        resolutions: {
+          version: 2,
+          resolutions: [
+            {
+              candidateKey: "Level 1:R01",
+              flag: "low-evidence-boundary",
+              action: "reject",
+              params: { other: "Level 1:R02", anchor: { label: [15, 5], sqft: 100 } },
+            },
+          ],
+        },
+      }),
+    ).rejects.toBeInstanceOf(InvalidHostRequest);
     const missing = await dispatch<RhvacTakeoffResolutionsResult>("rhvac.takeoff-resolutions", {
       path: input.path,
     });
@@ -123,7 +171,12 @@ test("rhvac.takeoff-resolutions reads and writes a deterministic sidecar", async
     const expected = {
       version: 2 as const,
       tsvSha256: { "Level 1": "hash-1", "Level 2": "hash-2" },
-      resolutions: [input.resolutions.resolutions[1], input.resolutions.resolutions[0]],
+      resolutions: [
+        input.resolutions.resolutions[1],
+        input.resolutions.resolutions[3],
+        input.resolutions.resolutions[2],
+        input.resolutions.resolutions[0],
+      ],
     };
     expect(saved.resolutions).toEqual(expected);
     expect(readFileSync(saved.savedPath, "utf8")).toBe(`${JSON.stringify(expected, null, 2)}\n`);
@@ -132,6 +185,16 @@ test("rhvac.takeoff-resolutions reads and writes a deterministic sidecar", async
         path: input.path,
       }),
     ).toEqual(saved);
+    const oldVerbV2 = {
+      version: 2 as const,
+      resolutions: [input.resolutions.resolutions[1]],
+    };
+    writeFileSync(saved.savedPath, `${JSON.stringify(oldVerbV2, null, 2)}\n`);
+    expect(
+      await dispatch<RhvacTakeoffResolutionsResult>("rhvac.takeoff-resolutions", {
+        path: input.path,
+      }),
+    ).toEqual({ savedPath: saved.savedPath, resolutions: oldVerbV2 });
     writeFileSync(saved.savedPath, "");
     await expect(
       dispatch("rhvac.takeoff-resolutions", { path: input.path }),

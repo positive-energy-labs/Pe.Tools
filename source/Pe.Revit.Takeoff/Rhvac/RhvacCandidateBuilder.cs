@@ -25,6 +25,7 @@ public sealed record TakeoffRoomShape(
     public List<string> Flags { get; init; } = new();
     public double[] Label { get; init; } = Array.Empty<double>();
     public string? SplitFrom { get; init; }
+    public string? MergedFrom { get; init; }
 }
 
 /// <summary>One parsed takeoff TSV: a level and its rooms.</summary>
@@ -72,10 +73,15 @@ public static class RhvacCandidateBuilder
         string CandidateKey,
         string Flag,
         string Action,
-        SplitParams? Params,
+        ResolutionParams? Params,
         ResolutionAnchor? Anchor
     );
-    private sealed record SplitParams(double[] A, double[] B);
+    private sealed record ResolutionParams(
+        double[]? A,
+        double[]? B,
+        string? Other,
+        ResolutionAnchor? Anchor
+    );
     private sealed record ResolutionAnchor(double[] Label, double Sqft);
     private sealed record RoomReference(string LevelName, string Key, TakeoffRoomShape Room);
     private readonly record struct RingSnap(int Edge, double T, double[] Point);
@@ -182,14 +188,18 @@ public static class RhvacCandidateBuilder
         var fullDirectory = Path.GetFullPath(tsvDirectory);
         var levels = Directory.GetFiles(fullDirectory, "rooms_*.tsv")
             .OrderBy(path => path, StringComparer.Ordinal)
-            .Select(path => ParseTsv(File.ReadAllText(path), simplify))
+            .Select(path => ParseTsv(File.ReadAllText(path), simplify: false))
             .ToList();
         var projectDirectory = Directory.GetParent(fullDirectory)?.FullName
             ?? throw new InvalidDataException($"{fullDirectory}: takeoff directory has no parent.");
         var sidecar = resolutionsPath ?? Path.Combine(projectDirectory, "takeoff-resolutions.json");
-        if (!File.Exists(sidecar))
-            return new ResolutionApplyResult(levels, 0, 0, 0);
-        return ApplyResolutions(levels, sidecar);
+        var result = File.Exists(sidecar)
+            ? ApplyResolutions(levels, sidecar)
+            : new ResolutionApplyResult(levels, 0, 0, 0);
+        if (simplify)
+            foreach (var level in result.Levels)
+                SimplifyLevelLoops(level.Rooms);
+        return result;
     }
 
     /// <summary>Pure, idempotent sidecar application with v2 anchor remapping and loss accounting.</summary>
@@ -206,12 +216,21 @@ public static class RhvacCandidateBuilder
         {
             if (string.IsNullOrEmpty(resolution.CandidateKey) || string.IsNullOrEmpty(resolution.Flag))
                 throw new InvalidDataException($"{resolutionsPath}: candidateKey and flag are required.");
-            if (resolution.Action is not ("accept" or "split"))
+            if (resolution.Action is not ("accept" or "split" or "reject" or "merge"))
                 throw new InvalidDataException($"{resolutionsPath}: unknown action '{resolution.Action}'.");
-            if (resolution.Params is not null)
+            if (resolution.Action == "split" && resolution.Params is { A: not null, B: not null })
             {
                 ValidatePoint(resolution.Params.A, resolutionsPath);
                 ValidatePoint(resolution.Params.B, resolutionsPath);
+            }
+            if (resolution.Action == "merge"
+                && resolution.Params is not { Other.Length: > 0, Anchor: not null })
+                throw new InvalidDataException($"{resolutionsPath}: merge params require other and anchor.");
+            if (resolution.Action == "merge" && resolution.Params is { Anchor: not null })
+            {
+                ValidatePoint(resolution.Params.Anchor.Label, resolutionsPath);
+                if (!double.IsFinite(resolution.Params.Anchor.Sqft) || resolution.Params.Anchor.Sqft <= 0)
+                    throw new InvalidDataException($"{resolutionsPath}: merge anchor sqft must be positive and finite.");
             }
             if (resolution.Anchor is not null)
             {
@@ -225,65 +244,108 @@ public static class RhvacCandidateBuilder
             level.LevelName, $"{level.LevelName}:{room.Id}", room))).ToList();
         var byKey = new Dictionary<string, List<FlagResolution>>(StringComparer.Ordinal);
         var splitTargets = new HashSet<string>(StringComparer.Ordinal);
+        var mergeSources = new HashSet<string>(StringComparer.Ordinal);
+        var mergedByTarget = new Dictionary<string, TakeoffRoomShape>(StringComparer.Ordinal);
         var applied = 0;
         var remapped = 0;
         var orphaned = 0;
         foreach (var resolution in file.Resolutions)
         {
-            var exact = rooms.FirstOrDefault(room => room.Key == resolution.CandidateKey);
-            var target = exact;
-            var wasRemapped = false;
-            var anchor = resolution.Anchor;
-            if (file.Version == 2 && anchor is null)
-            {
-                orphaned++;
-                continue;
-            }
-            if (file.Version == 2)
-            {
-                var requiredAnchor = anchor!;
-                var validExact = exact is not null
-                    && Contains(exact.Room, requiredAnchor.Label)
-                    && Math.Abs(exact.Room.RawSqft - requiredAnchor.Sqft) <= requiredAnchor.Sqft * 0.2;
-                if (!validExact)
-                {
-                    var separator = resolution.CandidateKey.LastIndexOf(':');
-                    var levelName = separator < 0 ? "" : resolution.CandidateKey[..separator];
-                    target = rooms.FirstOrDefault(room => room.LevelName == levelName
-                        && Contains(room.Room, requiredAnchor.Label));
-                    wasRemapped = target is not null;
-                }
-            }
-            if (target is null)
+            var sourceResolution = ResolveCandidate(
+                rooms, file.Version, resolution.CandidateKey, resolution.Anchor);
+            var sourceCandidate = sourceResolution.Target;
+            if (sourceCandidate is null)
             {
                 orphaned++;
                 continue;
             }
             if (resolution.Action == "split"
-                && (resolution.Params is null
-                    || splitTargets.Contains(target.Key)
-                    || SplitShape(target.Room, resolution.Params.A, resolution.Params.B) is null))
+                && (resolution.Params is not { A: not null, B: not null }
+                    || splitTargets.Contains(sourceCandidate.Key)
+                    || SplitShape(sourceCandidate.Room, resolution.Params.A, resolution.Params.B) is null))
             {
                 orphaned++;
                 continue;
             }
             if (resolution.Action == "split")
-                splitTargets.Add(target.Key);
+                splitTargets.Add(sourceCandidate.Key);
+            var wasRemapped = sourceResolution.Remapped;
+            if (resolution.Action == "merge")
+            {
+                var parameters = resolution.Params;
+                var survivorResolution = parameters is { Other: not null, Anchor: not null }
+                    ? ResolveCandidate(rooms, file.Version, parameters.Other, parameters.Anchor)
+                    : default;
+                var survivor = survivorResolution.Target;
+                if (survivor is null
+                    || survivor.Key == sourceCandidate.Key
+                    || survivor.LevelName != sourceCandidate.LevelName
+                    || mergeSources.Contains(sourceCandidate.Key)
+                    || mergeSources.Contains(survivor.Key))
+                {
+                    orphaned++;
+                    continue;
+                }
+                var merged = MergeShapes(
+                    mergedByTarget.GetValueOrDefault(sourceCandidate.Key) ?? sourceCandidate.Room,
+                    mergedByTarget.GetValueOrDefault(survivor.Key) ?? survivor.Room,
+                    resolution.Flag);
+                if (merged is null)
+                {
+                    orphaned++;
+                    continue;
+                }
+                mergeSources.Add(sourceCandidate.Key);
+                mergedByTarget.Remove(sourceCandidate.Key);
+                mergedByTarget[survivor.Key] = merged;
+                wasRemapped |= survivorResolution.Remapped;
+            }
             if (wasRemapped) remapped++;
             else applied++;
-            if (!byKey.TryGetValue(target.Key, out var targetResolutions))
+            if (resolution.Action == "merge")
+                continue;
+            if (!byKey.TryGetValue(sourceCandidate.Key, out var targetResolutions))
             {
                 targetResolutions = new List<FlagResolution>();
-                byKey.Add(target.Key, targetResolutions);
+                byKey.Add(sourceCandidate.Key, targetResolutions);
             }
             targetResolutions.Add(resolution);
         }
 
         var resolved = levels.Select(level => level with {
-            Rooms = level.Rooms.SelectMany(room =>
-                ApplyRoomResolutions(level.LevelName, room, byKey)).ToList(),
+            Rooms = level.Rooms.SelectMany(room => {
+                var key = $"{level.LevelName}:{room.Id}";
+                if (mergeSources.Contains(key))
+                    return Array.Empty<TakeoffRoomShape>();
+                return ApplyRoomResolutions(
+                    level.LevelName,
+                    mergedByTarget.TryGetValue(key, out var merged) ? merged : room,
+                    byKey);
+            }).ToList(),
         }).ToList();
         return new ResolutionApplyResult(resolved, applied, remapped, orphaned);
+    }
+
+    private static (RoomReference? Target, bool Remapped) ResolveCandidate(
+        IReadOnlyList<RoomReference> rooms,
+        int version,
+        string key,
+        ResolutionAnchor? anchor
+    )
+    {
+        var exact = rooms.FirstOrDefault(room => room.Key == key);
+        if (version == 1)
+            return (exact, false);
+        if (anchor is null)
+            return (null, false);
+        if (exact is not null
+            && Contains(exact.Room, anchor.Label)
+            && Math.Abs(exact.Room.RawSqft - anchor.Sqft) <= anchor.Sqft * 0.2)
+            return (exact, false);
+        var separator = key.LastIndexOf(':');
+        var levelName = separator < 0 ? "" : key[..separator];
+        return (rooms.FirstOrDefault(room => room.LevelName == levelName
+            && Contains(room.Room, anchor.Label)), true);
     }
 
     private static bool Contains(TakeoffRoomShape room, double[] point) =>
@@ -305,12 +367,15 @@ public static class RhvacCandidateBuilder
             .ToHashSet(StringComparer.Ordinal);
         var split = resolutions.FirstOrDefault(resolution =>
             resolution.Action == "split"
-            && resolution.Params is not null);
+            && resolution.Params is { A: not null, B: not null });
         var remaining = room.Flags.Where(flag => !accepted.Contains(flag)).ToList();
 
-        if (split?.Params is not null)
+        if (resolutions.Any(resolution => resolution.Action == "reject"))
+            return Array.Empty<TakeoffRoomShape>();
+
+        if (split?.Params is { A: { } a, B: { } b })
         {
-            var halves = SplitShape(room, split.Params.A, split.Params.B);
+            var halves = SplitShape(room, a, b);
             if (halves is not null)
             {
                 var childFlags = remaining.Where(flag => flag != split.Flag).ToList();
@@ -321,6 +386,133 @@ public static class RhvacCandidateBuilder
         return remaining.Count == room.Flags.Count
             ? new[] { room }
             : new[] { room with { Flags = remaining } };
+    }
+
+    private sealed record DirectedSegment(double[] A, double[] B);
+
+    /// <summary>Unions adjacent, non-overlapping detector polygons by cancelling their shared boundary.</summary>
+    private static TakeoffRoomShape? MergeShapes(
+        TakeoffRoomShape source,
+        TakeoffRoomShape target,
+        string resolvedFlag
+    )
+    {
+        var edges = new[] { source.Outer, target.Outer }
+            .SelectMany(ring => ring.Select((point, index) => new DirectedSegment(
+                SnapPoint(point), SnapPoint(ring[(index + 1) % ring.Count]))))
+            .ToList();
+        var endpoints = edges.SelectMany(edge => new[] { edge.A, edge.B }).ToList();
+        var pieces = new List<DirectedSegment>();
+        // ponytail: O(n^2) endpoint noding is fine for two room rings; use a clipping
+        // library if resolutions ever merge large arbitrary polygon sets.
+        foreach (var edge in edges)
+        {
+            var dx = edge.B[0] - edge.A[0];
+            var dy = edge.B[1] - edge.A[1];
+            var cuts = endpoints
+                .Where(point => PointOnSegment(point, edge))
+                .GroupBy(PointKey)
+                .Select(group => group.First())
+                .OrderBy(point => Math.Abs(dx) >= Math.Abs(dy)
+                    ? (point[0] - edge.A[0]) / dx
+                    : (point[1] - edge.A[1]) / dy)
+                .ToList();
+            for (var index = 0; index < cuts.Count - 1; index++)
+                if (PointKey(cuts[index]) != PointKey(cuts[index + 1]))
+                    pieces.Add(new DirectedSegment(cuts[index], cuts[index + 1]));
+        }
+
+        var boundary = new List<DirectedSegment>();
+        var shared = false;
+        foreach (var group in pieces.GroupBy(piece => {
+            var a = PointKey(piece.A);
+            var b = PointKey(piece.B);
+            return string.CompareOrdinal(a, b) < 0 ? $"{a}|{b}" : $"{b}|{a}";
+        }))
+        {
+            var pair = group.ToList();
+            if (pair.Count == 1)
+                boundary.Add(pair[0]);
+            else if (pair.Count == 2
+                && PointKey(pair[0].A) == PointKey(pair[1].B)
+                && PointKey(pair[0].B) == PointKey(pair[1].A))
+                shared = true;
+            else
+                return null;
+        }
+        if (!shared)
+            return null;
+
+        var outgoing = boundary
+            .Select((edge, index) => (edge, index))
+            .GroupBy(item => PointKey(item.edge.A))
+            .ToDictionary(group => group.Key, group => group.Select(item => item.index).ToList());
+        var unused = Enumerable.Range(0, boundary.Count).ToHashSet();
+        var loops = new List<List<double[]>>();
+        while (unused.Count > 0)
+        {
+            var first = unused.First();
+            var start = PointKey(boundary[first].A);
+            var loop = new List<double[]> { boundary[first].A };
+            var index = first;
+            var closed = false;
+            for (var step = 0; step <= boundary.Count; step++)
+            {
+                if (!unused.Remove(index))
+                    return null;
+                var edge = boundary[index];
+                var end = PointKey(edge.B);
+                if (end == start)
+                {
+                    closed = true;
+                    break;
+                }
+                loop.Add(edge.B);
+                var next = outgoing.GetValueOrDefault(end)?.Where(unused.Contains).ToList();
+                if (next is not { Count: 1 })
+                    return null;
+                index = next[0];
+            }
+            if (!closed)
+                return null;
+            loops.Add(loop);
+        }
+        if (loops is not [{ Count: >= 3 }])
+            return null;
+        var outer = SignedArea(loops[0]) > 0 ? loops[0] : loops[0].AsEnumerable().Reverse().ToList();
+        var flags = target.Flags
+            .Concat(source.Flags.Where(flag => flag != resolvedFlag))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(flag => flag, StringComparer.Ordinal)
+            .ToList();
+        return target with {
+            RawSqft = source.RawSqft + target.RawSqft,
+            PerimeterFt = RingPerimeter(outer),
+            Outer = outer,
+            Holes = target.Holes.Concat(source.Holes).ToList(),
+            Flags = flags,
+            MergedFrom = source.MergedFrom ?? source.Id,
+        };
+    }
+
+    private static double[] SnapPoint(double[] point) => new[] { Snap(point[0]), Snap(point[1]) };
+
+    private static double Snap(double value) => Math.Floor((value * 1e6) + 0.5) / 1e6;
+
+    private static string PointKey(double[] point) =>
+        $"{Snap(point[0]).ToString("0.######", CultureInfo.InvariantCulture)}," +
+        Snap(point[1]).ToString("0.######", CultureInfo.InvariantCulture);
+
+    private static bool PointOnSegment(double[] point, DirectedSegment segment)
+    {
+        var dx = segment.B[0] - segment.A[0];
+        var dy = segment.B[1] - segment.A[1];
+        var px = point[0] - segment.A[0];
+        var py = point[1] - segment.A[1];
+        var dot = (px * dx) + (py * dy);
+        return Math.Abs((dx * py) - (dy * px)) <= 1e-6 * Math.Max(1, Math.Sqrt((dx * dx) + (dy * dy)))
+            && dot >= -1e-6
+            && dot <= (dx * dx) + (dy * dy) + 1e-6;
     }
 
     private static TakeoffRoomShape[]? SplitShape(TakeoffRoomShape room, double[] a, double[] b)

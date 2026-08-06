@@ -174,6 +174,10 @@ export interface TakeoffRoomShape {
   flags?: TakeoffFlagKind[];
   /** Set on rooms produced by a resolved split — the original candidate id. */
   splitFrom?: string;
+  /** Set on the survivor of a merge; the absorbed candidate id. */
+  mergedFrom?: string;
+  /** Rejected rooms remain renderable but are excluded by export mirrors. */
+  rejected?: boolean;
 }
 
 export interface TakeoffLevel {

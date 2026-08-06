@@ -187,13 +187,13 @@ public sealed class RhvacCandidateBuilderTests
                       "flag": "open-plan-merge",
                       "action": "split",
                       "params": { "a": [15, 0], "b": [15, 30] },
-                      "anchor": { "label": [55, 5], "sqft": 100 }
+                      "anchor": { "label": [20, 15], "sqft": 1200 }
                     },
                     {
                       "candidateKey": "L1:R02",
                       "flag": "low-evidence-boundary",
                       "action": "accept",
-                      "anchor": { "label": [20, 15], "sqft": 1200 }
+                      "anchor": { "label": [55, 5], "sqft": 100 }
                     }
                   ]
                 }
@@ -221,6 +221,12 @@ public sealed class RhvacCandidateBuilderTests
                         RhvacCandidateBuilder.ParseTsvDirectory(takeoffDir).Levels, TestConventions())),
                     Is.EqualTo(JsonConvert.SerializeObject(firstCandidates)), "fresh parse must be deterministic");
             });
+
+            File.WriteAllText(sidecar, File.ReadAllText(sidecar).Replace("\"version\": 1", "\"version\": 2"));
+            Assert.That(
+                RhvacCandidateBuilder.ParseTsvDirectory(takeoffDir).Levels.Single().Rooms.Select(room => room.Id),
+                Is.EqualTo(new[] { "R01.a", "R01.b", "R02" }),
+                "v2 sidecars without reject/merge remain compatible");
         }
         finally
         {
@@ -245,7 +251,7 @@ public sealed class RhvacCandidateBuilderTests
 
             Assert.Multiple(() => {
                 Assert.That((before.Applied, before.Remapped, before.Orphaned),
-                    Is.EqualTo((2, 0, 1)));
+                    Is.EqualTo((4, 0, 2)));
                 Assert.That(result.Applied, Is.EqualTo(fixture.Expected.Applied));
                 Assert.That(result.Remapped, Is.EqualTo(fixture.Expected.Remapped));
                 Assert.That(result.Orphaned, Is.EqualTo(fixture.Expected.Orphaned));
@@ -255,6 +261,10 @@ public sealed class RhvacCandidateBuilderTests
                     Is.EqualTo(fixture.Expected.RoomSqft));
                 Assert.That(result.Levels.Single().Rooms.Select(room => room.Label),
                     Is.EqualTo(fixture.Expected.RoomLabels));
+                Assert.That(result.Levels.Single().Rooms.Select(room => room.Id),
+                    Does.Not.Contain(fixture.Expected.RejectedRoomId));
+                Assert.That(result.Levels.Single().Rooms.Single(room => room.Id == "R01").MergedFrom,
+                    Is.EqualTo(fixture.Expected.MergedFrom));
                 Assert.That(result.Applied + result.Remapped + result.Orphaned,
                     Is.EqualTo(fixture.Sidecar.Resolutions.Count));
             });
@@ -280,8 +290,82 @@ public sealed class RhvacCandidateBuilderTests
         int Orphaned,
         List<string> RoomIds,
         List<double> RoomSqft,
-        List<double[]> RoomLabels
+        List<double[]> RoomLabels,
+        string MergedFrom,
+        string RejectedRoomId
     );
+
+    [Test]
+    public void ProjectA_main_four_verb_sidecar_round_trips_with_expected_rooms_and_areas()
+    {
+        var fixtureDir = RhvacEvalTests.FindFixtureDir();
+        var takeoffDir = Path.Combine(fixtureDir, "takeoff");
+        var sidecar = Path.GetFullPath(Path.Combine(
+            fixtureDir, "..", "fixtures", "project-a-main-four-verbs.json"));
+
+        var result = RhvacCandidateBuilder.ParseTsvDirectory(takeoffDir, sidecar);
+        var main = result.Levels.Single(level => level.LevelName == "Level 1/Main Level");
+
+        Assert.Multiple(() => {
+            Assert.That((result.Applied, result.Remapped, result.Orphaned), Is.EqualTo((4, 0, 0)));
+            Assert.That(main.Rooms, Has.Count.EqualTo(81));
+            Assert.That(main.Rooms.Select(room => room.Id), Does.Not.Contain("R06"));
+            Assert.That(main.Rooms.Select(room => room.Id), Does.Not.Contain("R07"));
+            Assert.That(main.Rooms.Select(room => room.Id), Does.Not.Contain("R09"));
+            Assert.That(main.Rooms.Single(room => room.Id == "R03").RawSqft,
+                Is.EqualTo(1436.2).Within(1e-6));
+            Assert.That(main.Rooms.Where(room => room.SplitFrom == "R07").Select(room => room.RawSqft),
+                Is.EqualTo(new[] { 408.0, 353.125 }).Within(1e-6));
+            var merged = main.Rooms.Single(room => room.Id == "R13");
+            Assert.That(merged.RawSqft, Is.EqualTo(1049.6).Within(1e-6));
+            Assert.That(merged.MergedFrom, Is.EqualTo("R09"));
+        });
+    }
+
+    [Test]
+    public void Chained_merges_compose_without_losing_the_first_source()
+    {
+        var level = new LevelTakeoff("L1", 0, new List<TakeoffRoomShape> {
+            Square("R01", 0, 0, 10),
+            Square("R02", 10, 0, 10),
+            Square("R03", 20, 0, 10),
+        });
+        var sidecar = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(sidecar, """
+                {
+                  "version": 2,
+                  "resolutions": [
+                    {
+                      "candidateKey": "L1:R01",
+                      "flag": "low-evidence-boundary",
+                      "action": "merge",
+                      "params": { "other": "L1:R02", "anchor": { "label": [15, 5], "sqft": 100 } },
+                      "anchor": { "label": [5, 5], "sqft": 100 }
+                    },
+                    {
+                      "candidateKey": "L1:R02",
+                      "flag": "low-evidence-boundary",
+                      "action": "merge",
+                      "params": { "other": "L1:R03", "anchor": { "label": [25, 5], "sqft": 100 } },
+                      "anchor": { "label": [15, 5], "sqft": 100 }
+                    }
+                  ]
+                }
+                """);
+
+            var result = RhvacCandidateBuilder.ApplyResolutions(new[] { level }, sidecar);
+
+            Assert.That((result.Applied, result.Remapped, result.Orphaned), Is.EqualTo((2, 0, 0)));
+            Assert.That(result.Levels.Single().Rooms.Select(room => (room.Id, room.RawSqft)),
+                Is.EqualTo(new[] { ("R03", 300.0) }));
+        }
+        finally
+        {
+            File.Delete(sidecar);
+        }
+    }
 
     [Test]
     public void ProjectA_simplification_preserves_area_and_collapses_staircases()

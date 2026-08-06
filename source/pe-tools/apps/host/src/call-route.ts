@@ -218,7 +218,9 @@ const decodeRequest = Effect.fnUntraced(function* <K extends TsOnlyOperationKey>
 ) {
   const schemas = tsOnlyOperationSchemas[key] as { request?: Schema.Codec<unknown> };
   if (!schemas.request) return {} as never;
-  return (yield* Schema.decodeUnknownEffect(schemas.request)(request ?? {}).pipe(
+  return (yield* Schema.decodeUnknownEffect(schemas.request, { onExcessProperty: "error" })(
+    request ?? {},
+  ).pipe(
     Effect.mapError((error) => new InvalidHostRequest(key, error.message)),
   )) as Schema.Schema.Type<RequestSchemaOf<K>>;
 });

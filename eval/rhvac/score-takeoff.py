@@ -109,7 +109,7 @@ def straightness(candidate_meta, candidate_flags):
 
 
 def apply_resolutions(takeoff, sidecar):
-    """Apply v1 key-only or v2 anchor-backed accept/split decisions with loss accounting."""
+    """Apply v1 key-only or v2 anchor-backed decisions with loss accounting."""
     if sidecar.get("version") not in (1, 2) or not isinstance(sidecar.get("resolutions"), list):
         raise SystemExit("resolutions sidecar must be version 1 or 2 with a resolutions array")
     floors, candidate_flags, candidate_meta = takeoff
@@ -121,46 +121,52 @@ def apply_resolutions(takeoff, sidecar):
     grouped = defaultdict(list)
     split_pieces = {}
     split_targets = set()
+    merge_sources = set()
+    merge_source_floors = {}
+    merged_by_target = {}
+
+    def resolve_candidate(key, anchor):
+        target = next(((floor, key) for floor, candidates in floors.items()
+                       if key in candidates), None)
+        if sidecar.get("version") == 1:
+            return target, False
+        if not anchor:
+            return None, False
+        point = Point(anchor["label"])
+        exact_valid = (target is not None and floors[target[0]][target[1]].contains(point)
+                       and abs(candidate_meta[target[1]]["sqft"] - anchor["sqft"])
+                       <= anchor["sqft"] * 0.2)
+        if exact_valid:
+            return target, False
+        level = key.rsplit(":", 1)[0] if isinstance(key, str) and ":" in key else ""
+        return next(((floor, candidate_key)
+                     for floor, candidates in floors.items()
+                     for candidate_key, polygon in candidates.items()
+                     if candidate_key.rsplit(":", 1)[0] == level and polygon.contains(point)),
+                    None), True
 
     for resolution in sidecar.get("resolutions", []):
         action = resolution.get("action")
         if not resolution.get("candidateKey") or not resolution.get("flag"):
             raise SystemExit("each resolution requires candidateKey and flag")
-        if action not in ("accept", "split"):
+        if action not in ("accept", "split", "reject", "merge"):
             raise SystemExit(f"unknown resolution action: {action}")
         touches[action] += 1
         key = resolution.get("candidateKey")
-        anchor = resolution.get("anchor") if sidecar.get("version") == 2 else None
-        if sidecar.get("version") == 2 and not anchor:
-            accounting["orphaned"] += 1
-            continue
-        target = next(((floor, key) for floor, candidates in floors.items() if key in candidates), None)
-        was_remapped = False
-        if anchor:
-            point = Point(anchor["label"])
-            exact_valid = (target is not None and floors[target[0]][target[1]].contains(point)
-                           and abs(candidate_meta[target[1]]["sqft"] - anchor["sqft"])
-                           <= anchor["sqft"] * 0.2)
-            if not exact_valid:
-                level = key.rsplit(":", 1)[0] if isinstance(key, str) and ":" in key else ""
-                target = next(((floor, candidate_key)
-                               for floor, candidates in floors.items()
-                               for candidate_key, polygon in candidates.items()
-                               if candidate_key.rsplit(":", 1)[0] == level and polygon.contains(point)), None)
-                was_remapped = target is not None
-        if target is None:
+        source, was_remapped = resolve_candidate(key, resolution.get("anchor"))
+        if source is None:
             accounting["orphaned"] += 1
             continue
 
-        floor, target_key = target
+        floor, source_key = source
         if action == "split":
-            if target_key in split_targets:
+            if source_key in split_targets:
                 accounting["orphaned"] += 1
                 continue
             params = resolution.get("params") or {}
             try:
                 pieces = [piece for piece in split_polygon(
-                    floors[floor][target_key], LineString([params["a"], params["b"]])).geoms
+                    floors[floor][source_key], LineString([params["a"], params["b"]])).geoms
                           if isinstance(piece, Polygon) and piece.area >= 1]
             except (KeyError, TypeError, ValueError):
                 pieces = []
@@ -168,16 +174,71 @@ def apply_resolutions(takeoff, sidecar):
                 accounting["orphaned"] += 1
                 continue
             pieces.sort(key=lambda piece: (-piece.area, piece.centroid.x, piece.centroid.y))
-            split_targets.add(target_key)
-            split_pieces[target_key] = pieces
+            split_targets.add(source_key)
+            split_pieces[source_key] = pieces
+        elif action == "merge":
+            params = resolution.get("params") or {}
+            if not params.get("other") or not params.get("anchor"):
+                raise SystemExit("merge params require other and anchor")
+            survivor, survivor_remapped = resolve_candidate(
+                params["other"], params["anchor"])
+            if (survivor is None or survivor == source or survivor[0] != floor
+                    or source_key in merge_sources or survivor[1] in merge_sources):
+                accounting["orphaned"] += 1
+                continue
+            source_state = merged_by_target.get(source_key, {
+                "polygon": floors[floor][source_key],
+                "flags": set(candidate_flags[source_key]),
+                "sqft": candidate_meta[source_key]["sqft"],
+            })
+            survivor_state = merged_by_target.get(survivor[1], {
+                "polygon": floors[survivor[0]][survivor[1]],
+                "flags": set(candidate_flags[survivor[1]]),
+                "sqft": candidate_meta[survivor[1]]["sqft"],
+            })
+            merged = source_state["polygon"].union(survivor_state["polygon"])
+            if not isinstance(merged, Polygon):
+                accounting["orphaned"] += 1
+                continue
+            merge_sources.add(source_key)
+            merge_source_floors[source_key] = floor
+            merged_by_target.pop(source_key, None)
+            merged_by_target[survivor[1]] = {
+                "floor": survivor[0],
+                "polygon": merged,
+                "flags": (survivor_state["flags"]
+                          | (source_state["flags"] - {resolution["flag"]})),
+                "sqft": survivor_state["sqft"] + source_state["sqft"],
+            }
+            was_remapped = was_remapped or survivor_remapped
 
-        grouped[(floor, target_key)].append(resolution)
+        if action != "merge":
+            grouped[(floor, source_key)].append(resolution)
         accounting["remapped" if was_remapped else "applied"] += 1
 
+    for source_key in merge_sources:
+        del floors[merge_source_floors[source_key]][source_key]
+        candidate_flags.pop(source_key, None)
+        candidate_meta.pop(source_key, None)
+    for target_key, state in merged_by_target.items():
+        floors[state["floor"]][target_key] = state["polygon"]
+        candidate_flags[target_key] = state["flags"]
+        candidate_meta[target_key] = {
+            **candidate_meta[target_key],
+            "sqft": state["sqft"],
+            "vertices": len(state["polygon"].exterior.coords) - 1,
+        }
+
     for (floor, target_key), resolutions in grouped.items():
+        if target_key not in floors[floor]:
+            continue
         accepted = {resolution["flag"] for resolution in resolutions
                     if resolution["action"] == "accept"}
         flags = candidate_flags.pop(target_key, set()) - accepted
+        if any(resolution["action"] == "reject" for resolution in resolutions):
+            del floors[floor][target_key]
+            candidate_meta.pop(target_key, None)
+            continue
         split = next((resolution for resolution in resolutions
                       if resolution["action"] == "split"), None)
         if split is None:
@@ -644,7 +705,7 @@ def main():
                     help="directory containing ink_<level>.bin for automatic overlays")
     ap.add_argument("--gate", action="store_true", help="exit nonzero when an absolute gate fails")
     ap.add_argument("--resolutions", default=None,
-                    help="apply accept/split decisions from a takeoff-resolutions.json sidecar")
+                    help="apply takeoff-resolutions.json decisions before scoring")
     ap.add_argument("--quiet", action="store_true")
     a = ap.parse_args()
 

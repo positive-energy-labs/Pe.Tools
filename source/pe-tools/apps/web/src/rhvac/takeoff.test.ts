@@ -371,6 +371,8 @@ describe("ambiguity flags + resolutions", () => {
         roomIds: string[];
         roomSqft: number[];
         roomLabels: [number, number][];
+        mergedFrom: string;
+        rejectedRoomId: string;
       };
     };
 
@@ -383,7 +385,7 @@ describe("ambiguity flags + resolutions", () => {
       applied: before.applied,
       remapped: before.remapped,
       orphaned: before.orphaned,
-    }).toEqual({ applied: 2, remapped: 0, orphaned: 1 });
+    }).toEqual({ applied: 4, remapped: 0, orphaned: 2 });
 
     const result = applyResolutions(
       [parseTakeoffTsv(fixture.afterTsv)],
@@ -395,12 +397,52 @@ describe("ambiguity flags + resolutions", () => {
       applied: result.applied,
       remapped: result.remapped,
       orphaned: result.orphaned,
-      roomIds: result.levels[0]!.rooms.map((room) => room.id),
-      roomSqft: result.levels[0]!.rooms.map((room) => room.rawSqft),
-      roomLabels: result.levels[0]!.rooms.map((room) => room.label),
+      roomIds: result.levels[0]!.rooms.filter((room) => !room.rejected).map((room) => room.id),
+      roomSqft: result.levels[0]!.rooms.filter((room) => !room.rejected).map(
+        (room) => room.rawSqft,
+      ),
+      roomLabels: result.levels[0]!.rooms.filter((room) => !room.rejected).map(
+        (room) => room.label,
+      ),
+      mergedFrom: result.levels[0]!.rooms.find((room) => room.id === "R01")!.mergedFrom,
+      rejectedRoomId: result.levels[0]!.rooms.find((room) => room.rejected)!.id,
     }).toEqual(fixture.expected);
     expect(result.applied + result.remapped + result.orphaned).toBe(
       fixture.sidecar.resolutions.length,
     );
+  });
+
+  it("composes chained merges without losing the first source", () => {
+    const level = parseTakeoffTsv(
+      "META\tlevel\tL1\nMETA\telev\t0\nMETA\trooms\t3\n" +
+        "ROOM\tR01\t100\t40\t5\t5\t9\nPOLY\tR01\touter\t0;0|10;0|10;10|0;10\n" +
+        "ROOM\tR02\t100\t40\t15\t5\t9\nPOLY\tR02\touter\t10;0|20;0|20;10|10;10\n" +
+        "ROOM\tR03\t100\t40\t25\t5\t9\nPOLY\tR03\touter\t20;0|30;0|30;10|20;10\n",
+    );
+    const result = applyResolutions(
+      [level],
+      [
+        {
+          candidateKey: "L1:R01",
+          flag: "low-evidence-boundary",
+          action: "merge",
+          params: { other: "L1:R02", anchor: { label: [15, 5], sqft: 100 } },
+          anchor: { label: [5, 5], sqft: 100 },
+        },
+        {
+          candidateKey: "L1:R02",
+          flag: "low-evidence-boundary",
+          action: "merge",
+          params: { other: "L1:R03", anchor: { label: [25, 5], sqft: 100 } },
+          anchor: { label: [15, 5], sqft: 100 },
+        },
+      ],
+      2,
+    );
+
+    expect(result).toMatchObject({ applied: 2, remapped: 0, orphaned: 0 });
+    expect(result.levels[0]!.rooms.map(({ id, rawSqft }) => ({ id, rawSqft }))).toEqual([
+      { id: "R03", rawSqft: 300 },
+    ]);
   });
 });

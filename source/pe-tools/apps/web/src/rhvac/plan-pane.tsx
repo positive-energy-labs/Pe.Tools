@@ -7,15 +7,16 @@
  *
  * Ambiguity flags (Partition formulation) get a distinct clay dashed state and
  * a "needs decision" queue: each flag resolves with one touch — accept, or for
- * open-plan-merge draw a split chord (two clicks on the boundary; the polygon
- * bisects deterministically). Levels arrive already resolved; this pane only
- * reports new resolutions upward.
+ * open-plan-merge draw a split chord (two clicks on the boundary). Reject is
+ * one touch; merge selects a survivor with one polygon click. Levels arrive
+ * already resolved; this pane only reports new resolutions upward.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "#/components/ui/button";
 import { fmtNum } from "#/rhvac/cells";
 import {
+  mergeShapes,
   nearestOnRing,
   pendingFlags,
   type FlagResolution,
@@ -58,6 +59,8 @@ interface SplitDraft {
   first: [number, number] | null;
 }
 
+type MergeDraft = Omit<SplitDraft, "first">;
+
 export interface PlanPaneProps {
   /** Already resolved — routes apply the resolutions sidecar before passing levels here. */
   takeoff: RhvacTakeoffData | null;
@@ -83,6 +86,7 @@ export function PlanPane(props: PlanPaneProps) {
   const [levelIndex, setLevelIndex] = useState(0);
   const [focusedFlagKey, setFocusedFlagKey] = useState<string | null>(null);
   const [splitDraft, setSplitDraft] = useState<SplitDraft | null>(null);
+  const [mergeDraft, setMergeDraft] = useState<MergeDraft | null>(null);
 
   const roomsById = useMemo(() => new Map(rooms.map((r) => [r.identifier, r])), [rooms]);
   const matchedIds = useMemo(() => new Set(matchByCandidate.values()), [matchByCandidate]);
@@ -115,6 +119,7 @@ export function PlanPane(props: PlanPaneProps) {
 
   const beginSplit = (flag: PendingFlag) => {
     focusFlag(flag);
+    setMergeDraft(null);
     setSplitDraft({
       candidateKey: flag.candidateKey,
       levelIndex: flag.levelIndex,
@@ -125,8 +130,21 @@ export function PlanPane(props: PlanPaneProps) {
     });
   };
 
+  const beginMerge = (flag: PendingFlag) => {
+    focusFlag(flag);
+    setSplitDraft(null);
+    setMergeDraft({
+      candidateKey: flag.candidateKey,
+      levelIndex: flag.levelIndex,
+      roomId: flag.roomId,
+      flag: flag.flag,
+      anchor: flag.anchor,
+    });
+  };
+
   const resolve = (resolution: FlagResolution) => {
     setSplitDraft(null);
+    setMergeDraft(null);
     setFocusedFlagKey(null);
     props.onResolve(resolution);
   };
@@ -174,9 +192,20 @@ export function PlanPane(props: PlanPaneProps) {
           focusedId={focusedId}
           focusedFlagKey={focusedFlagKey}
           splitDraft={splitDraft?.levelIndex === levelIndex ? splitDraft : null}
+          mergeDraft={mergeDraft?.levelIndex === levelIndex ? mergeDraft : null}
           onPickRoom={props.onPickRoom}
           onPickFlagged={setFocusedFlagKey}
           onSplitPoint={onSplitPoint}
+          onMergeTarget={(other, anchor) => {
+            if (!mergeDraft || other === mergeDraft.candidateKey) return;
+            resolve({
+              candidateKey: mergeDraft.candidateKey,
+              flag: mergeDraft.flag,
+              action: "merge",
+              params: { other, anchor },
+              anchor: mergeDraft.anchor,
+            });
+          }}
         />
         {splitDraft && (
           <div className="absolute inset-x-2 bottom-2 flex items-center gap-2 rounded-[var(--radius)] border border-cat-clay/40 bg-background/95 px-2.5 py-1.5 shadow-sm">
@@ -189,6 +218,21 @@ export function PlanPane(props: PlanPaneProps) {
               variant="ghost"
               className="ml-auto"
               onClick={() => setSplitDraft(null)}
+            >
+              cancel
+            </Button>
+          </div>
+        )}
+        {mergeDraft && (
+          <div className="absolute inset-x-2 bottom-2 flex items-center gap-2 rounded-[var(--radius)] border border-cat-clay/40 bg-background/95 px-2.5 py-1.5 shadow-sm">
+            <span className="tele text-cat-clay">
+              merge {mergeDraft.roomId} into â€¦ click neighbor polygon
+            </span>
+            <Button
+              size="xs"
+              variant="ghost"
+              className="ml-auto"
+              onClick={() => setMergeDraft(null)}
             >
               cancel
             </Button>
@@ -213,11 +257,20 @@ export function PlanPane(props: PlanPaneProps) {
           recordedAgainstOlderDetection={props.recordedAgainstOlderDetection}
           onFocus={focusFlag}
           onBeginSplit={beginSplit}
+          onBeginMerge={beginMerge}
           onAccept={(flag) =>
             resolve({
               candidateKey: flag.candidateKey,
               flag: flag.flag,
               action: "accept",
+              anchor: flag.anchor,
+            })
+          }
+          onReject={(flag) =>
+            resolve({
+              candidateKey: flag.candidateKey,
+              flag: flag.flag,
+              action: "reject",
               anchor: flag.anchor,
             })
           }
@@ -273,7 +326,9 @@ function FlagQueue({
   recordedAgainstOlderDetection,
   onFocus,
   onBeginSplit,
+  onBeginMerge,
   onAccept,
+  onReject,
   onDownload,
   onReset,
 }: {
@@ -284,7 +339,9 @@ function FlagQueue({
   recordedAgainstOlderDetection: boolean;
   onFocus: (flag: PendingFlag) => void;
   onBeginSplit: (flag: PendingFlag) => void;
+  onBeginMerge: (flag: PendingFlag) => void;
   onAccept: (flag: PendingFlag) => void;
+  onReject: (flag: PendingFlag) => void;
   onDownload: () => void;
   onReset: () => void;
 }) {
@@ -322,8 +379,14 @@ function FlagQueue({
                 split
               </Button>
             )}
+            <Button size="xs" variant="outline" onClick={() => onBeginMerge(flag)}>
+              merge intoâ€¦
+            </Button>
             <Button size="xs" variant="ghost" onClick={() => onAccept(flag)}>
               {flag.flag === "open-plan-merge" ? "keep as one" : "accept"}
+            </Button>
+            <Button size="xs" variant="ghost" onClick={() => onReject(flag)}>
+              reject
             </Button>
           </li>
         ))}
@@ -371,9 +434,11 @@ function LevelSvg({
   focusedId,
   focusedFlagKey,
   splitDraft,
+  mergeDraft,
   onPickRoom,
   onPickFlagged,
   onSplitPoint,
+  onMergeTarget,
 }: {
   level: TakeoffLevel;
   roomsById: ReadonlyMap<number, RhvacRoom>;
@@ -381,9 +446,11 @@ function LevelSvg({
   focusedId: number | null;
   focusedFlagKey: string | null;
   splitDraft: SplitDraft | null;
+  mergeDraft: MergeDraft | null;
   onPickRoom: (identifier: number) => void;
   onPickFlagged: (candidateKey: string) => void;
   onSplitPoint: (point: [number, number]) => void;
+  onMergeTarget: (candidateKey: string, anchor: NonNullable<FlagResolution["anchor"]>) => void;
 }) {
   const bounds = useMemo(() => levelBounds(level), [level]);
   const initial = useMemo(() => (bounds ? fitView(bounds) : null), [bounds]);
@@ -495,7 +562,10 @@ function LevelSvg({
     <svg
       ref={svgRef}
       viewBox={`${v.x} ${v.y} ${v.w} ${v.h}`}
-      className={cn("size-full touch-none bg-card", splitDraft && "cursor-crosshair")}
+      className={cn(
+        "size-full touch-none bg-card",
+        (splitDraft || mergeDraft) && "cursor-crosshair",
+      )}
       preserveAspectRatio="xMidYMid meet"
       onPointerDown={onPointerDown}
       onClick={onSvgClick}
@@ -507,28 +577,39 @@ function LevelSvg({
         const selected =
           (identifier !== undefined && identifier === focusedId) ||
           (flagged && key === focusedFlagKey);
-        const stroke = selected
-          ? flagged
-            ? "var(--cat-clay)"
-            : "var(--primary)"
-          : flagged
-            ? "var(--cat-clay)"
-            : room
-              ? "var(--cat-blue)"
-              : "var(--cat-kiln)";
-        const fill = selected
-          ? `color-mix(in srgb, ${flagged ? "var(--cat-clay)" : "var(--primary)"} 28%, transparent)`
-          : flagged
-            ? "color-mix(in srgb, var(--cat-clay) 12%, transparent)"
-            : room
-              ? "color-mix(in srgb, var(--cat-blue) 12%, transparent)"
-              : "color-mix(in srgb, var(--cat-kiln) 10%, transparent)";
+        const stroke = shape.rejected
+          ? "var(--muted-foreground)"
+          : selected
+            ? flagged
+              ? "var(--cat-clay)"
+              : "var(--primary)"
+            : flagged
+              ? "var(--cat-clay)"
+              : room
+                ? "var(--cat-blue)"
+                : "var(--cat-kiln)";
+        const fill = shape.rejected
+          ? "color-mix(in srgb, var(--muted-foreground) 8%, transparent)"
+          : selected
+            ? `color-mix(in srgb, ${flagged ? "var(--cat-clay)" : "var(--primary)"} 28%, transparent)`
+            : flagged
+              ? "color-mix(in srgb, var(--cat-clay) 12%, transparent)"
+              : room
+                ? "color-mix(in srgb, var(--cat-blue) 12%, transparent)"
+                : "color-mix(in srgb, var(--cat-kiln) 10%, transparent)";
         return (
           <g
             key={shape.id}
-            className={cn((identifier !== undefined || flagged) && "cursor-pointer")}
+            opacity={shape.rejected ? 0.35 : undefined}
+            className={cn((identifier !== undefined || flagged || mergeDraft) && "cursor-pointer")}
             onClick={() => {
               if (draggedRef.current || splitDraft) return;
+              if (mergeDraft) {
+                const source = level.rooms.find((room) => room.id === mergeDraft.roomId);
+                if (!source || !mergeShapes(source, shape, mergeDraft.flag)) return;
+                onMergeTarget(key, { label: shape.label, sqft: shape.rawSqft });
+                return;
+              }
               if (identifier !== undefined) onPickRoom(identifier);
               else if (flagged) onPickFlagged(key);
             }}

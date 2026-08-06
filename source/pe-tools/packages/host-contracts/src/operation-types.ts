@@ -655,13 +655,30 @@ export type RhvacTakeoffData = Schema.Schema.Type<typeof rhvacTakeoffDataSchema>
 
 export const rhvacPointSchema = Schema.Tuple([Schema.Number, Schema.Number]);
 
-export const rhvacTakeoffResolutionSchema = Schema.Struct({
-  candidateKey: Schema.String,
-  flag: Schema.String,
-  action: Schema.Literals(["accept", "split"]),
-  params: Schema.optional(Schema.Struct({ a: rhvacPointSchema, b: rhvacPointSchema })),
-  anchor: Schema.optional(Schema.Struct({ label: rhvacPointSchema, sqft: Schema.Number })),
-});
+const rhvacResolutionAnchorSchema = Schema.Struct({ label: rhvacPointSchema, sqft: Schema.Number });
+
+export const rhvacTakeoffResolutionSchema = Schema.Union([
+  Schema.Struct({
+    candidateKey: Schema.String,
+    flag: Schema.String,
+    action: Schema.Literals(["accept", "reject"]),
+    anchor: Schema.optional(rhvacResolutionAnchorSchema),
+  }),
+  Schema.Struct({
+    candidateKey: Schema.String,
+    flag: Schema.String,
+    action: Schema.Literals(["split"]),
+    params: Schema.optional(Schema.Struct({ a: rhvacPointSchema, b: rhvacPointSchema })),
+    anchor: Schema.optional(rhvacResolutionAnchorSchema),
+  }),
+  Schema.Struct({
+    candidateKey: Schema.String,
+    flag: Schema.String,
+    action: Schema.Literals(["merge"]),
+    params: Schema.Struct({ other: Schema.String, anchor: rhvacResolutionAnchorSchema }),
+    anchor: Schema.optional(rhvacResolutionAnchorSchema),
+  }),
+]);
 export type RhvacTakeoffResolution = Schema.Schema.Type<typeof rhvacTakeoffResolutionSchema>;
 
 export const rhvacResolutionsFileSchema = Schema.Struct({

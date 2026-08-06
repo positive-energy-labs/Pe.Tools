@@ -6,7 +6,8 @@
  * same parsed takeoff it always yields the same polygons, so it survives
  * reload and replays against re-runs. The C# candidate builder consumes the
  * same sidecar before .r10 export, so accepted flags and split polygons feed
- * candidate generation without changing the source TSVs.
+ * candidate generation without changing the source TSVs; rejected rooms stay
+ * in the web projection only so the operator can see conserved gray geometry.
  *
  * Persistence is localStorage per takeoff source plus downloadable JSON; the
  * `rhvac.takeoff-resolutions` host op (src/host/rhvac.ts) persists the same
@@ -23,7 +24,10 @@ export { sortRhvacResolutions as sortResolutions } from "@pe/host-contracts/oper
 // ── sidecar schema ───────────────────────────────────────────────────────────
 
 /** Split chord endpoints, model coordinates (feet, Y up — the TSV frame). */
-export type SplitParams = NonNullable<RhvacTakeoffResolution["params"]>;
+export type SplitParams = NonNullable<
+  Extract<RhvacTakeoffResolution, { action: "split" }>["params"]
+>;
+export type MergeParams = Extract<RhvacTakeoffResolution, { action: "merge" }>["params"];
 export type FlagResolution = RhvacTakeoffResolution;
 export type ResolutionsFile = RhvacResolutionsFile;
 
@@ -69,66 +73,117 @@ export function applyResolutions(
   );
   const byKey = new Map<string, FlagResolution[]>();
   const splitTargets = new Set<string>();
+  const mergeSources = new Set<string>();
+  const mergedByTarget = new Map<string, TakeoffRoomShape>();
   let applied = 0;
   let remapped = 0;
   let orphaned = 0;
-  for (const resolution of resolutions) {
-    const exact = rooms.find((candidate) => candidate.key === resolution.candidateKey);
-    let target = exact;
-    let wasRemapped = false;
-    if (version === 2 && !resolution.anchor) {
-      orphaned++;
-      continue;
-    }
-    if (version === 2) {
-      const validExact =
-        exact &&
-        pointInShape(resolution.anchor!.label, exact.room) &&
-        Math.abs(exact.room.rawSqft - resolution.anchor!.sqft) <= resolution.anchor!.sqft * 0.2;
-      if (!validExact) {
-        const separator = resolution.candidateKey.lastIndexOf(":");
-        const levelName = separator < 0 ? "" : resolution.candidateKey.slice(0, separator);
-        target = rooms.find(
-          (candidate) =>
-            candidate.levelName === levelName &&
-            pointInShape(resolution.anchor!.label, candidate.room),
-        );
-        wasRemapped = Boolean(target);
-      }
-    }
-    if (!target) {
-      orphaned++;
-      continue;
-    }
+
+  const resolveCandidate = (
+    key: string,
+    anchor: FlagResolution["anchor"],
+  ): { target: (typeof rooms)[number] | undefined; remapped: boolean } => {
+    const exact = rooms.find((candidate) => candidate.key === key);
+    if (version === 1) return { target: exact, remapped: false };
+    if (!anchor) return { target: undefined, remapped: false };
     if (
-      resolution.action === "split" &&
-      (!resolution.params ||
-        splitTargets.has(target.key) ||
-        !splitShape(target.room, resolution.params.a, resolution.params.b))
-    ) {
+      exact &&
+      pointInShape(anchor.label, exact.room) &&
+      Math.abs(exact.room.rawSqft - anchor.sqft) <= anchor.sqft * 0.2
+    )
+      return { target: exact, remapped: false };
+    const separator = key.lastIndexOf(":");
+    const levelName = separator < 0 ? "" : key.slice(0, separator);
+    return {
+      target: rooms.find(
+        (candidate) =>
+          candidate.levelName === levelName && pointInShape(anchor.label, candidate.room),
+      ),
+      remapped: true,
+    };
+  };
+
+  for (const resolution of resolutions) {
+    const sourceResolution = resolveCandidate(resolution.candidateKey, resolution.anchor);
+    const sourceCandidate = sourceResolution.target;
+    if (!sourceCandidate) {
       orphaned++;
       continue;
     }
-    if (resolution.action === "split") splitTargets.add(target.key);
-    if (wasRemapped) remapped++;
+
+    if (resolution.action === "split") {
+      const params = resolution.params;
+      if (
+        !params ||
+        splitTargets.has(sourceCandidate.key) ||
+        !splitShape(sourceCandidate.room, params.a, params.b)
+      ) {
+        orphaned++;
+        continue;
+      }
+      splitTargets.add(sourceCandidate.key);
+    } else if (resolution.action === "merge") {
+      const survivorResolution = resolveCandidate(
+        resolution.params.other,
+        resolution.params.anchor,
+      );
+      const survivor = survivorResolution.target;
+      if (
+        !survivor ||
+        survivor.key === sourceCandidate.key ||
+        survivor.levelName !== sourceCandidate.levelName ||
+        mergeSources.has(sourceCandidate.key) ||
+        mergeSources.has(survivor.key)
+      ) {
+        orphaned++;
+        continue;
+      }
+      const merged = mergeShapes(
+        mergedByTarget.get(sourceCandidate.key) ?? sourceCandidate.room,
+        mergedByTarget.get(survivor.key) ?? survivor.room,
+        resolution.flag,
+      );
+      if (!merged) {
+        orphaned++;
+        continue;
+      }
+      mergeSources.add(sourceCandidate.key);
+      mergedByTarget.delete(sourceCandidate.key);
+      mergedByTarget.set(survivor.key, merged);
+      if (survivorResolution.remapped) sourceResolution.remapped = true;
+    }
+
+    if (sourceResolution.remapped) remapped++;
     else applied++;
-    const list = byKey.get(target.key) ?? [];
+    if (resolution.action === "merge") continue;
+    const list = byKey.get(sourceCandidate.key) ?? [];
     list.push(resolution);
-    byKey.set(target.key, list);
+    byKey.set(sourceCandidate.key, list);
   }
 
   const resolved = levels.map((level) => ({
     ...level,
     rooms: level.rooms.flatMap((room) => {
-      const forRoom = byKey.get(candidateKey(level.levelName, room.id));
-      if (!forRoom) return [room];
+      const key = candidateKey(level.levelName, room.id);
+      if (mergeSources.has(key)) return [];
+      const input = mergedByTarget.get(key) ?? room;
+      const forRoom = byKey.get(key);
+      if (!forRoom) return [input];
 
       const accepted = new Set(forRoom.filter((r) => r.action === "accept").map((r) => r.flag));
-      const split = forRoom.find((r) => r.action === "split" && r.params);
-      const remaining = (room.flags ?? []).filter((f) => !accepted.has(f));
+      const rejected = forRoom.some((r) => r.action === "reject");
+      const split = forRoom.find(
+        (r): r is Extract<FlagResolution, { action: "split" }> => r.action === "split",
+      );
+      const remaining = (input.flags ?? []).filter((f) => !accepted.has(f));
 
-      if (split) {
-        const halves = splitShape(room, split.params!.a, split.params!.b);
+      if (rejected) {
+        const { flags: _dropped, ...rest } = input;
+        return [{ ...rest, rejected: true }];
+      }
+
+      if (split?.params) {
+        const halves = splitShape(input, split.params.a, split.params.b);
         if (halves) {
           const childFlags = remaining.filter((f) => f !== split.flag);
           return halves.map((half) => ({
@@ -137,8 +192,8 @@ export function applyResolutions(
           }));
         }
       }
-      if (remaining.length === (room.flags?.length ?? 0)) return [room];
-      const { flags: _dropped, ...rest } = room;
+      if (remaining.length === (input.flags?.length ?? 0)) return [input];
+      const { flags: _dropped, ...rest } = input;
       return [remaining.length > 0 ? { ...rest, flags: remaining } : rest];
     }),
   }));
@@ -167,12 +222,137 @@ const ringPerimeter = (ring: [number, number][]): number => {
   return sum;
 };
 
+interface DirectedSegment {
+  a: [number, number];
+  b: [number, number];
+}
+
+const snapPoint = (point: readonly [number, number]): [number, number] =>
+  point.map((value) => Math.round(value * 1e6) / 1e6) as [number, number];
+const pointKey = (point: readonly [number, number]): string => snapPoint(point).join(",");
+
+const pointOnSegment = (point: [number, number], segment: DirectedSegment): boolean => {
+  const dx = segment.b[0] - segment.a[0];
+  const dy = segment.b[1] - segment.a[1];
+  const px = point[0] - segment.a[0];
+  const py = point[1] - segment.a[1];
+  return (
+    Math.abs(dx * py - dy * px) <= 1e-6 * Math.max(1, Math.hypot(dx, dy)) &&
+    px * dx + py * dy >= -1e-6 &&
+    px * dx + py * dy <= dx * dx + dy * dy + 1e-6
+  );
+};
+
+/** Union two adjacent, non-overlapping detector polygons by cancelling their shared boundary. */
+export function mergeShapes(
+  source: TakeoffRoomShape,
+  target: TakeoffRoomShape,
+  resolvedFlag: string,
+): TakeoffRoomShape | null {
+  const edges = [source.outer, target.outer].flatMap((ring) =>
+    ring.map((point, index) => ({
+      a: snapPoint(point),
+      b: snapPoint(ring[(index + 1) % ring.length]!),
+    })),
+  );
+  const endpoints = edges.flatMap((edge) => [edge.a, edge.b]);
+  const pieces: DirectedSegment[] = [];
+  // ponytail: O(n^2) endpoint noding is fine for two room rings; use a clipping
+  // library if resolutions ever merge large arbitrary polygon sets.
+  for (const edge of edges) {
+    const dx = edge.b[0] - edge.a[0];
+    const dy = edge.b[1] - edge.a[1];
+    const cuts = [
+      ...new Map(
+        endpoints
+          .filter((point) => pointOnSegment(point, edge))
+          .map((point) => [pointKey(point), point] as const),
+      ).values(),
+    ].sort((a, b) =>
+      Math.abs(dx) >= Math.abs(dy)
+        ? (a[0] - edge.a[0]) / dx - (b[0] - edge.a[0]) / dx
+        : (a[1] - edge.a[1]) / dy - (b[1] - edge.a[1]) / dy,
+    );
+    for (let index = 0; index < cuts.length - 1; index++)
+      if (pointKey(cuts[index]!) !== pointKey(cuts[index + 1]!))
+        pieces.push({ a: cuts[index]!, b: cuts[index + 1]! });
+  }
+
+  const grouped = new Map<string, DirectedSegment[]>();
+  for (const piece of pieces) {
+    const a = pointKey(piece.a);
+    const b = pointKey(piece.b);
+    const key = a < b ? `${a}|${b}` : `${b}|${a}`;
+    grouped.set(key, [...(grouped.get(key) ?? []), piece]);
+  }
+  const boundary: DirectedSegment[] = [];
+  let shared = false;
+  for (const group of grouped.values()) {
+    if (group.length === 1) boundary.push(group[0]!);
+    else if (
+      group.length === 2 &&
+      pointKey(group[0]!.a) === pointKey(group[1]!.b) &&
+      pointKey(group[0]!.b) === pointKey(group[1]!.a)
+    )
+      shared = true;
+    else return null;
+  }
+  if (!shared) return null;
+
+  const outgoing = new Map<string, number[]>();
+  boundary.forEach((edge, index) =>
+    outgoing.set(pointKey(edge.a), [...(outgoing.get(pointKey(edge.a)) ?? []), index]),
+  );
+  const unused = new Set(boundary.map((_, index) => index));
+  const loops: [number, number][][] = [];
+  while (unused.size > 0) {
+    const first = unused.values().next().value as number;
+    const start = pointKey(boundary[first]!.a);
+    const loop: [number, number][] = [boundary[first]!.a];
+    let index = first;
+    let closed = false;
+    for (let step = 0; step <= boundary.length; step++) {
+      if (!unused.delete(index)) return null;
+      const edge = boundary[index]!;
+      const end = pointKey(edge.b);
+      if (end === start) {
+        closed = true;
+        break;
+      }
+      loop.push(edge.b);
+      const next = (outgoing.get(end) ?? []).filter((candidate) => unused.has(candidate));
+      if (next.length !== 1) return null;
+      index = next[0]!;
+    }
+    if (!closed) return null;
+    loops.push(loop);
+  }
+  if (loops.length !== 1 || loops[0]!.length < 3) return null;
+  const outer = ringArea(loops[0]!) > 0 ? loops[0]! : [...loops[0]!].reverse();
+  const flags = [
+    ...new Set([
+      ...(target.flags ?? []),
+      ...(source.flags ?? []).filter((f) => f !== resolvedFlag),
+    ]),
+  ].sort();
+  return {
+    ...target,
+    rawSqft: source.rawSqft + target.rawSqft,
+    perimeterFt: ringPerimeter(outer),
+    outer,
+    holes: [...target.holes, ...source.holes],
+    ...(flags.length > 0 ? { flags } : {}),
+    mergedFrom: source.mergedFrom ?? source.id,
+  };
+}
+
 const pointInRing = (p: readonly [number, number], ring: [number, number][]): boolean => {
   let inside = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
     const [xi, yi] = ring[i]!;
     const [xj, yj] = ring[j]!;
-    if (yi > p[1] !== yj > p[1] && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi) inside = true;
+    if (yi > p[1] !== yj > p[1] && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi)
+      inside = !inside;
   }
   return inside;
 };
@@ -327,17 +507,18 @@ export interface PendingFlag {
 /** Flags still awaiting a decision, in level order then area-descending (room order). */
 export function pendingFlags(levels: TakeoffLevel[]): PendingFlag[] {
   return levels.flatMap((level, levelIndex) =>
-    level.rooms.flatMap(
-      (room) =>
-        room.flags?.map((flag) => ({
-          levelName: level.levelName,
-          levelIndex,
-          roomId: room.id,
-          candidateKey: candidateKey(level.levelName, room.id),
-          flag,
-          rawSqft: room.rawSqft,
-          anchor: { label: room.label, sqft: room.rawSqft },
-        })) ?? [],
+    level.rooms.flatMap((room) =>
+      room.rejected
+        ? []
+        : (room.flags?.map((flag) => ({
+            levelName: level.levelName,
+            levelIndex,
+            roomId: room.id,
+            candidateKey: candidateKey(level.levelName, room.id),
+            flag,
+            rawSqft: room.rawSqft,
+            anchor: { label: room.label, sqft: room.rawSqft },
+          })) ?? []),
     ),
   );
 }
