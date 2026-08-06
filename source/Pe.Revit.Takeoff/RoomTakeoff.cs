@@ -254,10 +254,15 @@ public static class RoomTakeoff
     {
         string tsv = Path.Combine(ArtifactDir(opt), $"rooms_{Sanitize(level.Name)}.tsv");
         if (!File.Exists(tsv)) throw new InvalidOperationException($"no detection result at {tsv} — run Detect first");
-        var result = new TakeoffResult { LevelName = level.Name, LevelElevation = level.ProjectElevation };
+        return LoadResult(File.ReadAllText(tsv), level.Name, level.ProjectElevation);
+    }
+
+    internal static TakeoffResult LoadResult(string tsv, string levelName, double levelElevation)
+    {
+        var result = new TakeoffResult { LevelName = levelName, LevelElevation = levelElevation };
         var rooms = new Dictionary<string, RoomResult>();
         var ic = CultureInfo.InvariantCulture;
-        foreach (var line in File.ReadAllLines(tsv))
+        foreach (var line in tsv.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries))
         {
             var p = line.Split('\t');
             if (p[0] == "ROOM")
@@ -279,6 +284,13 @@ public static class RoomTakeoff
                     return new[] { double.Parse(xy[0], ic), double.Parse(xy[1], ic) };
                 }).ToList();
                 if (p[2] == "outer") room.Polygon = poly; else room.Holes.Add(poly);
+            }
+            else if (p.Length == 3 && p[0] == "META" && p[1] == "flag")
+            {
+                int separator = p[2].IndexOf(':');
+                if (separator > 0 && rooms.TryGetValue(p[2][..separator], out var flagged))
+                    flagged.Flags.AddRange(p[2][(separator + 1)..]
+                        .Split(new[] { '+' }, StringSplitOptions.RemoveEmptyEntries));
             }
         }
         return result;

@@ -72,7 +72,7 @@ internal static class SpaceMaterializer
             space.BaseOffset = 0;
             space.UpperLimit = level;
             space.LimitOffset = room.MeanCeilingFt;
-            Stamp(space, token + "|" + room.Id);
+            Stamp(space, SpaceComments(token, room));
             ids.Add(space.Id);
         }
         doc.Regenerate();
@@ -256,6 +256,11 @@ internal static class SpaceMaterializer
 
     private static string? Comments(Element element) =>
         element.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS)?.AsString();
+
+    internal static string SpaceComments(string token, RoomResult room) =>
+        token + "|" + room.Id + (room.Flags.Count > 0
+            ? "\npe-takeoff: " + string.Join(", ", room.Flags)
+            : "");
 
     private static void Stamp(Element element, string value)
     {
