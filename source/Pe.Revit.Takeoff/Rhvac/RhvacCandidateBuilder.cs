@@ -155,8 +155,10 @@ public static class RhvacCandidateBuilder
                 throw new InvalidDataException($"Room {room.Id}: outer loop is not CCW (contract violation).");
             // The area scalar and the polygon are redundant truth; a drift means a corrupt or
             // stale TSV, and every downstream metric would silently grade the wrong geometry.
+            // RawSqft stays the exact cell-count truth while a regularized polygon may diverge
+            // up to TakeoffOptions.RegularizeAreaTolerancePct (3%); gate at that contract + slack.
             var polyArea = outerArea - room.Holes.Sum(hole => Math.Abs(SignedArea(hole)));
-            if (Math.Abs(polyArea - room.RawSqft) > Math.Max(2.0, room.RawSqft * 0.02))
+            if (Math.Abs(polyArea - room.RawSqft) > Math.Max(2.0, room.RawSqft * 0.035))
                 throw new InvalidDataException(
                     $"Room {room.Id}: RawSqft {room.RawSqft:F1} disagrees with polygon area {polyArea:F1}."
                 );

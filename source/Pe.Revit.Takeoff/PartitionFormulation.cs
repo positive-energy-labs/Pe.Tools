@@ -232,7 +232,7 @@ internal static class PartitionFormulation
             result.Rooms.Add(room);
         }
         SpaceBoundaryNetwork.Regularize(
-            result.Rooms, opt.CellFt, opt.BoundarySimplifyFt,
+            result.Rooms, opt.CellFt, opt.BoundarySimplifyFt, opt.RegularizeAreaTolerancePct,
             InkSupport.CreateOracle(W, H, hf.MinX, hf.MinY, opt.CellFt, seedInk, 3 * opt.CellFt), log);
         result.TotalSqft = result.Rooms.Sum(room => room.RawSqft);
         return result;

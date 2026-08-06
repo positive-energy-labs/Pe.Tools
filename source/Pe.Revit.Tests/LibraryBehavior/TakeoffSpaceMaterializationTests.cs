@@ -35,7 +35,7 @@ public sealed class TakeoffSpaceMaterializationTests
         };
 
         var rooms = new[] { Room("A", stairSteppedTrapezoid) };
-        SpaceBoundaryNetwork.Regularize(rooms, 1, 1, (_, _) => false);
+        SpaceBoundaryNetwork.Regularize(rooms, 1, 1, 3, (_, _) => false);
         var actual = SpaceBoundaryNetwork.Build(rooms);
 
         Assert.Multiple(() => {
@@ -55,7 +55,7 @@ public sealed class TakeoffSpaceMaterializationTests
                 new[] { 5d, 8 }, new[] { 6d, 8 }, new[] { 6d, 2 }, new[] { 5d, 2 }]),
         };
 
-        SpaceBoundaryNetwork.Regularize(rooms, 1, 1, (_, _) => false);
+        SpaceBoundaryNetwork.Regularize(rooms, 1, 1, 3, (_, _) => false);
         var actual = SpaceBoundaryNetwork.Build(rooms);
 
         Assert.That(actual, Has.One.Matches<BoundaryCurve>(line =>
@@ -69,7 +69,7 @@ public sealed class TakeoffSpaceMaterializationTests
     public void Free_seams_emit_axis_aligned_connectors_not_diagonals()
     {
         var rooms = DiagonalSeamRooms();
-        SpaceBoundaryNetwork.Regularize(rooms, 1, 1, (_, _) => false, TestContext.WriteLine);
+        SpaceBoundaryNetwork.Regularize(rooms, 1, 1, 3, (_, _) => false, TestContext.WriteLine);
         var actual = SpaceBoundaryNetwork.Build(rooms);
 
         Assert.Multiple(() => {
@@ -85,7 +85,7 @@ public sealed class TakeoffSpaceMaterializationTests
     public void Supported_offaxis_walls_stay_raw_and_flag_rooms_unregularized()
     {
         var rooms = DiagonalSeamRooms();
-        SpaceBoundaryNetwork.Regularize(rooms, 1, 1, (_, _) => true, TestContext.WriteLine);
+        SpaceBoundaryNetwork.Regularize(rooms, 1, 1, 3, (_, _) => true, TestContext.WriteLine);
 
         Assert.That(rooms.SelectMany(room => room.Flags), Does.Contain("unregularized"));
     }

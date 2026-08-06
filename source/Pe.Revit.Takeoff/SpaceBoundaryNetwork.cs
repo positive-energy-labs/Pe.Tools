@@ -69,8 +69,11 @@ internal static class SpaceBoundaryNetwork
     {
         public readonly List<BoundaryCurve> Curves = [];
         public readonly List<string> Tags = [];
-        public bool Dirty;
+        public readonly HashSet<string> DirtyCauses = new(StringComparer.Ordinal);
+        public bool Dirty => this.DirtyCauses.Count > 0;
         public bool RuledSeam;
+
+        public void Fail(string cause) => this.DirtyCauses.Add(cause);
 
         public void Line(Point a, Point b, string tag)
         {
@@ -106,12 +109,14 @@ internal static class SpaceBoundaryNetwork
     }
 
     internal static void Regularize(
-        IReadOnlyList<RoomResult> rooms, double cellFt, double simplifyFt,
+        IReadOnlyList<RoomResult> rooms, double cellFt, double simplifyFt, double areaTolerancePct,
         Func<double, double, bool> inkNear, Action<string>? log = null)
     {
         if (!IsFinite(cellFt) || cellFt <= 0) throw new ArgumentOutOfRangeException(nameof(cellFt));
         if (!IsFinite(simplifyFt) || simplifyFt < 0)
             throw new ArgumentOutOfRangeException(nameof(simplifyFt));
+        if (!IsFinite(areaTolerancePct) || areaTolerancePct < 0)
+            throw new ArgumentOutOfRangeException(nameof(areaTolerancePct));
 
         var paths = TracePaths(rooms, cellFt);
         if (paths.Count == 0) return;
@@ -138,6 +143,10 @@ internal static class SpaceBoundaryNetwork
             emitters.Add((path, em));
         }
         ClassifyOffAxis(emitters, axes, inkNear, log);
+        foreach (var (path, em) in emitters.Where(item => item.Em.Dirty))
+            log?.Invoke($"[network] dirty-path causes={string.Join("+", em.DirtyCauses.Order())} " +
+                        $"rooms={string.Join("+", path.Rooms.Order())} rawPoints={path.Raw.Count} " +
+                        $"fitSegments={path.Lines.Length}");
 
         int regularized = 0, unregularized = 0;
         double maxDrift = 0, maxDriftFrac = 0;
@@ -148,17 +157,25 @@ internal static class SpaceBoundaryNetwork
             var owned = emitters.Where(item => item.Path.Rooms.Contains(room.Id)).ToList();
             if (owned.Any(item => item.Em.RuledSeam)) AddFlag(room, "ruled-seam");
             string reason;
+            string detail = "";
             List<List<Point>>? loops;
             if (owned.Any(item => item.Em.Dirty)) { reason = "dirty-path"; loops = null; }
             else
             {
-                loops = TraceLoops(owned.SelectMany(item => item.Em.Curves));
+                loops = TraceLoops(owned.SelectMany(item => item.Em.Curves), out detail);
                 reason = loops == null ? "loop-trace" : "";
             }
-            if (loops == null || !TryApplyRegularizedLoops(room, loops, out double drift, out reason))
+            double drift = 0;
+            if (loops == null || !TryApplyRegularizedLoops(
+                    room, loops, areaTolerancePct, out drift, out reason))
             {
                 AddFlag(room, "unregularized");
                 fallbacks[reason] = fallbacks.GetValueOrDefault(reason) + 1;
+                if (reason == "loop-trace")
+                    log?.Invoke($"[network] loop-trace room={room.Id} {detail}");
+                else if (reason == "area-guard")
+                    log?.Invoke($"[network] area-guard room={room.Id} raw={rawSqft:F6}sf " +
+                                $"drift={drift:F6}sf/{drift / rawSqft:P6}");
                 unregularized++;
                 continue;
             }
@@ -171,11 +188,15 @@ internal static class SpaceBoundaryNetwork
             (Math.Atan2(axis.Y, axis.X) * 180 / Math.PI).ToString("F1", CultureInfo.InvariantCulture)));
         string fallbackCensus = string.Join(",", fallbacks.OrderBy(pair => pair.Key)
             .Select(pair => $"{pair.Key}:{pair.Value}"));
+        string dirtyCauseCensus = string.Join(",", emitters.Where(item => item.Em.Dirty)
+            .SelectMany(item => item.Em.DirtyCauses).GroupBy(cause => cause, StringComparer.Ordinal)
+            .OrderBy(group => group.Key).Select(group => $"{group.Key}:{group.Count()}"));
         log?.Invoke($"[network] paths={paths.Count} axes={axes.Count}({axisAngles}deg) wallLines={wallLines} " +
                     $"freeRuns={stats.FreeRuns} straightSeams={stats.StraightSeams} " +
                     $"cornerSeams={stats.CornerSeams} unresolvedRuns={stats.UnresolvedRuns} " +
                     $"regularized={regularized} unregularized={unregularized} " +
-                    $"fallbacks={fallbackCensus} maxAreaDrift={maxDrift:F6}sf/{maxDriftFrac:P6}");
+                    $"fallbacks={fallbackCensus} dirtyPathCauses={dirtyCauseCensus} " +
+                    $"maxAreaDrift={maxDrift:F6}sf/{maxDriftFrac:P6}");
     }
 
     private static void AddFlag(RoomResult room, string flag)
@@ -185,7 +206,8 @@ internal static class SpaceBoundaryNetwork
     }
 
     private static bool TryApplyRegularizedLoops(
-        RoomResult room, List<List<Point>> loops, out double drift, out string reason)
+        RoomResult room, List<List<Point>> loops, double areaTolerancePct,
+        out double drift, out string reason)
     {
         drift = 0;
         reason = "topology";
@@ -206,30 +228,35 @@ internal static class SpaceBoundaryNetwork
         double area = Math.Abs(Area(outer)) - holes.Sum(hole => Math.Abs(Area(hole)));
         if (area <= 0) return false;
         drift = Math.Abs(area - room.RawSqft);
-        if (drift > Math.Max(0.5, 0.01 * room.RawSqft))
+        if (drift > Math.Max(0.5, areaTolerancePct / 100 * room.RawSqft))
         { reason = "area-guard"; return false; }
 
         if (Area(outer) < 0) outer.Reverse();
         foreach (var hole in holes) if (Area(hole) > 0) hole.Reverse();
         room.Polygon = outer.Select(point => new[] { point.X, point.Y }).ToList();
         room.Holes = holes.Select(hole => hole.Select(point => new[] { point.X, point.Y }).ToList()).ToList();
-        room.RawSqft = area;
         room.PerimeterFt = Perimeter(outer);
         reason = "";
         return true;
     }
 
-    private static List<List<Point>>? TraceLoops(IEnumerable<BoundaryCurve> source)
+    private static List<List<Point>>? TraceLoops(IEnumerable<BoundaryCurve> source, out string failure)
     {
+        failure = "";
         var curves = source.ToList();
-        if (curves.Count == 0) return null;
+        if (curves.Count == 0) { failure = "no-curves"; return null; }
         var adjacency = new Dictionary<VertexKey, List<int>>();
         for (int i = 0; i < curves.Count; i++)
         {
             Add(Key(new Point(curves[i].X1, curves[i].Y1)), i);
             Add(Key(new Point(curves[i].X2, curves[i].Y2)), i);
         }
-        if (adjacency.Values.Any(edges => edges.Count != 2)) return null;
+        if (adjacency.Values.Any(edges => edges.Count != 2))
+        {
+            failure = "degrees=" + string.Join(",", adjacency.Values.GroupBy(edges => edges.Count)
+                .OrderBy(group => group.Key).Select(group => $"{group.Key}:{group.Count()}"));
+            return null;
+        }
 
         var unused = Enumerable.Range(0, curves.Count).ToHashSet();
         var loops = new List<List<Point>>();
@@ -242,16 +269,16 @@ internal static class SpaceBoundaryNetwork
             var loop = new List<Point>();
             while (true)
             {
-                if (!unused.Remove(edge)) return null;
+                if (!unused.Remove(edge)) { failure = "reused-edge"; return null; }
                 var curve = curves[edge];
                 var a = new Point(curve.X1, curve.Y1); var b = new Point(curve.X2, curve.Y2);
                 var ka = Key(a); var kb = Key(b);
                 if (current == ka) { loop.Add(a); current = kb; }
                 else if (current == kb) { loop.Add(b); current = ka; }
-                else return null;
+                else { failure = "disconnected-edge"; return null; }
                 if (current == start) break;
                 var next = adjacency[current].Where(unused.Contains).ToList();
-                if (next.Count != 1) return null;
+                if (next.Count != 1) { failure = $"continuations={next.Count}"; return null; }
                 edge = next[0];
             }
             loops.Add(loop);
@@ -264,7 +291,6 @@ internal static class SpaceBoundaryNetwork
             edges.Add(edge);
         }
     }
-
     private static List<Point> CollapseCollinear(List<Point> points)
     {
         var result = points.ToList();
@@ -838,11 +864,9 @@ internal static class SpaceBoundaryNetwork
                 // one uniform primitive around the whole loop: emit resolved fit segments
                 for (int i = 0; i < path.FitIndex.Count; i++)
                     em.Line(ResolvedAt(path, resolved, i), ResolvedAt(path, resolved, i + 1), "loop");
-                if (path.Lines[0] == null)
-                {
-                    stats.UnresolvedRuns++;
-                    em.Dirty = true;
-                }
+                // A closed free path is already a complete rectilinear loop (usually a tiny
+                // detector-owned hole whose short edges cannot vote for a consensus wall line).
+                // Preserve it exactly; unlike an open seam, it needs no invented connector.
                 return;
             }
         }
@@ -875,7 +899,7 @@ internal static class SpaceBoundaryNetwork
                 if (!EmitFreeRun(path, resolved, axes, inkNear, index, count, from, to, em, stats))
                 {
                     stats.UnresolvedRuns++;
-                    em.Dirty = true;
+                    em.Fail("free-run-deviation");
                 }
             }
             index = (index + count) % segments;
@@ -981,7 +1005,7 @@ internal static class SpaceBoundaryNetwork
                 else
                 {
                     isolated++;
-                    em.Dirty = true;
+                    em.Fail(supported ? "offaxis-short-run" : "offaxis-unsupported");
                     var c = em.Curves[start];
                     log?.Invoke($"[network] offaxis {em.Tags[start]} run={run} sup={(supported ? 1 : 0)} " +
                                 $"({c.X1:F1},{c.Y1:F1})->({c.X2:F1},{c.Y2:F1})");

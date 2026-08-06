@@ -245,8 +245,8 @@ public sealed class TakeoffReplayTests
                 "sliver dissolution must leave no under-min-area rooms");
         });
 
-        // Shared boundaries by construction: polygon areas tile the domain (sum of outer areas
-        // minus holes equals the domain area too, so adjacent outlines cannot overlap or gap).
+        // RawSqft above remains the exact partition conservation truth. Regularized geometry may
+        // drift only by its explicit per-room allowance; rooms beyond it revert to raw polygons.
         double Shoe(List<double[]> p)
         {
             double s = 0;
@@ -254,8 +254,9 @@ public sealed class TakeoffReplayTests
             { var a = p[i]; var b = p[(i + 1) % p.Count]; s += a[0] * b[1] - b[0] * a[1]; }
             return Math.Abs(s / 2);
         }
-        double polyArea = run.Rooms.Sum(r => Shoe(r.Polygon) - r.Holes.Sum(Shoe));
-        Assert.That(polyArea, Is.EqualTo(domainSqft).Within(1e-6));
+        Assert.That(run.Rooms, Has.All.Matches<RoomResult>(room =>
+            Math.Abs(Shoe(room.Polygon) - room.Holes.Sum(Shoe) - room.RawSqft)
+            <= Math.Max(0.5, new TakeoffOptions().RegularizeAreaTolerancePct / 100 * room.RawSqft) + 1e-6));
     }
 
     [Test]
@@ -378,7 +379,7 @@ public sealed class TakeoffReplayTests
             room => room.Polygon.SelectMany(point => point).ToArray(),
             StringComparer.Ordinal);
 
-        SpaceBoundaryNetwork.Regularize(rooms, 1, 1, (_, _) => true);
+        SpaceBoundaryNetwork.Regularize(rooms, 1, 1, 3, (_, _) => true);
 
         Assert.Multiple(() => {
             Assert.That(rooms.Select(room => room.Id), Is.EquivalentTo(before.Keys));
@@ -393,7 +394,7 @@ public sealed class TakeoffReplayTests
     {
         var rooms = DiagonalSeamRooms();
 
-        SpaceBoundaryNetwork.Regularize(rooms, 1, 1, (_, _) => true);
+        SpaceBoundaryNetwork.Regularize(rooms, 1, 1, 3, (_, _) => true);
 
         Assert.That(rooms, Has.All.Matches<RoomResult>(room => room.Flags.Contains("unregularized")));
     }
@@ -405,7 +406,7 @@ public sealed class TakeoffReplayTests
         room.RawSqft = 80;
         var raw = room.Polygon.Select(point => point.ToArray()).ToList();
 
-        SpaceBoundaryNetwork.Regularize([room], 1, 1, (_, _) => false);
+        SpaceBoundaryNetwork.Regularize([room], 1, 1, 3, (_, _) => false);
 
         Assert.Multiple(() => {
             Assert.That(room.Polygon.SelectMany(point => point), Is.EqualTo(raw.SelectMany(point => point)));
@@ -415,11 +416,49 @@ public sealed class TakeoffReplayTests
     }
 
     [Test]
+    public void Regularizer_area_tolerance_knob_distinguishes_one_from_three_percent()
+    {
+        RoomResult Candidate() => new() {
+            Id = "A", RawSqft = 98, LabelX = 5, LabelY = 5,
+            Polygon = [new[] { 0d, 0 }, new[] { 10d, 0 }, new[] { 10d, 10 }, new[] { 0d, 10 }],
+        };
+        var strict = Candidate();
+        var standard = Candidate();
+
+        SpaceBoundaryNetwork.Regularize([strict], 1, 1, 1, (_, _) => false);
+        SpaceBoundaryNetwork.Regularize(
+            [standard], 1, 1, new TakeoffOptions().RegularizeAreaTolerancePct, (_, _) => false);
+
+        Assert.Multiple(() => {
+            Assert.That(strict.RawSqft, Is.EqualTo(98));
+            Assert.That(strict.Flags, Does.Contain("unregularized"));
+            Assert.That(standard.RawSqft, Is.EqualTo(98), "cell-count area remains the conservation truth");
+            Assert.That(standard.Flags, Does.Not.Contain("unregularized"));
+        });
+    }
+
+    [Test]
+    public void Regularizer_preserves_short_closed_holes_without_failing_the_room()
+    {
+        var room = Room("A", [new[] { 0d, 0 }, new[] { 10d, 0 }, new[] { 10d, 10 }, new[] { 0d, 10 }]);
+        room.Holes = [[new[] { 4d, 4 }, new[] { 4d, 5 }, new[] { 5d, 5 }, new[] { 5d, 4 }]];
+        room.RawSqft = 99;
+
+        SpaceBoundaryNetwork.Regularize([room], 1, 1, 3, (_, _) => false);
+
+        Assert.Multiple(() => {
+            Assert.That(room.Flags, Does.Not.Contain("unregularized"));
+            Assert.That(room.Holes, Has.Count.EqualTo(1));
+            Assert.That(room.RawSqft, Is.EqualTo(99));
+        });
+    }
+
+    [Test]
     public void Regularizer_flags_ruled_seams_without_ink_support()
     {
         var rooms = DiagonalSeamRooms();
 
-        SpaceBoundaryNetwork.Regularize(rooms, 1, 1, (_, _) => false);
+        SpaceBoundaryNetwork.Regularize(rooms, 1, 1, 3, (_, _) => false);
 
         Assert.That(rooms.SelectMany(room => room.Flags), Does.Contain("ruled-seam"));
     }

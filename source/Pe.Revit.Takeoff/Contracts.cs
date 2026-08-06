@@ -58,6 +58,8 @@ public sealed class TakeoffOptions
     public double CeilingCloseFt = 0;       // close gaps <= this in the ceiling mask (rafter-only
                                             // roofs read patchy at framing stage; attic policy)
     public double BoundarySimplifyFt = 2.0; // physical wall-fit tolerance for raster boundary chains
+    public double RegularizeAreaTolerancePct = 3.0; // regularized polygon area may drift this percent;
+                                                    // absolute floor remains 0.5 sf
     public double BandPairSeparationFt = 0.75; // vertical-consistency AND: band A is also cut this
                                                // far BELOW KneeBandFt and only ink present in BOTH
                                                // cuts counts. Walls extrude vertically so they
