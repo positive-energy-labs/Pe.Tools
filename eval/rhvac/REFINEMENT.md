@@ -10,9 +10,11 @@ never guesses intent.
 
 - **Mechanisms generalize; thresholds don't.** project-a is the adversarial benchmark, not the spec.
   No project-a-specific constants in core logic (per-project knobs with sane defaults are fine).
-- Every detector change is judged by the scoreboard (`eval/rhvac/score-takeoff.py`), never by
-  eyeballing renders. Falsify before believing; a plausible mechanism gets measured on the live
-  data before it lands (see HANDOFF.md falsification-pass precedent).
+- Every detector change is judged by the scoreboard (`eval/rhvac/score-takeoff.py`), including
+  its absolute **GATES** section, with per-level overlays attached as evidence in any phase-close
+  note. A phase may not be recorded closed while gates fail unless the log names each failing gate
+  explicitly. Falsify before believing; a plausible mechanism gets measured on the live data
+  before it lands (see HANDOFF.md falsification-pass precedent).
 - Structural properties are enforced **by construction**, not tuned toward:
   partition (no holes/gaps), boundaries on a wall-line arrangement (no stair-steps),
   min feature width (no slivers), explicit ambiguity flags (no guessed intent).

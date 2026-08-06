@@ -45,7 +45,7 @@ def load_tsv(path):
     return rooms, polys
 
 
-def render(ink_path, tsv_path, out_path, scale=4, thumb=None):
+def render(ink_path, tsv_path, out_path, scale=4, thumb=None, junk_ids=(), quiet=False):
     w, h, minx, miny, cell, bits = load_ink(ink_path)
     rooms, polys = load_tsv(tsv_path)
     img = Image.new("RGB", (w * scale, h * scale), (255, 255, 255))
@@ -67,21 +67,25 @@ def render(ink_path, tsv_path, out_path, scale=4, thumb=None):
     except OSError:
         font = ImageFont.load_default()
     for i, (rid, meta) in enumerate(sorted(rooms.items())):
-        col = PALETTE[i % len(PALETTE)]
+        is_junk = rid in junk_ids
+        col = (255, 0, 255) if is_junk else PALETTE[i % len(PALETTE)]
         for kind, loop in polys.get(rid, []):
-            dr.line([tp(p) for p in loop] + [tp(loop[0])], fill=col, width=3 if kind == "outer" else 2)
+            dr.line([tp(p) for p in loop] + [tp(loop[0])], fill=col,
+                    width=6 if is_junk else (3 if kind == "outer" else 2))
         lx, ly = tp((meta["lx"], meta["ly"]))
-        label = f'{rid} {meta["sqft"]:.0f}sf h{meta["ceil"]:.1f}'
+        label = f'{"JUNK " if is_junk else ""}{rid} {meta["sqft"]:.0f}sf h{meta["ceil"]:.1f}'
         dr.text((lx + 2, ly + 2), label, fill=(255, 255, 255), font=font)
         dr.text((lx, ly), label, fill=col, font=font)
     img.save(out_path)
-    print(out_path, img.size)
+    if not quiet:
+        print(out_path, img.size)
     if thumb:
         small = img.copy()
         small.thumbnail((thumb, thumb))
         root, ext = os.path.splitext(out_path)
         small.save(f"{root}_small{ext}")
-        print(f"{root}_small{ext}", small.size)
+        if not quiet:
+            print(f"{root}_small{ext}", small.size)
 
 
 if __name__ == "__main__":

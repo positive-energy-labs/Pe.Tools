@@ -3,6 +3,7 @@
 */scorecard.*
 */scoreboard.txt
 */scoreboard.json
+*/overlay_*.png
 # Local copies of engineer originals and edit-lane self-check outputs — never committed.
 */*.r10
 */edit-check.*
