@@ -176,7 +176,7 @@ public sealed class TakeoffResult
             foreach (var h in r.Holes) sb.AppendLine($"POLY\t{r.Id}\thole\t{PolyStr(h)}");
         }
         // Ambiguity flags ride as 3-column META lines: existing consumers (score-takeoff.py,
-        // RhvacCandidateBuilder.ParseTsv) ignore unknown META keys, so the format stays
+        // TakeoffTsv.ParseTsv) ignore unknown META keys, so the format stays
         // backward-compatible with consumers that predate ambiguity flags.
         foreach (var r in this.Rooms.Where(r => r.Flags.Count > 0))
             sb.AppendLine($"META\tflag\t{r.Id}:{string.Join("+", r.Flags)}");

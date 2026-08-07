@@ -1,5 +1,3 @@
-using Pe.Revit.Takeoff.Rhvac;
-
 namespace Pe.Revit.Takeoff;
 
 internal sealed record MaterializationResolutionResult(
@@ -149,7 +147,7 @@ public static class RoomTakeoff
         var inkNear = InkSupport.LoadOracle(InkPath(opt, level), 3 * opt.CellFt);
         if (inkNear == null) log("[spaces] no ink raster found — arcs run on geometry alone");
         var takeoffDir = ArtifactDir(opt);
-        var sidecar = RhvacCandidateBuilder.ResolutionPath(takeoffDir);
+        var sidecar = TakeoffResolutions.ResolutionPath(takeoffDir);
         var resolved = File.Exists(sidecar)
             ? LoadMaterializationResult(takeoffDir, level.Name, sidecar)
             : new MaterializationResolutionResult(LoadResult(opt, level), 0, 0, 0);
@@ -337,8 +335,7 @@ public static class RoomTakeoff
         string? resolutionsPath = null
     )
     {
-        var resolved = RhvacCandidateBuilder.ParseTsvDirectory(
-            takeoffDirectory, resolutionsPath, simplify: false);
+        var resolved = TakeoffTsv.ParseTsvDirectory(takeoffDirectory, resolutionsPath);
         var level = resolved.Levels.Single(item => item.LevelName == levelName);
         var takeoff = new TakeoffResult {
             LevelName = level.LevelName,

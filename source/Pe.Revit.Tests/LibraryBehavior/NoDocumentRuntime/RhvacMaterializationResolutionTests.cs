@@ -1,13 +1,12 @@
 using Newtonsoft.Json;
 using Pe.Revit.Takeoff;
-using Pe.Revit.Takeoff.Rhvac;
 
 namespace Pe.Revit.Tests.LibraryBehavior.NoDocumentRuntime;
 
 public sealed class RhvacMaterializationResolutionTests
 {
     [Test]
-    public void Revit_materialization_resolutions_match_the_export_builder()
+    public void Revit_materialization_resolutions_match_core_takeoff()
     {
         var fixtureDir = RhvacEvalTests.FindFixtureDir();
         var takeoffDir = Path.Combine(fixtureDir, "takeoff");
@@ -15,9 +14,9 @@ public sealed class RhvacMaterializationResolutionTests
             fixtureDir, "..", "fixtures", "project-a-main-four-verbs.json"));
         const string levelName = "Level 1/Main Level";
 
-        var builder = RhvacCandidateBuilder.ParseTsvDirectory(takeoffDir, sidecar, simplify: false);
+        var core = TakeoffTsv.ParseTsvDirectory(takeoffDir, sidecar);
         var materialization = RoomTakeoff.LoadMaterializationResult(takeoffDir, levelName, sidecar);
-        var expected = builder.Levels.Single(level => level.LevelName == levelName).Rooms.Select(room => new {
+        var expected = core.Levels.Single(level => level.LevelName == levelName).Rooms.Select(room => new {
             room.Id, room.RawSqft, room.PerimeterFt, room.MeanCeilingFt,
             Polygon = room.Outer, room.Holes, room.Flags, room.Label, room.SplitFrom, room.MergedFrom,
         });
@@ -31,7 +30,7 @@ public sealed class RhvacMaterializationResolutionTests
             Assert.That((materialization.Applied, materialization.Remapped, materialization.Orphaned),
                 Is.EqualTo((4, 0, 0)));
             Assert.That((materialization.Applied, materialization.Remapped, materialization.Orphaned),
-                Is.EqualTo((builder.Applied, builder.Remapped, builder.Orphaned)));
+                Is.EqualTo((core.Applied, core.Remapped, core.Orphaned)));
             Assert.That(JsonConvert.SerializeObject(actual), Is.EqualTo(JsonConvert.SerializeObject(expected)));
             Assert.That(materialization.Takeoff.Rooms, Has.Count.EqualTo(81));
             Assert.That(materialization.Takeoff.Rooms.Select(room => room.Id),

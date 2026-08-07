@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using Pe.Revit.Takeoff;
 using Pe.Revit.Takeoff.Rhvac;
 
 namespace Pe.Revit.Tests.LibraryBehavior.NoDocumentRuntime;
@@ -23,7 +24,7 @@ public sealed class RhvacProjectAEvalRun
             Assert.Ignore($"No takeoff TSVs at {takeoffDir}; run a takeoff first (Rhvac/README.md).");
 
         var profileName = Environment.GetEnvironmentVariable("PE_EVAL_PROFILE") ?? "bootstrap";
-        var resolutionResult = RhvacCandidateBuilder.ParseTsvDirectory(takeoffDir);
+        var resolutionResult = TakeoffTsv.ParseTsvDirectory(takeoffDir);
         TestContext.Out.WriteLine(
             $"RESOLUTIONS applied={resolutionResult.Applied} remapped={resolutionResult.Remapped} orphaned={resolutionResult.Orphaned}");
         if (resolutionResult.Orphaned > 0)
