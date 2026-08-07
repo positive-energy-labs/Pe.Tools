@@ -61,3 +61,12 @@ never guesses intent.
   gated coverage 9.8%→24.7% area. Replay harness for post-Revit stages is the remaining
   phase-1 item.
 - 2026-08-06: Phase 3's `BoundarySnap` path is superseded: `SpaceBoundaryNetwork` now regularizes the full level once at partition emit, and TSV, UI, and Space materialization share that geometry.
+- 2026-08-08: Edit-in-Revit round landed (P6–P9, e442b57..792b7a5). Flow: calc draft → resolve
+  intent → draw (Spaces for regularized rooms only; unregularized/residue/defectors = owned
+  FilledRegions or detail-line fallback — zero silent loss, accounting test-asserted) → human
+  edits geometry in Revit → `RoomTakeoff.ReadbackNative` writes `rooms_<level>.native.tsv`
+  (source=native) → route merges native over detector by room id. Browser simplification
+  deleted; the route displays canonical geometry only. Seam flipped: core `TakeoffTsv`/
+  `TakeoffResolutions` own parse+resolutions; RHVAC is an export adapter. Residue: takeoff
+  Revit lane has no host-op wrapper (script/test facade only) — live op exposure + typegen,
+  live-session parity proof, and recalc-as-diff are the open items.
