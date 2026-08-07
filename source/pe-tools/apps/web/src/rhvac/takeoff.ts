@@ -15,6 +15,7 @@ import type {
 export function parseTakeoffTsv(tsvText: string): TakeoffLevel {
   let levelName: string | null = null;
   let elevation: number | null = null;
+  let source: TakeoffLevel["source"] = "detector";
   const rooms: TakeoffRoomShape[] = [];
   const residues: TakeoffResidueShape[] = [];
   const byId = new Map<string, TakeoffRoomShape>();
@@ -27,7 +28,12 @@ export function parseTakeoffTsv(tsvText: string): TakeoffLevel {
       case "META":
         if (parts[1] === "level") levelName = parts[2] ?? null;
         else if (parts[1] === "elev") elevation = Number(parts[2]);
-        else if (parts[1] === "flag") applyFlagMeta(parts[2] ?? "", byId);
+        else if (parts[1] === "source") {
+          const value = parts[2];
+          if (value !== "detector" && value !== "native")
+            throw new Error(`unknown takeoff source '${value ?? ""}'`);
+          source = value;
+        } else if (parts[1] === "flag") applyFlagMeta(parts[2] ?? "", byId);
         else if (parts[1] === "residue") {
           if (parts.length < 9)
             throw new Error(`malformed META residue line: ${line.slice(0, 80)}`);
@@ -75,8 +81,48 @@ export function parseTakeoffTsv(tsvText: string): TakeoffLevel {
 
   if (levelName === null || elevation === null || Number.isNaN(elevation))
     throw new Error("takeoff TSV has no META level/elev header");
-  return { levelName, elevation, rooms: rooms.filter((r) => r.outer.length >= 3), residues };
+  return {
+    levelName,
+    elevation,
+    source,
+    rooms: rooms.filter((r) => r.outer.length >= 3),
+    residues,
+  };
 }
+
+/** Replace detector rooms by id with authoritative native Revit geometry. */
+export function mergeTakeoffLevels(levels: TakeoffLevel[]): TakeoffLevel[] {
+  const nativeByLevel = new Map(
+    levels
+      .filter((level) => level.source === "native")
+      .map((level) => [level.levelName, level] as const),
+  );
+
+  return levels.flatMap((level) => {
+    if (level.source === "native") return [];
+
+    const native = nativeByLevel.get(level.levelName);
+    if (!native) return [level];
+
+    const nativeById = new Map(native.rooms.map((room) => [room.id, markNative(room)]));
+    const detectorIds = new Set(level.rooms.map((room) => room.id));
+    return [
+      {
+        ...level,
+        rooms: [
+          ...level.rooms.map((room) => nativeById.get(room.id) ?? room),
+          ...native.rooms.filter((room) => !detectorIds.has(room.id)).map(markNative),
+        ],
+      },
+    ];
+  });
+}
+
+const markNative = (room: TakeoffRoomShape): TakeoffRoomShape => ({
+  ...room,
+  flags: undefined,
+  native: true,
+});
 
 /**
  * Ambiguity-flag META line payload: `<roomId>:<flag+flag>` (Contracts.cs ToTsv).

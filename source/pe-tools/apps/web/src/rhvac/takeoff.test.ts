@@ -17,7 +17,13 @@ import {
   toResolutionsFile,
   type FlagResolution,
 } from "./resolutions";
-import { levelBounds, parseTakeoffTsv, shapeCentroid, shapePathD } from "./takeoff";
+import {
+  levelBounds,
+  mergeTakeoffLevels,
+  parseTakeoffTsv,
+  shapeCentroid,
+  shapePathD,
+} from "./takeoff";
 import { candidateKey, normalizeExtract, type RhvacExtract, type RoomMap } from "./types";
 
 const FIXTURE_DIR = join(import.meta.dirname, "../../public/rhvac-fixture");
@@ -58,6 +64,24 @@ const parseFlaggedUnitTakeoff = () =>
     ].join("\n"),
   );
 
+const parseMergeUnitTakeoff = (
+  source: string,
+  rooms: { id: string; sqft: number }[],
+  residue = false,
+) =>
+  parseTakeoffTsv(
+    [
+      "META\tlevel\tMerge Demo",
+      "META\telev\t0",
+      `META\tsource\t${source}`,
+      ...rooms.flatMap(({ id, sqft }, index) => [
+        `ROOM\t${id}\t${sqft}\t40\t${index * 12 + 5}\t5\t9`,
+        `POLY\t${id}\touter\t${index * 12};0|${index * 12 + 10};0|${index * 12 + 10};10|${index * 12};10`,
+      ]),
+      ...(residue ? ["META\tresidue\tX01\tcrumb\t25\t30\t5\t9\t28;0|33;0|33;5|28;5"] : []),
+    ].join("\n"),
+  );
+
 /** Basic O(n^2) check: any two non-adjacent ring edges properly crossing. */
 function selfIntersects(ring: [number, number][]): boolean {
   const n = ring.length;
@@ -80,7 +104,9 @@ function selfIntersects(ring: [number, number][]): boolean {
 }
 
 describe("rhvac fixture lane", () => {
-  const levels = manifest.takeoff.map((name) => parseTakeoffTsv(readFixture(name)));
+  const levels = mergeTakeoffLevels(
+    manifest.takeoff.map((name) => parseTakeoffTsv(readFixture(name))),
+  );
   const extract = normalizeExtract(JSON.parse(readFixture(manifest.extract)) as RhvacExtract);
   const roomMap = JSON.parse(readFixture(manifest.roomMap)) as RoomMap;
 
@@ -99,6 +125,13 @@ describe("rhvac fixture lane", () => {
         expect(Number.isFinite(cy)).toBe(true);
       }
     }
+    const theatre = levels.find((level) => level.levelName === "Level 0/Theatre")!;
+    expect(theatre.rooms.filter((room) => room.native).map((room) => room.id)).toEqual([
+      "R01",
+      "R02",
+      "R03",
+      "N01",
+    ]);
   });
 
   it("returns POLY vertices verbatim", () => {
@@ -145,6 +178,77 @@ describe("rhvac fixture lane", () => {
     expect(catalog.glass.length).toBeGreaterThan(0);
     expect(catalog.floors.length).toBeGreaterThan(0);
     for (const option of catalog.glass) expect(option.shgc).toBeDefined();
+  });
+});
+
+describe("native takeoff merge", () => {
+  it("native room geometry wins by id", () => {
+    const detector = parseMergeUnitTakeoff("detector", [{ id: "R01", sqft: 100 }]);
+    const native = parseMergeUnitTakeoff("native", [{ id: "R01", sqft: 900 }]);
+
+    const room = mergeTakeoffLevels([detector, native])[0]!.rooms[0]!;
+
+    expect(room).toMatchObject({ id: "R01", rawSqft: 900, native: true });
+  });
+
+  it("keeps detector rooms with no native counterpart", () => {
+    const detector = parseMergeUnitTakeoff("detector", [
+      { id: "R01", sqft: 100 },
+      { id: "R02", sqft: 200 },
+    ]);
+    const native = parseMergeUnitTakeoff("native", [{ id: "R01", sqft: 900 }]);
+
+    expect(
+      mergeTakeoffLevels([detector, native])[0]!.rooms.map(({ id, rawSqft, native }) => ({
+        id,
+        rawSqft,
+        native,
+      })),
+    ).toEqual([
+      { id: "R01", rawSqft: 900, native: true },
+      { id: "R02", rawSqft: 200, native: undefined },
+    ]);
+  });
+
+  it("adds native-only room ids", () => {
+    const detector = parseMergeUnitTakeoff("detector", [{ id: "R01", sqft: 100 }]);
+    const native = parseMergeUnitTakeoff("native", [
+      { id: "R01", sqft: 900 },
+      { id: "N01", sqft: 300 },
+    ]);
+
+    expect(mergeTakeoffLevels([detector, native])[0]!.rooms.map(({ id }) => id)).toEqual([
+      "R01",
+      "N01",
+    ]);
+  });
+
+  it("keeps residues from the detector level", () => {
+    const detector = parseMergeUnitTakeoff("detector", [{ id: "R01", sqft: 100 }], true);
+    const native = parseMergeUnitTakeoff("native", [{ id: "R01", sqft: 900 }]);
+
+    expect(mergeTakeoffLevels([detector, native])[0]!.residues.map(({ id }) => id)).toEqual([
+      "X01",
+    ]);
+  });
+
+  it("throws for an unknown takeoff source", () => {
+    expect(() => parseMergeUnitTakeoff("survey", [{ id: "R01", sqft: 100 }])).toThrow(
+      "unknown takeoff source 'survey'",
+    );
+  });
+
+  it("does not replay detector resolutions over native geometry", () => {
+    const detector = parseMergeUnitTakeoff("detector", [{ id: "R01", sqft: 100 }]);
+    const native = parseMergeUnitTakeoff("native", [{ id: "R01", sqft: 900 }]);
+
+    const result = applyResolutions(mergeTakeoffLevels([detector, native]), [
+      { candidateKey: "Merge Demo:R01", flag: "open-plan-merge", action: "reject" },
+    ]);
+
+    expect(result).toMatchObject({ applied: 0, remapped: 0, orphaned: 1 });
+    expect(result.levels[0]!.rooms[0]).toMatchObject({ id: "R01", rawSqft: 900, native: true });
+    expect(result.levels[0]!.residues).toEqual([]);
   });
 });
 

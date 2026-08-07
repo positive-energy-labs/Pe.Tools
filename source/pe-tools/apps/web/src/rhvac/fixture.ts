@@ -3,7 +3,7 @@
  * TSVs served from public/rhvac-fixture. The extract JSON is UTF-8 with BOM;
  * strip it before parsing.
  */
-import { parseTakeoffTsv } from "#/rhvac/takeoff";
+import { mergeTakeoffLevels, parseTakeoffTsv } from "#/rhvac/takeoff";
 import {
   normalizeExtract,
   type RhvacExtract,
@@ -33,7 +33,7 @@ const sha256 = async (text: string): Promise<string> =>
 
 const fetchJson = async <T>(path: string): Promise<T> => JSON.parse(await fetchText(path)) as T;
 
-export const FIXTURE_SOURCE_LABEL = "project-a fixture (Partition replay)";
+export const FIXTURE_SOURCE_LABEL = "project-a fixture (Partition replay + native edit)";
 
 export async function loadFixtureExtract(): Promise<RhvacExtract> {
   const manifest = await fetchJson<FixtureManifest>("manifest.json");
@@ -46,11 +46,13 @@ export async function loadFixtureTakeoff(): Promise<RhvacTakeoffData> {
     fetchJson<RoomMap>(manifest.roomMap),
     ...manifest.takeoff.map((name) => fetchText(name)),
   ]);
-  const levels = tsvTexts.map((text) => parseTakeoffTsv(text));
+  const parsedLevels = tsvTexts.map((text) => parseTakeoffTsv(text));
   const hashes = await Promise.all(tsvTexts.map(sha256));
   return {
-    levels,
+    levels: mergeTakeoffLevels(parsedLevels),
     roomMap,
-    tsvSha256: Object.fromEntries(levels.map((level, index) => [level.levelName, hashes[index]!])),
+    tsvSha256: Object.fromEntries(
+      parsedLevels.map((level, index) => [level.levelName, hashes[index]!]),
+    ),
   };
 }

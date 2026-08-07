@@ -99,6 +99,7 @@ export function applyResolutions(
     anchor: FlagResolution["anchor"],
   ): { target: (typeof rooms)[number] | undefined; remapped: boolean } => {
     const exact = rooms.find((candidate) => candidate.key === key);
+    if (exact?.room.native) return { target: undefined, remapped: false };
     if (version === 1) return { target: exact, remapped: false };
     if (!anchor) return { target: undefined, remapped: false };
     if (
@@ -112,7 +113,9 @@ export function applyResolutions(
     return {
       target: rooms.find(
         (candidate) =>
-          candidate.levelName === levelName && pointInShape(anchor.label, candidate.room),
+          !candidate.room.native &&
+          candidate.levelName === levelName &&
+          pointInShape(anchor.label, candidate.room),
       ),
       remapped: true,
     };

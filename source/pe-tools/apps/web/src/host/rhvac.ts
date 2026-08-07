@@ -16,7 +16,7 @@
  */
 import { callHostDynamic } from "#/host/client";
 import type { ResolutionsFile } from "#/rhvac/resolutions";
-import { parseTakeoffTsv } from "#/rhvac/takeoff";
+import { mergeTakeoffLevels, parseTakeoffTsv } from "#/rhvac/takeoff";
 import type {
   RhvacTakeoffResolutionsRequest,
   RhvacTakeoffResolutionsResult as HostRhvacTakeoffResolutionsResult,
@@ -99,12 +99,12 @@ export async function rhvacSaveTakeoffResolutions(
 
 export async function rhvacTakeoff(args: RhvacTakeoffArgs): Promise<RhvacTakeoffData> {
   const wire = (await callHostDynamic("rhvac.takeoff", args)) as RhvacTakeoffWire;
-  const levels = wire.tsvs.map((file) => parseTakeoffTsv(file.text));
+  const parsedLevels = wire.tsvs.map((file) => parseTakeoffTsv(file.text));
   return {
-    levels,
+    levels: mergeTakeoffLevels(parsedLevels),
     roomMap: wire.roomMap ?? { matches: [], skip: [] },
     tsvSha256: Object.fromEntries(
-      levels.map((level, index) => [level.levelName, wire.tsvs[index]!.sha256]),
+      parsedLevels.map((level, index) => [level.levelName, wire.tsvs[index]!.sha256]),
     ),
   };
 }

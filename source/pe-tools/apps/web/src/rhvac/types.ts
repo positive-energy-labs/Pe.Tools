@@ -187,6 +187,8 @@ export interface TakeoffRoomShape {
   mergedFrom?: string;
   /** Rejected rooms remain renderable but are excluded by export mirrors. */
   rejected?: boolean;
+  /** Native Revit geometry supersedes the detector shape with the same id. */
+  native?: boolean;
 }
 
 export interface TakeoffResidueShape {
@@ -203,6 +205,7 @@ export interface TakeoffResidueShape {
 export interface TakeoffLevel {
   levelName: string;
   elevation: number;
+  source: "detector" | "native";
   rooms: TakeoffRoomShape[];
   residues: TakeoffResidueShape[];
 }

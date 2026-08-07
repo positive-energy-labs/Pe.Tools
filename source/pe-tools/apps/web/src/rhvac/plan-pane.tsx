@@ -316,6 +316,9 @@ export function PlanPane(props: PlanPaneProps) {
       <div className="flex shrink-0 items-center gap-3 border-t border-[var(--line)] px-2.5 py-1">
         <LegendChip color="var(--cat-blue)" label="matched" />
         <LegendChip color="var(--cat-kiln)" label="unmatched" />
+        {level.rooms.some((room) => room.native) && (
+          <LegendChip color="var(--foreground)" label="native — edited in Revit" />
+        )}
         {pending.length > 0 && <LegendChip color="var(--cat-clay)" label="flagged" dashed />}
         {level.rooms.some((room) => room.flags?.includes("unregularized")) && (
           <LegendChip color="var(--muted-foreground)" label="raw shape — straighten in Revit" />
@@ -742,7 +745,7 @@ function LevelSvg({
               fill={fill}
               stroke={stroke}
               strokeOpacity={flagged ? 0.85 : 0.6}
-              strokeWidth={selected ? 2 : flagged ? 1.5 : 1}
+              strokeWidth={selected ? 2 : flagged || shape.native ? 1.5 : 1}
               strokeDasharray={flagged ? "5 3" : undefined}
               vectorEffect="non-scaling-stroke"
             />
