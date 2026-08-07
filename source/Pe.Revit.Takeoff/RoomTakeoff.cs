@@ -7,6 +7,13 @@ internal sealed record MaterializationResolutionResult(
     int Orphaned
 );
 
+public sealed record NativeReadbackResult(
+    int SpacesRead,
+    int SkippedUnplaced,
+    int SkippedUnenclosed,
+    string PathWritten
+);
+
 // Facade. Room detection needs THREE script executions because the host owns exactly one
 // transaction per run and ExportImage refuses to run mid-transaction:
 //
@@ -157,6 +164,125 @@ public static class RoomTakeoff
             ? $"[spaces] WARNING orphaned resolution decisions; {resolutionSummary}; unresolved rooms remain materialized"
             : $"[spaces] resolutions {resolutionSummary}");
         return SpaceMaterializer.Replace(doc, level, phase, resolved.Takeoff, opt, log, inkNear).Spaces;
+    }
+
+    public static NativeReadbackResult ReadbackNative(
+        Document doc,
+        Level level,
+        Phase phase,
+        string takeoffDirectory,
+        TakeoffOptions opt,
+        Action<string> log)
+    {
+        if (doc.GetElement(level.Id) is not Level || doc.GetElement(phase.Id) is not Phase)
+            throw new InvalidOperationException("level and phase must belong to the target document");
+
+        var rooms = new List<RoomResult>();
+        int skippedUnplaced = 0, skippedUnenclosed = 0;
+        var spaces = new FilteredElementCollector(doc).OfClass(typeof(SpatialElement))
+            .OfCategory(BuiltInCategory.OST_MEPSpaces).Cast<Space>()
+            .Where(space => space.LevelId.Value() == level.Id.Value()
+                            && space.get_Parameter(BuiltInParameter.ROOM_PHASE_ID)
+                                ?.AsElementId().Value() == phase.Id.Value())
+            .OrderBy(space => space.Number, StringComparer.Ordinal)
+            .ToList();
+
+        foreach (var space in spaces)
+        {
+            if (space.Location is not LocationPoint location)
+            {
+                skippedUnplaced++;
+                continue;
+            }
+
+            var boundaries = space.GetBoundarySegments(new SpatialElementBoundaryOptions());
+            if (space.Area <= 0 || boundaries is not { Count: > 0 })
+            {
+                skippedUnenclosed++;
+                continue;
+            }
+
+            var loops = boundaries.Select(segments => new {
+                    Segments = segments,
+                    Points = BoundaryPoints(segments),
+                })
+                .Where(loop => loop.Points.Count >= 3)
+                .OrderByDescending(loop => Math.Abs(TakeoffTsv.SignedArea(loop.Points)))
+                .ToList();
+            if (loops.Count == 0)
+            {
+                skippedUnenclosed++;
+                continue;
+            }
+
+            var outer = loops[0].Points;
+            if (TakeoffTsv.SignedArea(outer) < 0) outer.Reverse();
+            var holes = loops.Skip(1).Select(loop => loop.Points).ToList();
+            foreach (var hole in holes)
+                if (TakeoffTsv.SignedArea(hole) > 0) hole.Reverse();
+
+            var meanCeilingFt = space.LimitOffset;
+            if (meanCeilingFt <= 0 || double.IsNaN(meanCeilingFt) || double.IsInfinity(meanCeilingFt))
+            {
+                meanCeilingFt = space.UnboundedHeight;
+                if (meanCeilingFt <= 0 || double.IsNaN(meanCeilingFt) || double.IsInfinity(meanCeilingFt))
+                    meanCeilingFt = opt.StoryCapFt;
+                log($"[native-readback] Space '{space.Number}' has no usable LimitOffset; " +
+                    $"using {meanCeilingFt:F2} ft");
+            }
+
+            rooms.Add(new RoomResult {
+                Id = space.Number,
+                RawSqft = space.Area,
+                PerimeterFt = loops[0].Segments.Sum(segment => segment.GetCurve().Length),
+                LabelX = location.Point.X,
+                LabelY = location.Point.Y,
+                MeanCeilingFt = meanCeilingFt,
+                Polygon = outer,
+                Holes = holes,
+            });
+        }
+
+        if (rooms.Select(room => room.Id).Distinct(StringComparer.Ordinal).Count() != rooms.Count)
+            throw new InvalidOperationException("native Space numbers must be unique");
+
+        var result = new TakeoffResult {
+            LevelName = level.Name,
+            LevelElevation = level.ProjectElevation,
+            Source = TakeoffSource.Native,
+            Rooms = rooms,
+            TotalSqft = rooms.Sum(room => room.RawSqft),
+        };
+        var directory = Path.GetFullPath(takeoffDirectory);
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, $"rooms_{Sanitize(level.Name)}.native.tsv");
+        var temp = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            File.WriteAllText(temp, result.ToTsv());
+            if (File.Exists(path)) File.Replace(temp, path, null);
+            else File.Move(temp, path);
+        }
+        finally
+        {
+            if (File.Exists(temp)) File.Delete(temp);
+        }
+
+        log($"[native-readback] level='{level.Name}' phase='{phase.Name}' spaces={rooms.Count} " +
+            $"skippedUnplaced={skippedUnplaced} skippedUnenclosed={skippedUnenclosed} -> {path}");
+        return new NativeReadbackResult(rooms.Count, skippedUnplaced, skippedUnenclosed, path);
+    }
+
+    private static List<double[]> BoundaryPoints(IEnumerable<BoundarySegment> segments)
+    {
+        var points = new List<double[]>();
+        foreach (var segment in segments)
+        {
+            var tessellation = segment.GetCurve().Tessellate();
+            for (int i = 0; i < tessellation.Count - 1; i++)
+                points.Add(new[] { tessellation[i].X, tessellation[i].Y });
+        }
+        return points;
     }
 
     private static string InkPath(TakeoffOptions opt, Level level) =>

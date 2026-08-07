@@ -32,6 +32,7 @@ public sealed record TakeoffResidueShape(
 /// <summary>One parsed takeoff TSV: a level and its rooms.</summary>
 public sealed record LevelTakeoff(string LevelName, double Elevation, List<TakeoffRoomShape> Rooms)
 {
+    public TakeoffSource Source { get; init; } = TakeoffSource.Detector;
     public List<TakeoffResidueShape> Residues { get; init; } = new();
 }
 
@@ -43,6 +44,7 @@ public static class TakeoffTsv
         var ic = CultureInfo.InvariantCulture;
         string? levelName = null;
         double? elevation = null;
+        var source = TakeoffSource.Detector;
         int? declaredRooms = null;
         var rooms = new List<TakeoffRoomShape>();
         var residues = new List<TakeoffResidueShape>();
@@ -64,6 +66,12 @@ public static class TakeoffTsv
                         elevation = Parse(parts[2], lineIndex);
                     else if (parts[1] == "rooms")
                         declaredRooms = int.Parse(parts[2], ic);
+                    else if (parts[1] == "source")
+                        source = parts[2] switch {
+                            "detector" => TakeoffSource.Detector,
+                            "native" => TakeoffSource.Native,
+                            _ => throw Malformed(lineIndex, $"unknown takeoff source '{parts[2]}'"),
+                        };
                     else if (parts[1] == "flag")
                         ApplyFlagMeta(parts[2], byId);
                     // totalSqft and other META fields are display metadata; ignored.
@@ -125,7 +133,10 @@ public static class TakeoffTsv
                 );
         }
 
-        return new LevelTakeoff(levelName, elevation.Value, rooms) { Residues = residues };
+        return new LevelTakeoff(levelName, elevation.Value, rooms) {
+            Source = source,
+            Residues = residues,
+        };
     }
 
     /// <summary>
@@ -139,6 +150,7 @@ public static class TakeoffTsv
     {
         var fullDirectory = Path.GetFullPath(tsvDirectory);
         var levels = Directory.GetFiles(fullDirectory, "rooms_*.tsv")
+            .Where(path => !path.EndsWith(".native.tsv", StringComparison.OrdinalIgnoreCase))
             .OrderBy(path => path, StringComparer.Ordinal)
             .Select(path => ParseTsv(File.ReadAllText(path)))
             .ToList();
@@ -158,7 +170,7 @@ public static class TakeoffTsv
         room.Flags.Sort(StringComparer.Ordinal);
     }
 
-    private static double SignedArea(List<double[]> loop)
+    internal static double SignedArea(IReadOnlyList<double[]> loop)
     {
         var sum = 0.0;
         for (int i = 0, j = loop.Count - 1; i < loop.Count; j = i++)

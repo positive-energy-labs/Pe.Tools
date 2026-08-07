@@ -22,6 +22,7 @@ namespace Pe.Revit.Takeoff;
 // while evidence-free cores stay whole (measured: pure DistanceMaxima under-seeds closets/baths,
 // 41.9 vs 52.8 TOTAL).
 public enum TakeoffSeedSource { RegionCores, DistanceMaxima, Hybrid }
+public enum TakeoffSource { Detector, Native }
 public enum ResidueReason { Border, Crumb, Rejected }
 
 public sealed class TakeoffOptions
@@ -152,6 +153,7 @@ public sealed class TakeoffResult
 {
     public string LevelName = "";
     public double LevelElevation;           // ProjectElevation (internal origin)
+    public TakeoffSource? Source;           // null = detector (legacy); Native = Revit Space readback
     public List<RoomResult> Rooms = new();
     public List<ResidueResult> Residues = new();
     public double TotalSqft;
@@ -166,7 +168,10 @@ public sealed class TakeoffResult
     {
         var ic = CultureInfo.InvariantCulture;
         var sb = new StringBuilder();
-        sb.AppendLine($"META\tlevel\t{this.LevelName}\nMETA\telev\t{this.LevelElevation.ToString("F6", ic)}\nMETA\trooms\t{this.Rooms.Count}\nMETA\ttotalSqft\t{this.TotalSqft.ToString("F1", ic)}");
+        sb.AppendLine($"META\tlevel\t{this.LevelName}\nMETA\telev\t{this.LevelElevation.ToString("F6", ic)}");
+        if (this.Source != null)
+            sb.AppendLine($"META\tsource\t{this.Source.Value.ToString().ToLowerInvariant()}");
+        sb.AppendLine($"META\trooms\t{this.Rooms.Count}\nMETA\ttotalSqft\t{this.TotalSqft.ToString("F1", ic)}");
         if (this.ProfileProvenance != null) sb.AppendLine($"META\tprofile\t{this.ProfileProvenance}");
         foreach (string flag in this.LevelFlags) sb.AppendLine($"META\tflag\t{flag}");
         foreach (var r in this.Rooms)

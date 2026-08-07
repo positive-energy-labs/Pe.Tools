@@ -60,6 +60,8 @@ public sealed class TakeoffTsvTests
         try
         {
             File.WriteAllText(Path.Combine(takeoffDir, "rooms_L1.tsv"), tsv);
+            File.WriteAllText(Path.Combine(takeoffDir, "rooms_L1.native.tsv"),
+                tsv.Replace("META\trooms", "META\tsource\tnative\nMETA\trooms"));
             File.WriteAllText(sidecar, """
                 {
                   "version": 1,

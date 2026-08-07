@@ -172,6 +172,92 @@ public sealed class TakeoffSpaceMaterializationTests
     }
 
     [Test]
+    public void Materialized_spaces_round_trip_through_native_readback(UIApplication uiApplication)
+    {
+        var document = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
+        var takeoffDirectory = Path.Combine(Path.GetTempPath(), $"pe-native-readback-{Guid.NewGuid():N}");
+        try
+        {
+            var level = new FilteredElementCollector(document).OfClass(typeof(Level)).Cast<Level>()
+                .OrderBy(item => item.Elevation).First();
+            var phase = document.Phases.Cast<Phase>().Last();
+            var options = new TakeoffOptions { Marker = "PE-TEST-NATIVE" };
+            var logs = new List<string>();
+
+            using var transaction = new Transaction(document, "Prove native Space readback");
+            transaction.Start();
+            var materialized = MaterializeReadbackFixture(document, level, phase, options);
+            document.Regenerate();
+
+            var readback = RoomTakeoff.ReadbackNative(
+                document, level, phase, takeoffDirectory, options, logs.Add);
+            var parsed = TakeoffTsv.ParseTsv(File.ReadAllText(readback.PathWritten));
+            var spaces = materialized.Spaces.Select(id => (Space)document.GetElement(id)).ToList();
+
+            Assert.Multiple(() => {
+                Assert.That(readback.SpacesRead, Is.EqualTo(spaces.Count));
+                Assert.That((readback.SkippedUnplaced, readback.SkippedUnenclosed), Is.EqualTo((0, 0)));
+                Assert.That(parsed.Source, Is.EqualTo(TakeoffSource.Native));
+                Assert.That(parsed.Rooms.Select(room => room.Id),
+                    Is.EquivalentTo(spaces.Select(space => space.Number)));
+                Assert.That(logs, Has.Some.Contains("skippedUnplaced=0 skippedUnenclosed=0"));
+                foreach (var space in spaces)
+                    Assert.That(parsed.Rooms.Single(room => room.Id == space.Number).RawSqft,
+                        Is.EqualTo(space.Area).Within(0.1));
+            });
+            Assert.That(transaction.RollBack(), Is.EqualTo(TransactionStatus.RolledBack));
+        }
+        finally
+        {
+            RevitFamilyFixtureHarness.CloseDocument(document);
+            if (Directory.Exists(takeoffDirectory)) Directory.Delete(takeoffDirectory, recursive: true);
+        }
+    }
+
+    [Test]
+    public void Native_readback_follows_a_human_renumber(UIApplication uiApplication)
+    {
+        var document = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
+        var takeoffDirectory = Path.Combine(Path.GetTempPath(), $"pe-native-renumber-{Guid.NewGuid():N}");
+        try
+        {
+            var level = new FilteredElementCollector(document).OfClass(typeof(Level)).Cast<Level>()
+                .OrderBy(item => item.Elevation).First();
+            var phase = document.Phases.Cast<Phase>().Last();
+            var options = new TakeoffOptions { Marker = "PE-TEST-NATIVE-RENUMBER" };
+
+            using var transaction = new Transaction(document, "Prove native Space renumber readback");
+            transaction.Start();
+            var materialized = MaterializeReadbackFixture(document, level, phase, options);
+            document.Regenerate();
+            var initial = RoomTakeoff.ReadbackNative(
+                document, level, phase, takeoffDirectory, options, TestContext.WriteLine);
+            var initialId = ((Space)document.GetElement(materialized.Spaces[0])).Number;
+
+            var renumbered = (Space)document.GetElement(materialized.Spaces[0]);
+            renumbered.Number = "HUMAN-101";
+            Assert.That(renumbered.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS)?.Set(""), Is.True);
+            document.Regenerate();
+            var updated = RoomTakeoff.ReadbackNative(
+                document, level, phase, takeoffDirectory, options, TestContext.WriteLine);
+            var parsed = TakeoffTsv.ParseTsv(File.ReadAllText(updated.PathWritten));
+
+            Assert.Multiple(() => {
+                Assert.That(updated.PathWritten, Is.EqualTo(initial.PathWritten));
+                Assert.That(parsed.Source, Is.EqualTo(TakeoffSource.Native));
+                Assert.That(parsed.Rooms.Select(room => room.Id), Does.Contain("HUMAN-101"));
+                Assert.That(parsed.Rooms.Select(room => room.Id), Does.Not.Contain(initialId));
+            });
+            Assert.That(transaction.RollBack(), Is.EqualTo(TransactionStatus.RolledBack));
+        }
+        finally
+        {
+            RevitFamilyFixtureHarness.CloseDocument(document);
+            if (Directory.Exists(takeoffDirectory)) Directory.Delete(takeoffDirectory, recursive: true);
+        }
+    }
+
+    [Test]
     public void ProjectA_materialization_accounts_for_every_room_and_residue(UIApplication uiApplication)
     {
         var document = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
@@ -262,6 +348,21 @@ public sealed class TakeoffSpaceMaterializationTests
                        || curve.GetEndPoint(1).X > 20.01 && curve.GetEndPoint(1).X < 29.99;
             }));
         });
+    }
+
+    private static SpaceMaterializationResult MaterializeReadbackFixture(
+        Document document, Level level, Phase phase, TakeoffOptions options)
+    {
+        var first = Room("R01", Polygon(0, 0, 10, 10), Polygon(2, 2, 4, 4));
+        var second = Room("R02", Polygon(10, 0, 20, 10));
+        var takeoff = new TakeoffResult {
+            LevelName = level.Name,
+            LevelElevation = level.ProjectElevation,
+            Rooms = { first, second },
+            TotalSqft = first.RawSqft + second.RawSqft,
+        };
+        return SpaceMaterializer.Replace(
+            document, level, phase, takeoff, options, TestContext.WriteLine);
     }
 
     private static List<Element> Owned(Document document, TakeoffOptions options) =>
