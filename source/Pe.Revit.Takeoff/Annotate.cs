@@ -118,20 +118,26 @@ public static class Annotate
         return views.Count;
     }
 
-    private static CurveLoop ToLoop(List<double[]> pts)
+    internal static CurveLoop ToLoop(List<double[]> pts, double z = 0)
     {
-        var clean = new List<XYZ>();
-        foreach (var p in pts)
-        {
-            var xyz = new XYZ(p[0], p[1], 0);
-            if (clean.Count == 0 || clean[^1].DistanceTo(xyz) > 0.01) clean.Add(xyz);
-        }
-        if (clean.Count > 1 && clean[0].DistanceTo(clean[^1]) <= 0.01) clean.RemoveAt(clean.Count - 1);
+        var clean = CleanPoints(pts, z);
         if (clean.Count < 3) throw new InvalidOperationException("degenerate loop");
         var cl = new CurveLoop();
         for (int i = 0; i < clean.Count; i++)
             cl.Append(Line.CreateBound(clean[i], clean[(i + 1) % clean.Count]));
         return cl;
+    }
+
+    internal static List<XYZ> CleanPoints(List<double[]> pts, double z)
+    {
+        var clean = new List<XYZ>();
+        foreach (var p in pts)
+        {
+            var xyz = new XYZ(p[0], p[1], z);
+            if (clean.Count == 0 || clean[^1].DistanceTo(xyz) > 0.01) clean.Add(xyz);
+        }
+        if (clean.Count > 1 && clean[0].DistanceTo(clean[^1]) <= 0.01) clean.RemoveAt(clean.Count - 1);
+        return clean;
     }
 
     private static Color Rainbow(int i, int n)

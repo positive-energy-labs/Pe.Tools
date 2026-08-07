@@ -46,7 +46,7 @@ public sealed class TakeoffSpaceMaterializationTests
     }
 
     [Test]
-    public void Boundary_network_straightens_shared_wall_without_an_area_preserving_dogleg()
+    public void Boundary_network_preserves_shared_dogleg_when_straightening_exceeds_area_contract()
     {
         var rooms = new[] {
             Room("A", [new[] { 0d, 0 }, new[] { 5d, 0 }, new[] { 5d, 2 }, new[] { 6d, 2 },
@@ -58,9 +58,16 @@ public sealed class TakeoffSpaceMaterializationTests
         SpaceBoundaryNetwork.Regularize(rooms, 1, 1, 3, (_, _) => false);
         var actual = SpaceBoundaryNetwork.Build(rooms);
 
-        Assert.That(actual, Has.One.Matches<BoundaryCurve>(line =>
-            Math.Abs(line.X1 - 5) < 1e-6 && Math.Abs(line.X2 - 5) < 1e-6
-            && Math.Abs(line.Y1 - line.Y2) > 9.9));
+        Assert.Multiple(() => {
+            Assert.That(actual, Has.One.Matches<BoundaryCurve>(line =>
+                Math.Abs(line.X1 - 6) < 1e-6 && Math.Abs(line.X2 - 6) < 1e-6
+                && Math.Abs(line.Y1 - line.Y2) > 5.9));
+            Assert.That(actual, Has.None.Matches<BoundaryCurve>(line =>
+                Math.Abs(line.X1 - 5) < 1e-6 && Math.Abs(line.X2 - 5) < 1e-6
+                && Math.Abs(line.Y1 - line.Y2) > 9.9));
+            Assert.That(rooms, Has.All.Matches<RoomResult>(room =>
+                room.Flags.Contains("unregularized", StringComparer.Ordinal)));
+        });
     }
 
     // An unsupported diagonal seam (open-plan equidistance artifact) must emit as axis-aligned
@@ -117,14 +124,25 @@ public sealed class TakeoffSpaceMaterializationTests
             var level = new FilteredElementCollector(document).OfClass(typeof(Level)).Cast<Level>()
                 .OrderBy(item => item.Elevation).First();
             var phase = document.Phases.Cast<Phase>().Last();
+            var unresolved = Room("R03", Polygon(20, 0, 30, 10));
+            unresolved.Flags.Add("unregularized");
             var result = new TakeoffResult {
                 LevelName = level.Name,
                 LevelElevation = level.ProjectElevation,
                 Rooms = {
                     Room("R01", Polygon(0, 0, 10, 10), Polygon(2, 2, 4, 4)),
                     Room("R02", Polygon(10, 0, 20, 10)),
+                    unresolved,
+                    Room("R04", Polygon(40, 0, 60, 1)),
                 },
-                TotalSqft = 196,
+                Residues = {
+                    new ResidueResult {
+                        Id = "X01", Reason = ResidueReason.Rejected, RawSqft = 100,
+                        LabelX = 35, LabelY = 5, MeanCeilingFt = 10,
+                        Polygon = Polygon(30, 0, 40, 10),
+                    },
+                },
+                TotalSqft = 316,
             };
             var options = new TakeoffOptions { Marker = "PE-TEST-TAKEOFF" };
 
@@ -133,13 +151,13 @@ public sealed class TakeoffSpaceMaterializationTests
 
             var first = SpaceMaterializer.Replace(document, level, phase, result, options, TestContext.WriteLine);
             document.Regenerate();
-            AssertSpaces(document, first, result, options, level, phase);
+            AssertMaterialization(document, first, options, level, phase);
 
             var second = SpaceMaterializer.Replace(document, level, phase, result, options, TestContext.WriteLine);
             document.Regenerate();
-            Assert.That(second, Has.Count.EqualTo(2));
-            Assert.That(second, Has.None.Matches<ElementId>(id => first.Contains(id)));
-            AssertSpaces(document, second, result, options, level, phase);
+            Assert.That(second.Spaces, Has.Count.EqualTo(2));
+            Assert.That(second.Spaces, Has.None.Matches<ElementId>(id => first.Spaces.Contains(id)));
+            AssertMaterialization(document, second, options, level, phase);
 
             SpaceMaterializer.Cleanup(document, options, TestContext.WriteLine);
             document.Regenerate();
@@ -153,15 +171,73 @@ public sealed class TakeoffSpaceMaterializationTests
         }
     }
 
-    private static void AssertSpaces(
-        Document document, IReadOnlyList<ElementId> ids, TakeoffResult result, TakeoffOptions options,
-        Level level, Phase phase)
+    [Test]
+    public void ProjectA_materialization_accounts_for_every_room_and_residue(UIApplication uiApplication)
     {
-        var spaces = ids.Select(id => document.GetElement(id)).Cast<Space>().OrderBy(space => space.Number).ToList();
+        var document = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
+        try
+        {
+            var level = new FilteredElementCollector(document).OfClass(typeof(Level)).Cast<Level>()
+                .OrderBy(item => item.Elevation).First();
+            var phase = document.Phases.Cast<Phase>().Last();
+            var fixtureDir = NoDocumentRuntime.RhvacEvalTests.FindFixtureDir();
+            var takeoffDir = Path.Combine(fixtureDir, "takeoff");
+            var sidecar = Path.GetFullPath(Path.Combine(
+                fixtureDir, "..", "fixtures", "project-a-main-four-verbs.json"));
+            var result = RoomTakeoff.LoadMaterializationResult(
+                takeoffDir, "Level 1/Main Level", sidecar).Takeoff;
+            var options = new TakeoffOptions { Marker = "PE-TEST-project-a" };
+
+            using var transaction = new Transaction(document, "Prove project-a materialization census");
+            transaction.Start();
+            var materialized = SpaceMaterializer.Replace(
+                document, level, phase, result, options, TestContext.WriteLine);
+            document.Regenerate();
+
+            TestContext.Progress.WriteLine(
+                $"[project-a-census] spaces={materialized.Spaces.Count} " +
+                $"filledRegions={materialized.FilledRegions} lineFallbacks={materialized.LineFallbacks} " +
+                $"filledRegionFailures={materialized.FilledRegionFailures} rooms={materialized.Rooms} " +
+                $"residues={materialized.Residues} defectors={materialized.Defectors}");
+            Assert.Multiple(() => {
+                Assert.That(materialized.AccountingHolds, Is.True);
+                Assert.That(materialized.DeletedWithoutReplacement, Is.Zero);
+                Assert.That((materialized.Spaces.Count, materialized.FilledRegions, materialized.LineFallbacks,
+                        materialized.FilledRegionFailures, materialized.Rooms, materialized.Residues,
+                        materialized.Defectors),
+                    Is.EqualTo((10, 43, 31, 31, 72, 3, 9)));
+            });
+            SpaceMaterializer.Cleanup(document, options, TestContext.WriteLine);
+            document.Regenerate();
+            Assert.That(Owned(document, options), Is.Empty);
+            Assert.That(BoundaryLines(document, options), Is.Empty);
+            Assert.That(transaction.RollBack(), Is.EqualTo(TransactionStatus.RolledBack));
+        }
+        finally
+        {
+            RevitFamilyFixtureHarness.CloseDocument(document);
+        }
+    }
+
+    private static void AssertMaterialization(
+        Document document, SpaceMaterializationResult result, TakeoffOptions options, Level level, Phase phase)
+    {
+        var owned = Owned(document, options);
+        var spaces = result.Spaces.Select(id => document.GetElement(id)).Cast<Space>()
+            .OrderBy(space => space.Number).ToList();
+        var filledRegions = owned.OfType<FilledRegion>().ToList();
         Assert.Multiple(() => {
+            Assert.That(result.AccountingHolds, Is.True,
+                "spaces + filled regions + line fallbacks must equal rooms + residues + defectors");
+            Assert.That((result.Spaces.Count, result.FilledRegions, result.LineFallbacks,
+                    result.FilledRegionFailures, result.Rooms, result.Residues, result.Defectors,
+                    result.DeletedWithoutReplacement),
+                Is.EqualTo((2, 3, 0, 0, 3, 1, 1, 0)));
             Assert.That(spaces, Has.Count.EqualTo(2));
             Assert.That(spaces[0].Area, Is.EqualTo(96).Within(0.01));
             Assert.That(spaces[1].Area, Is.EqualTo(100).Within(0.01));
+            Assert.That(spaces.Select(space => space.Number),
+                Is.EquivalentTo(new[] { "R01", "R02" }));
             Assert.That(spaces.All(space => space.LevelId.Value() == level.Id.Value()
                                             && space.get_Parameter(BuiltInParameter.ROOM_PHASE_ID)
                                                 ?.AsElementId().Value() == phase.Id.Value()), Is.True);
@@ -171,14 +247,26 @@ public sealed class TakeoffSpaceMaterializationTests
             var secondPoint = ((LocationPoint)spaces[1].Location).Point;
             Assert.That(Math.Abs(firstPoint.X - 5) + Math.Abs(firstPoint.Y - 5), Is.LessThan(0.01));
             Assert.That(Math.Abs(secondPoint.X - 15) + Math.Abs(secondPoint.Y - 5), Is.LessThan(0.01));
-            Assert.That(Owned(document, options).Count(element => element is Space), Is.EqualTo(2));
-            Assert.That(BoundaryLines(document, options), Has.Count.EqualTo(9));
+            Assert.That(owned.Count(element => element is Space), Is.EqualTo(2));
+            Assert.That(filledRegions, Has.Count.EqualTo(3));
+            Assert.That(filledRegions.Select(SpaceMaterializer.Comments),
+                Has.Some.Contains("|R03\npe-takeoff: unregularized"));
+            Assert.That(filledRegions.Select(SpaceMaterializer.Comments),
+                Has.Some.Contains("|R04\npe-takeoff: shape-defect=sliver"));
+            Assert.That(filledRegions.Select(SpaceMaterializer.Comments),
+                Has.Some.Contains("|X01\npe-takeoff: residue=rejected"));
+            Assert.That(BoundaryLines(document, options), Has.Count.EqualTo(13));
+            Assert.That(BoundaryLines(document, options), Has.None.Matches<ModelCurve>(line => {
+                var curve = line.GeometryCurve;
+                return curve.GetEndPoint(0).X > 20.01 && curve.GetEndPoint(0).X < 29.99
+                       || curve.GetEndPoint(1).X > 20.01 && curve.GetEndPoint(1).X < 29.99;
+            }));
         });
     }
 
     private static List<Element> Owned(Document document, TakeoffOptions options) =>
         new FilteredElementCollector(document).WhereElementIsNotElementType()
-            .Where(element => element.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS)?.AsString()
+            .Where(element => SpaceMaterializer.Comments(element)
                 ?.StartsWith($"{options.Marker}|spaces|", StringComparison.Ordinal) == true)
             .ToList();
 

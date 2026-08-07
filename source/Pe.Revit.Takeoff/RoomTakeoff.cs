@@ -156,7 +156,7 @@ public static class RoomTakeoff
         log(resolved.Orphaned > 0
             ? $"[spaces] WARNING orphaned resolution decisions; {resolutionSummary}; unresolved rooms remain materialized"
             : $"[spaces] resolutions {resolutionSummary}");
-        return SpaceMaterializer.Replace(doc, level, phase, resolved.Takeoff, opt, log, inkNear);
+        return SpaceMaterializer.Replace(doc, level, phase, resolved.Takeoff, opt, log, inkNear).Spaces;
     }
 
     private static string InkPath(TakeoffOptions opt, Level level) =>
@@ -352,6 +352,16 @@ public static class RoomTakeoff
                 LabelY = room.Label[1],
                 SplitFrom = room.SplitFrom,
                 MergedFrom = room.MergedFrom,
+            }).ToList(),
+            Residues = level.Residues.Select(residue => new ResidueResult {
+                Id = residue.Id,
+                Reason = residue.Reason,
+                RawSqft = residue.RawSqft,
+                MeanCeilingFt = residue.MeanCeilingFt,
+                LabelX = residue.Label[0],
+                LabelY = residue.Label[1],
+                Polygon = residue.Outer,
+                Holes = residue.Holes,
             }).ToList(),
         };
         takeoff.TotalSqft = takeoff.Rooms.Sum(room => room.RawSqft);

@@ -25,6 +25,15 @@ public sealed class RhvacMaterializationResolutionTests
             room.Polygon, room.Holes, room.Flags,
             Label = new[] { room.LabelX, room.LabelY }, room.SplitFrom, room.MergedFrom,
         });
+        var expectedResidues = core.Levels.Single(level => level.LevelName == levelName).Residues
+            .Select(residue => new {
+                residue.Id, residue.Reason, residue.RawSqft, residue.MeanCeilingFt,
+                Polygon = residue.Outer, residue.Holes, residue.Label,
+            });
+        var actualResidues = materialization.Takeoff.Residues.Select(residue => new {
+            residue.Id, residue.Reason, residue.RawSqft, residue.MeanCeilingFt,
+            residue.Polygon, residue.Holes, Label = new[] { residue.LabelX, residue.LabelY },
+        });
 
         Assert.Multiple(() => {
             Assert.That((materialization.Applied, materialization.Remapped, materialization.Orphaned),
@@ -32,7 +41,10 @@ public sealed class RhvacMaterializationResolutionTests
             Assert.That((materialization.Applied, materialization.Remapped, materialization.Orphaned),
                 Is.EqualTo((core.Applied, core.Remapped, core.Orphaned)));
             Assert.That(JsonConvert.SerializeObject(actual), Is.EqualTo(JsonConvert.SerializeObject(expected)));
+            Assert.That(JsonConvert.SerializeObject(actualResidues),
+                Is.EqualTo(JsonConvert.SerializeObject(expectedResidues)));
             Assert.That(materialization.Takeoff.Rooms, Has.Count.EqualTo(81));
+            Assert.That(materialization.Takeoff.Residues, Has.Count.EqualTo(3));
             Assert.That(materialization.Takeoff.Rooms.Select(room => room.Id),
                 Does.Contain("R07.a").And.Contain("R07.b")
                     .And.Not.Contain("R06").And.Not.Contain("R07").And.Not.Contain("R09"));
