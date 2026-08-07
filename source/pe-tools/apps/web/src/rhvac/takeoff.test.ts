@@ -17,13 +17,7 @@ import {
   toResolutionsFile,
   type FlagResolution,
 } from "./resolutions";
-import {
-  deriveGridPitch,
-  levelBounds,
-  parseTakeoffTsv,
-  shapeCentroid,
-  shapePathD,
-} from "./takeoff";
+import { levelBounds, parseTakeoffTsv, shapeCentroid, shapePathD } from "./takeoff";
 import { candidateKey, normalizeExtract, type RhvacExtract, type RoomMap } from "./types";
 
 const FIXTURE_DIR = join(import.meta.dirname, "../../public/rhvac-fixture");
@@ -107,66 +101,15 @@ describe("rhvac fixture lane", () => {
     }
   });
 
-  it("simplifies fixture outlines without area drift, added vertices, or invalid rings", () => {
-    const loopArea = (loop: [number, number][]) => {
-      let sum = 0;
-      for (let i = 0; i < loop.length; i++) {
-        const [x0, y0] = loop[i]!;
-        const [x1, y1] = loop[(i + 1) % loop.length]!;
-        sum += x0 * y1 - x1 * y0;
-      }
-      return sum / 2;
-    };
-    const shapeArea = (outer: [number, number][], holes: [number, number][][]) =>
-      loopArea(outer) - holes.reduce((sum, hole) => sum + Math.abs(loopArea(hole)), 0);
+  it("returns POLY vertices verbatim", () => {
+    const level = parseTakeoffTsv(
+      "META\tlevel\tL1\nMETA\telev\t0\nROOM\tR01\t0.5\t3\t0.5\t0.25\t9\n" +
+        "POLY\tR01\touter\t0;0|0.25;0|0.5;0|0.75;0|1;0|1;0.25|1;0.5|0;0.5",
+    );
 
-    for (const name of manifest.takeoff) {
-      const raw = parseTakeoffTsv(readFixture(name), { simplify: false });
-      const simplified = parseTakeoffTsv(readFixture(name));
-      const pitch = deriveGridPitch(raw.rooms.flatMap((r) => [r.outer, ...r.holes]));
-      expect(pitch).not.toBeNull();
-      expect(pitch!).toBeLessThanOrEqual(1);
-
-      expect(simplified.rooms).toHaveLength(raw.rooms.length);
-      for (let i = 0; i < raw.rooms.length; i++) {
-        const before = raw.rooms[i]!;
-        const after = simplified.rooms[i]!;
-        // Area is the exported truth — simplification must not drift it materially.
-        const areaBefore = shapeArea(before.outer, before.holes);
-        const areaAfter = shapeArea(after.outer, after.holes);
-        expect(Math.abs(areaAfter - areaBefore)).toBeLessThanOrEqual(
-          Math.max(0.5, 0.01 * Math.abs(areaBefore)),
-        );
-        expect(after.outer.length).toBeLessThanOrEqual(before.outer.length);
-        expect(selfIntersects(after.outer)).toBe(false);
-        for (const hole of after.holes) expect(selfIntersects(hole)).toBe(false);
-      }
-    }
-  });
-
-  it("derives pitch from repeated raster steps, not micro snaps or long walls", () => {
-    const cleanSquares: [number, number][][] = Array.from({ length: 100 }, (_, index) => {
-      const x = index * 20;
-      return [
-        [x, 0],
-        [x + 10, 0],
-        [x + 10, 10],
-        [x, 10],
-      ];
-    });
-    const rasterWithMicroSnap: [number, number][] = [
-      [0, 0],
-      [0.000005, 0],
-      [0.250005, 0],
-      [0.500005, 0],
-      [0.750005, 0],
-      [1.000005, 0],
-      [1.000005, 0.25],
-      [1.000005, 0.5],
-      [0, 0.5],
-    ];
-
-    expect(deriveGridPitch([...cleanSquares, rasterWithMicroSnap])).toBe(0.25);
+    expect(level.rooms[0]!.outer).toHaveLength(8);
+    expect(level.rooms[0]!.outer[0]).toEqual([0, 0]);
+    expect(level.rooms[0]!.outer.at(-1)).toEqual([0, 0.5]);
   });
 
   it("room-map candidates all resolve to parsed polygons, oracle numbers to rooms", () => {

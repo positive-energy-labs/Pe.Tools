@@ -317,6 +317,9 @@ export function PlanPane(props: PlanPaneProps) {
         <LegendChip color="var(--cat-blue)" label="matched" />
         <LegendChip color="var(--cat-kiln)" label="unmatched" />
         {pending.length > 0 && <LegendChip color="var(--cat-clay)" label="flagged" dashed />}
+        {level.rooms.some((room) => room.flags?.includes("unregularized")) && (
+          <LegendChip color="var(--muted-foreground)" label="raw shape — straighten in Revit" />
+        )}
         {level.residues.some((residue) => !residue.claimed) && (
           <LegendChip color="var(--muted-foreground)" label="unclaimed residue" />
         )}
@@ -558,6 +561,7 @@ function LevelSvg({
         key,
         identifier,
         flagged: shape.flags?.some(isDecisionFlag) ?? false,
+        unregularized: shape.flags?.includes("unregularized") ?? false,
         d: shapePathD(shape, bounds),
         centroid: shapeCentroid(shape, bounds),
       };
@@ -679,7 +683,7 @@ function LevelSvg({
           }}
         />
       ))}
-      {shapes.map(({ shape, key, identifier, flagged, d, centroid }) => {
+      {shapes.map(({ shape, key, identifier, flagged, unregularized, d, centroid }) => {
         const room = identifier !== undefined ? roomsById.get(identifier) : undefined;
         const selected =
           (identifier !== undefined && identifier === focusedId) ||
@@ -692,18 +696,22 @@ function LevelSvg({
               : "var(--primary)"
             : flagged
               ? "var(--cat-clay)"
-              : room
-                ? "var(--cat-blue)"
-                : "var(--cat-kiln)";
+              : unregularized
+                ? "var(--muted-foreground)"
+                : room
+                  ? "var(--cat-blue)"
+                  : "var(--cat-kiln)";
         const fill = shape.rejected
           ? "color-mix(in srgb, var(--muted-foreground) 8%, transparent)"
           : selected
             ? `color-mix(in srgb, ${flagged ? "var(--cat-clay)" : "var(--primary)"} 28%, transparent)`
             : flagged
               ? "color-mix(in srgb, var(--cat-clay) 12%, transparent)"
-              : room
-                ? "color-mix(in srgb, var(--cat-blue) 12%, transparent)"
-                : "color-mix(in srgb, var(--cat-kiln) 10%, transparent)";
+              : unregularized
+                ? "color-mix(in srgb, var(--muted-foreground) 6%, transparent)"
+                : room
+                  ? "color-mix(in srgb, var(--cat-blue) 12%, transparent)"
+                  : "color-mix(in srgb, var(--cat-kiln) 10%, transparent)";
         return (
           <g
             key={shape.id}
