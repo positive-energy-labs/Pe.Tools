@@ -1,4 +1,13 @@
+using Pe.Revit.Takeoff.Rhvac;
+
 namespace Pe.Revit.Takeoff;
+
+internal sealed record MaterializationResolutionResult(
+    TakeoffResult Takeoff,
+    int Applied,
+    int Remapped,
+    int Orphaned
+);
 
 // Facade. Room detection needs THREE script executions because the host owns exactly one
 // transaction per run and ExportImage refuses to run mid-transaction:
@@ -139,7 +148,17 @@ public static class RoomTakeoff
         var level = ResolveLevel(doc, levelNameContains);
         var inkNear = InkSupport.LoadOracle(InkPath(opt, level), 3 * opt.CellFt);
         if (inkNear == null) log("[spaces] no ink raster found — arcs run on geometry alone");
-        return SpaceMaterializer.Replace(doc, level, phase, LoadResult(opt, level), opt, log, inkNear);
+        var takeoffDir = ArtifactDir(opt);
+        var sidecar = RhvacCandidateBuilder.ResolutionPath(takeoffDir);
+        var resolved = File.Exists(sidecar)
+            ? LoadMaterializationResult(takeoffDir, level.Name, sidecar)
+            : new MaterializationResolutionResult(LoadResult(opt, level), 0, 0, 0);
+        var resolutionSummary =
+            $"applied={resolved.Applied} remapped={resolved.Remapped} orphaned={resolved.Orphaned}";
+        log(resolved.Orphaned > 0
+            ? $"[spaces] WARNING orphaned resolution decisions; {resolutionSummary}; unresolved rooms remain materialized"
+            : $"[spaces] resolutions {resolutionSummary}");
+        return SpaceMaterializer.Replace(doc, level, phase, resolved.Takeoff, opt, log, inkNear);
     }
 
     private static string InkPath(TakeoffOptions opt, Level level) =>
@@ -292,7 +311,54 @@ public static class RoomTakeoff
                     flagged.Flags.AddRange(p[2][(separator + 1)..]
                         .Split(new[] { '+' }, StringSplitOptions.RemoveEmptyEntries));
             }
+            else if (p.Length >= 9 && p[0] == "META" && p[1] == "residue")
+            {
+                var residue = new ResidueResult {
+                    Id = p[2], Reason = Enum.Parse<ResidueReason>(p[3], ignoreCase: true), RawSqft = double.Parse(p[4], ic),
+                    LabelX = double.Parse(p[5], ic), LabelY = double.Parse(p[6], ic),
+                    MeanCeilingFt = double.Parse(p[7], ic), Polygon = ParsePoly(p[8], ic),
+                };
+                for (int i = 9; i < p.Length; i++) residue.Holes.Add(ParsePoly(p[i], ic));
+                result.Residues.Add(residue);
+            }
         }
         return result;
+    }
+
+    private static List<double[]> ParsePoly(string text, CultureInfo ic) =>
+        text.Split('|').Select(pt => {
+            var xy = pt.Split(';');
+            return new[] { double.Parse(xy[0], ic), double.Parse(xy[1], ic) };
+        }).ToList();
+
+    internal static MaterializationResolutionResult LoadMaterializationResult(
+        string takeoffDirectory,
+        string levelName,
+        string? resolutionsPath = null
+    )
+    {
+        var resolved = RhvacCandidateBuilder.ParseTsvDirectory(
+            takeoffDirectory, resolutionsPath, simplify: false);
+        var level = resolved.Levels.Single(item => item.LevelName == levelName);
+        var takeoff = new TakeoffResult {
+            LevelName = level.LevelName,
+            LevelElevation = level.Elevation,
+            Rooms = level.Rooms.Select(room => new RoomResult {
+                Id = room.Id,
+                RawSqft = room.RawSqft,
+                PerimeterFt = room.PerimeterFt,
+                MeanCeilingFt = room.MeanCeilingFt,
+                Polygon = room.Outer,
+                Holes = room.Holes,
+                Flags = room.Flags,
+                LabelX = room.Label[0],
+                LabelY = room.Label[1],
+                SplitFrom = room.SplitFrom,
+                MergedFrom = room.MergedFrom,
+            }).ToList(),
+        };
+        takeoff.TotalSqft = takeoff.Rooms.Sum(room => room.RawSqft);
+        return new MaterializationResolutionResult(
+            takeoff, resolved.Applied, resolved.Remapped, resolved.Orphaned);
     }
 }

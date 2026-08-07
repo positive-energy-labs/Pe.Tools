@@ -252,10 +252,17 @@ internal static class SpaceMaterializer
     private static string? Comments(Element element) =>
         element.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS)?.AsString();
 
-    internal static string SpaceComments(string token, RoomResult room) =>
-        token + "|" + room.Id + (room.Flags.Count > 0
-            ? "\npe-takeoff: " + string.Join(", ", room.Flags)
-            : "");
+    internal static string SpaceComments(string token, RoomResult room)
+    {
+        var lines = new List<string> { token + "|" + room.Id };
+        if (room.Flags.Count > 0)
+            lines.Add("pe-takeoff: " + string.Join(", ", room.Flags));
+        if (room.SplitFrom is not null)
+            lines.Add("pe-takeoff: splitFrom=" + room.SplitFrom);
+        if (room.MergedFrom is not null)
+            lines.Add("pe-takeoff: mergedFrom=" + room.MergedFrom);
+        return string.Join("\n", lines);
+    }
 
     private static void Stamp(Element element, string value)
     {
