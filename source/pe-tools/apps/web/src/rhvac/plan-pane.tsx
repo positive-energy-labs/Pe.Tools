@@ -19,6 +19,7 @@ import {
   mergeShapes,
   nearestOnRing,
   pendingFlags,
+  residueToRoom,
   type FlagResolution,
   type PendingFlag,
 } from "#/rhvac/resolutions";
@@ -61,6 +62,14 @@ interface SplitDraft {
 
 type MergeDraft = Omit<SplitDraft, "first">;
 
+interface ResidueDraft {
+  candidateKey: string;
+  levelIndex: number;
+  residueId: string;
+  reason: string;
+  anchor: NonNullable<FlagResolution["anchor"]>;
+}
+
 export interface PlanPaneProps {
   /** Already resolved — routes apply the resolutions sidecar before passing levels here. */
   takeoff: RhvacTakeoffData | null;
@@ -87,6 +96,7 @@ export function PlanPane(props: PlanPaneProps) {
   const [focusedFlagKey, setFocusedFlagKey] = useState<string | null>(null);
   const [splitDraft, setSplitDraft] = useState<SplitDraft | null>(null);
   const [mergeDraft, setMergeDraft] = useState<MergeDraft | null>(null);
+  const [residueDraft, setResidueDraft] = useState<ResidueDraft | null>(null);
 
   const roomsById = useMemo(() => new Map(rooms.map((r) => [r.identifier, r])), [rooms]);
   const matchedIds = useMemo(() => new Set(matchByCandidate.values()), [matchByCandidate]);
@@ -120,6 +130,7 @@ export function PlanPane(props: PlanPaneProps) {
   const beginSplit = (flag: PendingFlag) => {
     focusFlag(flag);
     setMergeDraft(null);
+    setResidueDraft(null);
     setSplitDraft({
       candidateKey: flag.candidateKey,
       levelIndex: flag.levelIndex,
@@ -133,6 +144,7 @@ export function PlanPane(props: PlanPaneProps) {
   const beginMerge = (flag: PendingFlag) => {
     focusFlag(flag);
     setSplitDraft(null);
+    setResidueDraft(null);
     setMergeDraft({
       candidateKey: flag.candidateKey,
       levelIndex: flag.levelIndex,
@@ -145,6 +157,7 @@ export function PlanPane(props: PlanPaneProps) {
   const resolve = (resolution: FlagResolution) => {
     setSplitDraft(null);
     setMergeDraft(null);
+    setResidueDraft(null);
     setFocusedFlagKey(null);
     props.onResolve(resolution);
   };
@@ -193,6 +206,7 @@ export function PlanPane(props: PlanPaneProps) {
           focusedFlagKey={focusedFlagKey}
           splitDraft={splitDraft?.levelIndex === levelIndex ? splitDraft : null}
           mergeDraft={mergeDraft?.levelIndex === levelIndex ? mergeDraft : null}
+          residueDraft={residueDraft?.levelIndex === levelIndex ? residueDraft : null}
           onPickRoom={props.onPickRoom}
           onPickFlagged={setFocusedFlagKey}
           onSplitPoint={onSplitPoint}
@@ -204,6 +218,28 @@ export function PlanPane(props: PlanPaneProps) {
               action: "merge",
               params: { other, anchor },
               anchor: mergeDraft.anchor,
+            });
+          }}
+          onPickResidue={(residue) => {
+            if (residue.claimed) return;
+            setSplitDraft(null);
+            setMergeDraft(null);
+            setResidueDraft({
+              candidateKey: candidateKey(level.levelName, residue.id),
+              levelIndex,
+              residueId: residue.id,
+              reason: residue.reason,
+              anchor: { label: residue.label, sqft: residue.rawSqft },
+            });
+          }}
+          onClaimTarget={(into, anchor) => {
+            if (!residueDraft) return;
+            resolve({
+              candidateKey: residueDraft.candidateKey,
+              flag: `residue:${residueDraft.reason}`,
+              action: "claim-residue",
+              params: { residueId: residueDraft.residueId, into, anchor },
+              anchor: residueDraft.anchor,
             });
           }}
         />
@@ -238,12 +274,41 @@ export function PlanPane(props: PlanPaneProps) {
             </Button>
           </div>
         )}
+        {residueDraft && (
+          <div className="absolute inset-x-2 bottom-2 flex items-center gap-2 rounded-[var(--radius)] border border-muted-foreground/40 bg-background/95 px-2.5 py-1.5 shadow-sm">
+            <span className="tele text-muted-foreground">
+              claim {residueDraft.residueId} — click neighbor or promote
+            </span>
+            <Button
+              size="xs"
+              variant="outline"
+              className="ml-auto"
+              onClick={() =>
+                resolve({
+                  candidateKey: residueDraft.candidateKey,
+                  flag: `residue:${residueDraft.reason}`,
+                  action: "claim-residue",
+                  params: { residueId: residueDraft.residueId },
+                  anchor: residueDraft.anchor,
+                })
+              }
+            >
+              promote
+            </Button>
+            <Button size="xs" variant="ghost" onClick={() => setResidueDraft(null)}>
+              cancel
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="flex shrink-0 items-center gap-3 border-t border-[var(--line)] px-2.5 py-1">
         <LegendChip color="var(--cat-blue)" label="matched" />
         <LegendChip color="var(--cat-kiln)" label="unmatched" />
         {pending.length > 0 && <LegendChip color="var(--cat-clay)" label="flagged" dashed />}
+        {level.residues.some((residue) => !residue.claimed) && (
+          <LegendChip color="var(--muted-foreground)" label="unclaimed residue" />
+        )}
         <LegendChip color="var(--primary)" label="selected" />
         <span className="tele ml-auto text-muted-foreground">wheel zoom · drag pan</span>
       </div>
@@ -435,10 +500,13 @@ function LevelSvg({
   focusedFlagKey,
   splitDraft,
   mergeDraft,
+  residueDraft,
   onPickRoom,
   onPickFlagged,
   onSplitPoint,
   onMergeTarget,
+  onPickResidue,
+  onClaimTarget,
 }: {
   level: TakeoffLevel;
   roomsById: ReadonlyMap<number, RhvacRoom>;
@@ -447,10 +515,13 @@ function LevelSvg({
   focusedFlagKey: string | null;
   splitDraft: SplitDraft | null;
   mergeDraft: MergeDraft | null;
+  residueDraft: ResidueDraft | null;
   onPickRoom: (identifier: number) => void;
   onPickFlagged: (candidateKey: string) => void;
   onSplitPoint: (point: [number, number]) => void;
   onMergeTarget: (candidateKey: string, anchor: NonNullable<FlagResolution["anchor"]>) => void;
+  onPickResidue: (residue: TakeoffLevel["residues"][number]) => void;
+  onClaimTarget: (candidateKey: string, anchor: NonNullable<FlagResolution["anchor"]>) => void;
 }) {
   const bounds = useMemo(() => levelBounds(level), [level]);
   const initial = useMemo(() => (bounds ? fitView(bounds) : null), [bounds]);
@@ -564,7 +635,7 @@ function LevelSvg({
       viewBox={`${v.x} ${v.y} ${v.w} ${v.h}`}
       className={cn(
         "size-full touch-none bg-card",
-        (splitDraft || mergeDraft) && "cursor-crosshair",
+        (splitDraft || mergeDraft || residueDraft) && "cursor-crosshair",
       )}
       preserveAspectRatio="xMidYMid meet"
       onPointerDown={onPointerDown}
@@ -572,6 +643,23 @@ function LevelSvg({
       onDoubleClick={() => setView(initial)}
     >
       <title>{level.levelName}</title>
+      {level.residues.map((residue) => (
+        <path
+          key={residue.id}
+          d={shapePathD(residue, bounds)}
+          fill="color-mix(in srgb, var(--muted-foreground) 12%, transparent)"
+          stroke="var(--muted-foreground)"
+          strokeOpacity={0.35}
+          strokeWidth={1}
+          vectorEffect="non-scaling-stroke"
+          className={residue.claimed ? undefined : "cursor-pointer"}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (!residue.claimed && !draggedRef.current && !splitDraft && !mergeDraft)
+              onPickResidue(residue);
+          }}
+        />
+      ))}
       {shapes.map(({ shape, key, identifier, flagged, d, centroid }) => {
         const room = identifier !== undefined ? roomsById.get(identifier) : undefined;
         const selected =
@@ -608,6 +696,13 @@ function LevelSvg({
                 const source = level.rooms.find((room) => room.id === mergeDraft.roomId);
                 if (!source || !mergeShapes(source, shape, mergeDraft.flag)) return;
                 onMergeTarget(key, { label: shape.label, sqft: shape.rawSqft });
+                return;
+              }
+              if (residueDraft) {
+                const residue = level.residues.find((item) => item.id === residueDraft.residueId);
+                if (!residue || !mergeShapes(residueToRoom(residue), shape, residueDraft.reason))
+                  return;
+                onClaimTarget(key, { label: shape.label, sqft: shape.rawSqft });
                 return;
               }
               if (identifier !== undefined) onPickRoom(identifier);

@@ -57,7 +57,7 @@ public sealed class TakeoffReplayTests
         Path.Combine(Path.GetTempPath(), $"pe-takeoff-replay-{Guid.NewGuid():N}-{name}");
 
     [Test]
-    public void Tsv_round_trip_preserves_room_flags()
+    public void Tsv_round_trip_preserves_room_flags_and_residue()
     {
         var source = new TakeoffResult {
             LevelName = "Flags",
@@ -70,6 +70,13 @@ public sealed class TakeoffReplayTests
                 },
             },
             TotalSqft = 100,
+            Residues = {
+                new ResidueResult {
+                    Id = "X01", Reason = ResidueReason.Border, RawSqft = 25,
+                    LabelX = 12.5, LabelY = 2.5, MeanCeilingFt = 8,
+                    Polygon = new() { new[] { 10d, 0d }, new[] { 15d, 0d }, new[] { 15d, 5d }, new[] { 10d, 5d } },
+                },
+            },
         };
 
         var loaded = RoomTakeoff.LoadResult(source.ToTsv(), source.LevelName, source.LevelElevation);
@@ -78,6 +85,11 @@ public sealed class TakeoffReplayTests
             Assert.That(loaded.Rooms.Single().Flags, Is.EqualTo(source.Rooms.Single().Flags));
             Assert.That(SpaceMaterializer.SpaceComments("owned", loaded.Rooms.Single()),
                 Is.EqualTo("owned|R07\npe-takeoff: open-plan-merge, low-evidence-boundary"));
+            Assert.That((loaded.Residues.Single().Id, loaded.Residues.Single().Reason,
+                    loaded.Residues.Single().RawSqft, loaded.Residues.Single().LabelX,
+                    loaded.Residues.Single().LabelY, loaded.Residues.Single().MeanCeilingFt),
+                Is.EqualTo(("X01", ResidueReason.Border, 25d, 12.5d, 2.5d, 8d)));
+            Assert.That(loaded.Residues.Single().Polygon, Is.EqualTo(source.Residues.Single().Polygon));
         });
     }
 

@@ -5,12 +5,18 @@
  * Display-lenient where the C# parser throws: we surface a message instead of
  * refusing the whole plan pane.
  */
-import type { TakeoffFlagKind, TakeoffLevel, TakeoffRoomShape } from "#/rhvac/types";
+import type {
+  TakeoffFlagKind,
+  TakeoffLevel,
+  TakeoffResidueShape,
+  TakeoffRoomShape,
+} from "#/rhvac/types";
 
 export function parseTakeoffTsv(tsvText: string, options?: { simplify?: boolean }): TakeoffLevel {
   let levelName: string | null = null;
   let elevation: number | null = null;
   const rooms: TakeoffRoomShape[] = [];
+  const residues: TakeoffResidueShape[] = [];
   const byId = new Map<string, TakeoffRoomShape>();
 
   for (const rawLine of tsvText.split("\n")) {
@@ -22,6 +28,19 @@ export function parseTakeoffTsv(tsvText: string, options?: { simplify?: boolean 
         if (parts[1] === "level") levelName = parts[2] ?? null;
         else if (parts[1] === "elev") elevation = Number(parts[2]);
         else if (parts[1] === "flag") applyFlagMeta(parts[2] ?? "", byId);
+        else if (parts[1] === "residue") {
+          if (parts.length < 9)
+            throw new Error(`malformed META residue line: ${line.slice(0, 80)}`);
+          residues.push({
+            id: parts[2]!,
+            reason: parts[3] as TakeoffResidueShape["reason"],
+            rawSqft: Number(parts[4]),
+            label: [Number(parts[5]), Number(parts[6])],
+            meanCeilingFt: Number(parts[7]),
+            outer: parseLoop(parts[8]!),
+            holes: parts.slice(9).map(parseLoop),
+          });
+        }
         // rooms / totalSqft are display metadata; ignored.
         break;
       case "ROOM": {
@@ -58,7 +77,7 @@ export function parseTakeoffTsv(tsvText: string, options?: { simplify?: boolean 
     throw new Error("takeoff TSV has no META level/elev header");
   const kept = rooms.filter((r) => r.outer.length >= 3);
   if (options?.simplify !== false) simplifyLevelLoops(kept);
-  return { levelName, elevation, rooms: kept };
+  return { levelName, elevation, rooms: kept, residues };
 }
 
 /**
@@ -281,8 +300,8 @@ export function levelBounds(level: TakeoffLevel): Bounds | null {
   let minY = Infinity;
   let maxX = -Infinity;
   let maxY = -Infinity;
-  for (const room of level.rooms)
-    for (const [x, y] of room.outer) {
+  for (const shape of [...level.rooms, ...level.residues])
+    for (const [x, y] of shape.outer) {
       if (x < minX) minX = x;
       if (y < minY) minY = y;
       if (x > maxX) maxX = x;
@@ -294,7 +313,10 @@ export function levelBounds(level: TakeoffLevel): Bounds | null {
 /** Model Y is up, SVG Y is down — mirror inside the level's own bounds. */
 const flipY = (y: number, bounds: Bounds) => bounds.minY + bounds.maxY - y;
 
-export function shapePathD(shape: TakeoffRoomShape, bounds: Bounds): string {
+export function shapePathD(
+  shape: Pick<TakeoffRoomShape, "outer" | "holes">,
+  bounds: Bounds,
+): string {
   const loopD = (loop: [number, number][]) =>
     loop
       .map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(2)} ${flipY(y, bounds).toFixed(2)}`)

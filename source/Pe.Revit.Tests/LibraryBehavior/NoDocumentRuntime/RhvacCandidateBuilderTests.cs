@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using Pe.Revit.Takeoff;
 using Pe.Revit.Takeoff.Rhvac;
 
 namespace Pe.Revit.Tests.LibraryBehavior.NoDocumentRuntime;
@@ -263,6 +264,9 @@ public sealed class RhvacCandidateBuilderTests
                     Is.EqualTo(fixture.Expected.RoomLabels));
                 Assert.That(result.Levels.Single().Rooms.Select(room => room.Id),
                     Does.Not.Contain(fixture.Expected.RejectedRoomId));
+                Assert.That(result.Levels.Single().Residues.Single(residue =>
+                        residue.Reason == ResidueReason.Rejected && residue.Claimed).Id,
+                    Is.EqualTo(fixture.Expected.RejectedRoomId));
                 Assert.That(result.Levels.Single().Rooms.Single(room => room.Id == "R01").MergedFrom,
                     Is.EqualTo(fixture.Expected.MergedFrom));
                 Assert.That(result.Applied + result.Remapped + result.Orphaned,
@@ -274,6 +278,39 @@ public sealed class RhvacCandidateBuilderTests
             File.Delete(sidecarPath);
         }
     }
+
+    [Test]
+    public void Claim_residue_unions_or_promotes_and_survives_renumbering()
+    {
+        var fixturePath = Path.GetFullPath(Path.Combine(
+            RhvacEvalTests.FindFixtureDir(), "..", "fixtures", "residue-claim-remap.json"));
+        var fixture = JsonConvert.DeserializeObject<ResidueClaimFixture>(File.ReadAllText(fixturePath))!;
+        var sidecarPath = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(sidecarPath, JsonConvert.SerializeObject(fixture.Sidecar));
+            var before = RhvacCandidateBuilder.ApplyResolutions(
+                new[] { RhvacCandidateBuilder.ParseTsv(fixture.BeforeTsv) }, sidecarPath);
+            var after = RhvacCandidateBuilder.ApplyResolutions(
+                new[] { RhvacCandidateBuilder.ParseTsv(fixture.AfterTsv) }, sidecarPath);
+
+            Assert.Multiple(() => {
+                Assert.That((before.Applied, before.Remapped, before.Orphaned), Is.EqualTo((2, 0, 0)));
+                Assert.That((after.Applied, after.Remapped, after.Orphaned), Is.EqualTo((0, 2, 0)));
+                Assert.That(after.Levels.Single().Rooms.Select(room => room.Id),
+                    Is.EqualTo(new[] { "R01", "R02", "X10" }));
+                Assert.That(after.Levels.Single().Rooms.Select(room => room.RawSqft),
+                    Is.EqualTo(new[] { 200.0, 100.0, 100.0 }));
+                Assert.That(after.Levels.Single().Residues, Is.Empty);
+            });
+        }
+        finally
+        {
+            File.Delete(sidecarPath);
+        }
+    }
+
+    private sealed record ResidueClaimFixture(string BeforeTsv, string AfterTsv, object Sidecar);
 
     private sealed record AnchorRemapFixture(
         string BeforeTsv,

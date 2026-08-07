@@ -31,6 +31,10 @@ const ANCHOR_FIXTURE = join(
   import.meta.dirname,
   "../../../../../../eval/rhvac/fixtures/sidecar-anchor-remap.json",
 );
+const RESIDUE_FIXTURE = join(
+  import.meta.dirname,
+  "../../../../../../eval/rhvac/fixtures/residue-claim-remap.json",
+);
 
 const readFixture = (name: string) => {
   const text = readFileSync(join(FIXTURE_DIR, name), "utf8");
@@ -216,9 +220,13 @@ describe("ambiguity flags + resolutions", () => {
     const level = parseTakeoffTsv(readFixture("rooms_Level_1_Main_Level.tsv"));
     expect(level.levelName).toBe("Level 1/Main Level");
     const byId = new Map(level.rooms.map((r) => [r.id, r]));
-    expect(byId.get("R03")!.flags).toEqual(["low-evidence-boundary", "open-plan-merge"]);
-    expect(byId.get("R13")!.flags).toEqual(["low-evidence-boundary"]);
-    expect(level.rooms.filter((room) => room.flags?.length).length).toBe(10);
+    expect(byId.get("R03")!.flags).toEqual([
+      "low-evidence-boundary",
+      "open-plan-merge",
+      "ruled-seam",
+    ]);
+    expect(byId.get("R13")!.flags).toEqual(["low-evidence-boundary", "unregularized"]);
+    expect(level.rooms.filter((room) => room.flags?.length).length).toBe(68);
   });
 
   it("ignores flag lines naming unknown rooms and malformed payloads", () => {
@@ -405,7 +413,9 @@ describe("ambiguity flags + resolutions", () => {
         (room) => room.label,
       ),
       mergedFrom: result.levels[0]!.rooms.find((room) => room.id === "R01")!.mergedFrom,
-      rejectedRoomId: result.levels[0]!.rooms.find((room) => room.rejected)!.id,
+      rejectedRoomId: result.levels[0]!.residues.find(
+        (residue) => residue.reason === "rejected" && residue.claimed,
+      )!.id,
     }).toEqual(fixture.expected);
     expect(result.applied + result.remapped + result.orphaned).toBe(
       fixture.sidecar.resolutions.length,
@@ -444,5 +454,32 @@ describe("ambiguity flags + resolutions", () => {
     expect(result.levels[0]!.rooms.map(({ id, rawSqft }) => ({ id, rawSqft }))).toEqual([
       { id: "R03", rawSqft: 300 },
     ]);
+  });
+
+  it("claims or promotes residue and remaps both residue and room anchors", () => {
+    const fixture = JSON.parse(readFileSync(RESIDUE_FIXTURE, "utf8")) as {
+      beforeTsv: string;
+      afterTsv: string;
+      sidecar: { version: 2; resolutions: FlagResolution[] };
+    };
+    const before = applyResolutions(
+      [parseTakeoffTsv(fixture.beforeTsv)],
+      fixture.sidecar.resolutions,
+      fixture.sidecar.version,
+    );
+    const after = applyResolutions(
+      [parseTakeoffTsv(fixture.afterTsv)],
+      fixture.sidecar.resolutions,
+      fixture.sidecar.version,
+    );
+
+    expect(before).toMatchObject({ applied: 2, remapped: 0, orphaned: 0 });
+    expect(after).toMatchObject({ applied: 0, remapped: 2, orphaned: 0 });
+    expect(after.levels[0]!.rooms.map(({ id, rawSqft }) => ({ id, rawSqft }))).toEqual([
+      { id: "R01", rawSqft: 200 },
+      { id: "R02", rawSqft: 100 },
+      { id: "X10", rawSqft: 100 },
+    ]);
+    expect(after.levels[0]!.residues).toEqual([]);
   });
 });

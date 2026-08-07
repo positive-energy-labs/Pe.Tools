@@ -180,10 +180,22 @@ export interface TakeoffRoomShape {
   rejected?: boolean;
 }
 
+export interface TakeoffResidueShape {
+  id: string;
+  reason: "border" | "crumb" | "rejected";
+  claimed?: boolean;
+  rawSqft: number;
+  meanCeilingFt: number;
+  label: [number, number];
+  outer: [number, number][];
+  holes: [number, number][][];
+}
+
 export interface TakeoffLevel {
   levelName: string;
   elevation: number;
   rooms: TakeoffRoomShape[];
+  residues: TakeoffResidueShape[];
 }
 
 /** Curated rhvac-room ↔ takeoff-candidate map (eval/rhvac/<project>/room-map.json). */

@@ -52,11 +52,14 @@ def load_takeoff(takeoff_dir):
     floors = defaultdict(dict)
     candidate_flags = defaultdict(set)
     candidate_meta = {}
+    residues = defaultdict(dict)
+    level_names = {}
     loaded = []
     for f in sorted(os.listdir(takeoff_dir)):
         if not (f.startswith("rooms_") and f.endswith(".tsv")):
             continue
-        level, elevation, polys, flags, rooms = None, None, defaultdict(list), defaultdict(set), {}
+        level, elevation, polys, flags, rooms, raw_residues = (None, None, defaultdict(list),
+                                                               defaultdict(set), {}, [])
         for line in open(os.path.join(takeoff_dir, f), encoding="utf-8"):
             p = line.rstrip("\n").split("\t")
             if p[0] == "META" and p[1] == "level":
@@ -67,17 +70,26 @@ def load_takeoff(takeoff_dir):
                 rid, separator, payload = p[2].partition(":")
                 if separator and rid.startswith("R"):
                     flags[rid].update(flag for flag in payload.split("+") if flag)
+            elif p[0] == "META" and p[1] == "residue" and len(p) >= 9:
+                raw_residues.append({
+                    "id": p[2], "reason": p[3], "sqft": float(p[4]),
+                    "label": [float(p[5]), float(p[6])], "meanCeilingFt": float(p[7]),
+                    "loops": [[tuple(map(float, q.split(";"))) for q in loop.split("|")]
+                              for loop in p[8:]],
+                })
             elif p[0] == "ROOM":
-                rooms[p[1]] = {"sqft": float(p[2]), "label": [float(p[4]), float(p[5])]}
+                rooms[p[1]] = {"sqft": float(p[2]), "label": [float(p[4]), float(p[5])],
+                               "meanCeilingFt": float(p[6])}
             elif p[0] == "POLY" and p[2] == "outer":
                 polys[p[1]].append([tuple(map(float, q.split(";"))) for q in p[3].split("|")])
         if level is None or elevation is None:
             raise SystemExit(f"{f}: no META level/elev line")
-        loaded.append((level, elevation, polys, flags, rooms))
-    elevations = sorted({elevation for _, elevation, _, _, _ in loaded})
-    for level, elevation, polys, flags, rooms in loaded:
+        loaded.append((level, elevation, polys, flags, rooms, raw_residues))
+    elevations = sorted({elevation for _, elevation, _, _, _, _ in loaded})
+    for level, elevation, polys, flags, rooms, raw_residues in loaded:
         match = re.search(r"Level\s+(\d+)", level, re.I)
         floor = int(match.group(1)) if match else elevations.index(elevation)
+        level_names[floor] = level
         for rid, loops in polys.items():
             pg = Polygon(loops[0])
             if not pg.is_valid:
@@ -89,7 +101,15 @@ def load_takeoff(takeoff_dir):
                 rooms[rid]["vertices"] = len(loops[0])
                 rooms[rid]["level"] = level
                 candidate_meta[key] = rooms[rid]
-    return floors, candidate_flags, candidate_meta
+        for residue in raw_residues:
+            pg = Polygon(residue["loops"][0], residue["loops"][1:])
+            if not pg.is_valid:
+                pg = pg.buffer(0)
+            if pg.area > 0:
+                residues[floor][f"{level}:{residue['id']}"] = {
+                    **residue, "polygon": pg, "level": level, "claimed": False,
+                }
+    return floors, candidate_flags, candidate_meta, residues, level_names
 
 
 def straightness(candidate_meta, candidate_flags):
@@ -115,10 +135,14 @@ def apply_resolutions(takeoff, sidecar):
     """Apply v1 key-only or v2 anchor-backed decisions with loss accounting."""
     if sidecar.get("version") not in (1, 2) or not isinstance(sidecar.get("resolutions"), list):
         raise SystemExit("resolutions sidecar must be version 1 or 2 with a resolutions array")
-    floors, candidate_flags, candidate_meta = takeoff
+    floors, candidate_flags, candidate_meta, residues, level_names = takeoff
     floors = defaultdict(dict, {floor: dict(candidates) for floor, candidates in floors.items()})
     candidate_flags = defaultdict(set, {key: set(flags) for key, flags in candidate_flags.items()})
     candidate_meta = dict(candidate_meta)
+    residues = defaultdict(dict, {
+        floor: {key: dict(value) for key, value in values.items()}
+        for floor, values in residues.items()
+    })
     accounting = {"applied": 0, "remapped": 0, "orphaned": 0}
     touches = defaultdict(int)
     grouped = defaultdict(list)
@@ -127,6 +151,7 @@ def apply_resolutions(takeoff, sidecar):
     merge_sources = set()
     merge_source_floors = {}
     merged_by_target = {}
+    claimed_residues = set()
 
     def resolve_candidate(key, anchor):
         target = next(((floor, key) for floor, candidates in floors.items()
@@ -148,14 +173,79 @@ def apply_resolutions(takeoff, sidecar):
                      if candidate_key.rsplit(":", 1)[0] == level and polygon.contains(point)),
                     None), True
 
+    def resolve_residue(key, anchor):
+        target = next(((floor, key) for floor, values in residues.items() if key in values), None)
+        if sidecar.get("version") == 1:
+            return target, False
+        if not anchor:
+            return None, False
+        point = Point(anchor["label"])
+        exact_valid = (target is not None
+                       and residues[target[0]][target[1]]["polygon"].contains(point)
+                       and abs(residues[target[0]][target[1]]["sqft"] - anchor["sqft"])
+                       <= anchor["sqft"] * 0.2)
+        if exact_valid:
+            return target, False
+        level = key.rsplit(":", 1)[0] if isinstance(key, str) and ":" in key else ""
+        return next(((floor, residue_key)
+                     for floor, values in residues.items()
+                     for residue_key, residue in values.items()
+                     if residue["level"] == level and residue["polygon"].contains(point)),
+                    None), True
+
     for resolution in sidecar.get("resolutions", []):
         action = resolution.get("action")
         if not resolution.get("candidateKey") or not resolution.get("flag"):
             raise SystemExit("each resolution requires candidateKey and flag")
-        if action not in ("accept", "split", "reject", "merge"):
+        if action not in ("accept", "split", "reject", "merge", "claim-residue"):
             raise SystemExit(f"unknown resolution action: {action}")
         touches[action] += 1
         key = resolution.get("candidateKey")
+        if action == "claim-residue":
+            params = resolution.get("params") or {}
+            if not params.get("residueId"):
+                raise SystemExit("claim-residue params require residueId")
+            if params.get("residueId") != key.rsplit(":", 1)[-1]:
+                accounting["orphaned"] += 1
+                continue
+            source, was_remapped = resolve_residue(key, resolution.get("anchor"))
+            if source is None or source in claimed_residues:
+                accounting["orphaned"] += 1
+                continue
+            floor, source_key = source
+            residue = residues[floor][source_key]
+            if params.get("into"):
+                if not params.get("anchor"):
+                    raise SystemExit("claim-residue into requires a target anchor")
+                target, target_remapped = resolve_candidate(params["into"], params["anchor"])
+                if target is None or target[0] != floor or target[1] in merge_sources:
+                    accounting["orphaned"] += 1
+                    continue
+                target_state = merged_by_target.get(target[1], {
+                    "floor": target[0], "polygon": floors[target[0]][target[1]],
+                    "flags": set(candidate_flags[target[1]]),
+                    "sqft": candidate_meta[target[1]]["sqft"],
+                })
+                merged = residue["polygon"].union(target_state["polygon"])
+                if not isinstance(merged, Polygon):
+                    accounting["orphaned"] += 1
+                    continue
+                merged_by_target[target[1]] = {
+                    **target_state, "polygon": merged,
+                    "sqft": target_state["sqft"] + residue["sqft"],
+                }
+                was_remapped = was_remapped or target_remapped
+            else:
+                floors[floor][source_key] = residue["polygon"]
+                candidate_flags[source_key] = set()
+                candidate_meta[source_key] = {
+                    "sqft": residue["sqft"], "label": residue["label"],
+                    "vertices": len(residue["polygon"].exterior.coords) - 1,
+                    "level": residue["level"],
+                }
+            claimed_residues.add(source)
+            accounting["remapped" if was_remapped else "applied"] += 1
+            continue
         source, was_remapped = resolve_candidate(key, resolution.get("anchor"))
         if source is None:
             accounting["orphaned"] += 1
@@ -231,6 +321,8 @@ def apply_resolutions(takeoff, sidecar):
             "sqft": state["sqft"],
             "vertices": len(state["polygon"].exterior.coords) - 1,
         }
+    for floor, key in claimed_residues:
+        del residues[floor][key]
 
     for (floor, target_key), resolutions in grouped.items():
         if target_key not in floors[floor]:
@@ -239,6 +331,13 @@ def apply_resolutions(takeoff, sidecar):
                     if resolution["action"] == "accept"}
         flags = candidate_flags.pop(target_key, set()) - accepted
         if any(resolution["action"] == "reject" for resolution in resolutions):
+            meta = candidate_meta[target_key]
+            residues[floor][target_key] = {
+                "id": target_key.rsplit(":", 1)[-1], "reason": "rejected",
+                "sqft": meta["sqft"], "label": meta["label"],
+                "meanCeilingFt": meta["meanCeilingFt"], "polygon": floors[floor][target_key],
+                "level": target_key.rsplit(":", 1)[0], "claimed": True,
+            }
             del floors[floor][target_key]
             candidate_meta.pop(target_key, None)
             continue
@@ -262,7 +361,7 @@ def apply_resolutions(takeoff, sidecar):
                 "level": parent_meta["level"],
             }
 
-    return (floors, candidate_flags, candidate_meta), {
+    return (floors, candidate_flags, candidate_meta, residues, level_names), {
         "touchesByVerb": dict(sorted(touches.items())), **accounting,
     }
 
@@ -427,7 +526,7 @@ def gates(precision_out, totals):
 
 
 def score(takeoff_dir, geo, stale, wall_tol=WALL_TOL_FT, takeoff=None):
-    floors, candidate_flags, candidate_meta = takeoff or load_takeoff(takeoff_dir)
+    floors, candidate_flags, candidate_meta, residues, level_names = takeoff or load_takeoff(takeoff_dir)
     excluded = {e["number"]: e.get("reason", "") for e in stale.get("exclude", [])}
     gts = {}
     for num, g in geo["rooms"].items():
@@ -541,11 +640,84 @@ def score(takeoff_dir, geo, stale, wall_tol=WALL_TOL_FT, takeoff=None):
         "wallTolFt": wall_tol,
     }
     precision_out = precision(floors, candidate_flags, gts, excluded)
+    residue_census = defaultdict(lambda: {
+        "count": 0, "sqft": 0.0, "claimed": 0, "claimedSqft": 0.0,
+        "unclaimed": 0, "unclaimedSqft": 0.0,
+    })
+    for level in level_names.values():
+        residue_census[level]
+    for values in residues.values():
+        for residue in values.values():
+            residue_census[residue["level"]]["count"] += 1
+            residue_census[residue["level"]]["sqft"] += residue["sqft"]
+            state = "claimed" if residue.get("claimed") else "unclaimed"
+            residue_census[residue["level"]][state] += 1
+            residue_census[residue["level"]][f"{state}Sqft"] += residue["sqft"]
     return {"takeoffDir": os.path.relpath(takeoff_dir, HERE).replace("\\", "/"),
             "totals": totals, "levels": levels_out,
             "straightness": straightness(candidate_meta, candidate_flags),
             "precision": precision_out, "gates": gates(precision_out, totals),
+            "residue": {level: {key: round(number, 1) if key.endswith("Sqft") or key == "sqft" else number
+                                for key, number in value.items()}
+                        for level, value in sorted(residue_census.items())},
             "rooms": {str(n): rooms_out[n] for n in sorted(rooms_out)}}
+
+
+def clean_status(before, after, resolved_takeoff, sidecar):
+    """Phase-5 touches-to-clean status for every level touched by the sidecar."""
+    floors, candidate_flags, candidate_meta, residues, level_names = resolved_takeoff
+    level_floor = {level: floor for floor, level in level_names.items()}
+    for floor, candidates in floors.items():
+        for key in candidates:
+            level_floor[key.rsplit(":", 1)[0]] = floor
+    for floor, values in residues.items():
+        for residue in values.values():
+            level_floor[residue["level"]] = floor
+    touched = sorted({resolution["candidateKey"].rsplit(":", 1)[0]
+                      for resolution in sidecar["resolutions"]})
+    output = {}
+    for level in touched:
+        floor = level_floor.get(level)
+        if floor is None:
+            continue
+        pending = sum(len(flags) for key, flags in candidate_flags.items()
+                      if key.rsplit(":", 1)[0] == level)
+        unclaimed = after["residue"].get(level, {"unclaimed": 0})["unclaimed"]
+        ratio = after["precision"]["levels"].get(floor, {}).get("candidateGtRatio")
+        before_level = before["levels"].get(floor, {})
+        after_level = after["levels"].get(floor, {})
+        before_score = before_level.get("meanIoU")
+        after_score = after_level.get("meanIoU")
+        score_delta = (round(100 * (after_score - before_score), 1)
+                       if before_score is not None and after_score is not None else None)
+        before_missing = before_level.get("taxonomy", {}).get("missing", 0)
+        after_missing = after_level.get("taxonomy", {}).get("missing", 0)
+        missing_delta = after_missing - before_missing
+        blockers = []
+        if pending:
+            blockers.append(f"{pending} pending flags")
+        if unclaimed:
+            blockers.append(f"{unclaimed} unclaimed residue")
+        if ratio is None or ratio > GATE_COUNT_RATIO_MAX:
+            blockers.append(f"candidate/GT {ratio} > {GATE_COUNT_RATIO_MAX}")
+        if score_delta is None or score_delta < 0:
+            blockers.append(f"score delta {score_delta}")
+        if missing_delta > 0:
+            blockers.append(f"taxonomy missing +{missing_delta}")
+        touches = sum(1 for resolution in sidecar["resolutions"]
+                      if resolution["candidateKey"].rsplit(":", 1)[0] == level)
+        output[level] = {
+            "clean": not blockers,
+            "touchesToClean": touches if not blockers else None,
+            "blockingReasons": blockers,
+            "pendingFlags": pending,
+            "unclaimedResidue": unclaimed,
+            "candidateGtRatio": ratio,
+            "ratioLimit": GATE_COUNT_RATIO_MAX,
+            "scoreDelta": score_delta,
+            "taxonomyMissingDelta": missing_delta,
+        }
+    return output
 
 
 CLS_MARK = {"ok": "ok  ", "shape-poor": "POOR", "fragmented": "FRAG", "merged": "MERG",
@@ -638,6 +810,11 @@ def to_text(sb):
                 f"{wall['actualPct'] if wall['actualPct'] is not None else '-'}%",
                 f"OVERALL {'PASS' if g['passed'] else 'FAIL'}"])
     out.append("")
+    out.append("RESIDUE")
+    for level, census in sb["residue"].items():
+        out.append(f"{level}: {census['count']} total  {census['sqft']} sf  "
+                   f"claimed {census['claimed']}  unclaimed {census['unclaimed']}")
+    out.append("")
     if "resolutions" in sb:
         r = sb["resolutions"]
         out.extend([
@@ -646,8 +823,17 @@ def to_text(sb):
             f"applied {r['applied']}  remapped {r['remapped']}  orphaned {r['orphaned']}",
             f"before ratio {r['before']['candidateGtRatio']}  score {r['before']['totalScore']}",
             f"after  ratio {r['after']['candidateGtRatio']}  score {r['after']['totalScore']}",
-            "",
         ])
+        for level, census in r["residueCensus"].items():
+            out.append(f"residue {level}: {census['count']} total  {census['sqft']} sf  "
+                       f"claimed {census['claimed']}  unclaimed {census['unclaimed']}")
+        for level, status in r["cleanStatus"].items():
+            verdict = (f"CLEAN — touches-to-clean {status['touchesToClean']}" if status["clean"]
+                       else "NOT CLEAN — " + "; ".join(status["blockingReasons"]))
+            out.append(f"CLEAN {level}: {verdict}; pending={status['pendingFlags']} "
+                       f"residue={status['unclaimedResidue']} ratio={status['candidateGtRatio']} "
+                       f"scoreΔ={status['scoreDelta']} missingΔ={status['taxonomyMissingDelta']}")
+        out.append("")
     out.append("per-room (sorted by oracle number; * = non-high confidence ground truth):")
     for n, r in sb["rooms"].items():
         conf = " " if r["confidence"] == "high" else "*"
@@ -762,6 +948,22 @@ def main():
                 "candidateGtRatio": sb["precision"]["total"]["candidateGtRatio"],
                 "totalScore": sb["totals"]["totalScore"],
             },
+            "residueCensus": {
+                level: {
+                    "count": (sb["residue"].get(level, {}).get("count", 0)
+                              + max(0, before["residue"].get(level, {}).get("unclaimed", 0)
+                                    - sb["residue"].get(level, {}).get("unclaimed", 0))),
+                    "sqft": round(sb["residue"].get(level, {}).get("sqft", 0)
+                                  + max(0, before["residue"].get(level, {}).get("unclaimedSqft", 0)
+                                        - sb["residue"].get(level, {}).get("unclaimedSqft", 0)), 1),
+                    "claimed": (sb["residue"].get(level, {}).get("claimed", 0)
+                                + max(0, before["residue"].get(level, {}).get("unclaimed", 0)
+                                      - sb["residue"].get(level, {}).get("unclaimed", 0))),
+                    "unclaimed": sb["residue"].get(level, {}).get("unclaimed", 0),
+                }
+                for level in sorted(set(before["residue"]) | set(sb["residue"]))
+            },
+            "cleanStatus": clean_status(before, sb, resolved, sidecar),
         }
     else:
         sb = before

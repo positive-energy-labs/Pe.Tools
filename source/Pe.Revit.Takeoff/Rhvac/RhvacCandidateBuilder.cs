@@ -28,8 +28,24 @@ public sealed record TakeoffRoomShape(
     public string? MergedFrom { get; init; }
 }
 
+public sealed record TakeoffResidueShape(
+    string Id,
+    ResidueReason Reason,
+    double RawSqft,
+    double MeanCeilingFt,
+    double[] Label,
+    List<double[]> Outer,
+    List<List<double[]>> Holes
+)
+{
+    public bool Claimed { get; init; }
+}
+
 /// <summary>One parsed takeoff TSV: a level and its rooms.</summary>
-public sealed record LevelTakeoff(string LevelName, double Elevation, List<TakeoffRoomShape> Rooms);
+public sealed record LevelTakeoff(string LevelName, double Elevation, List<TakeoffRoomShape> Rooms)
+{
+    public List<TakeoffResidueShape> Residues { get; init; } = new();
+}
 
 /// <summary>Resolved levels plus loss accounting for every sidecar decision.</summary>
 public sealed record ResolutionApplyResult(
@@ -80,10 +96,13 @@ public static class RhvacCandidateBuilder
         double[]? A,
         double[]? B,
         string? Other,
+        string? ResidueId,
+        string? Into,
         ResolutionAnchor? Anchor
     );
     private sealed record ResolutionAnchor(double[] Label, double Sqft);
     private sealed record RoomReference(string LevelName, string Key, TakeoffRoomShape Room);
+    private sealed record ResidueReference(string LevelName, string Key, TakeoffResidueShape Residue);
     private readonly record struct RingSnap(int Edge, double T, double[] Point);
 
     /// <summary>
@@ -98,6 +117,7 @@ public static class RhvacCandidateBuilder
         double? elevation = null;
         int? declaredRooms = null;
         var rooms = new List<TakeoffRoomShape>();
+        var residues = new List<TakeoffResidueShape>();
         var byId = new Dictionary<string, TakeoffRoomShape>();
 
         var lines = tsvText.Split('\n');
@@ -143,6 +163,15 @@ public static class RhvacCandidateBuilder
                     else
                         throw Malformed(lineIndex, $"unknown loop kind '{parts[2]}'");
                     break;
+                case "META" when parts.Length >= 9 && parts[1] == "residue":
+                    residues.Add(new TakeoffResidueShape(
+                        parts[2], Enum.Parse<ResidueReason>(parts[3], true),
+                        Parse(parts[4], lineIndex), Parse(parts[7], lineIndex),
+                        new[] { Parse(parts[5], lineIndex), Parse(parts[6], lineIndex) },
+                        ParseLoop(parts[8], lineIndex),
+                        parts.Skip(9).Select(value => ParseLoop(value, lineIndex)).ToList()
+                    ));
+                    break;
                 default:
                     throw Malformed(lineIndex, $"unrecognized line: {line[..Math.Min(line.Length, 80)]}");
             }
@@ -172,7 +201,7 @@ public static class RhvacCandidateBuilder
 
         if (simplify)
             SimplifyLevelLoops(rooms);
-        return new LevelTakeoff(levelName, elevation.Value, rooms);
+        return new LevelTakeoff(levelName, elevation.Value, rooms) { Residues = residues };
     }
 
     /// <summary>
@@ -190,9 +219,7 @@ public static class RhvacCandidateBuilder
             .OrderBy(path => path, StringComparer.Ordinal)
             .Select(path => ParseTsv(File.ReadAllText(path), simplify: false))
             .ToList();
-        var projectDirectory = Directory.GetParent(fullDirectory)?.FullName
-            ?? throw new InvalidDataException($"{fullDirectory}: takeoff directory has no parent.");
-        var sidecar = resolutionsPath ?? Path.Combine(projectDirectory, "takeoff-resolutions.json");
+        var sidecar = resolutionsPath ?? ResolutionPath(fullDirectory);
         var result = File.Exists(sidecar)
             ? ApplyResolutions(levels, sidecar)
             : new ResolutionApplyResult(levels, 0, 0, 0);
@@ -200,6 +227,14 @@ public static class RhvacCandidateBuilder
             foreach (var level in result.Levels)
                 SimplifyLevelLoops(level.Rooms);
         return result;
+    }
+
+    internal static string ResolutionPath(string tsvDirectory)
+    {
+        var fullDirectory = Path.GetFullPath(tsvDirectory);
+        var projectDirectory = Directory.GetParent(fullDirectory)?.FullName
+            ?? throw new InvalidDataException($"{fullDirectory}: takeoff directory has no parent.");
+        return Path.Combine(projectDirectory, "takeoff-resolutions.json");
     }
 
     /// <summary>Pure, idempotent sidecar application with v2 anchor remapping and loss accounting.</summary>
@@ -216,7 +251,7 @@ public static class RhvacCandidateBuilder
         {
             if (string.IsNullOrEmpty(resolution.CandidateKey) || string.IsNullOrEmpty(resolution.Flag))
                 throw new InvalidDataException($"{resolutionsPath}: candidateKey and flag are required.");
-            if (resolution.Action is not ("accept" or "split" or "reject" or "merge"))
+            if (resolution.Action is not ("accept" or "split" or "reject" or "merge" or "claim-residue"))
                 throw new InvalidDataException($"{resolutionsPath}: unknown action '{resolution.Action}'.");
             if (resolution.Action == "split" && resolution.Params is { A: not null, B: not null })
             {
@@ -232,6 +267,11 @@ public static class RhvacCandidateBuilder
                 if (!double.IsFinite(resolution.Params.Anchor.Sqft) || resolution.Params.Anchor.Sqft <= 0)
                     throw new InvalidDataException($"{resolutionsPath}: merge anchor sqft must be positive and finite.");
             }
+            if (resolution.Action == "claim-residue"
+                && resolution.Params is not { ResidueId.Length: > 0 })
+                throw new InvalidDataException($"{resolutionsPath}: claim-residue params require residueId.");
+            if (resolution.Action == "claim-residue" && resolution.Params is { Into.Length: > 0, Anchor: null })
+                throw new InvalidDataException($"{resolutionsPath}: claim-residue into requires a target anchor.");
             if (resolution.Anchor is not null)
             {
                 ValidatePoint(resolution.Anchor.Label, resolutionsPath);
@@ -242,15 +282,74 @@ public static class RhvacCandidateBuilder
 
         var rooms = levels.SelectMany(level => level.Rooms.Select(room => new RoomReference(
             level.LevelName, $"{level.LevelName}:{room.Id}", room))).ToList();
+        var residues = levels.SelectMany(level => level.Residues.Select(residue => new ResidueReference(
+            level.LevelName, $"{level.LevelName}:{residue.Id}", residue))).ToList();
         var byKey = new Dictionary<string, List<FlagResolution>>(StringComparer.Ordinal);
         var splitTargets = new HashSet<string>(StringComparer.Ordinal);
         var mergeSources = new HashSet<string>(StringComparer.Ordinal);
         var mergedByTarget = new Dictionary<string, TakeoffRoomShape>(StringComparer.Ordinal);
+        var claimedResidues = new HashSet<string>(StringComparer.Ordinal);
+        var promoted = new Dictionary<string, List<TakeoffRoomShape>>(StringComparer.Ordinal);
         var applied = 0;
         var remapped = 0;
         var orphaned = 0;
         foreach (var resolution in file.Resolutions)
         {
+            if (resolution.Action == "claim-residue")
+            {
+                var parameters = resolution.Params!;
+                var separator = resolution.CandidateKey.LastIndexOf(':');
+                if (parameters.ResidueId != resolution.CandidateKey[(separator + 1)..])
+                {
+                    orphaned++;
+                    continue;
+                }
+                var residueResolution = ResolveResidue(
+                    residues, file.Version, resolution.CandidateKey, resolution.Anchor);
+                var source = residueResolution.Target;
+                if (source is null || claimedResidues.Contains(source.Key))
+                {
+                    orphaned++;
+                    continue;
+                }
+                var residueRemapped = residueResolution.Remapped;
+                if (!string.IsNullOrEmpty(parameters.Into))
+                {
+                    var targetResolution = ResolveCandidate(
+                        rooms, file.Version, parameters.Into, parameters.Anchor);
+                    var target = targetResolution.Target;
+                    if (target is null || target.LevelName != source.LevelName || mergeSources.Contains(target.Key))
+                    {
+                        orphaned++;
+                        continue;
+                    }
+                    var residueRoom = new TakeoffRoomShape(
+                        source.Residue.Id, source.Residue.RawSqft, RingPerimeter(source.Residue.Outer),
+                        source.Residue.MeanCeilingFt, source.Residue.Outer, source.Residue.Holes
+                    ) { Label = source.Residue.Label };
+                    var targetRoom = mergedByTarget.GetValueOrDefault(target.Key) ?? target.Room;
+                    var merged = MergeShapes(residueRoom, targetRoom, resolution.Flag);
+                    if (merged is null)
+                    {
+                        orphaned++;
+                        continue;
+                    }
+                    mergedByTarget[target.Key] = merged with { MergedFrom = targetRoom.MergedFrom };
+                    residueRemapped |= targetResolution.Remapped;
+                }
+                else
+                {
+                    if (!promoted.TryGetValue(source.LevelName, out var levelPromoted))
+                        promoted[source.LevelName] = levelPromoted = new List<TakeoffRoomShape>();
+                    levelPromoted.Add(new TakeoffRoomShape(
+                        source.Residue.Id, source.Residue.RawSqft, RingPerimeter(source.Residue.Outer),
+                        source.Residue.MeanCeilingFt, source.Residue.Outer, source.Residue.Holes
+                    ) { Label = source.Residue.Label });
+                }
+                claimedResidues.Add(source.Key);
+                if (residueRemapped) remapped++; else applied++;
+                continue;
+            }
             var sourceResolution = ResolveCandidate(
                 rooms, file.Version, resolution.CandidateKey, resolution.Anchor);
             var sourceCandidate = sourceResolution.Target;
@@ -312,16 +411,25 @@ public static class RhvacCandidateBuilder
             targetResolutions.Add(resolution);
         }
 
-        var resolved = levels.Select(level => level with {
-            Rooms = level.Rooms.SelectMany(room => {
-                var key = $"{level.LevelName}:{room.Id}";
-                if (mergeSources.Contains(key))
-                    return Array.Empty<TakeoffRoomShape>();
-                return ApplyRoomResolutions(
-                    level.LevelName,
-                    mergedByTarget.TryGetValue(key, out var merged) ? merged : room,
-                    byKey);
-            }).ToList(),
+        var resolved = levels.Select(level => {
+            var rejected = new List<TakeoffResidueShape>();
+            return level with {
+                Rooms = level.Rooms.SelectMany(room => {
+                    var key = $"{level.LevelName}:{room.Id}";
+                    if (mergeSources.Contains(key))
+                        return Array.Empty<TakeoffRoomShape>();
+                    return ApplyRoomResolutions(
+                        level.LevelName,
+                        mergedByTarget.TryGetValue(key, out var merged) ? merged : room,
+                        byKey,
+                        rejected);
+                }).Concat(promoted.GetValueOrDefault(level.LevelName)
+                    ?? Enumerable.Empty<TakeoffRoomShape>()).ToList(),
+                Residues = level.Residues
+                    .Where(residue => !claimedResidues.Contains($"{level.LevelName}:{residue.Id}"))
+                    .Concat(rejected)
+                    .ToList(),
+            };
         }).ToList();
         return new ResolutionApplyResult(resolved, applied, remapped, orphaned);
     }
@@ -348,14 +456,38 @@ public static class RhvacCandidateBuilder
             && Contains(room.Room, anchor.Label)), true);
     }
 
+    private static (ResidueReference? Target, bool Remapped) ResolveResidue(
+        IReadOnlyList<ResidueReference> residues,
+        int version,
+        string key,
+        ResolutionAnchor? anchor
+    )
+    {
+        var exact = residues.FirstOrDefault(residue => residue.Key == key);
+        if (version == 1) return (exact, false);
+        if (anchor is null) return (null, false);
+        if (exact is not null
+            && Contains(exact.Residue.Outer, exact.Residue.Holes, anchor.Label)
+            && Math.Abs(exact.Residue.RawSqft - anchor.Sqft) <= anchor.Sqft * 0.2)
+            return (exact, false);
+        var separator = key.LastIndexOf(':');
+        var levelName = separator < 0 ? "" : key[..separator];
+        return (residues.FirstOrDefault(residue => residue.LevelName == levelName
+            && Contains(residue.Residue.Outer, residue.Residue.Holes, anchor.Label)), true);
+    }
+
     private static bool Contains(TakeoffRoomShape room, double[] point) =>
-        InsideLoop(room.Outer, point[0], point[1])
-        && room.Holes.All(hole => !InsideLoop(hole, point[0], point[1]));
+        Contains(room.Outer, room.Holes, point);
+
+    private static bool Contains(List<double[]> outer, List<List<double[]>> holes, double[] point) =>
+        InsideLoop(outer, point[0], point[1])
+        && holes.All(hole => !InsideLoop(hole, point[0], point[1]));
 
     private static IEnumerable<TakeoffRoomShape> ApplyRoomResolutions(
         string levelName,
         TakeoffRoomShape room,
-        IReadOnlyDictionary<string, List<FlagResolution>> byKey
+        IReadOnlyDictionary<string, List<FlagResolution>> byKey,
+        ICollection<TakeoffResidueShape> rejected
     )
     {
         if (!byKey.TryGetValue($"{levelName}:{room.Id}", out var resolutions))
@@ -371,7 +503,12 @@ public static class RhvacCandidateBuilder
         var remaining = room.Flags.Where(flag => !accepted.Contains(flag)).ToList();
 
         if (resolutions.Any(resolution => resolution.Action == "reject"))
+        {
+            rejected.Add(new TakeoffResidueShape(
+                room.Id, ResidueReason.Rejected, room.RawSqft, room.MeanCeilingFt,
+                room.Label, room.Outer, room.Holes) { Claimed = true });
             return Array.Empty<TakeoffRoomShape>();
+        }
 
         if (split?.Params is { A: { } a, B: { } b })
         {

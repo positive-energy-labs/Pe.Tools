@@ -6,14 +6,19 @@
  * same parsed takeoff it always yields the same polygons, so it survives
  * reload and replays against re-runs. The C# candidate builder consumes the
  * same sidecar before .r10 export, so accepted flags and split polygons feed
- * candidate generation without changing the source TSVs; rejected rooms stay
- * in the web projection only so the operator can see conserved gray geometry.
+ * candidate generation without changing the source TSVs; rejected rooms become
+ * claimed residue so conserved gray geometry remains explicit in every mirror.
  *
  * Persistence is localStorage per takeoff source plus downloadable JSON; the
  * `rhvac.takeoff-resolutions` host op (src/host/rhvac.ts) persists the same
  * shape as `<dir>/takeoff-resolutions.json`.
  */
-import { candidateKey, type TakeoffLevel, type TakeoffRoomShape } from "#/rhvac/types";
+import {
+  candidateKey,
+  type TakeoffLevel,
+  type TakeoffResidueShape,
+  type TakeoffRoomShape,
+} from "#/rhvac/types";
 import {
   sortRhvacResolutions,
   type RhvacResolutionsFile,
@@ -71,10 +76,19 @@ export function applyResolutions(
       room,
     })),
   );
+  const residues = levels.flatMap((level) =>
+    level.residues.map((residue) => ({
+      levelName: level.levelName,
+      key: candidateKey(level.levelName, residue.id),
+      residue,
+    })),
+  );
   const byKey = new Map<string, FlagResolution[]>();
   const splitTargets = new Set<string>();
   const mergeSources = new Set<string>();
   const mergedByTarget = new Map<string, TakeoffRoomShape>();
+  const claimedResidues = new Set<string>();
+  const promoted = new Map<string, TakeoffRoomShape[]>();
   let applied = 0;
   let remapped = 0;
   let orphaned = 0;
@@ -103,7 +117,73 @@ export function applyResolutions(
     };
   };
 
+  const resolveResidue = (
+    key: string,
+    anchor: FlagResolution["anchor"],
+  ): { target: (typeof residues)[number] | undefined; remapped: boolean } => {
+    const exact = residues.find((candidate) => candidate.key === key);
+    if (version === 1) return { target: exact, remapped: false };
+    if (!anchor) return { target: undefined, remapped: false };
+    if (
+      exact &&
+      pointInResidue(anchor.label, exact.residue) &&
+      Math.abs(exact.residue.rawSqft - anchor.sqft) <= anchor.sqft * 0.2
+    )
+      return { target: exact, remapped: false };
+    const separator = key.lastIndexOf(":");
+    const levelName = separator < 0 ? "" : key.slice(0, separator);
+    return {
+      target: residues.find(
+        (candidate) =>
+          candidate.levelName === levelName && pointInResidue(anchor.label, candidate.residue),
+      ),
+      remapped: true,
+    };
+  };
+
   for (const resolution of resolutions) {
+    if (resolution.action === "claim-residue") {
+      if (
+        resolution.params.residueId !==
+        resolution.candidateKey.slice(resolution.candidateKey.lastIndexOf(":") + 1)
+      ) {
+        orphaned++;
+        continue;
+      }
+      const sourceResolution = resolveResidue(resolution.candidateKey, resolution.anchor);
+      const source = sourceResolution.target;
+      if (!source || claimedResidues.has(source.key)) {
+        orphaned++;
+        continue;
+      }
+      let wasRemapped = sourceResolution.remapped;
+      if (resolution.params.into) {
+        const targetResolution = resolveCandidate(resolution.params.into, resolution.params.anchor);
+        const target = targetResolution.target;
+        if (!target || target.levelName !== source.levelName || mergeSources.has(target.key)) {
+          orphaned++;
+          continue;
+        }
+        const residueRoom = residueToRoom(source.residue);
+        const targetRoom = mergedByTarget.get(target.key) ?? target.room;
+        const merged = mergeShapes(residueRoom, targetRoom, resolution.flag);
+        if (!merged) {
+          orphaned++;
+          continue;
+        }
+        mergedByTarget.set(target.key, { ...merged, mergedFrom: targetRoom.mergedFrom });
+        wasRemapped ||= targetResolution.remapped;
+      } else {
+        promoted.set(source.levelName, [
+          ...(promoted.get(source.levelName) ?? []),
+          residueToRoom(source.residue),
+        ]);
+      }
+      claimedResidues.add(source.key);
+      if (wasRemapped) remapped++;
+      else applied++;
+      continue;
+    }
     const sourceResolution = resolveCandidate(resolution.candidateKey, resolution.anchor);
     const sourceCandidate = sourceResolution.target;
     if (!sourceCandidate) {
@@ -161,44 +241,74 @@ export function applyResolutions(
     byKey.set(sourceCandidate.key, list);
   }
 
-  const resolved = levels.map((level) => ({
-    ...level,
-    rooms: level.rooms.flatMap((room) => {
-      const key = candidateKey(level.levelName, room.id);
-      if (mergeSources.has(key)) return [];
-      const input = mergedByTarget.get(key) ?? room;
-      const forRoom = byKey.get(key);
-      if (!forRoom) return [input];
+  const resolved = levels.map((level) => {
+    const rejectedResidues: TakeoffResidueShape[] = [];
+    return {
+      ...level,
+      rooms: level.rooms
+        .flatMap((room) => {
+          const key = candidateKey(level.levelName, room.id);
+          if (mergeSources.has(key)) return [];
+          const input = mergedByTarget.get(key) ?? room;
+          const forRoom = byKey.get(key);
+          if (!forRoom) return [input];
 
-      const accepted = new Set(forRoom.filter((r) => r.action === "accept").map((r) => r.flag));
-      const rejected = forRoom.some((r) => r.action === "reject");
-      const split = forRoom.find(
-        (r): r is Extract<FlagResolution, { action: "split" }> => r.action === "split",
-      );
-      const remaining = (input.flags ?? []).filter((f) => !accepted.has(f));
+          const accepted = new Set(forRoom.filter((r) => r.action === "accept").map((r) => r.flag));
+          const rejected = forRoom.some((r) => r.action === "reject");
+          const split = forRoom.find(
+            (r): r is Extract<FlagResolution, { action: "split" }> => r.action === "split",
+          );
+          const remaining = (input.flags ?? []).filter((f) => !accepted.has(f));
 
-      if (rejected) {
-        const { flags: _dropped, ...rest } = input;
-        return [{ ...rest, rejected: true }];
-      }
+          if (rejected) {
+            rejectedResidues.push({
+              id: input.id,
+              reason: "rejected",
+              claimed: true,
+              rawSqft: input.rawSqft,
+              meanCeilingFt: input.meanCeilingFt,
+              label: input.label,
+              outer: input.outer,
+              holes: input.holes,
+            });
+            return [];
+          }
 
-      if (split?.params) {
-        const halves = splitShape(input, split.params.a, split.params.b);
-        if (halves) {
-          const childFlags = remaining.filter((f) => f !== split.flag);
-          return halves.map((half) => ({
-            ...half,
-            ...(childFlags.length > 0 ? { flags: childFlags } : {}),
-          }));
-        }
-      }
-      if (remaining.length === (input.flags?.length ?? 0)) return [input];
-      const { flags: _dropped, ...rest } = input;
-      return [remaining.length > 0 ? { ...rest, flags: remaining } : rest];
-    }),
-  }));
+          if (split?.params) {
+            const halves = splitShape(input, split.params.a, split.params.b);
+            if (halves) {
+              const childFlags = remaining.filter((f) => f !== split.flag);
+              return halves.map((half) => ({
+                ...half,
+                ...(childFlags.length > 0 ? { flags: childFlags } : {}),
+              }));
+            }
+          }
+          if (remaining.length === (input.flags?.length ?? 0)) return [input];
+          const { flags: _dropped, ...rest } = input;
+          return [remaining.length > 0 ? { ...rest, flags: remaining } : rest];
+        })
+        .concat(promoted.get(level.levelName) ?? []),
+      residues: level.residues
+        .filter((residue) => !claimedResidues.has(candidateKey(level.levelName, residue.id)))
+        .concat(rejectedResidues),
+    };
+  });
   return { levels: resolved, applied, remapped, orphaned };
 }
+
+const pointInResidue = (point: readonly [number, number], residue: TakeoffResidueShape): boolean =>
+  pointInRing(point, residue.outer) && residue.holes.every((hole) => !pointInRing(point, hole));
+
+export const residueToRoom = (residue: TakeoffResidueShape): TakeoffRoomShape => ({
+  id: residue.id,
+  rawSqft: residue.rawSqft,
+  perimeterFt: ringPerimeter(residue.outer),
+  meanCeilingFt: residue.meanCeilingFt,
+  label: residue.label,
+  outer: residue.outer,
+  holes: residue.holes,
+});
 
 // ── split geometry ───────────────────────────────────────────────────────────
 

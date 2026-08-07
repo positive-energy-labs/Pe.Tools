@@ -35,6 +35,8 @@ internal static class PartitionFormulation
             || double.IsInfinity(opt.MinSuspectCeilingStdDevFt)
             || opt.MinSuspectCeilingStdDevFt < 0)
             throw new ArgumentOutOfRangeException(nameof(opt.MinSuspectCeilingStdDevFt));
+        if (!double.IsFinite(opt.MinResidueSqft) || opt.MinResidueSqft < 0)
+            throw new ArgumentOutOfRangeException(nameof(opt.MinResidueSqft));
         int W = hf.W, H = hf.H, n = W * H;
         double cellArea = opt.CellFt * opt.CellFt;
 
@@ -164,7 +166,7 @@ internal static class PartitionFormulation
             Flag(flags, b, "low-evidence-boundary");
         }
 
-        // ---- emit: drop border-touching spaces (exterior leaks), order by area desc ----
+        // ---- emit: rooms plus conserved residue; room ownership/ranking stays unchanged ----
         var cellsById = new Dictionary<int, List<int>>();
         var touchesBorder = new HashSet<int>();
         for (int i = 0; i < n; i++)
@@ -181,6 +183,28 @@ internal static class PartitionFormulation
             .Where(id => !touchesBorder.Contains(id) && cellsById[id].Count * cellArea >= opt.MinSqft)
             .OrderByDescending(id => cellsById[id].Count).ThenBy(id => id)
             .ToList();
+        var residueRegions = touchesBorder
+            .OrderByDescending(id => cellsById[id].Count).ThenBy(id => id)
+            .Select(id => (id, cells: cellsById[id], reason: ResidueReason.Border))
+            .ToList();
+        int residueId = -1;
+        var seenCrumbs = new bool[n];
+        for (int i = 0; i < n; i++)
+        {
+            if (!domain[i] || owner[i] != 0 || seenCrumbs[i]) continue;
+            var cells = new List<int>();
+            seenCrumbs[i] = true; bfs.Enqueue(i);
+            while (bfs.Count > 0)
+            {
+                int c = bfs.Dequeue(); cells.Add(c); owner[c] = residueId;
+                int x = c % W, y = c / W;
+                if (x > 0 && domain[c - 1] && owner[c - 1] == 0 && !seenCrumbs[c - 1]) { seenCrumbs[c - 1] = true; bfs.Enqueue(c - 1); }
+                if (x < W - 1 && domain[c + 1] && owner[c + 1] == 0 && !seenCrumbs[c + 1]) { seenCrumbs[c + 1] = true; bfs.Enqueue(c + 1); }
+                if (y > 0 && domain[c - W] && owner[c - W] == 0 && !seenCrumbs[c - W]) { seenCrumbs[c - W] = true; bfs.Enqueue(c - W); }
+                if (y < H - 1 && domain[c + W] && owner[c + W] == 0 && !seenCrumbs[c + W]) { seenCrumbs[c + W] = true; bfs.Enqueue(c + W); }
+            }
+            residueRegions.Add((residueId--, cells, ResidueReason.Crumb));
+        }
         var medianWidthFt = RegionMedianWidthsFt(owner, W, H, opt.CellFt);
         var perimeterCells = RegionPerimeterCells(owner, W, H);
         var headroom = emitIds.ToDictionary(id => id, id => HeadroomStats(cellsById[id], hf));
@@ -240,6 +264,39 @@ internal static class PartitionFormulation
             if (flags.TryGetValue(id, out var fl)) room.Flags.AddRange(fl);
             result.Rooms.Add(room);
         }
+        int residueRank = 0, excludedResidues = 0;
+        double excludedResidueSqft = 0;
+        foreach (var (id, cells, reason) in residueRegions)
+        {
+            double sqft = cells.Count * cellArea;
+            if (sqft < opt.MinResidueSqft)
+            {
+                excludedResidues++;
+                excludedResidueSqft += sqft;
+                continue;
+            }
+            var polys = Detector.TraceLoops(cells, owner, id, W, H)
+                .Select(lp => lp.Select(v => new[] { hf.MinX + v.x * opt.CellFt, hf.MinY + v.y * opt.CellFt }).ToList())
+                .Select(Detector.CollapseCollinear)
+                .Where(p => p.Count >= 3)
+                .ToList();
+            if (polys.Count == 0) continue;
+            int outerIdx = Enumerable.Range(0, polys.Count)
+                .OrderByDescending(i => Math.Abs(Detector.Shoelace(polys[i]))).First();
+            var outer = polys[outerIdx];
+            if (Detector.Shoelace(outer) < 0) outer.Reverse();
+            int label = Detector.PoleOfInaccessibility(cells, owner, id, W, H);
+            var residue = new ResidueResult {
+                Id = "X" + (++residueRank).ToString("D2"), Reason = reason, RawSqft = sqft,
+                LabelX = hf.MinX + (label % W + 0.5) * opt.CellFt,
+                LabelY = hf.MinY + (label / W + 0.5) * opt.CellFt,
+                MeanCeilingFt = HeadroomStats(cells, hf).Mean, Polygon = outer,
+            };
+            for (int i = 0; i < polys.Count; i++) if (i != outerIdx) residue.Holes.Add(polys[i]);
+            result.Residues.Add(residue);
+        }
+        log($"[partition] residue={result.Residues.Count} ({result.Residues.Sum(r => r.RawSqft):F0}sf) " +
+            $"excluded<{opt.MinResidueSqft:F0}sf={excludedResidues} ({excludedResidueSqft:F0}sf)");
         SpaceBoundaryNetwork.Regularize(
             result.Rooms, opt.CellFt, opt.BoundarySimplifyFt, opt.RegularizeAreaTolerancePct,
             InkSupport.CreateOracle(W, H, hf.MinX, hf.MinY, opt.CellFt, seedInk, 3 * opt.CellFt), log);

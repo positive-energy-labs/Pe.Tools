@@ -678,6 +678,17 @@ export const rhvacTakeoffResolutionSchema = Schema.Union([
     params: Schema.Struct({ other: Schema.String, anchor: rhvacResolutionAnchorSchema }),
     anchor: Schema.optional(rhvacResolutionAnchorSchema),
   }),
+  Schema.Struct({
+    candidateKey: Schema.String,
+    flag: Schema.String,
+    action: Schema.Literals(["claim-residue"]),
+    params: Schema.Struct({
+      residueId: Schema.String,
+      into: Schema.optional(Schema.String),
+      anchor: Schema.optional(rhvacResolutionAnchorSchema),
+    }),
+    anchor: Schema.optional(rhvacResolutionAnchorSchema),
+  }),
 ]);
 export type RhvacTakeoffResolution = Schema.Schema.Type<typeof rhvacTakeoffResolutionSchema>;
 

@@ -22,6 +22,7 @@ namespace Pe.Revit.Takeoff;
 // while evidence-free cores stay whole (measured: pure DistanceMaxima under-seeds closets/baths,
 // 41.9 vs 52.8 TOTAL).
 public enum TakeoffSeedSource { RegionCores, DistanceMaxima, Hybrid }
+public enum ResidueReason { Border, Crumb, Rejected }
 
 public sealed class TakeoffOptions
 {
@@ -30,6 +31,7 @@ public sealed class TakeoffOptions
     public string LevelNameContains = "";   // matched against host Level.Name
     public double CellFt = 0.25;            // grid resolution; 0.25 resolves stud walls
     public double MinSqft = 20;             // retain small closets/baths for Pea-human review
+    public double MinResidueSqft = 20;      // suppress tiny unclaimed crumbs/leaks in the review UI
     public double MinHeadroomFt = 6.0;      // walkable = ceiling - floor >= this (kills eaves)
     public double FloorTolFt = 1.5;         // floor must sit within +/- this of level plane
     public double GapSealFt = 1.5;          // closes stud/dash gaps in physical View3D section ink.
@@ -131,6 +133,19 @@ public sealed class RoomResult
     public List<string> Flags = new();      // ambiguity flags (partition formulation): open-plan
                                             // merges, low-evidence boundaries, seedless pockets.
                                             // Never guessed intent — surfaced for human/pea review.
+    internal string? SplitFrom;             // sidecar provenance for resolved child Spaces
+    internal string? MergedFrom;             // sidecar provenance for resolved survivor Spaces
+}
+
+public sealed class ResidueResult
+{
+    public string Id = "";
+    public ResidueReason Reason;
+    public double RawSqft;
+    public double LabelX, LabelY;
+    public double MeanCeilingFt;
+    public List<double[]> Polygon = new();
+    public List<List<double[]>> Holes = new();
 }
 
 public sealed class TakeoffResult
@@ -138,6 +153,7 @@ public sealed class TakeoffResult
     public string LevelName = "";
     public double LevelElevation;           // ProjectElevation (internal origin)
     public List<RoomResult> Rooms = new();
+    public List<ResidueResult> Residues = new();
     public double TotalSqft;
     public string? ProfileProvenance;
     public List<string> LevelFlags = new();
@@ -164,6 +180,8 @@ public sealed class TakeoffResult
         // backward-compatible with consumers that predate ambiguity flags.
         foreach (var r in this.Rooms.Where(r => r.Flags.Count > 0))
             sb.AppendLine($"META\tflag\t{r.Id}:{string.Join("+", r.Flags)}");
+        foreach (var r in this.Residues)
+            sb.AppendLine($"META\tresidue\t{r.Id}\t{r.Reason.ToString().ToLowerInvariant()}\t{r.RawSqft.ToString("F1", ic)}\t{r.LabelX.ToString("F6", ic)}\t{r.LabelY.ToString("F6", ic)}\t{r.MeanCeilingFt.ToString("F2", ic)}\t{PolyStr(r.Polygon)}{string.Concat(r.Holes.Select(h => "\t" + PolyStr(h)))}");
         return sb.ToString();
     }
 
