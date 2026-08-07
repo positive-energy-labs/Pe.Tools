@@ -160,6 +160,15 @@ export const KNOWN_FLAG_KINDS = {
 
 export type TakeoffFlagKind = keyof typeof KNOWN_FLAG_KINDS | (string & {});
 
+/**
+ * Shape-telemetry flags: facts about the polygon's rendering state, not intent questions.
+ * They stay out of the decision queue and the flagged (clay-dashed) plan styling — a human
+ * addresses them by drawing, not by accept/reject.
+ */
+export const STATE_FLAG_KINDS = new Set(["unregularized", "ruled-seam"]);
+
+export const isDecisionFlag = (kind: string) => !STATE_FLAG_KINDS.has(kind);
+
 export interface TakeoffRoomShape {
   id: string;
   rawSqft: number;

@@ -26,7 +26,9 @@ import {
 import { levelBounds, shapeCentroid, shapePathD, type Bounds } from "#/rhvac/takeoff";
 import {
   candidateKey,
+  isDecisionFlag,
   KNOWN_FLAG_KINDS,
+  STATE_FLAG_KINDS,
   type RhvacRoom,
   type RhvacTakeoffData,
   type TakeoffLevel,
@@ -105,6 +107,15 @@ export function PlanPane(props: PlanPaneProps) {
     [rooms, matchedIds],
   );
   const pending = useMemo(() => (takeoff ? pendingFlags(takeoff.levels) : []), [takeoff]);
+  const stateSummary = useMemo(() => {
+    if (!takeoff) return "";
+    const counts = new Map<string, number>();
+    for (const level of takeoff.levels)
+      for (const room of level.rooms)
+        for (const flag of room.flags ?? [])
+          if (STATE_FLAG_KINDS.has(flag)) counts.set(flag, (counts.get(flag) ?? 0) + 1);
+    return [...counts.entries()].map(([kind, n]) => `${n} ${kind}`).join(" · ");
+  }, [takeoff]);
 
   if (!takeoff) {
     return (
@@ -316,6 +327,7 @@ export function PlanPane(props: PlanPaneProps) {
       {(pending.length > 0 || props.resolutionCount > 0) && (
         <FlagQueue
           pending={pending}
+          stateSummary={stateSummary}
           focusedFlagKey={focusedFlagKey}
           resolutionCount={props.resolutionCount}
           orphanCount={props.orphanCount}
@@ -385,6 +397,7 @@ export function PlanPane(props: PlanPaneProps) {
  */
 function FlagQueue({
   pending,
+  stateSummary,
   focusedFlagKey,
   resolutionCount,
   orphanCount,
@@ -398,6 +411,7 @@ function FlagQueue({
   onReset,
 }: {
   pending: PendingFlag[];
+  stateSummary: string;
   focusedFlagKey: string | null;
   resolutionCount: number;
   orphanCount: number;
@@ -420,6 +434,11 @@ function FlagQueue({
         <span className="tele ml-1.5 normal-case">
           {[...counts.entries()].map(([kind, n]) => `${n} ${kind}`).join(" · ") || "none pending"}
         </span>
+        {stateSummary && (
+          <span className="tele ml-1.5 normal-case text-muted-foreground">
+            · shape telemetry: {stateSummary}
+          </span>
+        )}
       </p>
       <ul className="space-y-px">
         {pending.map((flag) => (
@@ -445,7 +464,7 @@ function FlagQueue({
               </Button>
             )}
             <Button size="xs" variant="outline" onClick={() => onBeginMerge(flag)}>
-              merge intoâ€¦
+              merge into…
             </Button>
             <Button size="xs" variant="ghost" onClick={() => onAccept(flag)}>
               {flag.flag === "open-plan-merge" ? "keep as one" : "accept"}
@@ -538,7 +557,7 @@ function LevelSvg({
         shape,
         key,
         identifier,
-        flagged: (shape.flags?.length ?? 0) > 0,
+        flagged: shape.flags?.some(isDecisionFlag) ?? false,
         d: shapePathD(shape, bounds),
         centroid: shapeCentroid(shape, bounds),
       };

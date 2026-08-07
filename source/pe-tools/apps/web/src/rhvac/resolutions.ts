@@ -15,6 +15,7 @@
  */
 import {
   candidateKey,
+  isDecisionFlag,
   type TakeoffLevel,
   type TakeoffResidueShape,
   type TakeoffRoomShape,
@@ -620,7 +621,7 @@ export function pendingFlags(levels: TakeoffLevel[]): PendingFlag[] {
     level.rooms.flatMap((room) =>
       room.rejected
         ? []
-        : (room.flags?.map((flag) => ({
+        : (room.flags?.filter(isDecisionFlag).map((flag) => ({
             levelName: level.levelName,
             levelIndex,
             roomId: room.id,
