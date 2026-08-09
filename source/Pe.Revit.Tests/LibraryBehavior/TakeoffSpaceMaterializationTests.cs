@@ -119,6 +119,7 @@ public sealed class TakeoffSpaceMaterializationTests
     public void Spaces_replace_idempotently_and_cleanup_completely(UIApplication uiApplication)
     {
         var document = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
+        var logs = new List<string>();
         try
         {
             var level = new FilteredElementCollector(document).OfClass(typeof(Level)).Cast<Level>()
@@ -141,23 +142,28 @@ public sealed class TakeoffSpaceMaterializationTests
                         LabelX = 35, LabelY = 5, MeanCeilingFt = 10,
                         Polygon = Polygon(30, 0, 40, 10),
                     },
+                    new ResidueResult {
+                        Id = "X02", Reason = ResidueReason.Rejected, RawSqft = 50,
+                        LabelX = 70, LabelY = 5, MeanCeilingFt = 10,
+                        Polygon = SelfTouchingPolygon(),
+                    },
                 },
-                TotalSqft = 316,
+                TotalSqft = 366,
             };
             var options = new TakeoffOptions { Marker = "PE-TEST-TAKEOFF" };
 
             using var transaction = new Transaction(document, "Prove takeoff Space materialization");
             transaction.Start();
 
-            var first = SpaceMaterializer.Replace(document, level, phase, result, options, TestContext.WriteLine);
+            var first = SpaceMaterializer.Replace(document, level, phase, result, options, Log);
             document.Regenerate();
-            AssertMaterialization(document, first, options, level, phase);
+            AssertMaterialization(document, first, options, level, phase, logs);
 
-            var second = SpaceMaterializer.Replace(document, level, phase, result, options, TestContext.WriteLine);
+            var second = SpaceMaterializer.Replace(document, level, phase, result, options, Log);
             document.Regenerate();
             Assert.That(second.Spaces, Has.Count.EqualTo(2));
             Assert.That(second.Spaces, Has.None.Matches<ElementId>(id => first.Spaces.Contains(id)));
-            AssertMaterialization(document, second, options, level, phase);
+            AssertMaterialization(document, second, options, level, phase, logs);
 
             SpaceMaterializer.Cleanup(document, options, TestContext.WriteLine);
             document.Regenerate();
@@ -168,6 +174,12 @@ public sealed class TakeoffSpaceMaterializationTests
         finally
         {
             RevitFamilyFixtureHarness.CloseDocument(document);
+        }
+
+        void Log(string message)
+        {
+            logs.Add(message);
+            TestContext.WriteLine(message);
         }
     }
 
@@ -273,13 +285,19 @@ public sealed class TakeoffSpaceMaterializationTests
             var result = RoomTakeoff.LoadMaterializationResult(
                 takeoffDir, "Level 1/Main Level", sidecar).Takeoff;
             var options = new TakeoffOptions { Marker = "PE-TEST-project-a" };
+            var logs = new List<string>();
 
             using var transaction = new Transaction(document, "Prove project-a materialization census");
             transaction.Start();
             var materialized = SpaceMaterializer.Replace(
-                document, level, phase, result, options, TestContext.WriteLine);
+                document, level, phase, result, options, message => {
+                    logs.Add(message);
+                    TestContext.WriteLine(message);
+                });
             document.Regenerate();
 
+            foreach (var failure in logs.Where(message => message.Contains("ring repair failed:")))
+                TestContext.Progress.WriteLine($"[project-a-fr-failure] {failure}");
             TestContext.Progress.WriteLine(
                 $"[project-a-census] spaces={materialized.Spaces.Count} " +
                 $"filledRegions={materialized.FilledRegions} lineFallbacks={materialized.LineFallbacks} " +
@@ -291,7 +309,8 @@ public sealed class TakeoffSpaceMaterializationTests
                 Assert.That((materialized.Spaces.Count, materialized.FilledRegions, materialized.LineFallbacks,
                         materialized.FilledRegionFailures, materialized.Rooms, materialized.Residues,
                         materialized.Defectors),
-                    Is.EqualTo((10, 43, 31, 31, 72, 3, 9)));
+                    Is.EqualTo((10, 72, 2, 2, 72, 3, 9)));
+                Assert.That(logs.Count(message => message.Contains("ring repair failed:")), Is.EqualTo(2));
             });
             SpaceMaterializer.Cleanup(document, options, TestContext.WriteLine);
             document.Regenerate();
@@ -306,7 +325,8 @@ public sealed class TakeoffSpaceMaterializationTests
     }
 
     private static void AssertMaterialization(
-        Document document, SpaceMaterializationResult result, TakeoffOptions options, Level level, Phase phase)
+        Document document, SpaceMaterializationResult result, TakeoffOptions options, Level level, Phase phase,
+        IReadOnlyList<string> logs)
     {
         var owned = Owned(document, options);
         var spaces = result.Spaces.Select(id => document.GetElement(id)).Cast<Space>()
@@ -318,7 +338,7 @@ public sealed class TakeoffSpaceMaterializationTests
             Assert.That((result.Spaces.Count, result.FilledRegions, result.LineFallbacks,
                     result.FilledRegionFailures, result.Rooms, result.Residues, result.Defectors,
                     result.DeletedWithoutReplacement),
-                Is.EqualTo((2, 3, 0, 0, 3, 1, 1, 0)));
+                Is.EqualTo((2, 4, 0, 0, 3, 2, 1, 0)));
             Assert.That(spaces, Has.Count.EqualTo(2));
             Assert.That(spaces[0].Area, Is.EqualTo(96).Within(0.01));
             Assert.That(spaces[1].Area, Is.EqualTo(100).Within(0.01));
@@ -334,13 +354,16 @@ public sealed class TakeoffSpaceMaterializationTests
             Assert.That(Math.Abs(firstPoint.X - 5) + Math.Abs(firstPoint.Y - 5), Is.LessThan(0.01));
             Assert.That(Math.Abs(secondPoint.X - 15) + Math.Abs(secondPoint.Y - 5), Is.LessThan(0.01));
             Assert.That(owned.Count(element => element is Space), Is.EqualTo(2));
-            Assert.That(filledRegions, Has.Count.EqualTo(3));
+            Assert.That(filledRegions.Count, Is.GreaterThanOrEqualTo(result.FilledRegions));
             Assert.That(filledRegions.Select(SpaceMaterializer.Comments),
                 Has.Some.Contains("|R03\npe-takeoff: unregularized"));
             Assert.That(filledRegions.Select(SpaceMaterializer.Comments),
                 Has.Some.Contains("|R04\npe-takeoff: shape-defect=sliver"));
             Assert.That(filledRegions.Select(SpaceMaterializer.Comments),
                 Has.Some.Contains("|X01\npe-takeoff: residue=rejected"));
+            Assert.That(filledRegions, Has.Some.Matches<FilledRegion>(region =>
+                SpaceMaterializer.Comments(region)?.Contains("|X02\npe-takeoff: residue=rejected") == true));
+            Assert.That(logs, Has.Some.Contains("[spaces] X02 ring repaired:"));
             Assert.That(BoundaryLines(document, options), Has.Count.EqualTo(13));
             Assert.That(BoundaryLines(document, options), Has.None.Matches<ModelCurve>(line => {
                 var curve = line.GeometryCurve;
@@ -389,6 +412,11 @@ public sealed class TakeoffSpaceMaterializationTests
 
     private static List<double[]> Polygon(double x0, double y0, double x1, double y1) =>
         [new[] { x0, y0 }, new[] { x1, y0 }, new[] { x1, y1 }, new[] { x0, y1 }];
+
+    private static List<double[]> SelfTouchingPolygon() => [
+        new[] { 70d, 5 }, new[] { 70d, 0 }, new[] { 75d, 0 }, new[] { 75d, 5 },
+        new[] { 70d, 5 }, new[] { 70d, 10 }, new[] { 65d, 10 }, new[] { 65d, 5 },
+    ];
 
     private static double Area(IReadOnlyList<double[]> polygon) => polygon.Select((point, index) => {
         var next = polygon[(index + 1) % polygon.Count];

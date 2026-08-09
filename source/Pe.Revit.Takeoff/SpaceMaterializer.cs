@@ -145,36 +145,115 @@ internal static class SpaceMaterializer
             void DrawUnresolved(
                 string id, List<double[]> polygon, List<List<double[]>> holes, string comments)
             {
-                FilledRegion region;
+                List<FilledRegion> regions;
+                string? repairLog = null;
                 try
                 {
                     var loops = new List<CurveLoop> { Annotate.ToLoop(polygon, level.Elevation) };
                     loops.AddRange(holes.Select(hole => Annotate.ToLoop(hole, level.Elevation)));
-                    region = FilledRegion.Create(doc, frType.Id, view.Id, loops);
+                    regions = [FilledRegion.Create(doc, frType.Id, view.Id, loops)];
                 }
-                catch (Exception ex)
+                catch (Exception originalException)
                 {
-                    filledRegionFailures++;
-                    var points = Annotate.CleanPoints(polygon, level.Elevation);
-                    int made = 0;
-                    for (int i = 0; i < points.Count; i++)
+                    try
                     {
-                        var a = points[i]; var b = points[(i + 1) % points.Count];
-                        if (a.DistanceTo(b) <= 0.01) continue;
-                        var line = doc.Create.NewDetailCurve(view, Line.CreateBound(a, b));
-                        Stamp(line, comments);
-                        view.SetElementOverrides(line.Id, unresolvedStyle);
-                        made++;
+                        (regions, repairLog) = CreateRepairedRegions(id, polygon, holes);
                     }
-                    if (made == 0)
-                        throw new InvalidOperationException($"{id} FilledRegion failed and has no drawable outer ring", ex);
-                    lineFallbacks++;
-                    log($"[spaces] {id} FilledRegion failed; drew outer-ring detail lines: {ex.Message}");
-                    return;
+                    catch (Exception repairException)
+                    {
+                        DrawLineFallback(id, polygon, comments, originalException, repairException);
+                        return;
+                    }
                 }
-                Stamp(region, comments);
-                view.SetElementOverrides(region.Id, unresolvedStyle);
+
+                StampAndStyle(regions, comments);
                 filledRegions++;
+                if (repairLog != null) log(repairLog);
+            }
+
+            (List<FilledRegion> Regions, string RepairLog) CreateRepairedRegions(
+                string id, List<double[]> polygon, List<List<double[]>> holes)
+            {
+                var outerLoops = Annotate.SplitSelfTouchingLoop(
+                    polygon, level.Elevation, out int repeatedVertices, out int droppedDegenerateLoops);
+                var repairedLoops = outerLoops.ToList();
+                int droppedHoles = 0;
+                foreach (var hole in holes)
+                {
+                    try { repairedLoops.Add(Annotate.ToLoop(hole, level.Elevation)); }
+                    catch (Exception holeException)
+                    {
+                        droppedHoles++;
+                        log($"[spaces] {id} ring repair dropped hole: {holeException.Message}");
+                    }
+                }
+
+                List<FilledRegion> regions;
+                try
+                {
+                    regions = [FilledRegion.Create(doc, frType.Id, view.Id, repairedLoops)];
+                }
+                catch (Exception combinedException)
+                {
+                    regions = [];
+                    try
+                    {
+                        foreach (var outerLoop in outerLoops)
+                            regions.Add(FilledRegion.Create(
+                                doc, frType.Id, view.Id, new List<CurveLoop> { outerLoop }));
+                    }
+                    catch (Exception individualException)
+                    {
+                        if (regions.Count > 0) doc.Delete(regions.Select(item => item.Id).ToList());
+                        throw new InvalidOperationException(
+                            $"combined loops rejected ({combinedException.Message}); " +
+                            $"individual loop rejected ({individualException.Message})", individualException);
+                    }
+                    if (holes.Count > 0)
+                    {
+                        droppedHoles = holes.Count;
+                        log($"[spaces] {id} ring repair dropped {holes.Count} hole(s): " +
+                            "Revit rejected the combined repaired loops");
+                    }
+                }
+
+                string repairLog = $"[spaces] {id} ring repaired: repeatedVertices={repeatedVertices} " +
+                                   $"simpleLoops={outerLoops.Count} filledRegionElements={regions.Count} " +
+                                   $"droppedDegenerateLoops={droppedDegenerateLoops} droppedHoles={droppedHoles}";
+                return (regions, repairLog);
+            }
+
+            void StampAndStyle(IEnumerable<FilledRegion> regions, string comments)
+            {
+                foreach (var region in regions)
+                {
+                    Stamp(region, comments);
+                    view.SetElementOverrides(region.Id, unresolvedStyle);
+                }
+            }
+
+            void DrawLineFallback(
+                string id, List<double[]> polygon, string comments,
+                Exception originalException, Exception repairException)
+            {
+                filledRegionFailures++;
+                var points = Annotate.CleanPoints(polygon, level.Elevation);
+                int made = 0;
+                for (int i = 0; i < points.Count; i++)
+                {
+                    var a = points[i]; var b = points[(i + 1) % points.Count];
+                    if (a.DistanceTo(b) <= 0.01) continue;
+                    var line = doc.Create.NewDetailCurve(view, Line.CreateBound(a, b));
+                    Stamp(line, comments);
+                    view.SetElementOverrides(line.Id, unresolvedStyle);
+                    made++;
+                }
+                if (made == 0)
+                    throw new InvalidOperationException(
+                        $"{id} FilledRegion failed and ring repair left no drawable outer ring", repairException);
+                lineFallbacks++;
+                log($"[spaces] {id} FilledRegion failed; ring repair failed: {repairException.Message}; " +
+                    $"drew outer-ring detail lines: {originalException.Message}");
             }
         }
 
