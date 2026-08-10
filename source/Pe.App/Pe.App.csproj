@@ -38,7 +38,9 @@
         <!-- Revit Platform -->
         <PackageReference Include="JetBrains.Annotations" Version="2025.2.4" />
         <PackageReference Include="Nice3point.Revit.Toolkit" Version="$(RevitVersion).*" />
-        <PackageReference Include="Nice3point.Revit.Extensions" Version="$(RevitVersion).*" />
+        <!-- ponytail: 2025.2.4 adds long.ToElementId() ambiguous with Pe.Revit.Compat (CS0121); unpin when one owner is chosen -->
+        <PackageReference Include="Nice3point.Revit.Extensions" Version="2025.2.3" Condition="'$(RevitVersion)' == '2025'"/>
+        <PackageReference Include="Nice3point.Revit.Extensions" Version="$(RevitVersion).*" Condition="'$(RevitVersion)' != '2025'"/>
         <PackageReference Include="RevitExplorer.API" Version="2.6.0" />
         <PackageReference Include="Pe.Revit.Tasks" Version="$(PeSdkCompanionVersion)" />
         <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
