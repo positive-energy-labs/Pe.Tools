@@ -48,12 +48,8 @@ internal static class SpaceMaterializer
             throw new InvalidOperationException($"target level/phase already contains {existing.Count} non-takeoff Space(s)");
 
         DeleteOwned(doc, token, viewName);
-        var regularizedRooms = result.Rooms
-            .Where(room => !room.Flags.Contains("unregularized", StringComparer.Ordinal)).ToList();
-        var unresolvedRooms = result.Rooms
-            .Where(room => room.Flags.Contains("unregularized", StringComparer.Ordinal)).ToList();
-        var boundary = SpaceBoundaryNetwork.Build(regularizedRooms);
-        var spaceRooms = regularizedRooms.ToList();
+        var boundary = SpaceBoundaryNetwork.Build(result.Rooms);
+        var spaceRooms = result.Rooms.ToList();
 
         var viewType = new FilteredElementCollector(doc).OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>()
             .First(type => type.ViewFamily == ViewFamily.FloorPlan);
@@ -69,14 +65,9 @@ internal static class SpaceMaterializer
         {
             var curves = new CurveArray();
             foreach (var curve in boundary)
-                curves.Append(curve.IsArc
-                    ? Arc.Create(
-                        new XYZ(curve.X1, curve.Y1, level.Elevation),
-                        new XYZ(curve.X2, curve.Y2, level.Elevation),
-                        new XYZ(curve.MidX, curve.MidY, level.Elevation))
-                    : (Curve)Line.CreateBound(
-                        new XYZ(curve.X1, curve.Y1, level.Elevation),
-                        new XYZ(curve.X2, curve.Y2, level.Elevation)));
+                curves.Append(Line.CreateBound(
+                    new XYZ(curve.X1, curve.Y1, level.Elevation),
+                    new XYZ(curve.X2, curve.Y2, level.Elevation)));
             doc.Create.NewSpaceBoundaryLines(sketchPlane, curves, view);
             doc.Regenerate();
         }
@@ -120,7 +111,7 @@ internal static class SpaceMaterializer
         }
 
         int filledRegions = 0, lineFallbacks = 0, filledRegionFailures = 0;
-        if (unresolvedRooms.Count + result.Residues.Count + defectors.Count > 0)
+        if (result.Residues.Count + defectors.Count > 0)
         {
             var frType = new FilteredElementCollector(doc).OfClass(typeof(FilledRegionType))
                 .Cast<FilledRegionType>().First();
@@ -133,8 +124,6 @@ internal static class SpaceMaterializer
                 .SetProjectionLineColor(new Color(96, 96, 96))
                 .SetHalftone(true);
 
-            foreach (var room in unresolvedRooms)
-                DrawUnresolved(room.Id, room.Polygon, room.Holes, SpaceComments(token, room));
             foreach (var residue in result.Residues)
             {
                 // A border residue leaks past the takeoff crop: exterior terrain, not building
@@ -274,7 +263,7 @@ internal static class SpaceMaterializer
             // displacement. Both are physical distance errors, so their perimeter strip is the
             // relevant envelope; percentage tolerances punish small rooms arbitrarily.
             double targetArea = room.RawSqft;
-            double fitFt = Math.Min(opt.BoundarySimplifyFt, 3.5 * opt.CellFt);
+            double fitFt = opt.BoundarySimplifyFt;
             double tolerance = Math.Max(1, room.PerimeterFt * (opt.CellFt / 2 + fitFt));
             if (space.Area <= 0 || Math.Abs(space.Area - targetArea) > tolerance)
                 validationErrors.Add($"{room.Id} area native={space.Area:F1}sf physical={targetArea:F1}sf delta={space.Area - targetArea:+0.0;-0.0;0.0}sf ({(space.Area / targetArea - 1) * 100:+0.00;-0.00;0.00}%)");

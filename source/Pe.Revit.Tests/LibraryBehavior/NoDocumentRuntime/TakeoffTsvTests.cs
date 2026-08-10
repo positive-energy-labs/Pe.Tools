@@ -1,4 +1,6 @@
 using Newtonsoft.Json;
+using NetTopologySuite.Coverage;
+using NetTopologySuite.Geometries;
 using Pe.Revit.Takeoff;
 
 namespace Pe.Revit.Tests.LibraryBehavior.NoDocumentRuntime;
@@ -25,7 +27,7 @@ public sealed class TakeoffTsvTests
             "META\tlevel\tL1",
             "META\telev\t0.000000",
             "META\trooms\t1",
-            "ROOM\tR01\t3.0\t8.0\t1.0\t1.0\t9.00",
+            "ROOM\tR01\t3.0\t8.0\t0.5\t0.5\t9.00",
             "POLY\tR01\touter\t0;0|2;0|2;1|1;1|1;2|0;2",
         });
 
@@ -35,6 +37,31 @@ public sealed class TakeoffTsvTests
             new[] { 0d, 0d }, new[] { 2d, 0d }, new[] { 2d, 1d },
             new[] { 1d, 1d }, new[] { 1d, 2d }, new[] { 0d, 2d },
         }));
+    }
+
+    [Test]
+    public void Parse_rejects_topology_corruption_and_boundary_labels()
+    {
+        string Tsv(string outer, string label = "1.0\t1.0", string? hole = null, string rawSqft = "100") => string.Join("\n", new[] {
+            "META\tlevel\tL1",
+            "META\telev\t0",
+            "META\trooms\t1",
+            $"ROOM\tR01\t{rawSqft}\t40\t{label}\t9",
+            $"POLY\tR01\touter\t{outer}",
+            hole == null ? "" : $"POLY\tR01\thole\t{hole}",
+        });
+
+        Assert.Multiple(() => {
+            Assert.Throws<InvalidDataException>(() => TakeoffTsv.ParseTsv(
+                Tsv("0;0|5;0|0;4|4;4")), "self-crossing outer");
+            Assert.Throws<InvalidDataException>(() => TakeoffTsv.ParseTsv(
+                Tsv("0;0|10;0|10;10|0;10", hole: "20;20|20;21|21;21|21;20")),
+                "hole outside shell");
+            Assert.Throws<InvalidDataException>(() => TakeoffTsv.ParseTsv(
+                Tsv("0;0|10;0|10;10|0;10", "10.0\t5.0")), "label on boundary");
+            Assert.Throws<InvalidDataException>(() => TakeoffTsv.ParseTsv(
+                Tsv("0;0|10;0|10;10|0;10", rawSqft: "10000")), "gross area corruption");
+        });
     }
 
     [Test]
@@ -213,24 +240,45 @@ public sealed class TakeoffTsvTests
         var sidecar = Path.GetFullPath(Path.Combine(
             fixtureDir, "..", "fixtures", "project-a-main-four-verbs.json"));
 
+        var before = TakeoffTsv.ParseTsvDirectory(takeoffDir)
+            .Levels.Single(level => level.LevelName == "Level 1/Main Level");
         var result = TakeoffTsv.ParseTsvDirectory(takeoffDir, sidecar);
         var main = result.Levels.Single(level => level.LevelName == "Level 1/Main Level");
+        var split = main.Rooms.Where(room => room.SplitFrom == "R07").ToList();
+        var merged = main.Rooms.Single(room => room.Id == "R14");
 
         Assert.Multiple(() => {
             Assert.That((result.Applied, result.Remapped, result.Orphaned), Is.EqualTo((4, 0, 0)));
-            Assert.That(main.Rooms, Has.Count.EqualTo(81));
+            Assert.That(main.Rooms, Has.Count.EqualTo(before.Rooms.Count - 1));
             Assert.That(main.Rooms.Select(room => room.Id), Does.Not.Contain("R77"));
             Assert.That(main.Rooms.Select(room => room.Id), Does.Not.Contain("R07"));
-            Assert.That(main.Rooms.Select(room => room.Id), Does.Not.Contain("R14"));
+            Assert.That(main.Rooms.Select(room => room.Id), Does.Not.Contain("R72"));
             Assert.That(main.Rooms.Single(room => room.Id == "R04").RawSqft,
-                Is.EqualTo(1495.7).Within(1e-6));
-            Assert.That(main.Rooms.Where(room => room.SplitFrom == "R07").Select(room => room.RawSqft),
-                Is.EqualTo(new[] { 399.475, 374.024 }).Within(1e-3));
-            var merged = main.Rooms.Single(room => room.Id == "R08");
-            Assert.That(merged.RawSqft, Is.EqualTo(1137.8).Within(0.1));
-            Assert.That(merged.MergedFrom, Is.EqualTo("R14"));
+                Is.EqualTo(before.Rooms.Single(room => room.Id == "R04").RawSqft));
+            Assert.That(split, Has.Count.EqualTo(2));
+            Assert.That(split.All(room => room.RawSqft > 0), Is.True);
+            Assert.That(merged.RawSqft, Is.EqualTo(
+                before.Rooms.Single(room => room.Id == "R14").RawSqft
+                + before.Rooms.Single(room => room.Id == "R72").RawSqft).Within(0.1));
+            Assert.That(merged.MergedFrom, Is.EqualTo("R72"));
         });
     }
+
+    [Test]
+    public void Checked_in_ProjectA_takeoffs_are_valid_shared_coverages()
+    {
+        var factory = new GeometryFactory(new PrecisionModel(1_000_000));
+        var levels = TakeoffTsv.ParseTsvDirectory(Path.Combine(RhvacEvalTests.FindFixtureDir(), "takeoff")).Levels;
+        foreach (var level in levels)
+        {
+            LinearRing Ring(IReadOnlyList<double[]> points) => factory.CreateLinearRing(
+                points.Append(points[0]).Select(point => new Coordinate(point[0], point[1])).ToArray());
+            Geometry[] coverage = level.Rooms.Select(room => factory.CreatePolygon(
+                Ring(room.Outer), room.Holes.Select(Ring).ToArray())).Cast<Geometry>().ToArray();
+            Assert.That(CoverageValidator.IsValid(coverage), Is.True, level.LevelName);
+        }
+    }
+
     [Test]
     public void Chained_merges_compose_without_losing_the_first_source()
     {

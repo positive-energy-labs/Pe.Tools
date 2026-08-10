@@ -22,7 +22,7 @@ namespace Pe.Revit.Takeoff;
 internal static class PartitionFormulation
 {
     internal static TakeoffResult Run(
-        Heightfield hf, bool[] obst, bool[] seedInk, string levelName, double lvlZ,
+        Heightfield hf, bool[] obst, string levelName, double lvlZ,
         TakeoffOptions opt, Action<string> log)
     {
         if (double.IsNaN(opt.MinRegionCompactness) || double.IsInfinity(opt.MinRegionCompactness)
@@ -161,8 +161,8 @@ internal static class PartitionFormulation
         // ---- 6.5 wall-band claim: rooms must touch ----
         // BuildDomain excludes wall cells (no walkable headroom), so watershed fronts stop at wall
         // FACES and leave an unclaimed interstitial band inside every wall. Practice colors rooms
-        // wall-to-wall: claim non-domain cells sandwiched between owned cells within WallClaimFt
-        // per side (opposite-ray test over 8 directions), then split each band at its centerline
+        // wall-to-wall: claim non-domain cells seen by distinct rooms within WallClaimFt, then
+        // split each band at its centerline
         // with a multi-source BFS from the room frontiers. Exterior faces see a room on one side
         // only and are never claimed. RawSqft becomes centerline semantics where a band is claimed.
         var claimed = new bool[n];
@@ -170,27 +170,22 @@ internal static class PartitionFormulation
         {
             int reach = Math.Max(1, (int)Math.Round(opt.WallClaimFt / opt.CellFt));
             var claimable = new bool[n];
-            // axis-pair rays only: an axis ray still crosses a rotated wall band (at reduced
-            // effective reach), while diagonal pairs would claim fillets at concave exterior
-            // corners where both legs of the same L are within reach
-            int[,] rays = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
             for (int i = 0; i < n; i++)
             {
-                if (domain[i] || owner[i] != 0) continue;
                 int x = i % W, y = i / W;
-                int mask = 0;
-                for (int d = 0; d < 4; d++)
+                if (domain[i] || owner[i] != 0 || !obst[i]) continue;
+                int firstOwner = 0;
+                for (int dy = -reach; dy <= reach && !claimable[i]; dy++)
+                for (int dx = -reach; dx <= reach && !claimable[i]; dx++)
                 {
-                    int dx = rays[d, 0], dy = rays[d, 1];
-                    for (int step = 1; step <= reach; step++)
-                    {
-                        int px = x + dx * step, py = y + dy * step;
-                        if (px < 0 || px >= W || py < 0 || py >= H) break;
-                        if (owner[py * W + px] > 0) { mask |= 1 << d; break; }
-                    }
+                    if (dx * dx + dy * dy > reach * reach) continue;
+                    int px = x + dx, py = y + dy;
+                    if (px < 0 || px >= W || py < 0 || py >= H) continue;
+                    int seenOwner = owner[py * W + px];
+                    if (seenOwner <= 0) continue;
+                    if (firstOwner == 0) firstOwner = seenOwner;
+                    else if (firstOwner != seenOwner) claimable[i] = true;
                 }
-                // rays are laid out as opposite pairs: (0,1) (2,3)
-                claimable[i] = (mask & 3) == 3 || (mask & 12) == 12;
             }
             var band = new Queue<int>();
             for (int i = 0; i < n; i++)
@@ -216,6 +211,8 @@ internal static class PartitionFormulation
             }
             log($"[partition] wall-band claim={claimedCells * cellArea:F0}sf ({claimedCells} cells, reach={reach})");
         }
+        int diagonalFixes = ResolveDiagonalTouches(owner, evidence, W, H);
+        if (diagonalFixes > 0) log($"[partition] resolved {diagonalFixes} diagonal corner touches");
 
         // ---- low-evidence-boundary flags on the final labeling ----
         foreach (var ((a, b), (edges, backed)) in BoundaryPairs(owner, evidence, domain, W, H, opt.BoundaryEvidenceMin))
@@ -293,7 +290,6 @@ internal static class PartitionFormulation
             var loops = Detector.TraceLoops(cells, owner, id, W, H);
             var polys = loops
                 .Select(lp => lp.Select(v => new[] { hf.MinX + v.x * opt.CellFt, hf.MinY + v.y * opt.CellFt }).ToList())
-                .Select(Detector.CollapseCollinear)
                 .Where(p => p.Count >= 3)
                 .ToList();
             if (polys.Count == 0) continue;
@@ -358,12 +354,57 @@ internal static class PartitionFormulation
         }
         log($"[partition] residue={result.Residues.Count} ({result.Residues.Sum(r => r.RawSqft):F0}sf) " +
             $"excluded<{opt.MinResidueSqft:F0}sf={excludedResidues} ({excludedResidueSqft:F0}sf)");
+        bool WallAt(double x, double y)
+        {
+            int gx = (int)Math.Floor((x - hf.MinX) / opt.CellFt);
+            int gy = (int)Math.Floor((y - hf.MinY) / opt.CellFt);
+            return gx >= 0 && gx < W && gy >= 0 && gy < H && obst[gy * W + gx];
+        }
         SpaceBoundaryNetwork.Regularize(
-            result.Rooms, opt.CellFt, opt.BoundarySimplifyFt, opt.RegularizeAreaTolerancePct,
-            InkSupport.CreateOracle(W, H, hf.MinX, hf.MinY, opt.CellFt, seedInk, 3 * opt.CellFt), log,
-            opt.HardAreaDriftPct, opt.LoopBridgeMaxFt, result.Residues);
+            result.Rooms, opt.BoundarySimplifyFt, log, opt.CellFt, WallAt);
         result.TotalSqft = result.Rooms.Sum(room => room.RawSqft);
         return result;
+    }
+
+    // A checkerboard 2x2 makes a raster ring touch itself at one point. Give that one-cell
+    // ambiguity to the repeated owner (the larger one in a two-room tie) so loops stay polygonal.
+    private static int ResolveDiagonalTouches(int[] owner, float[] evidence, int width, int height)
+    {
+        var area = owner.Where(id => id > 0).GroupBy(id => id).ToDictionary(group => group.Key, group => group.Count());
+        int changed = 0;
+        while (true)
+        {
+            int passChanged = 0;
+            for (int y = 0; y < height - 1; y++)
+            for (int x = 0; x < width - 1; x++)
+            {
+                int topLeft = y * width + x, topRight = topLeft + 1;
+                int bottomLeft = topLeft + width, bottomRight = bottomLeft + 1;
+                int a = owner[topLeft], b = owner[topRight], c = owner[bottomLeft], d = owner[bottomRight];
+                bool diagonalA = a > 0 && a == d && b != a && c != a;
+                bool diagonalB = b > 0 && b == c && a != b && d != b;
+                int winner = diagonalA && diagonalB
+                    ? (area.GetValueOrDefault(a) >= area.GetValueOrDefault(b) ? a : b)
+                    : diagonalA ? a : diagonalB ? b : 0;
+                if (winner == 0) continue;
+
+                int first = winner == a ? topRight : topLeft;
+                int second = winner == a ? bottomLeft : bottomRight;
+                int target = evidence[first] != evidence[second]
+                    ? (evidence[first] > evidence[second] ? first : second)
+                    : area.GetValueOrDefault(owner[first]) <= area.GetValueOrDefault(owner[second])
+                        ? first : second;
+                int loser = owner[target];
+                owner[target] = winner;
+                area[winner] = area.GetValueOrDefault(winner) + 1;
+                if (loser > 0) area[loser]--;
+                passChanged++;
+            }
+            changed += passChanged;
+            if (passChanged == 0) return changed;
+            if (changed > owner.Length)
+                throw new InvalidOperationException("Diagonal corner cleanup did not converge");
+        }
     }
 
     // Existence mask: floor within tolerance of the level plane, plus covered headroom when

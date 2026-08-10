@@ -6,7 +6,7 @@ namespace Pe.Revit.Tests.LibraryBehavior;
 public sealed class TakeoffSpaceMaterializationTests
 {
     [Test]
-    public void Boundary_network_unions_shared_and_split_edges_once()
+    public void Boundary_network_nodes_and_deduplicates_shared_edges()
     {
         var rooms = new[] {
             Room("A", Polygon(0, 0, 10, 10), Polygon(2, 2, 4, 4)),
@@ -14,14 +14,18 @@ public sealed class TakeoffSpaceMaterializationTests
             Room("C", Polygon(10, 5, 20, 10)),
         };
 
-        var actual = SpaceBoundaryNetwork.Build(rooms)
-            .Select(line => $"{line.X1},{line.Y1}->{line.X2},{line.Y2}")
-            .ToArray();
+        var actual = SpaceBoundaryNetwork.Build(rooms);
 
-        Assert.That(actual, Is.EquivalentTo(new[] {
-            "0,0->20,0", "0,10->20,10", "0,0->0,10", "10,0->10,10", "20,0->20,10",
-            "10,5->20,5", "2,2->4,2", "2,4->4,4", "2,2->2,4", "4,2->4,4",
-        }));
+        Assert.Multiple(() => {
+            Assert.That(actual, Has.Count.EqualTo(14));
+            Assert.That(actual.Select(BoundaryKey).Distinct(), Has.Count.EqualTo(actual.Count));
+            Assert.That(actual, Has.Some.Matches<BoundaryCurve>(line =>
+                BoundaryKey(line) == "10,0|10,5"));
+            Assert.That(actual, Has.Some.Matches<BoundaryCurve>(line =>
+                BoundaryKey(line) == "10,5|10,10"));
+            Assert.That(actual, Has.None.Matches<BoundaryCurve>(line =>
+                BoundaryKey(line) == "10,0|10,10"));
+        });
     }
 
     [Test]
@@ -35,87 +39,53 @@ public sealed class TakeoffSpaceMaterializationTests
         };
 
         var rooms = new[] { Room("A", stairSteppedTrapezoid) };
-        SpaceBoundaryNetwork.Regularize(rooms, 1, 1, 3, (_, _) => false);
+        SpaceBoundaryNetwork.Regularize(rooms, 1);
         var actual = SpaceBoundaryNetwork.Build(rooms);
 
         Assert.Multiple(() => {
             Assert.That(actual, Has.Count.EqualTo(4));
-            Assert.That(actual, Has.None.Matches<BoundaryCurve>(curve => curve.IsArc));
             Assert.That(NetworkArea(actual), Is.EqualTo(Math.Abs(Area(stairSteppedTrapezoid))).Within(1e-5));
         });
     }
 
-    // EDITABILITY OVER AREA FIDELITY (2026-08-10): straightened geometry beyond the tight area
-    // tolerance still ships — the drift is flagged, never silently absorbed as regularized. A
-    // raster dogleg a human cannot edit is worse than an honest few-percent area drift.
     [Test]
-    public void Boundary_network_applies_straightened_geometry_beyond_tight_area_contract_with_flags()
+    public void Boundary_network_aligns_supported_shared_edges_to_a_local_wall_family()
     {
+        const double rise = 6.494;
         var rooms = new[] {
-            Room("A", [new[] { 0d, 0 }, new[] { 5d, 0 }, new[] { 5d, 2 }, new[] { 6d, 2 },
-                new[] { 6d, 8 }, new[] { 5d, 8 }, new[] { 5d, 10 }, new[] { 0d, 10 }]),
-            Room("B", [new[] { 5d, 0 }, new[] { 10d, 0 }, new[] { 10d, 10 }, new[] { 5d, 10 },
-                new[] { 5d, 8 }, new[] { 6d, 8 }, new[] { 6d, 2 }, new[] { 5d, 2 }]),
+            Room("A", [new[] { 0d, 0 }, new[] { 10d, 0 }, new[] { 0d, rise }]),
+            Room("B", [new[] { 0d, rise }, new[] { 10d, 0 }, new[] { 10d, 10 }, new[] { 0d, 10 }]),
+            Room("C", [new[] { 0d, 20 }, new[] { 10d, 20 }, new[] { 0d, 20 + rise }]),
+            Room("D", [new[] { 0d, 20 + rise }, new[] { 10d, 20 }, new[] { 10d, 30 }, new[] { 0d, 30 }]),
+        };
+        double nx = 0.5, ny = Math.Sqrt(3) / 2;
+        bool WallAt(double x, double y) => new[] { rise / 2, 20 + rise / 2 }
+            .Any(midY => Math.Abs(nx * x + ny * y - (nx * 5 + ny * midY)) <= 0.3);
+
+        SpaceBoundaryNetwork.Regularize(rooms, 0.5, cellFt: 0.25, wallAt: WallAt);
+
+        double angle = SharedAngle(rooms[0], rooms[1]);
+        Assert.Multiple(() => {
+            Assert.That(angle, Is.EqualTo(-30).Within(0.1),
+                "the evidence family, not the generic -33 degree chord, owns direction");
+            Assert.That(SharedAngle(rooms[2], rooms[3]), Is.EqualTo(angle).Within(1e-6));
+        });
+    }
+
+    [Test]
+    public void Boundary_network_leaves_edges_without_wall_support_unsnapped()
+    {
+        const double rise = 6.494;
+        var rooms = new[] {
+            Room("A", [new[] { 0d, 0 }, new[] { 10d, 0 }, new[] { 0d, rise }]),
+            Room("B", [new[] { 0d, rise }, new[] { 10d, 0 }, new[] { 10d, 10 }, new[] { 0d, 10 }]),
+            Room("C", [new[] { 0d, 20 }, new[] { 10d, 20 }, new[] { 0d, 20 + rise }]),
+            Room("D", [new[] { 0d, 20 + rise }, new[] { 10d, 20 }, new[] { 10d, 30 }, new[] { 0d, 30 }]),
         };
 
-        SpaceBoundaryNetwork.Regularize(rooms, 1, 1, 3, (_, _) => false);
-        var actual = SpaceBoundaryNetwork.Build(rooms);
+        SpaceBoundaryNetwork.Regularize(rooms, 0.5, cellFt: 0.25, wallAt: (_, _) => false);
 
-        Assert.Multiple(() => {
-            Assert.That(actual, Has.One.Matches<BoundaryCurve>(line =>
-                Math.Abs(line.X1 - 5) < 1e-6 && Math.Abs(line.X2 - 5) < 1e-6
-                && Math.Abs(line.Y1 - line.Y2) > 9.9));
-            Assert.That(actual, Has.None.Matches<BoundaryCurve>(line =>
-                Math.Abs(line.X1 - 6) < 1e-6 && Math.Abs(line.X2 - 6) < 1e-6));
-            Assert.That(rooms, Has.All.Matches<RoomResult>(room =>
-                room.Flags.Contains("unregularized", StringComparer.Ordinal)
-                && room.Flags.Contains("area-drift", StringComparer.Ordinal)));
-        });
-    }
-
-    // An unsupported diagonal seam (open-plan equidistance artifact) must emit as axis-aligned
-    // segments — an engineer rules an on-axis split, never a diagonal chord.
-    [Test]
-    public void Free_seams_emit_axis_aligned_connectors_not_diagonals()
-    {
-        var rooms = DiagonalSeamRooms();
-        SpaceBoundaryNetwork.Regularize(rooms, 1, 1, 3, (_, _) => false, TestContext.WriteLine);
-        var actual = SpaceBoundaryNetwork.Build(rooms);
-
-        Assert.Multiple(() => {
-            Assert.That(actual, Has.All.Matches<BoundaryCurve>(curve =>
-                Math.Abs(curve.X1 - curve.X2) < 1e-6 || Math.Abs(curve.Y1 - curve.Y2) < 1e-6));
-            Assert.That(rooms.SelectMany(room => room.Flags), Does.Contain("ruled-seam"));
-        });
-    }
-
-    // The same seam OVER wall ink is real off-axis geometry: the engine must not reshape it —
-    // it stays raster-faithful and both owning rooms are flagged for the human/Pea loop.
-    [Test]
-    public void Supported_offaxis_walls_stay_raw_and_flag_rooms_unregularized()
-    {
-        var rooms = DiagonalSeamRooms();
-        SpaceBoundaryNetwork.Regularize(rooms, 1, 1, 3, (_, _) => true, TestContext.WriteLine);
-
-        Assert.That(rooms.SelectMany(room => room.Flags), Does.Contain("unregularized"));
-    }
-
-    // 100x60 rectangle split by a seam that staircases (50,0)->(58,8) then runs straight up x=58.
-    private static RoomResult[] DiagonalSeamRooms()
-    {
-        var seam = new List<double[]>();
-        for (int i = 0; i < 8; i++)
-        {
-            seam.Add(new[] { 50d + i, 0d + i });
-            seam.Add(new[] { 50d + i, 1d + i });
-        }
-        seam.Add(new[] { 58d, 8d });
-        var a = new List<double[]> { new[] { 0d, 0 }, new[] { 50d, 0 } };
-        a.AddRange(seam.Skip(1));
-        a.AddRange([new[] { 58d, 60 }, new[] { 0d, 60 }]);
-        var b = new List<double[]> { new[] { 50d, 0 }, new[] { 100d, 0 }, new[] { 100d, 60 }, new[] { 58d, 60 }, new[] { 58d, 8 } };
-        b.AddRange(seam.Skip(1).Reverse().Skip(1));
-        return [Room("A", a), Room("B", b)];
+        Assert.That(SharedAngle(rooms[0], rooms[1]), Is.EqualTo(-33).Within(0.1));
     }
 
     [Test]
@@ -128,15 +98,14 @@ public sealed class TakeoffSpaceMaterializationTests
             var level = new FilteredElementCollector(document).OfClass(typeof(Level)).Cast<Level>()
                 .OrderBy(item => item.Elevation).First();
             var phase = document.Phases.Cast<Phase>().Last();
-            var unresolved = Room("R03", Polygon(20, 0, 30, 10));
-            unresolved.Flags.Add("unregularized");
+            var third = Room("R03", Polygon(20, 0, 30, 10));
             var result = new TakeoffResult {
                 LevelName = level.Name,
                 LevelElevation = level.ProjectElevation,
                 Rooms = {
                     Room("R01", Polygon(0, 0, 10, 10), Polygon(2, 2, 4, 4)),
                     Room("R02", Polygon(10, 0, 20, 10)),
-                    unresolved,
+                    third,
                     Room("R04", Polygon(40, 0, 60, 1)),
                 },
                 Residues = {
@@ -164,7 +133,7 @@ public sealed class TakeoffSpaceMaterializationTests
 
             var second = SpaceMaterializer.Replace(document, level, phase, result, options, Log);
             document.Regenerate();
-            Assert.That(second.Spaces, Has.Count.EqualTo(2));
+            Assert.That(second.Spaces, Has.Count.EqualTo(3));
             Assert.That(second.Spaces, Has.None.Matches<ElementId>(id => first.Spaces.Contains(id)));
             AssertMaterialization(document, second, options, level, phase, logs);
 
@@ -344,12 +313,13 @@ public sealed class TakeoffSpaceMaterializationTests
             Assert.That((result.Spaces.Count, result.FilledRegions, result.LineFallbacks,
                     result.FilledRegionFailures, result.Rooms, result.Residues, result.Defectors,
                     result.DeletedWithoutReplacement),
-                Is.EqualTo((2, 4, 0, 0, 3, 2, 1, 0)));
-            Assert.That(spaces, Has.Count.EqualTo(2));
+                Is.EqualTo((3, 3, 0, 0, 3, 2, 1, 0)));
+            Assert.That(spaces, Has.Count.EqualTo(3));
             Assert.That(spaces[0].Area, Is.EqualTo(96).Within(0.01));
             Assert.That(spaces[1].Area, Is.EqualTo(100).Within(0.01));
+            Assert.That(spaces[2].Area, Is.EqualTo(100).Within(0.01));
             Assert.That(spaces.Select(space => space.Number),
-                Is.EquivalentTo(new[] { "R01", "R02" }));
+                Is.EquivalentTo(new[] { "R01", "R02", "R03" }));
             Assert.That(spaces.All(space => space.LevelId.Value() == level.Id.Value()
                                             && space.get_Parameter(BuiltInParameter.ROOM_PHASE_ID)
                                                 ?.AsElementId().Value() == phase.Id.Value()), Is.True);
@@ -359,10 +329,8 @@ public sealed class TakeoffSpaceMaterializationTests
             var secondPoint = ((LocationPoint)spaces[1].Location).Point;
             Assert.That(Math.Abs(firstPoint.X - 5) + Math.Abs(firstPoint.Y - 5), Is.LessThan(0.01));
             Assert.That(Math.Abs(secondPoint.X - 15) + Math.Abs(secondPoint.Y - 5), Is.LessThan(0.01));
-            Assert.That(owned.Count(element => element is Space), Is.EqualTo(2));
+            Assert.That(owned.Count(element => element is Space), Is.EqualTo(3));
             Assert.That(filledRegions.Count, Is.GreaterThanOrEqualTo(result.FilledRegions));
-            Assert.That(filledRegions.Select(SpaceMaterializer.Comments),
-                Has.Some.Contains("|R03\npe-takeoff: unregularized"));
             Assert.That(filledRegions.Select(SpaceMaterializer.Comments),
                 Has.Some.Contains("|R04\npe-takeoff: shape-defect=sliver"));
             Assert.That(filledRegions.Select(SpaceMaterializer.Comments),
@@ -370,12 +338,7 @@ public sealed class TakeoffSpaceMaterializationTests
             Assert.That(filledRegions, Has.Some.Matches<FilledRegion>(region =>
                 SpaceMaterializer.Comments(region)?.Contains("|X02\npe-takeoff: residue=rejected") == true));
             Assert.That(logs, Has.Some.Contains("[spaces] X02 ring repaired:"));
-            Assert.That(BoundaryLines(document, options), Has.Count.EqualTo(13));
-            Assert.That(BoundaryLines(document, options), Has.None.Matches<ModelCurve>(line => {
-                var curve = line.GeometryCurve;
-                return curve.GetEndPoint(0).X > 20.01 && curve.GetEndPoint(0).X < 29.99
-                       || curve.GetEndPoint(1).X > 20.01 && curve.GetEndPoint(1).X < 29.99;
-            }));
+            Assert.That(BoundaryLines(document, options), Has.Count.EqualTo(18));
         });
     }
 
@@ -428,6 +391,36 @@ public sealed class TakeoffSpaceMaterializationTests
         var next = polygon[(index + 1) % polygon.Count];
         return point[0] * next[1] - next[0] * point[1];
     }).Sum() / 2;
+
+    private static string BoundaryKey(BoundaryCurve line)
+    {
+        bool forward = line.X1 < line.X2 || line.X1 == line.X2 && line.Y1 <= line.Y2;
+        return forward
+            ? $"{line.X1:G},{line.Y1:G}|{line.X2:G},{line.Y2:G}"
+            : $"{line.X2:G},{line.Y2:G}|{line.X1:G},{line.Y1:G}";
+    }
+
+    private static double SharedAngle(RoomResult first, RoomResult second)
+    {
+        var secondEdges = Enumerable.Range(0, second.Polygon.Count).ToDictionary(index =>
+            BoundaryKey(new BoundaryCurve(
+                second.Polygon[index][0], second.Polygon[index][1],
+                second.Polygon[(index + 1) % second.Polygon.Count][0],
+                second.Polygon[(index + 1) % second.Polygon.Count][1])));
+        var shared = Enumerable.Range(0, first.Polygon.Count).Select(index =>
+                new BoundaryCurve(
+                    first.Polygon[index][0], first.Polygon[index][1],
+                    first.Polygon[(index + 1) % first.Polygon.Count][0],
+                    first.Polygon[(index + 1) % first.Polygon.Count][1]))
+            .Where(edge => secondEdges.ContainsKey(BoundaryKey(edge)))
+            .OrderByDescending(edge => Math.Sqrt(
+                Math.Pow(edge.X2 - edge.X1, 2) + Math.Pow(edge.Y2 - edge.Y1, 2)))
+            .First();
+        double angle = Math.Atan2(shared.Y2 - shared.Y1, shared.X2 - shared.X1) * 180 / Math.PI;
+        if (angle > 90) angle -= 180;
+        if (angle <= -90) angle += 180;
+        return angle;
+    }
 
     private static double NetworkArea(IReadOnlyList<BoundaryCurve> lines)
     {

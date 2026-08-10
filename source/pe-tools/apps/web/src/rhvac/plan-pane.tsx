@@ -28,7 +28,6 @@ import {
   candidateKey,
   isDecisionFlag,
   KNOWN_FLAG_KINDS,
-  STATE_FLAG_KINDS,
   type RhvacRoom,
   type RhvacTakeoffData,
   type TakeoffLevel,
@@ -107,15 +106,6 @@ export function PlanPane(props: PlanPaneProps) {
     [rooms, matchedIds],
   );
   const pending = useMemo(() => (takeoff ? pendingFlags(takeoff.levels) : []), [takeoff]);
-  const stateSummary = useMemo(() => {
-    if (!takeoff) return "";
-    const counts = new Map<string, number>();
-    for (const level of takeoff.levels)
-      for (const room of level.rooms)
-        for (const flag of room.flags ?? [])
-          if (STATE_FLAG_KINDS.has(flag)) counts.set(flag, (counts.get(flag) ?? 0) + 1);
-    return [...counts.entries()].map(([kind, n]) => `${n} ${kind}`).join(" · ");
-  }, [takeoff]);
 
   if (!takeoff) {
     return (
@@ -320,9 +310,6 @@ export function PlanPane(props: PlanPaneProps) {
           <LegendChip color="var(--foreground)" label="native — edited in Revit" />
         )}
         {pending.length > 0 && <LegendChip color="var(--cat-clay)" label="flagged" dashed />}
-        {level.rooms.some((room) => room.flags?.includes("unregularized")) && (
-          <LegendChip color="var(--muted-foreground)" label="raw shape — straighten in Revit" />
-        )}
         {level.residues.some((residue) => !residue.claimed) && (
           <LegendChip color="var(--muted-foreground)" label="unclaimed residue" />
         )}
@@ -333,7 +320,6 @@ export function PlanPane(props: PlanPaneProps) {
       {(pending.length > 0 || props.resolutionCount > 0) && (
         <FlagQueue
           pending={pending}
-          stateSummary={stateSummary}
           focusedFlagKey={focusedFlagKey}
           resolutionCount={props.resolutionCount}
           orphanCount={props.orphanCount}
@@ -403,7 +389,6 @@ export function PlanPane(props: PlanPaneProps) {
  */
 function FlagQueue({
   pending,
-  stateSummary,
   focusedFlagKey,
   resolutionCount,
   orphanCount,
@@ -417,7 +402,6 @@ function FlagQueue({
   onReset,
 }: {
   pending: PendingFlag[];
-  stateSummary: string;
   focusedFlagKey: string | null;
   resolutionCount: number;
   orphanCount: number;
@@ -440,11 +424,6 @@ function FlagQueue({
         <span className="tele ml-1.5 normal-case">
           {[...counts.entries()].map(([kind, n]) => `${n} ${kind}`).join(" · ") || "none pending"}
         </span>
-        {stateSummary && (
-          <span className="tele ml-1.5 normal-case text-muted-foreground">
-            · shape telemetry: {stateSummary}
-          </span>
-        )}
       </p>
       <ul className="space-y-px">
         {pending.map((flag) => (
@@ -564,7 +543,6 @@ function LevelSvg({
         key,
         identifier,
         flagged: shape.flags?.some(isDecisionFlag) ?? false,
-        unregularized: shape.flags?.includes("unregularized") ?? false,
         d: shapePathD(shape, bounds),
         centroid: shapeCentroid(shape, bounds),
       };
@@ -686,7 +664,7 @@ function LevelSvg({
           }}
         />
       ))}
-      {shapes.map(({ shape, key, identifier, flagged, unregularized, d, centroid }) => {
+      {shapes.map(({ shape, key, identifier, flagged, d, centroid }) => {
         const room = identifier !== undefined ? roomsById.get(identifier) : undefined;
         const selected =
           (identifier !== undefined && identifier === focusedId) ||
@@ -699,22 +677,18 @@ function LevelSvg({
               : "var(--primary)"
             : flagged
               ? "var(--cat-clay)"
-              : unregularized
-                ? "var(--muted-foreground)"
-                : room
-                  ? "var(--cat-blue)"
-                  : "var(--cat-kiln)";
+              : room
+                ? "var(--cat-blue)"
+                : "var(--cat-kiln)";
         const fill = shape.rejected
           ? "color-mix(in srgb, var(--muted-foreground) 8%, transparent)"
           : selected
             ? `color-mix(in srgb, ${flagged ? "var(--cat-clay)" : "var(--primary)"} 28%, transparent)`
             : flagged
               ? "color-mix(in srgb, var(--cat-clay) 12%, transparent)"
-              : unregularized
-                ? "color-mix(in srgb, var(--muted-foreground) 6%, transparent)"
-                : room
-                  ? "color-mix(in srgb, var(--cat-blue) 12%, transparent)"
-                  : "color-mix(in srgb, var(--cat-kiln) 10%, transparent)";
+              : room
+                ? "color-mix(in srgb, var(--cat-blue) 12%, transparent)"
+                : "color-mix(in srgb, var(--cat-kiln) 10%, transparent)";
         return (
           <g
             key={shape.id}

@@ -1,3 +1,6 @@
+using NetTopologySuite.Geometries;
+using NetTopologySuite.Operation.Valid;
+
 namespace Pe.Revit.Takeoff;
 
 /// <summary>One parsed room from a takeoff TSV: identity, scalars, and polygon (model feet).</summary>
@@ -124,14 +127,7 @@ public static class TakeoffTsv
             var outerArea = SignedArea(room.Outer);
             if (outerArea <= 0)
                 throw new InvalidDataException($"Room {room.Id}: outer loop is not CCW (contract violation).");
-            // RawSqft stays the exact cell-count truth while a straightened polygon may diverge
-            // up to TakeoffOptions.HardAreaDriftPct (25%, flagged area-drift in META); gate at
-            // that contract + slack. Still catches gross corruption (wrong-room POLY lines).
-            var polyArea = outerArea - room.Holes.Sum(hole => Math.Abs(SignedArea(hole)));
-            if (Math.Abs(polyArea - room.RawSqft) > Math.Max(2.0, room.RawSqft * 0.27))
-                throw new InvalidDataException(
-                    $"Room {room.Id}: RawSqft {room.RawSqft:F1} disagrees with polygon area {polyArea:F1}."
-                );
+            ValidateGeometry(room);
         }
 
         return new LevelTakeoff(levelName, elevation.Value, rooms) {
@@ -177,6 +173,39 @@ public static class TakeoffTsv
         for (int i = 0, j = loop.Count - 1; i < loop.Count; j = i++)
             sum += (loop[j][0] * loop[i][1]) - (loop[i][0] * loop[j][1]);
         return sum / 2;
+    }
+
+    private static void ValidateGeometry(TakeoffRoomShape room)
+    {
+        try
+        {
+            var factory = new GeometryFactory(new PrecisionModel(1_000_000));
+            LinearRing Ring(IReadOnlyList<double[]> points)
+            {
+                var coordinates = points.Select(point => new Coordinate(point[0], point[1])).ToList();
+                coordinates.Add(coordinates[0].Copy());
+                return factory.CreateLinearRing(coordinates.ToArray());
+            }
+
+            var polygon = factory.CreatePolygon(Ring(room.Outer), room.Holes.Select(Ring).ToArray());
+            var validity = new IsValidOp(polygon).ValidationError;
+            if (validity != null)
+                throw new InvalidDataException($"Room {room.Id}: invalid polygon ({validity.Message}).");
+            if (polygon.Area <= 0)
+                throw new InvalidDataException($"Room {room.Id}: polygon has no net area.");
+            if (room.RawSqft <= 0 || polygon.Area > 4 * room.RawSqft || room.RawSqft > 4 * polygon.Area)
+                throw new InvalidDataException(
+                    $"Room {room.Id}: RawSqft {room.RawSqft:F1} grossly disagrees with polygon area {polygon.Area:F1}."
+                );
+            if (room.Label.Length < 2 || !polygon.Contains(factory.CreatePoint(
+                    new Coordinate(room.Label[0], room.Label[1]))))
+                throw new InvalidDataException($"Room {room.Id}: label is not strictly inside its polygon.");
+        }
+        catch (InvalidDataException) { throw; }
+        catch (Exception exception)
+        {
+            throw new InvalidDataException($"Room {room.Id}: malformed polygon.", exception);
+        }
     }
 
     private static List<double[]> ParseLoop(string text, int lineIndex)

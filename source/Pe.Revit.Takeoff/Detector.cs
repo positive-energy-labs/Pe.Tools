@@ -10,7 +10,7 @@ public static class Detector
         TakeoffOptions opt, Action<string> log)
     {
         var obst = BuildObstruction(hf, seedInk, levelElevation, opt, log);
-        return PartitionFormulation.Run(hf, obst, seedInk, levelName, levelElevation, opt, log);
+        return PartitionFormulation.Run(hf, obst, levelName, levelElevation, opt, log);
     }
 
     // Shared by detection, level-profile inference, and diagnostics: composed seed ink -> sealed

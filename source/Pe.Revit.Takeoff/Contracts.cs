@@ -61,16 +61,9 @@ public sealed class TakeoffOptions
     public double CeilingCloseFt = 0;       // close gaps <= this in the ceiling mask (rafter-only
                                             // roofs read patchy at framing stage; attic policy)
     public double BoundarySimplifyFt = 2.0; // physical wall-fit tolerance for raster boundary chains
-    public double RegularizeAreaTolerancePct = 3.0; // regularized polygon area may drift this percent;
-                                                    // absolute floor remains 0.5 sf
     public double WallClaimFt = 1.5;        // wall-band claim reach per side: non-domain cells
-                                            // sandwiched between owned cells within this reach are
+                                            // seen by distinct rooms within this reach are
                                             // split at the band centerline so rooms TOUCH (0 = off)
-    public double HardAreaDriftPct = 25;    // straightened geometry that misses the tight tolerance
-                                            // still ships (flagged) until drift exceeds this ceiling —
-                                            // an uneditable raster stairstep is worse than area drift
-    public double LoopBridgeMaxFt = 4.0;    // close a degree-1 vertex pair gap in the room's curve
-                                            // network with a straight bridge up to this length
     public double BandPairSeparationFt = 0.75; // vertical-consistency AND: band A is also cut this
                                                // far BELOW KneeBandFt and only ink present in BOTH
                                                // cuts counts. Walls extrude vertically so they
