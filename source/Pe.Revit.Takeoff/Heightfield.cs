@@ -37,7 +37,7 @@ public sealed class Heightfield
         hf.FloorZ = new float[n]; hf.CeilZ = new float[n];
         for (int i = 0; i < n; i++) { hf.FloorZ[i] = float.NaN; hf.CeilZ[i] = float.NaN; }
 
-        double zLo = lvlZ - opt.FloorTolFt - 1.0, zHi = lvlZ + 14.0;
+        double zLo = lvlZ - opt.FloorTolFt - 1.0, zHi = lvlZ + opt.StoryCapFt;
         var geoOpt = new Options { DetailLevel = ViewDetailLevel.Medium, IncludeNonVisibleObjects = false };
         int nElems = 0, nTris = 0;
         foreach (var src in EnumerateSources(doc))
@@ -65,12 +65,21 @@ public sealed class Heightfield
         // joist-only floors (framing stage, no subfloor yet): close <= 0.75 ft gaps in the floor
         // mask by copying the nearest floor z — round-2 heightfield pod lesson.
         FillFloorGaps(hf, (int)Math.Ceiling(0.75 / opt.CellFt));
+        // rafter-only roofs (attic): the ceiling mask is equally gappy; close it symmetrically so
+        // RequireCeiling can hold on sloped levels. Off (0) by default — flat levels don't need it.
+        CloseCeilingGaps(hf, opt.CeilingCloseFt);
 
         int floorCells = 0;
         for (int i = 0; i < n; i++)
             if (!float.IsNaN(hf.FloorZ[i]) && Math.Abs(hf.FloorZ[i] - lvlZ) <= opt.FloorTolFt) floorCells++;
         log($"[heightfield] {hf.W}x{hf.H} elems={nElems} tris={nTris} floorCells={floorCells}");
         return hf;
+    }
+
+    internal static void CloseCeilingGaps(Heightfield hf, double closeFt)
+    {
+        if (closeFt > 0)
+            FillGaps(hf.CeilZ, hf.W, hf.H, (int)Math.Ceiling(closeFt / hf.CellFt));
     }
 
     // The envelope can span multiple links (Snowdon needed Facades+Structural to close "outside")
@@ -189,21 +198,23 @@ public sealed class Heightfield
         }
     }
 
-    private static void FillFloorGaps(Heightfield hf, int radius)
+    private static void FillFloorGaps(Heightfield hf, int radius) => FillGaps(hf.FloorZ, hf.W, hf.H, radius);
+
+    private static void FillGaps(float[] field, int W, int H, int radius)
     {
         if (radius <= 0) return;
-        var src = (float[])hf.FloorZ.Clone();
-        for (int y = 0; y < hf.H; y++)
-            for (int x = 0; x < hf.W; x++)
+        var src = (float[])field.Clone();
+        for (int y = 0; y < H; y++)
+            for (int x = 0; x < W; x++)
             {
-                int i = y * hf.W + x;
+                int i = y * W + x;
                 if (!float.IsNaN(src[i])) continue;
-                for (int dy = -radius; dy <= radius && float.IsNaN(hf.FloorZ[i]); dy++)
+                for (int dy = -radius; dy <= radius && float.IsNaN(field[i]); dy++)
                     for (int dx = -radius; dx <= radius; dx++)
                     {
                         int nx2 = x + dx, ny2 = y + dy;
-                        if (nx2 < 0 || ny2 < 0 || nx2 >= hf.W || ny2 >= hf.H) continue;
-                        if (!float.IsNaN(src[ny2 * hf.W + nx2])) { hf.FloorZ[i] = src[ny2 * hf.W + nx2]; break; }
+                        if (nx2 < 0 || ny2 < 0 || nx2 >= W || ny2 >= H) continue;
+                        if (!float.IsNaN(src[ny2 * W + nx2])) { field[i] = src[ny2 * W + nx2]; break; }
                     }
             }
     }

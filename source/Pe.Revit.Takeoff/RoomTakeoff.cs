@@ -1,5 +1,19 @@
 namespace Pe.Revit.Takeoff;
 
+internal sealed record MaterializationResolutionResult(
+    TakeoffResult Takeoff,
+    int Applied,
+    int Remapped,
+    int Orphaned
+);
+
+public sealed record NativeReadbackResult(
+    int SpacesRead,
+    int SkippedUnplaced,
+    int SkippedUnenclosed,
+    string PathWritten
+);
+
 // Facade. Room detection needs THREE script executions because the host owns exactly one
 // transaction per run and ExportImage refuses to run mid-transaction:
 //
@@ -48,8 +62,17 @@ public static class RoomTakeoff
         var level = ResolveLevel(doc, levelNameContains);
         var (crop, va, va2, vb, vd) = LoadState(opt, level);
         string workDir = ArtifactDir(opt);
-
-        var hf = Heightfield.Build(doc, level, crop, opt, log);
+        var heightfieldOptions = opt.InferLevelProfile
+            ? new TakeoffOptions {
+                InferLevelProfile = false,
+                CellFt = opt.CellFt,
+                FloorTolFt = opt.FloorTolFt,
+                StoryCapFt = new LevelProfileThresholds().EvidenceStoryCapFt,
+                CeilingCloseFt = 0,
+            }
+            : opt;
+        string captureOptions = DetectSnapshot.CaptureOptionsOf(heightfieldOptions);
+        var hf = Heightfield.Build(doc, level, crop, heightfieldOptions, log);
         int n = hf.W * hf.H;
         // floor-slab edge: stair voids, overlooks, and the building envelope (which the header
         // band's proximity gate anchors on — eave walls under a roof slope have no knee ink)
@@ -66,7 +89,33 @@ public static class RoomTakeoff
         }
         var ink = ProjectionSeed.CaptureInk(doc, va, va2, vb, vd, crop, hf.W, hf.H, opt.CellFt, workDir, opt, log,
             floorEdge, out var kneeInk);
-        var result = Detector.Detect(hf, ink, level, opt, log);
+        LevelProfile? appliedProfile = null;
+        if (opt.InferLevelProfile)
+        {
+            appliedProfile = TakeoffPolicy.InferLevelProfile(new DetectSnapshot {
+                LevelName = level.Name, LevelElevation = lvlZ, Field = hf, SeedInk = ink,
+            });
+            appliedProfile.ApplyPolicyTo(opt);
+            log($"[profile] {appliedProfile.Provenance}");
+        }
+        if (opt.DumpReplaySnapshot)
+        {
+            // Offline-iteration capture: exactly what Detector.Detect consumes (see DetectSnapshot
+            // header for the honesty boundary). Detection changes then replay in NoDocumentRuntime
+            // tests in seconds — never tune detection through repeated bridge runs.
+            string snapPath = Path.Combine(workDir, $"replay_{Sanitize(level.Name)}.bin");
+            DetectSnapshot.Save(snapPath, new DetectSnapshot {
+                LevelName = level.Name, LevelElevation = lvlZ,
+                CaptureOptions = captureOptions,
+                Field = hf, SeedInk = ink,
+            });
+            log($"[replay] detect-input snapshot -> {snapPath}");
+        }
+        var result = appliedProfile == null
+            ? Detector.Detect(hf, ink, level.Name, level.ProjectElevation, opt, log)
+            : TakeoffPolicy.Detect(new DetectSnapshot {
+                LevelName = level.Name, LevelElevation = level.ProjectElevation, Field = hf, SeedInk = ink,
+            }, appliedProfile, log);
         result.SeedViewA = va; result.SeedViewB = vb;
         // Boundary-evidence raster for materialization: where is a boundary REAL geometry rather
         // than an equidistance seam? Real = knee-band wall ink (doors are open at +4 ft; the header
@@ -104,7 +153,136 @@ public static class RoomTakeoff
         var level = ResolveLevel(doc, levelNameContains);
         var inkNear = InkSupport.LoadOracle(InkPath(opt, level), 3 * opt.CellFt);
         if (inkNear == null) log("[spaces] no ink raster found — arcs run on geometry alone");
-        return SpaceMaterializer.Replace(doc, level, phase, LoadResult(opt, level), opt, log, inkNear);
+        var takeoffDir = ArtifactDir(opt);
+        var sidecar = TakeoffResolutions.ResolutionPath(takeoffDir);
+        var resolved = File.Exists(sidecar)
+            ? LoadMaterializationResult(takeoffDir, level.Name, sidecar)
+            : new MaterializationResolutionResult(LoadResult(opt, level), 0, 0, 0);
+        var resolutionSummary =
+            $"applied={resolved.Applied} remapped={resolved.Remapped} orphaned={resolved.Orphaned}";
+        log(resolved.Orphaned > 0
+            ? $"[spaces] WARNING orphaned resolution decisions; {resolutionSummary}; unresolved rooms remain materialized"
+            : $"[spaces] resolutions {resolutionSummary}");
+        return SpaceMaterializer.Replace(doc, level, phase, resolved.Takeoff, opt, log, inkNear).Spaces;
+    }
+
+    public static NativeReadbackResult ReadbackNative(
+        Document doc,
+        Level level,
+        Phase phase,
+        string takeoffDirectory,
+        TakeoffOptions opt,
+        Action<string> log)
+    {
+        if (doc.GetElement(level.Id) is not Level || doc.GetElement(phase.Id) is not Phase)
+            throw new InvalidOperationException("level and phase must belong to the target document");
+
+        var rooms = new List<RoomResult>();
+        int skippedUnplaced = 0, skippedUnenclosed = 0;
+        var spaces = new FilteredElementCollector(doc).OfClass(typeof(SpatialElement))
+            .OfCategory(BuiltInCategory.OST_MEPSpaces).Cast<Space>()
+            .Where(space => space.LevelId.Value() == level.Id.Value()
+                            && space.get_Parameter(BuiltInParameter.ROOM_PHASE_ID)
+                                ?.AsElementId().Value() == phase.Id.Value())
+            .OrderBy(space => space.Number, StringComparer.Ordinal)
+            .ToList();
+
+        foreach (var space in spaces)
+        {
+            if (space.Location is not LocationPoint location)
+            {
+                skippedUnplaced++;
+                continue;
+            }
+
+            var boundaries = space.GetBoundarySegments(new SpatialElementBoundaryOptions());
+            if (space.Area <= 0 || boundaries is not { Count: > 0 })
+            {
+                skippedUnenclosed++;
+                continue;
+            }
+
+            var loops = boundaries.Select(segments => new {
+                    Segments = segments,
+                    Points = BoundaryPoints(segments),
+                })
+                .Where(loop => loop.Points.Count >= 3)
+                .OrderByDescending(loop => Math.Abs(TakeoffTsv.SignedArea(loop.Points)))
+                .ToList();
+            if (loops.Count == 0)
+            {
+                skippedUnenclosed++;
+                continue;
+            }
+
+            var outer = loops[0].Points;
+            if (TakeoffTsv.SignedArea(outer) < 0) outer.Reverse();
+            var holes = loops.Skip(1).Select(loop => loop.Points).ToList();
+            foreach (var hole in holes)
+                if (TakeoffTsv.SignedArea(hole) > 0) hole.Reverse();
+
+            var meanCeilingFt = space.LimitOffset;
+            if (meanCeilingFt <= 0 || double.IsNaN(meanCeilingFt) || double.IsInfinity(meanCeilingFt))
+            {
+                meanCeilingFt = space.UnboundedHeight;
+                if (meanCeilingFt <= 0 || double.IsNaN(meanCeilingFt) || double.IsInfinity(meanCeilingFt))
+                    meanCeilingFt = opt.StoryCapFt;
+                log($"[native-readback] Space '{space.Number}' has no usable LimitOffset; " +
+                    $"using {meanCeilingFt:F2} ft");
+            }
+
+            rooms.Add(new RoomResult {
+                Id = space.Number,
+                RawSqft = space.Area,
+                PerimeterFt = loops[0].Segments.Sum(segment => segment.GetCurve().Length),
+                LabelX = location.Point.X,
+                LabelY = location.Point.Y,
+                MeanCeilingFt = meanCeilingFt,
+                Polygon = outer,
+                Holes = holes,
+            });
+        }
+
+        if (rooms.Select(room => room.Id).Distinct(StringComparer.Ordinal).Count() != rooms.Count)
+            throw new InvalidOperationException("native Space numbers must be unique");
+
+        var result = new TakeoffResult {
+            LevelName = level.Name,
+            LevelElevation = level.ProjectElevation,
+            Source = TakeoffSource.Native,
+            Rooms = rooms,
+            TotalSqft = rooms.Sum(room => room.RawSqft),
+        };
+        var directory = Path.GetFullPath(takeoffDirectory);
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, $"rooms_{Sanitize(level.Name)}.native.tsv");
+        var temp = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            File.WriteAllText(temp, result.ToTsv());
+            if (File.Exists(path)) File.Replace(temp, path, null);
+            else File.Move(temp, path);
+        }
+        finally
+        {
+            if (File.Exists(temp)) File.Delete(temp);
+        }
+
+        log($"[native-readback] level='{level.Name}' phase='{phase.Name}' spaces={rooms.Count} " +
+            $"skippedUnplaced={skippedUnplaced} skippedUnenclosed={skippedUnenclosed} -> {path}");
+        return new NativeReadbackResult(rooms.Count, skippedUnplaced, skippedUnenclosed, path);
+    }
+
+    private static List<double[]> BoundaryPoints(IEnumerable<BoundarySegment> segments)
+    {
+        var points = new List<double[]>();
+        foreach (var segment in segments)
+        {
+            var tessellation = segment.GetCurve().Tessellate();
+            for (int i = 0; i < tessellation.Count - 1; i++)
+                points.Add(new[] { tessellation[i].X, tessellation[i].Y });
+        }
+        return points;
     }
 
     private static string InkPath(TakeoffOptions opt, Level level) =>
@@ -219,10 +397,15 @@ public static class RoomTakeoff
     {
         string tsv = Path.Combine(ArtifactDir(opt), $"rooms_{Sanitize(level.Name)}.tsv");
         if (!File.Exists(tsv)) throw new InvalidOperationException($"no detection result at {tsv} — run Detect first");
-        var result = new TakeoffResult { LevelName = level.Name, LevelElevation = level.ProjectElevation };
+        return LoadResult(File.ReadAllText(tsv), level.Name, level.ProjectElevation);
+    }
+
+    internal static TakeoffResult LoadResult(string tsv, string levelName, double levelElevation)
+    {
+        var result = new TakeoffResult { LevelName = levelName, LevelElevation = levelElevation };
         var rooms = new Dictionary<string, RoomResult>();
         var ic = CultureInfo.InvariantCulture;
-        foreach (var line in File.ReadAllLines(tsv))
+        foreach (var line in tsv.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries))
         {
             var p = line.Split('\t');
             if (p[0] == "ROOM")
@@ -245,7 +428,70 @@ public static class RoomTakeoff
                 }).ToList();
                 if (p[2] == "outer") room.Polygon = poly; else room.Holes.Add(poly);
             }
+            else if (p.Length == 3 && p[0] == "META" && p[1] == "flag")
+            {
+                int separator = p[2].IndexOf(':');
+                if (separator > 0 && rooms.TryGetValue(p[2][..separator], out var flagged))
+                    flagged.Flags.AddRange(p[2][(separator + 1)..]
+                        .Split(new[] { '+' }, StringSplitOptions.RemoveEmptyEntries));
+            }
+            else if (p.Length >= 9 && p[0] == "META" && p[1] == "residue")
+            {
+                var residue = new ResidueResult {
+                    Id = p[2], Reason = Enum.Parse<ResidueReason>(p[3], ignoreCase: true), RawSqft = double.Parse(p[4], ic),
+                    LabelX = double.Parse(p[5], ic), LabelY = double.Parse(p[6], ic),
+                    MeanCeilingFt = double.Parse(p[7], ic), Polygon = ParsePoly(p[8], ic),
+                };
+                for (int i = 9; i < p.Length; i++) residue.Holes.Add(ParsePoly(p[i], ic));
+                result.Residues.Add(residue);
+            }
         }
         return result;
+    }
+
+    private static List<double[]> ParsePoly(string text, CultureInfo ic) =>
+        text.Split('|').Select(pt => {
+            var xy = pt.Split(';');
+            return new[] { double.Parse(xy[0], ic), double.Parse(xy[1], ic) };
+        }).ToList();
+
+    internal static MaterializationResolutionResult LoadMaterializationResult(
+        string takeoffDirectory,
+        string levelName,
+        string? resolutionsPath = null
+    )
+    {
+        var resolved = TakeoffTsv.ParseTsvDirectory(takeoffDirectory, resolutionsPath);
+        var level = resolved.Levels.Single(item => item.LevelName == levelName);
+        var takeoff = new TakeoffResult {
+            LevelName = level.LevelName,
+            LevelElevation = level.Elevation,
+            Rooms = level.Rooms.Select(room => new RoomResult {
+                Id = room.Id,
+                RawSqft = room.RawSqft,
+                PerimeterFt = room.PerimeterFt,
+                MeanCeilingFt = room.MeanCeilingFt,
+                Polygon = room.Outer,
+                Holes = room.Holes,
+                Flags = room.Flags,
+                LabelX = room.Label[0],
+                LabelY = room.Label[1],
+                SplitFrom = room.SplitFrom,
+                MergedFrom = room.MergedFrom,
+            }).ToList(),
+            Residues = level.Residues.Select(residue => new ResidueResult {
+                Id = residue.Id,
+                Reason = residue.Reason,
+                RawSqft = residue.RawSqft,
+                MeanCeilingFt = residue.MeanCeilingFt,
+                LabelX = residue.Label[0],
+                LabelY = residue.Label[1],
+                Polygon = residue.Outer,
+                Holes = residue.Holes,
+            }).ToList(),
+        };
+        takeoff.TotalSqft = takeoff.Rooms.Sum(room => room.RawSqft);
+        return new MaterializationResolutionResult(
+            takeoff, resolved.Applied, resolved.Remapped, resolved.Orphaned);
     }
 }

@@ -118,20 +118,100 @@ public static class Annotate
         return views.Count;
     }
 
-    private static CurveLoop ToLoop(List<double[]> pts)
+    internal static CurveLoop ToLoop(List<double[]> pts, double z = 0)
     {
-        var clean = new List<XYZ>();
-        foreach (var p in pts)
-        {
-            var xyz = new XYZ(p[0], p[1], 0);
-            if (clean.Count == 0 || clean[^1].DistanceTo(xyz) > 0.01) clean.Add(xyz);
-        }
-        if (clean.Count > 1 && clean[0].DistanceTo(clean[^1]) <= 0.01) clean.RemoveAt(clean.Count - 1);
+        var clean = CleanPoints(pts, z);
         if (clean.Count < 3) throw new InvalidOperationException("degenerate loop");
+        return ToLoop(clean);
+    }
+
+    internal static List<CurveLoop> SplitSelfTouchingLoop(
+        List<double[]> pts, double z, out int repeatedVertices, out int droppedDegenerateLoops)
+    {
+        var clean = CleanPoints(pts, z);
+        if (clean.Count < 3) throw new InvalidOperationException("degenerate loop");
+
+        repeatedVertices = 0;
+        droppedDegenerateLoops = 0;
+        var simpleLoops = new List<List<XYZ>>();
+        Split(clean, simpleLoops, ref repeatedVertices, ref droppedDegenerateLoops);
+        if (repeatedVertices == 0)
+            throw new InvalidOperationException("outer ring has no repeated vertices");
+        if (simpleLoops.Count == 0)
+            throw new InvalidOperationException("ring repair produced no non-trivial loops");
+        return simpleLoops.Select(ToLoop).ToList();
+    }
+
+    private static void Split(
+        List<XYZ> ring, List<List<XYZ>> simple, ref int repeatedVertices, ref int droppedDegenerateLoops)
+    {
+        for (int first = 0; first < ring.Count; first++)
+        for (int second = first + 1; second < ring.Count; second++)
+        {
+            if (ring[first].DistanceTo(ring[second]) > 0.01) continue;
+
+            repeatedVertices++;
+            var between = ring.GetRange(first, second - first);
+            var around = ring.GetRange(second, ring.Count - second);
+            around.AddRange(ring.GetRange(0, first));
+            KeepOrSplit(between, simple, ref repeatedVertices, ref droppedDegenerateLoops);
+            KeepOrSplit(around, simple, ref repeatedVertices, ref droppedDegenerateLoops);
+            return;
+        }
+
+        Keep(ring, simple, ref droppedDegenerateLoops);
+    }
+
+    private static void KeepOrSplit(
+        List<XYZ> ring, List<List<XYZ>> simple, ref int repeatedVertices, ref int droppedDegenerateLoops)
+    {
+        if (ring.Count < 3)
+        {
+            droppedDegenerateLoops++;
+            return;
+        }
+        Split(ring, simple, ref repeatedVertices, ref droppedDegenerateLoops);
+    }
+
+    private static void Keep(List<XYZ> ring, List<List<XYZ>> simple, ref int droppedDegenerateLoops)
+    {
+        if (ring.Count < 3 || Math.Abs(SignedArea(ring)) <= 0.0001)
+        {
+            droppedDegenerateLoops++;
+            return;
+        }
+        simple.Add(ring);
+    }
+
+    private static double SignedArea(IReadOnlyList<XYZ> points)
+    {
+        double sum = 0;
+        for (int i = 0; i < points.Count; i++)
+        {
+            var next = points[(i + 1) % points.Count];
+            sum += points[i].X * next.Y - next.X * points[i].Y;
+        }
+        return sum / 2;
+    }
+
+    private static CurveLoop ToLoop(IReadOnlyList<XYZ> clean)
+    {
         var cl = new CurveLoop();
         for (int i = 0; i < clean.Count; i++)
             cl.Append(Line.CreateBound(clean[i], clean[(i + 1) % clean.Count]));
         return cl;
+    }
+
+    internal static List<XYZ> CleanPoints(List<double[]> pts, double z)
+    {
+        var clean = new List<XYZ>();
+        foreach (var p in pts)
+        {
+            var xyz = new XYZ(p[0], p[1], z);
+            if (clean.Count == 0 || clean[^1].DistanceTo(xyz) > 0.01) clean.Add(xyz);
+        }
+        if (clean.Count > 1 && clean[0].DistanceTo(clean[^1]) <= 0.01) clean.RemoveAt(clean.Count - 1);
+        return clean;
     }
 
     private static Color Rainbow(int i, int n)

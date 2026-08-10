@@ -1,8 +1,26 @@
+using Autodesk.Revit.DB.ExtensibleStorage;
+
 namespace Pe.Revit.Takeoff;
+
+internal sealed record SpaceMaterializationResult(
+    IReadOnlyList<ElementId> Spaces,
+    int FilledRegions,
+    int LineFallbacks,
+    int FilledRegionFailures,
+    int Rooms,
+    int Residues,
+    int Defectors,
+    int DeletedWithoutReplacement)
+{
+    internal bool AccountingHolds =>
+        Spaces.Count + FilledRegions + LineFallbacks == Rooms + Residues + Defectors;
+}
 
 internal static class SpaceMaterializer
 {
-    internal static IReadOnlyList<ElementId> Replace(
+    private static readonly Guid OwnershipSchemaId = new("fe42dd0d-fd47-4b31-8332-ff1ed891ef02");
+
+    internal static SpaceMaterializationResult Replace(
         Document doc, Level level, Phase phase, TakeoffResult result, TakeoffOptions opt, Action<string> log,
         Func<double, double, bool>? inkNear = null)
     {
@@ -30,14 +48,12 @@ internal static class SpaceMaterializer
             throw new InvalidOperationException($"target level/phase already contains {existing.Count} non-takeoff Space(s)");
 
         DeleteOwned(doc, token, viewName);
-        var dropped = new SortedSet<string>(StringComparer.Ordinal);
-        var boundary = SpaceBoundaryNetwork.Build(result.Rooms, opt.CellFt, opt.BoundarySimplifyFt, inkNear, dropped, log);
-        var keptRooms = result.Rooms.Where(room => !dropped.Contains(room.Id)).ToList();
-        if (dropped.Count > 0)
-            log($"[spaces] dropped {dropped.Count}/{result.Rooms.Count} rooms as holes: " + string.Join(" ",
-                result.Rooms.Where(room => dropped.Contains(room.Id))
-                    .Select(room => $"{room.Id}@({room.LabelX:F0},{room.LabelY:F0})")));
-        if (keptRooms.Count == 0) throw new InvalidOperationException("every room dropped as unresolvable — nothing to materialize");
+        var regularizedRooms = result.Rooms
+            .Where(room => !room.Flags.Contains("unregularized", StringComparer.Ordinal)).ToList();
+        var unresolvedRooms = result.Rooms
+            .Where(room => room.Flags.Contains("unregularized", StringComparer.Ordinal)).ToList();
+        var boundary = SpaceBoundaryNetwork.Build(regularizedRooms);
+        var spaceRooms = regularizedRooms.ToList();
 
         var viewType = new FilteredElementCollector(doc).OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>()
             .First(type => type.ViewFamily == ViewFamily.FloorPlan);
@@ -49,21 +65,24 @@ internal static class SpaceMaterializer
         var sketchPlane = SketchPlane.Create(doc, plane);
         if (view.get_Parameter(BuiltInParameter.VIEW_DESCRIPTION)?.Set(sketchPlane.UniqueId) != true)
             throw new InvalidOperationException("cannot persist the owned Space boundary sketch plane");
-        var curves = new CurveArray();
-        foreach (var curve in boundary)
-            curves.Append(curve.IsArc
-                ? Arc.Create(
-                    new XYZ(curve.X1, curve.Y1, level.Elevation),
-                    new XYZ(curve.X2, curve.Y2, level.Elevation),
-                    new XYZ(curve.MidX, curve.MidY, level.Elevation))
-                : (Curve)Line.CreateBound(
-                    new XYZ(curve.X1, curve.Y1, level.Elevation),
-                    new XYZ(curve.X2, curve.Y2, level.Elevation)));
-        doc.Create.NewSpaceBoundaryLines(sketchPlane, curves, view);
-        doc.Regenerate();
+        if (boundary.Count > 0)
+        {
+            var curves = new CurveArray();
+            foreach (var curve in boundary)
+                curves.Append(curve.IsArc
+                    ? Arc.Create(
+                        new XYZ(curve.X1, curve.Y1, level.Elevation),
+                        new XYZ(curve.X2, curve.Y2, level.Elevation),
+                        new XYZ(curve.MidX, curve.MidY, level.Elevation))
+                    : (Curve)Line.CreateBound(
+                        new XYZ(curve.X1, curve.Y1, level.Elevation),
+                        new XYZ(curve.X2, curve.Y2, level.Elevation)));
+            doc.Create.NewSpaceBoundaryLines(sketchPlane, curves, view);
+            doc.Regenerate();
+        }
 
         var ids = new List<ElementId>();
-        foreach (var room in keptRooms)
+        foreach (var room in spaceRooms)
         {
             var space = doc.Create.NewSpace(level, phase, new UV(room.LabelX, room.LabelY))
                 ?? throw new InvalidOperationException($"Revit did not create a Space for {room.Id}");
@@ -72,35 +91,174 @@ internal static class SpaceMaterializer
             space.BaseOffset = 0;
             space.UpperLimit = level;
             space.LimitOffset = room.MeanCeilingFt;
-            Stamp(space, token + "|" + room.Id);
+            Stamp(space, SpaceComments(token, room));
             ids.Add(space.Id);
         }
         doc.Regenerate();
 
         // Room-level shape gate on the NATIVE boundary: a small room that came out as an
-        // arrowhead/wedge (acute corner), a sliver, or a step-storm is bewildering, not helpful —
-        // delete it so the plan shows an honest hole. Big rooms are exempt: circulation legally
-        // has many corners, and dropping the main corridor would gut the level.
-        var shapeDropped = new List<string>();
+        // arrowhead/wedge (acute corner), a sliver, or a step-storm is bewildering as a Space —
+        // redirect it to unresolved evidence. Big rooms are exempt: circulation legally
+        // has many corners. Defectors keep their raw polygon as unresolved evidence.
+        var defectors = new List<(RoomResult Room, string Reason)>();
         for (int i = ids.Count - 1; i >= 0; i--)
         {
             var space = (Space)doc.GetElement(ids[i]);
             string? reason = ShapeDefect(space, inkNear);
             if (reason == null) continue;
-            shapeDropped.Add($"{keptRooms[i].Id}@({keptRooms[i].LabelX:F0},{keptRooms[i].LabelY:F0}) {reason}");
-            dropped.Add(keptRooms[i].Id);
+            defectors.Add((spaceRooms[i], reason));
             doc.Delete(space.Id);
             ids.RemoveAt(i);
-            keptRooms.RemoveAt(i);
+            spaceRooms.RemoveAt(i);
         }
-        if (shapeDropped.Count > 0)
+        if (defectors.Count > 0)
         {
             doc.Regenerate();
-            log($"[spaces] shape gate dropped {shapeDropped.Count} rooms as holes: " + string.Join(" ", shapeDropped));
+            log($"[spaces] shape gate redirected {defectors.Count} rooms to unresolved evidence: " +
+                string.Join(" ", defectors.Select(item =>
+                    $"{item.Room.Id}@({item.Room.LabelX:F0},{item.Room.LabelY:F0}) {item.Reason}")));
+        }
+
+        int filledRegions = 0, lineFallbacks = 0, filledRegionFailures = 0;
+        if (unresolvedRooms.Count + result.Residues.Count + defectors.Count > 0)
+        {
+            var frType = new FilteredElementCollector(doc).OfClass(typeof(FilledRegionType))
+                .Cast<FilledRegionType>().First();
+            var solid = new FilteredElementCollector(doc).OfClass(typeof(FillPatternElement))
+                .Cast<FillPatternElement>().First(pattern => pattern.GetFillPattern().IsSolidFill);
+            var unresolvedStyle = new OverrideGraphicSettings()
+                .SetSurfaceForegroundPatternId(solid.Id)
+                .SetSurfaceForegroundPatternColor(new Color(128, 128, 128))
+                .SetSurfaceTransparency(55)
+                .SetProjectionLineColor(new Color(96, 96, 96))
+                .SetHalftone(true);
+
+            foreach (var room in unresolvedRooms)
+                DrawUnresolved(room.Id, room.Polygon, room.Holes, SpaceComments(token, room));
+            foreach (var residue in result.Residues)
+                DrawUnresolved(residue.Id, residue.Polygon, residue.Holes,
+                    $"{token}|{residue.Id}\npe-takeoff: residue={residue.Reason.ToString().ToLowerInvariant()}");
+            foreach (var (room, reason) in defectors)
+                DrawUnresolved(room.Id, room.Polygon, room.Holes,
+                    $"{SpaceComments(token, room)}\npe-takeoff: shape-defect={reason}");
+
+            void DrawUnresolved(
+                string id, List<double[]> polygon, List<List<double[]>> holes, string comments)
+            {
+                List<FilledRegion> regions;
+                string? repairLog = null;
+                try
+                {
+                    var loops = new List<CurveLoop> { Annotate.ToLoop(polygon, level.Elevation) };
+                    loops.AddRange(holes.Select(hole => Annotate.ToLoop(hole, level.Elevation)));
+                    regions = [FilledRegion.Create(doc, frType.Id, view.Id, loops)];
+                }
+                catch (Exception originalException)
+                {
+                    try
+                    {
+                        (regions, repairLog) = CreateRepairedRegions(id, polygon, holes);
+                    }
+                    catch (Exception repairException)
+                    {
+                        DrawLineFallback(id, polygon, comments, originalException, repairException);
+                        return;
+                    }
+                }
+
+                StampAndStyle(regions, comments);
+                filledRegions++;
+                if (repairLog != null) log(repairLog);
+            }
+
+            (List<FilledRegion> Regions, string RepairLog) CreateRepairedRegions(
+                string id, List<double[]> polygon, List<List<double[]>> holes)
+            {
+                var outerLoops = Annotate.SplitSelfTouchingLoop(
+                    polygon, level.Elevation, out int repeatedVertices, out int droppedDegenerateLoops);
+                var repairedLoops = outerLoops.ToList();
+                int droppedHoles = 0;
+                foreach (var hole in holes)
+                {
+                    try { repairedLoops.Add(Annotate.ToLoop(hole, level.Elevation)); }
+                    catch (Exception holeException)
+                    {
+                        droppedHoles++;
+                        log($"[spaces] {id} ring repair dropped hole: {holeException.Message}");
+                    }
+                }
+
+                List<FilledRegion> regions;
+                try
+                {
+                    regions = [FilledRegion.Create(doc, frType.Id, view.Id, repairedLoops)];
+                }
+                catch (Exception combinedException)
+                {
+                    regions = [];
+                    try
+                    {
+                        foreach (var outerLoop in outerLoops)
+                            regions.Add(FilledRegion.Create(
+                                doc, frType.Id, view.Id, new List<CurveLoop> { outerLoop }));
+                    }
+                    catch (Exception individualException)
+                    {
+                        if (regions.Count > 0) doc.Delete(regions.Select(item => item.Id).ToList());
+                        throw new InvalidOperationException(
+                            $"combined loops rejected ({combinedException.Message}); " +
+                            $"individual loop rejected ({individualException.Message})", individualException);
+                    }
+                    if (holes.Count > 0)
+                    {
+                        droppedHoles = holes.Count;
+                        log($"[spaces] {id} ring repair dropped {holes.Count} hole(s): " +
+                            "Revit rejected the combined repaired loops");
+                    }
+                }
+
+                string repairLog = $"[spaces] {id} ring repaired: repeatedVertices={repeatedVertices} " +
+                                   $"simpleLoops={outerLoops.Count} filledRegionElements={regions.Count} " +
+                                   $"droppedDegenerateLoops={droppedDegenerateLoops} droppedHoles={droppedHoles}";
+                return (regions, repairLog);
+            }
+
+            void StampAndStyle(IEnumerable<FilledRegion> regions, string comments)
+            {
+                foreach (var region in regions)
+                {
+                    Stamp(region, comments);
+                    view.SetElementOverrides(region.Id, unresolvedStyle);
+                }
+            }
+
+            void DrawLineFallback(
+                string id, List<double[]> polygon, string comments,
+                Exception originalException, Exception repairException)
+            {
+                filledRegionFailures++;
+                var points = Annotate.CleanPoints(polygon, level.Elevation);
+                int made = 0;
+                for (int i = 0; i < points.Count; i++)
+                {
+                    var a = points[i]; var b = points[(i + 1) % points.Count];
+                    if (a.DistanceTo(b) <= 0.01) continue;
+                    var line = doc.Create.NewDetailCurve(view, Line.CreateBound(a, b));
+                    Stamp(line, comments);
+                    view.SetElementOverrides(line.Id, unresolvedStyle);
+                    made++;
+                }
+                if (made == 0)
+                    throw new InvalidOperationException(
+                        $"{id} FilledRegion failed and ring repair left no drawable outer ring", repairException);
+                lineFallbacks++;
+                log($"[spaces] {id} FilledRegion failed; ring repair failed: {repairException.Message}; " +
+                    $"drew outer-ring detail lines: {originalException.Message}");
+            }
         }
 
         var validationErrors = new List<string>();
-        foreach (var (room, id) in keptRooms.Zip(ids, (room, id) => (room, id)))
+        foreach (var (room, id) in spaceRooms.Zip(ids, (room, id) => (room, id)))
         {
             var space = (Space)doc.GetElement(id);
             // Bound native area drift by the raster half-cell plus the wall fitter's maximum
@@ -122,15 +280,29 @@ internal static class SpaceMaterializer
         // gain), but the LEVEL total must hold — boundary regularization only moves area between
         // rooms, it must not create or destroy it
         double nativeTotal = ids.Sum(id => ((Space)doc.GetElement(id)).Area);
-        double targetTotal = keptRooms.Sum(room => room.RawSqft);
+        double targetTotal = spaceRooms.Sum(room => room.RawSqft);
         if (Math.Abs(nativeTotal - targetTotal) > Math.Max(20, 0.02 * targetTotal))
             validationErrors.Add(
                 $"level total drift: native={nativeTotal:F0}sf target={targetTotal:F0}sf delta={nativeTotal - targetTotal:+0;-0}sf");
         // ponytail: validation reports instead of throwing — the 80% product path materializes the
         // level and hands drift/enclosure failures to the human/Pea loop with the unresolved list
         foreach (var error in validationErrors) log($"[spaces] VALIDATION {error}");
-        log($"[spaces] phase='{phase.Name}' level='{level.Name}' spaces={ids.Count} boundaryCurves={boundary.Count} view='{viewName}'");
-        return ids;
+        var materialized = new SpaceMaterializationResult(
+            ids, filledRegions, lineFallbacks, filledRegionFailures,
+            result.Rooms.Count - defectors.Count, result.Residues.Count, defectors.Count, 0);
+        log($"[spaces] phase='{phase.Name}' level='{level.Name}' spaces={ids.Count} " +
+            $"filledRegions={filledRegions} lineFallbacks={lineFallbacks} " +
+            $"filledRegionFailures={filledRegionFailures} rooms={materialized.Rooms} " +
+            $"residues={materialized.Residues} defectors={materialized.Defectors} " +
+            $"deletedWithoutReplacement={materialized.DeletedWithoutReplacement} " +
+            $"boundaryCurves={boundary.Count} view='{viewName}'");
+        if (!materialized.AccountingHolds || materialized.DeletedWithoutReplacement != 0)
+            throw new InvalidOperationException(
+                $"materialization accounting failed: spaces={ids.Count} filledRegions={filledRegions} " +
+                $"lineFallbacks={lineFallbacks} rooms={materialized.Rooms} " +
+                $"residues={materialized.Residues} defectors={materialized.Defectors} " +
+                $"deletedWithoutReplacement={materialized.DeletedWithoutReplacement}");
+        return materialized;
     }
 
     // Room-level shape defects a user called "bewildering": arrowheads/wedges (acute corners),
@@ -254,14 +426,46 @@ internal static class SpaceMaterializer
     private static bool Owned(Element element, string token) =>
         Comments(element)?.StartsWith(token + "|", StringComparison.Ordinal) == true;
 
-    private static string? Comments(Element element) =>
-        element.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS)?.AsString();
+    internal static string? Comments(Element element)
+    {
+        string? comments = element.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS)?.AsString();
+        if (!string.IsNullOrWhiteSpace(comments)) return comments;
+        var schema = Schema.Lookup(OwnershipSchemaId);
+        if (schema == null) return null;
+        var entity = element.GetEntity(schema);
+        return entity.IsValid() ? entity.Get<string>("Token") : null;
+    }
+
+    internal static string SpaceComments(string token, RoomResult room)
+    {
+        var lines = new List<string> { token + "|" + room.Id };
+        if (room.Flags.Count > 0)
+            lines.Add("pe-takeoff: " + string.Join(", ", room.Flags));
+        if (room.SplitFrom is not null)
+            lines.Add("pe-takeoff: splitFrom=" + room.SplitFrom);
+        if (room.MergedFrom is not null)
+            lines.Add("pe-takeoff: mergedFrom=" + room.MergedFrom);
+        return string.Join("\n", lines);
+    }
 
     private static void Stamp(Element element, string value)
     {
         var parameter = element.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS);
-        if (parameter == null || parameter.IsReadOnly || !parameter.Set(value))
-            throw new InvalidOperationException($"cannot stamp ownership on {element.GetType().Name} {element.Id}");
+        if (parameter is { IsReadOnly: false } && parameter.Set(value)) return;
+        var schema = Schema.Lookup(OwnershipSchemaId) ?? CreateOwnershipSchema();
+        var entity = new Entity(schema);
+        entity.Set("Token", value);
+        element.SetEntity(entity);
+    }
+
+    private static Schema CreateOwnershipSchema()
+    {
+        var builder = new SchemaBuilder(OwnershipSchemaId);
+        builder.SetSchemaName("PeTakeoffOwnership");
+        builder.SetReadAccessLevel(AccessLevel.Public);
+        builder.SetWriteAccessLevel(AccessLevel.Public);
+        builder.AddSimpleField("Token", typeof(string));
+        return builder.Finish();
     }
 
     private static bool Contains(IReadOnlyList<double[]> polygon, double x, double y)

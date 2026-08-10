@@ -18,6 +18,13 @@ import {
 } from "./local-ops.ts";
 import { LocalOpError, localOpHttpStatus } from "./local-error.ts";
 import {
+  rhvacAssemblies,
+  rhvacOpen,
+  rhvacSave,
+  rhvacTakeoff,
+  rhvacTakeoffResolutions,
+} from "./rhvac-ops.ts";
+import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   isTsOnlyOperationKey,
   tsOnlyOperationCatalog,
@@ -224,6 +231,16 @@ export const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
       });
     case "revit.catalog.recent-documents":
       return yield* collectRecentDocuments(yield* decodeRequest(key, request));
+    case "rhvac.open":
+      return yield* rhvacOpen(yield* decodeRequest(key, request));
+    case "rhvac.assemblies":
+      return yield* rhvacAssemblies(yield* decodeRequest(key, request));
+    case "rhvac.save":
+      return yield* rhvacSave(yield* decodeRequest(key, request));
+    case "rhvac.takeoff":
+      return yield* rhvacTakeoff(yield* decodeRequest(key, request));
+    case "rhvac.takeoff-resolutions":
+      return yield* rhvacTakeoffResolutions(yield* decodeRequest(key, request));
     case "aps.auth.status":
       return yield* apsAuthStatus(yield* decodeRequest(key, request));
     case "aps.auth.login":
@@ -247,7 +264,9 @@ const decodeRequest = Effect.fnUntraced(function* <K extends TsOnlyOperationKey>
 ) {
   const schemas = tsOnlyOperationSchemas[key] as { request?: Schema.Codec<unknown> };
   if (!schemas.request) return {} as never;
-  return (yield* Schema.decodeUnknownEffect(schemas.request)(request ?? {}).pipe(
+  return (yield* Schema.decodeUnknownEffect(schemas.request, { onExcessProperty: "error" })(
+    request ?? {},
+  ).pipe(
     Effect.mapError((error) => new InvalidHostRequest(key, error.message)),
   )) as Schema.Schema.Type<RequestSchemaOf<K>>;
 });

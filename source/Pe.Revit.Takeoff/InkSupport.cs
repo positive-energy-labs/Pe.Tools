@@ -33,6 +33,12 @@ internal static class InkSupport
         for (int i = 0; i < w * h; i++)
             ink[i] = (bits[i >> 3] & 1 << (i & 7)) != 0;
 
+        return CreateOracle(w, h, minX, minY, cellFt, ink, radiusFt);
+    }
+
+    internal static Func<double, double, bool> CreateOracle(
+        int w, int h, double minX, double minY, double cellFt, bool[] ink, double radiusFt)
+    {
         // separable square dilation by the support radius (box, not disk — close enough here)
         int radius = Math.Max(1, (int)Math.Round(radiusFt / cellFt));
         var pass = new bool[w * h];
