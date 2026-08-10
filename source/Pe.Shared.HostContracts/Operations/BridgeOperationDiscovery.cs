@@ -244,7 +244,33 @@ public sealed record HostOpsCatalogEntry(
     IReadOnlyList<string> CallGuidance,
     string RequestSchemaJson,
     string ResponseSchemaJson
-);
+) {
+    /// <summary>
+    ///     The single projection from a registered op to its catalog entry — used by the live
+    ///     host.ops.catalog op and the offline pe-dev ops-catalog dump alike, so both lanes
+    ///     serve byte-identical entries.
+    /// </summary>
+    public static HostOpsCatalogEntry FromOp(BridgeOp op) {
+        var definition = op.Definition;
+        var metadata = definition.AgentMetadata;
+        return new HostOpsCatalogEntry(
+            definition.Key,
+            definition.DisplayName,
+            metadata.Intent.ToString(),
+            metadata.CostTier.ToString(),
+            metadata.Visibility.ToString(),
+            metadata.RequiresActiveDocument,
+            metadata.SupportedActiveDocumentKind.ToString(),
+            metadata.Description,
+            metadata.SearchTerms,
+            metadata.RequestExamples,
+            metadata.SafeDefaultRequestJson,
+            metadata.CallGuidance,
+            BridgeOpSchemaGenerator.GetRequestSchemaJson(definition.RequestType),
+            BridgeOpSchemaGenerator.GetResponseSchemaJson(definition.ResponseType)
+        );
+    }
+}
 
 public sealed record HostOpsCatalogData(
     IReadOnlyList<HostOpsCatalogEntry> Operations

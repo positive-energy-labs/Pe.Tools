@@ -12,6 +12,7 @@
     <ProjectReference Include="..\Pe.Aps\Pe.Aps.csproj" />
     <ProjectReference Include="..\Pe.Dev.RevitAutomation\Pe.Dev.RevitAutomation.csproj" />
     <ProjectReference Include="..\Pe.Shared.ApsAuth\Pe.Shared.ApsAuth.csproj" />
+    <ProjectReference Include="..\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj" />
     <ProjectReference Include="..\Pe.Shared.RevitData\Pe.Shared.RevitData.csproj" />
     <ProjectReference Include="..\Pe.Shared.StorageRuntime\Pe.Shared.StorageRuntime.csproj" />
   </ItemGroup>

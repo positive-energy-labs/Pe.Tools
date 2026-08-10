@@ -1,16 +1,21 @@
 /**
- * Typegen: fetch the runtime op catalog from a running host (GET /ops, which
- * proxies host.ops.catalog to the connected Revit session) and emit one
- * TypeScript file with per-op request/response types, a runtime key list, and
- * a key→types map. The emitted file is CHECKED IN — it is the compile-time
- * contract artifact, committed like a lockfile.
+ * Typegen: emit one TypeScript file with per-op request/response types, a
+ * runtime key list, and a key→types map. The emitted file is CHECKED IN — it
+ * is the compile-time contract artifact, committed like a lockfile.
  *
- * The running session is the source of truth — no C# reflection projection,
- * no [ExportTsSchema], no pe-dev codegen.
+ * Two catalog sources (VerbCatalog pattern — offline single source of truth,
+ * live host as a verification pass):
+ *   --catalog <file>   OFFLINE projection from `pe-dev ops-catalog` (default
+ *                      generation + drift-gate lane; deterministic, no host).
+ *   (no --catalog)     LIVE fetch from GET /ops of a running host, session-
+ *                      targeted — the verify lane (codegen:verify-live): proves
+ *                      a real session serves the same catalog the offline
+ *                      projection generated from.
  *
  * Run (from packages/host-contracts):
- *   pnpm codegen -- --session <bridgeSessionId>  # regenerate the checked-in file
- *   pnpm codegen:check -- --session <id>         # drift gate: exit 1 if stale
+ *   pnpm codegen                                # offline regenerate
+ *   pnpm codegen:check                          # offline drift gate: exit 1 if stale
+ *   pnpm codegen:verify-live -- --session <id>  # live parity check
  *   [--host http://127.0.0.1:5180] [--session <bridgeSessionId>] [--out <path>]
  */
 import { compile } from "json-schema-to-typescript";
@@ -63,61 +68,79 @@ const DEFAULT_OUT = resolve(import.meta.dirname, "../src/generated/host-ops.gene
 const hostBase = argValue("--host", "http://127.0.0.1:5180");
 const session = argValue("--session", "");
 const outPath = argValue("--out", DEFAULT_OUT);
+const catalogPath = argValue("--catalog", "");
 const checkMode = process.argv.includes("--check");
 
-const url = `${hostBase}/ops${session ? `?session=${encodeURIComponent(session)}` : ""}`;
-const response = await fetch(url, {
-  headers: session ? { [HOST_RPC_BRIDGE_SESSION_HEADER]: session } : undefined,
-}).catch(() => null);
-if (!response || !response.ok) {
-  const reason = response ? `${response.status} ${await response.text()}` : "host unreachable";
-  if (checkMode) {
-    // ponytail: drift gate needs a live Revit session; without one, skip — the
-    // committed file is still the contract, it just can't be re-verified here.
-    console.warn(`host-typegen --check skipped: GET ${url} failed (${reason}).`);
-    process.exit(0);
+let catalogSource: string;
+let operations: CatalogEntry[];
+
+if (catalogPath) {
+  // Offline lane: the catalog file is `pe-dev ops-catalog` output. Deterministic — a missing
+  // file or empty catalog is a hard failure, never a soft skip.
+  catalogSource = catalogPath;
+  const raw = await readFile(resolve(catalogPath), "utf8").catch(() => null);
+  if (raw === null) {
+    console.error(
+      `host-typegen: catalog file ${catalogPath} is missing. Run \`pe-dev ops-catalog --out ${catalogPath}\` first.`,
+    );
+    process.exit(1);
   }
-  console.error(`GET ${url} failed: ${reason}`);
-  process.exit(1);
-}
-const catalog = (await response.json()) as {
-  operations: CatalogEntry[];
-  bridgeSessionId?: string;
-};
-const operations = [...catalog.operations]
-  .filter((op) => op.origin !== "host-local") // types are hand-authored, not generated from /ops
-  .sort((a, b) => a.key.localeCompare(b.key));
+  const catalog = JSON.parse(raw) as { operations: CatalogEntry[] };
+  operations = [...catalog.operations].sort((a, b) => a.key.localeCompare(b.key));
+  if (operations.length === 0) {
+    console.error(`host-typegen: catalog file ${catalogPath} contains no operations.`);
+    process.exit(1);
+  }
+} else {
+  // Live lane (codegen:verify-live): fetch a session-targeted catalog from a running host.
+  const url = `${hostBase}/ops${session ? `?session=${encodeURIComponent(session)}` : ""}`;
+  catalogSource = url;
+  const response = await fetch(url, {
+    headers: session ? { [HOST_RPC_BRIDGE_SESSION_HEADER]: session } : undefined,
+  }).catch(() => null);
+  if (!response || !response.ok) {
+    const reason = response ? `${response.status} ${await response.text()}` : "host unreachable";
+    console.error(`GET ${url} failed: ${reason}`);
+    process.exit(1);
+  }
+  const catalog = (await response.json()) as {
+    operations: CatalogEntry[];
+    bridgeSessionId?: string;
+  };
+  operations = [...catalog.operations]
+    .filter((op) => op.origin !== "host-local") // types are hand-authored, not generated from /ops
+    .sort((a, b) => a.key.localeCompare(b.key));
 
-// No bridge ops means no live Revit session (the host still lists its host-local ops, which we
-// filtered out). Regenerating now would wipe the checked-in bridge types — skip, same posture as
-// an unreachable host. A connected session always carries bridge ops.
-if (operations.length === 0) {
-  console.warn(
-    `host-typegen skipped: GET ${url} returned no bridge operations (no live Revit session). The checked-in ${outPath} is unchanged.`,
-  );
-  process.exit(0);
-}
+  // No bridge ops means no live Revit session (the host still lists its host-local ops, which we
+  // filtered out). That can't verify anything — hard fail; the offline lane is the generator.
+  if (operations.length === 0) {
+    console.error(`GET ${url} returned no bridge operations (no live Revit session).`);
+    process.exit(1);
+  }
 
-// Typegen is a contract assertion, not a status display. An untargeted host may select RRD while
-// the operator intends a sandbox; accepting that catalog makes a wrong-lane check look green.
-if (!session) {
-  console.error(
-    `host-typegen refused an untargeted live catalog from ${url}; pass --session <bridgeSessionId>.`,
-  );
-  process.exit(1);
-}
-if (catalog.bridgeSessionId !== session) {
-  console.error(
-    `host-typegen target mismatch: requested '${session}', host reported '${catalog.bridgeSessionId ?? "<missing>"}'.`,
-  );
-  process.exit(1);
+  // Verification is a contract assertion, not a status display. An untargeted host may select RRD
+  // while the operator intends a sandbox; accepting that catalog makes a wrong-lane check look
+  // green.
+  if (!session) {
+    console.error(
+      `host-typegen refused an untargeted live catalog from ${url}; pass --session <bridgeSessionId>.`,
+    );
+    process.exit(1);
+  }
+  if (catalog.bridgeSessionId !== session) {
+    console.error(
+      `host-typegen target mismatch: requested '${session}', host reported '${catalog.bridgeSessionId ?? "<missing>"}'.`,
+    );
+    process.exit(1);
+  }
 }
 
 const chunks: string[] = [
   "/* eslint-disable */",
-  "// Generated by host-typegen from a live host op catalog. Do not edit.",
-  "// Regenerate: pnpm --filter @pe/host-contracts codegen",
-  "// Drift gate: append --check (fails when this file no longer matches the live catalog).",
+  "// Generated by host-typegen from the bridge op catalog. Do not edit.",
+  "// Regenerate: pnpm --filter @pe/host-contracts codegen        (offline, via pe-dev ops-catalog)",
+  "// Drift gate: pnpm --filter @pe/host-contracts codegen:check  (offline, deterministic)",
+  "// Live parity: pnpm --filter @pe/host-contracts codegen:verify-live -- --session <id>",
   "",
 ];
 const mapEntries: string[] = [];
@@ -163,13 +186,15 @@ if (checkMode) {
   const existing =
     (await readFile(outPath, "utf8").catch(() => null))?.replaceAll("\r\n", "\n") ?? null;
   if (existing === output) {
-    console.log(`host-ops types are in sync with ${url} (${operations.length} operations).`);
+    console.log(
+      `host-ops types are in sync with ${catalogSource} (${operations.length} operations).`,
+    );
     process.exit(0);
   }
   console.error(
     existing === null
       ? `${outPath} is missing. Run host-typegen without --check to generate it.`
-      : `${outPath} is stale against the live catalog at ${url}. Run host-typegen to regenerate, review, and commit.`,
+      : `${outPath} is stale against the catalog at ${catalogSource}. Run \`pnpm codegen\` to regenerate, review, and commit.`,
   );
   process.exit(1);
 }
