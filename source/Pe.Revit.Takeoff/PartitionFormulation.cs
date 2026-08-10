@@ -158,6 +158,65 @@ internal static class PartitionFormulation
             for (int i = 0; i < n; i++) if (domain[i] && owner[i] == 0) crumbSqft += cellArea;
         }
 
+        // ---- 6.5 wall-band claim: rooms must touch ----
+        // BuildDomain excludes wall cells (no walkable headroom), so watershed fronts stop at wall
+        // FACES and leave an unclaimed interstitial band inside every wall. Practice colors rooms
+        // wall-to-wall: claim non-domain cells sandwiched between owned cells within WallClaimFt
+        // per side (opposite-ray test over 8 directions), then split each band at its centerline
+        // with a multi-source BFS from the room frontiers. Exterior faces see a room on one side
+        // only and are never claimed. RawSqft becomes centerline semantics where a band is claimed.
+        var claimed = new bool[n];
+        if (opt.WallClaimFt > 0)
+        {
+            int reach = Math.Max(1, (int)Math.Round(opt.WallClaimFt / opt.CellFt));
+            var claimable = new bool[n];
+            // axis-pair rays only: an axis ray still crosses a rotated wall band (at reduced
+            // effective reach), while diagonal pairs would claim fillets at concave exterior
+            // corners where both legs of the same L are within reach
+            int[,] rays = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+            for (int i = 0; i < n; i++)
+            {
+                if (domain[i] || owner[i] != 0) continue;
+                int x = i % W, y = i / W;
+                int mask = 0;
+                for (int d = 0; d < 4; d++)
+                {
+                    int dx = rays[d, 0], dy = rays[d, 1];
+                    for (int step = 1; step <= reach; step++)
+                    {
+                        int px = x + dx * step, py = y + dy * step;
+                        if (px < 0 || px >= W || py < 0 || py >= H) break;
+                        if (owner[py * W + px] > 0) { mask |= 1 << d; break; }
+                    }
+                }
+                // rays are laid out as opposite pairs: (0,1) (2,3)
+                claimable[i] = (mask & 3) == 3 || (mask & 12) == 12;
+            }
+            var band = new Queue<int>();
+            for (int i = 0; i < n; i++)
+            {
+                if (!claimable[i]) continue;
+                int x = i % W, y = i / W;
+                int by = x > 0 && owner[i - 1] > 0 ? owner[i - 1]
+                    : x < W - 1 && owner[i + 1] > 0 ? owner[i + 1]
+                    : y > 0 && owner[i - W] > 0 ? owner[i - W]
+                    : y < H - 1 && owner[i + W] > 0 ? owner[i + W] : 0;
+                if (by > 0) { owner[i] = by; claimed[i] = true; band.Enqueue(i); }
+            }
+            int claimedCells = band.Count;
+            while (band.Count > 0)
+            {
+                int c = band.Dequeue();
+                int cx = c % W, cy = c / W;
+                int me = owner[c];
+                if (cx > 0 && claimable[c - 1] && owner[c - 1] == 0) { owner[c - 1] = me; claimed[c - 1] = true; band.Enqueue(c - 1); claimedCells++; }
+                if (cx < W - 1 && claimable[c + 1] && owner[c + 1] == 0) { owner[c + 1] = me; claimed[c + 1] = true; band.Enqueue(c + 1); claimedCells++; }
+                if (cy > 0 && claimable[c - W] && owner[c - W] == 0) { owner[c - W] = me; claimed[c - W] = true; band.Enqueue(c - W); claimedCells++; }
+                if (cy < H - 1 && claimable[c + W] && owner[c + W] == 0) { owner[c + W] = me; claimed[c + W] = true; band.Enqueue(c + W); claimedCells++; }
+            }
+            log($"[partition] wall-band claim={claimedCells * cellArea:F0}sf ({claimedCells} cells, reach={reach})");
+        }
+
         // ---- low-evidence-boundary flags on the final labeling ----
         foreach (var ((a, b), (edges, backed)) in BoundaryPairs(owner, evidence, domain, W, H, opt.BoundaryEvidenceMin))
         {
@@ -207,7 +266,9 @@ internal static class PartitionFormulation
         }
         var medianWidthFt = RegionMedianWidthsFt(owner, W, H, opt.CellFt);
         var perimeterCells = RegionPerimeterCells(owner, W, H);
-        var headroom = emitIds.ToDictionary(id => id, id => HeadroomStats(cellsById[id], hf));
+        // claimed wall-band cells have wall headroom, not room headroom — keep them out of stats
+        var headroom = emitIds.ToDictionary(id => id,
+            id => HeadroomStats(cellsById[id].Where(cell => !claimed[cell]), hf));
         foreach (int id in emitIds)
         {
             if (medianWidthFt[id] < opt.MinFeatureWidthFt) Flag(flags, id, "suspect:narrow");
@@ -299,7 +360,8 @@ internal static class PartitionFormulation
             $"excluded<{opt.MinResidueSqft:F0}sf={excludedResidues} ({excludedResidueSqft:F0}sf)");
         SpaceBoundaryNetwork.Regularize(
             result.Rooms, opt.CellFt, opt.BoundarySimplifyFt, opt.RegularizeAreaTolerancePct,
-            InkSupport.CreateOracle(W, H, hf.MinX, hf.MinY, opt.CellFt, seedInk, 3 * opt.CellFt), log);
+            InkSupport.CreateOracle(W, H, hf.MinX, hf.MinY, opt.CellFt, seedInk, 3 * opt.CellFt), log,
+            opt.HardAreaDriftPct, opt.LoopBridgeMaxFt, result.Residues);
         result.TotalSqft = result.Rooms.Sum(room => room.RawSqft);
         return result;
     }

@@ -47,17 +47,17 @@ public sealed class RhvacMaterializationResolutionTests
             Assert.That(materialization.Takeoff.Residues, Has.Count.EqualTo(3));
             Assert.That(materialization.Takeoff.Rooms.Select(room => room.Id),
                 Does.Contain("R07.a").And.Contain("R07.b")
-                    .And.Not.Contain("R06").And.Not.Contain("R07").And.Not.Contain("R09"));
+                    .And.Not.Contain("R77").And.Not.Contain("R07").And.Not.Contain("R14"));
             Assert.That(SpaceMaterializer.SpaceComments(
                     "owned", materialization.Takeoff.Rooms.Single(room => room.Id == "R07.a")),
                 Is.EqualTo("owned|R07.a\npe-takeoff: splitFrom=R07"));
             Assert.That(SpaceMaterializer.SpaceComments(
-                    "owned", materialization.Takeoff.Rooms.Single(room => room.Id == "R13")),
-                Is.EqualTo("owned|R13\npe-takeoff: low-evidence-boundary, unregularized" +
-                    "\npe-takeoff: mergedFrom=R09"));
+                    "owned", materialization.Takeoff.Rooms.Single(room => room.Id == "R08")),
+                Is.EqualTo("owned|R08\npe-takeoff: mergedFrom=R14"));
             Assert.That(SpaceMaterializer.SpaceComments(
                     "owned", materialization.Takeoff.Rooms.Single(room => room.Id == "R03")),
-                Is.EqualTo("owned|R03\npe-takeoff: open-plan-merge, ruled-seam"));
+                Is.EqualTo("owned|R03\npe-takeoff: ruled-seam, suspect:compactness, " +
+                    "suspect:narrow, unregularized"));
         });
     }
 }

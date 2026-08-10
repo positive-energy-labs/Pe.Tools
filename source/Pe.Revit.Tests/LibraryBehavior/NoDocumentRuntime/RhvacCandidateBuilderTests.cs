@@ -198,8 +198,10 @@ public sealed class RhvacCandidateBuilderTests
             }
         }
 
-        // Staircases of hundreds of points must come back as tens of segments.
-        Assert.That(simplifiedVertices, Is.LessThan(rawVertices / 4));
+        // The takeoff engine now ships pre-straightened loops (2026-08-10), so the r10-side
+        // simplification is a light second pass — it must never add vertices, and the combined
+        // pipeline keeps loops at editable vertex counts.
+        Assert.That(simplifiedVertices, Is.LessThanOrEqualTo(rawVertices));
     }
 
     [Test]

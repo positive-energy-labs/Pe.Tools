@@ -136,8 +136,17 @@ internal static class SpaceMaterializer
             foreach (var room in unresolvedRooms)
                 DrawUnresolved(room.Id, room.Polygon, room.Holes, SpaceComments(token, room));
             foreach (var residue in result.Residues)
+            {
+                // A border residue leaks past the takeoff crop: exterior terrain, not building
+                // evidence. Drawing it paints half the site — log it and keep the view clean.
+                if (residue.Reason == ResidueReason.Border)
+                {
+                    log($"[spaces] border residue {residue.Id} ({residue.RawSqft:F0}sf) not drawn");
+                    continue;
+                }
                 DrawUnresolved(residue.Id, residue.Polygon, residue.Holes,
                     $"{token}|{residue.Id}\npe-takeoff: residue={residue.Reason.ToString().ToLowerInvariant()}");
+            }
             foreach (var (room, reason) in defectors)
                 DrawUnresolved(room.Id, room.Polygon, room.Holes,
                     $"{SpaceComments(token, room)}\npe-takeoff: shape-defect={reason}");
@@ -287,9 +296,13 @@ internal static class SpaceMaterializer
         // ponytail: validation reports instead of throwing — the 80% product path materializes the
         // level and hands drift/enclosure failures to the human/Pea loop with the unresolved list
         foreach (var error in validationErrors) log($"[spaces] VALIDATION {error}");
+        // border residues are deliberately not drawn (exterior leaks); the accounting identity
+        // covers only drawn evidence, and the skip is logged above
         var materialized = new SpaceMaterializationResult(
             ids, filledRegions, lineFallbacks, filledRegionFailures,
-            result.Rooms.Count - defectors.Count, result.Residues.Count, defectors.Count, 0);
+            result.Rooms.Count - defectors.Count,
+            result.Residues.Count(residue => residue.Reason != ResidueReason.Border),
+            defectors.Count, 0);
         log($"[spaces] phase='{phase.Name}' level='{level.Name}' spaces={ids.Count} " +
             $"filledRegions={filledRegions} lineFallbacks={lineFallbacks} " +
             $"filledRegionFailures={filledRegionFailures} rooms={materialized.Rooms} " +

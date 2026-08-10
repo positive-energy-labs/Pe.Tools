@@ -110,13 +110,17 @@ internal static class SpaceBoundaryNetwork
 
     internal static void Regularize(
         IReadOnlyList<RoomResult> rooms, double cellFt, double simplifyFt, double areaTolerancePct,
-        Func<double, double, bool> inkNear, Action<string>? log = null)
+        Func<double, double, bool> inkNear, Action<string>? log = null,
+        double hardDriftPct = 25, double loopBridgeMaxFt = 4.0,
+        IReadOnlyList<ResidueResult>? residues = null)
     {
         if (!IsFinite(cellFt) || cellFt <= 0) throw new ArgumentOutOfRangeException(nameof(cellFt));
         if (!IsFinite(simplifyFt) || simplifyFt < 0)
             throw new ArgumentOutOfRangeException(nameof(simplifyFt));
         if (!IsFinite(areaTolerancePct) || areaTolerancePct < 0)
             throw new ArgumentOutOfRangeException(nameof(areaTolerancePct));
+        if (!IsFinite(hardDriftPct) || hardDriftPct < areaTolerancePct)
+            throw new ArgumentOutOfRangeException(nameof(hardDriftPct));
 
         var paths = TracePaths(rooms, cellFt);
         if (paths.Count == 0) return;
@@ -148,7 +152,14 @@ internal static class SpaceBoundaryNetwork
                         $"rooms={string.Join("+", path.Rooms.Order())} rawPoints={path.Raw.Count} " +
                         $"fitSegments={path.Lines.Length}");
 
+        // EDITABILITY OVER AREA FIDELITY (2026-08-10): a raster stairstep polygon is impossible
+        // for a human to adjust, so straightened geometry ships whenever a valid loop assembles —
+        // the tight area gate only decides regularized STATUS (Space vs evidence), and the hard
+        // ceiling decides whether the network geometry ships at all. Rooms with no assemblable
+        // loop get a local straightening of their own raster loop as a last resort; nothing keeps
+        // 1-cell stairsteps except genuinely unexplainable geometry that also defeats DP.
         int regularized = 0, unregularized = 0;
+        int geomNetwork = 0, geomApplied = 0, geomLocal = 0, geomRaster = 0, bridgedLoops = 0;
         double maxDrift = 0, maxDriftFrac = 0;
         var fallbacks = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var room in rooms)
@@ -156,33 +167,66 @@ internal static class SpaceBoundaryNetwork
             double rawSqft = room.RawSqft;
             var owned = emitters.Where(item => item.Path.Rooms.Contains(room.Id)).ToList();
             if (owned.Any(item => item.Em.RuledSeam)) AddFlag(room, "ruled-seam");
-            string reason;
-            string detail = "";
-            List<List<Point>>? loops;
-            if (owned.Any(item => item.Em.Dirty)) { reason = "dirty-path"; loops = null; }
-            else
+            bool dirty = owned.Any(item => item.Em.Dirty);
+
+            var curves = owned.SelectMany(item => item.Em.Curves).ToList();
+            var loops = TraceLoops(curves, out string detail);
+            bool usedBridge = false;
+            if (loops == null && TryBridgeCurves(curves, loopBridgeMaxFt, out var repaired))
             {
-                loops = TraceLoops(owned.SelectMany(item => item.Em.Curves), out detail);
-                reason = loops == null ? "loop-trace" : "";
+                loops = TraceLoops(repaired, out _);
+                usedBridge = loops != null;
             }
+
             double drift = 0;
-            if (loops == null || !TryApplyRegularizedLoops(
-                    room, loops, areaTolerancePct, out drift, out reason))
+            string reason = loops == null ? "loop-trace" : "";
+            bool applied = loops != null
+                && TryApplyRegularizedLoops(room, loops, hardDriftPct, out drift, out reason);
+            if (applied)
             {
+                if (usedBridge) { AddFlag(room, "bridged-loop"); bridgedLoops++; }
+                double tight = Math.Max(0.5, areaTolerancePct / 100 * rawSqft);
+                if (!dirty && drift <= tight)
+                {
+                    maxDrift = Math.Max(maxDrift, drift);
+                    maxDriftFrac = Math.Max(maxDriftFrac, drift / rawSqft);
+                    regularized++;
+                    geomNetwork++;
+                    continue;
+                }
                 AddFlag(room, "unregularized");
-                fallbacks[reason] = fallbacks.GetValueOrDefault(reason) + 1;
-                if (reason == "loop-trace")
-                    log?.Invoke($"[network] loop-trace room={room.Id} {detail}");
-                else if (reason == "area-guard")
-                    log?.Invoke($"[network] area-guard room={room.Id} raw={rawSqft:F6}sf " +
-                                $"drift={drift:F6}sf/{drift / rawSqft:P6}");
+                string cause = dirty ? "dirty-path" : "area-drift";
+                if (drift > tight)
+                {
+                    AddFlag(room, "area-drift");
+                    log?.Invoke($"[network] area-drift room={room.Id} raw={rawSqft:F6}sf " +
+                                $"drift={drift:F6}sf/{drift / rawSqft:P6} (geometry applied)");
+                }
+                fallbacks[cause] = fallbacks.GetValueOrDefault(cause) + 1;
+                geomApplied++;
                 unregularized++;
                 continue;
             }
-            maxDrift = Math.Max(maxDrift, drift);
-            maxDriftFrac = Math.Max(maxDriftFrac, drift / rawSqft);
-            regularized++;
+
+            AddFlag(room, "unregularized");
+            fallbacks[reason] = fallbacks.GetValueOrDefault(reason) + 1;
+            if (reason == "loop-trace")
+                log?.Invoke($"[network] loop-trace room={room.Id} {detail}");
+            else if (reason == "area-guard")
+                log?.Invoke($"[network] area-guard room={room.Id} raw={rawSqft:F6}sf " +
+                            $"drift={drift:F6}sf/{drift / rawSqft:P6} (beyond hard ceiling)");
+            if (LocalStraighten(room, axes, coarse, hardDriftPct))
+            {
+                AddFlag(room, "local-straightened");
+                geomLocal++;
+            }
+            else geomRaster++;
+            unregularized++;
         }
+
+        int residuesStraightened = 0;
+        foreach (var residue in residues ?? [])
+            if (StraightenResidue(residue, axes, coarse, hardDriftPct)) residuesStraightened++;
 
         string axisAngles = string.Join(",", axes.Select(axis =>
             (Math.Atan2(axis.Y, axis.X) * 180 / Math.PI).ToString("F1", CultureInfo.InvariantCulture)));
@@ -196,7 +240,10 @@ internal static class SpaceBoundaryNetwork
                     $"cornerSeams={stats.CornerSeams} unresolvedRuns={stats.UnresolvedRuns} " +
                     $"regularized={regularized} unregularized={unregularized} " +
                     $"fallbacks={fallbackCensus} dirtyPathCauses={dirtyCauseCensus} " +
-                    $"maxAreaDrift={maxDrift:F6}sf/{maxDriftFrac:P6}");
+                    $"maxAreaDrift={maxDrift:F6}sf/{maxDriftFrac:P6} " +
+                    $"geometry=network:{geomNetwork},applied:{geomApplied},local:{geomLocal}," +
+                    $"raster:{geomRaster} bridgedLoops={bridgedLoops} " +
+                    $"residuesStraightened={residuesStraightened}");
     }
 
     private static void AddFlag(RoomResult room, string flag)
@@ -238,6 +285,167 @@ internal static class SpaceBoundaryNetwork
         room.PerimeterFt = Perimeter(outer);
         reason = "";
         return true;
+    }
+
+    // ---- degree-1 bridge repair: a curve set that fails loop assembly only because a few
+    // endpoint pairs never met (weld miss, dropped micro-segment) is repaired by bridging
+    // nearest degree-1 vertex pairs with straight segments. Anything else still fails. ----
+
+    private static bool TryBridgeCurves(
+        List<BoundaryCurve> curves, double maxBridgeFt, out List<BoundaryCurve> repaired)
+    {
+        repaired = curves;
+        if (curves.Count == 0 || maxBridgeFt <= 0) return false;
+        var degree = new Dictionary<VertexKey, (Point At, int Count)>();
+        void Bump(Point point)
+        {
+            var key = Key(point);
+            degree[key] = degree.TryGetValue(key, out var d) ? (d.At, d.Count + 1) : (point, 1);
+        }
+        foreach (var curve in curves)
+        {
+            Bump(new Point(curve.X1, curve.Y1));
+            Bump(new Point(curve.X2, curve.Y2));
+        }
+        if (degree.Values.Any(d => d.Count > 2)) return false;
+        var open = degree.Values.Where(d => d.Count == 1).Select(d => d.At)
+            .OrderBy(point => point.X).ThenBy(point => point.Y).ToList();
+        if (open.Count == 0 || open.Count % 2 != 0) return false;
+        var bridges = new List<BoundaryCurve>();
+        var used = new bool[open.Count];
+        for (int i = 0; i < open.Count; i++)
+        {
+            if (used[i]) continue;
+            int best = -1;
+            double bestDist = maxBridgeFt;
+            for (int j = i + 1; j < open.Count; j++)
+            {
+                if (used[j]) continue;
+                double dist = Distance(open[i], open[j]);
+                if (dist <= bestDist) { bestDist = dist; best = j; }
+            }
+            if (best < 0) return false;
+            used[i] = used[best] = true;
+            var a = open[i];
+            var b = open[best];
+            bridges.Add(new BoundaryCurve(a.X, a.Y, b.X, b.Y, (a.X + b.X) / 2, (a.Y + b.Y) / 2, false));
+        }
+        repaired = curves.Concat(bridges).ToList();
+        return true;
+    }
+
+    // ---- local straightening: DP + axis-snap of a loop's own raster geometry; the last resort
+    // when no network loop assembles. Two adjacent locally-straightened rooms may diverge by a
+    // cell along a shared wall — still strictly better than 1-cell stairsteps, and flagged. ----
+
+    private static bool LocalStraighten(
+        RoomResult room, List<(double X, double Y)> axes, double tolerance, double hardDriftPct)
+    {
+        var outer = StraightenLoop(room.Polygon, axes, tolerance);
+        if (outer == null) return false;
+        // holes are best-effort: a room with many micro holes must not lose its straightened
+        // outer ring because one hole defeated the straightener
+        var holes = new List<List<Point>>();
+        foreach (var hole in room.Holes)
+            holes.Add(StraightenLoop(hole, axes, tolerance)
+                      ?? hole.Select(point => new Point(point[0], point[1])).ToList());
+        double area = Math.Abs(Area(outer)) - holes.Sum(hole => Math.Abs(Area(hole)));
+        if (area <= 0) return false;
+        if (Math.Abs(area - room.RawSqft) > Math.Max(0.5, hardDriftPct / 100 * room.RawSqft))
+            return false;
+        if (!Contains(outer, new Point(room.LabelX, room.LabelY))) return false;
+        if (holes.Any(hole => LoopsIntersect(outer, hole))) return false;
+        room.Polygon = outer.Select(point => new[] { point.X, point.Y }).ToList();
+        room.Holes = holes.Select(hole => hole.Select(point => new[] { point.X, point.Y }).ToList()).ToList();
+        room.PerimeterFt = Perimeter(outer);
+        return true;
+    }
+
+    private static bool StraightenResidue(
+        ResidueResult residue, List<(double X, double Y)> axes, double tolerance, double hardDriftPct)
+    {
+        var outer = StraightenLoop(residue.Polygon, axes, tolerance);
+        if (outer == null) return false;
+        var holes = new List<List<Point>>();
+        foreach (var hole in residue.Holes)
+            holes.Add(StraightenLoop(hole, axes, tolerance)
+                      ?? hole.Select(point => new Point(point[0], point[1])).ToList());
+        double area = Math.Abs(Area(outer)) - holes.Sum(hole => Math.Abs(Area(hole)));
+        if (area <= 0) return false;
+        if (Math.Abs(area - residue.RawSqft) > Math.Max(0.5, hardDriftPct / 100 * residue.RawSqft))
+            return false;
+        if (holes.Any(hole => LoopsIntersect(outer, hole))) return false;
+        residue.Polygon = outer.Select(point => new[] { point.X, point.Y }).ToList();
+        residue.Holes = holes.Select(hole => hole.Select(point => new[] { point.X, point.Y }).ToList()).ToList();
+        return true;
+    }
+
+    // One closed loop: Douglas-Peucker at tolerance, snap near-axis segments to the dominant
+    // building directions, re-corner via line intersections. Curved stretches keep their DP
+    // chords — allowed for now; 1-cell stairsteps are not.
+    private static List<Point>? StraightenLoop(
+        List<double[]> loop, List<(double X, double Y)> axes, double tolerance)
+    {
+        if (loop.Count < 3) return null;
+        var raw = loop.Select(point => new Point(point[0], point[1])).ToList();
+        var fitIndex = SimplifyClosed(raw, tolerance);
+        if (fitIndex.Count < 3) return null;
+        var pts = CollapseCollinear(fitIndex.Select(index => raw[index]).ToList());
+        if (pts.Count < 3) return null;
+
+        int m = pts.Count;
+        double snapTol = Math.Sin(SnapToleranceDegrees * Math.PI / 180);
+        var lines = new (double Nx, double Ny, double Offset)[m];
+        for (int i = 0; i < m; i++)
+        {
+            var a = pts[i];
+            var b = pts[(i + 1) % m];
+            double dx = b.X - a.X, dy = b.Y - a.Y;
+            double length = Math.Sqrt(dx * dx + dy * dy);
+            if (length < 1e-9) return null;
+            double ux = dx / length, uy = dy / length;
+            double bestCross = snapTol;
+            (double X, double Y)? bestDir = null;
+            foreach (var axis in axes)
+                foreach (var dir in new[] { (X: axis.X, Y: axis.Y), (X: -axis.Y, Y: axis.X) })
+                {
+                    double cross = Math.Abs(ux * dir.Y - uy * dir.X);
+                    if (ux * dir.X + uy * dir.Y > 0 && cross <= bestCross)
+                    {
+                        bestCross = cross;
+                        bestDir = dir;
+                    }
+                }
+            if (bestDir is { } u)
+            {
+                double nx = -u.Y, ny = u.X;
+                lines[i] = (nx, ny, (nx * (a.X + b.X) + ny * (a.Y + b.Y)) / 2);
+            }
+            else
+            {
+                double nx = -uy, ny = ux;
+                lines[i] = (nx, ny, nx * a.X + ny * a.Y);
+            }
+        }
+
+        var output = new List<Point>(m);
+        for (int i = 0; i < m; i++)
+        {
+            var previous = lines[(i + m - 1) % m];
+            var current = lines[i];
+            var vertex = pts[i];
+            var candidate = vertex;
+            double det = previous.Nx * current.Ny - previous.Ny * current.Nx;
+            if (Math.Abs(det) > 0.34)
+                candidate = new Point(
+                    (previous.Offset * current.Ny - previous.Ny * current.Offset) / det,
+                    (previous.Nx * current.Offset - previous.Offset * current.Nx) / det);
+            output.Add(Distance(candidate, vertex) <= MaxVertexShiftFt ? candidate : vertex);
+        }
+        var collapsed = CollapseCollinear(output);
+        if (collapsed.Count >= 3 && IsSimple(collapsed)) return collapsed;
+        // axis re-cornering broke the loop; ship the plain DP chords instead
+        return IsSimple(pts) ? pts : null;
     }
 
     private static List<List<Point>>? TraceLoops(IEnumerable<BoundaryCurve> source, out string failure)

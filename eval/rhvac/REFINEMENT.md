@@ -61,6 +61,30 @@ never guesses intent.
   gated coverage 9.8%→24.7% area. Replay harness for post-Revit stages is the remaining
   phase-1 item.
 - 2026-08-06: Phase 3's `BoundarySnap` path is superseded: `SpaceBoundaryNetwork` now regularizes the full level once at partition emit, and TSV, UI, and Space materialization share that geometry.
+- 2026-08-10 (eve): EDITABILITY ROUND — live project-a session with kaitpw surfaced two chronic,
+  binding defects: interstitial white bands between rooms (BuildDomain excludes wall cells, so
+  watershed fronts stop at wall FACES) and raster stairstep boundaries on 67/82 rooms, which
+  make human editing of FilledRegions literally impossible. Fixes, all mechanisms:
+  (1) wall-band claim — non-domain cells sandwiched between owned cells within WallClaimFt
+  (axis-pair rays; default 1.5 ft/side) are split at the band centerline by multi-source BFS,
+  so rooms TOUCH; RawSqft becomes centerline semantics where claimed (~2051 sf on project-a Main).
+  (2) EDITABILITY OVER AREA FIDELITY — straightened geometry ships whenever a valid loop
+  assembles: the tight tolerance now only decides regularized STATUS, drift up to
+  HardAreaDriftPct (25%) ships flagged `area-drift`; dirty paths still assemble from their
+  DP-fitted curves; degree-1 gaps get bridged (`bridged-loop`); rooms with no assemblable loop
+  get a local DP+axis-snap straightener (`local-straightened`); residues straightened too.
+  project-a Main geometry census: network:26/applied:34/local:21/raster:1 (was 15 straight /
+  67 raster). (3) Border residues (exterior leaks past the crop, e.g. the 5,200 sf pool-terrace
+  blob) are logged, never drawn. ParseTsv area-integrity seam widened 3.5%→27% to match the new
+  contract. Live project-a Main after: 31 Spaces, 53 FRs, lineFallbacks=0, filledRegionFailures=0
+  (was 2+2 — R17/R59 straightened away). Scoreboard 54.1 → 54.4 (cover% up every level; wall
+  recall 53.4% → 43.1% — the metric partly counts the jogs/nubs straightening removes; knob is
+  BoundarySimplifyFt/MaxVertexShiftFt if it matters). Four-verbs fixture recurated to the new
+  snapshot (accept R04 / reject R77 / split R07 / merge R14→R08; anchors rebind, 4/0/0).
+  Committed TSVs + room-map refreshed. Gates: offline 45/45, FreshRevitProcess 54/54.
+  Mech zoning plans discovered to be hand-drawn FilledRegions (no Spaces/zones/color schemes
+  in the doc) — zone polygons extracted as reference data (`project-a/zones-mech.json`),
+  grouping-only, not wired into scoring.
 - 2026-08-08: Edit-in-Revit round landed (P6–P9, e442b57..792b7a5). Flow: calc draft → resolve
   intent → draw (Spaces for regularized rooms only; unregularized/residue/defectors = owned
   FilledRegions or detail-line fallback — zero silent loss, accounting test-asserted) → human

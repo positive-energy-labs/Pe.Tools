@@ -45,8 +45,11 @@ public sealed class TakeoffSpaceMaterializationTests
         });
     }
 
+    // EDITABILITY OVER AREA FIDELITY (2026-08-10): straightened geometry beyond the tight area
+    // tolerance still ships — the drift is flagged, never silently absorbed as regularized. A
+    // raster dogleg a human cannot edit is worse than an honest few-percent area drift.
     [Test]
-    public void Boundary_network_preserves_shared_dogleg_when_straightening_exceeds_area_contract()
+    public void Boundary_network_applies_straightened_geometry_beyond_tight_area_contract_with_flags()
     {
         var rooms = new[] {
             Room("A", [new[] { 0d, 0 }, new[] { 5d, 0 }, new[] { 5d, 2 }, new[] { 6d, 2 },
@@ -60,13 +63,13 @@ public sealed class TakeoffSpaceMaterializationTests
 
         Assert.Multiple(() => {
             Assert.That(actual, Has.One.Matches<BoundaryCurve>(line =>
-                Math.Abs(line.X1 - 6) < 1e-6 && Math.Abs(line.X2 - 6) < 1e-6
-                && Math.Abs(line.Y1 - line.Y2) > 5.9));
-            Assert.That(actual, Has.None.Matches<BoundaryCurve>(line =>
                 Math.Abs(line.X1 - 5) < 1e-6 && Math.Abs(line.X2 - 5) < 1e-6
                 && Math.Abs(line.Y1 - line.Y2) > 9.9));
+            Assert.That(actual, Has.None.Matches<BoundaryCurve>(line =>
+                Math.Abs(line.X1 - 6) < 1e-6 && Math.Abs(line.X2 - 6) < 1e-6));
             Assert.That(rooms, Has.All.Matches<RoomResult>(room =>
-                room.Flags.Contains("unregularized", StringComparer.Ordinal)));
+                room.Flags.Contains("unregularized", StringComparer.Ordinal)
+                && room.Flags.Contains("area-drift", StringComparer.Ordinal)));
         });
     }
 
@@ -306,11 +309,14 @@ public sealed class TakeoffSpaceMaterializationTests
             Assert.Multiple(() => {
                 Assert.That(materialized.AccountingHolds, Is.True);
                 Assert.That(materialized.DeletedWithoutReplacement, Is.Zero);
+                // 2026-08-10 straightened-geometry census: every polygon ships straight (no line
+                // fallbacks, no FR failures), the border residue is logged-not-drawn, and the
+                // blank-doc shape gate defects more small rooms than the live doc does.
                 Assert.That((materialized.Spaces.Count, materialized.FilledRegions, materialized.LineFallbacks,
                         materialized.FilledRegionFailures, materialized.Rooms, materialized.Residues,
                         materialized.Defectors),
-                    Is.EqualTo((10, 72, 2, 2, 72, 3, 9)));
-                Assert.That(logs.Count(message => message.Contains("ring repair failed:")), Is.EqualTo(2));
+                    Is.EqualTo((18, 65, 0, 0, 64, 2, 17)));
+                Assert.That(logs.Count(message => message.Contains("ring repair failed:")), Is.EqualTo(0));
             });
             SpaceMaterializer.Cleanup(document, options, TestContext.WriteLine);
             document.Regenerate();

@@ -124,10 +124,11 @@ public static class TakeoffTsv
             var outerArea = SignedArea(room.Outer);
             if (outerArea <= 0)
                 throw new InvalidDataException($"Room {room.Id}: outer loop is not CCW (contract violation).");
-            // RawSqft stays the exact cell-count truth while a regularized polygon may diverge
-            // up to TakeoffOptions.RegularizeAreaTolerancePct (3%); gate at that contract + slack.
+            // RawSqft stays the exact cell-count truth while a straightened polygon may diverge
+            // up to TakeoffOptions.HardAreaDriftPct (25%, flagged area-drift in META); gate at
+            // that contract + slack. Still catches gross corruption (wrong-room POLY lines).
             var polyArea = outerArea - room.Holes.Sum(hole => Math.Abs(SignedArea(hole)));
-            if (Math.Abs(polyArea - room.RawSqft) > Math.Max(2.0, room.RawSqft * 0.035))
+            if (Math.Abs(polyArea - room.RawSqft) > Math.Max(2.0, room.RawSqft * 0.27))
                 throw new InvalidDataException(
                     $"Room {room.Id}: RawSqft {room.RawSqft:F1} disagrees with polygon area {polyArea:F1}."
                 );

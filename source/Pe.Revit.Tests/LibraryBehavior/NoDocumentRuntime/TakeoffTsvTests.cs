@@ -219,16 +219,16 @@ public sealed class TakeoffTsvTests
         Assert.Multiple(() => {
             Assert.That((result.Applied, result.Remapped, result.Orphaned), Is.EqualTo((4, 0, 0)));
             Assert.That(main.Rooms, Has.Count.EqualTo(81));
-            Assert.That(main.Rooms.Select(room => room.Id), Does.Not.Contain("R06"));
+            Assert.That(main.Rooms.Select(room => room.Id), Does.Not.Contain("R77"));
             Assert.That(main.Rooms.Select(room => room.Id), Does.Not.Contain("R07"));
-            Assert.That(main.Rooms.Select(room => room.Id), Does.Not.Contain("R09"));
-            Assert.That(main.Rooms.Single(room => room.Id == "R03").RawSqft,
-                Is.EqualTo(1436.2).Within(1e-6));
+            Assert.That(main.Rooms.Select(room => room.Id), Does.Not.Contain("R14"));
+            Assert.That(main.Rooms.Single(room => room.Id == "R04").RawSqft,
+                Is.EqualTo(1495.7).Within(1e-6));
             Assert.That(main.Rooms.Where(room => room.SplitFrom == "R07").Select(room => room.RawSqft),
-                Is.EqualTo(new[] { 408.0, 353.125 }).Within(1e-6));
-            var merged = main.Rooms.Single(room => room.Id == "R13");
-            Assert.That(merged.RawSqft, Is.EqualTo(1049.6).Within(1e-6));
-            Assert.That(merged.MergedFrom, Is.EqualTo("R09"));
+                Is.EqualTo(new[] { 399.475, 374.024 }).Within(1e-3));
+            var merged = main.Rooms.Single(room => room.Id == "R08");
+            Assert.That(merged.RawSqft, Is.EqualTo(1137.8).Within(0.1));
+            Assert.That(merged.MergedFrom, Is.EqualTo("R14"));
         });
     }
     [Test]

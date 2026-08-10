@@ -257,8 +257,8 @@ public sealed class TakeoffReplayTests
                 "sliver dissolution must leave no under-min-area rooms");
         });
 
-        // RawSqft above remains the exact partition conservation truth. Regularized geometry may
-        // drift only by its explicit per-room allowance; rooms beyond it revert to raw polygons.
+        // RawSqft above remains the exact partition conservation truth. Straightened geometry may
+        // drift up to the hard ceiling (flagged area-drift); the conservation sum never moves.
         double Shoe(List<double[]> p)
         {
             double s = 0;
@@ -268,7 +268,7 @@ public sealed class TakeoffReplayTests
         }
         Assert.That(run.Rooms, Has.All.Matches<RoomResult>(room =>
             Math.Abs(Shoe(room.Polygon) - room.Holes.Sum(Shoe) - room.RawSqft)
-            <= Math.Max(0.5, new TakeoffOptions().RegularizeAreaTolerancePct / 100 * room.RawSqft) + 1e-6));
+            <= Math.Max(0.5, new TakeoffOptions().HardAreaDriftPct / 100 * room.RawSqft) + 1e-6));
     }
 
     [Test]
@@ -392,21 +392,21 @@ public sealed class TakeoffReplayTests
     // ---- detector-side shared-boundary regularization ----
 
     [Test]
-    public void Regularizer_preserves_every_raw_room_on_fallback()
+    public void Regularizer_straightens_fallback_rooms_preserving_identity()
     {
+        // EDITABILITY OVER AREA FIDELITY (2026-08-10): fallback rooms no longer keep their raw
+        // raster loops — they ship straightened (network-assembled or locally simplified)
+        // geometry, still flagged unregularized for the human/Pea loop.
         var rooms = DiagonalSeamRooms();
-        var before = rooms.ToDictionary(
-            room => room.Id,
-            room => room.Polygon.SelectMany(point => point).ToArray(),
-            StringComparer.Ordinal);
+        var before = rooms.Select(room => room.Id).ToList();
 
         SpaceBoundaryNetwork.Regularize(rooms, 1, 1, 3, (_, _) => true);
 
         Assert.Multiple(() => {
-            Assert.That(rooms.Select(room => room.Id), Is.EquivalentTo(before.Keys));
+            Assert.That(rooms.Select(room => room.Id), Is.EquivalentTo(before));
+            Assert.That(rooms, Has.All.Matches<RoomResult>(room => room.Polygon.Count >= 3));
             Assert.That(rooms, Has.All.Matches<RoomResult>(room =>
-                room.Polygon.Count >= 3
-                && room.Polygon.SelectMany(point => point).SequenceEqual(before[room.Id])));
+                room.Flags.Contains("unregularized", StringComparer.Ordinal)));
         });
     }
 
@@ -421,18 +421,42 @@ public sealed class TakeoffReplayTests
     }
 
     [Test]
-    public void Regularizer_area_guard_reverts_to_raw_polygon()
+    public void Regularizer_area_drift_within_hard_ceiling_applies_geometry_with_flags()
     {
         var room = Room("A", [new[] { 0d, 0 }, new[] { 10d, 0 }, new[] { 10d, 10 }, new[] { 0d, 10 }]);
-        room.RawSqft = 80;
+        room.RawSqft = 80;   // 20% drift: beyond the tight tolerance, within the hard ceiling
+
+        SpaceBoundaryNetwork.Regularize([room], 1, 1, 3, (_, _) => false);
+
+        double Shoe(List<double[]> p)
+        {
+            double s = 0;
+            for (int i = 0; i < p.Count; i++)
+            { var a = p[i]; var b = p[(i + 1) % p.Count]; s += a[0] * b[1] - b[0] * a[1]; }
+            return Math.Abs(s / 2);
+        }
+        Assert.Multiple(() => {
+            Assert.That(Shoe(room.Polygon), Is.EqualTo(100).Within(1e-6),
+                "straightened geometry ships despite the drift");
+            Assert.That(room.RawSqft, Is.EqualTo(80), "cell-count area remains the conservation truth");
+            Assert.That(room.Flags, Does.Contain("unregularized").And.Contain("area-drift"));
+        });
+    }
+
+    [Test]
+    public void Regularizer_area_guard_beyond_hard_ceiling_keeps_raw_polygon()
+    {
+        var room = Room("A", [new[] { 0d, 0 }, new[] { 10d, 0 }, new[] { 10d, 10 }, new[] { 0d, 10 }]);
+        room.RawSqft = 60;   // 67% drift: beyond the hard ceiling — geometry must not ship
         var raw = room.Polygon.Select(point => point.ToArray()).ToList();
 
         SpaceBoundaryNetwork.Regularize([room], 1, 1, 3, (_, _) => false);
 
         Assert.Multiple(() => {
             Assert.That(room.Polygon.SelectMany(point => point), Is.EqualTo(raw.SelectMany(point => point)));
-            Assert.That(room.RawSqft, Is.EqualTo(80));
+            Assert.That(room.RawSqft, Is.EqualTo(60));
             Assert.That(room.Flags, Does.Contain("unregularized"));
+            Assert.That(room.Flags, Does.Not.Contain("area-drift"));
         });
     }
 
