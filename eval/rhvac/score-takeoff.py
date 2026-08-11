@@ -2,9 +2,10 @@
 # mined from the engineer's Bluebeam takeoffs (project-a/oracle-geometry.json, model feet).
 # This is the per-room geometric feedback loop detector iteration is judged by.
 #
-#   python eval/rhvac/score-takeoff.py                       # committed snapshot in project-a/takeoff
-#   python eval/rhvac/score-takeoff.py --project eval/rhvac/project-b --takeoff-dir <dir>
-#   python eval/rhvac/score-takeoff.py --write-room-map      # regenerate project-a/room-map.json from
+#   python eval/rhvac/score-takeoff.py --takeoff-dir <dir> --out-dir <new-artifact-dir>
+#   python eval/rhvac/score-takeoff.py --project eval/rhvac/project-b --takeoff-dir <dir> --out-dir <dir>
+#   python eval/rhvac/score-takeoff.py --takeoff-dir <dir> --out-dir <dir> --write-room-map
+#                                                            # regenerate project-a/room-map.json from
 #                                                            # mutual-best IoU pairs (provenance
 #                                                            # "auto-iou"; curated entries preserved)
 #
@@ -18,7 +19,7 @@
 #   project-a/stale-rooms.json (excluded here without code edits).
 # - Over-detection counts candidate area outside ANY ground-truth polygon, which includes real
 #   rooms whose ground truth is simply missing (15 in-model oracle rooms have no polygon).
-import argparse, json, math, os, re, statistics, sys
+import argparse, atexit, json, math, os, re, shutil, statistics, sys
 from collections import defaultdict
 
 import overlay
@@ -726,10 +727,15 @@ CLS_MARK = {"ok": "ok  ", "shape-poor": "POOR", "fragmented": "FRAG", "merged": 
 
 def to_text(sb):
     t, L = sb["totals"], sb["levels"]
-    out = [f"TAKEOFF SCOREBOARD  ({sb['takeoffDir']})",
-           f"TOTAL SCORE {t['totalScore']:.1f}  (mean IoU x100 over {t['gtRooms']} GT rooms; "
+    structure = sb["structureVerdict"]
+    out = [f"TAKEOFF STRUCTURE DIAGNOSTICS  ({sb['takeoffDir']})",
+           f"STRUCTURE {'PASS' if structure['acceptable'] else 'RED'}  "
+           f"missing:{structure['missing']} merged:{structure['merged']} "
+           f"fragmented:{structure['fragmented']} shape-poor:{structure['shapePoor']} "
+           f"junk:{structure['junk']}",
+           f"mean IoU diagnostic {t['totalScore']:.1f} over {t['gtRooms']} GT rooms; "
            f"high-conf {t['highConfScore']} over {t['highConfRooms']}; "
-           f"{t['staleExcluded']} stale-excluded)",
+           f"{t['staleExcluded']} stale-excluded",
            f"taxonomy    " + "  ".join(f"{k}:{v}" for k, v in sorted(t["taxonomy"].items())),
            f"wall recall {t['wallRecallPct']}% of {t['wallsTotal']} mined wall lines "
            f"(tol {t['wallTolFt']} ft)", ""]
@@ -843,7 +849,7 @@ def to_text(sb):
     return "\n".join(out) + "\n"
 
 
-def overlay_jobs(takeoff_dir, project, ink_dir):
+def overlay_jobs(takeoff_dir, out_dir, ink_dir):
     jobs = []
     for name in sorted(f for f in os.listdir(takeoff_dir)
                        if f.startswith("rooms_") and f.endswith(".tsv")):
@@ -854,8 +860,21 @@ def overlay_jobs(takeoff_dir, project, ink_dir):
         ink_path = os.path.join(ink_dir, f"ink_{slug}.bin") if ink_dir else None
         if not ink_path or not os.path.exists(ink_path):
             raise SystemExit(f"overlay ink missing for {slug}; pass --ink-dir")
-        jobs.append((level, ink_path, tsv_path, os.path.join(project, f"overlay_{slug}.png")))
+        jobs.append((level, ink_path, tsv_path, os.path.join(out_dir, f"overlay_{slug}.png")))
     return jobs
+
+
+def structure_verdict(scoreboard):
+    taxonomy = scoreboard["totals"]["taxonomy"]
+    verdict = {
+        "missing": taxonomy.get("missing", 0),
+        "merged": taxonomy.get("merged", 0),
+        "fragmented": taxonomy.get("fragmented", 0),
+        "shapePoor": taxonomy.get("shape-poor", 0),
+        "junk": scoreboard["precision"]["total"]["junkCount"],
+    }
+    verdict["acceptable"] = not any(verdict.values())
+    return verdict
 
 
 def render_overlays(scoreboard, jobs):
@@ -910,6 +929,10 @@ def main():
     ap.add_argument("--project", default=projectA,
                     help="project directory containing takeoff/ and oracle-geometry.json")
     ap.add_argument("--takeoff-dir", default=None)
+    ap.add_argument("--takeoff-label", default=None,
+                    help="durable display label for the input geometry in emitted diagnostics")
+    ap.add_argument("--out-dir", required=True,
+                    help="new artifact output directory; existing directories are refused")
     ap.add_argument("--geo", default=None)
     ap.add_argument("--stale", default=None)
     ap.add_argument("--write-room-map", action="store_true",
@@ -921,6 +944,8 @@ def main():
     ap.add_argument("--ink-dir", default=overlay.LIVE,
                     help="directory containing ink_<level>.bin for automatic overlays")
     ap.add_argument("--gate", action="store_true", help="exit nonzero when an absolute gate fails")
+    ap.add_argument("--review-gate", action="store_true",
+                    help="exit 2 unless every structural defect and junk count is zero")
     ap.add_argument("--resolutions", default=None,
                     help="apply takeoff-resolutions.json decisions before scoring")
     ap.add_argument("--quiet", action="store_true")
@@ -928,16 +953,30 @@ def main():
 
     project = os.path.abspath(a.project)
     takeoff_dir = a.takeoff_dir or os.path.join(project, "takeoff")
+    destination = os.path.abspath(a.out_dir)
+    if os.path.exists(destination):
+        raise SystemExit(f"--out-dir already exists: {destination}")
+    os.makedirs(os.path.dirname(destination), exist_ok=True)
+    out_dir = os.path.join(
+        os.path.dirname(destination), f".partial-{os.path.basename(destination)}-{os.getpid()}")
+    if os.path.exists(out_dir):
+        raise SystemExit(f"staging directory already exists: {out_dir}")
+    os.makedirs(out_dir)
+    atexit.register(lambda: shutil.rmtree(out_dir, ignore_errors=True))
     geo_path = a.geo or os.path.join(project, "oracle-geometry.json")
     stale_path = a.stale or os.path.join(project, "stale-rooms.json")
     geo = json.load(open(geo_path))
     stale = json.load(open(stale_path)) if os.path.exists(stale_path) else {"exclude": []}
     takeoff = load_takeoff(takeoff_dir)
     before = score(takeoff_dir, geo, stale, a.wall_tol, takeoff)
+    if a.takeoff_label:
+        before["takeoffDir"] = a.takeoff_label
     if a.resolutions:
         sidecar = json.load(open(a.resolutions, encoding="utf-8"))
         resolved, accounting = apply_resolutions(takeoff, sidecar)
         sb = score(takeoff_dir, geo, stale, a.wall_tol, resolved)
+        if a.takeoff_label:
+            sb["takeoffDir"] = a.takeoff_label
         sb["resolutions"] = {
             **accounting,
             "before": {
@@ -967,22 +1006,26 @@ def main():
         }
     else:
         sb = before
+    sb["structureVerdict"] = structure_verdict(sb)
     if os.path.abspath(takeoff_dir) == os.path.join(projectA, "takeoff"):
         game_room = sb["rooms"]["4"]
         assert (game_room["bestCandidate"] == "Level 0/Lower Level:R03"
                 and game_room["iou"] >= 0.55), "project-a registration self-check failed"
-    jobs = overlay_jobs(takeoff_dir, project, a.ink_dir)
+    jobs = overlay_jobs(takeoff_dir, out_dir, a.ink_dir)
     text = to_text(sb)
-    json.dump(sb, open(os.path.join(project, "scoreboard.json"), "w"), indent=1)
-    open(os.path.join(project, "scoreboard.txt"), "w", encoding="utf-8").write(text)
+    json.dump(sb, open(os.path.join(out_dir, "scoreboard.json"), "w"), indent=1)
+    open(os.path.join(out_dir, "scoreboard.txt"), "w", encoding="utf-8").write(text)
     render_overlays(sb, jobs)
     if not a.quiet:
         print(text, end="")
     if a.write_room_map:
         n = write_room_map(sb, geo, a.iou_min, project)
         print(f"room-map.json: +{n} auto-iou matches (mutual-best IoU >= {a.iou_min})")
+    os.replace(out_dir, destination)
     if a.gate and not sb["gates"]["passed"]:
         sys.exit(1)
+    if a.review_gate and not sb["structureVerdict"]["acceptable"]:
+        sys.exit(2)
 
 
 if __name__ == "__main__":

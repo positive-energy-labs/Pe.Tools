@@ -161,17 +161,31 @@ conventions, and TSV snapshot are fixtures. `RhvacEval.Score` matches candidates
 scores takeoff inputs against the oracle extract without a live model; the outer loop — true load
 recalc — means opening the exported file in RHVAC, and stays manual (see above).
 
-The whole inner loop, from a connected Revit session with the model open:
+The canonical detector review loop starts from a frozen all-level `DetectSnapshot` manifest and
+runs entirely offline. It audits intrinsic editability, reports structure independently, renders
+a blind all-level contact sheet, hashes the complete artifact, and exits nonzero when either axis
+is red:
 
 ```
-# 1. takeoff all levels -> committed TSV snapshot (selectors: pe-revit service list)
-python eval/rhvac/run-takeoff.py --port <hostPort> --session <bridgeSessionId> --project project-a --levels "Lower Level" "Main Level" "Upper Level" "Attic"
-# 2. score it (writes eval/rhvac/project-a/scorecard.{json,txt}; fails while gates fail)
-dotnet test source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests --filter "FullyQualifiedName~RhvacProjectAEvalRun" -v q --nologo
+.\eval\rhvac\review.ps1 `
+  -SnapshotManifest <frozen-manifest.json> `
+  -InkDirectory <matching-frozen-ink-directory> `
+  -OutputDirectory <new-artifact-directory>
 ```
 
-Iterating on detection code: hot-reload via the live converge session, re-run step 1 with
-`--detect-only` (seed views survive), re-score. `PE_EVAL_PROFILE=standard|stamp` tightens gates.
+The manifest must bind every replay snapshot and INKP raster by SHA-256. The strict-editability
+audit intentionally does not certify architectural alignment or promotion readiness; those require
+the registered plan underlay and evidence-derived frame calibration. The former mean-IoU scorer is
+retained under `structure/` as a diagnostic and no longer supplies a compensating total score.
+
+When fresh live capture is actually required, protect the dev session and write only to a new
+artifact directory; fixture promotion is separate and reviewed:
+
+```
+python eval/rhvac/run-takeoff.py --port <hostPort> --session <bridgeSessionId> `
+  --project project-a --levels "Lower Level" "Theatre" "Main Level" "Upper Level" "Attic" `
+  --out-dir <new-artifact-directory>
+```
 
 ### Envelope conversion (v1)
 

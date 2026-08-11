@@ -21,6 +21,10 @@ LIVE = next((d for d in [
 PALETTE = [(230,60,60),(60,120,230),(40,160,90),(220,140,30),(160,70,200),(200,60,150),
            (30,170,170),(120,120,40),(240,90,110),(90,90,240),(80,190,60),(250,110,40)]
 
+BLIND_COLOR = (24, 91, 122)
+DIAGNOSTIC_COLOR = (45, 45, 45)
+PROBLEM_COLOR = (205, 45, 45)
+
 
 def load_ink(path):
     with open(path, "rb") as f:
@@ -43,6 +47,70 @@ def load_tsv(path):
             loop = [tuple(map(float, p.split(";"))) for p in parts[3].split("|")]
             polys.setdefault(parts[1], []).append((parts[2], loop))
     return rooms, polys
+
+
+def render_review(ink_path, tsv_path, mode="blind", scale=2, problem_ids=(),
+                  problem_segments=(), problem_points=()):
+    """Render a neutral taste panel or an addressable diagnostic panel."""
+    if mode not in ("blind", "diagnostic"):
+        raise ValueError("mode must be 'blind' or 'diagnostic'")
+    w, h, minx, miny, cell, bits = load_ink(ink_path)
+    rooms, polys = load_tsv(tsv_path)
+
+    mask = Image.new("1", (w, h))
+    mask.putdata([
+        255 if (bits[i >> 3] >> (i & 7)) & 1 else 0
+        for i in range(w * h)
+    ])
+    mask = mask.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+    image = Image.new("RGB", (w, h), "white")
+    image.paste((184, 184, 184), mask=mask)
+    if scale != 1:
+        image = image.resize((w * scale, h * scale), Image.Resampling.NEAREST)
+
+    draw = ImageDraw.Draw(image)
+    problems = set(problem_ids)
+
+    def to_pixel(point):
+        return ((point[0] - minx) / cell * scale,
+                (h - (point[1] - miny) / cell) * scale)
+
+    font = _font(22)
+    for rid, meta in sorted(rooms.items()):
+        problem = rid in problems
+        color = (PROBLEM_COLOR if problem else
+                 BLIND_COLOR if mode == "blind" else DIAGNOSTIC_COLOR)
+        width = 6 if problem else 4
+        for kind, loop in polys.get(rid, []):
+            if len(loop) >= 2:
+                draw.line([to_pixel(point) for point in loop] + [to_pixel(loop[0])],
+                          fill=color, width=width if kind == "outer" else max(2, width - 2),
+                          joint="curve")
+        if mode == "diagnostic":
+            x, y = to_pixel((meta["lx"], meta["ly"]))
+            label = f"{rid}  {meta['sqft']:.0f} sf"
+            draw.text((x + 2, y + 2), label, fill="white", font=font)
+            draw.text((x, y), label, fill=color, font=font)
+    if mode == "diagnostic":
+        for start, end in problem_segments:
+            a, b = to_pixel(start), to_pixel(end)
+            draw.line((a, b), fill=PROBLEM_COLOR, width=7)
+            radius = 4
+            draw.ellipse((a[0] - radius, a[1] - radius, a[0] + radius, a[1] + radius),
+                         fill=PROBLEM_COLOR)
+        for point in problem_points:
+            x, y = to_pixel(point)
+            radius = 7
+            draw.ellipse((x - radius, y - radius, x + radius, y + radius),
+                         outline=PROBLEM_COLOR, width=4)
+    return image
+
+
+def _font(size):
+    try:
+        return ImageFont.truetype("arial.ttf", size)
+    except OSError:
+        return ImageFont.load_default()
 
 
 def render(ink_path, tsv_path, out_path, scale=4, thumb=None, junk_ids=(), quiet=False):
