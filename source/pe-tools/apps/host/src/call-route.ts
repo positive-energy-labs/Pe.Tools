@@ -291,7 +291,9 @@ function toProblem(error: CallError): {
             ? "BridgeBusy"
             : error.statusCode === 503
               ? "Disconnected"
-              : "HostFailure",
+              : error.statusCode === 400
+                ? "InvalidRequest"
+                : "HostFailure",
         message: error.message,
         status: error.statusCode,
       };
