@@ -1,5 +1,8 @@
 namespace Pe.Revit.Takeoff;
 
+using System.Security.Cryptography;
+using System.Text;
+
 internal sealed record MaterializationResolutionResult(
     TakeoffResult Takeoff,
     int Applied,
@@ -12,6 +15,30 @@ public sealed record NativeReadbackResult(
     int SkippedUnplaced,
     int SkippedUnenclosed,
     string PathWritten
+);
+
+public sealed record NativeEditabilityGateResult(
+    int Reviewed,
+    int Retained,
+    int Rejected,
+    IReadOnlyDictionary<string, IReadOnlyList<EditabilityViolationKind>> RejectionReasons
+);
+
+public sealed record PendingNativeTakeoffRun(
+    string DocumentIdentity,
+    long LevelId,
+    long PhaseId,
+    string OwnershipToken,
+    string RunId,
+    string SourceSha256,
+    IReadOnlyList<long> ExpectedElementIds,
+    IReadOnlyList<string> ExpectedRoomIds
+);
+
+public sealed record AuditedNativeTakeoffRun(
+    PendingNativeTakeoffRun Pending,
+    NativeEditabilityGateResult Audit,
+    IReadOnlyList<long> RetainedElementIds
 );
 
 // Facade. Room detection needs THREE script executions because the host owns exactly one
@@ -74,29 +101,34 @@ public static class RoomTakeoff
         string captureOptions = DetectSnapshot.CaptureOptionsOf(heightfieldOptions);
         var hf = Heightfield.Build(doc, level, crop, heightfieldOptions, log);
         int n = hf.W * hf.H;
-        // floor-slab edge: stair voids, overlooks, and the building envelope (which the header
-        // band's proximity gate anchors on — eave walls under a roof slope have no knee ink)
-        var floorEdge = new bool[n];
+        var bands = ProjectionSeed.CaptureBands(
+            doc, va, va2, vb, vd, crop, hf.W, hf.H, opt.CellFt, workDir, opt, log);
+        var ink = ProjectionSeed.ComposeInk(
+            bands.Plan, bands.Header, hf.W, hf.H, opt.CellFt, opt, floorEdge: null, log);
         double lvlZ = level.ProjectElevation;
-        bool Floor(int i) => !float.IsNaN(hf.FloorZ[i]) && Math.Abs(hf.FloorZ[i] - lvlZ) <= opt.FloorTolFt;
-        for (int i = 0; i < n; i++)
-        {
-            if (!Floor(i)) continue;
-            int x = i % hf.W, y = i / hf.W;
-            if (x > 0 && !Floor(i - 1) || x < hf.W - 1 && !Floor(i + 1)
-                || y > 0 && !Floor(i - hf.W) || y < hf.H - 1 && !Floor(i + hf.W))
-                floorEdge[i] = true;
-        }
-        var ink = ProjectionSeed.CaptureInk(doc, va, va2, vb, vd, crop, hf.W, hf.H, opt.CellFt, workDir, opt, log,
-            floorEdge, out var kneeInk);
+        var snapshot = new DetectSnapshot {
+            LevelName = level.Name, LevelElevation = lvlZ,
+            CaptureOptions = captureOptions, Field = hf, SeedInk = ink,
+        };
         LevelProfile? appliedProfile = null;
         if (opt.InferLevelProfile)
         {
-            appliedProfile = TakeoffPolicy.InferLevelProfile(new DetectSnapshot {
-                LevelName = level.Name, LevelElevation = lvlZ, Field = hf, SeedInk = ink,
-            });
+            appliedProfile = TakeoffPolicy.InferLevelProfile(snapshot);
             appliedProfile.ApplyPolicyTo(opt);
             log($"[profile] {appliedProfile.Provenance}");
+        }
+        var planObstruction = Detector.BuildObstruction(hf, ink, lvlZ, opt, _ => { });
+        var footprint = Detector.InkBoundedFloor(hf, planObstruction, lvlZ, opt.FloorTolFt);
+        // floor-slab edge: stair voids, overlooks, and the building envelope (which the header
+        // band's proximity gate anchors on — eave walls under a roof slope have no knee ink)
+        var floorEdge = new bool[n];
+        for (int i = 0; i < n; i++)
+        {
+            if (!footprint[i]) continue;
+            int x = i % hf.W, y = i / hf.W;
+            if (x > 0 && !footprint[i - 1] || x < hf.W - 1 && !footprint[i + 1]
+                || y > 0 && !footprint[i - hf.W] || y < hf.H - 1 && !footprint[i + hf.W])
+                floorEdge[i] = true;
         }
         if (opt.DumpReplaySnapshot)
         {
@@ -104,23 +136,17 @@ public static class RoomTakeoff
             // header for the honesty boundary). Detection changes then replay in NoDocumentRuntime
             // tests in seconds — never tune detection through repeated bridge runs.
             string snapPath = Path.Combine(workDir, $"replay_{Sanitize(level.Name)}.bin");
-            DetectSnapshot.Save(snapPath, new DetectSnapshot {
-                LevelName = level.Name, LevelElevation = lvlZ,
-                CaptureOptions = captureOptions,
-                Field = hf, SeedInk = ink,
-            });
+            DetectSnapshot.Save(snapPath, snapshot);
             log($"[replay] detect-input snapshot -> {snapPath}");
         }
         var result = appliedProfile == null
             ? Detector.Detect(hf, ink, level.Name, level.ProjectElevation, opt, log)
-            : TakeoffPolicy.Detect(new DetectSnapshot {
-                LevelName = level.Name, LevelElevation = level.ProjectElevation, Field = hf, SeedInk = ink,
-            }, appliedProfile, log);
+            : TakeoffPolicy.Detect(snapshot, appliedProfile, log);
         result.SeedViewA = va; result.SeedViewB = vb;
         // Boundary-evidence raster for materialization: where is a boundary REAL geometry rather
         // than an equidistance seam? Real = knee-band wall ink (doors are open at +4 ft; the header
         // band would mark sealed openings as walls) or a floor edge (stair voids, overlooks).
-        var evidence = kneeInk;
+        var evidence = (bool[])bands.Plan.Clone();
         for (int i = 0; i < n; i++) evidence[i] |= floorEdge[i];
         InkSupport.Save(InkPath(opt, level), hf.W, hf.H, hf.MinX, hf.MinY, opt.CellFt, evidence);
 
@@ -145,13 +171,18 @@ public static class RoomTakeoff
         return Takeoff.Annotate.ExportEvidence(doc, $"{opt.Marker} takeoff", Path.Combine(ArtifactDir(opt), "evidence"), log);
     }
 
-    public static IReadOnlyList<ElementId> MaterializeSpaces(
+    public static PendingNativeTakeoffRun MaterializeSpaces(
         Document doc, string levelNameContains, Phase phase, Action<string> log, TakeoffOptions? optOverride = null)
     {
         var opt = optOverride ?? new TakeoffOptions();
         opt.LevelNameContains = levelNameContains;
         var level = ResolveLevel(doc, levelNameContains);
+        string token = SpaceMaterializer.Token(opt, level, phase);
+        if (SpaceMaterializer.HasPendingRun(doc, token))
+            throw new InvalidOperationException(
+                "this level/phase already has a pending native takeoff; finalize or explicitly clean it up first");
         var inkNear = InkSupport.LoadOracle(InkPath(opt, level), 3 * opt.CellFt);
+        var distanceToInk = InkSupport.LoadDistanceOracle(InkPath(opt, level));
         if (inkNear == null) log("[spaces] no ink raster found — arcs run on geometry alone");
         var takeoffDir = ArtifactDir(opt);
         var sidecar = TakeoffResolutions.ResolutionPath(takeoffDir);
@@ -163,7 +194,64 @@ public static class RoomTakeoff
         log(resolved.Orphaned > 0
             ? $"[spaces] WARNING orphaned resolution decisions; {resolutionSummary}; unresolved rooms remain materialized"
             : $"[spaces] resolutions {resolutionSummary}");
-        return SpaceMaterializer.Replace(doc, level, phase, resolved.Takeoff, opt, log, inkNear).Spaces;
+        var takeoff = resolved.Takeoff;
+        SpaceBoundaryNetwork.Regularize(takeoff.Rooms, opt.BoundarySimplifyFt, log);
+        var alignmentPartition = takeoff.Rooms.ToList();
+        TakeoffPromotion.ApplyFrameLocal(takeoff, FrameLocalProjector.Project(takeoff), log);
+        TakeoffPromotion.MergeOrHoldTinyRooms(takeoff, opt.MinimumPromotedRoomSqft, log);
+        TakeoffPromotion.RejectMisalignedExposedRails(
+            takeoff, alignmentPartition, distanceToInk, log);
+        string runId = Guid.NewGuid().ToString("N");
+        string sourceSha256 = Sha256(takeoff.ToTsv());
+        var materialized = SpaceMaterializer.Replace(
+            doc, level, phase, takeoff, opt, log, inkNear,
+            new NativeRunStamp(runId, sourceSha256, "pending"));
+        return new PendingNativeTakeoffRun(
+            DocumentIdentity(doc), level.Id.Value(), phase.Id.Value(),
+            token, runId, sourceSha256,
+            materialized.Spaces.Select(id => id.Value()).OrderBy(id => id).ToList(),
+            takeoff.Rooms.Select(room => room.Id).OrderBy(id => id, StringComparer.Ordinal).ToList());
+    }
+
+    /// <summary>
+    /// Completes a pending native run after its materialization transaction has committed and
+    /// Revit has recomputed Space boundaries. This method requires a second write transaction.
+    /// </summary>
+    public static AuditedNativeTakeoffRun AuditAndFinalize(
+        Document doc, PendingNativeTakeoffRun pending, Action<string> log, TakeoffOptions? optOverride = null)
+    {
+        if (!doc.IsModifiable)
+            throw new InvalidOperationException("Native takeoff finalization requires an open transaction");
+        if (DocumentIdentity(doc) != pending.DocumentIdentity)
+            throw new InvalidOperationException("pending native takeoff belongs to a different document");
+        var level = doc.GetElement(pending.LevelId.ToElementId()) as Level
+            ?? throw new InvalidOperationException("pending native takeoff level no longer exists");
+        var phase = doc.GetElement(pending.PhaseId.ToElementId()) as Phase
+            ?? throw new InvalidOperationException("pending native takeoff phase no longer exists");
+        var opt = optOverride ?? new TakeoffOptions();
+        if (SpaceMaterializer.Token(opt, level, phase) != pending.OwnershipToken)
+            throw new InvalidOperationException("pending native takeoff ownership token does not match options");
+
+        var owned = new FilteredElementCollector(doc).OfClass(typeof(SpatialElement))
+            .OfCategory(BuiltInCategory.OST_MEPSpaces).Cast<Space>()
+            .Where(space => SpaceMaterializer.Owned(space, pending.OwnershipToken))
+            .OrderBy(space => space.Id.Value()).ToList();
+        if (!owned.Select(space => space.Id.Value()).SequenceEqual(pending.ExpectedElementIds)
+            || !owned.Select(space => space.Number).OrderBy(id => id, StringComparer.Ordinal)
+                .SequenceEqual(pending.ExpectedRoomIds))
+            throw new InvalidOperationException("pending native takeoff elements no longer match its receipt");
+        if (owned.Any(space => !SpaceMaterializer.HasRunStamp(
+                space, pending.RunId, pending.SourceSha256, "pending")))
+            throw new InvalidOperationException("pending native takeoff stamp is missing or stale");
+
+        var audit = PruneUneditableNative(doc, level, phase, opt, log);
+        SpaceMaterializer.SetRunAuditState(
+            doc, opt, level, phase, pending.RunId, pending.SourceSha256, "passed");
+        var retained = new FilteredElementCollector(doc).OfClass(typeof(SpatialElement))
+            .OfCategory(BuiltInCategory.OST_MEPSpaces).Cast<Space>()
+            .Where(space => SpaceMaterializer.Owned(space, pending.OwnershipToken))
+            .Select(space => space.Id.Value()).OrderBy(id => id).ToList();
+        return new AuditedNativeTakeoffRun(pending, audit, retained);
     }
 
     public static NativeReadbackResult ReadbackNative(
@@ -273,7 +361,68 @@ public static class RoomTakeoff
         return new NativeReadbackResult(rooms.Count, skippedUnplaced, skippedUnenclosed, path);
     }
 
-    private static List<double[]> BoundaryPoints(IEnumerable<BoundarySegment> segments)
+    /// <summary>
+    /// Runs after the materialization transaction commits, when Revit has recomputed the native
+    /// Space boundaries. Deletes only owned Spaces that fail the canonical editability audit.
+    /// </summary>
+    public static NativeEditabilityGateResult PruneUneditableNative(
+        Document doc, Level level, Phase phase, TakeoffOptions opt, Action<string> log)
+    {
+        string token = SpaceMaterializer.Token(opt, level, phase);
+        var spaces = new FilteredElementCollector(doc).OfClass(typeof(SpatialElement))
+            .OfCategory(BuiltInCategory.OST_MEPSpaces).Cast<Space>()
+            .Where(space => space.LevelId.Value() == level.Id.Value()
+                            && space.get_Parameter(BuiltInParameter.ROOM_PHASE_ID)
+                                ?.AsElementId().Value() == phase.Id.Value()
+                            && SpaceMaterializer.Owned(space, token))
+            .OrderBy(space => space.Number, StringComparer.Ordinal)
+            .ToList();
+        if (spaces.Select(space => space.Number).Distinct(StringComparer.Ordinal).Count() != spaces.Count)
+            throw new InvalidOperationException("owned native Space numbers must be unique");
+
+        var malformed = new Dictionary<string, IReadOnlyList<EditabilityViolationKind>>(StringComparer.Ordinal);
+        var shapes = new List<TakeoffRoomShape>();
+        foreach (var space in spaces)
+        {
+            var loops = space.GetBoundarySegments(new SpatialElementBoundaryOptions());
+            var points = loops?.Select(BoundaryPoints)
+                .Where(loop => loop.Count >= 3)
+                .OrderByDescending(loop => Math.Abs(TakeoffTsv.SignedArea(loop)))
+                .ToList();
+            if (space.Area <= 0 || points is not { Count: > 0 })
+            {
+                malformed[space.Number] = [EditabilityViolationKind.InvalidLoop];
+                continue;
+            }
+            shapes.Add(new TakeoffRoomShape(
+                space.Number, space.Area,
+                loops!.SelectMany(segments => segments).Sum(segment => segment.GetCurve().Length),
+                space.LimitOffset, points[0], points.Skip(1).ToList()));
+        }
+
+        var audit = TakeoffEditability.Evaluate(new LevelTakeoff(level.Name, level.ProjectElevation, shapes));
+        var rejected = audit.Rooms.Where(room => !room.IsStrictlyEditable)
+            .ToDictionary(
+                room => room.RoomId,
+                room => (IReadOnlyList<EditabilityViolationKind>)room.Violations
+                    .Select(violation => violation.Kind).Distinct().OrderBy(kind => kind).ToList(),
+                StringComparer.Ordinal);
+        foreach (var item in malformed) rejected[item.Key] = item.Value;
+        if (rejected.Count > 0)
+        {
+            doc.Delete(spaces.Where(space => rejected.ContainsKey(space.Number))
+                .Select(space => space.Id).ToList());
+            doc.Regenerate();
+        }
+        log($"[native-gate] level='{level.Name}' phase='{phase.Name}' reviewed={spaces.Count} " +
+            $"retained={spaces.Count - rejected.Count} rejected={rejected.Count}" +
+            (rejected.Count == 0 ? "" : " " + string.Join(" ", rejected.Select(item =>
+                $"{item.Key}:{string.Join("+", item.Value)}"))));
+        return new NativeEditabilityGateResult(
+            spaces.Count, spaces.Count - rejected.Count, rejected.Count, rejected);
+    }
+
+    internal static List<double[]> BoundaryPoints(IEnumerable<BoundarySegment> segments)
     {
         var points = new List<double[]>();
         foreach (var segment in segments)
@@ -287,6 +436,32 @@ public static class RoomTakeoff
 
     private static string InkPath(TakeoffOptions opt, Level level) =>
         Path.Combine(ArtifactDir(opt), $"ink_{Sanitize(level.Name)}.bin");
+
+    private static string DocumentIdentity(Document doc)
+    {
+        try
+        {
+            if (doc.IsModelInCloud)
+            {
+                var path = doc.GetCloudModelPath();
+                return $"cloud:{path.GetProjectGUID():D}:{path.GetModelGUID():D}";
+            }
+            if (!string.IsNullOrWhiteSpace(doc.PathName))
+                return "path:" + Path.GetFullPath(doc.PathName).ToUpperInvariant();
+        }
+        catch
+        {
+            // Fall through to a process-local identity for unsaved/test documents.
+        }
+        return $"session:{doc.Title}:{doc.GetHashCode()}";
+    }
+
+    private static string Sha256(string value)
+    {
+        using var sha = SHA256.Create();
+        return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(value)))
+            .Replace("-", "").ToLowerInvariant();
+    }
 
     public static int Cleanup(Document doc, Action<string> log, TakeoffOptions? optOverride = null)
     {
@@ -435,10 +610,21 @@ public static class RoomTakeoff
                     flagged.Flags.AddRange(p[2][(separator + 1)..]
                         .Split(new[] { '+' }, StringSplitOptions.RemoveEmptyEntries));
             }
+            else if (p.Length == 3 && p[0] == "META"
+                     && p[1] is "splitFrom" or "mergedFrom")
+            {
+                int separator = p[2].IndexOf(':');
+                if (separator > 0 && rooms.TryGetValue(p[2][..separator], out var tracked))
+                {
+                    string provenance = p[2][(separator + 1)..];
+                    if (p[1] == "splitFrom") tracked.SplitFrom = provenance;
+                    else tracked.MergedFrom = provenance;
+                }
+            }
             else if (p.Length >= 9 && p[0] == "META" && p[1] == "residue")
             {
                 var residue = new ResidueResult {
-                    Id = p[2], Reason = Enum.Parse<ResidueReason>(p[3], ignoreCase: true), RawSqft = double.Parse(p[4], ic),
+                    Id = p[2], Reason = (ResidueReason)Enum.Parse(typeof(ResidueReason), p[3], true), RawSqft = double.Parse(p[4], ic),
                     LabelX = double.Parse(p[5], ic), LabelY = double.Parse(p[6], ic),
                     MeanCeilingFt = double.Parse(p[7], ic), Polygon = ParsePoly(p[8], ic),
                 };

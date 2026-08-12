@@ -15,8 +15,8 @@ public sealed record TakeoffRoomShape(
 {
     public List<string> Flags { get; init; } = new();
     public double[] Label { get; init; } = Array.Empty<double>();
-    public string? SplitFrom { get; init; }
-    public string? MergedFrom { get; init; }
+    public string? SplitFrom { get; set; }
+    public string? MergedFrom { get; set; }
 }
 
 public sealed record TakeoffResidueShape(
@@ -77,6 +77,10 @@ public static class TakeoffTsv
                         };
                     else if (parts[1] == "flag")
                         ApplyFlagMeta(parts[2], byId);
+                    else if (parts[1] == "splitFrom")
+                        ApplyProvenance(parts[2], byId, (room, value) => room.SplitFrom = value);
+                    else if (parts[1] == "mergedFrom")
+                        ApplyProvenance(parts[2], byId, (room, value) => room.MergedFrom = value);
                     // totalSqft and other META fields are display metadata; ignored.
                     break;
                 case "ROOM" when parts.Length == 7:
@@ -104,7 +108,7 @@ public static class TakeoffTsv
                     break;
                 case "META" when parts.Length >= 9 && parts[1] == "residue":
                     residues.Add(new TakeoffResidueShape(
-                        parts[2], Enum.Parse<ResidueReason>(parts[3], true),
+                        parts[2], (ResidueReason)Enum.Parse(typeof(ResidueReason), parts[3], true),
                         Parse(parts[4], lineIndex), Parse(parts[7], lineIndex),
                         new[] { Parse(parts[5], lineIndex), Parse(parts[6], lineIndex) },
                         ParseLoop(parts[8], lineIndex),
@@ -165,6 +169,17 @@ public static class TakeoffTsv
         foreach (var flag in payload[(colon + 1)..].Split('+').Where(flag => flag.Length > 0))
             if (!room.Flags.Contains(flag)) room.Flags.Add(flag);
         room.Flags.Sort(StringComparer.Ordinal);
+    }
+
+    private static void ApplyProvenance(
+        string payload,
+        IReadOnlyDictionary<string, TakeoffRoomShape> byId,
+        Action<TakeoffRoomShape, string> apply)
+    {
+        var colon = payload.IndexOf(':');
+        if (colon <= 0 || colon == payload.Length - 1
+            || !byId.TryGetValue(payload[..colon], out var room)) return;
+        apply(room, payload[(colon + 1)..]);
     }
 
     internal static double SignedArea(IReadOnlyList<double[]> loop)

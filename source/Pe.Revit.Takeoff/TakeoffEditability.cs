@@ -15,6 +15,7 @@ public enum EditabilityViolationKind
     Reversal,
     DiagonalShortcut,
     MicroStepRun,
+    ExcessiveDetail,
 }
 
 public sealed record EditabilityPoint(double X, double Y);
@@ -58,6 +59,11 @@ public static class TakeoffEditability
     private const double AcuteAngle = 75 * Math.PI / 180;
     private const double MicroEdgeMaxFt = 1;
     private const int MicroRunMinEdges = 3;
+    private const double ShallowDetailMaxFt = 2.25;
+    private const double ShallowDetailSpanMaxFt = 4;
+    private const double ShortTurnEdgeMaxFt = 2.25;
+    private const double ShortTurnRunMaxFt = 16;
+    private const int ShortTurnRunMinEdges = 4;
     private const double Epsilon = 1e-9;
     private static readonly GeometryFactory GeometryFactory =
         new(new PrecisionModel(1_000_000));
@@ -301,6 +307,26 @@ public static class TakeoffEditability
             violations.Add(Violation(EditabilityViolationKind.MicroStepRun, roomId,
                 loopName, 0, edges[0].From, edges[^1].To, edges.Count,
                 $"all {edges.Count} boundary edges are handle-scale"));
+
+        for (var index = 0; index < edges.Count; index++)
+        {
+            if (edges[index].Length > ShortTurnEdgeMaxFt
+                || edges[(index + edges.Count - 1) % edges.Count].Length <= ShortTurnEdgeMaxFt)
+                continue;
+            int count = 0;
+            double total = 0;
+            while (count < edges.Count && edges[(index + count) % edges.Count].Length <= ShortTurnEdgeMaxFt)
+            {
+                total += edges[(index + count) % edges.Count].Length;
+                count++;
+            }
+            if (count < ShortTurnRunMinEdges || total > ShortTurnRunMaxFt) continue;
+            var last = edges[(index + count - 1) % edges.Count];
+            violations.Add(Violation(EditabilityViolationKind.ExcessiveDetail, roomId,
+                loopName, index, edges[index].From, last.To, count,
+                $"{count} consecutive short turn edges create avoidable edit handles"));
+        }
+
     }
 
     private static IReadOnlyList<Point> CleanLoop(IReadOnlyList<double[]> source)
@@ -320,7 +346,8 @@ public static class TakeoffEditability
             {
                 var incoming = points[index] - points[(index + points.Count - 1) % points.Count];
                 var outgoing = points[(index + 1) % points.Count] - points[index];
-                if (Math.Abs(Cross(incoming, outgoing)) <= Epsilon * incoming.Length * outgoing.Length
+                if (Math.Abs(Cross(incoming, outgoing))
+                        <= Math.Sin(AngleTolerance) * incoming.Length * outgoing.Length
                     && Dot(incoming, outgoing) > 0)
                 {
                     points.RemoveAt(index);

@@ -212,10 +212,9 @@ public static class ProjectionSeed
     // the knee band can — doors are open at +4 ft. Boundary-evidence needs that distinction.
     // Pixel->model mapping is exact: the export fills the crop box edge-to-edge (verified 0.02%
     // aspect agreement at 6000 px on projectA); ftPerPx = cropWidth / pixelWidth.
-    public static bool[] CaptureInk(
+    internal static (bool[] Plan, bool[] Header) CaptureBands(
         Document doc, string viewA, string viewA2, string viewB, string? viewD, BoundingBoxXYZ crop,
-        int gridW, int gridH, double cellFt, string workDir, TakeoffOptions opt, Action<string> log,
-        bool[]? floorEdge, out bool[] kneeBandInk)
+        int gridW, int gridH, double cellFt, string workDir, TakeoffOptions opt, Action<string> log)
     {
         int n = gridW * gridH;
         bool[] knee;
@@ -233,10 +232,20 @@ public static class ProjectionSeed
             for (int i = 0; i < n; i++) knee[i] = a1[i] && a2[i];
         }
         var b = ExportAndStamp(doc, viewB, crop, gridW, gridH, cellFt, workDir, opt, log);
-        var anchor = knee;
+        return (knee, b);
+    }
+
+    internal static bool[] ComposeInk(
+        bool[] plan, bool[] header, int gridW, int gridH, double cellFt,
+        TakeoffOptions opt, bool[]? floorEdge, Action<string>? log = null)
+    {
+        int n = gridW * gridH;
+        if (plan.Length != n || header.Length != n || floorEdge != null && floorEdge.Length != n)
+            throw new ArgumentException($"seed arrays disagree with {gridW}x{gridH}");
+        var anchor = plan;
         if (floorEdge != null)
         {
-            anchor = (bool[])knee.Clone();
+            anchor = (bool[])plan.Clone();
             for (int i = 0; i < n; i++) anchor[i] |= floorEdge[i];
         }
         var near = Dilate(anchor, gridW, gridH, Math.Max(1, (int)Math.Round(opt.HeaderNearFt / cellFt)));
@@ -244,13 +253,12 @@ public static class ProjectionSeed
         int bTotal = 0, bGatedOut = 0;
         for (int i = 0; i < n; i++)
         {
-            if (b[i]) bTotal++;
-            if (b[i] && !near[i]) bGatedOut++;
-            ink[i] = knee[i] || b[i] && near[i];
+            if (header[i]) bTotal++;
+            if (header[i] && !near[i]) bGatedOut++;
+            ink[i] = plan[i] || header[i] && near[i];
         }
-        kneeBandInk = knee;
-        log($"[seed] ink cells: {(viewD != null ? "dwg" : "knee(AND)")}={Count(knee)} " +
-            $"b={bTotal} bGatedOut={bGatedOut} final={Count(ink)}");
+        log?.Invoke($"[seed] plan={Count(plan)} header={bTotal} " +
+                    $"headerGatedOut={bGatedOut} final={Count(ink)}");
         return ink;
     }
 

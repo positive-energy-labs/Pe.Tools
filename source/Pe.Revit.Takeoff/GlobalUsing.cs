@@ -9,3 +9,4 @@ global using Autodesk.Revit.DB.Mechanical;
 global using Pe.Bcl.Compat;
 global using Pe.Revit.Compat;
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Pe.Revit.Tests")]
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Pe.Takeoff.Tests")]

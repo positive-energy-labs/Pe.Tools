@@ -61,6 +61,8 @@ public sealed class TakeoffOptions
     public double CeilingCloseFt = 0;       // close gaps <= this in the ceiling mask (rafter-only
                                             // roofs read patchy at framing stage; attic policy)
     public double BoundarySimplifyFt = 2.0; // physical wall-fit tolerance for raster boundary chains
+    public double MinimumPromotedRoomSqft = 30; // smaller unambiguous pockets merge into their
+                                                // sole neighbor; ambiguous pockets stay residue
     public double WallClaimFt = 1.5;        // wall-band claim reach per side: non-domain cells
                                             // seen by distinct rooms within this reach are
                                             // split at the band centerline so rooms TOUCH (0 = off)
@@ -186,6 +188,10 @@ public sealed class TakeoffResult
         // backward-compatible with consumers that predate ambiguity flags.
         foreach (var r in this.Rooms.Where(r => r.Flags.Count > 0))
             sb.AppendLine($"META\tflag\t{r.Id}:{string.Join("+", r.Flags)}");
+        foreach (var r in this.Rooms.Where(r => r.SplitFrom != null))
+            sb.AppendLine($"META\tsplitFrom\t{r.Id}:{r.SplitFrom}");
+        foreach (var r in this.Rooms.Where(r => r.MergedFrom != null))
+            sb.AppendLine($"META\tmergedFrom\t{r.Id}:{r.MergedFrom}");
         foreach (var r in this.Residues)
             sb.AppendLine($"META\tresidue\t{r.Id}\t{r.Reason.ToString().ToLowerInvariant()}\t{r.RawSqft.ToString("F1", ic)}\t{r.LabelX.ToString("F6", ic)}\t{r.LabelY.ToString("F6", ic)}\t{r.MeanCeilingFt.ToString("F2", ic)}\t{PolyStr(r.Polygon)}{string.Concat(r.Holes.Select(h => "\t" + PolyStr(h)))}");
         return sb.ToString();

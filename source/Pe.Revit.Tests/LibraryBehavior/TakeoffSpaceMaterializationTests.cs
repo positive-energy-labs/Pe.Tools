@@ -49,46 +49,6 @@ public sealed class TakeoffSpaceMaterializationTests
     }
 
     [Test]
-    public void Boundary_network_aligns_supported_shared_edges_to_a_local_wall_family()
-    {
-        const double rise = 6.494;
-        var rooms = new[] {
-            Room("A", [new[] { 0d, 0 }, new[] { 10d, 0 }, new[] { 0d, rise }]),
-            Room("B", [new[] { 0d, rise }, new[] { 10d, 0 }, new[] { 10d, 10 }, new[] { 0d, 10 }]),
-            Room("C", [new[] { 0d, 20 }, new[] { 10d, 20 }, new[] { 0d, 20 + rise }]),
-            Room("D", [new[] { 0d, 20 + rise }, new[] { 10d, 20 }, new[] { 10d, 30 }, new[] { 0d, 30 }]),
-        };
-        double nx = 0.5, ny = Math.Sqrt(3) / 2;
-        bool WallAt(double x, double y) => new[] { rise / 2, 20 + rise / 2 }
-            .Any(midY => Math.Abs(nx * x + ny * y - (nx * 5 + ny * midY)) <= 0.3);
-
-        SpaceBoundaryNetwork.Regularize(rooms, 0.5, cellFt: 0.25, wallAt: WallAt);
-
-        double angle = SharedAngle(rooms[0], rooms[1]);
-        Assert.Multiple(() => {
-            Assert.That(angle, Is.EqualTo(-30).Within(0.1),
-                "the evidence family, not the generic -33 degree chord, owns direction");
-            Assert.That(SharedAngle(rooms[2], rooms[3]), Is.EqualTo(angle).Within(1e-6));
-        });
-    }
-
-    [Test]
-    public void Boundary_network_leaves_edges_without_wall_support_unsnapped()
-    {
-        const double rise = 6.494;
-        var rooms = new[] {
-            Room("A", [new[] { 0d, 0 }, new[] { 10d, 0 }, new[] { 0d, rise }]),
-            Room("B", [new[] { 0d, rise }, new[] { 10d, 0 }, new[] { 10d, 10 }, new[] { 0d, 10 }]),
-            Room("C", [new[] { 0d, 20 }, new[] { 10d, 20 }, new[] { 0d, 20 + rise }]),
-            Room("D", [new[] { 0d, 20 + rise }, new[] { 10d, 20 }, new[] { 10d, 30 }, new[] { 0d, 30 }]),
-        };
-
-        SpaceBoundaryNetwork.Regularize(rooms, 0.5, cellFt: 0.25, wallAt: (_, _) => false);
-
-        Assert.That(SharedAngle(rooms[0], rooms[1]), Is.EqualTo(-33).Within(0.1));
-    }
-
-    [Test]
     public void Spaces_replace_idempotently_and_cleanup_completely(UIApplication uiApplication)
     {
         var document = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
@@ -124,24 +84,72 @@ public sealed class TakeoffSpaceMaterializationTests
             };
             var options = new TakeoffOptions { Marker = "PE-TEST-TAKEOFF" };
 
-            using var transaction = new Transaction(document, "Prove takeoff Space materialization");
-            transaction.Start();
+            using var group = new TransactionGroup(document, "Prove takeoff Space materialization");
+            group.Start();
 
-            var first = SpaceMaterializer.Replace(document, level, phase, result, options, Log);
-            document.Regenerate();
+            SpaceMaterializationResult first;
+            var firstStamp = new NativeRunStamp("run-one", "source-one", "pending");
+            using (var transaction = new Transaction(document, "Materialize takeoff Spaces"))
+            {
+                transaction.Start();
+                first = SpaceMaterializer.Replace(document, level, phase, result, options, Log,
+                    runStamp: firstStamp);
+                Assert.That(transaction.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
             AssertMaterialization(document, first, options, level, phase, logs);
+            Assert.That(Owned(document, options).OfType<Space>().All(space =>
+                SpaceMaterializer.HasRunStamp(space, "run-one", "source-one", "pending")), Is.True);
+            var pending = new PendingNativeTakeoffRun(
+                $"session:{document.Title}:{document.GetHashCode()}", level.Id.Value(), phase.Id.Value(),
+                SpaceMaterializer.Token(options, level, phase), "run-one", "source-one",
+                first.Spaces.Select(id => id.Value()).OrderBy(id => id).ToList(),
+                result.Rooms.Select(room => room.Id).OrderBy(id => id, StringComparer.Ordinal).ToList());
 
-            var second = SpaceMaterializer.Replace(document, level, phase, result, options, Log);
-            document.Regenerate();
-            Assert.That(second.Spaces, Has.Count.EqualTo(3));
-            Assert.That(second.Spaces, Has.None.Matches<ElementId>(id => first.Spaces.Contains(id)));
-            AssertMaterialization(document, second, options, level, phase, logs);
+            AuditedNativeTakeoffRun firstRun;
+            using (var transaction = new Transaction(document, "Audit native takeoff Spaces"))
+            {
+                transaction.Start();
+                firstRun = RoomTakeoff.AuditAndFinalize(document, pending, Log, options);
+                Assert.That(transaction.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+            var firstGate = firstRun.Audit;
+            Assert.That((firstGate.Reviewed, firstGate.Retained, firstGate.Rejected),
+                Is.EqualTo((4, 4, 0)));
+            Assert.That(Owned(document, options).OfType<Space>().All(space =>
+                SpaceMaterializer.HasRunStamp(space, "run-one", "source-one", "passed")), Is.True);
 
-            SpaceMaterializer.Cleanup(document, options, TestContext.WriteLine);
-            document.Regenerate();
+            using (var transaction = new Transaction(document, "Replace takeoff Spaces"))
+            {
+                transaction.Start();
+                SpaceMaterializer.Replace(document, level, phase, result, options, Log);
+                Assert.That(transaction.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+
+            NativeEditabilityGateResult secondGate;
+            using (var transaction = new Transaction(document, "Re-audit native takeoff Spaces"))
+            {
+                transaction.Start();
+                secondGate = RoomTakeoff.PruneUneditableNative(document, level, phase, options, Log);
+                Assert.That(transaction.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+            var retained = Owned(document, options).OfType<Space>().ToList();
+            Assert.Multiple(() => {
+                Assert.That((secondGate.Reviewed, secondGate.Retained, secondGate.Rejected),
+                    Is.EqualTo((4, 4, 0)));
+                Assert.That(retained.Select(space => space.Id), Is.EquivalentTo(first.Spaces));
+                Assert.That(retained.Select(space => space.Number),
+                    Is.EquivalentTo(new[] { "R01", "R02", "R03", "R04" }));
+            });
+
+            using (var transaction = new Transaction(document, "Clean up takeoff Spaces"))
+            {
+                transaction.Start();
+                SpaceMaterializer.Cleanup(document, options, TestContext.WriteLine);
+                Assert.That(transaction.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
             Assert.That(Owned(document, options), Is.Empty);
             Assert.That(BoundaryLines(document, options), Is.Empty);
-            Assert.That(transaction.RollBack(), Is.EqualTo(TransactionStatus.RolledBack));
+            Assert.That(group.RollBack(), Is.EqualTo(TransactionStatus.RolledBack));
         }
         finally
         {
@@ -313,13 +321,13 @@ public sealed class TakeoffSpaceMaterializationTests
             Assert.That((result.Spaces.Count, result.FilledRegions, result.LineFallbacks,
                     result.FilledRegionFailures, result.Rooms, result.Residues, result.Defectors,
                     result.DeletedWithoutReplacement),
-                Is.EqualTo((3, 3, 0, 0, 3, 2, 1, 0)));
-            Assert.That(spaces, Has.Count.EqualTo(3));
+                Is.EqualTo((4, 0, 0, 0, 4, 0, 0, 0)));
+            Assert.That(spaces, Has.Count.EqualTo(4));
             Assert.That(spaces[0].Area, Is.EqualTo(96).Within(0.01));
             Assert.That(spaces[1].Area, Is.EqualTo(100).Within(0.01));
             Assert.That(spaces[2].Area, Is.EqualTo(100).Within(0.01));
             Assert.That(spaces.Select(space => space.Number),
-                Is.EquivalentTo(new[] { "R01", "R02", "R03" }));
+                Is.EquivalentTo(new[] { "R01", "R02", "R03", "R04" }));
             Assert.That(spaces.All(space => space.LevelId.Value() == level.Id.Value()
                                             && space.get_Parameter(BuiltInParameter.ROOM_PHASE_ID)
                                                 ?.AsElementId().Value() == phase.Id.Value()), Is.True);
@@ -329,15 +337,16 @@ public sealed class TakeoffSpaceMaterializationTests
             var secondPoint = ((LocationPoint)spaces[1].Location).Point;
             Assert.That(Math.Abs(firstPoint.X - 5) + Math.Abs(firstPoint.Y - 5), Is.LessThan(0.01));
             Assert.That(Math.Abs(secondPoint.X - 15) + Math.Abs(secondPoint.Y - 5), Is.LessThan(0.01));
-            Assert.That(owned.Count(element => element is Space), Is.EqualTo(3));
+            Assert.That(owned.Count(element => element is Space), Is.EqualTo(4));
             Assert.That(filledRegions.Count, Is.GreaterThanOrEqualTo(result.FilledRegions));
             Assert.That(filledRegions.Select(SpaceMaterializer.Comments),
-                Has.Some.Contains("|R04\npe-takeoff: shape-defect=sliver"));
+                Has.None.Contains("|R04\npe-takeoff: shape-defect="));
             Assert.That(filledRegions.Select(SpaceMaterializer.Comments),
-                Has.Some.Contains("|X01\npe-takeoff: residue=rejected"));
-            Assert.That(filledRegions, Has.Some.Matches<FilledRegion>(region =>
-                SpaceMaterializer.Comments(region)?.Contains("|X02\npe-takeoff: residue=rejected") == true));
-            Assert.That(logs, Has.Some.Contains("[spaces] X02 ring repaired:"));
+                Has.None.Contains("|X01\npe-takeoff: residue=rejected"));
+            Assert.That(filledRegions.Select(SpaceMaterializer.Comments),
+                Has.None.Contains("|X02\npe-takeoff: residue=rejected"));
+            Assert.That(logs, Has.Some.Contains("[spaces] rejected residue X01 (100sf) not drawn"));
+            Assert.That(logs, Has.Some.Contains("[spaces] rejected residue X02 (50sf) not drawn"));
             Assert.That(BoundaryLines(document, options), Has.Count.EqualTo(18));
         });
     }

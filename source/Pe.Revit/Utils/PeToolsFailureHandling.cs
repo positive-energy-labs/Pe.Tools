@@ -80,7 +80,15 @@ public static class PeToolsFailureHandling {
         FailuresAccessor failuresAccessor,
         FailureMessageAccessor failureMessage
     ) {
-        var current = failureMessage.GetCurrentResolutionType();
+        FailureResolutionType current;
+        try {
+            current = failureMessage.GetCurrentResolutionType();
+        } catch (Autodesk.Revit.Exceptions.InvalidOperationException) {
+            // Some hard errors expose no resolution at all. They still need to flow through the
+            // normal rollback path; inspecting CurrentResolution must not crash the preprocessor
+            // and strand the transaction in Pending failure mode.
+            current = FailureResolutionType.Invalid;
+        }
         return IsResolutionPermitted(failuresAccessor, failureMessage, current)
             ? current
             : NonModalResolutionPreference.FirstOrDefault(type =>

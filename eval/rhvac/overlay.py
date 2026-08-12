@@ -11,6 +11,9 @@
 # produced the committed TSVs (pass --ink-dir).
 import argparse, os, struct
 from PIL import Image, ImageDraw, ImageFont
+from shapely.geometry import GeometryCollection, MultiPolygon, Polygon
+from shapely.validation import make_valid
+from shapely.ops import unary_union
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 LIVE = next((d for d in [
@@ -24,6 +27,10 @@ PALETTE = [(230,60,60),(60,120,230),(40,160,90),(220,140,30),(160,70,200),(200,6
 BLIND_COLOR = (24, 91, 122)
 DIAGNOSTIC_COLOR = (45, 45, 45)
 PROBLEM_COLOR = (205, 45, 45)
+DISPOSITION_ACCEPTED = (24, 91, 122)
+DISPOSITION_REJECTED = (219, 150, 55)
+DISPOSITION_CRUMB = (150, 150, 150)
+DISPOSITION_OVERLAP = (205, 45, 45)
 
 
 def load_ink(path):
@@ -47,6 +54,133 @@ def load_tsv(path):
             loop = [tuple(map(float, p.split(";"))) for p in parts[3].split("|")]
             polys.setdefault(parts[1], []).append((parts[2], loop))
     return rooms, polys
+
+
+def load_disposition_tsv(path):
+    rooms, polys = load_tsv(path)
+    residues = []
+    for line in open(path, encoding="utf-8"):
+        parts = line.rstrip("\r\n").split("\t")
+        if len(parts) < 9 or parts[:2] != ["META", "residue"]:
+            continue
+        residues.append({
+            "id": parts[2],
+            "reason": parts[3].lower(),
+            "sqft": float(parts[4]),
+            "loops": [
+                [tuple(map(float, point.split(";"))) for point in value.split("|")]
+                for value in parts[8:]
+            ],
+        })
+    return rooms, polys, residues
+
+
+def render_disposition(ink_path, tsv_path, scale=2):
+    """Render accepted/held accounting on the exact same registered extent as the blind panel."""
+    w, h, minx, miny, cell, _ = load_ink(ink_path)
+    rooms, polys, residues = load_disposition_tsv(tsv_path)
+    accepted = [_geometry(polys.get(room_id, [])) for room_id in sorted(rooms)]
+    rejected = [_residue_geometry(item) for item in residues if item["reason"] == "rejected"]
+    crumbs = [_residue_geometry(item) for item in residues if item["reason"] == "crumb"]
+    accepted = [geometry for geometry in accepted if not geometry.is_empty]
+    rejected = [geometry for geometry in rejected if not geometry.is_empty]
+    crumbs = [geometry for geometry in crumbs if not geometry.is_empty]
+    all_geometries = accepted + rejected + crumbs
+    intersections = []
+    # Red means at least two disposition geometries claim the same area. Union the
+    # pairwise intersections so triple claims stay one geometry-derived area.
+    for index, left in enumerate(all_geometries):
+        for right in all_geometries[index + 1:]:
+            if not left.intersects(right):
+                continue
+            intersection = left.intersection(right)
+            if intersection.area > 1e-7:
+                intersections.append(intersection)
+    overlap = unary_union(intersections) if intersections else GeometryCollection()
+
+    size = (w * scale, h * scale)
+    image = Image.new("RGB", size, "white")
+
+    def to_pixel(point):
+        return ((point[0] - minx) / cell * scale,
+                (h - (point[1] - miny) / cell) * scale)
+
+    for geometries, color in (
+        (accepted, DISPOSITION_ACCEPTED),
+        (rejected, DISPOSITION_REJECTED),
+        (crumbs, DISPOSITION_CRUMB),
+        ([overlap], DISPOSITION_OVERLAP),
+    ):
+        mask = Image.new("1", size)
+        draw = ImageDraw.Draw(mask)
+        for geometry in geometries:
+            _draw_geometry(draw, geometry, to_pixel)
+        image.paste(color, mask=mask)
+
+    accounting = {
+        "acceptedCount": len(rooms),
+        "acceptedSqft": round(sum(room["sqft"] for room in rooms.values()), 1),
+        "rejectedCount": sum(item["reason"] == "rejected" for item in residues),
+        "rejectedSqft": round(sum(item["sqft"] for item in residues
+                                  if item["reason"] == "rejected"), 1),
+        "crumbCount": sum(item["reason"] == "crumb" for item in residues),
+        "crumbSqft": round(sum(item["sqft"] for item in residues
+                               if item["reason"] == "crumb"), 1),
+        "overlapSqft": round(overlap.area, 1),
+    }
+    _draw_disposition_legend(image, accounting)
+    return image, accounting
+
+
+def _geometry(loops):
+    outers = [loop for kind, loop in loops if kind == "outer"]
+    holes = [loop for kind, loop in loops if kind == "hole"]
+    return _valid_polygonal(Polygon(outers[0], holes)) if outers else GeometryCollection()
+
+
+def _residue_geometry(residue):
+    loops = residue["loops"]
+    return _valid_polygonal(Polygon(loops[0], loops[1:])) if loops else GeometryCollection()
+
+
+def _valid_polygonal(geometry):
+    repaired = make_valid(geometry) if not geometry.is_valid else geometry
+    if isinstance(repaired, (Polygon, MultiPolygon)):
+        return repaired
+    polygons = [part for part in getattr(repaired, "geoms", ())
+                if isinstance(part, (Polygon, MultiPolygon))]
+    return unary_union(polygons) if polygons else GeometryCollection()
+
+
+def _draw_geometry(draw, geometry, to_pixel):
+    polygons = ([geometry] if isinstance(geometry, Polygon) else
+                list(geometry.geoms) if isinstance(geometry, MultiPolygon) else [])
+    for polygon in polygons:
+        draw.polygon([to_pixel(point) for point in polygon.exterior.coords], fill=1)
+        for hole in polygon.interiors:
+            draw.polygon([to_pixel(point) for point in hole.coords], fill=0)
+
+
+def _draw_disposition_legend(image, accounting):
+    rows = [
+        (DISPOSITION_ACCEPTED,
+         f"accepted  {accounting['acceptedCount']} rooms  {accounting['acceptedSqft']:.1f} sf"),
+        (DISPOSITION_REJECTED,
+         f"rejected  {accounting['rejectedCount']} rooms  {accounting['rejectedSqft']:.1f} sf"),
+        (DISPOSITION_CRUMB,
+         f"crumbs  {accounting['crumbCount']} regions  {accounting['crumbSqft']:.1f} sf"),
+        (DISPOSITION_OVERLAP, f"overlap  {accounting['overlapSqft']:.1f} sf"),
+    ]
+    text_font = _font(18)
+    row_height, padding, swatch = 25, 10, 14
+    width = 325
+    height = padding * 2 + row_height * len(rows)
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((8, 8, 8 + width, 8 + height), fill="white", outline=(70, 70, 70), width=1)
+    for index, (color, text) in enumerate(rows):
+        y = 8 + padding + index * row_height
+        draw.rectangle((18, y + 3, 18 + swatch, y + 3 + swatch), fill=color)
+        draw.text((40, y), text, fill=(35, 35, 35), font=text_font)
 
 
 def render_review(ink_path, tsv_path, mode="blind", scale=2, problem_ids=(),

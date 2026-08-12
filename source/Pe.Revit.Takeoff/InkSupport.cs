@@ -23,6 +23,38 @@ internal static class InkSupport
     // is absent (older artifacts): callers must degrade to geometry-only behavior.
     internal static Func<double, double, bool>? LoadOracle(string path, double radiusFt)
     {
+        var raster = Load(path);
+        if (raster == null) return null;
+        var (w, h, minX, minY, cellFt, ink) = raster.Value;
+        return CreateOracle(w, h, minX, minY, cellFt, ink, radiusFt);
+    }
+
+    internal static Func<double, double, double>? LoadDistanceOracle(
+        string path, double maximumDistanceFt = 2)
+    {
+        var raster = Load(path);
+        if (raster == null) return null;
+        var (w, h, minX, minY, cellFt, ink) = raster.Value;
+        int radius = (int)Math.Ceiling(maximumDistanceFt / cellFt);
+        return (x, y) => {
+            int cx = (int)Math.Floor((x - minX) / cellFt);
+            int cy = (int)Math.Floor((y - minY) / cellFt);
+            if (cx < 0 || cy < 0 || cx >= w || cy >= h) return maximumDistanceFt;
+            double best = maximumDistanceFt;
+            for (int dy = -radius; dy <= radius; dy++)
+            for (int dx = -radius; dx <= radius; dx++)
+            {
+                int ix = cx + dx, iy = cy + dy;
+                if (ix < 0 || iy < 0 || ix >= w || iy >= h || !ink[iy * w + ix]) continue;
+                best = Math.Min(best, Math.Sqrt(dx * dx + dy * dy) * cellFt);
+            }
+            return best;
+        };
+    }
+
+    private static (int W, int H, double MinX, double MinY, double CellFt, bool[] Ink)? Load(
+        string path)
+    {
         if (!File.Exists(path)) return null;
         using var reader = new BinaryReader(File.OpenRead(path));
         if (reader.ReadUInt32() != Magic) throw new InvalidOperationException($"{path} is not an ink raster");
@@ -32,8 +64,7 @@ internal static class InkSupport
         var ink = new bool[w * h];
         for (int i = 0; i < w * h; i++)
             ink[i] = (bits[i >> 3] & 1 << (i & 7)) != 0;
-
-        return CreateOracle(w, h, minX, minY, cellFt, ink, radiusFt);
+        return (w, h, minX, minY, cellFt, ink);
     }
 
     internal static Func<double, double, bool> CreateOracle(

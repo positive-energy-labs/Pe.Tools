@@ -52,6 +52,47 @@ public sealed class TakeoffEditabilityTests
     }
 
     [Test]
+    public void Isolated_shallow_orthogonal_cut_in_needs_evidence_before_rejection()
+    {
+        var room = TakeoffEditability.Evaluate(Level(Room("R01",
+            (0, 0), (12, 0), (12, 10),
+            (8, 10), (8, 8.5), (5, 8.5), (5, 10), (0, 10))))
+            .Rooms.Single();
+
+        Assert.Multiple(() => {
+            Assert.That(room.IsStrictlyEditable, Is.True);
+            Assert.That(room.Violations.Select(violation => violation.Kind),
+                Does.Not.Contain(EditabilityViolationKind.ExcessiveDetail));
+        });
+    }
+
+    [Test]
+    public void Ordinary_large_l_shape_is_not_excessive_detail()
+    {
+        var room = TakeoffEditability.Evaluate(Level(Room("R01",
+            (0, 0), (20, 0), (20, 8), (8, 8), (8, 20), (0, 20))))
+            .Rooms.Single();
+
+        Assert.Multiple(() => {
+            Assert.That(room.IsStrictlyEditable, Is.True);
+            Assert.That(room.Violations.Select(violation => violation.Kind),
+                Does.Not.Contain(EditabilityViolationKind.ExcessiveDetail));
+        });
+    }
+
+    [Test]
+    public void Four_short_turn_edges_are_excessive_detail_even_when_not_subfoot()
+    {
+        var room = TakeoffEditability.Evaluate(Level(Room("R01",
+            (0, 0), (12, 0), (12, 10),
+            (10, 10), (10, 8), (8, 8), (8, 6), (6, 6), (6, 10), (0, 10))))
+            .Rooms.Single();
+
+        Assert.That(room.Violations.Select(violation => violation.Kind),
+            Does.Contain(EditabilityViolationKind.ExcessiveDetail));
+    }
+
+    [Test]
     public void Arbitrarily_rotated_rectangle_is_intrinsically_editable_not_proven_correct()
     {
         const double degrees = 17;
@@ -92,6 +133,19 @@ public sealed class TakeoffEditabilityTests
     {
         var room = TakeoffEditability.Evaluate(Level(Room("R01",
             (0, 0), (5, 0), (10, 0), (10, 10), (0, 10))))
+            .Rooms.Single();
+
+        Assert.Multiple(() => {
+            Assert.That(room.IsStrictlyEditable, Is.True);
+            Assert.That(room.CornerCount, Is.EqualTo(4));
+        });
+    }
+
+    [Test]
+    public void Revit_precision_noise_on_a_straight_wall_does_not_create_a_false_corner()
+    {
+        var room = TakeoffEditability.Evaluate(Level(Room("R01",
+            (0, 0), (5, 0.00001), (10, 0), (10, 10), (0, 10))))
             .Rooms.Single();
 
         Assert.Multiple(() => {

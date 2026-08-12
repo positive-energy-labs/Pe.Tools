@@ -41,7 +41,8 @@ internal static class PartitionFormulation
         double cellArea = opt.CellFt * opt.CellFt;
 
         // ---- 1. domain ----
-        var domain = BuildDomain(hf, lvlZ, opt);
+        var footprint = Detector.InkBoundedFloor(hf, obst, lvlZ, opt.FloorTolFt);
+        var domain = BuildDomain(hf, lvlZ, opt, footprint);
         int domainCells = domain.Count(d => d);
 
         // ---- 2. boundary evidence ----
@@ -354,14 +355,6 @@ internal static class PartitionFormulation
         }
         log($"[partition] residue={result.Residues.Count} ({result.Residues.Sum(r => r.RawSqft):F0}sf) " +
             $"excluded<{opt.MinResidueSqft:F0}sf={excludedResidues} ({excludedResidueSqft:F0}sf)");
-        bool WallAt(double x, double y)
-        {
-            int gx = (int)Math.Floor((x - hf.MinX) / opt.CellFt);
-            int gy = (int)Math.Floor((y - hf.MinY) / opt.CellFt);
-            return gx >= 0 && gx < W && gy >= 0 && gy < H && obst[gy * W + gx];
-        }
-        SpaceBoundaryNetwork.Regularize(
-            result.Rooms, opt.BoundarySimplifyFt, log, opt.CellFt, WallAt);
         result.TotalSqft = result.Rooms.Sum(room => room.RawSqft);
         return result;
     }
@@ -409,12 +402,14 @@ internal static class PartitionFormulation
 
     // Existence mask: floor within tolerance of the level plane, plus covered headroom when
     // RequireCeiling. Every domain cell must end up assigned (or logged as border/crumb drop).
-    internal static bool[] BuildDomain(Heightfield hf, double lvlZ, TakeoffOptions opt)
+    internal static bool[] BuildDomain(
+        Heightfield hf, double lvlZ, TakeoffOptions opt, bool[]? footprint = null)
     {
         int n = hf.W * hf.H;
         var domain = new bool[n];
         for (int i = 0; i < n; i++)
         {
+            if (footprint != null && !footprint[i]) continue;
             if (float.IsNaN(hf.FloorZ[i]) || Math.Abs(hf.FloorZ[i] - lvlZ) > opt.FloorTolFt) continue;
             if (opt.RequireCeiling
                 && (float.IsNaN(hf.CeilZ[i]) || hf.CeilZ[i] - hf.FloorZ[i] < opt.MinHeadroomFt
@@ -430,7 +425,8 @@ internal static class PartitionFormulation
     internal static void DumpDiagnostics(string path, Heightfield hf, bool[] obst, double lvlZ, TakeoffOptions opt)
     {
         int W = hf.W, H = hf.H, n = W * H;
-        var domain = BuildDomain(hf, lvlZ, opt);
+        var footprint = Detector.InkBoundedFloor(hf, obst, lvlZ, opt.FloorTolFt);
+        var domain = BuildDomain(hf, lvlZ, opt, footprint);
         var ceilStep = new float[n];
         var floorStep = new float[n];
         for (int y = 0; y < H; y++)

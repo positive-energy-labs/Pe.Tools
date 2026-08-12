@@ -50,6 +50,15 @@ public static class BridgeOpRegistry {
                 .Where(assembly => !assembly.IsDynamic)
                 .Where(assembly =>
                     assembly.GetName().Name?.StartsWith("Pe.", StringComparison.Ordinal) == true)
+                // A type can only declare BridgeOp members or BridgeOperationAttribute methods
+                // when its assembly directly references this contract assembly. Avoid reflecting
+                // across unrelated feature assemblies: optional feature dependencies need not be
+                // loaded merely because the host bridge reconnects after a script used them.
+                .Where(assembly => ReferenceEquals(assembly, typeof(BridgeOpRegistry).Assembly)
+                    || assembly.GetReferencedAssemblies().Any(reference =>
+                        string.Equals(reference.Name,
+                            typeof(BridgeOpRegistry).Assembly.GetName().Name,
+                            StringComparison.Ordinal)))
                 .ToArray()
         );
 

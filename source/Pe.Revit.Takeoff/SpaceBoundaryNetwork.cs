@@ -9,10 +9,24 @@ internal readonly record struct BoundaryCurve(double X1, double Y1, double X2, d
 // Rooms are one polygonal coverage, not independent shapes. Simplifying them together is the
 // essential invariant: an interior edge is represented once and both adjacent rooms receive the
 // exact same replacement. There are deliberately no per-room repairs or fallback geometries here.
+//
+// After simplification the coverage is snapped to DOMINANT ORIENTATION FRAMES: houses are
+// rectilinear, so almost every corner is 90 degrees and non-orthogonal walls are rare outliers
+// (exterior fulcrums, rotated wings, curves). DP chords alone ship arbitrary angles, which makes
+// the FilledRegions impossible to edit by hand — the user law is editability first.
 internal static class SpaceBoundaryNetwork
 {
     private const double Scale = 1_000_000;
     private const double Degrees = Math.PI / 180;
+    private const double SnapToleranceDeg = 25;   // long edge joins a frame axis within this
+    private const double SnapShortDeg = 10;       // short edges must be nearly on-axis already
+    private const double SnapShortFt = 6;         // the long/short boundary
+    private const double SnapMinFt = 1.0;         // below this an edge is raster noise in a dense
+                                                  // zone the simplifier chose to protect: hands off
+    private const double FrameClusterDeg = 6;     // mod-90 angle clustering width
+    private const double FrameMinShare = 0.10;    // a frame owns at least this edge-weight share
+    private const double RunGapFt = 0.4;          // collinear run: max offset gap to the previous
+    private const double RunSpanFt = 0.75;        // collinear run: max total offset spread
     private readonly record struct VertexKey(long X, long Y);
     private readonly record struct SegmentKey(VertexKey A, VertexKey B);
     private sealed class WallEdge
@@ -23,14 +37,20 @@ internal static class SpaceBoundaryNetwork
         internal required double Length;
         internal required double MidX;
         internal required double MidY;
-        internal double EvidenceAngle;
+        internal bool Curve;
         internal WallLine? Line;
     }
     private sealed class WallLine
     {
         internal required double Nx;
         internal required double Ny;
-        internal required double Offset;
+        internal double Offset;
+    }
+    private sealed class Frame
+    {
+        internal double Angle;                    // [0, PI/2): the frame's base axis, mod 90
+        internal double Weight;
+        internal double SumSin, SumCos;           // circular mean accumulators, period PI/2
     }
     private static readonly GeometryFactory Factory =
         new(new PrecisionModel(Scale));
@@ -65,8 +85,7 @@ internal static class SpaceBoundaryNetwork
     }
 
     internal static void Regularize(
-        IReadOnlyList<RoomResult> rooms, double simplifyFt, Action<string>? log = null,
-        double cellFt = 0, Func<double, double, bool>? wallAt = null)
+        IReadOnlyList<RoomResult> rooms, double simplifyFt, Action<string>? log = null)
     {
         if (!IsFinite(simplifyFt) || simplifyFt < 0)
             throw new ArgumentOutOfRangeException(nameof(simplifyFt));
@@ -84,20 +103,78 @@ internal static class SpaceBoundaryNetwork
         for (int attempt = 0; attempt < 5; attempt++, tolerance /= 2)
         {
             var simplified = CoverageSimplifier.Simplify(source, tolerance);
-            if (cellFt > 0 && wallAt != null)
-                simplified = AlignToWallEvidence(simplified, cellFt, wallAt, log);
-            bool ogcValid = simplified.All(room => room.IsValid);
-            bool coverageValid = ogcValid && CoverageValidator.IsValid(simplified);
-            bool adjacencyValid = coverageValid && SharedEdges(simplified).SetEquals(sourceAdjacency);
-            bool areaValid = Math.Abs(simplified.Sum(room => room.Area) - sourceArea) <= 0.02 * sourceArea;
-            Polygon[] polygons = [];
-            bool labelsValid = ogcValid && TryReadRooms(simplified, rooms, out polygons);
-            if (!ogcValid || !coverageValid || !adjacencyValid || !areaValid || !labelsValid)
+            var snapped = SnapToFrames(simplified, rooms, tolerance, log);
+            string? debugDir = Environment.GetEnvironmentVariable("PE_TAKEOFF_COVERAGE_DUMP");
+            if (debugDir != null)
             {
-                log?.Invoke($"[coverage] rejected tolerance={tolerance:F3}ft " +
+                Directory.CreateDirectory(debugDir);
+                File.WriteAllLines(Path.Combine(debugDir, $"simplified_{tolerance:F3}.wkt"),
+                    simplified.Select((geometry, i) => rooms[i].Id + "\t" + geometry));
+                File.WriteAllLines(Path.Combine(debugDir, $"snapped_{tolerance:F3}.wkt"),
+                    snapped.Select((geometry, i) => rooms[i].Id + "\t" + geometry));
+            }
+            // a failed snap must not cost the attempt its (good) simplification: fall back to
+            // the unsnapped coverage before halving the tolerance toward raw raster
+            // snapping is judged against what simplification kept: a raster-diagonal corner
+            // contact that DP already shrank below substance may collapse into a clean
+            // 4-corner junction point
+            var simplifiedAdjacency = SharedEdges(simplified);
+            Polygon[]? polygons = Accept(snapped, "snapped", simplifiedAdjacency);
+            if (polygons == null && !ReferenceEquals(snapped, simplified))
+                polygons = Accept(simplified, "simplified", sourceAdjacency);
+            if (polygons == null)
+            {
+                continue;
+            }
+
+            Polygon[]? Accept(
+                Geometry[] candidate, string stage, Dictionary<(int A, int B), double> baseline)
+            {
+                bool ogcValid = candidate.All(room => room.IsValid);
+                bool coverageValid = ogcValid && CoverageValidator.IsValid(candidate);
+                // the law is rooms must TOUCH: gaining adjacency is fine (snapping closes
+                // hairline gaps), a shared edge degrading to a corner-point contact is fine
+                // (4-corner junctions), but a substantial neighbor pair SEPARATING is not
+                bool adjacencyValid = coverageValid && SharedEdges(candidate) is var shared
+                    && baseline.Where(pair => pair.Value >= 1.5 && !shared.ContainsKey(pair.Key))
+                        .All(pair =>
+                            candidate[pair.Key.A].Distance(candidate[pair.Key.B]) <= 0.01);
+                bool areaValid = Math.Abs(candidate.Sum(room => room.Area) - sourceArea) <= 0.02 * sourceArea;
+                Polygon[] read = [];
+                bool labelsValid = ogcValid && TryReadRooms(candidate, rooms, out read);
+                if (ogcValid && coverageValid && adjacencyValid && areaValid && labelsValid) return read;
+                log?.Invoke($"[coverage] rejected {stage} tolerance={tolerance:F3}ft " +
                             $"ogc={ogcValid} shared={coverageValid} adjacency={adjacencyValid} " +
                             $"area={areaValid} labels={labelsValid}");
-                continue;
+                if (!ogcValid && log != null)
+                    for (int i = 0; i < candidate.Length; i++)
+                    {
+                        var error = new NetTopologySuite.Operation.Valid.IsValidOp(candidate[i])
+                            .ValidationError;
+                        if (error != null)
+                            log($"[coverage]   {rooms[i].Id}: {error.Message} at " +
+                                $"({error.Coordinate.X:F2},{error.Coordinate.Y:F2})");
+                    }
+                if (coverageValid && !adjacencyValid && log != null)
+                {
+                    var shared2 = SharedEdges(candidate);
+                    foreach (var pair in baseline.Where(pair =>
+                                 pair.Value >= 1.5 && !shared2.ContainsKey(pair.Key)
+                                 && candidate[pair.Key.A].Distance(candidate[pair.Key.B]) > 0.01))
+                        log($"[coverage]   separated {rooms[pair.Key.A].Id}|" +
+                            $"{rooms[pair.Key.B].Id} was {pair.Value:F2}ft shared");
+                }
+                if (ogcValid && !coverageValid && log != null)
+                {
+                    var marks = CoverageValidator.Validate(candidate);
+                    for (int i = 0; i < marks.Length; i++)
+                        if (marks[i] != null && !marks[i].IsEmpty)
+                            log($"[coverage]   {rooms[i].Id}: invalid coverage boundary near " +
+                                $"({marks[i].Coordinate.X:F2},{marks[i].Coordinate.Y:F2}) " +
+                                $"length={marks[i].Length:F2} " +
+                                $"wkt={marks[i].ToString()[..Math.Min(300, marks[i].ToString().Length)]}");
+                }
+                return null;
             }
 
             double maxDriftPct = 0;
@@ -124,85 +201,266 @@ internal static class SpaceBoundaryNetwork
         throw new InvalidOperationException("No shared simplification retained every room label");
     }
 
-    // The coverage simplifier owns topology; this stage owns direction. It fits only long edges
-    // that stay over straight wall evidence, groups nearby parallel fits into wing-local
-    // orientation families, then moves each shared vertex once from all incident fitted lines.
-    // Evidence does not own offset: the partition already split the wall band, while a raster
-    // ink centroid can land anywhere across the physical wall thickness.
-    private static Geometry[] AlignToWallEvidence(
-        Geometry[] coverage, double cellFt, Func<double, double, bool> wallAt,
+    // The coverage simplifier owns topology; this stage owns direction. Every straight edge near
+    // a dominant orientation frame snaps EXACTLY onto a frame axis; collinear edges share one
+    // line so walls have no micro-jogs; each shared vertex then moves once from all incident
+    // lines, so adjacent rooms receive identical replacements and corners between two axes of a
+    // frame are exactly 90 degrees. Curve chains (consistent small same-sign turns — round
+    // towers, bay windows, octagon corners) and true diagonals beyond the snap tolerance keep
+    // their DP chords.
+    private static Geometry[] SnapToFrames(
+        Geometry[] coverage, IReadOnlyList<RoomResult> rooms, double tolerance,
         Action<string>? log)
     {
-        var edges = UniqueEdges(coverage).Values
-            .Where(edge => edge.Length >= 8)
-            .Where(edge => FitEvidence(edge, cellFt, wallAt))
-            .OrderByDescending(edge => edge.Length).ToList();
-        if (edges.Count == 0) return coverage;
+        var edges = UniqueEdges(coverage);
+        var curves = CurveChainEdges(coverage);
+        foreach (var edge in edges.Values) edge.Curve = curves.Contains(edge.Key);
+        var straight = edges.Values
+            .Where(edge => !edge.Curve && edge.Length >= SnapMinFt).ToList();
+        if (straight.Count == 0) return coverage;
 
-        var families = new List<List<WallEdge>>();
-        foreach (var edge in edges)
+        var frames = new List<Frame>();
+        foreach (var edge in straight.OrderByDescending(edge => edge.Length))
         {
-            var family = families.FirstOrDefault(candidate =>
-                AngleDifference(MeanAngle(candidate), edge.EvidenceAngle) <= 6 * Degrees
-                && candidate.Any(member => Distance(member.MidX, member.MidY, edge.MidX, edge.MidY) <= 120));
-            if (family == null) families.Add([edge]);
-            else family.Add(edge);
+            double angle = NormalizeAngle90(EdgeAngle(edge));
+            var frame = frames.FirstOrDefault(candidate =>
+                Difference90(candidate.Angle, angle) <= FrameClusterDeg * Degrees);
+            if (frame == null) frames.Add(frame = new Frame());
+            frame.Weight += edge.Length;
+            frame.SumSin += edge.Length * Math.Sin(4 * angle);
+            frame.SumCos += edge.Length * Math.Cos(4 * angle);
+            frame.Angle = NormalizeAngle90(0.25 * Math.Atan2(frame.SumSin, frame.SumCos));
+        }
+        double totalWeight = straight.Sum(edge => edge.Length);
+        var kept = frames.Where(frame =>
+            frame.Weight >= Math.Max(12, FrameMinShare * totalWeight)).ToList();
+        if (kept.Count == 0) return coverage;
+        foreach (var frame in kept)
+        {
+            // buildings are usually modeled on the project axes; do not let chord noise hold a
+            // whole frame a fraction of a degree off a clean 0/45/90
+            double nearest = Math.Round(frame.Angle / (45 * Degrees)) * 45 * Degrees;
+            if (Math.Abs(frame.Angle - nearest) <= 1 * Degrees) frame.Angle = NormalizeAngle90(nearest);
         }
 
-        int aligned = 0;
-        var familyAngles = new List<double>();
-        foreach (var family in families)
+        // per-edge axis assignment, then collinear runs share a single length-weighted line
+        var groups = new Dictionary<(Frame Frame, int Axis), List<WallEdge>>();
+        foreach (var edge in straight)
         {
-            double weight = family.Sum(edge => edge.Length);
-            if (family.Count < 2 || weight < 16) continue;
-            double angle = Math.Round(MeanAngle(family) / (0.5 * Degrees)) * 0.5 * Degrees;
-            angle = NormalizeAngle(angle);
-            familyAngles.Add(angle);
-            double nx = -Math.Sin(angle), ny = Math.Cos(angle);
-            foreach (var edge in family)
+            double angle = EdgeAngle(edge);
+            var best = kept.MinBy(frame => Difference90(frame.Angle, angle))!;
+            double snapTolerance =
+                (edge.Length >= SnapShortFt ? SnapToleranceDeg : SnapShortDeg) * Degrees;
+            if (Difference90(best.Angle, angle) > snapTolerance) continue;
+            int axis = AngleDifference(angle, best.Angle) <=
+                       AngleDifference(angle, best.Angle + Math.PI / 2) ? 0 : 1;
+            if (!groups.TryGetValue((best, axis), out var members))
+                groups[(best, axis)] = members = [];
+            members.Add(edge);
+        }
+        if (groups.Count == 0) return coverage;
+
+        int runs = 0;
+        foreach (var ((frame, axis), members) in groups)
+        {
+            double direction = frame.Angle + axis * Math.PI / 2;
+            double nx = -Math.Sin(direction), ny = Math.Cos(direction);
+            List<WallEdge>? run = null;
+            double previous = double.NegativeInfinity, first = double.NegativeInfinity;
+            foreach (var edge in members.OrderBy(edge => nx * edge.MidX + ny * edge.MidY))
             {
-                edge.Line = new WallLine {
-                    Nx = nx, Ny = ny, Offset = nx * edge.MidX + ny * edge.MidY,
+                double offset = nx * edge.MidX + ny * edge.MidY;
+                if (run == null || offset - previous > RunGapFt || offset - first > RunSpanFt)
+                {
+                    Commit(run);
+                    run = [];
+                    runs++;
+                    first = offset;
+                }
+                run.Add(edge);
+                previous = offset;
+            }
+            Commit(run);
+
+            void Commit(List<WallEdge>? committed)
+            {
+                if (committed == null) return;
+                double weight = committed.Sum(edge => edge.Length);
+                var line = new WallLine {
+                    Nx = nx, Ny = ny,
+                    Offset = committed.Sum(edge =>
+                        edge.Length * (nx * edge.MidX + ny * edge.MidY)) / weight,
                 };
-                aligned++;
+                foreach (var edge in committed) edge.Line = line;
             }
         }
-        if (aligned == 0) return coverage;
 
-        var moved = ResolveVertices(edges, cellFt);
-        Geometry[] result = coverage.Select(Move).ToArray();
-        log?.Invoke($"[coverage] aligned {aligned} wall-supported edges across " +
-                    $"{familyAngles.Count} local families " +
-                    $"({string.Join(",", familyAngles.Select(angle =>
-                        (angle / Degrees).ToString("F1", CultureInfo.InvariantCulture))) }deg)");
-        return result;
+        var moved = ResolveVertices(edges.Values, tolerance);
+        int snapped = straight.Count(edge => edge.Line != null);
 
-        Geometry Move(Geometry geometry)
+        // Rebuild the coverage from the moved edge graph instead of moving rings in place:
+        // noding the moved segments turns folds, overlaps and collapsed jogs into ordinary
+        // nodes, polygonizing yields exactly-noded faces, and label points hand each face to
+        // its room. Unlabeled faces inside the footprint (fold slivers AND pre-existing
+        // hairline gaps) are absorbed by their longest-shared assigned neighbor; faces outside
+        // the footprint (outward folds, residue pockets) are dropped. Valid shared-edge
+        // coverage by construction; the caller's gates still judge the outcome.
+        var segments = new List<Geometry>();
+        foreach (var edge in edges.Values)
         {
-            var polygon = (Polygon)geometry;
-            return Factory.CreatePolygon(MoveRing(polygon.ExteriorRing),
-                Enumerable.Range(0, polygon.NumInteriorRings)
-                    .Select(index => MoveRing(polygon.GetInteriorRingN(index))).ToArray());
+            var a = moved.GetValueOrDefault(Key(edge.A), edge.A);
+            var b = moved.GetValueOrDefault(Key(edge.B), edge.B);
+            if (Key(a) == Key(b)) continue;
+            segments.Add(Factory.CreateLineString([a.Copy(), b.Copy()]));
+        }
+        var polygonizer = new NetTopologySuite.Operation.Polygonize.Polygonizer();
+        polygonizer.Add(UnaryUnionOp.Union(segments));
+        var faces = polygonizer.GetPolygons().Cast<Polygon>().ToList();
+
+        var owner = new int[faces.Count];
+        Array.Fill(owner, -1);
+        for (int roomIndex = 0; roomIndex < rooms.Count; roomIndex++)
+        {
+            var label = Factory.CreatePoint(
+                new Coordinate(rooms[roomIndex].LabelX, rooms[roomIndex].LabelY));
+            int face = faces.FindIndex(candidate => candidate.Contains(label));
+            if (face < 0 || owner[face] >= 0) return coverage; // a room collapsed: snap unusable
+            owner[face] = roomIndex;
         }
 
-        LinearRing MoveRing(LineString ring)
+        var footprint = NetTopologySuite.Geometries.Prepared.PreparedGeometryFactory
+            .Prepare(UnaryUnionOp.Union(coverage));
+        int absorbed = 0, droppedFaces = 0;
+        for (int round = 0; round < 6; round++)
         {
-            var coordinates = ring.Coordinates.Take(ring.NumPoints - 1)
-                .Select(coordinate => moved.GetValueOrDefault(Key(coordinate), coordinate).Copy())
-                .ToList();
-            coordinates.Add(coordinates[0].Copy());
-            return Factory.CreateLinearRing(coordinates.ToArray());
+            bool changed = false;
+            for (int face = 0; face < faces.Count; face++)
+            {
+                if (owner[face] != -1) continue;
+                if (!footprint.Covers(faces[face].InteriorPoint))
+                {
+                    owner[face] = -2;
+                    droppedFaces++;
+                    continue;
+                }
+                int bestNeighbor = -1;
+                double bestShared = 0;
+                for (int other = 0; other < faces.Count; other++)
+                {
+                    if (owner[other] < 0 || other == face
+                        || !faces[face].EnvelopeInternal.Intersects(faces[other].EnvelopeInternal))
+                        continue;
+                    double sharedLength =
+                        faces[face].Boundary.Intersection(faces[other].Boundary).Length;
+                    if (sharedLength > bestShared)
+                    {
+                        bestShared = sharedLength;
+                        bestNeighbor = other;
+                    }
+                }
+                if (bestNeighbor < 0) continue;
+                owner[face] = owner[bestNeighbor];
+                absorbed++;
+                changed = true;
+            }
+            if (!changed) break;
+        }
+
+        var result = new Geometry[coverage.Length];
+        for (int roomIndex = 0; roomIndex < coverage.Length; roomIndex++)
+        {
+            var mine = Enumerable.Range(0, faces.Count)
+                .Where(face => owner[face] == roomIndex)
+                .Select(face => (Geometry)faces[face]).ToList();
+            if (mine.Count == 0) return coverage;
+            var union = mine.Count == 1 ? mine[0] : UnaryUnionOp.Union(mine);
+            // the TSV serializes at 1e-6: snap-round NOW so the gates judge exactly what
+            // ships (near-coincident doubles otherwise collapse into spikes on re-parse)
+            union = NetTopologySuite.Precision.GeometryPrecisionReducer.Reduce(
+                union, Factory.PrecisionModel);
+            if (union is not Polygon) return coverage; // disconnected room: snap unusable
+            result[roomIndex] = union;
+        }
+
+        log?.Invoke($"[coverage] frames=({string.Join(",", kept.Select(frame =>
+                        (frame.Angle / Degrees).ToString("F2", CultureInfo.InvariantCulture)))})deg " +
+                    $"snapped={snapped}/{edges.Count} runs={runs} curveEdges={curves.Count} " +
+                    $"faces={faces.Count} absorbed={absorbed} dropped={droppedFaces}");
+        return result;
+    }
+
+    // A run of >= 3 consecutive edges turning the same way by small angles is a curve (or a
+    // deliberate chamfer fan); its chords must not be snapped into stairsteps.
+    private static HashSet<SegmentKey> CurveChainEdges(IEnumerable<Geometry> coverage)
+    {
+        var result = new HashSet<SegmentKey>();
+        foreach (var polygon in coverage.Cast<Polygon>())
+        {
+            Mark(polygon.ExteriorRing);
+            for (int i = 0; i < polygon.NumInteriorRings; i++) Mark(polygon.GetInteriorRingN(i));
+        }
+        return result;
+
+        void Mark(LineString ring)
+        {
+            int count = ring.NumPoints - 1;
+            if (count < 4) return;
+            var chain = new List<int>();
+            int sign = 0;
+            for (int i = 0; i <= count; i++)
+            {
+                var a = ring.GetCoordinateN(((i - 1) % count + count) % count);
+                var b = ring.GetCoordinateN(i % count);
+                var c = ring.GetCoordinateN((i + 1) % count);
+                double turn = NormalizeTurn(
+                    Math.Atan2(c.Y - b.Y, c.X - b.X) - Math.Atan2(b.Y - a.Y, b.X - a.X));
+                double magnitude = Math.Abs(turn);
+                int turnSign = magnitude >= 8 * Degrees && magnitude <= 50 * Degrees
+                    ? Math.Sign(turn) : 0;
+                if (turnSign != 0 && turnSign == sign) { chain.Add(i % count); continue; }
+                Flush();
+                sign = turnSign;
+                if (turnSign != 0) chain.Add(i % count);
+            }
+            Flush();
+
+            void Flush()
+            {
+                // n consecutive qualifying vertices join n+1 edges; require >= 3 edges
+                if (chain.Count >= 2)
+                    for (int j = -1; j < chain.Count; j++)
+                    {
+                        int vertex = j < 0 ? chain[0] - 1 : chain[j];
+                        int from = ((vertex % count) + count) % count;
+                        result.Add(Segment(ring.GetCoordinateN(from),
+                                           ring.GetCoordinateN((from + 1) % count)));
+                    }
+                chain.Clear();
+            }
         }
     }
 
-    private static HashSet<(int A, int B)> SharedEdges(IReadOnlyList<Geometry> rooms)
+    private static IEnumerable<LineString> Rings(Polygon polygon) =>
+        new[] { (LineString)polygon.ExteriorRing }.Concat(
+            Enumerable.Range(0, polygon.NumInteriorRings).Select(polygon.GetInteriorRingN));
+
+    private static double NormalizeTurn(double turn)
     {
-        var result = new HashSet<(int, int)>();
+        while (turn > Math.PI) turn -= 2 * Math.PI;
+        while (turn < -Math.PI) turn += 2 * Math.PI;
+        return turn;
+    }
+
+    private static Dictionary<(int A, int B), double> SharedEdges(IReadOnlyList<Geometry> rooms)
+    {
+        var result = new Dictionary<(int, int), double>();
         for (int i = 0; i < rooms.Count; i++)
         for (int j = i + 1; j < rooms.Count; j++)
-            if (rooms[i].EnvelopeInternal.Intersects(rooms[j].EnvelopeInternal)
-                && rooms[i].Boundary.Intersection(rooms[j].Boundary).Length > 0.01)
-                result.Add((i, j));
+        {
+            if (!rooms[i].EnvelopeInternal.Intersects(rooms[j].EnvelopeInternal)) continue;
+            double length = rooms[i].Boundary.Intersection(rooms[j].Boundary).Length;
+            if (length > 0.01) result[(i, j)] = length;
+        }
         return result;
     }
 
@@ -225,6 +483,7 @@ internal static class SpaceBoundaryNetwork
                 var key = Segment(a, b);
                 if (result.ContainsKey(key)) continue;
                 double length = Distance(a.X, a.Y, b.X, b.Y);
+                if (length <= 0) continue;
                 result[key] = new WallEdge {
                     Key = key, A = a.Copy(), B = b.Copy(), Length = length,
                     MidX = (a.X + b.X) / 2, MidY = (a.Y + b.Y) / 2,
@@ -233,61 +492,10 @@ internal static class SpaceBoundaryNetwork
         }
     }
 
-    private static bool FitEvidence(
-        WallEdge edge, double cellFt, Func<double, double, bool> wallAt)
-    {
-        double dx = (edge.B.X - edge.A.X) / edge.Length;
-        double dy = (edge.B.Y - edge.A.Y) / edge.Length;
-        double nx = -dy, ny = dx;
-        int stations = Math.Max(2, (int)Math.Ceiling(edge.Length / cellFt));
-        int across = Math.Max(1, (int)Math.Ceiling(0.75 / cellFt));
-        var centers = new List<(double X, double Y)>();
-        int supported = 0;
-        for (int station = 0; station <= stations; station++)
-        {
-            double t = (double)station / stations;
-            double x = edge.A.X + t * (edge.B.X - edge.A.X);
-            double y = edge.A.Y + t * (edge.B.Y - edge.A.Y);
-            double supportX = 0, supportY = 0;
-            int hits = 0;
-            for (int offset = -across; offset <= across; offset++)
-            {
-                double sampleX = x + nx * offset * cellFt;
-                double sampleY = y + ny * offset * cellFt;
-                if (!wallAt(sampleX, sampleY)) continue;
-                supportX += sampleX;
-                supportY += sampleY;
-                hits++;
-            }
-            if (hits == 0) continue;
-            centers.Add((supportX / hits, supportY / hits));
-            supported++;
-        }
-        if (supported < 0.8 * (stations + 1) || centers.Count < 6) return false;
-
-        double meanX = centers.Average(point => point.X);
-        double meanY = centers.Average(point => point.Y);
-        double xx = 0, xy = 0, yy = 0;
-        foreach (var point in centers)
-        {
-            double x = point.X - meanX, y = point.Y - meanY;
-            xx += x * x; xy += x * y; yy += y * y;
-        }
-        double angle = NormalizeAngle(0.5 * Math.Atan2(2 * xy, xx - yy));
-        double edgeAngle = NormalizeAngle(Math.Atan2(edge.B.Y - edge.A.Y, edge.B.X - edge.A.X));
-        if (AngleDifference(angle, edgeAngle) > 12 * Degrees) return false;
-        double evidenceNx = -Math.Sin(angle), evidenceNy = Math.Cos(angle);
-        if (centers.Max(point => Math.Abs(
-                evidenceNx * (point.X - meanX) + evidenceNy * (point.Y - meanY)))
-            > Math.Max(0.25, 1.5 * cellFt))
-            return false;
-        edge.EvidenceAngle = angle;
-        return true;
-    }
-
     private static Dictionary<VertexKey, Coordinate> ResolveVertices(
-        IEnumerable<WallEdge> edges, double cellFt)
+        IEnumerable<WallEdge> allEdges, double tolerance)
     {
+        var edges = allEdges.ToList();
         var incidences = new Dictionary<VertexKey, Dictionary<WallLine, double>>();
         var originals = new Dictionary<VertexKey, Coordinate>();
         foreach (var edge in edges.Where(edge => edge.Line != null))
@@ -299,8 +507,28 @@ internal static class SpaceBoundaryNetwork
             lines[edge.Line!] = lines.GetValueOrDefault(edge.Line!) + edge.Length;
         }
 
+        // a short free edge between two snapped walls is a DP corner bevel, not architecture:
+        // give both its endpoints the union of incident lines so the bevel collapses into the
+        // corner intersection (real chamfers are longer and survive)
+        foreach (var edge in edges.Where(edge =>
+                     edge.Line == null && !edge.Curve && edge.Length <= 0.75 * tolerance))
+        {
+            var ka = Key(edge.A); var kb = Key(edge.B);
+            var union = new Dictionary<WallLine, double>();
+            foreach (var key in new[] { ka, kb })
+                if (incidences.TryGetValue(key, out var lines))
+                    foreach (var (line, weight) in lines)
+                        union[line] = union.GetValueOrDefault(line) + weight;
+            if (union.Count == 0) continue;
+            originals[ka] = edge.A;
+            originals[kb] = edge.B;
+            incidences[ka] = union;
+            incidences[kb] = union;
+        }
+
         var result = new Dictionary<VertexKey, Coordinate>();
-        double maxShift = Math.Max(0.5, 3 * cellFt);
+        double maxShift = Math.Max(0.6, 0.375 * tolerance);
+        // ponytail: single per-vertex least-squares; a global snap-solver is the upgrade path
         foreach (var (key, weighted) in incidences)
         {
             var original = originals[key];
@@ -311,6 +539,7 @@ internal static class SpaceBoundaryNetwork
             if (Distance(original.X, original.Y, candidate.X, candidate.Y) <= maxShift)
                 result[key] = candidate;
         }
+
         return result;
     }
 
@@ -342,16 +571,8 @@ internal static class SpaceBoundaryNetwork
         return new Coordinate(point.X + line.Nx * shift, point.Y + line.Ny * shift);
     }
 
-    private static double MeanAngle(IReadOnlyCollection<WallEdge> edges)
-    {
-        double x = 0, y = 0;
-        foreach (var edge in edges)
-        {
-            x += edge.Length * Math.Cos(2 * edge.EvidenceAngle);
-            y += edge.Length * Math.Sin(2 * edge.EvidenceAngle);
-        }
-        return NormalizeAngle(0.5 * Math.Atan2(y, x));
-    }
+    private static double EdgeAngle(WallEdge edge) =>
+        NormalizeAngle(Math.Atan2(edge.B.Y - edge.A.Y, edge.B.X - edge.A.X));
 
     private static double NormalizeAngle(double angle)
     {
@@ -359,10 +580,22 @@ internal static class SpaceBoundaryNetwork
         return angle < 0 ? angle + Math.PI : angle;
     }
 
+    private static double NormalizeAngle90(double angle)
+    {
+        angle %= Math.PI / 2;
+        return angle < 0 ? angle + Math.PI / 2 : angle;
+    }
+
     private static double AngleDifference(double a, double b)
     {
         double difference = Math.Abs(NormalizeAngle(a) - NormalizeAngle(b));
         return Math.Min(difference, Math.PI - difference);
+    }
+
+    private static double Difference90(double a, double b)
+    {
+        double difference = Math.Abs(NormalizeAngle90(a) - NormalizeAngle90(b));
+        return Math.Min(difference, Math.PI / 2 - difference);
     }
 
     private static VertexKey Key(Coordinate point) =>

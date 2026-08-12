@@ -74,15 +74,12 @@ public static class TakeoffPolicy
 
         var defaults = new TakeoffOptions { CellFt = hf.CellFt };
         var obstruction = Detector.BuildObstruction(hf, snap.SeedInk, snap.LevelElevation, defaults, _ => { });
-        var boundedFloor = InkBoundedFloor(hf, obstruction, snap.LevelElevation, defaults.FloorTolFt);
-        var floor = new bool[n];
-        int boundedCount = 0, floorCount = 0, ceilingCount = 0, habitableCount = 0;
+        var boundedFloor = Detector.InkBoundedFloor(
+            hf, obstruction, snap.LevelElevation, defaults.FloorTolFt);
+        int boundedCount = 0, ceilingCount = 0, habitableCount = 0;
         double maxCeilingAboveLevel = defaults.StoryCapFt;
         for (int i = 0; i < n; i++)
         {
-            floor[i] = !float.IsNaN(hf.FloorZ[i])
-                       && Math.Abs(hf.FloorZ[i] - snap.LevelElevation) <= defaults.FloorTolFt;
-            if (floor[i]) floorCount++;
             if (!boundedFloor[i]) continue;
             boundedCount++;
             if (float.IsNaN(hf.CeilZ[i]) || hf.CeilZ[i] <= hf.FloorZ[i]) continue;
@@ -111,7 +108,7 @@ public static class TakeoffPolicy
         int realCeilingFloorCount = 0, slopedCount = 0, doubleHeightCount = 0, stepCount = 0;
         for (int i = 0; i < n; i++)
         {
-            if (!floor[i] || float.IsNaN(hf.CeilZ[i])) continue;
+            if (!boundedFloor[i] || float.IsNaN(hf.CeilZ[i])) continue;
             realCeilingFloorCount++;
             if (sloped[i]) slopedCount++;
             if (hf.CeilZ[i] - hf.FloorZ[i] > thresholds.DoubleHeightHeadroomFt) doubleHeightCount++;
@@ -123,18 +120,18 @@ public static class TakeoffPolicy
         int floorNearInk = 0, stepNearInk = 0;
         for (int i = 0; i < n; i++)
         {
-            if (!floor[i] || distanceToInk[i] > nearCells + 1e-4) continue;
+            if (!boundedFloor[i] || distanceToInk[i] > nearCells + 1e-4) continue;
             floorNearInk++;
             if (ceilingStep[i]) stepNearInk++;
         }
-        double inkBaseRate = (double)floorNearInk / Math.Max(1, floorCount);
+        double inkBaseRate = (double)floorNearInk / Math.Max(1, boundedCount);
         double stepPrecision = (double)stepNearInk / Math.Max(1, stepCount);
 
         var profile = new LevelProfile {
             CeilingCoverage = (double)ceilingCount / Math.Max(1, boundedCount),
             HabitableFraction = (double)habitableCount / Math.Max(1, boundedCount),
             SlopedCeilingFraction = (double)slopedCount / Math.Max(1, realCeilingFloorCount),
-            DoubleHeightFraction = (double)doubleHeightCount / Math.Max(1, floorCount),
+            DoubleHeightFraction = (double)doubleHeightCount / Math.Max(1, boundedCount),
             CeilingStepInkLift = inkBaseRate > 0 ? stepPrecision / inkBaseRate : 0,
             NoHabitableDomain = boundedCount == 0
                                 || (double)habitableCount / boundedCount < thresholds.HabitableFractionMin,
@@ -200,32 +197,4 @@ public static class TakeoffPolicy
         return result;
     }
 
-    private static bool[] InkBoundedFloor(Heightfield hf, bool[] obstruction, double levelElevation, double floorTolFt)
-    {
-        int W = hf.W, H = hf.H, n = W * H;
-        var outside = new bool[n];
-        var queue = new Queue<int>();
-        void Add(int i)
-        {
-            if (obstruction[i] || outside[i]) return;
-            outside[i] = true;
-            queue.Enqueue(i);
-        }
-        for (int x = 0; x < W; x++) { Add(x); Add((H - 1) * W + x); }
-        for (int y = 1; y + 1 < H; y++) { Add(y * W); Add(y * W + W - 1); }
-        while (queue.Count > 0)
-        {
-            int i = queue.Dequeue(), x = i % W, y = i / W;
-            if (x > 0) Add(i - 1);
-            if (x + 1 < W) Add(i + 1);
-            if (y > 0) Add(i - W);
-            if (y + 1 < H) Add(i + W);
-        }
-
-        var domain = new bool[n];
-        for (int i = 0; i < n; i++)
-            domain[i] = !outside[i] && !float.IsNaN(hf.FloorZ[i])
-                        && Math.Abs(hf.FloorZ[i] - levelElevation) <= floorTolFt;
-        return domain;
-    }
 }

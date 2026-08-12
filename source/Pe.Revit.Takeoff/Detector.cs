@@ -88,6 +88,40 @@ public static class Detector
         return obst;
     }
 
+    // The plan-sealed, same-level floor footprint. Flooding from the raster boundary identifies
+    // everything architecturally outside; floor surfaces cannot establish existence by themselves.
+    internal static bool[] InkBoundedFloor(
+        Heightfield hf, bool[] obstruction, double levelElevation, double floorTolFt)
+    {
+        int W = hf.W, H = hf.H, n = W * H;
+        if (obstruction.Length != n)
+            throw new ArgumentException($"obstruction disagrees with {W}x{H}");
+        var outside = new bool[n];
+        var queue = new Queue<int>();
+        void Add(int i)
+        {
+            if (obstruction[i] || outside[i]) return;
+            outside[i] = true;
+            queue.Enqueue(i);
+        }
+        for (int x = 0; x < W; x++) { Add(x); Add((H - 1) * W + x); }
+        for (int y = 1; y + 1 < H; y++) { Add(y * W); Add(y * W + W - 1); }
+        while (queue.Count > 0)
+        {
+            int i = queue.Dequeue(), x = i % W, y = i / W;
+            if (x > 0) Add(i - 1);
+            if (x + 1 < W) Add(i + 1);
+            if (y > 0) Add(i - W);
+            if (y + 1 < H) Add(i + W);
+        }
+
+        var footprint = new bool[n];
+        for (int i = 0; i < n; i++)
+            footprint[i] = !outside[i] && !float.IsNaN(hf.FloorZ[i])
+                           && Math.Abs(hf.FloorZ[i] - levelElevation) <= floorTolFt;
+        return footprint;
+    }
+
     // ---- morphology: two-pass chamfer close (dilate r then erode r) ----
     private static void Close(bool[] mask, int W, int H, float rCells)
     {

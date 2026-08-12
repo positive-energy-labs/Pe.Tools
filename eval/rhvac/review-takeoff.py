@@ -331,8 +331,12 @@ def build(args):
                 render_dir = staging / "review" / "variants" / alias
                 render_dir.mkdir(parents=True, exist_ok=True)
                 blind_path = render_dir / f"blind_{slug}.png"
+                disposition_path = render_dir / f"disposition_{slug}.png"
                 diagnostic_path = render_dir / f"diagnostic_{slug}.png"
                 overlay.render_review(copied_ink, copied_tsv, mode="blind", scale=args.scale).save(blind_path)
+                disposition, disposition_accounting = overlay.render_disposition(
+                    copied_ink, copied_tsv, scale=args.scale)
+                disposition.save(disposition_path)
                 overlay.render_review(copied_ink, copied_tsv, mode="diagnostic", scale=args.scale,
                                       problem_ids=problem_ids,
                                       problem_segments=problem_segments,
@@ -342,6 +346,8 @@ def build(args):
                     "alias": alias,
                     "geometry": copied_tsv.relative_to(staging).as_posix(),
                     "blind": blind_path.relative_to(staging).as_posix(),
+                    "disposition": disposition_path.relative_to(staging).as_posix(),
+                    "dispositionAccounting": disposition_accounting,
                     "diagnostic": diagnostic_path.relative_to(staging).as_posix(),
                     "audit": copied_audit.relative_to(staging).as_posix() if copied_audit else None,
                 })

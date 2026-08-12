@@ -16,13 +16,15 @@ internal sealed record SpaceMaterializationResult(
         Spaces.Count + FilledRegions + LineFallbacks == Rooms + Residues + Defectors;
 }
 
+internal sealed record NativeRunStamp(string RunId, string SourceSha256, string AuditState);
+
 internal static class SpaceMaterializer
 {
     private static readonly Guid OwnershipSchemaId = new("fe42dd0d-fd47-4b31-8332-ff1ed891ef02");
 
     internal static SpaceMaterializationResult Replace(
         Document doc, Level level, Phase phase, TakeoffResult result, TakeoffOptions opt, Action<string> log,
-        Func<double, double, bool>? inkNear = null)
+        Func<double, double, bool>? inkNear = null, NativeRunStamp? runStamp = null)
     {
         if (!doc.IsModifiable) throw new InvalidOperationException("Space materialization requires an open transaction");
         if (doc.GetElement(level.Id) is not Level || doc.GetElement(phase.Id) is not Phase)
@@ -38,29 +40,65 @@ internal static class SpaceMaterializer
                 throw new InvalidOperationException($"{room.Id} label point is outside its accepted region");
 
         string token = Token(opt, level, phase), viewName = ViewName(opt, level, phase);
-        var existing = new FilteredElementCollector(doc).OfClass(typeof(SpatialElement))
+        var levelSpaces = new FilteredElementCollector(doc).OfClass(typeof(SpatialElement))
             .OfCategory(BuiltInCategory.OST_MEPSpaces).Cast<Space>()
-            .Where(space => space.LevelId.Value() == level.Id.Value()
-                            && space.get_Parameter(BuiltInParameter.ROOM_PHASE_ID)?.AsElementId().Value() == phase.Id.Value()
+            .Where(space => space.LevelId.Value() == level.Id.Value()).ToList();
+        var wrongPhaseOwned = levelSpaces
+            .Where(space => Owned(space, token)
+                            && space.get_Parameter(BuiltInParameter.ROOM_PHASE_ID)?.AsElementId().Value()
+                            != phase.Id.Value())
+            .ToList();
+        if (wrongPhaseOwned.Count > 0)
+            throw new InvalidOperationException(
+                $"target ownership token contains {wrongPhaseOwned.Count} Space(s) outside phase '{phase.Name}'");
+        var ownedSpaces = levelSpaces
+            .Where(space => Owned(space, token)).ToList();
+        var duplicateOwnedIds = ownedSpaces.GroupBy(space => OwnedRoomId(space, token), StringComparer.Ordinal)
+            .Where(group => group.Key != null && group.Count() > 1).Select(group => group.Key).ToList();
+        if (duplicateOwnedIds.Count > 0)
+            throw new InvalidOperationException(
+                $"target ownership token contains duplicate room ids: {string.Join(", ", duplicateOwnedIds)}");
+        var existing = levelSpaces
+            .Where(space => space.get_Parameter(BuiltInParameter.ROOM_PHASE_ID)?.AsElementId().Value()
+                            == phase.Id.Value()
                             && !Owned(space, token))
             .Select(space => space.Id).ToList();
         if (existing.Count > 0)
             throw new InvalidOperationException($"target level/phase already contains {existing.Count} non-takeoff Space(s)");
 
+        var view = new FilteredElementCollector(doc).OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
+            .SingleOrDefault(candidate => candidate.Name == viewName);
+        var sketchPlane = view != null && OwnedSketchPlane(view) is { } sketchId
+            ? doc.GetElement(sketchId) as SketchPlane
+            : null;
         DeleteOwned(doc, token, viewName);
         var boundary = SpaceBoundaryNetwork.Build(result.Rooms);
         var spaceRooms = result.Rooms.ToList();
 
-        var viewType = new FilteredElementCollector(doc).OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>()
-            .First(type => type.ViewFamily == ViewFamily.FloorPlan);
-        var view = ViewPlan.Create(doc, viewType.Id, level.Id);
-        view.Name = viewName;
-        view.get_Parameter(BuiltInParameter.VIEW_PHASE)?.Set(phase.Id);
+        if (view == null)
+        {
+            var viewType = new FilteredElementCollector(doc).OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>()
+                .First(type => type.ViewFamily == ViewFamily.FloorPlan);
+            view = ViewPlan.Create(doc, viewType.Id, level.Id);
+            view.Name = viewName;
+            view.get_Parameter(BuiltInParameter.VIEW_PHASE)?.Set(phase.Id);
+        }
+        else
+        {
+            var viewPhase = view.get_Parameter(BuiltInParameter.VIEW_PHASE);
+            if (viewPhase is { IsReadOnly: false } && viewPhase.AsElementId().Value() != phase.Id.Value())
+                viewPhase.Set(phase.Id);
+        }
+        if (runStamp != null)
+            Stamp(view, ViewRunComments(token, runStamp));
 
-        var plane = Plane.CreateByNormalAndOrigin(XYZ.BasisZ, new XYZ(0, 0, level.Elevation));
-        var sketchPlane = SketchPlane.Create(doc, plane);
-        if (view.get_Parameter(BuiltInParameter.VIEW_DESCRIPTION)?.Set(sketchPlane.UniqueId) != true)
-            throw new InvalidOperationException("cannot persist the owned Space boundary sketch plane");
+        if (sketchPlane == null)
+        {
+            var plane = Plane.CreateByNormalAndOrigin(XYZ.BasisZ, new XYZ(0, 0, level.Elevation));
+            sketchPlane = SketchPlane.Create(doc, plane);
+            if (view.get_Parameter(BuiltInParameter.VIEW_DESCRIPTION)?.Set(sketchPlane.UniqueId) != true)
+                throw new InvalidOperationException("cannot persist the owned Space boundary sketch plane");
+        }
         if (boundary.Count > 0)
         {
             var curves = new CurveArray();
@@ -72,44 +110,57 @@ internal static class SpaceMaterializer
             doc.Regenerate();
         }
 
-        var ids = new List<ElementId>();
+        var available = ownedSpaces.ToList();
+        var assigned = new Dictionary<string, Space>(StringComparer.Ordinal);
         foreach (var room in spaceRooms)
+        {
+            var exact = available.FirstOrDefault(space => OwnedRoomId(space, token) == room.Id);
+            if (exact == null) continue;
+            assigned.Add(room.Id, exact);
+            available.Remove(exact);
+        }
+        foreach (var room in spaceRooms.Where(room => !assigned.ContainsKey(room.Id)))
+        {
+            var nearest = available.OrderBy(space => DistanceSquared(space, room)).FirstOrDefault();
+            if (nearest == null) break;
+            assigned.Add(room.Id, nearest);
+            available.Remove(nearest);
+        }
+
+        var spacesByRoom = new Dictionary<string, Space>(StringComparer.Ordinal);
+        foreach (var room in spaceRooms.Where(room => assigned.ContainsKey(room.Id)))
+        {
+            var space = assigned[room.Id];
+            MoveTo(space, room);
+            Configure(space, room);
+            spacesByRoom.Add(room.Id, space);
+        }
+        if (available.Count > 0) doc.Delete(available.Select(space => space.Id).ToList());
+        doc.Regenerate();
+
+        foreach (var room in spaceRooms.Where(room => !spacesByRoom.ContainsKey(room.Id)))
         {
             var space = doc.Create.NewSpace(level, phase, new UV(room.LabelX, room.LabelY))
                 ?? throw new InvalidOperationException($"Revit did not create a Space for {room.Id}");
-            space.Number = room.Id;
-            space.Name = $"{opt.Marker} {room.Id}";
-            space.BaseOffset = 0;
-            space.UpperLimit = level;
-            space.LimitOffset = room.MeanCeilingFt;
-            Stamp(space, SpaceComments(token, room));
-            ids.Add(space.Id);
+            Configure(space, room);
+            spacesByRoom.Add(room.Id, space);
         }
         doc.Regenerate();
+        var ids = spaceRooms.Select(room => spacesByRoom[room.Id].Id).ToList();
+        var wrongPhase = ids.Select(id => (Space)doc.GetElement(id))
+            .Where(space => space.get_Parameter(BuiltInParameter.ROOM_PHASE_ID)?.AsElementId().Value()
+                            != phase.Id.Value())
+            .Select(space => space.Id.Value()).ToList();
+        if (wrongPhase.Count > 0)
+            throw new InvalidOperationException(
+                $"Revit assigned {wrongPhase.Count} Space(s) outside requested phase '{phase.Name}': " +
+                string.Join(", ", wrongPhase));
 
-        // Room-level shape gate on the NATIVE boundary: a small room that came out as an
-        // arrowhead/wedge (acute corner), a sliver, or a step-storm is bewildering as a Space —
-        // redirect it to unresolved evidence. Big rooms are exempt: circulation legally
-        // has many corners. Defectors keep their raw polygon as unresolved evidence.
+        // Geometry promotion is decided before Revit and verified after commit. Inspecting a
+        // newly placed Space here is transaction-state-dependent: the same room can be enclosed
+        // on a replacement pass only because the previous boundary graph existed at transaction
+        // start. Keep materialization deterministic and let the canonical native gate decide.
         var defectors = new List<(RoomResult Room, string Reason)>();
-        for (int i = ids.Count - 1; i >= 0; i--)
-        {
-            var space = (Space)doc.GetElement(ids[i]);
-            string? reason = ShapeDefect(space, inkNear);
-            if (reason == null) continue;
-            defectors.Add((spaceRooms[i], reason));
-            doc.Delete(space.Id);
-            ids.RemoveAt(i);
-            spaceRooms.RemoveAt(i);
-        }
-        if (defectors.Count > 0)
-        {
-            doc.Regenerate();
-            log($"[spaces] shape gate redirected {defectors.Count} rooms to unresolved evidence: " +
-                string.Join(" ", defectors.Select(item =>
-                    $"{item.Room.Id}@({item.Room.LabelX:F0},{item.Room.LabelY:F0}) {item.Reason}")));
-        }
-
         int filledRegions = 0, lineFallbacks = 0, filledRegionFailures = 0;
         if (result.Residues.Count + defectors.Count > 0)
         {
@@ -128,9 +179,10 @@ internal static class SpaceMaterializer
             {
                 // A border residue leaks past the takeoff crop: exterior terrain, not building
                 // evidence. Drawing it paints half the site — log it and keep the view clean.
-                if (residue.Reason == ResidueReason.Border)
+                if (residue.Reason is ResidueReason.Border or ResidueReason.Rejected)
                 {
-                    log($"[spaces] border residue {residue.Id} ({residue.RawSqft:F0}sf) not drawn");
+                    log($"[spaces] {residue.Reason.ToString().ToLowerInvariant()} residue " +
+                        $"{residue.Id} ({residue.RawSqft:F0}sf) not drawn");
                     continue;
                 }
                 DrawUnresolved(residue.Id, residue.Polygon, residue.Holes,
@@ -289,8 +341,8 @@ internal static class SpaceMaterializer
         // covers only drawn evidence, and the skip is logged above
         var materialized = new SpaceMaterializationResult(
             ids, filledRegions, lineFallbacks, filledRegionFailures,
-            result.Rooms.Count - defectors.Count,
-            result.Residues.Count(residue => residue.Reason != ResidueReason.Border),
+            spaceRooms.Count,
+            result.Residues.Count(residue => residue.Reason == ResidueReason.Crumb),
             defectors.Count, 0);
         log($"[spaces] phase='{phase.Name}' level='{level.Name}' spaces={ids.Count} " +
             $"filledRegions={filledRegions} lineFallbacks={lineFallbacks} " +
@@ -305,6 +357,31 @@ internal static class SpaceMaterializer
                 $"residues={materialized.Residues} defectors={materialized.Defectors} " +
                 $"deletedWithoutReplacement={materialized.DeletedWithoutReplacement}");
         return materialized;
+
+        void Configure(Space space, RoomResult room)
+        {
+            space.Number = room.Id;
+            space.Name = $"{opt.Marker} {room.Id}";
+            space.BaseOffset = 0;
+            space.UpperLimit = level;
+            space.LimitOffset = room.MeanCeilingFt;
+            Stamp(space, SpaceComments(token, room, runStamp));
+        }
+
+        void MoveTo(Space space, RoomResult room)
+        {
+            if (space.Location is not LocationPoint location)
+                throw new InvalidOperationException($"owned Space {space.Id.Value()} has no point location");
+            var delta = new XYZ(room.LabelX - location.Point.X, room.LabelY - location.Point.Y, 0);
+            if (delta.GetLength() > 1e-6) ElementTransformUtils.MoveElement(doc, space.Id, delta);
+        }
+
+        static double DistanceSquared(Space space, RoomResult room)
+        {
+            if (space.Location is not LocationPoint location) return double.MaxValue;
+            double dx = location.Point.X - room.LabelX, dy = location.Point.Y - room.LabelY;
+            return dx * dx + dy * dy;
+        }
     }
 
     // Room-level shape defects a user called "bewildering": arrowheads/wedges (acute corners),
@@ -396,7 +473,7 @@ internal static class SpaceMaterializer
     internal static string Token(TakeoffOptions opt, Level level, Phase phase) =>
         $"{opt.Marker}|spaces|{level.Id.Value()}|{phase.Id.Value()}";
 
-    private static string ViewName(TakeoffOptions opt, Level level, Phase phase) =>
+    internal static string ViewName(TakeoffOptions opt, Level level, Phase phase) =>
         $"{opt.Marker} spaces {level.Name} {phase.Name}";
 
     private static void DeleteOwned(Document doc, string token, string viewName)
@@ -405,17 +482,18 @@ internal static class SpaceMaterializer
             .Where(view => view.Name == viewName).ToList();
         var sketchIds = views.Select(OwnedSketchPlane).Where(id => id != null).Select(id => id!).ToList();
         var ids = new FilteredElementCollector(doc).WhereElementIsNotElementType()
-            .Where(element => Owned(element, token)
-                              || element is ViewPlan && views.Any(view => view.Id.Value() == element.Id.Value()))
-            .Select(element => element.Id).Concat(sketchIds).GroupBy(id => id.Value()).Select(group => group.First()).ToList();
-        // Revit refuses to delete the ACTIVE view; if the user has our spaces view open, strand it
-        // under a stale name instead so the fresh view can claim the canonical name
-        var active = doc.ActiveView;
-        if (active != null && ids.Any(id => id.Value() == active.Id.Value()))
-        {
-            ids.RemoveAll(id => id.Value() == active.Id.Value());
-            active.Name = $"{viewName} stale {DateTime.UtcNow.Ticks}";
-        }
+            .Where(element => element is not Space && Owned(element, token))
+            .Select(element => element.Id).ToList();
+        if (sketchIds.Count > 0)
+            ids.AddRange(new FilteredElementCollector(doc)
+                .OfCategory(BuiltInCategory.OST_MEPSpaceSeparationLines)
+                .WhereElementIsNotElementType().Cast<ModelCurve>()
+                .Where(line => sketchIds.Any(id => id.Value() == line.SketchPlane.Id.Value()))
+                .Select(line => line.Id));
+        ids = ids.GroupBy(id => id.Value()).Select(group => group.First()).ToList();
+        // Reuse the canonical view and its sketch plane. Deleting a view attempts to delete its
+        // workset, which may be non-editable in a detached workshared document even though all
+        // Takeoff elements inside that view are safely replaceable.
         if (ids.Count > 0) { doc.Delete(ids); doc.Regenerate(); }
     }
 
@@ -425,8 +503,17 @@ internal static class SpaceMaterializer
         return string.IsNullOrWhiteSpace(uniqueId) ? null : view.Document.GetElement(uniqueId)?.Id;
     }
 
-    private static bool Owned(Element element, string token) =>
+    internal static bool Owned(Element element, string token) =>
         Comments(element)?.StartsWith(token + "|", StringComparison.Ordinal) == true;
+
+    private static string? OwnedRoomId(Space space, string token)
+    {
+        string? firstLine = Comments(space)?.Split('\n')[0].TrimEnd('\r');
+        string prefix = token + "|";
+        return firstLine?.StartsWith(prefix, StringComparison.Ordinal) == true
+            ? firstLine[prefix.Length..]
+            : null;
+    }
 
     internal static string? Comments(Element element)
     {
@@ -438,7 +525,21 @@ internal static class SpaceMaterializer
         return entity.IsValid() ? entity.Get<string>("Token") : null;
     }
 
-    internal static string SpaceComments(string token, RoomResult room)
+    internal static bool HasRunStamp(
+        Element element, string runId, string sourceSha256, string auditState) =>
+        Comments(element)?.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .Contains(RunLine(new NativeRunStamp(runId, sourceSha256, auditState)), StringComparer.Ordinal) == true;
+
+    internal static bool HasPendingRun(Document doc, string token) =>
+        new FilteredElementCollector(doc).OfClass(typeof(SpatialElement))
+            .OfCategory(BuiltInCategory.OST_MEPSpaces).Cast<Space>()
+            .Where(space => Owned(space, token))
+            .Select(Comments)
+            .Any(comments => comments?.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+                .Any(line => line.StartsWith("pe-takeoff-run:", StringComparison.Ordinal)
+                             && line.Contains(";audit=pending;", StringComparison.Ordinal)) == true);
+
+    internal static string SpaceComments(string token, RoomResult room, NativeRunStamp? runStamp = null)
     {
         var lines = new List<string> { token + "|" + room.Id };
         if (room.Flags.Count > 0)
@@ -447,6 +548,38 @@ internal static class SpaceMaterializer
             lines.Add("pe-takeoff: splitFrom=" + room.SplitFrom);
         if (room.MergedFrom is not null)
             lines.Add("pe-takeoff: mergedFrom=" + room.MergedFrom);
+        if (runStamp != null)
+            lines.Add(RunLine(runStamp));
+        return string.Join("\n", lines);
+    }
+
+    internal static void SetRunAuditState(
+        Document doc, TakeoffOptions opt, Level level, Phase phase,
+        string runId, string sourceSha256, string auditState)
+    {
+        var stamp = new NativeRunStamp(runId, sourceSha256, auditState);
+        string token = Token(opt, level, phase);
+        foreach (var space in new FilteredElementCollector(doc).OfClass(typeof(SpatialElement))
+                     .OfCategory(BuiltInCategory.OST_MEPSpaces).Cast<Space>()
+                     .Where(space => Owned(space, token)))
+            Stamp(space, ReplaceRunLine(Comments(space), stamp));
+
+        var view = new FilteredElementCollector(doc).OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
+            .SingleOrDefault(candidate => candidate.Name == ViewName(opt, level, phase));
+        if (view != null) Stamp(view, ViewRunComments(token, stamp));
+    }
+
+    private static string ViewRunComments(string token, NativeRunStamp stamp) =>
+        $"pe-takeoff-view: {token}\n{RunLine(stamp)}";
+
+    private static string RunLine(NativeRunStamp stamp) =>
+        $"pe-takeoff-run: run={stamp.RunId};audit={stamp.AuditState};source={stamp.SourceSha256}";
+
+    private static string ReplaceRunLine(string? comments, NativeRunStamp stamp)
+    {
+        var lines = (comments ?? "").Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .Where(line => !line.StartsWith("pe-takeoff-run:", StringComparison.Ordinal)).ToList();
+        lines.Add(RunLine(stamp));
         return string.Join("\n", lines);
     }
 

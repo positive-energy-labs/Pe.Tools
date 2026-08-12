@@ -68,7 +68,7 @@ public static class TakeoffResolutions
             if (resolution.Action == "merge" && resolution.Params is { Anchor: not null })
             {
                 ValidatePoint(resolution.Params.Anchor.Label, resolutionsPath);
-                if (!double.IsFinite(resolution.Params.Anchor.Sqft) || resolution.Params.Anchor.Sqft <= 0)
+                if (!resolution.Params.Anchor.Sqft.IsFinite() || resolution.Params.Anchor.Sqft <= 0)
                     throw new InvalidDataException($"{resolutionsPath}: merge anchor sqft must be positive and finite.");
             }
             if (resolution.Action == "claim-residue"
@@ -79,7 +79,7 @@ public static class TakeoffResolutions
             if (resolution.Anchor is not null)
             {
                 ValidatePoint(resolution.Anchor.Label, resolutionsPath);
-                if (!double.IsFinite(resolution.Anchor.Sqft) || resolution.Anchor.Sqft <= 0)
+                if (!resolution.Anchor.Sqft.IsFinite() || resolution.Anchor.Sqft <= 0)
                     throw new InvalidDataException($"{resolutionsPath}: anchor sqft must be positive and finite.");
             }
         }
@@ -582,7 +582,7 @@ public static class TakeoffResolutions
 
     private static void ValidatePoint(double[]? point, string path)
     {
-        if (point is not { Length: 2 } || point.Any(value => !double.IsFinite(value)))
+        if (point is not { Length: 2 } || point.Any(value => !value.IsFinite()))
             throw new InvalidDataException($"{path}: split points must be finite [x, y] pairs.");
     }
 
