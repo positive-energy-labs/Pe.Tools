@@ -1,18 +1,27 @@
 /** PROTOTYPE — variant "atlas": plan-dominant three-pane. */
 //
-// Round-2 boundary experiment: the PLAN is the scope master, the TABLE always answers
-// "everything currently in scope". No zone selected = the whole house is in the table, so the
-// round-1 inbox's "see everything at once" survives; selecting a zone on the plan narrows it,
-// so the round-1 zones variant's "only show what's needed" survives too. The table is never
-// hidden and never collapses into a per-zone detail pane — that is the structural law here.
+// Round-2 boundary experiment, round-3 shape. The PLAN is the scope master, the TABLE always
+// answers "everything currently in scope". No zone selected = the whole house is in the table, so
+// the round-1 inbox's "see everything at once" survives; selecting a zone on the plan narrows it,
+// so the round-1 zones variant's "only show what's needed" survives too. The table is never hidden
+// and never collapses into a per-zone detail pane — that is the structural law here.
+//
+// Round-3 correction: the ZONE'S pipeline stage was the wrong progress signal — a zone label says
+// nothing about whether any particular room needs a person. Progress is now DERIVED from room
+// facts and rendered with ONE vocabulary on all three surfaces: the rail's per-zone segment bar,
+// the plan's room fills, and the table's state column all read the same four room states. The
+// zone stage survives only as an explicitly-labelled, filterable text column.
 //
 // Read-only mock. Every edit, decision and selection lives in local state; nothing is written.
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { Button } from "#/components/ui/button";
 import { CellSelect, fmtNum, NumberCell, TextCell } from "#/rhvac/cells";
 import { Live, Seam } from "#/takeoff/seam";
+import { ZoneThumb } from "#/takeoff/zone-plan";
 import {
   boundsOf,
+  FLAG_MEANING,
   LEVEL_LANES,
   mergeBounds,
   pathD,
@@ -23,11 +32,46 @@ import { cn } from "#/lib/utils";
 import { SENSIBLE_CAP_BTUH, STAGE_ORDER, type MockStage, type RoomType } from "./mock";
 import { useMockWorldGeo, type GeoRoom, type GeoZone } from "./mock-geo";
 
-// ── Stage vocabulary ────────────────────────────────────────────────────────
+// ── Room state — the one progress vocabulary ────────────────────────────────
 //
-// Round-1 con: the stage palette read as a rainbow. Restrained ramp instead — progress is a
-// neutral opacity ramp, and only two states earn a hue: "needs a human" (clay) and "landed in
-// the .r10" (blue). Everything between is quiet on purpose.
+// Derived from the room's own facts, never from its zone's stage label. Four states, one hue
+// budget: clay is the only alarm, green the only "done", everything between is quiet.
+
+type RoomState = "call" | "unreviewed" | "data" | "synced";
+
+const ROOM_STATES: RoomState[] = ["call", "unreviewed", "data", "synced"];
+
+const STATE_META: Record<RoomState, { tone: string; label: string; note: string }> = {
+  call: {
+    tone: "var(--cat-clay)",
+    label: "needs a call",
+    note: "a human must decide: an open detector flag, or the .r10 no longer matches the model",
+  },
+  unreviewed: {
+    tone: "var(--muted-foreground)",
+    label: "no Manual J",
+    note: "nothing open, but no Manual J data entered yet — export would refuse this room",
+  },
+  data: {
+    tone: "var(--cat-slate)",
+    label: "data entered",
+    note: "Manual J data entered against settled geometry, not yet exported",
+  },
+  synced: {
+    tone: "var(--cat-green)",
+    label: "in .r10",
+    note: "exported and the .r10 still agrees with the model",
+  },
+};
+
+/** The derivation. `open` is the count of undecided detector flags on this room. */
+function roomState(room: GeoRoom, open: number): RoomState {
+  if (open > 0) return "call";
+  if (room.r10 && room.r10.lastSyncedSqft !== room.sqft) return "call"; // drift is a call
+  if (room.r10) return "synced";
+  if (room.data) return "data";
+  return "unreviewed";
+}
 
 const STAGE_BLURB: Record<MockStage, string> = {
   declared: "drawn, no system tag typed",
@@ -39,39 +83,74 @@ const STAGE_BLURB: Record<MockStage, string> = {
   drifted: "hand-edit drift since last sync",
 };
 
-const stageTone = (stage: MockStage): string =>
-  stage === "drifted" || stage === "partitioned"
-    ? "var(--cat-clay)"
-    : stage === "synced"
-      ? "var(--cat-blue)"
-      : "var(--foreground)";
-
-const stageDim = (stage: MockStage): number =>
-  stage === "drifted" || stage === "partitioned" || stage === "synced"
-    ? 1
-    : 0.25 + STAGE_ORDER.indexOf(stage) * 0.12;
-
-/** The pipeline-position chip: seven ticks, filled to this zone's stage. Round-1 con answered —
- *  every room row carries its zone's position, so "where is this in the pipeline" is never a
- *  question the table cannot answer. */
-function StageTicks({ stage, className }: { stage: MockStage; className?: string }) {
-  const idx = STAGE_ORDER.indexOf(stage);
-  const tone = stageTone(stage);
+/**
+ * Per-zone progress, derived: one equal segment per room, coloured by that room's own state. A
+ * zone with no rooms gets a dashed empty bar — "not partitioned" is a real state, not a zero.
+ * This replaces the seven-tick zone-stage pip, which said nothing about whether work was needed.
+ */
+function ZoneStateBar({
+  zone,
+  states,
+  className,
+}: {
+  zone: GeoZone;
+  states: RoomState[];
+  className?: string;
+}) {
+  if (states.length === 0)
+    return (
+      <span
+        className={cn(
+          "inline-block h-2.5 w-10 shrink-0 rounded-[1px] border border-dashed border-[var(--line-2)]",
+          className,
+        )}
+        title={`${zone.zone.key} — not partitioned: no rooms have been materialized yet`}
+      />
+    );
+  const census = ROOM_STATES.map((s) => ({ s, n: states.filter((x) => x === s).length })).filter(
+    (x) => x.n > 0,
+  );
   return (
     <span
-      className={cn("inline-flex items-center gap-px align-middle", className)}
-      title={`${stage} — ${STAGE_BLURB[stage]}`}
+      className={cn("flex h-2.5 w-10 shrink-0 items-stretch gap-px", className)}
+      title={`${zone.zone.key} — ${states.length} rooms · ${census
+        .map((c) => `${c.n} ${STATE_META[c.s].label}`)
+        .join(", ")}`}
     >
-      {STAGE_ORDER.map((s, i) => (
+      {states.map((s, i) => (
         <span
-          key={s}
-          className="inline-block h-2.5 w-1 rounded-[1px]"
+          key={i}
+          className="min-w-px flex-1 rounded-[1px]"
           style={{
-            background: i <= idx ? tone : "var(--line)",
-            opacity: i <= idx ? stageDim(stage) : 1,
+            background: STATE_META[s].tone,
+            opacity: s === "unreviewed" ? 0.3 : 0.9,
           }}
         />
       ))}
+    </span>
+  );
+}
+
+function StateDot({ state }: { state: RoomState }) {
+  return (
+    <span
+      className="inline-block size-2 shrink-0 rounded-[1px] align-middle"
+      style={{
+        background: STATE_META[state].tone,
+        opacity: state === "unreviewed" ? 0.35 : 1,
+      }}
+    />
+  );
+}
+
+function Swatch({ tone, label, dashed }: { tone: string; label: string; dashed?: boolean }) {
+  return (
+    <span className="tele inline-flex items-center gap-1 text-muted-foreground">
+      <span
+        className={cn("inline-block size-2.5 rounded-[1px] border", dashed && "border-dashed")}
+        style={{ background: `color-mix(in srgb, ${tone} 16%, transparent)`, borderColor: tone }}
+      />
+      {label}
     </span>
   );
 }
@@ -107,33 +186,35 @@ const ROOM_TYPES: RoomType[] = [
 type Verdict = "accept" | "dismiss";
 const flagKey = (guid: string, flag: string) => `${guid}::${flag}`;
 
+const shortId = (guid: string) => guid.slice(guid.lastIndexOf("-") + 1);
+
+/**
+ * Zones smaller than this are stray scribbles in the fixture (Lower#01 at 42 sf sits ~100 ft from
+ * the real cluster). Drawing them blew the plan's viewBox out and rendered the actual house as
+ * specks. They are excluded from the plan and from its bounds fit — but never deleted from the
+ * rail, where they stay visible and marked, because silently dropping declared geometry is worse
+ * than an ugly plan.
+ */
+const PLAN_MIN_SQFT = 60;
+const onPlan = (z: GeoZone) => z.zone.declaredSqft >= PLAN_MIN_SQFT;
+
 // ── Row model ───────────────────────────────────────────────────────────────
 
 interface Row {
   zone: GeoZone;
   room: GeoRoom;
+  state: RoomState;
+  open: string[];
 }
 
-const shortId = (guid: string) => guid.slice(guid.lastIndexOf("-") + 1);
-
-/** Room review state — what the plan fill and the table's state column both read from. */
-type Review = "open" | "drifted" | "synced" | "settled";
-
-function reviewOf(room: GeoRoom, open: number): Review {
-  if (open > 0) return "open";
-  if (room.r10 && room.r10.lastSyncedSqft !== room.sqft) return "drifted";
-  if (room.r10) return "synced";
-  return "settled";
-}
-
-const REVIEW_TONE: Record<Review, string> = {
-  open: "var(--cat-clay)",
-  drifted: "var(--cat-clay)",
-  synced: "var(--cat-blue)",
-  settled: "var(--cat-slate)",
-};
+// Column filters. `null` = no filter on that column.
+type FlagFilter = "any" | "none" | string;
 
 // ── Variant ─────────────────────────────────────────────────────────────────
+
+const PLAN_MIN_PX = 140;
+const PLAN_MAX_PX = 720;
+const PLAN_DEFAULT_PX = 340;
 
 export function Variant() {
   const { world, geoReady } = useMockWorldGeo();
@@ -145,6 +226,18 @@ export function Variant() {
   const [filter, setFilter] = useState("");
   const [edits, setEdits] = useState<Record<string, RoomEdit>>({});
   const [decided, setDecided] = useState<Record<string, Verdict>>({});
+
+  // Column filters — compose with plan scope and the rail's pipeline filter.
+  const [colStage, setColStage] = useState<MockStage | null>(null);
+  const [colState, setColState] = useState<RoomState | null>(null);
+  const [colType, setColType] = useState<RoomType | null>(null);
+  const [colFlag, setColFlag] = useState<FlagFilter | null>(null);
+
+  // Plan geometry: collapsible + draggable, remembered for the session.
+  const [planOpen, setPlanOpen] = useState(true);
+  const [planH, setPlanH] = useState(PLAN_DEFAULT_PX);
+  const [statsOpen, setStatsOpen] = useState(false);
+  const drag = useRef<{ y: number; h: number } | null>(null);
 
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
 
@@ -173,16 +266,21 @@ export function Variant() {
 
   const openFlags = (room: GeoRoom) =>
     room.flags.filter(
-      (f) => !room.decisions.some((d) => d.flag === f) && !decided[flagKey(room.guid, f)],
+      (f) =>
+        typeof f === "string" &&
+        !room.decisions.some((d) => d.flag === f) &&
+        !decided[flagKey(room.guid, f)],
     );
 
-  // ── Scope derivation ──────────────────────────────────────────────────────
-  // The stage strip filters the world; the plan selects within it; the table shows the result.
+  const stateOf = (room: GeoRoom) => roomState(room, openFlags(room).length);
+  const zoneStates = (z: GeoZone) => z.rooms.map((r) => stateOf(apply(r)));
+  const zoneCalls = (z: GeoZone) => zoneStates(z).filter((s) => s === "call").length;
 
-  const inStage = (z: GeoZone) => stageFilter === null || z.stage === stageFilter;
+  // ── Scope derivation ──────────────────────────────────────────────────────
+  // Rail pipeline filter narrows the world; the plan selects within it; the table shows the result.
+
   const filteredZones = useMemo(
-    () => world.zones.filter(inStage),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    () => world.zones.filter((z) => stageFilter === null || z.stage === stageFilter),
     [world, stageFilter],
   );
 
@@ -193,9 +291,17 @@ export function Variant() {
   const rows = useMemo<Row[]>(() => {
     const q = filter.trim().toLowerCase();
     const out: Row[] = [];
-    for (const zone of scopeZones)
+    for (const zone of scopeZones) {
+      if (colStage && zone.stage !== colStage) continue;
       for (const room of zone.rooms) {
         const shown = apply(room);
+        const open = openFlags(shown);
+        const state = roomState(shown, open.length);
+        if (colState && state !== colState) continue;
+        if (colType && shown.type !== colType) continue;
+        if (colFlag === "any" && open.length === 0) continue;
+        if (colFlag === "none" && open.length > 0) continue;
+        if (colFlag && colFlag !== "any" && colFlag !== "none" && !open.includes(colFlag)) continue;
         if (
           q &&
           !shown.name.toLowerCase().includes(q) &&
@@ -203,13 +309,30 @@ export function Variant() {
           !zone.zone.key.toLowerCase().includes(q)
         )
           continue;
-        out.push({ zone, room: shown });
+        out.push({ zone, room: shown, state, open });
       }
+    }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeZones, filter, edits]);
+  }, [scopeZones, filter, edits, decided, colStage, colState, colType, colFlag]);
 
   const cursorRow = rows.find((r) => r.room.guid === cursor) ?? null;
+
+  const flagVocabulary = useMemo(() => {
+    const set = new Set<string>();
+    for (const z of world.zones)
+      for (const r of z.rooms) for (const f of r.flags) if (typeof f === "string") set.add(f);
+    return [...set].sort();
+  }, [world]);
+
+  const anyColFilter =
+    colStage !== null || colState !== null || colType !== null || colFlag !== null;
+  const clearCols = () => {
+    setColStage(null);
+    setColState(null);
+    setColType(null);
+    setColFlag(null);
+  };
 
   // ── Keyboard: j/k cursor, a/d verbs, Esc clears scope (←/→ belong to the switcher) ──
   useEffect(() => {
@@ -219,6 +342,7 @@ export function Variant() {
       if (e.key === "Escape") {
         setZoneKey(null);
         setCursor(null);
+        clearCols();
         return;
       }
       if (e.key === "j" || e.key === "k") {
@@ -230,10 +354,9 @@ export function Variant() {
         return;
       }
       if ((e.key === "a" || e.key === "d") && cursorRow) {
-        const open = openFlags(cursorRow.room);
-        if (open.length === 0) return;
+        if (cursorRow.open.length === 0) return;
         e.preventDefault();
-        decide(cursorRow.room, open[0]!, e.key === "a" ? "accept" : "dismiss");
+        decide(cursorRow.room, cursorRow.open[0]!, e.key === "a" ? "accept" : "dismiss");
       }
     };
     window.addEventListener("keydown", onKey);
@@ -253,15 +376,35 @@ export function Variant() {
     if (z) setLevel(z.zone.lane.label);
   };
 
+  // ── Plan resize: pointer events only, no library. Below the min cap the plan hides. ──
+  const onHandleDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    drag.current = { y: e.clientY, h: planOpen ? planH : PLAN_MIN_PX };
+  };
+  const onHandleMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    if (!d) return;
+    const next = d.h + (e.clientY - d.y);
+    if (next < PLAN_MIN_PX - 28) {
+      setPlanOpen(false);
+      return;
+    }
+    setPlanOpen(true);
+    setPlanH(Math.min(PLAN_MAX_PX, Math.max(PLAN_MIN_PX, next)));
+  };
+  const onHandleUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    drag.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId))
+      e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+
   // ── Census ────────────────────────────────────────────────────────────────
   const stageCounts = STAGE_ORDER.map((s) => ({
     stage: s,
     n: world.zones.filter((z) => z.stage === s).length,
   }));
-  const scopeOpen = scopeZones.reduce(
-    (n, z) => n + z.rooms.reduce((m, r) => m + openFlags(r).length, 0),
-    0,
-  );
+  const scopeCalls = rows.filter((r) => r.state === "call").length;
   const scopeSqft = rows.reduce((s, r) => s + r.room.sqft, 0);
 
   const proposedUrl =
@@ -269,18 +412,20 @@ export function Variant() {
     (selected ? `&zone=${encodeURIComponent(selected.zone.key)}` : "") +
     (cursorRow ? `&room=${shortId(cursorRow.room.guid)}` : "");
 
+  const peekZone = cursorRow?.zone ?? selected ?? null;
+
   return (
     <main className="flex h-screen min-h-0 flex-col bg-background">
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-3 py-1.5">
         <h1 className="font-pe-display text-lg font-semibold tracking-tight">Atlas</h1>
-        <span className="tele text-muted-foreground">the plan is the index; the table is the truth</span>
+        <span className="tele text-muted-foreground">
+          the plan is the index; the table is the truth
+        </span>
         <Live>{world.docName}</Live>
         <span className="tele text-muted-foreground">{world.r10Path}</span>
         <div className="ml-auto flex items-center gap-2">
-          {!geoReady && (
-            <span className="tele text-cat-clay">loading real room geometry…</span>
-          )}
+          {!geoReady && <span className="tele text-cat-clay">loading real room geometry…</span>}
           <Seam className="max-w-96">
             proposed URL <span className="tele">{proposedUrl}</span>
           </Seam>
@@ -288,12 +433,30 @@ export function Variant() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        {/* ── LEFT: global pipeline filter + zone list ─────────────────────── */}
-        <aside className="flex w-64 min-w-64 shrink-0 flex-col border-r border-border bg-background">
+        {/* ── LEFT: pipeline filter + zone list, progress derived from rooms ── */}
+        <aside className="flex w-72 min-w-72 shrink-0 flex-col border-r border-border bg-background">
+          <div className="shrink-0 border-b border-border px-2 py-1.5">
+            <div className="tele-label mb-1 text-muted-foreground">room states — one per room</div>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              {ROOM_STATES.map((s) => (
+                <span
+                  key={s}
+                  title={STATE_META[s].note}
+                  className="tele inline-flex items-center gap-1 text-muted-foreground"
+                >
+                  <StateDot state={s} />
+                  {STATE_META[s].label}
+                </span>
+              ))}
+            </div>
+          </div>
+
           <div className="shrink-0 border-b border-border px-2 py-2">
-            <div className="tele-label mb-1 text-muted-foreground">pipeline — global filter</div>
+            <div className="tele-label mb-1 text-muted-foreground">
+              zone pipeline — global filter
+            </div>
             <div className="flex flex-col">
-              {stageCounts.map(({ stage, n }) => {
+              {stageCounts.map(({ stage, n }, i) => {
                 const on = stageFilter === stage;
                 return (
                   <button
@@ -306,11 +469,11 @@ export function Variant() {
                       setCursor(null);
                     }}
                     className={cn(
-                      "flex items-center gap-1.5 rounded-[var(--radius)] px-1 py-0.5 text-left hover:bg-muted",
+                      "flex items-baseline gap-1.5 rounded-[var(--radius)] px-1 py-0.5 text-left hover:bg-muted",
                       on && "bg-primary/[0.08]",
                     )}
                   >
-                    <StageTicks stage={stage} />
+                    <span className="tele w-3 shrink-0 text-muted-foreground">{i + 1}</span>
                     <span className={cn("tele flex-1 truncate", !on && "text-muted-foreground")}>
                       {stage}
                     </span>
@@ -330,8 +493,8 @@ export function Variant() {
             )}
           </div>
 
-          {/* Minimal zone list, grouped by level only so the list stays consistent — level is
-              never the organizer, the pipeline is. */}
+          {/* Zone list, grouped by level only so the list stays consistent — level is never the
+              organizer, the room states are. */}
           <div className="min-h-0 flex-1 overflow-y-auto">
             {LEVEL_LANES.map((lane) => {
               const zs = filteredZones.filter((z) => z.zone.lane.label === lane.label);
@@ -343,35 +506,41 @@ export function Variant() {
                   </div>
                   <ul>
                     {zs.map((z) => {
-                      const open = z.rooms.reduce((n, r) => n + openFlags(r).length, 0);
+                      const states = zoneStates(z);
+                      const calls = states.filter((s) => s === "call").length;
                       const on = z.zone.key === zoneKey;
+                      const off = !onPlan(z);
                       return (
                         <li key={z.zone.key}>
                           <button
                             type="button"
                             onClick={() => selectZone(on ? null : z)}
+                            title={
+                              off
+                                ? `off-plan scribble — ${fmtNum(z.zone.declaredSqft, 0)} sf, drawn far from the level cluster; kept in the list, excluded from the plan`
+                                : `${z.name} · ${z.zone.lane.label} · ${fmtNum(z.zone.declaredSqft, 0)} sf declared`
+                            }
                             className={cn(
                               "flex w-full items-center gap-1.5 border-b border-[var(--line-soft)] px-2 py-1 text-left hover:bg-muted",
                               on && "bg-primary/[0.08]",
+                              off && "opacity-55",
                             )}
                           >
-                            <span
-                              className="size-2.5 shrink-0 rounded-[1px] border"
-                              style={{
-                                borderColor: `rgb(${z.zone.color})`,
-                                background: `color-mix(in srgb, rgb(${z.zone.color}) 30%, transparent)`,
-                              }}
-                            />
+                            {/* Real zone outline, not a colour square — shape is identity. */}
+                            <ZoneThumb zone={z.zone} className="size-5" />
                             <span className="tele shrink-0">{z.zone.key}</span>
                             <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                              {z.name}
+                              {off ? "off-plan scribble" : z.name}
                             </span>
-                            {open > 0 && (
-                              <span className="tele rounded-[var(--radius)] bg-cat-clay/15 px-1 text-cat-clay">
-                                {open}
+                            {calls > 0 && (
+                              <span
+                                className="tele shrink-0 rounded-[var(--radius)] bg-cat-clay/15 px-1 text-cat-clay"
+                                title={`${calls} room${calls === 1 ? "" : "s"} in this zone need a human call — an open detector flag or .r10 drift`}
+                              >
+                                {calls} call{calls === 1 ? "" : "s"}
                               </span>
                             )}
-                            <StageTicks stage={z.stage} className="shrink-0" />
+                            <ZoneStateBar zone={z} states={states} />
                           </button>
                         </li>
                       );
@@ -383,15 +552,12 @@ export function Variant() {
           </div>
         </aside>
 
-        {/* ── MIDDLE: the plan (dominant) + the master table (subordinate, never hidden) ── */}
+        {/* ── MIDDLE: the plan (collapsible) + the master table (never hidden) ── */}
         <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="flex shrink-0 items-center gap-1 border-b border-border px-2 py-1">
+          <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border px-2 py-1">
             {LEVEL_LANES.map((lane) => {
               const zs = world.zones.filter((z) => z.zone.lane.label === lane.label);
-              const open = zs.reduce(
-                (n, z) => n + z.rooms.reduce((m, r) => m + openFlags(r).length, 0),
-                0,
-              );
+              const calls = zs.reduce((n, z) => n + zoneCalls(z), 0);
               return (
                 <button
                   key={lane.label}
@@ -407,97 +573,210 @@ export function Variant() {
                 >
                   {lane.label}
                   <span className="ml-1 opacity-60">{zs.length}</span>
-                  {open > 0 && <span className="ml-1 text-cat-clay">·{open}</span>}
+                  {calls > 0 && <span className="ml-1 text-cat-clay">·{calls}</span>}
                 </button>
               );
             })}
+
+            <button
+              type="button"
+              onClick={() => setStatsOpen((v) => !v)}
+              title="level-wide totals — the whole-building dashboard was noise; the level is the unit you actually work in"
+              className={cn(
+                "tele ml-2 rounded-[var(--radius)] border px-1.5 py-0.5",
+                statsOpen
+                  ? "border-primary/40 bg-primary/[0.08]"
+                  : "border-[var(--line-2)] text-muted-foreground hover:bg-muted",
+              )}
+            >
+              level stats
+            </button>
+            <button
+              type="button"
+              onClick={() => setPlanOpen((v) => !v)}
+              title={planOpen ? "collapse the plan — give the table the full height" : "show the plan"}
+              className="tele rounded-[var(--radius)] border border-[var(--line-2)] px-1.5 py-0.5 text-muted-foreground hover:bg-muted"
+            >
+              {planOpen ? "▴ hide plan" : "▾ show plan"}
+            </button>
+
             <span className="tele ml-auto text-muted-foreground">
               {selected ? `scoped to ${selected.zone.key}` : "whole house in scope"} — Esc clears
             </span>
           </div>
 
-          <LevelPlan
-            zones={levelZones}
-            stageFilter={stageFilter}
-            selectedKey={zoneKey}
-            cursor={cursor}
-            openFlags={openFlags}
-            onSelectZone={selectZone}
-            onCursor={(z, guid) => {
-              setZoneKey(z.zone.key);
-              setLevel(z.zone.lane.label);
-              setCursor(guid);
+          {planOpen && (
+            <div className="relative shrink-0 overflow-hidden bg-card" style={{ height: planH }}>
+              <LevelPlan
+                zones={levelZones}
+                stageFilter={stageFilter}
+                selectedKey={zoneKey}
+                cursor={cursor}
+                stateOf={stateOf}
+                onSelectZone={selectZone}
+                onCursor={(z, guid) => {
+                  setZoneKey(z.zone.key);
+                  setLevel(z.zone.lane.label);
+                  setCursor(guid);
+                }}
+                onClear={() => {
+                  setZoneKey(null);
+                  setCursor(null);
+                }}
+              />
+              {statsOpen && (
+                <LevelStats
+                  level={level}
+                  zones={levelZones}
+                  stateOf={stateOf}
+                  onClose={() => setStatsOpen(false)}
+                />
+              )}
+            </div>
+          )}
+
+          {/* The grabbable boundary. Drag past the min cap and the plan hides itself. */}
+          <div
+            role="separator"
+            aria-orientation="horizontal"
+            onPointerDown={onHandleDown}
+            onPointerMove={onHandleMove}
+            onPointerUp={onHandleUp}
+            onPointerCancel={onHandleUp}
+            onDoubleClick={() => {
+              setPlanOpen(true);
+              setPlanH(PLAN_DEFAULT_PX);
             }}
-            onClear={() => {
-              setZoneKey(null);
-              setCursor(null);
-            }}
-          />
+            title={
+              planOpen
+                ? "drag to resize the plan · drag past the minimum to hide it · double-click to reset"
+                : "drag down to bring the plan back · double-click to reset"
+            }
+            className={cn(
+              "group flex h-2 shrink-0 cursor-row-resize items-center justify-center border-y border-border bg-muted/50 hover:bg-primary/15",
+              !planOpen && "bg-muted",
+            )}
+          >
+            <span className="h-px w-8 bg-[var(--line-2)] group-hover:bg-primary/60" />
+          </div>
 
           {/* The master table. Scoped, never hidden, never a per-zone detail pane. */}
-          <div className="flex min-h-0 flex-[4] flex-col border-t border-border">
+          <div className="flex min-h-0 flex-1 flex-col">
             <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-2 py-1">
               <span className="tele-label text-muted-foreground">rooms in scope</span>
               <input
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
                 placeholder="filter name / type / zone…"
-                className="tele h-6 w-48 rounded-[var(--radius)] border border-border bg-transparent px-1.5 outline-none focus:border-ring"
+                className="tele h-6 w-44 rounded-[var(--radius)] border border-border bg-transparent px-1.5 outline-none focus:border-ring"
               />
               <span className="tele text-muted-foreground">
                 {rows.length} rooms · {fmtNum(scopeSqft, 0)} sf
-                {scopeOpen > 0 && <span className="text-cat-clay"> · {scopeOpen} open</span>}
+                {scopeCalls > 0 && (
+                  <span className="text-cat-clay"> · {scopeCalls} needing a call</span>
+                )}
               </span>
+
               {selected && (
+                <FilterChip label={`plan scope: ${selected.zone.key}`} onClear={() => selectZone(null)} />
+              )}
+              {stageFilter && (
+                <FilterChip label={`rail: ${stageFilter}`} onClear={() => setStageFilter(null)} />
+              )}
+              {colStage && (
+                <FilterChip label={`stage: ${colStage}`} onClear={() => setColStage(null)} />
+              )}
+              {colState && (
+                <FilterChip
+                  label={`state: ${STATE_META[colState].label}`}
+                  onClear={() => setColState(null)}
+                />
+              )}
+              {colType && <FilterChip label={`type: ${colType}`} onClear={() => setColType(null)} />}
+              {colFlag && (
+                <FilterChip
+                  label={`flags: ${colFlag === "any" ? "any open" : colFlag === "none" ? "none open" : colFlag}`}
+                  onClear={() => setColFlag(null)}
+                />
+              )}
+              {anyColFilter && (
                 <button
                   type="button"
-                  className="tele-label text-muted-foreground hover:text-foreground"
-                  onClick={() => selectZone(null)}
+                  onClick={clearCols}
+                  className="tele rounded-[var(--radius)] px-1 text-muted-foreground hover:bg-muted"
                 >
-                  ← back to whole house
+                  clear column filters
                 </button>
               )}
-              <span className="tele ml-auto text-muted-foreground">j/k cursor · a/d accept/dismiss</span>
+
+              <span className="tele ml-auto text-muted-foreground">
+                j/k cursor · a/d accept/dismiss
+              </span>
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto">
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr>
-                    {[
-                      ["pipeline", ""],
-                      ["zone", ""],
-                      ["name", ""],
-                      ["type", ""],
-                      ["sf", "r"],
-                      ["ceil", "r"],
-                      ["ppl", "r"],
-                      ["ltg W", "r"],
-                      ["eq S", "r"],
-                      ["eq L", "r"],
-                      ["vent", "r"],
-                      ["flags", ""],
-                      [".r10", ""],
-                    ].map(([label, align]) => (
-                      <th
-                        key={label}
-                        className={cn(
-                          "tele-label sticky top-0 z-10 whitespace-nowrap border-b border-l border-border bg-muted px-1.5 py-1 font-normal text-muted-foreground first:border-l-0",
-                          align === "r" ? "text-right" : "text-left",
-                        )}
-                      >
-                        {label}
-                      </th>
-                    ))}
+                    <Th label="stage" title="the ZONE's pipeline label — not a claim about this room">
+                      <ColFilter
+                        value={colStage}
+                        onChange={setColStage}
+                        all="any"
+                        options={STAGE_ORDER.map((s) => ({ value: s, label: s }))}
+                      />
+                    </Th>
+                    <Th
+                      label="state"
+                      title="this ROOM's derived state — the same vocabulary the rail bars and the plan fills use"
+                    >
+                      <ColFilter
+                        value={colState}
+                        onChange={setColState}
+                        all="any"
+                        options={ROOM_STATES.map((s) => ({ value: s, label: STATE_META[s].label }))}
+                      />
+                    </Th>
+                    <Th label="zone" />
+                    <Th label="name" />
+                    <Th label="type">
+                      <ColFilter
+                        value={colType}
+                        onChange={setColType}
+                        all="any"
+                        options={ROOM_TYPES.map((t) => ({ value: t, label: t }))}
+                      />
+                    </Th>
+                    <Th label="sf" right title="detected area — geometry is edited in Revit" />
+                    <Th label="ceil" right />
+                    <Th label="ppl" right />
+                    <Th label="ltg W" right />
+                    <Th label="eq S" right />
+                    <Th label="eq L" right />
+                    <Th label="vent" right />
+                    <Th label="flags">
+                      <ColFilter
+                        value={colFlag}
+                        onChange={setColFlag}
+                        all="any"
+                        options={[
+                          { value: "any", label: "any open" },
+                          { value: "none", label: "none open" },
+                          ...flagVocabulary.map((f) => ({ value: f, label: f })),
+                        ]}
+                      />
+                    </Th>
+                    <Th label=".r10" />
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(({ zone, room }) => (
+                  {rows.map(({ zone, room, state, open }) => (
                     <TableRow
                       key={room.guid}
                       zone={zone}
                       room={room}
-                      open={openFlags(room)}
+                      state={state}
+                      open={open}
                       cursor={cursor === room.guid}
                       rowRef={(el) => {
                         if (el) rowRefs.current.set(room.guid, el);
@@ -515,28 +794,27 @@ export function Variant() {
               {rows.length === 0 && (
                 <p className="p-6 text-center text-xs text-muted-foreground">
                   No rooms in scope. Zones before <span className="tele">partitioned</span> have no
-                  rooms yet.
+                  rooms yet — widen the filters or press <span className="tele">Esc</span>.
                 </p>
               )}
             </div>
           </div>
         </section>
 
-        {/* ── RIGHT: granular data. Opaque — round-1 con answered. ─────────── */}
+        {/* ── RIGHT: sparse peek at exactly one zone. Opaque on purpose. ────── */}
         <aside className="flex w-80 min-w-80 shrink-0 flex-col overflow-y-auto border-l border-border bg-background">
-          {cursorRow ? (
-            <RoomCard
-              zone={cursorRow.zone}
-              room={cursorRow.room}
-              open={openFlags(cursorRow.room)}
-              decided={decided}
-              onDecide={decide}
-            />
-          ) : selected ? (
-            <ZoneCard zone={selected} open={scopeOpen} world={world} openFlags={openFlags} />
-          ) : (
-            <HouseCard world={world} zones={filteredZones} openFlags={openFlags} />
-          )}
+          <Peek
+            zone={peekZone}
+            room={cursorRow?.room ?? null}
+            open={cursorRow?.open ?? []}
+            state={cursorRow?.state ?? null}
+            decided={decided}
+            geoReady={geoReady}
+            stateOf={stateOf}
+            world={world}
+            onDecide={decide}
+            url={proposedUrl}
+          />
         </aside>
       </div>
     </main>
@@ -550,7 +828,7 @@ function LevelPlan({
   stageFilter,
   selectedKey,
   cursor,
-  openFlags,
+  stateOf,
   onSelectZone,
   onCursor,
   onClear,
@@ -559,25 +837,30 @@ function LevelPlan({
   stageFilter: MockStage | null;
   selectedKey: string | null;
   cursor: string | null;
-  openFlags: (room: GeoRoom) => string[];
+  stateOf: (room: GeoRoom) => RoomState;
   onSelectZone: (z: GeoZone) => void;
   onCursor: (z: GeoZone, guid: string) => void;
   onClear: () => void;
 }) {
+  // Stray sub-60 sf zones are excluded from the frame fit AND the render — one of them sitting
+  // 100 ft off the cluster was the reason the real house drew as specks near the legend.
+  const drawn = useMemo(() => zones.filter(onPlan), [zones]);
+  const skipped = zones.length - drawn.length;
+
   const bounds = useMemo<Bounds | null>(() => {
-    if (zones.length === 0) return null;
-    let b: Bounds = zones[0]!.zone.bounds;
-    for (const z of zones) {
+    if (drawn.length === 0) return null;
+    let b: Bounds = drawn[0]!.zone.bounds;
+    for (const z of drawn) {
       b = mergeBounds(b, z.zone.bounds);
       for (const r of z.rooms) if (r.outer) b = mergeBounds(b, boundsOf([r.outer]));
       for (const s of z.residues) b = mergeBounds(b, boundsOf([s.outer]));
     }
     return b;
-  }, [zones]);
+  }, [drawn]);
 
   if (!bounds)
     return (
-      <div className="flex min-h-0 flex-[5] items-center justify-center text-xs text-muted-foreground">
+      <div className="flex size-full items-center justify-center text-xs text-muted-foreground">
         no zones on this level
       </div>
     );
@@ -590,7 +873,7 @@ function LevelPlan({
   const flipY = (y: number) => bounds.minY + bounds.maxY - y;
 
   return (
-    <div className="relative min-h-0 flex-[5] overflow-hidden bg-card">
+    <div className="size-full">
       <svg
         viewBox={`${bounds.minX - pad} ${bounds.minY - pad} ${w + pad * 2} ${h + pad * 2}`}
         preserveAspectRatio="xMidYMid meet"
@@ -607,7 +890,7 @@ function LevelPlan({
           onClick={onClear}
         />
 
-        {zones.map((z) => {
+        {drawn.map((z) => {
           const dimmed = stageFilter !== null && z.stage !== stageFilter;
           const on = z.zone.key === selectedKey;
           const rgb = `rgb(${z.zone.color})`;
@@ -645,10 +928,9 @@ function LevelPlan({
               ))}
 
               {z.rooms.map((room) => {
-                const open = openFlags(room).length;
-                const review = reviewOf(room, open);
+                const state = stateOf(room);
                 const isCursor = room.guid === cursor;
-                const tone = isCursor ? "var(--primary)" : REVIEW_TONE[review];
+                const tone = isCursor ? "var(--primary)" : STATE_META[state].tone;
                 const click = (e: React.MouseEvent) => {
                   e.stopPropagation();
                   if (!dimmed) onCursor(z, room.guid);
@@ -669,7 +951,7 @@ function LevelPlan({
                       className="cursor-pointer"
                       onClick={click}
                     >
-                      <title>{`${room.name} — ${room.sqft} sf (no detected boundary)`}</title>
+                      <title>{`${room.name} — ${room.sqft} sf · ${STATE_META[state].label} (no detected boundary)`}</title>
                     </circle>
                   );
                 return (
@@ -677,14 +959,14 @@ function LevelPlan({
                     <path
                       d={pathD([room.outer, ...room.holes], bounds)}
                       fillRule="evenodd"
-                      fill={`color-mix(in srgb, ${tone} ${isCursor ? 34 : 13}%, transparent)`}
+                      fill={`color-mix(in srgb, ${tone} ${isCursor ? 34 : state === "unreviewed" ? 7 : 13}%, transparent)`}
                       stroke={tone}
                       strokeOpacity={0.85}
-                      strokeWidth={isCursor ? 2.5 : review === "open" ? 1.5 : 1}
-                      strokeDasharray={review === "open" && !isCursor ? "4 2.5" : undefined}
+                      strokeWidth={isCursor ? 2.5 : state === "call" ? 1.5 : 1}
+                      strokeDasharray={state === "call" && !isCursor ? "4 2.5" : undefined}
                       vectorEffect="non-scaling-stroke"
                     >
-                      <title>{`${room.name} — ${room.sqft} sf · ${review}`}</title>
+                      <title>{`${room.name} — ${room.sqft} sf · ${STATE_META[state].label}`}</title>
                     </path>
                     {on && room.sqft > 40 && (
                       <text
@@ -726,29 +1008,215 @@ function LevelPlan({
       </svg>
 
       <div className="pointer-events-none absolute bottom-1 left-2 flex flex-wrap items-center gap-x-3 gap-y-0.5">
-        <Swatch tone={REVIEW_TONE.settled} label="settled" />
-        <Swatch tone={REVIEW_TONE.open} label="open decision" dashed />
-        <Swatch tone={REVIEW_TONE.synced} label="in .r10" />
+        {ROOM_STATES.map((s) => (
+          <Swatch
+            key={s}
+            tone={STATE_META[s].tone}
+            label={STATE_META[s].label}
+            dashed={s === "call"}
+          />
+        ))}
         <Swatch tone="var(--muted-foreground)" label="held residue" dashed />
         <Swatch tone="var(--primary)" label="cursor" />
+        {skipped > 0 && (
+          <span className="tele text-muted-foreground">
+            {skipped} sub-{PLAN_MIN_SQFT} sf scribble{skipped === 1 ? "" : "s"} off-plan — see the
+            rail
+          </span>
+        )}
       </div>
     </div>
   );
 }
 
-function Swatch({ tone, label, dashed }: { tone: string; label: string; dashed?: boolean }) {
+// ── Level-wide stats: the surviving piece of the round-1 dashboard ──────────
+
+function LevelStats({
+  level,
+  zones,
+  stateOf,
+  onClose,
+}: {
+  level: string;
+  zones: GeoZone[];
+  stateOf: (room: GeoRoom) => RoomState;
+  onClose: () => void;
+}) {
+  const rooms = zones.flatMap((z) => z.rooms);
+  const area: Record<RoomState, number> = { call: 0, unreviewed: 0, data: 0, synced: 0 };
+  let calls = 0;
+  for (const r of rooms) {
+    const s = stateOf(r);
+    area[s] += r.sqft;
+    if (s === "call") calls += 1;
+  }
+  const unpartitioned = zones.filter((z) => z.rooms.length === 0);
+  const unpartitionedSqft = unpartitioned.reduce((s, z) => s + z.zone.declaredSqft, 0);
+  const totalArea = ROOM_STATES.reduce((s, k) => s + area[k], 0) + unpartitionedSqft;
+
+  const partitioned = zones.length - unpartitioned.length;
+  const reviewed = zones.filter(
+    (z) => z.rooms.length > 0 && z.rooms.every((r) => stateOf(r) !== "call"),
+  ).length;
+  const synced = zones.filter(
+    (z) => z.rooms.length > 0 && z.rooms.every((r) => stateOf(r) === "synced"),
+  ).length;
+
+  const held = zones.reduce((s, z) => s + z.heldSqft, 0);
+  let residual = 0;
+  for (const z of zones) {
+    const run = z.runs[z.runs.length - 1];
+    if (!run) continue;
+    residual += run.declaredSqft - (run.roomSqft + run.claimedWallSqft + z.heldSqft + run.excludedSqft);
+  }
+
+  const pct = (n: number) => (zones.length === 0 ? 0 : Math.round((n / zones.length) * 100));
+
   return (
-    <span className="tele inline-flex items-center gap-1 text-muted-foreground">
-      <span
-        className={cn("inline-block size-2.5 rounded-[1px] border", dashed && "border-dashed")}
-        style={{ background: `color-mix(in srgb, ${tone} 16%, transparent)`, borderColor: tone }}
-      />
-      {label}
-    </span>
+    <div className="absolute top-2 right-2 z-20 w-64 rounded-[var(--radius)] border border-border bg-background/95 px-2 py-1.5 shadow-sm backdrop-blur">
+      <div className="mb-1 flex items-baseline gap-1.5">
+        <span className="section-label">{level} — level totals</span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="tele ml-auto text-muted-foreground hover:text-foreground"
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="flex h-2 w-full items-stretch gap-px overflow-hidden rounded-[1px]">
+        {ROOM_STATES.map((s) =>
+          area[s] > 0 ? (
+            <span
+              key={s}
+              title={`${STATE_META[s].label} — ${fmtNum(area[s], 0)} sf`}
+              style={{
+                width: `${(area[s] / Math.max(totalArea, 1)) * 100}%`,
+                background: STATE_META[s].tone,
+                opacity: s === "unreviewed" ? 0.35 : 0.9,
+              }}
+            />
+          ) : null,
+        )}
+        {unpartitionedSqft > 0 && (
+          <span
+            title={`not partitioned — ${fmtNum(unpartitionedSqft, 0)} sf declared, no rooms yet`}
+            className="border border-dashed border-[var(--line-2)]"
+            style={{ width: `${(unpartitionedSqft / Math.max(totalArea, 1)) * 100}%` }}
+          />
+        )}
+      </div>
+      <p className="tele mt-0.5 text-muted-foreground">
+        {fmtNum(totalArea, 0)} sf declared on this level, by room state
+      </p>
+
+      <div className="mt-1.5 space-y-px">
+        <StatLine label="partitioned" value={`${pct(partitioned)}% · ${partitioned}/${zones.length} zones`} />
+        <StatLine label="reviewed" value={`${pct(reviewed)}% · no open calls`} />
+        <StatLine label="synced" value={`${pct(synced)}% · every room in the .r10`} />
+        <StatLine
+          label="calls"
+          value={calls === 0 ? "none open" : `${calls} rooms need a human`}
+          tone={calls > 0 ? "text-cat-clay" : "text-cat-green"}
+        />
+        <StatLine label="held" value={`${fmtNum(held, 0)} sf residue`} />
+        <StatLine
+          label="closure"
+          value={
+            Math.abs(residual) < 1
+              ? "closed — every declared foot accounted"
+              : `${fmtNum(residual, 0)} sf unaccounted`
+          }
+          tone={Math.abs(residual) < 1 ? "text-cat-green" : "text-cat-clay"}
+        />
+      </div>
+    </div>
   );
 }
 
-// ── Table row ───────────────────────────────────────────────────────────────
+function StatLine({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  return (
+    <p className="tele flex gap-1.5">
+      <span className="w-16 shrink-0 text-right text-muted-foreground">{label}</span>
+      <span className={cn("min-w-0 flex-1 truncate", tone)}>{value}</span>
+    </p>
+  );
+}
+
+// ── Table pieces ────────────────────────────────────────────────────────────
+
+function Th({
+  label,
+  right,
+  title,
+  children,
+}: {
+  label: string;
+  right?: boolean;
+  title?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <th
+      title={title}
+      className={cn(
+        "sticky top-0 z-10 align-top whitespace-nowrap border-b border-l border-border bg-muted px-1.5 py-1 font-normal first:border-l-0",
+        right ? "text-right" : "text-left",
+      )}
+    >
+      <span className="tele-label block text-muted-foreground">{label}</span>
+      {children}
+    </th>
+  );
+}
+
+/** A column filter, in the table's own idiom: a hairline native select, tinted when active. */
+function ColFilter<T extends string>({
+  value,
+  onChange,
+  options,
+  all,
+}: {
+  value: T | null;
+  onChange: (v: T | null) => void;
+  options: { value: string; label: string }[];
+  all: string;
+}) {
+  return (
+    <select
+      value={value ?? ""}
+      onChange={(e) => onChange(e.target.value === "" ? null : (e.target.value as T))}
+      className={cn(
+        "tele mt-0.5 h-5 w-full min-w-0 max-w-32 rounded-[1px] border bg-transparent px-0.5 outline-none",
+        value
+          ? "border-primary/40 bg-primary/[0.06] text-foreground"
+          : "border-[var(--line-soft)] text-muted-foreground",
+      )}
+    >
+      <option value="">{all}</option>
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function FilterChip({ label, onClear }: { label: string; onClear: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClear}
+      title="remove this filter"
+      className="tele inline-flex items-center gap-1 rounded-[var(--radius)] border border-[var(--line-2)] bg-muted px-1.5 py-px hover:border-destructive/40 hover:text-destructive"
+    >
+      <span className="normal-case">{label}</span>
+      <span className="opacity-60">×</span>
+    </button>
+  );
+}
 
 const cellNum = "border-b border-l border-[var(--line-soft)] p-0";
 const cellRead =
@@ -757,6 +1225,7 @@ const cellRead =
 function TableRow({
   zone,
   room,
+  state,
   open,
   cursor,
   rowRef,
@@ -765,6 +1234,7 @@ function TableRow({
 }: {
   zone: GeoZone;
   room: GeoRoom;
+  state: RoomState;
   open: string[];
   cursor: boolean;
   rowRef: (el: HTMLTableRowElement | null) => void;
@@ -778,14 +1248,26 @@ function TableRow({
   return (
     <tr
       ref={rowRef}
-      className={cn("h-7 scroll-mt-8 hover:bg-muted/60", cursor && "bg-primary/[0.06]")}
+      className={cn("h-7 scroll-mt-12 hover:bg-muted/60", cursor && "bg-primary/[0.06]")}
       onClick={(e) => {
         if ((e.target as HTMLElement).closest("button")) return;
         onFocus();
       }}
     >
-      <td className="whitespace-nowrap border-b border-[var(--line-soft)] px-1.5">
-        <StageTicks stage={zone.stage} />
+      <td
+        className="tele whitespace-nowrap border-b border-[var(--line-soft)] px-1.5 text-muted-foreground"
+        title={`zone ${zone.zone.key} is at "${zone.stage}" — ${STAGE_BLURB[zone.stage]}. This is a ZONE label; the room's own state is the next column.`}
+      >
+        {STAGE_ORDER.indexOf(zone.stage) + 1} {zone.stage}
+      </td>
+      <td
+        className="tele whitespace-nowrap border-b border-l border-[var(--line-soft)] px-1.5"
+        title={STATE_META[state].note}
+      >
+        <StateDot state={state} />{" "}
+        <span className={state === "call" ? "text-cat-clay" : "text-muted-foreground"}>
+          {STATE_META[state].label}
+        </span>
       </td>
       <td className="tele whitespace-nowrap border-b border-l border-[var(--line-soft)] px-1.5">
         <span
@@ -893,7 +1375,7 @@ function TableRow({
               {room.sqft - room.r10.lastSyncedSqft} sf
             </span>
           ) : (
-            <span className="tele text-cat-blue">#{room.r10.identifier}</span>
+            <span className="tele text-cat-green">#{room.r10.identifier}</span>
           )
         ) : (
           <span className="tele text-muted-foreground/50">—</span>
@@ -903,311 +1385,404 @@ function TableRow({
   );
 }
 
-// ── Right rail cards ────────────────────────────────────────────────────────
+// ── Right rail: sparse labelled lines, ledger idiom ─────────────────────────
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Line({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
   return (
-    <div className="flex items-baseline justify-between gap-2 border-b border-[var(--line-soft)] py-0.5">
-      <span className="tele-label shrink-0 text-muted-foreground">{label}</span>
-      <span className="tele min-w-0 truncate text-right">{children}</span>
+    <p className="tele flex gap-1.5">
+      <span className="w-16 shrink-0 text-right text-muted-foreground">{label}</span>
+      <span className={cn("min-w-0 flex-1 break-words", muted && "text-muted-foreground")}>
+        {value}
+      </span>
+    </p>
+  );
+}
+
+function nextAction(zone: GeoZone, calls: number): string {
+  if (calls > 0) return `clear ${calls} open call${calls === 1 ? "" : "s"} on this zone`;
+  switch (zone.stage) {
+    case "declared":
+      return "type a system tag on the Zoning Region";
+    case "registered":
+      return "run the partition to materialize rooms";
+    case "partitioned":
+    case "reviewed":
+      return "enter Manual J data against settled geometry";
+    case "data":
+      return "export this zone into the .r10";
+    case "synced":
+      return "nothing pending — this zone is closed";
+    case "drifted":
+      return `reconcile ${fmtNum(zone.driftSqft, 0)} sf of hand-edit drift, then re-sync`;
+  }
+}
+
+function Peek({
+  zone,
+  room,
+  open,
+  state,
+  decided,
+  geoReady,
+  stateOf,
+  world,
+  onDecide,
+  url,
+}: {
+  zone: GeoZone | null;
+  room: GeoRoom | null;
+  open: string[];
+  state: RoomState | null;
+  decided: Record<string, Verdict>;
+  geoReady: boolean;
+  stateOf: (room: GeoRoom) => RoomState;
+  world: { systems: { tag: string; zoneKeys: string[]; sensibleBtuh: number; overCap: boolean }[] };
+  onDecide: (room: GeoRoom, flag: string, verb: Verdict) => void;
+  url: string;
+}) {
+  if (!zone)
+    return (
+      <div className="space-y-1 p-3">
+        <p className="tele text-muted-foreground">
+          nothing under the cursor. Click a zone on the plan to scope, or a room to peek.
+        </p>
+        <p className="tele text-muted-foreground">
+          j/k move the cursor · a/d accept or dismiss the first open call · Esc widens back to the
+          whole house.
+        </p>
+      </div>
+    );
+
+  const calls = zone.rooms.filter((r) => stateOf(r) === "call").length;
+  const run = zone.runs[zone.runs.length - 1] ?? null;
+  const closure = run
+    ? run.declaredSqft - (run.roomSqft + run.claimedWallSqft + zone.heldSqft + run.excludedSqft)
+    : null;
+  const systems = world.systems.filter((s) => s.zoneKeys.includes(zone.zone.key));
+  const localDecisions = room
+    ? room.flags
+        .map((f) => ({ flag: f, verb: decided[flagKey(room.guid, f)] }))
+        .filter((x): x is { flag: string; verb: Verdict } => x.verb !== undefined)
+    : [];
+
+  return (
+    <div className="divide-y divide-[var(--line)]">
+      <div className="px-2.5 py-2">
+        <div className="flex items-center gap-1.5">
+          <ZoneThumb zone={zone.zone} className="size-5" />
+          <span className="tele">{zone.zone.key}</span>
+          <span className="tele truncate text-muted-foreground">
+            {zone.name} · {zone.zone.lane.label}
+          </span>
+        </div>
+        <h2 className="mt-1 font-pe-display text-base leading-tight font-semibold tracking-tight">
+          {room ? room.name : zone.name}
+        </h2>
+        <p className="mt-1 flex flex-wrap items-center gap-x-1.5">
+          {room && state ? (
+            <>
+              <StateDot state={state} />
+              <span className={cn("tele", state === "call" ? "text-cat-clay" : undefined)}>
+                {STATE_META[state].label}
+              </span>
+              <span className="tele text-muted-foreground">
+                {room.sqft} sf · {fmtNum(room.ceilingFt, 1)} ft clg · {room.type}
+              </span>
+            </>
+          ) : (
+            <span className="tele text-muted-foreground">
+              {zone.rooms.length} rooms · {fmtNum(zone.zone.declaredSqft, 0)} sf declared · zone at{" "}
+              {zone.stage}
+            </span>
+          )}
+        </p>
+      </div>
+
+      <ZonePeek zone={zone} cursorRoom={room} geoReady={geoReady} stateOf={stateOf} />
+
+      {open.length > 0 && room && (
+        <div className="px-2.5 py-2">
+          <p className="section-label mb-1">open calls — {open.length}</p>
+          <ul className="space-y-1">
+            {open.map((flag) => (
+              <li key={flag}>
+                <p className="tele text-cat-clay">{flag}</p>
+                <p className="tele text-muted-foreground">{FLAG_MEANING[flag] ?? "no blurb"}</p>
+                <span className="mt-0.5 flex gap-1">
+                  <Button size="xs" variant="ghost" onClick={() => onDecide(room, flag, "accept")}>
+                    accept <span className="ml-1 opacity-50">a</span>
+                  </Button>
+                  <Button size="xs" variant="ghost" onClick={() => onDecide(room, flag, "dismiss")}>
+                    dismiss <span className="ml-1 opacity-50">d</span>
+                  </Button>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <Seam className="mt-1.5">
+            verbs write through to the Room Region provenance blob; here they are local only
+          </Seam>
+        </div>
+      )}
+
+      <div className="space-y-1 px-2.5 py-2">
+        <p className="section-label">next action for this zone</p>
+        <p className="text-xs leading-relaxed">{nextAction(zone, calls)}</p>
+      </div>
+
+      <div className="px-2.5 py-2">
+        <p className="section-label mb-1">provenance</p>
+        {room ? (
+          <>
+            <Line label="run" value={room.provenance.runId} />
+            <Line
+              label="source sf"
+              value={
+                room.sqft === room.provenance.sourceSqft
+                  ? `${fmtNum(room.provenance.sourceSqft, 0)} sf — unchanged since detection`
+                  : `${fmtNum(room.provenance.sourceSqft, 0)} sf detected, now ${room.sqft} sf`
+              }
+            />
+            <Line label="boundary" value={room.outer ? `${room.outer.length} pts detected` : "no polygon — dot only"} />
+            <Line label="guid" value={room.guid} />
+            <Line
+              label=".r10"
+              value={
+                room.r10
+                  ? `#${room.r10.identifier} · synced ${room.r10.syncedAt.slice(0, 10)} at ${fmtNum(room.r10.lastSyncedSqft, 0)} sf`
+                  : "never exported"
+              }
+            />
+            {room.decisions.length === 0 && localDecisions.length === 0 ? (
+              <Line label="decisions" value="none written on this room" muted />
+            ) : (
+              <>
+                {room.decisions.map((d, i) => (
+                  <Line
+                    key={`w${i}`}
+                    label={i === 0 ? "decisions" : ""}
+                    value={`${d.verb} ${d.flag} · ${d.at.slice(0, 10)} · ${d.runId}`}
+                  />
+                ))}
+                {localDecisions.map((d) => (
+                  <Line key={`l${d.flag}`} label="" value={`${d.verb} ${d.flag} · this session`} />
+                ))}
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            <Line label="zone guid" value={zone.zone.guid} />
+            <Line label="tags" value={zone.tags.length > 0 ? zone.tags.join(", ") : "none typed yet"} />
+            <Line label="declared" value={`${fmtNum(zone.zone.declaredSqft, 0)} sf`} />
+            <Line label="run" value={run ? run.runId : "no partition run against this zone"} muted={!run} />
+          </>
+        )}
+      </div>
+
+      {systems.length > 0 && (
+        <div className="px-2.5 py-2">
+          <p className="section-label mb-1">systems</p>
+          {systems.map((s) => (
+            <Line
+              key={s.tag}
+              label={s.tag}
+              value={`${fmtNum(s.sensibleBtuh, 0)} Btu/h sensible${
+                s.overCap ? ` — over the ${SENSIBLE_CAP_BTUH.toLocaleString()} cap` : ""
+              }`}
+            />
+          ))}
+        </div>
+      )}
+
+      <div className="px-2.5 py-2">
+        <p className="section-label mb-1">accounting closure</p>
+        {run ? (
+          <>
+            <Line label="declared" value={`${fmtNum(run.declaredSqft, 0)} sf`} />
+            <Line label="rooms" value={`${fmtNum(run.roomSqft, 0)} sf · ${run.created} created`} />
+            <Line label="walls" value={`${fmtNum(run.claimedWallSqft, 0)} sf claimed`} />
+            <Line label="held" value={`${fmtNum(zone.heldSqft, 0)} sf · ${run.held} residue`} />
+            <Line label="excluded" value={`${fmtNum(run.excludedSqft, 0)} sf`} />
+            <p
+              className={cn(
+                "tele mt-1 rounded-[var(--radius)] border px-1.5 py-0.5",
+                closure !== null && Math.abs(closure) < 1
+                  ? "border-cat-green/25 bg-cat-green/[0.08] text-cat-green"
+                  : "border-cat-clay/30 bg-cat-clay/[0.08] text-cat-clay",
+              )}
+            >
+              {closure !== null && Math.abs(closure) < 1
+                ? "closed — every declared foot is accounted for"
+                : `${fmtNum(closure ?? 0, 0)} sf unaccounted`}
+            </p>
+          </>
+        ) : (
+          <p className="tele text-muted-foreground">
+            no run yet — nothing has been claimed against this zone's declared area.
+          </p>
+        )}
+      </div>
+
+      <div className="space-y-1 px-2.5 py-2">
+        <p className="section-label">addressable</p>
+        <p className="tele rounded-[var(--radius)] border border-[var(--line)] bg-muted/60 px-1.5 py-1 break-all text-muted-foreground">
+          {url}
+        </p>
+      </div>
     </div>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="border-b border-border px-3 py-2">
-      <h3 className="section-label mb-1 text-muted-foreground">{title}</h3>
-      {children}
-    </section>
-  );
-}
-
-function nextAction(zone: GeoZone, open: number): string {
-  switch (zone.stage) {
-    case "declared":
-      return "type a system tag on the Zoning Region (step 2)";
-    case "registered":
-      return "run the partition to materialize rooms (step 3)";
-    case "partitioned":
-      return open > 0 ? `clear ${open} open decision${open === 1 ? "" : "s"} (step 4)` : "review clean — enter Manual J data";
-    case "reviewed":
-      return "enter Manual J data (step 5)";
-    case "data":
-      return "export to the .r10 (step 6)";
-    case "synced":
-      return "nothing pending";
-    case "drifted":
-      return `re-sync — ${zone.driftSqft} sf of hand-edit drift since last export`;
-  }
-}
-
-function RoomCard({
+/**
+ * The zone under the cursor, drawn from the real detector polygons: zone outline, held residues,
+ * sibling rooms dim, the cursor room emphasized. Same Y-flipped frame as the level plan, so a
+ * room's position here is its position in the model. Rooms the fixture does not cover fall back to
+ * label dots, and say so. Ported from the ledger variant — the plan answers "where in the house",
+ * this answers "where in the zone", and the second question survived the merge.
+ */
+function ZonePeek({
   zone,
-  room,
-  open,
-  decided,
-  onDecide,
+  cursorRoom,
+  geoReady,
+  stateOf,
 }: {
   zone: GeoZone;
-  room: GeoRoom;
-  open: string[];
-  decided: Record<string, Verdict>;
-  onDecide: (room: GeoRoom, flag: string, verb: Verdict) => void;
+  cursorRoom: GeoRoom | null;
+  geoReady: boolean;
+  stateOf: (room: GeoRoom) => RoomState;
 }) {
-  const local = room.flags
-    .map((f) => ({ flag: f, verb: decided[flagKey(room.guid, f)] }))
-    .filter((x): x is { flag: string; verb: Verdict } => x.verb !== undefined);
+  const withGeometry = zone.rooms.filter((r) => r.outer !== null);
+  const bounds = useMemo<Bounds>(() => {
+    let b: Bounds = zone.zone.bounds;
+    for (const room of zone.rooms) if (room.outer) b = mergeBounds(b, boundsOf([room.outer]));
+    for (const residue of zone.residues) b = mergeBounds(b, boundsOf([residue.outer]));
+    return b;
+  }, [zone]);
+
+  const w = Math.max(bounds.maxX - bounds.minX, 1e-6);
+  const h = Math.max(bounds.maxY - bounds.minY, 1e-6);
+  const pad = Math.max(w, h) * 0.06;
+  const font = Math.max(w, h) / 26;
+  const flipY = (y: number) => bounds.minY + bounds.maxY - y;
 
   return (
-    <>
-      <Section title="cursor room">
-        <div className="mb-1 flex items-baseline gap-2">
-          <span className="font-pe-display text-base font-semibold tracking-tight">{room.name}</span>
-          <span className="tele text-muted-foreground">{shortId(room.guid)}</span>
-        </div>
-        <Field label="zone">
-          {zone.zone.key} · {zone.name}
-        </Field>
-        <Field label="stage">
-          <StageTicks stage={zone.stage} className="mr-1" />
-          {zone.stage}
-        </Field>
-        <Field label="type">{room.type}</Field>
-        <Field label="area">{room.sqft} sf</Field>
-        <Field label="ceiling">{fmtNum(room.ceilingFt, 1)} ft</Field>
-        <Field label="boundary">
-          {room.outer ? `${room.outer.length} pts detected` : "no polygon — dot only"}
-        </Field>
-      </Section>
+    <div>
+      <div className="h-52 border-b border-[var(--line)] bg-card">
+        <svg
+          viewBox={`${bounds.minX - pad} ${bounds.minY - pad} ${w + pad * 2} ${h + pad * 2}`}
+          preserveAspectRatio="xMidYMid meet"
+          className="size-full"
+        >
+          <title>{`${zone.zone.key} — declared zone, its rooms, and the cursor room`}</title>
 
-      <Section title="provenance">
-        <Field label="run">{room.provenance.runId}</Field>
-        <Field label="source sf">{room.provenance.sourceSqft}</Field>
-        <Field label="guid">{room.guid}</Field>
-        <Field label=".r10">
-          {room.r10
-            ? `#${room.r10.identifier} · synced ${room.r10.syncedAt.slice(0, 10)} at ${room.r10.lastSyncedSqft} sf`
-            : "never exported"}
-        </Field>
-        {room.decisions.length === 0 && local.length === 0 ? (
-          <p className="tele mt-1 text-muted-foreground">no decision receipts on this room</p>
-        ) : (
-          <ul className="mt-1 space-y-0.5">
-            {room.decisions.map((d) => (
-              <li key={d.flag} className="tele text-muted-foreground">
-                <span className={d.verb === "accept" ? "text-cat-blue" : "text-cat-clay"}>
-                  {d.verb}
-                </span>{" "}
-                {d.flag} · {d.at.slice(0, 10)} · {d.runId}
-              </li>
-            ))}
-            {local.map((d) => (
-              <li key={d.flag} className="tele text-muted-foreground">
-                <span className={d.verb === "accept" ? "text-cat-blue" : "text-cat-clay"}>
-                  {d.verb}
-                </span>{" "}
-                {d.flag} · <span className="text-cat-clay">this session</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
+          {/* The designer's declared scope. Nothing may be claimed outside it. */}
+          <path
+            d={pathD(zone.zone.loops, bounds)}
+            fillRule="evenodd"
+            fill={`color-mix(in srgb, rgb(${zone.zone.color}) 8%, transparent)`}
+            stroke={`rgb(${zone.zone.color})`}
+            strokeWidth={1.5}
+            strokeOpacity={0.85}
+            vectorEffect="non-scaling-stroke"
+          />
 
-      <Section title={`open flags — ${open.length}`}>
-        {open.length === 0 ? (
-          <p className="tele text-muted-foreground">nothing to decide here.</p>
-        ) : (
-          <ul className="space-y-1.5">
-            {open.map((flag) => (
-              <li key={flag} className="rounded-[var(--radius)] border border-[var(--line)] p-1.5">
-                <div className="tele mb-1 text-cat-clay">{flag}</div>
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    className="tele flex-1 rounded-[var(--radius)] border border-[var(--line-2)] px-2 py-0.5 hover:bg-muted"
-                    onClick={() => onDecide(room, flag, "accept")}
-                  >
-                    accept <span className="opacity-50">a</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="tele flex-1 rounded-[var(--radius)] border border-[var(--line-2)] px-2 py-0.5 hover:bg-muted"
-                    onClick={() => onDecide(room, flag, "dismiss")}
-                  >
-                    dismiss <span className="opacity-50">d</span>
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-        <Seam className="mt-2">
-          verbs write through to the Room Region provenance blob; here they are local only
-        </Seam>
-      </Section>
-
-      <ClosureSection zone={zone} />
-    </>
-  );
-}
-
-function ZoneCard({
-  zone,
-  open,
-  world,
-  openFlags,
-}: {
-  zone: GeoZone;
-  open: number;
-  world: { systems: { tag: string; zoneKeys: string[]; sensibleBtuh: number; overCap: boolean }[] };
-  openFlags: (room: GeoRoom) => string[];
-}) {
-  void openFlags;
-  const systems = world.systems.filter((s) => s.zoneKeys.includes(zone.zone.key));
-  return (
-    <>
-      <Section title="selected zone">
-        <div className="mb-1 flex items-baseline gap-2">
-          <span className="font-pe-display text-base font-semibold tracking-tight">{zone.name}</span>
-          <span className="tele text-muted-foreground">{zone.zone.key}</span>
-        </div>
-        <Field label="stage">
-          <StageTicks stage={zone.stage} className="mr-1" />
-          {zone.stage}
-        </Field>
-        <Field label="level">{zone.zone.lane.label}</Field>
-        <Field label="declared">{fmtNum(zone.zone.declaredSqft, 0)} sf</Field>
-        <Field label="rooms">{zone.rooms.length}</Field>
-        <Field label="open">{open}</Field>
-        <Field label="tags">{zone.tags.join(", ") || "none"}</Field>
-        <Field label="guid">{zone.zone.guid}</Field>
-      </Section>
-
-      {systems.length > 0 && (
-        <Section title="systems">
-          {systems.map((s) => (
-            <Field key={s.tag} label={s.tag}>
-              <span className={s.overCap ? "text-cat-clay" : undefined}>
-                {fmtNum(s.sensibleBtuh, 0)} Btu/h sensible
-                {s.overCap && ` — over ${SENSIBLE_CAP_BTUH.toLocaleString()} cap`}
-              </span>
-            </Field>
+          {/* Held residue: abstention stays visible; a held area beats a guessed one. */}
+          {zone.residues.map((residue) => (
+            <path
+              key={residue.id}
+              d={pathD([residue.outer, ...residue.holes], bounds)}
+              fillRule="evenodd"
+              fill="color-mix(in srgb, var(--muted-foreground) 12%, transparent)"
+              stroke="var(--muted-foreground)"
+              strokeOpacity={0.4}
+              strokeDasharray="4 3"
+              strokeWidth={1}
+              vectorEffect="non-scaling-stroke"
+            >
+              <title>{`held residue · ${residue.reason} · ${fmtNum(residue.rawSqft, 0)} sf`}</title>
+            </path>
           ))}
-        </Section>
-      )}
 
-      <ClosureSection zone={zone} />
+          {zone.rooms.map((room) => {
+            const on = cursorRoom?.guid === room.guid;
+            const state = stateOf(room);
+            const accent = on ? "var(--primary)" : STATE_META[state].tone;
+            if (!room.outer) {
+              const r = Math.max(Math.sqrt(Math.max(room.sqft, 20)) / 3.2, Math.max(w, h) / 90);
+              return (
+                <circle
+                  key={room.guid}
+                  cx={room.label[0]}
+                  cy={flipY(room.label[1])}
+                  r={r}
+                  fill={`color-mix(in srgb, ${accent} ${on ? 45 : 18}%, transparent)`}
+                  stroke={accent}
+                  strokeWidth={on ? 2 : 1}
+                  strokeDasharray="3 2"
+                  vectorEffect="non-scaling-stroke"
+                >
+                  <title>{`${room.name} · ${fmtNum(room.sqft, 0)} sf · position only, no boundary`}</title>
+                </circle>
+              );
+            }
+            return (
+              <path
+                key={room.guid}
+                d={pathD([room.outer, ...room.holes], bounds)}
+                fillRule="evenodd"
+                fill={`color-mix(in srgb, ${accent} ${on ? 32 : 10}%, transparent)`}
+                stroke={accent}
+                strokeOpacity={on ? 0.95 : 0.55}
+                strokeWidth={on ? 2 : 1}
+                strokeDasharray={state === "call" && !on ? "5 3" : undefined}
+                vectorEffect="non-scaling-stroke"
+              >
+                <title>{`${room.name} · ${fmtNum(room.sqft, 0)} sf · ${STATE_META[state].label}`}</title>
+              </path>
+            );
+          })}
 
-      <Section title="next action">
-        <p className="text-xs">{nextAction(zone, open)}</p>
-      </Section>
-    </>
-  );
-}
+          {cursorRoom && (
+            <text
+              x={cursorRoom.label[0]}
+              y={flipY(cursorRoom.label[1])}
+              textAnchor="middle"
+              fontSize={font}
+              className="pointer-events-none select-none"
+              fill="var(--foreground)"
+            >
+              <tspan x={cursorRoom.label[0]} fontWeight={600}>
+                {cursorRoom.name}
+              </tspan>
+              <tspan x={cursorRoom.label[0]} dy={font * 1.15} fillOpacity={0.7}>
+                {fmtNum(cursorRoom.sqft, 0)} sf
+              </tspan>
+            </text>
+          )}
+        </svg>
+      </div>
 
-/** Accounting closure — declared area must be fully accounted for: rooms + claimed wall band +
- *  held residue + excluded. A zone that does not close is not reviewable. */
-function ClosureSection({ zone }: { zone: GeoZone }) {
-  const run = zone.runs[zone.runs.length - 1];
-  if (!run)
-    return (
-      <Section title="accounting closure">
-        <p className="tele text-muted-foreground">no partition run yet — nothing to close.</p>
-      </Section>
-    );
-  const accounted = run.roomSqft + run.claimedWallSqft + zone.heldSqft + run.excludedSqft;
-  const residual = run.declaredSqft - accounted;
-  const closed = Math.abs(residual) < 1;
-  return (
-    <Section title="accounting closure">
-      <p className="tele leading-relaxed">
-        {fmtNum(run.roomSqft, 0)} rooms + {fmtNum(run.claimedWallSqft, 0)} wall +{" "}
-        {fmtNum(zone.heldSqft, 0)} held + {fmtNum(run.excludedSqft, 0)} excluded ={" "}
-        {fmtNum(accounted, 0)} of {fmtNum(run.declaredSqft, 0)} declared
-      </p>
-      <p className={cn("tele mt-1", closed ? "text-cat-blue" : "text-cat-clay")}>
-        {closed ? "closed — residual < 1 sf" : `residual ${fmtNum(residual, 1)} sf unaccounted`}
-      </p>
-      <Field label="run">{run.runId}</Field>
-      <Field label="census">
-        {run.created} created · {run.rebound} rebound · {run.held} held · {run.orphaned} orphaned
-      </Field>
-    </Section>
-  );
-}
-
-function HouseCard({
-  world,
-  zones,
-  openFlags,
-}: {
-  world: { docName: string; r10Path: string; systems: { tag: string; overCap: boolean }[] };
-  zones: GeoZone[];
-  openFlags: (room: GeoRoom) => string[];
-}) {
-  const rooms = zones.reduce((n, z) => n + z.rooms.length, 0);
-  const open = zones.reduce((n, z) => n + z.rooms.reduce((m, r) => m + openFlags(r).length, 0), 0);
-  const declared = zones.reduce((s, z) => s + z.zone.declaredSqft, 0);
-  const over = world.systems.filter((s) => s.overCap);
-  const worst = [...zones]
-    .map((z) => ({ z, open: z.rooms.reduce((m, r) => m + openFlags(r).length, 0) }))
-    .filter((x) => x.open > 0)
-    .sort((a, b) => b.open - a.open)
-    .slice(0, 6);
-
-  return (
-    <>
-      <Section title="whole house">
-        <p className="tele mb-1 text-muted-foreground">
-          Nothing selected — the table is showing everything in the current filter.
-        </p>
-        <Field label="zones">{zones.length}</Field>
-        <Field label="rooms">{rooms}</Field>
-        <Field label="declared">{fmtNum(declared, 0)} sf</Field>
-        <Field label="open">{open}</Field>
-        <Field label="doc">{world.docName}</Field>
-      </Section>
-
-      {over.length > 0 && (
-        <Section title="cap violations">
-          <p className="tele text-cat-clay">
-            {over.map((s) => s.tag).join(", ")} exceed {SENSIBLE_CAP_BTUH.toLocaleString()} Btu/h
-            sensible.
-          </p>
-        </Section>
-      )}
-
-      <Section title="heaviest review debt">
-        {worst.length === 0 ? (
-          <p className="tele text-muted-foreground">no open decisions in this filter.</p>
-        ) : (
-          <ul className="space-y-0.5">
-            {worst.map(({ z, open: n }) => (
-              <li key={z.zone.key} className="flex items-center gap-1.5">
-                <StageTicks stage={z.stage} />
-                <span className="tele">{z.zone.key}</span>
-                <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                  {z.name}
-                </span>
-                <span className="tele text-cat-clay">{n}</span>
-              </li>
-            ))}
-          </ul>
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 px-2.5 py-1">
+        <Swatch tone="var(--primary)" label="cursor room" />
+        <Swatch tone={STATE_META.call.tone} label="needs a call" dashed />
+        {zone.residues.length > 0 && (
+          <Swatch tone="var(--muted-foreground)" label={`held ×${zone.residues.length}`} dashed />
         )}
-      </Section>
+        <span className="tele text-muted-foreground">
+          {withGeometry.length}/{zone.rooms.length} with real boundaries
+        </span>
+      </div>
 
-      <Section title="how to drive this">
-        <ul className="space-y-0.5 text-xs text-muted-foreground">
-          <li>Click a zone on the plan to scope everything to it.</li>
-          <li>Click a room to put the cursor on it; the rail follows.</li>
-          <li>
-            <span className="tele">j</span>/<span className="tele">k</span> move the cursor,{" "}
-            <span className="tele">a</span>/<span className="tele">d</span> accept/dismiss,{" "}
-            <span className="tele">Esc</span> returns to the whole house.
-          </li>
-        </ul>
-      </Section>
-    </>
+      {(!geoReady || withGeometry.length < zone.rooms.length) && (
+        <p className="px-2.5 pb-1.5">
+          <Seam>
+            {!geoReady
+              ? "the detector fixture has not loaded yet — rooms are position dots until it does"
+              : "this zone is outside the replayed capture, so its rooms carry label points and areas but no boundary"}
+          </Seam>
+        </p>
+      )}
+    </div>
   );
 }

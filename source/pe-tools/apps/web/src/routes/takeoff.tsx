@@ -1,27 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { VariantSwitcher } from "#/takeoff/proto/switcher";
-import { Variant as ZonesVariant } from "#/takeoff/proto/variant-zones";
-import { Variant as InboxVariant } from "#/takeoff/proto/variant-inbox";
-import { Variant as PeaVariant } from "#/takeoff/proto/variant-pea";
 import { Variant as AtlasVariant } from "#/takeoff/proto/variant-atlas";
-import { Variant as LedgerVariant } from "#/takeoff/proto/variant-ledger";
+import { Variant as PeaVariant } from "#/takeoff/proto/variant-pea";
 
 /**
- * /takeoff — PROTOTYPE: UX exploration, switchable via ?variant= (src/takeoff/proto/).
- *
- * Round-1 verdict (2026-08-14): three-pane layout wins — zones/filters left, master table
- * middle, granular data right; real geometry is critical; the rhvac grid's cell editing is
- * the canonical table feel. Round 2 explores the remaining tension: plan-dominant ("atlas")
- * vs table-dominant ("ledger") middle pane. The round-1 spec and house variants live on
- * this branch's history (commit 3049bf3); "pea" is sidelined but kept for reference.
+ * /takeoff — PROTOTYPE converging on canon: "atlas" (plan-dominant three-pane) won rounds 1–2
+ * and carries the merged verdicts (collapsible/resizable plan, ledger's minimal right rail +
+ * zone poly peek, level-stats popover, filterable columns, derived room-state progress).
+ * "pea" (chat-native) is sidelined but kept for its route-state thinking. Retired variants
+ * live in this branch's history: spec/house at 3049bf3, zones/inbox/ledger at feebcb6.
  */
 const VARIANTS = [
-  { key: "atlas", name: "plan-dominant three-pane" },
-  { key: "ledger", name: "table-dominant three-pane" },
-  { key: "zones", name: "zone-first workbench (r1)" },
-  { key: "inbox", name: "decision inbox (r1)" },
-  { key: "pea", name: "chat-native (r1, sidelined)" },
+  { key: "atlas", name: "atlas (canon-track)" },
+  { key: "pea", name: "chat-native (sidelined)" },
 ];
 
 export const Route = createFileRoute("/takeoff")({
@@ -36,9 +28,6 @@ function VariantGate() {
   return (
     <>
       {variant === "atlas" && <AtlasVariant />}
-      {variant === "ledger" && <LedgerVariant />}
-      {variant === "zones" && <ZonesVariant />}
-      {variant === "inbox" && <InboxVariant />}
       {variant === "pea" && <PeaVariant />}
       <VariantSwitcher variants={VARIANTS} current={variant} />
     </>
