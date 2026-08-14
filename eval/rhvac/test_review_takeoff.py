@@ -38,8 +38,11 @@ class ReviewTakeoffTests(unittest.TestCase):
             zone = {
                 "Level": "Test", "Zone": "Test#00", "MinX": 0, "MinY": 0,
                 "MaxX": 3, "MaxY": 2, "Tsv": "zones/rooms_Test.tsv",
+                "ZoneLoops": [[[0, 0], [3, 0], [3, 2], [0, 2]]],
                 "Ink": "input/ink_Test.bin", "RawRooms": 2, "AcceptedRooms": 1,
-                "HeldRooms": 1, "InkBackedEdgeFraction": 0.5, "ClosureErrorSqft": 0,
+                "HeldRooms": 1, "ExcludedSqft": 0, "ZoneSqft": 6,
+                "SharedEdgePairs": 0, "LostSharedEdgePairs": 0,
+                "InkBackedEdgeFraction": 0.5, "ClosureErrorSqft": 0,
             }
             outside = {**zone, "Zone": "Test#01", "MinX": 20, "MaxX": 22}
             (root / "report.json").write_text(
@@ -73,7 +76,9 @@ class ReviewTakeoffTests(unittest.TestCase):
                     "ROOM\tR01\t9\t12\t1\t1\t9\n"
                     f"POLY\tR01\touter\t{points}\n"
                     "META\tresidue\tR02\trejected\t4\t2\t2\t9\t1;1|3;1|3;3|1;3\n"
-                    "META\tresidue\tX01\tcrumb\t1\t0.5\t0.5\t9\t0;0|1;0|1;1|0;1\n",
+                    "META\tresidue\tX01\tcrumb\t1\t0.5\t0.5\t9\t0;0|1;0|1;1|0;1\n"
+                    # Exact zone accounting retains unobserved scope as an explicit disposition.
+                    "META\tresidue\tZ01\texcluded\t1\t3.5\t3.5\t0\t3;3|4;3|4;4|3;4\n",
                     encoding="utf-8",
                 )
                 sources.append((source, digest(tsv)))
@@ -124,6 +129,8 @@ class ReviewTakeoffTests(unittest.TestCase):
                     "rejectedSqft": 4.0,
                     "crumbCount": 1,
                     "crumbSqft": 1.0,
+                    "excludedCount": 1,
+                    "excludedSqft": 1.0,
                 })
             # The variants place the same raw regions differently; overlap is the
             # computed union of pairwise intersections, not raw-area arithmetic.

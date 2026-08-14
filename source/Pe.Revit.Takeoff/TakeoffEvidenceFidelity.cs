@@ -44,10 +44,17 @@ internal static class TakeoffEvidenceFidelity
     internal static IReadOnlyList<MisalignedExposedRail> Evaluate(
         IReadOnlyList<RoomResult> rooms,
         Func<double, double, double> distanceToInk)
+        => Evaluate(rooms, null, distanceToInk);
+
+    internal static IReadOnlyList<MisalignedExposedRail> Evaluate(
+        IReadOnlyList<RoomResult> rooms,
+        ISet<string>? evaluatedRoomIds,
+        Func<double, double, double> distanceToInk)
     {
         var polygons = rooms.ToDictionary(room => room.Id, ToPolygon, StringComparer.Ordinal);
         var result = new List<MisalignedExposedRail>();
-        foreach (var room in rooms)
+        foreach (var room in rooms.Where(room =>
+                     evaluatedRoomIds == null || evaluatedRoomIds.Contains(room.Id)))
         {
             var otherBoundaries = polygons
                 .Where(item => item.Key != room.Id)

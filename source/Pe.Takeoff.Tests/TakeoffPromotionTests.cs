@@ -18,16 +18,22 @@ public sealed class TakeoffPromotionTests
             DomainSqft = 130,
         };
 
-        var promotion = TakeoffPromotion.PromoteZone(source, 0, (_, _) => 0);
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, Zone("all", (0, 0), (30, 0), (30, 10), (0, 10)),
+            Options(minimumRoomSqft: 0), (_, _) => 0);
 
         Assert.Multiple(() => {
             Assert.That(promotion.Result.Rooms.Select(room => room.Id), Is.EqualTo(new[] { "good" }));
-            Assert.That(promotion.Result.Residues.Single().Id, Is.EqualTo("bad"));
+            Assert.That(promotion.Result.Residues.Single(residue =>
+                residue.Reason == ResidueReason.Rejected).Id, Is.EqualTo("bad"));
             Assert.That(promotion.Diagnostics.SourceRooms, Is.EqualTo(2));
+            Assert.That(promotion.Diagnostics.SharedNetworkStrictRooms, Is.GreaterThanOrEqualTo(1));
             Assert.That(promotion.Diagnostics.AcceptedRooms, Is.EqualTo(1));
             Assert.That(promotion.Diagnostics.HeldRooms, Is.EqualTo(1));
             Assert.That(promotion.Diagnostics.Rejections.Single().Key, Does.StartWith("frame:"));
             Assert.That(promotion.Diagnostics.Rejections.Single().Value, Is.EqualTo(1));
+            Assert.That(promotion.Diagnostics.RejectionDetails["bad"],
+                Does.StartWith("frame:"));
             Assert.That(promotion.Diagnostics.InkBackedEdgeFraction, Is.EqualTo(1).Within(1e-9));
             Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
             Assert.That(promotion.Diagnostics.IsStrictlyEditable, Is.True);
@@ -45,14 +51,128 @@ public sealed class TakeoffPromotionTests
             DomainSqft = 80,
         };
 
-        var first = TakeoffPromotion.PromoteZone(source, 0, (_, _) => 0);
-        var second = TakeoffPromotion.PromoteZone(source, 0, (_, _) => 0);
+        var zone = Zone("room", (0, 0), (10, 0), (10, 8), (0, 8));
+        var first = TakeoffPromotion.PromoteZone(source, zone, Options(0), (_, _) => 0);
+        var second = TakeoffPromotion.PromoteZone(source, zone, Options(0), (_, _) => 0);
 
         Assert.Multiple(() => {
             Assert.That(second.Result.ToTsv(), Is.EqualTo(first.Result.ToTsv()));
-            Assert.That(second.Diagnostics with { Rejections = first.Diagnostics.Rejections },
+            Assert.That(second.Diagnostics with {
+                    Rejections = first.Diagnostics.Rejections,
+                    RejectionDetails = first.Diagnostics.RejectionDetails,
+                },
                 Is.EqualTo(first.Diagnostics));
             Assert.That(second.Diagnostics.Rejections, Is.EqualTo(first.Diagnostics.Rejections));
+            Assert.That(second.Diagnostics.RejectionDetails,
+                Is.EqualTo(first.Diagnostics.RejectionDetails));
+        });
+    }
+
+    [Test]
+    public void Zone_promotion_represents_uncaptured_scope_as_explicit_excluded_residue()
+    {
+        var source = new TakeoffResult {
+            LevelName = "Level 1",
+            Rooms = { Room("room", (0, 0), (10, 0), (10, 10), (0, 10)) },
+            DomainSqft = 100,
+        };
+        var zone = Zone("double", (0, 0), (20, 0), (20, 10), (0, 10));
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, zone, Options(minimumRoomSqft: 0), (_, _) => 0);
+
+        Assert.Multiple(() => {
+            Assert.That(promotion.Diagnostics.ZoneSqft, Is.EqualTo(200).Within(1e-9));
+            Assert.That(promotion.Diagnostics.AcceptedSqft, Is.EqualTo(100).Within(1e-9));
+            Assert.That(promotion.Diagnostics.ExcludedSqft, Is.EqualTo(100).Within(1e-9));
+            Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
+            Assert.That(promotion.Diagnostics.IsContained, Is.True);
+            Assert.That(promotion.Result.Residues.Single().Reason,
+                Is.EqualTo(ResidueReason.Excluded));
+        });
+    }
+
+    [Test]
+    public void Orthogonal_projection_that_leaves_zone_holds_the_room_whole()
+    {
+        var trapezoid = Room("room", (0, 0), (9, 0), (10, 10), (0, 10));
+        trapezoid.RawSqft = 95;
+        var source = new TakeoffResult {
+            LevelName = "Level 1", Rooms = { trapezoid }, DomainSqft = 95,
+        };
+        var zone = Zone("trapezoid", (0, 0), (9, 0), (10, 10), (0, 10));
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, zone, Options(minimumRoomSqft: 0, boundarySimplifyFt: 0), (_, _) => 0,
+            TestContext.Out.WriteLine);
+
+        Assert.Multiple(() => {
+            Assert.That(promotion.Result.Rooms, Is.Empty);
+            Assert.That(promotion.Result.Residues.Count(residue =>
+                residue.Reason == ResidueReason.Rejected), Is.EqualTo(1));
+            Assert.That(promotion.Diagnostics.HeldSqft, Is.EqualTo(95).Within(1e-6));
+            Assert.That(promotion.Diagnostics.ExcludedSqft, Is.Zero.Within(1e-6));
+            Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
+            Assert.That(promotion.Diagnostics.IsContained, Is.True);
+        });
+    }
+
+    [Test]
+    public void Held_room_count_tracks_source_rooms_not_clipped_residue_pieces()
+    {
+        var source = new TakeoffResult {
+            LevelName = "Level 1",
+            Rooms = { Room("bridge", (0, 0), (30, 0), (30, 10), (0, 10)) },
+            DomainSqft = 300,
+        };
+        var zone = new ZoneScope {
+            Name = "two islands",
+            Loops = {
+                new List<double[]> { new[] { 0d, 0d }, new[] { 10d, 0d },
+                    new[] { 10d, 10d }, new[] { 0d, 10d } },
+                new List<double[]> { new[] { 20d, 0d }, new[] { 30d, 0d },
+                    new[] { 30d, 10d }, new[] { 20d, 10d } },
+            },
+        };
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, zone, Options(minimumRoomSqft: 0, boundarySimplifyFt: 0), (_, _) => 0);
+
+        Assert.Multiple(() => {
+            Assert.That(promotion.Result.Residues.Count(residue =>
+                residue.Reason == ResidueReason.Rejected), Is.EqualTo(2));
+            Assert.That(promotion.Diagnostics.HeldRooms, Is.EqualTo(1));
+            Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
+        });
+    }
+
+    [Test]
+    public void Adjacent_promoted_rooms_keep_one_exact_shared_orthogonal_edge()
+    {
+        var source = new TakeoffResult {
+            LevelName = "Level 1",
+            Rooms = {
+                Room("left", (0, 0), (5, 0), (5.2, 10), (0, 10)),
+                Room("right", (5, 0), (10, 0), (10, 10), (5.2, 10)),
+            },
+            DomainSqft = 100,
+        };
+        source.Rooms[0].RawSqft = 51;
+        source.Rooms[1].RawSqft = 49;
+        var zone = Zone("shared", (-1, -1), (11, -1), (11, 11), (-1, 11));
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, zone, Options(minimumRoomSqft: 0, boundarySimplifyFt: 0), (_, _) => 0,
+            TestContext.Out.WriteLine);
+
+        Assert.Multiple(() => {
+            string reasons = string.Join(", ", promotion.Diagnostics.Rejections
+                .Select(item => $"{item.Key}={item.Value}"));
+            Assert.That(promotion.Result.Rooms, Has.Count.EqualTo(2), reasons);
+            Assert.That(promotion.Diagnostics.SharedEdgePairs, Is.EqualTo(1));
+            Assert.That(promotion.Diagnostics.LostSharedEdgePairs, Is.Zero);
+            Assert.That(promotion.Diagnostics.IsStrictlyEditable, Is.True);
+            Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
         });
     }
 
@@ -187,5 +307,16 @@ public sealed class TakeoffPromotionTests
         LabelX = points.Average(point => point.X),
         LabelY = points.Average(point => point.Y),
         Polygon = points.Select(point => new[] { point.X, point.Y }).ToList(),
+    };
+
+    private static ZoneScope Zone(string name, params (double X, double Y)[] points) => new() {
+        Name = name,
+        Loops = { points.Select(point => new[] { point.X, point.Y }).ToList() },
+    };
+
+    private static TakeoffOptions Options(
+        double minimumRoomSqft, double boundarySimplifyFt = 2) => new() {
+        MinimumPromotedRoomSqft = minimumRoomSqft,
+        BoundarySimplifyFt = boundarySimplifyFt,
     };
 }

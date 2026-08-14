@@ -21,6 +21,14 @@ internal sealed class PreparedLevelTakeoffDetection
         result.LevelFlags.AddRange(this.flags);
         return result;
     }
+
+    internal TakeoffResult Detect(ZoneScope zone, Action<string> log)
+    {
+        var result = this.detection.Detect(zone, log);
+        result.ProfileProvenance = this.provenance;
+        result.LevelFlags.AddRange(this.flags);
+        return result;
+    }
 }
 
 // Mechanism thresholds for evidence-derived level policy. Defaults are calibrated against the

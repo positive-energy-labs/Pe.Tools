@@ -17,6 +17,8 @@ HELD_FILL = (250, 231, 197)
 VOID = (145, 145, 145)
 VOID_FILL = (232, 232, 232)
 INK = (190, 190, 190)
+ZONE = (112, 44, 138)
+DISPOSITION_ALPHA = 64
 
 
 def font(size):
@@ -56,7 +58,6 @@ def render_zone(root, zone, output, padding_cells=12, scale=2):
                 pixels[x - x0, py] = INK
 
     rooms, polygons, residues = overlay.load_disposition_tsv(tsv_path)
-    draw = ImageDraw.Draw(image)
 
     def point(value):
         return ((value[0] - min_x) / cell - x0,
@@ -68,24 +69,52 @@ def render_zone(root, zone, output, padding_cells=12, scale=2):
             continue
         color, fill = ((HELD, HELD_FILL) if residue["reason"] == "rejected"
                        else (VOID, VOID_FILL))
-        draw.polygon([point(value) for value in loops[0]], fill=fill, outline=color, width=2)
+        layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
+        layer_draw = ImageDraw.Draw(layer)
+        layer_draw.polygon([point(value) for value in loops[0]],
+                           fill=(*fill, DISPOSITION_ALPHA))
         for hole in loops[1:]:
-            draw.polygon([point(value) for value in hole], fill="white", outline=color, width=1)
+            layer_draw.polygon([point(value) for value in hole], fill=(0, 0, 0, 0))
+        image = Image.alpha_composite(image.convert("RGBA"), layer).convert("RGB")
+
+    draw = ImageDraw.Draw(image)
+    for residue in residues:
+        loops = residue["loops"]
+        if not loops:
+            continue
+        color = HELD if residue["reason"] == "rejected" else VOID
+        draw.line([point(value) for value in loops[0]] + [point(loops[0][0])],
+                  fill=color, width=2)
+        for hole in loops[1:]:
+            draw.line([point(value) for value in hole] + [point(hole[0])],
+                      fill=color, width=1)
     for room_id in sorted(rooms):
         for kind, loop in polygons.get(room_id, []):
             if len(loop) >= 2:
                 draw.line([point(value) for value in loop] + [point(loop[0])],
                           fill=ACCEPTED, width=3 if kind == "outer" else 2)
+    # Scope is a first-class review datum, not an inferred crop. Draw every outer/hole loop last
+    # so a reviewer can see exactly what the accepted, held, and excluded areas must partition.
+    for loop in zone["ZoneLoops"]:
+        if len(loop) >= 2:
+            draw.line([point(value) for value in loop] + [point(loop[0])],
+                      fill=ZONE, width=3)
 
     if scale != 1:
         image = image.resize((image.width * scale, image.height * scale), Image.Resampling.NEAREST)
     image.thumbnail((900, 650), Image.Resampling.LANCZOS)
-    title = (f"{zone['Zone']}   raw {zone['RawRooms']}   accepted {zone['AcceptedRooms']}   "
-             f"held {zone['HeldRooms']}   ink {zone['InkBackedEdgeFraction']:.0%}   "
-             f"closure {zone['ClosureErrorSqft']:.3f} sf")
+    title = (f"{zone['Zone']}   zone {zone['ZoneSqft']:.0f} sf   raw {zone['RawRooms']}   "
+             f"network-strict {zone.get('SharedNetworkStrictRooms', 0)}   "
+             f"accepted {zone['AcceptedRooms']}   held {zone['HeldRooms']}   "
+             f"excluded {zone['ExcludedSqft']:.0f} sf")
+    subtitle = (f"ink {zone['InkBackedEdgeFraction']:.0%}   "
+                f"shared {zone['SharedEdgePairs']}/{zone['LostSharedEdgePairs']} lost   "
+                f"closure {zone['ClosureErrorSqft']:.3f} sf")
     panel = Image.new("RGB", (900, 700), "white")
-    panel.paste(image, ((900 - image.width) // 2, 48 + (650 - image.height) // 2))
-    ImageDraw.Draw(panel).text((14, 14), title, fill=(30, 30, 30), font=font(18))
+    panel.paste(image, ((900 - image.width) // 2, 66 + (630 - image.height) // 2))
+    panel_draw = ImageDraw.Draw(panel)
+    panel_draw.text((14, 10), title, fill=(30, 30, 30), font=font(18))
+    panel_draw.text((14, 32), subtitle, fill=(70, 70, 70), font=font(16))
     panel.save(output)
 
 

@@ -30,6 +30,7 @@ PROBLEM_COLOR = (205, 45, 45)
 DISPOSITION_ACCEPTED = (24, 91, 122)
 DISPOSITION_REJECTED = (219, 150, 55)
 DISPOSITION_CRUMB = (150, 150, 150)
+DISPOSITION_EXCLUDED = (220, 220, 220)
 DISPOSITION_OVERLAP = (205, 45, 45)
 
 
@@ -82,10 +83,12 @@ def render_disposition(ink_path, tsv_path, scale=2):
     accepted = [_geometry(polys.get(room_id, [])) for room_id in sorted(rooms)]
     rejected = [_residue_geometry(item) for item in residues if item["reason"] == "rejected"]
     crumbs = [_residue_geometry(item) for item in residues if item["reason"] == "crumb"]
+    excluded = [_residue_geometry(item) for item in residues if item["reason"] == "excluded"]
     accepted = [geometry for geometry in accepted if not geometry.is_empty]
     rejected = [geometry for geometry in rejected if not geometry.is_empty]
     crumbs = [geometry for geometry in crumbs if not geometry.is_empty]
-    all_geometries = accepted + rejected + crumbs
+    excluded = [geometry for geometry in excluded if not geometry.is_empty]
+    all_geometries = accepted + rejected + crumbs + excluded
     intersections = []
     # Red means at least two disposition geometries claim the same area. Union the
     # pairwise intersections so triple claims stay one geometry-derived area.
@@ -109,6 +112,7 @@ def render_disposition(ink_path, tsv_path, scale=2):
         (accepted, DISPOSITION_ACCEPTED),
         (rejected, DISPOSITION_REJECTED),
         (crumbs, DISPOSITION_CRUMB),
+        (excluded, DISPOSITION_EXCLUDED),
         ([overlap], DISPOSITION_OVERLAP),
     ):
         mask = Image.new("1", size)
@@ -126,6 +130,9 @@ def render_disposition(ink_path, tsv_path, scale=2):
         "crumbCount": sum(item["reason"] == "crumb" for item in residues),
         "crumbSqft": round(sum(item["sqft"] for item in residues
                                if item["reason"] == "crumb"), 1),
+        "excludedCount": sum(item["reason"] == "excluded" for item in residues),
+        "excludedSqft": round(sum(item["sqft"] for item in residues
+                                   if item["reason"] == "excluded"), 1),
         "overlapSqft": round(overlap.area, 1),
     }
     _draw_disposition_legend(image, accounting)
@@ -169,6 +176,8 @@ def _draw_disposition_legend(image, accounting):
          f"rejected  {accounting['rejectedCount']} rooms  {accounting['rejectedSqft']:.1f} sf"),
         (DISPOSITION_CRUMB,
          f"crumbs  {accounting['crumbCount']} regions  {accounting['crumbSqft']:.1f} sf"),
+        (DISPOSITION_EXCLUDED,
+         f"excluded  {accounting['excludedCount']} regions  {accounting['excludedSqft']:.1f} sf"),
         (DISPOSITION_OVERLAP, f"overlap  {accounting['overlapSqft']:.1f} sf"),
     ]
     text_font = _font(18)

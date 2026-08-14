@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 using Newtonsoft.Json;
 
 using NUnit.Framework;
@@ -37,12 +39,14 @@ public sealed class ZoneBoundedDetectTests
         double MinY,
         double MaxX,
         double MaxY,
+        IReadOnlyList<List<double[]>> ZoneLoops,
         string Tsv,
         string Ink,
         long RawMilliseconds,
         long PromotionMilliseconds,
         int OracleRooms,
         int RawRooms,
+        int SharedNetworkStrictRooms,
         int AcceptedRooms,
         int HeldRooms,
         int TinyMerged,
@@ -51,13 +55,17 @@ public sealed class ZoneBoundedDetectTests
         double HeldSqft,
         double VoidSqft,
         double ExcludedSqft,
+        double ZoneSqft,
         double HeldFraction,
         double VoidFraction,
         double InkBackedEdgeFraction,
         double ClosureErrorSqft,
         bool StrictlyEditable,
         bool Contained,
-        IReadOnlyDictionary<string, int> Rejections);
+        int SharedEdgePairs,
+        int LostSharedEdgePairs,
+        IReadOnlyDictionary<string, int> Rejections,
+        IReadOnlyDictionary<string, string> RejectionDetails);
 
     [Test]
     public void Zone_mask_bounds_partition_to_west_block()
@@ -87,13 +95,16 @@ public sealed class ZoneBoundedDetectTests
         var snap = TakeoffReplayTests.BuildSyntheticEstate();
         var zone = RectZone("exterior", 0, 0, 3.0, 3.0); // outside the envelope entirely
         var result = snap.Replay(ReplayOptions(), _ => { }, zone.CellMask(snap.Field));
-        var promoted = TakeoffPromotion.PromoteZone(result, 30, snap.SeedInkDistance());
+        var promoted = TakeoffPromotion.PromoteZone(
+            result, zone, ReplayOptions(), snap.SeedInkDistance());
         Assert.Multiple(() => {
             Assert.That(result.Rooms, Is.Empty);
             Assert.That(result.Residues, Is.Empty);
             Assert.That(result.DomainSqft, Is.Zero);
             Assert.That(promoted.Result.Rooms, Is.Empty);
-            Assert.That(promoted.Result.Residues, Is.Empty);
+            Assert.That(promoted.Result.Residues, Has.Count.EqualTo(1));
+            Assert.That(promoted.Result.Residues.Single().Reason, Is.EqualTo(ResidueReason.Excluded));
+            Assert.That(promoted.Result.Residues.Single().RawSqft, Is.EqualTo(9).Within(1e-9));
             Assert.That(promoted.Diagnostics.ClosureErrorSqft, Is.Zero);
         });
     }
@@ -113,14 +124,20 @@ public sealed class ZoneBoundedDetectTests
     {
         var snap = TakeoffReplayTests.BuildSyntheticEstate();
         var options = ReplayOptions();
-        var mask = RectZone("west", 3.5, 3.5, 24.5, 36.5).CellMask(snap.Field);
+        var zone = RectZone("west", 3.5, 3.5, 24.5, 36.5);
+        var mask = zone.CellMask(snap.Field);
         string ordinary = snap.Replay(options, _ => { }, mask).ToTsv();
 
         var prepared = Detector.Prepare(
             snap.Field, snap.SeedInk, snap.LevelName, snap.LevelElevation, options, _ => { });
         string cached = prepared.Detect(mask, _ => { }).ToTsv();
+        string cropped = prepared.Detect(zone, _ => { }).ToTsv();
 
-        Assert.That(cached, Is.EqualTo(ordinary));
+        Assert.Multiple(() => {
+            Assert.That(cached, Is.EqualTo(ordinary));
+            Assert.That(cropped, Is.EqualTo(cached),
+                "padded zone crop must preserve the full-grid partition exactly");
+        });
     }
 
     // ---- projectA: real capture x real designer zones ----
@@ -190,22 +207,26 @@ public sealed class ZoneBoundedDetectTests
     public void ProjectA_zones_partition_within_declared_scope()
     {
         var levels = LevelMap
-            .Select(m => (m.View, m.Floor, Bin: FindReplayBin(m.BinToken)))
+            .Select((m, index) => (Index: index, m.View, m.Floor, Bin: FindReplayBin(m.BinToken)))
             .Where(m => m.Bin != null)
             .ToList();
         if (levels.Count == 0)
             Assert.Ignore("no replay_*.bin captured yet; run eval/rhvac/run-takeoff.py once live");
 
-        var failures = new List<string>();
-        var reports = new List<PromotionZoneReport>();
+        var failures = new ConcurrentBag<string>();
+        var reports = new ConcurrentBag<PromotionZoneReport>();
         string repoRoot = Path.GetFullPath(Path.Combine(RhvacEvalTests.FindFixtureDir(), "..", "..", ".."));
         string artifactDir = Path.Combine(repoRoot, ".artifacts", "takeoff-zone-promotion");
         if (Directory.Exists(artifactDir)) Directory.Delete(artifactDir, recursive: true);
         Directory.CreateDirectory(Path.Combine(artifactDir, "input"));
         Directory.CreateDirectory(Path.Combine(artifactDir, "zones"));
+        string? zoneFilter = Environment.GetEnvironmentVariable("PE_TAKEOFF_ZONE");
         int zonesRun = 0, zonesWithRooms = 0, abstained = 0;
-        foreach (var (view, floor, bin) in levels)
+        Parallel.ForEach(levels, new ParallelOptions {
+            MaxDegreeOfParallelism = Math.Min(4, levels.Count),
+        }, level =>
         {
+            var (levelIndex, view, floor, bin) = level;
             var snap = DetectSnapshot.Load(bin!);
             var profile = TakeoffPolicy.InferLevelProfile(snap);
             var prepared = profile.NoHabitableDomain
@@ -218,33 +239,44 @@ public sealed class ZoneBoundedDetectTests
             if (ink == null)
             {
                 failures.Add($"{view}: missing ink_{token}.bin for registered promotion review");
-                continue;
+                return;
             }
             string copiedInk = Path.Combine(artifactDir, "input", $"ink_{token}.bin");
             string copiedReplay = Path.Combine(artifactDir, "input", $"replay_{token}.bin");
-            File.Copy(ink, copiedInk, overwrite: true);
+            File.Copy(ink!, copiedInk, overwrite: true);
             File.Copy(bin!, copiedReplay, overwrite: true);
-            foreach (var zone in ZonesFor(view))
+            var zones = ZonesFor(view)
+                .Where(zone => zoneFilter == null
+                    || zone.Name.Contains(zoneFilter, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            for (int zoneIndex = 0; zoneIndex < zones.Count; zoneIndex++)
             {
+                var zone = zones[zoneIndex];
+                string slug = $"{levelIndex + 1:D2}_{zoneIndex + 1:D2}_{Slug(zone.Name)}";
+                string progress = Path.Combine(artifactDir, "zones", $"timing_{slug}.txt");
                 var mask = zone.CellMask(snap.Field);
                 var timer = System.Diagnostics.Stopwatch.StartNew();
                 var result = prepared == null
                     ? TakeoffPolicy.Detect(snap, profile, _ => { }, zoneMask: mask)
-                    : prepared.Detect(mask, _ => { });
+                    : prepared.Detect(zone, _ => { });
                 long rawMilliseconds = timer.ElapsedMilliseconds;
+                File.WriteAllText(progress, $"raw={rawMilliseconds}ms\nstage=promotion\n");
                 timer.Restart();
                 var promotion = TakeoffPromotion.PromoteZone(
-                    result, new TakeoffOptions().MinimumPromotedRoomSqft, distanceToInk);
+                    result, zone, profile.Options, distanceToInk,
+                    message => File.AppendAllText(progress, message + Environment.NewLine));
                 long promotionMilliseconds = timer.ElapsedMilliseconds;
-                zonesRun++;
+                File.WriteAllText(progress,
+                    $"raw={rawMilliseconds}ms\npromotion={promotionMilliseconds}ms\nstage=done\n");
+                Interlocked.Increment(ref zonesRun);
 
                 if (result.DomainSqft == 0)
                 {
                     if (result.Rooms.Count > 0)
                         failures.Add($"{zone.Name}: rooms without domain");
-                    abstained++;
+                    Interlocked.Increment(ref abstained);
                 }
-                if (result.Rooms.Count > 0) zonesWithRooms++;
+                if (result.Rooms.Count > 0) Interlocked.Increment(ref zonesWithRooms);
 
                 // containment: every emitted vertex inside the zone loops within one cell — a
                 // vertex sits on a cell corner, up to half a cell diagonally outside the last
@@ -289,7 +321,6 @@ public sealed class ZoneBoundedDetectTests
                     && promotion.Result.ExcludedResidueSqft == 0)
                     failures.Add($"{zone.Name}: promoted result vacuously hides {oracleInside} oracle rooms");
 
-                string slug = $"{zonesRun:D2}_{Slug(zone.Name)}";
                 string tsv = Path.Combine(artifactDir, "zones", $"rooms_{slug}.tsv");
                 File.WriteAllText(tsv, promotion.Result.ToTsv());
                 var points = zone.Loops.SelectMany(loop => loop).ToList();
@@ -300,12 +331,14 @@ public sealed class ZoneBoundedDetectTests
                     points.Min(point => point[1]),
                     points.Max(point => point[0]),
                     points.Max(point => point[1]),
+                    zone.Loops,
                     Path.GetRelativePath(artifactDir, tsv).Replace('\\', '/'),
                     Path.GetRelativePath(artifactDir, copiedInk).Replace('\\', '/'),
                     rawMilliseconds,
                     promotionMilliseconds,
                     oracleInside,
                     result.Rooms.Count,
+                    promotion.Diagnostics.SharedNetworkStrictRooms,
                     promotion.Diagnostics.AcceptedRooms,
                     promotion.Diagnostics.HeldRooms,
                     promotion.Diagnostics.TinyMerged,
@@ -314,26 +347,34 @@ public sealed class ZoneBoundedDetectTests
                     promotion.Diagnostics.HeldSqft,
                     promotion.Diagnostics.VoidSqft,
                     promotion.Diagnostics.ExcludedSqft,
+                    promotion.Diagnostics.ZoneSqft,
                     promotion.Diagnostics.HeldFraction,
                     promotion.Diagnostics.VoidFraction,
                     promotion.Diagnostics.InkBackedEdgeFraction,
                     promotion.Diagnostics.ClosureErrorSqft,
                     promotion.Diagnostics.IsStrictlyEditable,
-                    contained,
-                    promotion.Diagnostics.Rejections));
+                    promotion.Diagnostics.IsContained,
+                    promotion.Diagnostics.SharedEdgePairs,
+                    promotion.Diagnostics.LostSharedEdgePairs,
+                    promotion.Diagnostics.Rejections,
+                    promotion.Diagnostics.RejectionDetails));
                 TestContext.Out.WriteLine(
                     $"{zone.Name}: raw={result.Rooms.Count} accepted={promotion.Diagnostics.AcceptedRooms} " +
                     $"held={promotion.Diagnostics.HeldRooms} ink={promotion.Diagnostics.InkBackedEdgeFraction:P0} " +
                     $"closure={promotion.Diagnostics.ClosureErrorSqft:F3}sf " +
                     $"time={rawMilliseconds}+{promotionMilliseconds}ms oracle={oracleInside}");
             }
-        }
+        });
+        var orderedReports = reports
+            .OrderBy(report => Array.FindIndex(LevelMap, item => item.View == report.Level))
+            .ThenBy(report => report.Zone, StringComparer.Ordinal)
+            .ToList();
         File.WriteAllText(Path.Combine(artifactDir, "report.json"),
             JsonConvert.SerializeObject(new {
                 SchemaVersion = 1,
                 GeneratedUtc = DateTimeOffset.UtcNow,
-                Zones = reports,
-                RejectionHistogram = reports.SelectMany(report => report.Rejections)
+                Zones = orderedReports,
+                RejectionHistogram = orderedReports.SelectMany(report => report.Rejections)
                     .GroupBy(item => item.Key, StringComparer.Ordinal)
                     .ToDictionary(group => group.Key, group => group.Sum(item => item.Value),
                         StringComparer.Ordinal),
@@ -341,7 +382,7 @@ public sealed class ZoneBoundedDetectTests
         TestContext.Out.WriteLine(
             $"zones={zonesRun} withRooms={zonesWithRooms} abstained={abstained} " +
             $"artifact={artifactDir}");
-        Assert.That(failures, Is.Empty, string.Join("\n", failures));
+        Assert.That(failures, Is.Empty, string.Join("\n", failures.OrderBy(item => item)));
     }
 
     [Test]
@@ -353,15 +394,23 @@ public sealed class ZoneBoundedDetectTests
         var snap = DetectSnapshot.Load(bin);
         var zone = ZonesFor("Main Level").First();
         var mask = zone.CellMask(snap.Field);
+        var timer = System.Diagnostics.Stopwatch.StartNew();
         var raw = snap.ReplayInferred(_ => { }, zoneMask: mask);
+        TestContext.Out.WriteLine($"raw={timer.ElapsedMilliseconds}ms");
+        timer.Restart();
         var profile = TakeoffPolicy.InferLevelProfile(snap);
         var cached = TakeoffPolicy.PrepareDetection(snap, profile, _ => { })
-            .Detect(mask, _ => { });
+            .Detect(zone, _ => { });
+        TestContext.Out.WriteLine($"prepared+detect={timer.ElapsedMilliseconds}ms");
         var distanceToInk = snap.SeedInkDistance();
+        timer.Restart();
         var first = TakeoffPromotion.PromoteZone(
-            cached, new TakeoffOptions().MinimumPromotedRoomSqft, distanceToInk);
+            cached, zone, profile.Options, distanceToInk);
+        TestContext.Out.WriteLine($"promotion-first={timer.ElapsedMilliseconds}ms");
+        timer.Restart();
         var second = TakeoffPromotion.PromoteZone(
-            cached, new TakeoffOptions().MinimumPromotedRoomSqft, distanceToInk);
+            cached, zone, profile.Options, distanceToInk);
+        TestContext.Out.WriteLine($"promotion-second={timer.ElapsedMilliseconds}ms");
         Assert.Multiple(() => {
             Assert.That(cached.ToTsv(), Is.EqualTo(raw.ToTsv()),
                 "prepared level evidence must preserve real replay output byte-for-byte");

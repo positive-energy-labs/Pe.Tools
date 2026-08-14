@@ -1,3 +1,7 @@
+using NetTopologySuite.Geometries;
+using NetTopologySuite.Operation.Polygonize;
+using NetTopologySuite.Operation.Union;
+
 namespace Pe.Revit.Takeoff;
 
 // A designer-declared partition domain: the closed loops of one Zoning Region, model feet.
@@ -5,14 +9,15 @@ namespace Pe.Revit.Takeoff;
 // and linked-model noise are excluded by declaration, not inference.
 public sealed class ZoneScope
 {
+    private static readonly GeometryFactory GeometryFactory = new(new PrecisionModel(), 0);
+
     public string Name = "";
     public List<List<double[]>> Loops = new();   // outer + holes, even-odd, model ft
 
     // Per-cell mask on a snapshot grid: even-odd containment of each cell center.
     public bool[] CellMask(Heightfield hf)
     {
-        if (this.Loops.Count == 0 || this.Loops.Any(l => l.Count < 3))
-            throw new InvalidOperationException($"zone '{this.Name}' has no usable loops");
+        this.Validate();
         double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
         foreach (var loop in this.Loops)
         foreach (var p in loop)
@@ -40,6 +45,27 @@ public sealed class ZoneScope
         return mask;
     }
 
+    internal Geometry ExactGeometry()
+    {
+        this.Validate();
+        var linework = this.Loops.Select(loop => {
+            var coordinates = loop.Select(point => new Coordinate(point[0], point[1])).ToList();
+            if (!coordinates[0].Equals2D(coordinates[^1])) coordinates.Add(coordinates[0].Copy());
+            return (Geometry)GeometryFactory.CreateLineString(coordinates.ToArray());
+        }).ToList();
+        var polygonizer = new Polygonizer();
+        polygonizer.Add(UnaryUnionOp.Union(linework));
+        var faces = polygonizer.GetPolygons().Cast<Polygon>()
+            .Where(face => ContainsEvenOdd(this.Loops, face.InteriorPoint.X, face.InteriorPoint.Y))
+            .Cast<Geometry>().ToList();
+        if (faces.Count == 0)
+            throw new InvalidOperationException($"zone '{this.Name}' has no polygonal area");
+        var geometry = UnaryUnionOp.Union(faces);
+        if (!geometry.IsValid || geometry.Area <= 0)
+            throw new InvalidOperationException($"zone '{this.Name}' has invalid polygonal area");
+        return geometry;
+    }
+
     // Even-odd over ALL loops together: holes flip parity without needing orientation metadata.
     public static bool ContainsEvenOdd(List<List<double[]>> loops, double x, double y)
     {
@@ -55,5 +81,14 @@ public sealed class ZoneScope
             }
         }
         return inside;
+    }
+
+    private void Validate()
+    {
+        if (this.Loops.Count == 0 || this.Loops.Any(loop => loop.Count < 3)
+            || this.Loops.SelectMany(loop => loop).Any(point => point.Length < 2
+                || double.IsNaN(point[0]) || double.IsInfinity(point[0])
+                || double.IsNaN(point[1]) || double.IsInfinity(point[1])))
+            throw new InvalidOperationException($"zone '{this.Name}' has no usable loops");
     }
 }

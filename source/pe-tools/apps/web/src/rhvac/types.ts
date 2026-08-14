@@ -193,7 +193,7 @@ export interface TakeoffRoomShape {
 
 export interface TakeoffResidueShape {
   id: string;
-  reason: "border" | "crumb" | "rejected";
+  reason: "border" | "crumb" | "rejected" | "excluded";
   claimed?: boolean;
   rawSqft: number;
   meanCeilingFt: number;

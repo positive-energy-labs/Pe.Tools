@@ -2,6 +2,32 @@
 
 Dated, append-only. Newest batch first. Each entry: what was decided, and the why that makes it stick. Reopen one only with new evidence — and record the reopening here.
 
+## 2026-08-14 (zone promotion loop) — exact scope and editability are binding
+
+- **The exact Zoning Region geometry is the accounting universe.** Promotion receives the
+  `ZoneScope`; accepted + held + void + excluded must equal its polygonal area within numerical
+  precision. Uncaptured scope is an explicit excluded region, never area that disappears from a
+  detector-derived denominator.
+- **Promotion fails closed.** A projected room that leaves its zone, loses a source adjacency, or
+  fails canonical editability is held whole using its source geometry. Only accepted regions reach
+  the Room Region materializer. Area, ink, and rejection counts remain diagnostics.
+- **One shared network remains mandatory.** The raster partition needs
+  `SpaceBoundaryNetwork` to recover coherent long-edge frames; removing it made all 183 projectA
+  candidates frame-incoherent. `FrameLocalProjector` then uses one rail set per connected local
+  frame, and a final adjacency audit holds both sides of any lost shared edge.
+- **The tuning loop is per-zone and visually reviewable.** Frozen level evidence is prepared once,
+  cropped per zone, and evaluated across all 45 project-a zones in about 20 seconds. The report carries
+  exact zone loops, enclosing-zone area, per-room rejection detail, shared-edge preservation, and
+  a translucent disposition contact sheet so the registered plan remains visible.
+- **The 30-sf rule is only a first-run unlabeled-pocket heuristic.** project-a `.r10` contains a real
+  standalone 23-sf Guest Suite Laundry with its own load and register. A small candidate may merge
+  only with exactly one neighbor when the union stays strict; linked or designer-authored rooms
+  must never be merged merely because they are small.
+- **Short shared rails are architectural evidence, not raster noise by default.** Retaining
+  orthogonal rails down to 0.75 ft improved the frozen all-zone result from 31 to 34 accepted rooms,
+  accepted area from 4,324 to 4,683 sf, and preserved shared adjacencies from 7 to 11, with zero
+  lost pairs and every hard law still green. Lower thresholds remain unproven.
+
 ## 2026-08-14 (live Revit, later) — Room Region materialization live-proven
 
 `ZoneMaterializer` on the project-a clone, real zoning view ("Mechanical Zoning Plan - Main Level"),

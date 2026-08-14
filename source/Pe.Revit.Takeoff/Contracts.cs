@@ -12,7 +12,7 @@ namespace Pe.Revit.Takeoff;
 // (under-seeds closets/baths, 41.9 vs 52.8 — see DECISIONS.md).
 public enum TakeoffSeedSource { RegionCores, Hybrid }
 public enum TakeoffSource { Detector, Native }
-public enum ResidueReason { Border, Crumb, Rejected }
+public enum ResidueReason { Border, Crumb, Rejected, Excluded }
 
 public sealed class TakeoffOptions
 {

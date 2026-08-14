@@ -52,6 +52,7 @@ internal sealed record FrameLocalProjectionResult(
 internal static class FrameLocalProjector
 {
     private const double MinEdgeFt = 1.5;
+    private const double MinRailEdgeFt = 0.75;
     private const double AxisToleranceRad = 8 * Math.PI / 180;
     private const double MinFrameSupport = 0.42;
     private const double MixedFrameMargin = 0.10;
@@ -392,7 +393,7 @@ internal static class FrameLocalProjector
             double axisError = vertical
                 ? AngleDifference90(angle, Math.PI / 2)
                 : AngleDifference90(angle, 0);
-            if (axisError > AxisToleranceRad || edge.length < MinEdgeFt) continue;
+            if (axisError > AxisToleranceRad || edge.length < MinRailEdgeFt) continue;
             observations.Add(vertical
                 ? ((edge.a.X + edge.b.X) / 2, Math.Min(edge.a.Y, edge.b.Y), Math.Max(edge.a.Y, edge.b.Y), edge.length)
                 : ((edge.a.Y + edge.b.Y) / 2, Math.Min(edge.a.X, edge.b.X), Math.Max(edge.a.X, edge.b.X), edge.length));

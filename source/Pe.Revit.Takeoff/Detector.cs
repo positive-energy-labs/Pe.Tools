@@ -27,6 +27,53 @@ internal sealed class PreparedTakeoffDetection
         PartitionFormulation.Run(
             this.field, this.obstruction, this.levelName, this.levelElevation, this.options,
             log, zoneMask, this.footprint, this.evidence);
+
+    internal TakeoffResult Detect(ZoneScope zone, Action<string> log)
+    {
+        if (zone == null) throw new ArgumentNullException(nameof(zone));
+        const int paddingCells = 2;
+        var points = zone.Loops.SelectMany(loop => loop).ToList();
+        int x0 = Math.Max(0, (int)Math.Floor(
+            (points.Min(point => point[0]) - this.field.MinX) / this.field.CellFt) - paddingCells);
+        int y0 = Math.Max(0, (int)Math.Floor(
+            (points.Min(point => point[1]) - this.field.MinY) / this.field.CellFt) - paddingCells);
+        int x1 = Math.Min(this.field.W, (int)Math.Ceiling(
+            (points.Max(point => point[0]) - this.field.MinX) / this.field.CellFt) + paddingCells);
+        int y1 = Math.Min(this.field.H, (int)Math.Ceiling(
+            (points.Max(point => point[1]) - this.field.MinY) / this.field.CellFt) + paddingCells);
+        if (x1 <= x0 || y1 <= y0)
+            return new TakeoffResult {
+                LevelName = this.levelName,
+                LevelElevation = this.levelElevation,
+            };
+
+        int width = x1 - x0, height = y1 - y0;
+        var croppedField = new Heightfield {
+            W = width,
+            H = height,
+            MinX = this.field.MinX + x0 * this.field.CellFt,
+            MinY = this.field.MinY + y0 * this.field.CellFt,
+            CellFt = this.field.CellFt,
+            FloorZ = Crop(this.field.FloorZ),
+            CeilZ = Crop(this.field.CeilZ),
+        };
+        var croppedObstruction = Crop(this.obstruction);
+        var croppedFootprint = Crop(this.footprint);
+        var croppedEvidence = Crop(this.evidence);
+        log($"[partition] zone crop {this.field.W}x{this.field.H} -> {width}x{height}");
+        return PartitionFormulation.Run(
+            croppedField, croppedObstruction, this.levelName, this.levelElevation, this.options,
+            log, zone.CellMask(croppedField), croppedFootprint, croppedEvidence);
+
+        T[] Crop<T>(T[] source)
+        {
+            var cropped = new T[width * height];
+            for (int y = 0; y < height; y++)
+                Array.Copy(source, (y0 + y) * this.field.W + x0,
+                    cropped, y * width, width);
+            return cropped;
+        }
+    }
 }
 
 // Detection core. INK DEFINES BOUNDARY EVIDENCE; PHYSICS DEFINES THE PARTITION DOMAIN.
