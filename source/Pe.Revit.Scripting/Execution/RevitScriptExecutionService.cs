@@ -959,9 +959,16 @@ public sealed class RevitScriptExecutionService(
     ///     makes mutation detection possible — Revit raises DocumentChanged with real deltas only on
     ///     commit, never for a rolled-back transaction — while the group rollback physically discards
     ///     the changes. The sandbox name prefix keeps document-event consumers (bridge invalidation)
-    ///     from treating the churn as a real change. Mutations observed with unprefixed transaction
-    ///     names or changes to another document persisted outside the guard and stay hard errors.
-    ///     If the rollback guard cannot start, execution fails closed.
+    ///     from treating the churn as a real change, and is also how the guard tells its own contained
+    ///     churn from a genuine escape: a DocumentChanged carrying a transaction name that is NOT the
+    ///     guard's (a committed transaction the group rollback does not cover — for example a change to
+    ///     another open document) persisted and stays a hard error. Regeneration that a script's reads
+    ///     force (e.g. ViewSchedule.GetTableData) raises DocumentChanged under the guard's OWN
+    ///     transaction name, or with none at all, and is discarded by the group rollback — it is
+    ///     contained, never a persist. Classification is by transaction NAME, never by Document
+    ///     reference: Revit hands the event a different Document wrapper than context.Document, so a
+    ///     reference check misreads the guard's own churn as a foreign write. If the rollback guard
+    ///     cannot start, execution fails closed.
     /// </summary>
     private static void ExecuteInReadOnlyRollbackGuard(
         PeScriptContainer container,
@@ -1008,7 +1015,7 @@ public sealed class RevitScriptExecutionService(
             );
         }
 
-        using var mutationMonitor = new ScriptDocumentMutationMonitor(context.App.Application, document);
+        using var mutationMonitor = new ScriptDocumentMutationMonitor(context.App.Application);
 
         try {
             container.Execute();
@@ -1031,7 +1038,7 @@ public sealed class RevitScriptExecutionService(
 
         if (mutationMonitor.HasPersistedChanges)
             throw new RevitScriptMutationException(
-                "ReadOnly script execution changed an open Revit document and the changes PERSISTED (they happened outside the rollback guard). " +
+                "ReadOnly script execution changed an open Revit document and the changes PERSISTED (a committed transaction the rollback guard does not cover, e.g. another open document). " +
                 mutationMonitor.CreateSummary() +
                 " Rerun with permissionMode=WriteTransaction for intentional changes."
             );
@@ -1192,22 +1199,22 @@ public sealed class RevitScriptExecutionService(
 
     private sealed class ScriptDocumentMutationMonitor : IDisposable {
         private readonly Autodesk.Revit.ApplicationServices.Application _application;
-        private readonly Document _guardedDocument;
         private readonly List<ScriptDocumentMutationEvent> _events = [];
         private bool _disposed;
 
         public ScriptDocumentMutationMonitor(
-            Autodesk.Revit.ApplicationServices.Application application,
-            Document guardedDocument
+            Autodesk.Revit.ApplicationServices.Application application
         ) {
             this._application = application ?? throw new ArgumentNullException(nameof(application));
-            this._guardedDocument = guardedDocument ?? throw new ArgumentNullException(nameof(guardedDocument));
             this._application.DocumentChanged += this.OnDocumentChanged;
         }
 
         public bool HasChanges => this._events.Count != 0;
 
-        /// <summary>Changes committed outside the rollback sandbox (unprefixed transaction names) — they persisted.</summary>
+        /// <summary>A change carrying a transaction name that is not the guard's — a committed
+        /// transaction the group rollback does not cover (e.g. another open document), so it persisted.
+        /// Regeneration a script's reads force carries the guard's own name (or none) and is contained,
+        /// so it never counts here.</summary>
         public bool HasPersistedChanges => this._events.Any(item => !item.IsSandboxChurn);
 
         public void Dispose() {
@@ -1249,15 +1256,19 @@ public sealed class RevitScriptExecutionService(
 
             var document = args.GetDocument();
             var transactionNames = args.GetTransactionNames().ToList();
+            // Classify by transaction NAME, not Document reference: Revit hands the event a different
+            // Document wrapper than context.Document, so ReferenceEquals misreads the guard's own churn
+            // as a foreign write (the ViewSchedule.GetTableData regen persist-false-positive). See
+            // ReadOnlyGuardMutationClassifier for the full contract.
+            var escapedGuard = ReadOnlyGuardMutationClassifier.EscapedGuard(
+                transactionNames, ReadOnlyGuardTransactionName);
             this._events.Add(new ScriptDocumentMutationEvent(
                 document?.Title ?? "<unknown>",
                 addedCount,
                 modifiedCount,
                 deletedCount,
                 transactionNames,
-                ReferenceEquals(document, this._guardedDocument)
-                && transactionNames.Count > 0
-                && transactionNames.All(name => string.Equals(name, ReadOnlyGuardTransactionName, StringComparison.Ordinal))
+                IsSandboxChurn: !escapedGuard
             ));
         }
 
