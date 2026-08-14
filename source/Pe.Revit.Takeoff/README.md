@@ -57,8 +57,7 @@ Live-unproven assumptions — probe each in a scratch document before building o
 - **FR boundary read-back under user editing** — arcs, splines, self-touching rings drawn by hand must hit STRAIGHT-ONLY enforcement at read time.
 - **Registry blob capacity** — the hidden-text-param pattern has no known length guard; verify the ceiling before betting a growing registry on it.
 - **Capture cache** — per-zone runs are only cheap if the level-wide raster capture is shared and keyed by document/level/capture-options hash.
-- **`.r10` upsert round-trip** — surgical sync assumes row-level Jet UPDATE/INSERT into a live RHVAC schema leaves a file RHVAC opens and recalcs cleanly. Probe against `projectA.local.r10` before building the export op.
-- **`.r10` lock detection** — sync must detect RHVAC holding the file and refuse, not corrupt.
+- **`.r10` upsert round-trip** — Jet layer PROVEN 2026-08-14 (`eval/rhvac/project-a/UPSERT-PROBE.md`): row-level UPDATE/INSERT side-effect-free, zero foreign keys, lock refusal exercised; `eval/rhvac/sync-rhvac.ps1` is the safety envelope. Residual: a human on an RHVAC box must confirm the app opens and recalcs a synced file. Schema facts: `Room` PK is `Number`; `Identifier` is an autonumber COUNTER — never supply it.
 
 ## Inheritance
 
