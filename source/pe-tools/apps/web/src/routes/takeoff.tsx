@@ -39,6 +39,11 @@ import {
 } from "#/takeoff/model";
 import { Live, Seam, Step } from "#/takeoff/seam";
 import { PlanLegend, ZonePlan, ZoneThumb } from "#/takeoff/zone-plan";
+import { VariantSwitcher } from "#/takeoff/proto/switcher";
+import { Variant as ZonesVariant } from "#/takeoff/proto/variant-zones";
+import { Variant as HouseVariant } from "#/takeoff/proto/variant-house";
+import { Variant as InboxVariant } from "#/takeoff/proto/variant-inbox";
+import { Variant as PeaVariant } from "#/takeoff/proto/variant-pea";
 import { cn } from "#/lib/utils";
 
 /**
@@ -53,9 +58,36 @@ import { cn } from "#/lib/utils";
  * Where a stage stands in for something that does not exist yet, it carries a `seam:` chip
  * naming its replacement. The page is honest about which half it is in — that is the point.
  */
+/** PROTOTYPE — UX exploration round 1: five structurally different shapes for this surface,
+ *  switchable via ?variant= (see src/takeoff/proto/). "spec" is the pre-existing page. */
+const VARIANTS = [
+  { key: "spec", name: "pipeline spec (current)" },
+  { key: "zones", name: "zone-first workbench" },
+  { key: "house", name: "house as system" },
+  { key: "inbox", name: "decision inbox" },
+  { key: "pea", name: "chat-native workspace" },
+];
+
 export const Route = createFileRoute("/takeoff")({
-  component: TakeoffRoute,
+  validateSearch: (search: Record<string, unknown>) => ({
+    variant: VARIANTS.some((v) => v.key === search.variant) ? (search.variant as string) : "spec",
+  }),
+  component: VariantGate,
 });
+
+function VariantGate() {
+  const { variant } = Route.useSearch();
+  return (
+    <>
+      {variant === "spec" && <TakeoffRoute />}
+      {variant === "zones" && <ZonesVariant />}
+      {variant === "house" && <HouseVariant />}
+      {variant === "inbox" && <InboxVariant />}
+      {variant === "pea" && <PeaVariant />}
+      <VariantSwitcher variants={VARIANTS} current={variant} />
+    </>
+  );
+}
 
 /** Default .r10 for the export lane; the endpoint always syncs a COPY of whatever this names. */
 const DEFAULT_R10 = "C:\\Users\\kaitp\\source\\repos\\Pe.Tools\\eval\\rhvac\\project-a\\projectA.local.r10";
