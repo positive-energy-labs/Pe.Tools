@@ -8,7 +8,7 @@ namespace Pe.Revit.Takeoff.Rhvac;
 // Newtonsoft (not System.Text.Json) because SDK analyzer PE1011 forbids STJ in Revit-hosted
 // projects; Json.NET binds the camelCase extract onto these records case-insensitively by default.
 // This is the INNER eval loop (input-space vs oracle inputs); the OUTER loop — true load recalc —
-// requires opening the exported file in RHVAC itself (see README.md, "no headless calculation").
+// requires opening the exported file in RHVAC itself (no headless calculation exists).
 
 /// <summary>Root of an extract-rhvac.ps1 oracle file. Building/system loads are ignored here.</summary>
 public sealed record OracleExtract(string SourceFile, List<OracleRoom> Rooms);

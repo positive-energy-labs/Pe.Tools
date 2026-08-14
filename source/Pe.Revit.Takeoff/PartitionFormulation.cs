@@ -1,7 +1,6 @@
 namespace Pe.Revit.Takeoff;
 
-// Phase-2 formulation (eval/rhvac/PHASE2-PARTITION.md): rooms are a PARTITION of the covered
-// walkable domain, not independent blobs.
+// Rooms are a PARTITION of the covered walkable domain, not independent blobs:
 //
 //   1. DOMAIN    = floor-present (+ ceiling/headroom when RequireCeiling) — the existence mask.
 //   2. EVIDENCE  = continuous per-cell boundary cost: sealed obstruction ink is certainty (1.0);
@@ -110,10 +109,9 @@ internal static class PartitionFormulation
         Relabel(owner, uf);
 
         // ---- 6. sliver dissolution: delete the sliver, re-flood its cells under the SAME
-        // evidence-priority assignment rule. A thin wall-band sliver therefore splits between its
-        // real neighbors at the centerline instead of inflating one dominant neighbor (measured:
-        // dominant-neighbor dumping cost Guest Office 0.93 -> 0.67 IoU). Cells no live region can
-        // reach are crumbs — logged, never silent.
+        // evidence-priority rule, so a thin wall-band sliver splits between its real neighbors at
+        // the centerline instead of inflating one dominant neighbor. Cells no live region can reach
+        // are crumbs — logged, never silent.
         int dissolved = 0, droppedIsolated = 0;
         for (int iter = 0; iter < 32; iter++)
         {
@@ -161,11 +159,10 @@ internal static class PartitionFormulation
 
         // ---- 6.5 wall-band claim: rooms must touch ----
         // BuildDomain excludes wall cells (no walkable headroom), so watershed fronts stop at wall
-        // FACES and leave an unclaimed interstitial band inside every wall. Practice colors rooms
-        // wall-to-wall: claim non-domain cells seen by distinct rooms within WallClaimFt, then
-        // split each band at its centerline
-        // with a multi-source BFS from the room frontiers. Exterior faces see a room on one side
-        // only and are never claimed. RawSqft becomes centerline semantics where a band is claimed.
+        // FACES and leave an unclaimed band inside every wall. Claim non-domain cells seen by
+        // distinct rooms within WallClaimFt, then split each band at its centerline via multi-source
+        // BFS from the room frontiers. Exterior faces see a room on one side only and are never
+        // claimed. RawSqft becomes centerline semantics where a band is claimed.
         var claimed = new bool[n];
         if (opt.WallClaimFt > 0)
         {
@@ -419,9 +416,8 @@ internal static class PartitionFormulation
         return domain;
     }
 
-    // Offline diagnosis/calibration dump (numpy-friendly, see eval/rhvac scripts): per-cell
-    // domain + obstruction masks and RAW neighbor height steps in feet, so evidence thresholds
-    // and weights can be studied against the ground-truth wall lines without re-dumping.
+    // Offline diagnosis/calibration dump (numpy-friendly): per-cell domain + obstruction masks and
+    // RAW neighbor height steps in feet, so evidence thresholds and weights can be studied offline.
     internal static void DumpDiagnostics(string path, Heightfield hf, bool[] obst, double lvlZ, TakeoffOptions opt)
     {
         int W = hf.W, H = hf.H, n = W * H;

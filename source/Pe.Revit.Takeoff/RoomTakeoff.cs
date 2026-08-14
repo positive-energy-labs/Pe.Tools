@@ -41,28 +41,14 @@ public sealed record AuditedNativeTakeoffRun(
     IReadOnlyList<long> RetainedElementIds
 );
 
-// Facade. Room detection needs THREE script executions because the host owns exactly one
+// Facade. Detection runs as separate script executions because the host owns exactly one
 // transaction per run and ExportImage refuses to run mid-transaction:
-//
-//   1. Prepare (WriteTransaction) — resolve level, size the crop from geometry, create the two
-//      stripped seed views. Persists a state file so later runs re-derive nothing.
+//   1. Prepare (WriteTransaction) — resolve level, size the crop, create the stripped seed views;
+//      persists a state file so later runs re-derive nothing.
 //   2. Detect (ReadOnly) — export + read the seed ink, build the heightfield, detect, write TSV.
-//   3. Annotate (WriteTransaction) — rainbow evidence view.  Then ExportEvidence (ReadOnly),
-//      Cleanup (WriteTransaction) as needed.
-//
-// A pea script therefore stays tiny:
-//   RoomTakeoff.Prepare(doc, new TakeoffOptions { LevelNameContains = "Upper" }, WriteLine);
-//   ...next run...   var r = RoomTakeoff.Detect(doc, "Upper", WriteLine);
-//   ...next run...   RoomTakeoff.Annotate(doc, "Upper", WriteLine);
-//
-// Method choice (why projection seed + heightfield, decided 2026-07-06 on projectA):
-// four competing approaches ran as isolated pods against a framing-stage IFC estate (70k
-// DirectShapes, no Wall elements, no Rooms). Autodesk-native (EnergyAnalysisDetailModel, gbXML,
-// link room-bounding) is definitively blind to DirectShapes; geometry slicing needs a per-model
-// cut-height hack per failure mode; Revit's renderer supplies wall ink through physically clipped
-// top-down 3D bands, while the headroom field rejects roofless areas and adds ceiling heights.
-// The composite is deliberate: ink = walls, field = physics.
-// Dev law: extract once, iterate locally — never tune detection through repeated bridge runs.
+//   3. Annotate (WriteTransaction) — evidence view; then ExportEvidence (ReadOnly), Cleanup.
+// Method: ink = walls (Revit's renderer through clipped top-down 3D bands), field = physics (the
+// headroom field rejects roofless areas and supplies ceiling heights). See takeoff-learnings.md.
 public static class RoomTakeoff
 {
     private static readonly HashSet<ElementId> SpatialSlabCategories = new(new[] {
@@ -133,8 +119,7 @@ public static class RoomTakeoff
         if (opt.DumpReplaySnapshot)
         {
             // Offline-iteration capture: exactly what Detector.Detect consumes (see DetectSnapshot
-            // header for the honesty boundary). Detection changes then replay in NoDocumentRuntime
-            // tests in seconds — never tune detection through repeated bridge runs.
+            // header for the honesty boundary).
             string snapPath = Path.Combine(workDir, $"replay_{Sanitize(level.Name)}.bin");
             DetectSnapshot.Save(snapPath, snapshot);
             log($"[replay] detect-input snapshot -> {snapPath}");

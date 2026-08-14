@@ -4,10 +4,9 @@ using Pe.Revit.Takeoff;
 namespace Pe.Revit.Takeoff.Rhvac;
 
 // Core takeoff -> RhvacRoom export adapter: applies per-project conversion conventions
-// (conventions.json) and builds envelope rooms for the eval scorer.
-// Pure math, no Revit API — runs anywhere the tests run.
+// (conventions.json) and builds envelope rooms for the eval scorer. Pure math, no Revit API.
 //
-// v1 heuristics (see Rhvac/README.md "Envelope conversion"):
+// v1 envelope heuristics:
 // - Exterior walls: probe outward from each outer-loop edge midpoint; exterior iff the probe lands
 //   in no other room on the level. One wall per compass direction, summed length x mean ceiling.
 // - Floors/roofs: uncovered-fraction raster against the level immediately below/above.
@@ -43,11 +42,9 @@ public static class RhvacCandidateBuilder
     private const double StairEdgeCells = 2.5; // edges up to this many grid cells are staircase steps
 
     // ── raster simplification ─────────────────────────────────────────────────────────────────
-    // The detector emits marching-squares staircase outlines on its raster grid, so diagonal
-    // walls arrive as hundreds of one-cell steps: every step edge falls under MinWallEdgeFeet
-    // (walls vanish from the envelope) and any length summed from the raw outline overstates
-    // diagonals by up to sqrt(2). Collapse collinear runs, then Douglas-Peucker with tolerance =
-    // one grid cell, derived from the data. Applied only by the RHVAC export adapter.
+    // The detector emits marching-squares staircase outlines: diagonal walls arrive as many one-cell
+    // steps, each under MinWallEdgeFeet (so walls vanish) and overstating length by up to sqrt(2).
+    // Collapse collinear runs, then Douglas-Peucker at one grid cell (derived from the data).
 
     /// <summary>Most frequent repeated sub-limit axis component = detector grid pitch.</summary>
     internal static double? DeriveGridPitch(IEnumerable<List<double[]>> loops)
@@ -130,12 +127,10 @@ public static class RhvacCandidateBuilder
 
     /// <summary>
     /// One simplification attempt. Staircase edges (a few cells or shorter) are replaced by their
-    /// midpoints — for a uniform marching-squares staircase those lie exactly on the true wall
-    /// line, so straightening is area-unbiased (anchoring Douglas-Peucker on staircase corners
-    /// instead shaves ~pitch/2 x length off every diagonal). Long edges keep their endpoints, so
-    /// real corners stay exact. Then collinear runs collapse and Douglas-Peucker runs on the two
-    /// chains between vertex 0 and the vertex farthest from it (the split makes DP well-defined
-    /// on a ring).
+    /// midpoints, which lie on the true wall line for a uniform staircase, so straightening is
+    /// area-unbiased (anchoring DP on staircase corners instead shaves ~pitch/2 off every diagonal).
+    /// Long edges keep their endpoints. Then collinear runs collapse and DP runs on the two chains
+    /// between vertex 0 and the vertex farthest from it (splitting makes DP well-defined on a ring).
     /// </summary>
     private static List<double[]> SimplifyOnce(List<double[]> ring, double pitch, double tolerance)
     {
@@ -334,7 +329,7 @@ public static class RhvacCandidateBuilder
     /// <summary>
     /// Classifies outer-loop edges exterior/interior by outward probe, sums exterior length per
     /// compass direction, and adds one wall per direction. Returns total exterior edge length.
-    /// Hole boundaries are skipped: courtyards are usually enclosed (v1, see README).
+    /// Hole boundaries are skipped: courtyards are usually enclosed (v1).
     /// </summary>
     private static double AddWalls(
         RhvacRoom room,

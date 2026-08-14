@@ -1,23 +1,16 @@
 namespace Pe.Revit.Takeoff;
 
-// One shared boundary network for all accepted takeoff regions.
-//
-// THE STRAIGHT-ONLY LAW (pull-back decided 2026-07-12 after the curve/hole-solving ambition
-// produced diagonal artifacts across whole plans): the network emits only straight segments, and
-// every segment is either ON a consensus wall line or an axis-aligned connector between wall
-// lines. Anything the priors cannot explain is emitted raster-faithful and flagged UNRESOLVED for
-// the human/Pea draft loop — the engine never invents a diagonal or a curve to look finished.
-// Curved-wall support was removed wholesale; curved rooms land in the unresolved bucket.
-//
-//   1. trace paths between junction nodes (grid vertices with degree != 2), remembering which
-//      rooms own each path;
+// One shared boundary network for all accepted takeoff regions. STRAIGHT-ONLY: the network emits
+// only straight segments, each either ON a consensus wall line or an axis-aligned connector between
+// wall lines. Anything the priors cannot explain is emitted raster-faithful and flagged UNRESOLVED;
+// the engine never invents a diagonal or curve. Steps:
+//   1. trace paths between junction nodes (grid vertices with degree != 2), tracking owning rooms;
 //   2. Douglas-Peucker each path at the product tolerance;
-//   3. snap near-axis segments to the dominant building directions and cluster them by signed
-//      offset across the WHOLE network — each cluster is one physical wall line;
+//   3. snap near-axis segments to dominant building directions, cluster by signed offset across the
+//      WHOLE network — each cluster is one physical wall line;
 //   4. re-solve every vertex from its incident wall lines (line x line intersection, projection);
-//   5. each remaining free run (door opening, open-plan seam, off-axis wall) emits as a straight
-//      axis-aligned seam or an axis-aligned L connector when one fits the raster within
-//      allowance; otherwise the raw fitted polyline is emitted and the owning rooms are flagged.
+//   5. each remaining free run emits as a straight axis-aligned seam or an L connector when one fits
+//      the raster; otherwise the raw fitted polyline is emitted and the owning rooms are flagged.
 internal static class StrictSpaceBoundaryNetworkCore
 {
     private const double Scale = 1_000_000;          // fixed-point vertex key quantum (1e-6 ft)
@@ -26,11 +19,9 @@ internal static class StrictSpaceBoundaryNetworkCore
     private const double MinClusterSegmentFt = 1.5;  // shorter segments are noise, not wall votes
     private const double MaxChamferFt = 3.5;         // gap-seal corner damage never exceeds this
     private const double StraightSeamDegrees = 3;    // a "straight" seam must really be on-axis
-    private const double SupportedSeamFt = 2.5;      // connector allowance over wall ink (real
-                                                     // geometry: never reshape it aggressively)
-    private const double UnsupportedSeamFt = 8.0;    // connector allowance with no ink: the seam
-                                                     // is an equidistance artifact at an opening —
-                                                     // an engineer rules an axis-aligned split
+    private const double SupportedSeamFt = 2.5;      // connector allowance over wall ink (real geometry)
+    private const double UnsupportedSeamFt = 8.0;    // connector allowance with no ink: an equidistance
+                                                     // seam at an opening, free to route to an axis split
 
     private readonly record struct GridPoint(long X, long Y);
     private readonly record struct GridEdge(GridPoint A, GridPoint B);
@@ -59,9 +50,8 @@ internal static class StrictSpaceBoundaryNetworkCore
         public int FreeRuns, StraightSeams, CornerSeams, UnresolvedRuns;
     }
 
-    // Per-path emission buffer. Dirty paths (raster fallbacks, isolated diagonals with no wall
-    // evidence) drop their OWNING ROOMS from the result instead of shipping a bewildering shape:
-    // a visibly missing room is an easy human fix; a mangled one is not.
+    // Per-path emission buffer. Dirty paths (raster fallbacks, unsupported isolated diagonals) drop
+    // their OWNING ROOMS instead of shipping a mangled shape — drop, don't mangle.
     private sealed class Emitter
     {
         public readonly List<BoundaryCurve> Curves = [];
@@ -71,8 +61,7 @@ internal static class StrictSpaceBoundaryNetworkCore
         public void Line(Point a, Point b, string tag)
         {
             double dx = a.X - b.X, dy = a.Y - b.Y;
-            // Revit refuses curves under ShortCurveTolerance (~1/256 ft); anything this small is
-            // raster dust anyway
+            // Revit refuses curves under ShortCurveTolerance (~1/256 ft); this small is raster dust.
             if (Math.Sqrt(dx * dx + dy * dy) <= 0.01) return;
             this.Curves.Add(new BoundaryCurve(a.X, a.Y, b.X, b.Y));
             this.Tags.Add(tag);
@@ -98,11 +87,11 @@ internal static class StrictSpaceBoundaryNetworkCore
 
         double coarse = Math.Min(simplifyFt, 3.5 * cellFt);
         foreach (var path in paths) Simplify(path, coarse);
-        // real buildings have wings on different rotations; every strong direction gets its own
-        // snap family, so a secondary wing regularizes as cleanly as the dominant one
+        // every strong direction gets its own snap family, so a secondary wing on a different
+        // rotation regularizes as cleanly as the dominant one
         var axes = DominantAxes(paths);
-        // consensus window: generous enough for raster centerline wobble (+/- 2 cells at product
-        // resolution), never wide enough to swallow a distinct parallel wall one coarse cell away
+        // consensus window: covers raster centerline wobble (+/- 2 cells) without swallowing a
+        // distinct parallel wall one coarse cell away
         double consensusFt = Math.Min(0.5, 2 * cellFt);
         int wallLines = ClusterWallLines(paths, axes, consensusFt);
         var forced = CollapseChamfers(paths);
@@ -119,8 +108,7 @@ internal static class StrictSpaceBoundaryNetworkCore
         }
         ClassifyOffAxis(emitters, axes, inkNear, log);
 
-        // drop, don't mangle: every room touching a dirty path vanishes wholesale (an obvious,
-        // fixable hole), and curves serving only dropped rooms vanish with it
+        // drop, don't mangle: every room touching a dirty path vanishes wholesale as a fixable hole
         var dropped = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (path, em) in emitters)
             if (em.Dirty) dropped.UnionWith(path.Rooms);
@@ -295,9 +283,8 @@ internal static class StrictSpaceBoundaryNetworkCore
     private static List<int> SimplifyClosed(List<Point> raw, double tolerance)
     {
         if (raw.Count < 4) return Enumerable.Range(0, raw.Count).ToList();
-        // anchor the two halves at the loop's diameter endpoints (true extreme corners) —
-        // anchoring at raw[0], an arbitrary mid-wall point, erodes corners at tolerance scale
-        // and the tilted segments then contaminate the dominant-axis histogram
+        // anchor the two halves at the loop's diameter endpoints (true extreme corners); anchoring
+        // at an arbitrary mid-wall point erodes corners and contaminates the dominant-axis histogram
         int a = Enumerable.Range(1, raw.Count - 1)
             .OrderByDescending(index => Distance(raw[0], raw[index])).First();
         int b = Enumerable.Range(0, raw.Count).Where(index => index != a)
@@ -667,9 +654,8 @@ internal static class StrictSpaceBoundaryNetworkCore
             var to = ResolvedAt(path, resolved, index + count);
             double dx = to.X - from.X, dy = to.Y - from.Y;
             double length = Math.Sqrt(dx * dx + dy * dy);
-            // a wall run must ship on-axis: vertex resolution can pull a short run's endpoint off
-            // its consensus line, and the tilted straight segment reads as a fake diagonal. Route
-            // it through the same axis-aligned connector machinery as a free run instead.
+            // a wall run must ship on-axis: vertex resolution can pull a short run's endpoint off its
+            // consensus line into a fake diagonal, so route the tilted case through the connector path.
             bool tilted = length > 1e-6
                           && !directions.Any(u => Math.Abs((dx * u.Y - dy * u.X) / length) <= snap);
             if (primitive != null && !tilted) em.Line(from, to, "wall");
@@ -687,10 +673,9 @@ internal static class StrictSpaceBoundaryNetworkCore
         }
     }
 
-    // A free run is a stretch with no consensus wall line under it: a door opening, an open-plan
-    // equidistance seam, or an off-axis/curved wall. Emit it as a straight on-axis seam or an
-    // axis-aligned L connector when one fits the raster; otherwise emit the raw fitted polyline
-    // and mark the path dirty so its rooms drop as holes.
+    // A free run has no consensus wall line under it (door opening, open-plan seam, off-axis wall).
+    // Emit a straight on-axis seam or axis-aligned L connector when one fits the raster; otherwise
+    // emit the raw fitted polyline and mark the path dirty so its rooms drop as holes.
     private static bool EmitFreeRun(
         PathGeom path, Dictionary<VertexKey, Point> resolved, List<(double X, double Y)> axes,
         Func<double, double, bool>? inkNear, int firstSegment, int segmentCount,
@@ -748,11 +733,9 @@ internal static class StrictSpaceBoundaryNetworkCore
         return false;
     }
 
-    // Off-axis policy: an emitted segment not aligned to any building direction is acceptable ONLY
-    // as part of a supported chain — three or more consecutive off-axis segments over wall ink
-    // (a real curved or angled wall traced faithfully). Isolated diagonals (a nub cap, a corner
-    // bite, a resolution artifact) and unsupported diagonals mark the path dirty: their rooms
-    // drop as holes rather than shipping a shape that bewilders the user.
+    // Off-axis policy: an off-axis segment is acceptable ONLY as part of a supported chain — three+
+    // consecutive off-axis segments over wall ink (a real curved/angled wall). Isolated or
+    // unsupported diagonals mark the path dirty so its rooms drop as holes.
     private static void ClassifyOffAxis(
         List<(PathGeom Path, Emitter Em)> emitters, List<(double X, double Y)> axes,
         Func<double, double, bool>? inkNear, Action<string>? log)

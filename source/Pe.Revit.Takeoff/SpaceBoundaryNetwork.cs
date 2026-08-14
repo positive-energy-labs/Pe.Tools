@@ -6,14 +6,11 @@ namespace Pe.Revit.Takeoff;
 
 internal readonly record struct BoundaryCurve(double X1, double Y1, double X2, double Y2);
 
-// Rooms are one polygonal coverage, not independent shapes. Simplifying them together is the
-// essential invariant: an interior edge is represented once and both adjacent rooms receive the
-// exact same replacement. There are deliberately no per-room repairs or fallback geometries here.
-//
-// After simplification the coverage is snapped to DOMINANT ORIENTATION FRAMES: houses are
-// rectilinear, so almost every corner is 90 degrees and non-orthogonal walls are rare outliers
-// (exterior fulcrums, rotated wings, curves). DP chords alone ship arbitrary angles, which makes
-// the FilledRegions impossible to edit by hand — the user law is editability first.
+// Rooms are one polygonal coverage, not independent shapes: simplify them together so an interior
+// edge is represented once and both adjacent rooms receive the exact same replacement. No per-room
+// repairs or fallback geometries. After simplification the coverage snaps to DOMINANT ORIENTATION
+// FRAMES — houses are rectilinear, and DP chords alone ship arbitrary angles that make the
+// FilledRegions un-editable by hand.
 internal static class SpaceBoundaryNetwork
 {
     private const double Scale = 1_000_000;
@@ -113,11 +110,8 @@ internal static class SpaceBoundaryNetwork
                 File.WriteAllLines(Path.Combine(debugDir, $"snapped_{tolerance:F3}.wkt"),
                     snapped.Select((geometry, i) => rooms[i].Id + "\t" + geometry));
             }
-            // a failed snap must not cost the attempt its (good) simplification: fall back to
-            // the unsnapped coverage before halving the tolerance toward raw raster
-            // snapping is judged against what simplification kept: a raster-diagonal corner
-            // contact that DP already shrank below substance may collapse into a clean
-            // 4-corner junction point
+            // a failed snap must not cost the attempt its (good) simplification: fall back to the
+            // unsnapped coverage before halving the tolerance toward raw raster
             var simplifiedAdjacency = SharedEdges(simplified);
             Polygon[]? polygons = Accept(snapped, "snapped", simplifiedAdjacency);
             if (polygons == null && !ReferenceEquals(snapped, simplified))
@@ -201,13 +195,11 @@ internal static class SpaceBoundaryNetwork
         throw new InvalidOperationException("No shared simplification retained every room label");
     }
 
-    // The coverage simplifier owns topology; this stage owns direction. Every straight edge near
-    // a dominant orientation frame snaps EXACTLY onto a frame axis; collinear edges share one
-    // line so walls have no micro-jogs; each shared vertex then moves once from all incident
-    // lines, so adjacent rooms receive identical replacements and corners between two axes of a
-    // frame are exactly 90 degrees. Curve chains (consistent small same-sign turns — round
-    // towers, bay windows, octagon corners) and true diagonals beyond the snap tolerance keep
-    // their DP chords.
+    // The coverage simplifier owns topology; this stage owns direction. Every straight edge near a
+    // dominant orientation frame snaps EXACTLY onto a frame axis; collinear edges share one line so
+    // walls have no micro-jogs; each shared vertex moves once from all incident lines so adjacent
+    // rooms get identical replacements and corners are exactly 90 degrees. Curve chains (small
+    // same-sign turns) and true diagonals beyond the snap tolerance keep their DP chords.
     private static Geometry[] SnapToFrames(
         Geometry[] coverage, IReadOnlyList<RoomResult> rooms, double tolerance,
         Action<string>? log)
@@ -298,13 +290,10 @@ internal static class SpaceBoundaryNetwork
         var moved = ResolveVertices(edges.Values, tolerance);
         int snapped = straight.Count(edge => edge.Line != null);
 
-        // Rebuild the coverage from the moved edge graph instead of moving rings in place:
-        // noding the moved segments turns folds, overlaps and collapsed jogs into ordinary
-        // nodes, polygonizing yields exactly-noded faces, and label points hand each face to
-        // its room. Unlabeled faces inside the footprint (fold slivers AND pre-existing
-        // hairline gaps) are absorbed by their longest-shared assigned neighbor; faces outside
-        // the footprint (outward folds, residue pockets) are dropped. Valid shared-edge
-        // coverage by construction; the caller's gates still judge the outcome.
+        // Rebuild the coverage from the moved edge graph instead of moving rings in place: noding
+        // turns folds/overlaps/collapsed jogs into ordinary nodes, polygonizing yields exactly-noded
+        // faces, label points hand each face to its room. Unlabeled faces inside the footprint are
+        // absorbed by their longest-shared assigned neighbor; faces outside it are dropped.
         var segments = new List<Geometry>();
         foreach (var edge in edges.Values)
         {
@@ -439,10 +428,6 @@ internal static class SpaceBoundaryNetwork
             }
         }
     }
-
-    private static IEnumerable<LineString> Rings(Polygon polygon) =>
-        new[] { (LineString)polygon.ExteriorRing }.Concat(
-            Enumerable.Range(0, polygon.NumInteriorRings).Select(polygon.GetInteriorRingN));
 
     private static double NormalizeTurn(double turn)
     {

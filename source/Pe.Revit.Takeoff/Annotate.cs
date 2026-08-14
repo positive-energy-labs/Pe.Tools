@@ -1,9 +1,8 @@
 namespace Pe.Revit.Takeoff;
 
-// Takeoff annotation: rainbow FilledRegions + optional text markers on a fresh, marker-named
-// evidence view, plus census/cleanup. Conventions paid for in round 1 (Snowdon) and projectA:
-// - Never mutate user views; fresh evidence views, cropped to the regions bbox (an estate's
-//   site survey otherwise dwarfs the building in every export).
+// Takeoff annotation: rainbow FilledRegions on a fresh, marker-named evidence view, plus
+// census/cleanup. Revit-API constraints that shape this code:
+// - Never mutate user views; evidence draws on fresh views cropped to the regions bbox.
 // - FilledRegions are view-specific: deleting the evidence view cleans everything with it.
 // - TextNote has NO Comments parameter — mark notes by text content; detail items get
 //   ALL_MODEL_INSTANCE_COMMENTS.

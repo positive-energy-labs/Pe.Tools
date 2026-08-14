@@ -2,31 +2,24 @@ using System.Windows.Media.Imaging;
 
 namespace Pe.Revit.Takeoff;
 
-// Room-seed layer: use Revit's renderer instead of slicing geometry ourselves.
-// project-a proved why: the architect's deliverable was a framing-stage IFC — 70k DirectShapes,
-// zero Wall elements — where every LocationCurve/native-room approach is dead on arrival, and
-// Revit's plan renderer still draws perfect wall ink (it solves view range, cut planes, link
-// display, and DirectShape sectioning for free). We export a surgically stripped plan view to PNG
-// at a known crop->pixel mapping and read the ink back as an occupancy grid.
+// Room-seed layer: use Revit's plan renderer instead of slicing geometry ourselves. On a
+// framing-stage IFC (many DirectShapes, zero Wall elements) LocationCurve/native-room approaches
+// are dead on arrival, but the renderer still draws correct wall ink. We export a surgically
+// stripped view to PNG at a known crop->pixel mapping and read the ink back as an occupancy grid.
 //
-// The recipe (every line below was paid for in blood on projectA, 2026-07-06):
+// Constraints:
 // - FRESH top-down orthographic View3D; never mutate user views.
-// - PHYSICAL one-foot section box around each cut. Plan view ranges are insufficient for IFC
-//   DirectShapes: Revit projects geometry from other stories even when all four range planes are
-//   correctly bound to the current level (project-a live proof, 2026-07-10).
-// - TWO bands OR'd downstream: KneeBand (~4 ft) catches knee walls and under-window studs;
-//   HeaderBand (~8.5 ft, ABOVE door/window heads) is the door-sealer — Revit draws headers
-//   continuous through openings, which morphological closing provably cannot do for collinear
-//   gaps. Cut height is a per-model knob: this estate ran 10 ft ceilings / 8 ft heads.
-// - Hide EVERYTHING except the wall-ink categories, but OST_RvtLinks itself MUST stay visible —
-//   hiding it blanks the entire linked IFC (first vgprint export was an empty page).
-// - Host-view category visibility/overrides flow into IFC links directly; no per-link
-//   RevitLinkGraphicsSettings needed.
-// - NO surface patterns (solid surface fill let projected roof planes flood the dormer wing);
-//   cut+projection lines black, heavy-ish weight so 1-cell walls survive the grid downsample.
-// - Open-to-sky spaces (courtyards, terraces) look enclosed in plan ink — both 2D pods
-//   false-positived the courtyard. The Heightfield ceiling test is the corrective; never ship
-//   projection-seed detection without it.
+// - PHYSICAL one-foot section box around each cut: plan view ranges are insufficient for IFC
+//   DirectShapes (Revit projects geometry from other stories even with all range planes bound).
+// - TWO bands OR'd downstream: KneeBand (~4 ft) catches knee walls / under-window studs; HeaderBand
+//   (~8.5 ft, ABOVE door/window heads) seals doorways — headers draw continuous through openings,
+//   which morphological closing cannot reproduce for collinear gaps. Cut height is a per-model knob.
+// - Hide EVERYTHING except wall-ink categories, but OST_RvtLinks itself MUST stay visible — hiding
+//   it blanks the entire linked IFC. Host-view visibility/overrides flow into IFC links directly.
+// - NO surface patterns (solid fill lets projected roof planes flood the plan); cut+projection
+//   lines black, heavy weight so 1-cell walls survive the grid downsample.
+// - Open-to-sky spaces (courtyards, terraces) look enclosed in plan ink; the Heightfield ceiling
+//   test is the corrective — never ship projection-seed detection without it.
 public static class ProjectionSeed
 {
     private static readonly BuiltInCategory[] InkCategories = {
@@ -39,11 +32,9 @@ public static class ProjectionSeed
         id != null && InkCategories.Any(category => id == ((long)category).ToElementId());
 
     // WriteTransaction step: create the stripped seed views, cropped to `crop` (model coords).
-    // Band A is cut TWICE (vertical-consistency pair, see CaptureInk). When the model carries the
-    // architect's own 2D plan for this level (a flat linked DWG at the level elevation — standard
-    // MEP background practice), a fourth "seed D" view isolates it: that linework is finished
-    // walls, one story, near-zero noise, and beats any cut through framing. Idempotent:
-    // same-named views are deleted first.
+    // Band A is cut TWICE (vertical-consistency pair, see CaptureBands). When the model carries a
+    // flat linked DWG plan at the level elevation, a fourth "seed D" view isolates it — finished
+    // walls, one story, beats any cut through framing. Idempotent: same-named views deleted first.
     public static (string viewA, string viewA2, string viewB, string? viewD) PrepareSeedViews(
         Document doc, Level level, BoundingBoxXYZ crop, TakeoffOptions opt, Action<string> log)
     {
@@ -52,8 +43,7 @@ public static class ProjectionSeed
         string nameB = $"{opt.Marker} seed B {level.Name}";
         string nameD = $"{opt.Marker} seed D {level.Name}";
         // doc.Delete(singleId) on a VIEW silently rolls back the host-owned transaction with
-        // success-looking logs (dwgvec pod, 2026-07-06). Always delete views via the ICollection
-        // overload.
+        // success-looking logs. Always delete views via the ICollection overload.
         var stale = new FilteredElementCollector(doc).OfClass(typeof(View)).Cast<View>()
             .Where(v => v.Name == nameA || v.Name == nameA2 || v.Name == nameB || v.Name == nameD)
             .Select(v => v.Id).ToList();
@@ -74,9 +64,8 @@ public static class ProjectionSeed
         return (nameA, nameA2, nameB, viewD);
     }
 
-    // The architect's per-level plan background: a linked, model-space DWG whose geometry is FLAT
-    // and sits at the level elevation. Z + flatness + XY overlap identify it without relying on
-    // file naming conventions.
+    // The per-level plan background: a linked model-space DWG that is FLAT and sits at the level
+    // elevation. Z + flatness + XY overlap identify it without relying on file naming.
     private static ImportInstance? FindLevelDwg(Document doc, Level level, BoundingBoxXYZ crop)
     {
         ImportInstance? best = null;
@@ -116,10 +105,8 @@ public static class ProjectionSeed
             try { if (v.CanCategoryBeHidden(cat.Id)) v.SetCategoryHidden(cat.Id, true); } catch { }
         }
         v.SetCategoryHidden(dwg.Category.Id, false);
-        // boundary layers only: walls and glazing (glass lines seal window openings in the
-        // envelope). Furniture, millwork, fixtures, roof plans, hatches, stairs, balconies, and
-        // site linework are room-fragmenting or room-inventing noise. When the file has no
-        // recognizable wall layer, keep everything and let the physics gates cope.
+        // boundary layers only: walls + glazing (glass lines seal window openings). Other layers are
+        // room-fragmenting/inventing noise. No recognizable wall layer = keep everything, let physics cope.
         var layers = dwg.Category.SubCategories.Cast<Category>().ToList();
         bool hasWallLayer = layers.Any(layer => layer.Name.IndexOf("WALL", StringComparison.OrdinalIgnoreCase) >= 0);
         if (hasWallLayer)
@@ -196,22 +183,14 @@ public static class ProjectionSeed
     }
 
     // ReadOnly step: export the band views and compose the ink grid:
-    //
-    //   knee  = A1 AND A2      vertical-consistency: walls extrude vertically, so they draw the
-    //                          same footprint at both knee cuts; rafters/joists/battens/gutters/
-    //                          stair flights/raked railings/flat labels shift or vanish
-    //   ink   = knee OR (B AND near(knee | floorEdge, HeaderNearFt))
-    //                          header ink seals door openings, but only counts within reach of
-    //                          knee ink or the floor-slab edge — a "wall" in the header cut far
-    //                          from both is a mid-room roof plane or high framing, not a room
-    //                          boundary. The slab edge matters for eave walls under a roof slope:
-    //                          their only header-band evidence IS the roof plane, and the building
-    //                          envelope always coincides with the slab edge (project-a NE bedrooms).
-    //
-    // kneeBandInk = the AND'd knee band. Band B cannot distinguish a wall from a sealed opening;
-    // the knee band can — doors are open at +4 ft. Boundary-evidence needs that distinction.
-    // Pixel->model mapping is exact: the export fills the crop box edge-to-edge (verified 0.02%
-    // aspect agreement at 6000 px on projectA); ftPerPx = cropWidth / pixelWidth.
+    //   knee = A1 AND A2  — walls extrude vertically so they draw the same footprint at both knee
+    //                       cuts; rafters/joists/gutters/flat labels shift or vanish.
+    //   ink  = knee OR (B AND near(knee | floorEdge, HeaderNearFt)) — header ink seals door openings
+    //                       but only counts within reach of knee ink or the slab edge; a "wall" in
+    //                       the header cut far from both is a mid-room roof plane, not a boundary.
+    //                       Slab edge matters for eave walls whose only header evidence is the roof.
+    // Band B cannot distinguish a wall from a sealed opening; the knee band can (doors open at +4 ft).
+    // Pixel->model mapping is exact: the export fills the crop box edge-to-edge; ftPerPx = cropW/pixelW.
     internal static (bool[] Plan, bool[] Header) CaptureBands(
         Document doc, string viewA, string viewA2, string viewB, string? viewD, BoundingBoxXYZ crop,
         int gridW, int gridH, double cellFt, string workDir, TakeoffOptions opt, Action<string> log)
@@ -220,8 +199,7 @@ public static class ProjectionSeed
         bool[] knee;
         if (viewD != null)
         {
-            // the architect's own plan linework: finished walls, one story — no vertical-
-            // consistency AND needed, and the framing bands' knee cuts add only noise beside it
+            // DWG plan linework: finished walls, one story — no vertical-consistency AND needed
             knee = ExportAndStamp(doc, viewD, crop, gridW, gridH, cellFt, workDir, opt, log);
         }
         else

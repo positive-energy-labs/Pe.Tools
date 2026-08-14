@@ -9,9 +9,9 @@ internal sealed record StrictSpaceBoundaryNetworkResult(
     IReadOnlyList<RoomResult> AcceptedRooms,
     IReadOnlyCollection<string> DroppedRoomIds);
 
-// Narrow adapter over the last strict, drop-don't-mangle network from f970088. It accepts the
-// current RoomResult contract and returns both the shared linework and reconstructed room loops;
-// callers can compare it offline without changing the active takeoff/materialization path.
+// Narrow adapter over the legacy strict drop-don't-mangle network (superseded in the live path by
+// FrameLocalProjector; retained for offline comparison, exercised only by tests). Returns both the
+// shared linework and reconstructed room loops.
 internal static class StrictSpaceBoundaryNetwork
 {
     private const double Scale = 1_000_000;

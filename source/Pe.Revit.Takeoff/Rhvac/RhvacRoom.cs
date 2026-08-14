@@ -1,19 +1,9 @@
 namespace Pe.Revit.Takeoff.Rhvac;
 
-// RHVAC is purely mathematical and area-based; nothing here is a drawing. Conventions below were
-// validated 2026-07-24 against the firm's most complex real project (projectA, 150 rooms) —
-// see README.md in this folder for the .r10 format spec and the verification evidence.
-//
-// Firm conventions (all confirmed in real files):
-// - Rooms and floor/roof rows store AREA in the length field with width 1 ("area x 1"), purely to
-//   make manual entry and auditing easy. Walls are the exception: real length x height segments.
-// - Vaulted/sloped ceilings are entered as a volume-preserving AVERAGE height; RHVAC's sloped
-//   ceiling feature is unused (0 of 150 project-a rooms).
-// - Roof rows carry a pitch allowance in the RHVAC width field (1.2 on under-roof rooms). Kept
-//   here as AreaMultiplier so exported files stay auditable the way engineers expect.
-// - Interior rooms (no exterior exposure) are the norm, not the edge case: ~half of project-a rooms
-//   have placeholder zero rows for walls/floors/glass. In this shape absence is an EMPTY list;
-//   the file adapter writes RHVAC's zero placeholder rows.
+// RHVAC is purely mathematical and area-based; nothing here is a drawing. The .r10 format spec and
+// firm Manual J conventions (area x 1, volume-preserving average height, roof pitch allowance,
+// interior-room placeholders) live in docs/context/rhvac-and-mj-reference.md. In this shape, absence
+// of a category is an EMPTY list; the file adapter writes RHVAC's zero placeholder rows.
 
 /// <summary>RHVAC's eight wall-facing directions, clockwise from north (codes 0-7, verified).</summary>
 public enum RhvacWallDirection

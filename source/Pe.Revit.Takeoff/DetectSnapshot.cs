@@ -2,22 +2,19 @@ using System.IO.Compression;
 
 namespace Pe.Revit.Takeoff;
 
-// Persisted post-Revit intermediate state: exactly what evidence inference + Detector.Detect
-// consume — the raw heightfield rasters, the composed seed ink, and the level identity. RoomTakeoff
-// .Detect dumps one per live run (replay_<level>.bin, gzip); Replay() reruns region detection +
-// polygonization offline with ARBITRARY TakeoffOptions, so detection changes iterate in seconds
-// against real captured state (NoDocumentRuntime tests) instead of through live bridge runs.
+// Persisted post-Revit intermediate state: the raw heightfield rasters, composed seed ink, and
+// level identity that Detector.Detect consumes. Dumped per live run (replay_<level>.bin, gzip);
+// Replay() reruns detection offline with arbitrary TakeoffOptions, so detection changes iterate in
+// seconds against captured state instead of live bridge runs.
 //
-// HONESTY BOUNDARY — what replay can and cannot prove. Everything downstream of the snapshot is
-// exercised for real: obstruction morphology, door sealers, region growing, ceiling/compactness
-// gates, partition propagation, loop tracing, TSV. Everything UPSTREAM is baked at capture time
-// and CANNOT be re-tuned offline:
-//   - heightfield build window: FloorTolFt, EvidenceStoryCapFt, CeilingCloseFt (CeilZ above the
-//     evidence cap simply is not in the file; widening FloorTolFt offline cannot add floor cells)
+// HONESTY BOUNDARY — everything DOWNSTREAM of the snapshot is exercised for real (morphology, door
+// sealers, region growing, gates, loop tracing, TSV). Everything UPSTREAM is baked at capture and
+// CANNOT be re-tuned offline:
+//   - heightfield build window: FloorTolFt, EvidenceStoryCapFt, CeilingCloseFt (CeilZ/floor cells
+//     above/outside the captured window simply are not in the file)
 //   - ink composition: band cut heights, BandPairSeparationFt, HeaderNearFt gating, SeedPixelSize
 //   - CellFt: the rasters are fixed-resolution; Replay fail-fasts on a mismatch
-// CaptureOptions records those baked knobs so an offline session knows what it is standing on.
-// Changing any of them still needs a live re-capture (run-takeoff.py).
+// CaptureOptions records those baked knobs; changing any needs a live re-capture.
 public sealed class DetectSnapshot
 {
     private const uint Magic = 0x54414B53; // "SKAT"
