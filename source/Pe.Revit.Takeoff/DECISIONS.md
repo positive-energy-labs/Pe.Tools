@@ -2,6 +2,28 @@
 
 Dated, append-only. Newest batch first. Each entry: what was decided, and the why that makes it stick. Reopen one only with new evidence — and record the reopening here.
 
+## 2026-08-14 (live Revit) — FR carriers and registry blob proven; TakeoffCarriers live-verified
+
+Live-probed in the project-a cloud clone (Revit 2025, dev payload) via `scripting.execute`:
+
+- **FR shared-param write round-trip PROVEN.** A text param bound through our own
+  `SharedParameterBinder` (instance binding, Detail Items category) landed on all 9,212
+  FilledRegions; set + Regenerate round-trips in-transaction and reads back identically from a
+  separate later call. The persistence-layer hypothesis under every data home is now fact.
+- **Registry blob capacity PROVEN to 1 MB** on a hidden Project Information text param
+  (1 KB / 32 KB / 256 KB / 1 MB all round-trip byte-identical).
+- **`TakeoffCarriers` live-verified**: EnsureBindings + WriteIdentity/ReadIdentity +
+  provenance blob on a real FR; System registry write/read through the fail-closed codec;
+  `Reconcile` on live data surfaced the rename question correctly (vanished FC-13 + appeared
+  WS-1 = 1 candidate pair). Pe.Revit.Takeoff gained its one ProjectReference (Pe.Revit) for the
+  binder — the sanctioned persistence path; the library stays otherwise leaf.
+- Residual: carrier survival across save/sync/reopen is standard Revit project-param behavior;
+  spot-check on the first model that syncs. Probe params (`_PE_TakeoffProbe*`) live only in the
+  unsaved clone session.
+- Ops note: adding a new source file (or any csproj change) puts hot reload into
+  restart-required by design — converge --restart cycles Revit and drops open documents; reopen
+  via `revit.apply.document.open`. Not an SDK bug.
+
 ## 2026-08-14 (live RHVAC) — surgical sync accepted and recalculated by RHVAC 10
 
 Live-probed in Elite RHVAC 10.01.57 on a disposable copy of projectA. `sync-rhvac.ps1`

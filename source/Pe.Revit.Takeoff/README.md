@@ -53,9 +53,9 @@ Gates are conservation and identity laws — no oracle, no tolerance dial: accou
 
 Live-unproven assumptions — probe each in a scratch document before building on it:
 
-- **FR shared-param write round-trip.** Read side is proven in project-a (`OST_FilledRegion.AllowsBoundParameters == false`, yet instance params bound to a category set including Detail Items appear writable on FRs). The write side — our own binding via `SharedParameterBinder`, set + save + reopen — is not.
+- **FR shared-param write round-trip — PROVEN live 2026-08-14** (DECISIONS): our own `SharedParameterBinder` Detail-Items instance binding writes and reads back on project-a FRs (all 9,212 carry it); `TakeoffCarriers` is the productized module, live-verified including registry blob round-trip and reconciliation. Residual: survival across save/sync/reopen is standard Revit project-param behavior, spot-check on first synced model.
 - **FR boundary read-back under user editing** — arcs, splines, self-touching rings drawn by hand must hit STRAIGHT-ONLY enforcement at read time.
-- **Registry blob capacity** — the hidden-text-param pattern has no known length guard; verify the ceiling before betting a growing registry on it.
+- **Registry blob capacity — PROVEN to 1 MB live 2026-08-14**: a 1,048,571-char string round-trips on a hidden Project Information text param; orders of magnitude above any realistic registry.
 - **Capture cache** — per-zone runs are only cheap if the level-wide raster capture is shared and keyed by document/level/capture-options hash.
 - **`.r10` upsert round-trip** — Jet layer PROVEN 2026-08-14 (`eval/rhvac/project-a/UPSERT-PROBE.md`): row-level UPDATE/INSERT side-effect-free, zero foreign keys, lock refusal exercised; `eval/rhvac/sync-rhvac.ps1` is the safety envelope. Residual: a human on an RHVAC box must confirm the app opens and recalcs a synced file. Schema facts: `Room` PK is `Number`; `Identifier` is an autonumber COUNTER — never supply it.
 
