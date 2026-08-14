@@ -2,6 +2,17 @@
 
 Dated, append-only. Newest batch first. Each entry: what was decided, and the why that makes it stick. Reopen one only with new evidence — and record the reopening here.
 
+## 2026-08-14 (later) — the review surface and the `.r10` reversal
+
+Settled in a mock-driven session (decision-queue mock v2, judged against the live `/rhvac` plan-pane pattern).
+
+- **Pending proposals are session-ephemeral; decisions write through.** The review surface holds no batch-commit state: every accept/dismiss is an op persisting to the datum's home at click time, and the solver's determinism (same model + zone + constants → same proposal) makes a lost session cost one rerun, never a decision. This deleted the "proposal blob" idea before it was born — an ephemeral queue is admissible precisely because nothing pending accumulates.
+- **Held data conflicts are the one persisted pending state** — a marker on the surviving Room Region's blob, because export-blocking state cannot be session-scoped. Removals do not hold: confirming a removal orphans the room's `.r10` data with a stale flag rather than deleting it.
+- **Two-verb review vocabulary.** accept = take the recalc's proposal, dismiss = keep the designer's state, uniform across shape/new/removal/drift rows; merges are the only multi-choice row. Mirrors the surviving `plan-pane.tsx` FlagQueue — one row per decision, inline verbs, no cards, no severity taxonomy. Web UI carries no geometry verbs (reaffirming the purge); shape work deep-links to Revit.
+- **Drift is measured, not forbidden.** Closure is a partition-time invariant; hand-edit drift reports against a project-constant threshold (starting 20 sf — a constant in one place, not a UI lever) and blocks export only above it. Edge-snap reconciliation arrives as a rerun proposal row, never silently.
+- **The zone is the rerun unit; no sub-zone rerun, no exposed knobs.** Partial accept is free (rows are independent); accepted rooms are pinned by GUID re-binding so a zone rerun cannot disturb them — granularity without a dice lever. Determinism is the anti-dice-rolling law: rerunning an unchanged model returns the identical proposal. A designer needing per-zone constant tuning is a promotion-gate bug to file, not a knob to expose.
+- **REOPENED: export "never in place" (set earlier today) → surgical sync.** New evidence: remaking the file violates one-home-per-datum — the `.r10` is the home for Manual J data *and* for RHVAC-native edits this pipeline will never model (equipment picks, duct settings, overrides), all destroyed by a remake; and file-identity churn was rotting the `{file identity, Identifier}` link every export. New shape: upsert by `Identifier` on geometry-owned fields only, insert new rooms, park removals stale, touch nothing else. Safety survives as copy → validate → atomic swap + timestamped backup ("never destructively" replaces "never in place"). New proof obligations (README): Jet upsert round-trip that RHVAC still opens and recalcs; lock detection; plus an adoption path for pre-existing files (match by name once, then `Identifier` forever).
+
 ## 2026-08-14 — the zone-bounded spec
 
 Settled in a grilled design session against five audits (feedback loops, architecture, UI, git-history census, four-surface project-a reconciliation) plus the firm's Manual J training deck.

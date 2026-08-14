@@ -13,7 +13,7 @@ Each step has one owner and writes to one home. "Op" means a `takeoff.*`/`rhvac.
 | 3 | Partition (per zone, explicit trigger) | op | Room Region + held/void FRs on first run; a proposal diff on rerun | level-wide capture (cached) masked to the zone → watershed → promotion gate with per-zone frames; accounting closure asserted |
 | 4 | Edit | designer | Room Region FRs | Revit's native sketch editor — the edit surface |
 | 5 | Room data | designer via web grid | the `.r10` copy | deterministic assists (lighting 0.25 W/sf, people by bedrooms, PE equipment table, OA/exhaust, ERV latent) keyed off room type; closed assembly picker |
-| 6 | Export | op | new `.r10` (never in place); `.r10` link blob on FRs | 32-bit Jet lane (`export-rhvac.ps1`); deterministic `SystemNumber`; tag written into the RHVAC system name |
+| 6 | Export | op | surgical sync into the existing `.r10`; `.r10` link blob on FRs | 32-bit Jet lane; upsert by `Identifier` on geometry-owned fields only; copy → validate → atomic swap + timestamped backup; refuses while RHVAC holds the file; deterministic `SystemNumber`; tag written into the RHVAC system name |
 | 7 | Reconcile | op | report only | tag join across `.r10` ↔ zones ↔ equipment (`PE_G___TagInstance`) ↔ FOM workbook |
 
 ## Data homes
@@ -29,6 +29,8 @@ Each step has one owner and writes to one home. "Op" means a `takeoff.*`/`rhvac.
 | Loads and results | the `.r10` | RHVAC is the calculation authority; no headless calc exists |
 | Equipment identity and parameters | `PE_G___TagInstance` etc. on equipment instances | office standard; read-only to this pipeline |
 | Manual S selection | FOM workbook | read-only to this pipeline |
+| Held data conflicts (e.g. two accepted rooms merged) | marker on the surviving Room Region's blob | the only persisted pending state; blocks export until resolved |
+| Pending proposals (unaccepted rerun diffs) | nowhere — session-ephemeral | admissible because reruns are deterministic and every decision writes through immediately |
 | Run artifacts (replay, ink, evidence) | project-scoped artifact directory | diagnostics, never state |
 
 ## Identity spine
@@ -39,7 +41,7 @@ Two tiers everywhere: a stable GUID for machine joins, a mutable human tag or na
 
 **In**: steps 1–7 above; per-zone conservation metrics; the reconciliation report (the "all in sync" check — it writes nothing).
 **Out (for now)**: generating the ManS workbook; writing FOM values back onto equipment; paste-ready xlsx blocks (boundaries of that data need mapping first).
-**Prototype before speccing**: the review/diff presentation and the house-as-system views (zone accounting, System tree with the 32k Btu/hr sensible-cap warning). Invariants that hold regardless: proposals never auto-apply; the designer's shape wins until accepted; drift is shown against the accepted baseline.
+**Prototype before speccing**: the house-as-system views (zone accounting, System tree with the 32k Btu/hr sensible-cap warning). The review surface is settled by the mocked decision-queue shape (see DECISIONS 2026-08-14 review batch): two verbs everywhere — accept takes the recalc's proposal, dismiss keeps the designer's state; data-conflict holds are the only multi-choice rows; shapes change only in Revit. Invariants: proposals never auto-apply; the designer's shape wins until accepted; drift is shown against the accepted state.
 
 Dev-lane is acceptable during build-out, but installability is a standing constraint: no new dependency on `sourceRoot`, scripts resolved package-relative, ops designed as products.
 
@@ -55,6 +57,8 @@ Live-unproven assumptions — probe each in a scratch document before building o
 - **FR boundary read-back under user editing** — arcs, splines, self-touching rings drawn by hand must hit STRAIGHT-ONLY enforcement at read time.
 - **Registry blob capacity** — the hidden-text-param pattern has no known length guard; verify the ceiling before betting a growing registry on it.
 - **Capture cache** — per-zone runs are only cheap if the level-wide raster capture is shared and keyed by document/level/capture-options hash.
+- **`.r10` upsert round-trip** — surgical sync assumes row-level Jet UPDATE/INSERT into a live RHVAC schema leaves a file RHVAC opens and recalcs cleanly. Probe against `projectA.local.r10` before building the export op.
+- **`.r10` lock detection** — sync must detect RHVAC holding the file and refuse, not corrupt.
 
 ## Inheritance
 

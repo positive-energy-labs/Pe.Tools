@@ -23,7 +23,7 @@ Unqualified Room, Zone, and System are ambiguous across Revit and RHVAC — qual
 3. Partition runs per zone on explicit request: first run materializes Room Regions plus held/void residue; reruns propose a diff against the accepted baseline.
 4. The designer reshapes Room Regions in Revit and reruns affected zones.
 5. Room data is entered in the web grid against the `.r10`; assists derive people/lighting/equipment/ventilation from room type and area.
-6. Export writes a new `.r10` (never in place) and records the `.r10` linkage back onto each Room Region.
+6. Export surgically syncs the existing `.r10` — upsert by `Identifier` on geometry-owned fields, insert new rooms, park removals stale; RHVAC-native edits are never touched — and records the `.r10` linkage back onto each Room Region. Sync is copy → validate → atomic swap with a timestamped backup, and refuses while RHVAC holds the file.
 7. Reconcile reports the joins and divergences across `.r10`, zones, equipment, and the FOM workbook — writing nothing.
 
 ## Laws
@@ -35,5 +35,8 @@ Unqualified Room, Zone, and System are ambiguous across Revit and RHVAC — qual
 - **Identity**: GUID (stable, machine) paired with tag or name (mutable, human) at every layer. GUIDs are minted at registration or promotion and survive reruns, splits, merges, and revisions. Out-of-sync state fails fast into explicit reconciliation — orphans block export.
 - **Authority**: Zoning Regions own outer scope; Room Regions own the internal partition and are the edit surface; the `.r10` owns Manual J room data and results; RHVAC owns calculation; the FOM workbook owns equipment selection. The UI reads geometry, edits only `.r10` data and Pe metadata through ops, and never becomes authoritative.
 - **Persistence**: model state lives in Pe shared parameters (bound through `SharedParameterBinder`) and versioned, fail-closed JSON-blob parameters. Extensible storage is banned.
-- **Propose, never overwrite**: reruns produce diffs against the accepted baseline; the designer's shapes and decisions stand until explicitly replaced. Data conflicts hold and block export rather than merge silently.
-- **Explicit triggers**: partitioning and drift handling run when a human asks, per zone. Nothing watches the model for change.
+- **Propose, never overwrite**: reruns produce diffs against the accepted state; the designer's shapes and decisions stand until explicitly replaced. Data conflicts hold and block export rather than merge silently.
+- **Write-through review**: every accept/dismiss is an op that persists to the datum's home at decision time — no batch commit. Pending proposals are session-ephemeral; that is admissible only because the solver is deterministic on model + zone + constants, so a lost session costs one rerun, never a decision. Held data conflicts are the sole persisted pending state.
+- **Two verbs**: accept takes the recalc's proposal; dismiss keeps the designer's state. Data-conflict holds are the only multi-choice decision. Geometry changes happen in Revit, never in web UI.
+- **Drift**: accounting closure is a partition-time invariant. Hand-edit drift (gaps, sibling overlaps, out-of-zone spill) is measured against a project-constant threshold — allowed under it, blocking export over it. Reconciliation (edge snaps) is proposed by the next rerun, never applied silently.
+- **Explicit triggers**: partitioning and drift handling run when a human asks, per zone — the zone is the rerun unit, and no solver threshold or constant is exposed per run. Accepted rooms are pinned by GUID re-binding, so a zone rerun cannot disturb resolved rooms. Nothing watches the model for change.
