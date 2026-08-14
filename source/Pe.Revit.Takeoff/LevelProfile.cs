@@ -169,7 +169,8 @@ public static class TakeoffPolicy
         return profile;
     }
 
-    internal static TakeoffResult Detect(DetectSnapshot snap, LevelProfile profile, Action<string> log)
+    internal static TakeoffResult Detect(
+        DetectSnapshot snap, LevelProfile profile, Action<string> log, bool[]? zoneMask = null)
     {
         var field = snap.Field;
         if (profile.Options.CeilingCloseFt > snap.CapturedCeilingCloseFt() + 1e-9)
@@ -190,7 +191,7 @@ public static class TakeoffPolicy
         else
         {
             result = Detector.Detect(
-                field, snap.SeedInk, snap.LevelName, snap.LevelElevation, profile.Options, log);
+                field, snap.SeedInk, snap.LevelName, snap.LevelElevation, profile.Options, log, zoneMask);
         }
         result.ProfileProvenance = profile.Provenance;
         result.LevelFlags.AddRange(profile.Flags.Select(flag => $"level:{snap.LevelName}:{flag}"));

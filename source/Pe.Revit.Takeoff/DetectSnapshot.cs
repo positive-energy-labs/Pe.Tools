@@ -26,21 +26,22 @@ public sealed class DetectSnapshot
     public Heightfield Field = null!;
     public bool[] SeedInk = null!;
 
-    public TakeoffResult Replay(TakeoffOptions opt, Action<string> log)
+    public TakeoffResult Replay(TakeoffOptions opt, Action<string> log, bool[]? zoneMask = null)
     {
         ValidateReplayOptions(opt);
         LogReplay(log);
-        return Detector.Detect(this.Field, this.SeedInk, this.LevelName, this.LevelElevation, opt, log);
+        return Detector.Detect(this.Field, this.SeedInk, this.LevelName, this.LevelElevation, opt, log, zoneMask);
     }
 
-    public TakeoffResult ReplayInferred(Action<string> log, Action<TakeoffOptions>? configure = null)
+    public TakeoffResult ReplayInferred(
+        Action<string> log, Action<TakeoffOptions>? configure = null, bool[]? zoneMask = null)
     {
         var profile = TakeoffPolicy.InferLevelProfile(this);
         configure?.Invoke(profile.Options);
         ValidateReplayOptions(profile.Options);
         LogReplay(log);
         log($"[profile] {profile.Provenance}");
-        return TakeoffPolicy.Detect(this, profile, log);
+        return TakeoffPolicy.Detect(this, profile, log, zoneMask);
     }
 
     private void ValidateReplayOptions(TakeoffOptions opt)

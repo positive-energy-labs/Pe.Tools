@@ -105,6 +105,11 @@ public sealed class TakeoffResult
     public List<RoomResult> Rooms = new();
     public List<ResidueResult> Residues = new();
     public double TotalSqft;
+    // Accounting law inputs: rooms + residues + ExcludedResidueSqft must equal
+    // DomainSqft + ClaimedWallSqft, exactly. Populated by the detector; zero for Native readback.
+    public double DomainSqft;               // partition domain after any zone mask
+    public double ClaimedWallSqft;          // wall-band cells claimed into rooms (outside domain)
+    public double ExcludedResidueSqft;      // sub-MinResidueSqft residue suppressed from review
     public string? ProfileProvenance;
     public List<string> LevelFlags = new();
     public string? SeedViewA, SeedViewB;    // names of the stripped seed views (until cleanup)

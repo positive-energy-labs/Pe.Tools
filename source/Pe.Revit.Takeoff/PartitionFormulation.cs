@@ -22,7 +22,7 @@ internal static class PartitionFormulation
 {
     internal static TakeoffResult Run(
         Heightfield hf, bool[] obst, string levelName, double lvlZ,
-        TakeoffOptions opt, Action<string> log)
+        TakeoffOptions opt, Action<string> log, bool[]? zoneMask = null)
     {
         if (double.IsNaN(opt.MinRegionCompactness) || double.IsInfinity(opt.MinRegionCompactness)
             || opt.MinRegionCompactness < 0 || opt.MinRegionCompactness > 1)
@@ -41,6 +41,15 @@ internal static class PartitionFormulation
 
         // ---- 1. domain ----
         var footprint = Detector.InkBoundedFloor(hf, obst, lvlZ, opt.FloorTolFt);
+        if (zoneMask != null)
+        {
+            if (zoneMask.Length != n)
+                throw new ArgumentException($"zoneMask disagrees with {W}x{H}", nameof(zoneMask));
+            double excludedSqft = 0;
+            for (int i = 0; i < n; i++)
+                if (footprint[i] && !zoneMask[i]) { footprint[i] = false; excludedSqft += cellArea; }
+            log($"[partition] zone mask: {excludedSqft:F0}sf of level footprint excluded by declaration");
+        }
         var domain = BuildDomain(hf, lvlZ, opt, footprint);
         int domainCells = domain.Count(d => d);
 
@@ -163,6 +172,7 @@ internal static class PartitionFormulation
         // BFS from the room frontiers. Exterior faces see a room on one side only and are never
         // claimed. RawSqft becomes centerline semantics where a band is claimed.
         var claimed = new bool[n];
+        int claimedCellsTotal = 0;
         if (opt.WallClaimFt > 0)
         {
             int reach = Math.Max(1, (int)Math.Round(opt.WallClaimFt / opt.CellFt));
@@ -171,6 +181,9 @@ internal static class PartitionFormulation
             {
                 int x = i % W, y = i / W;
                 if (domain[i] || owner[i] != 0 || !obst[i]) continue;
+                // Scope law: wall-band cells outside the declared zone stay unclaimed, so no room
+                // ever carries geometry past the Zoning Region boundary.
+                if (zoneMask != null && !zoneMask[i]) continue;
                 int firstOwner = 0;
                 for (int dy = -reach; dy <= reach && !claimable[i]; dy++)
                 for (int dx = -reach; dx <= reach && !claimable[i]; dx++)
@@ -207,9 +220,13 @@ internal static class PartitionFormulation
                 if (cy < H - 1 && claimable[c + W] && owner[c + W] == 0) { owner[c + W] = me; claimed[c + W] = true; band.Enqueue(c + W); claimedCells++; }
             }
             log($"[partition] wall-band claim={claimedCells * cellArea:F0}sf ({claimedCells} cells, reach={reach})");
+            claimedCellsTotal = claimedCells;
         }
-        int diagonalFixes = ResolveDiagonalTouches(owner, evidence, W, H);
+        int diagonalFixes = ResolveDiagonalTouches(owner, evidence, domain, claimed, W, H);
         if (diagonalFixes > 0) log($"[partition] resolved {diagonalFixes} diagonal corner touches");
+        // Diagonal fixes can pull non-domain corner cells into rooms; they are claimed area for
+        // the accounting identity, marked in `claimed` by ResolveDiagonalTouches itself.
+        claimedCellsTotal = claimed.Count(c => c);
 
         // ---- low-evidence-boundary flags on the final labeling ----
         foreach (var ((a, b), (edges, backed)) in BoundaryPairs(owner, evidence, domain, W, H, opt.BoundaryEvidenceMin))
@@ -240,6 +257,18 @@ internal static class PartitionFormulation
             .OrderByDescending(id => cellsById[id].Count).ThenBy(id => id)
             .Select(id => (id, cells: cellsById[id], reason: ResidueReason.Border))
             .ToList();
+        // Non-border regions under MinSqft (post-claim/diagonal shrinkage the sliver loop never
+        // re-checked) become visible residue — dropping them silently broke accounting closure.
+        var subMin = cellsById.Keys
+            .Where(id => !touchesBorder.Contains(id) && !emitIds.Contains(id))
+            .OrderByDescending(id => cellsById[id].Count).ThenBy(id => id)
+            .ToList();
+        if (subMin.Count > 0)
+        {
+            log($"[partition] sub-min regions to residue: {subMin.Count} " +
+                $"({subMin.Sum(id => cellsById[id].Count) * cellArea:F1}sf)");
+            residueRegions.AddRange(subMin.Select(id => (id, cellsById[id], ResidueReason.Crumb)));
+        }
         int residueId = -1;
         var seenCrumbs = new bool[n];
         for (int i = 0; i < n; i++)
@@ -352,12 +381,16 @@ internal static class PartitionFormulation
         log($"[partition] residue={result.Residues.Count} ({result.Residues.Sum(r => r.RawSqft):F0}sf) " +
             $"excluded<{opt.MinResidueSqft:F0}sf={excludedResidues} ({excludedResidueSqft:F0}sf)");
         result.TotalSqft = result.Rooms.Sum(room => room.RawSqft);
+        result.DomainSqft = domainCells * cellArea;
+        result.ClaimedWallSqft = claimedCellsTotal * cellArea;
+        result.ExcludedResidueSqft = excludedResidueSqft;
         return result;
     }
 
     // A checkerboard 2x2 makes a raster ring touch itself at one point. Give that one-cell
     // ambiguity to the repeated owner (the larger one in a two-room tie) so loops stay polygonal.
-    private static int ResolveDiagonalTouches(int[] owner, float[] evidence, int width, int height)
+    private static int ResolveDiagonalTouches(
+        int[] owner, float[] evidence, bool[] domain, bool[] claimed, int width, int height)
     {
         var area = owner.Where(id => id > 0).GroupBy(id => id).ToDictionary(group => group.Key, group => group.Count());
         int changed = 0;
@@ -385,6 +418,9 @@ internal static class PartitionFormulation
                         ? first : second;
                 int loser = owner[target];
                 owner[target] = winner;
+                // A grabbed non-domain cell (wall/void corner) is claimed area — the accounting
+                // identity counts it on the same side as the wall-band claim.
+                if (loser == 0 && !domain[target]) claimed[target] = true;
                 area[winner] = area.GetValueOrDefault(winner) + 1;
                 if (loser > 0) area[loser]--;
                 passChanged++;

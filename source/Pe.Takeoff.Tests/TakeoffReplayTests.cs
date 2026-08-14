@@ -20,7 +20,7 @@ public sealed class TakeoffReplayTests
     // area; a 45-degree diagonal wall sealing a triangular room off the open plan's SE corner.
     // Every floor cell carries a 9-ft ceiling, so ceiling gates pass and door gaps are the only
     // topology question: unsealed they merge A+B+open-plan into one region.
-    private static DetectSnapshot BuildSyntheticEstate()
+    internal static DetectSnapshot BuildSyntheticEstate()
     {
         const int W = 120, H = 80;
         const double cell = 0.5;

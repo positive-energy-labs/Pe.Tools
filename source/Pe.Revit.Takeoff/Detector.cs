@@ -7,10 +7,10 @@ public static class Detector
 {
     public static TakeoffResult Detect(
         Heightfield hf, bool[] seedInk, string levelName, double levelElevation,
-        TakeoffOptions opt, Action<string> log)
+        TakeoffOptions opt, Action<string> log, bool[]? zoneMask = null)
     {
         var obst = BuildObstruction(hf, seedInk, levelElevation, opt, log);
-        return PartitionFormulation.Run(hf, obst, levelName, levelElevation, opt, log);
+        return PartitionFormulation.Run(hf, obst, levelName, levelElevation, opt, log, zoneMask);
     }
 
     // Shared by detection, level-profile inference, and diagnostics: composed seed ink -> sealed
