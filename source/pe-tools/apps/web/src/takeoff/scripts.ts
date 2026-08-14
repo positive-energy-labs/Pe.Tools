@@ -146,12 +146,13 @@ export interface PartitionArgs {
 }
 
 /**
- * The rerun unit. Replays the level-wide capture masked to this zone's declared loops, then
- * materializes accepted rooms and held residue into the real zoning view. Reruns re-bind by
+ * The rerun unit. Replays the level-wide capture masked to this zone's declared loops, runs the
+ * per-zone promotion gate (TakeoffPromotion.PromoteZone — same chain the NUnit harness proves),
+ * then materializes accepted rooms and held residue into the real zoning view. Reruns re-bind by
  * geometry and never touch an existing region — propose, never overwrite.
  *
- * seam: TakeoffPromotion.PromoteZone (the per-zone editability gate) is internal and not
- * reachable from scripting, so what lands here is the raw detector partition.
+ * PromoteZone throws InvalidOperationException on a binding-law violation; that surfaces as a
+ * script error deliberately — a law break is a bug, not a held zone.
  */
 export const partitionScript = (args: PartitionArgs) => `
 var loops = new List<List<double[]>> { ${csLoops(args.loops)} };
@@ -162,6 +163,11 @@ var zone = new Pe.Revit.Takeoff.ZoneScope { Name = "${cs(args.zoneName)}", Loops
 var snap = Pe.Revit.Takeoff.DetectSnapshot.Load(
     Environment.ExpandEnvironmentVariables("${cs(args.replayPath)}"));
 var result = snap.ReplayInferred(s => { }, null, zone.CellMask(snap.Field));
+
+var profile = Pe.Revit.Takeoff.TakeoffPolicy.InferLevelProfile(snap);
+var promo = Pe.Revit.Takeoff.TakeoffPromotion.PromoteZone(
+    result, zone, profile.Options, snap.SeedInkDistance(), s => { });
+result = promo.Result;
 
 var view = new FilteredElementCollector(doc).OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
     .FirstOrDefault(v => !v.IsTemplate && v.Name == "${cs(args.view)}");
@@ -181,6 +187,9 @@ sb.Append("{\\"levelName\\":\\"").Append(esc(result.LevelName)).Append("\\"");
 sb.Append(",\\"elevation\\":").Append(num(elevation));
 sb.Append(",\\"created\\":").Append(mat.Created).Append(",\\"held\\":").Append(mat.Held);
 sb.Append(",\\"rebound\\":").Append(mat.Rebound).Append(",\\"orphaned\\":").Append(mat.Orphaned);
+sb.Append(",\\"promotion\\":{\\"accepted\\":").Append(promo.Diagnostics.AcceptedRooms);
+sb.Append(",\\"held\\":").Append(promo.Diagnostics.HeldRooms);
+sb.Append(",\\"strict\\":").Append(promo.Diagnostics.IsStrictlyEditable ? "true" : "false").Append("}");
 sb.Append(",\\"domainSqft\\":").Append(num(result.DomainSqft));
 sb.Append(",\\"claimedWallSqft\\":").Append(num(result.ClaimedWallSqft));
 sb.Append(",\\"excludedResidueSqft\\":").Append(num(result.ExcludedResidueSqft));
