@@ -1,0 +1,373 @@
+/**
+ * The takeoff pipeline's web-side vocabulary — the seven steps of
+ * source/Pe.Revit.Takeoff/README.md as data the /takeoff route can render.
+ *
+ * Nothing here is authoritative. Zone geometry belongs to the Zoning Region FR, identity to
+ * the System registry blob, room geometry to the Room Region FR, and Manual J data to the
+ * `.r10`. This module only names those things and computes display-side geometry.
+ */
+import { ProjectA_ZONES, type DeclaredZone } from "#/takeoff/zones-project-a";
+
+// ── Levels ──────────────────────────────────────────────────────────────────
+//
+// A zoning view, its Revit level, and the level-wide capture the partition replays. The capture
+// is the honesty boundary (DetectSnapshot's header): everything upstream of the .bin is baked.
+
+export interface LevelLane {
+  /** Zoning view name — matched exactly against a non-template ViewPlan. */
+  view: string;
+  /** Short label for the board. */
+  label: string;
+  /** Substring that identifies the Revit Level (its Elevation is the FR sketch plane). */
+  levelFragment: string;
+  /** replay_*.bin basename in the project artifact directory. */
+  replayFile: string;
+}
+
+export const LEVEL_LANES: LevelLane[] = [
+  {
+    view: "Mechanical Zoning Plan - Lower Level",
+    label: "Lower",
+    levelFragment: "Lower",
+    replayFile: "replay_Level_0_Lower_Level.bin",
+  },
+  {
+    view: "Mechanical Zoning Plan - Main Level",
+    label: "Main",
+    levelFragment: "Main",
+    replayFile: "replay_Level_1_Main_Level.bin",
+  },
+  {
+    view: "Mechanical Zoning Plan - Upper Level",
+    label: "Upper",
+    levelFragment: "Upper",
+    replayFile: "replay_Level_2_Upper_Level.bin",
+  },
+  {
+    view: "Mechanical Zoning Plan - Attic Level",
+    label: "Attic",
+    levelFragment: "Attic",
+    replayFile: "replay_Level_3_Attic.bin",
+  },
+];
+
+/** Default artifact directory — where the live runs dumped the replay snapshots. */
+export const DEFAULT_ARTIFACT_DIR = "%USERPROFILE%\\OneDrive\\Documents\\Pe.Tools\\takeoff";
+
+// ── Zones ───────────────────────────────────────────────────────────────────
+
+export interface Zone extends DeclaredZone {
+  lane: LevelLane;
+  /** "Main#06" — stable within the fixture, and what the deterministic GUID is derived from. */
+  key: string;
+  /** 1-based ordinal within the level, as shown on the board. */
+  ordinal: number;
+  /** Machine identity. seam: minted by register today, geometric-stamped on the FR tomorrow. */
+  guid: string;
+  /** Declared area (shoelace over even-odd loops) — the accounting law's right-hand side. */
+  declaredSqft: number;
+  bounds: Bounds;
+}
+
+export interface Bounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+/**
+ * Deterministic per-zone GUID, so a browser reload (or a different machine) addresses the same
+ * Room Regions. A real registration mints a random GUID and stamps it on the Zoning Region FR;
+ * until zoning FRs carry that stamp, derivation from (level, ordinal) is the stand-in that keeps
+ * rerun identity working. Namespace 7a4e0000-…-8000 is takeoff-MVP-only.
+ */
+export const zoneGuid = (levelIndex: number, ordinal: number) =>
+  `7a4e0000-0000-4000-8000-${String(levelIndex).padStart(6, "0")}${String(ordinal).padStart(6, "0")}`;
+
+export const shoelace = (loop: readonly (readonly [number, number])[]) => {
+  let sum = 0;
+  for (let i = 0; i < loop.length; i++) {
+    const a = loop[i]!;
+    const b = loop[(i + 1) % loop.length]!;
+    sum += a[0] * b[1] - b[0] * a[1];
+  }
+  return Math.abs(sum) / 2;
+};
+
+export const boundsOf = (loops: readonly (readonly (readonly [number, number])[])[]): Bounds => {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const loop of loops)
+    for (const [x, y] of loop) {
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  return { minX, minY, maxX, maxY };
+};
+
+export const mergeBounds = (a: Bounds, b: Bounds): Bounds => ({
+  minX: Math.min(a.minX, b.minX),
+  minY: Math.min(a.minY, b.minY),
+  maxX: Math.max(a.maxX, b.maxX),
+  maxY: Math.max(a.maxY, b.maxY),
+});
+
+/**
+ * Even-odd containment over ALL loops together — the exact rule ZoneScope.ContainsEvenOdd uses,
+ * so a room the solver placed inside a zone reads as inside here too. Used to bind a detected
+ * room to the Room Region FR that carries its decisions.
+ */
+export function containsEvenOdd(
+  loops: readonly (readonly (readonly [number, number])[])[],
+  x: number,
+  y: number,
+) {
+  let inside = false;
+  for (const loop of loops) {
+    const m = loop.length;
+    for (let i = 0, j = m - 1; i < m; j = i++) {
+      const [xi, yi] = loop[i]!;
+      const [xj, yj] = loop[j]!;
+      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/**
+ * SVG path in a Y-flipped frame (model Y grows north, SVG Y grows down). `bounds` fixes the
+ * flip origin so every shape in one pane shares a frame — preserving the coordinate frame is
+ * the whole point; a per-shape fit would silently move rooms relative to their zone.
+ */
+export function pathD(
+  loops: readonly (readonly (readonly [number, number])[])[],
+  bounds: Bounds,
+): string {
+  const flip = (y: number) => bounds.minY + bounds.maxY - y;
+  return loops
+    .filter((loop) => loop.length >= 3)
+    .map(
+      (loop) =>
+        loop
+          .map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(3)} ${flip(y).toFixed(3)}`)
+          .join("") + "Z",
+    )
+    .join("");
+}
+
+/** The zone board's source: the declared fixture, grouped and measured. */
+export function buildZones(declared: DeclaredZone[] = ProjectA_ZONES): Zone[] {
+  const zones: Zone[] = [];
+  LEVEL_LANES.forEach((lane, levelIndex) => {
+    declared
+      .filter((z) => z.view === lane.view)
+      .forEach((z, i) => {
+        const ordinal = i + 1;
+        zones.push({
+          ...z,
+          lane,
+          ordinal,
+          key: `${lane.label}#${String(ordinal).padStart(2, "0")}`,
+          guid: zoneGuid(levelIndex, ordinal),
+          declaredSqft: z.loops.reduce((sum, loop) => sum + shoelace(loop), 0),
+          bounds: boundsOf(z.loops),
+        });
+      });
+  });
+  return zones;
+}
+
+// ── Live results (wire shapes of the scripting calls) ───────────────────────
+
+export interface DetectedRoom {
+  id: string;
+  rawSqft: number;
+  perimeterFt: number;
+  meanCeilingFt: number;
+  label: [number, number];
+  flags: string[];
+  outer: [number, number][];
+}
+
+export interface DetectedResidue {
+  id: string;
+  reason: string;
+  rawSqft: number;
+  label: [number, number];
+  outer: [number, number][];
+}
+
+/** A Room Region / held-residue FR that exists in the model right now. */
+export interface LiveRegion {
+  elementId: number;
+  role: string;
+  guid: string;
+  sqft: number;
+  /** Raw provenance blob text — the datum's home for decisions. */
+  blob: string;
+  outer: [number, number][];
+}
+
+export interface PartitionRun {
+  levelName: string;
+  elevation: number;
+  created: number;
+  held: number;
+  rebound: number;
+  orphaned: number;
+  domainSqft: number;
+  claimedWallSqft: number;
+  excludedResidueSqft: number;
+  totalSqft: number;
+  profile: string;
+  failures: string[];
+  rooms: DetectedRoom[];
+  residues: DetectedResidue[];
+  regions: LiveRegion[];
+}
+
+export interface RegistrySystem {
+  guid: string;
+  tag: string;
+}
+
+export interface RegistryState {
+  systems: RegistrySystem[];
+  appeared: string[];
+  vanished: RegistrySystem[];
+  renameCandidates: { fromGuid: string; fromTag: string; toTag: string }[];
+  needsHuman: boolean;
+}
+
+export interface ModelStatus {
+  doc: string;
+  systems: RegistrySystem[];
+  regions: { zoneGuid: string; rooms: number; held: number }[];
+}
+
+// ── Zone status (step the zone is at) ───────────────────────────────────────
+
+export type ZoneStage = "unregistered" | "registered" | "partitioned";
+
+export const zoneStage = (tags: string[], materializedRooms: number): ZoneStage =>
+  materializedRooms > 0 ? "partitioned" : tags.length > 0 ? "registered" : "unregistered";
+
+// ── Decisions (the write-through blob extension) ────────────────────────────
+
+/**
+ * Two verbs, per README's review law: `accept` takes the recalculation's proposal, `dismiss`
+ * keeps the designer's state. Written straight into the Room Region's provenance blob at
+ * decision time — there is no batch commit and no sidecar.
+ */
+export interface Resolution {
+  subject: string;
+  flag: string;
+  verb: "accept" | "dismiss";
+  at: string;
+  runId: string;
+}
+
+/** Reads the `resolutions` array spliced onto a v1 RegionProvenance blob. Fail-soft: a blob we
+ *  cannot parse reads as "no decisions", never as "decided". */
+export function readResolutions(blob: string): Resolution[] {
+  try {
+    const parsed = JSON.parse(blob) as { resolutions?: Resolution[] };
+    return Array.isArray(parsed.resolutions) ? parsed.resolutions : [];
+  } catch {
+    return [];
+  }
+}
+
+/** One decision per (subject, flag) — a later verb replaces the earlier one. */
+export function upsertResolution(existing: Resolution[], next: Resolution): Resolution[] {
+  return [...existing.filter((r) => !(r.subject === next.subject && r.flag === next.flag)), next];
+}
+
+/** Binds a detected room to the Room Region FR that carries its decisions, by label containment. */
+export function regionForRoom(room: DetectedRoom, regions: LiveRegion[]): LiveRegion | undefined {
+  return regions.find(
+    (region) =>
+      region.role === "room-region" && containsEvenOdd([region.outer], room.label[0], room.label[1]),
+  );
+}
+
+// ── Decision queue rows ─────────────────────────────────────────────────────
+
+export interface DecisionRow {
+  /** Stable row key. */
+  key: string;
+  kind: "flag" | "orphan" | "failure";
+  subject: string;
+  flag: string;
+  detail: string;
+  sqft: number | null;
+  /** Where the decision is written. Null = no home yet, so the row cannot be written through. */
+  elementId: number | null;
+  resolved: Resolution | null;
+}
+
+/**
+ * The review surface is a decision queue, not a data browser: one row per thing a human must
+ * call, with its home attached. Rooms the solver is confident about never appear.
+ */
+export function decisionRows(run: PartitionRun): DecisionRow[] {
+  const rows: DecisionRow[] = [];
+  const claimed = new Set<number>();
+  for (const room of run.rooms) {
+    const region = regionForRoom(room, run.regions);
+    if (region) claimed.add(region.elementId);
+    const resolutions = region ? readResolutions(region.blob) : [];
+    for (const flag of room.flags)
+      rows.push({
+        key: `flag:${room.id}:${flag}`,
+        kind: "flag",
+        subject: room.id,
+        flag,
+        detail: FLAG_MEANING[flag] ?? flag,
+        sqft: room.rawSqft,
+        elementId: region?.elementId ?? null,
+        resolved: resolutions.find((r) => r.subject === room.id && r.flag === flag) ?? null,
+      });
+  }
+  for (const region of run.regions) {
+    if (region.role !== "room-region" || claimed.has(region.elementId)) continue;
+    const resolutions = readResolutions(region.blob);
+    rows.push({
+      key: `orphan:${region.guid}`,
+      kind: "orphan",
+      subject: region.guid.slice(0, 8),
+      flag: "orphaned-region",
+      detail: "this rerun claimed no room here — the designer's region stands until accepted",
+      sqft: region.sqft,
+      elementId: region.elementId,
+      resolved: resolutions.find((r) => r.flag === "orphaned-region") ?? null,
+    });
+  }
+  for (const failure of run.failures)
+    rows.push({
+      key: `failure:${failure}`,
+      kind: "failure",
+      subject: failure.split(":")[0] ?? failure,
+      flag: "materialize-failed",
+      detail: failure,
+      sqft: null,
+      elementId: null,
+      resolved: null,
+    });
+  return rows;
+}
+
+/** Detector flag vocabulary, spelled out so a row is readable without the source. */
+export const FLAG_MEANING: Record<string, string> = {
+  seedless: "no seed room backs this space — verify it is a real room",
+  "suspect:narrow": "narrow enough that the boundary may be a wall band, not a room",
+  "suspect:ceiling-variance": "ceiling height varies across the space — chase, void, or vault",
+  "low-evidence-boundary": "boundary placed on weak wall evidence",
+  "orphaned-region": "an existing region no room in this run claims",
+  "materialize-failed": "Revit refused the loop — dropped whole rather than bent to fit",
+};

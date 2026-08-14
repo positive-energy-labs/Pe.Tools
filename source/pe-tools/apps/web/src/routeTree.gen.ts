@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from "./routes/__root";
+import { Route as TakeoffRouteImport } from "./routes/takeoff";
 import { Route as SettingsRouteImport } from "./routes/settings";
 import { Route as ScheduleGridRouteImport } from "./routes/schedule-grid";
 import { Route as RhvacRouteImport } from "./routes/rhvac";
@@ -28,10 +29,16 @@ import { Route as ChatRouteImport } from "./routes/chat";
 import { Route as IndexRouteImport } from "./routes/index";
 import { Route as DocsTargetRouteImport } from "./routes/docs.target";
 import { Route as DocsRuntimeRouteImport } from "./routes/docs.runtime";
+import { Route as ApiTakeoffExportRouteImport } from "./routes/api/takeoff/export";
 import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
 import { Route as ApiPdfAuditMapRouteImport } from "./routes/api/pdf-audit/map";
 import { Route as ApiPdfAuditParseParseIdRouteImport } from "./routes/api/pdf-audit/parse.$parseId";
 
+const TakeoffRoute = TakeoffRouteImport.update({
+  id: "/takeoff",
+  path: "/takeoff",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const SettingsRoute = SettingsRouteImport.update({
   id: "/settings",
   path: "/settings",
@@ -127,6 +134,11 @@ const DocsRuntimeRoute = DocsRuntimeRouteImport.update({
   path: "/docs/runtime",
   getParentRoute: () => rootRouteImport,
 } as any);
+const ApiTakeoffExportRoute = ApiTakeoffExportRouteImport.update({
+  id: "/api/takeoff/export",
+  path: "/api/takeoff/export",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const ApiPdfAuditParseRoute = ApiPdfAuditParseRouteImport.update({
   id: "/api/pdf-audit/parse",
   path: "/api/pdf-audit/parse",
@@ -161,10 +173,12 @@ export interface FileRoutesByFullPath {
   "/rhvac": typeof RhvacRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
+  "/takeoff": typeof TakeoffRoute;
   "/docs/runtime": typeof DocsRuntimeRoute;
   "/docs/target": typeof DocsTargetRoute;
   "/api/pdf-audit/map": typeof ApiPdfAuditMapRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
+  "/api/takeoff/export": typeof ApiTakeoffExportRoute;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
 }
 export interface FileRoutesByTo {
@@ -185,10 +199,12 @@ export interface FileRoutesByTo {
   "/rhvac": typeof RhvacRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
+  "/takeoff": typeof TakeoffRoute;
   "/docs/runtime": typeof DocsRuntimeRoute;
   "/docs/target": typeof DocsTargetRoute;
   "/api/pdf-audit/map": typeof ApiPdfAuditMapRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
+  "/api/takeoff/export": typeof ApiTakeoffExportRoute;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
 }
 export interface FileRoutesById {
@@ -210,10 +226,12 @@ export interface FileRoutesById {
   "/rhvac": typeof RhvacRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
+  "/takeoff": typeof TakeoffRoute;
   "/docs/runtime": typeof DocsRuntimeRoute;
   "/docs/target": typeof DocsTargetRoute;
   "/api/pdf-audit/map": typeof ApiPdfAuditMapRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
+  "/api/takeoff/export": typeof ApiTakeoffExportRoute;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
 }
 export interface FileRouteTypes {
@@ -236,10 +254,12 @@ export interface FileRouteTypes {
     | "/rhvac"
     | "/schedule-grid"
     | "/settings"
+    | "/takeoff"
     | "/docs/runtime"
     | "/docs/target"
     | "/api/pdf-audit/map"
     | "/api/pdf-audit/parse"
+    | "/api/takeoff/export"
     | "/api/pdf-audit/parse/$parseId";
   fileRoutesByTo: FileRoutesByTo;
   to:
@@ -260,10 +280,12 @@ export interface FileRouteTypes {
     | "/rhvac"
     | "/schedule-grid"
     | "/settings"
+    | "/takeoff"
     | "/docs/runtime"
     | "/docs/target"
     | "/api/pdf-audit/map"
     | "/api/pdf-audit/parse"
+    | "/api/takeoff/export"
     | "/api/pdf-audit/parse/$parseId";
   id:
     | "__root__"
@@ -284,10 +306,12 @@ export interface FileRouteTypes {
     | "/rhvac"
     | "/schedule-grid"
     | "/settings"
+    | "/takeoff"
     | "/docs/runtime"
     | "/docs/target"
     | "/api/pdf-audit/map"
     | "/api/pdf-audit/parse"
+    | "/api/takeoff/export"
     | "/api/pdf-audit/parse/$parseId";
   fileRoutesById: FileRoutesById;
 }
@@ -309,14 +333,23 @@ export interface RootRouteChildren {
   RhvacRoute: typeof RhvacRoute;
   ScheduleGridRoute: typeof ScheduleGridRoute;
   SettingsRoute: typeof SettingsRoute;
+  TakeoffRoute: typeof TakeoffRoute;
   DocsRuntimeRoute: typeof DocsRuntimeRoute;
   DocsTargetRoute: typeof DocsTargetRoute;
   ApiPdfAuditMapRoute: typeof ApiPdfAuditMapRoute;
   ApiPdfAuditParseRoute: typeof ApiPdfAuditParseRouteWithChildren;
+  ApiTakeoffExportRoute: typeof ApiTakeoffExportRoute;
 }
 
 declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
+    "/takeoff": {
+      id: "/takeoff";
+      path: "/takeoff";
+      fullPath: "/takeoff";
+      preLoaderRoute: typeof TakeoffRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/settings": {
       id: "/settings";
       path: "/settings";
@@ -450,6 +483,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof DocsRuntimeRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/api/takeoff/export": {
+      id: "/api/takeoff/export";
+      path: "/api/takeoff/export";
+      fullPath: "/api/takeoff/export";
+      preLoaderRoute: typeof ApiTakeoffExportRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/api/pdf-audit/parse": {
       id: "/api/pdf-audit/parse";
       path: "/api/pdf-audit/parse";
@@ -503,10 +543,12 @@ const rootRouteChildren: RootRouteChildren = {
   RhvacRoute: RhvacRoute,
   ScheduleGridRoute: ScheduleGridRoute,
   SettingsRoute: SettingsRoute,
+  TakeoffRoute: TakeoffRoute,
   DocsRuntimeRoute: DocsRuntimeRoute,
   DocsTargetRoute: DocsTargetRoute,
   ApiPdfAuditMapRoute: ApiPdfAuditMapRoute,
   ApiPdfAuditParseRoute: ApiPdfAuditParseRouteWithChildren,
+  ApiTakeoffExportRoute: ApiTakeoffExportRoute,
 };
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
