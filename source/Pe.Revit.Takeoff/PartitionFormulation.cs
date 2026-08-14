@@ -22,7 +22,8 @@ internal static class PartitionFormulation
 {
     internal static TakeoffResult Run(
         Heightfield hf, bool[] obst, string levelName, double lvlZ,
-        TakeoffOptions opt, Action<string> log, bool[]? zoneMask = null)
+        TakeoffOptions opt, Action<string> log, bool[]? zoneMask = null,
+        bool[]? preparedFootprint = null, float[]? preparedEvidence = null)
     {
         if (double.IsNaN(opt.MinRegionCompactness) || double.IsInfinity(opt.MinRegionCompactness)
             || opt.MinRegionCompactness < 0 || opt.MinRegionCompactness > 1)
@@ -40,7 +41,9 @@ internal static class PartitionFormulation
         double cellArea = opt.CellFt * opt.CellFt;
 
         // ---- 1. domain ----
-        var footprint = Detector.InkBoundedFloor(hf, obst, lvlZ, opt.FloorTolFt);
+        var footprint = preparedFootprint == null
+            ? Detector.InkBoundedFloor(hf, obst, lvlZ, opt.FloorTolFt)
+            : (bool[])preparedFootprint.Clone();
         if (zoneMask != null)
         {
             if (zoneMask.Length != n)
@@ -54,7 +57,7 @@ internal static class PartitionFormulation
         int domainCells = domain.Count(d => d);
 
         // ---- 2. boundary evidence ----
-        var evidence = BuildEvidence(hf, obst, opt);
+        var evidence = preparedEvidence ?? BuildEvidence(hf, obst, opt);
 
         // ---- 3. seeds ----
         int nSeeds;
@@ -453,7 +456,7 @@ internal static class PartitionFormulation
 
     // Continuous boundary-evidence field: obstruction ink is certainty; ceiling and floor height
     // discontinuities contribute weighted saturating ramps (soffits, plate lines, sunken rooms).
-    private static float[] BuildEvidence(Heightfield hf, bool[] obst, TakeoffOptions opt)
+    internal static float[] BuildEvidence(Heightfield hf, bool[] obst, TakeoffOptions opt)
     {
         int W = hf.W, H = hf.H, n = W * H;
         var e = new float[n];

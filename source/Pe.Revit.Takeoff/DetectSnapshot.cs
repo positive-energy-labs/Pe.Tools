@@ -44,6 +44,22 @@ public sealed class DetectSnapshot
         return TakeoffPolicy.Detect(this, profile, log, zoneMask);
     }
 
+    internal Func<double, double, double> SeedInkDistance()
+    {
+        int width = this.Field.W, height = this.Field.H;
+        if (this.SeedInk.Length != width * height)
+            throw new InvalidOperationException("snapshot ink disagrees with its captured grid");
+        var cells = Detector.Chamfer(this.SeedInk, width, height, invert: false);
+        return (x, y) =>
+        {
+            int column = (int)Math.Floor((x - this.Field.MinX) / this.Field.CellFt);
+            int row = (int)Math.Floor((y - this.Field.MinY) / this.Field.CellFt);
+            if (column < 0 || column >= width || row < 0 || row >= height)
+                return double.PositiveInfinity;
+            return cells[row * width + column] * this.Field.CellFt;
+        };
+    }
+
     private void ValidateReplayOptions(TakeoffOptions opt)
     {
         if (Math.Abs(opt.CellFt - this.Field.CellFt) > 1e-9)

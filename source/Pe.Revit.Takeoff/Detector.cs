@@ -1,10 +1,50 @@
 namespace Pe.Revit.Takeoff;
 
+internal sealed class PreparedTakeoffDetection
+{
+    private readonly Heightfield field;
+    private readonly bool[] obstruction;
+    private readonly bool[] footprint;
+    private readonly float[] evidence;
+    private readonly string levelName;
+    private readonly double levelElevation;
+    private readonly TakeoffOptions options;
+
+    internal PreparedTakeoffDetection(
+        Heightfield field, bool[] obstruction, bool[] footprint, float[] evidence,
+        string levelName, double levelElevation, TakeoffOptions options)
+    {
+        this.field = field;
+        this.obstruction = obstruction;
+        this.footprint = footprint;
+        this.evidence = evidence;
+        this.levelName = levelName;
+        this.levelElevation = levelElevation;
+        this.options = options;
+    }
+
+    internal TakeoffResult Detect(bool[]? zoneMask, Action<string> log) =>
+        PartitionFormulation.Run(
+            this.field, this.obstruction, this.levelName, this.levelElevation, this.options,
+            log, zoneMask, this.footprint, this.evidence);
+}
+
 // Detection core. INK DEFINES BOUNDARY EVIDENCE; PHYSICS DEFINES THE PARTITION DOMAIN.
 // Everything here is pure computation over the heightfield + ink rasters. DetectSnapshot persists
 // exactly these inputs so partition changes iterate offline against real captured state.
 public static class Detector
 {
+    internal static PreparedTakeoffDetection Prepare(
+        Heightfield hf, bool[] seedInk, string levelName, double levelElevation,
+        TakeoffOptions opt, Action<string> log)
+    {
+        var obstruction = BuildObstruction(hf, seedInk, levelElevation, opt, log);
+        var footprint = InkBoundedFloor(hf, obstruction, levelElevation, opt.FloorTolFt);
+        var evidence = PartitionFormulation.BuildEvidence(hf, obstruction, opt);
+        return new PreparedTakeoffDetection(
+            hf, obstruction, footprint, evidence, levelName, levelElevation, opt);
+    }
+
     public static TakeoffResult Detect(
         Heightfield hf, bool[] seedInk, string levelName, double levelElevation,
         TakeoffOptions opt, Action<string> log, bool[]? zoneMask = null)

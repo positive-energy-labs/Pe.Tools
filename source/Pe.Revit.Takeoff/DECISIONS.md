@@ -2,6 +2,28 @@
 
 Dated, append-only. Newest batch first. Each entry: what was decided, and the why that makes it stick. Reopen one only with new evidence — and record the reopening here.
 
+## 2026-08-14 (live RHVAC) — surgical sync accepted and recalculated by RHVAC 10
+
+Live-probed in Elite RHVAC 10.01.57 on a disposable copy of projectA. `sync-rhvac.ps1`
+updated only Room Identifier 1: name `Golf Sim 005` → `Golf Sim 005 SYNC PROBE` and area
+1485 → 1600 sf. RHVAC opened the output without a repair/conversion error; its Room Data view
+showed the new name and area. Opening Load Preview recalculated the project, and saving persisted
+the fresh results.
+
+- Building area moved exactly +115 sf, 51559.8008 → 51674.8008.
+- System 1 cooling net load moved +47 Btuh, 4009.5569 → 4056.5569; heating load moved
+  +102 Btuh, 7604.6611 → 7706.6611. Its fixed actual airflow remained 600 CFM.
+- Building cooling net changed 488173.4375 → 486648.9375 and heating changed 483396.625 →
+  483498.625. The building cooling direction is not attributable solely to this room because the
+  full RHVAC recalculation refreshed project-wide previously persisted results; the edited
+  system's heating and cooling both moved upward as expected.
+- A fresh extract found all 149 other rooms' modeled inputs projection-identical to the
+  pre-open synced file. No calculation error was reported.
+
+This closes the RHVAC-open/recalculation residual for surgical UPDATE. The optional orphaned
+`SystemNumber` and `DefaultRoom`-clone INSERT live probes remain unrun; they do not block the
+proven update path.
+
 ## 2026-08-14 (later) — the review surface and the `.r10` reversal
 
 Settled in a mock-driven session (decision-queue mock v2, judged against the live `/rhvac` plan-pane pattern).

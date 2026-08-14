@@ -1,5 +1,28 @@
 namespace Pe.Revit.Takeoff;
 
+internal sealed class PreparedLevelTakeoffDetection
+{
+    private readonly PreparedTakeoffDetection detection;
+    private readonly string provenance;
+    private readonly IReadOnlyList<string> flags;
+
+    internal PreparedLevelTakeoffDetection(
+        PreparedTakeoffDetection detection, string provenance, IReadOnlyList<string> flags)
+    {
+        this.detection = detection;
+        this.provenance = provenance;
+        this.flags = flags;
+    }
+
+    internal TakeoffResult Detect(bool[]? zoneMask, Action<string> log)
+    {
+        var result = this.detection.Detect(zoneMask, log);
+        result.ProfileProvenance = this.provenance;
+        result.LevelFlags.AddRange(this.flags);
+        return result;
+    }
+}
+
 // Mechanism thresholds for evidence-derived level policy. Defaults are calibrated against the
 // project-a parity set and project-b falsification set; none depend on project or level names.
 public sealed class LevelProfileThresholds
@@ -172,16 +195,7 @@ public static class TakeoffPolicy
     internal static TakeoffResult Detect(
         DetectSnapshot snap, LevelProfile profile, Action<string> log, bool[]? zoneMask = null)
     {
-        var field = snap.Field;
-        if (profile.Options.CeilingCloseFt > snap.CapturedCeilingCloseFt() + 1e-9)
-        {
-            field = new Heightfield {
-                W = snap.Field.W, H = snap.Field.H,
-                MinX = snap.Field.MinX, MinY = snap.Field.MinY, CellFt = snap.Field.CellFt,
-                FloorZ = snap.Field.FloorZ, CeilZ = (float[])snap.Field.CeilZ.Clone(),
-            };
-            Heightfield.CloseCeilingGaps(field, profile.Options.CeilingCloseFt);
-        }
+        var field = DetectionField(snap, profile);
         TakeoffResult result;
         if (profile.NoHabitableDomain)
         {
@@ -196,6 +210,34 @@ public static class TakeoffPolicy
         result.ProfileProvenance = profile.Provenance;
         result.LevelFlags.AddRange(profile.Flags.Select(flag => $"level:{snap.LevelName}:{flag}"));
         return result;
+    }
+
+    internal static PreparedLevelTakeoffDetection PrepareDetection(
+        DetectSnapshot snap, LevelProfile profile, Action<string> log)
+    {
+        if (profile.NoHabitableDomain)
+            throw new InvalidOperationException(
+                $"level '{snap.LevelName}' has no habitable domain to prepare");
+        var detection = Detector.Prepare(
+            DetectionField(snap, profile), snap.SeedInk, snap.LevelName, snap.LevelElevation,
+            profile.Options, log);
+        return new PreparedLevelTakeoffDetection(
+            detection,
+            profile.Provenance,
+            profile.Flags.Select(flag => $"level:{snap.LevelName}:{flag}").ToList());
+    }
+
+    private static Heightfield DetectionField(DetectSnapshot snap, LevelProfile profile)
+    {
+        if (profile.Options.CeilingCloseFt <= snap.CapturedCeilingCloseFt() + 1e-9)
+            return snap.Field;
+        var field = new Heightfield {
+            W = snap.Field.W, H = snap.Field.H,
+            MinX = snap.Field.MinX, MinY = snap.Field.MinY, CellFt = snap.Field.CellFt,
+            FloorZ = snap.Field.FloorZ, CeilZ = (float[])snap.Field.CeilZ.Clone(),
+        };
+        Heightfield.CloseCeilingGaps(field, profile.Options.CeilingCloseFt);
+        return field;
     }
 
 }

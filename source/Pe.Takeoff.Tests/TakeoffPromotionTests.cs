@@ -6,6 +6,57 @@ namespace Pe.Takeoff.Tests;
 public sealed class TakeoffPromotionTests
 {
     [Test]
+    public void Zone_promotion_returns_strict_disposition_and_non_gating_diagnostics()
+    {
+        var accepted = Room("good", (0, 0), (10, 0), (10, 8), (0, 8));
+        var rejected = Room("bad", (20, 0), (25, 5), (20, 10));
+        accepted.RawSqft = 80;
+        rejected.RawSqft = 50;
+        var source = new TakeoffResult {
+            LevelName = "Level 1",
+            Rooms = { accepted, rejected },
+            DomainSqft = 130,
+        };
+
+        var promotion = TakeoffPromotion.PromoteZone(source, 0, (_, _) => 0);
+
+        Assert.Multiple(() => {
+            Assert.That(promotion.Result.Rooms.Select(room => room.Id), Is.EqualTo(new[] { "good" }));
+            Assert.That(promotion.Result.Residues.Single().Id, Is.EqualTo("bad"));
+            Assert.That(promotion.Diagnostics.SourceRooms, Is.EqualTo(2));
+            Assert.That(promotion.Diagnostics.AcceptedRooms, Is.EqualTo(1));
+            Assert.That(promotion.Diagnostics.HeldRooms, Is.EqualTo(1));
+            Assert.That(promotion.Diagnostics.Rejections.Single().Key, Does.StartWith("frame:"));
+            Assert.That(promotion.Diagnostics.Rejections.Single().Value, Is.EqualTo(1));
+            Assert.That(promotion.Diagnostics.InkBackedEdgeFraction, Is.EqualTo(1).Within(1e-9));
+            Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
+            Assert.That(promotion.Diagnostics.IsStrictlyEditable, Is.True);
+            Assert.That(source.Rooms, Has.Count.EqualTo(2), "promotion must not mutate raw partition evidence");
+            Assert.That(source.Residues, Is.Empty);
+        });
+    }
+
+    [Test]
+    public void Zone_promotion_is_deterministic()
+    {
+        var source = new TakeoffResult {
+            LevelName = "Level 1",
+            Rooms = { Room("good", (0, 0), (10, 0), (10, 8), (0, 8)) },
+            DomainSqft = 80,
+        };
+
+        var first = TakeoffPromotion.PromoteZone(source, 0, (_, _) => 0);
+        var second = TakeoffPromotion.PromoteZone(source, 0, (_, _) => 0);
+
+        Assert.Multiple(() => {
+            Assert.That(second.Result.ToTsv(), Is.EqualTo(first.Result.ToTsv()));
+            Assert.That(second.Diagnostics with { Rejections = first.Diagnostics.Rejections },
+                Is.EqualTo(first.Diagnostics));
+            Assert.That(second.Diagnostics.Rejections, Is.EqualTo(first.Diagnostics.Rejections));
+        });
+    }
+
+    [Test]
     public void Frame_local_rejections_become_explicit_residue()
     {
         var accepted = Room("good", (0, 0), (10, 0), (10, 8), (0, 8));

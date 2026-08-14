@@ -366,9 +366,12 @@ public sealed class TakeoffReplayTests
         Floor(40, 48, 40, 48);     // one 4 x 4 ft bulge lets it survive max-width dissolution
         for (int i = 0; i < n; i++)
             if (!float.IsNaN(hf.CeilZ[i])) hf.CeilZ[i] = i % 2 == 0 ? 8 : 10;
+        var ink = new bool[n];
+        for (int x = 7; x <= 48; x++) { ink[7 * W + x] = true; ink[48 * W + x] = true; }
+        for (int y = 7; y <= 48; y++) { ink[y * W + 7] = true; ink[y * W + 48] = true; }
         var snap = new DetectSnapshot {
             LevelName = "Suspect", LevelElevation = 0, CaptureOptions = "synthetic",
-            Field = hf, SeedInk = new bool[n],
+            Field = hf, SeedInk = ink,
         };
         var opt = new TakeoffOptions {
             CellFt = cell, MinSqft = 20, MinFeatureWidthFt = 2.5,
@@ -376,10 +379,17 @@ public sealed class TakeoffReplayTests
         };
 
         var result = snap.Replay(opt, _ => { });
+        opt.MinRegionCompactness = 0;
+        opt.SuspectMaxSqft = 0;
+        var unflagged = snap.Replay(opt, _ => { });
+        static string GeometryOnly(TakeoffResult takeoff) => string.Join("\n",
+            takeoff.ToTsv().Split('\n').Where(line => !line.StartsWith("META\tflag\t")));
 
         Assert.Multiple(() => {
             Assert.That(result.Rooms, Has.Count.EqualTo(2));
             Assert.That(result.TotalSqft, Is.EqualTo(140).Within(0.01));
+            Assert.That(GeometryOnly(unflagged), Is.EqualTo(GeometryOnly(result)),
+                "suspect thresholds may add flags but must not change partition geometry");
             Assert.That(result.Rooms.Single(r => r.RawSqft < 50).Flags,
                 Does.Contain("suspect:compactness").And.Contain("suspect:narrow")
                     .And.Contain("suspect:ceiling-variance"));

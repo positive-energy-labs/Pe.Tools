@@ -21,6 +21,26 @@ internal static class TakeoffEvidenceFidelity
     private const double Epsilon = 1e-7;
     private static readonly GeometryFactory Factory = new(new PrecisionModel(), 0);
 
+    internal static double BoundarySupportFraction(
+        IReadOnlyList<RoomResult> rooms,
+        Func<double, double, double> distanceToInk)
+    {
+        int supported = 0, sampled = 0;
+        foreach (var room in rooms)
+        foreach (var edge in Edges(ToPolygon(room)))
+        {
+            int count = Math.Max(2, (int)Math.Ceiling(edge.Length / SampleStepFt) + 1);
+            for (int index = 0; index < count; index++)
+            {
+                double distance = edge.Length * index / (count - 1);
+                var point = PointAlong(edge, distance);
+                if (distanceToInk(point.X, point.Y) <= 0.25 + Epsilon) supported++;
+                sampled++;
+            }
+        }
+        return sampled == 0 ? 0 : (double)supported / sampled;
+    }
+
     internal static IReadOnlyList<MisalignedExposedRail> Evaluate(
         IReadOnlyList<RoomResult> rooms,
         Func<double, double, double> distanceToInk)

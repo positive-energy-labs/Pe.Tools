@@ -2,10 +2,90 @@ using NetTopologySuite.Geometries;
 
 namespace Pe.Revit.Takeoff;
 
+internal sealed record ZonePromotionDiagnostics(
+    int SourceRooms,
+    int AcceptedRooms,
+    int HeldRooms,
+    int TinyMerged,
+    double PartitionSqft,
+    double AcceptedSqft,
+    double HeldSqft,
+    double VoidSqft,
+    double ExcludedSqft,
+    double InkBackedEdgeFraction,
+    double ClosureErrorSqft,
+    bool IsStrictlyEditable,
+    IReadOnlyDictionary<string, int> Rejections)
+{
+    internal double HeldFraction => this.PartitionSqft <= 0 ? 0 : this.HeldSqft / this.PartitionSqft;
+    internal double VoidFraction => this.PartitionSqft <= 0 ? 0
+        : (this.VoidSqft + this.ExcludedSqft) / this.PartitionSqft;
+}
+
+internal sealed record ZonePromotionResult(
+    TakeoffResult Result,
+    ZonePromotionDiagnostics Diagnostics);
+
 internal static class TakeoffPromotion
 {
     private const double Epsilon = 1e-7;
     private static readonly GeometryFactory GeometryFactory = new(new PrecisionModel(), 0);
+
+    internal static ZonePromotionResult PromoteZone(
+        TakeoffResult source,
+        double minimumRoomSqft,
+        Func<double, double, double> distanceToInk,
+        Action<string>? log = null)
+    {
+        if (source == null) throw new ArgumentNullException(nameof(source));
+        if (distanceToInk == null) throw new ArgumentNullException(nameof(distanceToInk));
+        var result = Clone(source);
+        SpaceBoundaryNetwork.Regularize(
+            result.Rooms, new TakeoffOptions().BoundarySimplifyFt, log);
+        var completePartition = result.Rooms.Select(room => Clone(room)).ToList();
+        var projection = FrameLocalProjector.Project(result);
+        var rejections = projection.Rejected
+            .GroupBy(item => $"frame:{item.Reason}")
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+
+        ApplyFrameLocal(result, projection, log);
+        int beforeTiny = result.Rooms.Count;
+        int heldTiny = minimumRoomSqft > 0
+            ? MergeOrHoldTinyRooms(result, minimumRoomSqft, log)
+            : 0;
+        int tinyMerged = beforeTiny - result.Rooms.Count - heldTiny;
+        if (heldTiny > 0) rejections["tiny:held"] = heldTiny;
+
+        int evidenceRejected = RejectMisalignedExposedRails(
+            result, completePartition, distanceToInk, log);
+        if (evidenceRejected > 0) rejections["evidence:misaligned"] = evidenceRejected;
+
+        double acceptedSqft = result.Rooms.Sum(room => room.RawSqft);
+        double heldSqft = result.Residues
+            .Where(residue => residue.Reason == ResidueReason.Rejected)
+            .Sum(residue => residue.RawSqft);
+        double voidSqft = result.Residues
+            .Where(residue => residue.Reason != ResidueReason.Rejected)
+            .Sum(residue => residue.RawSqft);
+        double closureError = Math.Abs(acceptedSqft + heldSqft + voidSqft
+            + result.ExcludedResidueSqft - (result.DomainSqft + result.ClaimedWallSqft));
+        bool strict = TakeoffEditability.Evaluate(ToLevel(result, result.Rooms)).IsStrictlyEditable;
+        var diagnostics = new ZonePromotionDiagnostics(
+            source.Rooms.Count,
+            result.Rooms.Count,
+            result.Residues.Count(residue => residue.Reason == ResidueReason.Rejected),
+            tinyMerged,
+            result.DomainSqft + result.ClaimedWallSqft,
+            acceptedSqft,
+            heldSqft,
+            voidSqft,
+            result.ExcludedResidueSqft,
+            TakeoffEvidenceFidelity.BoundarySupportFraction(result.Rooms, distanceToInk),
+            closureError,
+            strict,
+            new SortedDictionary<string, int>(rejections, StringComparer.Ordinal));
+        return new ZonePromotionResult(result, diagnostics);
+    }
 
     internal static int ApplyFrameLocal(
         TakeoffResult result, FrameLocalProjectionResult projection, Action<string>? log = null)
@@ -131,6 +211,50 @@ internal static class TakeoffPromotion
         Flags = room.Flags.ToList(),
         SplitFrom = room.SplitFrom,
         MergedFrom = room.MergedFrom,
+    };
+
+    private static RoomResult Clone(RoomResult room) => new()
+    {
+        Id = room.Id,
+        RawSqft = room.RawSqft,
+        PerimeterFt = room.PerimeterFt,
+        LabelX = room.LabelX,
+        LabelY = room.LabelY,
+        MeanCeilingFt = room.MeanCeilingFt,
+        Polygon = room.Polygon.Select(point => new[] { point[0], point[1] }).ToList(),
+        Holes = room.Holes.Select(hole => hole
+            .Select(point => new[] { point[0], point[1] }).ToList()).ToList(),
+        Flags = room.Flags.ToList(),
+        SplitFrom = room.SplitFrom,
+        MergedFrom = room.MergedFrom,
+    };
+
+    private static TakeoffResult Clone(TakeoffResult source) => new()
+    {
+        LevelName = source.LevelName,
+        LevelElevation = source.LevelElevation,
+        Source = source.Source,
+        Rooms = source.Rooms.Select(room => Clone(room)).ToList(),
+        Residues = source.Residues.Select(residue => new ResidueResult {
+            Id = residue.Id,
+            Reason = residue.Reason,
+            RawSqft = residue.RawSqft,
+            LabelX = residue.LabelX,
+            LabelY = residue.LabelY,
+            MeanCeilingFt = residue.MeanCeilingFt,
+            Polygon = residue.Polygon.Select(point => new[] { point[0], point[1] }).ToList(),
+            Holes = residue.Holes.Select(hole => hole
+                .Select(point => new[] { point[0], point[1] }).ToList()).ToList(),
+        }).ToList(),
+        TotalSqft = source.TotalSqft,
+        DomainSqft = source.DomainSqft,
+        ClaimedWallSqft = source.ClaimedWallSqft,
+        ExcludedResidueSqft = source.ExcludedResidueSqft,
+        ProfileProvenance = source.ProfileProvenance,
+        LevelFlags = source.LevelFlags.ToList(),
+        SeedViewA = source.SeedViewA,
+        SeedViewB = source.SeedViewB,
+        EvidenceView = source.EvidenceView,
     };
 
     private static List<double[]> Coordinates(LineString ring, bool counterClockwise)
