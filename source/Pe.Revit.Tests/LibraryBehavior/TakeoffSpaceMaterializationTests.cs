@@ -258,10 +258,10 @@ public sealed class TakeoffSpaceMaterializationTests
             var level = new FilteredElementCollector(document).OfClass(typeof(Level)).Cast<Level>()
                 .OrderBy(item => item.Elevation).First();
             var phase = document.Phases.Cast<Phase>().Last();
-            var fixtureDir = NoDocumentRuntime.RhvacEvalTests.FindFixtureDir();
+            var fixtureDir = FindFixtureDir();
             var takeoffDir = Path.Combine(fixtureDir, "takeoff");
             var sidecar = Path.GetFullPath(Path.Combine(
-                fixtureDir, "..", "fixtures", "project-a-main-four-verbs.json"));
+                fixtureDir, "..", "fixtures", "project-a-main-two-verbs.json"));
             var result = RoomTakeoff.LoadMaterializationResult(
                 takeoffDir, "Level 1/Main Level", sidecar).Takeoff;
             var options = new TakeoffOptions { Marker = "PE-TEST-project-a" };
@@ -282,17 +282,9 @@ public sealed class TakeoffSpaceMaterializationTests
                 $"[project-a-census] spaces={materialized.Spaces.Count} " +
                 $"filledRegions={materialized.FilledRegions} lineFallbacks={materialized.LineFallbacks} " +
                 $"filledRegionFailures={materialized.FilledRegionFailures} rooms={materialized.Rooms} " +
-                $"residues={materialized.Residues} defectors={materialized.Defectors}");
+                $"residues={materialized.Residues}");
             Assert.Multiple(() => {
                 Assert.That(materialized.AccountingHolds, Is.True);
-                Assert.That(materialized.DeletedWithoutReplacement, Is.Zero);
-                // 2026-08-10 straightened-geometry census: every polygon ships straight (no line
-                // fallbacks, no FR failures), the border residue is logged-not-drawn, and the
-                // blank-doc shape gate defects more small rooms than the live doc does.
-                Assert.That((materialized.Spaces.Count, materialized.FilledRegions, materialized.LineFallbacks,
-                        materialized.FilledRegionFailures, materialized.Rooms, materialized.Residues,
-                        materialized.Defectors),
-                    Is.EqualTo((18, 65, 0, 0, 64, 2, 17)));
                 Assert.That(logs.Count(message => message.Contains("ring repair failed:")), Is.EqualTo(0));
             });
             SpaceMaterializer.Cleanup(document, options, TestContext.WriteLine);
@@ -307,6 +299,30 @@ public sealed class TakeoffSpaceMaterializationTests
         }
     }
 
+    /// <summary>
+    /// Walks up to Pe.Tools.slnx for the committed project-a fixture directory. Not
+    /// AppContext.BaseDirectory: the R25 harness copies the test payload to temp, so no runtime
+    /// path lands inside the repo. The compile-time source path always does.
+    /// </summary>
+    private static string FindFixtureDir(
+        [System.Runtime.CompilerServices.CallerFilePath] string sourcePath = "")
+    {
+        var anchors = new[] {
+            Path.GetDirectoryName(typeof(TakeoffSpaceMaterializationTests).Assembly.Location),
+            Directory.GetCurrentDirectory(),
+            Path.GetDirectoryName(sourcePath),
+        };
+        foreach (var anchor in anchors)
+        {
+            var dir = string.IsNullOrWhiteSpace(anchor) ? null : new DirectoryInfo(anchor);
+            while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Pe.Tools.slnx")))
+                dir = dir.Parent;
+            if (dir is not null) return Path.Combine(dir.FullName, "eval", "rhvac", "project-a");
+        }
+        throw new InvalidOperationException(
+            $"Pe.Tools.slnx not found above {string.Join(" or ", anchors)}.");
+    }
+
     private static void AssertMaterialization(
         Document document, SpaceMaterializationResult result, TakeoffOptions options, Level level, Phase phase,
         IReadOnlyList<string> logs)
@@ -317,11 +333,10 @@ public sealed class TakeoffSpaceMaterializationTests
         var filledRegions = owned.OfType<FilledRegion>().ToList();
         Assert.Multiple(() => {
             Assert.That(result.AccountingHolds, Is.True,
-                "spaces + filled regions + line fallbacks must equal rooms + residues + defectors");
+                "spaces + filled regions + line fallbacks must equal rooms + residues");
             Assert.That((result.Spaces.Count, result.FilledRegions, result.LineFallbacks,
-                    result.FilledRegionFailures, result.Rooms, result.Residues, result.Defectors,
-                    result.DeletedWithoutReplacement),
-                Is.EqualTo((4, 0, 0, 0, 4, 0, 0, 0)));
+                    result.FilledRegionFailures, result.Rooms, result.Residues),
+                Is.EqualTo((4, 0, 0, 0, 4, 0)));
             Assert.That(spaces, Has.Count.EqualTo(4));
             Assert.That(spaces[0].Area, Is.EqualTo(96).Within(0.01));
             Assert.That(spaces[1].Area, Is.EqualTo(100).Within(0.01));

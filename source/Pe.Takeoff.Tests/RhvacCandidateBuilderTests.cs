@@ -1,7 +1,9 @@
 using Pe.Revit.Takeoff;
 using Pe.Revit.Takeoff.Rhvac;
 
-namespace Pe.Revit.Tests.LibraryBehavior.NoDocumentRuntime;
+using NUnit.Framework;
+
+namespace Pe.Takeoff.Tests;
 
 // Synthetic-geometry tests for the takeoff -> RHVAC envelope converter, plus one integration run
 // over the committed project-a TSV snapshot. No files are written.

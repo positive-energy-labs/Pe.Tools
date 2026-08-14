@@ -9,7 +9,8 @@ does.
 ## `.r10` container & I/O
 
 An `.r10` is an **Access 97 / Jet 3.5 MDB** (`Standard Jet DB`, version byte 0x00) — even files RHVAC
-writes today.
+writes today. The extension is version-stamped (`.rh9` / `.rh10` / `.r10` across RHVAC releases); the
+container does not change.
 
 - The 64-bit ACE driver **cannot open it**. Only the 32-bit Jet driver works, so **every I/O touch
   runs in a 32-bit process** (`C:\Windows\SysWOW64\WindowsPowerShell\v1.0\powershell.exe`) — never
@@ -52,7 +53,7 @@ Write the array form; read both. Real-file quirks the reader must tolerate:
 | `Length`, `Width` | **area × 1** — `Length` = room sf, `Width` = 1. Never real dimensions. |
 | `Height` | volume-preserving average; sloped-ceiling fields unused (0/150 rooms). |
 | `FloorLength/Width/Perimeter` | area × 1; perimeter = exposed slab edge. |
-| `RoofLength/Width` | plan area × pitch allowance — width holds 1.2 (under roof) or 1.0 (flat). |
+| `RoofLength/Width` | project-a field convention: plan area × pitch allowance — width 1.2 (under roof) or 1.0 (flat). **Not taught**: training says width stays 1 with area in length, and legacy screenshots agree. Tolerate both on read; don't emit 1.2 as doctrine. |
 | `WallLength/Height/Direction` | **the exception:** real length × height; direction 0=N..7=NW clockwise. |
 | `GlassReference`, `DoorReference` | 1-based wall ordinals; 0 on placeholder rows. |
 | `GlassOccurrences` | exists; **doors have no occurrences column** — repeat rows instead. |
@@ -90,20 +91,42 @@ equals the assembly `Name` and clones its code fields, overriding only geometry/
 
 Source: firm's internal Manual J training. Candidates for editor assists:
 
-- **Lighting**: 0.25 W/sf × room area.
+- **Lighting**: `round(0.25 W/sf × room area)`; legacy files drift up to ±3% — don't chase exact matches.
 - **People**: 2 in primary bedroom, 1 per other bedroom (nowhere else).
-- **Equipment loads by room type** ("PE full bath", "PE Powder", "Utility/Laundry", "PE Kitchen",
-  "PE Dining Load", "PE electronics"; fridge = 16 cf load; ignore "AE" entries).
+- **Equipment loads by room type** — use "PE" entries, ignore "AE"; fridge = 16 cf load; assume a 30"
+  kitchen appliance is a refrigerator; **double the load for oversized rooms** (a primary bath with two
+  sinks, multiple showerheads, and a tub gets two full-bath loads). Item names must not contain `;` or
+  `,` (RHVAC silently substitutes). The PE table (training deck, slide 23):
+
+  | Item | Sens Btuh | Lat Btuh | Avg In-Use % | % Used/hr |
+  |---|---|---|---|---|
+  | PE Office Load | 900 | 0 | 100 | 100 |
+  | PE Kitchen | 1800 | 400 | 100 | 100 |
+  | PE Full Bath | 0 | 500 | 100 | 10 |
+  | PE Utility/Laundry | 0 | 600 | 100 | 10 |
+  | PE Powder | 0 | 300 | 100 | 10 |
+  | PE Dining Load | 270 | 270 | 100 | 50 |
+  | PE Exercise | 710 | 1090 | 100 | 5 |
+  | PE Electronics | 600 | 0 | 25 | 100 |
+  | PE Athletics Strenuous / Moderate / Light (per person) | 717 / 580 / 307 | 1076 / 870 / 307 | 100 | 50 |
+  | Coffee maker — brewer / warmer | 1331 / 155 | 717 / 84 | 100 | 25 / 50 |
 - **Zone cap**: sensible gain ≤ 32,000 Btu/hr per zone (equipment constraint) — good UI warning.
-- **Ventilation per zone**: OA = (#bedrooms+1)×7.5 cfm + 0.03×sf; exhaust = 25 cfm per WC/bath/laundry
-  (min 20 per ASHRAE 62.2-2018); take max(OA, exhaust) rounded up to 10s; infiltration credit OFF.
+- **Ventilation per zone**: OA = (#bedrooms+1)×7.5 cfm + 0.03×sf (the +1 proxies the primary bedroom's
+  second occupant); exhaust demand = 25 cfm per WC/bath/laundry (floor 20 per ASHRAE 62.2-2018; a full
+  bath with a separate WC room needs 20 from both compartments; kitchen exhaust ignored — intermittent);
+  take the max, round up to 10s; infiltration credit OFF. **Write the result to Ventilation only — the
+  RHVAC Exhaust field stays 0** except continuously-exhausted no-makeup-air spaces (pool house): RHVAC
+  replaces exhaust CFM with unconditioned outdoor air, inflating loads.
 - **ERV latent**: misc return latent gain = zone ventilation latent gain × −0.5.
 - **Setpoints**: heating min 70, cooling max 75 (resilience doctrine); test ACH 3 default, 0.6 passive.
+  The BoD worksheet may record survey values instead (e.g. 72/60/72) — doctrine ≠ recorded artifact.
 - **Austin code-min fallback materials**: floor 22A-pm U-1.18, roof 18B1-36o U-0.029, wall 12F1-0bw
   U-0.065, glass U-0.35/SHGC-0.25.
-- **Zoning**: <2000 sf usually 1 zone; primary suite gets its own; one system per zone, zone number
-  stays 1, system name suffix "- IU-[n]"; wine rooms get W/STD both sides (wood-framed floor, 55°F,
-  own system); slab-on-grade = exposed perimeter only.
+- **Zoning**: <2000 sf usually 1 zone; primary suite gets its own; one system per zone. Zone number
+  stays 1 and the system name carries a `- IU-[n]`-style tag suffix — **both current-era doctrine**:
+  legacy files predate them (Glencliff 2021: System 3/Zone 3, plain names), and the suffix is a stated
+  downstream import contract. Wine rooms get W/STD both sides (wood-framed floor, 50–55°F, own system;
+  R-21 all six sides recommended in Austin); slab-on-grade = exposed perimeter only.
 
 ## Revit vs RHVAC terminology
 
@@ -119,7 +142,8 @@ is ambiguous; qualify the software when it matters.
 | Filled Region | View-specific 2D detail graphic, no domain semantics | (no counterpart) | The editable sheet graphic |
 
 - RHVAC hierarchy is **Building → System → Zone → Room**. RHVAC `System` ≠ Revit MEP System.
-- projectA: 150 rooms, 42 systems, **all `ZoneNumber = 1`** — the RHVAC zone layer is degenerate. The
+- projectA: 150 rooms, 42 systems, **all `ZoneNumber = 1`** — the RHVAC zone layer is degenerate
+  (current doctrine only; legacy files carry real zone numbers — don't assume 1 on reads). The
   colored zoning-sheet polygons visualize *Systems* (and merge several into one legend entry, e.g.
   "System FC-8, FC-13: Great Room"), not Revit Zones/Spaces.
 - A Filled Region carries no native Room/Space/Zone role — the semantic role must be stamped

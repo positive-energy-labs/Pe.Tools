@@ -2,7 +2,9 @@ using Pe.Revit.Takeoff;
 using NetTopologySuite.Coverage;
 using NetTopologySuite.Geometries;
 
-namespace Pe.Revit.Tests.LibraryBehavior.NoDocumentRuntime;
+using NUnit.Framework;
+
+namespace Pe.Takeoff.Tests;
 
 // The offline detection loop: DetectSnapshot persists exactly what Detector.Detect consumes
 // (heightfield + composed seed ink + level identity); Replay reruns partition detection +
@@ -237,7 +239,7 @@ public sealed class TakeoffReplayTests
         });
     }
 
-    // ---- partition formulation semantics (phase 2, eval/rhvac/PHASE2-PARTITION.md) ----
+    // ---- partition formulation semantics (source/Pe.Revit.Takeoff/DECISIONS.md) ----
 
     private static TakeoffOptions PartitionOptions() => new() { CellFt = 0.5, SealWallRunGaps = true };
 

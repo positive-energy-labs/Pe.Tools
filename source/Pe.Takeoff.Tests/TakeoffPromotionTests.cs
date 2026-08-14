@@ -6,28 +6,6 @@ namespace Pe.Takeoff.Tests;
 public sealed class TakeoffPromotionTests
 {
     [Test]
-    public void Keeps_orthogonal_room_and_rejects_triangle_whole()
-    {
-        var result = new TakeoffResult {
-            LevelName = "Level 1",
-            Rooms = {
-                Room("good", (0, 0), (10, 0), (10, 8), (0, 8)),
-                Room("bad", (20, 0), (25, 5), (20, 10)),
-            },
-        };
-
-        var rejected = TakeoffPromotion.RejectUneditable(result);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(rejected, Is.EqualTo(1));
-            Assert.That(result.Rooms.Select(room => room.Id), Is.EqualTo(new[] { "good" }));
-            Assert.That(result.Residues.Single().Id, Is.EqualTo("bad"));
-            Assert.That(result.Residues.Single().Reason, Is.EqualTo(ResidueReason.Rejected));
-        });
-    }
-
-    [Test]
     public void Frame_local_rejections_become_explicit_residue()
     {
         var accepted = Room("good", (0, 0), (10, 0), (10, 8), (0, 8));

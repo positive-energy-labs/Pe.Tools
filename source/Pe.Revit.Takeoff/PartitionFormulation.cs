@@ -50,7 +50,6 @@ internal static class PartitionFormulation
         // ---- 3. seeds ----
         int nSeeds;
         var seed = opt.SeedSource switch {
-            TakeoffSeedSource.DistanceMaxima => SeedsFromDistanceMaxima(evidence, domain, W, H, opt, out nSeeds),
             TakeoffSeedSource.Hybrid => SeedsHybrid(evidence, obst, domain, W, H, opt, out nSeeds),
             _ => SeedsFromCores(obst, domain, W, H, out nSeeds),
         };
@@ -414,50 +413,6 @@ internal static class PartitionFormulation
             domain[i] = true;
         }
         return domain;
-    }
-
-    // Offline diagnosis/calibration dump (numpy-friendly): per-cell domain + obstruction masks and
-    // RAW neighbor height steps in feet, so evidence thresholds and weights can be studied offline.
-    internal static void DumpDiagnostics(string path, Heightfield hf, bool[] obst, double lvlZ, TakeoffOptions opt)
-    {
-        int W = hf.W, H = hf.H, n = W * H;
-        var footprint = Detector.InkBoundedFloor(hf, obst, lvlZ, opt.FloorTolFt);
-        var domain = BuildDomain(hf, lvlZ, opt, footprint);
-        var ceilStep = new float[n];
-        var floorStep = new float[n];
-        for (int y = 0; y < H; y++)
-            for (int x = 0; x < W; x++)
-            {
-                int i = y * W + x;
-                foreach (int j in new[] { x < W - 1 ? i + 1 : -1, y < H - 1 ? i + W : -1 })
-                {
-                    if (j < 0) continue;
-                    float ca = hf.CeilZ[i], cb = hf.CeilZ[j];
-                    if (!float.IsNaN(ca) && !float.IsNaN(cb))
-                    {
-                        float s = Math.Abs(ca - cb);
-                        if (s > ceilStep[i]) ceilStep[i] = s;
-                        if (s > ceilStep[j]) ceilStep[j] = s;
-                    }
-                    float fa = hf.FloorZ[i], fb = hf.FloorZ[j];
-                    if (!float.IsNaN(fa) && !float.IsNaN(fb))
-                    {
-                        float s = Math.Abs(fa - fb);
-                        if (s > floorStep[i]) floorStep[i] = s;
-                        if (s > floorStep[j]) floorStep[j] = s;
-                    }
-                }
-            }
-        using var w = new BinaryWriter(File.Create(path));
-        w.Write(W); w.Write(H);
-        w.Write(hf.MinX); w.Write(hf.MinY); w.Write(hf.CellFt);
-        foreach (bool d in domain) w.Write((byte)(d ? 1 : 0));
-        foreach (bool o in obst) w.Write((byte)(o ? 1 : 0));
-        var bytes = new byte[n * 4];
-        Buffer.BlockCopy(ceilStep, 0, bytes, 0, bytes.Length);
-        w.Write(bytes);
-        Buffer.BlockCopy(floorStep, 0, bytes, 0, bytes.Length);
-        w.Write(bytes);
     }
 
     // Continuous boundary-evidence field: obstruction ink is certainty; ceiling and floor height

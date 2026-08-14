@@ -46,9 +46,9 @@ public sealed record AuditedNativeTakeoffRun(
 //   1. Prepare (WriteTransaction) — resolve level, size the crop, create the stripped seed views;
 //      persists a state file so later runs re-derive nothing.
 //   2. Detect (ReadOnly) — export + read the seed ink, build the heightfield, detect, write TSV.
-//   3. Annotate (WriteTransaction) — evidence view; then ExportEvidence (ReadOnly), Cleanup.
 // Method: ink = walls (Revit's renderer through clipped top-down 3D bands), field = physics (the
-// headroom field rejects roofless areas and supplies ceiling heights). See takeoff-learnings.md.
+// headroom field rejects roofless areas and supplies ceiling heights).
+// See docs/features/takeoffs/rhvac-and-mj-reference.md.
 public static class RoomTakeoff
 {
     private static readonly HashSet<ElementId> SpatialSlabCategories = new(new[] {
@@ -139,63 +139,6 @@ public static class RoomTakeoff
         File.WriteAllText(tsv, result.ToTsv());
         log($"[detect] rooms={result.Rooms.Count} totalSqft={result.TotalSqft:F0} -> {tsv}");
         return result;
-    }
-
-    public static string Annotate(Document doc, string levelNameContains, Action<string> log, TakeoffOptions? optOverride = null)
-    {
-        var opt = optOverride ?? new TakeoffOptions();
-        opt.LevelNameContains = levelNameContains;
-        var level = ResolveLevel(doc, levelNameContains);
-        var result = LoadResult(opt, level);
-        return Annotate_(doc, level, result, opt, log);
-    }
-
-    public static List<string> ExportEvidence(Document doc, Action<string> log, TakeoffOptions? optOverride = null)
-    {
-        var opt = optOverride ?? new TakeoffOptions();
-        return Takeoff.Annotate.ExportEvidence(doc, $"{opt.Marker} takeoff", Path.Combine(ArtifactDir(opt), "evidence"), log);
-    }
-
-    public static PendingNativeTakeoffRun MaterializeSpaces(
-        Document doc, string levelNameContains, Phase phase, Action<string> log, TakeoffOptions? optOverride = null)
-    {
-        var opt = optOverride ?? new TakeoffOptions();
-        opt.LevelNameContains = levelNameContains;
-        var level = ResolveLevel(doc, levelNameContains);
-        string token = SpaceMaterializer.Token(opt, level, phase);
-        if (SpaceMaterializer.HasPendingRun(doc, token))
-            throw new InvalidOperationException(
-                "this level/phase already has a pending native takeoff; finalize or explicitly clean it up first");
-        var inkNear = InkSupport.LoadOracle(InkPath(opt, level), 3 * opt.CellFt);
-        var distanceToInk = InkSupport.LoadDistanceOracle(InkPath(opt, level));
-        if (inkNear == null) log("[spaces] no ink raster found — arcs run on geometry alone");
-        var takeoffDir = ArtifactDir(opt);
-        var sidecar = TakeoffResolutions.ResolutionPath(takeoffDir);
-        var resolved = File.Exists(sidecar)
-            ? LoadMaterializationResult(takeoffDir, level.Name, sidecar)
-            : new MaterializationResolutionResult(LoadResult(opt, level), 0, 0, 0);
-        var resolutionSummary =
-            $"applied={resolved.Applied} remapped={resolved.Remapped} orphaned={resolved.Orphaned}";
-        log(resolved.Orphaned > 0
-            ? $"[spaces] WARNING orphaned resolution decisions; {resolutionSummary}; unresolved rooms remain materialized"
-            : $"[spaces] resolutions {resolutionSummary}");
-        var takeoff = resolved.Takeoff;
-        SpaceBoundaryNetwork.Regularize(takeoff.Rooms, opt.BoundarySimplifyFt, log);
-        var alignmentPartition = takeoff.Rooms.ToList();
-        TakeoffPromotion.ApplyFrameLocal(takeoff, FrameLocalProjector.Project(takeoff), log);
-        TakeoffPromotion.MergeOrHoldTinyRooms(takeoff, opt.MinimumPromotedRoomSqft, log);
-        TakeoffPromotion.RejectMisalignedExposedRails(
-            takeoff, alignmentPartition, distanceToInk, log);
-        string runId = Guid.NewGuid().ToString("N");
-        string sourceSha256 = Sha256(takeoff.ToTsv());
-        var materialized = SpaceMaterializer.Replace(
-            doc, level, phase, takeoff, opt, log, inkNear,
-            new NativeRunStamp(runId, sourceSha256, "pending"));
-        return new PendingNativeTakeoffRun(
-            DocumentIdentity(doc), level.Id.Value(), phase.Id.Value(),
-            token, runId, sourceSha256,
-            materialized.Spaces.Select(id => id.Value()).OrderBy(id => id).ToList(),
-            takeoff.Rooms.Select(room => room.Id).OrderBy(id => id, StringComparer.Ordinal).ToList());
     }
 
     /// <summary>
@@ -447,15 +390,6 @@ public static class RoomTakeoff
         return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(value)))
             .Replace("-", "").ToLowerInvariant();
     }
-
-    public static int Cleanup(Document doc, Action<string> log, TakeoffOptions? optOverride = null)
-    {
-        var opt = optOverride ?? new TakeoffOptions();
-        return SpaceMaterializer.Cleanup(doc, opt, log) + Takeoff.Annotate.Cleanup(doc, opt, log);
-    }
-
-    private static string Annotate_(Document doc, Level level, TakeoffResult result, TakeoffOptions opt, Action<string> log) =>
-        Takeoff.Annotate.DrawEvidence(doc, level, result, opt, log);
 
     private static Level ResolveLevel(Document doc, string nameContains) =>
         new FilteredElementCollector(doc).OfClass(typeof(Level)).Cast<Level>()

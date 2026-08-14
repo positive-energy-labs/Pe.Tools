@@ -6,47 +6,6 @@ internal static class TakeoffPromotion
 {
     private const double Epsilon = 1e-7;
     private static readonly GeometryFactory GeometryFactory = new(new PrecisionModel(), 0);
-    internal static int ApplyStrictNetwork(
-        TakeoffResult result, StrictSpaceBoundaryNetworkResult network, Action<string>? log = null)
-    {
-        var dropped = network.DroppedRoomIds.ToHashSet(StringComparer.Ordinal);
-        var rejectedRooms = result.Rooms.Where(room => dropped.Contains(room.Id)).ToList();
-        result.Rooms = network.AcceptedRooms.ToList();
-        MoveToRejectedResidue(result, rejectedRooms);
-        result.TotalSqft = result.Rooms.Sum(room => room.RawSqft);
-        if (rejectedRooms.Count > 0)
-            log?.Invoke($"[promotion] strict network dropped {rejectedRooms.Count} whole room(s): " +
-                        string.Join(",", rejectedRooms.Select(room => room.Id)));
-        return rejectedRooms.Count;
-    }
-
-    internal static int RejectUneditable(TakeoffResult result, Action<string>? log = null)
-    {
-        if (result.Rooms.Count == 0) return 0;
-        var audit = TakeoffEditability.Evaluate(new LevelTakeoff(
-            result.LevelName,
-            result.LevelElevation,
-            result.Rooms.Select(room => new TakeoffRoomShape(
-                room.Id,
-                room.RawSqft,
-                room.PerimeterFt,
-                room.MeanCeilingFt,
-                room.Polygon,
-                room.Holes) { Label = new[] { room.LabelX, room.LabelY } }).ToList()));
-        var rejected = audit.Rooms.Where(room => !room.IsStrictlyEditable).ToList();
-        if (rejected.Count == 0) return 0;
-
-        var rejectedIds = rejected.Select(room => room.RoomId)
-            .ToHashSet(StringComparer.Ordinal);
-        var rejectedRooms = result.Rooms.Where(room => rejectedIds.Contains(room.Id)).ToList();
-        MoveToRejectedResidue(result, rejectedRooms);
-        result.Rooms.RemoveAll(room => rejectedIds.Contains(room.Id));
-        result.TotalSqft = result.Rooms.Sum(room => room.RawSqft);
-
-        log?.Invoke($"[promotion] rejected {rejected.Count} uneditable room(s); " +
-                    $"accepted={result.Rooms.Count} rejectedIds={string.Join(",", rejectedIds)}");
-        return rejected.Count;
-    }
 
     internal static int ApplyFrameLocal(
         TakeoffResult result, FrameLocalProjectionResult projection, Action<string>? log = null)

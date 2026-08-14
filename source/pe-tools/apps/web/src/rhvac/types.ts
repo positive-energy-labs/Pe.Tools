@@ -152,8 +152,6 @@ export interface RhvacAssemblyCatalog {
  * Unknown kinds are preserved verbatim (forward-compatible).
  */
 export const KNOWN_FLAG_KINDS = {
-  "open-plan-merge":
-    "rooms merged because no wall evidence separates them — decide the split (or accept as one)",
   "low-evidence-boundary": "boundary placed on weak evidence — accept or adjust",
   seedless: "space with no seed room — verify it is a real room",
 } as const;

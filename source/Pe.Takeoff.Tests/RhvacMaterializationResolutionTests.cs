@@ -1,7 +1,9 @@
 using Newtonsoft.Json;
 using Pe.Revit.Takeoff;
 
-namespace Pe.Revit.Tests.LibraryBehavior.NoDocumentRuntime;
+using NUnit.Framework;
+
+namespace Pe.Takeoff.Tests;
 
 public sealed class RhvacMaterializationResolutionTests
 {
@@ -11,7 +13,7 @@ public sealed class RhvacMaterializationResolutionTests
         var fixtureDir = RhvacEvalTests.FindFixtureDir();
         var takeoffDir = Path.Combine(fixtureDir, "takeoff");
         var sidecar = Path.GetFullPath(Path.Combine(
-            fixtureDir, "..", "fixtures", "project-a-main-four-verbs.json"));
+            fixtureDir, "..", "fixtures", "project-a-main-two-verbs.json"));
         const string levelName = "Level 1/Main Level";
 
         var core = TakeoffTsv.ParseTsvDirectory(takeoffDir, sidecar);
@@ -37,7 +39,7 @@ public sealed class RhvacMaterializationResolutionTests
 
         Assert.Multiple(() => {
             Assert.That((materialization.Applied, materialization.Remapped, materialization.Orphaned),
-                Is.EqualTo((4, 0, 0)));
+                Is.EqualTo((2, 0, 0)));
             Assert.That((materialization.Applied, materialization.Remapped, materialization.Orphaned),
                 Is.EqualTo((core.Applied, core.Remapped, core.Orphaned)));
             Assert.That(JsonConvert.SerializeObject(actual), Is.EqualTo(JsonConvert.SerializeObject(expected)));
@@ -46,14 +48,7 @@ public sealed class RhvacMaterializationResolutionTests
             Assert.That(materialization.Takeoff.Rooms, Has.Count.EqualTo(81));
             Assert.That(materialization.Takeoff.Residues, Has.Count.EqualTo(3));
             Assert.That(materialization.Takeoff.Rooms.Select(room => room.Id),
-                Does.Contain("R07.a").And.Contain("R07.b")
-                    .And.Not.Contain("R77").And.Not.Contain("R07").And.Not.Contain("R72"));
-            Assert.That(SpaceMaterializer.SpaceComments(
-                    "owned", materialization.Takeoff.Rooms.Single(room => room.Id == "R07.a")),
-                Is.EqualTo("owned|R07.a\npe-takeoff: splitFrom=R07"));
-            Assert.That(SpaceMaterializer.SpaceComments(
-                    "owned", materialization.Takeoff.Rooms.Single(room => room.Id == "R14")),
-                Is.EqualTo("owned|R14\npe-takeoff: mergedFrom=R72"));
+                Does.Not.Contain("R77").And.Contain("R07").And.Contain("R72"));
             Assert.That(SpaceMaterializer.SpaceComments(
                     "owned", materialization.Takeoff.Rooms.Single(room => room.Id == "R03")),
                 Is.EqualTo("owned|R03\npe-takeoff: low-evidence-boundary, open-plan-merge"));

@@ -28,7 +28,6 @@ import { Route as ChatRouteImport } from "./routes/chat";
 import { Route as IndexRouteImport } from "./routes/index";
 import { Route as DocsTargetRouteImport } from "./routes/docs.target";
 import { Route as DocsRuntimeRouteImport } from "./routes/docs.runtime";
-import { Route as DemoTanstackQueryRouteImport } from "./routes/demo/tanstack-query";
 import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
 import { Route as ApiPdfAuditMapRouteImport } from "./routes/api/pdf-audit/map";
 import { Route as ApiPdfAuditParseParseIdRouteImport } from "./routes/api/pdf-audit/parse.$parseId";
@@ -128,11 +127,6 @@ const DocsRuntimeRoute = DocsRuntimeRouteImport.update({
   path: "/docs/runtime",
   getParentRoute: () => rootRouteImport,
 } as any);
-const DemoTanstackQueryRoute = DemoTanstackQueryRouteImport.update({
-  id: "/demo/tanstack-query",
-  path: "/demo/tanstack-query",
-  getParentRoute: () => rootRouteImport,
-} as any);
 const ApiPdfAuditParseRoute = ApiPdfAuditParseRouteImport.update({
   id: "/api/pdf-audit/parse",
   path: "/api/pdf-audit/parse",
@@ -167,7 +161,6 @@ export interface FileRoutesByFullPath {
   "/rhvac": typeof RhvacRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
-  "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
   "/docs/runtime": typeof DocsRuntimeRoute;
   "/docs/target": typeof DocsTargetRoute;
   "/api/pdf-audit/map": typeof ApiPdfAuditMapRoute;
@@ -192,7 +185,6 @@ export interface FileRoutesByTo {
   "/rhvac": typeof RhvacRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
-  "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
   "/docs/runtime": typeof DocsRuntimeRoute;
   "/docs/target": typeof DocsTargetRoute;
   "/api/pdf-audit/map": typeof ApiPdfAuditMapRoute;
@@ -218,7 +210,6 @@ export interface FileRoutesById {
   "/rhvac": typeof RhvacRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
-  "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
   "/docs/runtime": typeof DocsRuntimeRoute;
   "/docs/target": typeof DocsTargetRoute;
   "/api/pdf-audit/map": typeof ApiPdfAuditMapRoute;
@@ -245,7 +236,6 @@ export interface FileRouteTypes {
     | "/rhvac"
     | "/schedule-grid"
     | "/settings"
-    | "/demo/tanstack-query"
     | "/docs/runtime"
     | "/docs/target"
     | "/api/pdf-audit/map"
@@ -270,7 +260,6 @@ export interface FileRouteTypes {
     | "/rhvac"
     | "/schedule-grid"
     | "/settings"
-    | "/demo/tanstack-query"
     | "/docs/runtime"
     | "/docs/target"
     | "/api/pdf-audit/map"
@@ -295,7 +284,6 @@ export interface FileRouteTypes {
     | "/rhvac"
     | "/schedule-grid"
     | "/settings"
-    | "/demo/tanstack-query"
     | "/docs/runtime"
     | "/docs/target"
     | "/api/pdf-audit/map"
@@ -321,7 +309,6 @@ export interface RootRouteChildren {
   RhvacRoute: typeof RhvacRoute;
   ScheduleGridRoute: typeof ScheduleGridRoute;
   SettingsRoute: typeof SettingsRoute;
-  DemoTanstackQueryRoute: typeof DemoTanstackQueryRoute;
   DocsRuntimeRoute: typeof DocsRuntimeRoute;
   DocsTargetRoute: typeof DocsTargetRoute;
   ApiPdfAuditMapRoute: typeof ApiPdfAuditMapRoute;
@@ -463,13 +450,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof DocsRuntimeRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/demo/tanstack-query": {
-      id: "/demo/tanstack-query";
-      path: "/demo/tanstack-query";
-      fullPath: "/demo/tanstack-query";
-      preLoaderRoute: typeof DemoTanstackQueryRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
     "/api/pdf-audit/parse": {
       id: "/api/pdf-audit/parse";
       path: "/api/pdf-audit/parse";
@@ -523,7 +503,6 @@ const rootRouteChildren: RootRouteChildren = {
   RhvacRoute: RhvacRoute,
   ScheduleGridRoute: ScheduleGridRoute,
   SettingsRoute: SettingsRoute,
-  DemoTanstackQueryRoute: DemoTanstackQueryRoute,
   DocsRuntimeRoute: DocsRuntimeRoute,
   DocsTargetRoute: DocsTargetRoute,
   ApiPdfAuditMapRoute: ApiPdfAuditMapRoute,

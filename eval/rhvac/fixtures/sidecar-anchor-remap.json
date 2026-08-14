@@ -11,57 +11,80 @@
         "candidateKey": "L1:R01",
         "flag": "low-evidence-boundary",
         "action": "accept",
-        "anchor": { "label": [5.0, 5.0], "sqft": 100.0 }
-      },
-      {
-        "candidateKey": "L1:R02",
-        "flag": "open-plan-merge",
-        "action": "split",
-        "params": { "a": [30.0, 0.0], "b": [30.0, 20.0] },
-        "anchor": { "label": [30.0, 10.0], "sqft": 400.0 }
+        "anchor": {
+          "label": [
+            5.0,
+            5.0
+          ],
+          "sqft": 100.0
+        }
       },
       {
         "candidateKey": "L1:R03",
         "flag": "seedless",
         "action": "reject",
-        "anchor": { "label": [55.0, 5.0], "sqft": 100.0 }
-      },
-      {
-        "candidateKey": "L1:R04",
-        "flag": "low-evidence-boundary",
-        "action": "merge",
-        "params": {
-          "other": "L1:R05",
-          "anchor": { "label": [85.0, 5.0], "sqft": 100.0 }
-        },
-        "anchor": { "label": [75.0, 5.0], "sqft": 100.0 }
-      },
-      {
-        "candidateKey": "L1:R06",
-        "flag": "low-evidence-boundary",
-        "action": "merge",
-        "params": {
-          "other": "L1:R99",
-          "anchor": { "label": [200.0, 5.0], "sqft": 100.0 }
-        },
-        "anchor": { "label": [105.0, 5.0], "sqft": 100.0 }
+        "anchor": {
+          "label": [
+            55.0,
+            5.0
+          ],
+          "sqft": 100.0
+        }
       },
       {
         "candidateKey": "L1:R99",
         "flag": "seedless",
         "action": "accept",
-        "anchor": { "label": [300.0, 5.0], "sqft": 100.0 }
+        "anchor": {
+          "label": [
+            300.0,
+            5.0
+          ],
+          "sqft": 100.0
+        }
       }
     ]
   },
   "expected": {
     "applied": 0,
-    "remapped": 4,
-    "orphaned": 2,
-    "roomIds": ["R01", "R02", "R03", "R05.a", "R05.b"],
-    "roomSqft": [200.0, 100.0, 100.0, 200.0, 200.0],
-    "roomLabels": [[85.0, 5.0], [5.0, 5.0], [105.0, 5.0], [25.0, 10.0], [35.0, 10.0]],
-    "mergedFrom": "R06",
+    "remapped": 2,
+    "orphaned": 1,
+    "roomIds": [
+      "R01",
+      "R02",
+      "R03",
+      "R05",
+      "R06"
+    ],
+    "roomSqft": [
+      100.0,
+      100.0,
+      100.0,
+      400.0,
+      100.0
+    ],
+    "roomLabels": [
+      [
+        85.0,
+        5.0
+      ],
+      [
+        5.0,
+        5.0
+      ],
+      [
+        105.0,
+        5.0
+      ],
+      [
+        30.0,
+        10.0
+      ],
+      [
+        75.0,
+        5.0
+      ]
+    ],
     "rejectedRoomId": "R04"
   }
 }

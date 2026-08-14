@@ -1,7 +1,7 @@
 /**
  * /rhvac rooms grid — all rooms in one dense hairline table. Sortable headers,
  * name/number filter + system filter, row click focuses the detail panel,
- * checkbox selection feeds bulk system/zone reassignment and bulk delete.
+ * checkbox selection feeds bulk system reassignment and bulk delete.
  * Scalar cells edit inline (commit-on-blur); calc'd cfm columns are read-only
  * and dim once anything is edited (stale until RHVAC re-runs its calc).
  */
@@ -19,7 +19,6 @@ type SortKey =
   | "number"
   | "name"
   | "systemNumber"
-  | "zoneNumber"
   | "areaSquareFeet"
   | "ceilingHeightFeet"
   | "cfmCooling"
@@ -169,7 +168,6 @@ export function RoomsGrid(props: RoomsGridProps) {
               <Th label="#" sortKey="number" right />
               <Th label="name" sortKey="name" />
               <Th label="sys" sortKey="systemNumber" right />
-              <Th label="zone" sortKey="zoneNumber" right />
               <Th label="area sf" sortKey="areaSquareFeet" right />
               <Th label="ceil ft" sortKey="ceilingHeightFeet" right />
               <Th label="ppl" right />
@@ -221,7 +219,7 @@ export function RoomsGrid(props: RoomsGridProps) {
   );
 }
 
-/** Bulk system/zone reassignment for the checked rows. Blank field = leave unchanged. */
+/** Bulk system reassignment for the checked rows. Blank field = leave unchanged. */
 function BulkBar({
   selectedIds,
   onBulkAssign,
@@ -234,16 +232,10 @@ function BulkBar({
   onClear: () => void;
 }) {
   const systemRef = useRef<HTMLInputElement>(null);
-  const zoneRef = useRef<HTMLInputElement>(null);
 
   const apply = () => {
-    const patch: BulkAssignPatch = {};
     const sys = Number.parseInt(systemRef.current?.value ?? "", 10);
-    const zone = Number.parseInt(zoneRef.current?.value ?? "", 10);
-    if (!Number.isNaN(sys)) patch.systemNumber = sys;
-    if (!Number.isNaN(zone)) patch.zoneNumber = zone;
-    if (patch.systemNumber !== undefined || patch.zoneNumber !== undefined)
-      onBulkAssign(selectedIds, patch);
+    if (!Number.isNaN(sys)) onBulkAssign(selectedIds, { systemNumber: sys });
   };
 
   return (
@@ -252,12 +244,6 @@ function BulkBar({
       <input
         ref={systemRef}
         placeholder="sys"
-        inputMode="numeric"
-        className="tele h-6 w-11 rounded-[var(--radius)] border border-border bg-card px-1 text-right outline-none focus:border-ring"
-      />
-      <input
-        ref={zoneRef}
-        placeholder="zone"
         inputMode="numeric"
         className="tele h-6 w-11 rounded-[var(--radius)] border border-border bg-card px-1 text-right outline-none focus:border-ring"
       />
@@ -342,14 +328,6 @@ const GridRow = memo(function GridRow({
           integer
           min={1}
           onCommit={(v) => patch({ systemNumber: v })}
-        />
-      </td>
-      <td className={cn(numberCell, "w-12")}>
-        <NumberCell
-          value={room.zoneNumber}
-          integer
-          min={1}
-          onCommit={(v) => patch({ zoneNumber: v })}
         />
       </td>
       <td className={cn(numberCell, "w-20")}>

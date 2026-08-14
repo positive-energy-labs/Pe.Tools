@@ -1,10 +1,12 @@
 using Pe.Revit.Takeoff;
 
-namespace Pe.Revit.Tests.LibraryBehavior.NoDocumentRuntime;
+using NUnit.Framework;
+
+namespace Pe.Takeoff.Tests;
 
 // Offline detection-loop driver: replays captured snapshots under the evidence-derived library
-// policy and writes rooms_<level>.tsv files to $PE_TAKEOFF_REPLAY_OUT. Score the dump with
-// `python eval/rhvac/score-takeoff.py --takeoff-dir <out>`; no Revit is involved.
+// policy and writes rooms_<level>.tsv files to $PE_TAKEOFF_REPLAY_OUT. No Revit is involved;
+// the dump is read back through the review lane (eval/rhvac/review.ps1).
 //
 //   $env:PE_TAKEOFF_REPLAY_OUT = "<dir>"
 //   $env:PE_TAKEOFF_REPLAY_FILTER = "replay_MAIN_LEVEL.bin;replay_ROOF_PLAN.bin" // optional
@@ -76,28 +78,6 @@ public sealed class ProjectAReplayDumpRun
             lines.Add($"[dump] {snap.LevelName}: rooms={result.Rooms.Count} totalSqft={result.TotalSqft:F0} -> {tsv}");
             File.WriteAllLines(Path.Combine(outDir, $"log_{name}.txt"), lines);
             foreach (string line in lines) TestContext.Out.WriteLine(line);
-        }
-    }
-
-    [Test]
-    [Explicit("Diagnosis/calibration lane; needs PE_TAKEOFF_DIAG_OUT and live-captured snapshots.")]
-    public void Dump_partition_diagnostics()
-    {
-        string? outDir = Environment.GetEnvironmentVariable("PE_TAKEOFF_DIAG_OUT");
-        if (string.IsNullOrEmpty(outDir))
-            Assert.Ignore("set PE_TAKEOFF_DIAG_OUT to the directory the diagnostic rasters should land in");
-        var bins = FindSnapshots();
-        if (bins.Count == 0) Assert.Ignore("no replay_*.bin captured yet");
-        Directory.CreateDirectory(outDir);
-        foreach (string bin in bins)
-        {
-            var snap = DetectSnapshot.Load(bin);
-            var opt = TakeoffPolicy.InferLevelProfile(snap).Options;
-            var obst = Detector.BuildObstruction(snap.Field, snap.SeedInk, snap.LevelElevation, opt, _ => { });
-            string name = string.Concat(snap.LevelName.Select(ch => char.IsLetterOrDigit(ch) ? ch : '_'));
-            PartitionFormulation.DumpDiagnostics(
-                Path.Combine(outDir, $"diag_{name}.bin"), snap.Field, obst, snap.LevelElevation, opt);
-            TestContext.Out.WriteLine($"[diag] {snap.LevelName} -> diag_{name}.bin");
         }
     }
 }

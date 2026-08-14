@@ -8,12 +8,10 @@ internal sealed record SpaceMaterializationResult(
     int LineFallbacks,
     int FilledRegionFailures,
     int Rooms,
-    int Residues,
-    int Defectors,
-    int DeletedWithoutReplacement)
+    int Residues)
 {
     internal bool AccountingHolds =>
-        Spaces.Count + FilledRegions + LineFallbacks == Rooms + Residues + Defectors;
+        Spaces.Count + FilledRegions + LineFallbacks == Rooms + Residues;
 }
 
 internal sealed record NativeRunStamp(string RunId, string SourceSha256, string AuditState);
@@ -160,9 +158,8 @@ internal static class SpaceMaterializer
         // newly placed Space here is transaction-state-dependent: the same room can be enclosed
         // on a replacement pass only because the previous boundary graph existed at transaction
         // start. Keep materialization deterministic and let the canonical native gate decide.
-        var defectors = new List<(RoomResult Room, string Reason)>();
         int filledRegions = 0, lineFallbacks = 0, filledRegionFailures = 0;
-        if (result.Residues.Count + defectors.Count > 0)
+        if (result.Residues.Count > 0)
         {
             var frType = new FilteredElementCollector(doc).OfClass(typeof(FilledRegionType))
                 .Cast<FilledRegionType>().First();
@@ -188,9 +185,6 @@ internal static class SpaceMaterializer
                 DrawUnresolved(residue.Id, residue.Polygon, residue.Holes,
                     $"{token}|{residue.Id}\npe-takeoff: residue={residue.Reason.ToString().ToLowerInvariant()}");
             }
-            foreach (var (room, reason) in defectors)
-                DrawUnresolved(room.Id, room.Polygon, room.Holes,
-                    $"{SpaceComments(token, room)}\npe-takeoff: shape-defect={reason}");
 
             void DrawUnresolved(
                 string id, List<double[]> polygon, List<List<double[]>> holes, string comments)
@@ -342,20 +336,17 @@ internal static class SpaceMaterializer
         var materialized = new SpaceMaterializationResult(
             ids, filledRegions, lineFallbacks, filledRegionFailures,
             spaceRooms.Count,
-            result.Residues.Count(residue => residue.Reason == ResidueReason.Crumb),
-            defectors.Count, 0);
+            result.Residues.Count(residue => residue.Reason == ResidueReason.Crumb));
         log($"[spaces] phase='{phase.Name}' level='{level.Name}' spaces={ids.Count} " +
             $"filledRegions={filledRegions} lineFallbacks={lineFallbacks} " +
             $"filledRegionFailures={filledRegionFailures} rooms={materialized.Rooms} " +
-            $"residues={materialized.Residues} defectors={materialized.Defectors} " +
-            $"deletedWithoutReplacement={materialized.DeletedWithoutReplacement} " +
+            $"residues={materialized.Residues} " +
             $"boundaryCurves={boundary.Count} view='{viewName}'");
-        if (!materialized.AccountingHolds || materialized.DeletedWithoutReplacement != 0)
+        if (!materialized.AccountingHolds)
             throw new InvalidOperationException(
                 $"materialization accounting failed: spaces={ids.Count} filledRegions={filledRegions} " +
                 $"lineFallbacks={lineFallbacks} rooms={materialized.Rooms} " +
-                $"residues={materialized.Residues} defectors={materialized.Defectors} " +
-                $"deletedWithoutReplacement={materialized.DeletedWithoutReplacement}");
+                $"residues={materialized.Residues}");
         return materialized;
 
         void Configure(Space space, RoomResult room)

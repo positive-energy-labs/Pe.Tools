@@ -1,6 +1,8 @@
 using Pe.Revit.Takeoff.Rhvac;
 
-namespace Pe.Revit.Tests.LibraryBehavior.NoDocumentRuntime;
+using NUnit.Framework;
+
+namespace Pe.Takeoff.Tests;
 
 // Self-tests for the RHVAC eval scorer against the committed project-a fixture (150 rooms).
 // The oracle plays both sides: reconstructing candidates from it must score perfect, and every
@@ -16,7 +18,7 @@ public sealed class RhvacEvalTests
         RhvacEval.LoadTolerances(Path.Combine(FixtureDir, "tolerances.json"), "standard");
     // In-memory, deliberately NOT the committed room-map.json: the fixture map is curated data
     // that evolves (skips shrink the oracle pool), while these self-tests need the full 150-room
-    // oracle. LoadMap's parse path is exercised by the real runner (RhvacProjectAEvalRun).
+    // oracle.
     private static readonly RoomMap EmptyMap = new(new List<RoomMapMatch>(), new List<RoomMapSkip>());
 
     [Test]

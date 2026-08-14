@@ -1,6 +1,8 @@
 using Pe.Revit.Takeoff.Rhvac;
 
-namespace Pe.Revit.Tests.LibraryBehavior.NoDocumentRuntime;
+using NUnit.Framework;
+
+namespace Pe.Takeoff.Tests;
 
 public sealed class RhvacRoomShapeTests
 {

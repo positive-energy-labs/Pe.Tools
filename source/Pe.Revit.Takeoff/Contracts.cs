@@ -3,13 +3,14 @@ namespace Pe.Revit.Takeoff;
 // Room-takeoff contracts: the per-room payload the RHVAC / OpenStudio exporter consumes (sqft,
 // perimeter, wall segments, interior label point, polygon, mean ceiling height). Detection must
 // not depend on native Room names — architects place Rooms in only ~1/4-1/3 of spaces, so names
-// are matched on later by containment. See docs/context/takeoff-learnings.md for the pivot + laws.
+// are matched on later by containment. See docs/features/takeoffs/rhvac-and-mj-reference.md.
 
 // Partition seed source (one seed = one candidate space before merges/dissolution):
-// RegionCores = connected components of unobstructed domain;
-// DistanceMaxima = distance-transform plateaus; Hybrid = cores, except a core with >= 2 plateaus
-// is seeded by them so open-plan cores split along interior evidence ridges (ceiling/floor steps).
-public enum TakeoffSeedSource { RegionCores, DistanceMaxima, Hybrid }
+// RegionCores = connected components of unobstructed domain; Hybrid = cores, except a core with
+// >= 2 distance-transform plateaus is seeded by them so open-plan cores split along interior
+// evidence ridges (ceiling/floor steps). Standalone distance-maxima seeding is falsified
+// (under-seeds closets/baths, 41.9 vs 52.8 — see DECISIONS.md).
+public enum TakeoffSeedSource { RegionCores, Hybrid }
 public enum TakeoffSource { Detector, Native }
 public enum ResidueReason { Border, Crumb, Rejected }
 

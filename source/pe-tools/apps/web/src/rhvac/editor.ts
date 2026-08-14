@@ -29,7 +29,6 @@ interface LoadedDoc {
 
 export interface BulkAssignPatch {
   systemNumber?: number;
-  zoneNumber?: number;
 }
 
 export function useRhvacEditor() {
