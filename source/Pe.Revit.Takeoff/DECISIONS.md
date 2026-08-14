@@ -2,6 +2,17 @@
 
 Dated, append-only. Newest batch first. Each entry: what was decided, and the why that makes it stick. Reopen one only with new evidence — and record the reopening here.
 
+## 2026-08-14 (live Revit, later) — Room Region materialization live-proven
+
+`ZoneMaterializer` on the project-a clone, real zoning view ("Mechanical Zoning Plan - Main Level"),
+11 real detected rooms from Main Level zone #05: first run created 11 Room Region FRs stamped
+role/GUID/provenance through `TakeoffCarriers`; the immediate rerun created 0, re-bound 11/11 by
+the geometric anchor law (label-point containment + area +/-20%), orphaned 0, 11 distinct GUIDs
+stable. Reruns never touch an existing region — unmatched rooms are created, orphans are reported,
+nothing is modified or deleted (propose-never-overwrite at the materialization layer). Held
+residue draws only when the zone has none yet. Rebind ambiguity resolves to best area ratio and
+the loser stays unmatched. FR-only; no Spaces anywhere in the path.
+
 ## 2026-08-14 (live Revit) — FR carriers and registry blob proven; TakeoffCarriers live-verified
 
 Live-probed in the project-a cloud clone (Revit 2025, dev payload) via `scripting.execute`:
