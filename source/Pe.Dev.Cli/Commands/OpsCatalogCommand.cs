@@ -45,6 +45,12 @@ internal static class OpsCatalogCommand {
             (_, _, _) => throw new NotSupportedException("catalog projection only")));
         BridgeOpRegistry.Register(FamilyModelHostOperations.Build(
             (_, _, _) => throw new NotSupportedException("catalog projection only")));
+        BridgeOpRegistry.Register(FamilyFoundryHostOperations.Plan(
+            (_, _, _) => throw new NotSupportedException("catalog projection only")));
+        BridgeOpRegistry.Register(FamilyFoundryHostOperations.Apply(
+            (_, _, _) => throw new NotSupportedException("catalog projection only")));
+        BridgeOpRegistry.Register(FamilyFoundryHostOperations.Project(
+            (_, _, _) => throw new NotSupportedException("catalog projection only")));
 
         var operations = BridgeOpRegistry.All
             .Select(HostOpsCatalogEntry.FromOp)
