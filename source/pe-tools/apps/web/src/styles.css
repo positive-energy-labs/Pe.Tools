@@ -154,8 +154,10 @@
   --color-cat-lichen: var(--cat-lichen);
   --color-cat-clay: var(--cat-clay);
   --color-cat-kiln: var(--cat-kiln);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  /* The 2px-radius law is flat: shadcn's derived steps computed NEGATIVE off a 2px base
+     (calc(2px - 4px)), which browsers drop to 0. One radius, every step. */
+  --radius-sm: var(--radius);
+  --radius-md: var(--radius);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 }
