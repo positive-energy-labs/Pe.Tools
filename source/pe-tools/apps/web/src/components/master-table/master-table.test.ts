@@ -105,3 +105,30 @@ test("edit commit: junk is refused, min clamps, integers truncate", () => {
   expect(parseCell("-3", { min: 0 })).toBe(0);
   expect(parseCell("2.7", { integer: true })).toBe(2);
 });
+
+test("match columns: a multi-valued filter overrides facet equality", () => {
+  // Flags-style column: options are declared, matching is a predicate, no facet at all.
+  const flags: Record<string, string[]> = { a: ["low-ceiling"], b: [], c: ["low-ceiling", "odd"] };
+  const flagCol: Column<Fam> = {
+    key: "flags",
+    label: "flags",
+    options: [
+      { value: "any", label: "any open" },
+      { value: "none", label: "none open" },
+      { value: "odd", label: "odd" },
+    ],
+    match: (row, value) => {
+      const open = flags[row.id] ?? [];
+      if (value === "any") return open.length > 0;
+      if (value === "none") return open.length === 0;
+      return open.includes(value);
+    },
+    cell: () => null,
+  };
+  const all = [...columns, flagCol];
+  expect(applyFilters(rows, all, { flags: "any" }).map((r) => r.id)).toEqual(["a", "c"]);
+  expect(applyFilters(rows, all, { flags: "none" }).map((r) => r.id)).toEqual(["b"]);
+  expect(applyFilters(rows, all, { flags: "odd" }).map((r) => r.id)).toEqual(["c"]);
+  // Declared options win over derivation, so the vocabulary stays stable with no facet.
+  expect(facetOptions(rows, flagCol).map((o) => o.value)).toEqual(["any", "none", "odd"]);
+});

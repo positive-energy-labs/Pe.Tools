@@ -7,7 +7,7 @@
  * shim: duplicated from takeoff-fresh atlas; when takeoff merges, both routes consume this one
  * component.
  */
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
   applyFilters,
@@ -36,8 +36,11 @@ export interface MasterTableProps<Row> {
   /** Shown when the scope is empty — say what would widen it. */
   empty?: ReactNode;
   onRowClick?: (row: Row) => void;
-  /** Highlighted row, if the route tracks a cursor. */
+  /** Highlighted row, if the route tracks a cursor. Kept scrolled into view. */
   activeKey?: string | null;
+  /** Fires when the visible row order changes (filter/sort/search). This is how a route's
+   * keyboard cursor walks the SAME order the user sees without owning the table's state. */
+  onVisibleChange?: (keys: string[]) => void;
 }
 
 export function MasterTable<Row>({
@@ -51,6 +54,7 @@ export function MasterTable<Row>({
   empty,
   onRowClick,
   activeKey,
+  onVisibleChange,
 }: MasterTableProps<Row>) {
   const [filters, setFilters] = useState<Filters>({});
   const [sorts, setSorts] = useState<SortKey[]>([]);
@@ -60,6 +64,18 @@ export function MasterTable<Row>({
     () => applySort(applyFilters(rows, columns, filters, query), columns, sorts),
     [rows, columns, filters, query, sorts],
   );
+
+  const visibleKeys = useMemo(() => visible.map(rowKey), [visible, rowKey]);
+  const onVisibleChangeRef = useRef(onVisibleChange);
+  onVisibleChangeRef.current = onVisibleChange;
+  useEffect(() => {
+    onVisibleChangeRef.current?.(visibleKeys);
+  }, [visibleKeys]);
+
+  const activeRowRef = useRef<HTMLTableRowElement | null>(null);
+  useEffect(() => {
+    activeRowRef.current?.scrollIntoView({ block: "nearest" });
+  }, [activeKey]);
 
   const activeFilters = columns.filter((c) => filters[c.key]);
   const grouped = columns.some((c) => c.group);
@@ -141,7 +157,7 @@ export function MasterTable<Row>({
                   stickyTop={grouped}
                   onSort={(additive) => setSorts((prev) => toggleSort(prev, col.key, additive))}
                 >
-                  {col.facet && (
+                  {(col.facet || col.options) && (
                     <ColFilter
                       value={filters[col.key] ?? null}
                       onChange={(v) => setFilter(col.key, v)}
@@ -159,6 +175,7 @@ export function MasterTable<Row>({
               return (
                 <tr
                   key={key}
+                  ref={activeKey === key ? activeRowRef : undefined}
                   className={cn(
                     "h-7 scroll-mt-12 hover:bg-muted/60",
                     activeKey === key && "bg-primary/[0.06]",
@@ -180,6 +197,9 @@ export function MasterTable<Row>({
                         "border-b border-l border-[var(--line-soft)] p-0 first:border-l-0",
                         col.right && "text-right",
                         col.width,
+                        // Locked cells need their own ground — a transparent sticky cell would
+                        // show the scrolling columns sliding beneath it.
+                        col.lock && "sticky left-0 z-[5] bg-background",
                       )}
                     >
                       {col.cell(row)}
@@ -232,6 +252,7 @@ function Th<Row>({
         stickyTop ? "top-5" : "top-0",
         col.right ? "text-right" : "text-left",
         col.width,
+        col.lock && "left-0 z-20",
       )}
     >
       {col.sort ? (

@@ -20,8 +20,14 @@ export interface Column<Row> {
   sort?: (row: Row) => string | number;
   /** Present ⇒ filterable. Returns the row's value for this column's select ("" = no value). */
   facet?: (row: Row) => string;
+  /** Custom filter predicate for multi-valued columns (a row with several flags matching
+   * "any open"/"none"/one flag). Defaults to `facet(row) === value` equality. */
+  match?: (row: Row, value: string) => boolean;
   /** Filter options; derived from the rows' facet values when omitted. */
   options?: { value: string; label: string }[];
+  /** Lock the column to the left edge while the table scrolls horizontally. Give locked
+   * columns a `width`; lock only leading columns — a lock after a scrolling column overlaps. */
+  lock?: boolean;
   /** Label for the filter's "no filter" option. */
   all?: string;
   /** Free-text search reads this; omitted columns are not searched. */
@@ -78,11 +84,14 @@ export function applyFilters<Row>(
   filters: Filters,
   query = "",
 ): Row[] {
-  const active = columns.filter((c) => c.facet && filters[c.key]);
+  const active = columns.filter((c) => (c.facet || c.match) && filters[c.key]);
   const q = query.trim().toLowerCase();
   const searchable = columns.filter((c) => c.search);
   return rows.filter((row) => {
-    for (const col of active) if (col.facet?.(row) !== filters[col.key]) return false;
+    for (const col of active) {
+      const value = filters[col.key] ?? "";
+      if (col.match ? !col.match(row, value) : col.facet?.(row) !== value) return false;
+    }
     if (q && searchable.length > 0) {
       if (!searchable.some((c) => c.search?.(row).toLowerCase().includes(q))) return false;
     }
