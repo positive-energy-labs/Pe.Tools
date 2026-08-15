@@ -53,7 +53,9 @@ function worldSub(world: WorldFacts): string {
   const year = yearLabel(world.year);
   return world.session
     ? [world.session.lane, year, `pid ${world.session.processId}`].filter(Boolean).join(" · ")
-    : ["sandbox", year ?? "?", world.pid ? `pid ${world.pid}` : undefined].filter(Boolean).join(" · ");
+    : ["sandbox", year ?? "?", world.pid ? `pid ${world.pid}` : undefined]
+        .filter(Boolean)
+        .join(" · ");
 }
 
 function worldDocs(world: WorldFacts): string {
@@ -66,15 +68,36 @@ function worldDocs(world: WorldFacts): string {
 
 // ── ui atoms ───────────────────────────────────────────────────────────────────────────────────
 
-function Mono({ children, size = 10, color = "var(--muted-foreground)" }: { children: React.ReactNode; size?: number; color?: string }) {
+function Mono({
+  children,
+  size = 10,
+  color = "var(--muted-foreground)",
+}: {
+  children: React.ReactNode;
+  size?: number;
+  color?: string;
+}) {
   return (
-    <span className="font-[var(--font-pe-mono)]" style={{ fontSize: size, color, letterSpacing: "0.04em" }}>
+    <span
+      className="font-[var(--font-pe-mono)]"
+      style={{ fontSize: size, color, letterSpacing: "0.04em" }}
+    >
       {children}
     </span>
   );
 }
 
-function Btn({ children, onClick, danger, disabled }: { children: React.ReactNode; onClick: () => void; danger?: boolean; disabled?: boolean }) {
+function Btn({
+  children,
+  onClick,
+  danger,
+  disabled,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  danger?: boolean;
+  disabled?: boolean;
+}) {
   return (
     <button
       type="button"
@@ -82,7 +105,9 @@ function Btn({ children, onClick, danger, disabled }: { children: React.ReactNod
       disabled={disabled}
       className="tele ml-2 px-1.5 py-0.5"
       style={{
-        fontSize: 9, borderRadius: 2, cursor: disabled ? "default" : "pointer",
+        fontSize: 9,
+        borderRadius: 2,
+        cursor: disabled ? "default" : "pointer",
         border: `0.5px solid ${danger ? "var(--cat-clay)" : "var(--line-2)"}`,
         color: danger ? "var(--cat-clay)" : "var(--muted-foreground)",
         opacity: disabled ? 0.4 : 1,
@@ -165,11 +190,16 @@ function Page() {
                 key={y}
                 type="button"
                 disabled={busy != null}
-                onClick={() => void act({ action: "start", year: y }, `start a 20${y} sandbox`, `start-${y}`)}
+                onClick={() =>
+                  void act({ action: "start", year: y }, `start a 20${y} sandbox`, `start-${y}`)
+                }
                 className="tele flex-1 py-1.5"
                 style={{
-                  fontSize: 10, borderRadius: 2, cursor: busy ? "default" : "pointer",
-                  border: "0.5px dashed var(--line-2)", color: "var(--muted-foreground)",
+                  fontSize: 10,
+                  borderRadius: 2,
+                  cursor: busy ? "default" : "pointer",
+                  border: "0.5px dashed var(--line-2)",
+                  color: "var(--muted-foreground)",
                   opacity: busy === `start-${y}` ? 0.5 : 1,
                 }}
               >
@@ -192,7 +222,15 @@ function Page() {
                 return (
                   <tr key={world.id} style={{ borderTop: "0.5px solid var(--line-soft)" }}>
                     <td className="py-2 pr-3" style={{ width: 8 }}>
-                      <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 3, background: PHASE_COLOR[world.phase] }} />
+                      <span
+                        style={{
+                          display: "inline-block",
+                          width: 6,
+                          height: 6,
+                          borderRadius: 3,
+                          background: PHASE_COLOR[world.phase],
+                        }}
+                      />
                     </td>
                     <td className="py-2 pr-4">
                       <div style={{ fontSize: 13, color: "var(--foreground)" }}>
@@ -202,7 +240,10 @@ function Page() {
                     </td>
                     <td className="py-2 pr-4">
                       <Mono size={10} color={PHASE_COLOR[world.phase]}>
-                        {(world.session ? "live" : (world.registry?.state ?? world.phase)).toUpperCase()}
+                        {(world.session
+                          ? "live"
+                          : (world.registry?.state ?? world.phase)
+                        ).toUpperCase()}
                       </Mono>
                     </td>
                     <td className="py-2 pr-4" style={{ maxWidth: 220 }}>
@@ -214,7 +255,16 @@ function Page() {
                     <td className="py-2 text-right" style={{ whiteSpace: "nowrap" }}>
                       {sandboxId ? (
                         <>
-                          <Btn disabled={busy != null} onClick={() => void act({ action: "restart", id: sandboxId }, `restart ${sandboxId}`, `restart-${sandboxId}`)}>
+                          <Btn
+                            disabled={busy != null}
+                            onClick={() =>
+                              void act(
+                                { action: "restart", id: sandboxId },
+                                `restart ${sandboxId}`,
+                                `restart-${sandboxId}`,
+                              )
+                            }
+                          >
                             restart
                           </Btn>
                           <Btn
@@ -250,7 +300,9 @@ function Page() {
 
           {error ? (
             <div className="mt-2">
-              <Mono size={9} color="var(--cat-clay)">{error}</Mono>
+              <Mono size={9} color="var(--cat-clay)">
+                {error}
+              </Mono>
             </div>
           ) : null}
 
@@ -266,24 +318,47 @@ function Page() {
                     return (
                       <tr key={world.id} style={{ borderTop: "0.5px solid var(--line-soft)" }}>
                         <td className="py-2 pr-3" style={{ width: 8 }}>
-                          <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 3, border: "1px solid var(--muted-foreground)" }} />
+                          <span
+                            style={{
+                              display: "inline-block",
+                              width: 6,
+                              height: 6,
+                              borderRadius: 3,
+                              border: "1px solid var(--muted-foreground)",
+                            }}
+                          />
                         </td>
                         <td className="py-2 pr-4">
-                          <div style={{ fontSize: 13, color: "var(--muted-foreground)" }}>{world.id}</div>
+                          <div style={{ fontSize: 13, color: "var(--muted-foreground)" }}>
+                            {world.id}
+                          </div>
                           <Mono size={9}>
                             {yearLabel(world.year) ?? "?"} · was pid {world.pid ?? "?"}
                           </Mono>
                         </td>
                         <td className="py-2 pr-4" style={{ maxWidth: 260 }}>
                           <Mono size={9}>
-                            {world.registry?.firstFailureEvent?.message ?? world.registry?.detail ?? ""}
+                            {world.registry?.firstFailureEvent?.message ??
+                              world.registry?.detail ??
+                              ""}
                           </Mono>
                         </td>
                         <td className="py-2 pr-4">
-                          <Mono size={9}>{died ? `died ${died} ago` : (world.registry?.state ?? "dead")}</Mono>
+                          <Mono size={9}>
+                            {died ? `died ${died} ago` : (world.registry?.state ?? "dead")}
+                          </Mono>
                         </td>
                         <td className="py-2 text-right">
-                          <Btn disabled={busy != null} onClick={() => void act({ action: "restart", id: world.id }, `restart ${world.id}`, `restart-${world.id}`)}>
+                          <Btn
+                            disabled={busy != null}
+                            onClick={() =>
+                              void act(
+                                { action: "restart", id: world.id },
+                                `restart ${world.id}`,
+                                `restart-${world.id}`,
+                              )
+                            }
+                          >
                             start again
                           </Btn>
                         </td>
@@ -305,18 +380,34 @@ function Page() {
                 type="button"
                 onClick={() => setLedgerOpen(false)}
                 className="tele cursor-pointer px-1"
-                style={{ fontSize: 9, borderRadius: 2, border: "0.5px solid var(--line-2)", color: "var(--muted-foreground)" }}
+                style={{
+                  fontSize: 9,
+                  borderRadius: 2,
+                  border: "0.5px solid var(--line-2)",
+                  color: "var(--muted-foreground)",
+                }}
               >
                 ›
               </button>
             </div>
-            <div ref={logRef} className="min-h-0 flex-1 overflow-y-auto" style={{ maxHeight: "82vh" }}>
+            <div
+              ref={logRef}
+              className="min-h-0 flex-1 overflow-y-auto"
+              style={{ maxHeight: "82vh" }}
+            >
               {ledger.length === 0 ? (
                 <Mono size={9}>quiet — world changes and your actions land here</Mono>
               ) : null}
               {ledger.map((e, idx) => (
-                <div key={idx} className="py-1.5" style={{ borderTop: "0.5px solid var(--line-soft)" }}>
-                  <Mono size={9} color={e.actor === "bridge" ? "var(--pe-blue)" : "var(--foreground)"}>
+                <div
+                  key={idx}
+                  className="py-1.5"
+                  style={{ borderTop: "0.5px solid var(--line-soft)" }}
+                >
+                  <Mono
+                    size={9}
+                    color={e.actor === "bridge" ? "var(--pe-blue)" : "var(--foreground)"}
+                  >
                     {e.actor}
                   </Mono>
                   <div style={{ fontSize: 11, color: "var(--foreground)" }}>{e.label}</div>

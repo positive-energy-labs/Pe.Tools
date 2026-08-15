@@ -106,14 +106,22 @@ function DataTablesRoute() {
         </div>
         <div className="flex items-center gap-2">
           {draft && (
-            <Button size="sm" disabled={busy || draft.name.trim().length === 0} onClick={() => void applyDraft()}>
+            <Button
+              size="sm"
+              disabled={busy || draft.name.trim().length === 0}
+              onClick={() => void applyDraft()}
+            >
               {busy ? <Loader2 className="animate-spin" /> : <CheckCheck />}
               {busy ? "Applying…" : "Apply to Revit"}
             </Button>
           )}
         </div>
       </header>
-      {note && <p className="shrink-0 border-b border-border px-4 py-1 text-xs text-muted-foreground">{note}</p>}
+      {note && (
+        <p className="shrink-0 border-b border-border px-4 py-1 text-xs text-muted-foreground">
+          {note}
+        </p>
+      )}
 
       <div className="flex min-h-0 flex-1">
         <SidePane
@@ -125,7 +133,9 @@ function DataTablesRoute() {
             <div className="flex items-center justify-between gap-2">
               <span className="section-label">
                 Tables
-                <span className="tele ml-1.5 normal-case text-muted-foreground">{tables.length}</span>
+                <span className="tele ml-1.5 normal-case text-muted-foreground">
+                  {tables.length}
+                </span>
               </span>
               <span className="flex items-center">
                 <Button
@@ -149,7 +159,10 @@ function DataTablesRoute() {
               id: t.name,
               label: t.name,
               meta: `${t.columns.length}×${t.rows.length}`,
-              hint: t.placements.length > 0 ? `on ${t.placements.map((p) => p.sheetNumber).join(", ")}` : undefined,
+              hint:
+                t.placements.length > 0
+                  ? `on ${t.placements.map((p) => p.sheetNumber).join(", ")}`
+                  : undefined,
             }))}
             activeId={draft && !draft.isNew ? draft.name : null}
             onPick={(id) => {
@@ -252,7 +265,10 @@ function DraftEditor({
             <tr>
               <th className="border-b border-border bg-muted" />
               {draft.columns.map((column, columnIndex) => (
-                <th key={columnIndex} className="min-w-36 border-b border-l border-border bg-muted px-1.5 py-1 text-left">
+                <th
+                  key={columnIndex}
+                  className="min-w-36 border-b border-l border-border bg-muted px-1.5 py-1 text-left"
+                >
                   <div className="flex items-center gap-1">
                     <Input
                       value={column.heading}

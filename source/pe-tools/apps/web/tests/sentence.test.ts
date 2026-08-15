@@ -9,7 +9,9 @@ const NOW = Date.parse("2026-07-16T12:00:00Z");
 const zero = { proposals: 0, staged: 0, good: 0, attention: 0 };
 
 test("sentence grammar over the run lifecycle: idle → working → awaiting → committed → failed", () => {
-  expect(sentenceText({ snapshot: { phase: "idle" }, clause: "", staged: null, nowMs: NOW })).toEqual({
+  expect(
+    sentenceText({ snapshot: { phase: "idle" }, clause: "", staged: null, nowMs: NOW }),
+  ).toEqual({
     text: "pea is idle — nothing in flight",
     tone: "rest",
   });

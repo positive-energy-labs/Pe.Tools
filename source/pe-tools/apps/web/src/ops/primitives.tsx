@@ -97,7 +97,9 @@ export function KVGrid({
 
 /** Small mono provenance/limits line — what was measured, when, what was left out. */
 export function Provenance({ children }: { children: ReactNode }) {
-  return <p className="tele mt-1.5 text-[10px] leading-relaxed text-muted-foreground">{children}</p>;
+  return (
+    <p className="tele mt-1.5 text-[10px] leading-relaxed text-muted-foreground">{children}</p>
+  );
 }
 
 export function MonoNote({ children, hue }: { children: ReactNode; hue?: CatHue }) {
@@ -177,7 +179,11 @@ function TreeRow({ node, depth, dense }: { node: TreeNode; depth: number; dense:
         >
           {node.label}
         </span>
-        {node.meta && <span className="tele ml-auto shrink-0 text-[10px] text-muted-foreground">{node.meta}</span>}
+        {node.meta && (
+          <span className="tele ml-auto shrink-0 text-[10px] text-muted-foreground">
+            {node.meta}
+          </span>
+        )}
       </div>
       {hasChildren && open && (
         <ul style={{ borderLeft: "0.5px solid var(--line-soft)", marginLeft: 8 + depth * 14 + 5 }}>

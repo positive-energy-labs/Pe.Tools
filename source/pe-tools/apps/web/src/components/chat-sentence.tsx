@@ -42,13 +42,21 @@ export function sentenceText(input: {
 }): SentenceLine {
   const { snapshot, clause, target, staged, nowMs } = input;
   const last = snapshot.lastCompleted;
-  const sinceLast = last?.completedAt ? nowMs - Date.parse(last.completedAt) : Number.POSITIVE_INFINITY;
+  const sinceLast = last?.completedAt
+    ? nowMs - Date.parse(last.completedAt)
+    : Number.POSITIVE_INFINITY;
 
   if (last?.isError && sinceLast < FAIL_RELAX_MS && snapshot.phase === "idle")
-    return { text: `ran into trouble ${last.activity.gerund}${last.activity.target ? ` ${last.activity.target}` : ""}`, tone: "failed" };
+    return {
+      text: `ran into trouble ${last.activity.gerund}${last.activity.target ? ` ${last.activity.target}` : ""}`,
+      tone: "failed",
+    };
 
   if (snapshot.phase === "asking")
-    return { text: `pea is ${snapshot.activity?.gerund ?? "asking"} — your call`, tone: "awaiting" };
+    return {
+      text: `pea is ${snapshot.activity?.gerund ?? "asking"} — your call`,
+      tone: "awaiting",
+    };
 
   if (snapshot.phase === "thinking") return { text: "pea is thinking", tone: "active" };
 

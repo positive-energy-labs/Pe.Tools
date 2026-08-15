@@ -11,7 +11,12 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { HOST_QUERY_KEY, useBridgeSessionsListQuery } from "#/host/queries";
-import { fromBridgeSessions, resolveTarget, type SessionFacts, type TargetSelector } from "#/host/target";
+import {
+  fromBridgeSessions,
+  resolveTarget,
+  type SessionFacts,
+  type TargetSelector,
+} from "#/host/target";
 
 /** One entry of `pe-revit sandbox status --json` (relayed verbatim by the host). */
 export interface SandboxRegistryEntry {

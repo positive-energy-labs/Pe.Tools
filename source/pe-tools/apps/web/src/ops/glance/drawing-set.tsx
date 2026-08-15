@@ -240,9 +240,9 @@ function DrawingSetView({ results, observedAtMs, call }: SyntheticViewProps) {
 
       {detailError && <MonoNote hue="clay">detail fetch failed: {detailError}</MonoNote>}
       <Provenance>
-        {details ? details.size : detailError ? 0 : "…"} of {total ?? sheets.length} sheets
-        detailed (anchor geometry; budget {DETAIL_BUDGET}, one per series then richest remainder) ·
-        remaining sheets render as empty frames · obs{" "}
+        {details ? details.size : detailError ? 0 : "…"} of {total ?? sheets.length} sheets detailed
+        (anchor geometry; budget {DETAIL_BUDGET}, one per series then richest remainder) · remaining
+        sheets render as empty frames · obs{" "}
         {observedAtMs ? new Date(observedAtMs).toLocaleTimeString() : "—"}
       </Provenance>
     </div>

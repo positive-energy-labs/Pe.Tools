@@ -169,10 +169,7 @@ function ContextSummaryView({ data }: OpViewProps) {
             <Chip hue={activeView.isSheet === true ? "green" : "blue"}>
               {text(activeView.viewType)}
             </Chip>
-            <span
-              className="min-w-0 truncate text-xs font-medium"
-              title={text(activeView.title)}
-            >
+            <span className="min-w-0 truncate text-xs font-medium" title={text(activeView.title)}>
               {text(activeView.title)}
             </span>
             <MonoNote>1:{text(activeView.scale)}</MonoNote>
@@ -671,7 +668,10 @@ function ScoreBar({ score, max, muted }: { score: number; max: number; muted: bo
   const frac = max > 0 ? Math.max(0, Math.min(1, score / max)) : 0;
   const color = muted ? "var(--cat-kiln)" : "var(--pe-blue)";
   return (
-    <span className="inline-flex shrink-0 items-center gap-1.5" title={`score ${score} of max ${max} in this set`}>
+    <span
+      className="inline-flex shrink-0 items-center gap-1.5"
+      title={`score ${score} of max ${max} in this set`}
+    >
       <span
         className="inline-block"
         style={{
@@ -729,7 +729,10 @@ function ResolveReferencesView({ data }: OpViewProps) {
       {candidates.length === 0 ? (
         <EmptyState note="nothing in the model matched this reference" />
       ) : (
-        <div className="flex flex-col" style={{ border: "0.5px solid var(--line)", borderRadius: 2 }}>
+        <div
+          className="flex flex-col"
+          style={{ border: "0.5px solid var(--line)", borderRadius: 2 }}
+        >
           {candidates.map((candidate, i) => {
             const handle = asRecord(candidate.handle);
             const related = asRecords(candidate.relatedHandles);
@@ -741,7 +744,8 @@ function ResolveReferencesView({ data }: OpViewProps) {
                 key={handle ? `${handleId(handle)}-${i}` : i}
                 className="flex min-w-0 flex-col gap-1 px-2.5 py-2"
                 style={{
-                  borderBottom: i < candidates.length - 1 ? "0.5px solid var(--line-soft)" : undefined,
+                  borderBottom:
+                    i < candidates.length - 1 ? "0.5px solid var(--line-soft)" : undefined,
                   borderLeft: top
                     ? "2px solid var(--pe-blue)"
                     : ambiguous

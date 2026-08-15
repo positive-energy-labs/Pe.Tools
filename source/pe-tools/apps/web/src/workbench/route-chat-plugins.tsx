@@ -202,7 +202,10 @@ function ParameterLinksChatPlugin({
   };
 
   return (
-    <InlineRoutePlugin title={parameterLinksRouteState.title} action={actionLabel(toolName, args, running)}>
+    <InlineRoutePlugin
+      title={parameterLinksRouteState.title}
+      action={actionLabel(toolName, args, running)}
+    >
       <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
         <Metric value={profile?.definitions.length ?? 0} label="definitions" />
         <Metric value={profile?.assignments.length ?? 0} label="assignments" />
@@ -346,7 +349,10 @@ function FamilyTypesChatPlugin({
   if (active && !reviewable) return null;
 
   return (
-    <InlineRoutePlugin title={familyTypesRouteState.title} action={actionLabel(toolName, args, running)}>
+    <InlineRoutePlugin
+      title={familyTypesRouteState.title}
+      action={actionLabel(toolName, args, running)}
+    >
       <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
         <Metric value={openProposals} label="open proposals" />
         <Metric value={summary.staged} label="staged" />

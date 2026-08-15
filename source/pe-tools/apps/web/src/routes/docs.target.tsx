@@ -1154,7 +1154,10 @@ function DocsTarget() {
                 ))}
               </tbody>
             </table>
-            <p className="mt-2 max-w-[54ch] text-[11px]" style={{ color: "var(--muted-foreground)" }}>
+            <p
+              className="mt-2 max-w-[54ch] text-[11px]"
+              style={{ color: "var(--muted-foreground)" }}
+            >
               These states cover sessions the bridge can see. The sentence's world clause speaks one
               grammar wider: fusing the sandbox registry (`host/fleet.ts`) adds world phases —
               booting (“in a world that is still booting”), unresponsive, gone — so a pin over a

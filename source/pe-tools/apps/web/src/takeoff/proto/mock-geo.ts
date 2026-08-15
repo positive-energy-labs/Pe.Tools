@@ -70,8 +70,7 @@ function zoneOf(zones: MockZone[], lane: string, x: number, y: number): MockZone
 }
 
 function laneOf(levelName: string): string | null {
-  for (const frag of ["Lower", "Main", "Upper", "Attic"])
-    if (levelName.includes(frag)) return frag;
+  for (const frag of ["Lower", "Main", "Upper", "Attic"]) if (levelName.includes(frag)) return frag;
   return null;
 }
 
@@ -139,7 +138,11 @@ export function joinGeometry(world: MockWorld, takeoff: RhvacTakeoffData): GeoWo
           provenance: { runId, sourceSqft: sqft },
           r10:
             stageIdx >= 5
-              ? { identifier: 100 + (h % 400), syncedAt: "2026-08-13T09:12:00Z", lastSyncedSqft: sqft }
+              ? {
+                  identifier: 100 + (h % 400),
+                  syncedAt: "2026-08-13T09:12:00Z",
+                  lastSyncedSqft: sqft,
+                }
               : null,
           data: stageIdx >= 4 ? assistData(type, sqft, bedrooms) : null,
           outer: shape.outer,

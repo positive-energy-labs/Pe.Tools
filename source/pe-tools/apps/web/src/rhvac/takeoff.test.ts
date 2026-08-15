@@ -177,5 +177,4 @@ describe("native takeoff merge", () => {
       "unknown takeoff source 'survey'",
     );
   });
-
 });

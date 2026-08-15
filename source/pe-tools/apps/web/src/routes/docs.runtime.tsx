@@ -2906,9 +2906,9 @@ function DocsRuntime() {
           <p className="mb-2 max-w-[80ch] text-[12px]" style={{ color: "var(--muted-foreground)" }}>
             The dev/user split, drawn whole. A user's machine has one writer and one boot path. Your
             machine has many builders — a primary checkout (the dev session), any number of worktree
-            checkouts
-            (each spawning its own sandbox, concurrently), AND an installed release — all sharing
-            one Addins door. Signing is the invisible variable that decides whether they agree.
+            checkouts (each spawning its own sandbox, concurrently), AND an installed release — all
+            sharing one Addins door. Signing is the invisible variable that decides whether they
+            agree.
           </p>
           <TwoWorlds />
         </section>

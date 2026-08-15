@@ -61,7 +61,10 @@ export function ScheduleGridChatPlugin({
   };
 
   return (
-    <InlineRoutePlugin title={scheduleGridRouteState.title} action={actionLabel(toolName, args, running)}>
+    <InlineRoutePlugin
+      title={scheduleGridRouteState.title}
+      action={actionLabel(toolName, args, running)}
+    >
       <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
         {snapshot ? (
           <span className="min-w-0 truncate font-medium text-[var(--clay-ink)]">

@@ -101,7 +101,8 @@ export function SyntheticRunner({
   }, [op.key, bridgeSessionId]);
 
   const failedRequired = statuses.filter(
-    (status) => !status.ok && !op.deps.find((dep) => (dep.as ?? dep.key) === status.alias)?.optional,
+    (status) =>
+      !status.ok && !op.deps.find((dep) => (dep.as ?? dep.key) === status.alias)?.optional,
   );
   const View = op.View;
 

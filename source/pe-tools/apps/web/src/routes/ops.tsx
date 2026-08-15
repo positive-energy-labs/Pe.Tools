@@ -159,8 +159,7 @@ function OpsPlayground() {
   useEffect(() => {
     if (!selected) return;
     const cheapRead =
-      selected.intent?.toLowerCase() !== "mutate" &&
-      selected.costTier?.toLowerCase() === "cheap";
+      selected.intent?.toLowerCase() !== "mutate" && selected.costTier?.toLowerCase() === "cheap";
     if (cheapRead && autoRunKey.current !== selected.key) {
       autoRunKey.current = selected.key;
       void run(selected);
@@ -283,9 +282,7 @@ function OpsPlayground() {
                           "w-full rounded-[2px] px-2 py-1 text-left transition-colors hover:bg-muted",
                           active && "bg-muted",
                         )}
-                        style={
-                          active ? { boxShadow: "inset 2px 0 0 var(--pe-blue)" } : undefined
-                        }
+                        style={active ? { boxShadow: "inset 2px 0 0 var(--pe-blue)" } : undefined}
                       >
                         <div className="flex items-center gap-1.5">
                           <span

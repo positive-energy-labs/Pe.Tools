@@ -323,10 +323,7 @@ export function RfaChip({ target }: { target: string }) {
       onClose={() => setOpen(false)}
       title="family — search loaded families or recent .rfa files"
     >
-      <PanelHeader
-        label="family"
-        detail={hasProject ? "loaded in project" : "recent .rfa files"}
-      />
+      <PanelHeader label="family" detail={hasProject ? "loaded in project" : "recent .rfa files"} />
       <div className="px-3 py-1.5" style={{ borderBottom: "0.5px solid var(--line-soft)" }}>
         <input
           autoFocus
