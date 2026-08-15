@@ -242,7 +242,7 @@ internal static class SpaceBoundaryNetwork
         foreach (var edge in straight)
         {
             double angle = EdgeAngle(edge);
-            var best = kept.MinBy(frame => Difference90(frame.Angle, angle))!;
+            var best = kept.OrderBy(frame => Difference90(frame.Angle, angle)).First();
             double snapTolerance =
                 (edge.Length >= SnapShortFt ? SnapToleranceDeg : SnapShortDeg) * Degrees;
             if (Difference90(best.Angle, angle) > snapTolerance) continue;
@@ -299,8 +299,8 @@ internal static class SpaceBoundaryNetwork
         var segments = new List<Geometry>();
         foreach (var edge in edges.Values)
         {
-            var a = moved.GetValueOrDefault(Key(edge.A), edge.A);
-            var b = moved.GetValueOrDefault(Key(edge.B), edge.B);
+            var a = moved.TryGetValue(Key(edge.A), out var movedA) ? movedA : edge.A;
+            var b = moved.TryGetValue(Key(edge.B), out var movedB) ? movedB : edge.B;
             if (Key(a) == Key(b)) continue;
             segments.Add(Factory.CreateLineString([a.Copy(), b.Copy()]));
         }
@@ -309,7 +309,7 @@ internal static class SpaceBoundaryNetwork
         var faces = polygonizer.GetPolygons().Cast<Polygon>().ToList();
 
         var owner = new int[faces.Count];
-        Array.Fill(owner, -1);
+        for (int i = 0; i < owner.Length; i++) owner[i] = -1;
         for (int roomIndex = 0; roomIndex < rooms.Count; roomIndex++)
         {
             var label = Factory.CreatePoint(

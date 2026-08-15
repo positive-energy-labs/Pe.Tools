@@ -35,7 +35,8 @@ internal static class PartitionFormulation
             || double.IsInfinity(opt.MinSuspectCeilingStdDevFt)
             || opt.MinSuspectCeilingStdDevFt < 0)
             throw new ArgumentOutOfRangeException(nameof(opt.MinSuspectCeilingStdDevFt));
-        if (!double.IsFinite(opt.MinResidueSqft) || opt.MinResidueSqft < 0)
+        if (double.IsNaN(opt.MinResidueSqft) || double.IsInfinity(opt.MinResidueSqft)
+            || opt.MinResidueSqft < 0)
             throw new ArgumentOutOfRangeException(nameof(opt.MinResidueSqft));
         int W = hf.W, H = hf.H, n = W * H;
         double cellArea = opt.CellFt * opt.CellFt;
