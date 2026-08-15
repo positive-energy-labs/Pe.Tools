@@ -172,8 +172,8 @@ parse lane `family/doc-pane.tsx` and pea's `family-commands`/`route-state-comman
       Both routes fill them, so "no profiles yet" now names the settings module it reads and the
       empty document picker points at the create field beside it.
 - [ ] Derivation-cost subtitles in the doc picker ("opens instantly" / "boots a 2025 world").
-- [ ] Sentence-as-receipt: on commit the sentence briefly becomes
-      "committed <change> on <doc> · just now", then relaxes.
+- [x] Sentence-as-receipt — `receipt` prop on `Sentence` (4s relax); `/families` fires it on
+      apply ("applied profile to N families") and `/family` on save ("saved N fields to <doc>").
 - Law: the sentence carries targeting NOUNS only; the sole status exception is pea's live
   loop state as the prefix. Scope/filter state lives in table chips, never the sentence.
 
