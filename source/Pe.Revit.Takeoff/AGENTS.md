@@ -1,49 +1,42 @@
 # Takeoffs
 
-Takeoffs turns architectural evidence into persistent, editable Revit zoning and room geometry, then bridges room data into Elite RHVAC for Manual J. The designer declares scope and engineering intent; automation handles deterministic partitioning and data transfer; ambiguity stays visible for human resolution.
+Takeoffs turns designer-drawn zoning intent into persistent, editable room geometry in Revit and bridges room data into Elite RHVAC for Manual J. The designer declares scope and engineering intent; ops handle deterministic partitioning, identity, and data transfer; ambiguity stays visible for human resolution.
 
-## Why
-
-- **Make revisions a diff, not a redraw.** Durable takeoff state lets an architectural change rerun affected partitions instead of restarting the draw-and-enter cycle.
-- **Reuse work PE already does.** PE already draws and issues zoning geometry. Using it as the detector's domain gives an explicit inclusion boundary — roofs, other levels, site, and linked-model noise are out without inference.
-- **Don't ask code to guess intent.** Unbounded room detection plateaued because splitting an open plan into rooms encodes engineering intent no geometry reveals. The zoning boundary supplies that intent and bounds the search; automation partitions, the designer decides.
-- **Persist in domain tools.** Revit owns geometry and assignments; `.r10` owns RHVAC-only inputs and results. The UI is a replaceable view, never an authority.
+Read [README.md](README.md) for the pipeline, data homes, and scope boundaries. Read [DECISIONS.md](DECISIONS.md) before reopening a settled question or re-trying a falsified approach. Read [the RHVAC & Manual J reference](../../docs/features/takeoffs/rhvac-and-mj-reference.md) before touching `.r10` I/O, export conventions, or Revit↔RHVAC terminology.
 
 ## Language
 
-- **Zoning Region**: persistent, designer-drawn Filled Region for one connected scope area on a level. Carries a name, color, and one or more RHVAC System assignments; it is both the issued sheet graphic and the detector's partition domain. Regions sharing a name read as one legend entry — "zoning group" is that shared name, not a managed entity.
+- **System**: the cross-level equipment/service identity — a stable GUID paired with a mutable user tag (`FC-8`, `UH-1`, `WS-2`). Lives in the System registry; referenced by Zoning Regions; exported as an RHVAC System carrying the tag in its name. Tags are user-decided and change mid-project; joins never travel through tags.
+- **Zoning Region**: persistent, designer-drawn Filled Region for one connected scope area on a level. Carries role, GUID, name, and referenced System tags via Pe shared parameters; it is both the issued sheet graphic and the detector's partition domain. Regions sharing a name read as one legend entry — "zoning group" is that shared name, not a managed entity.
 - **Takeoff Room**: PE's atomic room-by-room Manual J unit. One Takeoff Room = one Room Region = one RHVAC Room.
-- **Room Region**: persistent, editable Filled Region for one Takeoff Room inside a Zoning Region. The designer's edit surface.
-- **Revit Space**: native analytical volume derived from a Room Region — regenerated and audited, never hand-edited.
-- **RHVAC System**: load/equipment parent. Every exported RHVAC Room carries one explicit `SystemNumber`.
+- **Room Region**: persistent, editable Filled Region for one Takeoff Room inside a Zoning Region — the designer's edit surface. Carries role, GUID, room type, and a provenance blob (run id, source hash, `.r10` link).
+- **Revit Space**: optional downstream derivation for Revit-native MEP workflows. Nothing in the takeoff critical path reads or needs one.
+- **RHVAC System**: load/equipment parent in the `.r10`. Every exported room carries one explicit `SystemNumber`.
 - **RHVAC Zone**: subgroup within an RHVAC System. PE leaves every room at `ZoneNumber = 1`; not a product grouping.
 
-Unqualified Room, Zone, and System are ambiguous across Revit and RHVAC — qualify **Architectural Room**, **Revit HVAC Zone**, and **Revit MEP System** when the native entity matters. Before changing these mappings, their Revit representations, or RHVAC export, read [the terminology note](../../docs/context/takeoff-room-space-zone-system-terminology-2026-08-13.md).
+Unqualified Room, Zone, and System are ambiguous across Revit and RHVAC — qualify **Architectural Room**, **Revit HVAC Zone**, and **Revit MEP System** when the native entity matters. The crosswalk lives in the RHVAC reference.
 
 ## Workflow
 
-1. The designer draws and labels Zoning Regions (name, color, RHVAC System) in Revit — this declares scope and produces the issued zoning graphic.
-2. The detector partitions each Zoning Region into Room Regions and reports accepted, held, void, and excluded areas.
-3. The designer reshapes Room Regions, assigns room data, and reruns only affected partitions as needed.
-4. Takeoffs derives Revit Spaces when needed and writes room inputs to `.r10`.
-5. The designer finishes remaining inputs and calculations in RHVAC. Later revisions resume from the edited state.
+1. The designer draws Zoning Regions and types System tags on them — declaring scope and producing the issued zoning graphic.
+2. Validate/register stamps role + GUID, resolves tags against the System registry, and reports per zone; tag renames reconcile explicitly here.
+3. Partition runs per zone on explicit request: first run materializes Room Regions plus held/void residue; reruns propose a diff against the accepted baseline.
+4. The designer reshapes Room Regions in Revit and reruns affected zones.
+5. Room data is entered in the web grid against the `.r10`; assists derive people/lighting/equipment/ventilation from room type and area.
+6. Export surgically syncs the existing `.r10` — upsert by `Identifier` on geometry-owned fields, insert new rooms, park removals stale; RHVAC-native edits are never touched — and records the `.r10` linkage back onto each Room Region. Sync is copy → validate → atomic swap with a timestamped backup, and refuses while RHVAC holds the file.
+7. Reconcile reports the joins and divergences across `.r10`, zones, equipment, and the FOM workbook — writing nothing.
 
 ## Laws
 
-- **Scope**: Every Room Region belongs to exactly one Zoning Region. The detector never claims geometry outside it — roofs, other levels, site, linked-model noise.
-- **Accounting**: Accepted rooms plus held, void, and excluded areas account for every Zoning Region on every level. Abstention stays visible; a held area beats a guessed one.
-- **Editability**: Prefer a held area to a mangled room. A Room Region ships only through a strict promotion gate — one coherent local orthogonal frame with ordinary right-angle corners (no sharp tips, diagonal shortcuts, stair steps, or jumbled junctions), and every straightened edge still tracing real wall evidence. Straight is not enough; a clean edge that has drifted off the wall it represents is rejected. Rooms that fail are dropped whole into visible residue, never bent to fit. Coverage or area diagnostics cannot buy back a violation.
-- **Authority**: Zoning Regions own outer scope; Room Regions own the internal partition and are the edit surface; Revit Spaces are derived, never authored, and a materialized Space's native boundary is read back and audited before a run is final. Editing a Zoning Region invalidates only its partition; editing a Room Region never redefines scope. The UI may cache but never becomes authoritative.
-- **Identity**: Filled Regions carry an explicit PE role and stable identifiers; identity and provenance survive targeted reruns, splits, merges, and architectural revisions.
-- **Persistence**: Revit owns zoning/room geometry and RHVAC System assignments; `.r10` owns RHVAC-only inputs and saved results. Recalculation proposes a diff against prior edits rather than silently replacing them. RHVAC remains the calculation authority — writing `.r10` does not run the load calc.
-
-## Decisions
-
-Resolved, so agents stop reopening them:
-
-- **Detector domain is the Zoning Region, not the level.** No level-wide detection, no "coverage %" as the goal — the ceiling there is engineer intent, not geometry.
-- **1:1 Takeoff Room ↔ Room Region ↔ RHVAC Room.**
-- **Designer edits Room Region FRs; Spaces are derived and disposable** — no hand-edited Spaces flowing back as truth.
-- **No native Revit HVAC Zones or Space color-fill schemes as output** — project-a uses none and Revit 2026 changed the tools; revisit only on real need.
-- **"Zoning group" is a shared name/color, not an entity.**
-- **Keep "System" as office vocabulary** — no rename.
+- **One home per datum.** Every datum has exactly one place it is changed; every other appearance is a read-through projection. The data-homes table in README.md is authoritative — a new datum gets a home there before it gets code.
+- **Scope**: every Room Region belongs to exactly one Zoning Region. The detector never claims geometry outside its zone — roofs, other levels, site, linked-model noise are excluded by declaration, not inference.
+- **Accounting**: accepted + held + void + excluded sums to the Zoning Region's area, exactly, per zone. Abstention stays visible; a held area beats a guessed one.
+- **Editability**: a Room Region ships only through the strict promotion gate — one coherent local orthogonal frame with ordinary right-angle corners, and every straightened edge still tracing real wall evidence. Rooms that fail drop whole into visible residue, never bent to fit. Coverage or area diagnostics cannot buy back a violation.
+- **Identity**: GUID (stable, machine) paired with tag or name (mutable, human) at every layer. GUIDs are minted at registration or promotion and survive reruns, splits, merges, and revisions. Out-of-sync state fails fast into explicit reconciliation — orphans block export.
+- **Authority**: Zoning Regions own outer scope; Room Regions own the internal partition and are the edit surface; the `.r10` owns Manual J room data and results; RHVAC owns calculation; the FOM workbook owns equipment selection. The UI reads geometry, edits only `.r10` data and Pe metadata through ops, and never becomes authoritative.
+- **Persistence**: model state lives in Pe shared parameters (bound through `SharedParameterBinder`) and versioned, fail-closed JSON-blob parameters. Extensible storage is banned.
+- **Propose, never overwrite**: reruns produce diffs against the accepted state; the designer's shapes and decisions stand until explicitly replaced. Data conflicts hold and block export rather than merge silently.
+- **Write-through review**: every accept/dismiss is an op that persists to the datum's home at decision time — no batch commit. Pending proposals are session-ephemeral; that is admissible only because the solver is deterministic on model + zone + constants, so a lost session costs one rerun, never a decision. Held data conflicts are the sole persisted pending state.
+- **Two verbs**: accept takes the recalc's proposal; dismiss keeps the designer's state. Data-conflict holds are the only multi-choice decision. Geometry changes happen in Revit, never in web UI.
+- **Drift**: accounting closure is a partition-time invariant. Hand-edit drift (gaps, sibling overlaps, out-of-zone spill) is measured against a project-constant threshold — allowed under it, blocking export over it. Reconciliation (edge snaps) is proposed by the next rerun, never applied silently.
+- **Explicit triggers**: partitioning and drift handling run when a human asks, per zone — the zone is the rerun unit, and no solver threshold or constant is exposed per run. Accepted rooms are pinned by GUID re-binding, so a zone rerun cannot disturb resolved rooms. Nothing watches the model for change.

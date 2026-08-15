@@ -174,23 +174,13 @@ public static class Annotate
 
     private static void Keep(List<XYZ> ring, List<List<XYZ>> simple, ref int droppedDegenerateLoops)
     {
-        if (ring.Count < 3 || Math.Abs(SignedArea(ring)) <= 0.0001)
+        if (ring.Count < 3 || Math.Abs(TakeoffGeometry.SignedArea(
+                ring.Select(point => new[] { point.X, point.Y }).ToList())) <= 0.0001)
         {
             droppedDegenerateLoops++;
             return;
         }
         simple.Add(ring);
-    }
-
-    private static double SignedArea(IReadOnlyList<XYZ> points)
-    {
-        double sum = 0;
-        for (int i = 0; i < points.Count; i++)
-        {
-            var next = points[(i + 1) % points.Count];
-            sum += points[i].X * next.Y - next.X * points[i].Y;
-        }
-        return sum / 2;
     }
 
     private static CurveLoop ToLoop(IReadOnlyList<XYZ> clean)

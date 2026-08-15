@@ -26,21 +26,69 @@ public sealed class DetectSnapshot
     public Heightfield Field = null!;
     public bool[] SeedInk = null!;
 
-    public TakeoffResult Replay(TakeoffOptions opt, Action<string> log)
+    public TakeoffResult Replay(TakeoffOptions opt, Action<string> log, bool[]? zoneMask = null)
     {
         ValidateReplayOptions(opt);
         LogReplay(log);
-        return Detector.Detect(this.Field, this.SeedInk, this.LevelName, this.LevelElevation, opt, log);
+        return Detector.Detect(this.Field, this.SeedInk, this.LevelName, this.LevelElevation, opt, log, zoneMask);
     }
 
-    public TakeoffResult ReplayInferred(Action<string> log, Action<TakeoffOptions>? configure = null)
+    public TakeoffResult ReplayInferred(
+        Action<string> log, Action<TakeoffOptions>? configure = null, bool[]? zoneMask = null)
     {
         var profile = TakeoffPolicy.InferLevelProfile(this);
         configure?.Invoke(profile.Options);
         ValidateReplayOptions(profile.Options);
         LogReplay(log);
         log($"[profile] {profile.Provenance}");
-        return TakeoffPolicy.Detect(this, profile, log);
+        return TakeoffPolicy.Detect(this, profile, log, zoneMask);
+    }
+
+    /// <summary>
+    /// Distance-to-nearest-ink oracle in model feet, sampled on the captured grid. This is the
+    /// evidence argument <see cref="TakeoffPromotion.PromoteZone"/> requires, so it is public for
+    /// the same reason promotion is: the live path must be able to run the reviewed gate chain.
+    /// </summary>
+    public Func<double, double, double> SeedInkDistance()
+    {
+        int width = this.Field.W, height = this.Field.H;
+        if (this.SeedInk.Length != width * height)
+            throw new InvalidOperationException("snapshot ink disagrees with its captured grid");
+        var cells = Detector.Chamfer(this.SeedInk, width, height, invert: false);
+        return DistanceOracle(cells);
+    }
+
+    /// <summary>
+    /// Like <see cref="SeedInkDistance"/>, but door-head seal cells count as evidence too: a
+    /// door-head closure is derived from real model door geometry, so a room edge standing on one
+    /// stands on something the drawing asserted — unlike wall-run and gap-close seals, which are
+    /// heuristic plugs and stay out. This is the oracle the ink-backing acceptance gate should get
+    /// on door-heavy levels, where a legitimate room is often bounded by its own doorway.
+    /// </summary>
+    public Func<double, double, double> EvidenceInkDistance(LevelProfile profile)
+    {
+        int width = this.Field.W, height = this.Field.H;
+        if (this.SeedInk.Length != width * height)
+            throw new InvalidOperationException("snapshot ink disagrees with its captured grid");
+        var seals = TakeoffPolicy.SealClasses(this, profile);
+        var evidence = new bool[this.SeedInk.Length];
+        for (int i = 0; i < evidence.Length; i++)
+            evidence[i] = this.SeedInk[i] || seals[i] == Detector.SealDoorHead;
+        var cells = Detector.Chamfer(evidence, width, height, invert: false);
+        return DistanceOracle(cells);
+    }
+
+    private Func<double, double, double> DistanceOracle(float[] cells)
+    {
+        int width = this.Field.W, height = this.Field.H;
+        return (x, y) =>
+        {
+            int column = (int)Math.Floor((x - this.Field.MinX) / this.Field.CellFt);
+            int row = (int)Math.Floor((y - this.Field.MinY) / this.Field.CellFt);
+            if (column < 0 || column >= width || row < 0 || row >= height)
+                return double.PositiveInfinity;
+            return cells[row * width + column] * this.Field.CellFt;
+        };
     }
 
     private void ValidateReplayOptions(TakeoffOptions opt)
@@ -109,6 +157,8 @@ public sealed class DetectSnapshot
             $"HeaderBandFt={opt.HeaderBandFt.ToString(ic)}",
             $"BandPairSeparationFt={opt.BandPairSeparationFt.ToString(ic)}",
             $"HeaderNearFt={opt.HeaderNearFt.ToString(ic)}",
+            $"FramingLowBandFt={opt.FramingLowBandFt.ToString(ic)}",
+            $"FramingLowSupportNearFt={opt.FramingLowSupportNearFt.ToString(ic)}",
             $"SeedPixelSize={opt.SeedPixelSize.ToString(ic)}");
     }
 

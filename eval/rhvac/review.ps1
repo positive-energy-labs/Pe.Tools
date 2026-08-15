@@ -3,7 +3,6 @@ param(
     [string] $SnapshotManifest,
     [Parameter(Mandatory)]
     [string] $OutputDirectory,
-    [string] $ProjectDirectory = "$PSScriptRoot/project-a",
     [string] $InkDirectory,
     [ValidateRange(1, 100)]
     [int] $ExpectedLevelCount = 5,
@@ -32,23 +31,6 @@ try {
         throw "Editability audit failed operationally with exit code $auditExit"
     }
 
-    $structureDirectory = Join-Path $staging "structure"
-    $scoreArgs = @(
-        "$PSScriptRoot/score-takeoff.py",
-        "--project", $ProjectDirectory,
-        "--takeoff-dir", $auditDirectory,
-        "--takeoff-label", "../audit",
-        "--out-dir", $structureDirectory,
-        "--review-gate",
-        "--quiet"
-    )
-    if ($InkDirectory) { $scoreArgs += "--ink-dir", $InkDirectory }
-    python @scoreArgs
-    $structureExit = $LASTEXITCODE
-    if ($structureExit -notin 0, 2) {
-        throw "Structure diagnostics failed operationally with exit code $structureExit"
-    }
-
     $bundleDirectory = Join-Path $staging "bundle"
     $reviewArgs = @(
         "$PSScriptRoot/review-takeoff.py",
@@ -73,7 +55,7 @@ try {
 
     Move-Item -LiteralPath $staging -Destination $destination
     Write-Host "Review bundle: $destination"
-    exit $(if ($auditExit -eq 0 -and $structureExit -eq 0) { 0 } else { 2 })
+    exit $auditExit
 }
 finally {
     if (Test-Path -LiteralPath $staging) {

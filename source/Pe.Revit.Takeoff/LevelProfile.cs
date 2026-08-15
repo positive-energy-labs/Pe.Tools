@@ -1,5 +1,39 @@
 namespace Pe.Revit.Takeoff;
 
+internal sealed class PreparedLevelTakeoffDetection
+{
+    private readonly PreparedTakeoffDetection detection;
+    private readonly string provenance;
+    private readonly IReadOnlyList<string> flags;
+
+    internal PreparedLevelTakeoffDetection(
+        PreparedTakeoffDetection detection, string provenance, IReadOnlyList<string> flags)
+    {
+        this.detection = detection;
+        this.provenance = provenance;
+        this.flags = flags;
+    }
+
+    internal TakeoffResult Detect(bool[]? zoneMask, Action<string> log)
+    {
+        var result = this.detection.Detect(zoneMask, log);
+        result.ProfileProvenance = this.provenance;
+        result.LevelFlags.AddRange(this.flags);
+        return result;
+    }
+
+    internal TakeoffResult Detect(ZoneScope zone, Action<string> log) =>
+        this.Detect(zone, log, out _);
+
+    internal TakeoffResult Detect(ZoneScope zone, Action<string> log, out int whiteoutCells)
+    {
+        var result = this.detection.Detect(zone, log, out whiteoutCells);
+        result.ProfileProvenance = this.provenance;
+        result.LevelFlags.AddRange(this.flags);
+        return result;
+    }
+}
+
 // Mechanism thresholds for evidence-derived level policy. Defaults are calibrated against the
 // project-a parity set and project-b falsification set; none depend on project or level names.
 public sealed class LevelProfileThresholds
@@ -144,14 +178,20 @@ public static class TakeoffPolicy
         {
             profile.Options.RequireCeiling = true;
             profile.Options.SealDoorHeads = true;
-            profile.Options.SealWallRunGaps = !attic;
+            // Flat coverage keeps wall-run sealing even when the sloped fraction trips the attic
+            // branch: a story with vaulted great-rooms is still a story of walled rooms, and
+            // disarming sealing there starves whole wings of closure (Main Level, measured:
+            // ML05/ML09 went from 0 accepted rooms to solving once sealing was restored). Only a
+            // level that is attic-like AND lacks flat coverage is a true attic, where run sealing
+            // manufactures walls out of roof-plane noise (Attic 01, measured: -9 rooms).
+            profile.Options.SealWallRunGaps = true;
         }
         if (!flat && !profile.NoHabitableDomain)
             profile.Flags.Add("low-ceiling-evidence");
         if (attic)
         {
             profile.Options.SealDoorHeads = true;
-            profile.Options.SealWallRunGaps = false;
+            profile.Options.SealWallRunGaps = flat;
             profile.Options.MinHeadroomFt = 3.5;
             profile.Options.CeilingCloseFt = 3;
             profile.Options.StoryCapFt = Math.Ceiling(maxCeilingAboveLevel);
@@ -169,18 +209,10 @@ public static class TakeoffPolicy
         return profile;
     }
 
-    internal static TakeoffResult Detect(DetectSnapshot snap, LevelProfile profile, Action<string> log)
+    internal static TakeoffResult Detect(
+        DetectSnapshot snap, LevelProfile profile, Action<string> log, bool[]? zoneMask = null)
     {
-        var field = snap.Field;
-        if (profile.Options.CeilingCloseFt > snap.CapturedCeilingCloseFt() + 1e-9)
-        {
-            field = new Heightfield {
-                W = snap.Field.W, H = snap.Field.H,
-                MinX = snap.Field.MinX, MinY = snap.Field.MinY, CellFt = snap.Field.CellFt,
-                FloorZ = snap.Field.FloorZ, CeilZ = (float[])snap.Field.CeilZ.Clone(),
-            };
-            Heightfield.CloseCeilingGaps(field, profile.Options.CeilingCloseFt);
-        }
+        var field = DetectionField(snap, profile);
         TakeoffResult result;
         if (profile.NoHabitableDomain)
         {
@@ -190,11 +222,48 @@ public static class TakeoffPolicy
         else
         {
             result = Detector.Detect(
-                field, snap.SeedInk, snap.LevelName, snap.LevelElevation, profile.Options, log);
+                field, snap.SeedInk, snap.LevelName, snap.LevelElevation, profile.Options, log, zoneMask);
         }
         result.ProfileProvenance = profile.Provenance;
         result.LevelFlags.AddRange(profile.Flags.Select(flag => $"level:{snap.LevelName}:{flag}"));
         return result;
+    }
+
+    internal static PreparedLevelTakeoffDetection PrepareDetection(
+        DetectSnapshot snap, LevelProfile profile, Action<string> log)
+    {
+        if (profile.NoHabitableDomain)
+            throw new InvalidOperationException(
+                $"level '{snap.LevelName}' has no habitable domain to prepare");
+        var detection = Detector.Prepare(
+            DetectionField(snap, profile), snap.SeedInk, snap.LevelName, snap.LevelElevation,
+            profile.Options, log);
+        return new PreparedLevelTakeoffDetection(
+            detection,
+            profile.Provenance,
+            profile.Flags.Select(flag => $"level:{snap.LevelName}:{flag}").ToList());
+    }
+
+    /// <summary>
+    /// Per-cell seal attribution for the level exactly as this profile's knobs would seal it — the
+    /// same heightfield <see cref="PrepareDetection"/> detects against, so the raster is the real
+    /// closure decision and not a re-derivation under different options.
+    /// </summary>
+    public static byte[] SealClasses(DetectSnapshot snap, LevelProfile profile) =>
+        Detector.SealClasses(
+            DetectionField(snap, profile), snap.SeedInk, snap.LevelElevation, profile.Options);
+
+    private static Heightfield DetectionField(DetectSnapshot snap, LevelProfile profile)
+    {
+        if (profile.Options.CeilingCloseFt <= snap.CapturedCeilingCloseFt() + 1e-9)
+            return snap.Field;
+        var field = new Heightfield {
+            W = snap.Field.W, H = snap.Field.H,
+            MinX = snap.Field.MinX, MinY = snap.Field.MinY, CellFt = snap.Field.CellFt,
+            FloorZ = snap.Field.FloorZ, CeilZ = (float[])snap.Field.CeilZ.Clone(),
+        };
+        Heightfield.CloseCeilingGaps(field, profile.Options.CeilingCloseFt);
+        return field;
     }
 
 }

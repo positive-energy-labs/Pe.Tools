@@ -8,7 +8,7 @@
 # The port is the target host's HTTP port: `pe-revit service list` shows live hosts; if a live
 # host's service file was swept (it happens), pass --port explicitly. The Revit session must
 # already have the model open (revit.apply.document.open). See
-# source/Pe.Revit.Takeoff/Rhvac/README.md "Eval harness".
+# source/Pe.Revit.Takeoff/README.md.
 import argparse, atexit, glob, json, os, shutil, sys, urllib.request
 
 parser = argparse.ArgumentParser()
@@ -88,5 +88,5 @@ for tsv in tsvs:
 os.replace(staging_dir, snapshot_dir)
 
 print(f"{len(tsvs)} takeoff TSVs -> {snapshot_dir}", flush=True)
-print(f"next: python eval/rhvac/score-takeoff.py --project {args.project} "
-      f"--takeoff-dir {snapshot_dir} --out-dir <artifact-score-dir>", flush=True)
+print("next: pwsh eval/rhvac/review.ps1 -SnapshotManifest <manifest> "
+      "-OutputDirectory <new-review-dir>", flush=True)

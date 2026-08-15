@@ -9,9 +9,9 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from "./routes/__root";
+import { Route as TakeoffsRouteImport } from "./routes/takeoffs";
 import { Route as SettingsRouteImport } from "./routes/settings";
 import { Route as ScheduleGridRouteImport } from "./routes/schedule-grid";
-import { Route as RhvacRouteImport } from "./routes/rhvac";
 import { Route as ParameterLinksRouteImport } from "./routes/parameter-links";
 import { Route as OpsRouteImport } from "./routes/ops";
 import { Route as InstancesRouteImport } from "./routes/instances";
@@ -28,11 +28,15 @@ import { Route as ChatRouteImport } from "./routes/chat";
 import { Route as IndexRouteImport } from "./routes/index";
 import { Route as DocsTargetRouteImport } from "./routes/docs.target";
 import { Route as DocsRuntimeRouteImport } from "./routes/docs.runtime";
-import { Route as DemoTanstackQueryRouteImport } from "./routes/demo/tanstack-query";
 import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
 import { Route as ApiPdfAuditMapRouteImport } from "./routes/api/pdf-audit/map";
 import { Route as ApiPdfAuditParseParseIdRouteImport } from "./routes/api/pdf-audit/parse.$parseId";
 
+const TakeoffsRoute = TakeoffsRouteImport.update({
+  id: "/takeoffs",
+  path: "/takeoffs",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const SettingsRoute = SettingsRouteImport.update({
   id: "/settings",
   path: "/settings",
@@ -41,11 +45,6 @@ const SettingsRoute = SettingsRouteImport.update({
 const ScheduleGridRoute = ScheduleGridRouteImport.update({
   id: "/schedule-grid",
   path: "/schedule-grid",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const RhvacRoute = RhvacRouteImport.update({
-  id: "/rhvac",
-  path: "/rhvac",
   getParentRoute: () => rootRouteImport,
 } as any);
 const ParameterLinksRoute = ParameterLinksRouteImport.update({
@@ -128,11 +127,6 @@ const DocsRuntimeRoute = DocsRuntimeRouteImport.update({
   path: "/docs/runtime",
   getParentRoute: () => rootRouteImport,
 } as any);
-const DemoTanstackQueryRoute = DemoTanstackQueryRouteImport.update({
-  id: "/demo/tanstack-query",
-  path: "/demo/tanstack-query",
-  getParentRoute: () => rootRouteImport,
-} as any);
 const ApiPdfAuditParseRoute = ApiPdfAuditParseRouteImport.update({
   id: "/api/pdf-audit/parse",
   path: "/api/pdf-audit/parse",
@@ -164,10 +158,9 @@ export interface FileRoutesByFullPath {
   "/instances": typeof InstancesRoute;
   "/ops": typeof OpsRoute;
   "/parameter-links": typeof ParameterLinksRoute;
-  "/rhvac": typeof RhvacRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
-  "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
+  "/takeoffs": typeof TakeoffsRoute;
   "/docs/runtime": typeof DocsRuntimeRoute;
   "/docs/target": typeof DocsTargetRoute;
   "/api/pdf-audit/map": typeof ApiPdfAuditMapRoute;
@@ -189,10 +182,9 @@ export interface FileRoutesByTo {
   "/instances": typeof InstancesRoute;
   "/ops": typeof OpsRoute;
   "/parameter-links": typeof ParameterLinksRoute;
-  "/rhvac": typeof RhvacRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
-  "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
+  "/takeoffs": typeof TakeoffsRoute;
   "/docs/runtime": typeof DocsRuntimeRoute;
   "/docs/target": typeof DocsTargetRoute;
   "/api/pdf-audit/map": typeof ApiPdfAuditMapRoute;
@@ -215,10 +207,9 @@ export interface FileRoutesById {
   "/instances": typeof InstancesRoute;
   "/ops": typeof OpsRoute;
   "/parameter-links": typeof ParameterLinksRoute;
-  "/rhvac": typeof RhvacRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
-  "/demo/tanstack-query": typeof DemoTanstackQueryRoute;
+  "/takeoffs": typeof TakeoffsRoute;
   "/docs/runtime": typeof DocsRuntimeRoute;
   "/docs/target": typeof DocsTargetRoute;
   "/api/pdf-audit/map": typeof ApiPdfAuditMapRoute;
@@ -242,10 +233,9 @@ export interface FileRouteTypes {
     | "/instances"
     | "/ops"
     | "/parameter-links"
-    | "/rhvac"
     | "/schedule-grid"
     | "/settings"
-    | "/demo/tanstack-query"
+    | "/takeoffs"
     | "/docs/runtime"
     | "/docs/target"
     | "/api/pdf-audit/map"
@@ -267,10 +257,9 @@ export interface FileRouteTypes {
     | "/instances"
     | "/ops"
     | "/parameter-links"
-    | "/rhvac"
     | "/schedule-grid"
     | "/settings"
-    | "/demo/tanstack-query"
+    | "/takeoffs"
     | "/docs/runtime"
     | "/docs/target"
     | "/api/pdf-audit/map"
@@ -292,10 +281,9 @@ export interface FileRouteTypes {
     | "/instances"
     | "/ops"
     | "/parameter-links"
-    | "/rhvac"
     | "/schedule-grid"
     | "/settings"
-    | "/demo/tanstack-query"
+    | "/takeoffs"
     | "/docs/runtime"
     | "/docs/target"
     | "/api/pdf-audit/map"
@@ -318,10 +306,9 @@ export interface RootRouteChildren {
   InstancesRoute: typeof InstancesRoute;
   OpsRoute: typeof OpsRoute;
   ParameterLinksRoute: typeof ParameterLinksRoute;
-  RhvacRoute: typeof RhvacRoute;
   ScheduleGridRoute: typeof ScheduleGridRoute;
   SettingsRoute: typeof SettingsRoute;
-  DemoTanstackQueryRoute: typeof DemoTanstackQueryRoute;
+  TakeoffsRoute: typeof TakeoffsRoute;
   DocsRuntimeRoute: typeof DocsRuntimeRoute;
   DocsTargetRoute: typeof DocsTargetRoute;
   ApiPdfAuditMapRoute: typeof ApiPdfAuditMapRoute;
@@ -330,6 +317,13 @@ export interface RootRouteChildren {
 
 declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
+    "/takeoffs": {
+      id: "/takeoffs";
+      path: "/takeoffs";
+      fullPath: "/takeoffs";
+      preLoaderRoute: typeof TakeoffsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/settings": {
       id: "/settings";
       path: "/settings";
@@ -342,13 +336,6 @@ declare module "@tanstack/react-router" {
       path: "/schedule-grid";
       fullPath: "/schedule-grid";
       preLoaderRoute: typeof ScheduleGridRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/rhvac": {
-      id: "/rhvac";
-      path: "/rhvac";
-      fullPath: "/rhvac";
-      preLoaderRoute: typeof RhvacRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/parameter-links": {
@@ -463,13 +450,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof DocsRuntimeRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/demo/tanstack-query": {
-      id: "/demo/tanstack-query";
-      path: "/demo/tanstack-query";
-      fullPath: "/demo/tanstack-query";
-      preLoaderRoute: typeof DemoTanstackQueryRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
     "/api/pdf-audit/parse": {
       id: "/api/pdf-audit/parse";
       path: "/api/pdf-audit/parse";
@@ -520,10 +500,9 @@ const rootRouteChildren: RootRouteChildren = {
   InstancesRoute: InstancesRoute,
   OpsRoute: OpsRoute,
   ParameterLinksRoute: ParameterLinksRoute,
-  RhvacRoute: RhvacRoute,
   ScheduleGridRoute: ScheduleGridRoute,
   SettingsRoute: SettingsRoute,
-  DemoTanstackQueryRoute: DemoTanstackQueryRoute,
+  TakeoffsRoute: TakeoffsRoute,
   DocsRuntimeRoute: DocsRuntimeRoute,
   DocsTargetRoute: DocsTargetRoute,
   ApiPdfAuditMapRoute: ApiPdfAuditMapRoute,

@@ -1,0 +1,624 @@
+﻿{
+    "header":  [
+                   "SHIM. Cloneable Manual-J code fields per assembly, used ONLY when the target .r10 does not",
+                   "already contain a row using that assembly name. The real design â€” per-project custom",
+                   "assemblies authored against the project envelope â€” is deferred; see the sync op comment.",
+                   "Values are RHVAC VB6 variant cells: variantType 8195=int32 (0x2003), 8196=float32 (0x2004),",
+                   "8200=string (0x2008), 8203=int16 bool (0x200B). Geometry, U-value, and SHGC are NOT here:",
+                   "those come from the takeoff, per room.",
+                   "Regenerate with mine-assembly-presets.ps1; never hand-edit a value you cannot source."
+               ],
+    "generatedFrom":  "projectA.scratch.r10",
+    "generatedUtc":  "2026-08-15T03:01:34Z",
+    "note":  "Mined from the firm\u0027s project-a project (150 rooms), the most complex real file available.",
+    "floors":  [
+                   {
+                       "name":  "shortest side of floor slab is 20\u0027 wide",
+                       "columns":  {
+                                       "FloorDescription":  {
+                                                                "variantType":  8200,
+                                                                "value":  "shortest side of floor slab is 20\u0027 wide"
+                                                            },
+                                       "FloorConstructionMaterial":  {
+                                                                         "variantType":  8200,
+                                                                         "value":  "21B-20"
+                                                                     },
+                                       "FloorCategory":  {
+                                                             "variantType":  8195,
+                                                             "value":  21
+                                                         },
+                                       "FloorSealedCrawlSpace":  {
+                                                                     "variantType":  8203,
+                                                                     "value":  0
+                                                                 },
+                                       "FloorCrawlSpaceWallUValue":  {
+                                                                         "variantType":  8196,
+                                                                         "value":  0
+                                                                     },
+                                       "FloorRadiant":  {
+                                                            "variantType":  8203,
+                                                            "value":  0
+                                                        },
+                                       "FloorOptions":  {
+                                                            "variantType":  8200,
+                                                            "value":  "c"
+                                                        },
+                                       "FloorSTD":  {
+                                                        "variantType":  8196,
+                                                        "value":  0
+                                                    },
+                                       "FloorWTD":  {
+                                                        "variantType":  8196,
+                                                        "value":  0
+                                                    }
+                                   }
+                   },
+                   {
+                       "name":  "R-10 insulation, passive, heavy dry or light wet soil",
+                       "columns":  {
+                                       "FloorDescription":  {
+                                                                "variantType":  8200,
+                                                                "value":  "R-10 insulation, passive, heavy dry or light wet soil"
+                                                            },
+                                       "FloorConstructionMaterial":  {
+                                                                         "variantType":  8200,
+                                                                         "value":  "22B-10pm"
+                                                                     },
+                                       "FloorCategory":  {
+                                                             "variantType":  8195,
+                                                             "value":  22
+                                                         },
+                                       "FloorSealedCrawlSpace":  {
+                                                                     "variantType":  8203,
+                                                                     "value":  0
+                                                                 },
+                                       "FloorCrawlSpaceWallUValue":  {
+                                                                         "variantType":  8196,
+                                                                         "value":  0
+                                                                     },
+                                       "FloorRadiant":  {
+                                                            "variantType":  8203,
+                                                            "value":  0
+                                                        },
+                                       "FloorOptions":  {
+                                                            "variantType":  8200,
+                                                            "value":  "c"
+                                                        },
+                                       "FloorSTD":  {
+                                                        "variantType":  8196,
+                                                        "value":  0
+                                                    },
+                                       "FloorWTD":  {
+                                                        "variantType":  8196,
+                                                        "value":  0
+                                                    }
+                                   }
+                   },
+                   {
+                       "name":  "R-19 open cell 1/2 lb. spray foam insulation, 5 inches in 2 x 10 joist cavity, any cover",
+                       "columns":  {
+                                       "FloorDescription":  {
+                                                                "variantType":  8200,
+                                                                "value":  "R-19 open cell 1/2 lb. spray foam insulation, 5 inches in 2 x 10 joist cavity, any cover"
+                                                            },
+                                       "FloorConstructionMaterial":  {
+                                                                         "variantType":  8200,
+                                                                         "value":  "20P1-19op"
+                                                                     },
+                                       "FloorCategory":  {
+                                                             "variantType":  8195,
+                                                             "value":  20
+                                                         },
+                                       "FloorSealedCrawlSpace":  {
+                                                                     "variantType":  8203,
+                                                                     "value":  0
+                                                                 },
+                                       "FloorCrawlSpaceWallUValue":  {
+                                                                         "variantType":  8196,
+                                                                         "value":  0
+                                                                     },
+                                       "FloorRadiant":  {
+                                                            "variantType":  8203,
+                                                            "value":  0
+                                                        },
+                                       "FloorOptions":  {
+                                                            "variantType":  8200,
+                                                            "value":  ""
+                                                        },
+                                       "FloorSTD":  {
+                                                        "variantType":  8196,
+                                                        "value":  0
+                                                    },
+                                       "FloorWTD":  {
+                                                        "variantType":  8196,
+                                                        "value":  0
+                                                    }
+                                   }
+                   },
+                   {
+                       "name":  "WR R20",
+                       "columns":  {
+                                       "FloorDescription":  {
+                                                                "variantType":  8200,
+                                                                "value":  "WR R20"
+                                                            },
+                                       "FloorConstructionMaterial":  {
+                                                                         "variantType":  8200,
+                                                                         "value":  "WR R20"
+                                                                     },
+                                       "FloorCategory":  {
+                                                             "variantType":  8195,
+                                                             "value":  19
+                                                         },
+                                       "FloorSealedCrawlSpace":  {
+                                                                     "variantType":  8203,
+                                                                     "value":  0
+                                                                 },
+                                       "FloorCrawlSpaceWallUValue":  {
+                                                                         "variantType":  8196,
+                                                                         "value":  0.032
+                                                                     },
+                                       "FloorRadiant":  {
+                                                            "variantType":  8203,
+                                                            "value":  0
+                                                        },
+                                       "FloorOptions":  {
+                                                            "variantType":  8200,
+                                                            "value":  "t"
+                                                        },
+                                       "FloorSTD":  {
+                                                        "variantType":  8196,
+                                                        "value":  0
+                                                    },
+                                       "FloorWTD":  {
+                                                        "variantType":  8196,
+                                                        "value":  0
+                                                    }
+                                   }
+                   },
+                   {
+                       "name":  "passive, heavy dry or light wet soil",
+                       "columns":  {
+                                       "FloorDescription":  {
+                                                                "variantType":  8200,
+                                                                "value":  "passive, heavy dry or light wet soil"
+                                                            },
+                                       "FloorConstructionMaterial":  {
+                                                                         "variantType":  8200,
+                                                                         "value":  "22A-pm"
+                                                                     },
+                                       "FloorCategory":  {
+                                                             "variantType":  8195,
+                                                             "value":  22
+                                                         },
+                                       "FloorSealedCrawlSpace":  {
+                                                                     "variantType":  8203,
+                                                                     "value":  0
+                                                                 },
+                                       "FloorCrawlSpaceWallUValue":  {
+                                                                         "variantType":  8196,
+                                                                         "value":  0
+                                                                     },
+                                       "FloorRadiant":  {
+                                                            "variantType":  8203,
+                                                            "value":  0
+                                                        },
+                                       "FloorOptions":  {
+                                                            "variantType":  8200,
+                                                            "value":  "t"
+                                                        },
+                                       "FloorSTD":  {
+                                                        "variantType":  8196,
+                                                        "value":  0
+                                                    },
+                                       "FloorWTD":  {
+                                                        "variantType":  8196,
+                                                        "value":  0
+                                                    }
+                                   }
+                   }
+               ],
+    "roofs":  [
+                  {
+                      "name":  "R49 closed cell sprayfoam in 2x14 joist cavity",
+                      "columns":  {
+                                      "RoofDescription":  {
+                                                              "variantType":  8200,
+                                                              "value":  "R49 closed cell sprayfoam in 2x14 joist cavity"
+                                                          },
+                                      "RoofConstructionMaterial":  {
+                                                                       "variantType":  8200,
+                                                                       "value":  "R49 CC SPF in 2x14"
+                                                                   },
+                                      "RoofCategory":  {
+                                                           "variantType":  8195,
+                                                           "value":  18
+                                                       },
+                                      "RoofCLTDIndex":  {
+                                                            "variantType":  8195,
+                                                            "value":  41
+                                                        },
+                                      "RoofDirection":  {
+                                                            "variantType":  8195,
+                                                            "value":  0
+                                                        },
+                                      "RoofOptions":  {
+                                                          "variantType":  8200,
+                                                          "value":  ""
+                                                      },
+                                      "RoofSTD":  {
+                                                      "variantType":  8196,
+                                                      "value":  0
+                                                  },
+                                      "RoofWTD":  {
+                                                      "variantType":  8196,
+                                                      "value":  0
+                                                  }
+                                  }
+                  },
+                  {
+                      "name":  "R-20 Insulated wine room ceiling",
+                      "columns":  {
+                                      "RoofDescription":  {
+                                                              "variantType":  8200,
+                                                              "value":  "R-20 Insulated wine room ceiling"
+                                                          },
+                                      "RoofConstructionMaterial":  {
+                                                                       "variantType":  8200,
+                                                                       "value":  "R-20 WR ceiling"
+                                                                   },
+                                      "RoofCategory":  {
+                                                           "variantType":  8195,
+                                                           "value":  17
+                                                       },
+                                      "RoofCLTDIndex":  {
+                                                            "variantType":  8195,
+                                                            "value":  6
+                                                        },
+                                      "RoofDirection":  {
+                                                            "variantType":  8195,
+                                                            "value":  0
+                                                        },
+                                      "RoofOptions":  {
+                                                          "variantType":  8200,
+                                                          "value":  ""
+                                                      },
+                                      "RoofSTD":  {
+                                                      "variantType":  8196,
+                                                      "value":  20
+                                                  },
+                                      "RoofWTD":  {
+                                                      "variantType":  8196,
+                                                      "value":  20
+                                                  }
+                                  }
+                  }
+              ],
+    "walls":  [
+                  {
+                      "name":  "R-20 board insulation to floor, no interior finish, 10\u0027 floor depth",
+                      "columns":  {
+                                      "WallDescription":  {
+                                                              "variantType":  8200,
+                                                              "value":  "R-20 board insulation to floor, no interior finish, 10\u0027 floor depth"
+                                                          },
+                                      "WallConstructionMaterial":  {
+                                                                       "variantType":  8200,
+                                                                       "value":  "15B0-20sf-10"
+                                                                   },
+                                      "WallGroupCode":  {
+                                                            "variantType":  8200,
+                                                            "value":  "K"
+                                                        },
+                                      "WallCategory":  {
+                                                           "variantType":  8195,
+                                                           "value":  15
+                                                       },
+                                      "WallAboveGradeUValue":  {
+                                                                   "variantType":  8196,
+                                                                   "value":  0.045
+                                                               },
+                                      "WallSTD":  {
+                                                      "variantType":  8196,
+                                                      "value":  0
+                                                  },
+                                      "WallWTD":  {
+                                                      "variantType":  8196,
+                                                      "value":  0
+                                                  }
+                                  }
+                  },
+                  {
+                      "name":  "R-3 insulated sheathing, R-13 closed cell sprayfoam in a 2x6 wood stud cavity, R-15 Fiberglass batt",
+                      "columns":  {
+                                      "WallDescription":  {
+                                                              "variantType":  8200,
+                                                              "value":  "R-3 insulated sheathing, R-13 closed cell sprayfoam in a 2x6 wood stud cavity, R-15 Fiberglass batt"
+                                                          },
+                                      "WallConstructionMaterial":  {
+                                                                       "variantType":  8200,
+                                                                       "value":  "CF Above Grade Wall"
+                                                                   },
+                                      "WallGroupCode":  {
+                                                            "variantType":  8200,
+                                                            "value":  "K"
+                                                        },
+                                      "WallCategory":  {
+                                                           "variantType":  8195,
+                                                           "value":  12
+                                                       },
+                                      "WallAboveGradeUValue":  {
+                                                                   "variantType":  8196,
+                                                                   "value":  0
+                                                               },
+                                      "WallSTD":  {
+                                                      "variantType":  8196,
+                                                      "value":  0
+                                                  },
+                                      "WallWTD":  {
+                                                      "variantType":  8196,
+                                                      "value":  0
+                                                  }
+                                  }
+                  },
+                  {
+                      "name":  "Tasting Room Wall",
+                      "columns":  {
+                                      "WallDescription":  {
+                                                              "variantType":  8200,
+                                                              "value":  "Tasting Room Wall"
+                                                          },
+                                      "WallConstructionMaterial":  {
+                                                                       "variantType":  8200,
+                                                                       "value":  "Tasting_Wall"
+                                                                   },
+                                      "WallGroupCode":  {
+                                                            "variantType":  8200,
+                                                            "value":  "H"
+                                                        },
+                                      "WallCategory":  {
+                                                           "variantType":  8195,
+                                                           "value":  15
+                                                       },
+                                      "WallAboveGradeUValue":  {
+                                                                   "variantType":  8196,
+                                                                   "value":  0.088
+                                                               },
+                                      "WallSTD":  {
+                                                      "variantType":  8196,
+                                                      "value":  0
+                                                  },
+                                      "WallWTD":  {
+                                                      "variantType":  8196,
+                                                      "value":  20
+                                                  }
+                                  }
+                  },
+                  {
+                      "name":  "R-20 Insulated wine room wall",
+                      "columns":  {
+                                      "WallDescription":  {
+                                                              "variantType":  8200,
+                                                              "value":  "R-20 Insulated wine room wall"
+                                                          },
+                                      "WallConstructionMaterial":  {
+                                                                       "variantType":  8200,
+                                                                       "value":  "R20 WR wall"
+                                                                   },
+                                      "WallGroupCode":  {
+                                                            "variantType":  8200,
+                                                            "value":  "K"
+                                                        },
+                                      "WallCategory":  {
+                                                           "variantType":  8195,
+                                                           "value":  12
+                                                       },
+                                      "WallAboveGradeUValue":  {
+                                                                   "variantType":  8196,
+                                                                   "value":  0
+                                                               },
+                                      "WallSTD":  {
+                                                      "variantType":  8196,
+                                                      "value":  20
+                                                  },
+                                      "WallWTD":  {
+                                                      "variantType":  8196,
+                                                      "value":  0
+                                                  }
+                                  }
+                  },
+                  {
+                      "name":  "Wine glass wall entry. U-0.28 at interior conditions.",
+                      "columns":  {
+                                      "WallDescription":  {
+                                                              "variantType":  8200,
+                                                              "value":  "Wine glass wall entry. U-0.28 at interior conditions."
+                                                          },
+                                      "WallConstructionMaterial":  {
+                                                                       "variantType":  8200,
+                                                                       "value":  "U-0.28 Wine Glass"
+                                                                   },
+                                      "WallGroupCode":  {
+                                                            "variantType":  8200,
+                                                            "value":  "A"
+                                                        },
+                                      "WallCategory":  {
+                                                           "variantType":  8195,
+                                                           "value":  15
+                                                       },
+                                      "WallAboveGradeUValue":  {
+                                                                   "variantType":  8196,
+                                                                   "value":  0.045
+                                                               },
+                                      "WallSTD":  {
+                                                      "variantType":  8196,
+                                                      "value":  20
+                                                  },
+                                      "WallWTD":  {
+                                                      "variantType":  8196,
+                                                      "value":  20
+                                                  }
+                                  }
+                  }
+              ],
+    "glass":  [
+                  {
+                      "name":  "Averaged U value based on excel calc in the folder. U-0.28 SHGC-0.41",
+                      "columns":  {
+                                      "GlassDescription":  {
+                                                               "variantType":  8200,
+                                                               "value":  "Averaged U value based on excel calc in the folder. U-0.28 SHGC-0.41"
+                                                           },
+                                      "GlassConstructionMaterial":  {
+                                                                        "variantType":  8200,
+                                                                        "value":  "U-0.28 SHGC-0.41"
+                                                                    },
+                                      "GlassGlazingArrangement":  {
+                                                                      "variantType":  8195,
+                                                                      "value":  1
+                                                                  },
+                                      "GlassExternalShadeScreenCoverage":  {
+                                                                               "variantType":  8196,
+                                                                               "value":  100
+                                                                           },
+                                      "GlassInternalShadeScreenType":  {
+                                                                           "variantType":  8195,
+                                                                           "value":  0
+                                                                       },
+                                      "GlassInternalShadeScreenCoverage":  {
+                                                                               "variantType":  8196,
+                                                                               "value":  25
+                                                                           },
+                                      "GlassInsectScreenType":  {
+                                                                    "variantType":  8195,
+                                                                    "value":  0
+                                                                },
+                                      "GlassInsectScreenCoverage":  {
+                                                                        "variantType":  8196,
+                                                                        "value":  50
+                                                                    },
+                                      "GlassGeometryType":  {
+                                                                "variantType":  8195,
+                                                                "value":  0
+                                                            },
+                                      "GlassGroundReflectance":  {
+                                                                     "variantType":  8196,
+                                                                     "value":  0.2
+                                                                 },
+                                      "GlassSkyLight":  {
+                                                            "variantType":  8203,
+                                                            "value":  0
+                                                        },
+                                      "GlassOverhangProjection":  {
+                                                                      "variantType":  8196,
+                                                                      "value":  0
+                                                                  },
+                                      "GlassOverhangOffset":  {
+                                                                  "variantType":  8196,
+                                                                  "value":  0
+                                                              },
+                                      "GlassUserShadeScreenCoefficient":  {
+                                                                              "variantType":  8196,
+                                                                              "value":  1
+                                                                          },
+                                      "GlassUserSkylightTilt":  {
+                                                                    "variantType":  8196,
+                                                                    "value":  0
+                                                                }
+                                  }
+                  },
+                  {
+                      "name":  "U-0.55 SHGC-0.40",
+                      "columns":  {
+                                      "GlassDescription":  {
+                                                               "variantType":  8200,
+                                                               "value":  "U-0.55 SHGC-0.40"
+                                                           },
+                                      "GlassConstructionMaterial":  {
+                                                                        "variantType":  8200,
+                                                                        "value":  "U-0.55 SHGC-0.40"
+                                                                    },
+                                      "GlassGlazingArrangement":  {
+                                                                      "variantType":  8195,
+                                                                      "value":  1
+                                                                  },
+                                      "GlassExternalShadeScreenCoverage":  {
+                                                                               "variantType":  8196,
+                                                                               "value":  100
+                                                                           },
+                                      "GlassInternalShadeScreenType":  {
+                                                                           "variantType":  8195,
+                                                                           "value":  0
+                                                                       },
+                                      "GlassInternalShadeScreenCoverage":  {
+                                                                               "variantType":  8196,
+                                                                               "value":  25
+                                                                           },
+                                      "GlassInsectScreenType":  {
+                                                                    "variantType":  8195,
+                                                                    "value":  0
+                                                                },
+                                      "GlassInsectScreenCoverage":  {
+                                                                        "variantType":  8196,
+                                                                        "value":  50
+                                                                    },
+                                      "GlassGeometryType":  {
+                                                                "variantType":  8195,
+                                                                "value":  0
+                                                            },
+                                      "GlassGroundReflectance":  {
+                                                                     "variantType":  8196,
+                                                                     "value":  0.2
+                                                                 },
+                                      "GlassSkyLight":  {
+                                                            "variantType":  8203,
+                                                            "value":  -1
+                                                        },
+                                      "GlassOverhangProjection":  {
+                                                                      "variantType":  8196,
+                                                                      "value":  0
+                                                                  },
+                                      "GlassOverhangOffset":  {
+                                                                  "variantType":  8196,
+                                                                  "value":  0
+                                                              },
+                                      "GlassUserShadeScreenCoefficient":  {
+                                                                              "variantType":  8196,
+                                                                              "value":  1
+                                                                          },
+                                      "GlassUserSkylightTilt":  {
+                                                                    "variantType":  8196,
+                                                                    "value":  0
+                                                                }
+                                  }
+                  }
+              ],
+    "doors":  [
+                  {
+                      "name":  "Wood - Solid Core",
+                      "columns":  {
+                                      "DoorDescription":  {
+                                                              "variantType":  8200,
+                                                              "value":  "Wood - Solid Core"
+                                                          },
+                                      "DoorConstructionMaterial":  {
+                                                                       "variantType":  8200,
+                                                                       "value":  "11D"
+                                                                   }
+                                  }
+                  },
+                  {
+                      "name":  "Metal - Fiberglass Core",
+                      "columns":  {
+                                      "DoorDescription":  {
+                                                              "variantType":  8200,
+                                                              "value":  "Metal - Fiberglass Core"
+                                                          },
+                                      "DoorConstructionMaterial":  {
+                                                                       "variantType":  8200,
+                                                                       "value":  "11J"
+                                                                   }
+                                  }
+                  }
+              ]
+}

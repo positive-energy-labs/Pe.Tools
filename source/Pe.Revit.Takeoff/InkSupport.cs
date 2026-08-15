@@ -7,6 +7,11 @@ internal static class InkSupport
 {
     private const uint Magic = 0x504B4E49; // "INKP"
 
+    /// <summary>
+    /// Writes a boolean raster in the INKP layout. Deterministic byte-for-byte: the header is the
+    /// caller's grid and the payload is a pure bit-pack, so a rerun of the same inputs rewrites the
+    /// identical file.
+    /// </summary>
     internal static void Save(string path, int w, int h, double minX, double minY, double cellFt, bool[] ink)
     {
         using var writer = new BinaryWriter(File.Create(path));

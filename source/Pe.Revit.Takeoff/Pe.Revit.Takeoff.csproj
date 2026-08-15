@@ -22,4 +22,10 @@
         <PackageReference Include="Newtonsoft.Json" Version="13.0.3"/>
     </ItemGroup>
 
+    <ItemGroup>
+        <!-- TakeoffCarriers rides SharedParameterBinder/TempSharedParamFile — the one sanctioned
+             persistence path (ES is banned). Takeoff stays otherwise leaf. -->
+        <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj"/>
+    </ItemGroup>
+
 </Project>

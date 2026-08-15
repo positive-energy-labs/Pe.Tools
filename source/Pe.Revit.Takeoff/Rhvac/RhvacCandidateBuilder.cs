@@ -103,7 +103,8 @@ public static class RhvacCandidateBuilder
     )
     {
         static double NetArea(List<double[]> o, List<List<double[]>> hs) =>
-            Math.Abs(SignedArea(o)) - hs.Sum(hole => Math.Abs(SignedArea(hole)));
+            Math.Abs(TakeoffGeometry.SignedArea(o))
+            - hs.Sum(hole => Math.Abs(TakeoffGeometry.SignedArea(hole)));
 
         var rawArea = NetArea(outer, holes);
         var gate = Math.Max(0.5, 0.01 * Math.Abs(rawArea));
@@ -439,13 +440,5 @@ public static class RhvacCandidateBuilder
         }
 
         return inside;
-    }
-
-    private static double SignedArea(List<double[]> loop)
-    {
-        var sum = 0.0;
-        for (int i = 0, j = loop.Count - 1; i < loop.Count; j = i++)
-            sum += (loop[j][0] * loop[i][1]) - (loop[i][0] * loop[j][1]);
-        return sum / 2;
     }
 }

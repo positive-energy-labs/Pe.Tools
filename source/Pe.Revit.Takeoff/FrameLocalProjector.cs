@@ -15,16 +15,31 @@ internal enum FrameLocalRejectionReason
     LabelOutside,
     AreaDrift,
     BoundaryDrift,
+    SourceFeatureDrop,
     MicroStepRun,
     CrossFrameOverlap,
     AmbiguousSourceOverlap,
     CanonicalEditability
 }
 
+/// <summary>
+/// One room the projector refused, and — when the projection got far enough to measure them — the
+/// two drift magnitudes it measured.
+/// </summary>
+/// <remarks>
+/// <paramref name="AreaDrift"/> and <paramref name="BoundaryDriftFt"/> are miss attribution, not
+/// gate inputs: they are recorded whenever a candidate polygon existed, INCLUDING when some other
+/// gate is what actually fired. Without them a rejection only says "too far"; with them a sweep can
+/// answer the question that a tolerance change actually turns on — how far, and would any reachable
+/// tolerance have saved this room. Null means the room died before a candidate existed (no frame,
+/// no rails, no owned cells), so no distance was ever measured and none is invented.
+/// </remarks>
 internal sealed record FrameLocalRejectedRoom(
     RoomResult Room,
     FrameLocalRejectionReason Reason,
-    string Detail);
+    string Detail,
+    double? AreaDrift = null,
+    double? BoundaryDriftFt = null);
 
 internal sealed record FrameLocalConservation(
     int SourceRooms,
@@ -40,6 +55,37 @@ internal sealed record FrameLocalConservation(
     public double SourceDeltaSqft => AccountedSourceSqft - SourceSqft;
 }
 
+/// <summary>
+/// The projector's tunable tolerances. Defaults are the shipped constants, so an omitted record
+/// reproduces shipped behavior exactly; <see cref="From"/> projects the public options record.
+/// </summary>
+internal sealed record FrameLocalKnobs(
+    double MaxBoundaryDriftFt,
+    double MaxSourceDropFt,
+    double MaxAreaDrift,
+    double MinFrameSupport,
+    double RailMergeFt,
+    double RailGapFt,
+    double MinRailEdgeFt,
+    double ComponentGapFt,
+    double DeStaircaseFt = 1.0,
+    double ZoneSnapDeg = 0)
+{
+    internal static readonly FrameLocalKnobs Default = new(1.5, 1.5, 0.10, 0.42, 0.55, 1.1, 0.75, 0.55);
+
+    internal static FrameLocalKnobs From(TakeoffOptions options) => new(
+        options.FrameMaxBoundaryDriftFt,
+        options.FrameMaxSourceDropFt,
+        options.FrameMaxAreaDrift,
+        options.FrameMinFrameSupport,
+        options.FrameRailMergeFt,
+        options.FrameRailGapFt,
+        options.FrameMinRailEdgeFt,
+        options.FrameComponentGapFt,
+        options.FrameDeStaircaseFt,
+        options.FrameZoneSnapDeg);
+}
+
 internal sealed record FrameLocalProjectionResult(
     TakeoffResult Accepted,
     IReadOnlyList<FrameLocalRejectedRoom> Rejected,
@@ -53,21 +99,21 @@ internal static class FrameLocalProjector
 {
     private const double MinEdgeFt = 1.5;
     private const double AxisToleranceRad = 8 * Math.PI / 180;
-    private const double MinFrameSupport = 0.42;
     private const double MixedFrameMargin = 0.10;
-    private const double ComponentGapFt = 0.55;
-    private const double RailMergeFt = 0.55;
-    private const double RailGapFt = 1.1;
-    private const double MaxAreaDrift = 0.10;
-    private const double MaxBoundaryDriftFt = 1.5;
     private const double Epsilon = 1e-7;
 
-    private static readonly GeometryFactory Factory = new(new PrecisionModel(), 0);
+    private static readonly GeometryFactory Factory = TakeoffGeometry.Factory;
 
     internal static FrameLocalProjectionResult Project(TakeoffResult source) =>
-        Project(source, allowLocalRetry: true);
+        Project(source, FrameLocalKnobs.Default, allowLocalRetry: true);
 
-    private static FrameLocalProjectionResult Project(TakeoffResult source, bool allowLocalRetry)
+    internal static FrameLocalProjectionResult Project(
+        TakeoffResult source, FrameLocalKnobs knobs, Geometry? declaredZone = null) =>
+        Project(source, knobs, allowLocalRetry: true, declaredZone);
+
+    private static FrameLocalProjectionResult Project(
+        TakeoffResult source, FrameLocalKnobs knobs, bool allowLocalRetry,
+        Geometry? declaredZone = null)
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
 
@@ -84,7 +130,10 @@ internal static class FrameLocalProjector
                     $"source geometry is invalid ({exception.GetType().Name})"));
             }
         }
-        var frames = DominantFrames(originals.OfType<SourceRoom>().Select(x => x.Geometry));
+        var frames = SnapToDeclaredFrames(
+            DominantFrames(
+                originals.OfType<SourceRoom>().Select(x => x.Geometry), knobs.DeStaircaseFt),
+            declaredZone, knobs.ZoneSnapDeg);
         var assigned = new List<Assignment>();
 
         for (int i = 0; i < originals.Count; i++)
@@ -92,12 +141,13 @@ internal static class FrameLocalProjector
             var sourceRoom = originals[i];
             if (sourceRoom == null) continue;
             var scores = frames
-                .Select((frame, index) => new { index, frame, score = FrameSupport(sourceRoom.Geometry, frame) })
+                .Select((frame, index) => new { index, frame,
+                    score = FrameSupport(sourceRoom.Geometry, frame, knobs.DeStaircaseFt) })
                 .OrderByDescending(x => x.score)
                 .ThenBy(x => x.index)
                 .ToList();
 
-            if (scores.Count == 0 || scores[0].score < MinFrameSupport)
+            if (scores.Count == 0 || scores[0].score < knobs.MinFrameSupport)
             {
                 Reject(i, FrameLocalRejectionReason.NoCoherentFrame,
                     $"best support {(scores.Count == 0 ? 0 : scores[0].score):P1}");
@@ -135,9 +185,9 @@ internal static class FrameLocalProjector
         var projected = new Dictionary<int, ProjectedRoom>();
         foreach (var frameGroup in assigned.GroupBy(x => x.FrameIndex))
         {
-            foreach (var component in ConnectedComponents(frameGroup.ToList()))
+            foreach (var component in ConnectedComponents(frameGroup.ToList(), knobs))
             {
-                try { SolveComponent(component, projected, rejected); }
+                try { SolveComponent(component, knobs, projected, rejected); }
                 catch (Exception exception)
                 {
                     foreach (var room in component)
@@ -178,7 +228,8 @@ internal static class FrameLocalProjector
         {
             var retryable = rejected
                 .Where(item => item.Value.Reason is FrameLocalRejectionReason.AreaDrift
-                    or FrameLocalRejectionReason.BoundaryDrift)
+                    or FrameLocalRejectionReason.BoundaryDrift
+                    or FrameLocalRejectionReason.SourceFeatureDrop)
                 .Select(item => item.Key)
                 .OrderBy(index => index)
                 .ToList();
@@ -189,10 +240,11 @@ internal static class FrameLocalProjector
                 if (sourceRoom == null || assignment == null) continue;
 
                 var neighborhood = originals.OfType<SourceRoom>()
-                    .Where(other => sourceRoom.Geometry.Distance(other.Geometry) <= ComponentGapFt)
+                    .Where(other => sourceRoom.Geometry.Distance(other.Geometry) <= knobs.ComponentGapFt)
                     .Select(other => CloneRoom(other.Room))
                     .ToList();
-                var local = Project(CloneTakeoff(source, neighborhood), allowLocalRetry: false);
+                var local = Project(
+                    CloneTakeoff(source, neighborhood), knobs, allowLocalRetry: false, declaredZone);
                 var repaired = local.Accepted.Rooms
                     .SingleOrDefault(room => room.Id == sourceRoom.Room.Id);
                 if (repaired == null) continue;
@@ -256,13 +308,18 @@ internal static class FrameLocalProjector
 
     private static void SolveComponent(
         List<Assignment> component,
+        FrameLocalKnobs knobs,
         Dictionary<int, ProjectedRoom> projected,
         Dictionary<int, FrameLocalRejectedRoom> rejected)
     {
         double frame = component[0].Frame;
         var normalized = component.ToDictionary(x => x.Index, x => Rotate(x.Source.Geometry, -frame));
-        var xRails = BuildRails(normalized.Values, vertical: true);
-        var yRails = BuildRails(normalized.Values, vertical: false);
+        // Rails come from de-staircased copies: a rotated room's raster steps land at ±45 in its own
+        // frame and would otherwise contribute nothing. Cell ownership keeps the raw geometry.
+        var railSource = normalized.Values
+            .Select(geometry => DeStaircase(geometry, knobs.DeStaircaseFt)).ToList();
+        var xRails = BuildRails(railSource, knobs, vertical: true);
+        var yRails = BuildRails(railSource, knobs, vertical: false);
         if (xRails.Count < 2 || yRails.Count < 2)
         {
             foreach (var room in component)
@@ -312,34 +369,66 @@ internal static class FrameLocalProjector
                 continue;
             }
 
+            // Both drifts are measured BEFORE any of them gates, so every rejection from here down
+            // carries how far the projection actually wandered — including rejections that had
+            // nothing to do with drift. That is what turns "the tolerance rejected it" into "the
+            // tolerance would have had to reach X", which is the only form a tolerance sweep can act
+            // on. Measuring costs one extra Hausdorff per doomed room and buys the whole miss
+            // attribution; guessing the magnitudes afterwards is not available at any price.
+            double areaDrift = Math.Abs(candidate.Area - room.Source.Geometry.Area) /
+                               Math.Max(room.Source.Geometry.Area, Epsilon);
+            double boundaryDrift = DiscreteHausdorffDistance.Distance(
+                room.Source.Geometry.Boundary, candidate.Boundary);
+            // The symmetric Hausdorff above is one number for two different failures, and they are
+            // not equally dishonest. projected->source is INVENTION: an accepted boundary standing
+            // where the detector proposed nothing. source->projected is a DROP: a thin source
+            // appendage the rail lattice swallowed. Invention has no other backstop and stays on the
+            // tight tolerance; a drop is already bounded twice over — by the area-drift gate above,
+            // and downstream by ink-backing, which refuses any accepted boundary that no ink
+            // supports. Measuring them together made a 547 sf room with a 0.3 ft-wide spike
+            // indistinguishable from a room whose walls had wandered off the evidence.
+            double sourceDrop = new DiscreteHausdorffDistance(
+                room.Source.Geometry.Boundary, candidate.Boundary).OrientedDistance();
+            double invention = new DiscreteHausdorffDistance(
+                candidate.Boundary, room.Source.Geometry.Boundary).OrientedDistance();
+            string probe = $"frameDeg={frame * 180 / Math.PI:F2} " +
+                $"support={FrameSupport(room.Source.Geometry, frame, knobs.DeStaircaseFt):F3} " +
+                $"srcArea={room.Source.Geometry.Area:F0} " +
+                $"drop={sourceDrop:F2} invent={invention:F2}";
+
             var label = Factory.CreatePoint(new Coordinate(room.Source.Room.LabelX, room.Source.Room.LabelY));
             if (!candidate.Covers(label))
             {
-                Reject(room, FrameLocalRejectionReason.LabelOutside, "source label is outside projected room");
+                Reject(room, FrameLocalRejectionReason.LabelOutside, "source label is outside projected room",
+                    areaDrift, boundaryDrift);
                 continue;
             }
 
-            double areaDrift = Math.Abs(candidate.Area - room.Source.Geometry.Area) /
-                               Math.Max(room.Source.Geometry.Area, Epsilon);
-            if (areaDrift > MaxAreaDrift)
+            if (areaDrift > knobs.MaxAreaDrift)
             {
-                Reject(room, FrameLocalRejectionReason.AreaDrift, $"area drift {areaDrift:P1}");
+                Reject(room, FrameLocalRejectionReason.AreaDrift, $"area drift {areaDrift:P1} {probe}",
+                    areaDrift, boundaryDrift);
                 continue;
             }
 
-            double boundaryDrift = DiscreteHausdorffDistance.Distance(
-                room.Source.Geometry.Boundary, candidate.Boundary);
-            if (boundaryDrift > MaxBoundaryDriftFt)
+            if (invention > knobs.MaxBoundaryDriftFt)
             {
                 Reject(room, FrameLocalRejectionReason.BoundaryDrift,
-                    $"boundary drift {boundaryDrift:F2} ft");
+                    $"boundary drift {boundaryDrift:F2} ft {probe}", areaDrift, boundaryDrift);
+                continue;
+            }
+
+            if (sourceDrop > knobs.MaxSourceDropFt)
+            {
+                Reject(room, FrameLocalRejectionReason.SourceFeatureDrop,
+                    $"source feature drop {sourceDrop:F2} ft {probe}", areaDrift, boundaryDrift);
                 continue;
             }
 
             if (HasMicroStepRun(polygon))
             {
                 Reject(room, FrameLocalRejectionReason.MicroStepRun,
-                    "three or more consecutive handle-scale edges remain");
+                    "three or more consecutive handle-scale edges remain", areaDrift, boundaryDrift);
                 continue;
             }
 
@@ -347,12 +436,14 @@ internal static class FrameLocalProjector
                 room.Index, room.FrameIndex, room.Source, (Polygon)candidate.Copy()));
         }
 
-        void Reject(Assignment room, FrameLocalRejectionReason reason, string detail) =>
-            rejected.TryAdd(room.Index,
-                new FrameLocalRejectedRoom(CloneRoom(room.Source.Room), reason, detail));
+        void Reject(Assignment room, FrameLocalRejectionReason reason, string detail,
+            double? areaDrift = null, double? boundaryDriftFt = null) =>
+            rejected.TryAdd(room.Index, new FrameLocalRejectedRoom(
+                CloneRoom(room.Source.Room), reason, detail, areaDrift, boundaryDriftFt));
     }
 
-    private static List<List<Assignment>> ConnectedComponents(List<Assignment> rooms)
+    private static List<List<Assignment>> ConnectedComponents(
+        List<Assignment> rooms, FrameLocalKnobs knobs)
     {
         var remaining = rooms.ToDictionary(x => x.Index);
         var result = new List<List<Assignment>>();
@@ -367,7 +458,8 @@ internal static class FrameLocalProjector
             {
                 var current = queue.Dequeue();
                 var neighbors = remaining.Values
-                    .Where(other => current.Source.Geometry.Distance(other.Source.Geometry) <= ComponentGapFt)
+                    .Where(other => current.Source.Geometry.Distance(other.Source.Geometry)
+                        <= knobs.ComponentGapFt)
                     .OrderBy(x => x.Index)
                     .ToList();
                 foreach (var neighbor in neighbors)
@@ -382,7 +474,8 @@ internal static class FrameLocalProjector
         return result;
     }
 
-    private static List<double> BuildRails(IEnumerable<Geometry> geometries, bool vertical)
+    private static List<double> BuildRails(
+        IEnumerable<Geometry> geometries, FrameLocalKnobs knobs, bool vertical)
     {
         var observations = new List<(double offset, double min, double max, double weight)>();
         foreach (var geometry in geometries)
@@ -392,21 +485,21 @@ internal static class FrameLocalProjector
             double axisError = vertical
                 ? AngleDifference90(angle, Math.PI / 2)
                 : AngleDifference90(angle, 0);
-            if (axisError > AxisToleranceRad || edge.length < MinEdgeFt) continue;
+            if (axisError > AxisToleranceRad || edge.length < knobs.MinRailEdgeFt) continue;
             observations.Add(vertical
                 ? ((edge.a.X + edge.b.X) / 2, Math.Min(edge.a.Y, edge.b.Y), Math.Max(edge.a.Y, edge.b.Y), edge.length)
                 : ((edge.a.Y + edge.b.Y) / 2, Math.Min(edge.a.X, edge.b.X), Math.Max(edge.a.X, edge.b.X), edge.length));
         }
 
         var rails = new List<double>();
-        foreach (var cluster in ClusterByOffset(observations))
+        foreach (var cluster in ClusterByOffset(observations, knobs.RailMergeFt))
         {
             var spans = cluster.OrderBy(x => x.min).ToList();
             double start = spans[0].min, end = spans[0].max;
             var run = new List<(double offset, double min, double max, double weight)> { spans[0] };
             for (int i = 1; i < spans.Count; i++)
             {
-                if (spans[i].min - end <= RailGapFt)
+                if (spans[i].min - end <= knobs.RailGapFt)
                 {
                     end = Math.Max(end, spans[i].max);
                     run.Add(spans[i]);
@@ -420,19 +513,19 @@ internal static class FrameLocalProjector
             rails.Add(WeightedOffset(run));
         }
 
-        return ClusterScalars(rails, RailMergeFt)
+        return ClusterScalars(rails, knobs.RailMergeFt)
             .Select(cluster => cluster.Average())
             .OrderBy(x => x)
             .ToList();
     }
 
     private static List<List<(double offset, double min, double max, double weight)>> ClusterByOffset(
-        List<(double offset, double min, double max, double weight)> values)
+        List<(double offset, double min, double max, double weight)> values, double railMergeFt)
     {
         var result = new List<List<(double, double, double, double)>>();
         foreach (var value in values.OrderBy(x => x.offset))
         {
-            if (result.Count == 0 || value.offset - WeightedOffset(result[^1]) > RailMergeFt)
+            if (result.Count == 0 || value.offset - WeightedOffset(result[^1]) > railMergeFt)
                 result.Add(new List<(double, double, double, double)>());
             result[^1].Add(value);
         }
@@ -454,13 +547,58 @@ internal static class FrameLocalProjector
         return result;
     }
 
+    // A rotated wall traced from the raster is a staircase of cell-scale axis-aligned steps, and a
+    // staircase folds its entire length into the axis bin — the true frame is invisible to any
+    // raw-edge histogram. Simplifying first melts the stairs back into the diagonals they sample,
+    // so angle measurement always happens on de-rasterized geometry.
+    private static Geometry DeStaircase(Geometry geometry, double toleranceFt)
+    {
+        if (toleranceFt <= 0) return geometry;
+        var simplified = NetTopologySuite.Simplify.DouglasPeuckerSimplifier
+            .Simplify(geometry, toleranceFt);
+        return simplified.IsValid && simplified.Area > Epsilon ? simplified : geometry;
+    }
+
+    /// <summary>
+    /// Replaces a measured frame with the declared zone's own angle when the two agree to within
+    /// <paramref name="snapDegrees"/>.
+    /// </summary>
+    /// <remarks>
+    /// A frame measured off raster boundaries carries chord noise of a few tenths of a degree — on
+    /// the project-a 45-degree wing the estimate lands at 45.27 against a zone drawn at exactly 45.00.
+    /// That 0.27 is inside the measurement's own noise but OUTSIDE the 0.25-degree tolerance the
+    /// canonical editability audit allows, so every zone-fit clip along the declared edge reads as
+    /// OffFrameEdge, falls back, and dies at the scope gate. Where a declared angle exists and the
+    /// measurement already agrees with it, the declaration is simply the better number: it is known
+    /// rather than estimated. Beyond the margin the two are different frames and the measurement is
+    /// left alone, so a zone drawn at an angle the rooms do not share can never bend them.
+    /// </remarks>
+    private static List<double> SnapToDeclaredFrames(
+        List<double> frames, Geometry? declaredZone, double snapDegrees)
+    {
+        if (declaredZone == null || snapDegrees <= 0 || frames.Count == 0) return frames;
+        var declared = DominantFrames([declaredZone], deStaircaseFt: 0);
+        if (declared.Count == 0) return frames;
+        double tolerance = snapDegrees * Math.PI / 180;
+        return frames.Select(frame =>
+        {
+            var nearest = declared
+                .Where(angle => AngleDifference90(angle, frame) <= tolerance)
+                .OrderBy(angle => AngleDifference90(angle, frame))
+                .ToList();
+            return nearest.Count == 0 ? frame : nearest[0];
+        }).ToList();
+    }
+
     // Matches the strict core's length-weighted modulo-90 histogram and circular mean, without
     // importing its detector internals. The frames therefore come from each level's own edges.
-    private static List<double> DominantFrames(IEnumerable<Geometry> geometries)
+    private static List<double> DominantFrames(
+        IEnumerable<Geometry> geometries, double deStaircaseFt)
     {
         const int bins = 30;
         var histogram = new double[bins];
-        var edges = geometries.SelectMany(Edges).Where(x => x.length >= MinEdgeFt).ToList();
+        var edges = geometries.Select(geometry => DeStaircase(geometry, deStaircaseFt))
+            .SelectMany(Edges).Where(x => x.length >= MinEdgeFt).ToList();
         foreach (var edge in edges)
         {
             double folded = Fold90(Math.Atan2(edge.b.Y - edge.a.Y, edge.b.X - edge.a.X));
@@ -490,9 +628,10 @@ internal static class FrameLocalProjector
         return selected;
     }
 
-    private static double FrameSupport(Geometry geometry, double frame)
+    private static double FrameSupport(Geometry geometry, double frame, double deStaircaseFt)
     {
-        var edges = Edges(geometry).Where(x => x.length >= MinEdgeFt).ToList();
+        var edges = Edges(DeStaircase(geometry, deStaircaseFt))
+            .Where(x => x.length >= MinEdgeFt).ToList();
         double total = edges.Sum(x => x.length);
         if (total <= Epsilon) return 0;
         return edges.Where(x => AngleDifference90(
@@ -572,20 +711,10 @@ internal static class FrameLocalProjector
 
     private static SourceRoom ToSourceRoom(RoomResult room)
     {
-        var shell = ToRing(room.Polygon);
-        var holes = room.Holes.Select(ToRing).ToArray();
-        var polygon = Factory.CreatePolygon(shell, holes);
+        var polygon = TakeoffGeometry.ToPolygon(room, Factory);
         if (!polygon.IsValid || polygon.Area <= Epsilon)
             throw new ArgumentException("Room polygon is invalid.");
         return new SourceRoom(room, polygon);
-    }
-
-    private static LinearRing ToRing(List<double[]> points)
-    {
-        if (points.Count < 3) throw new ArgumentException("Room loop needs at least three points.");
-        var coordinates = points.Select(p => new Coordinate(p[0], p[1])).ToList();
-        if (!coordinates[0].Equals2D(coordinates[^1])) coordinates.Add(coordinates[0].Copy());
-        return Factory.CreateLinearRing(coordinates.ToArray());
     }
 
     private static Geometry Rotate(Geometry geometry, double radians) =>
@@ -638,7 +767,7 @@ internal static class FrameLocalProjector
         if (!collapseCollinear)
         {
             var raw = coordinates.Select(x => new[] { x.X, x.Y }).ToList();
-            if ((SignedArea(raw) > 0) != counterClockwise) raw.Reverse();
+            if ((TakeoffGeometry.SignedArea(raw) > 0) != counterClockwise) raw.Reverse();
             return raw;
         }
         bool changed;
@@ -663,7 +792,7 @@ internal static class FrameLocalProjector
         } while (changed);
 
         var points = coordinates.Select(x => new[] { x.X, x.Y }).ToList();
-        if ((SignedArea(points) > 0) != counterClockwise) points.Reverse();
+        if ((TakeoffGeometry.SignedArea(points) > 0) != counterClockwise) points.Reverse();
         return points;
     }
 
@@ -674,18 +803,6 @@ internal static class FrameLocalProjector
             return new TakeoffRoomShape(room.Id, room.RawSqft, room.PerimeterFt, room.MeanCeilingFt,
                 room.Polygon, room.Holes) { Label = new[] { room.LabelX, room.LabelY } };
         }).ToList());
-
-    private static double SignedArea(List<double[]> points)
-    {
-        double area = 0;
-        for (int i = 0; i < points.Count; i++)
-        {
-            var a = points[i];
-            var b = points[(i + 1) % points.Count];
-            area += a[0] * b[1] - b[0] * a[1];
-        }
-        return area / 2;
-    }
 
     private static List<double[]> Copy(List<double[]> points) =>
         points.Select(x => new[] { x[0], x[1] }).ToList();

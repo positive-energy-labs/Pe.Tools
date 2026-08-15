@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Effect, FileSystem } from "effect";
@@ -9,14 +9,10 @@ import { expect, test } from "vite-plus/test";
 import type {
   RhvacAssemblyCatalogData,
   RhvacExtractData,
-  RhvacRoomData,
-  RhvacSaveResult,
   RhvacTakeoffData,
-  RhvacTakeoffResolutionsResult,
 } from "@pe/host-contracts/operation-types";
 import type { RevitBridge } from "../src/bridge.ts";
 import { dispatchTsOnlyOperation, InvalidHostRequest } from "../src/call-route.ts";
-import { LocalOpError } from "../src/local-error.ts";
 import { rhvacScriptDirectory } from "../src/rhvac-ops.ts";
 
 /**
@@ -62,143 +58,92 @@ test("rhvac ops validate inputs without touching the Jet lane", async () => {
     _tag: "LocalOpError",
     statusCode: 400,
   });
-  await expect(
-    dispatch("rhvac.save", {
-      sourcePath: "C:\\nope\\missing.r10",
-      outputPath: "C:\\nope\\missing.r10",
-      edits: { updates: [], deletes: [] },
-    }),
-    // missing source reports 404 before the same-path refusal is even reached
-  ).rejects.toBeInstanceOf(LocalOpError);
   await expect(dispatch("rhvac.takeoff", { path: "C:\\nope\\project.txt" })).rejects.toMatchObject({
     _tag: "LocalOpError",
     statusCode: 400,
   });
-  await expect(
-    dispatch("rhvac.takeoff-resolutions", {
-      path: "C:\\nope\\project.txt",
-      resolutions: { version: 1, resolutions: [] },
-    }),
-  ).rejects.toMatchObject({ _tag: "LocalOpError", statusCode: 400 });
-  await expect(
-    dispatch("rhvac.takeoff-resolutions", { path: "C:\\nope\\missing.r10" }),
-  ).rejects.toMatchObject({ _tag: "LocalOpError", statusCode: 404 });
+  await expect(dispatch("rhvac.launch", { path: "C:\\nope\\project.pdf" })).rejects.toMatchObject({
+    _tag: "LocalOpError",
+    statusCode: 400,
+  });
+  await expect(dispatch("rhvac.launch", { path: "C:\\nope\\missing.r10" })).rejects.toMatchObject({
+    _tag: "LocalOpError",
+    statusCode: 404,
+  });
 });
 
-test("rhvac.takeoff-resolutions reads and writes a deterministic sidecar", async () => {
-  const projectDir = mkdtempSync(join(tmpdir(), "pe-rhvac-resolutions-"));
+test("rhvac.sync refuses malformed syncs before it can touch a file", async () => {
+  const projectDir = mkdtempSync(join(tmpdir(), "pe-rhvac-sync-"));
   try {
-    const input = {
-      path: join(projectDir, "project.r10"),
-      resolutions: {
-        version: 2 as const,
-        tsvSha256: { "Level 2": "hash-2", "Level 1": "hash-1" },
-        resolutions: [
-          {
-            candidateKey: "Level 2:R09",
-            flag: "open-plan-merge",
-            action: "accept" as const,
-            anchor: { label: [20, 9] as [number, number], sqft: 900 },
-          },
-          {
-            candidateKey: "Level 1:R03",
-            flag: "low-evidence-boundary",
-            action: "accept" as const,
-            anchor: { label: [10, 3] as [number, number], sqft: 300 },
-          },
-          {
-            candidateKey: "Level 1:R05",
-            flag: "seedless",
-            action: "reject" as const,
-            anchor: { label: [30, 5] as [number, number], sqft: 100 },
-          },
-          {
-            candidateKey: "Level 1:R04",
-            flag: "low-evidence-boundary",
-            action: "merge" as const,
-            params: {
-              other: "Level 1:R03",
-              anchor: { label: [10, 3] as [number, number], sqft: 300 },
-            },
-            anchor: { label: [20, 3] as [number, number], sqft: 200 },
-          },
-        ],
-      },
-    };
-    writeFileSync(input.path, "");
-    await expect(
-      dispatch("rhvac.takeoff-resolutions", {
-        path: input.path,
-        resolutions: {
-          version: 2,
-          resolutions: [
-            {
-              candidateKey: "Level 1:R01",
-              flag: "low-evidence-boundary",
-              action: "merge",
-              anchor: { label: [5, 5], sqft: 100 },
-            },
-          ],
-        },
-      }),
-    ).rejects.toBeInstanceOf(InvalidHostRequest);
-    await expect(
-      dispatch("rhvac.takeoff-resolutions", {
-        path: input.path,
-        resolutions: {
-          version: 2,
-          resolutions: [
-            {
-              candidateKey: "Level 1:R01",
-              flag: "low-evidence-boundary",
-              action: "reject",
-              params: { other: "Level 1:R02", anchor: { label: [15, 5], sqft: 100 } },
-            },
-          ],
-        },
-      }),
-    ).rejects.toBeInstanceOf(InvalidHostRequest);
-    const missing = await dispatch<RhvacTakeoffResolutionsResult>("rhvac.takeoff-resolutions", {
-      path: input.path,
-    });
-    expect(missing).toEqual({
-      savedPath: join(projectDir, "takeoff-resolutions.json"),
-      resolutions: null,
+    const targetPath = join(projectDir, "project.r10");
+    writeFileSync(targetPath, "");
+    const room = (overrides: Record<string, unknown> = {}) => ({
+      number: 101,
+      name: "Great Room",
+      systemNumber: 3,
+      zoneNumber: 1,
+      areaSquareFeet: 420,
+      ceilingHeightFeet: 10,
+      people: 0,
+      lightingWatts: 105,
+      equipmentSensibleBtuh: 0,
+      equipmentLatentBtuh: 0,
+      ventilationCfm: 40,
+      floors: [],
+      roofs: [],
+      walls: [
+        { index1: 1, assembly: "W", uValue: 0.06, lengthFeet: 20, heightFeet: 10, direction: 0 },
+      ],
+      glass: [],
+      doors: [],
+      ...overrides,
     });
 
-    const saved = await dispatch<RhvacTakeoffResolutionsResult>("rhvac.takeoff-resolutions", input);
-    expect(saved.savedPath).toBe(join(projectDir, "takeoff-resolutions.json"));
-    const expected = {
-      version: 2 as const,
-      tsvSha256: { "Level 1": "hash-1", "Level 2": "hash-2" },
-      resolutions: [
-        input.resolutions.resolutions[1],
-        input.resolutions.resolutions[3],
-        input.resolutions.resolutions[2],
-        input.resolutions.resolutions[0],
-      ],
-    };
-    expect(saved.resolutions).toEqual(expected);
-    expect(readFileSync(saved.savedPath, "utf8")).toBe(`${JSON.stringify(expected, null, 2)}\n`);
-    expect(
-      await dispatch<RhvacTakeoffResolutionsResult>("rhvac.takeoff-resolutions", {
-        path: input.path,
-      }),
-    ).toEqual(saved);
-    const oldVerbV2 = {
-      version: 2 as const,
-      resolutions: [input.resolutions.resolutions[1]],
-    };
-    writeFileSync(saved.savedPath, `${JSON.stringify(oldVerbV2, null, 2)}\n`);
-    expect(
-      await dispatch<RhvacTakeoffResolutionsResult>("rhvac.takeoff-resolutions", {
-        path: input.path,
-      }),
-    ).toEqual({ savedPath: saved.savedPath, resolutions: oldVerbV2 });
-    writeFileSync(saved.savedPath, "");
+    // Nothing to do is a caller bug, not a no-op write.
     await expect(
-      dispatch("rhvac.takeoff-resolutions", { path: input.path }),
-    ).rejects.toBeInstanceOf(LocalOpError);
+      dispatch("rhvac.sync", { targetPath, inserts: [], updates: [] }),
+    ).rejects.toMatchObject({ _tag: "LocalOpError", statusCode: 400 });
+    // A room pointing at a system the caller never listed would orphan in Jet, which enforces nothing.
+    await expect(
+      dispatch("rhvac.sync", {
+        targetPath,
+        inserts: [room()],
+        updates: [],
+        systems: [{ number: 1, name: "Down" }],
+      }),
+    ).rejects.toMatchObject({ _tag: "LocalOpError", statusCode: 400 });
+    // A window hanging off a wall ordinal the room does not have.
+    await expect(
+      dispatch("rhvac.sync", {
+        targetPath,
+        inserts: [
+          room({
+            glass: [
+              {
+                assembly: "G",
+                uValue: 0.3,
+                widthFeet: 4,
+                heightFeet: 5,
+                wallReference: 9,
+                shgc: 0.25,
+                occurrences: 1,
+              },
+            ],
+          }),
+        ],
+        updates: [],
+        systems: [{ number: 3, name: "IU-3" }],
+      }),
+    ).rejects.toMatchObject({ _tag: "LocalOpError", statusCode: 400 });
+    // An insert carrying an identifier is a shape error: Jet's COUNTER assigns it.
+    await expect(
+      dispatch("rhvac.sync", {
+        targetPath,
+        inserts: [room({ identifier: 7 })],
+        updates: [],
+        systems: [{ number: 3, name: "IU-3" }],
+      }),
+    ).rejects.toBeInstanceOf(InvalidHostRequest);
   } finally {
     rmSync(projectDir, { recursive: true, force: true });
   }
@@ -234,7 +179,7 @@ test("rhvac.takeoff without takeoff data is empty, not an error", async () => {
 });
 
 test.skipIf(!laneAvailable)(
-  "rhvac open → assemblies → save → re-open round-trip on the project-a copy",
+  "rhvac open → assemblies on the project-a copy",
   { timeout: 600_000 },
   async () => {
     // --- open: 150 rooms, real identifiers ---
@@ -252,67 +197,6 @@ test.skipIf(!laneAvailable)(
     for (const category of ["floors", "roofs", "walls", "glass", "doors"] as const) {
       expect(catalog[category].length).toBeGreaterThan(0);
       expect(catalog[category][0].name.length).toBeGreaterThan(0);
-    }
-
-    // --- save: edit one projection-stable room, delete one other room ---
-    // Projection-stable = compacted wall ordinals and wall-major opening order,
-    // so re-extract reproduces everything but the intended edits verbatim
-    // (rooms with zero-row padding legitimately re-extract with renumbered
-    // ordinals — same selection rule as eval/rhvac/edit-check.ps1).
-    const isEditable = (room: RhvacRoomData) =>
-      room.walls.length > 0 &&
-      room.glass.length > 0 &&
-      room.walls.every((wall, i) => wall.index1 === i + 1) &&
-      (
-        [room.glass.map((g) => g.wallReference), room.doors.map((d) => d.wallReference)] as const
-      ).every(
-        (refs) =>
-          refs.every((ref) => ref >= 1 && ref <= room.walls.length) &&
-          refs.every((ref, i) => i === 0 || ref >= refs[i - 1]),
-      );
-    const target = extract.rooms.find(isEditable);
-    expect(target).toBeDefined();
-    const victim = [...extract.rooms].reverse().find((r) => r.identifier !== target!.identifier);
-    expect(victim).toBeDefined();
-
-    const editedRoom = { ...target!, areaSquareFeet: target!.areaSquareFeet + 25 };
-    const workDir = mkdtempSync(join(tmpdir(), "pe-rhvac-smoke-"));
-    const outputPath = join(workDir, "projectA.edited.r10");
-    try {
-      const saved = await dispatch<RhvacSaveResult>("rhvac.save", {
-        sourcePath: ProjectAR10,
-        outputPath,
-        edits: { updates: [editedRoom], deletes: [victim!.identifier] },
-      });
-      expect(saved).toEqual({ outputPath, updated: 1, deleted: 1 });
-      expect(existsSync(outputPath)).toBe(true);
-
-      // --- re-open: exactly the intended edits, everything else identical ---
-      const after = await dispatch<RhvacExtractData>("rhvac.open", { path: outputPath });
-      expect(after.rooms.length).toBe(149);
-      expect(after.rooms.some((room) => room.identifier === victim!.identifier)).toBe(false);
-
-      const targetAfter = after.rooms.find((room) => room.identifier === target!.identifier)!;
-      expect(targetAfter.areaSquareFeet).toBeCloseTo(target!.areaSquareFeet + 25, 2);
-      // Neutralize the intended edit (float32 quantization), then projection-identical.
-      expect({ ...targetAfter, areaSquareFeet: 0 }).toEqual({ ...target!, areaSquareFeet: 0 });
-
-      const untouchedBefore = extract.rooms.filter(
-        (room) => room.identifier !== target!.identifier && room.identifier !== victim!.identifier,
-      );
-      const afterById = new Map(after.rooms.map((room) => [room.identifier, room]));
-      for (const room of untouchedBefore) expect(afterById.get(room.identifier)).toEqual(room);
-
-      // save refuses sourcePath == outputPath
-      await expect(
-        dispatch("rhvac.save", {
-          sourcePath: outputPath,
-          outputPath,
-          edits: { updates: [], deletes: [victim!.identifier] },
-        }),
-      ).rejects.toMatchObject({ _tag: "LocalOpError", statusCode: 400 });
-    } finally {
-      rmSync(workDir, { recursive: true, force: true });
     }
   },
 );

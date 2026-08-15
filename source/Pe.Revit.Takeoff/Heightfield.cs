@@ -112,6 +112,7 @@ public sealed class Heightfield
             {
                 foreach (Face f in s.Faces)
                 {
+                    if (f is PlanarFace planar && IsVertical(planar.FaceNormal, xf)) continue;
                     Mesh? m; try { m = f.Triangulate(); } catch { continue; }
                     if (m != null) n += StampMesh(m, xf, hf, lvlZ, opt);
                 }
@@ -124,6 +125,13 @@ public sealed class Heightfield
             }
         }
         return n;
+    }
+
+    private static bool IsVertical(XYZ normal, Transform transform)
+    {
+        XYZ transformed = transform.OfVector(normal);
+        double length = transformed.GetLength();
+        return length > 1e-12 && Math.Abs(transformed.Z) / length < 0.5;
     }
 
     private static int StampMesh(Mesh m, Transform xf, Heightfield hf, double lvlZ, TakeoffOptions opt)

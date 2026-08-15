@@ -6,6 +6,23 @@ namespace Pe.Takeoff.Tests;
 public sealed class TakeoffEvidenceFidelityTests
 {
     [Test]
+    public void Snapshot_ink_distance_uses_captured_grid_in_model_feet()
+    {
+        var snapshot = new DetectSnapshot {
+            Field = new Heightfield { W = 3, H = 3, MinX = 10, MinY = 20, CellFt = 0.5 },
+            SeedInk = new[] { false, false, false, false, true, false, false, false, false },
+        };
+
+        var distance = snapshot.SeedInkDistance();
+
+        Assert.Multiple(() => {
+            Assert.That(distance(10.75, 20.75), Is.Zero);
+            Assert.That(distance(11.25, 20.75), Is.EqualTo(0.5).Within(1e-9));
+            Assert.That(distance(9, 20), Is.EqualTo(double.PositiveInfinity));
+        });
+    }
+
+    [Test]
     public void Exposed_edge_parallel_to_ink_is_rejected_at_half_foot_offset()
     {
         var rooms = new[] { Rect("room", 0, 0, 10, 8) };

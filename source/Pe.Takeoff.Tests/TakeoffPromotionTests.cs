@@ -6,24 +6,181 @@ namespace Pe.Takeoff.Tests;
 public sealed class TakeoffPromotionTests
 {
     [Test]
-    public void Keeps_orthogonal_room_and_rejects_triangle_whole()
+    public void Zone_promotion_returns_strict_disposition_and_non_gating_diagnostics()
     {
-        var result = new TakeoffResult {
+        var accepted = Room("good", (0, 0), (10, 0), (10, 8), (0, 8));
+        var rejected = Room("bad", (20, 0), (25, 5), (20, 10));
+        accepted.RawSqft = 80;
+        rejected.RawSqft = 50;
+        var source = new TakeoffResult {
             LevelName = "Level 1",
-            Rooms = {
-                Room("good", (0, 0), (10, 0), (10, 8), (0, 8)),
-                Room("bad", (20, 0), (25, 5), (20, 10)),
+            Rooms = { accepted, rejected },
+            DomainSqft = 130,
+        };
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, Zone("all", (0, 0), (30, 0), (30, 10), (0, 10)),
+            Options(minimumRoomSqft: 0), (_, _) => 0);
+
+        Assert.Multiple(() => {
+            Assert.That(promotion.Result.Rooms.Select(room => room.Id), Is.EqualTo(new[] { "good" }));
+            Assert.That(promotion.Result.Residues.Single(residue =>
+                residue.Reason == ResidueReason.Rejected).Id, Is.EqualTo("bad"));
+            Assert.That(promotion.Diagnostics.SourceRooms, Is.EqualTo(2));
+            Assert.That(promotion.Diagnostics.SharedNetworkStrictRooms, Is.GreaterThanOrEqualTo(1));
+            Assert.That(promotion.Diagnostics.AcceptedRooms, Is.EqualTo(1));
+            Assert.That(promotion.Diagnostics.HeldRooms, Is.EqualTo(1));
+            Assert.That(promotion.Diagnostics.Rejections.Single().Key, Does.StartWith("frame:"));
+            Assert.That(promotion.Diagnostics.Rejections.Single().Value, Is.EqualTo(1));
+            Assert.That(promotion.Diagnostics.RejectionDetails["bad"],
+                Does.StartWith("frame:"));
+            Assert.That(promotion.Diagnostics.InkBackedEdgeFraction, Is.EqualTo(1).Within(1e-9));
+            Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
+            Assert.That(promotion.Diagnostics.IsStrictlyEditable, Is.True);
+            Assert.That(source.Rooms, Has.Count.EqualTo(2), "promotion must not mutate raw partition evidence");
+            Assert.That(source.Residues, Is.Empty);
+        });
+    }
+
+    [Test]
+    public void Zone_promotion_is_deterministic()
+    {
+        var source = new TakeoffResult {
+            LevelName = "Level 1",
+            Rooms = { Room("good", (0, 0), (10, 0), (10, 8), (0, 8)) },
+            DomainSqft = 80,
+        };
+
+        var zone = Zone("room", (0, 0), (10, 0), (10, 8), (0, 8));
+        var first = TakeoffPromotion.PromoteZone(source, zone, Options(0), (_, _) => 0);
+        var second = TakeoffPromotion.PromoteZone(source, zone, Options(0), (_, _) => 0);
+
+        Assert.Multiple(() => {
+            Assert.That(second.Result.ToTsv(), Is.EqualTo(first.Result.ToTsv()));
+            Assert.That(second.Diagnostics with {
+                    Rejections = first.Diagnostics.Rejections,
+                    RejectionDetails = first.Diagnostics.RejectionDetails,
+                },
+                Is.EqualTo(first.Diagnostics));
+            Assert.That(second.Diagnostics.Rejections, Is.EqualTo(first.Diagnostics.Rejections));
+            Assert.That(second.Diagnostics.RejectionDetails,
+                Is.EqualTo(first.Diagnostics.RejectionDetails));
+        });
+    }
+
+    [Test]
+    public void Zone_promotion_represents_uncaptured_scope_as_explicit_excluded_residue()
+    {
+        var source = new TakeoffResult {
+            LevelName = "Level 1",
+            Rooms = { Room("room", (0, 0), (10, 0), (10, 10), (0, 10)) },
+            DomainSqft = 100,
+        };
+        var zone = Zone("double", (0, 0), (20, 0), (20, 10), (0, 10));
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, zone, Options(minimumRoomSqft: 0), (_, _) => 0);
+
+        Assert.Multiple(() => {
+            Assert.That(promotion.Diagnostics.ZoneSqft, Is.EqualTo(200).Within(1e-9));
+            Assert.That(promotion.Diagnostics.AcceptedSqft, Is.EqualTo(100).Within(1e-9));
+            Assert.That(promotion.Diagnostics.ExcludedSqft, Is.EqualTo(100).Within(1e-9));
+            Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
+            Assert.That(promotion.Diagnostics.IsContained, Is.True);
+            Assert.That(promotion.Result.Residues.Single().Reason,
+                Is.EqualTo(ResidueReason.Excluded));
+        });
+    }
+
+    [Test]
+    public void Orthogonal_projection_that_leaves_zone_holds_the_room_whole()
+    {
+        var trapezoid = Room("room", (0, 0), (9, 0), (10, 10), (0, 10));
+        trapezoid.RawSqft = 95;
+        var source = new TakeoffResult {
+            LevelName = "Level 1", Rooms = { trapezoid }, DomainSqft = 95,
+        };
+        var zone = Zone("trapezoid", (0, 0), (9, 0), (10, 10), (0, 10));
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, zone, Options(minimumRoomSqft: 0, boundarySimplifyFt: 0), (_, _) => 0,
+            TestContext.Out.WriteLine);
+
+        Assert.Multiple(() => {
+            Assert.That(promotion.Result.Rooms, Is.Empty);
+            Assert.That(promotion.Result.Residues.Count(residue =>
+                residue.Reason == ResidueReason.Rejected), Is.EqualTo(1));
+            Assert.That(promotion.Diagnostics.HeldSqft, Is.EqualTo(95).Within(1e-6));
+            Assert.That(promotion.Diagnostics.ExcludedSqft, Is.Zero.Within(1e-6));
+            Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
+            Assert.That(promotion.Diagnostics.IsContained, Is.True);
+        });
+    }
+
+    [Test]
+    public void Held_room_count_tracks_source_rooms_not_clipped_residue_pieces()
+    {
+        var source = new TakeoffResult {
+            LevelName = "Level 1",
+            Rooms = { Room("bridge", (0, 0), (30, 0), (30, 10), (0, 10)) },
+            DomainSqft = 300,
+        };
+        var zone = new ZoneScope {
+            Name = "two islands",
+            Loops = {
+                new List<double[]> { new[] { 0d, 0d }, new[] { 10d, 0d },
+                    new[] { 10d, 10d }, new[] { 0d, 10d } },
+                new List<double[]> { new[] { 20d, 0d }, new[] { 30d, 0d },
+                    new[] { 30d, 10d }, new[] { 20d, 10d } },
             },
         };
 
-        var rejected = TakeoffPromotion.RejectUneditable(result);
+        // Clip disarmed on purpose. This test owns the held-count law on the path where a room is
+        // REJECTED and its geometry then falls apart inside the zone — the path zone-fit fell back
+        // to, and the one every zone still takes when fitting fails. Two disjoint islands of equal
+        // area are also the one shape where "keep the largest piece" is a coin flip, so they are the
+        // wrong fixture to pin clip's behavior on; Zone_fit_keeps_only_the_largest_piece does that
+        // with prongs that actually differ.
+        var options = Options(minimumRoomSqft: 0, boundarySimplifyFt: 0);
+        options.ZoneClipEnabled = false;
 
-        Assert.Multiple(() =>
-        {
-            Assert.That(rejected, Is.EqualTo(1));
-            Assert.That(result.Rooms.Select(room => room.Id), Is.EqualTo(new[] { "good" }));
-            Assert.That(result.Residues.Single().Id, Is.EqualTo("bad"));
-            Assert.That(result.Residues.Single().Reason, Is.EqualTo(ResidueReason.Rejected));
+        var promotion = TakeoffPromotion.PromoteZone(source, zone, options, (_, _) => 0);
+
+        Assert.Multiple(() => {
+            Assert.That(promotion.Result.Residues.Count(residue =>
+                residue.Reason == ResidueReason.Rejected), Is.EqualTo(2));
+            Assert.That(promotion.Diagnostics.HeldRooms, Is.EqualTo(1));
+            Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
+        });
+    }
+
+    [Test]
+    public void Adjacent_promoted_rooms_keep_one_exact_shared_orthogonal_edge()
+    {
+        var source = new TakeoffResult {
+            LevelName = "Level 1",
+            Rooms = {
+                Room("left", (0, 0), (5, 0), (5.2, 10), (0, 10)),
+                Room("right", (5, 0), (10, 0), (10, 10), (5.2, 10)),
+            },
+            DomainSqft = 100,
+        };
+        source.Rooms[0].RawSqft = 51;
+        source.Rooms[1].RawSqft = 49;
+        var zone = Zone("shared", (-1, -1), (11, -1), (11, 11), (-1, 11));
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, zone, Options(minimumRoomSqft: 0, boundarySimplifyFt: 0), (_, _) => 0,
+            TestContext.Out.WriteLine);
+
+        Assert.Multiple(() => {
+            string reasons = string.Join(", ", promotion.Diagnostics.Rejections
+                .Select(item => $"{item.Key}={item.Value}"));
+            Assert.That(promotion.Result.Rooms, Has.Count.EqualTo(2), reasons);
+            Assert.That(promotion.Diagnostics.SharedEdgePairs, Is.EqualTo(1));
+            Assert.That(promotion.Diagnostics.LostSharedEdgePairs, Is.Zero);
+            Assert.That(promotion.Diagnostics.IsStrictlyEditable, Is.True);
+            Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
         });
     }
 
@@ -149,6 +306,387 @@ public sealed class TakeoffPromotionTests
         });
     }
 
+    // ---- pre-solve triage ----
+
+    [Test]
+    public void Triage_hold_emits_the_whole_zone_as_one_reasoned_residue()
+    {
+        var source = new TakeoffResult {
+            LevelName = "Level 1",
+            Rooms = { Room("wander", (0, 0), (10, 0), (10, 10), (0, 10)) },
+            DomainSqft = 100,
+        };
+        var zone = Zone("closet", (0, 0), (20, 0), (20, 10), (0, 10));
+        var options = Options(minimumRoomSqft: 0);
+        options.SmallZoneSqft = 750;
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, zone, options, (_, _) => 0, TestContext.Out.WriteLine,
+            new ZoneCensus(200, 10, 0.05, [], 0));
+
+        Assert.Multiple(() => {
+            Assert.That(promotion.Diagnostics.Triage!.IsHold, Is.True);
+            Assert.That(promotion.Diagnostics.Triage!.Reason, Is.EqualTo("small-zone"));
+            Assert.That(promotion.Result.Rooms, Is.Empty, "a held zone never emits a room");
+            Assert.That(promotion.Result.Residues.Single().Id, Is.EqualTo("TRIAGE-HELD:small-zone"));
+            Assert.That(promotion.Result.Residues.Single().Reason,
+                Is.EqualTo(ResidueReason.Rejected));
+            Assert.That(promotion.Diagnostics.HeldSqft, Is.EqualTo(200).Within(1e-9),
+                "the abstention accounts for the entire declared zone");
+            Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
+            Assert.That(promotion.Diagnostics.IsContained, Is.True);
+        });
+    }
+
+    [Test]
+    public void Triage_census_without_an_armed_knob_changes_nothing()
+    {
+        var source = new TakeoffResult {
+            LevelName = "Level 1",
+            Rooms = { Room("room", (0, 0), (10, 0), (10, 10), (0, 10)) },
+            DomainSqft = 100,
+        };
+        var zone = Zone("room", (0, 0), (10, 0), (10, 10), (0, 10));
+
+        var options = Options(minimumRoomSqft: 0);
+        options.SmallZoneSqft = 0; // disarm: this test proves an unarmed census is inert
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, zone, options, (_, _) => 0, null,
+            new ZoneCensus(100, 10, 0.1, [], 0));
+
+        Assert.Multiple(() => {
+            Assert.That(promotion.Diagnostics.Triage!.IsHold, Is.False);
+            Assert.That(promotion.Result.Rooms.Select(room => room.Id), Is.EqualTo(new[] { "room" }));
+        });
+    }
+
+    // ---- post-solve recombination ----
+
+    // A parent wrapping a 2x2 notch on three sides: the notch hands 6 of its 8 ft of perimeter to
+    // exactly one neighbor, which is the whole point of the absorb rule.
+    private static TakeoffResult NotchedPair()
+    {
+        var parent = Room("parent",
+            (0, 0), (10, 0), (10, 12), (6, 12), (6, 10), (4, 10), (4, 12), (0, 12));
+        parent.RawSqft = 116;
+        var notch = Room("notch", (4, 10), (6, 10), (6, 12), (4, 12));
+        notch.RawSqft = 4;
+        return new TakeoffResult {
+            LevelName = "Level 1", Rooms = { parent, notch }, DomainSqft = 120,
+        };
+    }
+
+    [Test]
+    public void Absorb_neighbor_merges_a_room_that_hands_most_of_its_perimeter_to_one_neighbor()
+    {
+        var options = Options(minimumRoomSqft: 0, boundarySimplifyFt: 0);
+        options.AbsorbNeighborMaxSqft = 10;
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            NotchedPair(), Zone("all", (0, 0), (10, 0), (10, 12), (0, 12)),
+            options, (_, _) => 0, TestContext.Out.WriteLine);
+
+        Assert.Multiple(() => {
+            Assert.That(promotion.Result.Rooms.Select(room => room.Id), Is.EqualTo(new[] { "parent" }));
+            Assert.That(promotion.Result.Rooms.Single().RawSqft, Is.EqualTo(120).Within(1e-6));
+            Assert.That(promotion.Result.Rooms.Single().MergedFrom, Is.EqualTo("notch"));
+            Assert.That(promotion.Diagnostics.Rejections["absorb:merged"], Is.EqualTo(1));
+            Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
+        });
+    }
+
+    [Test]
+    public void Absorb_neighbor_is_inert_when_disarmed()
+    {
+        var options = Options(minimumRoomSqft: 0, boundarySimplifyFt: 0);
+        options.AbsorbNeighborMaxSqft = 0;
+        options.EdgeBandFt = 0;
+        var promotion = TakeoffPromotion.PromoteZone(
+            NotchedPair(), Zone("all", (0, 0), (10, 0), (10, 12), (0, 12)),
+            options, (_, _) => 0);
+
+        Assert.Multiple(() => {
+            Assert.That(promotion.Result.Rooms, Has.Count.EqualTo(2));
+            Assert.That(promotion.Diagnostics.Rejections.Keys, Has.No.Member("absorb:merged"));
+        });
+    }
+
+    [Test]
+    public void Edge_band_room_merges_into_its_largest_interior_neighbor()
+    {
+        var rind = Room("rind", (0, 0), (20, 0), (20, 2), (0, 2));
+        rind.RawSqft = 40;
+        var interior = Room("interior", (0, 2), (20, 2), (20, 20), (0, 20));
+        interior.RawSqft = 360;
+        var source = new TakeoffResult {
+            LevelName = "Level 1", Rooms = { rind, interior }, DomainSqft = 400,
+        };
+        var options = Options(minimumRoomSqft: 0, boundarySimplifyFt: 0);
+        options.EdgeBandFt = 2.0;
+        options.AbsorbNeighborMaxSqft = 0; // disarm absorb so the merge is attributable to edge-band
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, Zone("all", (0, 0), (20, 0), (20, 20), (0, 20)),
+            options, (_, _) => 0, TestContext.Out.WriteLine);
+
+        Assert.Multiple(() => {
+            Assert.That(promotion.Result.Rooms.Select(room => room.Id),
+                Is.EqualTo(new[] { "interior" }));
+            Assert.That(promotion.Result.Rooms.Single().RawSqft, Is.EqualTo(400).Within(1e-6));
+            Assert.That(promotion.Diagnostics.Rejections["edgeband:merged"], Is.EqualTo(1));
+            Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
+        });
+    }
+
+    [Test]
+    public void Edge_band_room_with_no_neighbor_is_left_for_the_downstream_gates()
+    {
+        var rind = Room("rind", (0, 0), (20, 0), (20, 2), (0, 2));
+        rind.RawSqft = 40;
+        var source = new TakeoffResult {
+            LevelName = "Level 1", Rooms = { rind }, DomainSqft = 40,
+        };
+        var options = Options(minimumRoomSqft: 0, boundarySimplifyFt: 0);
+        options.EdgeBandFt = 2.0;
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, Zone("all", (0, 0), (20, 0), (20, 20), (0, 20)),
+            options, (_, _) => 0, TestContext.Out.WriteLine);
+
+        Assert.Multiple(() => {
+            Assert.That(promotion.Result.Rooms.Select(room => room.Id), Is.EqualTo(new[] { "rind" }),
+                "recombination has nothing to fold into, so it declines to decide");
+            Assert.That(promotion.Diagnostics.Rejections.Keys,
+                Has.No.Member("edgeband:merged").And.No.Member("edgeband:held"));
+            Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
+        });
+    }
+
+    [Test]
+    public void Absorb_picks_the_neighbor_holding_the_most_shared_perimeter()
+    {
+        // A 2x2 pocket notched into "big" on three sides (6 ft shared) and merely abutting "small"
+        // along its open top edge (2 ft). Two neighbors — the old "exactly one" rule skipped this
+        // shape entirely, which is why the stage never fired on real zones.
+        var big = Room("big",
+            (0, 0), (10, 0), (10, 12), (6, 12), (6, 10), (4, 10), (4, 12), (0, 12));
+        big.RawSqft = 116;
+        var pocket = Room("pocket", (4, 10), (6, 10), (6, 12), (4, 12));
+        pocket.RawSqft = 4;
+        // Vertices at x=4 and x=6 so the three rooms form a valid shared-edge coverage: "small"
+        // meets "big" twice and the pocket once along y=12.
+        var small = Room("small",
+            (0, 12), (4, 12), (6, 12), (10, 12), (10, 16), (0, 16));
+        small.RawSqft = 40;
+        var source = new TakeoffResult {
+            LevelName = "Level 1", Rooms = { big, pocket, small }, DomainSqft = 160,
+        };
+        var options = Options(minimumRoomSqft: 0, boundarySimplifyFt: 0);
+        options.AbsorbNeighborMaxSqft = 10;
+        options.EdgeBandFt = 0; // disarm edge-band: "small" sits half inside the default 2 ft band
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, Zone("all", (0, 0), (10, 0), (10, 16), (0, 16)),
+            options, (_, _) => 0, TestContext.Out.WriteLine);
+
+        Assert.Multiple(() => {
+            Assert.That(promotion.Diagnostics.Rejections["absorb:merged"], Is.EqualTo(1));
+            Assert.That(promotion.Result.Rooms.Select(room => room.Id),
+                Is.EquivalentTo(new[] { "big", "small" }));
+            Assert.That(promotion.Result.Rooms.Single(room => room.Id == "big").RawSqft,
+                Is.EqualTo(120).Within(1e-6), "the pocket went to the 6 ft neighbor, not the 2 ft one");
+            Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
+        });
+    }
+
+    [Test]
+    public void Recombination_runs_before_the_frame_projector_can_reject_the_lattice_cell()
+    {
+        // The pocket alone is a legal orthogonal rectangle, so this proves ordering rather than
+        // shape: absorbed geometry must reach the projector already merged.
+        var options = Options(minimumRoomSqft: 0, boundarySimplifyFt: 0);
+        options.AbsorbNeighborMaxSqft = 10;
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            NotchedPair(), Zone("all", (0, 0), (10, 0), (10, 12), (0, 12)),
+            options, (_, _) => 0);
+
+        Assert.Multiple(() => {
+            Assert.That(promotion.Diagnostics.Rejections.Keys, Has.No.Member("frame:NoCoherentFrame"));
+            Assert.That(promotion.Result.Rooms, Has.Count.EqualTo(1));
+            Assert.That(promotion.Diagnostics.SourceRooms, Is.EqualTo(2));
+        });
+    }
+
+    [Test]
+    public void Zone_fit_snaps_a_room_edge_lying_just_inside_the_zone_boundary_onto_it()
+    {
+        // The right edge sits 0.4 ft inside the zone's parallel right edge — a void sliver that no
+        // gate is wrong about and every gate leaves behind. The zone edge is authority, so the room
+        // moves onto it rather than the sliver being explained.
+        var source = new TakeoffResult {
+            LevelName = "Level 1",
+            Rooms = { Room("room", (2, 2), (19.6, 2), (19.6, 18), (2, 18)) },
+            DomainSqft = 281.6,
+        };
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, Zone("all", (0, 0), (20, 0), (20, 20), (0, 20)),
+            Options(minimumRoomSqft: 0, boundarySimplifyFt: 0), (_, _) => 0,
+            TestContext.Out.WriteLine);
+
+        var room = promotion.Result.Rooms.Single();
+        Assert.Multiple(() => {
+            Assert.That(room.RawSqft, Is.EqualTo(288).Within(1e-6),
+                "the 0.4 ft sliver along the zone edge is now inside the room");
+            Assert.That(room.Polygon.Max(point => point[0]), Is.EqualTo(20).Within(1e-9));
+            Assert.That(room.Flags, Contains.Item("zone-fit"));
+            Assert.That(promotion.Diagnostics.Rejections["zonefit:snapped"], Is.EqualTo(1));
+            Assert.That(promotion.Diagnostics.Rejections.Keys, Has.No.Member("zonefit:fallback"));
+            Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
+            Assert.That(promotion.Diagnostics.IsStrictlyEditable, Is.True);
+        });
+    }
+
+    [Test]
+    public void Zone_fit_clips_an_overhanging_room_instead_of_the_scope_gate_rejecting_it()
+    {
+        var source = new TakeoffResult {
+            LevelName = "Level 1",
+            Rooms = { Room("room", (5, 5), (25, 5), (25, 15), (5, 15)) },
+            DomainSqft = 200,
+        };
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, Zone("all", (0, 0), (20, 0), (20, 20), (0, 20)),
+            Options(minimumRoomSqft: 0, boundarySimplifyFt: 0), (_, _) => 0,
+            TestContext.Out.WriteLine);
+
+        Assert.Multiple(() => {
+            Assert.That(promotion.Result.Rooms.Single().RawSqft, Is.EqualTo(150).Within(1e-6),
+                "the overhang is trimmed, not grounds for throwing the room away");
+            Assert.That(promotion.Result.Rooms.Single().Flags, Contains.Item("zone-fit"));
+            Assert.That(promotion.Diagnostics.Rejections["zonefit:clipped"], Is.EqualTo(1));
+            Assert.That(promotion.Diagnostics.Rejections.Keys, Has.No.Member("scope:outside"));
+            Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
+            Assert.That(promotion.Diagnostics.IsContained, Is.True);
+        });
+    }
+
+    [Test]
+    public void Zone_fit_falls_back_when_the_zone_edge_runs_diagonal_to_the_room_frame()
+    {
+        // The zone's top edge slopes relative to the room's frame. Edge-wise snapping refuses the
+        // move up front — only a near-parallel zone segment may pull a room edge — so the pre-fit
+        // room stands untouched and no zone-fit event fires at all. (Vertex-wise snapping used to
+        // try the tilt and count a fallback; that path was falsified on the diagonal wings.)
+        var source = new TakeoffResult {
+            LevelName = "Level 1",
+            Rooms = { Room("room", (2, 2), (18, 2), (18, 9.8), (2, 9.8)) },
+            DomainSqft = 124.8,
+        };
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, Zone("sloped", (0, 0), (20, 0), (20, 10), (0, 14)),
+            Options(minimumRoomSqft: 0, boundarySimplifyFt: 0), (_, _) => 0,
+            TestContext.Out.WriteLine);
+
+        var room = promotion.Result.Rooms.Single();
+        Assert.Multiple(() => {
+            Assert.That(room.RawSqft, Is.EqualTo(124.8).Within(1e-6), "pre-fit geometry, untouched");
+            Assert.That(room.Polygon.Max(point => point[1]), Is.EqualTo(9.8).Within(1e-9));
+            Assert.That(room.Flags, Has.No.Member("zone-fit"));
+            Assert.That(promotion.Diagnostics.Rejections.Keys, Has.No.Member("zonefit:fallback"));
+            Assert.That(promotion.Diagnostics.Rejections.Keys, Has.No.Member("zonefit:snapped"));
+            Assert.That(promotion.Diagnostics.IsStrictlyEditable, Is.True);
+            Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
+        });
+    }
+
+    [Test]
+    public void Zone_fit_keeps_only_the_largest_piece_when_clipping_shatters_a_room()
+    {
+        // A bar crossing the mouth of a U-shaped zone survives only inside the two prongs. Keeping
+        // both would be the solver inventing a partition split the detector never proposed, so the
+        // larger prong is the room and the smaller is residue.
+        var source = new TakeoffResult {
+            LevelName = "Level 1",
+            Rooms = { Room("bar", (0, 12), (20, 12), (20, 16), (0, 16)) },
+            DomainSqft = 80,
+        };
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            source,
+            Zone("u", (0, 0), (20, 0), (20, 20), (16, 20), (16, 8), (6, 8), (6, 20), (0, 20)),
+            Options(minimumRoomSqft: 0, boundarySimplifyFt: 0), (_, _) => 0,
+            TestContext.Out.WriteLine);
+
+        var residue = promotion.Result.Residues
+            .Single(item => item.Id.StartsWith("bar~zonefit", StringComparison.Ordinal));
+        Assert.Multiple(() => {
+            Assert.That(promotion.Result.Rooms.Single().RawSqft, Is.EqualTo(24).Within(1e-6),
+                "the 6 ft prong, not the 4 ft one");
+            Assert.That(residue.Reason, Is.EqualTo(ResidueReason.Rejected));
+            Assert.That(residue.RawSqft, Is.EqualTo(16).Within(1e-6));
+            Assert.That(promotion.Diagnostics.Rejections["zonefit:clipped"], Is.EqualTo(1));
+            Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
+            Assert.That(promotion.Diagnostics.IsContained, Is.True);
+        });
+    }
+
+    [Test]
+    public void Zone_fit_is_inert_when_both_knobs_are_off()
+    {
+        var options = Options(minimumRoomSqft: 0, boundarySimplifyFt: 0);
+        options.ZoneSnapFt = 0;
+        options.ZoneClipEnabled = false;
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            new TakeoffResult {
+                LevelName = "Level 1",
+                Rooms = { Room("room", (5, 5), (25, 5), (25, 15), (5, 15)) },
+                DomainSqft = 200,
+            },
+            Zone("all", (0, 0), (20, 0), (20, 20), (0, 20)), options, (_, _) => 0);
+
+        Assert.Multiple(() => {
+            Assert.That(promotion.Result.Rooms, Is.Empty);
+            Assert.That(promotion.Diagnostics.Rejections["scope:outside"], Is.EqualTo(1),
+                "with zone-fit disarmed the overhang is a scope rejection, exactly as before");
+            Assert.That(promotion.Diagnostics.Rejections.Keys
+                .Where(key => key.StartsWith("zonefit:", StringComparison.Ordinal)), Is.Empty);
+        });
+    }
+
+    [Test]
+    public void Zone_policy_relaxes_absorb_only_where_the_wall_network_is_too_sparse_to_certify()
+    {
+        var baseline = Options(minimumRoomSqft: 30);
+        baseline.AdaptivePolicy = true; // armed explicitly: default is off (falsified at 2.5ft drift)
+        var sparse = new ZoneCensus(4000, 120, 0.03, [], 0.2);
+        var dense = new ZoneCensus(4000, 600, 0.15, [], 0.2);
+        var lattice = new ZonePartitionStats(8, 90, 2.0);
+        var single = new ZonePartitionStats(1, 3000, 0.25);
+
+        var relaxed = ZonePolicy.Adapt(sparse, lattice, baseline);
+        var untouched = ZonePolicy.Adapt(dense, lattice, baseline);
+        var noLattice = ZonePolicy.Adapt(sparse, single, baseline);
+        baseline.AdaptivePolicy = false;
+        var disarmed = ZonePolicy.Adapt(sparse, lattice, baseline);
+
+        Assert.Multiple(() => {
+            Assert.That(relaxed.Options.AbsorbNeighborSharedPerimeterFraction,
+                Is.EqualTo(0.30).Within(1e-9));
+            Assert.That(relaxed.AdaptedKnobs.Keys,
+                Is.EqualTo(new[] { "AbsorbNeighborSharedPerimeterFraction" }));
+            Assert.That(untouched.AdaptedKnobs, Is.Empty, "dense ink certifies its own partitions");
+            Assert.That(noLattice.AdaptedKnobs, Is.Empty, "no lattice to absorb, so no rule fires");
+            Assert.That(disarmed.AdaptedKnobs, Is.Empty);
+            Assert.That(disarmed.Options.AbsorbNeighborSharedPerimeterFraction,
+                Is.EqualTo(0.45).Within(1e-9));
+        });
+    }
+
     private static RoomResult Room(string id, params (double X, double Y)[] points) => new()
     {
         Id = id,
@@ -158,5 +696,16 @@ public sealed class TakeoffPromotionTests
         LabelX = points.Average(point => point.X),
         LabelY = points.Average(point => point.Y),
         Polygon = points.Select(point => new[] { point.X, point.Y }).ToList(),
+    };
+
+    private static ZoneScope Zone(string name, params (double X, double Y)[] points) => new() {
+        Name = name,
+        Loops = { points.Select(point => new[] { point.X, point.Y }).ToList() },
+    };
+
+    private static TakeoffOptions Options(
+        double minimumRoomSqft, double boundarySimplifyFt = 2) => new() {
+        MinimumPromotedRoomSqft = minimumRoomSqft,
+        BoundarySimplifyFt = boundarySimplifyFt,
     };
 }

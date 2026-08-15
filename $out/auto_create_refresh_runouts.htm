@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+   <title>Auto Create/Refresh Runouts</title>
+   <meta name="generator" content="Help &amp; Manual" />
+   <meta name="keywords" content="Auto Create/Refresh Runouts,CFM,Create Runout,Refresh Runout,Runout" />
+   <meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1" />   
+   
+   <meta http-equiv="X-UA-Compatible" content="IE=10" />
+   <link type="text/css" href="default.css" rel="stylesheet" />
+   <link type="text/css" href="custom.css" rel="stylesheet">
+
+   <style TYPE="text/css" media="screen"> 
+      html, body { margin:0; 
+             padding:0; 
+             overflow: hidden; 
+             background: #FFFFFF; 
+       } 
+
+      div#printheader { display: none; }
+      #idheader { width:100%; 
+                  height:auto; 
+                  padding: 0; 
+                  margin: 0; 
+       } 
+      #idcontent { position:relative }                                               
+      #callout-table, #overview-table {display:block; position:relative; top:0; left:0;}
+      #callout-icon {display:block; position:absolute; top:-11px; left:-11px;}
+      #callout-icon-flag {display:block; position:absolute; top:-11px; left:-8px;}
+      #callout-table a {text-decoration: none; color: blue;}
+      #callout-table a:visited {text-decoration: none; color: blue;}
+      #overview-table a {text-decoration: none; color: black;}
+      #overview-table a:visited {text-decoration: none; color: black;}
+      #callout-table a:hover, #overview-table a:hover {text-decoration: underline;}      
+      #switchtoggles { text-align: right; padding: 0 5px 0 0; font-size: 90%; margin: 0; }  
+      p.help-url { margin: 20px 0 5px 0; text-align: center; font-size: 80%; text-decoration: none }
+      .sync-toc { color: #ffffff; font-size: 8pt; font-weight: bold; display: none; }
+      .sync-toc a { color: #ffffff; text-decoration: none; font-weight: bold;}
+      .sync-toc a:visited { color: #ffffff; }
+      .sync-toc a:hover { text-decoration: underline; }
+
+   </style>
+   <noscript>
+   <style type="text/css">
+   html, body { overflow: auto; }
+   </style> 
+   </noscript>
+   <style type="text/css" media="print">
+      span.f_Heading1 { color: black; }
+      #idheader, #printheader img { display:none; }
+      #printheader { display: block; margin-top: 20px; }
+      #idcontent { margin-top: 10px; position:relative }
+   </style>   
+
+   <script type="text/javascript" src="jquery.js"></script>
+   <script type="text/javascript" src="helpman_settings.js"></script>
+   <script type="text/javascript" src="helpman_topicinit.js"></script>
+   <script type="text/javascript" src="nsh.js"></script>
+<!--[if lt IE 7]>
+<style type="text/css">
+  #idcontent {padding: 0px;} 
+  #innerdiv {padding: 10px 5px 5px 10px ;} 
+</style> 
+<![endif]-->
+
+
+
+</head>
+<body>
+
+
+<div id="printheader"><h1 class="p_Heading1"><span class="f_Heading1">Auto Create/Refresh Runouts (Manual D Ductsize)</span></h1>
+</div>
+<div id="idheader">
+<div id="idheaderbg">
+<table style="width:100%;border:none;margin:0px;background:url(background-topic-header.jpg)" cellspacing="0" cellpadding="0"> 
+  <tr valign="bottom">
+    <td align="left" valign="bottom" class="topichead">
+   
+   <p class="crumbs" id="idnav"><b>Navigation:</b>&nbsp;
+   
+   Drawing Board &gt; Catalogs and Objects &gt; Smart Figures &gt; Manual D Ductsize&nbsp;&gt;</p>
+   <h1 class="p_Heading1"><span class="f_Heading1">Auto Create/Refresh Runouts (Manual D Ductsize)</span></h1>
+
+    </td>
+    <td align="right" width="120" valign="middle" class="topichead" id="idnav">
+    
+     <a href="delete_multiple_ducts.htm"
+        onmouseover="document.images.prev.src='hm_btn_navigate_prev_orange.png'" 
+        onmouseout="document.images.prev.src='hm_btn_navigate_prev.png'"
+        ><img name="prev" src="hm_btn_navigate_prev.png" border=0 alt="Previous page"
+        ></a><a href="welcome.htm"
+        onmouseover="document.images.main.src='hm_btn_navigate_top_orange.png'" 
+        onmouseout="document.images.main.src='hm_btn_navigate_top.png'"><img name=main src="hm_btn_navigate_top.png" border=0 alt="Return to chapter overview"
+        ></a><a href="duct_shortcut_keys.htm"
+        onmouseover="document.images.next.src='hm_btn_navigate_next_orange.png'" 
+        onmouseout="document.images.next.src='hm_btn_navigate_next.png'"><img name=next src="hm_btn_navigate_next.png" border=0 alt="Next page"
+        ></a>
+    </td>
+  </tr>  
+</table>
+<!-- The following code displays Expand All/Collapse All links  below the header in topics containing toggles -->
+  
+</div>
+</div>  
+
+<div id="idcontent"><div id="innerdiv">
+<!--ZOOMRESTART-->
+<p style="margin: 0.1667in 0 0 0;">To open this dialog: &nbsp;Right click a duct, then click Auto Create/Refresh Runouts from the popup menu.</p>
+<p style="margin: 0.1667in 0 0 0;">This dialog lets you create runouts for each of the rooms that you have drawn with the Rhvac MJ8 Drawing Objects catalog.</p>
+<p style="margin: 0.1667in 0 0 0;"><img style="margin:0;width:3.9063in;height:5.5521in;border:none" src="auto_cre1.png"/></p>
+<p style="margin: 0.1667in 0 0 0;"><span style="font-weight: bold;">Rooms List:</span> &nbsp;Shows each Rhvac room that you have drawn, along with the supply airflow, system and zone numbers. &nbsp;Check the box beside each room for which you want to create runouts.</p>
+<p style="margin: 0.1667in 0 0 0;"><span style="font-weight: bold;">Mark All, Clear All:</span> &nbsp;Checks or unchecks the box for each room in the list.</p>
+<p style="margin: 0.1667in 0 0 0;"><span style="font-weight: bold;">Status:</span> &nbsp;Shows a message indicating whether or not a supply trunk exists for each Rhvac system in the project.</p>
+<p style="margin: 0.1667in 0 0 0;"><span style="font-weight: bold;">Existing Supply Runouts Options:</span> &nbsp;Determines whether or not existing runouts in the selected rooms will be deleted or reused.</p>
+<p style="margin: 0.1667in 0 0 0;"><span style="font-weight: bold;">AutoConnect:</span> &nbsp;When checked, makes it so the program will attempt to connect each new runout into the nearest trunk on the same sheet. &nbsp;It is usually best to leave this checkbox unchecked so that you can have control over where and how your ducts are connected together.</p>
+<p style="margin: 0.1667in 0 0 0;"><span style="font-weight: bold;">Assign Return Runout Airflows:</span> &nbsp;When the box for a system is checked, assigns the supply airflow to the return runouts that are connected to that system&#39;s Return Main Trunk object.</p>
+<p style="margin: 0.1667in 0 0 0;"><span style="font-weight: bold;">OK:</span> &nbsp;Applies the changes you have made on this dialog and closes it.</p>
+<p style="margin: 0.1667in 0 0 0;"><span style="font-weight: bold;">Cancel:</span> &nbsp;Closes this dialog without making any further changes.</p>
+<p style="margin: 0.1667in 0 0 0;"><span style="font-weight: bold;">Apply:</span> &nbsp;Applies the changes you have made on this dialog without closing it.</p>
+
+<!--ZOOMSTOP-->
+</div></div>
+<script type="text/javascript">
+
+var lastSlashPos = document.URL.lastIndexOf("/") > document.URL.lastIndexOf("\\") ? document.URL.lastIndexOf("/") : document.URL.lastIndexOf("\\");
+if( document.URL.substring(lastSlashPos + 1, lastSlashPos + 4).toLowerCase() != "~hh" )
+{
+ if (document.all) setTimeout(function() {nsrInit();},20); 
+    else nsrInit();
+ } 
+
+
+</script>
+</body>
+</html>

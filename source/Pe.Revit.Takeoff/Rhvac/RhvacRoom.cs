@@ -2,8 +2,9 @@ namespace Pe.Revit.Takeoff.Rhvac;
 
 // RHVAC is purely mathematical and area-based; nothing here is a drawing. The .r10 format spec and
 // firm Manual J conventions (area x 1, volume-preserving average height, roof pitch allowance,
-// interior-room placeholders) live in docs/context/rhvac-and-mj-reference.md. In this shape, absence
-// of a category is an EMPTY list; the file adapter writes RHVAC's zero placeholder rows.
+// interior-room placeholders) live in docs/features/takeoffs/rhvac-and-mj-reference.md. In this
+// shape, absence of a category is an EMPTY list; the file adapter writes RHVAC's zero
+// placeholder rows.
 
 /// <summary>RHVAC's eight wall-facing directions, clockwise from north (codes 0-7, verified).</summary>
 public enum RhvacWallDirection
