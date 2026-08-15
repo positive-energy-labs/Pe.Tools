@@ -195,4 +195,13 @@ test("exports TS-only admin operation schemas", () => {
     rootKey: "schedules",
   });
   expect(settingsTree.moduleKey).toBe("CmdScheduleManager");
+
+  const shellOpen = Schema.decodeUnknownSync(tsOnlyOperationSchemas["host.shell.open"].request)({
+    path: "C:\\artifacts\\run",
+  });
+  const shellOpened = Schema.decodeUnknownSync(tsOnlyOperationSchemas["host.shell.open"].response)({
+    opened: true,
+    path: shellOpen.path,
+  });
+  expect(shellOpened).toEqual({ opened: true, path: "C:\\artifacts\\run" });
 });

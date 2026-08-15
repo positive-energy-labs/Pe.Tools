@@ -107,6 +107,17 @@ export const hostLogsRequestSchema = Schema.Struct({
   tailLineCount: Schema.Number,
 });
 
+export const hostShellOpenRequestSchema = Schema.Struct({
+  path: Schema.String,
+});
+export type HostShellOpenRequest = Schema.Schema.Type<typeof hostShellOpenRequestSchema>;
+
+export const hostShellOpenDataSchema = Schema.Struct({
+  opened: Schema.Boolean,
+  path: Schema.String,
+});
+export type HostShellOpenData = Schema.Schema.Type<typeof hostShellOpenDataSchema>;
+
 export const RevitRecentDocumentSource = {
   RevitIni: "RevitIni",
   RegistryProfileMru: "RegistryProfileMru",
@@ -769,6 +780,10 @@ export const tsOnlyOperationSchemas = {
   "host.status": {
     response: hostProbeDataSchema,
   },
+  "host.shell.open": {
+    request: hostShellOpenRequestSchema,
+    response: hostShellOpenDataSchema,
+  },
   "host.topology": {
     response: hostTopologyDataSchema,
   },
@@ -865,6 +880,20 @@ export type HostLocalCatalogEntry = HostOperationDefinition & {
  * key — the index test asserts full coverage.
  */
 export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
+  {
+    key: "host.shell.open",
+    origin: "host-local",
+    displayName: "Open Path",
+    description:
+      "Open an existing absolute file or directory path with the operating system default handler. No Revit session is needed.",
+    intent: "Mutate",
+    visibility: "EscalationVisible",
+    costTier: "Mutation",
+    requiresActiveDocument: false,
+    requestTypeName: "HostShellOpenRequest",
+    responseTypeName: "HostShellOpenData",
+    searchTerms: ["host", "shell", "open", "file", "directory", "default app", "artifact"],
+  },
   {
     key: "revit.catalog.recent-documents",
     origin: "host-local",

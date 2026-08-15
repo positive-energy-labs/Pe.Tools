@@ -17,6 +17,8 @@
   },
   "type": "module",
   "scripts": {
+    "codegen": "pnpm --filter @pe/host-contracts codegen",
+    "codegen:check": "pnpm --filter @pe/host-contracts codegen:check",
     "ready": "vp check && vp run -r test && vp run -r build && pnpm typegen:check",
     "typegen:check": "pnpm --filter @pe/host-contracts codegen:check",
     "test": "vp run -r test",
