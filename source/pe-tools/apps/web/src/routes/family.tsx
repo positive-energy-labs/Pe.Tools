@@ -1,12 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   type SettingsProposalSource,
-  familyRouteState,
   settingsFieldPointer,
   settingsFieldSegments,
-  settingsRouteState,
 } from "@pe/agent-contracts";
 import { ThemeToggle } from "#/components/ThemeToggle";
 import { RfaChip, RvtChip } from "#/components/document-chips";
@@ -17,11 +15,43 @@ import {
   resolveCitations,
   useFamilyGrounding,
 } from "#/family/doc-pane";
+import {
+  type FormulaProblem,
+  authoredFormulaParams,
+  formulaAncestry,
+  validateFormula,
+} from "#/family/formula";
+import { FamilyInspector, type ParamAssociations } from "#/family/inspector";
+import {
+  FAMILY_MODULE,
+  type EvidenceSlice,
+  type FamilyStore,
+  type FieldState,
+  useLiveFamilyStore,
+  useMockFamilyStore,
+} from "#/family/store";
 import { familyModelPlaneOffset, familyModelPrismFaceCoordinate } from "#/family-model/preview";
-import { useTreeQuery } from "#/host/queries";
-import { useRouteState } from "#/workbench/route-state";
 
-export const Route = createFileRoute("/family")({ component: Page });
+export const Route = createFileRoute("/family")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    mock: search.mock != null && search.mock !== false ? true : undefined,
+  }),
+  component: FamilyRoute,
+});
+
+/** The store seam is chosen once, here: `?mock` mounts a self-contained fixture. */
+function FamilyRoute() {
+  const { mock } = Route.useSearch();
+  return mock ? <MockFamily /> : <LiveFamily />;
+}
+
+function LiveFamily() {
+  return <Page store={useLiveFamilyStore()} />;
+}
+
+function MockFamily() {
+  return <Page store={useMockFamilyStore()} />;
+}
 
 /* ------------------------------------------------------------------------------------------------
  * /family — THE surface for one authored family.json.
@@ -39,6 +69,8 @@ interface ParamSpec {
   resolvedValues?: Record<string, string>;
   value?: string;
   formula?: string;
+  /** Authored schema carries a nullable `isInstance`; absent means TYPE (Revit's default). */
+  isInstance?: boolean;
 }
 interface PlaneSpec {
   from: string;
@@ -101,18 +133,6 @@ interface FamilyModel {
   unmodeled?: unknown[];
 }
 
-type FieldState = {
-  proposal?: {
-    value?: unknown;
-    delete?: true;
-    note?: string | null;
-    confidence?: "high" | "low" | null;
-    sources?: SettingsProposalSource[] | null;
-  } | null;
-  staged?: { value?: unknown; delete?: true } | null;
-  review?: string;
-};
-
 // ── portable-literal + reference helpers ────────────────────────────────────────────────────────
 function inches(text: string | undefined): number | null {
   if (!text) return null;
@@ -164,6 +184,20 @@ const setParamValue = (model: FamilyModel, name: string, value: string): FamilyM
   const spec = specs[name];
   if (!spec || spec.formula != null) return model; // value XOR formula — formula params are locked
   return { ...model, [section]: { ...specs, [name]: { ...spec, value } } };
+};
+
+/** Stage a formula at /familyParameters/<name>/formula. An empty draft removes it.
+ * The value-XOR-formula law is the HOST's to enforce: staging a formula over a param that
+ * still carries values is allowed here and surfaces as an advisory, never a block. */
+const setParamFormula = (model: FamilyModel, name: string, formula: string): FamilyModel => {
+  const section = model.familyParameters[name] ? "familyParameters" : "sharedParameters";
+  const specs = model[section] ?? {};
+  const spec = specs[name];
+  if (!spec) return model;
+  const next: ParamSpec = { ...spec };
+  if (formula.trim()) next.formula = formula.trim();
+  else delete next.formula;
+  return { ...model, [section]: { ...specs, [name]: next } };
 };
 
 const setOverride = (
@@ -389,6 +423,31 @@ function constituentParams(model: FamilyModel, hovered: string | null): string[]
     refs.push(model.arrays?.[slug]?.halfCount);
   }
   return refs.map((ref) => paramRef(ref)).filter((name): name is string => name != null);
+}
+
+/** Reverse of `constituentParams`: every authored construct that reads this parameter.
+ * This is the inspector's "associates through" — derived from the authored model, not
+ * from a host GetAssociated call. */
+function paramAssociations(model: FamilyModel, name: string): ParamAssociations {
+  const reads = (...refs: (string | undefined)[]) => refs.some((ref) => paramRef(ref) === name);
+  const dimensions: string[] = [];
+  for (const [slug, solid] of Object.entries(model.solids ?? {}))
+    if (reads(solid.width, solid.depth, solid.height, solid.diameter))
+      dimensions.push(`solid ${slug}`);
+  for (const [slug, plane] of Object.entries(model.planes ?? {}))
+    if (reads(plane.by)) dimensions.push(`plane ${slug}`);
+  for (const [slug, connector] of Object.entries(model.connectors ?? {}))
+    if (reads(connector.diameter, connector.width, connector.height, connector.stub?.depth))
+      dimensions.push(`connector ${slug}`);
+  const arrays = Object.entries(model.arrays ?? {})
+    .filter(([, spec]) => reads(spec.halfCount))
+    .map(([slug]) => `array ${slug}`);
+  const nested = Object.entries(model.nestedFamilies ?? {}).flatMap(([slug, spec]) =>
+    Object.entries(spec.parameterBindings ?? {})
+      .filter(([, source]) => paramRef(source) === name || source === name)
+      .map(([target]) => `${slug} · ${target}`),
+  );
+  return { dimensions, arrays, nested };
 }
 
 // ── the triptych ────────────────────────────────────────────────────────────────────────────────
@@ -1185,6 +1244,9 @@ function TypeMatrix({
   fields,
   onCite,
   onReview,
+  onReviewMark,
+  selectedParam,
+  onSelectParam,
 }: {
   model: FamilyModel;
   typeName: string;
@@ -1193,6 +1255,9 @@ function TypeMatrix({
   fields: Record<string, FieldState>;
   onCite: (context: { label: string; sources: SettingsProposalSource[] } | null) => void;
   onReview: (pointer: string, action: "approve" | "deny") => void;
+  onReviewMark: (pointer: string, next: ReviewMarkState) => void;
+  selectedParam: string | null;
+  onSelectParam: (name: string | null) => void;
 }) {
   const [newType, setNewType] = useState("");
   const typeNames = Object.keys(model.types);
@@ -1200,6 +1265,11 @@ function TypeMatrix({
     ...groupParameters("family", model.familyParameters),
     ...(model.sharedParameters ? groupParameters("shared", model.sharedParameters) : []),
   ];
+  // ONE parameter source for every formula cell in the matrix — the authored model.
+  const formulaParams = useMemo(
+    () => authoredFormulaParams(model.familyParameters, model.sharedParameters),
+    [model.familyParameters, model.sharedParameters],
+  );
 
   return (
     <div className="overflow-x-auto">
@@ -1208,6 +1278,9 @@ function TypeMatrix({
           <tr className="text-left">
             <th className="border-b border-[var(--line-2)] py-1 pr-3 font-normal">
               <span className="tele-label text-[10px] text-[var(--slate)]">parameter</span>
+            </th>
+            <th className="border-b border-[var(--line-2)] px-2 py-1 font-normal">
+              <span className="tele-label text-[10px] text-[var(--kiln)]">= formula</span>
             </th>
             <th className="border-b border-[var(--line-2)] px-2 py-1 text-right font-normal">
               <span className="tele-label text-[10px] text-[var(--slate)]">family value</span>
@@ -1246,8 +1319,12 @@ function TypeMatrix({
               selected={typeName}
               update={update}
               fields={fields}
+              formulaParams={formulaParams}
               onCite={onCite}
               onReview={onReview}
+              onReviewMark={onReviewMark}
+              selectedParam={selectedParam}
+              onSelectParam={onSelectParam}
             />
           ))}
         </tbody>
@@ -1303,8 +1380,12 @@ function ParamRows({
   selected,
   update,
   fields,
+  formulaParams,
   onCite,
   onReview,
+  onReviewMark,
+  selectedParam,
+  onSelectParam,
 }: {
   origin: string;
   specs: Record<string, ParamSpec>;
@@ -1313,35 +1394,60 @@ function ParamRows({
   selected: string;
   update: Update;
   fields: Record<string, FieldState>;
+  formulaParams: ReturnType<typeof authoredFormulaParams>;
   onCite: (context: { label: string; sources: SettingsProposalSource[] } | null) => void;
   onReview: (pointer: string, action: "approve" | "deny") => void;
+  onReviewMark: (pointer: string, next: ReviewMarkState) => void;
+  selectedParam: string | null;
+  onSelectParam: (name: string | null) => void;
 }) {
   const section = origin.startsWith("shared") ? "sharedParameters" : "familyParameters";
   return (
     <>
       <tr>
-        <td colSpan={2 + typeNames.length} className="pt-2">
+        <td colSpan={3 + typeNames.length} className="pt-2">
           <span className="tele-label text-[9px] text-[var(--lichen)]">{origin} parameters</span>
         </td>
       </tr>
       {Object.entries(specs).map(([name, spec]) => {
         const isFormula = spec.formula != null;
         const familyCell = cellField(fields, [section, name, "value"]);
+        const pinned = selectedParam === name;
         return (
-          <tr key={name} className="border-b border-[var(--line-soft)]">
-            <td className="max-w-48 truncate py-1 pr-3" title={spec.dataType}>
-              {name}
+          <tr key={name} className="group/row border-b border-[var(--line-soft)]">
+            <td className="max-w-48 py-1 pr-3">
+              <button
+                type="button"
+                onClick={() => onSelectParam(pinned ? null : name)}
+                title={`${spec.dataType} — click to inspect ancestry and associations`}
+                className={`max-w-full truncate text-left ${
+                  pinned ? "font-semibold text-[var(--pe-blue)]" : "hover:text-[var(--pe-blue)]"
+                }`}
+              >
+                {name}
+              </button>
               {isFormula && (
                 <span className="ml-1 font-mono text-[10px] text-[var(--kiln)]">ƒ</span>
               )}
             </td>
+            <td className="px-2 py-1">
+              <FormulaCell
+                paramName={name}
+                formula={spec.formula}
+                hasTypeValues={typeNames.some((type) => model.types[type]?.[name] != null)}
+                cell={cellField(fields, [section, name, "formula"])}
+                params={formulaParams}
+                onCommit={(next) => update((current) => setParamFormula(current, name, next))}
+                onReviewMark={onReviewMark}
+              />
+            </td>
             <td className="px-2 py-1 text-right">
               {isFormula ? (
                 <span
-                  className="font-mono text-[10px] text-[var(--kiln)]"
-                  title="formula-driven — value XOR formula"
+                  className="font-mono text-[10px] text-[var(--kiln)]/60"
+                  title="formula-driven — value XOR formula; clear the formula to author a value"
                 >
-                  = {spec.formula}
+                  locked
                 </span>
               ) : (
                 <CellValue
@@ -1351,6 +1457,7 @@ function ParamRows({
                   onCommit={(next) => update((current) => setParamValue(current, name, next))}
                   onCite={onCite}
                   onReview={onReview}
+                  onReviewMark={onReviewMark}
                 />
               )}
             </td>
@@ -1381,6 +1488,7 @@ function ParamRows({
                         }
                         onCite={onCite}
                         onReview={onReview}
+                        onReviewMark={onReviewMark}
                         strong
                       />
                       <button
@@ -1408,6 +1516,7 @@ function ParamRows({
                       }
                       onCite={onCite}
                       onReview={onReview}
+                      onReviewMark={onReviewMark}
                     />
                   ) : (
                     <button
@@ -1440,6 +1549,7 @@ function CellValue({
   onCommit,
   onCite,
   onReview,
+  onReviewMark,
   strong,
 }: {
   value: string;
@@ -1448,6 +1558,7 @@ function CellValue({
   onCommit: (next: string) => void;
   onCite: (context: { label: string; sources: SettingsProposalSource[] } | null) => void;
   onReview: (pointer: string, action: "approve" | "deny") => void;
+  onReviewMark: (pointer: string, next: ReviewMarkState) => void;
   strong?: boolean;
 }) {
   const tone = cell.attention
@@ -1494,6 +1605,10 @@ function CellValue({
           ¶{cell.sources.length}
         </span>
       )}
+      <ReviewMark
+        review={reviewState(cell.field)}
+        onCycle={(next) => onReviewMark(cell.pointer, next)}
+      />
       {cell.proposal && (
         <>
           <button
@@ -1518,8 +1633,159 @@ function CellValue({
   );
 }
 
+/* ── review mark: an orthogonal per-field tri-state, cycled by one click ──────────────────────── */
+
+export type ReviewMarkState = "none" | "good" | "attention";
+
+const NEXT_REVIEW: Record<ReviewMarkState, ReviewMarkState> = {
+  none: "good",
+  good: "attention",
+  attention: "none",
+};
+
+function reviewState(field: FieldState | undefined): ReviewMarkState {
+  return field?.review === "good" || field?.review === "attention" ? field.review : "none";
+}
+
+/** none → good → attention → none. A human edit auto-writes "good"; this demotes it. */
+function ReviewMark({
+  review,
+  onCycle,
+}: {
+  review: ReviewMarkState;
+  onCycle: (next: ReviewMarkState) => void;
+}) {
+  const cycle = () => onCycle(NEXT_REVIEW[review]);
+  if (review === "none")
+    return (
+      <button
+        type="button"
+        title="mark reviewed"
+        onClick={cycle}
+        className="size-2 shrink-0 rounded-full border border-[var(--line-2)] opacity-0 transition-opacity hover:opacity-100 focus:opacity-100 group-hover/row:opacity-60"
+      />
+    );
+  const good = review === "good";
+  return (
+    <button
+      type="button"
+      title={good ? "reviewed · good (click to flag)" : "needs attention (click to clear)"}
+      onClick={cycle}
+      className="grid size-3 shrink-0 place-items-center rounded-full font-mono text-[8px] font-bold"
+      style={{
+        background: good
+          ? "color-mix(in srgb, var(--lichen) 24%, transparent)"
+          : "color-mix(in srgb, var(--kiln) 28%, transparent)",
+        color: good ? "var(--lichen)" : "var(--kiln)",
+      }}
+    >
+      {good ? "✓" : "!"}
+    </button>
+  );
+}
+
+/* ── @formula as a first-class cell ──────────────────────────────────────────────────────────── */
+
+/**
+ * The formula column. A formula-backed parameter's per-type value cells are locked (an
+ * authoring-time error in the schema), but its FORMULA is always editable — this is the
+ * only cell that can lift the lock. Client validation is ADVISORY: invalid-ref, cycle
+ * (with the draft spliced into the graph), and type-refs-instance render as a clay dot
+ * whose tooltip carries the problem text. Nothing here blocks staging; the host's
+ * validate/save is the final word.
+ */
+function FormulaCell({
+  paramName,
+  formula,
+  hasTypeValues,
+  cell,
+  params,
+  onCommit,
+  onReviewMark,
+}: {
+  paramName: string;
+  formula: string | undefined;
+  hasTypeValues: boolean;
+  cell: ReturnType<typeof cellField>;
+  params: ReturnType<typeof authoredFormulaParams>;
+  onCommit: (next: string) => void;
+  onReviewMark: (pointer: string, next: ReviewMarkState) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const text = formula ?? "";
+  const problems: FormulaProblem[] = useMemo(() => {
+    const subject = draft ?? text;
+    if (!subject.trim()) return [];
+    const found = validateFormula({ paramName, draft: subject, params });
+    return hasTypeValues
+      ? [
+          ...found,
+          {
+            kind: "invalid-ref" as const,
+            message: `"${paramName}" still carries per-type values — a formula-driven parameter cannot, so the host will reject one of them`,
+          },
+        ]
+      : found;
+  }, [draft, text, paramName, params, hasTypeValues]);
+
+  const tone = cell.staged
+    ? "text-[var(--lichen)] font-semibold"
+    : formula
+      ? "text-[var(--kiln)]"
+      : "text-[var(--slate)]/50";
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      {draft == null ? (
+        <button
+          type="button"
+          title={
+            formula
+              ? `${paramName} · formula (click to edit)`
+              : `${paramName} has no formula — click to author one`
+          }
+          onClick={() => setDraft(text)}
+          className={`cursor-text rounded-[2px] px-0.5 font-mono text-[10px] hover:bg-[var(--kiln)]/10 ${tone}`}
+        >
+          {formula ? `= ${formula}` : "= …"}
+        </button>
+      ) : (
+        <input
+          autoFocus
+          value={draft}
+          size={Math.max(8, draft.length)}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={() => {
+            if (draft.trim() !== text.trim()) onCommit(draft);
+            setDraft(null);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") event.currentTarget.blur();
+            if (event.key === "Escape") setDraft(null);
+          }}
+          placeholder="Width + 2in"
+          className={`rounded-[2px] border bg-[var(--paper)] px-0.5 font-mono text-[10px] outline-none ${
+            problems.length > 0 ? "border-[var(--kiln)]" : "border-[var(--pe-blue)]"
+          }`}
+        />
+      )}
+      {problems.length > 0 && (
+        <span
+          className="size-1.5 shrink-0 rounded-full bg-[var(--kiln)]"
+          title={problems.map((problem) => problem.message).join("\n")}
+        />
+      )}
+      {(formula != null || cell.staged) && (
+        <ReviewMark
+          review={reviewState(cell.field)}
+          onCycle={(next) => onReviewMark(cell.pointer, next)}
+        />
+      )}
+    </span>
+  );
+}
+
 // ═══════════════════════════════════════════ PAGE ═══════════════════════════════════════════════
-const FAMILY_MODULE = { moduleKey: "FamilyFoundry", rootKey: "models" };
 
 const MINIMAL_TEMPLATE = (name: string) =>
   JSON.stringify(
@@ -1638,25 +1904,7 @@ function withEvidence(model: FamilyModel, evidence: EvidenceSlice | null): Famil
   return next;
 }
 
-type EvidenceSlice = {
-  typeNames: string[];
-  parameters: Array<{
-    name: string;
-    valuesPerType: Record<string, { value?: string | null }>;
-  }>;
-  diagnostics: unknown[];
-  from: {
-    origin: string;
-    capturedAt: string;
-    documentVersionToken?: string | null;
-    familyName: string;
-    rfaPath?: string | null;
-  };
-};
-
-function Page() {
-  const settings = useRouteState(settingsRouteState);
-  const family = useRouteState(familyRouteState);
+function Page({ store }: { store: FamilyStore }) {
   const [mode, setMode] = useState<"full" | "parameters">("full");
   const [selectedType, setSelectedType] = useState<string>("");
   const [hovered, setHovered] = useState<string | null>(null);
@@ -1665,19 +1913,21 @@ function Page() {
   );
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<{ text: string; atMs: number } | null>(null);
+  const [lastSave, setLastSave] = useState<{ saved: number; failed: number } | null>(null);
+  const [selectedParam, setSelectedParam] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
 
-  const snapshot = settings.slice?.snapshot;
-  const isFamilyDocument =
-    snapshot?.documentId.moduleKey === FAMILY_MODULE.moduleKey &&
-    snapshot.documentId.rootKey === FAMILY_MODULE.rootKey;
-  const fields = (settings.slice?.fields ?? {}) as Record<string, FieldState>;
+  const snapshot = store.snapshot;
+  const isFamilyDocument = snapshot != null;
+  const fields = store.fields;
   const model = useMemo(
-    () => (isFamilyDocument ? parseModel(snapshot?.rawContent, fields) : null),
-    [isFamilyDocument, snapshot?.rawContent, fields],
+    () => parseModel(snapshot?.rawContent, fields),
+    [snapshot?.rawContent, fields],
   );
 
-  const evidence = (family.slice?.evidence ?? null) as EvidenceSlice | null;
+  const evidence: EvidenceSlice | null = store.evidence;
   const evidenceFresh =
     evidence != null &&
     (evidence.from.documentVersionToken == null ||
@@ -1693,35 +1943,26 @@ function Page() {
       : (Object.keys(model?.types ?? {})[0] ?? "");
 
   // ── target: bound selector; resolution now lives inside the sentence's world slot ──
-  const boundTarget = family.slice?.binding?.target ?? "";
+  const boundTarget = store.boundTarget;
+  const documents = store.documents;
 
-  // ── documents list: the existing settings.tree op already enumerates a root ─
-  const treeQuery = useTreeQuery(
-    {
-      ...FAMILY_MODULE,
-      subDirectory: "",
-      recursive: true,
-      includeFragments: false,
-      includeSchemas: false,
-    },
-    { bridgeSessionId: boundTarget || undefined },
-  );
-  const documents = useMemo(
-    () =>
-      (treeQuery.data?.files ?? [])
-        .filter((entry) => entry.relativePath.toLowerCase().endsWith(".json"))
-        .map((entry) => entry.relativePath),
-    [treeQuery.data?.files],
-  );
+  /** Every dispatcher write settles the same way: error text and the `hint` teaching
+   * channel are distinct, and both are surfaced verbatim. */
+  const settle = (result: { ok: boolean; error?: string; hint?: string }, fallback: string) => {
+    setError(result.ok ? null : (result.error ?? fallback));
+    setHint(result.ok ? null : (result.hint ?? null));
+    return result.ok;
+  };
 
   const openDocument = async (relativePath: string) => {
     setBusy("open");
-    setError(null);
-    const result = await settings.command("open", {
-      documentId: { ...FAMILY_MODULE, relativePath },
-      target: boundTarget || undefined,
-    });
-    if (!result.ok) setError(result.error ?? result.hint ?? "Could not open document.");
+    settle(
+      await store.settingsCommand("open", {
+        documentId: { ...FAMILY_MODULE, relativePath },
+        target: boundTarget || undefined,
+      }),
+      "Could not open document.",
+    );
     setBusy(null);
   };
 
@@ -1729,14 +1970,15 @@ function Page() {
     const relativePath = name.trim().replace(/\s+/g, "-").toLowerCase();
     if (!relativePath) return;
     setBusy("create");
-    setError(null);
-    const result = await settings.command("create", {
-      documentId: { ...FAMILY_MODULE, relativePath },
-      rawContent: MINIMAL_TEMPLATE(name.trim()),
-      target: boundTarget || undefined,
-    });
-    if (!result.ok) setError(result.error ?? result.hint ?? "Could not create document.");
-    else await treeQuery.refetch();
+    const ok = settle(
+      await store.settingsCommand("create", {
+        documentId: { ...FAMILY_MODULE, relativePath },
+        rawContent: MINIMAL_TEMPLATE(name.trim()),
+        target: boundTarget || undefined,
+      }),
+      "Could not create document.",
+    );
+    if (ok) store.refreshDocuments();
     setBusy(null);
   };
 
@@ -1751,7 +1993,7 @@ function Page() {
         { path: ["fields", pointer, "review"], value: "good" },
       ];
     });
-    if (patches.length > 0) void settings.apply(patches);
+    if (patches.length > 0) void store.applyFields(patches);
   };
 
   const review = (pointer: string, action: "approve" | "deny") => {
@@ -1759,28 +2001,63 @@ function Page() {
     if (action === "approve" && field?.proposal != null) {
       const edit =
         field.proposal.delete === true ? { delete: true } : { value: field.proposal.value };
-      void settings.apply([
+      void store.applyFields([
         { path: ["fields", pointer, "staged"], value: edit },
         { path: ["fields", pointer, "review"], value: "good" },
       ]);
     } else {
-      void settings.apply([
+      void store.applyFields([
         { path: ["fields", pointer, "proposal"] },
         { path: ["fields", pointer, "review"], value: "none" },
       ]);
     }
   };
 
+  /** acceptAll — stage every OPEN proposal in one write; already-staged fields are skipped
+   * so a human's own edit is never overwritten by a batch accept. */
+  const acceptAll = () => {
+    const patches = Object.entries(fields)
+      .filter(([, field]) => field.staged == null && field.proposal != null)
+      .flatMap(([pointer, field]) => [
+        {
+          path: ["fields", pointer, "staged"],
+          value:
+            field.proposal!.delete === true ? { delete: true } : { value: field.proposal!.value },
+        },
+        { path: ["fields", pointer, "review"], value: "good" },
+      ]);
+    if (patches.length > 0) void store.applyFields(patches);
+  };
+
+  /** The tri-state review toggle writes a review patch BESIDE the staged edit. */
+  const markReview = (pointer: string, next: ReviewMarkState) => {
+    void store.applyFields([{ path: ["fields", pointer, "review"], value: next }]);
+  };
+
   const run = async (name: "validate" | "save") => {
     setBusy(name);
-    setError(null);
-    const result = await settings.command(
+    const result = await store.settingsCommand(
       name,
       name === "validate"
         ? { includeProposals: false, target: boundTarget || undefined }
         : { target: boundTarget || undefined },
     );
-    if (!result.ok) setError(result.error ?? result.hint ?? `${name} failed.`);
+    const ok = settle(result, `${name} failed.`);
+    if (name === "save") {
+      const outcome = (result.result ?? {}) as {
+        saved?: number;
+        failures?: Array<{ key: string; error: string }>;
+      };
+      const saved = ok ? (outcome.saved ?? 0) : 0;
+      const failed = outcome.failures?.length ?? (ok ? 0 : stagedCount);
+      setLastSave({ saved, failed });
+      if (ok && saved > 0) {
+        setReceipt({
+          text: `saved ${saved} field${saved === 1 ? "" : "s"} to ${snapshot?.documentId.relativePath ?? "the document"}`,
+          atMs: Date.now(),
+        });
+      }
+    }
     setBusy(null);
   };
 
@@ -1789,26 +2066,23 @@ function Page() {
       { path: ["fields", pointer, "staged"] },
       { path: ["fields", pointer, "review"], value: "none" },
     ]);
-    if (patches.length > 0) await settings.apply(patches);
-    await settings.command("refresh", { target: boundTarget || undefined });
+    if (patches.length > 0) await store.applyFields(patches);
+    await store.settingsCommand("refresh", { target: boundTarget || undefined });
   };
 
   const captureEvidence = async () => {
     setBusy("capture");
-    setError(null);
-    const result = await family.command("capture_evidence", {});
-    if (!result.ok) setError(result.error ?? result.hint ?? "Capture failed.");
+    settle(await store.familyCommand("capture_evidence", {}), "Capture failed.");
     setBusy(null);
   };
 
   const buildEvidence = async () => {
     if (!snapshot) return;
     setBusy("build");
-    setError(null);
-    const result = await family.command("build_evidence", {
-      documentId: snapshot.documentId,
-    });
-    if (!result.ok) setError(result.error ?? result.hint ?? "Build failed.");
+    settle(
+      await store.familyCommand("build_evidence", { documentId: snapshot.documentId }),
+      "Build failed.",
+    );
     setBusy(null);
   };
 
@@ -1831,26 +2105,12 @@ function Page() {
           images?: Array<{ id: string; page: number; category: string }>;
         };
         if (!response.ok || payload.error) throw new Error(payload.error ?? "parse failed");
-        await family.apply([
-          {
-            path: ["doc"],
-            value: {
-              parseId: payload.jobId,
-              fileName: payload.fileName,
-              blocks: (payload.blocks ?? []).map(({ id, page, kind, md }) => ({
-                id,
-                page,
-                kind,
-                md,
-              })),
-              images: (payload.images ?? []).map(({ id, page, category }) => ({
-                id,
-                page,
-                category,
-              })),
-            },
-          },
-        ]);
+        await store.setSpecDoc({
+          parseId: payload.jobId,
+          fileName: payload.fileName,
+          blocks: (payload.blocks ?? []).map(({ id, page, kind, md }) => ({ id, page, kind, md })),
+          images: (payload.images ?? []).map(({ id, page, category }) => ({ id, page, category })),
+        });
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -1860,7 +2120,7 @@ function Page() {
   };
 
   // ── grounding: hover context or constituent citations ─────────────────────
-  const { grounding } = useFamilyGrounding(family.slice?.doc?.parseId);
+  const { grounding } = useFamilyGrounding(store.doc?.parseId);
   const hoveredParams = model ? constituentParams(model, hovered) : [];
   const constituentCite = useMemo(() => {
     if (!model || hoveredParams.length === 0) return null;
@@ -1886,11 +2146,51 @@ function Page() {
     [grounding, activeCite],
   );
 
-  const stagedCount = Object.values(fields).filter((field) => field.staged != null).length;
+  const stagedFields = Object.values(fields).filter((field) => field.staged != null);
+  const stagedCount = stagedFields.length;
+  const attentionCount = stagedFields.filter((field) => field.review === "attention").length;
   const proposalCount = Object.values(fields).filter(
     (field) => field.staged == null && field.proposal != null,
   ).length;
-  const showDocPane = mode === "parameters" || family.slice?.doc != null || parsing;
+  const showDocPane = mode === "parameters" || store.doc != null || parsing;
+
+  /* ── client-side save gate. The server stays the enforcer (route:settings `save`
+     refuses any staged field marked "attention"); this only makes the refusal legible
+     BEFORE the round trip, with the reason on the button. ── */
+  const saveBlockedReason = !isFamilyDocument
+    ? "no family document open"
+    : stagedCount === 0
+      ? "nothing staged"
+      : attentionCount > 0
+        ? `${attentionCount} field${attentionCount === 1 ? " needs" : "s need"} attention`
+        : null;
+
+  /* ── inspector: everything derived from the AUTHORED model, no host round trip ── */
+  const formulaParams = useMemo(
+    () => authoredFormulaParams(model?.familyParameters, model?.sharedParameters),
+    [model?.familyParameters, model?.sharedParameters],
+  );
+  const inspected = useMemo(() => {
+    if (!model || !selectedParam) return null;
+    const spec = paramSpec(model, selectedParam);
+    if (!spec) return null;
+    return {
+      spec,
+      origin: (model.familyParameters[selectedParam] ? "family" : "shared") as "family" | "shared",
+      ...formulaAncestry(selectedParam, formulaParams),
+      associations: paramAssociations(model, selectedParam),
+    };
+  }, [model, selectedParam, formulaParams]);
+
+  // Esc drops the pinned parameter — the same grounding-focus reflex /family-types has.
+  useEffect(() => {
+    if (!selectedParam) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelectedParam(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedParam]);
 
   return (
     <main className="flex h-screen flex-col bg-[var(--paper)] text-[var(--foreground)]">
@@ -1907,17 +2207,18 @@ function Page() {
               : "editing"
           }
           prefixTone={proposalCount > 0 ? "awaiting" : "rest"}
-          documentLabel={isFamilyDocument ? (snapshot?.documentId.relativePath ?? null) : null}
+          documentLabel={snapshot?.documentId.relativePath ?? null}
           documents={documents}
           onPickDocument={(path) => void openDocument(path)}
           target={boundTarget}
           onBind={(selector) => {
             // The settings slice runs the document commands; it needs the same session
             // binding as the family slice or FamilyFoundry module discovery fails.
-            void family.command("bind", { target: selector });
-            void settings.command("bind", { target: selector });
+            void store.familyCommand("bind", { target: selector });
+            void store.settingsCommand("bind", { target: selector });
           }}
           busy={busy != null}
+          receipt={receipt}
         />
         <NewDocument onCreate={createDocument} busy={busy != null} />
         <span className="mx-1 h-4 w-px bg-[var(--line-2)]" />
@@ -1954,9 +2255,19 @@ function Page() {
 
         <span className="ml-auto" />
         {proposalCount > 0 && (
-          <span className="font-mono text-[10px] text-[var(--pe-blue)]">
-            {proposalCount} open proposal{proposalCount === 1 ? "" : "s"}
-          </span>
+          <>
+            <span className="font-mono text-[10px] text-[var(--pe-blue)]">
+              {proposalCount} open proposal{proposalCount === 1 ? "" : "s"}
+            </span>
+            <button
+              type="button"
+              onClick={acceptAll}
+              title="Stage every open proposal — fields you have already staged are left alone"
+              className="rounded-[2px] border border-[var(--pe-blue)] px-2 py-0.5 text-[10px] text-[var(--pe-blue)] hover:bg-[var(--pe-blue)]/10"
+            >
+              accept all
+            </button>
+          </>
         )}
         {stagedCount > 0 && (
           <button
@@ -1977,8 +2288,9 @@ function Page() {
         </button>
         <button
           type="button"
-          disabled={!isFamilyDocument || stagedCount === 0 || busy != null}
+          disabled={saveBlockedReason != null || busy != null}
           onClick={() => void run("save")}
+          title={saveBlockedReason ?? `Save ${stagedCount} staged field(s)`}
           className="rounded-[2px] bg-[var(--pe-blue)] px-2 py-0.5 text-[10px] text-white disabled:opacity-40"
         >
           save {stagedCount || ""}
@@ -2042,7 +2354,21 @@ function Page() {
             {evidenceFresh ? "fresh" : "STALE"}
           </span>
         )}
+        {saveBlockedReason && stagedCount > 0 && (
+          <span className="text-[var(--kiln)]">Save blocked · {saveBlockedReason}</span>
+        )}
+        {lastSave && busy == null && (
+          <span className={lastSave.failed > 0 ? "text-[var(--kiln)]" : "text-[var(--lichen)]"}>
+            Saved {lastSave.saved}
+            {lastSave.failed > 0 ? ` · ${lastSave.failed} failed` : ""}
+          </span>
+        )}
         {error && <span className="text-[var(--fail)]">{error}</span>}
+        {/* The dispatcher's `hint` is a teaching channel, distinct from the error text. */}
+        {hint && <span className="text-[var(--kiln)]">hint: {hint}</span>}
+        {store.isMock && (
+          <span className="text-[var(--slate)]">?mock — fixture store, no host</span>
+        )}
       </div>
 
       {/* ── body ────────────────────────────────────────────────────────────── */}
@@ -2077,6 +2403,9 @@ function Page() {
                 fields={fields}
                 onCite={setCite}
                 onReview={review}
+                onReviewMark={markReview}
+                selectedParam={selectedParam}
+                onSelectParam={setSelectedParam}
               />
               <details className="rounded-[2px] border border-[var(--line)] bg-[var(--paper-2)]/40 px-3 py-2">
                 <summary className="tele-label cursor-pointer text-[10px] text-[var(--clay-ink)]">
@@ -2090,16 +2419,36 @@ function Page() {
           )}
         </div>
 
-        {showDocPane && (
-          <div className="w-[42%] min-w-[380px] shrink-0">
-            <FamilyDocPane
-              grounding={grounding}
-              citations={citations}
-              unresolved={unresolvedCitations}
-              caption={activeCite?.label ?? null}
-              onParse={(input) => void parseSpec(input)}
-              parsing={parsing}
-            />
+        {(showDocPane || inspected) && (
+          <div className="flex w-[42%] min-w-[380px] shrink-0 flex-col">
+            {showDocPane && (
+              <div className="min-h-0 flex-1">
+                <FamilyDocPane
+                  grounding={grounding}
+                  citations={citations}
+                  unresolved={unresolvedCitations}
+                  caption={activeCite?.label ?? null}
+                  onParse={(input) => void parseSpec(input)}
+                  parsing={parsing}
+                />
+              </div>
+            )}
+            {inspected && selectedParam && (
+              <div className={showDocPane ? "h-[42%] min-h-0 shrink-0" : "min-h-0 flex-1"}>
+                <FamilyInspector
+                  paramName={selectedParam}
+                  origin={inspected.origin}
+                  dataType={inspected.spec.dataType}
+                  formula={inspected.spec.formula}
+                  isInstance={inspected.spec.isInstance}
+                  dependsOn={inspected.dependsOn}
+                  dependents={inspected.dependents}
+                  associations={inspected.associations}
+                  onSelect={setSelectedParam}
+                  onClose={() => setSelectedParam(null)}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>
