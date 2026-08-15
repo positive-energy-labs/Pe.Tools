@@ -91,11 +91,7 @@ function EmptyFrame() {
   return (
     <div
       aria-hidden
-      style={{
-        aspectRatio: "3 / 2",
-        border: "0.5px dashed var(--line-2)",
-        borderRadius: 0,
-      }}
+      className="aspect-[3/2] rounded-none border border-dashed border-[var(--line-2)]"
     />
   );
 }
@@ -115,12 +111,7 @@ function Thumbnail({
     <button
       type="button"
       onClick={onSelect}
-      className="flex min-w-0 flex-col gap-1 p-1.5 text-left hover:bg-muted/60"
-      style={{
-        border: selected ? "0.5px solid var(--pe-blue)" : "0.5px solid var(--line)",
-        borderRadius: 2,
-        background: selected ? "color-mix(in srgb, var(--pe-blue) 6%, transparent)" : undefined,
-      }}
+      className={`flex min-w-0 flex-col gap-1 rounded-[var(--radius)] border p-1.5 text-left hover:bg-muted/60 ${selected ? "border-[var(--pe-blue)] bg-[color-mix(in_srgb,var(--pe-blue)_6%,transparent)]" : "border-[var(--line)]"}`}
       title={
         entry
           ? `${sheet.sheetNumber} — ${sheet.sheetName}`
@@ -197,10 +188,7 @@ function DrawingSetView({ results, observedAtMs, call }: SyntheticViewProps) {
           label={`${group.prefix} series`}
           aside={<MonoNote>{group.sheets.length} sheets</MonoNote>}
         >
-          <div
-            className="grid gap-2"
-            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))" }}
-          >
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2">
             {group.sheets.map((sheet) => (
               <Thumbnail
                 key={sheet.uniqueId ?? sheet.sheetNumber}

@@ -86,10 +86,7 @@ function PanelsView({ data }: OpViewProps) {
       {entries.length === 0 ? (
         <EmptyState note="no panels in scope" />
       ) : (
-        <div
-          className="grid gap-2"
-          style={{ gridTemplateColumns: "repeat(auto-fill, minmax(16rem, 1fr))" }}
-        >
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(16rem,1fr))] gap-2">
           {entries.map((panel, i) => {
             const configured = asNumber(panel.configuredSlotCount);
             const occupied = asNumber(panel.occupiedSlotCount);
@@ -105,14 +102,12 @@ function PanelsView({ data }: OpViewProps) {
             return (
               <article
                 key={asString(panel.panelUniqueId) ?? i}
-                className="min-w-0 p-2"
-                style={{ border: "0.5px solid var(--line)", borderRadius: 2 }}
+                className="min-w-0 rounded-[var(--radius)] border border-[var(--line)] p-2"
               >
                 <div className="mb-1.5 flex items-baseline justify-between gap-2">
                   <h3
-                    className="truncate text-sm font-semibold"
+                    className="truncate text-sm font-semibold text-[var(--pe-blue)]"
                     title={asString(panel.panelName)}
-                    style={{ color: "var(--pe-blue)" }}
                   >
                     {asString(panel.panelName) ?? "(unnamed)"}
                   </h3>
@@ -407,8 +402,7 @@ function extractBreakerSlots(body: Rec): BreakerSlot[] | undefined {
 function BreakerHalf({ slot, side }: { slot: BreakerSlot | undefined; side: "left" | "right" }) {
   const gutter = (
     <span
-      className="tele shrink-0 px-1.5 py-1 text-[11px]"
-      style={{ width: 34, textAlign: side === "left" ? "right" : "left", color: "var(--pe-blue)" }}
+      className={`tele w-[34px] shrink-0 px-1.5 py-1 text-[11px] text-[var(--pe-blue)] ${side === "left" ? "text-right" : "text-left"}`}
     >
       {slot?.num ?? ""}
     </span>
@@ -442,8 +436,7 @@ function BreakerHalf({ slot, side }: { slot: BreakerSlot | undefined; side: "lef
     );
   return (
     <div
-      className="flex min-w-0 items-center"
-      style={side === "left" ? { borderRight: "1.5px solid var(--line-2)" } : undefined}
+      className={`flex min-w-0 items-center ${side === "left" ? "border-r-[1.5px] border-r-[var(--line-2)]" : ""}`}
     >
       {inner}
     </div>
@@ -461,11 +454,7 @@ function Panelboard({ slots }: { slots: BreakerSlot[] }) {
       {Array.from({ length: rowCount }, (_, i) => (
         <div
           key={i}
-          className="grid"
-          style={{
-            gridTemplateColumns: "1fr 1fr",
-            borderTop: i > 0 ? "0.5px solid var(--line-soft)" : undefined,
-          }}
+          className={`grid grid-cols-2 ${i > 0 ? "border-t border-[var(--line-soft)]" : ""}`}
         >
           <BreakerHalf slot={odds[i]} side="left" />
           <BreakerHalf slot={evens[i]} side="right" />
@@ -542,19 +531,9 @@ function PanelScheduleCard({ entry }: { entry: Rec }) {
   const slots = body ? extractBreakerSlots(body) : undefined;
   const panelName = asString(entry.panelName) ?? asString(entry.scheduleName) ?? "(unnamed panel)";
   return (
-    <article className="min-w-0" style={{ border: "0.5px solid var(--line-2)", borderRadius: 2 }}>
-      <div
-        className="flex items-baseline justify-between gap-2 px-2 py-1.5"
-        style={{
-          background: "color-mix(in srgb, var(--pe-blue) 12%, transparent)",
-          borderBottom: "0.5px solid var(--line-2)",
-        }}
-      >
-        <h3
-          className="truncate text-sm font-semibold"
-          style={{ color: "var(--pe-blue)" }}
-          title={panelName}
-        >
+    <article className="min-w-0 rounded-[var(--radius)] border border-[var(--line-2)]">
+      <div className="flex items-baseline justify-between gap-2 border-b border-[var(--line-2)] bg-[color-mix(in_srgb,var(--pe-blue)_12%,transparent)] px-2 py-1.5">
+        <h3 className="truncate text-sm font-semibold text-[var(--pe-blue)]" title={panelName}>
           {panelName}
         </h3>
         <MonoNote>
@@ -568,7 +547,7 @@ function PanelScheduleCard({ entry }: { entry: Rec }) {
       {header && <SectionLines section={header} />}
       {body ? (
         slots ? (
-          <div style={{ borderTop: header ? "0.5px solid var(--line-soft)" : undefined }}>
+          <div className={header ? "border-t border-[var(--line-soft)]" : undefined}>
             <Panelboard slots={slots} />
           </div>
         ) : (
@@ -583,12 +562,12 @@ function PanelScheduleCard({ entry }: { entry: Rec }) {
         <EmptyState note="no body section in projection" />
       )}
       {summary && (
-        <div style={{ borderTop: "0.5px solid var(--line)" }}>
+        <div className="border-t border-[var(--line)]">
           <SectionLines section={summary} />
         </div>
       )}
       {footer && (
-        <div style={{ borderTop: "0.5px solid var(--line-soft)" }}>
+        <div className="border-t border-[var(--line-soft)]">
           <SectionLines section={footer} />
         </div>
       )}

@@ -90,10 +90,7 @@ function HostNode({ host }: { host: Record<string, unknown> }) {
   const agent = asRecord(host.agentRuntime);
   const disconnectReason = asString(host.disconnectReason);
   return (
-    <div
-      className="flex min-w-0 flex-col gap-1.5 px-3 py-2.5"
-      style={{ border: "0.5px solid var(--line-2)", borderRadius: 2 }}
-    >
+    <div className="flex min-w-0 flex-col gap-1.5 rounded-[var(--radius)] border border-[var(--line-2)] px-3 py-2.5">
       <div className="flex items-center gap-1.5">
         <LiveDot tone={connected ? "pinned" : "dangling"} lane={lane} />
         <span className="text-xs font-semibold">host</span>
@@ -126,13 +123,7 @@ function DocumentLeaf({ doc }: { doc: Record<string, unknown> }) {
   return (
     <div className="flex min-w-0 items-baseline gap-1.5 py-0.5">
       <span
-        className="inline-block shrink-0 self-center"
-        style={{
-          width: 5,
-          height: 5,
-          borderRadius: 1,
-          background: isActive ? "var(--pe-blue)" : "var(--line-2)",
-        }}
+        className={`inline-block size-[5px] shrink-0 self-center rounded-[1px] ${isActive ? "bg-[var(--pe-blue)]" : "bg-[var(--line-2)]"}`}
       />
       <span
         className={`min-w-0 truncate text-xs ${isActive ? "font-medium" : "text-muted-foreground"}`}
@@ -161,12 +152,7 @@ function SessionNode({
   const openCount = asNumber(session.openDocumentCount);
   return (
     <div
-      className="flex min-w-0 flex-col gap-1 px-3 py-2"
-      style={{
-        border: `0.5px solid ${connected ? "var(--line)" : "var(--line-soft)"}`,
-        borderRadius: 2,
-        opacity: connected ? 1 : 0.6,
-      }}
+      className={`flex min-w-0 flex-col gap-1 rounded-[var(--radius)] border px-3 py-2 ${connected ? "border-[var(--line)]" : "border-[var(--line-soft)] opacity-60"}`}
     >
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         <LiveDot tone={connected ? "implicit" : "muted"} lane={lane} />
@@ -182,10 +168,7 @@ function SessionNode({
       </div>
 
       {/* document leaves — staged fetch, graceful in every state */}
-      <div
-        className="mt-0.5 flex flex-col pl-2.5"
-        style={{ borderLeft: "0.5px solid var(--line-soft)" }}
-      >
+      <div className="mt-0.5 flex flex-col border-l border-[var(--line-soft)] pl-2.5">
         {!connected && (
           <MonoNote>
             not queried — last reported doc: {asString(session.activeDocumentTitle) ?? "∅"}
@@ -246,10 +229,7 @@ function SessionTopologyView({ results, observedAtMs }: SyntheticViewProps) {
         </div>
 
         {/* trunk + session lanes */}
-        <div
-          className="ml-5 flex min-w-0 flex-1 flex-col gap-2.5 py-1"
-          style={{ borderLeft: "0.5px solid var(--line)" }}
-        >
+        <div className="ml-5 flex min-w-0 flex-1 flex-col gap-2.5 border-l border-[var(--line)] py-1">
           {sessions.length === 0 ? (
             <div className="pl-5">
               <EmptyState note="no bridge sessions — no Revit process is connected to this host" />
@@ -262,8 +242,7 @@ function SessionTopologyView({ results, observedAtMs }: SyntheticViewProps) {
                   {/* branch tick from trunk to session */}
                   <span
                     aria-hidden
-                    className="absolute left-0 top-4 inline-block w-5"
-                    style={{ borderTop: "0.5px solid var(--line)" }}
+                    className="absolute left-0 top-4 inline-block w-5 border-t border-[var(--line)]"
                   />
                   <SessionNode session={session} docFetch={id ? docFetches[id] : undefined} />
                 </div>

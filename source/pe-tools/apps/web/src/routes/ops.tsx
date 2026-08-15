@@ -207,8 +207,8 @@ function OpsPlayground() {
   return (
     <main className="grid h-screen grid-cols-[19rem_1fr] gap-0 bg-background text-foreground">
       {/* Op list */}
-      <aside className="flex min-h-0 flex-col" style={{ borderRight: "0.5px solid var(--line-2)" }}>
-        <div className="p-2" style={{ borderBottom: "0.5px solid var(--line)" }}>
+      <aside className="flex min-h-0 flex-col border-r border-[var(--line-2)]">
+        <div className="border-b border-[var(--line)] p-2">
           <Input
             placeholder={
               catalogQuery.isPending ? "Loading op catalog..." : `Search ${ops.length} host ops...`
@@ -221,10 +221,7 @@ function OpsPlayground() {
           {/* Glance: synthetic composed surfaces, pinned above the raw op domains. */}
           {!query.trim() && syntheticOps.length > 0 && (
             <section>
-              <h2
-                className="section-label sticky top-0 z-10 px-3 pb-1 pt-3"
-                style={{ background: "var(--background)" }}
-              >
+              <h2 className="section-label sticky top-0 z-10 bg-background px-3 pb-1 pt-3">
                 Glance
                 <span className="tele ml-1.5 text-[9px] text-muted-foreground">
                   {syntheticOps.length}
@@ -242,9 +239,8 @@ function OpsPlayground() {
                         }}
                         className={cn(
                           "w-full rounded-[2px] px-2 py-1 text-left transition-colors hover:bg-muted",
-                          active && "bg-muted",
+                          active && "bg-muted shadow-[inset_2px_0_0_var(--pe-blue)]",
                         )}
-                        style={active ? { boxShadow: "inset 2px 0 0 var(--pe-blue)" } : undefined}
                       >
                         <div className="min-w-0 truncate text-xs font-medium">
                           {glance.displayName}
@@ -261,10 +257,7 @@ function OpsPlayground() {
           )}
           {grouped.map(({ domain, ops: members }) => (
             <section key={domain}>
-              <h2
-                className="section-label sticky top-0 z-10 px-3 pb-1 pt-3"
-                style={{ background: "var(--background)" }}
-              >
+              <h2 className="section-label sticky top-0 z-10 bg-background px-3 pb-1 pt-3">
                 {domain}
                 <span className="tele ml-1.5 text-[9px] text-muted-foreground">
                   {members.length}
@@ -280,9 +273,8 @@ function OpsPlayground() {
                         onClick={() => select(op)}
                         className={cn(
                           "w-full rounded-[2px] px-2 py-1 text-left transition-colors hover:bg-muted",
-                          active && "bg-muted",
+                          active && "bg-muted shadow-[inset_2px_0_0_var(--pe-blue)]",
                         )}
-                        style={active ? { boxShadow: "inset 2px 0 0 var(--pe-blue)" } : undefined}
                       >
                         <div className="flex items-center gap-1.5">
                           <span
@@ -298,14 +290,8 @@ function OpsPlayground() {
                           )}
                           {opViews[op.key] && (
                             <span
-                              className="ml-auto shrink-0"
+                              className="ml-auto size-[5px] shrink-0 rounded-[1px] bg-[var(--pe-green)]"
                               title="curated view"
-                              style={{
-                                width: 5,
-                                height: 5,
-                                borderRadius: 1,
-                                background: "var(--pe-green)",
-                              }}
                             />
                           )}
                         </div>
@@ -817,10 +803,7 @@ function OutputBlock({ title, value }: { title: string; value: unknown }) {
   return (
     <div className="min-w-0">
       {title && <h2 className="section-label mb-1">{title}</h2>}
-      <pre
-        className="max-h-[32rem] overflow-auto bg-muted/30 p-3 text-xs"
-        style={{ border: "0.5px solid var(--line)", borderRadius: 2 }}
-      >
+      <pre className="max-h-[32rem] overflow-auto rounded-[var(--radius)] border border-[var(--line)] bg-muted/30 p-3 text-xs">
         {typeof value === "string" ? value : JSON.stringify(value, null, 2)}
       </pre>
     </div>

@@ -79,8 +79,8 @@ function Mono({
 }) {
   return (
     <span
-      className="font-[var(--font-pe-mono)]"
-      style={{ fontSize: size, color, letterSpacing: "0.04em" }}
+      className="font-[var(--font-pe-mono)] tracking-[0.04em]"
+      style={{ fontSize: size, color }}
     >
       {children}
     </span>
@@ -103,15 +103,7 @@ function Btn({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="tele ml-2 px-1.5 py-0.5"
-      style={{
-        fontSize: 9,
-        borderRadius: 2,
-        cursor: disabled ? "default" : "pointer",
-        border: `0.5px solid ${danger ? "var(--cat-clay)" : "var(--line-2)"}`,
-        color: danger ? "var(--cat-clay)" : "var(--muted-foreground)",
-        opacity: disabled ? 0.4 : 1,
-      }}
+      className={`tele ml-2 cursor-pointer rounded-[var(--radius)] border px-1.5 py-0.5 text-[9px] disabled:cursor-default disabled:opacity-40 ${danger ? "border-cat-clay/25 text-cat-clay" : "border-[var(--line-2)] text-muted-foreground"}`}
     >
       {children}
     </button>
@@ -179,9 +171,9 @@ function Page() {
   }, [ledger.length, ledgerOpen]);
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--background)" }}>
-      <div className="mx-auto flex max-w-5xl gap-0 px-6 py-6" style={{ minHeight: "85vh" }}>
-        <div className="flex-1 pr-5" style={{ borderRight: "0.5px solid var(--line-2)" }}>
+    <div className="min-h-screen bg-background">
+      <div className="mx-auto flex min-h-[85vh] max-w-5xl gap-0 px-6 py-6">
+        <div className="flex-1 border-r border-[var(--line-2)] pr-5">
           {/* declare a new world — the only way a sandbox comes to exist from this surface */}
           <div className="flex items-center gap-2 pb-4">
             <Mono size={10}>declare a new world:</Mono>
@@ -193,15 +185,7 @@ function Page() {
                 onClick={() =>
                   void act({ action: "start", year: y }, `start a 20${y} sandbox`, `start-${y}`)
                 }
-                className="tele flex-1 py-1.5"
-                style={{
-                  fontSize: 10,
-                  borderRadius: 2,
-                  cursor: busy ? "default" : "pointer",
-                  border: "0.5px dashed var(--line-2)",
-                  color: "var(--muted-foreground)",
-                  opacity: busy === `start-${y}` ? 0.5 : 1,
-                }}
+                className={`tele flex-1 cursor-pointer rounded-[var(--radius)] border border-dashed border-[var(--line-2)] py-1.5 text-[10px] text-muted-foreground disabled:cursor-default ${busy === `start-${y}` ? "opacity-50" : ""}`}
               >
                 {busy === `start-${y}` ? "starting…" : `+ 20${y}`}
               </button>
@@ -211,7 +195,7 @@ function Page() {
           <div className="pb-2">
             <Mono size={10}>FLEET</Mono>
           </div>
-          <table className="w-full" style={{ borderCollapse: "collapse" }}>
+          <table className="w-full border-collapse">
             <tbody>
               {fleet.map((world) => {
                 const sandboxId = world.kind === "sandbox" ? world.id : undefined;
@@ -220,20 +204,15 @@ function Page() {
                   ? age(world.session.observedAtUnixMs, nowMs)
                   : age(parseUtc(world.registry?.startedAtUtc), nowMs);
                 return (
-                  <tr key={world.id} style={{ borderTop: "0.5px solid var(--line-soft)" }}>
-                    <td className="py-2 pr-3" style={{ width: 8 }}>
+                  <tr key={world.id} className="border-t border-[var(--line-soft)]">
+                    <td className="w-[8px] py-2 pr-3">
                       <span
-                        style={{
-                          display: "inline-block",
-                          width: 6,
-                          height: 6,
-                          borderRadius: 3,
-                          background: PHASE_COLOR[world.phase],
-                        }}
+                        className="inline-block size-[6px] rounded-[3px]"
+                        style={{ backgroundColor: PHASE_COLOR[world.phase] }}
                       />
                     </td>
                     <td className="py-2 pr-4">
-                      <div style={{ fontSize: 13, color: "var(--foreground)" }}>
+                      <div className="text-[13px] text-foreground">
                         {world.kind === "user" ? "your Revit" : world.id}
                       </div>
                       <Mono size={9}>{worldSub(world)}</Mono>
@@ -246,13 +225,13 @@ function Page() {
                         ).toUpperCase()}
                       </Mono>
                     </td>
-                    <td className="py-2 pr-4" style={{ maxWidth: 220 }}>
+                    <td className="max-w-[220px] py-2 pr-4">
                       <Mono size={9}>{worldDocs(world)}</Mono>
                     </td>
                     <td className="py-2 pr-4 text-right">
                       <Mono size={9}>{seen ? `seen ${seen} ago` : ""}</Mono>
                     </td>
-                    <td className="py-2 text-right" style={{ whiteSpace: "nowrap" }}>
+                    <td className="whitespace-nowrap py-2 text-right">
                       {sandboxId ? (
                         <>
                           <Btn
@@ -311,32 +290,22 @@ function Page() {
               <div className="pb-2">
                 <Mono size={10}>KILLED</Mono>
               </div>
-              <table className="w-full" style={{ borderCollapse: "collapse", opacity: 0.55 }}>
+              <table className="w-full border-collapse opacity-[0.55]">
                 <tbody>
                   {killed.map((world) => {
                     const died = age(parseUtc(world.registry?.stoppedAtUtc), nowMs);
                     return (
-                      <tr key={world.id} style={{ borderTop: "0.5px solid var(--line-soft)" }}>
-                        <td className="py-2 pr-3" style={{ width: 8 }}>
-                          <span
-                            style={{
-                              display: "inline-block",
-                              width: 6,
-                              height: 6,
-                              borderRadius: 3,
-                              border: "1px solid var(--muted-foreground)",
-                            }}
-                          />
+                      <tr key={world.id} className="border-t border-[var(--line-soft)]">
+                        <td className="w-[8px] py-2 pr-3">
+                          <span className="inline-block size-[6px] rounded-[3px] border border-muted-foreground" />
                         </td>
                         <td className="py-2 pr-4">
-                          <div style={{ fontSize: 13, color: "var(--muted-foreground)" }}>
-                            {world.id}
-                          </div>
+                          <div className="text-[13px] text-muted-foreground">{world.id}</div>
                           <Mono size={9}>
                             {yearLabel(world.year) ?? "?"} · was pid {world.pid ?? "?"}
                           </Mono>
                         </td>
-                        <td className="py-2 pr-4" style={{ maxWidth: 260 }}>
+                        <td className="max-w-[260px] py-2 pr-4">
                           <Mono size={9}>
                             {world.registry?.firstFailureEvent?.message ??
                               world.registry?.detail ??
@@ -379,38 +348,24 @@ function Page() {
               <button
                 type="button"
                 onClick={() => setLedgerOpen(false)}
-                className="tele cursor-pointer px-1"
-                style={{
-                  fontSize: 9,
-                  borderRadius: 2,
-                  border: "0.5px solid var(--line-2)",
-                  color: "var(--muted-foreground)",
-                }}
+                className="tele cursor-pointer rounded-[var(--radius)] border border-[var(--line-2)] px-1 text-[9px] text-muted-foreground"
               >
                 ›
               </button>
             </div>
-            <div
-              ref={logRef}
-              className="min-h-0 flex-1 overflow-y-auto"
-              style={{ maxHeight: "82vh" }}
-            >
+            <div ref={logRef} className="max-h-[82vh] min-h-0 flex-1 overflow-y-auto">
               {ledger.length === 0 ? (
                 <Mono size={9}>quiet — world changes and your actions land here</Mono>
               ) : null}
               {ledger.map((e, idx) => (
-                <div
-                  key={idx}
-                  className="py-1.5"
-                  style={{ borderTop: "0.5px solid var(--line-soft)" }}
-                >
+                <div key={idx} className="border-t border-[var(--line-soft)] py-1.5">
                   <Mono
                     size={9}
                     color={e.actor === "bridge" ? "var(--pe-blue)" : "var(--foreground)"}
                   >
                     {e.actor}
                   </Mono>
-                  <div style={{ fontSize: 11, color: "var(--foreground)" }}>{e.label}</div>
+                  <div className="text-[11px] text-foreground">{e.label}</div>
                   <Mono size={8}>
                     {(() => {
                       const s = Math.max(0, Math.round((nowMs - e.atMs) / 1000));
@@ -426,24 +381,9 @@ function Page() {
             type="button"
             onClick={() => setLedgerOpen(true)}
             title="open the ledger"
-            className="ml-2 flex cursor-pointer flex-col items-center gap-2 py-2"
-            style={{
-              width: 24,
-              border: "0.5px solid var(--line-2)",
-              borderRadius: 2,
-              background: "transparent",
-              alignSelf: "stretch",
-            }}
+            className="ml-2 flex w-6 self-stretch cursor-pointer flex-col items-center gap-2 rounded-[var(--radius)] border border-[var(--line-2)] bg-transparent py-2"
           >
-            <span
-              className="font-[var(--font-pe-mono)]"
-              style={{
-                fontSize: 9,
-                letterSpacing: "0.08em",
-                color: "var(--muted-foreground)",
-                writingMode: "vertical-rl",
-              }}
-            >
+            <span className="font-[var(--font-pe-mono)] text-[9px] tracking-[0.08em] text-muted-foreground [writing-mode:vertical-rl]">
               LEDGER · {ledger.length}
             </span>
           </button>

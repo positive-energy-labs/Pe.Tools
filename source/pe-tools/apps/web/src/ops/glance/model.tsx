@@ -63,10 +63,7 @@ function obs(observedAtUtc: string | undefined, fallbackMs: number): string {
 /** Stat band cell: tele value over a quiet sans label. */
 function Stat({ label, value, hue }: { label: string; value: ReactNode; hue?: CatHue }) {
   return (
-    <div
-      className="min-w-[64px] px-3 py-1.5"
-      style={{ borderRight: "0.5px solid var(--line-soft)" }}
-    >
+    <div className="min-w-[64px] border-r border-[var(--line-soft)] px-3 py-1.5">
       <div className="tele" style={hue ? { color: catVar(hue) } : undefined}>
         {value ?? "∅"}
       </div>
@@ -125,10 +122,7 @@ function ModelGlanceView({ results, observedAtMs }: SyntheticViewProps) {
   return (
     <div className="flex flex-col gap-5">
       {/* document hero: identity + discipline + levels, first 200px answers the question */}
-      <div
-        className="min-w-0 px-3 py-2"
-        style={{ border: "0.5px solid var(--line-2)", borderRadius: 2 }}
-      >
+      <div className="min-w-0 rounded-[var(--radius)] border border-[var(--line-2)] px-3 py-2">
         <div className="flex min-w-0 flex-wrap items-baseline gap-2">
           <span className="min-w-0 truncate text-sm font-semibold" title={path || undefined}>
             {doc ? text(doc.title) : "no active document"}
@@ -180,10 +174,7 @@ function ModelGlanceView({ results, observedAtMs }: SyntheticViewProps) {
       </div>
 
       {/* stat band: true project totals + family totals */}
-      <div
-        className="flex flex-wrap"
-        style={{ border: "0.5px solid var(--line)", borderRadius: 2 }}
-      >
+      <div className="flex flex-wrap rounded-[var(--radius)] border border-[var(--line)]">
         <Stat label="views" value={text(totals.viewCount)} />
         <Stat label="sheets" value={text(totals.sheetCount)} />
         <Stat label="schedules" value={text(totals.scheduleCount)} />
@@ -321,10 +312,7 @@ function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
       {!activeView ? (
         <EmptyState note="no active view reported" />
       ) : (
-        <div
-          className="min-w-0 px-3 py-2"
-          style={{ border: "0.5px solid var(--line-2)", borderRadius: 2 }}
-        >
+        <div className="min-w-0 rounded-[var(--radius)] border border-[var(--line-2)] px-3 py-2">
           <div className="flex min-w-0 flex-wrap items-baseline gap-2">
             <span className="min-w-0 truncate text-sm font-semibold" title={text(activeView.title)}>
               {text(activeView.title)}
@@ -394,31 +382,18 @@ function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
           ) : (
             <ul className="flex flex-col gap-1">
               {confidenceWarnings.map((warning, i) => (
-                <li key={i} className="tele text-[10px]" style={{ color: catVar("kiln") }}>
+                <li key={i} className="tele text-[10px] text-cat-kiln">
                   {warning}
                 </li>
               ))}
             </ul>
           )}
           {apiLimitations.length > 0 && (
-            <div
-              className="px-2 py-1.5"
-              style={{
-                borderRadius: 2,
-                background: `color-mix(in srgb, ${catVar("kiln")} 6%, transparent)`,
-                border: `0.5px solid color-mix(in srgb, ${catVar("kiln")} 25%, transparent)`,
-              }}
-            >
-              <div className="tele-label mb-1" style={{ color: catVar("kiln") }}>
-                api limitations (verbatim)
-              </div>
+            <div className="rounded-[var(--radius)] border border-cat-kiln/25 bg-cat-kiln/[0.06] px-2 py-1.5">
+              <div className="tele-label mb-1 text-cat-kiln">api limitations (verbatim)</div>
               <ul className="flex flex-col gap-1">
                 {apiLimitations.map((limitation, i) => (
-                  <li
-                    key={i}
-                    className="text-[11px] leading-snug"
-                    style={{ color: catVar("kiln") }}
-                  >
+                  <li key={i} className="text-[11px] leading-snug text-cat-kiln">
                     {limitation}
                   </li>
                 ))}

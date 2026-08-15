@@ -1,4 +1,4 @@
-import { type CSSProperties, type ReactNode, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { cn } from "#/lib/utils";
 
 /**
@@ -29,13 +29,14 @@ export function Chip({
   return (
     <span
       title={title}
-      className={cn("inline-flex items-center gap-1 px-1.5 py-px", mono && "tele-label")}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-[var(--radius)] border px-1.5 py-px",
+        mono ? "tele-label text-[10px]" : "text-[11px]",
+      )}
       style={{
-        fontSize: mono ? 10 : 11,
-        borderRadius: 2,
         color: c,
-        background: `color-mix(in srgb, ${c} 12%, transparent)`,
-        border: `0.5px solid color-mix(in srgb, ${c} 25%, transparent)`,
+        backgroundColor: `color-mix(in srgb, ${c} 12%, transparent)`,
+        borderColor: `color-mix(in srgb, ${c} 25%, transparent)`,
       }}
     >
       {children}
@@ -112,10 +113,7 @@ export function MonoNote({ children, hue }: { children: ReactNode; hue?: CatHue 
 
 export function EmptyState({ note }: { note: string }) {
   return (
-    <div
-      className="flex items-center justify-center px-4 py-8 text-xs text-muted-foreground"
-      style={{ border: "0.5px dashed var(--line-2)", borderRadius: 2 }}
-    >
+    <div className="flex items-center justify-center rounded-[var(--radius)] border border-dashed border-[var(--line-2)] px-4 py-8 text-xs text-muted-foreground">
       {note}
     </div>
   );
@@ -136,10 +134,7 @@ export type TreeNode = {
  * guide lines, quiet hover. Leaf rows read as items, group rows as folders. */
 export function TreeView({ nodes, dense = false }: { nodes: TreeNode[]; dense?: boolean }) {
   return (
-    <div
-      className="overflow-auto"
-      style={{ border: "0.5px solid var(--line)", borderRadius: 2, maxHeight: "32rem" }}
-    >
+    <div className="max-h-[32rem] overflow-auto rounded-[var(--radius)] border border-[var(--line)]">
       <ul className="py-1">
         {nodes.map((node) => (
           <TreeRow key={node.id} node={node} depth={0} dense={dense} />
@@ -165,11 +160,10 @@ function TreeRow({ node, depth, dense }: { node: TreeNode; depth: number; dense:
         style={{ paddingLeft: 8 + depth * 14 }}
       >
         <span
-          className="inline-block w-3 shrink-0 text-center text-[9px] text-muted-foreground"
-          style={{
-            transform: open && hasChildren ? "rotate(90deg)" : undefined,
-            transition: "transform 120ms",
-          }}
+          className={cn(
+            "inline-block w-3 shrink-0 text-center text-[9px] text-muted-foreground transition-transform duration-[120ms]",
+            open && hasChildren && "rotate-90",
+          )}
         >
           {hasChildren ? "▸" : ""}
         </span>
@@ -186,7 +180,10 @@ function TreeRow({ node, depth, dense }: { node: TreeNode; depth: number; dense:
         )}
       </div>
       {hasChildren && open && (
-        <ul style={{ borderLeft: "0.5px solid var(--line-soft)", marginLeft: 8 + depth * 14 + 5 }}>
+        <ul
+          className="border-l border-[var(--line-soft)]"
+          style={{ marginLeft: 8 + depth * 14 + 5 }}
+        >
           {node.children?.map((child) => (
             <TreeRow key={child.id} node={child} depth={depth + 1} dense={dense} />
           ))}
@@ -226,29 +223,24 @@ export function DataTable<Row>({
   footer?: ReactNode;
 }) {
   return (
-    <div style={{ border: "0.5px solid var(--line-2)", borderRadius: 2 }} className="min-w-0">
+    <div className="min-w-0 rounded-[var(--radius)] border border-[var(--line-2)]">
       {title && (
-        <div
-          className="px-2 py-1 text-center text-xs font-semibold"
-          style={{ borderBottom: "0.5px solid var(--line-2)" }}
-        >
+        <div className="border-b border-[var(--line-2)] px-2 py-1 text-center text-xs font-semibold">
           {title}
         </div>
       )}
       <div className="overflow-auto" style={{ maxHeight }}>
         <table className="w-full border-collapse text-left text-xs">
-          <thead className="sticky top-0 z-10" style={{ background: "var(--muted)" }}>
+          <thead className="sticky top-0 z-10 bg-muted">
             <tr>
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={cn("px-2 py-1 font-semibold", col.numeric && "text-right")}
-                  style={{
-                    borderBottom: "0.5px solid var(--line-2)",
-                    borderRight: "0.5px solid var(--line-soft)",
-                    width: col.width,
-                    whiteSpace: "nowrap",
-                  }}
+                  className={cn(
+                    "whitespace-nowrap border-b border-r border-b-[var(--line-2)] border-r-[var(--line-soft)] px-2 py-1 font-semibold",
+                    col.numeric && "text-right",
+                  )}
+                  style={{ width: col.width }}
                 >
                   {col.header}
                 </th>
@@ -261,15 +253,10 @@ export function DataTable<Row>({
                 {columns.map((col) => (
                   <td
                     key={col.key}
-                    className={cn("px-2 py-1 align-top", col.numeric && "tele text-right")}
-                    style={{
-                      borderBottom: "0.5px solid var(--line-soft)",
-                      borderRight: "0.5px solid var(--line-soft)",
-                      maxWidth: 320,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
+                    className={cn(
+                      "max-w-[320px] overflow-hidden text-ellipsis whitespace-nowrap border-b border-r border-[var(--line-soft)] px-2 py-1 align-top",
+                      col.numeric && "tele text-right",
+                    )}
                   >
                     {col.cell(row, index)}
                   </td>
@@ -282,11 +269,7 @@ export function DataTable<Row>({
           <div className="px-2 py-6 text-center text-xs text-muted-foreground">no rows</div>
         )}
       </div>
-      {footer && (
-        <div className="px-2 py-1" style={{ borderTop: "0.5px solid var(--line)" }}>
-          {footer}
-        </div>
-      )}
+      {footer && <div className="border-t border-[var(--line)] px-2 py-1">{footer}</div>}
     </div>
   );
 }
@@ -308,31 +291,25 @@ export function CoverageBar({
   const sum = segments.reduce((acc, s) => acc + s.count, 0);
   const denom = total ?? sum;
   if (denom <= 0) return <EmptyState note="nothing in scope" />;
-  const style: CSSProperties = {
-    display: "flex",
-    height: 10,
-    borderRadius: 2,
-    overflow: "hidden",
-    border: "0.5px solid var(--line)",
-  };
   return (
     <div>
-      <div style={style}>
+      <div className="flex h-[10px] overflow-hidden rounded-[var(--radius)] border border-[var(--line)]">
         {segments.map((s) => (
           <div
             key={s.label}
             title={`${s.label}: ${s.count}`}
+            className="border-r border-[var(--background)]"
             style={{
               width: `${(s.count / denom) * 100}%`,
-              background: `color-mix(in srgb, ${catVar(s.hue)} 55%, transparent)`,
-              borderRight: "0.5px solid var(--background)",
+              backgroundColor: `color-mix(in srgb, ${catVar(s.hue)} 55%, transparent)`,
             }}
           />
         ))}
         {sum < denom && (
           <div
             title={`unaccounted: ${denom - sum}`}
-            style={{ width: `${((denom - sum) / denom) * 100}%`, background: "var(--muted)" }}
+            className="bg-muted"
+            style={{ width: `${((denom - sum) / denom) * 100}%` }}
           />
         )}
       </div>
@@ -340,13 +317,8 @@ export function CoverageBar({
         {segments.map((s) => (
           <span key={s.label} className="tele inline-flex items-center gap-1 text-[10px]">
             <span
-              style={{
-                width: 7,
-                height: 7,
-                borderRadius: 1,
-                background: catVar(s.hue),
-                display: "inline-block",
-              }}
+              className="inline-block size-[7px] rounded-[1px]"
+              style={{ backgroundColor: catVar(s.hue) }}
             />
             <span className="text-muted-foreground">{s.label}</span> {s.count}
           </span>

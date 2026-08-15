@@ -169,7 +169,7 @@ export function SheetCanvas({ entry }: { entry: RevitDetailSheets.Res.SheetDetai
   return (
     <svg
       viewBox={`${frame.minX - pad} ${-pad} ${w + pad * 2} ${h + pad * 2}`}
-      style={{ width: "100%", maxWidth: 720, display: "block" }}
+      className="block w-full max-w-[720px]"
       role="img"
       aria-label={`sheet ${entry.summary.sheetNumber} anchor map`}
     >
@@ -212,7 +212,7 @@ export function SheetCanvas({ entry }: { entry: RevitDetailSheets.Res.SheetDetai
               y={toY(b.maxY) + fontSize * 1.3}
               fontSize={fontSize}
               fill={hue}
-              style={{ fontFamily: "var(--font-mono, monospace)" }}
+              className="font-[var(--font-mono,_monospace)]"
             >
               {anchor.label.length > 28 ? `${anchor.label.slice(0, 27)}…` : anchor.label}
             </text>
@@ -296,19 +296,17 @@ function ParameterRows({
   return (
     <div className="mt-2">
       <div className="section-label mb-1">{label}</div>
-      <div style={{ border: "0.5px solid var(--line)", borderRadius: 2 }}>
+      <div className="rounded-[var(--radius)] border border-[var(--line)]">
         {params.map((p) => (
           <div
             key={p.identity.key}
-            className="flex items-baseline justify-between gap-3 px-2 py-1"
-            style={{ borderBottom: "0.5px solid var(--line-soft)" }}
+            className="flex items-baseline justify-between gap-3 border-b border-[var(--line-soft)] px-2 py-1"
           >
             <span className="min-w-0 truncate text-xs" title={p.name}>
               {p.name}
             </span>
             <span
-              className="tele shrink-0 text-right"
-              style={!p.found || p.isBlank ? { color: catVar("kiln") } : undefined}
+              className={`tele shrink-0 text-right ${!p.found || p.isBlank ? "text-cat-kiln" : ""}`}
               title={p.rawValue ?? undefined}
             >
               {!p.found ? "not found" : p.isBlank ? "blank" : (p.displayValue ?? p.value ?? "∅")}
@@ -328,7 +326,7 @@ function ElementCard({ entry }: { entry: RevitDetailElements.Res.ElementContextE
   const grouped = instanceParams.length > 0 || typeParams.length > 0;
 
   return (
-    <div style={{ border: "0.5px solid var(--line-2)", borderRadius: 2 }} className="p-2">
+    <div className="rounded-[var(--radius)] border border-[var(--line-2)] p-2">
       <div className="flex flex-wrap items-center gap-2">
         {entry.categoryName && <Chip hue="blue">{entry.categoryName}</Chip>}
         <span className="text-xs font-medium">{entry.name}</span>
@@ -468,7 +466,7 @@ function ParameterLinksView({ data }: OpViewProps) {
       header: "proposed",
       numeric: true,
       cell: (w) => (
-        <span style={w.changed ? { color: catVar("green") } : undefined}>
+        <span className={w.changed ? "text-cat-green" : undefined}>
           {linkValueText(w.proposedValue)}
         </span>
       ),
@@ -556,7 +554,7 @@ function FamilyMatrix({ family }: { family: RevitMatrixLoadedFamilies.Res.Family
         const hasFormula = p.formulaState === "Present";
         return (
           <span
-            style={hasFormula ? { color: catVar("lichen") } : undefined}
+            className={hasFormula ? "text-cat-lichen" : undefined}
             title={hasFormula && p.formula ? `= ${p.formula}` : undefined}
           >
             {value ?? "∅"}
@@ -740,24 +738,14 @@ function FamilyEditorSnapshotView({ data }: OpViewProps) {
     {
       key: "formula",
       header: "formula",
-      cell: (p) =>
-        p.formula ? (
-          <span className="tele" style={{ color: catVar("lichen") }}>
-            = {p.formula}
-          </span>
-        ) : (
-          ""
-        ),
+      cell: (p) => (p.formula ? <span className="tele text-cat-lichen">= {p.formula}</span> : ""),
     },
     ...typeNames.map((typeName) => ({
       key: `t:${typeName}`,
       header:
         typeName === res.currentTypeName ? (
           <span>
-            {typeName}{" "}
-            <span className="tele text-[10px]" style={{ color: catVar("blue") }}>
-              current
-            </span>
+            {typeName} <span className="tele text-[10px] text-cat-blue">current</span>
           </span>
         ) : (
           typeName
@@ -824,13 +812,9 @@ function FamilyModelView({ data }: OpViewProps) {
       )}
       {ev.diagnostics.length > 0 ? (
         <OpSection label="diagnostics">
-          <div style={{ border: "0.5px solid var(--line)", borderRadius: 2 }}>
+          <div className="rounded-[var(--radius)] border border-[var(--line)]">
             {ev.diagnostics.map((d, i) => (
-              <div
-                key={i}
-                className="px-2 py-1"
-                style={{ borderBottom: "0.5px solid var(--line-soft)" }}
-              >
+              <div key={i} className="border-b border-[var(--line-soft)] px-2 py-1">
                 <MonoNote
                   hue={
                     d.provenance === "Unresolved"

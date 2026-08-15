@@ -714,7 +714,7 @@ function ConceptEvidenceView({ data }: OpViewProps) {
             label={conceptName}
             aside={<MonoNote>{candidates.length} candidates</MonoNote>}
           >
-            <div style={{ border: "0.5px solid var(--line)", borderRadius: 2 }}>
+            <div className="rounded-[var(--radius)] border border-[var(--line)]">
               {candidates.map((candidate, i) => {
                 const identity = asRecord(candidate.identity);
                 const confidence = asString(candidate.confidence);
@@ -725,8 +725,7 @@ function ConceptEvidenceView({ data }: OpViewProps) {
                 return (
                   <div
                     key={asString(identity?.key) ?? `${i}`}
-                    className="flex min-w-0 items-baseline gap-2 px-2 py-1.5 hover:bg-muted/40"
-                    style={i > 0 ? { borderTop: "0.5px solid var(--line-soft)" } : undefined}
+                    className={`flex min-w-0 items-baseline gap-2 px-2 py-1.5 hover:bg-muted/40 ${i > 0 ? "border-t border-[var(--line-soft)]" : ""}`}
                   >
                     <span className="tele w-6 shrink-0 text-right text-muted-foreground">
                       {i + 1}
@@ -809,10 +808,7 @@ function RecentDocumentsView({ data }: OpViewProps) {
 
   return (
     <OpSection label="Recent Documents" aside={<MonoNote>{documents.length} entries</MonoNote>}>
-      <div
-        className="grid gap-2"
-        style={{ gridTemplateColumns: "repeat(auto-fill, minmax(15rem, 1fr))" }}
-      >
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-2">
         {documents.map((doc, i) => {
           const path = asString(doc.path) ?? "";
           const { stem, ext, dir } = splitPath(path);
@@ -822,8 +818,7 @@ function RecentDocumentsView({ data }: OpViewProps) {
           return (
             <div
               key={path || `${i}`}
-              className="min-w-0 px-2.5 py-2"
-              style={{ border: "0.5px solid var(--line)", borderRadius: 2 }}
+              className="min-w-0 rounded-[var(--radius)] border border-[var(--line)] px-2.5 py-2"
               title={path}
             >
               <div className="flex items-baseline gap-1.5">

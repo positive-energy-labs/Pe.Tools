@@ -125,10 +125,7 @@ function ContextSummaryView({ data }: OpViewProps) {
     <div className="flex flex-col gap-5">
       {/* hero: document identity large, chips beneath, active-view stage line —
           Revit's window chrome distilled to a title block */}
-      <div
-        className="min-w-0 px-4 py-3"
-        style={{ border: "0.5px solid var(--line-2)", borderRadius: 2 }}
-      >
+      <div className="min-w-0 rounded-[var(--radius)] border border-[var(--line-2)] px-4 py-3">
         <div className="tele-label text-[10px] tracking-[0.3em] text-muted-foreground">
           DOCUMENT
         </div>
@@ -161,10 +158,7 @@ function ContextSummaryView({ data }: OpViewProps) {
 
         {/* stage line: where the camera is right now */}
         {activeView && (
-          <div
-            className="mt-2.5 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 pt-2"
-            style={{ borderTop: "0.5px solid var(--line-soft)" }}
-          >
+          <div className="mt-2.5 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 border-t border-[var(--line-soft)] pt-2">
             <span className="tele-label text-[10px] text-muted-foreground">ON STAGE</span>
             <Chip hue={activeView.isSheet === true ? "green" : "blue"}>
               {text(activeView.viewType)}
@@ -248,14 +242,7 @@ function DocumentTab({ doc }: { doc: Record<string, unknown> }) {
   const isActive = doc.isActive === true;
   return (
     <div
-      className="flex min-w-0 flex-col gap-0.5 px-2.5 py-1.5"
-      style={{
-        border: `0.5px solid ${isActive ? "var(--line-2)" : "var(--line)"}`,
-        borderRadius: 2,
-        boxShadow: isActive ? "inset 0 2px 0 0 var(--pe-blue)" : undefined,
-        background: isActive ? "color-mix(in srgb, var(--pe-blue) 5%, transparent)" : undefined,
-        maxWidth: "18rem",
-      }}
+      className={`flex max-w-[18rem] min-w-0 flex-col gap-0.5 rounded-[var(--radius)] border px-2.5 py-1.5 ${isActive ? "border-[var(--line-2)] bg-[color-mix(in_srgb,var(--pe-blue)_5%,transparent)] shadow-[inset_0_2px_0_0_var(--pe-blue)]" : "border-[var(--line)]"}`}
     >
       <div className="flex min-w-0 items-baseline gap-1.5">
         <span
@@ -475,10 +462,7 @@ function ObservedViewCard({ view }: { view: Record<string, unknown> }) {
   ];
 
   return (
-    <div
-      className="flex min-w-0 flex-col gap-4 px-3 py-2.5"
-      style={{ border: "0.5px solid var(--line)", borderRadius: 2 }}
-    >
+    <div className="flex min-w-0 flex-col gap-4 rounded-[var(--radius)] border border-[var(--line)] px-3 py-2.5">
       <div className="flex min-w-0 flex-wrap items-baseline gap-2">
         <Chip hue="blue">{text(view.viewType)}</Chip>
         <span className="min-w-0 truncate text-xs font-semibold" title={text(view.title)}>
@@ -666,29 +650,18 @@ function ViewRenderingStateView({ data }: OpViewProps) {
  * ceiling, so the bar is honest only relative to the best score in this set. */
 function ScoreBar({ score, max, muted }: { score: number; max: number; muted: boolean }) {
   const frac = max > 0 ? Math.max(0, Math.min(1, score / max)) : 0;
-  const color = muted ? "var(--cat-kiln)" : "var(--pe-blue)";
   return (
     <span
       className="inline-flex shrink-0 items-center gap-1.5"
       title={`score ${score} of max ${max} in this set`}
     >
-      <span
-        className="inline-block"
-        style={{
-          width: 72,
-          height: 3,
-          borderRadius: 1,
-          background: "color-mix(in srgb, var(--line-2) 60%, transparent)",
-        }}
-      >
+      <span className="inline-block h-[3px] w-[72px] rounded-[1px] bg-[color-mix(in_srgb,var(--line-2)_60%,transparent)]">
         <span
-          className="block h-full"
-          style={{ width: `${frac * 100}%`, borderRadius: 1, background: color }}
+          className={`block h-full rounded-[1px] ${muted ? "bg-cat-kiln" : "bg-[var(--pe-blue)]"}`}
+          style={{ width: `${frac * 100}%` }}
         />
       </span>
-      <span className="tele text-[10px]" style={{ color: muted ? "var(--cat-kiln)" : undefined }}>
-        {score}
-      </span>
+      <span className={`tele text-[10px] ${muted ? "text-cat-kiln" : ""}`}>{score}</span>
     </span>
   );
 }
@@ -729,10 +702,7 @@ function ResolveReferencesView({ data }: OpViewProps) {
       {candidates.length === 0 ? (
         <EmptyState note="nothing in the model matched this reference" />
       ) : (
-        <div
-          className="flex flex-col"
-          style={{ border: "0.5px solid var(--line)", borderRadius: 2 }}
-        >
+        <div className="flex flex-col rounded-[var(--radius)] border border-[var(--line)]">
           {candidates.map((candidate, i) => {
             const handle = asRecord(candidate.handle);
             const related = asRecords(candidate.relatedHandles);
@@ -742,19 +712,7 @@ function ResolveReferencesView({ data }: OpViewProps) {
             return (
               <div
                 key={handle ? `${handleId(handle)}-${i}` : i}
-                className="flex min-w-0 flex-col gap-1 px-2.5 py-2"
-                style={{
-                  borderBottom:
-                    i < candidates.length - 1 ? "0.5px solid var(--line-soft)" : undefined,
-                  borderLeft: top
-                    ? "2px solid var(--pe-blue)"
-                    : ambiguous
-                      ? "2px solid var(--cat-kiln)"
-                      : "2px solid transparent",
-                  background: top
-                    ? "color-mix(in srgb, var(--pe-blue) 4%, transparent)"
-                    : undefined,
-                }}
+                className={`flex min-w-0 flex-col gap-1 border-l-2 px-2.5 py-2 ${i < candidates.length - 1 ? "border-b border-b-[var(--line-soft)]" : ""} ${top ? "border-l-[var(--pe-blue)] bg-[color-mix(in_srgb,var(--pe-blue)_4%,transparent)]" : ambiguous ? "border-l-cat-kiln" : "border-l-transparent"}`}
               >
                 <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                   <span className="tele w-6 shrink-0 text-[10px] text-muted-foreground">

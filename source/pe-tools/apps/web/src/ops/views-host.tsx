@@ -72,7 +72,7 @@ function HostStatusView({ data }: OpViewProps) {
       />
       {!connected && disconnectReason && (
         <Provenance>
-          <span style={{ color: "var(--cat-clay)" }}>disconnect: {disconnectReason}</span>
+          <span className="text-cat-clay">disconnect: {disconnectReason}</span>
         </Provenance>
       )}
       {agentRuntime && agentRuntime.available !== true && (
@@ -107,10 +107,7 @@ function SessionRow({
   openDocumentCount: number | undefined;
 }) {
   return (
-    <div
-      className="flex min-w-0 items-center gap-2 px-2 py-1.5"
-      style={{ borderBottom: "0.5px solid var(--line-soft)" }}
-    >
+    <div className="flex min-w-0 items-center gap-2 border-b border-[var(--line-soft)] px-2 py-1.5">
       <LiveDot tone={connected ? "implicit" : "dangling"} lane={lane} />
       <LaneBadge lane={lane} />
       <span className="min-w-0 truncate text-xs font-medium" title={title}>
@@ -128,7 +125,7 @@ function SessionRow({
 }
 
 function sessionListFrame(children: ReactNode) {
-  return <div style={{ border: "0.5px solid var(--line)", borderRadius: 2 }}>{children}</div>;
+  return <div className="rounded-[var(--radius)] border border-[var(--line)]">{children}</div>;
 }
 
 function BridgeSessionsListView({ data }: OpViewProps) {
@@ -203,7 +200,7 @@ function LogLine({ line }: { line: string }) {
   const timestamp = match?.[1] ?? "";
   const rest = timestamp ? line.slice(timestamp.length) : line;
   return (
-    <div style={{ whiteSpace: "pre", fontSize: 11, lineHeight: "1.5" }} className="tele">
+    <div className="tele whitespace-pre text-[11px] leading-[1.5]">
       {timestamp && <span className="text-muted-foreground">{timestamp}</span>}
       <span style={{ color: logLineColor(rest) }}>{rest}</span>
     </div>
@@ -236,8 +233,7 @@ function LogsTailView({ data }: OpViewProps) {
             ) : (
               <div
                 ref={scrollToBottom}
-                className="overflow-auto px-2 py-1"
-                style={{ border: "0.5px solid var(--line)", borderRadius: 2, maxHeight: "18rem" }}
+                className="max-h-[18rem] overflow-auto rounded-[var(--radius)] border border-[var(--line)] px-2 py-1"
               >
                 {lines.map((line, index) => (
                   <LogLine key={index} line={line} />
@@ -269,8 +265,7 @@ function SettingsWorkspacesView({ data }: OpViewProps) {
           return (
             <div
               key={asString(workspace.workspaceKey) ?? String(i)}
-              className="px-3 py-2"
-              style={{ border: "0.5px solid var(--line)", borderRadius: 2 }}
+              className="rounded-[var(--radius)] border border-[var(--line)] px-3 py-2"
             >
               <div className="flex items-baseline gap-2">
                 <span className="text-xs font-medium">
