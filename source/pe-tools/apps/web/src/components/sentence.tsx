@@ -50,6 +50,10 @@ export interface SlotSpec {
   placeholder: string;
   options: SlotOption[] | null;
   onPick?: (id: string) => void;
+  /** Tooltip — say what binding this noun DOES, not what the noun is called. */
+  title?: string;
+  /** Shown when the picker has nothing to offer. Say where the options come from. */
+  empty?: string;
 }
 
 export interface SentenceProps {
@@ -60,6 +64,8 @@ export interface SentenceProps {
   documentLabel?: string | null;
   documents?: string[];
   onPickDocument?: (path: string) => void;
+  /** Shown when the document list is empty. Say how the surface gets its first document. */
+  documentsEmpty?: string;
   /** Extra noun slots, rendered between the document slot and the world clause. */
   slots?: SlotSpec[];
   /** Bound target selector ("" = unbound/implicit) and the bind writer. null = unbind. */
@@ -77,15 +83,18 @@ function Slot({
   placeholder,
   onClick,
   open,
+  title,
 }: {
   text: string | null;
   placeholder: string;
   onClick: () => void;
   open: boolean;
+  title?: string;
 }) {
   return (
     <button
       type="button"
+      title={title}
       onClick={(event) => {
         event.stopPropagation();
         onClick();
@@ -130,6 +139,7 @@ export function Sentence({
   documentLabel,
   documents,
   onPickDocument,
+  documentsEmpty,
   slots,
   target,
   onBind,
@@ -196,6 +206,7 @@ export function Sentence({
               <Slot
                 text={null}
                 placeholder="pick a document"
+                title="The document this surface is bound to. Picking one here is what chooses what you are editing — there is no separate mode switch."
                 open={openSlot === "doc"}
                 onClick={() => setOpenSlot(openSlot === "doc" ? null : "doc")}
               />
@@ -216,6 +227,7 @@ export function Sentence({
                 <Slot
                   text={documentLabel ?? null}
                   placeholder="pick a document"
+                  title="The document this surface is bound to. Picking one here is what chooses what you are editing — there is no separate mode switch."
                   open={openSlot === "doc"}
                   onClick={() => setOpenSlot(openSlot === "doc" ? null : "doc")}
                 />
@@ -237,11 +249,16 @@ export function Sentence({
                 <Slot
                   text={slot.text}
                   placeholder={slot.placeholder}
+                  title={slot.title}
                   open={openSlot === slot.key}
                   onClick={() => setOpenSlot(openSlot === slot.key ? null : slot.key)}
                 />
               ) : (
-                <span className="tele" style={{ fontSize: 11, color: "var(--foreground)" }}>
+                <span
+                  className="tele"
+                  title={slot.title}
+                  style={{ fontSize: 11, color: "var(--foreground)" }}
+                >
                   {slot.text ?? slot.placeholder}
                 </span>
               )}
@@ -250,7 +267,7 @@ export function Sentence({
           <button
             type="button"
             className="tele"
-            title="which world this surface speaks to — click to bind"
+            title="The Revit world every call from this surface is sent to. Click to bind a different session, or to unbind and follow whichever session is the only one running."
             style={{
               fontSize: 11,
               padding: 0,
@@ -306,7 +323,8 @@ export function Sentence({
             ))}
           {documents.length === 0 ? (
             <div className="tele py-1" style={{ fontSize: 10, color: "var(--muted-foreground)" }}>
-              no documents yet
+              {documentsEmpty ??
+                "No documents yet — create one to give this surface something to edit."}
             </div>
           ) : null}
         </Popover>
@@ -346,7 +364,8 @@ export function Sentence({
               ))}
             {slot.options.length === 0 ? (
               <div className="tele py-1" style={{ fontSize: 10, color: "var(--muted-foreground)" }}>
-                no {slot.key}s yet
+                {slot.empty ??
+                  `No ${slot.key} to bind yet — nothing in the bound world offers one.`}
               </div>
             ) : null}
           </Popover>

@@ -79,6 +79,25 @@ test("clustered columns: contiguous group members share one spanning header", ()
   ]);
 });
 
+test("clustered columns: a resumed group still renders, and names itself on the console", () => {
+  const scrambled: Column<Fam>[] = [columns[1]!, columns[2]!, columns[0]!];
+  const warnings: string[] = [];
+  const original = console.warn;
+  console.warn = (message: string) => warnings.push(message);
+  try {
+    // The span math never lies about the columns it was handed — two "identity" headers.
+    expect(clusters(scrambled)).toEqual([
+      { group: "identity", span: 1 },
+      { group: undefined, span: 1 },
+      { group: "identity", span: 1 },
+    ]);
+  } finally {
+    console.warn = original;
+  }
+  expect(warnings.length).toBe(1);
+  expect(warnings[0]).toContain("not contiguous");
+});
+
 test("edit commit: junk is refused, min clamps, integers truncate", () => {
   expect(parseCell("14")).toBe(14);
   expect(parseCell("  ")).toBe(null);

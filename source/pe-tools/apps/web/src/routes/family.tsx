@@ -1356,15 +1356,30 @@ function TypeMatrix({
         <thead>
           <tr className="text-left">
             <th className="border-b border-[var(--line-2)] py-1 pr-3 font-normal">
-              <span className="tele-label text-[10px] text-[var(--slate)]">parameter</span>
+              <span
+                className="tele-label text-[10px] text-[var(--slate)]"
+                title="Every parameter this family owns, grouped by where it came from and which properties group it sits in. Click a name to inspect how it is wired."
+              >
+                parameter
+              </span>
             </th>
             <th className="border-b border-[var(--line-2)] px-2 py-1 font-normal">
-              <span className="tele-label text-[10px] text-[var(--kiln)]">= formula</span>
+              <span
+                className="tele-label text-[10px] text-[var(--kiln)]"
+                title="A parameter's formula is a first-class cell here, not a hidden property. Authoring one locks the value cells on its row, because a parameter holds a value or a formula, never both."
+              >
+                = formula
+              </span>
             </th>
             {/* A live family has no authored global — its types ARE the values. */}
             {lane.kind === "authored" && (
               <th className="border-b border-[var(--line-2)] px-2 py-1 text-right font-normal">
-                <span className="tele-label text-[10px] text-[var(--slate)]">family value</span>
+                <span
+                  className="tele-label text-[10px] text-[var(--slate)]"
+                  title="The family-level default. Every type inherits it unless that type overrides it in its own column."
+                >
+                  family value
+                </span>
               </th>
             )}
             {typeNames.map((name) => {
@@ -1379,7 +1394,7 @@ function TypeMatrix({
                       : "border-[var(--line-2)] text-[var(--clay-ink)]"
                   }`}
                   onClick={() => onType(name)}
-                  title={`${overrides} override${overrides === 1 ? "" : "s"} — click to flex all exhibits`}
+                  title={`Type "${name}" overrides ${overrides} parameter${overrides === 1 ? "" : "s"}; everything else it inherits from the family. Click to flex every exhibit on the page to this type.`}
                 >
                   {name}
                   <span className="ml-1 font-normal text-[var(--slate)]">
@@ -1413,6 +1428,21 @@ function TypeMatrix({
           ))}
         </tbody>
       </table>
+      {/* Two ways this matrix can be blank, and they need different answers. */}
+      {groups.length === 0 && (
+        <p className="mt-2 max-w-lg text-[11px] text-[var(--slate)]">
+          {lane.kind === "live"
+            ? "This family exposes no editable parameters — Revit reported none on the open family. Refresh above if you have just added some in the family editor."
+            : "This document declares no parameters yet. Add them under familyParameters in the JSON below, or ask pea to draft them from a spec sheet in the pane on the right."}
+        </p>
+      )}
+      {groups.length > 0 && typeNames.length === 0 && (
+        <p className="mt-2 max-w-lg text-[11px] text-[var(--slate)]">
+          {lane.kind === "live"
+            ? "The family has parameters but no types, so there are no per-type values to show. Types are Revit's to create — add one in the family editor, then refresh."
+            : "No types yet, so every parameter shows only its family value. Name one below and press Enter to get a column to override into."}
+        </p>
+      )}
       {/* Adding a type authors the document; the live lane edits an OPEN family, whose
           type roster is Revit's to change. */}
       {lane.kind === "authored" && (
@@ -1427,6 +1457,7 @@ function TypeMatrix({
               }
             }}
             placeholder="New type name…"
+            title="Add a type to this family. It starts with no overrides, so it inherits every family value until you override one — and an empty type is kept, never pruned."
             className="w-40 rounded-[2px] border border-[var(--line-2)] bg-transparent px-1.5 py-0.5 text-[11px] outline-none focus:border-[var(--pe-blue)]"
           />
           <span className="text-[10px] text-[var(--slate)]">
@@ -1499,7 +1530,12 @@ function ParamRows({
     <>
       <tr>
         <td colSpan={leadColumns + typeNames.length} className="pt-2">
-          <span className="tele-label text-[9px] text-[var(--lichen)]">{origin} parameters</span>
+          <span
+            className="tele-label text-[9px] text-[var(--lichen)]"
+            title={`${origin} — grouped by where the parameter is defined (family-owned vs shared) and the properties group Revit files it under. The grouping is descriptive; it changes nothing about how a parameter behaves.`}
+          >
+            {origin} parameters
+          </span>
         </td>
       </tr>
       {Object.entries(specs).map(([name, spec]) => {
@@ -1512,7 +1548,7 @@ function ParamRows({
               <button
                 type="button"
                 onClick={() => onSelectParam(pinned ? null : name)}
-                title={`${spec.dataType} — click to inspect ancestry and associations`}
+                title={`${name} is a ${spec.dataType}${spec.isInstance ? " bound per instance" : ""}. Click to pin it in the inspector, which shows what its formula depends on, what depends on it, and every solid, plane, connector, array, and nested family that reads it. Esc unpins.`}
                 className={`max-w-full truncate text-left ${
                   pinned ? "font-semibold text-[var(--pe-blue)]" : "hover:text-[var(--pe-blue)]"
                 }`}
@@ -1544,7 +1580,7 @@ function ParamRows({
                 {isFormula ? (
                   <span
                     className="font-mono text-[10px] text-[var(--kiln)]/60"
-                    title="formula-driven — value XOR formula; clear the formula to author a value"
+                    title={`${name} carries a formula, and a parameter holds a value OR a formula, never both. Clear the formula to author a family value here.`}
                   >
                     locked
                   </span>
@@ -1570,7 +1606,7 @@ function ParamRows({
                   <td
                     key={typeName}
                     className={`px-2 py-1 text-right ${highlight}`}
-                    title="formula-driven — the formula cell is the only editable one for this parameter"
+                    title={`Computed from ${name}'s formula for this type, not authored. To change it, edit the formula in the “= formula” column — that is the only editable cell this parameter has.`}
                   >
                     <span className="font-mono text-[10px] text-[var(--kiln)]/60">
                       {spec.resolvedValues?.[typeName] ?? "locked"}
@@ -1582,7 +1618,7 @@ function ParamRows({
                   <td
                     key={typeName}
                     className={`px-2 py-1 text-right ${highlight}`}
-                    title="Revit reports this parameter read-only — an edit here would be refused"
+                    title={`Revit reports ${name} read-only on this family, so no edit here could ever land — it is shown for reading only.`}
                   >
                     <span className="font-mono text-[11px] text-[var(--slate)]/60">
                       {override ?? "—"}
@@ -1612,8 +1648,8 @@ function ParamRows({
                       {lane.kind === "authored" && (
                         <button
                           type="button"
-                          title="Clear override — revert to family value"
-                          className="text-[var(--slate)] hover:text-[var(--fail)]"
+                          title={`Drop this type's override of "${name}" so it inherits the family value again. Staged like any other edit — nothing reaches the document until you save.`}
+                          className="text-[var(--slate)] hover:text-[var(--clay)]"
                           onClick={() =>
                             update((current) => setOverride(current, typeName, name, null))
                           }
@@ -1642,7 +1678,7 @@ function ParamRows({
                   ) : (
                     <button
                       type="button"
-                      title="Inherited from family value — click to override"
+                      title={`Inherited: "${typeName}" has no value of its own for ${name}, so it follows the family value. Click to give this type its own override — the family value stays put.`}
                       className="rounded-[2px] border border-dashed border-transparent px-0.5 font-mono text-[11px] text-[var(--slate)]/70 hover:border-[var(--line-2)]"
                       onClick={() =>
                         update((current) => setOverride(current, typeName, name, spec.value ?? ""))
@@ -1685,8 +1721,11 @@ function CellValue({
   onReviewMark: (pointer: string, next: ReviewMarkState) => void;
   strong?: boolean;
 }) {
+  /* Colour budget: clay is the alarm and nothing else wears it, so a flagged cell is the one
+     thing on the page asking for a human. Lichen carries STAGED (pending, not done); green is
+     reserved for what actually landed, which only the save receipt can claim. */
   const tone = cell.attention
-    ? "text-[var(--kiln)]"
+    ? "text-[var(--clay)]"
     : cell.staged
       ? "text-[var(--lichen)] font-semibold"
       : cell.proposal
@@ -1713,10 +1752,10 @@ function CellValue({
         value={value}
         title={
           cell.staged
-            ? `${label} · staged (unsaved)`
+            ? `${label} — edited but NOT written yet. It lives in staging until you save; discard throws it away.`
             : cell.proposal
-              ? `${label} · proposed by pea${cell.proposal.note ? ` — ${cell.proposal.note}` : ""}`
-              : label
+              ? `${label} — pea proposed this value and is waiting on you. Accept (✓) stages it, reject (✕) drops it; typing over it counts as accepting your own version.${cell.proposal.note ? ` Pea's reasoning: ${cell.proposal.note}` : ""}`
+              : `${label} — click to edit. Edits stage first and are never written straight through.`
         }
         onCommit={onCommit}
         className={`text-[11px] ${tone}`}
@@ -1725,7 +1764,7 @@ function CellValue({
         <button
           type="button"
           className="font-mono text-[9px] text-[var(--pe-blue)] hover:font-bold"
-          title={`${cell.sources.length} document citation${cell.sources.length === 1 ? "" : "s"} — hover to ground, click to pin (Esc unpins)`}
+          title={`This value is traceable to ${cell.sources.length} region${cell.sources.length === 1 ? "" : "s"} of the spec document. Hovering the cell already highlights them in the pane; click to PIN that highlight so it survives the pointer leaving, and press Esc to unpin.`}
           onClick={() => onPin({ label: `${label} → ${value}`, sources: cell.sources })}
         >
           ¶{cell.sources.length}
@@ -1739,7 +1778,7 @@ function CellValue({
         <>
           <button
             type="button"
-            title="Accept proposal — stage it"
+            title="Accept pea's proposal: stage this value as if you had typed it. Staging is not saving — it still has to pass the save gate."
             className="text-[var(--lichen)] hover:font-bold"
             onClick={() => onReview(cell.pointer, "approve")}
           >
@@ -1747,8 +1786,8 @@ function CellValue({
           </button>
           <button
             type="button"
-            title="Reject proposal"
-            className="text-[var(--slate)] hover:text-[var(--fail)]"
+            title="Reject pea's proposal and clear it from this cell. The current value is left exactly as it is."
+            className="text-[var(--slate)] hover:text-[var(--clay)]"
             onClick={() => onReview(cell.pointer, "deny")}
           >
             ✕
@@ -1786,7 +1825,7 @@ function ReviewMark({
     return (
       <button
         type="button"
-        title="mark reviewed"
+        title="Unreviewed. Click to mark this field as checked by a human — your own edits mark themselves, so this is for values you inherited or accepted from pea."
         onClick={cycle}
         className="size-2 shrink-0 rounded-full border border-[var(--line-2)] opacity-0 transition-opacity hover:opacity-100 focus:opacity-100 group-hover/row:opacity-60"
       />
@@ -1795,14 +1834,18 @@ function ReviewMark({
   return (
     <button
       type="button"
-      title={good ? "reviewed · good (click to flag)" : "needs attention (click to clear)"}
+      title={
+        good
+          ? "Reviewed and accepted. Click to flag it instead — a flagged field BLOCKS the save until it is resolved, which is how you park a doubtful value without losing it."
+          : "Flagged for attention, and this alone is enough to block the save. Click to clear the flag once you have settled the value."
+      }
       onClick={cycle}
       className="grid size-3 shrink-0 place-items-center rounded-full font-mono text-[8px] font-bold"
       style={{
         background: good
           ? "color-mix(in srgb, var(--lichen) 24%, transparent)"
-          : "color-mix(in srgb, var(--kiln) 28%, transparent)",
-        color: good ? "var(--lichen)" : "var(--kiln)",
+          : "color-mix(in srgb, var(--clay) 24%, transparent)",
+        color: good ? "var(--lichen)" : "var(--clay)",
       }}
     >
       {good ? "✓" : "!"}
@@ -1865,7 +1908,7 @@ function FormulaCell({
     return (
       <span
         className="font-mono text-[10px] text-[var(--slate)]/50"
-        title="Revit reports this parameter read-only"
+        title="Revit reports this parameter read-only, so it accepts no formula. Editing it here would only produce a refusal at apply time."
       >
         {formula ? `= ${formula}` : "—"}
       </span>
@@ -1884,8 +1927,8 @@ function FormulaCell({
           type="button"
           title={
             formula
-              ? `${paramName} · formula (click to edit)`
-              : `${paramName} has no formula — click to author one`
+              ? `${paramName} is driven by this formula, which is why its per-type value cells are locked. This cell is the only one that can lift that lock — clear the formula and the values become editable again.`
+              : `${paramName} has no formula. Author one here and every type inherits the computed value; the per-type cells lock, because a parameter carries a value or a formula, never both.`
           }
           onClick={() => setDraft(text)}
           className={`cursor-text rounded-[2px] px-0.5 font-mono text-[10px] hover:bg-[var(--kiln)]/10 ${tone}`}
@@ -1907,15 +1950,18 @@ function FormulaCell({
             if (event.key === "Escape") setDraft(null);
           }}
           placeholder="Width + 2in"
+          title="Author a formula for this parameter. Validation is advisory — an invalid draft still stages, and the dot beside the cell says why it is doubtful."
           className={`rounded-[2px] border bg-[var(--paper)] px-0.5 font-mono text-[10px] outline-none ${
-            problems.length > 0 ? "border-[var(--kiln)]" : "border-[var(--pe-blue)]"
+            problems.length > 0 ? "border-[var(--clay)]" : "border-[var(--pe-blue)]"
           }`}
         />
       )}
+      {/* The clay dot, as SHIMS names it: the client validator's problems and the host's own
+          dryRun verdict share ONE mark, because both are advisory and neither blocks staging. */}
       {problems.length > 0 && (
         <span
-          className="size-1.5 shrink-0 rounded-full bg-[var(--kiln)]"
-          title={problems.map((problem) => problem.message).join("\n")}
+          className="size-1.5 shrink-0 rounded-full bg-[var(--clay)]"
+          title={`${problems.length} problem${problems.length === 1 ? "" : "s"} with this formula. Advisory only — it will still stage, and Revit's own validate/save is the final word:\n\n${problems.map((problem) => `· ${problem.message}`).join("\n")}`}
         />
       )}
       {(formula != null || cell.staged) && (
@@ -2420,6 +2466,10 @@ function Page({
         placeholder: "pick a family",
         options: live.families,
         onPick: (id) => void live.openFamily(id),
+        title:
+          "Which family is open in the bound session's family editor. Picking one here actually opens it in Revit and re-reads the snapshot — this is a targeting choice with a side effect, not a filter.",
+        empty:
+          "No loaded families reported by the bound world. Load a family into the open project in Revit, or bind a world that has one.",
       },
     ];
   }, [live]);
@@ -2457,6 +2507,7 @@ function Page({
           }
           documents={documents}
           onPickDocument={(path) => void pickDocument(path)}
+          documentsEmpty="No family.json documents in this world yet — type a name in “new family name…” beside the sentence to create your first one from a minimal template."
           slots={sentenceSlots}
           target={boundTarget}
           onBind={(selector) => {
@@ -2473,8 +2524,8 @@ function Page({
           className="tele-label shrink-0 text-[9px] text-[var(--slate)]"
           title={
             lane.kind === "live"
-              ? "editing the family open in the bound session's family editor — save applies to Revit"
-              : "editing an authored family.json — save writes the document"
+              ? "LIVE lane. You are editing the family currently open in Revit's family editor, so apply writes straight into that session — there is no file behind it and nothing to validate. This is not a mode you chose: binding the live entry in the document slot is what put you here, and picking a family.json takes you back. Staged edits are local to this browser tab, so pea cannot propose into this lane; use capture → doc to promote the family and let pea work on it there."
+              : "AUTHORED lane. You are editing a family.json document, and save writes that file. This is not a mode you chose: binding a document in the sentence is what put you here. Pea shares this exact document, so its proposals land in the same cells you are editing."
           }
         >
           {lane.chip}
@@ -2484,11 +2535,17 @@ function Page({
 
         {model && (
           <>
-            <span className="tele-label text-[9px] text-[var(--slate)]">flex</span>
+            <span
+              className="tele-label text-[9px] text-[var(--slate)]"
+              title="Flex the whole page to one type: the anatomy drawings, the matrix highlight, and every resolved dimension all follow this choice. It selects a viewpoint, it never edits anything."
+            >
+              flex
+            </span>
             {Object.keys(model.types).map((name) => (
               <button
                 key={name}
                 type="button"
+                title={`Draw and resolve everything as type "${name}". Nothing is edited — this is the type the exhibits are flexed to.`}
                 onClick={() => setSelectedType(name)}
                 className={`rounded-[2px] px-1.5 py-0.5 font-mono text-[10px] ${
                   name === typeName
@@ -2509,7 +2566,11 @@ function Page({
             type="button"
             onClick={() => setMode(mode === "full" ? "parameters" : "full")}
             className="rounded-[2px] border border-[var(--line)] px-2 py-0.5 text-[10px] text-[var(--slate)] hover:border-[var(--pe-blue)]"
-            title="Parameters-only mode: hide the anatomy sheet, give the matrix and spec sheet the full page"
+            title={
+              mode === "full"
+                ? "Put the anatomy drawings away and give the matrix and spec sheet the whole page — the right choice when you are reconciling numbers against a spec rather than checking geometry."
+                : "Bring the anatomy triptych back: true-scale front/side/plan views of this family, flexed to the selected type."
+            }
           >
             {mode === "full" ? "parameters only" : "full anatomy"}
           </button>
@@ -2519,7 +2580,7 @@ function Page({
             type="button"
             disabled={live.reading}
             onClick={() => live.refresh()}
-            title="Re-read the family from the family editor"
+            title="Re-read the family from Revit's family editor. Staged edits survive — this only replaces the snapshot underneath them, so use it when someone has changed the family in Revit since you started."
             className="rounded-[2px] border border-[var(--line)] px-2 py-0.5 text-[10px] text-[var(--slate)] disabled:opacity-40"
           >
             {live.reading ? "reading…" : "refresh"}
@@ -2529,13 +2590,16 @@ function Page({
         <span className="ml-auto" />
         {proposalCount > 0 && (
           <>
-            <span className="font-mono text-[10px] text-[var(--pe-blue)]">
+            <span
+              className="tele text-[10px] text-[var(--pe-blue)]"
+              title="Cells where pea has suggested a value you have not yet answered. They are drawn dashed in the matrix; hovering one grounds it in the spec pane so you can see what it was read from."
+            >
               {proposalCount} open proposal{proposalCount === 1 ? "" : "s"}
             </span>
             <button
               type="button"
               onClick={acceptAll}
-              title="Stage every open proposal — fields you have already staged are left alone"
+              title="Stage every open proposal at once. Cells you have already edited yourself are skipped, so a batch accept can never overwrite your own work — and staging is still not saving."
               className="rounded-[2px] border border-[var(--pe-blue)] px-2 py-0.5 text-[10px] text-[var(--pe-blue)] hover:bg-[var(--pe-blue)]/10"
             >
               accept all
@@ -2546,7 +2610,8 @@ function Page({
           <button
             type="button"
             onClick={() => void discardStaged()}
-            className="rounded-[2px] border border-[var(--line)] px-2 py-0.5 text-[10px] text-[var(--fail)] hover:border-[var(--fail)]"
+            title={`Throw away all ${stagedCount} staged edit${stagedCount === 1 ? "" : "s"} and re-read the ${live ? "family editor" : "document"} from scratch. Nothing saved is affected — only the unsaved staging is lost, and it cannot be recovered.`}
+            className="rounded-[2px] border border-[var(--line)] px-2 py-0.5 text-[10px] text-[var(--slate)] hover:border-[var(--clay)] hover:text-[var(--clay)]"
           >
             discard {stagedCount}
           </button>
@@ -2557,6 +2622,11 @@ function Page({
             type="button"
             disabled={!isFamilyDocument || busy != null}
             onClick={() => void run("validate")}
+            title={
+              isFamilyDocument
+                ? "Check the document against the family schema and report the issues. It writes nothing, and it judges the document as SAVED — staged edits are not part of what it reads."
+                : "Nothing to validate — open a family document in the sentence first."
+            }
             className="rounded-[2px] border border-[var(--line)] px-2 py-0.5 text-[10px] text-[var(--slate)] disabled:opacity-40"
           >
             validate
@@ -2567,10 +2637,11 @@ function Page({
           disabled={saveBlockedReason != null || busy != null}
           onClick={() => void (live ? runLiveSave() : run("save"))}
           title={
-            saveBlockedReason ??
-            (live
-              ? `Apply ${stagedCount} staged edit(s) to the open family`
-              : `Save ${stagedCount} staged field(s)`)
+            saveBlockedReason
+              ? `${saveBlockedReason}. The server refuses on the same rule, so this is the refusal you would get anyway, just sooner.`
+              : live
+                ? `Write ${stagedCount} staged edit${stagedCount === 1 ? "" : "s"} into the family open in Revit. Each edit succeeds or fails on its own — anything Revit refuses stays staged and is named in the strip below, so you can fix just that one and press apply again.`
+                : `Write ${stagedCount} staged field${stagedCount === 1 ? "" : "s"} to the document. The document is re-opened afterwards, so what you see next is the file as it actually landed, not what was hoped for.`
           }
           className="rounded-[2px] bg-[var(--pe-blue)] px-2 py-0.5 text-[10px] text-white disabled:opacity-40"
         >
@@ -2584,8 +2655,8 @@ function Page({
           onClick={() => void (live ? captureToDocument() : captureEvidence())}
           title={
             live
-              ? "Capture this live family as a new authored family.json and open it — the bridge into the authored lane"
-              : "Read the family open in the bound Revit session into evidence"
+              ? "The bridge between the two lanes, and the only crossing there is. This reads the live family out of Revit, writes it as a new family.json under captured/, and opens it — so you end up in the authored lane on the same family, where the document can be versioned and pea can propose into it. Revit itself is not modified."
+              : "Read the family currently open in the bound Revit session and fold its real, resolved values into this document as EVIDENCE. It changes no authored value — it is how the numbers on screen earn the right to be believed."
           }
           className="rounded-[2px] border border-[var(--line)] px-2 py-0.5 text-[10px] text-[var(--slate)] disabled:opacity-40"
         >
@@ -2599,8 +2670,8 @@ function Page({
             onClick={() => void buildEvidence()}
             title={
               stagedCount > 0
-                ? "Save staged edits first — builds prove the saved revision"
-                : "Build the saved document to an .rfa and refresh evidence"
+                ? `Save your ${stagedCount} staged edit${stagedCount === 1 ? "" : "s"} first. A build proves the SAVED revision, so building now would prove a family you have already moved past.`
+                : "Build this saved document into a real .rfa in Revit and read the result back as evidence. This is the proof lane: it is what turns the authored numbers on screen into numbers Revit actually produced."
             }
             className="rounded-[2px] border border-[var(--line)] px-2 py-0.5 text-[10px] text-[var(--slate)] disabled:opacity-40"
           >
@@ -2614,29 +2685,32 @@ function Page({
       </div>
 
       {/* ── status strip ────────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-3 border-b border-[var(--line-soft)] px-4 py-1 text-[10px] text-[var(--slate)]">
+      {/* Every fact in this strip is machine-measured, so the whole strip is tele/tabular. */}
+      <div className="tele flex flex-wrap items-center gap-3 border-b border-[var(--line-soft)] px-4 py-1 text-[10px] text-[var(--slate)]">
         {live ? (
           <>
-            <span>
+            <span title="The family currently open in the bound session's family editor. Edits here go to Revit, not to a file — pick a different family in the sentence to move.">
               family:{" "}
               <strong className="text-[var(--clay-ink)]">
                 {live.familyName ?? (live.reading ? "reading…" : "none read")}
               </strong>
             </span>
-            <span title="When this snapshot was read — the live family may have moved on since.">
+            <span title="How long ago this snapshot was read out of the family editor. Revit is free to have moved on since — press refresh if anything looks wrong.">
               read {readAgo(live.readAtMs) ?? "—"}
             </span>
           </>
         ) : (
           <>
-            <span>
+            <span title="The authored family.json this surface is editing. Pea shares this exact document, so it can propose into the same cells you are editing.">
               document:{" "}
               <strong className="text-[var(--clay-ink)]">
                 {isFamilyDocument ? snapshot?.documentId.relativePath : "none open"}
               </strong>
             </span>
-            <span>version: {snapshot?.versionToken ?? "—"}</span>
-            <span>
+            <span title="The document revision this view was built from. Save writes against it, so a token that changed underneath is how a conflicting write gets caught.">
+              version: {snapshot?.versionToken ?? "—"}
+            </span>
+            <span title="Result of the last schema check on the document. “Not run” is not a pass — press validate to actually ask.">
               validation:{" "}
               {snapshot?.validation
                 ? snapshot.validation.isValid
@@ -2646,13 +2720,14 @@ function Page({
             </span>
           </>
         )}
+        {/* Freshness is the normal case and gets no ink; only STALE earns a colour. */}
         {evidence && !live && (
           <span
-            className={evidenceFresh ? "text-[var(--lichen)]" : "text-[var(--kiln)]"}
+            className={evidenceFresh ? undefined : "text-[var(--kiln)]"}
             title={
               evidenceFresh
-                ? `Evidence from ${evidence.from.origin} of ${evidence.from.familyName} at ${evidence.from.capturedAt}`
-                : "Evidence was produced from an older revision of this document — build again to refresh"
+                ? `Real values read back out of ${evidence.from.origin} for ${evidence.from.familyName} at ${evidence.from.capturedAt}. They match the revision on screen, so the resolved numbers below are trustworthy.`
+                : "These resolved values were read from an OLDER revision of this document, so they describe a family you have since changed. Save, then build again to refresh them."
             }
           >
             evidence: {evidence.from.origin} · {evidence.parameters.length} params ·{" "}
@@ -2660,10 +2735,22 @@ function Page({
           </span>
         )}
         {saveBlockedReason && stagedCount > 0 && (
-          <span className="text-[var(--kiln)]">Save blocked · {saveBlockedReason}</span>
+          <span
+            className="text-[var(--clay)]"
+            title="The save verb is refusing before the round trip. The server enforces the same rule, so clearing this is the only way through."
+          >
+            Save blocked · {saveBlockedReason}
+          </span>
         )}
         {lastSave && busy == null && (
-          <span className={lastSave.failed > 0 ? "text-[var(--kiln)]" : "text-[var(--lichen)]"}>
+          <span
+            className={lastSave.failed > 0 ? "text-[var(--clay)]" : "text-[var(--cat-green)]"}
+            title={
+              lastSave.failed > 0
+                ? "Some edits landed and some did not. The failed ones are still staged, named below, so they can be fixed and retried without redoing the rest."
+                : "Every staged edit landed. Green means done — nothing on this page is still waiting to be written."
+            }
+          >
             Saved {lastSave.saved}
             {lastSave.failed > 0 ? ` · ${lastSave.failed} failed` : ""}
           </span>
@@ -2671,17 +2758,33 @@ function Page({
         {/* A live apply fails PER EDIT — name each one; those edits are still staged. */}
         {liveFailures.length > 0 && busy == null && (
           <span
-            className="text-[var(--kiln)]"
-            title={liveFailures.map((failure) => `${failure.label}: ${failure.error}`).join("\n")}
+            className="text-[var(--clay)]"
+            title={`Revit refused these edits individually; the rest of the apply went through. They are still staged, so fix the value and press apply again:\n\n${liveFailures.map((failure) => `· ${failure.label}: ${failure.error}`).join("\n")}`}
           >
             still staged: {liveFailures.map((failure) => failure.label).join(" · ")}
           </span>
         )}
-        {error && <span className="text-[var(--fail)]">{error}</span>}
+        {error && (
+          <span
+            className="text-[var(--clay)]"
+            title="The last command failed and nothing was written. This is the dispatcher's own words, verbatim."
+          >
+            {error}
+          </span>
+        )}
         {/* The dispatcher's `hint` is a teaching channel, distinct from the error text. */}
-        {hint && <span className="text-[var(--kiln)]">hint: {hint}</span>}
+        {hint && (
+          <span
+            className="text-[var(--kiln)]"
+            title="A hint from the command itself about how to get past the error — advice, not a second failure."
+          >
+            hint: {hint}
+          </span>
+        )}
         {store.isMock && (
-          <span className="text-[var(--slate)]">?mock — fixture store, no host</span>
+          <span title="?mock — this page is running on a built-in fixture. No Revit host, no pea, no dispatcher; every verb is inert. Drop ?mock from the URL to talk to a real world.">
+            ?mock — fixture store, no host
+          </span>
         )}
       </div>
 
@@ -2690,20 +2793,26 @@ function Page({
         <div className="min-w-0 flex-1 overflow-y-auto px-4 py-3">
           {!model ? (
             <div className="grid h-full place-items-center text-sm text-[var(--slate)]">
-              <div className="text-center">
+              <div className="max-w-md text-center">
                 {live ? (
                   <>
-                    <p>{live.reading ? "Reading the open family…" : "No family read yet."}</p>
+                    <p>
+                      {live.reading
+                        ? "Reading the family open in Revit…"
+                        : "Nothing read from the family editor yet."}
+                    </p>
                     <p className="mt-1 text-[11px]">
-                      Pick a family in the sentence, or refresh to re-read the family editor.
+                      Pick a family in the sentence above to open it in the family editor, or press
+                      refresh if one is already open there.
                     </p>
                   </>
                 ) : (
                   <>
-                    <p>Open a family document, or create one to start.</p>
+                    <p>No family document bound yet.</p>
                     <p className="mt-1 text-[11px]">
-                      Pea shares this exact document — ask it to capture the active Revit family or
-                      draft one from a spec sheet.
+                      Pick one in the sentence above, or type a name in “new family name…” to create
+                      one from a minimal template. Pea shares whatever you bind, so you can also ask
+                      it to capture the family open in Revit or draft one from a spec sheet.
                     </p>
                   </>
                 )}
@@ -2735,7 +2844,14 @@ function Page({
                 onSelectParam={setSelectedParam}
               />
               <details className="rounded-[2px] border border-[var(--line)] bg-[var(--paper-2)]/40 px-3 py-2">
-                <summary className="tele-label cursor-pointer text-[10px] text-[var(--clay-ink)]">
+                <summary
+                  className="tele-label cursor-pointer text-[10px] text-[var(--clay-ink)]"
+                  title={
+                    live
+                      ? "The raw snapshot family.editor.snapshot returned, with your staged edits folded in — this is exactly what apply will send back to Revit."
+                      : "The raw family.json every exhibit above is a view of, with your staged edits folded in. If the drawings and the matrix ever disagree, this is the tie-breaker."
+                  }
+                >
                   {live
                     ? "LIVE SNAPSHOT — what family.editor.snapshot returned, plus staged edits"
                     : "AUTHORED TRUTH — the family.json all exhibits are editing"}
@@ -2801,6 +2917,7 @@ function NewDocument({ onCreate, busy }: { onCreate: (name: string) => void; bus
           }
         }}
         placeholder="new family name…"
+        title="Name a new family.json. It is written from a minimal template — one prism, three length parameters, one type — and opened immediately, so you land in it rather than having to go find it."
         className="w-36 rounded-[2px] border border-[var(--line)] bg-transparent px-1.5 py-0.5 text-[11px] outline-none focus:border-[var(--pe-blue)]"
       />
       <button
@@ -2810,6 +2927,11 @@ function NewDocument({ onCreate, busy }: { onCreate: (name: string) => void; bus
           onCreate(name.trim());
           setName("");
         }}
+        title={
+          name.trim()
+            ? `Write a new document from the minimal template and open it. The file lands at "${name.trim().replace(/\s+/g, "-").toLowerCase()}".`
+            : "Type a family name first — the name becomes the document's path."
+        }
         className="rounded-[2px] border border-[var(--line)] px-1.5 py-0.5 text-[10px] hover:border-[var(--pe-blue)] disabled:opacity-40"
       >
         create

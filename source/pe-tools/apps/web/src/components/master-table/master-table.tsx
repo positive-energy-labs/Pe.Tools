@@ -74,14 +74,20 @@ export function MasterTable<Row>({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-2 py-1">
-        <span className="tele-label text-muted-foreground">{scopeLabel}</span>
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--line)] px-2 py-1">
+        <span
+          className="tele-label text-muted-foreground"
+          title="Everything currently in scope. This table is never hidden and never narrowed silently — every filter acting on it is a chip in this strip."
+        >
+          {scopeLabel}
+        </span>
         {searchPlaceholder && (
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={searchPlaceholder}
-            className="tele h-6 w-44 rounded-[var(--radius)] border border-border bg-transparent px-1.5 outline-none focus:border-ring"
+            title="Free-text filter. It reads only the columns that declare themselves searchable, so a match here always points at a visible column."
+            className="tele h-6 w-44 rounded-[var(--radius)] border border-[var(--line-2)] bg-transparent px-1.5 outline-none focus:border-ring"
           />
         )}
         {summary && <span className="tele text-muted-foreground">{summary}</span>}
@@ -101,6 +107,7 @@ export function MasterTable<Row>({
           <button
             type="button"
             onClick={() => setFilters({})}
+            title="Drop every column filter at once. Filters owned by the route (scope, plan, picks) have their own chips and are left alone."
             className="tele rounded-[var(--radius)] px-1 text-muted-foreground hover:bg-muted"
           >
             clear column filters
@@ -118,7 +125,7 @@ export function MasterTable<Row>({
                     // biome-ignore lint/suspicious/noArrayIndexKey: clusters are positional by definition
                     key={`${c.group ?? ""}-${i}`}
                     colSpan={c.span}
-                    className="tele-label sticky top-0 z-10 whitespace-nowrap border-b border-l border-border bg-muted px-1.5 py-px text-left font-normal text-muted-foreground first:border-l-0"
+                    className="tele-label sticky top-0 z-10 whitespace-nowrap border-b border-l border-[var(--line)] bg-muted px-1.5 py-px text-left font-normal text-muted-foreground first:border-l-0"
                   >
                     {c.group ?? ""}
                   </th>
@@ -157,7 +164,12 @@ export function MasterTable<Row>({
                     activeKey === key && "bg-primary/[0.06]",
                   )}
                   onClick={(e) => {
-                    if ((e.target as HTMLElement).closest("button,input,select,textarea,a,[role=button]")) return;
+                    if (
+                      (e.target as HTMLElement).closest(
+                        "button,input,select,textarea,a,[role=button]",
+                      )
+                    )
+                      return;
                     onRowClick?.(row);
                   }}
                 >
@@ -178,9 +190,14 @@ export function MasterTable<Row>({
             })}
           </tbody>
         </table>
+        {/* Two different emptinesses, two different answers: nothing in scope at all is the
+            ROUTE's story to tell; a scope emptied by this table's own filters is the table's,
+            and it routes back to the chips that caused it. */}
         {visible.length === 0 && (
-          <p className="p-6 text-center text-xs text-muted-foreground">
-            {empty ?? "Nothing in scope. Widen the filters."}
+          <p className="tele mx-auto max-w-md p-6 text-center text-[11px] text-muted-foreground">
+            {rows.length > 0
+              ? `All ${rows.length} rows in scope are filtered out — clear a chip in the strip above to bring them back.`
+              : (empty ?? "Nothing in scope yet. Widen the scope above to fill the table.")}
           </p>
         )}
       </div>
@@ -211,7 +228,7 @@ function Th<Row>({
     <th
       title={col.title}
       className={cn(
-        "sticky z-10 align-top whitespace-nowrap border-b border-l border-border bg-muted px-1.5 py-1 font-normal first:border-l-0",
+        "sticky z-10 align-top whitespace-nowrap border-b border-l border-[var(--line)] bg-muted px-1.5 py-1 font-normal first:border-l-0",
         stickyTop ? "top-5" : "top-0",
         col.right ? "text-right" : "text-left",
         col.width,
@@ -221,7 +238,7 @@ function Th<Row>({
         <button
           type="button"
           onClick={(e) => onSort(e.shiftKey)}
-          title="click to sort · shift-click to add to the sort"
+          title="Sort by this column. Clicking again flips the direction; shift-click appends it as a tie-breaker behind the sorts already applied, numbered in the header."
           className="tele-label block w-full text-left text-muted-foreground hover:text-foreground"
         >
           {col.label}
@@ -255,9 +272,10 @@ function ColFilter({
   return (
     <select
       value={value ?? ""}
+      title="Narrow the table to one value of this column. The choices are every value present across ALL rows, so they stay put as other filters move."
       onChange={(e) => onChange(e.target.value === "" ? null : e.target.value)}
       className={cn(
-        "tele mt-0.5 h-5 w-full min-w-0 max-w-32 rounded-[1px] border bg-transparent px-0.5 outline-none",
+        "tele mt-0.5 h-5 w-full min-w-0 max-w-32 rounded-[var(--radius)] border bg-transparent px-0.5 outline-none",
         value
           ? "border-primary/40 bg-primary/[0.06] text-foreground"
           : "border-[var(--line-soft)] text-muted-foreground",
@@ -278,7 +296,7 @@ export function FilterChip({ label, onClear }: { label: string; onClear: () => v
     <button
       type="button"
       onClick={onClear}
-      title="remove this filter"
+      title="This filter is narrowing the table right now. Click to drop it and widen the scope back out."
       className="tele inline-flex items-center gap-1 rounded-[var(--radius)] border border-[var(--line-2)] bg-muted px-1.5 py-px hover:border-destructive/40 hover:text-destructive"
     >
       <span className="normal-case">{label}</span>

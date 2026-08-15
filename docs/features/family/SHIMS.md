@@ -24,6 +24,11 @@ the user in the authored lane of the same family. That is the only crossing.
    `apps/web/src/components/master-table/` because takeoff-fresh is not on main yet.
    Replacement: when takeoff merges, both routes consume ONE shared component; the takeoff
    atlas migrates onto this copy, not the reverse.
+   Two laws were written down while polishing, and they travel with the copy: `facetOptions`
+   derives from ALL rows on purpose (a column's vocabulary must not shuffle as other filters
+   narrow), and `clusters` `console.warn`s in dev when a column group is interrupted and resumed
+   — that invariant caught `/families` rendering the "family" span header twice on its first run,
+   which is why the plan column now sits after the identity cluster rather than inside it.
 2. **`host.shell.open` adoption.** Generic typed op (path in, OS default app). Takeoffs'
    "Launch RHVAC" button migrates onto it when takeoff merges. Receipts in `/families`
    link artifact dirs through it.
@@ -162,6 +167,10 @@ parse lane `family/doc-pane.tsx` and pea's `family-commands`/`route-state-comman
 - [x] Profile slot for `/families` (`auditing <doc> against <profile> in <world>`) — built on
       `SlotSpec`; the document reads as flat text (session truth, not a picker), the profile slot
       picks from the settings library, and apply success fires the sentence receipt.
+- [x] Slot tooltips + routed empty pickers — `SlotSpec` carries `title` (what BINDING this noun
+      does) and `empty` (where the options come from), plus `documentsEmpty` on `SentenceProps`.
+      Both routes fill them, so "no profiles yet" now names the settings module it reads and the
+      empty document picker points at the create field beside it.
 - [ ] Derivation-cost subtitles in the doc picker ("opens instantly" / "boots a 2025 world").
 - [ ] Sentence-as-receipt: on commit the sentence briefly becomes
       "committed <change> on <doc> · just now", then relaxes.

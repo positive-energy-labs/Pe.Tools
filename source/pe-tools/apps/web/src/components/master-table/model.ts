@@ -49,7 +49,15 @@ export function toggleSort(sorts: SortKey[], key: string, additive: boolean): So
   return sorts.map((s) => (s.key === key ? flipped : s));
 }
 
-/** Every distinct facet value present in the rows, sorted — the honest vocabulary of the column. */
+/**
+ * Every distinct facet value present in the rows, sorted — the honest vocabulary of the column.
+ *
+ * INTENTIONAL: `rows` here is ALL rows, never the currently-visible subset. A column's select
+ * therefore keeps a STABLE vocabulary as other filters narrow the table — options never vanish
+ * or reshuffle under the cursor, and picking one can always widen the scope back out. The price
+ * is that a chosen option may resolve to zero visible rows; the empty state says so, which is a
+ * better answer than an option that quietly disappeared.
+ */
 export function facetOptions<Row>(
   rows: readonly Row[],
   col: Column<Row>,
@@ -108,15 +116,33 @@ export function applySort<Row>(
   });
 }
 
-/** Contiguous runs of columns sharing a `group` — the clustered header row. */
+/**
+ * Contiguous runs of columns sharing a `group` — the clustered header row.
+ *
+ * The column order is the CALLER's to get right: a group interrupted and then resumed renders as
+ * two separate spanning headers with the same label, which reads as a bug in the data rather than
+ * a bug in the ordering. In dev that mis-ordering is named on the console (warn, never throw —
+ * a cosmetic header must not take the table down).
+ */
 export function clusters<Row>(
   columns: readonly Column<Row>[],
 ): { group: string | undefined; span: number }[] {
   const out: { group: string | undefined; span: number }[] = [];
+  const opened = new Set<string>();
   for (const col of columns) {
     const last = out.at(-1);
     if (last && last.group === col.group && col.group !== undefined) last.span += 1;
-    else out.push({ group: col.group, span: 1 });
+    else {
+      if (col.group !== undefined) {
+        if (import.meta.env.DEV && opened.has(col.group)) {
+          console.warn(
+            `MasterTable: column group "${col.group}" is not contiguous — column "${col.key}" resumes it after another group. Sort the columns by group before passing them in; the header will otherwise show "${col.group}" twice.`,
+          );
+        }
+        opened.add(col.group);
+      }
+      out.push({ group: col.group, span: 1 });
+    }
   }
   return out;
 }
