@@ -21,6 +21,18 @@ An entry leaves this file only when the replacement ships or the gap is closed.
 4. **Profile schema validation is web-side fail-fast only.** Stale OneDrive profiles surface
    named diagnostics in the picker, no auto-migration. If most of the library turns out
    stale, that pain is the signal to build an upgrade lane — revisit then, not before.
+5. **`familyfoundry.*` is dialled dynamically from the web.** `apps/web/src/host/familyfoundry.ts`
+   hand-mirrors the `FamilyFoundryHostContracts.cs` DTOs and calls `plan` / `apply` / `project`
+   through `callHostDynamic`, because the checked-in typegen output does not carry them yet.
+   Every function names the generated client that replaces it; `/families` marks each backed
+   surface with a dashed `seam` chip. Replacement: a codegen run against a live host catalog.
+6. **Profile picker enumeration is unproven against a live host.** `settings.tree` DOES expose
+   the profile library — `familyfoundry.plan` parses `DesiredFamilyMigrationProfile`, whose
+   registration is `{ moduleKey: "CmdFFDesiredMigrator", rootKey: "profiles" }` — and the picker
+   reads it plus one `settings.document.open` per entry (capped at 40) so each option carries its
+   real validation issues as a `disabledReason`. None of that has been exercised against a live
+   session yet; if the module turns out unreachable from the web the slot renders empty and this
+   entry becomes a real gap. Replacement: the step-3 live proof below.
 
 ## Intentional gaps (deliberate, not scheduled)
 
@@ -31,6 +43,16 @@ An entry leaves this file only when the replacement ships or the gap is closed.
   on disk.
 - **No pea proposal engine in `/families` v1.** Proposals/citations are `/family`'s trust
   layer; the fleet route's trust layer is plan provenance + receipts.
+- **Grouped-cards view dropped** with `/family-matrix`; the master table's clusters + filters
+  cover the audit story, and one table beats two view modes of the same facts.
+- **Per-family checkbox pre-picker dropped** with `/family-matrix`. Categories + placement are the
+  draft scope; narrowing to individual families is the TABLE's job (family search, column filters),
+  not a second picker that competes with it. The matrix budget is still sized to the resolved
+  family list, so nothing truncates silently.
+- **Per-family plan flags are limited to "no actions".** `familyfoundry.plan` reports diagnostics at
+  PROFILE level, not per family, so the apply gate is: clean diagnostics globally, and every
+  included family has at least one lowered action. Richer per-family flags need a per-family
+  diagnostic channel on the op, which is not a shim — it is a contract change if it is ever wanted.
 - **`/api/pdf-audit/map` deleted, `/api/pdf-audit/parse` kept.** Proposals come from pea via
   route state; the heuristic/direct-Anthropic mapper was a placeholder.
 
@@ -60,7 +82,9 @@ only when each item below is grafted into `/family` or explicitly waived here:
 
 - [ ] Family slot (`… <family> from <doc> <world>`), conditional on doc kind; `/families` →
       `/family` navigation is filling this slot.
-- [ ] Profile slot for `/families` (`auditing <doc> against <profile> in <world>`).
+- [x] Profile slot for `/families` (`auditing <doc> against <profile> in <world>`) — built on
+      `SlotSpec`; the document reads as flat text (session truth, not a picker), the profile slot
+      picks from the settings library, and apply success fires the sentence receipt.
 - [ ] Derivation-cost subtitles in the doc picker ("opens instantly" / "boots a 2025 world").
 - [ ] Sentence-as-receipt: on commit the sentence briefly becomes
       "committed <change> on <doc> · just now", then relaxes.

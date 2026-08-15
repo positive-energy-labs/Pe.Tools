@@ -141,11 +141,12 @@ const TOOLS = [
     description: "The Pea agent workbench — chat, trace, and the context world inspector.",
   },
   {
-    to: "/family-matrix",
-    title: "Family Matrix",
-    label: "Revit data",
+    to: "/families",
+    title: "Families",
+    label: "Family Foundry",
     icon: Table2,
-    description: "Parameter values across loaded Revit family types, as a scannable matrix.",
+    description:
+      "Every loaded family's types × parameters in one table — audit it against a profile, plan the reconciliation, apply with receipts.",
   },
   {
     to: "/family-types",

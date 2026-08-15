@@ -17,10 +17,10 @@ import { Route as OpsRouteImport } from "./routes/ops";
 import { Route as InstancesRouteImport } from "./routes/instances";
 import { Route as FamilyTypesRouteImport } from "./routes/family-types";
 import { Route as FamilyModelRouteImport } from "./routes/family-model";
-import { Route as FamilyMatrixRouteImport } from "./routes/family-matrix";
 import { Route as FamilyDocRouteImport } from "./routes/family-doc";
 import { Route as FamilyAuditRouteImport } from "./routes/family-audit";
 import { Route as FamilyRouteImport } from "./routes/family";
+import { Route as FamiliesRouteImport } from "./routes/families";
 import { Route as DocLabRouteImport } from "./routes/doc-lab";
 import { Route as DesignSystemRouteImport } from "./routes/design-system";
 import { Route as DataTablesRouteImport } from "./routes/data-tables";
@@ -73,11 +73,6 @@ const FamilyModelRoute = FamilyModelRouteImport.update({
   path: "/family-model",
   getParentRoute: () => rootRouteImport,
 } as any);
-const FamilyMatrixRoute = FamilyMatrixRouteImport.update({
-  id: "/family-matrix",
-  path: "/family-matrix",
-  getParentRoute: () => rootRouteImport,
-} as any);
 const FamilyDocRoute = FamilyDocRouteImport.update({
   id: "/family-doc",
   path: "/family-doc",
@@ -91,6 +86,11 @@ const FamilyAuditRoute = FamilyAuditRouteImport.update({
 const FamilyRoute = FamilyRouteImport.update({
   id: "/family",
   path: "/family",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const FamiliesRoute = FamiliesRouteImport.update({
+  id: "/families",
+  path: "/families",
   getParentRoute: () => rootRouteImport,
 } as any);
 const DocLabRoute = DocLabRouteImport.update({
@@ -155,10 +155,10 @@ export interface FileRoutesByFullPath {
   "/data-tables": typeof DataTablesRoute;
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
+  "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
   "/family-audit": typeof FamilyAuditRoute;
   "/family-doc": typeof FamilyDocRoute;
-  "/family-matrix": typeof FamilyMatrixRoute;
   "/family-model": typeof FamilyModelRoute;
   "/family-types": typeof FamilyTypesRoute;
   "/instances": typeof InstancesRoute;
@@ -180,10 +180,10 @@ export interface FileRoutesByTo {
   "/data-tables": typeof DataTablesRoute;
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
+  "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
   "/family-audit": typeof FamilyAuditRoute;
   "/family-doc": typeof FamilyDocRoute;
-  "/family-matrix": typeof FamilyMatrixRoute;
   "/family-model": typeof FamilyModelRoute;
   "/family-types": typeof FamilyTypesRoute;
   "/instances": typeof InstancesRoute;
@@ -206,10 +206,10 @@ export interface FileRoutesById {
   "/data-tables": typeof DataTablesRoute;
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
+  "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
   "/family-audit": typeof FamilyAuditRoute;
   "/family-doc": typeof FamilyDocRoute;
-  "/family-matrix": typeof FamilyMatrixRoute;
   "/family-model": typeof FamilyModelRoute;
   "/family-types": typeof FamilyTypesRoute;
   "/instances": typeof InstancesRoute;
@@ -233,10 +233,10 @@ export interface FileRouteTypes {
     | "/data-tables"
     | "/design-system"
     | "/doc-lab"
+    | "/families"
     | "/family"
     | "/family-audit"
     | "/family-doc"
-    | "/family-matrix"
     | "/family-model"
     | "/family-types"
     | "/instances"
@@ -258,10 +258,10 @@ export interface FileRouteTypes {
     | "/data-tables"
     | "/design-system"
     | "/doc-lab"
+    | "/families"
     | "/family"
     | "/family-audit"
     | "/family-doc"
-    | "/family-matrix"
     | "/family-model"
     | "/family-types"
     | "/instances"
@@ -283,10 +283,10 @@ export interface FileRouteTypes {
     | "/data-tables"
     | "/design-system"
     | "/doc-lab"
+    | "/families"
     | "/family"
     | "/family-audit"
     | "/family-doc"
-    | "/family-matrix"
     | "/family-model"
     | "/family-types"
     | "/instances"
@@ -309,10 +309,10 @@ export interface RootRouteChildren {
   DataTablesRoute: typeof DataTablesRoute;
   DesignSystemRoute: typeof DesignSystemRoute;
   DocLabRoute: typeof DocLabRoute;
+  FamiliesRoute: typeof FamiliesRoute;
   FamilyRoute: typeof FamilyRoute;
   FamilyAuditRoute: typeof FamilyAuditRoute;
   FamilyDocRoute: typeof FamilyDocRoute;
-  FamilyMatrixRoute: typeof FamilyMatrixRoute;
   FamilyModelRoute: typeof FamilyModelRoute;
   FamilyTypesRoute: typeof FamilyTypesRoute;
   InstancesRoute: typeof InstancesRoute;
@@ -386,13 +386,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof FamilyModelRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/family-matrix": {
-      id: "/family-matrix";
-      path: "/family-matrix";
-      fullPath: "/family-matrix";
-      preLoaderRoute: typeof FamilyMatrixRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
     "/family-doc": {
       id: "/family-doc";
       path: "/family-doc";
@@ -412,6 +405,13 @@ declare module "@tanstack/react-router" {
       path: "/family";
       fullPath: "/family";
       preLoaderRoute: typeof FamilyRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/families": {
+      id: "/families";
+      path: "/families";
+      fullPath: "/families";
+      preLoaderRoute: typeof FamiliesRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/doc-lab": {
@@ -511,10 +511,10 @@ const rootRouteChildren: RootRouteChildren = {
   DataTablesRoute: DataTablesRoute,
   DesignSystemRoute: DesignSystemRoute,
   DocLabRoute: DocLabRoute,
+  FamiliesRoute: FamiliesRoute,
   FamilyRoute: FamilyRoute,
   FamilyAuditRoute: FamilyAuditRoute,
   FamilyDocRoute: FamilyDocRoute,
-  FamilyMatrixRoute: FamilyMatrixRoute,
   FamilyModelRoute: FamilyModelRoute,
   FamilyTypesRoute: FamilyTypesRoute,
   InstancesRoute: InstancesRoute,
