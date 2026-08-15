@@ -13,8 +13,8 @@
  *            out. Drift is refused by the op, echoed here as an error with re-plan guidance.
  * The projection lane runs sideways: families picked in the table, dense profile JSON back.
  *
- * Everything the seam chips mark is dialled through `#/host/familyfoundry`, which hand-mirrors the
- * C# DTOs until the generated clients land.
+ * All Family Foundry calls go through `#/host/familyfoundry`, fully typed against the checked-in
+ * generated clients. The remaining unproven surface is LIVE behavior (SHIMS: step-3 live proof).
  */
 import { createFileRoute } from "@tanstack/react-router";
 import { useQueries } from "@tanstack/react-query";
@@ -223,14 +223,14 @@ function familyFlag(entry: FfFamilyPlan): string | null {
 
 // ── seam chip ───────────────────────────────────────────────────────────────────────────────────
 
-/** Marks a surface dialled through the untyped adapter. Dashed = "the shape is not proven yet". */
+/** Marks a surface whose LIVE behavior is unproven. Dashed = "typed, but not yet exercised". */
 function Seam({ op }: { op: string }) {
   return (
     <span
-      title={`untyped seam — ${op} is dialled dynamically until its generated client lands`}
+      title={`${op} is typed but unproven against a live session — SHIMS names the step-3 proof`}
       className="tele rounded-[1px] border border-dashed border-[var(--line-2)] px-1 text-[10px] text-muted-foreground"
     >
-      seam · {op}
+      unproven · {op}
     </span>
   );
 }

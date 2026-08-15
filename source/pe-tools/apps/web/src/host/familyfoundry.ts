@@ -1,16 +1,10 @@
 /**
  * Family Foundry boundary — the FFMigrator lane (`/families`) talks to Revit through here.
  *
- * SEAM: `familyfoundry.plan|apply|project` are live C# bridge ops
- * (source/Pe.App/Host/FamilyFoundryBridgeOps.cs) whose DTOs are authored in
- * Pe.Shared.HostContracts/Operations/FamilyFoundryHostContracts.cs, but they are NOT yet in the
- * checked-in typegen output (`@pe/host-contracts/generated`). Until a codegen run against a live
- * host catalog lands them, this module hand-mirrors those DTOs and dials them through
- * `callHostDynamic`. Every function below names the generated client that replaces it; when that
- * client exists, delete the mirrored interface and the cast, not the call site.
- *
- * `host.shell.open` is NOT a seam — it is a checked-in TS-only op, so it goes through the typed
- * client and is re-exported here only so the route has one Family Foundry surface to import.
+ * Fully typed: `familyfoundry.plan|apply|project` and `host.shell.open` all go through the
+ * checked-in typegen output (`@pe/host-contracts/generated`). The `Ff*` aliases below exist so
+ * the route speaks one short vocabulary; they are projections of the generated namespaces,
+ * never parallel truth.
  *
  * Contract notes that shape the UI (read from the C# handler, not guessed):
  *   - Profile input is always INLINE JSON. No op accepts a profile path; the route reads the
@@ -22,145 +16,52 @@
  *   - `apply` refuses (`refused: true`) on empty familyIds, a blank expectedPlanHash, or hash
  *     drift; the response's own `planHash` is the recompiled truth to compare against.
  */
-import { callHostDynamic, callHostRpc } from "#/host/client";
+import { callHostRpc } from "#/host/client";
 import type { HostSessionScope, HostShellOpenData } from "@pe/host-contracts/operation-types";
+import type {
+  FamilyfoundryApply,
+  FamilyfoundryPlan,
+  FamilyfoundryProject,
+} from "@pe/host-contracts/generated";
 
-/** A named, path-addressed complaint from the compiler or the op boundary. */
-export interface FfDiagnostic {
-  code: string;
-  path: string;
-  message: string;
-  suggestion?: string | null;
-}
+export type FfDiagnostic = FamilyfoundryPlan.Res.FamilyFoundryDiagnostic;
+export type FfLoweredAction = FamilyfoundryPlan.Res.FamilyFoundryLoweredActionData;
+export type FfParameterProvenance = FamilyfoundryPlan.Res.FamilyFoundryParameterProvenanceData;
+export type FfResolvedParameter = FamilyfoundryPlan.Res.FamilyFoundryResolvedParameterData;
+export type FfReconciliationPlan = FamilyfoundryPlan.Res.FamilyFoundryReconciliationPlanData;
+export type FfFamilyPlan = FamilyfoundryPlan.Res.FamilyFoundryFamilyPlanData;
+export type FfPlanData = FamilyfoundryPlan.Res.Response;
+export type FfDiffSummary = FamilyfoundryApply.Res.FamilyFoundryParameterDiffSummary;
+export type FfApplyReceipt = FamilyfoundryApply.Res.FamilyFoundryApplyReceipt;
+export type FfApplyData = FamilyfoundryApply.Res.Response;
+export type FfProjection = FamilyfoundryProject.Res.FamilyFoundryProfileProjectionData;
+export type FfProjectData = FamilyfoundryProject.Res.Response;
 
-export interface FfLoweredAction {
-  operation: string;
-  target: string;
-  sources: string[];
-  reason: string;
-}
-
-/** Per-field provenance: which layer of the profile decided each facet of the definition. */
-export interface FfParameterProvenance {
-  identity: string;
-  dataType: string;
-  propertiesGroup: string;
-  isInstance: string;
-  tooltip: string;
-}
-
-export interface FfResolvedParameterDefinition {
-  identity: unknown;
-  name: string;
-  dataTypeId: string;
-  propertiesGroupId: string;
-  isInstance: boolean;
-  tooltip?: string | null;
-}
-
-export interface FfResolvedParameter {
-  definition: FfResolvedParameterDefinition;
-  isShared: boolean;
-  assignment?: { kind: string; value: string } | null;
-  valuesByType: Record<string, string | null>;
-  migration?: {
-    sourceNames: string[];
-    onlyAddIfSourceExists: boolean;
-    mappingStrategy: string;
-  } | null;
-  provenance: FfParameterProvenance;
-}
-
-export interface FfReconciliationPlan {
-  parameters: FfResolvedParameter[];
-  requiredApsParameterNames: string[];
-  familyParameterNames: string[];
-  loweredActions: FfLoweredAction[];
-}
-
-export interface FfFamilyPlan {
-  familyId: number;
-  familyName: string;
-  plan: FfReconciliationPlan;
-}
-
-export interface FfPlanData {
-  planHash: string | null;
-  families: FfFamilyPlan[];
-  diagnostics: FfDiagnostic[];
-}
-
-export interface FfDiffSummary {
-  added: number;
-  removed: number;
-  modified: number;
-}
-
-export interface FfApplyReceipt {
-  familyId: number;
-  familyName?: string | null;
-  success: boolean;
-  error?: string | null;
-  operationsRun: string[];
-  parametersChanged: number;
-  diffSummary: FfDiffSummary;
-  artifactDirectoryPath?: string | null;
-}
-
-export interface FfApplyData {
-  planHash: string | null;
-  refused: boolean;
-  receipts: FfApplyReceipt[];
-  diagnostics: FfDiagnostic[];
-}
-
-export interface FfProjection {
-  familyId: number;
-  familyName?: string | null;
-  success: boolean;
-  profileJson?: string | null;
-  error?: string | null;
-}
-
-export interface FfProjectData {
-  projections: FfProjection[];
-  diagnostics: FfDiagnostic[];
-}
-
-/**
- * Compile a profile into per-family reconciliation plans plus the drift hash.
- * seam: replaced by the generated `FamilyfoundryPlan` client (`@pe/host-contracts/generated`).
- */
-export async function familyFoundryPlan(
-  request: { profileJson: string; familyId?: number },
+/** Compile a profile into per-family reconciliation plans plus the drift hash. */
+export function familyFoundryPlan(
+  request: FamilyfoundryPlan.Req.Request,
   scope?: HostSessionScope,
 ): Promise<FfPlanData> {
-  return (await callHostDynamic("familyfoundry.plan", request, scope)) as FfPlanData;
+  return callHostRpc("familyfoundry.plan", request, scope);
 }
 
-/**
- * Migrate each explicit family independently; drift against `expectedPlanHash` is refused whole.
- * seam: replaced by the generated `FamilyfoundryApply` client (`@pe/host-contracts/generated`).
- */
-export async function familyFoundryApply(
-  request: { profileJson: string; familyIds: number[]; expectedPlanHash: string },
+/** Migrate each explicit family independently; drift against `expectedPlanHash` is refused whole. */
+export function familyFoundryApply(
+  request: FamilyfoundryApply.Req.Request,
   scope?: HostSessionScope,
 ): Promise<FfApplyData> {
-  return (await callHostDynamic("familyfoundry.apply", request, scope)) as FfApplyData;
+  return callHostRpc("familyfoundry.apply", request, scope);
 }
 
-/**
- * Read selected loaded families back out as dense runnable FFManagerProfile JSON.
- * seam: replaced by the generated `FamilyfoundryProject` client (`@pe/host-contracts/generated`).
- */
-export async function familyFoundryProject(
-  request: { familyIds: number[] },
+/** Read selected loaded families back out as dense runnable FFManagerProfile JSON. */
+export function familyFoundryProject(
+  request: FamilyfoundryProject.Req.Request,
   scope?: HostSessionScope,
 ): Promise<FfProjectData> {
-  return await (callHostDynamic("familyfoundry.project", request, scope) as Promise<FfProjectData>);
+  return callHostRpc("familyfoundry.project", request, scope);
 }
 
-/** Open a receipt's artifact directory in the OS default handler. Typed today — not a seam. */
+/** Open a receipt's artifact directory in the OS default handler. */
 export function openHostPath(path: string, scope?: HostSessionScope): Promise<HostShellOpenData> {
   return callHostRpc("host.shell.open", { path }, scope);
 }
