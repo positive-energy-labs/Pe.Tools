@@ -85,15 +85,17 @@ the user in the authored lane of the same family. That is the only crossing.
 Every gate below is grafted or waived, so the routes are gone. Deleted: `routes/family-doc.tsx`,
 `routes/family-types.tsx`, `routes/family-audit.tsx`, `routes/family-model.tsx` (already only a
 redirect to `/family`), `src/family-types/`, `src/pdf-audit/`, `routes/api/pdf-audit/map.ts`,
-`src/lab/kit.tsx` (its only importer was `family-types/mock.ts`), and `src/host/family-doc.ts`
+`src/lab/kit.tsx` (its only importer was `family-types/mock.ts`), `src/lab/mock.ts` (its synthetic
+table fixtures lost their final consumer; the one surviving `BBox` shape moved into `estimate.ts`),
+and `src/host/family-doc.ts`
 (the untyped-ish snapshot/apply adapter, superseded by `family/live.tsx`, which calls the same
 two ops through the generated typed client AND carries per-edit outcomes + dryRun).
 
 Kept, with the import-graph reason: `routes/api/pdf-audit/parse.ts` + `parse.$parseId.ts` (the
 parse lane `family/doc-pane.tsx` and pea's `family-commands`/`route-state-commands` both fetch),
 `src/grounded-doc/` (parse cache + types + the `/doc-lab` and `/design-system` surfaces),
-`src/lab/estimate.ts` + `src/lab/mock.ts` (the calibrated cell-geometry estimator `doc-pane`
-depends on), and the `route:family-types` contracts + mcps handlers (shim 7 above).
+`src/lab/estimate.ts` (the calibrated cell-geometry estimator `doc-pane` depends on), and the
+`route:family-types` contracts + mcps handlers (shim 7 above).
 
 - [x] `formula.ts` + `formula.test.ts` — landed at `apps/web/src/family/formula.ts` (+test).
       Param source retargeted to the authored model via `authoredFormulaParams(familyParameters,

@@ -15,15 +15,15 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { findAmbiguousBlockIds } from "#/grounded-doc/ambiguous";
 import type { DocImage, GroundedBlock, ParsedDocView } from "#/grounded-doc/types";
 
-export type FocusOrigin = "markdown" | "page" | "image" | "external";
+type FocusOrigin = "markdown" | "page" | "image" | "external";
 
-export interface BlockFocus {
+interface BlockFocus {
   /** A block id OR an extracted-image id — blocks and images share one namespace. */
   blockId: string;
   origin: FocusOrigin;
 }
 
-export type GroundedDocStatus =
+type GroundedDocStatus =
   | { phase: "empty" }
   | { phase: "parsing"; fileName: string }
   | { phase: "error"; message: string }

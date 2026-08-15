@@ -6,14 +6,19 @@
  * are honest guesses — the UI must present them as such (crosshair + dashed),
  * never as measured truth.
  */
-import type { BBox } from "#/lab/mock";
+interface BBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 
-export interface MdGrid {
+interface MdGrid {
   header: string[];
   rows: string[][];
 }
 
-export function parseMdTable(md: string): MdGrid | null {
+function parseMdTable(md: string): MdGrid | null {
   const lines = md
     .split("\n")
     .map((l) => l.trim())
@@ -36,7 +41,7 @@ export function parseMdTable(md: string): MdGrid | null {
  * is a merged/spanning value ("applies to the whole row") — a real edge case
  * in equipment datasheets. It must not count toward column weights.
  */
-export function isSpanningRow(row: string[]): boolean {
+function isSpanningRow(row: string[]): boolean {
   return row.length > 2 && !!row[1] && row.slice(2).every((c) => !c) && row[1].length > 30;
 }
 
@@ -46,7 +51,7 @@ export function isSpanningRow(row: string[]): boolean {
  * column-center error ≤ ~17pt on 90–130pt columns — right cell, but honest
  * UI must render it as an estimate.
  */
-export function columnEdges(grid: MdGrid, bbox: BBox): number[] {
+function columnEdges(grid: MdGrid, bbox: BBox): number[] {
   const nCols = Math.max(grid.header.length, ...grid.rows.map((r) => r.length));
   const weights: number[] = [];
   for (let c = 0; c < nCols; c++) {
@@ -72,7 +77,7 @@ export function columnEdges(grid: MdGrid, bbox: BBox): number[] {
  * Estimated bbox for a data cell (rowIdx into grid.rows, colIdx into columns).
  * Assumes one header row and uniform row heights across the bbox.
  */
-export function estimateCellBBox(grid: MdGrid, bbox: BBox, rowIdx: number, colIdx: number): BBox {
+function estimateCellBBox(grid: MdGrid, bbox: BBox, rowIdx: number, colIdx: number): BBox {
   const edges = columnEdges(grid, bbox);
   const nBands = grid.rows.length + 1; // header + data rows
   const rowH = bbox.h / nBands;
@@ -90,7 +95,7 @@ export function estimateCellBBox(grid: MdGrid, bbox: BBox, rowIdx: number, colId
    value). When line-box rows match the md grid 1:1, cell positions are
    MEASURED, not estimated. */
 
-export function lineBoxGroups(bboxes: BBox[]): BBox[][] {
+function lineBoxGroups(bboxes: BBox[]): BBox[][] {
   if (bboxes.length < 2) return [];
   const table = bboxes[0];
   const lines = bboxes.slice(1).filter((b) => b.h <= 16 && b.h < table.h * 0.5);
@@ -105,7 +110,7 @@ export function lineBoxGroups(bboxes: BBox[]): BBox[][] {
 }
 
 /** Line-box group per md data row (index-aligned), or null when they don't line up. */
-export function matchRowBoxes(grid: MdGrid, bboxes: BBox[]): (BBox[] | undefined)[] | null {
+function matchRowBoxes(grid: MdGrid, bboxes: BBox[]): (BBox[] | undefined)[] | null {
   const groups = lineBoxGroups(bboxes);
   if (groups.length === 0) return null;
   const n = grid.rows.length;
@@ -116,7 +121,7 @@ export function matchRowBoxes(grid: MdGrid, bboxes: BBox[]): (BBox[] | undefined
 
 /* ── Targets from a real parse ─────────────────────────────────────────── */
 
-export interface ParsedDocLike {
+interface ParsedDocLike {
   fileName: string;
   pages: { page: number; width: number; height: number; screenshotUrl: string | null }[];
   blocks: { id: string; page: number; kind: string; md: string; bboxes: BBox[] }[];

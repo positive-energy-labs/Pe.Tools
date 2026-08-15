@@ -35,7 +35,7 @@
   --user-line: color-mix(in srgb, var(--user) 36%, transparent);
   --pea-tint: color-mix(in srgb, var(--pe-green) 12%, transparent);
   --pea-line: color-mix(in srgb, var(--pe-green) 32%, transparent);
-  /* PE data palette — categorical colors for badges/cells/legends (family-matrix, status chips).
+  /* PE data palette — categorical colors for badges, cells, legends, and status chips.
      One hue per category; consumers tint it (`/12` bg, `/25` border) and use the full hue as text.
      Light values are dark enough to read on their own faint tint; .dark lightens them to match. */
   --cat-blue: #005695; /* PE Blue — built-in / family kind */

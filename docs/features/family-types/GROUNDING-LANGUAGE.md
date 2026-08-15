@@ -1,7 +1,7 @@
 # The standardized language (in-repo FamilyFoundry + shared contracts) — 2026-07-12
 
 THE design precedent per user steer. Source-indexed from `source/Pe.Revit.FamilyFoundry` and
-`source/Pe.Shared.RevitData`. The family-types state model speaks THIS language.
+`source/Pe.Shared.RevitData`. The consolidated family surfaces speak THIS language.
 
 ## The anchors (STABLE — build on these)
 
@@ -37,10 +37,8 @@ THE design precedent per user steer. Source-indexed from `source/Pe.Revit.Family
 
 - `FamilyEditorParameterSnapshot` / `FamilyEditorApply*` (`FamilySnapshotContracts.cs:41-83`) —
   flat, name-only wire for `family.editor.*` ops; mid-migration toward the canonical descriptor
-  (family-sheet PLAN directed convergence; unfinished). **Our pass: additive alignment only —
-  attach `Identity` to snapshot params, keep flat fields, note full convergence in ledger.**
-  Verified: the PLAN's extension fields (identity/dependsOn/dependents/associations/dryRun) have
-  NOT landed in C# yet — Wave 1B adds them.
+  shape. Keep additions aligned with the canonical identity and provenance vocabulary instead of
+  creating a third parameter model.
 - `ParameterSnapshot` (FF-local, `Snapshots/ParameterSnapshot.cs`) — typed view being subordinated;
   has `FromCanonical`/`ToCanonical`.
 - Legacy geometry/spec types — irrelevant here.
@@ -50,10 +48,10 @@ THE design precedent per user steer. Source-indexed from `source/Pe.Revit.Family
 SetParamValues (global value/formula, uses set-unset trick), SetParamValuesPerType,
 AddParamsFromSettings, AddSharedParams, Map*/MapReplaceParams, BacklinkParamsToBuiltIn,
 DeleteParams/PurgeParams, SortParams, CreateFamilyTypes/FinalizeFamilyTypes.
-(Add/delete/type-creation stay unbridged this pass — ledger 6.)
+Verify the current bridge catalog before relying on add/delete/type-creation from a web surface.
 
 ## Unverified (check before relying)
 
 - `family.editor.snapshot` internals (`RevitDataRequestService.GetFamilyEditorSnapshotCore`) —
   whether it reuses FamilySnapshotExtractor. Read before extending.
-- `shared:` vs `shared-guid:` Key-prefix divergence — potential latent dedup bug (ledger).
+- `shared:` vs `shared-guid:` Key-prefix divergence — potential latent dedup bug.
