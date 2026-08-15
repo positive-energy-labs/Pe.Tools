@@ -12,6 +12,7 @@ import {
   listBridgeSessions,
   openSettingsDocument,
   openSettingsDocumentWithModule,
+  openShellPath,
   saveSettingsDocument,
   tailLogs,
   validateSettingsDocument,
@@ -185,6 +186,8 @@ export const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
       return yield* listBridgeSessions(bridge.list);
     case "logs.tail":
       return yield* tailLogs(yield* decodeRequest(key, request));
+    case "host.shell.open":
+      return yield* openShellPath(yield* decodeRequest(key, request));
     case "settings.workspaces": {
       const bridgeView = yield* bridge.snapshot(bridgeSessionId);
       return yield* getSettingsWorkspaces({

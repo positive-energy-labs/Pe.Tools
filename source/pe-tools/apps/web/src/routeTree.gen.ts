@@ -15,12 +15,8 @@ import { Route as ScheduleGridRouteImport } from "./routes/schedule-grid";
 import { Route as ParameterLinksRouteImport } from "./routes/parameter-links";
 import { Route as OpsRouteImport } from "./routes/ops";
 import { Route as InstancesRouteImport } from "./routes/instances";
-import { Route as FamilyTypesRouteImport } from "./routes/family-types";
-import { Route as FamilyModelRouteImport } from "./routes/family-model";
-import { Route as FamilyMatrixRouteImport } from "./routes/family-matrix";
-import { Route as FamilyDocRouteImport } from "./routes/family-doc";
-import { Route as FamilyAuditRouteImport } from "./routes/family-audit";
 import { Route as FamilyRouteImport } from "./routes/family";
+import { Route as FamiliesRouteImport } from "./routes/families";
 import { Route as DocLabRouteImport } from "./routes/doc-lab";
 import { Route as DesignSystemRouteImport } from "./routes/design-system";
 import { Route as DataTablesRouteImport } from "./routes/data-tables";
@@ -29,7 +25,6 @@ import { Route as IndexRouteImport } from "./routes/index";
 import { Route as DocsTargetRouteImport } from "./routes/docs.target";
 import { Route as DocsRuntimeRouteImport } from "./routes/docs.runtime";
 import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
-import { Route as ApiPdfAuditMapRouteImport } from "./routes/api/pdf-audit/map";
 import { Route as ApiPdfAuditParseParseIdRouteImport } from "./routes/api/pdf-audit/parse.$parseId";
 
 const TakeoffsRoute = TakeoffsRouteImport.update({
@@ -62,34 +57,14 @@ const InstancesRoute = InstancesRouteImport.update({
   path: "/instances",
   getParentRoute: () => rootRouteImport,
 } as any);
-const FamilyTypesRoute = FamilyTypesRouteImport.update({
-  id: "/family-types",
-  path: "/family-types",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const FamilyModelRoute = FamilyModelRouteImport.update({
-  id: "/family-model",
-  path: "/family-model",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const FamilyMatrixRoute = FamilyMatrixRouteImport.update({
-  id: "/family-matrix",
-  path: "/family-matrix",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const FamilyDocRoute = FamilyDocRouteImport.update({
-  id: "/family-doc",
-  path: "/family-doc",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const FamilyAuditRoute = FamilyAuditRouteImport.update({
-  id: "/family-audit",
-  path: "/family-audit",
-  getParentRoute: () => rootRouteImport,
-} as any);
 const FamilyRoute = FamilyRouteImport.update({
   id: "/family",
   path: "/family",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const FamiliesRoute = FamiliesRouteImport.update({
+  id: "/families",
+  path: "/families",
   getParentRoute: () => rootRouteImport,
 } as any);
 const DocLabRoute = DocLabRouteImport.update({
@@ -132,11 +107,6 @@ const ApiPdfAuditParseRoute = ApiPdfAuditParseRouteImport.update({
   path: "/api/pdf-audit/parse",
   getParentRoute: () => rootRouteImport,
 } as any);
-const ApiPdfAuditMapRoute = ApiPdfAuditMapRouteImport.update({
-  id: "/api/pdf-audit/map",
-  path: "/api/pdf-audit/map",
-  getParentRoute: () => rootRouteImport,
-} as any);
 const ApiPdfAuditParseParseIdRoute = ApiPdfAuditParseParseIdRouteImport.update({
   id: "/$parseId",
   path: "/$parseId",
@@ -149,12 +119,8 @@ export interface FileRoutesByFullPath {
   "/data-tables": typeof DataTablesRoute;
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
+  "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
-  "/family-audit": typeof FamilyAuditRoute;
-  "/family-doc": typeof FamilyDocRoute;
-  "/family-matrix": typeof FamilyMatrixRoute;
-  "/family-model": typeof FamilyModelRoute;
-  "/family-types": typeof FamilyTypesRoute;
   "/instances": typeof InstancesRoute;
   "/ops": typeof OpsRoute;
   "/parameter-links": typeof ParameterLinksRoute;
@@ -163,7 +129,6 @@ export interface FileRoutesByFullPath {
   "/takeoffs": typeof TakeoffsRoute;
   "/docs/runtime": typeof DocsRuntimeRoute;
   "/docs/target": typeof DocsTargetRoute;
-  "/api/pdf-audit/map": typeof ApiPdfAuditMapRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
 }
@@ -173,12 +138,8 @@ export interface FileRoutesByTo {
   "/data-tables": typeof DataTablesRoute;
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
+  "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
-  "/family-audit": typeof FamilyAuditRoute;
-  "/family-doc": typeof FamilyDocRoute;
-  "/family-matrix": typeof FamilyMatrixRoute;
-  "/family-model": typeof FamilyModelRoute;
-  "/family-types": typeof FamilyTypesRoute;
   "/instances": typeof InstancesRoute;
   "/ops": typeof OpsRoute;
   "/parameter-links": typeof ParameterLinksRoute;
@@ -187,7 +148,6 @@ export interface FileRoutesByTo {
   "/takeoffs": typeof TakeoffsRoute;
   "/docs/runtime": typeof DocsRuntimeRoute;
   "/docs/target": typeof DocsTargetRoute;
-  "/api/pdf-audit/map": typeof ApiPdfAuditMapRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
 }
@@ -198,12 +158,8 @@ export interface FileRoutesById {
   "/data-tables": typeof DataTablesRoute;
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
+  "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
-  "/family-audit": typeof FamilyAuditRoute;
-  "/family-doc": typeof FamilyDocRoute;
-  "/family-matrix": typeof FamilyMatrixRoute;
-  "/family-model": typeof FamilyModelRoute;
-  "/family-types": typeof FamilyTypesRoute;
   "/instances": typeof InstancesRoute;
   "/ops": typeof OpsRoute;
   "/parameter-links": typeof ParameterLinksRoute;
@@ -212,7 +168,6 @@ export interface FileRoutesById {
   "/takeoffs": typeof TakeoffsRoute;
   "/docs/runtime": typeof DocsRuntimeRoute;
   "/docs/target": typeof DocsTargetRoute;
-  "/api/pdf-audit/map": typeof ApiPdfAuditMapRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
 }
@@ -224,12 +179,8 @@ export interface FileRouteTypes {
     | "/data-tables"
     | "/design-system"
     | "/doc-lab"
+    | "/families"
     | "/family"
-    | "/family-audit"
-    | "/family-doc"
-    | "/family-matrix"
-    | "/family-model"
-    | "/family-types"
     | "/instances"
     | "/ops"
     | "/parameter-links"
@@ -238,7 +189,6 @@ export interface FileRouteTypes {
     | "/takeoffs"
     | "/docs/runtime"
     | "/docs/target"
-    | "/api/pdf-audit/map"
     | "/api/pdf-audit/parse"
     | "/api/pdf-audit/parse/$parseId";
   fileRoutesByTo: FileRoutesByTo;
@@ -248,12 +198,8 @@ export interface FileRouteTypes {
     | "/data-tables"
     | "/design-system"
     | "/doc-lab"
+    | "/families"
     | "/family"
-    | "/family-audit"
-    | "/family-doc"
-    | "/family-matrix"
-    | "/family-model"
-    | "/family-types"
     | "/instances"
     | "/ops"
     | "/parameter-links"
@@ -262,7 +208,6 @@ export interface FileRouteTypes {
     | "/takeoffs"
     | "/docs/runtime"
     | "/docs/target"
-    | "/api/pdf-audit/map"
     | "/api/pdf-audit/parse"
     | "/api/pdf-audit/parse/$parseId";
   id:
@@ -272,12 +217,8 @@ export interface FileRouteTypes {
     | "/data-tables"
     | "/design-system"
     | "/doc-lab"
+    | "/families"
     | "/family"
-    | "/family-audit"
-    | "/family-doc"
-    | "/family-matrix"
-    | "/family-model"
-    | "/family-types"
     | "/instances"
     | "/ops"
     | "/parameter-links"
@@ -286,7 +227,6 @@ export interface FileRouteTypes {
     | "/takeoffs"
     | "/docs/runtime"
     | "/docs/target"
-    | "/api/pdf-audit/map"
     | "/api/pdf-audit/parse"
     | "/api/pdf-audit/parse/$parseId";
   fileRoutesById: FileRoutesById;
@@ -297,12 +237,8 @@ export interface RootRouteChildren {
   DataTablesRoute: typeof DataTablesRoute;
   DesignSystemRoute: typeof DesignSystemRoute;
   DocLabRoute: typeof DocLabRoute;
+  FamiliesRoute: typeof FamiliesRoute;
   FamilyRoute: typeof FamilyRoute;
-  FamilyAuditRoute: typeof FamilyAuditRoute;
-  FamilyDocRoute: typeof FamilyDocRoute;
-  FamilyMatrixRoute: typeof FamilyMatrixRoute;
-  FamilyModelRoute: typeof FamilyModelRoute;
-  FamilyTypesRoute: typeof FamilyTypesRoute;
   InstancesRoute: typeof InstancesRoute;
   OpsRoute: typeof OpsRoute;
   ParameterLinksRoute: typeof ParameterLinksRoute;
@@ -311,7 +247,6 @@ export interface RootRouteChildren {
   TakeoffsRoute: typeof TakeoffsRoute;
   DocsRuntimeRoute: typeof DocsRuntimeRoute;
   DocsTargetRoute: typeof DocsTargetRoute;
-  ApiPdfAuditMapRoute: typeof ApiPdfAuditMapRoute;
   ApiPdfAuditParseRoute: typeof ApiPdfAuditParseRouteWithChildren;
 }
 
@@ -359,46 +294,18 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof InstancesRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/family-types": {
-      id: "/family-types";
-      path: "/family-types";
-      fullPath: "/family-types";
-      preLoaderRoute: typeof FamilyTypesRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/family-model": {
-      id: "/family-model";
-      path: "/family-model";
-      fullPath: "/family-model";
-      preLoaderRoute: typeof FamilyModelRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/family-matrix": {
-      id: "/family-matrix";
-      path: "/family-matrix";
-      fullPath: "/family-matrix";
-      preLoaderRoute: typeof FamilyMatrixRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/family-doc": {
-      id: "/family-doc";
-      path: "/family-doc";
-      fullPath: "/family-doc";
-      preLoaderRoute: typeof FamilyDocRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/family-audit": {
-      id: "/family-audit";
-      path: "/family-audit";
-      fullPath: "/family-audit";
-      preLoaderRoute: typeof FamilyAuditRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
     "/family": {
       id: "/family";
       path: "/family";
       fullPath: "/family";
       preLoaderRoute: typeof FamilyRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/families": {
+      id: "/families";
+      path: "/families";
+      fullPath: "/families";
+      preLoaderRoute: typeof FamiliesRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/doc-lab": {
@@ -457,13 +364,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof ApiPdfAuditParseRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/api/pdf-audit/map": {
-      id: "/api/pdf-audit/map";
-      path: "/api/pdf-audit/map";
-      fullPath: "/api/pdf-audit/map";
-      preLoaderRoute: typeof ApiPdfAuditMapRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
     "/api/pdf-audit/parse/$parseId": {
       id: "/api/pdf-audit/parse/$parseId";
       path: "/$parseId";
@@ -491,12 +391,8 @@ const rootRouteChildren: RootRouteChildren = {
   DataTablesRoute: DataTablesRoute,
   DesignSystemRoute: DesignSystemRoute,
   DocLabRoute: DocLabRoute,
+  FamiliesRoute: FamiliesRoute,
   FamilyRoute: FamilyRoute,
-  FamilyAuditRoute: FamilyAuditRoute,
-  FamilyDocRoute: FamilyDocRoute,
-  FamilyMatrixRoute: FamilyMatrixRoute,
-  FamilyModelRoute: FamilyModelRoute,
-  FamilyTypesRoute: FamilyTypesRoute,
   InstancesRoute: InstancesRoute,
   OpsRoute: OpsRoute,
   ParameterLinksRoute: ParameterLinksRoute,
@@ -505,7 +401,6 @@ const rootRouteChildren: RootRouteChildren = {
   TakeoffsRoute: TakeoffsRoute,
   DocsRuntimeRoute: DocsRuntimeRoute,
   DocsTargetRoute: DocsTargetRoute,
-  ApiPdfAuditMapRoute: ApiPdfAuditMapRoute,
   ApiPdfAuditParseRoute: ApiPdfAuditParseRouteWithChildren,
 };
 export const routeTree = rootRouteImport

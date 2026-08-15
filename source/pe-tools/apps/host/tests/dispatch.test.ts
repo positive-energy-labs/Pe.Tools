@@ -25,6 +25,7 @@ import {
 import {
   getBridgeSessionSummary,
   getSettingsWorkspaces,
+  openShellPath,
   parseRegistryRecentDocumentRows,
 } from "../src/local-ops.ts";
 import { LocalOpError } from "../src/local-error.ts";
@@ -106,6 +107,28 @@ HKEY_CURRENT_USER\\Software\\Autodesk\\Revit\\Autodesk Revit 2024\\Profiles\\Des
       valueName: "FileNameMRU2",
     },
   ]);
+});
+
+test("host shell open validates an absolute existing path and returns the launched path", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "pe-shell-open-"));
+  let launchedPath: string | undefined;
+  try {
+    const result = await runDispatch(
+      openShellPath({ path: directory }, async (path) => {
+        launchedPath = path;
+      }),
+    );
+    expect(result).toEqual({ opened: true, path: directory });
+    expect(launchedPath).toBe(directory);
+    await expect(
+      runDispatch(openShellPath({ path: "relative/path" }, async () => {})),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    await expect(
+      runDispatch(openShellPath({ path: join(directory, "missing") }, async () => {})),
+    ).rejects.toMatchObject({ statusCode: 404 });
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test("settings tree path validation fails as LocalOpError", async () => {

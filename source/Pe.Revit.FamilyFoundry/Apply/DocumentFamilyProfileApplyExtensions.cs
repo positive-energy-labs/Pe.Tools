@@ -8,6 +8,20 @@ using Pe.Shared.StorageRuntime;
 namespace Pe.Revit.FamilyFoundry.Apply;
 
 public static class DocumentFamilyProfileApplyExtensions {
+    public static FamilyMigrationReconciliationPlan CompileDesiredFamilyMigrationProfile(
+        this Document doc,
+        DesiredFamilyMigrationProfile profile
+    ) {
+        if (doc == null)
+            throw new ArgumentNullException(nameof(doc));
+        if (profile == null)
+            throw new ArgumentNullException(nameof(profile));
+
+        using var tempFile = new TempSharedParamFile(doc);
+        var apsParamData = ResolveSharedParameterDefinitions(profile, profile, tempFile, profile.MappingData);
+        return DesiredParameterCompiler.Compile(profile, profile, apsParamData, profile.MappingData);
+    }
+
     public static FamilyProfileApplyResult ApplyFamilyProfile(
         this Document doc,
         FFManagerProfile profile,

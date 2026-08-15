@@ -1,19 +1,44 @@
 /**
  * Client-side Revit-formula validation — instant UX before a formula stages.
  *
- * The host is authoritative (family.editor.apply → Formula.TrySetFormula); this is
- * the fast-feedback cousin that runs entirely from the snapshot. It mirrors the C#
+ * The host is authoritative (settings.document.validate → FamilyModelValidator); this is
+ * the fast-feedback cousin that runs entirely from the AUTHORED model. It mirrors the C#
  * tokenizer (`Pe.Revit/Extensions/FamParameter/Formula/Tokenizer.cs`): strip string
  * literals, mask valid parameter names (longest-first, boundary-aware), then split on
  * boundary chars. Everything left that isn't a number or a known Revit function is a
  * suspicious reference.
  *
- * Three checks, all derived from the snapshot + the in-progress draft:
+ * Three checks, all derived from the authored `familyParameters` / `sharedParameters`
+ * plus the in-progress draft:
  *   - invalid-ref: a token that resolves to no parameter and no function,
  *   - cycle: the edited param reaches itself through the formula graph (draft included),
  *   - type-refs-instance: a TYPE param's formula reads an INSTANCE param (Revit forbids it).
+ *
+ * Every problem is ADVISORY. Staging is never blocked on this — the host's validate/save
+ * stays the final word.
  */
-import type { FamilyTypesParam } from "@pe/agent-contracts";
+
+/** The slice of an authored parameter spec this validator reads. */
+export interface AuthoredParamLike {
+  formula?: string | null;
+  /** Absent means TYPE — Revit's default, and the authored schema's (`isInstance` is nullable). */
+  isInstance?: boolean | null;
+}
+
+/** A parameter as the validator sees it: a name plus its authored formula/binding. */
+export interface FormulaParam extends AuthoredParamLike {
+  name: string;
+}
+
+/** Flatten the authored parameter records into the validator's parameter source. */
+export function authoredFormulaParams(
+  familyParameters?: Record<string, AuthoredParamLike>,
+  sharedParameters?: Record<string, AuthoredParamLike>,
+): FormulaParam[] {
+  return [...Object.entries(familyParameters ?? {}), ...Object.entries(sharedParameters ?? {})].map(
+    ([name, spec]) => ({ name, formula: spec.formula, isInstance: spec.isInstance }),
+  );
+}
 
 /** Revit built-in functions (lowercased), excluded from parameter-reference detection.
  * Sourced from the authoritative C# tokenizer; exp10 added from the brief's list. */
@@ -166,13 +191,13 @@ function reaches(
 }
 
 /**
- * Validate an in-progress formula for one parameter against the snapshot. Returns every
- * problem found (empty = clean). Staging is never blocked on this — the host decides.
+ * Validate an in-progress formula for one parameter against the authored model. Returns
+ * every problem found (empty = clean). Staging is never blocked on this — the host decides.
  */
 export function validateFormula(args: {
   paramName: string;
   draft: string;
-  params: readonly FamilyTypesParam[];
+  params: readonly FormulaParam[];
 }): FormulaProblem[] {
   const { paramName, draft, params } = args;
   if (!draft.trim()) return [];
@@ -187,7 +212,7 @@ export function validateFormula(args: {
     problems.push({ kind: "invalid-ref", message: `"${token}" is not a parameter`, token });
   }
 
-  // Formula graph over the snapshot, with the edited param's formula replaced by the draft.
+  // Formula graph over the authored model, with the edited param's formula replaced by the draft.
   const graph = new Map<string, string[]>();
   for (const p of params) {
     const formula = p.name === paramName ? draft : (p.formula ?? "");
@@ -203,10 +228,11 @@ export function validateFormula(args: {
     });
   }
 
-  // A type parameter's formula may not read an instance parameter.
-  if (edited && edited.isInstance === false) {
+  // A type parameter's formula may not read an instance parameter. An authored parameter
+  // with no `isInstance` is a TYPE parameter (Revit's default), so the check still applies.
+  if (edited && edited.isInstance !== true) {
     for (const ref of refs) {
-      if (byName.get(ref)?.isInstance) {
+      if (byName.get(ref)?.isInstance === true) {
         problems.push({
           kind: "type-refs-instance",
           message: `type parameter can't reference instance parameter "${ref}"`,
@@ -217,4 +243,19 @@ export function validateFormula(args: {
   }
 
   return problems;
+}
+
+/** Ancestry over the authored formula graph: what drives `paramName`, and what it drives. */
+export function formulaAncestry(
+  paramName: string,
+  params: readonly FormulaParam[],
+): { dependsOn: string[]; dependents: string[] } {
+  const validNames = params.map((p) => p.name);
+  const refsOf = (param: FormulaParam) =>
+    param.formula?.trim() ? analyzeFormula(param.formula, validNames).refs : [];
+  const self = params.find((p) => p.name === paramName);
+  return {
+    dependsOn: self ? refsOf(self) : [],
+    dependents: params.filter((p) => refsOf(p).includes(paramName)).map((p) => p.name),
+  };
 }

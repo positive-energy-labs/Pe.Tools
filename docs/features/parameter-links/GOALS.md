@@ -37,7 +37,9 @@ Add one generic assistant-ui route-plugin registry. When a generic `route_state_
 
 Preview and apply carry the complete reviewed profile through the existing route-command input. Apply fails when that profile no longer matches the live draft, so a later agent patch cannot silently change the human-reviewed write. The dock reads route slices from the Workbench's existing session-state SSE projection; its initial GET is only a cold-start fallback.
 
-The `plugin=family-types` query parameter is a separate pilot for hosting an existing full route page in a right-side workspace lane. It intentionally reuses the Family Types route and state protocol through an iframe; it is not a second plugin registry or route-state implementation. Keep this narrow until direct route composition in chat has a proven identity and navigation model.
+The former `plugin=family-types` iframe pilot retired with the standalone route. Its route-state
+protocol remains registered only for Pea's inline family-types chat plugin; it is not a second
+route-state implementation or a browser navigation surface.
 
 Do not add feature-specific agent tools, a second chat transport, or a second route-state implementation.
 

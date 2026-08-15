@@ -1,21 +1,18 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import type { FamilyTypesParam } from "@pe/agent-contracts";
+import {
+  type FormulaParam,
+  analyzeFormula,
+  authoredFormulaParams,
+  formulaAncestry,
+  validateFormula,
+} from "./formula.ts";
 
-import { analyzeFormula, validateFormula } from "./formula.ts";
-
-function p(name: string, extra: Partial<FamilyTypesParam> = {}): FamilyTypesParam {
-  return {
-    name,
-    isInstance: false,
-    isReadOnly: false,
-    storageType: "Double",
-    valuesPerType: {},
-    ...extra,
-  };
+function p(name: string, extra: Partial<FormulaParam> = {}): FormulaParam {
+  return { name, isInstance: false, ...extra };
 }
 
-const PARAMS: FamilyTypesParam[] = [
+const PARAMS: FormulaParam[] = [
   p("Width"),
   p("Width Offset"), // overlapping name — must mask before "Width"
   p("Depth"),
@@ -110,5 +107,44 @@ describe("validateFormula", () => {
     const params = PARAMS.map((x) => (x.name === "Height" ? p("Height", { isInstance: true }) : x));
     const problems = validateFormula({ paramName: "Height", draft: "Clearance + 1", params });
     expect(problems).toEqual([]);
+  });
+});
+
+/* ── the retarget: the authored family.json IS the parameter source ───────── */
+
+describe("authoredFormulaParams", () => {
+  it("flattens family + shared parameters into one name space", () => {
+    const params = authoredFormulaParams(
+      { Width: { formula: undefined }, Height: { formula: "Width * 2" } },
+      { "PE Tag": { isInstance: true } },
+    );
+    expect(params.map((x) => x.name)).toEqual(["Width", "Height", "PE Tag"]);
+    expect(validateFormula({ paramName: "Height", draft: "Width * 2", params })).toEqual([]);
+  });
+
+  it("treats an authored parameter with no isInstance as a TYPE parameter", () => {
+    // Revit's default, and the authored schema's (`isInstance` is nullable) — so the
+    // type-refs-instance law still applies to a plain authored parameter.
+    const params = authoredFormulaParams(
+      { Height: {}, Clearance: { isInstance: true } },
+      undefined,
+    );
+    const problems = validateFormula({ paramName: "Height", draft: "Clearance + 1", params });
+    expect(problems.some((x) => x.kind === "type-refs-instance")).toBe(true);
+  });
+});
+
+describe("formulaAncestry", () => {
+  it("reads dependsOn from the param's own formula and dependents from the graph", () => {
+    const params = authoredFormulaParams({
+      Width: {},
+      Depth: {},
+      Height: { formula: "Width + Depth" },
+      Volume: { formula: "Height * Width" },
+    });
+    const height = formulaAncestry("Height", params);
+    expect(height.dependsOn.sort()).toEqual(["Depth", "Width"]);
+    expect(height.dependents).toEqual(["Volume"]);
+    expect(formulaAncestry("Width", params).dependents).toEqual(["Height", "Volume"]);
   });
 });

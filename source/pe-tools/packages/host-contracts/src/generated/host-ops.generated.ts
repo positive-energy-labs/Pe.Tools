@@ -114,6 +114,158 @@ export namespace FamilyEditorSnapshot {
   }
 }
 
+/** Recompile inline desired-state Family Foundry profile JSON, refuse plan drift, then migrate each explicit loaded family independently with receipts. */
+export namespace FamilyfoundryApply {
+  export namespace Req {
+    export interface Request {
+      profileJson: string;
+      familyIds: number[];
+      expectedPlanHash: string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      planHash?: null | string;
+      refused: boolean;
+      receipts: FamilyFoundryApplyReceipt[];
+      diagnostics: FamilyFoundryDiagnostic[];
+    }
+    export interface FamilyFoundryApplyReceipt {
+      familyId: number;
+      familyName?: null | string;
+      success: boolean;
+      error?: null | string;
+      operationsRun: string[];
+      parametersChanged: number;
+      diffSummary: FamilyFoundryParameterDiffSummary;
+      artifactDirectoryPath?: null | string;
+    }
+    export interface FamilyFoundryParameterDiffSummary {
+      added: number;
+      removed: number;
+      modified: number;
+    }
+    export interface FamilyFoundryDiagnostic {
+      code: string;
+      path: string;
+      message: string;
+      suggestion?: null | string;
+    }
+  }
+}
+
+/** Strictly compile inline desired-state Family Foundry profile JSON into per-family reconciliation plans with provenance and a deterministic drift hash. */
+export namespace FamilyfoundryPlan {
+  export namespace Req {
+    export interface Request {
+      profileJson: string;
+      familyId?: number | null;
+    }
+  }
+  export namespace Res {
+    export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
+
+    export interface Response {
+      planHash?: null | string;
+      families: FamilyFoundryFamilyPlanData[];
+      diagnostics: FamilyFoundryDiagnostic[];
+    }
+    export interface FamilyFoundryFamilyPlanData {
+      familyId: number;
+      familyName: string;
+      plan: FamilyFoundryReconciliationPlanData;
+    }
+    export interface FamilyFoundryReconciliationPlanData {
+      parameters: FamilyFoundryResolvedParameterData[];
+      requiredApsParameterNames: string[];
+      familyParameterNames: string[];
+      loweredActions: FamilyFoundryLoweredActionData[];
+    }
+    export interface FamilyFoundryResolvedParameterData {
+      definition: FamilyFoundryResolvedParameterDefinitionData;
+      isShared: boolean;
+      assignment?: null | FamilyFoundryAssignmentData;
+      valuesByType: {
+        [k: string]: null | string;
+      };
+      migration?: null | FamilyFoundryMigrationData;
+      provenance: FamilyFoundryParameterProvenanceData;
+    }
+    export interface FamilyFoundryResolvedParameterDefinitionData {
+      identity: ParameterIdentity;
+      name: string;
+      dataTypeId: string;
+      propertiesGroupId: string;
+      isInstance: boolean;
+      tooltip?: null | string;
+    }
+    export interface ParameterIdentity {
+      key: string;
+      kind: ParameterIdentityKind;
+      name: string;
+      builtInParameterId?: number | null;
+      sharedGuid?: null | string;
+      parameterElementId?: number | null;
+    }
+    export interface FamilyFoundryAssignmentData {
+      kind: string;
+      value: string;
+    }
+    export interface FamilyFoundryMigrationData {
+      sourceNames: string[];
+      onlyAddIfSourceExists: boolean;
+      mappingStrategy: string;
+    }
+    export interface FamilyFoundryParameterProvenanceData {
+      identity: string;
+      dataType: string;
+      propertiesGroup: string;
+      isInstance: string;
+      tooltip: string;
+    }
+    export interface FamilyFoundryLoweredActionData {
+      operation: string;
+      target: string;
+      sources: string[];
+      reason: string;
+    }
+    export interface FamilyFoundryDiagnostic {
+      code: string;
+      path: string;
+      message: string;
+      suggestion?: null | string;
+    }
+  }
+}
+
+/** Open selected loaded families read-only, capture full snapshots, and return dense runnable FFManagerProfile JSON inline. */
+export namespace FamilyfoundryProject {
+  export namespace Req {
+    export interface Request {
+      familyIds: number[];
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      projections: FamilyFoundryProfileProjectionData[];
+      diagnostics: FamilyFoundryDiagnostic[];
+    }
+    export interface FamilyFoundryProfileProjectionData {
+      familyId: number;
+      familyName?: null | string;
+      success: boolean;
+      profileJson?: null | string;
+      error?: null | string;
+    }
+    export interface FamilyFoundryDiagnostic {
+      code: string;
+      path: string;
+      message: string;
+      suggestion?: null | string;
+    }
+  }
+}
+
 /** List every bridge operation this Revit session supports, with JSON Schemas for request and response payloads. */
 export namespace HostOpsCatalog {
   export namespace Req {
@@ -4800,6 +4952,9 @@ export interface HostOps {
   "family.editor.apply": { request: FamilyEditorApply.Req.Request; response: FamilyEditorApply.Res.Response };
   "family.editor.open": { request: FamilyEditorOpen.Req.Request; response: FamilyEditorOpen.Res.Response };
   "family.editor.snapshot": { request: FamilyEditorSnapshot.Req.Request; response: FamilyEditorSnapshot.Res.Response };
+  "familyfoundry.apply": { request: FamilyfoundryApply.Req.Request; response: FamilyfoundryApply.Res.Response };
+  "familyfoundry.plan": { request: FamilyfoundryPlan.Req.Request; response: FamilyfoundryPlan.Res.Response };
+  "familyfoundry.project": { request: FamilyfoundryProject.Req.Request; response: FamilyfoundryProject.Res.Response };
   "host.ops.catalog": { request: HostOpsCatalog.Req.Request; response: HostOpsCatalog.Res.Response };
   "revit.apply.command.execute": { request: RevitApplyCommandExecute.Req.Request; response: RevitApplyCommandExecute.Res.Response };
   "revit.apply.document.open": { request: RevitApplyDocumentOpen.Req.Request; response: RevitApplyDocumentOpen.Res.Response };
@@ -4858,6 +5013,9 @@ export const hostOpKeys = [
   "family.editor.apply",
   "family.editor.open",
   "family.editor.snapshot",
+  "familyfoundry.apply",
+  "familyfoundry.plan",
+  "familyfoundry.project",
   "host.ops.catalog",
   "revit.apply.command.execute",
   "revit.apply.document.open",
