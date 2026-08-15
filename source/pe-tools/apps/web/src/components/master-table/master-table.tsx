@@ -157,7 +157,7 @@ export function MasterTable<Row>({
                     activeKey === key && "bg-primary/[0.06]",
                   )}
                   onClick={(e) => {
-                    if ((e.target as HTMLElement).closest("button")) return;
+                    if ((e.target as HTMLElement).closest("button,input,select,textarea,a,[role=button]")) return;
                     onRowClick?.(row);
                   }}
                 >
