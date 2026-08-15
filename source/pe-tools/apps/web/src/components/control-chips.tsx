@@ -18,7 +18,7 @@ interface PickerOption {
   hint?: string;
 }
 
-/** Model + access pickers — shadcn DropdownMenu radio groups replacing the hand-rolled Picker. */
+/** Model + access pickers — Combobox-backed chips replacing the hand-rolled Picker. */
 export function ControlChips() {
   const { debug, setModel, setAccessLevel } = useWorkbench();
   const { models, access } = debug.state;

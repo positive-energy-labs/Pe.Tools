@@ -17,7 +17,7 @@ import { PickList } from "#/components/ui/pick-list";
 import { SidePane } from "#/components/ui/side-pane";
 import { ValueDiff } from "#/components/ui/value-diff";
 import { HostConnectionPill } from "#/host/issues";
-import { cn } from "#/lib/utils";
+import { cn, timeAgo } from "#/lib/utils";
 import { useRouteState } from "#/workbench/route-state";
 
 /**
@@ -647,15 +647,4 @@ function pushFailureNote(result: unknown): string | null {
   return `${failures.length} cell${failures.length === 1 ? "" : "s"} failed${
     first?.error ? `: ${first.error}` : "."
   }`;
-}
-
-function timeAgo(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime();
-  if (Number.isNaN(ms)) return "";
-  const min = Math.round(ms / 60000);
-  if (min < 1) return "just now";
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  return `${Math.round(hr / 24)}d ago`;
 }

@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "#/components/ui/select";
 import { useTreeQuery, useWorkspacesQuery } from "#/host/queries";
+import { timeAgo } from "#/lib/utils";
 import { useRouteState } from "#/workbench/route-state";
 import { RouteWorkspaceShell } from "#/workbench/route-workspace-shell";
 
@@ -524,13 +525,3 @@ function display(value: unknown): string {
 }
 
 /** Compact relative-time label for an ISO timestamp. */
-function timeAgo(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime();
-  if (Number.isNaN(ms)) return "";
-  const min = Math.round(ms / 60000);
-  if (min < 1) return "just now";
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  return `${Math.round(hr / 24)}d ago`;
-}

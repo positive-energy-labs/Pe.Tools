@@ -33,6 +33,7 @@ import {
   ComboboxInput,
   ComboboxItem,
   ComboboxList,
+  ComboboxTrigger,
 } from "#/components/ui/combobox";
 import {
   Command,
@@ -55,16 +56,6 @@ import {
   DialogTrigger,
 } from "#/components/ui/dialog";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "#/components/ui/dropdown-menu";
-import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
@@ -85,7 +76,6 @@ import { ValueDiff } from "#/components/ui/value-diff";
 import { Switch } from "#/components/ui/switch";
 import { Textarea } from "#/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
-import { Tooltip, UiTooltipProvider } from "#/components/ui/tooltip";
 import { GroundedDocView } from "#/grounded-doc/GroundedDocView";
 import { useGroundedDoc } from "#/grounded-doc/engine";
 import { SAMPLE_DOC } from "#/grounded-doc/sample";
@@ -242,35 +232,33 @@ const STATUS_TONE: Record<Status, BadgeTone> = {
 
 function DesignSystem() {
   return (
-    <UiTooltipProvider>
-      <div className="ds-canon min-h-screen">
-        <style>{CANON_CSS}</style>
-        <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur">
-          <div className="page-wrap flex items-center justify-between py-3">
-            <div className="flex items-center gap-2">
-              <span className="size-2 rounded-full bg-primary" />
-              <span className="font-pe-display text-sm font-semibold tracking-tight">
-                Design System
-              </span>
-              <span className="tele-label ml-1 text-muted-foreground">living spec</span>
-              <Link to="/" className="ml-2 text-xs text-muted-foreground">
-                ← tools
-              </Link>
-            </div>
-            <ThemeToggle />
+    <div className="ds-canon min-h-screen">
+      <style>{CANON_CSS}</style>
+      <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur">
+        <div className="page-wrap flex items-center justify-between py-3">
+          <div className="flex items-center gap-2">
+            <span className="size-2 rounded-full bg-primary" />
+            <span className="font-pe-display text-sm font-semibold tracking-tight">
+              Design System
+            </span>
+            <span className="tele-label ml-1 text-muted-foreground">living spec</span>
+            <Link to="/" className="ml-2 text-xs text-muted-foreground">
+              ← tools
+            </Link>
           </div>
-        </header>
+          <ThemeToggle />
+        </div>
+      </header>
 
-        <main className="page-wrap flex flex-col gap-16 py-10">
-          <Intro />
-          <Laws />
-          <Tokens />
-          <Primitives />
-          <Patterns />
-          <GroundedDoc />
-        </main>
-      </div>
-    </UiTooltipProvider>
+      <main className="page-wrap flex flex-col gap-16 py-10">
+        <Intro />
+        <Laws />
+        <Tokens />
+        <Primitives />
+        <Patterns />
+        <GroundedDoc />
+      </main>
+    </div>
   );
 }
 
@@ -598,16 +586,12 @@ function ButtonsBlock() {
           <Sparkles /> with icon
         </Button>
         <Button disabled>disabled</Button>
-        <Tooltip.Root>
-          <Tooltip.Trigger render={<Button variant="outline">hover me</Button>} />
-          <Tooltip.Portal>
-            <Tooltip.Positioner sideOffset={6}>
-              <Tooltip.Popup className="rounded-[var(--radius)] bg-popover px-2 py-1 text-xs text-popover-foreground ring-1 ring-border">
-                Tooltip via base-ui
-              </Tooltip.Popup>
-            </Tooltip.Positioner>
-          </Tooltip.Portal>
-        </Tooltip.Root>
+        <Button
+          variant="outline"
+          title="teach-tooltips ride the native title attribute — the app's one tooltip idiom"
+        >
+          hover me
+        </Button>
       </Group>
     </div>
   );
@@ -755,25 +739,8 @@ function SurfacesBlock() {
 }
 
 function OverlaysBlock() {
-  const [sort, setSort] = useState("recent");
   return (
-    <Group label="Overlays — DropdownMenu · Dialog">
-      <DropdownMenu>
-        <DropdownMenuTrigger render={<Button variant="outline" />}>
-          Sort: {sort} <ChevronDown />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent>
-          <DropdownMenuRadioGroup value={sort} onValueChange={setSort}>
-            <DropdownMenuLabel>Order by</DropdownMenuLabel>
-            <DropdownMenuRadioItem value="recent">Most recent</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="size">Size</DropdownMenuRadioItem>
-          </DropdownMenuRadioGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive">Clear all</DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
+    <Group label="Overlays — Dialog">
       <Dialog>
         <DialogTrigger render={<Button variant="outline" />}>Open dialog</DialogTrigger>
         <DialogContent>
@@ -1101,7 +1068,7 @@ function BalancedStatPanel() {
         <div className="flex items-baseline justify-between border-b border-border px-3 py-2">
           <div>
             <div className="text-[13px] font-semibold">Family reconciliation</div>
-            <div className="tele text-muted-foreground">→ family-types</div>
+            <div className="tele text-muted-foreground">→ families</div>
           </div>
           <span className="tele-label text-muted-foreground">balanced</span>
         </div>
@@ -1232,7 +1199,7 @@ function LensThread() {
   );
 }
 
-/** Model/access picker — DropdownMenu radio group behind a Button trigger (canonical). */
+/** Model/access picker — Combobox behind a quiet Button trigger, the control-chips idiom. */
 function Picker({
   title,
   options,
@@ -1243,24 +1210,33 @@ function Picker({
   initial: string;
 }) {
   const [value, setValue] = useState(initial);
-  const label = options.find((o) => o.id === value)?.name ?? title;
+  const selected = options.find((o) => o.id === value) ?? null;
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="outline" size="sm" />} title={title}>
-        {label} <ChevronDown className="opacity-60" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-52">
-        <DropdownMenuRadioGroup value={value} onValueChange={setValue}>
-          <DropdownMenuLabel>{title}</DropdownMenuLabel>
-          {options.map((o) => (
-            <DropdownMenuRadioItem key={o.id} value={o.id} className="flex-col items-start">
-              <span className="text-foreground">{o.name}</span>
-              {o.hint ? <span className="text-xs text-muted-foreground">{o.hint}</span> : null}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <Combobox
+      items={options}
+      value={selected}
+      onValueChange={(option: { id: string; name: string; hint?: string } | null) => {
+        if (option) setValue(option.id);
+      }}
+      itemToStringLabel={(option: { id: string; name: string; hint?: string }) => option.name}
+    >
+      <ComboboxTrigger title={title} render={<Button variant="outline" size="sm" />}>
+        {selected?.name ?? title} <ChevronDown className="opacity-60" />
+      </ComboboxTrigger>
+      <ComboboxContent align="start" className="min-w-52">
+        <ComboboxEmpty>No options.</ComboboxEmpty>
+        <ComboboxList>
+          {(option: { id: string; name: string; hint?: string }) => (
+            <ComboboxItem key={option.id} value={option} className="flex-col items-start">
+              <span className="text-foreground">{option.name}</span>
+              {option.hint ? (
+                <span className="text-xs text-muted-foreground">{option.hint}</span>
+              ) : null}
+            </ComboboxItem>
+          )}
+        </ComboboxList>
+      </ComboboxContent>
+    </Combobox>
   );
 }
 

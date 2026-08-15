@@ -7,6 +7,7 @@ import {
 import { Link } from "@tanstack/react-router";
 
 import { ValueDiff } from "#/components/ui/value-diff";
+import { timeAgo } from "#/lib/utils";
 
 import {
   InlineRoutePlugin,
@@ -115,13 +116,4 @@ export function ScheduleGridChatPlugin({
       ) : null}
     </InlineRoutePlugin>
   );
-}
-
-function timeAgo(iso: string): string {
-  const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-  if (Number.isNaN(min)) return "";
-  if (min < 1) return "just now";
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.round(min / 60);
-  return hr < 24 ? `${hr}h ago` : `${Math.round(hr / 24)}d ago`;
 }

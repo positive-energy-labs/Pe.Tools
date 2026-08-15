@@ -9,77 +9,27 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from "./routes/__root";
-import { Route as TakeoffsRouteImport } from "./routes/takeoffs";
-import { Route as SettingsRouteImport } from "./routes/settings";
-import { Route as ScheduleGridRouteImport } from "./routes/schedule-grid";
-import { Route as ParameterLinksRouteImport } from "./routes/parameter-links";
-import { Route as OpsRouteImport } from "./routes/ops";
-import { Route as InstancesRouteImport } from "./routes/instances";
-import { Route as FamilyRouteImport } from "./routes/family";
-import { Route as FamiliesRouteImport } from "./routes/families";
-import { Route as DocLabRouteImport } from "./routes/doc-lab";
-import { Route as DesignSystemRouteImport } from "./routes/design-system";
-import { Route as DataTablesRouteImport } from "./routes/data-tables";
-import { Route as ChatRouteImport } from "./routes/chat";
 import { Route as IndexRouteImport } from "./routes/index";
-import { Route as DocsTargetRouteImport } from "./routes/docs.target";
+import { Route as ChatRouteImport } from "./routes/chat";
+import { Route as DataTablesRouteImport } from "./routes/data-tables";
+import { Route as DesignSystemRouteImport } from "./routes/design-system";
+import { Route as DocLabRouteImport } from "./routes/doc-lab";
+import { Route as FamiliesRouteImport } from "./routes/families";
+import { Route as FamilyRouteImport } from "./routes/family";
+import { Route as InstancesRouteImport } from "./routes/instances";
+import { Route as OpsRouteImport } from "./routes/ops";
+import { Route as ParameterLinksRouteImport } from "./routes/parameter-links";
+import { Route as ScheduleGridRouteImport } from "./routes/schedule-grid";
+import { Route as SettingsRouteImport } from "./routes/settings";
+import { Route as TakeoffsRouteImport } from "./routes/takeoffs";
 import { Route as DocsRuntimeRouteImport } from "./routes/docs.runtime";
+import { Route as DocsTargetRouteImport } from "./routes/docs.target";
 import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
 import { Route as ApiPdfAuditParseParseIdRouteImport } from "./routes/api/pdf-audit/parse.$parseId";
 
-const TakeoffsRoute = TakeoffsRouteImport.update({
-  id: "/takeoffs",
-  path: "/takeoffs",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const SettingsRoute = SettingsRouteImport.update({
-  id: "/settings",
-  path: "/settings",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const ScheduleGridRoute = ScheduleGridRouteImport.update({
-  id: "/schedule-grid",
-  path: "/schedule-grid",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const ParameterLinksRoute = ParameterLinksRouteImport.update({
-  id: "/parameter-links",
-  path: "/parameter-links",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const OpsRoute = OpsRouteImport.update({
-  id: "/ops",
-  path: "/ops",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const InstancesRoute = InstancesRouteImport.update({
-  id: "/instances",
-  path: "/instances",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const FamilyRoute = FamilyRouteImport.update({
-  id: "/family",
-  path: "/family",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const FamiliesRoute = FamiliesRouteImport.update({
-  id: "/families",
-  path: "/families",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const DocLabRoute = DocLabRouteImport.update({
-  id: "/doc-lab",
-  path: "/doc-lab",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const DesignSystemRoute = DesignSystemRouteImport.update({
-  id: "/design-system",
-  path: "/design-system",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const DataTablesRoute = DataTablesRouteImport.update({
-  id: "/data-tables",
-  path: "/data-tables",
+const IndexRoute = IndexRouteImport.update({
+  id: "/",
+  path: "/",
   getParentRoute: () => rootRouteImport,
 } as any);
 const ChatRoute = ChatRouteImport.update({
@@ -87,19 +37,69 @@ const ChatRoute = ChatRouteImport.update({
   path: "/chat",
   getParentRoute: () => rootRouteImport,
 } as any);
-const IndexRoute = IndexRouteImport.update({
-  id: "/",
-  path: "/",
+const DataTablesRoute = DataTablesRouteImport.update({
+  id: "/data-tables",
+  path: "/data-tables",
   getParentRoute: () => rootRouteImport,
 } as any);
-const DocsTargetRoute = DocsTargetRouteImport.update({
-  id: "/docs/target",
-  path: "/docs/target",
+const DesignSystemRoute = DesignSystemRouteImport.update({
+  id: "/design-system",
+  path: "/design-system",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const DocLabRoute = DocLabRouteImport.update({
+  id: "/doc-lab",
+  path: "/doc-lab",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const FamiliesRoute = FamiliesRouteImport.update({
+  id: "/families",
+  path: "/families",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const FamilyRoute = FamilyRouteImport.update({
+  id: "/family",
+  path: "/family",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const InstancesRoute = InstancesRouteImport.update({
+  id: "/instances",
+  path: "/instances",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const OpsRoute = OpsRouteImport.update({
+  id: "/ops",
+  path: "/ops",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const ParameterLinksRoute = ParameterLinksRouteImport.update({
+  id: "/parameter-links",
+  path: "/parameter-links",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const ScheduleGridRoute = ScheduleGridRouteImport.update({
+  id: "/schedule-grid",
+  path: "/schedule-grid",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const SettingsRoute = SettingsRouteImport.update({
+  id: "/settings",
+  path: "/settings",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const TakeoffsRoute = TakeoffsRouteImport.update({
+  id: "/takeoffs",
+  path: "/takeoffs",
   getParentRoute: () => rootRouteImport,
 } as any);
 const DocsRuntimeRoute = DocsRuntimeRouteImport.update({
   id: "/docs/runtime",
   path: "/docs/runtime",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const DocsTargetRoute = DocsTargetRouteImport.update({
+  id: "/docs/target",
+  path: "/docs/target",
   getParentRoute: () => rootRouteImport,
 } as any);
 const ApiPdfAuditParseRoute = ApiPdfAuditParseRouteImport.update({
@@ -252,81 +252,11 @@ export interface RootRouteChildren {
 
 declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
-    "/takeoffs": {
-      id: "/takeoffs";
-      path: "/takeoffs";
-      fullPath: "/takeoffs";
-      preLoaderRoute: typeof TakeoffsRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/settings": {
-      id: "/settings";
-      path: "/settings";
-      fullPath: "/settings";
-      preLoaderRoute: typeof SettingsRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/schedule-grid": {
-      id: "/schedule-grid";
-      path: "/schedule-grid";
-      fullPath: "/schedule-grid";
-      preLoaderRoute: typeof ScheduleGridRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/parameter-links": {
-      id: "/parameter-links";
-      path: "/parameter-links";
-      fullPath: "/parameter-links";
-      preLoaderRoute: typeof ParameterLinksRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/ops": {
-      id: "/ops";
-      path: "/ops";
-      fullPath: "/ops";
-      preLoaderRoute: typeof OpsRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/instances": {
-      id: "/instances";
-      path: "/instances";
-      fullPath: "/instances";
-      preLoaderRoute: typeof InstancesRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/family": {
-      id: "/family";
-      path: "/family";
-      fullPath: "/family";
-      preLoaderRoute: typeof FamilyRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/families": {
-      id: "/families";
-      path: "/families";
-      fullPath: "/families";
-      preLoaderRoute: typeof FamiliesRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/doc-lab": {
-      id: "/doc-lab";
-      path: "/doc-lab";
-      fullPath: "/doc-lab";
-      preLoaderRoute: typeof DocLabRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/design-system": {
-      id: "/design-system";
-      path: "/design-system";
-      fullPath: "/design-system";
-      preLoaderRoute: typeof DesignSystemRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/data-tables": {
-      id: "/data-tables";
-      path: "/data-tables";
-      fullPath: "/data-tables";
-      preLoaderRoute: typeof DataTablesRouteImport;
+    "/": {
+      id: "/";
+      path: "/";
+      fullPath: "/";
+      preLoaderRoute: typeof IndexRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/chat": {
@@ -336,18 +266,81 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof ChatRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/": {
-      id: "/";
-      path: "/";
-      fullPath: "/";
-      preLoaderRoute: typeof IndexRouteImport;
+    "/data-tables": {
+      id: "/data-tables";
+      path: "/data-tables";
+      fullPath: "/data-tables";
+      preLoaderRoute: typeof DataTablesRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/docs/target": {
-      id: "/docs/target";
-      path: "/docs/target";
-      fullPath: "/docs/target";
-      preLoaderRoute: typeof DocsTargetRouteImport;
+    "/design-system": {
+      id: "/design-system";
+      path: "/design-system";
+      fullPath: "/design-system";
+      preLoaderRoute: typeof DesignSystemRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/doc-lab": {
+      id: "/doc-lab";
+      path: "/doc-lab";
+      fullPath: "/doc-lab";
+      preLoaderRoute: typeof DocLabRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/families": {
+      id: "/families";
+      path: "/families";
+      fullPath: "/families";
+      preLoaderRoute: typeof FamiliesRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/family": {
+      id: "/family";
+      path: "/family";
+      fullPath: "/family";
+      preLoaderRoute: typeof FamilyRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/instances": {
+      id: "/instances";
+      path: "/instances";
+      fullPath: "/instances";
+      preLoaderRoute: typeof InstancesRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/ops": {
+      id: "/ops";
+      path: "/ops";
+      fullPath: "/ops";
+      preLoaderRoute: typeof OpsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/parameter-links": {
+      id: "/parameter-links";
+      path: "/parameter-links";
+      fullPath: "/parameter-links";
+      preLoaderRoute: typeof ParameterLinksRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/schedule-grid": {
+      id: "/schedule-grid";
+      path: "/schedule-grid";
+      fullPath: "/schedule-grid";
+      preLoaderRoute: typeof ScheduleGridRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/settings": {
+      id: "/settings";
+      path: "/settings";
+      fullPath: "/settings";
+      preLoaderRoute: typeof SettingsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/takeoffs": {
+      id: "/takeoffs";
+      path: "/takeoffs";
+      fullPath: "/takeoffs";
+      preLoaderRoute: typeof TakeoffsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/docs/runtime": {
@@ -355,6 +348,13 @@ declare module "@tanstack/react-router" {
       path: "/docs/runtime";
       fullPath: "/docs/runtime";
       preLoaderRoute: typeof DocsRuntimeRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/docs/target": {
+      id: "/docs/target";
+      path: "/docs/target";
+      fullPath: "/docs/target";
+      preLoaderRoute: typeof DocsTargetRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/api/pdf-audit/parse": {

@@ -5,6 +5,7 @@ import {
   DownloadCloud,
   FileScan,
   Boxes,
+  Map,
   LoaderCircle,
   MessageSquare,
   Settings2,
@@ -146,6 +147,14 @@ const TOOLS = [
     icon: Table2,
     description:
       "Every loaded family's types × parameters in one table — audit it against a profile, plan the reconciliation, apply with receipts.",
+  },
+  {
+    to: "/takeoffs",
+    title: "Takeoffs",
+    label: "Manual J",
+    icon: Map,
+    description:
+      "The takeoff atlas — zones on the plan, rooms in the table, Manual J data through to a synced RHVAC .r10.",
   },
   {
     to: "/settings",

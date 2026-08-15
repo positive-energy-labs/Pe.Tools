@@ -79,9 +79,14 @@ const workspaceOnlyPlugins: Record<string, string> = {
   instances: "Instances",
 };
 
+/** Registered slices whose ROUTE no longer exists: pea still targets the state (family SHIMS
+ * shim 7 retains `route:family-types` for the mcps handlers + inline chat cards), but there is
+ * no page to iframe — offering it as a workspace would 404. */
+const WORKSPACELESS_ROUTES = new Set(["family-types"]);
+
 /** Route names hostable as chat workspace plugins — registry + workspace-only routes. */
 export const CHAT_PLUGIN_ROUTES = [
-  ...Object.keys(routeChatPlugins),
+  ...Object.keys(routeChatPlugins).filter((route) => !WORKSPACELESS_ROUTES.has(route)),
   ...Object.keys(workspaceOnlyPlugins),
 ] as [string, ...string[]];
 export type ChatPluginRoute = string;
@@ -357,13 +362,8 @@ function FamilyTypesChatPlugin({
         <Metric value={openProposals} label="open proposals" />
         <Metric value={summary.staged} label="staged" />
         <Metric value={summary.attention} label="need attention" issue />
-        <Link
-          className="ml-auto font-medium text-[var(--pe-blue)] hover:underline"
-          to="/chat"
-          search={(previous) => ({ ...previous, plugin: "family-types" })}
-        >
-          Open workspace
-        </Link>
+        {/* No workspace link: the /family-types route is gone; this slice lives on only for
+            pea's tools and these inline cards. */}
       </div>
 
       {active && reviewable ? (

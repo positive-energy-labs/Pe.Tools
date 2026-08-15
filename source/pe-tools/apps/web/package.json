@@ -25,7 +25,6 @@
     "@pe/host-contracts": "workspace:*",
     "@t3-oss/env-core": "^0.13.10",
     "@tanstack/react-devtools": "latest",
-    "@tanstack/react-form": "latest",
     "@tanstack/react-hotkeys": "catalog:",
     "@tanstack/react-query": "latest",
     "@tanstack/react-query-devtools": "latest",

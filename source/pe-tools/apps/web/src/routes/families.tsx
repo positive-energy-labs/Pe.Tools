@@ -55,6 +55,7 @@ import {
   useLoadedFamiliesMatrixQuery,
   useTreeQuery,
 } from "#/host/queries";
+import { useVerb } from "#/lib/use-verb";
 import { cn } from "#/lib/utils";
 
 export const Route = createFileRoute("/families")({ component: FamiliesRoute });
@@ -295,9 +296,7 @@ function FamiliesRoute() {
   const [applyData, setApplyData] = useState<FfApplyData | null>(null);
   const [projection, setProjection] = useState<FfProjectData | null>(null);
   const [showUncommon, setShowUncommon] = useState(false);
-  const [busy, setBusy] = useState<"plan" | "apply" | "project" | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [receipt, setReceipt] = useState<{ text: string; atMs: number } | null>(null);
+  const { busy, error, setError, receipt, run } = useVerb();
 
   const status = useHostStatusQuery(scope);
   const session = useBridgeSessionSummaryQuery(scope);
@@ -373,14 +372,17 @@ function FamiliesRoute() {
     },
     { ...scope, enabled: connected },
   );
-  const profilePaths = useMemo(
+  const allProfilePaths = useMemo(
     () =>
       (profileTree.data?.files ?? [])
         .filter((file) => file.relativePath.toLowerCase().endsWith(".json"))
         .map((file) => file.relativePath)
-        .sort((a, b) => a.localeCompare(b))
-        .slice(0, PROFILE_READ_LIMIT),
+        .sort((a, b) => a.localeCompare(b)),
     [profileTree.data?.files],
+  );
+  const profilePaths = useMemo(
+    () => allProfilePaths.slice(0, PROFILE_READ_LIMIT),
+    [allProfilePaths],
   );
   const profileDocs = useQueries({
     queries: profilePaths.map((relativePath) => ({
@@ -396,28 +398,35 @@ function FamiliesRoute() {
     })),
   });
 
-  const profileOptions = useMemo<SlotOption[]>(
-    () =>
-      profilePaths.map((relativePath, index) => {
-        const query = profileDocs[index];
-        const issues = query?.data?.validation.issues ?? [];
-        const disabledReason = query?.error
-          ? `could not read: ${(query.error as Error).message}`
-          : issues.length > 0
-            ? issues
-                .slice(0, 2)
-                .map((issue) => `${issue.code} · ${issue.path}: ${issue.message}`)
-                .join(" · ")
-            : undefined;
-        return {
-          id: relativePath,
-          label: relativePath,
-          sub: query?.isPending ? "reading…" : undefined,
-          disabledReason,
-        };
-      }),
-    [profilePaths, profileDocs],
-  );
+  const profileOptions = useMemo<SlotOption[]>(() => {
+    const options: SlotOption[] = profilePaths.map((relativePath, index) => {
+      const query = profileDocs[index];
+      const issues = query?.data?.validation.issues ?? [];
+      const disabledReason = query?.error
+        ? `could not read: ${(query.error as Error).message}`
+        : issues.length > 0
+          ? issues
+              .slice(0, 2)
+              .map((issue) => `${issue.code} · ${issue.path}: ${issue.message}`)
+              .join(" · ")
+          : undefined;
+      return {
+        id: relativePath,
+        label: relativePath,
+        sub: query?.isPending ? "reading…" : undefined,
+        disabledReason,
+      };
+    });
+    // The cap must never bite silently (docblock law): name the hidden remainder.
+    if (allProfilePaths.length > PROFILE_READ_LIMIT) {
+      options.push({
+        id: "__truncated__",
+        label: `…${allProfilePaths.length - PROFILE_READ_LIMIT} more profiles not shown`,
+        disabledReason: `only the first ${PROFILE_READ_LIMIT} (by name) are read — prune or rename the library to surface others`,
+      });
+    }
+    return options;
+  }, [profilePaths, profileDocs, allProfilePaths.length]);
   const profileJson = useMemo(() => {
     const index = profilePath ? profilePaths.indexOf(profilePath) : -1;
     return index >= 0 ? (profileDocs[index]?.data?.rawContent ?? null) : null;
@@ -701,11 +710,9 @@ function FamiliesRoute() {
     setApplyData(null);
   };
 
-  const runPlan = async () => {
-    if (!profileJson) return;
-    setBusy("plan");
-    setError(null);
-    try {
+  const runPlan = () =>
+    run("plan", async () => {
+      if (!profileJson) return;
       const data = await familyFoundryPlan({ profileJson }, scope);
       setPlan(data);
       setApplyData(null);
@@ -713,11 +720,7 @@ function FamiliesRoute() {
       if (data.families.length === 0 && data.diagnostics.length === 0) {
         setError("The profile compiled, but it claims no loaded family in this project.");
       }
-    } catch (cause) {
-      setError(`plan failed — ${(cause as Error).message}`);
-    }
-    setBusy(null);
-  };
+    });
 
   const includedPlanned = useMemo(
     () =>
@@ -739,11 +742,9 @@ function FamiliesRoute() {
     return null;
   })();
 
-  const runApply = async () => {
-    if (!profileJson || !plan?.planHash || applyBlockedReason) return;
-    setBusy("apply");
-    setError(null);
-    try {
+  const runApply = () =>
+    run("apply", async () => {
+      if (!profileJson || !plan?.planHash || applyBlockedReason) return;
       const data = await familyFoundryApply(
         {
           profileJson,
@@ -759,28 +760,18 @@ function FamiliesRoute() {
             ? `plan drift — the project recompiled to ${data.planHash.slice(0, 12)}…, not ${plan.planHash.slice(0, 12)}…. Re-plan and review the decision queue before applying.`
             : `apply refused — ${data.diagnostics.map(diagnosticLine).join(" · ") || "no reason reported"}`,
         );
-      } else {
-        const ok = data.receipts.filter((entry) => entry.success).length;
-        setReceipt({ text: `applied profile to ${ok} families`, atMs: Date.now() });
-        void matrix.refetch();
+        return;
       }
-    } catch (cause) {
-      setError(`apply failed — ${(cause as Error).message}`);
-    }
-    setBusy(null);
-  };
+      const ok = data.receipts.filter((entry) => entry.success).length;
+      void matrix.refetch();
+      return `applied profile to ${ok} families`;
+    });
 
-  const runProject = async () => {
-    if (pickedIds.size === 0) return;
-    setBusy("project");
-    setError(null);
-    try {
+  const runProject = () =>
+    run("project", async () => {
+      if (pickedIds.size === 0) return;
       setProjection(await familyFoundryProject({ familyIds: [...pickedIds] }, scope));
-    } catch (cause) {
-      setError(`projection failed — ${(cause as Error).message}`);
-    }
-    setBusy(null);
-  };
+    });
 
   const matrixIssue = matrix.isError
     ? toHostIssue(matrix.error, "Couldn't load the matrix")

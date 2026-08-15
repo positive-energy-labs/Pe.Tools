@@ -1,6 +1,5 @@
 import { getRouteApi } from "@tanstack/react-router";
 
-import { TargetChip } from "#/components/target-chip";
 import { mintSelector, sessionLabel, type TargetSelector } from "#/host/target";
 import { CHAT_CONSUMER, readScoped, scopeKey, type TargetScope } from "#/host/target-scope";
 import { chipDescriptor, LaneBadge, LiveDot, resolutionReadout, toneColor } from "#/host/target-ui";
@@ -33,13 +32,6 @@ export function useChatTarget() {
       replace: true,
     });
   return { selector, resolution, sessions, worldLog, pin };
-}
-
-/** Kept unmounted: the sentence's world slot is now the chat's one bind control, but this
- * chip's resolution-readout ideas are worth revisiting. */
-export function ChatTargetChip() {
-  const { selector, sessions, pin } = useChatTarget();
-  return <TargetChip selector={selector} sessions={sessions} onPin={pin} dropUp />;
 }
 
 /**

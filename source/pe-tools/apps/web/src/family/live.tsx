@@ -27,6 +27,7 @@ import { settingsFieldSegments } from "@pe/agent-contracts";
 import type { FamilyEditorApply, FamilyEditorSnapshot } from "@pe/host-contracts/generated";
 import type { SlotOption } from "#/components/sentence";
 import { callHostRpc } from "#/host/client";
+import { timeAgo } from "#/lib/utils";
 import { useFleet, worldName } from "#/host/fleet";
 import { HOST_QUERY_KEY, useHostOp } from "#/host/queries";
 import { resolveTarget } from "#/host/target";
@@ -392,10 +393,5 @@ export function useFamilyEditorLane(
 
 /** Compact relative-time label — the family-types staleness idiom, kept verbatim. */
 export function readAgo(atMs: number | null): string | null {
-  if (!atMs) return null;
-  const minutes = Math.round((Date.now() - atMs) / 60000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  return hours < 24 ? `${hours}h ago` : `${Math.round(hours / 24)}d ago`;
+  return timeAgo(atMs) || null;
 }

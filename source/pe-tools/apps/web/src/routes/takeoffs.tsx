@@ -16,6 +16,7 @@ import { Button } from "#/components/ui/button";
 import { callHostRpc } from "#/host/client";
 import { mintSelector, sessionLabel, type SessionFacts } from "#/host/target";
 import { useTarget } from "#/host/use-target";
+import { useVerb } from "#/lib/use-verb";
 import { fmtNum } from "#/takeoff/cells";
 import { Atlas, type AtlasActions } from "#/takeoff/atlas";
 import {
@@ -89,33 +90,10 @@ function TakeoffsRoute() {
 
   const [raw, setRaw] = useState<LiveRaw | null>(null);
   const [overlay, setOverlay] = useState<SessionOverlay>(emptyOverlay);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [busySeconds, setBusySeconds] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, seconds: busySeconds, error, setError, run } = useVerb();
   const [r10Path, setR10Path] = useState("");
   const [r10, setR10] = useState<RhvacExtractData | null>(null);
   const [panel, setPanel] = useState<"adopt" | "sync" | null>(null);
-
-  /** One operation at a time — the host owns one transaction, and interleaving reads mid-write
-   *  would render a half-true world. */
-  const run = useCallback(async (label: string, work: () => Promise<void>) => {
-    setBusy(label);
-    setBusySeconds(0);
-    setError(null);
-    try {
-      await work();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!busy) return;
-    const timer = window.setInterval(() => setBusySeconds((value) => value + 1), 1000);
-    return () => window.clearInterval(timer);
-  }, [busy]);
 
   const load = useCallback(async (s: HostSessionScope) => {
     setRaw(await readSnapshot(s));
