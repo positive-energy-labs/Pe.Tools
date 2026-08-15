@@ -33,8 +33,17 @@
 
 This section is updated only from commands actually run.
 
-- Pending: touched C# package builds (`Debug.R25`, isolated source-compile lane).
-- Pending: no-Revit C# and TypeScript contract tests.
-- Pending: plan-hash determinism test.
-- Pending: offline `pnpm codegen` and `pnpm codegen:check`.
+- Passed: isolated `Debug.R25` builds for `Pe.Shared.HostContracts`, `Pe.Revit.FamilyFoundry`, `Pe.App`,
+  `Pe.Shared.Tests`, and the touched offline-catalog package `Pe.Dev.Cli` (0 warnings and 0 errors in each
+  final build).
+- Passed: `dotnet test source/Pe.Shared.Tests/Pe.Shared.Tests.csproj -c Debug.R25` (107 passed).
+- Passed: the no-Revit plan-hash determinism test proves identical plans hash identically, dictionary insertion
+  order is ignored, and a field change produces a different 64-character lowercase SHA-256 hash.
+- Passed: `pnpm --filter @pe/host-contracts test` (16 passed) and `pnpm --filter @pe/host test`
+  (45 passed, 2 skipped), including all four DTO shapes and host-local shell dispatch validation.
+- Passed: from `source/pe-tools`, `pnpm codegen` and `pnpm codegen:check` generated and verified 57
+  offline catalog operations, including all three `familyfoundry.*` operations. Root aliases were added so
+  these mission commands are directly runnable.
+- Passed: scope audit found no mission changes under `source/pe-tools/apps/web/src`; concurrent web work remains
+  user-owned and excluded from every mission commit.
 - Out of scope: live/FreshRevitProcess behavior proof; tracked in `SHIMS.md`.
