@@ -559,9 +559,11 @@ export const rhvacAssemblyCatalogSchema = Schema.Struct({
 });
 export type RhvacAssemblyCatalogData = Schema.Schema.Type<typeof rhvacAssemblyCatalogSchema>;
 
-export const rhvacRoomSchema = Schema.Struct({
-  /** Room autonumber PK — the edit lane's row target; distinct from `number`. */
-  identifier: Schema.Number,
+/**
+ * Everything about a room except its autonumber PK. A room being INSERTED has no PK yet — Jet
+ * assigns it — so the insert lane takes these fields alone and reports the assigned identifier back.
+ */
+const rhvacRoomFields = {
   number: Schema.Number,
   name: Schema.String,
   systemNumber: Schema.Number,
@@ -572,6 +574,7 @@ export const rhvacRoomSchema = Schema.Struct({
   lightingWatts: Schema.Number,
   equipmentSensibleBtuh: Schema.Number,
   equipmentLatentBtuh: Schema.Number,
+  ventilationCfm: Schema.Number,
   /** Stored RHVAC calc outputs — read-only, ignored on save. */
   loads: Schema.optional(Schema.Record(Schema.String, Schema.Number)),
   floors: Schema.Array(
@@ -621,37 +624,116 @@ export const rhvacRoomSchema = Schema.Struct({
       wallReference: Schema.Number,
     }),
   ),
+} as const;
+
+/** A room being inserted: no `identifier` yet — Jet's COUNTER assigns it. */
+export const rhvacInsertRoomSchema = Schema.Struct(rhvacRoomFields);
+export type RhvacInsertRoomData = Schema.Schema.Type<typeof rhvacInsertRoomSchema>;
+
+export const rhvacRoomSchema = Schema.Struct({
+  /** Room autonumber PK — the edit lane's row target; distinct from `number`. */
+  identifier: Schema.Number,
+  ...rhvacRoomFields,
 });
 export type RhvacRoomData = Schema.Schema.Type<typeof rhvacRoomSchema>;
 
+/** Weak .r10 identity: file name plus a stamp over project/client titles. */
+export const rhvacFileIdentitySchema = Schema.Struct({
+  fileName: Schema.String,
+  projectTitle: Schema.String,
+  clientName: Schema.String,
+  stamp: Schema.String,
+});
+export type RhvacFileIdentity = Schema.Schema.Type<typeof rhvacFileIdentitySchema>;
+
 export const rhvacExtractSchema = Schema.Struct({
   sourceFile: Schema.String,
+  fileIdentity: rhvacFileIdentitySchema,
   building: Schema.Record(Schema.String, Schema.Number),
-  // Systems carry `number` plus ~35 Calculated* fields; typed loosely on purpose.
-  systems: Schema.Array(Schema.Record(Schema.String, Schema.Number)),
+  systems: Schema.Array(Schema.Struct({ number: Schema.Number, name: Schema.String })),
   rooms: Schema.Array(rhvacRoomSchema),
 });
 export type RhvacExtractData = Schema.Schema.Type<typeof rhvacExtractSchema>;
 
-export const rhvacSaveRequestSchema = Schema.Struct({
-  sourcePath: Schema.String,
-  /** Must differ from sourcePath — the original .r10 is never written in place. */
-  outputPath: Schema.String,
-  edits: Schema.Struct({
-    /** Full extract-shaped rooms (including identifier) — written back whole. */
-    updates: Schema.Array(rhvacRoomSchema),
-    /** Room identifiers (autonumber PK) to delete. */
-    deletes: Schema.Array(Schema.Number),
-  }),
+export const rhvacSyncRequestSchema = Schema.Struct({
+  /** The .r10 to sync IN PLACE — behind a lock check, a working copy, and a timestamped backup. */
+  targetPath: Schema.String,
+  /** New rooms. Their assigned `identifier`s come back in the result. */
+  inserts: Schema.Array(rhvacInsertRoomSchema),
+  /** Existing rooms, targeted by `identifier`; written back whole. */
+  updates: Schema.Array(rhvacRoomSchema),
+  /**
+   * Systems the rooms reference. An existing `number` is left exactly as the engineer has it
+   * (never renamed); a missing one is seeded by cloning the lowest-numbered System row and
+   * overriding number + name only. See eval/rhvac/template/SYSTEM-INSERT-PROBE.md.
+   */
+  systems: Schema.optional(
+    Schema.Array(Schema.Struct({ number: Schema.Number, name: Schema.String })),
+  ),
+  /** Delete the template's blank Room (Identifier 1) — only if it is still untouched. */
+  deleteUntouchedSeedRoom: Schema.optional(Schema.Boolean),
+  /** Validate and keep the working copy without swapping the target. */
+  whatIf: Schema.optional(Schema.Boolean),
 });
-export type RhvacSaveRequest = Schema.Schema.Type<typeof rhvacSaveRequestSchema>;
+export type RhvacSyncRequest = Schema.Schema.Type<typeof rhvacSyncRequestSchema>;
 
-export const rhvacSaveResultSchema = Schema.Struct({
-  outputPath: Schema.String,
+/**
+ * Weak by necessity: an .r10 carries NO GUID or stable id anywhere (probed — Project is 9 free-text
+ * columns, Client 9, Version 6 build numbers). `stamp` hashes the engineer-facing project + client
+ * titles, so it survives copying or renaming the FILE and changes when the project is retitled.
+ * All four parts are reported so a caller pairing {fileIdentity, roomIdentifier} into Revit
+ * provenance can detect drift rather than silently trust a match.
+ */
+export const rhvacSyncResultSchema = Schema.Struct({
+  targetPath: Schema.String,
+  /** Null when nothing was swapped (whatIf). */
+  backupPath: Schema.NullOr(Schema.String),
+  swapped: Schema.Boolean,
+  fileIdentity: rhvacFileIdentitySchema,
+  /** Every requested system, with `seeded` false for ones that already existed. */
+  systems: Schema.Array(
+    Schema.Struct({
+      number: Schema.Number,
+      name: Schema.String,
+      identifier: Schema.Number,
+      seeded: Schema.Boolean,
+    }),
+  ),
+  /** Room number -> the Jet-assigned autonumber PK, read back after the insert. */
+  insertedRooms: Schema.Array(
+    Schema.Struct({ number: Schema.Number, name: Schema.String, identifier: Schema.Number }),
+  ),
   updated: Schema.Number,
-  deleted: Schema.Number,
+  seedRoom: Schema.Struct({
+    identifier: Schema.Number,
+    action: Schema.Literals(["deleted", "kept", "not-requested"]),
+    reason: Schema.String,
+  }),
+  /**
+   * Rooms whose assembly was in neither the target file nor the preset catalog: that category was
+   * written as one explicit zero row (no load), never a guessed material. Surface these.
+   */
+  assemblyFallbacks: Schema.Array(
+    Schema.Struct({
+      roomNumber: Schema.Number,
+      roomName: Schema.String,
+      category: Schema.String,
+      assemblies: Schema.Array(Schema.String),
+    }),
+  ),
+  roomsBefore: Schema.Number,
+  roomsAfter: Schema.Number,
+  /** The safety envelope's own transcript (lock check, census, validation, swap). */
+  log: Schema.String,
 });
-export type RhvacSaveResult = Schema.Schema.Type<typeof rhvacSaveResultSchema>;
+export type RhvacSyncResult = Schema.Schema.Type<typeof rhvacSyncResultSchema>;
+
+export const rhvacLaunchResultSchema = Schema.Struct({
+  path: Schema.String,
+  /** True once the shell accepted the open; RHVAC's own startup is not awaited. */
+  launched: Schema.Boolean,
+});
+export type RhvacLaunchResult = Schema.Schema.Type<typeof rhvacLaunchResultSchema>;
 
 export const rhvacRoomMapSchema = Schema.Struct({
   matches: Schema.Array(Schema.Struct({ oracleNumber: Schema.Number, candidate: Schema.String })),
@@ -666,83 +748,6 @@ export const rhvacTakeoffDataSchema = Schema.Struct({
   roomMap: Schema.NullOr(rhvacRoomMapSchema),
 });
 export type RhvacTakeoffData = Schema.Schema.Type<typeof rhvacTakeoffDataSchema>;
-
-export const rhvacPointSchema = Schema.Tuple([Schema.Number, Schema.Number]);
-
-const rhvacResolutionAnchorSchema = Schema.Struct({ label: rhvacPointSchema, sqft: Schema.Number });
-
-export const rhvacTakeoffResolutionSchema = Schema.Union([
-  Schema.Struct({
-    candidateKey: Schema.String,
-    flag: Schema.String,
-    action: Schema.Literals(["accept", "reject"]),
-    anchor: Schema.optional(rhvacResolutionAnchorSchema),
-  }),
-  Schema.Struct({
-    candidateKey: Schema.String,
-    flag: Schema.String,
-    action: Schema.Literals(["split"]),
-    params: Schema.optional(Schema.Struct({ a: rhvacPointSchema, b: rhvacPointSchema })),
-    anchor: Schema.optional(rhvacResolutionAnchorSchema),
-  }),
-  Schema.Struct({
-    candidateKey: Schema.String,
-    flag: Schema.String,
-    action: Schema.Literals(["merge"]),
-    params: Schema.Struct({ other: Schema.String, anchor: rhvacResolutionAnchorSchema }),
-    anchor: Schema.optional(rhvacResolutionAnchorSchema),
-  }),
-  Schema.Struct({
-    candidateKey: Schema.String,
-    flag: Schema.String,
-    action: Schema.Literals(["claim-residue"]),
-    params: Schema.Struct({
-      residueId: Schema.String,
-      into: Schema.optional(Schema.String),
-      anchor: Schema.optional(rhvacResolutionAnchorSchema),
-    }),
-    anchor: Schema.optional(rhvacResolutionAnchorSchema),
-  }),
-]);
-export type RhvacTakeoffResolution = Schema.Schema.Type<typeof rhvacTakeoffResolutionSchema>;
-
-export const rhvacResolutionsFileSchema = Schema.Struct({
-  version: Schema.Literals([1, 2]),
-  tsvSha256: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-  resolutions: Schema.Array(rhvacTakeoffResolutionSchema),
-});
-export type RhvacResolutionsFile = Schema.Schema.Type<typeof rhvacResolutionsFileSchema>;
-
-function compareOrdinal(a: string, b: string): number {
-  if (a === b) return 0;
-  return a < b ? -1 : 1;
-}
-
-export const sortRhvacResolutions = (
-  resolutions: readonly RhvacTakeoffResolution[],
-): RhvacTakeoffResolution[] =>
-  [...resolutions].sort(
-    (a, b) => compareOrdinal(a.candidateKey, b.candidateKey) || compareOrdinal(a.flag, b.flag),
-  );
-
-export const rhvacTakeoffResolutionsRequestSchema = Schema.Struct({
-  /** The .r10 FILE path; the sidecar is written beside its takeoff directory. */
-  path: Schema.String,
-  /** Omit to read the existing sidecar; provide to atomically replace it. */
-  resolutions: Schema.optional(rhvacResolutionsFileSchema),
-});
-export type RhvacTakeoffResolutionsRequest = Schema.Schema.Type<
-  typeof rhvacTakeoffResolutionsRequestSchema
->;
-
-export const rhvacTakeoffResolutionsResultSchema = Schema.Struct({
-  savedPath: Schema.String,
-  /** Null when no sidecar exists yet. */
-  resolutions: Schema.NullOr(rhvacResolutionsFileSchema),
-});
-export type RhvacTakeoffResolutionsResult = Schema.Schema.Type<
-  typeof rhvacTakeoffResolutionsResultSchema
->;
 
 export const tsOnlyOperationSchemas = {
   "aps.auth.login": {
@@ -788,17 +793,17 @@ export const tsOnlyOperationSchemas = {
     request: rhvacPathRequestSchema,
     response: rhvacAssemblyCatalogSchema,
   },
-  "rhvac.save": {
-    request: rhvacSaveRequestSchema,
-    response: rhvacSaveResultSchema,
+  "rhvac.sync": {
+    request: rhvacSyncRequestSchema,
+    response: rhvacSyncResultSchema,
+  },
+  "rhvac.launch": {
+    request: rhvacPathRequestSchema,
+    response: rhvacLaunchResultSchema,
   },
   "rhvac.takeoff": {
     request: rhvacPathRequestSchema,
     response: rhvacTakeoffDataSchema,
-  },
-  "rhvac.takeoff-resolutions": {
-    request: rhvacTakeoffResolutionsRequestSchema,
-    response: rhvacTakeoffResolutionsResultSchema,
   },
   "settings.document.open": {
     request: openSettingsDocumentRequestSchema,
@@ -916,18 +921,42 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     searchTerms: ["rhvac", "r10", "assemblies", "constructions", "u-value", "materials"],
   },
   {
-    key: "rhvac.save",
+    key: "rhvac.sync",
     origin: "host-local",
-    displayName: "Save RHVAC Edits",
+    displayName: "Sync RHVAC Project",
     description:
-      "Apply room updates/deletes (by identifier) to a COPY of an .r10 file — the source is never written in place. Stored loads go stale until RHVAC recalculates.",
+      "One atomic sync of an .r10 IN PLACE: seed systems, insert new rooms, update existing ones, optionally drop the template's blank seed room. Refuses while RHVAC holds the file, works on a copy, validates, then swaps with a timestamped backup. Returns each inserted room's assigned identifier plus the file identity to pair with Revit provenance.",
     intent: "Mutate",
     visibility: "DefaultVisible",
     costTier: "Mutation",
     requiresActiveDocument: false,
-    requestTypeName: "RhvacSaveRequest",
-    responseTypeName: "RhvacSaveResult",
-    searchTerms: ["rhvac", "r10", "save", "edit", "update", "delete", "write"],
+    requestTypeName: "RhvacSyncRequest",
+    responseTypeName: "RhvacSyncResult",
+    searchTerms: [
+      "rhvac",
+      "r10",
+      "sync",
+      "export",
+      "insert",
+      "rooms",
+      "systems",
+      "takeoff",
+      "backup",
+    ],
+  },
+  {
+    key: "rhvac.launch",
+    origin: "host-local",
+    displayName: "Open .r10 in RHVAC",
+    description:
+      "Open an .r10 file with its Windows file association (Elite RHVAC). Fire-and-forget: the shell owns the app, and load recalculation is a manual step in RHVAC.",
+    intent: "Mutate",
+    visibility: "DefaultVisible",
+    costTier: "Cheap",
+    requiresActiveDocument: false,
+    requestTypeName: "RhvacPathRequest",
+    responseTypeName: "RhvacLaunchResult",
+    searchTerms: ["rhvac", "r10", "launch", "open", "start", "elite", "shell"],
   },
   {
     key: "rhvac.takeoff",
@@ -942,20 +971,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     requestTypeName: "RhvacPathRequest",
     responseTypeName: "RhvacTakeoffData",
     searchTerms: ["rhvac", "takeoff", "tsv", "room map", "plan", "polygons"],
-  },
-  {
-    key: "rhvac.takeoff-resolutions",
-    origin: "host-local",
-    displayName: "RHVAC Takeoff Resolutions",
-    description:
-      "Read or atomically replace deterministic ambiguity-flag resolutions in takeoff-resolutions.json beside an .r10 project's takeoff directory.",
-    intent: "Mutate",
-    visibility: "DefaultVisible",
-    costTier: "Cheap",
-    requiresActiveDocument: false,
-    requestTypeName: "RhvacTakeoffResolutionsRequest",
-    responseTypeName: "RhvacTakeoffResolutionsResult",
-    searchTerms: ["rhvac", "takeoff", "resolutions", "flags", "split", "accept", "sidecar"],
   },
   {
     key: "settings.workspaces",

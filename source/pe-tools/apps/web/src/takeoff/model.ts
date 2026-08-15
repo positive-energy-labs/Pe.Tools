@@ -1,6 +1,6 @@
 /**
  * The takeoff pipeline's web-side vocabulary — the seven steps of
- * source/Pe.Revit.Takeoff/README.md as data the /takeoff route can render.
+ * source/Pe.Revit.Takeoff/README.md as data the /takeoffs route can render.
  *
  * Nothing here is authoritative. Zone geometry belongs to the Zoning Region FR, identity to
  * the System registry blob, room geometry to the Room Region FR, and Manual J data to the
@@ -202,12 +202,39 @@ export interface DetectedResidue {
   outer: [number, number][];
 }
 
+/** A non-template ViewPlan, for the adoption flow's view pick. */
+export interface ViewFacts {
+  name: string;
+  /** GenLevel name; "" for plan views with no level. */
+  level: string;
+  /** FilledRegion count on the view — sorts zoning-plan candidates up without name-matching. */
+  regions: number;
+}
+
+/** A FilledRegion as the adoption/zone reads see it: identity stamps + tessellated loops. */
+export interface CandidateRegion {
+  elementId: number;
+  typeName: string;
+  /** Owner view name. */
+  view: string;
+  /** "r,g,b" foreground pattern color of the FR type. */
+  color: string;
+  sqft: number;
+  /** Pe role stamp — null = unstamped designer FR (an adoption candidate). */
+  role: string | null;
+  guid: string | null;
+  /** Raw provenance blob ("" when absent). */
+  blob: string;
+  loops: [number, number][][];
+}
+
 /** A Room Region / held-residue FR that exists in the model right now. */
 export interface LiveRegion {
   elementId: number;
   role: string;
   guid: string;
   sqft: number;
+  roomType?: string;
   /** Raw provenance blob text — the datum's home for decisions. */
   blob: string;
   outer: [number, number][];
@@ -292,7 +319,8 @@ export function upsertResolution(existing: Resolution[], next: Resolution): Reso
 export function regionForRoom(room: DetectedRoom, regions: LiveRegion[]): LiveRegion | undefined {
   return regions.find(
     (region) =>
-      region.role === "room-region" && containsEvenOdd([region.outer], room.label[0], room.label[1]),
+      region.role === "room-region" &&
+      containsEvenOdd([region.outer], room.label[0], room.label[1]),
   );
 }
 
@@ -370,4 +398,6 @@ export const FLAG_MEANING: Record<string, string> = {
   "low-evidence-boundary": "boundary placed on weak wall evidence",
   "orphaned-region": "an existing region no room in this run claims",
   "materialize-failed": "Revit refused the loop — dropped whole rather than bent to fit",
+  "unhomed-proposal":
+    "this rerun found a room with no materialized region yet — accept to materialize it, or dismiss to drop it",
 };

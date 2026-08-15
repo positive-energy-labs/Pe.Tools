@@ -13,6 +13,7 @@ public static class TakeoffCarriers
     internal static readonly Guid RegionGuid = new("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9002");
     internal static readonly Guid ProvenanceGuid = new("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9003");
     internal static readonly Guid RegistryGuid = new("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9004");
+    internal static readonly Guid RoomTypeGuid = new("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9005");
 
     public const string RoleZoningRegion = "zoning-region";
     public const string RoleRoomRegion = "room-region";
@@ -36,6 +37,11 @@ public static class TakeoffCarriers
             new SharedDefinitionSpec("_PE_TakeoffProvenance", SpecTypeId.String.Text,
                 Description: "Pe takeoff machine bookkeeping blob (run id, source hash, .r10 link, holds).",
                 Guid: ProvenanceGuid, Visible: false, UserModifiable: false),
+            [BuiltInCategory.OST_DetailComponents]);
+        SharedParameterBinder.EnsureProjectBinding(document,
+            new SharedDefinitionSpec("PE_M___RoomType", SpecTypeId.String.Text,
+                Description: "Takeoffs room classification used by Manual J assists.",
+                Guid: RoomTypeGuid),
             [BuiltInCategory.OST_DetailComponents]);
         SharedParameterBinder.EnsureProjectBinding(document,
             new SharedDefinitionSpec("_PE_TakeoffSystemRegistry", SpecTypeId.String.Text,
@@ -64,6 +70,12 @@ public static class TakeoffCarriers
 
     public static string? ReadProvenance(FilledRegion region) =>
         region.get_Parameter(ProvenanceGuid)?.AsString() is { Length: > 0 } s ? s : null;
+
+    public static void WriteRoomType(FilledRegion region, string roomType) =>
+        Set(region, RoomTypeGuid, roomType);
+
+    public static string ReadRoomType(FilledRegion region) =>
+        region.get_Parameter(RoomTypeGuid)?.AsString() is { Length: > 0 } value ? value : "hall";
 
     // Absent blob = empty registry (a model that never registered a System). Any stored blob that
     // fails the codec throws — fail closed, never proceed against a half-read registry.

@@ -8,7 +8,7 @@
  */
 import { useMemo } from "react";
 
-import { fmtNum } from "#/rhvac/cells";
+import { fmtNum } from "#/takeoff/cells";
 import {
   boundsOf,
   mergeBounds,
@@ -19,7 +19,17 @@ import {
 } from "#/takeoff/model";
 import { cn } from "#/lib/utils";
 
-export function ZoneThumb({ zone, className }: { zone: Zone; className?: string }) {
+export function ZoneThumb({
+  zone,
+  className,
+}: {
+  zone: {
+    loops: readonly (readonly (readonly [number, number])[])[];
+    bounds: Bounds;
+    color: string;
+  };
+  className?: string;
+}) {
   const b = zone.bounds;
   const w = Math.max(b.maxX - b.minX, 1e-6);
   const h = Math.max(b.maxY - b.minY, 1e-6);
@@ -102,7 +112,11 @@ export function ZonePlan({
       {(run?.rooms ?? []).map((room) => {
         const flagged = room.flags.length > 0;
         const selected = room.id === selectedSubject;
-        const accent = selected ? "var(--primary)" : flagged ? "var(--cat-clay)" : "var(--cat-blue)";
+        const accent = selected
+          ? "var(--primary)"
+          : flagged
+            ? "var(--cat-clay)"
+            : "var(--cat-blue)";
         return (
           <g key={room.id} className="cursor-pointer" onClick={() => onSelect(room.id)}>
             <path

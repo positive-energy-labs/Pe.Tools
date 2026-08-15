@@ -19,7 +19,37 @@ internal static class TakeoffEvidenceFidelity
     private const double OffsetStepFt = 0.125;
     private const double MaximumOffsetFt = 1.5;
     private const double Epsilon = 1e-7;
-    private static readonly GeometryFactory Factory = new(new PrecisionModel(), 0);
+    private static readonly GeometryFactory Factory = TakeoffGeometry.Factory;
+
+    /// <summary>
+    /// Fraction of one room's boundary samples that sit on ink, ignoring samples near
+    /// <paramref name="exemptBoundary"/> — the zone edge is user-declared authority, not evidence,
+    /// so a room is never punished for standing on it. Returns null when every sample is exempt
+    /// (a room made entirely of zone edge asserts nothing about ink either way).
+    /// </summary>
+    internal static double? RoomBoundarySupportFraction(
+        RoomResult room,
+        Func<double, double, double> distanceToInk,
+        Geometry? exemptBoundary,
+        double exemptFt)
+    {
+        int supported = 0, sampled = 0;
+        foreach (var edge in Edges(ToPolygon(room)))
+        {
+            int count = Math.Max(2, (int)Math.Ceiling(edge.Length / SampleStepFt) + 1);
+            for (int index = 0; index < count; index++)
+            {
+                double distance = edge.Length * index / (count - 1);
+                var point = PointAlong(edge, distance);
+                if (exemptBoundary != null
+                    && exemptBoundary.Distance(Factory.CreatePoint(point)) <= exemptFt + Epsilon)
+                    continue;
+                if (distanceToInk(point.X, point.Y) <= 0.25 + Epsilon) supported++;
+                sampled++;
+            }
+        }
+        return sampled == 0 ? null : (double)supported / sampled;
+    }
 
     internal static double BoundarySupportFraction(
         IReadOnlyList<RoomResult> rooms,
@@ -193,13 +223,5 @@ internal static class TakeoffEvidenceFidelity
                 foreach (var child in Lines(geometry.GetGeometryN(index))) yield return child;
     }
 
-    private static Polygon ToPolygon(RoomResult room) => Factory.CreatePolygon(
-        Ring(room.Polygon), room.Holes.Select(Ring).ToArray());
-
-    private static LinearRing Ring(IReadOnlyList<double[]> points)
-    {
-        var coordinates = points.Select(point => new Coordinate(point[0], point[1])).ToList();
-        if (!coordinates[0].Equals2D(coordinates[^1])) coordinates.Add(coordinates[0].Copy());
-        return Factory.CreateLinearRing(coordinates.ToArray());
-    }
+    private static Polygon ToPolygon(RoomResult room) => TakeoffGeometry.ToPolygon(room, Factory);
 }

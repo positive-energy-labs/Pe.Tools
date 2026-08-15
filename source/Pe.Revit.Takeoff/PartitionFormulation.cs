@@ -63,6 +63,7 @@ internal static class PartitionFormulation
         int nSeeds;
         var seed = opt.SeedSource switch {
             TakeoffSeedSource.Hybrid => SeedsHybrid(evidence, obst, domain, W, H, opt, out nSeeds),
+            TakeoffSeedSource.DistanceMaxima => SeedsFromDistanceMaxima(evidence, domain, W, H, opt, out nSeeds),
             _ => SeedsFromCores(obst, domain, W, H, out nSeeds),
         };
 

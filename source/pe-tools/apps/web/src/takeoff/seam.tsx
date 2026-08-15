@@ -1,7 +1,7 @@
 /**
  * Seam chips — the living spec's honesty device.
  *
- * Every stage of /takeoff is either wired to the real backend or standing in for something that
+ * Every stage of /takeoffs is either wired to the real backend or standing in for something that
  * does not exist yet. A `seam:` chip marks the second kind and says, in one line, what replaces
  * it. A stage with no chip is claiming to be real; that claim has to be true.
  */

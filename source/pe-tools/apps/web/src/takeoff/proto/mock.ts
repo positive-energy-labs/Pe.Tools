@@ -1,5 +1,5 @@
 /**
- * PROTOTYPE — shared mock world for the /takeoff UX variants (?variant=).
+ * Development fixture data retained behind the explicit /takeoffs fixture adapter.
  *
  * Deterministic synthesis over the real project-a zone fixture so every variant judges the same
  * dense, plausible mid-project state: some zones untouched, some mid-review, some synced, one
@@ -76,7 +76,12 @@ const ROOM_POOL: [RoomType, string][] = [
   ["mechanical", "Mech"],
 ];
 
-const FLAG_POOL = ["seedless", "suspect:narrow", "suspect:ceiling-variance", "low-evidence-boundary"];
+const FLAG_POOL = [
+  "seedless",
+  "suspect:narrow",
+  "suspect:ceiling-variance",
+  "low-evidence-boundary",
+];
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
 
@@ -249,7 +254,8 @@ export function mockWorld(): MockWorld {
     }
 
     // Rooms exist from "partitioned" on.
-    const roomCount = stageIdx >= 2 ? Math.max(1, Math.min(8, Math.round(zone.declaredSqft / 220))) : 0;
+    const roomCount =
+      stageIdx >= 2 ? Math.max(1, Math.min(8, Math.round(zone.declaredSqft / 220))) : 0;
     const pts = interiorPoints(zone, roomCount, rand);
     const runId = `run-2026-08-${String(10 + (zi % 4)).padStart(2, "0")}-${(hash(zone.key) % 900) + 100}`;
     const bedroomsInZone = roomCount >= 3 ? 1 + (hash(zone.key) % 3) : 0;
@@ -359,4 +365,7 @@ export function mockWorld(): MockWorld {
 
 /** Open decision count across a zone — the "review debt" number. */
 export const openDecisions = (z: MockZone) =>
-  z.rooms.reduce((n, r) => n + r.flags.filter((f) => !r.decisions.some((d) => d.flag === f)).length, 0);
+  z.rooms.reduce(
+    (n, r) => n + r.flags.filter((f) => !r.decisions.some((d) => d.flag === f)).length,
+    0,
+  );

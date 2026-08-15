@@ -1,36 +1,29 @@
 import { createHash, randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { Effect, FileSystem, Schema, Stream } from "effect";
+import { Effect, FileSystem, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import type {
   RhvacAssemblyCatalogData,
   RhvacExtractData,
+  RhvacInsertRoomData,
+  RhvacLaunchResult,
   RhvacPathRequest,
-  RhvacRoomData,
-  RhvacSaveRequest,
-  RhvacSaveResult,
+  RhvacSyncRequest,
+  RhvacSyncResult,
   RhvacTakeoffData,
-  RhvacTakeoffResolutionsRequest,
-  RhvacTakeoffResolutionsResult,
-} from "@pe/host-contracts/operation-types";
-import {
-  rhvacResolutionsFileSchema,
-  sortRhvacResolutions,
 } from "@pe/host-contracts/operation-types";
 import {
   readDirectoryEntriesOrEmpty,
-  readFileString,
   readFileStringBomAwareOrEmpty,
   statOrNull,
-  writeFileStringAtomic,
 } from "./files/index.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { LocalOpError } from "./local-error.ts";
 
 /**
  * RHVAC .r10 local ops. An .r10 file is an Access 97 Jet database only the
- * 32-bit Jet driver can open, so open/assemblies/save spawn the repo's proven
+ * 32-bit Jet driver can open, so open/assemblies/sync spawn the repo's proven
  * scripts (source/Pe.Revit.Takeoff/Rhvac/*.ps1) under SysWOW64 PowerShell and
  * exchange JSON through temp files. Pure file/process ops — no Revit session.
  *
@@ -83,49 +76,113 @@ export const rhvacAssemblies = Effect.fnUntraced(function* (input: RhvacPathRequ
   );
 });
 
-export const rhvacSave = Effect.fnUntraced(function* (input: RhvacSaveRequest) {
-  const key = "rhvac.save";
-  yield* assertR10File(key, input.sourcePath);
-  if (!input.outputPath.toLowerCase().endsWith(".r10"))
-    return yield* invalid(key, `outputPath must end in .r10, got: ${input.outputPath}`);
-  if (resolve(input.sourcePath).toLowerCase() === resolve(input.outputPath).toLowerCase())
-    return yield* invalid(
-      key,
-      "sourcePath and outputPath must differ — the original .r10 is never written in place.",
-    );
-  if (input.edits.updates.length === 0 && input.edits.deletes.length === 0)
-    return yield* invalid(key, "edits carry no updates and no deletes; nothing to save.");
+/**
+ * The one atomic write lane for a .r10 the engineer keeps: seed systems, insert new rooms, update
+ * existing ones, optionally drop the template's blank seed room — then swap the target in place
+ * behind a lock check, a working copy, validation, and a timestamped backup (sync-rhvac.ps1 owns
+ * that envelope; export-rhvac.ps1 owns every SQL statement).
+ *
+ * This writes the target ITSELF rather than a separate output file: the .r10 is the engineer's
+ * home for this data, and a sync that leaves a copy behind moves the truth question onto the user.
+ */
+export const rhvacSync = Effect.fnUntraced(function* (input: RhvacSyncRequest) {
+  const key = "rhvac.sync";
+  yield* assertR10File(key, input.targetPath);
+  if (input.inserts.length === 0 && input.updates.length === 0 && !input.deleteUntouchedSeedRoom)
+    return yield* invalid(key, "sync carries no inserts, no updates, and no seed-room deletion.");
 
-  // toEditRoom throws LocalOpError on dangling wall references; surface it typed.
-  const editsPayload = yield* Effect.try({
+  const systems = input.systems ?? [];
+  const knownSystems = new Set(systems.map((system) => system.number));
+  // The lane refuses orphans too (Jet does not enforce Room.SystemNumber -> System.Number), but a
+  // room referencing a system the caller never mentioned is a caller bug worth naming here.
+  for (const room of [...input.inserts, ...input.updates])
+    if (systems.length > 0 && !knownSystems.has(room.systemNumber))
+      return yield* invalid(
+        key,
+        `room ${room.number} references system ${room.systemNumber}, which is not in the request's systems list [${[...knownSystems].join(", ")}]. List it (existing systems are left untouched) or fix the room.`,
+      );
+
+  const payload = yield* Effect.try({
     try: () => ({
-      updates: input.edits.updates.map((room) => toEditRoom(key, room)),
-      deletes: input.edits.deletes,
+      systems: systems.map((system) => ({ Number: system.number, Name: system.name })),
+      inserts: input.inserts.map((room) => toLaneRoom(key, room)),
+      updates: input.updates.map((room) => ({
+        Identifier: room.identifier,
+        ...toLaneRoom(key, room),
+      })),
+      deletes: [],
+      deleteUntouchedSeedRoom: input.deleteUntouchedSeedRoom === true,
     }),
     catch: (error) =>
       error instanceof LocalOpError ? error : new LocalOpError(key, describeError(error)),
   });
+
   const fs = yield* FileSystem.FileSystem;
-  const editsPath = tempJsonPath("edits");
+  const syncPath = tempJsonPath("sync");
+  const resultPath = tempJsonPath("sync-result");
   yield* fs
-    .writeFileString(editsPath, JSON.stringify(editsPayload))
+    .writeFileString(syncPath, JSON.stringify(payload))
     .pipe(Effect.mapError((error) => new LocalOpError(key, describeError(error))));
+
   return yield* Effect.ensuring(
     Effect.gen(function* () {
-      yield* runRhvacScript(
+      const log = yield* runRhvacScript(
         key,
-        "export-rhvac.ps1",
-        ["-EditsJson", editsPath, "-Source", input.sourcePath, "-Output", input.outputPath],
+        "sync-rhvac.ps1",
+        [
+          "-Target",
+          input.targetPath,
+          "-SyncJson",
+          syncPath,
+          "-ResultJson",
+          resultPath,
+          ...(input.whatIf ? ["-WhatIf"] : []),
+        ],
         SAVE_TIMEOUT_MS,
       );
+      const result = (yield* readJsonOutput(key, resultPath)) as RhvacSyncResult;
       return {
-        outputPath: input.outputPath,
-        updated: input.edits.updates.length,
-        deleted: input.edits.deletes.length,
-      } satisfies RhvacSaveResult;
+        targetPath: result.targetPath,
+        backupPath: result.backupPath ?? null,
+        swapped: result.swapped,
+        fileIdentity: result.fileIdentity,
+        systems: result.systems,
+        insertedRooms: result.insertedRooms,
+        updated: result.updated,
+        seedRoom: result.seedRoom,
+        assemblyFallbacks: result.assemblyFallbacks,
+        roomsBefore: result.roomsBefore,
+        roomsAfter: result.roomsAfter,
+        log,
+      } satisfies RhvacSyncResult;
     }),
-    removeQuietly(editsPath),
+    Effect.all([removeQuietly(syncPath), removeQuietly(resultPath)]),
   );
+});
+
+/**
+ * Hand an .r10 to Elite RHVAC through its Windows file association. Fire-and-forget: `start`
+ * returns as soon as the shell accepts the open, and RHVAC's load recalculation stays a manual
+ * step (there is no headless calc — see docs/features/takeoffs/rhvac-and-mj-reference.md).
+ */
+export const rhvacLaunch = Effect.fnUntraced(function* (input: RhvacPathRequest) {
+  const key = "rhvac.launch";
+  yield* assertR10File(key, input.path);
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  // `start` is a cmd builtin, not an executable; the empty string is its window-title argument,
+  // without which cmd treats a quoted path as the title and opens nothing.
+  const command = ChildProcess.make("cmd.exe", ["/c", "start", "", input.path]);
+  const exitCode = yield* Effect.scoped(
+    Effect.gen(function* () {
+      const handle = yield* spawner.spawn(command);
+      return yield* handle.exitCode;
+    }),
+  ).pipe(Effect.mapError((error) => new LocalOpError(key, describeError(error))));
+  if (exitCode !== 0)
+    return yield* Effect.fail(
+      new LocalOpError(key, `the shell refused to open ${input.path} (exit ${exitCode})`),
+    );
+  return { path: input.path, launched: true } satisfies RhvacLaunchResult;
 });
 
 /**
@@ -167,65 +224,15 @@ export const rhvacTakeoff = Effect.fnUntraced(function* (input: RhvacPathRequest
   } satisfies RhvacTakeoffData;
 });
 
-export const rhvacTakeoffResolutions = Effect.fnUntraced(function* (
-  input: RhvacTakeoffResolutionsRequest,
-) {
-  const key = "rhvac.takeoff-resolutions";
-  yield* assertR10File(key, input.path);
-  const savedPath = join(dirname(input.path), "takeoff-resolutions.json");
-  if (input.resolutions) {
-    const resolutions = {
-      version: input.resolutions.version,
-      ...(input.resolutions.tsvSha256
-        ? { tsvSha256: sortRecord(input.resolutions.tsvSha256) }
-        : {}),
-      resolutions: sortRhvacResolutions(input.resolutions.resolutions),
-    };
-    yield* writeFileStringAtomic(savedPath, `${JSON.stringify(resolutions, null, 2)}\n`, key);
-    return { savedPath, resolutions } satisfies RhvacTakeoffResolutionsResult;
-  }
-
-  const read = yield* Effect.result(readFileString(savedPath, key));
-  if (read._tag === "Failure") {
-    if (read.failure.statusCode === 404)
-      return { savedPath, resolutions: null } satisfies RhvacTakeoffResolutionsResult;
-    return yield* Effect.fail(read.failure);
-  }
-  const text = read.success;
-  if (!text.trim())
-    return yield* Effect.fail(new LocalOpError(key, `${savedPath} is empty; refusing fallback`));
-  const parsed = yield* parseJson(key, text, savedPath);
-  const resolutions = yield* Schema.decodeUnknownEffect(rhvacResolutionsFileSchema)(parsed).pipe(
-    Effect.mapError(
-      (error) =>
-        new LocalOpError(
-          key,
-          `${savedPath} does not match the resolutions schema: ${error.message}`,
-        ),
-    ),
-  );
-  return {
-    savedPath,
-    resolutions: {
-      version: resolutions.version,
-      ...(resolutions.tsvSha256 ? { tsvSha256: sortRecord(resolutions.tsvSha256) } : {}),
-      resolutions: sortRhvacResolutions(resolutions.resolutions),
-    },
-  } satisfies RhvacTakeoffResolutionsResult;
-});
-
-const sortRecord = (values: Record<string, string>): Record<string, string> =>
-  Object.fromEntries(Object.entries(values).sort(([a], [b]) => (a === b ? 0 : a < b ? -1 : 1)));
-
 // --- edit payload conversion ---------------------------------------------------
 
 /**
  * Convert one extract-shaped room (camelCase, flat glass/doors pointing at wall
- * ordinals) into export-rhvac.ps1's edit shape (PascalCase C# RhvacRoom +
- * Identifier, openings nested under their wall). Openings match walls by
- * `index1`; blob regeneration compacts ordinals to the 1..N order sent here.
+ * ordinals) into export-rhvac.ps1's room shape (PascalCase C# RhvacRoom, openings
+ * nested under their wall). Openings match walls by `index1`; blob regeneration
+ * compacts ordinals to the 1..N order sent here.
  */
-function toEditRoom(key: string, room: RhvacRoomData) {
+function toLaneRoom(key: string, room: RhvacInsertRoomData) {
   const wallOrdinals = new Set(room.walls.map((wall) => wall.index1));
   for (const [category, openings] of [
     ["glass", room.glass],
@@ -235,12 +242,11 @@ function toEditRoom(key: string, room: RhvacRoomData) {
       if (!wallOrdinals.has(opening.wallReference))
         throw new LocalOpError(
           key,
-          `room ${room.number} (Identifier ${room.identifier}): ${category} references wall ordinal ${opening.wallReference}, but the room's walls are [${[...wallOrdinals].join(", ")}]. Fix the reference before saving.`,
+          `room ${room.number}: ${category} references wall ordinal ${opening.wallReference}, but the room's walls are [${[...wallOrdinals].join(", ")}]. Fix the reference before saving.`,
           400,
         );
   }
   return {
-    Identifier: room.identifier,
     Number: room.number,
     Name: room.name,
     AreaSquareFeet: room.areaSquareFeet,
@@ -252,6 +258,7 @@ function toEditRoom(key: string, room: RhvacRoomData) {
       LightingWatts: room.lightingWatts,
       SensibleEquipmentBtuh: room.equipmentSensibleBtuh,
       LatentEquipmentBtuh: room.equipmentLatentBtuh,
+      VentilationCfm: room.ventilationCfm,
     },
     Floors: room.floors.map((floor) => ({
       Assembly: { Name: floor.assembly, UValue: floor.uValue },

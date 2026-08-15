@@ -1192,6 +1192,7 @@ public sealed class RevitScriptExecutionService(
 
     private sealed class ScriptDocumentMutationMonitor : IDisposable {
         private readonly Autodesk.Revit.ApplicationServices.Application _application;
+        // Kept as part of the live type shape; classification intentionally does not use wrapper identity.
         private readonly Document _guardedDocument;
         private readonly List<ScriptDocumentMutationEvent> _events = [];
         private bool _disposed;
@@ -1249,15 +1250,15 @@ public sealed class RevitScriptExecutionService(
 
             var document = args.GetDocument();
             var transactionNames = args.GetTransactionNames().ToList();
+            var escapedGuard = ReadOnlyGuardMutationClassifier.EscapedGuard(
+                transactionNames, ReadOnlyGuardTransactionName);
             this._events.Add(new ScriptDocumentMutationEvent(
                 document?.Title ?? "<unknown>",
                 addedCount,
                 modifiedCount,
                 deletedCount,
                 transactionNames,
-                ReferenceEquals(document, this._guardedDocument)
-                && transactionNames.Count > 0
-                && transactionNames.All(name => string.Equals(name, ReadOnlyGuardTransactionName, StringComparison.Ordinal))
+                IsSandboxChurn: !escapedGuard
             ));
         }
 

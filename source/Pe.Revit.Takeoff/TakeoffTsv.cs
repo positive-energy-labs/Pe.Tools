@@ -27,10 +27,7 @@ public sealed record TakeoffResidueShape(
     double[] Label,
     List<double[]> Outer,
     List<List<double[]>> Holes
-)
-{
-    public bool Claimed { get; init; }
-}
+);
 
 /// <summary>One parsed takeoff TSV: a level and its rooms.</summary>
 public sealed record LevelTakeoff(string LevelName, double Elevation, List<TakeoffRoomShape> Rooms)
@@ -128,7 +125,7 @@ public static class TakeoffTsv
         {
             if (room.Outer.Count < 3)
                 throw new InvalidDataException($"Room {room.Id}: outer loop has {room.Outer.Count} vertices.");
-            var outerArea = SignedArea(room.Outer);
+            var outerArea = TakeoffGeometry.SignedArea(room.Outer);
             if (outerArea <= 0)
                 throw new InvalidDataException($"Room {room.Id}: outer loop is not CCW (contract violation).");
             ValidateGeometry(room);
@@ -140,26 +137,13 @@ public static class TakeoffTsv
         };
     }
 
-    /// <summary>
-    /// Parses every rooms_*.tsv in a takeoff directory and applies the optional
-    /// takeoff-resolutions.json beside that directory.
-    /// </summary>
-    public static ResolutionApplyResult ParseTsvDirectory(
-        string tsvDirectory,
-        string? resolutionsPath = null
-    )
-    {
-        var fullDirectory = Path.GetFullPath(tsvDirectory);
-        var levels = Directory.GetFiles(fullDirectory, "rooms_*.tsv")
+    /// <summary>Parses every rooms_*.tsv in a takeoff directory, level-name ordered.</summary>
+    public static List<LevelTakeoff> ParseTsvDirectory(string tsvDirectory) =>
+        Directory.GetFiles(Path.GetFullPath(tsvDirectory), "rooms_*.tsv")
             .Where(path => !path.EndsWith(".native.tsv", StringComparison.OrdinalIgnoreCase))
             .OrderBy(path => path, StringComparer.Ordinal)
             .Select(path => ParseTsv(File.ReadAllText(path)))
             .ToList();
-        var sidecar = resolutionsPath ?? TakeoffResolutions.ResolutionPath(fullDirectory);
-        return File.Exists(sidecar)
-            ? TakeoffResolutions.ApplyResolutions(levels, sidecar)
-            : new ResolutionApplyResult(levels, 0, 0, 0);
-    }
 
     private static void ApplyFlagMeta(string payload, IReadOnlyDictionary<string, TakeoffRoomShape> byId)
     {
@@ -182,27 +166,12 @@ public static class TakeoffTsv
         apply(room, payload[(colon + 1)..]);
     }
 
-    internal static double SignedArea(IReadOnlyList<double[]> loop)
-    {
-        var sum = 0.0;
-        for (int i = 0, j = loop.Count - 1; i < loop.Count; j = i++)
-            sum += (loop[j][0] * loop[i][1]) - (loop[i][0] * loop[j][1]);
-        return sum / 2;
-    }
-
     private static void ValidateGeometry(TakeoffRoomShape room)
     {
         try
         {
-            var factory = new GeometryFactory(new PrecisionModel(1_000_000));
-            LinearRing Ring(IReadOnlyList<double[]> points)
-            {
-                var coordinates = points.Select(point => new Coordinate(point[0], point[1])).ToList();
-                coordinates.Add(coordinates[0].Copy());
-                return factory.CreateLinearRing(coordinates.ToArray());
-            }
-
-            var polygon = factory.CreatePolygon(Ring(room.Outer), room.Holes.Select(Ring).ToArray());
+            var factory = TakeoffGeometry.Coverage;
+            var polygon = TakeoffGeometry.ToPolygon(room, factory);
             var validity = new IsValidOp(polygon).ValidationError;
             if (validity != null)
                 throw new InvalidDataException($"Room {room.Id}: invalid polygon ({validity.Message}).");

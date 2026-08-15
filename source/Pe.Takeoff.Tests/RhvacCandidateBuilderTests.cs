@@ -214,7 +214,7 @@ public sealed class RhvacCandidateBuilderTests
         var tsvPaths = Directory.GetFiles(takeoffDir, "rooms_*.tsv");
         Assert.That(tsvPaths, Has.Length.EqualTo(5));
 
-        var levels = TakeoffTsv.ParseTsvDirectory(takeoffDir).Levels
+        var levels = TakeoffTsv.ParseTsvDirectory(takeoffDir)
             .OrderBy(level => level.Elevation)
             .ToList();
         var conventions = RhvacCandidateBuilder.LoadConventions(Path.Combine(fixtureDir, "conventions.json"));

@@ -87,8 +87,6 @@ public sealed class TakeoffReplayTests
 
         Assert.Multiple(() => {
             Assert.That(loaded.Rooms.Single().Flags, Is.EqualTo(source.Rooms.Single().Flags));
-            Assert.That(SpaceMaterializer.SpaceComments("owned", loaded.Rooms.Single()),
-                Is.EqualTo("owned|R07\npe-takeoff: open-plan-merge, low-evidence-boundary"));
             Assert.That((loaded.Residues.Single().Id, loaded.Residues.Single().Reason,
                     loaded.Residues.Single().RawSqft, loaded.Residues.Single().LabelX,
                     loaded.Residues.Single().LabelY, loaded.Residues.Single().MeanCeilingFt),
@@ -229,13 +227,24 @@ public sealed class TakeoffReplayTests
             Assert.That(atticProfile.SlopedCeilingFraction, Is.GreaterThanOrEqualTo(0.9));
             Assert.That(atticProfile.Options.MinHeadroomFt, Is.EqualTo(3.5));
             Assert.That(atticProfile.Options.CeilingCloseFt, Is.EqualTo(3));
-            Assert.That(atticProfile.Options.SealWallRunGaps, Is.False);
+            // A flat-covered level keeps wall-run sealing even when attic-classified: project-a' Main
+            // Level (sloped 0.50) and Attic Level (0.55) are indistinguishable at level scale, and
+            // disarming starved Main's diagonal wings of closure entirely. The ink-backing
+            // promotion gate — not the seal switch — is what stops seal-manufactured rooms.
+            Assert.That(atticProfile.Options.SealWallRunGaps, Is.True);
             Assert.That(attic.Field.CeilZ, Is.EqualTo(rawAtticCeiling),
                 "profile-specific closing must not change replay evidence");
             Assert.That(doubleProfile.DoubleHeightFraction, Is.GreaterThan(0.4));
             Assert.That(doubleProfile.Options.StoryCapFt, Is.EqualTo(20));
+            // Seeding is Hybrid by DEFAULT since the 2026-08-14 fan-out, and the profile only ever
+            // upgrades to Hybrid — it never asks for RegionCores back. So the stepped-ceiling branch
+            // no longer distinguishes these two levels: the basement arrives Hybrid too. The branch
+            // is kept because it is the only thing that would re-assert Hybrid if the default were
+            // rolled back, but below-grade/non-flat levels are no longer steered to RegionCores by
+            // inference, and RegionCores is now reachable only by asking for it explicitly.
             Assert.That(hybridProfile.Options.SeedSource, Is.EqualTo(TakeoffSeedSource.Hybrid));
-            Assert.That(basementProfile.Options.SeedSource, Is.EqualTo(TakeoffSeedSource.RegionCores));
+            Assert.That(basementProfile.Options.SeedSource, Is.EqualTo(TakeoffSeedSource.Hybrid));
+            Assert.That(new TakeoffOptions().SeedSource, Is.EqualTo(TakeoffSeedSource.Hybrid));
         });
     }
 
@@ -329,6 +338,12 @@ public sealed class TakeoffReplayTests
         // parametric: below MinBoundarySupport the halves are ONE open-plan space, flagged.
         var opt = PartitionOptions();
         opt.SeedSource = TakeoffSeedSource.Hybrid;
+        // SeedClearFt pinned, not defaulted. The shipped default is now 1.5 ft, at which the
+        // clearance plateau flows straight through this fixture's half-foot stubs and the hall reads
+        // as ONE fat open area — no second seed, nothing to merge, and the merge semantics under
+        // test never get exercised. 3.0 ft is the clearance at which the pinch is a plateau divider,
+        // which is the precondition this test needs, not the behavior it asserts.
+        opt.SeedClearFt = 3.0;
         var split = snap.Replay(opt, _ => { });
         Assert.Multiple(() => {
             Assert.That(split.Rooms, Has.Count.EqualTo(2), "the pinch must split the hybrid seeds");

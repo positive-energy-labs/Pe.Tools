@@ -28,8 +28,17 @@ internal sealed class PreparedTakeoffDetection
             this.field, this.obstruction, this.levelName, this.levelElevation, this.options,
             log, zoneMask, this.footprint, this.evidence);
 
-    internal TakeoffResult Detect(ZoneScope zone, Action<string> log)
+    internal TakeoffResult Detect(ZoneScope zone, Action<string> log) =>
+        this.Detect(zone, log, out _);
+
+    /// <summary>
+    /// Detects inside one declared zone. <c>whiteoutCells</c> reports the ink cells the per-zone
+    /// hygiene pass removed — zero unless <see cref="TakeoffOptions.InkClusterWhiteoutCells"/> is
+    /// on, so the artifact can say how much raster the run deleted before solving.
+    /// </summary>
+    internal TakeoffResult Detect(ZoneScope zone, Action<string> log, out int whiteoutCells)
     {
+        whiteoutCells = 0;
         if (zone == null) throw new ArgumentNullException(nameof(zone));
         const int paddingCells = 2;
         var points = zone.Loops.SelectMany(loop => loop).ToList();
@@ -58,12 +67,35 @@ internal sealed class PreparedTakeoffDetection
             CeilZ = Crop(this.field.CeilZ),
         };
         var croppedObstruction = Crop(this.obstruction);
-        var croppedFootprint = Crop(this.footprint);
-        var croppedEvidence = Crop(this.evidence);
+        bool[]? croppedFootprint = Crop(this.footprint);
+        float[]? croppedEvidence = Crop(this.evidence);
+        var croppedMask = zone.CellMask(croppedField);
         log($"[partition] zone crop {this.field.W}x{this.field.H} -> {width}x{height}");
+        // Pre-solve hygiene. The obstruction raster is built once per LEVEL by Prepare, so the zone
+        // crop is the only per-zone seam there is; whiting out here also means the clusters have
+        // already been gap-sealed, which is the honest thing to test for "floats free of the wall
+        // network". A removal invalidates the level-derived footprint and evidence rasters, so both
+        // are recomputed from the cleaned obstruction — otherwise the whited clutter would leave a
+        // hole in the domain instead of joining the room around it.
+        if (this.options.InkClusterWhiteoutCells > 0 || this.options.InkClusterWhiteoutBboxFt > 0)
+        {
+            var hygiene = InkHygiene.RemoveFloatingClusters(
+                croppedObstruction, croppedMask, width, height,
+                this.options.InkClusterWhiteoutCells, this.options.InkClusterWhiteoutBboxFt,
+                this.field.CellFt);
+            whiteoutCells = hygiene.RemovedCells;
+            if (hygiene.RemovedCells > 0)
+            {
+                croppedObstruction = hygiene.Ink;
+                croppedFootprint = null;
+                croppedEvidence = null;
+                log($"[partition] ink hygiene whited out {hygiene.RemovedCells} floating cell(s) " +
+                    $"= {hygiene.RemovedCells * this.field.CellFt * this.field.CellFt:F0}sf");
+            }
+        }
         return PartitionFormulation.Run(
             croppedField, croppedObstruction, this.levelName, this.levelElevation, this.options,
-            log, zone.CellMask(croppedField), croppedFootprint, croppedEvidence);
+            log, croppedMask, croppedFootprint, croppedEvidence);
 
         T[] Crop<T>(T[] source)
         {
@@ -100,14 +132,47 @@ public static class Detector
         return PartitionFormulation.Run(hf, obst, levelName, levelElevation, opt, log, zoneMask);
     }
 
+    // Per-cell attribution of the sealing passes in BuildObstruction. A cell carries exactly one
+    // class: the passes run in order and each only ever claims cells no earlier pass sealed.
+    public const byte SealNone = 0;
+
+    /// <summary>Cell became obstruction from the <see cref="TakeoffOptions.GapSealFt"/> morphological close.</summary>
+    public const byte SealGapClose = 1;
+
+    /// <summary>Cell became obstruction from the door-head lintel sealer (<see cref="TakeoffOptions.SealDoorHeads"/>).</summary>
+    public const byte SealDoorHead = 2;
+
+    /// <summary>Cell became obstruction from the headerless wall-run gap sealer (<see cref="TakeoffOptions.SealWallRunGaps"/>).</summary>
+    public const byte SealWallRunGap = 3;
+
+    /// <summary>
+    /// The sealing decisions BuildObstruction makes, as a reviewable raster: one class byte per
+    /// cell, zero everywhere the obstruction mask is just raw seed ink. Closures are otherwise
+    /// invisible in review — a sealed doorway looks exactly like a drawn wall downstream.
+    /// </summary>
+    public static byte[] SealClasses(
+        Heightfield hf, bool[] seedInk, double levelElevation, TakeoffOptions opt)
+    {
+        BuildObstruction(hf, seedInk, levelElevation, opt, _ => { }, out var classes);
+        return classes;
+    }
+
     // Shared by detection, level-profile inference, and diagnostics: composed seed ink -> sealed
     // obstruction mask (stud-gap close + geometric door sealers).
     internal static bool[] BuildObstruction(
-        Heightfield hf, bool[] seedInk, double lvlZ, TakeoffOptions opt, Action<string> log)
+        Heightfield hf, bool[] seedInk, double lvlZ, TakeoffOptions opt, Action<string> log) =>
+        BuildObstruction(hf, seedInk, lvlZ, opt, log, out _);
+
+    internal static bool[] BuildObstruction(
+        Heightfield hf, bool[] seedInk, double lvlZ, TakeoffOptions opt, Action<string> log,
+        out byte[] sealClass)
     {
         int W = hf.W, H = hf.H, n = W * H;
         var obst = (bool[])seedInk.Clone();
         Close(obst, W, H, (float)(opt.GapSealFt / 2.0 / opt.CellFt));
+        sealClass = new byte[n];
+        for (int i = 0; i < n; i++)
+            if (obst[i] && !seedInk[i]) sealClass[i] = SealGapClose;
 
         if (opt.SealDoorHeads)
         {
@@ -126,7 +191,12 @@ public static class Detector
                 if (obst[i] || !tall[i]) continue;
                 if (float.IsNaN(hf.FloorZ[i]) || float.IsNaN(hf.CeilZ[i])) continue;
                 double head = hf.CeilZ[i] - hf.FloorZ[i];
-                if (head >= opt.MinHeadroomFt && head <= opt.DoorHeadMaxFt) { obst[i] = true; sealed_++; }
+                if (head >= opt.MinHeadroomFt && head <= opt.DoorHeadMaxFt)
+                {
+                    obst[i] = true;
+                    sealClass[i] = SealDoorHead;
+                    sealed_++;
+                }
             }
             log($"[detect] door-head seal: {sealed_ * opt.CellFt * opt.CellFt:F0} sf of lintel cells became obstruction");
         }
@@ -169,7 +239,8 @@ public static class Detector
             for (int x = 0; x < W; x++) Scan(x, 0, -1, 1);
             for (int y = 1; y < H; y++) Scan(W - 1, y, -1, 1);
             int nFilled = 0;
-            for (int i = 0; i < n; i++) if (filled[i] && !obst[i]) { obst[i] = true; nFilled++; }
+            for (int i = 0; i < n; i++)
+                if (filled[i] && !obst[i]) { obst[i] = true; sealClass[i] = SealWallRunGap; nFilled++; }
             log($"[detect] wall-run gap seal: {nFilled * opt.CellFt * opt.CellFt:F0} sf of doorway gaps became obstruction");
         }
         return obst;

@@ -2,6 +2,208 @@
 
 Dated, append-only. Newest batch first. Each entry: what was decided, and the why that makes it stick. Reopen one only with new evidence — and record the reopening here.
 
+## 2026-08-15 (the authority-vs-estimate batch) — three-agent fan-out, verified and merged
+
+**Adopted:**
+
+- **Declared zone angle beats the measured frame inside its own noise
+  (`FrameLocalProjector.SnapToDeclaredFrames`, `FrameZoneSnapDeg = 1.0`).** ML05's rooms were never
+  wrong — the raster frame estimator measured the wing at 45.267° against a zone drawn at exactly
+  45.000°, and the 0.25° editability tolerance split that hair: every zone-fit clip read as
+  `OffFrameEdge`, fell back, and the un-clipped room died at `scope:outside` (8 of 11 ML05 losses;
+  drift was only 4). When the measured frame lands within `FrameZoneSnapDeg` of the zone's own
+  dominant angle, the declared angle wins — it is KNOWN where the estimate is only inferred. Beyond
+  the margin the measurement stands, so a zone at an angle its rooms don't share can never bend
+  them. Board 59 → 69 accepted (+2,509 sf), ML05 3 → 7, only Attic 01 −1. Independently
+  corroborated: the LL06/LL08 agent reached the same scope/zone-fit chain with no knowledge of this
+  fix (48 rooms / 12,987 sf board-wide were dying whole for sub-1% overhangs whose trimming clip
+  was refused on exactly this angle disagreement).
+- **Boundary drift split into its two directions
+  (`BoundaryDrift` = invention, projected→source; `SourceFeatureDrop` = drop, source→projected,
+  `FrameMaxSourceDropFt = 2.5`).** The symmetric Hausdorff was one number for two failures of
+  unequal dishonesty: INVENTION (an accepted boundary the detector never proposed) has no other
+  backstop and keeps the tight tolerance; a DROP (a thin source appendage the rail lattice
+  swallowed) is already bounded by the area-drift gate and by ink-backing. At the 2.5/2.5 defaults
+  behavior is byte-identical to the old gate — the split is the measurement seam; whether drops
+  deserve a looser leash (sweep says only ≥7.8 ft buys anything: one clean 547 sf LL08 room) is a
+  deliberate follow-up, not a default slipped in.
+- **Rejections carry their magnitudes (`frameDeg/support/srcArea/drop/invent` in details;
+  `scope/<room> outside=N sf of M sf (P%)`).** Both agents' root causes were found by
+  instrumentation-first missions; neither was findable while the gates reported bare counters. A
+  tolerance rejection must state what the tolerance would have had to be.
+- **Framing gets a low-support veto at capture (seed F/F0 pair,
+  `knee = (A ∨ (F ∧ near(F0, 1.5 ft))) ∧ A2`, `FramingLowBandFt = 1.0`).** kaitpw spotted "ducts"
+  in the attic crops; the live census showed no ducts (all MEP hidden, GenericModel fallback
+  correctly off) but 4,200 of the attic band's 6,145 framing members were joists, blocking,
+  rafters, plates, and sheathing — horizontal structure drawn as phantom wall ink. The knee AND
+  kills sloped members (footprint shifts between cuts) but is blind to horizontal members riding
+  through both knee cuts. A wall-former runs down to its plate; framing ink now only counts near
+  the low-cut framing footprint. Raster-side because the framing lives in linked documents, which
+  host views cannot element-hide.
+
+**Rejected:**
+
+- **`DoorGapMaxFt = 6.75` — decisively, twice-queued and now closed.** 59 → 40 rooms, −4,104 sf.
+  The histogram is the proof: `doorHeadSqft` unchanged (369.3) while `wallRunGapSqft` doubles —
+  the wider gap seals wall runs, not doors, scrambling the watershed (`NoCoherentFrame` 10 → 22)
+  while contributing zero backing. Nothing recommends it at any stacking.
+- **Zone-edge exemption for editability violations (mirroring the ink gate's exemption).**
+  Correct-sounding, measured worse: clips commit that the FINAL editability gate (no exemption)
+  then kills, −22 rooms outside the target zones. A zone-edge exemption is only coherent if it
+  runs through the canonical editability contract end to end — a public-contract change, not a
+  promotion-stage patch.
+- **Global relaxation for attic gains (`BoundarySnap 45/20` + drift 4.5).** The +4 attic rooms are
+  real (92/81% backed, crops clean) but the snap widening manufactures unbacked rooms elsewhere
+  (LL08 −2 via `ink:unbacked`, Main 10's trivially-correct 1,284 sf room lost). Attic ink-ratios
+  (0.26–0.34) that would key a per-zone adaptive rule are framing-noise-inflated — re-measure
+  after the F/F0 recapture before designing that rule.
+
+**Confirmed defect, deliberately deferred: the wall-run sealer is angle-blind.** In the 45° wing
+its two diagonal scans run PARALLEL to the walls and fill whole corner triangles (95% of ML05's
+199 sf of run plugs are diagonal-scan-owned; orthogonal ML08 is 100% H/V), and diagonal cell steps
+are 0.354 ft against thresholds calibrated in 0.25 ft cells, so diagonal scans bridge 6.4 ft where
+4.5 was declared. Disabling is catastrophic (59 → 32; the sealer is load-bearing), and fat plugs
+currently prop up productive zones — the fix is a global re-tune that must happen on
+framing-filtered ink. ML05's four remaining `frame:BoundaryDrift` holds (4.0–6.4 ft) are the
+corner-notch victims; they are the next rooms to fall when this is fixed.
+
+## 2026-08-14 (night: the diagonal-wing + honesty batch) — called-out zones root-caused
+
+The four zones kaitpw called out (LL06, LL08, ML05, ML09) all live in the building's ~45°
+rotated wing. Three independent defects stacked there; each got its own fix, all measured on the
+45-zone harness, 127 tests green throughout.
+
+**Adopted:**
+
+- **De-staircase before any angle measurement (`FrameLocalProjector.DeStaircase`, DP 1.0 ft).** A
+  45° wall traced from a 0.5 ft raster is a staircase of axis-aligned steps, and a staircase folds
+  its ENTIRE length into the 0° bin of any raw-edge mod-90 histogram — the true frame is
+  structurally invisible, not just noisy. `DominantFrames`, `FrameSupport`, and rail extraction all
+  measure on simplified copies now (cell ownership keeps raw geometry). ML05 went 0 → 8-10
+  accepted, clean 45° rooms on walls; aggregate 63 → 74 before gating.
+- **Zone snapping is edge-wise and frame-preserving.** Vertex-wise nearest-point snapping was
+  falsified: a lone vertex snapping across a zone jog onto a non-parallel segment tilts both
+  adjacent edges, the strict audit refuses, the whole fit falls back, and the downstream scope gate
+  kills the room ("snap poisons clip"). Now an EDGE moves only onto a near-parallel (≤3°) zone
+  segment whose line both endpoints are within `ZoneSnapFt` of. And a snap is never allowed to sink
+  a clip that stands alone: zone-fit tries snap+clip, then clip-only, before falling back.
+- **Zone-fit refusals name themselves** (`RejectionDetails["zonefit/<id>"]`): invalid-or-tiny /
+  still-overhangs / overlaps-neighbor / lost-shared-edge / editability with violation kinds. The
+  diagonal-wing diagnosis was impossible while `zonefit:fallback` was a bare counter.
+- **Flat levels keep wall-run sealing even when attic-classified.** project-a Main (sloped 0.50) vs
+  Attic (0.55) are indistinguishable at level scale, and the attic-branch disarm starved Main's
+  wings of closure entirely (ML05/ML09: zero rooms). Sealing arms wherever ceiling coverage is
+  flat; what stops seal-manufactured rooms is the ink gate below, not the seal switch. (Attic 00
+  and Attic 01 are zones on the SAME level wanting opposite sealing — no level-scoped switch can
+  ever serve both.)
+- **Ink-backing acceptance gate (`ink-backing` stage, `InkBackedAcceptMin = 0.5`).** Teal must mean
+  trustworthy: an accepted room needs ≥50% of its non-zone-edge boundary on evidence ink, else it
+  holds (`ink:unbacked`, per-room fraction recorded). Zone-edge samples are exempt — authority, not
+  evidence. This is what converts LL08's 12-room fragment soup and Attic 01's seal-lattice into
+  honest abstention, and it retroactively justifies arming sealing everywhere flat.
+- **Door-head seals count as backing evidence (`DetectSnapshot.EvidenceInkDistance`).** A door-head
+  closure derives from real model door geometry; a room bounded by its own doorway is legitimately
+  backed. Wall-run and gap-close plugs stay heuristic and do NOT back a boundary. Measured: LL08
+  0 → 5 accepted at 0.70 backing, LL06 backing 0.55 → 0.75.
+- **`OST_GenericModel` is fallback wall ink, not a peer category (`ProjectionSeed`).** Live-proven
+  root cause of the "ductwork and equipment coming through" noise: the band whitelist admitted
+  GenericModel for IFC-walls-as-DirectShapes agnosticism, but in project-a the IFC's GenericModel
+  members are equipment proxies ('Undefined', full-height) and round piers ('3P0-17') — the LL06/
+  LL08 blob clusters — while actual walls arrive as Structural Framing studs (1,495 in LL06's
+  quadrant alone). GenericModel is now admitted only when recognized wall categories are absent
+  from the band (<50 elements), mirroring the DWG wall-layer precedent. NOT adopted: mirroring the
+  sheeted zoning view's settings wholesale — the engineers element-hide the entire IFC link there
+  (their background is the flat DWG), which would delete the primary lane's only wall source.
+
+**Falsified / rejected this batch:**
+
+- Vertex-wise zone snapping (see above; the test
+  `Zone_fit_falls_back_when_the_zone_edge_runs_diagonal_to_the_room_frame` now records the
+  edge-wise contract).
+- Level-scoped seal discrimination between Main and Attic (indistinguishable profiles).
+- Raw-edge frame histograms on raster-traced geometry (blind to rotated frames by construction).
+
+## 2026-08-14 (seam refactor + six-way tuning fan-out) — patterns adopted, axes closed
+
+Full evidence: `docs/features/takeoffs/solver-architecture-reeval.md` (A/B appendix + composite
+table) and `docs/features/takeoffs/zoning-plan-ink-feasibility.md`. Composite outcome: 31 → 59
+accepted rooms (17% → 27% conversion) on the 45-zone project-a harness, no zone losing a room, all
+laws green, 127 tests.
+
+**Adopted patterns:**
+
+- **Ink is evidence; the zone is authority.** Two different fidelity rules, never conflated. A
+  boundary must stay near its measured ink ("never bent to fit" = the frame drift gate). But the
+  zone boundary is a user declaration: rooms are clipped/snapped to it (`zone-fit` stage), never
+  rejected merely for grazing it. kaitpw: clipping and snapping are non-negotiable.
+- **An audit may never be tighter than the transform it audits.** The frame gate's 1.5 ft drift
+  budget rejected motion `BoundarySimplifyFt = 2.0` had licensed — a self-inconsistency costing
+  ~15 rooms. Now `FrameMaxBoundaryDriftFt = 2.5`, `FrameMaxAreaDrift = 0.20`; do not go past
+  3.0 ft — at 4.0 the gate stops firing and mean ink-backing turns down (the harness stops
+  measuring safety).
+- **Hybrid seeding, `SeedClearFt = 1.5`.** Unimodal peak, measured 45 > 42 > 39 > 36 > 32
+  accepted at 1.0/1.5/2.0/3.0/4.5. Splits open-plan cores at real evidence ridges; the merge
+  criterion re-merges unbacked splits, so finer seeding adds candidates without adding a new way
+  to be wrong.
+- **Knobs-not-consts + self-describing artifacts.** Every tuned threshold lives in
+  `TakeoffOptions`; every report carries the effective options + hash (per level). A number that
+  can't be varied in an experiment can't be defended in a default.
+- **Recombination runs before the frame projector.** Absorb/edge-band placed after it never fire —
+  their targets are already rejected. Placement beat thresholds by an order of magnitude.
+- **Triage holds are labeled by cause.** Zero-raster zones hold as `no-raster`, never
+  `small-zone` — a raster failure must not masquerade as a policy decision.
+- **Drift-magnitude capture on every frame rejection** (`RejectionDetails["drift/<id>"]`): ten
+  lines that turned "20 zones held and nobody knows why" into ranked, quantified causes. Keep.
+- **Regularizer frame snap widened: `BoundarySnapToleranceDeg 35`, `BoundarySnapShortDeg 12`**
+  (+4 rooms, BoundaryDrift 25→21, ink-backing and shared-edge losses flat). SnapTol 45/20 is a
+  per-zone area-dominant lever (+sf, −rooms, −0.03 ink). Short edges must stay conservative —
+  45/45 collapsed.
+- **Door/window closures are visible.** Three seal classes attributed at the source
+  (gap-close / door-head / wall-run), persisted as deterministic INKP bins, drawn on every panel,
+  closure sqft in the subtitle (old `closure` slot was the accounting residual — renamed `leak`).
+  Found by rendering: Main Level never arms wall-run sealing (sloped-ceiling fraction trips the
+  attic branch) — open question, now observable.
+
+**Closed axes (do not re-try without new evidence):**
+
+- **Evidence-weight tuning is structurally dead under core seeding.** Boundary support is
+  identically 1.0 (seeds are components of `domain ∧ ¬obst`, so shared boundaries sit on
+  obstruction cells where evidence = 1). `MinBoundarySupport` ≤ 1 is a no-op; > 1 collapses
+  everything. Making it live requires measuring support pre-flood or excluding obstruction cells.
+- **A second-chance rescue pass for held rooms cannot work at any lawful threshold.** Held rooms
+  need median 2.7 ft / max 8.3 ft of drift to pass — they are genuinely non-rectilinear watershed
+  outlines (band-ink artifact), not near-misses.
+- **Census-adaptive per-zone knobs are OFF (`AdaptivePolicy = false`).** The one live rule
+  (sparse-ink → absorb 0.30) was a +3-room win under the old tight projector and a measured
+  −6-room cost under the relaxed one — per-zone adaptation calibrated against one gate
+  configuration does not survive a change to that gate. The seam stays (pure, attributed via
+  `adaptedKnobs`); rearm only after recalibration. Corollary: `inkRatio` cleanly separates
+  sparse-partition zones (≤0.056) from certified ones (≥0.121) on project-a — the signal is real
+  even though the rule is currently unearned.
+- **Absorb share thresholds: measured ceiling is 0.54** (rooms have 3–4 neighbors; no one
+  neighbor holds 60% of a perimeter). Defaults 0.45/0.5; 0.30 remains a falsified-as-default,
+  plausible-per-zone lever.
+- **DWG-derived zoning-plan ink is opportunistic, not primary (kaitpw).** Raster band capture
+  exists because it is agnostic to model topology; the DWG-layer strip (proven live on projectA)
+  only exists where layered DWGs + zoning views do. Revisit when testing new models.
+- **`LevelProfile` only upgrades toward Hybrid; the below-grade → RegionCores rule is dead by
+  override order** now that Hybrid is the default. Deliberate domain rule silently subsumed —
+  revive it consciously or delete it, don't rediscover it.
+- **`BoundarySimplifyFt` coarsening falsified twice** (2.5 and 3.0): it buys BoundaryDrift
+  reductions by killing rooms — zonefit fallbacks and scope:outside rise. Cleaner-looking
+  outlines are not better-fitting outlines.
+- **Under-sealing destroys Lower Level**: `GapSealFt` 1.5→1.0 took Lower from 27 to 6 accepted
+  rooms; `DoorGapMaxFt` down likewise. Foundation-wall ink needs the full seal. `DoorGapMaxFt`
+  UP to 6.75 gains +616 sf but costs mean ink-backing 0.676→0.646 — HELD, not shipped, pending
+  the ink-backing-as-gate decision; if ink-backing becomes a gate, re-measure it behind that gate.
+- **Aggregate conversion is a proxy that diverged from the goal.** The composite raised accepted
+  rooms 31→59 while the user's called-out zones (LL08/ML05/ML09) did not visually improve: LL08's
+  12 accepted are 10% ink-backed fragments; ML05/ML09 accept nothing at 0% ink-backing because
+  their wall ink barely exists in the band raster. Ink starvation is the binding constraint
+  (third independent confirmation). Candidate correction under review: per-room ink-backing
+  acceptance gate (zone-edge segments exempt — zone is authority), headline metric becomes
+  well-backed accepted sf.
+
 ## 2026-08-14 (zone promotion loop) — exact scope and editability are binding
 
 - **The exact Zoning Region geometry is the accounting universe.** Promotion receives the

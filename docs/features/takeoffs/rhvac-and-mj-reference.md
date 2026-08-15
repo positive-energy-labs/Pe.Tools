@@ -169,7 +169,15 @@ is ambiguous; qualify the software when it matters.
   lane (`-EditsJson`/`-Source`). 32-bit.
 - `Rhvac/extract-rhvac.ps1` — `.r10` → JSON oracle extractor: per-room inputs + the `identifier` PK +
   stored loads; `-Assemblies` for the distinct-assembly picker listing. 32-bit.
+- `Rhvac/sync-rhvac.ps1` — the safety envelope around the engine: lock refusal → working copy →
+  validation → atomic swap with a timestamped backup. Runs from any PowerShell; spawns the 32-bit
+  lane itself.
+- `Rhvac/assembly-presets.json` + `Rhvac/mine-assembly-presets.ps1` — **shim** catalog of cloneable
+  Manual-J code fields, mined from a real file. Consulted only when the target `.r10` does not
+  already use an assembly name; if neither has it, the category lands as one explicit zero row and
+  the room+category is reported as a fallback. Per-project custom assemblies are deferred.
 
-Both are also host local ops (`rhvac.open` / `rhvac.assemblies` / `rhvac.save` / `rhvac.takeoff`,
-dev-lane only). Automated verification stops at SQL read-back of the written file; "RHVAC opens and
-calculates it" is a manual check per export.
+These are also host local ops (`rhvac.open` / `rhvac.assemblies` / `rhvac.sync` /
+`rhvac.launch` / `rhvac.takeoff`, dev-lane only). `rhvac.sync` is the one lane that writes the
+engineer's file in place, and the only one that seeds `System` rows. Automated verification stops at
+SQL read-back of the written file; "RHVAC opens and calculates it" is a manual check per export.

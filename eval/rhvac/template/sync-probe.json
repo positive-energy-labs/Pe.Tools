@@ -1,0 +1,103 @@
+{
+  "systems": [
+    { "Number": 3, "Name": "Great Room - IU-3" },
+    { "Number": 4, "Name": "Primary Suite - IU-4" }
+  ],
+  "inserts": [
+    {
+      "Number": 101,
+      "Name": "Great Room",
+      "AreaSquareFeet": 420.5,
+      "CeilingHeightFeet": 11.25,
+      "SystemNumber": 3,
+      "ZoneNumber": 1,
+      "InternalLoads": {
+        "People": 0,
+        "LightingWatts": 105,
+        "SensibleEquipmentBtuh": 0,
+        "LatentEquipmentBtuh": 0
+      },
+      "Floors": [
+        {
+          "Assembly": { "Name": "passive, heavy dry or light wet soil", "UValue": 1.18 },
+          "AreaSquareFeet": 420.5,
+          "ExposedPerimeterFeet": 38.0
+        }
+      ],
+      "Roofs": [
+        {
+          "Assembly": { "Name": "R49 closed cell sprayfoam in 2x14 joist cavity", "UValue": 0.024 },
+          "AreaSquareFeet": 420.5,
+          "AreaMultiplier": 1.0
+        }
+      ],
+      "Walls": [
+        {
+          "Assembly": { "Name": "Tasting Room Wall", "UValue": 0.085 },
+          "LengthFeet": 22.0,
+          "HeightFeet": 11.25,
+          "Direction": 0,
+          "Windows": [
+            {
+              "Assembly": { "Name": "U-0.55 SHGC-0.40", "UValue": 0.55 },
+              "WidthFeet": 6.0,
+              "HeightFeet": 8.0,
+              "SolarHeatGainCoefficient": 0.4,
+              "Occurrences": 2
+            }
+          ],
+          "Doors": []
+        },
+        {
+          "Assembly": { "Name": "Tasting Room Wall", "UValue": 0.085 },
+          "LengthFeet": 19.0,
+          "HeightFeet": 11.25,
+          "Direction": 2,
+          "Windows": [],
+          "Doors": [
+            {
+              "Assembly": { "Name": "Wood - Solid Core", "UValue": 0.39 },
+              "WidthFeet": 3.0,
+              "HeightFeet": 8.0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Number": 102,
+      "Name": "Primary Bedroom",
+      "AreaSquareFeet": 310.0,
+      "CeilingHeightFeet": 10.0,
+      "SystemNumber": 4,
+      "ZoneNumber": 1,
+      "InternalLoads": {
+        "People": 2,
+        "LightingWatts": 78,
+        "SensibleEquipmentBtuh": 0,
+        "LatentEquipmentBtuh": 0
+      },
+      "Floors": [
+        {
+          "Assembly": { "Name": "WR R20", "UValue": 0.05 },
+          "AreaSquareFeet": 310.0,
+          "ExposedPerimeterFeet": 0.0
+        }
+      ],
+      "Roofs": [],
+      "Walls": [
+        {
+          "Assembly": { "Name": "PROBE - assembly in neither the file nor the catalog", "UValue": 0.065 },
+          "LengthFeet": 17.5,
+          "HeightFeet": 10.0,
+          "Direction": 4,
+          "Windows": [],
+          "Doors": []
+        }
+      ]
+    }
+  ],
+  "updates": [],
+  "deletes": [],
+  "deleteUntouchedSeedRoom": true
+}

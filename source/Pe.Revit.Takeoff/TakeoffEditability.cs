@@ -65,8 +65,7 @@ public static class TakeoffEditability
     private const double ShortTurnRunMaxFt = 16;
     private const int ShortTurnRunMinEdges = 4;
     private const double Epsilon = 1e-9;
-    private static readonly GeometryFactory GeometryFactory =
-        new(new PrecisionModel(1_000_000));
+    private static readonly GeometryFactory GeometryFactory = TakeoffGeometry.Coverage;
 
     public static LevelEditabilityAudit Evaluate(LevelTakeoff takeoff)
     {
@@ -122,15 +121,10 @@ public static class TakeoffEditability
     }
 
     private static Polygon ToPolygon(TakeoffRoomShape room) =>
-        GeometryFactory.CreatePolygon(Ring(room.Outer), room.Holes.Select(Ring).ToArray());
+        TakeoffGeometry.ToPolygon(room, GeometryFactory);
 
-    private static LinearRing Ring(IReadOnlyList<double[]> points)
-    {
-        var coordinates = points.Select(point => new Coordinate(point[0], point[1])).ToList();
-        if (coordinates.Count > 0 && !coordinates[0].Equals2D(coordinates[^1]))
-            coordinates.Add(coordinates[0].Copy());
-        return GeometryFactory.CreateLinearRing(coordinates.ToArray());
-    }
+    private static LinearRing Ring(IReadOnlyList<double[]> points) =>
+        TakeoffGeometry.Ring(points, GeometryFactory);
 
     private static RoomEditabilityAudit AuditRoom(TakeoffRoomShape room)
     {

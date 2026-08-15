@@ -3,44 +3,6 @@ namespace Pe.Revit.Takeoff;
 using System.Security.Cryptography;
 using System.Text;
 
-internal sealed record MaterializationResolutionResult(
-    TakeoffResult Takeoff,
-    int Applied,
-    int Remapped,
-    int Orphaned
-);
-
-public sealed record NativeReadbackResult(
-    int SpacesRead,
-    int SkippedUnplaced,
-    int SkippedUnenclosed,
-    string PathWritten
-);
-
-public sealed record NativeEditabilityGateResult(
-    int Reviewed,
-    int Retained,
-    int Rejected,
-    IReadOnlyDictionary<string, IReadOnlyList<EditabilityViolationKind>> RejectionReasons
-);
-
-public sealed record PendingNativeTakeoffRun(
-    string DocumentIdentity,
-    long LevelId,
-    long PhaseId,
-    string OwnershipToken,
-    string RunId,
-    string SourceSha256,
-    IReadOnlyList<long> ExpectedElementIds,
-    IReadOnlyList<string> ExpectedRoomIds
-);
-
-public sealed record AuditedNativeTakeoffRun(
-    PendingNativeTakeoffRun Pending,
-    NativeEditabilityGateResult Audit,
-    IReadOnlyList<long> RetainedElementIds
-);
-
 // Facade. Detection runs as separate script executions because the host owns exactly one
 // transaction per run and ExportImage refuses to run mid-transaction:
 //   1. Prepare (WriteTransaction) — resolve level, size the crop, create the stripped seed views;
@@ -63,8 +25,8 @@ public static class RoomTakeoff
     {
         var level = ResolveLevel(doc, opt.LevelNameContains);
         var crop = ComputeCrop(doc, level, opt);
-        var (va, va2, vb, vd) = ProjectionSeed.PrepareSeedViews(doc, level, crop, opt, log);
-        SaveState(opt, level, crop, va, va2, vb, vd);
+        var (va, va2, vb, vbf, vf, vf0, vd) = ProjectionSeed.PrepareSeedViews(doc, level, crop, opt, log);
+        SaveState(opt, level, crop, va, va2, vb, vbf, vf, vf0, vd);
         log($"[prepare] level='{level.Name}' crop=({crop.Min.X:F0},{crop.Min.Y:F0})..({crop.Max.X:F0},{crop.Max.Y:F0})");
     }
 
@@ -73,7 +35,7 @@ public static class RoomTakeoff
         var opt = optOverride ?? new TakeoffOptions();
         opt.LevelNameContains = levelNameContains;
         var level = ResolveLevel(doc, levelNameContains);
-        var (crop, va, va2, vb, vd) = LoadState(opt, level);
+        var (crop, va, va2, vb, vbf, vf, vf0, vd) = LoadState(opt, level);
         string workDir = ArtifactDir(opt);
         var heightfieldOptions = opt.InferLevelProfile
             ? new TakeoffOptions {
@@ -88,7 +50,7 @@ public static class RoomTakeoff
         var hf = Heightfield.Build(doc, level, crop, heightfieldOptions, log);
         int n = hf.W * hf.H;
         var bands = ProjectionSeed.CaptureBands(
-            doc, va, va2, vb, vd, crop, hf.W, hf.H, opt.CellFt, workDir, opt, log);
+            doc, va, va2, vb, vbf, vf, vf0, vd, crop, hf.W, hf.H, opt.CellFt, workDir, opt, log);
         var ink = ProjectionSeed.ComposeInk(
             bands.Plan, bands.Header, hf.W, hf.H, opt.CellFt, opt, floorEdge: null, log);
         double lvlZ = level.ProjectElevation;
@@ -139,227 +101,6 @@ public static class RoomTakeoff
         File.WriteAllText(tsv, result.ToTsv());
         log($"[detect] rooms={result.Rooms.Count} totalSqft={result.TotalSqft:F0} -> {tsv}");
         return result;
-    }
-
-    /// <summary>
-    /// Completes a pending native run after its materialization transaction has committed and
-    /// Revit has recomputed Space boundaries. This method requires a second write transaction.
-    /// </summary>
-    public static AuditedNativeTakeoffRun AuditAndFinalize(
-        Document doc, PendingNativeTakeoffRun pending, Action<string> log, TakeoffOptions? optOverride = null)
-    {
-        if (!doc.IsModifiable)
-            throw new InvalidOperationException("Native takeoff finalization requires an open transaction");
-        if (DocumentIdentity(doc) != pending.DocumentIdentity)
-            throw new InvalidOperationException("pending native takeoff belongs to a different document");
-        var level = doc.GetElement(pending.LevelId.ToElementId()) as Level
-            ?? throw new InvalidOperationException("pending native takeoff level no longer exists");
-        var phase = doc.GetElement(pending.PhaseId.ToElementId()) as Phase
-            ?? throw new InvalidOperationException("pending native takeoff phase no longer exists");
-        var opt = optOverride ?? new TakeoffOptions();
-        if (SpaceMaterializer.Token(opt, level, phase) != pending.OwnershipToken)
-            throw new InvalidOperationException("pending native takeoff ownership token does not match options");
-
-        var owned = new FilteredElementCollector(doc).OfClass(typeof(SpatialElement))
-            .OfCategory(BuiltInCategory.OST_MEPSpaces).Cast<Space>()
-            .Where(space => SpaceMaterializer.Owned(space, pending.OwnershipToken))
-            .OrderBy(space => space.Id.Value()).ToList();
-        if (!owned.Select(space => space.Id.Value()).SequenceEqual(pending.ExpectedElementIds)
-            || !owned.Select(space => space.Number).OrderBy(id => id, StringComparer.Ordinal)
-                .SequenceEqual(pending.ExpectedRoomIds))
-            throw new InvalidOperationException("pending native takeoff elements no longer match its receipt");
-        if (owned.Any(space => !SpaceMaterializer.HasRunStamp(
-                space, pending.RunId, pending.SourceSha256, "pending")))
-            throw new InvalidOperationException("pending native takeoff stamp is missing or stale");
-
-        var audit = PruneUneditableNative(doc, level, phase, opt, log);
-        SpaceMaterializer.SetRunAuditState(
-            doc, opt, level, phase, pending.RunId, pending.SourceSha256, "passed");
-        var retained = new FilteredElementCollector(doc).OfClass(typeof(SpatialElement))
-            .OfCategory(BuiltInCategory.OST_MEPSpaces).Cast<Space>()
-            .Where(space => SpaceMaterializer.Owned(space, pending.OwnershipToken))
-            .Select(space => space.Id.Value()).OrderBy(id => id).ToList();
-        return new AuditedNativeTakeoffRun(pending, audit, retained);
-    }
-
-    public static NativeReadbackResult ReadbackNative(
-        Document doc,
-        Level level,
-        Phase phase,
-        string takeoffDirectory,
-        TakeoffOptions opt,
-        Action<string> log)
-    {
-        if (doc.GetElement(level.Id) is not Level || doc.GetElement(phase.Id) is not Phase)
-            throw new InvalidOperationException("level and phase must belong to the target document");
-
-        var rooms = new List<RoomResult>();
-        int skippedUnplaced = 0, skippedUnenclosed = 0;
-        var spaces = new FilteredElementCollector(doc).OfClass(typeof(SpatialElement))
-            .OfCategory(BuiltInCategory.OST_MEPSpaces).Cast<Space>()
-            .Where(space => space.LevelId.Value() == level.Id.Value()
-                            && space.get_Parameter(BuiltInParameter.ROOM_PHASE_ID)
-                                ?.AsElementId().Value() == phase.Id.Value())
-            .OrderBy(space => space.Number, StringComparer.Ordinal)
-            .ToList();
-
-        foreach (var space in spaces)
-        {
-            if (space.Location is not LocationPoint location)
-            {
-                skippedUnplaced++;
-                continue;
-            }
-
-            var boundaries = space.GetBoundarySegments(new SpatialElementBoundaryOptions());
-            if (space.Area <= 0 || boundaries is not { Count: > 0 })
-            {
-                skippedUnenclosed++;
-                continue;
-            }
-
-            var loops = boundaries.Select(segments => new {
-                    Segments = segments,
-                    Points = BoundaryPoints(segments),
-                })
-                .Where(loop => loop.Points.Count >= 3)
-                .OrderByDescending(loop => Math.Abs(TakeoffTsv.SignedArea(loop.Points)))
-                .ToList();
-            if (loops.Count == 0)
-            {
-                skippedUnenclosed++;
-                continue;
-            }
-
-            var outer = loops[0].Points;
-            if (TakeoffTsv.SignedArea(outer) < 0) outer.Reverse();
-            var holes = loops.Skip(1).Select(loop => loop.Points).ToList();
-            foreach (var hole in holes)
-                if (TakeoffTsv.SignedArea(hole) > 0) hole.Reverse();
-
-            var meanCeilingFt = space.LimitOffset;
-            if (meanCeilingFt <= 0 || double.IsNaN(meanCeilingFt) || double.IsInfinity(meanCeilingFt))
-            {
-                meanCeilingFt = space.UnboundedHeight;
-                if (meanCeilingFt <= 0 || double.IsNaN(meanCeilingFt) || double.IsInfinity(meanCeilingFt))
-                    meanCeilingFt = opt.StoryCapFt;
-                log($"[native-readback] Space '{space.Number}' has no usable LimitOffset; " +
-                    $"using {meanCeilingFt:F2} ft");
-            }
-
-            rooms.Add(new RoomResult {
-                Id = space.Number,
-                RawSqft = space.Area,
-                PerimeterFt = loops[0].Segments.Sum(segment => segment.GetCurve().Length),
-                LabelX = location.Point.X,
-                LabelY = location.Point.Y,
-                MeanCeilingFt = meanCeilingFt,
-                Polygon = outer,
-                Holes = holes,
-            });
-        }
-
-        if (rooms.Select(room => room.Id).Distinct(StringComparer.Ordinal).Count() != rooms.Count)
-            throw new InvalidOperationException("native Space numbers must be unique");
-
-        var result = new TakeoffResult {
-            LevelName = level.Name,
-            LevelElevation = level.ProjectElevation,
-            Source = TakeoffSource.Native,
-            Rooms = rooms,
-            TotalSqft = rooms.Sum(room => room.RawSqft),
-        };
-        var directory = Path.GetFullPath(takeoffDirectory);
-        Directory.CreateDirectory(directory);
-        var path = Path.Combine(directory, $"rooms_{Sanitize(level.Name)}.native.tsv");
-        var temp = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
-        try
-        {
-            File.WriteAllText(temp, result.ToTsv());
-            if (File.Exists(path)) File.Replace(temp, path, null);
-            else File.Move(temp, path);
-        }
-        finally
-        {
-            if (File.Exists(temp)) File.Delete(temp);
-        }
-
-        log($"[native-readback] level='{level.Name}' phase='{phase.Name}' spaces={rooms.Count} " +
-            $"skippedUnplaced={skippedUnplaced} skippedUnenclosed={skippedUnenclosed} -> {path}");
-        return new NativeReadbackResult(rooms.Count, skippedUnplaced, skippedUnenclosed, path);
-    }
-
-    /// <summary>
-    /// Runs after the materialization transaction commits, when Revit has recomputed the native
-    /// Space boundaries. Deletes only owned Spaces that fail the canonical editability audit.
-    /// </summary>
-    public static NativeEditabilityGateResult PruneUneditableNative(
-        Document doc, Level level, Phase phase, TakeoffOptions opt, Action<string> log)
-    {
-        string token = SpaceMaterializer.Token(opt, level, phase);
-        var spaces = new FilteredElementCollector(doc).OfClass(typeof(SpatialElement))
-            .OfCategory(BuiltInCategory.OST_MEPSpaces).Cast<Space>()
-            .Where(space => space.LevelId.Value() == level.Id.Value()
-                            && space.get_Parameter(BuiltInParameter.ROOM_PHASE_ID)
-                                ?.AsElementId().Value() == phase.Id.Value()
-                            && SpaceMaterializer.Owned(space, token))
-            .OrderBy(space => space.Number, StringComparer.Ordinal)
-            .ToList();
-        if (spaces.Select(space => space.Number).Distinct(StringComparer.Ordinal).Count() != spaces.Count)
-            throw new InvalidOperationException("owned native Space numbers must be unique");
-
-        var malformed = new Dictionary<string, IReadOnlyList<EditabilityViolationKind>>(StringComparer.Ordinal);
-        var shapes = new List<TakeoffRoomShape>();
-        foreach (var space in spaces)
-        {
-            var loops = space.GetBoundarySegments(new SpatialElementBoundaryOptions());
-            var points = loops?.Select(BoundaryPoints)
-                .Where(loop => loop.Count >= 3)
-                .OrderByDescending(loop => Math.Abs(TakeoffTsv.SignedArea(loop)))
-                .ToList();
-            if (space.Area <= 0 || points is not { Count: > 0 })
-            {
-                malformed[space.Number] = [EditabilityViolationKind.InvalidLoop];
-                continue;
-            }
-            shapes.Add(new TakeoffRoomShape(
-                space.Number, space.Area,
-                loops!.SelectMany(segments => segments).Sum(segment => segment.GetCurve().Length),
-                space.LimitOffset, points[0], points.Skip(1).ToList()));
-        }
-
-        var audit = TakeoffEditability.Evaluate(new LevelTakeoff(level.Name, level.ProjectElevation, shapes));
-        var rejected = audit.Rooms.Where(room => !room.IsStrictlyEditable)
-            .ToDictionary(
-                room => room.RoomId,
-                room => (IReadOnlyList<EditabilityViolationKind>)room.Violations
-                    .Select(violation => violation.Kind).Distinct().OrderBy(kind => kind).ToList(),
-                StringComparer.Ordinal);
-        foreach (var item in malformed) rejected[item.Key] = item.Value;
-        if (rejected.Count > 0)
-        {
-            doc.Delete(spaces.Where(space => rejected.ContainsKey(space.Number))
-                .Select(space => space.Id).ToList());
-            doc.Regenerate();
-        }
-        log($"[native-gate] level='{level.Name}' phase='{phase.Name}' reviewed={spaces.Count} " +
-            $"retained={spaces.Count - rejected.Count} rejected={rejected.Count}" +
-            (rejected.Count == 0 ? "" : " " + string.Join(" ", rejected.Select(item =>
-                $"{item.Key}:{string.Join("+", item.Value)}"))));
-        return new NativeEditabilityGateResult(
-            spaces.Count, spaces.Count - rejected.Count, rejected.Count, rejected);
-    }
-
-    internal static List<double[]> BoundaryPoints(IEnumerable<BoundarySegment> segments)
-    {
-        var points = new List<double[]>();
-        foreach (var segment in segments)
-        {
-            var tessellation = segment.GetCurve().Tessellate();
-            for (int i = 0; i < tessellation.Count - 1; i++)
-                points.Add(new[] { tessellation[i].X, tessellation[i].Y });
-        }
-        return points;
     }
 
     private static string InkPath(TakeoffOptions opt, Level level) =>
@@ -461,30 +202,30 @@ public static class RoomTakeoff
     private static string StatePath(TakeoffOptions opt, Level level) =>
         Path.Combine(ArtifactDir(opt), $"state_{Sanitize(level.Name)}.txt");
 
-    private static void SaveState(TakeoffOptions opt, Level level, BoundingBoxXYZ crop, string va, string va2, string vb, string? vd)
+    private static void SaveState(TakeoffOptions opt, Level level, BoundingBoxXYZ crop, string va, string va2, string vb, string vbf, string vf, string vf0, string? vd)
     {
         var ic = CultureInfo.InvariantCulture;
         var lines = new List<string> {
             $"minx={crop.Min.X.ToString("F6", ic)}", $"miny={crop.Min.Y.ToString("F6", ic)}",
             $"maxx={crop.Max.X.ToString("F6", ic)}", $"maxy={crop.Max.Y.ToString("F6", ic)}",
             $"minz={crop.Min.Z.ToString("F6", ic)}", $"maxz={crop.Max.Z.ToString("F6", ic)}",
-            $"viewA={va}", $"viewA2={va2}", $"viewB={vb}",
+            $"viewA={va}", $"viewA2={va2}", $"viewB={vb}", $"viewBF={vbf}", $"viewF={vf}", $"viewF0={vf0}",
         };
         if (vd != null) lines.Add($"viewD={vd}");
         File.WriteAllLines(StatePath(opt, level), lines);
     }
 
-    private static (BoundingBoxXYZ crop, string va, string va2, string vb, string? vd) LoadState(TakeoffOptions opt, Level level)
+    private static (BoundingBoxXYZ crop, string va, string va2, string vb, string vbf, string vf, string vf0, string? vd) LoadState(TakeoffOptions opt, Level level)
     {
         var path = StatePath(opt, level);
         if (!File.Exists(path)) throw new InvalidOperationException($"no takeoff state at {path} — run Prepare first");
         var kv = File.ReadAllLines(path).Select(l => l.Split(new[] { '=' }, 2))
             .Where(p => p.Length == 2).ToDictionary(p => p[0], p => p[1]);
-        if (!kv.ContainsKey("viewA2"))
-            throw new InvalidOperationException("takeoff state predates the band-pair seed — run Prepare again");
+        if (!kv.ContainsKey("viewBF"))
+            throw new InvalidOperationException("takeoff state predates the framing-support seed — run Prepare again");
         double G(string k) => double.Parse(kv[k], CultureInfo.InvariantCulture);
         var crop = new BoundingBoxXYZ { Min = new XYZ(G("minx"), G("miny"), G("minz")), Max = new XYZ(G("maxx"), G("maxy"), G("maxz")) };
-        return (crop, kv["viewA"], kv["viewA2"], kv["viewB"], kv.GetValueOrDefault("viewD"));
+        return (crop, kv["viewA"], kv["viewA2"], kv["viewB"], kv["viewBF"], kv["viewF"], kv["viewF0"], kv.GetValueOrDefault("viewD"));
     }
 
     private static TakeoffResult LoadResult(TakeoffOptions opt, Level level)
@@ -559,44 +300,4 @@ public static class RoomTakeoff
             var xy = pt.Split(';');
             return new[] { double.Parse(xy[0], ic), double.Parse(xy[1], ic) };
         }).ToList();
-
-    internal static MaterializationResolutionResult LoadMaterializationResult(
-        string takeoffDirectory,
-        string levelName,
-        string? resolutionsPath = null
-    )
-    {
-        var resolved = TakeoffTsv.ParseTsvDirectory(takeoffDirectory, resolutionsPath);
-        var level = resolved.Levels.Single(item => item.LevelName == levelName);
-        var takeoff = new TakeoffResult {
-            LevelName = level.LevelName,
-            LevelElevation = level.Elevation,
-            Rooms = level.Rooms.Select(room => new RoomResult {
-                Id = room.Id,
-                RawSqft = room.RawSqft,
-                PerimeterFt = room.PerimeterFt,
-                MeanCeilingFt = room.MeanCeilingFt,
-                Polygon = room.Outer,
-                Holes = room.Holes,
-                Flags = room.Flags,
-                LabelX = room.Label[0],
-                LabelY = room.Label[1],
-                SplitFrom = room.SplitFrom,
-                MergedFrom = room.MergedFrom,
-            }).ToList(),
-            Residues = level.Residues.Select(residue => new ResidueResult {
-                Id = residue.Id,
-                Reason = residue.Reason,
-                RawSqft = residue.RawSqft,
-                MeanCeilingFt = residue.MeanCeilingFt,
-                LabelX = residue.Label[0],
-                LabelY = residue.Label[1],
-                Polygon = residue.Outer,
-                Holes = residue.Holes,
-            }).ToList(),
-        };
-        takeoff.TotalSqft = takeoff.Rooms.Sum(room => room.RawSqft);
-        return new MaterializationResolutionResult(
-            takeoff, resolved.Applied, resolved.Remapped, resolved.Orphaned);
-    }
 }

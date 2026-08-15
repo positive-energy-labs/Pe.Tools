@@ -22,9 +22,12 @@ internal sealed class PreparedLevelTakeoffDetection
         return result;
     }
 
-    internal TakeoffResult Detect(ZoneScope zone, Action<string> log)
+    internal TakeoffResult Detect(ZoneScope zone, Action<string> log) =>
+        this.Detect(zone, log, out _);
+
+    internal TakeoffResult Detect(ZoneScope zone, Action<string> log, out int whiteoutCells)
     {
-        var result = this.detection.Detect(zone, log);
+        var result = this.detection.Detect(zone, log, out whiteoutCells);
         result.ProfileProvenance = this.provenance;
         result.LevelFlags.AddRange(this.flags);
         return result;
@@ -175,14 +178,20 @@ public static class TakeoffPolicy
         {
             profile.Options.RequireCeiling = true;
             profile.Options.SealDoorHeads = true;
-            profile.Options.SealWallRunGaps = !attic;
+            // Flat coverage keeps wall-run sealing even when the sloped fraction trips the attic
+            // branch: a story with vaulted great-rooms is still a story of walled rooms, and
+            // disarming sealing there starves whole wings of closure (Main Level, measured:
+            // ML05/ML09 went from 0 accepted rooms to solving once sealing was restored). Only a
+            // level that is attic-like AND lacks flat coverage is a true attic, where run sealing
+            // manufactures walls out of roof-plane noise (Attic 01, measured: -9 rooms).
+            profile.Options.SealWallRunGaps = true;
         }
         if (!flat && !profile.NoHabitableDomain)
             profile.Flags.Add("low-ceiling-evidence");
         if (attic)
         {
             profile.Options.SealDoorHeads = true;
-            profile.Options.SealWallRunGaps = false;
+            profile.Options.SealWallRunGaps = flat;
             profile.Options.MinHeadroomFt = 3.5;
             profile.Options.CeilingCloseFt = 3;
             profile.Options.StoryCapFt = Math.Ceiling(maxCeilingAboveLevel);
@@ -234,6 +243,15 @@ public static class TakeoffPolicy
             profile.Provenance,
             profile.Flags.Select(flag => $"level:{snap.LevelName}:{flag}").ToList());
     }
+
+    /// <summary>
+    /// Per-cell seal attribution for the level exactly as this profile's knobs would seal it — the
+    /// same heightfield <see cref="PrepareDetection"/> detects against, so the raster is the real
+    /// closure decision and not a re-derivation under different options.
+    /// </summary>
+    public static byte[] SealClasses(DetectSnapshot snap, LevelProfile profile) =>
+        Detector.SealClasses(
+            DetectionField(snap, profile), snap.SeedInk, snap.LevelElevation, profile.Options);
 
     private static Heightfield DetectionField(DetectSnapshot snap, LevelProfile profile)
     {

@@ -1,13 +1,9 @@
-/**
- * Dense-grid editing primitives for /rhvac. Cells are uncontrolled and commit
- * on blur/Enter (Escape reverts) so keystrokes never re-render the 150-row
- * grid; the room object only changes when a value actually lands.
- */
+/** Dense-grid editing primitives shared by the Takeoffs plan and room table. */
 import { useRef } from "react";
 
 import { cn } from "#/lib/utils";
 
-/** Round for display without float noise: 22.200000762 → "22.2", 599.99994 → "600". */
+/** Round for display without float noise: 22.200000762 -> "22.2", 599.99994 -> "600". */
 export function fmtNum(value: number, digits = 2): string {
   return String(Number(value.toFixed(digits)));
 }
@@ -103,7 +99,7 @@ export function NumberCell({
       title={title}
       onText={(text) => {
         const parsed = integer ? Number.parseInt(text, 10) : Number(text);
-        if (Number.isNaN(parsed)) return; // revert-by-rerender: display key resets the input
+        if (Number.isNaN(parsed)) return;
         onCommit(min !== undefined && parsed < min ? min : parsed);
       }}
     />

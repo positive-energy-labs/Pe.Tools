@@ -32,36 +32,69 @@ public static class ProjectionSeed
         id != null && InkCategories.Any(category => id == ((long)category).ToElementId());
 
     // WriteTransaction step: create the stripped seed views, cropped to `crop` (model coords).
-    // Band A is cut TWICE (vertical-consistency pair, see CaptureBands). When the model carries a
-    // flat linked DWG plan at the level elevation, a fourth "seed D" view isolates it — finished
-    // walls, one story, beats any cut through framing. Idempotent: same-named views deleted first.
-    public static (string viewA, string viewA2, string viewB, string? viewD) PrepareSeedViews(
+    // Band A is cut TWICE (vertical-consistency pair, see CaptureBands). Framing is captured in its
+    // own knee/low pair (seed F / F0): the knee AND kills sloped members whose footprint shifts, but
+    // is blind to HORIZONTAL members riding through both knee cuts (joists, blocking, collar ties) —
+    // those are vetoed raster-side because they have no footprint near the floor, where every
+    // wall-former does. Element-hiding cannot do this: the framing lives in linked documents.
+    // When the model carries a flat linked DWG plan at the level elevation, a "seed D" view isolates
+    // it — finished walls, one story, beats any cut through framing. Idempotent: same-named views
+    // deleted first.
+    public static (string viewA, string viewA2, string viewB, string viewBF, string viewF, string viewF0, string? viewD) PrepareSeedViews(
         Document doc, Level level, BoundingBoxXYZ crop, TakeoffOptions opt, Action<string> log)
     {
         string nameA = $"{opt.Marker} seed A {level.Name}";
         string nameA2 = $"{opt.Marker} seed A2 {level.Name}";
         string nameB = $"{opt.Marker} seed B {level.Name}";
+        string nameBF = $"{opt.Marker} seed BF {level.Name}";
+        string nameF = $"{opt.Marker} seed F {level.Name}";
+        string nameF0 = $"{opt.Marker} seed F0 {level.Name}";
         string nameD = $"{opt.Marker} seed D {level.Name}";
         // doc.Delete(singleId) on a VIEW silently rolls back the host-owned transaction with
         // success-looking logs. Always delete views via the ICollection overload.
+        var names = new HashSet<string> { nameA, nameA2, nameB, nameBF, nameF, nameF0, nameD };
         var stale = new FilteredElementCollector(doc).OfClass(typeof(View)).Cast<View>()
-            .Where(v => v.Name == nameA || v.Name == nameA2 || v.Name == nameB || v.Name == nameD)
+            .Where(v => names.Contains(v.Name))
             .Select(v => v.Id).ToList();
         if (stale.Count > 0) doc.Delete(stale);
 
-        MakeBandView(doc, level, crop, opt.KneeBandFt, nameA, opt);
-        MakeBandView(doc, level, crop, opt.KneeBandFt - opt.BandPairSeparationFt, nameA2, opt);
-        MakeBandView(doc, level, crop, opt.HeaderBandFt, nameB, opt);
+        // OST_GenericModel is a fallback wall source, not a peer: on an IFC where walls arrive as
+        // DirectShapes it is the only ink there is, but wherever recognized wall categories are
+        // plentiful it contributes equipment proxies, piers, and duct bodies — pure noise (projectA,
+        // measured: 'Undefined' IFC generic models drew the LL06/LL08 blob clusters). So it is
+        // admitted only when the band would otherwise be starved of walls.
+        bool genericModelInk = CountRecognizedWallElements(doc, level, crop) < 50;
+        log($"[seed] genericModelInk={genericModelInk} (recognized wall elements "
+            + $"{(genericModelInk ? "<" : ">=")} 50 in band)");
+        // Framing (and GenericModel, when admitted as fallback wall ink — an IFC's studs and
+        // sheathing land there) is the only ink source that mixes wall-formers with horizontal
+        // structure, so it alone gets the low-support veto; every other category cuts clean.
+        var framingCats = genericModelInk
+            ? new[] { BuiltInCategory.OST_StructuralFraming, BuiltInCategory.OST_GenericModel }
+            : new[] { BuiltInCategory.OST_StructuralFraming };
+        var steadyCats = InkCategories.Except(new[] {
+            BuiltInCategory.OST_StructuralFraming, BuiltInCategory.OST_GenericModel }).ToArray();
+        var allInk = steadyCats.Concat(framingCats).ToArray();
         var dwg = FindLevelDwg(doc, level, crop);
+        if (dwg == null)
+        {
+            MakeBandView(doc, level, crop, opt.KneeBandFt, nameA, opt, steadyCats);
+            MakeBandView(doc, level, crop, opt.KneeBandFt - opt.BandPairSeparationFt, nameA2, opt, allInk);
+            MakeBandView(doc, level, crop, opt.KneeBandFt, nameF, opt, framingCats);
+        }
+        MakeBandView(doc, level, crop, opt.HeaderBandFt, nameB, opt, steadyCats);
+        MakeBandView(doc, level, crop, opt.HeaderBandFt, nameBF, opt, framingCats);
+        MakeBandView(doc, level, crop, opt.FramingLowBandFt, nameF0, opt, framingCats);
         string? viewD = null;
         if (dwg != null)
         {
             MakeDwgView(doc, level, crop, dwg, nameD);
             viewD = nameD;
         }
-        log($"[seed] views '{nameA}' (+{opt.KneeBandFt} ft), '{nameA2}' (+{opt.KneeBandFt - opt.BandPairSeparationFt} ft), '{nameB}' (+{opt.HeaderBandFt} ft)"
-            + (dwg != null ? $", '{nameD}' (DWG '{dwg.Category?.Name}')" : " (no level DWG found)"));
-        return (nameA, nameA2, nameB, viewD);
+        log(dwg != null
+            ? $"[seed] views '{nameD}' (DWG '{dwg.Category?.Name}'), '{nameB}', '{nameBF}', '{nameF0}'"
+            : $"[seed] views '{nameA}', '{nameA2}', '{nameB}', '{nameBF}', '{nameF}', '{nameF0}' (no level DWG found)");
+        return (nameA, nameA2, nameB, nameBF, nameF, nameF0, viewD);
     }
 
     // The per-level plan background: a linked model-space DWG that is FLAT and sits at the level
@@ -129,8 +162,48 @@ public static class ProjectionSeed
         if (others.Count > 0) v.HideElements(others);
     }
 
+    /// <summary>
+    /// Count of elements in recognized wall categories (walls, columns, framing, curtain) whose box
+    /// crosses the knee band inside the crop, across the host document and every loaded link. This
+    /// is what decides whether OST_GenericModel is needed as fallback wall ink.
+    /// </summary>
+    private static int CountRecognizedWallElements(Document doc, Level level, BoundingBoxXYZ crop)
+    {
+        double z0 = level.ProjectElevation + 1.0, z1 = level.ProjectElevation + 9.0;
+        var wallCategories = new HashSet<long> {
+            (long)BuiltInCategory.OST_Walls, (long)BuiltInCategory.OST_Columns,
+            (long)BuiltInCategory.OST_StructuralColumns, (long)BuiltInCategory.OST_StructuralFraming,
+            (long)BuiltInCategory.OST_CurtainWallPanels,
+        };
+        int count = 0;
+        void Tally(Document d, Transform tf)
+        {
+            foreach (Element el in new FilteredElementCollector(d).WhereElementIsNotElementType())
+            {
+                if (el.Category == null || !wallCategories.Contains(el.Category.Id.Value())) continue;
+                var bb = el.get_BoundingBox(null);
+                if (bb == null) continue;
+                var lo = tf.OfPoint(bb.Min);
+                var hi = tf.OfPoint(bb.Max);
+                if (Math.Max(lo.X, hi.X) < crop.Min.X || Math.Min(lo.X, hi.X) > crop.Max.X) continue;
+                if (Math.Max(lo.Y, hi.Y) < crop.Min.Y || Math.Min(lo.Y, hi.Y) > crop.Max.Y) continue;
+                if (Math.Max(lo.Z, hi.Z) < z0 || Math.Min(lo.Z, hi.Z) > z1) continue;
+                count++;
+            }
+        }
+        Tally(doc, Transform.Identity);
+        foreach (var link in new FilteredElementCollector(doc)
+                     .OfClass(typeof(RevitLinkInstance)).Cast<RevitLinkInstance>())
+        {
+            var linkDoc = link.GetLinkDocument();
+            if (linkDoc != null) Tally(linkDoc, link.GetTotalTransform());
+        }
+        return count;
+    }
+
     private static void MakeBandView(
-        Document doc, Level level, BoundingBoxXYZ crop, double cutFt, string name, TakeoffOptions opt)
+        Document doc, Level level, BoundingBoxXYZ crop, double cutFt, string name, TakeoffOptions opt,
+        BuiltInCategory[] categories)
     {
         var vft = new FilteredElementCollector(doc).OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>()
             .First(t => t.ViewFamily == ViewFamily.ThreeDimensional);
@@ -163,7 +236,7 @@ public static class ProjectionSeed
         v.CropBoxActive = true;
         v.CropBoxVisible = false;
 
-        var keep = new HashSet<ElementId>(InkCategories.Select(c => ((long)c).ToElementId()));
+        var keep = new HashSet<ElementId>(categories.Select(c => ((long)c).ToElementId()));
         keep.Add(((long)BuiltInCategory.OST_RvtLinks).ToElementId()); // hiding the link category blanks the IFC
         foreach (Category cat in doc.Settings.Categories)
         {
@@ -176,26 +249,40 @@ public static class ProjectionSeed
         var ogs = new OverrideGraphicSettings()
             .SetProjectionLineColor(black).SetProjectionLineWeight(5)
             .SetCutLineColor(black).SetCutLineWeight(7);
-        foreach (var bic in InkCategories)
+        foreach (var bic in categories)
         {
             try { v.SetCategoryOverrides(((long)bic).ToElementId(), ogs); } catch { }
         }
     }
 
     // ReadOnly step: export the band views and compose the ink grid:
-    //   knee = A1 AND A2  — walls extrude vertically so they draw the same footprint at both knee
-    //                       cuts; rafters/joists/gutters/flat labels shift or vanish.
+    //   knee = (A1 OR (F AND near(F0, FramingLowSupportNearFt))) AND A2
+    //     A1 is steady categories (walls, columns, curtain) — they cut clean at any height.
+    //     F is framing at the knee cut; it only counts near the low-cut framing footprint F0,
+    //     because a wall-former (stud) runs down to its plate while joists, blocking, and collar
+    //     ties riding at knee height have nothing below (project-a attic: 4,200 of 6,145 band framing
+    //     members were horizontal structure, drawn as phantom wall ink before this veto).
+    //     The A2 AND still kills SLOPED members: their footprint shifts between the knee cuts.
     //   ink  = knee OR (B AND near(knee | floorEdge, HeaderNearFt)) — header ink seals door openings
     //                       but only counts within reach of knee ink or the slab edge; a "wall" in
     //                       the header cut far from both is a mid-room roof plane, not a boundary.
     //                       Slab edge matters for eave walls whose only header evidence is the roof.
+    //   header = B OR (BF AND near(F0)) — same low-support veto as the knee, because the header cut
+    //                       runs straight through roof structure (the attic B export is a forest of
+    //                       rafter ladders, all within HeaderNearFt of the wing's walls). Door
+    //                       headers keep their ink: jack studs and under-sill cripples run to the
+    //                       floor, so real openings always have low-cut framing within reach.
     // Band B cannot distinguish a wall from a sealed opening; the knee band can (doors open at +4 ft).
     // Pixel->model mapping is exact: the export fills the crop box edge-to-edge; ftPerPx = cropW/pixelW.
     internal static (bool[] Plan, bool[] Header) CaptureBands(
-        Document doc, string viewA, string viewA2, string viewB, string? viewD, BoundingBoxXYZ crop,
+        Document doc, string viewA, string viewA2, string viewB, string viewBF, string viewF, string viewF0,
+        string? viewD, BoundingBoxXYZ crop,
         int gridW, int gridH, double cellFt, string workDir, TakeoffOptions opt, Action<string> log)
     {
         int n = gridW * gridH;
+        var f0 = ExportAndStamp(doc, viewF0, crop, gridW, gridH, cellFt, workDir, opt, log);
+        var support = Dilate(f0, gridW, gridH,
+            Math.Max(1, (int)Math.Round(opt.FramingLowSupportNearFt / cellFt)));
         bool[] knee;
         if (viewD != null)
         {
@@ -206,10 +293,25 @@ public static class ProjectionSeed
         {
             var a1 = ExportAndStamp(doc, viewA, crop, gridW, gridH, cellFt, workDir, opt, log);
             var a2 = ExportAndStamp(doc, viewA2, crop, gridW, gridH, cellFt, workDir, opt, log);
+            var f1 = ExportAndStamp(doc, viewF, crop, gridW, gridH, cellFt, workDir, opt, log);
             knee = new bool[n];
-            for (int i = 0; i < n; i++) knee[i] = a1[i] && a2[i];
+            int vetoed = 0;
+            for (int i = 0; i < n; i++)
+            {
+                if (f1[i] && !support[i] && !a1[i] && a2[i]) vetoed++;
+                knee[i] = (a1[i] || f1[i] && support[i]) && a2[i];
+            }
+            log($"[seed] framing low-support veto dropped {vetoed} knee cells");
         }
         var b = ExportAndStamp(doc, viewB, crop, gridW, gridH, cellFt, workDir, opt, log);
+        var bf = ExportAndStamp(doc, viewBF, crop, gridW, gridH, cellFt, workDir, opt, log);
+        int headerVetoed = 0;
+        for (int i = 0; i < n; i++)
+        {
+            if (bf[i] && !support[i] && !b[i]) headerVetoed++;
+            b[i] = b[i] || bf[i] && support[i];
+        }
+        log($"[seed] framing low-support veto dropped {headerVetoed} header cells");
         return (knee, b);
     }
 

@@ -1,6 +1,7 @@
 import { Context, Deferred, Effect, Layer, PubSub, Ref, Schema } from "effect";
 import type { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpServerResponse as Response } from "effect/unstable/http";
+import { capture } from "@pe/runtime";
 import { createHash, randomUUID } from "node:crypto";
 import {
   BRIDGE_CONTRACT_VERSION,
@@ -564,12 +565,37 @@ export const RevitBridgeLive = Layer.effect(
 
       const myGate = yield* Deferred.make<void>();
       const previousGate = yield* Ref.getAndSet(session.queueTail, myGate);
+      const queuedAt = Date.now();
+      capture("bridge_queue", {
+        op: operationKey,
+        session_id: session.sessionId,
+        queue_depth: depth,
+        phase: "queued",
+      });
+      yield* Effect.logInfo(
+        `Revit queue queued op=${operationKey} session=${session.sessionId} depth=${depth}`,
+      );
       return yield* Effect.gen(function* () {
         yield* Deferred.await(previousGate);
+        const startedAt = Date.now();
+        capture("bridge_queue", {
+          op: operationKey,
+          session_id: session.sessionId,
+          queue_depth: depth,
+          phase: "started",
+          wait_ms: Date.now() - queuedAt,
+        });
+        yield* Effect.logInfo(
+          `Revit queue started op=${operationKey} session=${session.sessionId} depth=${depth} wait_ms=${startedAt - queuedAt}`,
+        );
         // The session may have died — or been taken over by a reconnect — while we queued.
         const live = (yield* Ref.get(sessions)).get(session.sessionId);
         if (live !== session) return yield* Effect.fail(new NoRevitSession());
-        return yield* invokeSession(session, operationKey, payload);
+        const result = yield* invokeSession(session, operationKey, payload);
+        yield* Effect.logInfo(
+          `Revit queue completed op=${operationKey} session=${session.sessionId} duration_ms=${Date.now() - startedAt}`,
+        );
+        return result;
       }).pipe(
         Effect.ensuring(
           Effect.andThen(

@@ -205,6 +205,7 @@ try {
             lightingWatts = [double]$row['LightingWatts']
             equipmentSensibleBtuh = [double]$row['EquipmentSensible']
             equipmentLatentBtuh = [double]$row['EquipmentLatent']
+            ventilationCfm = [double]$row['VentilationCFM']
             loads = [ordered]@{
                 cfmSupplyCooling = [double]$row['CFMSupplyCooling']
                 cfmSupplyHeating = [double]$row['CFMSupplyHeating']
@@ -224,12 +225,15 @@ try {
         Where-Object { $_.TABLE_NAME -eq 'System' -and $_.COLUMN_NAME -like 'Calculated*' -and $_.TYPE_NAME -ne 'LONGBINARY' } |
         ForEach-Object COLUMN_NAME)
     $systemAdapter = [System.Data.Odbc.OdbcDataAdapter]::new(
-        "SELECT Number, $(($systemColumns | ForEach-Object { "[$_]" }) -join ', ') FROM [System] ORDER BY Number", $connection)
+        "SELECT Number, Description, $(($systemColumns | ForEach-Object { "[$_]" }) -join ', ') FROM [System] ORDER BY Number", $connection)
     $systemTable = [System.Data.DataTable]::new()
     [void]$systemAdapter.Fill($systemTable)
     $systemAdapter.Dispose()
     $systems = foreach ($row in $systemTable.Rows) {
-        $entry = [ordered]@{ number = [int]$row['Number'] }
+        $entry = [ordered]@{
+            number = [int]$row['Number']
+            name = $(if ($row['Description'] -is [DBNull]) { '' } else { [string]$row['Description'] })
+        }
         foreach ($column in $systemColumns) {
             $value = $row[$column]
             if ($value -is [DBNull]) { continue }
@@ -253,8 +257,25 @@ try {
         heatingLoadRecommendedBtuh = [double]$resultsRow['BuildingHeatingLoadRecommended']
     }
 
+    $projectCommand = $connection.CreateCommand()
+    $projectCommand.CommandText = 'SELECT ProjectTitle FROM [Project]'
+    $projectTitle = [string]$projectCommand.ExecuteScalar()
+    $projectCommand.Dispose()
+    $clientCommand = $connection.CreateCommand()
+    $clientCommand.CommandText = 'SELECT ClientName FROM [Client]'
+    $clientName = [string]$clientCommand.ExecuteScalar()
+    $clientCommand.Dispose()
+    $stampSource = $projectTitle + [char]0 + $clientName
+    $stampBytes = [Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($stampSource))
+
     $extract = [ordered]@{
         sourceFile = [IO.Path]::GetFileName($Path)
+        fileIdentity = [ordered]@{
+            fileName = [IO.Path]::GetFileName($Path)
+            projectTitle = $projectTitle
+            clientName = $clientName
+            stamp = ([BitConverter]::ToString($stampBytes) -replace '-').Substring(0, 16).ToLowerInvariant()
+        }
         building = $building
         systems = @($systems)
         rooms = @($rooms)

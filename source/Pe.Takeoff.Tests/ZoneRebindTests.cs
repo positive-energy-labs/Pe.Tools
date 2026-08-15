@@ -72,10 +72,16 @@ public sealed class ZoneRebindTests
     [Test]
     public void Provenance_codec_round_trips_and_fails_closed()
     {
-        var provenance = new RegionProvenance(1, Guid.NewGuid(), "run-7", "R03", 212.5);
+        var provenance = new RegionProvenance(1, Guid.NewGuid(), "run-7", "R03", 212.5)
+            { Flags = ["low-boundary-support"] };
         var loaded = RegionProvenance.FromJson(provenance.ToJson());
         Assert.Multiple(() => {
-            Assert.That(loaded, Is.EqualTo(provenance));
+            Assert.That(loaded.Version, Is.EqualTo(provenance.Version));
+            Assert.That(loaded.ZoneGuid, Is.EqualTo(provenance.ZoneGuid));
+            Assert.That(loaded.RunId, Is.EqualTo(provenance.RunId));
+            Assert.That(loaded.SourceRoomId, Is.EqualTo(provenance.SourceRoomId));
+            Assert.That(loaded.SourceSqft, Is.EqualTo(provenance.SourceSqft));
+            Assert.That(loaded.Flags, Is.EqualTo(provenance.Flags));
             Assert.Throws<InvalidOperationException>(() => RegionProvenance.FromJson("garbage"));
             Assert.Throws<InvalidOperationException>(() => RegionProvenance.FromJson(
                 "{\"Version\":9,\"ZoneGuid\":\"" + Guid.NewGuid() + "\"}"));

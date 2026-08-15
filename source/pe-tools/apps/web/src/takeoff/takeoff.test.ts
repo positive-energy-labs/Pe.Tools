@@ -1,7 +1,5 @@
-import { describe, expect, it } from "vite-plus/test";
+﻿import { describe, expect, it } from "vite-plus/test";
 
-import { toExportRoom } from "#/takeoff/export";
-import type { RhvacRoom } from "#/rhvac/types";
 import {
   buildZones,
   containsEvenOdd,
@@ -15,7 +13,8 @@ import {
   type LiveRegion,
   type PartitionRun,
 } from "#/takeoff/model";
-import { decisionScript, partitionScript, registryScript } from "#/takeoff/scripts";
+import { decisionScript, partitionScript, registryScript, snapshotScript } from "#/takeoff/scripts";
+import { buildLiveWorld, type SessionOverlay } from "#/takeoff/world";
 
 const square = (x: number, y: number, size: number): [number, number][] => [
   [x, y],
@@ -57,14 +56,14 @@ describe("even-odd containment", () => {
 });
 
 describe("zone stage", () => {
-  it("walks unregistered → registered → partitioned", () => {
+  it("walks unregistered â†’ registered â†’ partitioned", () => {
     expect(zoneStage([], 0)).toBe("unregistered");
     expect(zoneStage(["FC-8"], 0)).toBe("registered");
     expect(zoneStage(["FC-8"], 3)).toBe("partitioned");
   });
 });
 
-// ── The write-through review law ─────────────────────────────────────────────
+// â”€â”€ The write-through review law â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const region = (elementId: number, blob: string, outer = square(0, 0, 10)): LiveRegion => ({
   elementId,
@@ -92,7 +91,7 @@ describe("resolutions on the provenance blob", () => {
     expect(readResolutions("not json")).toEqual([]);
   });
 
-  it("keeps one decision per (subject, flag) — a later verb replaces the earlier", () => {
+  it("keeps one decision per (subject, flag) â€” a later verb replaces the earlier", () => {
     const first = upsertResolution([], {
       subject: "R01",
       flag: "seedless",
@@ -112,7 +111,7 @@ describe("resolutions on the provenance blob", () => {
   });
 });
 
-// ── The decision queue ───────────────────────────────────────────────────────
+// â”€â”€ The decision queue â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const run = (over: Partial<PartitionRun> = {}): PartitionRun => ({
   levelName: "Level 1/Main Level",
@@ -174,22 +173,69 @@ describe("decision queue", () => {
     expect(rows[0]).toMatchObject({ kind: "failure", elementId: null });
   });
 
-  it("leaves a clean room out of the queue entirely — it is not a data browser", () => {
-    expect(decisionRows(run({ rooms: [room("R01", [])], regions: [region(42, provenance())] })))
-      .toHaveLength(0);
+  it("leaves a clean room out of the queue entirely â€” it is not a data browser", () => {
+    expect(
+      decisionRows(run({ rooms: [room("R01", [])], regions: [region(42, provenance())] })),
+    ).toHaveLength(0);
   });
 
   it("does not bind a room to a region it is not inside", () => {
-    expect(
-      regionForRoom(room("R01", [], [500, 500]), [region(42, provenance())]),
-    ).toBeUndefined();
+    expect(regionForRoom(room("R01", [], [500, 500]), [region(42, provenance())])).toBeUndefined();
   });
 });
 
-// ── The scripts ──────────────────────────────────────────────────────────────
+// â”€â”€ Rerun proposals never silently drop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+describe("rerun proposals", () => {
+  const guid = "7a4e0000-0000-4000-8000-000000010006";
+  const zoneFr = {
+    elementId: 1,
+    typeName: "Zoning",
+    view: "V",
+    color: "0,0,0",
+    sqft: 100,
+    role: "zoning-region",
+    guid,
+    blob: JSON.stringify({ v: 1, view: "V", name: "Z1", systemTag: "FC-8" }),
+    loops: [square(0, 0, 10)],
+  };
+  const overlay: SessionOverlay = {
+    // a run that detected a room the rebind matched to no existing region (regions: [])
+    runs: { [guid]: run({ rooms: [room("R99", [], [50, 5])], regions: [] }) },
+    replays: {},
+    edits: {},
+  };
+
+  it("flags a rerun-discovered room with no materialized region so it blocks the sync", () => {
+    const world = buildLiveWorld({
+      status: { doc: "d", systems: [], regions: [] },
+      zoneFrs: [zoneFr],
+      views: [{ name: "V", level: "Main", regions: 1 }],
+      regionsByZone: {},
+      overlay,
+      r10Path: null,
+      r10: null,
+    });
+    const rooms = world.zones[0]!.rooms;
+    expect(rooms).toHaveLength(1);
+    // present (not dropped) AND carrying an open call (so blockedZones excludes the zone)
+    expect(rooms[0]!.elementId).toBeNull();
+    expect(rooms[0]!.flags).toContain("unhomed-proposal");
+  });
+});
+
+// â”€â”€ The scripts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+const embeddedArgument = (script: string, method: string): string => {
+  const match = script.match(
+    new RegExp(`TakeoffAtlas\\.${method}\\(doc, "((?:\\\\.|[^"])*)"(?:, Notify)?\\)`),
+  );
+  expect(match).not.toBeNull();
+  return JSON.parse(`"${match![1]}"`) as string;
+};
 
 describe("generated C#", () => {
-  it("never opens its own transaction — the host owns it", () => {
+  it("delegates product behavior to TakeoffAtlas and output shaping to TakeoffJson", () => {
     const scripts = [
       registryScript({ observed: ["FC-8"], register: ["FC-8"], renames: [] }),
       partitionScript({
@@ -203,109 +249,44 @@ describe("generated C#", () => {
       }),
       decisionScript({ elementId: 42, resolutionsJson: "[]" }),
     ];
-    for (const script of scripts) expect(script).not.toMatch(/new Transaction\(/);
+    for (const script of scripts) {
+      expect(script).toContain("Pe.Revit.Takeoff.TakeoffAtlas.");
+      expect(script).toContain("Pe.Revit.Takeoff.TakeoffJson.Serialize(");
+      expect(script).toContain("Result(");
+      expect(script).not.toContain("PE_JSON");
+      expect(script).not.toMatch(/new Transaction\(|FilteredElementCollector|ZoneMaterializer/);
+    }
   });
 
-  it("embeds zone loops as C# literals — Newtonsoft is unreachable in the scripting context", () => {
-    const script = partitionScript({
-      replayPath: "C:\\a\\replay.bin",
-      view: "V",
+  it("snapshotScript is the whole-model thin call", () => {
+    expect(snapshotScript()).toBe(
+      "Result(Pe.Revit.Takeoff.TakeoffJson.Serialize(Pe.Revit.Takeoff.TakeoffAtlas.Snapshot(doc)));",
+    );
+  });
+
+  it("preserves partition JSON, including loops and C#-sensitive characters", () => {
+    const args = {
+      replayPath: 'C:\\a\\"quoted"\\replay.bin',
+      view: 'V "north"',
       levelFragment: "Main",
-      zoneName: "Z",
+      zoneName: "Z\nline 2",
       zoneGuid: "7a4e0000-0000-4000-8000-000000010006",
       runId: "r",
       loops: [square(1, 2, 3)],
-    });
-    expect(script).toContain("new double[]{1.000000,2.000000}");
-    expect(script).toContain("Pe.Revit.Takeoff.ZoneMaterializer.Materialize");
-    expect(script).toContain("doc.Regenerate();");
-  });
-
-  it("refuses a non-GUID zone identity rather than splicing it into C#", () => {
-    expect(() =>
-      decisionScript({ elementId: 1, resolutionsJson: "[]" }),
-    ).not.toThrow();
-    expect(() =>
-      registryScript({ observed: [], register: [], renames: [{ guid: "'; DROP", toTag: "x" }] }),
-    ).toThrow(/not a GUID/);
-  });
-
-  it("escapes quotes in tags so a typed tag cannot break out of its literal", () => {
-    const script = registryScript({ observed: ['FC"8'], register: [], renames: [] });
-    expect(script).toContain('"FC\\"8"');
-  });
-});
-
-// ── Export mapping ───────────────────────────────────────────────────────────
-
-const rhvacRoom = (): RhvacRoom => ({
-  identifier: 1,
-  number: 1,
-  name: "Golf Sim",
-  systemNumber: 2,
-  zoneNumber: 1,
-  areaSquareFeet: 1485,
-  ceilingHeightFeet: 9,
-  people: 2,
-  lightingWatts: 371,
-  equipmentSensibleBtuh: 0,
-  equipmentLatentBtuh: 0,
-  loads: {
-    cfmSupplyCooling: 0,
-    cfmSupplyHeating: 0,
-    cfmSupplyActual: 0,
-    temperatureInDuct: 0,
-    registersCalculated: 0,
-  },
-  floors: [{ assembly: "F1", uValue: 0.05, areaSquareFeet: 1485, exposedPerimeterFeet: 40 }],
-  roofs: [],
-  walls: [
-    { index1: 1, assembly: "W1", uValue: 0.06, lengthFeet: 20, heightFeet: 9, direction: 0 },
-    { index1: 2, assembly: "W1", uValue: 0.06, lengthFeet: 30, heightFeet: 9, direction: 2 },
-  ],
-  glass: [
-    {
-      assembly: "G1",
-      uValue: 0.3,
-      widthFeet: 3,
-      heightFeet: 5,
-      wallReference: 2,
-      shgc: 0.25,
-      occurrences: 2,
-    },
-  ],
-  doors: [{ assembly: "D1", uValue: 0.4, widthFeet: 3, heightFeet: 7, wallReference: 1 }],
-});
-
-describe("export lane mapping", () => {
-  it("nests openings under their host wall by 1-based ordinal", () => {
-    const mapped = toExportRoom(rhvacRoom()) as {
-      Walls: { Windows: unknown[]; Doors: unknown[] }[];
     };
-    expect(mapped.Walls[0]!.Doors).toHaveLength(1);
-    expect(mapped.Walls[0]!.Windows).toHaveLength(0);
-    expect(mapped.Walls[1]!.Windows).toHaveLength(1);
+    const script = partitionScript(args);
+    expect(JSON.parse(embeddedArgument(script, "Partition"))).toEqual(args);
+    expect(script).not.toContain("\nline 2");
   });
 
-  it("lifts loads into InternalLoads and keeps the Identifier the lane matches on", () => {
-    const mapped = toExportRoom(rhvacRoom()) as {
-      Identifier: number;
-      InternalLoads: { People: number; LightingWatts: number };
+  it("transports registry JSON as data; typed C# deserialization owns GUID validation", () => {
+    const args = {
+      observed: ['FC"8', "line\n2"],
+      register: ["C:\\FC"],
+      renames: [{ guid: "'; DROP", toTag: 'FC"9' }],
     };
-    expect(mapped.Identifier).toBe(1);
-    expect(mapped.InternalLoads).toMatchObject({ People: 2, LightingWatts: 371 });
-  });
-
-  it("applies the staged edit and leaves everything else as the file has it", () => {
-    const mapped = toExportRoom(rhvacRoom(), {
-      identifier: 1,
-      name: "Golf Simulator",
-      areaSquareFeet: 1486,
-    }) as { Name: string; AreaSquareFeet: number; CeilingHeightFeet: number };
-    expect(mapped).toMatchObject({
-      Name: "Golf Simulator",
-      AreaSquareFeet: 1486,
-      CeilingHeightFeet: 9,
-    });
+    const script = registryScript(args);
+    expect(JSON.parse(embeddedArgument(script, "ApplyRegistry"))).toEqual(args);
+    expect(script).not.toContain("line\n2");
   });
 });

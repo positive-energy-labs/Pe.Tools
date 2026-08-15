@@ -1,36 +1,62 @@
-/** PROTOTYPE — variant "atlas": plan-dominant three-pane. */
+/** Atlas — the /takeoffs workspace: plan-dominant three-pane. */
 //
-// Round-2 boundary experiment, round-3 shape. The PLAN is the scope master, the TABLE always
-// answers "everything currently in scope". No zone selected = the whole house is in the table, so
-// the round-1 inbox's "see everything at once" survives; selecting a zone on the plan narrows it,
-// so the round-1 zones variant's "only show what's needed" survives too. The table is never hidden
-// and never collapses into a per-zone detail pane — that is the structural law here.
+// The PLAN is the scope master, the TABLE always answers "everything currently in scope". No zone
+// selected = the whole house is in the table; selecting a zone on the plan narrows it. The table
+// is never hidden and never collapses into a per-zone detail pane — that is the structural law.
 //
-// Round-3 correction: the ZONE'S pipeline stage was the wrong progress signal — a zone label says
-// nothing about whether any particular room needs a person. Progress is now DERIVED from room
-// facts and rendered with ONE vocabulary on all three surfaces: the rail's per-zone segment bar,
-// the plan's room fills, and the table's state column all read the same four room states. The
-// zone stage survives only as an explicitly-labelled, filterable text column.
+// Progress is DERIVED from room facts and rendered with ONE vocabulary on all three surfaces:
+// the rail's per-zone segment bar, the plan's room fills, and the table's state column all read
+// the same four room states. The zone stage survives only as a filterable text column.
 //
-// Read-only mock. Every edit, decision and selection lives in local state; nothing is written.
+// The atlas renders a `World` and calls back through `AtlasActions` — it owns selection and
+// optimistic decision state, nothing else. The route owns the world, the overlay, and every
+// host call.
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "#/components/ui/button";
-import { CellSelect, fmtNum, NumberCell, TextCell } from "#/rhvac/cells";
+import { CellSelect, fmtNum, NumberCell, TextCell } from "#/takeoff/cells";
 import { Live, Seam } from "#/takeoff/seam";
 import { ZoneThumb } from "#/takeoff/zone-plan";
+import { boundsOf, FLAG_MEANING, mergeBounds, pathD, type Bounds } from "#/takeoff/model";
 import {
-  boundsOf,
-  FLAG_MEANING,
-  LEVEL_LANES,
-  mergeBounds,
-  pathD,
-  type Bounds,
-} from "#/takeoff/model";
+  SENSIBLE_CAP_BTUH,
+  STAGE_ORDER,
+  type RoomEdit,
+  type RoomType,
+  type Stage,
+  type World,
+  type WorldLane,
+  type WorldRoom,
+  type WorldSystem,
+  type WorldZone,
+} from "#/takeoff/world";
 import { cn } from "#/lib/utils";
 
-import { SENSIBLE_CAP_BTUH, STAGE_ORDER, type MockStage, type RoomType } from "./mock";
-import { useMockWorldGeo, type GeoRoom, type GeoZone } from "./mock-geo";
+export type Verdict = "accept" | "dismiss";
+
+export interface AtlasActions {
+  /** Stage a Manual J / naming edit (session overlay; the .r10 takes it at sync). */
+  patch: (guid: string, patch: RoomEdit) => void;
+  /** Write-through: persist onto the Room Region blob (live) or accept locally (fixture). */
+  decide: (room: WorldRoom, flag: string, verb: Verdict) => void;
+  openAdopt: () => void;
+  openSync: () => void;
+  capture: (lane: WorldLane) => void;
+  partition: (zone: WorldZone) => void;
+  launch: () => void;
+  refresh: () => void;
+}
+
+export interface AtlasProps {
+  world: World;
+  /** Real room boundaries loaded (fixture fetch / live regions read finished). */
+  geoReady: boolean;
+  /** True when talking to a targeted Revit document; false on the explicit fixture adapter. */
+  live: boolean;
+  /** Label of the operation in flight, or null. One at a time — the host owns one transaction. */
+  busy: string | null;
+  actions: AtlasActions;
+}
 
 // ── Room state — the one progress vocabulary ────────────────────────────────
 //
@@ -65,7 +91,7 @@ const STATE_META: Record<RoomState, { tone: string; label: string; note: string 
 };
 
 /** The derivation. `open` is the count of undecided detector flags on this room. */
-function roomState(room: GeoRoom, open: number): RoomState {
+function roomState(room: WorldRoom, open: number): RoomState {
   if (open > 0) return "call";
   if (room.r10 && room.r10.lastSyncedSqft !== room.sqft) return "call"; // drift is a call
   if (room.r10) return "synced";
@@ -73,8 +99,8 @@ function roomState(room: GeoRoom, open: number): RoomState {
   return "unreviewed";
 }
 
-const STAGE_BLURB: Record<MockStage, string> = {
-  declared: "drawn, no system tag typed",
+const STAGE_BLURB: Record<Stage, string> = {
+  declared: "adopted, no system tag typed",
   registered: "tag resolved against the registry",
   partitioned: "rooms materialized, decisions open",
   reviewed: "decision queue empty",
@@ -93,7 +119,7 @@ function ZoneStateBar({
   states,
   className,
 }: {
-  zone: GeoZone;
+  zone: WorldZone;
   states: RoomState[];
   className?: string;
 }) {
@@ -155,18 +181,7 @@ function Swatch({ tone, label, dashed }: { tone: string; label: string; dashed?:
   );
 }
 
-// ── Local edit / decision state ─────────────────────────────────────────────
-
-interface RoomEdit {
-  name?: string;
-  type?: RoomType;
-  ceilingFt?: number;
-  people?: number;
-  lightingW?: number;
-  equipSensible?: number;
-  equipLatent?: number;
-  ventilationCfm?: number;
-}
+// ── Local decision state (optimistic; the write-through is the authority) ───
 
 const ROOM_TYPES: RoomType[] = [
   "great room",
@@ -183,7 +198,6 @@ const ROOM_TYPES: RoomType[] = [
   "mechanical",
 ];
 
-type Verdict = "accept" | "dismiss";
 const flagKey = (guid: string, flag: string) => `${guid}::${flag}`;
 
 const shortId = (guid: string) => guid.slice(guid.lastIndexOf("-") + 1);
@@ -196,19 +210,19 @@ const shortId = (guid: string) => guid.slice(guid.lastIndexOf("-") + 1);
  * than an ugly plan.
  */
 const PLAN_MIN_SQFT = 60;
-const onPlan = (z: GeoZone) => z.zone.declaredSqft >= PLAN_MIN_SQFT;
+const onPlan = (z: WorldZone) => z.zone.declaredSqft >= PLAN_MIN_SQFT;
 
 // ── Row model ───────────────────────────────────────────────────────────────
 
 interface Row {
-  zone: GeoZone;
-  room: GeoRoom;
+  zone: WorldZone;
+  room: WorldRoom;
   state: RoomState;
   open: string[];
 }
 
 // Column filters. `null` = no filter on that column.
-type FlagFilter = "any" | "none" | string;
+type FlagFilter = string;
 
 // ── Variant ─────────────────────────────────────────────────────────────────
 
@@ -216,19 +230,21 @@ const PLAN_MIN_PX = 140;
 const PLAN_MAX_PX = 720;
 const PLAN_DEFAULT_PX = 340;
 
-export function Variant() {
-  const { world, geoReady } = useMockWorldGeo();
-
-  const [stageFilter, setStageFilter] = useState<MockStage | null>(null);
-  const [level, setLevel] = useState<string>("Main");
+export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
+  const [stageFilter, setStageFilter] = useState<Stage | null>(null);
+  const [level, setLevel] = useState<string>("");
   const [zoneKey, setZoneKey] = useState<string | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
-  const [edits, setEdits] = useState<Record<string, RoomEdit>>({});
   const [decided, setDecided] = useState<Record<string, Verdict>>({});
 
+  // First lane to arrive names the initial level tab (lanes are live data, not a constant).
+  useEffect(() => {
+    if (!level && world.lanes.length > 0) setLevel(world.lanes[0]!.label);
+  }, [level, world.lanes]);
+
   // Column filters — compose with plan scope and the rail's pipeline filter.
-  const [colStage, setColStage] = useState<MockStage | null>(null);
+  const [colStage, setColStage] = useState<Stage | null>(null);
   const [colState, setColState] = useState<RoomState | null>(null);
   const [colType, setColType] = useState<RoomType | null>(null);
   const [colFlag, setColFlag] = useState<FlagFilter | null>(null);
@@ -241,40 +257,13 @@ export function Variant() {
 
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
 
-  // Local edits are a lens over the fixture, never a write.
-  const apply = (room: GeoRoom): GeoRoom => {
-    const e = edits[room.guid];
-    if (!e) return room;
-    return {
-      ...room,
-      name: e.name ?? room.name,
-      type: e.type ?? room.type,
-      ceilingFt: e.ceilingFt ?? room.ceilingFt,
-      data: room.data
-        ? {
-            people: e.people ?? room.data.people,
-            lightingW: e.lightingW ?? room.data.lightingW,
-            equipSensible: e.equipSensible ?? room.data.equipSensible,
-            equipLatent: e.equipLatent ?? room.data.equipLatent,
-            ventilationCfm: e.ventilationCfm ?? room.data.ventilationCfm,
-          }
-        : null,
-    };
-  };
-  const patch = (guid: string, p: RoomEdit) =>
-    setEdits((prev) => ({ ...prev, [guid]: { ...prev[guid], ...p } }));
+  // Edits live in the route's session overlay (they must survive into the sync payload); the
+  // world arrives with them already applied. The atlas only forwards patches.
+  const openFlags = (room: WorldRoom) => room.flags.filter((f) => !decided[flagKey(room.guid, f)]);
 
-  const openFlags = (room: GeoRoom) =>
-    room.flags.filter(
-      (f) =>
-        typeof f === "string" &&
-        !room.decisions.some((d) => d.flag === f) &&
-        !decided[flagKey(room.guid, f)],
-    );
-
-  const stateOf = (room: GeoRoom) => roomState(room, openFlags(room).length);
-  const zoneStates = (z: GeoZone) => z.rooms.map((r) => stateOf(apply(r)));
-  const zoneCalls = (z: GeoZone) => zoneStates(z).filter((s) => s === "call").length;
+  const stateOf = (room: WorldRoom) => roomState(room, openFlags(room).length);
+  const zoneStates = (z: WorldZone) => z.rooms.map((r) => stateOf(r));
+  const zoneCalls = (z: WorldZone) => zoneStates(z).filter((s) => s === "call").length;
 
   // ── Scope derivation ──────────────────────────────────────────────────────
   // Rail pipeline filter narrows the world; the plan selects within it; the table shows the result.
@@ -294,7 +283,7 @@ export function Variant() {
     for (const zone of scopeZones) {
       if (colStage && zone.stage !== colStage) continue;
       for (const room of zone.rooms) {
-        const shown = apply(room);
+        const shown = room;
         const open = openFlags(shown);
         const state = roomState(shown, open.length);
         if (colState && state !== colState) continue;
@@ -314,14 +303,13 @@ export function Variant() {
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeZones, filter, edits, decided, colStage, colState, colType, colFlag]);
+  }, [scopeZones, filter, decided, colStage, colState, colType, colFlag]);
 
   const cursorRow = rows.find((r) => r.room.guid === cursor) ?? null;
 
   const flagVocabulary = useMemo(() => {
     const set = new Set<string>();
-    for (const z of world.zones)
-      for (const r of z.rooms) for (const f of r.flags) if (typeof f === "string") set.add(f);
+    for (const z of world.zones) for (const r of z.rooms) for (const f of r.flags) set.add(f);
     return [...set].sort();
   }, [world]);
 
@@ -367,10 +355,14 @@ export function Variant() {
     if (cursor) rowRefs.current.get(cursor)?.scrollIntoView({ block: "nearest" });
   }, [cursor]);
 
-  const decide = (room: GeoRoom, flag: string, verb: Verdict) =>
+  // Optimistic: mark locally, then write through. The route re-reads on demand; a failed
+  // write surfaces through the route's error lane, never as a silently-kept decision.
+  const decide = (room: WorldRoom, flag: string, verb: Verdict) => {
     setDecided((prev) => ({ ...prev, [flagKey(room.guid, flag)]: verb }));
+    actions.decide(room, flag, verb);
+  };
 
-  const selectZone = (z: GeoZone | null) => {
+  const selectZone = (z: WorldZone | null) => {
     setZoneKey(z ? z.zone.key : null);
     setCursor(null);
     if (z) setLevel(z.zone.lane.label);
@@ -408,7 +400,7 @@ export function Variant() {
   const scopeSqft = rows.reduce((s, r) => s + r.room.sqft, 0);
 
   const proposedUrl =
-    `/takeoff?level=${level}` +
+    `/takeoffs?level=${level}` +
     (selected ? `&zone=${encodeURIComponent(selected.zone.key)}` : "") +
     (cursorRow ? `&room=${shortId(cursorRow.room.guid)}` : "");
 
@@ -418,17 +410,54 @@ export function Variant() {
     <main className="flex h-screen min-h-0 flex-col bg-background">
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-3 py-1.5">
-        <h1 className="font-pe-display text-lg font-semibold tracking-tight">Atlas</h1>
+        <h1 className="font-pe-display text-lg font-semibold tracking-tight">Takeoffs</h1>
         <span className="tele text-muted-foreground">
           the plan is the index; the table is the truth
         </span>
-        <Live>{world.docName}</Live>
-        <span className="tele text-muted-foreground">{world.r10Path}</span>
-        <div className="ml-auto flex items-center gap-2">
-          {!geoReady && <span className="tele text-cat-clay">loading real room geometry…</span>}
-          <Seam className="max-w-96">
-            proposed URL <span className="tele">{proposedUrl}</span>
-          </Seam>
+        {live ? (
+          <Live>{world.docName}</Live>
+        ) : (
+          <Seam>fixture world — project-a replay, no document attached</Seam>
+        )}
+        {world.r10Path && <span className="tele text-muted-foreground">{world.r10Path}</span>}
+        <div className="ml-auto flex items-center gap-1.5">
+          {busy ? (
+            <span className="tele text-cat-clay">{busy}…</span>
+          ) : (
+            !geoReady && <span className="tele text-cat-clay">loading room geometry…</span>
+          )}
+          <Button
+            size="xs"
+            variant="outline"
+            disabled={!live || busy !== null}
+            onClick={actions.openAdopt}
+          >
+            adopt zones
+          </Button>
+          <Button
+            size="xs"
+            variant="outline"
+            disabled={!live || busy !== null}
+            onClick={actions.openSync}
+          >
+            sync .r10
+          </Button>
+          <Button
+            size="xs"
+            variant="ghost"
+            disabled={!live || !world.r10Path}
+            onClick={actions.launch}
+          >
+            open in RHVAC
+          </Button>
+          <Button
+            size="xs"
+            variant="ghost"
+            disabled={!live || busy !== null}
+            onClick={actions.refresh}
+          >
+            refresh
+          </Button>
         </div>
       </header>
 
@@ -496,7 +525,7 @@ export function Variant() {
           {/* Zone list, grouped by level only so the list stays consistent — level is never the
               organizer, the room states are. */}
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {LEVEL_LANES.map((lane) => {
+            {world.lanes.map((lane) => {
               const zs = filteredZones.filter((z) => z.zone.lane.label === lane.label);
               if (zs.length === 0) return null;
               return (
@@ -555,7 +584,7 @@ export function Variant() {
         {/* ── MIDDLE: the plan (collapsible) + the master table (never hidden) ── */}
         <section className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border px-2 py-1">
-            {LEVEL_LANES.map((lane) => {
+            {world.lanes.map((lane) => {
               const zs = world.zones.filter((z) => z.zone.lane.label === lane.label);
               const calls = zs.reduce((n, z) => n + zoneCalls(z), 0);
               return (
@@ -563,7 +592,7 @@ export function Variant() {
                   key={lane.label}
                   type="button"
                   onClick={() => setLevel(lane.label)}
-                  title={lane.view}
+                  title={`${lane.view}${lane.replayPath ? " · captured this session" : " · not captured yet"}`}
                   className={cn(
                     "tele rounded-[var(--radius)] border px-2 py-0.5",
                     lane.label === level
@@ -594,7 +623,9 @@ export function Variant() {
             <button
               type="button"
               onClick={() => setPlanOpen((v) => !v)}
-              title={planOpen ? "collapse the plan — give the table the full height" : "show the plan"}
+              title={
+                planOpen ? "collapse the plan — give the table the full height" : "show the plan"
+              }
               className="tele rounded-[var(--radius)] border border-[var(--line-2)] px-1.5 py-0.5 text-muted-foreground hover:bg-muted"
             >
               {planOpen ? "▴ hide plan" : "▾ show plan"}
@@ -678,7 +709,10 @@ export function Variant() {
               </span>
 
               {selected && (
-                <FilterChip label={`plan scope: ${selected.zone.key}`} onClear={() => selectZone(null)} />
+                <FilterChip
+                  label={`plan scope: ${selected.zone.key}`}
+                  onClear={() => selectZone(null)}
+                />
               )}
               {stageFilter && (
                 <FilterChip label={`rail: ${stageFilter}`} onClear={() => setStageFilter(null)} />
@@ -692,7 +726,9 @@ export function Variant() {
                   onClear={() => setColState(null)}
                 />
               )}
-              {colType && <FilterChip label={`type: ${colType}`} onClear={() => setColType(null)} />}
+              {colType && (
+                <FilterChip label={`type: ${colType}`} onClear={() => setColType(null)} />
+              )}
               {colFlag && (
                 <FilterChip
                   label={`flags: ${colFlag === "any" ? "any open" : colFlag === "none" ? "none open" : colFlag}`}
@@ -718,7 +754,10 @@ export function Variant() {
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr>
-                    <Th label="stage" title="the ZONE's pipeline label — not a claim about this room">
+                    <Th
+                      label="stage"
+                      title="the ZONE's pipeline label — not a claim about this room"
+                    >
                       <ColFilter
                         value={colStage}
                         onChange={setColStage}
@@ -786,7 +825,7 @@ export function Variant() {
                         setCursor(room.guid);
                         if (!selected) setLevel(zone.zone.lane.label);
                       }}
-                      onPatch={(p) => patch(room.guid, p)}
+                      onPatch={(p) => actions.patch(room.guid, p)}
                     />
                   ))}
                 </tbody>
@@ -810,6 +849,9 @@ export function Variant() {
             state={cursorRow?.state ?? null}
             decided={decided}
             geoReady={geoReady}
+            live={live}
+            busy={busy}
+            actions={actions}
             stateOf={stateOf}
             world={world}
             onDecide={decide}
@@ -833,13 +875,13 @@ function LevelPlan({
   onCursor,
   onClear,
 }: {
-  zones: GeoZone[];
-  stageFilter: MockStage | null;
+  zones: WorldZone[];
+  stageFilter: Stage | null;
   selectedKey: string | null;
   cursor: string | null;
-  stateOf: (room: GeoRoom) => RoomState;
-  onSelectZone: (z: GeoZone) => void;
-  onCursor: (z: GeoZone, guid: string) => void;
+  stateOf: (room: WorldRoom) => RoomState;
+  onSelectZone: (z: WorldZone) => void;
+  onCursor: (z: WorldZone, guid: string) => void;
   onClear: () => void;
 }) {
   // Stray sub-60 sf zones are excluded from the frame fit AND the render — one of them sitting
@@ -1038,8 +1080,8 @@ function LevelStats({
   onClose,
 }: {
   level: string;
-  zones: GeoZone[];
-  stateOf: (room: GeoRoom) => RoomState;
+  zones: WorldZone[];
+  stateOf: (room: WorldRoom) => RoomState;
   onClose: () => void;
 }) {
   const rooms = zones.flatMap((z) => z.rooms);
@@ -1067,7 +1109,8 @@ function LevelStats({
   for (const z of zones) {
     const run = z.runs[z.runs.length - 1];
     if (!run) continue;
-    residual += run.declaredSqft - (run.roomSqft + run.claimedWallSqft + z.heldSqft + run.excludedSqft);
+    residual +=
+      run.declaredSqft - (run.roomSqft + run.claimedWallSqft + z.heldSqft + run.excludedSqft);
   }
 
   const pct = (n: number) => (zones.length === 0 ? 0 : Math.round((n / zones.length) * 100));
@@ -1112,7 +1155,10 @@ function LevelStats({
       </p>
 
       <div className="mt-1.5 space-y-px">
-        <StatLine label="partitioned" value={`${pct(partitioned)}% · ${partitioned}/${zones.length} zones`} />
+        <StatLine
+          label="partitioned"
+          value={`${pct(partitioned)}% · ${partitioned}/${zones.length} zones`}
+        />
         <StatLine label="reviewed" value={`${pct(reviewed)}% · no open calls`} />
         <StatLine label="synced" value={`${pct(synced)}% · every room in the .r10`} />
         <StatLine
@@ -1232,8 +1278,8 @@ function TableRow({
   onFocus,
   onPatch,
 }: {
-  zone: GeoZone;
-  room: GeoRoom;
+  zone: WorldZone;
+  room: WorldRoom;
   state: RoomState;
   open: string[];
   cursor: boolean;
@@ -1242,8 +1288,15 @@ function TableRow({
   onPatch: (p: RoomEdit) => void;
 }) {
   const drifted = room.r10 !== null && room.r10.lastSyncedSqft !== room.sqft;
-  const d = room.data;
-  const na = <span className="tele block px-1.5 text-right text-muted-foreground/50">—</span>;
+  // Always editable: entering any Manual J number creates the room's data (state → "data entered").
+  const d = room.data ?? {
+    people: 0,
+    lightingW: 0,
+    equipSensible: 0,
+    equipLatent: 0,
+    ventilationCfm: 0,
+  };
+  const dim = room.data === null ? "opacity-50" : undefined;
 
   return (
     <tr
@@ -1303,60 +1356,40 @@ function TableRow({
           onCommit={(v) => onPatch({ ceilingFt: v })}
         />
       </td>
-      <td className={cn(cellNum, "w-12")}>
-        {d ? (
-          <NumberCell value={d.people} integer min={0} onCommit={(v) => onPatch({ people: v })} />
-        ) : (
-          na
-        )}
+      <td className={cn(cellNum, "w-12", dim)}>
+        <NumberCell value={d.people} integer min={0} onCommit={(v) => onPatch({ people: v })} />
       </td>
-      <td className={cn(cellNum, "w-16")}>
-        {d ? (
-          <NumberCell
-            value={d.lightingW}
-            digits={0}
-            min={0}
-            onCommit={(v) => onPatch({ lightingW: v })}
-          />
-        ) : (
-          na
-        )}
+      <td className={cn(cellNum, "w-16", dim)}>
+        <NumberCell
+          value={d.lightingW}
+          digits={0}
+          min={0}
+          onCommit={(v) => onPatch({ lightingW: v })}
+        />
       </td>
-      <td className={cn(cellNum, "w-16")}>
-        {d ? (
-          <NumberCell
-            value={d.equipSensible}
-            digits={0}
-            min={0}
-            onCommit={(v) => onPatch({ equipSensible: v })}
-          />
-        ) : (
-          na
-        )}
+      <td className={cn(cellNum, "w-16", dim)}>
+        <NumberCell
+          value={d.equipSensible}
+          digits={0}
+          min={0}
+          onCommit={(v) => onPatch({ equipSensible: v })}
+        />
       </td>
-      <td className={cn(cellNum, "w-16")}>
-        {d ? (
-          <NumberCell
-            value={d.equipLatent}
-            digits={0}
-            min={0}
-            onCommit={(v) => onPatch({ equipLatent: v })}
-          />
-        ) : (
-          na
-        )}
+      <td className={cn(cellNum, "w-16", dim)}>
+        <NumberCell
+          value={d.equipLatent}
+          digits={0}
+          min={0}
+          onCommit={(v) => onPatch({ equipLatent: v })}
+        />
       </td>
-      <td className={cn(cellNum, "w-16")}>
-        {d ? (
-          <NumberCell
-            value={d.ventilationCfm}
-            digits={0}
-            min={0}
-            onCommit={(v) => onPatch({ ventilationCfm: v })}
-          />
-        ) : (
-          na
-        )}
+      <td className={cn(cellNum, "w-16", dim)}>
+        <NumberCell
+          value={d.ventilationCfm}
+          digits={0}
+          min={0}
+          onCommit={(v) => onPatch({ ventilationCfm: v })}
+        />
       </td>
       <td className="whitespace-nowrap border-b border-l border-[var(--line-soft)] px-1.5">
         {open.length > 0 ? (
@@ -1398,18 +1431,20 @@ function Line({ label, value, muted }: { label: string; value: string; muted?: b
   );
 }
 
-function nextAction(zone: GeoZone, calls: number): string {
+function nextAction(zone: WorldZone, calls: number): string {
   if (calls > 0) return `clear ${calls} open call${calls === 1 ? "" : "s"} on this zone`;
   switch (zone.stage) {
     case "declared":
-      return "type a system tag on the Zoning Region";
+      return "assign a system tag (adopt zones, re-adopt to edit)";
     case "registered":
-      return "run the partition to materialize rooms";
+      return zone.zone.lane.replayPath
+        ? "run the partition to materialize rooms"
+        : "capture this level, then run the partition";
     case "partitioned":
     case "reviewed":
       return "enter Manual J data against settled geometry";
     case "data":
-      return "export this zone into the .r10";
+      return "sync this zone into the .r10";
     case "synced":
       return "nothing pending — this zone is closed";
     case "drifted":
@@ -1424,20 +1459,26 @@ function Peek({
   state,
   decided,
   geoReady,
+  live,
+  busy,
+  actions,
   stateOf,
   world,
   onDecide,
   url,
 }: {
-  zone: GeoZone | null;
-  room: GeoRoom | null;
+  zone: WorldZone | null;
+  room: WorldRoom | null;
   open: string[];
   state: RoomState | null;
   decided: Record<string, Verdict>;
   geoReady: boolean;
-  stateOf: (room: GeoRoom) => RoomState;
-  world: { systems: { tag: string; zoneKeys: string[]; sensibleBtuh: number; overCap: boolean }[] };
-  onDecide: (room: GeoRoom, flag: string, verb: Verdict) => void;
+  live: boolean;
+  busy: string | null;
+  actions: AtlasActions;
+  stateOf: (room: WorldRoom) => RoomState;
+  world: { systems: WorldSystem[] };
+  onDecide: (room: WorldRoom, flag: string, verb: Verdict) => void;
   url: string;
 }) {
   if (!zone)
@@ -1519,15 +1560,48 @@ function Peek({
               </li>
             ))}
           </ul>
-          <Seam className="mt-1.5">
-            verbs write through to the Room Region provenance blob; here they are local only
-          </Seam>
+          {!live ? (
+            <Seam className="mt-1.5">fixture: verbs stay local, nothing is written</Seam>
+          ) : room.elementId === null ? (
+            <Seam className="mt-1.5">
+              no Room Region home yet — partition must materialize this room before a decision can
+              be written
+            </Seam>
+          ) : (
+            <Live className="mt-1.5">verbs write through to the Room Region provenance blob</Live>
+          )}
         </div>
       )}
 
       <div className="space-y-1 px-2.5 py-2">
         <p className="section-label">next action for this zone</p>
         <p className="text-xs leading-relaxed">{nextAction(zone, calls)}</p>
+        {live && (
+          <span className="flex flex-wrap gap-1 pt-0.5">
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={busy !== null}
+              title={`capture ${zone.zone.lane.label}: prepare seed views, export ink, detect — writes replay_<level>.bin`}
+              onClick={() => actions.capture(zone.zone.lane)}
+            >
+              {zone.zone.lane.replayPath ? "re-capture level" : "capture level"}
+            </Button>
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={busy !== null || !zone.zone.lane.replayPath}
+              title={
+                zone.zone.lane.replayPath
+                  ? "replay the capture masked to this zone; materialize Room Regions (rerun never overwrites)"
+                  : "capture the level first — the partition replays its snapshot"
+              }
+              onClick={() => actions.partition(zone)}
+            >
+              partition zone
+            </Button>
+          </span>
+        )}
       </div>
 
       <div className="px-2.5 py-2">
@@ -1543,7 +1617,10 @@ function Peek({
                   : `${fmtNum(room.provenance.sourceSqft, 0)} sf detected, now ${room.sqft} sf`
               }
             />
-            <Line label="boundary" value={room.outer ? `${room.outer.length} pts detected` : "no polygon — dot only"} />
+            <Line
+              label="boundary"
+              value={room.outer ? `${room.outer.length} pts detected` : "no polygon — dot only"}
+            />
             <Line label="guid" value={room.guid} />
             <Line
               label=".r10"
@@ -1573,9 +1650,16 @@ function Peek({
         ) : (
           <>
             <Line label="zone guid" value={zone.zone.guid} />
-            <Line label="tags" value={zone.tags.length > 0 ? zone.tags.join(", ") : "none typed yet"} />
+            <Line
+              label="tags"
+              value={zone.tags.length > 0 ? zone.tags.join(", ") : "none typed yet"}
+            />
             <Line label="declared" value={`${fmtNum(zone.zone.declaredSqft, 0)} sf`} />
-            <Line label="run" value={run ? run.runId : "no partition run against this zone"} muted={!run} />
+            <Line
+              label="run"
+              value={run ? run.runId : "no partition run against this zone"}
+              muted={!run}
+            />
           </>
         )}
       </div>
@@ -1647,10 +1731,10 @@ function ZonePeek({
   geoReady,
   stateOf,
 }: {
-  zone: GeoZone;
-  cursorRoom: GeoRoom | null;
+  zone: WorldZone;
+  cursorRoom: WorldRoom | null;
   geoReady: boolean;
-  stateOf: (room: GeoRoom) => RoomState;
+  stateOf: (room: WorldRoom) => RoomState;
 }) {
   const withGeometry = zone.rooms.filter((r) => r.outer !== null);
   const bounds = useMemo<Bounds>(() => {

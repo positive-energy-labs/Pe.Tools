@@ -14,7 +14,16 @@ public sealed record RegionProvenance(
     string SourceRoomId,
     double SourceSqft)
 {
-    public string ToJson() => JsonConvert.SerializeObject(this);
+    [JsonProperty("resolutions")]
+    public List<RegionResolution> Resolutions { get; init; } = [];
+
+    [JsonProperty("r10")]
+    public RegionRhvacLink? Rhvac { get; init; }
+
+    [JsonProperty("flags")]
+    public List<string> Flags { get; init; } = [];
+
+    public string ToJson() => TakeoffJson.Serialize(this);
 
     // Fail-closed: an unreadable or wrong-version blob throws; callers surface and stop.
     public static RegionProvenance FromJson(string json)
@@ -34,6 +43,19 @@ public sealed record RegionProvenance(
             : throw new InvalidOperationException($"provenance blob is v{provenance.Version}; this build reads v1");
     }
 }
+
+public sealed record RegionResolution(
+    string Subject,
+    string Flag,
+    string Verb,
+    string At,
+    string RunId);
+
+public sealed record RegionRhvacLink(
+    int Identifier,
+    string FileIdentity,
+    string SyncedAt,
+    double LastSyncedSqft);
 
 public sealed record ExistingRegion(long ElementId, Guid Guid, List<double[]> Polygon, double Sqft);
 
@@ -108,9 +130,8 @@ public static class ZoneMaterializer
     public sealed record MaterializeResult(
         int Created, int Held, int Rebound, int Orphaned, List<string> Failures);
 
-    // First run: creates everything. Rerun: re-binds by geometry, creates only unmatched rooms,
-    // touches no existing region, reports orphans. Caller owns the transaction and the zone's
-    // registered identity.
+    // First run creates proposals. A rerun is read/propose-only: it rebinds the new result to the
+    // accepted baseline and reports unmatched/orphaned facts without creating or overwriting FRs.
     public static MaterializeResult Materialize(
         Document doc, View view, double elevation, Guid zoneGuid, string runId,
         IReadOnlyList<RoomResult> accepted, IReadOnlyList<ResidueResult> held,
@@ -120,11 +141,14 @@ public static class ZoneMaterializer
         var frType = new FilteredElementCollector(doc).OfClass(typeof(FilledRegionType))
             .Cast<FilledRegionType>().First();
         var existing = ReadExisting(doc, view, zoneGuid, TakeoffCarriers.RoleRoomRegion);
+        var existingHeld = ReadExisting(doc, view, zoneGuid, TakeoffCarriers.RoleHeldResidue);
+        bool firstRun = existing.Count == 0 && existingHeld.Count == 0;
         var rebind = Rebind(accepted, existing);
         var failures = new List<string>();
+        var createdRegions = new List<FilledRegion>();
         int created = 0, heldDrawn = 0;
 
-        foreach (var room in rebind.Unmatched)
+        foreach (var room in firstRun ? rebind.Unmatched : [])
         {
             try
             {
@@ -133,7 +157,10 @@ public static class ZoneMaterializer
                 var region = FilledRegion.Create(doc, frType.Id, view.Id, loops);
                 TakeoffCarriers.WriteIdentity(region, TakeoffCarriers.RoleRoomRegion, Guid.NewGuid());
                 TakeoffCarriers.WriteProvenance(region,
-                    new RegionProvenance(1, zoneGuid, runId, room.Id, room.RawSqft).ToJson());
+                    (new RegionProvenance(1, zoneGuid, runId, room.Id, room.RawSqft)
+                        { Flags = room.Flags.ToList() }).ToJson());
+                TakeoffCarriers.WriteRoomType(region, "hall");
+                createdRegions.Add(region);
                 created++;
             }
             catch (Exception ex)
@@ -143,8 +170,7 @@ public static class ZoneMaterializer
             }
         }
 
-        var existingHeld = ReadExisting(doc, view, zoneGuid, TakeoffCarriers.RoleHeldResidue);
-        if (existingHeld.Count == 0)
+        if (firstRun)
             foreach (var residue in held)
             {
                 try
@@ -160,6 +186,16 @@ public static class ZoneMaterializer
                 {
                     failures.Add($"{residue.Id}: {ex.Message}");
                 }
+            }
+
+        if (failures.Count > 0)
+            foreach (var region in createdRegions)
+            {
+                string blob = TakeoffCarriers.ReadProvenance(region)!;
+                var provenance = RegionProvenance.FromJson(blob);
+                if (!provenance.Flags.Contains("materialization-failure"))
+                    provenance.Flags.Add("materialization-failure");
+                TakeoffCarriers.WriteProvenance(region, provenance.ToJson());
             }
 
         log($"[materialize] zone={zoneGuid:D} created={created} held={heldDrawn} " +

@@ -13,17 +13,10 @@ internal readonly record struct BoundaryCurve(double X1, double Y1, double X2, d
 // FilledRegions un-editable by hand.
 internal static class SpaceBoundaryNetwork
 {
-    private const double Scale = 1_000_000;
+    private const double Scale = TakeoffGeometry.CoverageScale;   // integer key grid == this file's precision model
     private const double Degrees = Math.PI / 180;
-    private const double SnapToleranceDeg = 25;   // long edge joins a frame axis within this
-    private const double SnapShortDeg = 10;       // short edges must be nearly on-axis already
-    private const double SnapShortFt = 6;         // the long/short boundary
-    private const double SnapMinFt = 1.0;         // below this an edge is raster noise in a dense
-                                                  // zone the simplifier chose to protect: hands off
-    private const double FrameClusterDeg = 6;     // mod-90 angle clustering width
-    private const double FrameMinShare = 0.10;    // a frame owns at least this edge-weight share
-    private const double RunGapFt = 0.4;          // collinear run: max offset gap to the previous
-    private const double RunSpanFt = 0.75;        // collinear run: max total offset spread
+    // Snap/frame/run tunables live on TakeoffOptions (Boundary* fields); defaults there are the
+    // fan-out-tuned values (snap 35/12), the rest the consts this file always carried.
     private readonly record struct VertexKey(long X, long Y);
     private readonly record struct SegmentKey(VertexKey A, VertexKey B);
     private sealed class WallEdge
@@ -49,8 +42,7 @@ internal static class SpaceBoundaryNetwork
         internal double Weight;
         internal double SumSin, SumCos;           // circular mean accumulators, period PI/2
     }
-    private static readonly GeometryFactory Factory =
-        new(new PrecisionModel(Scale));
+    private static readonly GeometryFactory Factory = TakeoffGeometry.Coverage;
 
     internal static IReadOnlyList<BoundaryCurve> Build(IEnumerable<RoomResult> rooms)
     {
@@ -82,9 +74,11 @@ internal static class SpaceBoundaryNetwork
     }
 
     internal static void Regularize(
-        IReadOnlyList<RoomResult> rooms, double simplifyFt, Action<string>? log = null)
+        IReadOnlyList<RoomResult> rooms, TakeoffOptions options, Action<string>? log = null)
     {
-        if (!IsFinite(simplifyFt) || simplifyFt < 0)
+        if (options == null) throw new ArgumentNullException(nameof(options));
+        double simplifyFt = options.BoundarySimplifyFt;
+        if (!TakeoffGeometry.IsFinite(simplifyFt) || simplifyFt < 0)
             throw new ArgumentOutOfRangeException(nameof(simplifyFt));
         if (rooms.Count == 0) return;
 
@@ -100,7 +94,7 @@ internal static class SpaceBoundaryNetwork
         for (int attempt = 0; attempt < 5; attempt++, tolerance /= 2)
         {
             var simplified = CoverageSimplifier.Simplify(source, tolerance);
-            var snapped = SnapToFrames(simplified, rooms, tolerance, log);
+            var snapped = SnapToFrames(simplified, rooms, tolerance, options, log);
             string? debugDir = Environment.GetEnvironmentVariable("PE_TAKEOFF_COVERAGE_DUMP");
             if (debugDir != null)
             {
@@ -176,12 +170,12 @@ internal static class SpaceBoundaryNetwork
             {
                 var room = rooms[i];
                 var polygon = polygons[i];
-                room.Polygon = Points(polygon.ExteriorRing);
-                if (SignedArea(room.Polygon) < 0) room.Polygon.Reverse();
+                room.Polygon = TakeoffGeometry.Points(polygon.ExteriorRing);
+                if (TakeoffGeometry.SignedArea(room.Polygon) < 0) room.Polygon.Reverse();
                 room.Holes = Enumerable.Range(0, polygon.NumInteriorRings)
-                    .Select(index => Points(polygon.GetInteriorRingN(index))).ToList();
+                    .Select(index => TakeoffGeometry.Points(polygon.GetInteriorRingN(index))).ToList();
                 foreach (var hole in room.Holes)
-                    if (SignedArea(hole) > 0) hole.Reverse();
+                    if (TakeoffGeometry.SignedArea(hole) > 0) hole.Reverse();
                 room.PerimeterFt = polygon.Length;
                 if (room.RawSqft > 0)
                     maxDriftPct = Math.Max(maxDriftPct,
@@ -202,8 +196,16 @@ internal static class SpaceBoundaryNetwork
     // same-sign turns) and true diagonals beyond the snap tolerance keep their DP chords.
     private static Geometry[] SnapToFrames(
         Geometry[] coverage, IReadOnlyList<RoomResult> rooms, double tolerance,
-        Action<string>? log)
+        TakeoffOptions options, Action<string>? log)
     {
+        double SnapToleranceDeg = options.BoundarySnapToleranceDeg;
+        double SnapShortDeg = options.BoundarySnapShortDeg;
+        double SnapShortFt = options.BoundarySnapShortFt;
+        double SnapMinFt = options.BoundarySnapMinFt;
+        double FrameClusterDeg = options.BoundaryFrameClusterDeg;
+        double FrameMinShare = options.BoundaryFrameMinShare;
+        double RunGapFt = options.BoundaryRunGapFt;
+        double RunSpanFt = options.BoundaryRunSpanFt;
         var edges = UniqueEdges(coverage);
         var curves = CurveChainEdges(coverage);
         foreach (var edge in edges.Values) edge.Curve = curves.Contains(edge.Key);
@@ -600,9 +602,7 @@ internal static class SpaceBoundaryNetwork
     }
 
     private static Geometry ToGeometry(RoomResult room) =>
-        Factory.CreatePolygon(
-            Ring(room.Polygon, room.Id),
-            room.Holes.Select(hole => Ring(hole, room.Id)).ToArray());
+        TakeoffGeometry.ToPolygon(room, Factory);
 
     private static bool TryReadRooms(
         IReadOnlyList<Geometry> geometries, IReadOnlyList<RoomResult> rooms,
@@ -620,40 +620,7 @@ internal static class SpaceBoundaryNetwork
         return true;
     }
 
-    private static LinearRing Ring(IReadOnlyList<double[]> points, string owner)
-    {
-        if (points.Count < 3) throw new InvalidOperationException($"{owner} has a degenerate loop");
-        var coordinates = new List<Coordinate>(points.Count + 1);
-        foreach (var point in points)
-        {
-            if (point.Length < 2 || !IsFinite(point[0]) || !IsFinite(point[1]))
-                throw new InvalidOperationException($"{owner} has a non-finite boundary point");
-            var coordinate = new Coordinate(point[0], point[1]);
-            if (coordinates.Count == 0 || !coordinates[^1].Equals2D(coordinate))
-                coordinates.Add(coordinate);
-        }
-        if (coordinates.Count > 1 && coordinates[0].Equals2D(coordinates[^1]))
-            coordinates.RemoveAt(coordinates.Count - 1);
-        if (coordinates.Count < 3) throw new InvalidOperationException($"{owner} has a degenerate loop");
-        coordinates.Add(coordinates[0].Copy());
-        return Factory.CreateLinearRing(coordinates.ToArray());
-    }
+    private static LinearRing Ring(IReadOnlyList<double[]> points, string owner) =>
+        TakeoffGeometry.Ring(points, Factory, owner);
 
-    private static List<double[]> Points(LineString ring) => ring.Coordinates
-        .Take(ring.NumPoints - 1)
-        .Select(point => new[] { point.X, point.Y })
-        .ToList();
-
-    private static double SignedArea(IReadOnlyList<double[]> points)
-    {
-        double area = 0;
-        for (int i = 0; i < points.Count; i++)
-        {
-            var a = points[i]; var b = points[(i + 1) % points.Count];
-            area += a[0] * b[1] - b[0] * a[1];
-        }
-        return area / 2;
-    }
-
-    private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 }
