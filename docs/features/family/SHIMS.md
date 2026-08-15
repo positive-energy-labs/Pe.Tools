@@ -21,12 +21,7 @@ An entry leaves this file only when the replacement ships or the gap is closed.
 4. **Profile schema validation is web-side fail-fast only.** Stale OneDrive profiles surface
    named diagnostics in the picker, no auto-migration. If most of the library turns out
    stale, that pain is the signal to build an upgrade lane — revisit then, not before.
-5. **`familyfoundry.*` is dialled dynamically from the web.** `apps/web/src/host/familyfoundry.ts`
-   hand-mirrors the `FamilyFoundryHostContracts.cs` DTOs and calls `plan` / `apply` / `project`
-   through `callHostDynamic`, because the checked-in typegen output does not carry them yet.
-   Every function names the generated client that replaces it; `/families` marks each backed
-   surface with a dashed `seam` chip. Replacement: a codegen run against a live host catalog.
-6. **Profile picker enumeration is unproven against a live host.** `settings.tree` DOES expose
+5. **Profile picker enumeration is unproven against a live host.** `settings.tree` DOES expose
    the profile library — `familyfoundry.plan` parses `DesiredFamilyMigrationProfile`, whose
    registration is `{ moduleKey: "CmdFFDesiredMigrator", rootKey: "profiles" }` — and the picker
    reads it plus one `settings.document.open` per entry (capped at 40) so each option carries its
