@@ -5,6 +5,18 @@ The two family routes are the web homes of the two proven FF products:
 `/family` = FFManager (one family, lane chosen by the bound document: live .rfa vs authored family.json).
 An entry leaves this file only when the replacement ships or the gap is closed.
 
+**Lane law (locked).** `/family` is ONE route with two lanes, and BINDING IS THE CHOICE — the
+lane is displayed as a chip beside the sentence, never offered as a toggle. The document slot
+lists the authored `family.json` documents and, whenever the bound session's ACTIVE document is
+a family document, one live entry ("the open family editor"). The AUTHORED lane is everything
+that existed before: anatomy triptych, matrix, doc pane, validate, build, evidence. The LIVE
+lane derives its model from `family.editor.snapshot` and renders the SAME matrix, formula
+column, review/staging machinery, doc pane, and inspector — with no anatomy (a live family has
+no authored constituents to draw), no build/evidence lane, and no `validate` (there is no
+document to validate). CAPTURE IS THE BRIDGE: in the live lane the capture verb promotes
+(`capture_evidence`'s `modelJson` → `settings create`, whose own open binds the result), landing
+the user in the authored lane of the same family. That is the only crossing.
+
 ## Shims (temporary, each names its replacement)
 
 1. **master-table duplicated from takeoff-fresh.** The takeoff atlas table (column filter chips,
@@ -28,6 +40,23 @@ An entry leaves this file only when the replacement ships or the gap is closed.
    real validation issues as a `disabledReason`. None of that has been exercised against a live
    session yet; if the module turns out unreachable from the web the slot renders empty and this
    entry becomes a real gap. Replacement: the step-3 live proof below.
+6. **LIVE-lane staged edits are TAB-LOCAL.** The authored lane stages into `route:settings`
+   fields, which pea shares and every tab sees. The live lane has no document for
+   `route:settings` to own, so `useFamilyEditorLane` keeps the SAME `FieldState` shape and the
+   SAME JSON-Pointer keys in local React state (`patchFields`, exported from `family/store.tsx`,
+   is the one implementation). Consequence, stated plainly: **pea cannot propose into the live
+   lane** — the review trichotomy renders there, but only the human ever fills it. Replacement:
+   either a `fields` map on `route:family` (a contract change, so it needs a live-proven reason,
+   not a guess), or the promotion path — capture to an authored document and let pea propose
+   there, which is what the capture bridge is for.
+7. **`route:family-types` contracts and its pea handlers are RETAINED, deliberately.** The
+   `/family-types` route is deleted, but the slice is not orphaned web state: `packages/mcps`
+   registers its `parse_spec`/`refresh_snapshot`/`push` handlers in `pea/routes.ts`, the chat
+   surface still renders `FamilyTypesChatPlugin` against it, and
+   `packages/agent-contracts/src/family-types.ts` is the home of `specDocSchema` (imported by
+   `family.ts`) and `parameterIdentitySchema` (imported by `parameter-links.ts`). Deleting the
+   slice would break pea's tools for no gain, so it stays and this entry names why. Replacement:
+   retire it when pea's family editing runs through the live lane's own commands.
 
 ## Intentional gaps (deliberate, not scheduled)
 
@@ -51,17 +80,31 @@ An entry leaves this file only when the replacement ships or the gap is closed.
 - **`/api/pdf-audit/map` deleted, `/api/pdf-audit/parse` kept.** Proposals come from pea via
   route state; the heuristic/direct-Anthropic mapper was a placeholder.
 
-## Harvest gates — family-types deletion checklist
+## Harvest gates — family-types deletion checklist (CLOSED)
 
-`/family-types` (and `pdf-audit` local store, `/family-audit`, `/family-doc`) are deleted
-only when each item below is grafted into `/family` or explicitly waived here:
+Every gate below is grafted or waived, so the routes are gone. Deleted: `routes/family-doc.tsx`,
+`routes/family-types.tsx`, `routes/family-audit.tsx`, `routes/family-model.tsx` (already only a
+redirect to `/family`), `src/family-types/`, `src/pdf-audit/`, `routes/api/pdf-audit/map.ts`,
+`src/lab/kit.tsx` (its only importer was `family-types/mock.ts`), and `src/host/family-doc.ts`
+(the untyped-ish snapshot/apply adapter, superseded by `family/live.tsx`, which calls the same
+two ops through the generated typed client AND carries per-edit outcomes + dryRun).
+
+Kept, with the import-graph reason: `routes/api/pdf-audit/parse.ts` + `parse.$parseId.ts` (the
+parse lane `family/doc-pane.tsx` and pea's `family-commands`/`route-state-commands` both fetch),
+`src/grounded-doc/` (parse cache + types + the `/doc-lab` and `/design-system` surfaces),
+`src/lab/estimate.ts` + `src/lab/mock.ts` (the calibrated cell-geometry estimator `doc-pane`
+depends on), and the `route:family-types` contracts + mcps handlers (shim 7 above).
 
 - [x] `formula.ts` + `formula.test.ts` — landed at `apps/web/src/family/formula.ts` (+test).
       Param source retargeted to the authored model via `authoredFormulaParams(familyParameters,
       sharedParameters)`; the `FamilyTypesParam` dependency is gone (a local `FormulaParam` shape),
       and an authored param with no `isInstance` counts as TYPE, so the type-refs-instance law
       still applies. 15 tests (the original 12 + 3 for the retarget and ancestry).
-- [ ] Per-edit non-blocking `family.editor.apply {dryRun:true}` advisory check.
+- [x] Per-edit non-blocking `family.editor.apply {dryRun:true}` advisory check — `check` /
+      `advisory` on `LiveLaneApi` (`apps/web/src/family/live.tsx`), fired from `FormulaCell`'s
+      commit in `routes/family.tsx` and rendered on the SAME clay dot as the client
+      validator's problems, prefixed "Revit:" so the host's verdict is named as the host's.
+      LIVE lane only; the authored lane keeps the client validator + the `validate` command.
 - [x] Tri-state review toggle UI (none→good→attention) — `ReviewMark` in `routes/family.tsx`,
       on every value cell AND the formula cell; writes a `review` patch beside the staged edit.
       Human edits still auto-write "good"; the toggle is how a human demotes to "attention".
@@ -95,12 +138,25 @@ only when each item below is grafted into `/family` or explicitly waived here:
       ADVISORY: invalid-ref / cycle / type-refs-instance, plus a value-XOR-formula warning when
       the param still carries per-type values, all on a clay dot whose tooltip is the problem
       text. Nothing blocks staging — the host's validate/save is the final word.
-- [ ] Pin/Esc grounding focus model + measured-vs-estimated reticle distinction in the doc pane.
+- [x] Pin/Esc grounding focus model + measured-vs-estimated reticle distinction —
+      `apps/web/src/family/doc-pane.tsx` + the focus state in `routes/family.tsx`. Hover
+      grounds (`onCite`), clicking a cell's `¶N` badge PINS (`onPin` → `pinnedCite`, which
+      outranks hover and survives the pointer leaving), and Esc unpins FIRST, then deselects
+      the pinned parameter — one key, two steps, never both. The pane draws corner-bracket
+      reticles whose style carries the provenance the box edge already carried: solid for
+      parser-measured geometry, dashed for an interpolated estimate, with a "pinned · esc"
+      affordance in the caption.
 
 ## Sentence harvest (from quarry/poc-2026-07 sentence-chat POC)
 
-- [ ] Family slot (`… <family> from <doc> <world>`), conditional on doc kind; `/families` →
-      `/family` navigation is filling this slot.
+- [x] Family slot (`editing the open family editor — <family> in <world>`) — a `SlotSpec` on
+      `/family`'s Sentence, LIVE lane only, listing `revit.catalog.loaded-families` and calling
+      `family.editor.open` + re-snapshot on pick (`sentenceSlots` in `routes/family.tsx`,
+      `families`/`openFamily` on `LiveLaneApi`). The world is spoken ONCE — by the sentence's
+      own world clause — so neither the live document entry nor the family slot repeats it.
+      `/families` fills the slot by navigation: a table row click navigates to
+      `/family?family=<familyId>`, and `/family` opens that family in the bound session's
+      family editor on mount. The URL is the whole handoff — no cross-route state store.
 - [x] Profile slot for `/families` (`auditing <doc> against <profile> in <world>`) — built on
       `SlotSpec`; the document reads as flat text (session truth, not a picker), the profile slot
       picks from the settings library, and apply success fires the sentence receipt.
@@ -118,3 +174,11 @@ planHash drift echo), `familyfoundry.project`, `host.shell.open`. Live-Revit pro
 apply lane is a step-3 gate, recorded here until run.
 
 - [ ] Live proof: plan → apply → receipts on a sandbox project (FreshRevitProcess lane).
+- [ ] Live proof: `/family`'s LIVE LANE end to end — the live document entry appearing when a
+      family is open, `family.editor.snapshot` → matrix, a staged value + a staged formula
+      through `family.editor.apply` (including a DELIBERATELY bad edit, to see "Saved N · M
+      failed" with the failed edit still staged), the `{dryRun:true}` advisory, the family slot
+      calling `family.editor.open`, `/families` row → `/family?family=<id>`, and capture →
+      authored doc. **Unproven: none of it has met a live host.** The AUTHORED lane is proven
+      through `/family?mock` end to end (open → edit → review → accept all → save receipt →
+      inspector → doc pane), which is exactly the half that needs no host.

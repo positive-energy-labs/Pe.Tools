@@ -159,8 +159,9 @@ export function useLiveFamilyStore(): FamilyStore {
 
 /* ── mock ────────────────────────────────────────────────────────────────── */
 
-/** Apply one `["fields", pointer, segment]` patch to a local field map. */
-function patchFields(
+/** Apply one `["fields", pointer, segment]` patch to a local field map.
+ * Shared with the LIVE lane, whose staged edits are tab-local by nature. */
+export function patchFields(
   fields: Record<string, FieldState>,
   patches: RouteStatePatch[],
 ): Record<string, FieldState> {

@@ -117,6 +117,8 @@ export function FamilyDocPane({
   citations,
   unresolved,
   caption,
+  pinned,
+  onUnpin,
   onParse,
   parsing,
 }: {
@@ -125,6 +127,9 @@ export function FamilyDocPane({
   unresolved: SettingsProposalSource[];
   /** One line describing what the citations belong to (field + proposed value). */
   caption?: string | null;
+  /** True when the citation is PINNED — it outranks hover and survives the pointer leaving. */
+  pinned?: boolean;
+  onUnpin?: () => void;
   onParse: (input: { url?: string; file?: File }) => void;
   parsing: boolean;
 }) {
@@ -191,7 +196,9 @@ export function FamilyDocPane({
     }
   }
 
+  // Reticle metrics divide by scale so brackets stay a constant screen size at any zoom.
   const stroke = 1.75 / cam.scale;
+  const bracket = 12 / cam.scale;
 
   return (
     <div
@@ -251,6 +258,31 @@ export function FamilyDocPane({
                   background: `color-mix(in srgb, ${color} 9%, transparent)`,
                 }}
               />
+              {/* The reticle carries the provenance distinction into the CORNERS: measured
+                  geometry gets solid brackets, an estimate gets dashed ones. The eye reads
+                  the brackets before it reads the box edge, so "is this measured?" is
+                  answerable at a glance and never has to be inferred from a legend. */}
+              {corners(citation.bbox, bracket).map((corner, cornerIndex) => (
+                <div
+                  key={cornerIndex}
+                  className="absolute"
+                  style={{
+                    left: corner.x,
+                    top: corner.y,
+                    width: bracket,
+                    height: bracket,
+                    borderTopStyle: citation.measured ? "solid" : "dashed",
+                    borderBottomStyle: citation.measured ? "solid" : "dashed",
+                    borderLeftStyle: citation.measured ? "solid" : "dashed",
+                    borderRightStyle: citation.measured ? "solid" : "dashed",
+                    borderTopWidth: corner.top ? stroke * 1.2 : 0,
+                    borderBottomWidth: corner.top ? 0 : stroke * 1.2,
+                    borderLeftWidth: corner.left ? stroke * 1.2 : 0,
+                    borderRightWidth: corner.left ? 0 : stroke * 1.2,
+                    borderColor: color,
+                  }}
+                />
+              ))}
               {citations.length > 1 && (
                 <div
                   className="absolute grid size-4 place-items-center rounded-full text-[9px] font-semibold text-white"
@@ -274,8 +306,24 @@ export function FamilyDocPane({
         {caption ? (
           <div className="rounded-[2px] border border-[var(--line)] bg-card/95 px-3 py-2 shadow-xl backdrop-blur">
             <div className="flex items-center justify-between gap-2">
-              <span className="truncate font-mono text-[10px] text-muted-foreground">
-                {caption}
+              <span className="flex min-w-0 items-center gap-1.5">
+                {pinned && (
+                  <button
+                    type="button"
+                    onClick={onUnpin}
+                    title="pinned — click or press Esc to unpin"
+                    className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium"
+                    style={{
+                      background: "color-mix(in srgb, var(--pe-blue) 16%, transparent)",
+                      color: "var(--pe-blue)",
+                    }}
+                  >
+                    pinned · esc
+                  </button>
+                )}
+                <span className="truncate font-mono text-[10px] text-muted-foreground">
+                  {caption}
+                </span>
               </span>
               <span className="flex shrink-0 gap-1">
                 {citations.map((citation, index) => (
@@ -315,12 +363,22 @@ export function FamilyDocPane({
           </div>
         ) : (
           <div className="text-center text-[11px] text-white/50">
-            hover a cited cell or constituent to ground it here
+            hover a cited cell or constituent to ground it here · click its ¶ to pin
           </div>
         )}
       </div>
     </div>
   );
+}
+
+/** Four corner-bracket anchor points for a bbox, each an L drawn with 2 borders. */
+function corners(bbox: { x: number; y: number; w: number; h: number }, len: number) {
+  return [
+    { x: bbox.x, y: bbox.y, top: true, left: true },
+    { x: bbox.x + bbox.w - len, y: bbox.y, top: true, left: false },
+    { x: bbox.x, y: bbox.y + bbox.h - len, top: false, left: true },
+    { x: bbox.x + bbox.w - len, y: bbox.y + bbox.h - len, top: false, left: false },
+  ];
 }
 
 function UploadSurface({

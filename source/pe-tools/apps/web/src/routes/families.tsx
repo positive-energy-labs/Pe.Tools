@@ -16,7 +16,7 @@
  * All Family Foundry calls go through `#/host/familyfoundry`, fully typed against the checked-in
  * generated clients. The remaining unproven surface is LIVE behavior (SHIMS: step-3 live proof).
  */
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQueries } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 
@@ -273,6 +273,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 // ── route ───────────────────────────────────────────────────────────────────────────────────────
 
 function FamiliesRoute() {
+  const navigate = useNavigate();
   const [target, setTarget] = useState("");
   const scope = useMemo(() => (target ? { bridgeSessionId: target } : undefined), [target]);
 
@@ -1102,6 +1103,12 @@ function FamiliesRoute() {
           applied === null
             ? "no scope applied yet — pick a category above and apply the scope"
             : "no families in scope — widen the category filter or the placement scope"
+        }
+        /* Fleet → one family. The URL is the whole handoff: /family opens the requested
+           family in the bound session's family editor and lands in its live lane. No
+           cross-route store, nothing to keep in sync. */
+        onRowClick={(row) =>
+          void navigate({ to: "/family", search: { family: String(row.familyId) } })
         }
       />
     </main>

@@ -7,7 +7,6 @@ import {
   Boxes,
   LoaderCircle,
   MessageSquare,
-  PencilRuler,
   Settings2,
   Table2,
   Terminal,
@@ -126,12 +125,12 @@ export const Route = createFileRoute("/")({ component: App });
 
 const TOOLS = [
   {
-    to: "/family-model",
-    title: "Family Model",
+    to: "/family",
+    title: "Family",
     label: "Family Foundry",
     icon: Boxes,
     description:
-      "Inspect portable family.json, preview named geometry and connectors, capture an open family, or build a target-year RFA.",
+      "One family, two lanes: an authored family.json (anatomy, matrix, build) or the family open in Revit's editor. Binding picks the lane; capture bridges them.",
   },
   {
     to: "/chat",
@@ -149,14 +148,6 @@ const TOOLS = [
       "Every loaded family's types × parameters in one table — audit it against a profile, plan the reconciliation, apply with receipts.",
   },
   {
-    to: "/family-types",
-    title: "Family Types",
-    label: "Revit editor",
-    icon: PencilRuler,
-    description:
-      "A web Family Types dialog — pea proposes spec-sheet values with provenance; you review, stage, and push to Revit.",
-  },
-  {
     to: "/settings",
     title: "Settings",
     label: "Host pipeline",
@@ -171,22 +162,6 @@ const TOOLS = [
     icon: FileScan,
     description:
       "The grounded-document engine in isolation — parsed markdown beside the PDF pages, hover either side to link them.",
-  },
-  {
-    to: "/family-audit",
-    title: "Family Audit",
-    label: "Experimental",
-    icon: FileScan,
-    description:
-      "Audit one loaded family against a PDF — hover any mapped cell to see where in the document it came from.",
-  },
-  {
-    to: "/family-doc",
-    title: "Family Doc Audit",
-    label: "Experimental",
-    icon: PencilRuler,
-    description:
-      "Read and edit the open family document's parameters, with PDF-grounded value proposals applied via the scripting lane.",
   },
   {
     to: "/ops",

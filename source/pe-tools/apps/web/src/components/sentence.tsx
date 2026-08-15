@@ -7,6 +7,10 @@
  * filter state live in table chips, never here. A fresh commit briefly replaces
  * the whole sentence with its receipt ("committed <change> on <doc> · just
  * now"), then relaxes back to the nouns.
+ *
+ * Layout law: the sentence claims a real basis (`basis-72`) inside its wrapping toolbar, so a
+ * crowded row WRAPS rather than shrinking the sentence to a sliver. The targeting surface must
+ * stay readable; the buttons are the ones that move.
  */
 import { useEffect, useRef, useState } from "react";
 
@@ -164,7 +168,7 @@ export function Sentence({
   // Sentence-as-receipt: a fresh commit replaces the nouns entirely, then relaxes back.
   if (receiptFresh && receipt) {
     return (
-      <div className="relative inline-block min-w-0 flex-1">
+      <div className="relative inline-block min-w-0 flex-1 basis-72">
         <div
           className="flex h-7 items-center overflow-hidden px-2"
           style={{ border: "0.5px solid var(--line-2)", borderRadius: 2 }}
@@ -178,7 +182,7 @@ export function Sentence({
   }
 
   return (
-    <div ref={rootRef} className="relative inline-block min-w-0 flex-1">
+    <div ref={rootRef} className="relative inline-block min-w-0 flex-1 basis-72">
       <div
         className="flex h-7 items-center overflow-hidden px-2"
         style={{ border: "0.5px solid var(--line-2)", borderRadius: 2, opacity: busy ? 0.6 : 1 }}
@@ -202,7 +206,10 @@ export function Sentence({
             </>
           ) : (
             <>
-              <span className="tele" style={{ fontSize: 11, color: TONE_COLOR[prefixTone], transition: "color 0.6s" }}>
+              <span
+                className="tele"
+                style={{ fontSize: 11, color: TONE_COLOR[prefixTone], transition: "color 0.6s" }}
+              >
                 {prefix}{" "}
               </span>
               {hasDocSlot ? (
@@ -216,7 +223,11 @@ export function Sentence({
             </>
           )}
           {slots?.map((slot) => (
-            <span key={slot.key} className="flex items-baseline gap-1" style={{ whiteSpace: "nowrap" }}>
+            <span
+              key={slot.key}
+              className="flex items-baseline gap-1"
+              style={{ whiteSpace: "nowrap" }}
+            >
               {slot.joiner ? (
                 <span className="tele" style={{ fontSize: 11, color: "var(--muted-foreground)" }}>
                   {slot.joiner}
@@ -244,7 +255,10 @@ export function Sentence({
               fontSize: 11,
               padding: 0,
               cursor: "pointer",
-              background: openSlot === "world" ? "color-mix(in srgb, var(--pe-blue) 7%, transparent)" : "transparent",
+              background:
+                openSlot === "world"
+                  ? "color-mix(in srgb, var(--pe-blue) 7%, transparent)"
+                  : "transparent",
               border: "none",
               borderRadius: 0,
               color: resolution.kind === "resolved" ? "var(--muted-foreground)" : "var(--pe-blue)",
@@ -363,7 +377,11 @@ export function Sentence({
             </div>
           ))}
           {bootingWorlds.map((world) => (
-            <div key={world.id} className="py-1" style={{ borderTop: "0.5px solid var(--line-soft)" }}>
+            <div
+              key={world.id}
+              className="py-1"
+              style={{ borderTop: "0.5px solid var(--line-soft)" }}
+            >
               <span className="tele" style={{ fontSize: 10, color: "var(--cat-kiln)" }}>
                 {world.id} — still booting
               </span>
