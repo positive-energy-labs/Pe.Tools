@@ -1,4 +1,4 @@
-import {
+﻿import {
   cellSelectionFeature,
   columnFilteringFeature,
   columnPinningFeature,
@@ -12,7 +12,7 @@ import {
   type RowData,
 } from "@tanstack/react-table";
 
-import type { Column } from "#/components/master-table/model";
+import type { ValueColumn } from "#/components/master-table/model";
 
 /** The complete TanStack surface MasterTable owns. Do not replace this with stockFeatures. */
 export const masterTableFeatures = tableFeatures({
@@ -31,14 +31,14 @@ export type MasterColumnDef<Row extends RowData> = ColumnDef<MasterTableFeatures
 
 /** Map Pe's stable public column model to a private TanStack column tree. */
 export function toColumnDefs<Row extends RowData>(
-  columns: readonly Column<Row>[],
+  columns: readonly ValueColumn<Row>[],
 ): MasterColumnDef<Row>[] {
   const entries = columns.map((column) => ({ column, path: groupPath(column) }));
   return buildLevel(entries, 0);
 }
 
 function buildLevel<Row extends RowData>(
-  entries: readonly { column: Column<Row>; path: readonly string[] }[],
+  entries: readonly { column: ValueColumn<Row>; path: readonly string[] }[],
   depth: number,
 ): MasterColumnDef<Row>[] {
   const defs: MasterColumnDef<Row>[] = [];
@@ -63,12 +63,12 @@ function buildLevel<Row extends RowData>(
   return defs;
 }
 
-function groupPath<Row extends RowData>(column: Column<Row>): readonly string[] {
+function groupPath<Row extends RowData>(column: ValueColumn<Row>): readonly string[] {
   if (column.group === undefined) return [];
   return typeof column.group === "string" ? [column.group] : column.group;
 }
 
-function toLeafDef<Row extends RowData>(column: Column<Row>): MasterColumnDef<Row> {
+function toLeafDef<Row extends RowData>(column: ValueColumn<Row>): MasterColumnDef<Row> {
   return {
     id: column.key,
     header: column.label,

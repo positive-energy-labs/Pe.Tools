@@ -107,6 +107,37 @@ function readCell(p: StateCellProps): CellRead {
   };
 }
 
+/**
+ * Cell state, in the order attention is owed: fix drift, review the proposal, commit the staged,
+ * re-read the stale, check the unverified, leave clean alone, and locked last — nothing to do.
+ * A state column with no explicit `sort` orders by this (SURFACE-PHILOSOPHY §1: state columns
+ * sort in the order the work happens, not alphabetically).
+ */
+export const CELL_STATE_ORDER = [
+  "drift",
+  "proposed",
+  "staged",
+  "stale",
+  "unverified",
+  "clean",
+  "locked",
+] as const;
+export type CellStateName = (typeof CELL_STATE_ORDER)[number];
+
+/**
+ * The precedence collapsed to one word — the vocabulary a table can facet, count and group by.
+ * Executes the same `readCell` as the renderer, so the word and the marks cannot disagree.
+ */
+export function cellStateLabel(p: StateCellProps): CellStateName {
+  const read = readCell(p);
+  if (read.body === "locked") return "locked";
+  if (read.unsettled === "drift") return "drift";
+  if (read.body === "proposed") return "proposed";
+  if (read.unsaved != null) return "staged";
+  if (read.unsettled != null) return read.unsettled;
+  return "clean";
+}
+
 export function StateCell(props: StateCellProps) {
   const { value, modelValue, capReason, grounding, confidence, note, className } = props;
   const read = readCell(props);

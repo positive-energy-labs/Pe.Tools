@@ -1012,15 +1012,6 @@ function ArmingBlock() {
    come out. Where its contract cannot express something the grammar needs, there is a `GAP:` here
    and a visible gap-note below. The gap is the deliverable. */
 
-function stateFacet(row: ParamRow): string {
-  if (row.cap !== "editable") return "locked";
-  if (row.agree === "drift") return "drift";
-  if (row.stage === "proposed") return "proposed";
-  if (row.stage === "staged") return "staged";
-  if (row.fresh !== "fresh") return row.fresh;
-  return "clean";
-}
-
 function RealTable() {
   const columns = useMemo<Column<ParamRow>[]>(
     () => [
@@ -1052,33 +1043,16 @@ function RealTable() {
       {
         key: "value",
         label: "value",
-        title: "The value as shown, carrying every mark the grammar has to make.",
+        title:
+          "The value, carrying every mark the grammar has to make. Its filter speaks the grammar's own state vocabulary.",
+        // THE CELL-STATE CLAUSE (ruled 2026-08-16, discharging the renderer-identity gap): the
+        // column declares WHAT IT DRAWS. The table renders StateCell itself, and facet defaults
+        // to the grammar's one-word reading — the hand-modelled `state` column this section
+        // used to carry is gone because the primitive now reads the cell instead of the caller
+        // restating it. Sort stays the VALUE; the filter carries the state.
+        state: cellProps,
         sort: (r) => r.value,
         search: (r) => r.value,
-        // GAP (MasterTable): `cell` returns an opaque ReactNode. The table cannot know this cell
-        // is a StateCell, so it cannot sort, filter, count or group by cell STATE — see the
-        // `state` column below, which is that same fact modelled a second time by hand.
-        cell: (r) => (
-          <span className="block px-1.5 py-1">
-            <StateCell {...cellProps(r)} />
-          </span>
-        ),
-      },
-      {
-        // GAP (MasterTable): this column exists ONLY because the table cannot read the state out
-        // of the cell beside it. It is `CellFixture` → `StateCellProps` → a string, computed a
-        // third time, and it will drift from the cell the first time precedence changes.
-        key: "state",
-        label: "state",
-        title:
-          "What the cell to the left is saying. Derived here because the table cannot read it.",
-        width: "w-28",
-        facet: stateFacet,
-        cell: (r) => (
-          <span className="block px-1.5 py-1 font-[family-name:var(--font-pe-mono)] text-[10px] text-[var(--r-ink-mute)]">
-            {stateFacet(r)}
-          </span>
-        ),
       },
       {
         key: "read",
@@ -1165,33 +1139,17 @@ function RealTable() {
           what MasterTable cannot express
         </span>
         <GapNote>
-          <strong>renderer identity.</strong> <code>Column.cell</code> returns an opaque{" "}
-          <code>ReactNode</code>. The table cannot know a cell carries state, so: the{" "}
-          <code>state</code> column above is the same fact modelled by hand a second time;{" "}
-          <code>CellStateKey</code> cannot derive its axes from the rows on screen; and a row
-          holding a proposal can only be marked through <code>rowClassName</code>, which knows
-          nothing about the grammar. A cell-state clause on <code>Column</code> — the renderer
-          declaring what it draws — is the shape this wants.
+          <strong>the clause&apos;s residue.</strong> The cell-state clause (ruled 2026-08-16)
+          discharged renderer identity, selection-as-hue, the hover law and the two-palette chrome —
+          but <code>CellStateKey</code> still cannot derive its axes from the rows on screen, and a
+          row holding a proposal is still marked through <code>rowClassName</code>, which knows
+          nothing about the grammar. Row-level state is the clause&apos;s unfinished half.
         </GapNote>
         <GapNote>
-          <strong>selection is a hue.</strong> Selected cells and the active row are{" "}
-          <code>bg-primary/[0.06]</code> and focus is <code>ring-primary</code>. The language says
-          selection and focus are a fill and never a hue — <code>--r-select</code>, the fourth rung
-          of the ground ladder. Neither is reachable from <code>Column</code> or{" "}
-          <code>MasterTableProps</code>.
-        </GapNote>
-        <GapNote>
-          <strong>the hover law does not reach the table.</strong> Rows are{" "}
-          <code>hover:bg-muted/60</code>, a second hover treatment beside <code>--r-veil</code>,
-          which every control in the language shares.
-        </GapNote>
-        <GapNote>
-          <strong>two vocabularies in one object.</strong> The table&apos;s chrome — header strip,{" "}
-          <code>th</code> backgrounds, <code>--line</code>/<code>--line-soft</code> rules, the
-          locked column&apos;s <code>bg-background</code>, the empty-state prose — is all on the old
-          token vocabulary. Inside an <code>--r-artifact</code> frame that is two palettes in one
-          artifact, visible at the frame&apos;s inner edge. This is the crusade&apos;s first
-          table-shaped job.
+          <strong>non-state cells own their own box.</strong> <code>td</code> is <code>p-0</code>;
+          the table draws the box model for <code>state</code> columns, but every plain{" "}
+          <code>cell</code> renderer still decides padding for itself — decided per column instead
+          of once by the primitive.
         </GapNote>
         <GapNote>
           <strong>two heads.</strong> <code>scopeLabel</code> is required and MasterTable always

@@ -1,8 +1,10 @@
 /** MasterTable's public product model. TanStack's types stay behind the component boundary. */
 import type { ReactNode } from "react";
 
+import type { StateCellProps } from "#/components/lang/cell";
+
 /** A column. Capabilities are opt-in by the presence of a field, never by a flag. */
-export interface Column<Row> {
+interface ColumnBase<Row> {
   /** Stable id — filter/sort state and React keys are keyed on it. */
   key: string;
   label: string;
@@ -34,8 +36,29 @@ export interface Column<Row> {
   all?: string;
   /** Free-text search reads this; omitted columns are not searched. */
   search?: (row: Row) => string;
-  cell: (row: Row) => ReactNode;
 }
+
+/** A column that draws its own body. The table knows nothing about what the cell says. */
+export interface ValueColumn<Row> extends ColumnBase<Row> {
+  cell: (row: Row) => ReactNode;
+  state?: never;
+}
+
+/**
+ * THE CELL-STATE CLAUSE. A column that declares WHAT IT DRAWS instead of returning an opaque
+ * node: the table renders the language's `StateCell` itself (one box model, owned here), and —
+ * because the renderer's identity is known — it can facet, count and order rows by cell state
+ * without the consumer modelling that fact a second time. `facet` defaults to the grammar's
+ * one-word reading (`cellStateLabel`); `sort` defaults to attention order (`CELL_STATE_ORDER`).
+ * Either can still be supplied to override.
+ */
+export interface StateColumn<Row> extends ColumnBase<Row> {
+  state: (row: Row) => StateCellProps;
+  cell?: never;
+}
+
+/** Exactly one of `cell` and `state` — a column draws a body or declares one, never both. */
+export type Column<Row> = ValueColumn<Row> | StateColumn<Row>;
 
 export interface SortKey {
   key: string;

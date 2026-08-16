@@ -14,8 +14,14 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 
+import { CELL_STATE_ORDER, StateCell, cellStateLabel } from "#/components/lang/cell";
 import { CellNavigationProvider, type CellMove } from "#/components/master-table/cell-navigation";
-import { facetOptions, type Column, type MasterTableState } from "#/components/master-table/model";
+import {
+  facetOptions,
+  type Column,
+  type MasterTableState,
+  type ValueColumn,
+} from "#/components/master-table/model";
 import { masterTableFeatures, toColumnDefs } from "#/components/master-table/tanstack-adapter";
 import {
   Combobox,
@@ -59,9 +65,33 @@ export interface MasterTableProps<Row extends RowData> {
 
 const emptyTableState = (): MasterTableState => ({ filters: {}, sorts: [], query: "" });
 
+/**
+ * THE CELL-STATE CLAUSE, executed once at the boundary. A `state` column resolves to a plain
+ * column whose cell is the language's `StateCell` in the primitive's own box model, and whose
+ * facet/sort default to the grammar's one-word reading — so the table filters, counts and
+ * orders by cell state without any consumer modelling the fact a second time, and the word in
+ * the filter can never disagree with the marks in the cell.
+ */
+function resolveStateColumn<Row>(column: Column<Row>): ValueColumn<Row> {
+  const state = column.state;
+  if (state === undefined) return column;
+  const label = (row: Row) => cellStateLabel(state(row));
+  return {
+    ...column,
+    state: undefined,
+    cell: (row: Row) => (
+      <span className="block px-1.5 py-1">
+        <StateCell {...state(row)} />
+      </span>
+    ),
+    facet: column.facet ?? label,
+    sort: column.sort ?? ((row: Row) => CELL_STATE_ORDER.indexOf(label(row))),
+  } as ValueColumn<Row>;
+}
+
 export function MasterTable<Row extends RowData>({
   rows,
-  columns,
+  columns: rawColumns,
   rowKey,
   scopeLabel,
   searchPlaceholder,
@@ -76,6 +106,7 @@ export function MasterTable<Row extends RowData>({
   tableState,
   onTableStateChange,
 }: MasterTableProps<Row>) {
+  const columns = useMemo(() => rawColumns.map(resolveStateColumn), [rawColumns]);
   const [internalState, setInternalState] = useState(emptyTableState);
   const resolvedState = tableState ?? internalState;
   const stateRef = useRef(resolvedState);
@@ -238,9 +269,9 @@ export function MasterTable<Row extends RowData>({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--line)] px-2 py-1">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--r-line)] px-2 py-1">
         <span
-          className="tele-label text-muted-foreground"
+          className="tele-label text-[var(--r-ink-2)]"
           title="Everything currently in scope. This table is never hidden and never narrowed silently — every filter acting on it is a chip in this strip."
         >
           {scopeLabel}
@@ -251,19 +282,19 @@ export function MasterTable<Row extends RowData>({
             onChange={(event) => updateState((state) => ({ ...state, query: event.target.value }))}
             placeholder={searchPlaceholder}
             title="Free-text filter. It reads only the columns that declare themselves searchable, so a match here always points at a visible column."
-            className="tele h-6 w-44 rounded-[var(--radius)] border border-[var(--line-2)] bg-transparent px-1.5 outline-none focus:border-ring"
+            className="tele h-6 w-44 rounded-[var(--radius)] border border-[var(--r-line-2)] bg-transparent px-1.5 outline-none focus:border-[var(--r-line-2)] focus:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
           />
         )}
         {/* The search box says how much it cut, right where the typing happens. */}
         {resolvedState.query && (
           <span
-            className="tele text-muted-foreground"
+            className="tele text-[var(--r-ink-2)]"
             title="How many rows survive the free-text filter, out of every row in scope."
           >
             {visibleRows.length} of {rows.length}
           </span>
         )}
-        {summary && <span className="tele text-muted-foreground">{summary}</span>}
+        {summary && <span className="tele text-[var(--r-ink-2)]">{summary}</span>}
 
         {chips.map((chip) => (
           <FilterChip key={chip.label} label={chip.label} onClear={chip.onClear} />
@@ -286,7 +317,7 @@ export function MasterTable<Row extends RowData>({
             type="button"
             onClick={() => updateState((state) => ({ ...state, filters: {} }))}
             title="Drop every column filter at once. Filters owned by the route have their own chips and are left alone."
-            className="tele rounded-[var(--radius)] px-1 text-muted-foreground hover:bg-muted"
+            className="tele rounded-[var(--radius)] px-1 text-[var(--r-ink-2)] hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
           >
             clear column filters
           </button>
@@ -333,7 +364,7 @@ export function MasterTable<Row extends RowData>({
                       colSpan={header.colSpan}
                       rowSpan={header.rowSpan}
                       style={{ top: stickyTop(rowIndex) }}
-                      className="tele-label sticky z-10 whitespace-nowrap border-b border-l border-[var(--line)] bg-muted px-1.5 py-px text-left font-normal text-muted-foreground first:border-l-0"
+                      className="tele-label sticky z-10 whitespace-nowrap border-b border-l border-[var(--r-line)] bg-[var(--r-recess)] px-1.5 py-px text-left font-normal text-[var(--r-ink-2)] [--r-on:var(--r-recess)] first:border-l-0"
                     >
                       <table.FlexRender header={header} />
                     </th>
@@ -351,8 +382,11 @@ export function MasterTable<Row extends RowData>({
                   key={key}
                   ref={activeKey === key ? activeRowRef : undefined}
                   className={cn(
-                    "h-7 scroll-mt-12 hover:bg-muted/60",
-                    activeKey === key && "bg-primary/[0.06]",
+                    // THE HOVER LAW: the one neutral veil, composited over whatever fill the row
+                    // carries. THE SELECTION LAW: the active row is a fill (--r-select), never a
+                    // hue, and re-declares --r-on so cell washes land on the right ground.
+                    "h-7 scroll-mt-12 hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]",
+                    activeKey === key && "bg-[var(--r-select)] [--r-on:var(--r-select)]",
                     rowClassName?.(tableRow.original),
                   )}
                   onMouseEnter={onRowHover ? () => onRowHover(tableRow.original) : undefined}
@@ -405,11 +439,13 @@ export function MasterTable<Row extends RowData>({
                             }}
                             onMouseEnter={cell.getSelectionExtendHandler()}
                             className={cn(
-                              "border-b border-l border-[var(--line-soft)] p-0 outline-none first:border-l-0 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary",
-                              selection & 2 && "bg-primary/[0.06]",
+                              // Focus is a firm hairline; selection is the select fill. Locked
+                              // columns sit on --r-on — the ground of whatever contains the table.
+                              "border-b border-l border-[var(--r-line)] p-0 outline-none first:border-l-0 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[var(--r-line-2)]",
+                              selection & 2 && "bg-[var(--r-select)] [--r-on:var(--r-select)]",
                               column.right && "text-right",
                               column.width,
-                              column.lock && "sticky left-0 z-[5] bg-background",
+                              column.lock && "sticky left-0 z-[5] bg-[var(--r-on)]",
                             )}
                           >
                             <CellNavigationProvider
@@ -431,7 +467,7 @@ export function MasterTable<Row extends RowData>({
           </tbody>
         </table>
         {visibleRows.length === 0 && (
-          <p className="tele mx-auto max-w-md p-6 text-center text-[11px] text-muted-foreground">
+          <p className="tele mx-auto max-w-md p-6 text-center text-[11px] text-[var(--r-ink-2)]">
             {rows.length > 0
               ? `All ${rows.length} rows in scope are filtered out — clear a chip in the strip above to bring them back.`
               : (empty ?? "Nothing in scope yet. Widen the scope above to fill the table.")}
@@ -471,7 +507,7 @@ function LeafHeader<Row>({
       rowSpan={rowSpan}
       style={{ top: stickyTop }}
       className={cn(
-        "sticky z-10 align-top whitespace-nowrap border-b border-l border-[var(--line)] bg-muted px-1.5 py-1 font-normal first:border-l-0",
+        "sticky z-10 align-top whitespace-nowrap border-b border-l border-[var(--r-line)] bg-[var(--r-recess)] px-1.5 py-1 font-normal [--r-on:var(--r-recess)] first:border-l-0",
         column.right ? "text-right" : "text-left",
         column.width,
         column.lock && "left-0 z-20",
@@ -483,18 +519,18 @@ function LeafHeader<Row>({
           type="button"
           onClick={(event) => onSort(event.shiftKey)}
           title="Sort by this column. Clicking again flips the direction; shift-click appends it as a tie-breaker behind the sorts already applied, numbered in the header."
-          className="tele-label block w-full text-left text-muted-foreground hover:text-foreground"
+          className="tele-label block w-full text-left text-[var(--r-ink-2)] hover:text-[var(--r-ink)]"
         >
           {column.header ?? column.label}
           {direction && (
-            <span className="ml-1 text-foreground">
+            <span className="ml-1 text-[var(--r-ink)]">
               {direction === "asc" ? "↑" : "↓"}
               {sortCount > 1 && <span className="opacity-60">{rank + 1}</span>}
             </span>
           )}
         </button>
       ) : (
-        <span className="tele-label block text-muted-foreground">
+        <span className="tele-label block text-[var(--r-ink-2)]">
           {column.header ?? column.label}
         </span>
       )}
@@ -545,9 +581,10 @@ function ColFilter({
           title="Narrow the table to one value of this column. The choices are every value present across ALL rows, so they stay put as other filters move."
           className={cn(
             "tele flex h-5 w-full min-w-0 max-w-32 items-center justify-between gap-0.5 rounded-[var(--radius)] border bg-transparent px-1 font-normal outline-none",
+            // An active filter is "lit" — the select fill, never a hue.
             value
-              ? "border-primary/40 bg-primary/[0.06] text-foreground"
-              : "border-[var(--line-soft)] text-muted-foreground hover:border-[var(--line-2)]",
+              ? "border-[var(--r-line-2)] bg-[var(--r-select)] text-[var(--r-ink)]"
+              : "border-[var(--r-line)] text-[var(--r-ink-2)] hover:border-[var(--r-line-2)]",
           )}
         >
           <span className="truncate normal-case">{value === null ? all : selected.label}</span>
@@ -576,7 +613,7 @@ export function FilterChip({ label, onClear }: { label: string; onClear: () => v
       type="button"
       onClick={onClear}
       title="This filter is narrowing the table right now. Click to drop it and widen the scope back out."
-      className="tele inline-flex items-center gap-1 rounded-[var(--radius)] border border-[var(--line-2)] bg-muted px-1.5 py-px hover:border-destructive/40 hover:text-destructive"
+      className="tele inline-flex items-center gap-1 rounded-[var(--radius)] border border-[var(--r-line-2)] bg-[var(--r-recess)] px-1.5 py-px hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
     >
       <span className="normal-case">{label}</span>
       <span className="opacity-60">×</span>

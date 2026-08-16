@@ -1,7 +1,7 @@
 import { useRef } from "react";
 
 import { useCellNavigation } from "#/components/master-table/cell-navigation";
-import { fmtNum, parseCell, type Column } from "#/components/master-table/model";
+import { fmtNum, parseCell, type ValueColumn } from "#/components/master-table/model";
 import { cn } from "#/lib/utils";
 
 const CELL_CLASS = "tele h-7 w-full min-w-0 bg-transparent px-1.5 outline-none focus:bg-primary/5";
@@ -201,7 +201,7 @@ export function stateColumn<Row>({
   label?: string;
   title?: string;
   of: (row: Row) => StateMeta;
-}): Column<Row> {
+}): ValueColumn<Row> {
   return {
     key,
     label,

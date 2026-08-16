@@ -8,10 +8,10 @@ and named, never renumbered. Context: `docs/features/design-lang/CLEANROOM.md`.
    `components/lang/` successors. They stay because the in-flight family clean-room and 22
    button importers consume them. Discharged by: the per-route normalization crusade
    migrating each consumer onto `lang/`, then deleting the superseded primitives.
-2. **The design-lang proto (`src/design-lang/*`, `/design-lang` route) is the validation
-   record**, not yet deleted. Discharged by: the new `/design-system` index absorbing the
-   spec content and a round-3 decision that no further palette/grammar rounds need the
-   harness; then the proto folds to its snapshot branches.
+2. ~~**The design-lang proto (`src/design-lang/*`, `/design-lang` route) is the validation
+   record**, not yet deleted.~~ **CLOSED 2026-08-16** — proto and route deleted; rivals live
+   on snapshot branch `proto/design-lang-base2-round2`; palette values single-homed in
+   `src/design-lang.css`; verdicts stay in CLEANROOM.md.
 3. **`ArmingStrip` ships with no live consumer.** The family apply verb is the intended
    first consumer (the ceremony clause no surface has built). Discharged by: family route
    normalization wiring it to a real `write:model` commit.
@@ -49,12 +49,14 @@ and named, never renumbered. Context: `docs/features/design-lang/CLEANROOM.md`.
 
 ### Crusade roster candidates (gaps the cutover surfaced, in signal order)
 
-1. **MasterTable cell-state clause.** `Column.cell` is an opaque ReactNode: the table can't
-   know a cell carries state, so the state column re-models the same fact by hand,
-   `CellStateKey` can't derive axes from rows, selection/hover/tokens are old-vocabulary
-   (two palettes visible inside one artifact frame), the table always draws its own head
-   beside `ArtifactFrame`'s, `FilterChip` triplicates `NarrowChip`, and there is no
-   footline/summary row for receipts. The single highest-leverage primitive change.
+1. ~~**MasterTable cell-state clause.**~~ **PARTIALLY CLOSED 2026-08-16** — `Column` is now
+   `ValueColumn | StateColumn`: a `state` column declares `StateCellProps`, the table renders
+   `StateCell` itself and defaults facet to `cellStateLabel` and sort to `CELL_STATE_ORDER`
+   (attention order). Selection/focus are `--r-select` + `--r-line-2`, hover is the veil, and
+   the table chrome is on `--r-*` natively. `/design-system` §04 is consumer #1; the takeoffs
+   pass is consumer #2 (the API evidence). STILL OPEN from the original item: `CellStateKey`
+   deriving axes from on-screen rows, row-level proposal marking beyond `rowClassName`, the
+   double head beside `ArtifactFrame`, `FilterChip` vs `NarrowChip`, no receipt/footline row.
 - **Popover foundation + one Dropdown/Picker** (extends entry 7): five specimens measured —
   three of four combobox consumers ask for a wider popup and are silently ignored
   (`w-(--anchor-width)` wins every merge) while `ui/select` grows to content (the opposite
@@ -69,4 +71,7 @@ and named, never renumbered. Context: `docs/features/design-lang/CLEANROOM.md`.
 - **The trichotomy reviewer rebuilt on `StateCell`** — named as soon-consumer everywhere;
   the proposal-flow satellite currently stands in for it.
 - **Verb busy+disabled composition** — a busy-and-refused verb is unrenderable.
-- **`--viz-*` palette** still consumer-less; charts/taxonomy absent from the catalogue.
+- ~~**`--viz-*` palette** still consumer-less.~~ **TOKENS SHIPPED 2026-08-16** (`--viz-1..6`
+  in design-lang.css, band-quantized, grayscale law; `--cat-*` aliases onto it in the
+  styles.css shim). Still owed: a catalogued chart/series consumer (ops `CoverageBar` is the
+  designated first, arriving with the ops migration).
