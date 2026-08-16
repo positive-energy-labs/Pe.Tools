@@ -94,16 +94,21 @@
   --cat-clay: var(--viz-5);
   --cat-kiln: var(--viz-6);
 
-  /* role tokens (COLOR-ROLES.md, superseded by the --r-* meaning band) */
+  /* role tokens (COLOR-ROLES.md, superseded by the --r-* meaning band).
+     −2 lines, /family promotion 2026-08-16: `--st-derived` and `--st-ground` died with
+     variant-e and have no consumer left anywhere. The seven below all still resolve real
+     spends inside `components/ui/{verb,chip,switcher}.tsx` — whose last PRODUCT consumers this
+     pass removed. What holds them alive now is the design-system's own SUPERSEDED-SPECIMEN
+     exhibits (`/design-system/swatch` imports both `ui/verb` and `ui/chip` to show what the
+     lang components replaced), so retiring these seven lines is that exhibit's call, not a
+     route pass's. */
   --act-commit: var(--r-commit);
   --act-hover: color-mix(in srgb, var(--r-ink) 40%, transparent);
   --st-proposal: var(--r-pea);
   --st-drift: var(--r-alarm);
   --st-warn: var(--r-caution);
-  --st-derived: var(--r-done); /* SHIM: derived has no --r-* role; joint-review finding */
   --st-done: var(--r-done);
   --st-meta: var(--r-ink-2);
-  --st-ground: var(--r-line-2);
 }
 
 @theme inline {
@@ -163,7 +168,55 @@ body,
   min-height: 100%;
 }
 
-/* ── Type tiers ──────────────────────────────────────────────────────────────
+/* ── TYPE TIERS (ruled 2026-08-16 · evidence: docs/features/design-lang/TYPE-COPY-CENSUS.md) ──
+   Three orthogonal axes, so a text spend is three one-word decisions:
+     TIER — size+leading by ROLE, the six utilities below. Arbitrary text-[Npx] and every
+            half-pixel size die; the census shows the first three tiers cover 90% of real use.
+     FACE — font-sans (human language, the default) · face-mono (the machine measured this) ·
+            font-pe-display (the one hero + route titles). Face carries NO size.
+     CASE — t-upper (section heads): t-label + t-upper IS the section head. A case, not a
+            tier — that one decision retires the seven hand-rolled section-head forks.
+   WEIGHT LAW (ruled with it): bold = unsaved on data surfaces, or emphasis inside t-prose —
+   never chrome emphasis. Semibold = t-title and t-upper heads ONLY. Chrome never buys weight.
+   tele / tele-label / section-label below are LEGACY bundles: routes shed them during their
+   sweep pass; new code composes tier × face × case instead. */
+@utility t-caption {
+  font-size: 10px;
+  line-height: 1.4;
+}
+@utility t-label {
+  font-size: 11px;
+  line-height: 1.4;
+}
+@utility t-value {
+  font-size: 12px;
+  line-height: 1.45;
+}
+@utility t-prose {
+  font-size: 13px;
+  line-height: 1.6;
+}
+@utility t-title {
+  font-size: 16px;
+  line-height: 1.3;
+}
+@utility t-display {
+  font-size: 40px;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+@utility t-upper {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+@utility face-mono {
+  font-family: var(--font-pe-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+/* ── Legacy type bundles (superseded by tier × face × case above) ────────────
    Two families only. Open Sans for anything a human reads as language; mono for
    anything the machine measured. The law: "mono means the machine measured this" —
    states, stats, statuses, timestamps, durations, counts, ids get tele/tele-label;
