@@ -1,8 +1,4 @@
-/** Dense-grid editing primitives: commit on blur/Enter, Escape reverts, read-only says why.
- *
- * shim: duplicated from takeoff-fresh `#/takeoff/cells`; when takeoff merges, both routes
- * consume this one component.
- */
+/** Dense-grid editing primitives: commit on blur/Enter, Escape reverts, read-only says why. */
 import { useRef } from "react";
 
 import { fmtNum, parseCell, type Column } from "#/components/master-table/model";

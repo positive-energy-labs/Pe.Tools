@@ -13,14 +13,25 @@
 // host call.
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  CellSelect,
+  NumberCell,
+  ReadCell,
+  StateDot,
+  stateColumn,
+  TextCell,
+  type StateMeta,
+} from "#/components/master-table/cells";
+import { MasterTable } from "#/components/master-table/master-table";
+import { fmtNum, type Column } from "#/components/master-table/model";
 import { Button } from "#/components/ui/button";
-import { CellSelect, fmtNum, NumberCell, TextCell } from "#/takeoff/cells";
 import { Live, Seam } from "#/takeoff/seam";
 import { ZoneThumb } from "#/takeoff/zone-plan";
 import { boundsOf, FLAG_MEANING, mergeBounds, pathD, type Bounds } from "#/takeoff/model";
 import {
   SENSIBLE_CAP_BTUH,
   STAGE_ORDER,
+  type RoomData,
   type RoomEdit,
   type RoomType,
   type Stage,
@@ -90,6 +101,13 @@ const STATE_META: Record<RoomState, { tone: string; label: string; note: string 
   },
 };
 
+/** The state as the shared grid speaks it: clay is the only alarm, "no Manual J" the only dim. */
+const stateMeta = (state: RoomState): StateMeta => ({
+  ...STATE_META[state],
+  alarm: state === "call",
+  dim: state === "unreviewed",
+});
+
 /** The derivation. `open` is the count of undecided detector flags on this room. */
 function roomState(room: WorldRoom, open: number): RoomState {
   if (open > 0) return "call";
@@ -157,18 +175,6 @@ function ZoneStateBar({
   );
 }
 
-function StateDot({ state }: { state: RoomState }) {
-  return (
-    <span
-      className="inline-block size-2 shrink-0 rounded-[1px] align-middle"
-      style={{
-        background: STATE_META[state].tone,
-        opacity: state === "unreviewed" ? 0.35 : 1,
-      }}
-    />
-  );
-}
-
 function Swatch({ tone, label, dashed }: { tone: string; label: string; dashed?: boolean }) {
   return (
     <span className="tele inline-flex items-center gap-1 text-muted-foreground">
@@ -198,6 +204,15 @@ const ROOM_TYPES: RoomType[] = [
   "mechanical",
 ];
 
+/** The Manual J number columns: one whole-unit field each, all editable, all faded until entered. */
+const MANUAL_J: { field: keyof RoomData; label: string; width: string }[] = [
+  { field: "people", label: "ppl", width: "w-12" },
+  { field: "lightingW", label: "ltg W", width: "w-16" },
+  { field: "equipSensible", label: "eq S", width: "w-16" },
+  { field: "equipLatent", label: "eq L", width: "w-16" },
+  { field: "ventilationCfm", label: "vent", width: "w-16" },
+];
+
 const flagKey = (guid: string, flag: string) => `${guid}::${flag}`;
 
 const shortId = (guid: string) => guid.slice(guid.lastIndexOf("-") + 1);
@@ -221,9 +236,6 @@ interface Row {
   open: string[];
 }
 
-// Column filters. `null` = no filter on that column.
-type FlagFilter = string;
-
 // ── Variant ─────────────────────────────────────────────────────────────────
 
 const PLAN_MIN_PX = 140;
@@ -235,27 +247,21 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
   const [level, setLevel] = useState<string>("");
   const [zoneKey, setZoneKey] = useState<string | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
-  const [filter, setFilter] = useState("");
   const [decided, setDecided] = useState<Record<string, Verdict>>({});
+  /** The row order the user is actually looking at — MasterTable owns filter/sort/search, and
+   *  reports the result here so j/k walks the SAME order rather than the pre-filter scope. */
+  const [visibleKeys, setVisibleKeys] = useState<string[]>([]);
 
   // First lane to arrive names the initial level tab (lanes are live data, not a constant).
   useEffect(() => {
     if (!level && world.lanes.length > 0) setLevel(world.lanes[0]!.label);
   }, [level, world.lanes]);
 
-  // Column filters — compose with plan scope and the rail's pipeline filter.
-  const [colStage, setColStage] = useState<Stage | null>(null);
-  const [colState, setColState] = useState<RoomState | null>(null);
-  const [colType, setColType] = useState<RoomType | null>(null);
-  const [colFlag, setColFlag] = useState<FlagFilter | null>(null);
-
   // Plan geometry: collapsible + draggable, remembered for the session.
   const [planOpen, setPlanOpen] = useState(true);
   const [planH, setPlanH] = useState(PLAN_DEFAULT_PX);
   const [statsOpen, setStatsOpen] = useState(false);
   const drag = useRef<{ y: number; h: number } | null>(null);
-
-  const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
 
   // Edits live in the route's session overlay (they must survive into the sync payload); the
   // world arrives with them already applied. The atlas only forwards patches.
@@ -276,34 +282,29 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
   const selected = zoneKey ? (world.zones.find((z) => z.zone.key === zoneKey) ?? null) : null;
   const levelZones = world.zones.filter((z) => z.zone.lane.label === level);
 
-  const scopeZones = selected ? [selected] : filteredZones;
+  // Scope only — plan selection and the rail's pipeline filter. Every other narrowing (stage,
+  // state, type, flags, free text) is the table's own, and shows as a chip in its strip.
+  const scopeZones = useMemo(
+    () => (selected ? [selected] : filteredZones),
+    [selected, filteredZones],
+  );
   const rows = useMemo<Row[]>(() => {
-    const q = filter.trim().toLowerCase();
     const out: Row[] = [];
     for (const zone of scopeZones) {
-      if (colStage && zone.stage !== colStage) continue;
       for (const room of zone.rooms) {
-        const shown = room;
-        const open = openFlags(shown);
-        const state = roomState(shown, open.length);
-        if (colState && state !== colState) continue;
-        if (colType && shown.type !== colType) continue;
-        if (colFlag === "any" && open.length === 0) continue;
-        if (colFlag === "none" && open.length > 0) continue;
-        if (colFlag && colFlag !== "any" && colFlag !== "none" && !open.includes(colFlag)) continue;
-        if (
-          q &&
-          !shown.name.toLowerCase().includes(q) &&
-          !shown.type.includes(q) &&
-          !zone.zone.key.toLowerCase().includes(q)
-        )
-          continue;
-        out.push({ zone, room: shown, state, open });
+        const open = openFlags(room);
+        out.push({ zone, room, state: roomState(room, open.length), open });
       }
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeZones, filter, decided, colStage, colState, colType, colFlag]);
+  }, [scopeZones, decided]);
+
+  // What the table is actually showing, in its order.
+  const visibleRows = useMemo(() => {
+    const byGuid = new Map(rows.map((r) => [r.room.guid, r]));
+    return visibleKeys.map((key) => byGuid.get(key)).filter((r): r is Row => r !== undefined);
+  }, [rows, visibleKeys]);
 
   const cursorRow = rows.find((r) => r.room.guid === cursor) ?? null;
 
@@ -313,15 +314,6 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
     return [...set].sort();
   }, [world]);
 
-  const anyColFilter =
-    colStage !== null || colState !== null || colType !== null || colFlag !== null;
-  const clearCols = () => {
-    setColStage(null);
-    setColState(null);
-    setColType(null);
-    setColFlag(null);
-  };
-
   // ── Keyboard: j/k cursor, a/d verbs, Esc clears scope (←/→ belong to the switcher) ──
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -330,15 +322,14 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
       if (e.key === "Escape") {
         setZoneKey(null);
         setCursor(null);
-        clearCols();
         return;
       }
       if (e.key === "j" || e.key === "k") {
         e.preventDefault();
-        if (rows.length === 0) return;
-        const i = rows.findIndex((r) => r.room.guid === cursor);
-        const next = e.key === "j" ? Math.min(rows.length - 1, i + 1) : Math.max(0, i - 1);
-        setCursor(rows[i === -1 ? 0 : next]!.room.guid);
+        if (visibleRows.length === 0) return;
+        const i = visibleRows.findIndex((r) => r.room.guid === cursor);
+        const next = e.key === "j" ? Math.min(visibleRows.length - 1, i + 1) : Math.max(0, i - 1);
+        setCursor(visibleRows[i === -1 ? 0 : next]!.room.guid);
         return;
       }
       if ((e.key === "a" || e.key === "d") && cursorRow) {
@@ -350,10 +341,6 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
-
-  useEffect(() => {
-    if (cursor) rowRefs.current.get(cursor)?.scrollIntoView({ block: "nearest" });
-  }, [cursor]);
 
   // Optimistic: mark locally, then write through. The route re-reads on demand; a failed
   // write surfaces through the route's error lane, never as a silently-kept decision.
@@ -367,6 +354,206 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
     setCursor(null);
     if (z) setLevel(z.zone.lane.label);
   };
+
+  // ── The table's columns. One descriptor per column; MasterTable owns filter/sort/search. ──
+  const columns = useMemo<Column<Row>[]>(
+    () => [
+      {
+        key: "stage",
+        label: "stage",
+        title: "the ZONE's pipeline label — not a claim about this room",
+        width: "w-28",
+        sort: (row) => STAGE_ORDER.indexOf(row.zone.stage),
+        facet: (row) => row.zone.stage,
+        options: STAGE_ORDER.map((s) => ({ value: s, label: s })),
+        cell: (row) => (
+          <ReadCell
+            value={`${STAGE_ORDER.indexOf(row.zone.stage) + 1} ${row.zone.stage}`}
+            reason={`zone ${row.zone.zone.key} is at "${row.zone.stage}" — ${STAGE_BLURB[row.zone.stage]}. This is a ZONE label; the room's own state is the next column.`}
+            className="text-muted-foreground"
+          />
+        ),
+      },
+      {
+        ...stateColumn<Row>({
+          label: "state",
+          title:
+            "this ROOM's derived state — the same vocabulary the rail bars and the plan fills use",
+          of: (row) => stateMeta(row.state),
+        }),
+        // Pipeline order, not alphabetical: "needs a call" sorts before "in .r10" because that
+        // is the order the work happens in.
+        sort: (row) => ROOM_STATES.indexOf(row.state),
+        options: ROOM_STATES.map((s) => ({
+          value: STATE_META[s].label,
+          label: STATE_META[s].label,
+        })),
+      },
+      {
+        key: "zone",
+        label: "zone",
+        width: "w-24",
+        sort: (row) => row.zone.zone.key,
+        search: (row) => row.zone.zone.key,
+        cell: (row) => (
+          <span className="tele block truncate px-1.5">
+            <span
+              className="mr-1 inline-block size-2 rounded-[1px] align-middle"
+              style={{ background: `rgb(${row.zone.zone.color})` }}
+            />
+            {row.zone.zone.key}
+          </span>
+        ),
+      },
+      {
+        key: "name",
+        label: "name",
+        width: "min-w-40",
+        sort: (row) => row.room.name,
+        search: (row) => row.room.name,
+        cell: (row) => (
+          <TextCell
+            value={row.room.name}
+            onCommit={(v) => actions.patch(row.room.guid, { name: v })}
+            className="text-left"
+          />
+        ),
+      },
+      {
+        key: "type",
+        label: "type",
+        width: "w-32",
+        sort: (row) => row.room.type,
+        search: (row) => row.room.type,
+        facet: (row) => row.room.type,
+        options: ROOM_TYPES.map((t) => ({ value: t, label: t })),
+        cell: (row) => (
+          <CellSelect
+            value={row.room.type}
+            onChange={(v) => actions.patch(row.room.guid, { type: v as RoomType })}
+          >
+            {ROOM_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </CellSelect>
+        ),
+      },
+      {
+        key: "sqft",
+        label: "sf",
+        title: "detected area — geometry is edited in Revit",
+        right: true,
+        width: "w-16",
+        sort: (row) => row.room.sqft,
+        cell: (row) => (
+          <ReadCell
+            value={row.room.sqft}
+            reason={`detected area — source ${row.room.provenance.sourceSqft} sf, run ${row.room.provenance.runId}. Geometry is edited in Revit, never here.`}
+          />
+        ),
+      },
+      {
+        key: "ceil",
+        label: "ceil",
+        right: true,
+        width: "w-14",
+        sort: (row) => row.room.ceilingFt,
+        cell: (row) => (
+          <NumberCell
+            value={row.room.ceilingFt}
+            digits={1}
+            min={0}
+            onCommit={(v) => actions.patch(row.room.guid, { ceilingFt: v })}
+          />
+        ),
+      },
+      // The Manual J block: same shape, same law — faded until the room has data, and any
+      // number entered CREATES that data (the room's state moves to "data entered").
+      ...MANUAL_J.map(
+        (mj): Column<Row> => ({
+          key: mj.field,
+          label: mj.label,
+          right: true,
+          width: mj.width,
+          sort: (row) => row.room.data?.[mj.field] ?? 0,
+          cell: (row) => (
+            <NumberCell
+              value={row.room.data?.[mj.field] ?? 0}
+              digits={0}
+              integer
+              min={0}
+              className={row.room.data === null ? "opacity-50" : undefined}
+              onCommit={(v) => actions.patch(row.room.guid, { [mj.field]: v })}
+            />
+          ),
+        }),
+      ),
+      {
+        key: "flags",
+        label: "flags",
+        width: "w-24",
+        title: "undecided detector calls on this room — a/d accept or dismiss the first one",
+        sort: (row) => row.open.length,
+        // Multi-valued: a room carries a SET of flags, so the vocabulary is "any open" /
+        // "none open" / one named flag rather than a single cell value.
+        match: (row, value) =>
+          value === "any"
+            ? row.open.length > 0
+            : value === "none"
+              ? row.open.length === 0
+              : row.open.includes(value),
+        options: [
+          { value: "any", label: "any open" },
+          { value: "none", label: "none open" },
+          ...flagVocabulary.map((f) => ({ value: f, label: f })),
+        ],
+        cell: (row) =>
+          row.open.length > 0 ? (
+            <span className="tele block truncate px-1.5 text-cat-clay" title={row.open.join(", ")}>
+              {row.open.length} open
+            </span>
+          ) : row.room.decisions.length > 0 ? (
+            <span className="tele block truncate px-1.5 text-muted-foreground">
+              {row.room.decisions.length} decided
+            </span>
+          ) : null,
+      },
+      {
+        key: "r10",
+        label: ".r10",
+        width: "w-28",
+        title: "this room's line in the .r10 — or the drift that must be reconciled before re-sync",
+        sort: (row) => row.room.r10?.identifier ?? "",
+        cell: (row) => {
+          const r10 = row.room.r10;
+          if (!r10) return <span className="tele block px-1.5 text-muted-foreground/50">—</span>;
+          const drift = row.room.sqft - r10.lastSyncedSqft;
+          return drift !== 0 ? (
+            <span className="tele block truncate px-1.5 text-cat-clay">
+              drift {drift > 0 ? "+" : ""}
+              {drift} sf
+            </span>
+          ) : (
+            <span className="tele block truncate px-1.5 text-cat-green">#{r10.identifier}</span>
+          );
+        },
+      },
+    ],
+    [actions, flagVocabulary],
+  );
+
+  // Chips the ROUTE owns. The table's own column filters chip themselves.
+  const chips = useMemo(() => {
+    const list: { label: string; onClear: () => void }[] = [];
+    if (selected)
+      list.push({ label: `plan scope: ${selected.zone.key}`, onClear: () => selectZone(null) });
+    if (stageFilter)
+      list.push({ label: `rail: ${stageFilter}`, onClear: () => setStageFilter(null) });
+    return list;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, stageFilter]);
 
   // ── Plan resize: pointer events only, no library. Below the min cap the plan hides. ──
   const onHandleDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -396,8 +583,8 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
     stage: s,
     n: world.zones.filter((z) => z.stage === s).length,
   }));
-  const scopeCalls = rows.filter((r) => r.state === "call").length;
-  const scopeSqft = rows.reduce((s, r) => s + r.room.sqft, 0);
+  const scopeCalls = visibleRows.filter((r) => r.state === "call").length;
+  const scopeSqft = visibleRows.reduce((s, r) => s + r.room.sqft, 0);
 
   const proposedUrl =
     `/takeoffs?level=${level}` +
@@ -473,7 +660,7 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                   title={STATE_META[s].note}
                   className="tele inline-flex items-center gap-1 text-muted-foreground"
                 >
-                  <StateDot state={s} />
+                  <StateDot {...stateMeta(s)} />
                   {STATE_META[s].label}
                 </span>
               ))}
@@ -692,152 +879,41 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
           </div>
 
           {/* The master table. Scoped, never hidden, never a per-zone detail pane. */}
-          <div className="flex min-h-0 flex-1 flex-col">
-            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-2 py-1">
-              <span className="tele-label text-muted-foreground">rooms in scope</span>
-              <input
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                placeholder="filter name / type / zone…"
-                className="tele h-6 w-44 rounded-[var(--radius)] border border-border bg-transparent px-1.5 outline-none focus:border-ring"
-              />
-              <span className="tele text-muted-foreground">
-                {rows.length} rooms · {fmtNum(scopeSqft, 0)} sf
+          <MasterTable
+            rows={rows}
+            columns={columns}
+            rowKey={(row) => row.room.guid}
+            scopeLabel="rooms in scope"
+            searchPlaceholder="name / type / zone…"
+            chips={chips}
+            summary={
+              <>
+                {visibleRows.length} rooms · {fmtNum(scopeSqft, 0)} sf
                 {scopeCalls > 0 && (
                   <span className="text-cat-clay"> · {scopeCalls} needing a call</span>
                 )}
-              </span>
-
-              {selected && (
-                <FilterChip
-                  label={`plan scope: ${selected.zone.key}`}
-                  onClear={() => selectZone(null)}
-                />
-              )}
-              {stageFilter && (
-                <FilterChip label={`rail: ${stageFilter}`} onClear={() => setStageFilter(null)} />
-              )}
-              {colStage && (
-                <FilterChip label={`stage: ${colStage}`} onClear={() => setColStage(null)} />
-              )}
-              {colState && (
-                <FilterChip
-                  label={`state: ${STATE_META[colState].label}`}
-                  onClear={() => setColState(null)}
-                />
-              )}
-              {colType && (
-                <FilterChip label={`type: ${colType}`} onClear={() => setColType(null)} />
-              )}
-              {colFlag && (
-                <FilterChip
-                  label={`flags: ${colFlag === "any" ? "any open" : colFlag === "none" ? "none open" : colFlag}`}
-                  onClear={() => setColFlag(null)}
-                />
-              )}
-              {anyColFilter && (
-                <button
-                  type="button"
-                  onClick={clearCols}
-                  className="tele rounded-[var(--radius)] px-1 text-muted-foreground hover:bg-muted"
-                >
-                  clear column filters
-                </button>
-              )}
-
-              <span className="tele ml-auto text-muted-foreground">
-                j/k cursor · a/d accept/dismiss
-              </span>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-auto">
-              <table className="w-full border-collapse text-xs">
-                <thead>
-                  <tr>
-                    <Th
-                      label="stage"
-                      title="the ZONE's pipeline label — not a claim about this room"
-                    >
-                      <ColFilter
-                        value={colStage}
-                        onChange={setColStage}
-                        all="any"
-                        options={STAGE_ORDER.map((s) => ({ value: s, label: s }))}
-                      />
-                    </Th>
-                    <Th
-                      label="state"
-                      title="this ROOM's derived state — the same vocabulary the rail bars and the plan fills use"
-                    >
-                      <ColFilter
-                        value={colState}
-                        onChange={setColState}
-                        all="any"
-                        options={ROOM_STATES.map((s) => ({ value: s, label: STATE_META[s].label }))}
-                      />
-                    </Th>
-                    <Th label="zone" />
-                    <Th label="name" />
-                    <Th label="type">
-                      <ColFilter
-                        value={colType}
-                        onChange={setColType}
-                        all="any"
-                        options={ROOM_TYPES.map((t) => ({ value: t, label: t }))}
-                      />
-                    </Th>
-                    <Th label="sf" right title="detected area — geometry is edited in Revit" />
-                    <Th label="ceil" right />
-                    <Th label="ppl" right />
-                    <Th label="ltg W" right />
-                    <Th label="eq S" right />
-                    <Th label="eq L" right />
-                    <Th label="vent" right />
-                    <Th label="flags">
-                      <ColFilter
-                        value={colFlag}
-                        onChange={setColFlag}
-                        all="any"
-                        options={[
-                          { value: "any", label: "any open" },
-                          { value: "none", label: "none open" },
-                          ...flagVocabulary.map((f) => ({ value: f, label: f })),
-                        ]}
-                      />
-                    </Th>
-                    <Th label=".r10" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map(({ zone, room, state, open }) => (
-                    <TableRow
-                      key={room.guid}
-                      zone={zone}
-                      room={room}
-                      state={state}
-                      open={open}
-                      cursor={cursor === room.guid}
-                      rowRef={(el) => {
-                        if (el) rowRefs.current.set(room.guid, el);
-                        else rowRefs.current.delete(room.guid);
-                      }}
-                      onFocus={() => {
-                        setCursor(room.guid);
-                        if (!selected) setLevel(zone.zone.lane.label);
-                      }}
-                      onPatch={(p) => actions.patch(room.guid, p)}
-                    />
-                  ))}
-                </tbody>
-              </table>
-              {rows.length === 0 && (
-                <p className="p-6 text-center text-xs text-muted-foreground">
-                  No rooms in scope. Zones before <span className="tele">partitioned</span> have no
-                  rooms yet — widen the filters or press <span className="tele">Esc</span>.
-                </p>
-              )}
-            </div>
-          </div>
+                <span className="ml-2 opacity-70">j/k cursor · a/d accept/dismiss</span>
+              </>
+            }
+            empty={
+              <>
+                No rooms in scope. Zones before <span className="tele">partitioned</span> have no
+                rooms yet — widen the rail filter or press <span className="tele">Esc</span>.
+              </>
+            }
+            activeKey={cursor}
+            onRowClick={(row) => {
+              setCursor(row.room.guid);
+              // Clicking a row of the whole-house scope follows the room to its level; when a
+              // zone is already picked on the plan the level is the user's choice, not the row's.
+              if (!selected) setLevel(row.zone.zone.lane.label);
+            }}
+            onVisibleChange={(keys) =>
+              setVisibleKeys((prev) =>
+                prev.length === keys.length && prev.every((k, i) => k === keys[i]) ? prev : keys,
+              )
+            }
+          />
         </section>
 
         {/* ── RIGHT: sparse peek at exactly one zone. Opaque on purpose. ────── */}
@@ -1190,234 +1266,6 @@ function StatLine({ label, value, tone }: { label: string; value: string; tone?:
   );
 }
 
-// ── Table pieces ────────────────────────────────────────────────────────────
-
-function Th({
-  label,
-  right,
-  title,
-  children,
-}: {
-  label: string;
-  right?: boolean;
-  title?: string;
-  children?: React.ReactNode;
-}) {
-  return (
-    <th
-      title={title}
-      className={cn(
-        "sticky top-0 z-10 align-top whitespace-nowrap border-b border-l border-border bg-muted px-1.5 py-1 font-normal first:border-l-0",
-        right ? "text-right" : "text-left",
-      )}
-    >
-      <span className="tele-label block text-muted-foreground">{label}</span>
-      {children}
-    </th>
-  );
-}
-
-/** A column filter, in the table's own idiom: a hairline native select, tinted when active. */
-function ColFilter<T extends string>({
-  value,
-  onChange,
-  options,
-  all,
-}: {
-  value: T | null;
-  onChange: (v: T | null) => void;
-  options: { value: string; label: string }[];
-  all: string;
-}) {
-  return (
-    <select
-      value={value ?? ""}
-      onChange={(e) => onChange(e.target.value === "" ? null : (e.target.value as T))}
-      className={cn(
-        "tele mt-0.5 h-5 w-full min-w-0 max-w-32 rounded-[1px] border bg-transparent px-0.5 outline-none",
-        value
-          ? "border-primary/40 bg-primary/[0.06] text-foreground"
-          : "border-[var(--line-soft)] text-muted-foreground",
-      )}
-    >
-      <option value="">{all}</option>
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-function FilterChip({ label, onClear }: { label: string; onClear: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClear}
-      title="remove this filter"
-      className="tele inline-flex items-center gap-1 rounded-[var(--radius)] border border-[var(--line-2)] bg-muted px-1.5 py-px hover:border-destructive/40 hover:text-destructive"
-    >
-      <span className="normal-case">{label}</span>
-      <span className="opacity-60">×</span>
-    </button>
-  );
-}
-
-const cellNum = "border-b border-l border-[var(--line-soft)] p-0";
-const cellRead =
-  "tele whitespace-nowrap border-b border-l border-[var(--line-soft)] px-1.5 text-right";
-
-function TableRow({
-  zone,
-  room,
-  state,
-  open,
-  cursor,
-  rowRef,
-  onFocus,
-  onPatch,
-}: {
-  zone: WorldZone;
-  room: WorldRoom;
-  state: RoomState;
-  open: string[];
-  cursor: boolean;
-  rowRef: (el: HTMLTableRowElement | null) => void;
-  onFocus: () => void;
-  onPatch: (p: RoomEdit) => void;
-}) {
-  const drifted = room.r10 !== null && room.r10.lastSyncedSqft !== room.sqft;
-  // Always editable: entering any Manual J number creates the room's data (state → "data entered").
-  const d = room.data ?? {
-    people: 0,
-    lightingW: 0,
-    equipSensible: 0,
-    equipLatent: 0,
-    ventilationCfm: 0,
-  };
-  const dim = room.data === null ? "opacity-50" : undefined;
-
-  return (
-    <tr
-      ref={rowRef}
-      className={cn("h-7 scroll-mt-12 hover:bg-muted/60", cursor && "bg-primary/[0.06]")}
-      onClick={(e) => {
-        if ((e.target as HTMLElement).closest("button")) return;
-        onFocus();
-      }}
-    >
-      <td
-        className="tele whitespace-nowrap border-b border-[var(--line-soft)] px-1.5 text-muted-foreground"
-        title={`zone ${zone.zone.key} is at "${zone.stage}" — ${STAGE_BLURB[zone.stage]}. This is a ZONE label; the room's own state is the next column.`}
-      >
-        {STAGE_ORDER.indexOf(zone.stage) + 1} {zone.stage}
-      </td>
-      <td
-        className="tele whitespace-nowrap border-b border-l border-[var(--line-soft)] px-1.5"
-        title={STATE_META[state].note}
-      >
-        <StateDot state={state} />{" "}
-        <span className={state === "call" ? "text-cat-clay" : "text-muted-foreground"}>
-          {STATE_META[state].label}
-        </span>
-      </td>
-      <td className="tele whitespace-nowrap border-b border-l border-[var(--line-soft)] px-1.5">
-        <span
-          className="mr-1 inline-block size-2 rounded-[1px] align-middle"
-          style={{ background: `rgb(${zone.zone.color})` }}
-        />
-        {zone.zone.key}
-      </td>
-      <td className={cn(cellNum, "min-w-40")}>
-        <TextCell value={room.name} onCommit={(v) => onPatch({ name: v })} className="text-left" />
-      </td>
-      <td className={cn(cellNum, "w-32")}>
-        <CellSelect value={room.type} onChange={(v) => onPatch({ type: v as RoomType })}>
-          {ROOM_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </CellSelect>
-      </td>
-      {/* Machine-measured: geometry edits happen in Revit, never here. */}
-      <td
-        className={cn(cellRead, "w-16 tabular-nums")}
-        title={`detected area — source ${room.provenance.sourceSqft} sf, run ${room.provenance.runId}`}
-      >
-        {room.sqft}
-      </td>
-      <td className={cn(cellNum, "w-14")}>
-        <NumberCell
-          value={room.ceilingFt}
-          digits={1}
-          min={0}
-          onCommit={(v) => onPatch({ ceilingFt: v })}
-        />
-      </td>
-      <td className={cn(cellNum, "w-12", dim)}>
-        <NumberCell value={d.people} integer min={0} onCommit={(v) => onPatch({ people: v })} />
-      </td>
-      <td className={cn(cellNum, "w-16", dim)}>
-        <NumberCell
-          value={d.lightingW}
-          digits={0}
-          min={0}
-          onCommit={(v) => onPatch({ lightingW: v })}
-        />
-      </td>
-      <td className={cn(cellNum, "w-16", dim)}>
-        <NumberCell
-          value={d.equipSensible}
-          digits={0}
-          min={0}
-          onCommit={(v) => onPatch({ equipSensible: v })}
-        />
-      </td>
-      <td className={cn(cellNum, "w-16", dim)}>
-        <NumberCell
-          value={d.equipLatent}
-          digits={0}
-          min={0}
-          onCommit={(v) => onPatch({ equipLatent: v })}
-        />
-      </td>
-      <td className={cn(cellNum, "w-16", dim)}>
-        <NumberCell
-          value={d.ventilationCfm}
-          digits={0}
-          min={0}
-          onCommit={(v) => onPatch({ ventilationCfm: v })}
-        />
-      </td>
-      <td className="whitespace-nowrap border-b border-l border-[var(--line-soft)] px-1.5">
-        {open.length > 0 ? (
-          <span className="tele text-cat-clay" title={open.join(", ")}>
-            {open.length} open
-          </span>
-        ) : room.decisions.length > 0 ? (
-          <span className="tele text-muted-foreground">{room.decisions.length} decided</span>
-        ) : null}
-      </td>
-      <td className="whitespace-nowrap border-b border-l border-[var(--line-soft)] px-1.5">
-        {room.r10 ? (
-          drifted ? (
-            <span className="tele text-cat-clay">
-              drift {room.sqft - room.r10.lastSyncedSqft > 0 ? "+" : ""}
-              {room.sqft - room.r10.lastSyncedSqft} sf
-            </span>
-          ) : (
-            <span className="tele text-cat-green">#{room.r10.identifier}</span>
-          )
-        ) : (
-          <span className="tele text-muted-foreground/50">—</span>
-        )}
-      </td>
-    </tr>
-  );
-}
-
 // ── Right rail: sparse labelled lines, ledger idiom ─────────────────────────
 
 function Line({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
@@ -1522,7 +1370,7 @@ function Peek({
         <p className="mt-1 flex flex-wrap items-center gap-x-1.5">
           {room && state ? (
             <>
-              <StateDot state={state} />
+              <StateDot {...stateMeta(state)} />
               <span className={cn("tele", state === "call" ? "text-cat-clay" : undefined)}>
                 {STATE_META[state].label}
               </span>

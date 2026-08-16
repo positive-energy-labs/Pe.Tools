@@ -15,9 +15,8 @@ Seven independent table implementations exist. `components/master-table/` (306+1
 tested pure core) is the canon: multi-sort, facet filters over ALL rows (stable vocabulary law),
 cluster headers, chip strip, two honest empty states.
 
-- The atlas still runs the ORIGINAL fork it was copied from (`takeoff/atlas.tsx:754-1416`:
-  positional JSX columns, 14 `<Th>` hand-matched to 14 `<td>`, no sorting). Its SHIMS entry says
-  the atlas migrates onto the shared copy now that takeoff merged.
+- The atlas migrated onto the canon (2026-08-15): its fork and `takeoff/cells.tsx` are deleted,
+  it gained sorting and a `match` flags filter, and gap 8's `fmtNum` twin is dead.
 - `ops/primitives.tsx:213` `DataTable<Row>` is a second, incompatible `Column<Row>` interface
   with 12 consumers across the ops views.
 - Hand-rolled besides: `data-tables.tsx:263`, `schedule-grid.tsx:300`, `instances.tsx:214`,
@@ -25,11 +24,13 @@ cluster headers, chip strip, two honest empty states.
   (`families.tsx:1015`) and receipts (`:1116`) tables.
 
 Capabilities the canon must absorb before it can abolish the rest:
-- **Selection model** — families hand-rolls `pickedIds: Set<number>` in a cell (`families.tsx:540`);
-  atlas has a `cursor` guid + j/k keyboard nav (`atlas.tsx:326-352`). Neither is in MasterTable.
-- **Editable cells** — `master-table/cells.tsx` already carries `TextCell`/`NumberCell`/`CellSelect`
-  (byte-identical twin of `takeoff/cells.tsx`), but MasterTable itself renders read-only.
-- **First row/col lock** — sticky header exists; sticky first column does not.
+- **Selection model** — families hand-rolls `pickedIds: Set<number>` in a cell (`families.tsx:540`).
+  A single cursor IS covered now (`activeKey` + `onVisibleChange`, which is how atlas's j/k walks
+  the visible order); multi-select is not.
+- **Editable cells** — covered: `master-table/cells.tsx` owns `TextCell`/`NumberCell`/`CellSelect`
+  and a column renders them from its `cell`, as the atlas's Manual J columns do.
+- **First col lock** — covered by `Column.lock` (sticky-left with its own ground); no consumer
+  needs it yet.
 - **Cell width control** — only a `width` utility-class string today.
 - **Proposal-aware cells** — see theme 2.
 - **URL-addressable state** — filters/sorts/query are component-local `useState`
@@ -171,8 +172,8 @@ good 7-variant error UI adopted by only 4 of 11 surfaces. Web-side candidate: pe
    `instances.tsx`, `host/target-ui.tsx`, schedule-grid plugin) — plus takeoffs' `.slice(0,10)`.
 6. **`/` index TOOLS lists 6 of 13 routes** — `/takeoffs` is unreachable except by typed URL.
 7. **Esc-handler with input-guard ×3**, each with a different guard list.
-8. **`fmtNum` twice, number-parse twice** (`takeoff/cells.tsx` vs `master-table/model.ts` — the
-   model.ts pair is stricter; atlas should consume it and its twin die).
+8. ~~**`fmtNum` twice, number-parse twice**~~ — CLOSED 2026-08-15: `takeoff/cells.tsx` is deleted,
+   every caller consumes `master-table/model.ts`'s stricter pair.
 
 ## Ignored work (noted, not scheduled — SHIMS style)
 

@@ -17,7 +17,7 @@ import { callHostRpc } from "#/host/client";
 import { mintSelector, sessionLabel, type SessionFacts } from "#/host/target";
 import { useTarget } from "#/host/use-target";
 import { useVerb } from "#/lib/use-verb";
-import { fmtNum } from "#/takeoff/cells";
+import { fmtNum } from "#/components/master-table/model";
 import { Atlas, type AtlasActions } from "#/takeoff/atlas";
 import {
   adoptZones,

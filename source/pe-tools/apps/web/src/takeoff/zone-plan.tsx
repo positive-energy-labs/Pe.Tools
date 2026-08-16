@@ -8,7 +8,7 @@
  */
 import { useMemo } from "react";
 
-import { fmtNum } from "#/takeoff/cells";
+import { fmtNum } from "#/components/master-table/model";
 import {
   boundsOf,
   mergeBounds,

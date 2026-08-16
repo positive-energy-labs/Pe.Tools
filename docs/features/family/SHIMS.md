@@ -19,16 +19,15 @@ the user in the authored lane of the same family. That is the only crossing.
 
 ## Shims (temporary, each names its replacement)
 
-1. **master-table duplicated from takeoff-fresh.** The takeoff atlas table (column filter chips,
-   ColFilter selects, commit-on-blur cells, state column idiom) is ported into
-   `apps/web/src/components/master-table/` because takeoff-fresh is not on main yet.
-   Replacement: when takeoff merges, both routes consume ONE shared component; the takeoff
-   atlas migrates onto this copy, not the reverse.
-   Two laws were written down while polishing, and they travel with the copy: `facetOptions`
-   derives from ALL rows on purpose (a column's vocabulary must not shuffle as other filters
-   narrow), and `clusters` `console.warn`s in dev when a column group is interrupted and resumed
-   — that invariant caught `/families` rendering the "family" span header twice on its first run,
-   which is why the plan column now sits after the identity cluster rather than inside it.
+Numbers are stable: a closed entry leaves the list and is named below, never renumbered.
+
+**Closed:** 1 — *master-table duplicated from takeoff-fresh*. Shipped 2026-08-15: the atlas
+migrated onto `apps/web/src/components/master-table/`, its fork (`Th`/`ColFilter`/`FilterChip`/
+`TableRow`) and `takeoff/cells.tsx` are deleted, and there is one implementation. The two laws
+from that entry live on in the code: `facetOptions` derives from ALL rows on purpose (a column's
+vocabulary must not shuffle as other filters narrow), and `clusters` `console.warn`s in dev when
+a column group is interrupted and resumed.
+
 2. **`host.shell.open` adoption.** Generic typed op (path in, OS default app). Takeoffs'
    "Launch RHVAC" button migrates onto it when takeoff merges. Receipts in `/families`
    link artifact dirs through it.

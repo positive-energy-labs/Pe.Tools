@@ -4,8 +4,7 @@
  * collapses into a per-row detail pane, and every filter narrowing it is visible as a removable
  * chip in its own header — so what you see is always the complete truth about the current scope.
  *
- * shim: duplicated from takeoff-fresh atlas; when takeoff merges, both routes consume this one
- * component.
+ * One implementation: `/families` and the takeoff atlas both render this component.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
