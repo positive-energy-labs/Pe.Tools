@@ -1218,7 +1218,12 @@ function RealTable() {
         markup written to flatter it. This is the product primitive, unmodified, wrapped in an{" "}
         <code className="font-[family-name:var(--font-pe-mono)] text-[11px]">ArtifactFrame</code>{" "}
         per the border budget, with the cell-state key inside the frame it describes. Sort a column,
-        filter one, type in the search box — the grammar has to survive all of it.
+        filter one, type in the search box — the grammar has to survive all of it. THE ROW LAW
+        (ruled 2026-08-16): a cell is one clipped line — the value and its zero-footprint marks,
+        with the body wash filling the whole cell. Fat rows are never allowed. The prose a cell used
+        to carry (refusal reasons, notes, citations, the model&apos;s ghost value) reads out in the
+        band under the table when the cell is focused, the way a spreadsheet&apos;s formula bar
+        reads out the active cell — click a cell below to see it.
       </p>
       <p className="max-w-[80ch] text-[12px] leading-relaxed text-[var(--r-ink-2)]">
         This table is also the exhibit for two of §01&apos;s laws, because neither can be shown on a

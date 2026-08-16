@@ -14,7 +14,13 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 
-import { CELL_STATE_ORDER, StateCell, cellStateLabel } from "#/components/lang/cell";
+import {
+  CELL_STATE_ORDER,
+  StateCell,
+  cellFactsText,
+  cellStateLabel,
+  type StateCellProps,
+} from "#/components/lang/cell";
 import { CellNavigationProvider, type CellMove } from "#/components/master-table/cell-navigation";
 import {
   facetOptions,
@@ -72,21 +78,27 @@ const emptyTableState = (): MasterTableState => ({ filters: {}, sorts: [], query
  * orders by cell state without any consumer modelling the fact a second time, and the word in
  * the filter can never disagree with the marks in the cell.
  */
-function resolveStateColumn<Row>(column: Column<Row>): ValueColumn<Row> {
+type ResolvedColumn<Row> = ValueColumn<Row> & {
+  /** Kept off the public union: the table's own handle on a state column's reader, so the
+   * readout band can re-read the focused cell's facts without the consumer re-supplying them. */
+  readState?: (row: Row) => StateCellProps;
+};
+
+function resolveStateColumn<Row>(column: Column<Row>): ResolvedColumn<Row> {
   const state = column.state;
   if (state === undefined) return column;
   const label = (row: Row) => cellStateLabel(state(row));
   return {
     ...column,
     state: undefined,
-    cell: (row: Row) => (
-      <span className="block px-1.5 py-1">
-        <StateCell {...state(row)} />
-      </span>
-    ),
+    // ROW SCALE (ruled 2026-08-16): the cell IS the td's content box — one clipped line,
+    // full-bleed, so the body wash covers the whole cell. Prose facts read out in the band
+    // below the table, never inside the row.
+    cell: (row: Row) => <StateCell scale="row" {...state(row)} />,
     facet: column.facet ?? label,
     sort: column.sort ?? ((row: Row) => CELL_STATE_ORDER.indexOf(label(row))),
-  } as ValueColumn<Row>;
+    readState: state,
+  } as ResolvedColumn<Row>;
 }
 
 export function MasterTable<Row extends RowData>({
@@ -474,6 +486,45 @@ export function MasterTable<Row extends RowData>({
           </p>
         )}
       </div>
+
+      {/* THE READOUT BAND (ruled 2026-08-16): rows never grow, so the focused cell's prose —
+          state word, refusal reason, note, citation, the model's ghost value — reads out HERE,
+          at constant height, the way a spreadsheet's formula bar reads out the active cell.
+          Present exactly when the table carries state columns, so plain tables pay nothing. */}
+      {columns.some((column) => column.readState) && (
+        <table.Subscribe
+          source={table.atoms.cellSelection}
+          selector={() => {
+            const focused = table.getFocusedCell();
+            return focused ? `${focused.row.id} ${focused.column.id}` : "";
+          }}
+        >
+          {() => {
+            const focused = table.getFocusedCell();
+            const reader = focused ? columnByKey.get(focused.column.id)?.readState : undefined;
+            const cellState = focused && reader ? reader(focused.row.original) : undefined;
+            const facts = cellState ? cellFactsText(cellState) : null;
+            return (
+              <div className="tele flex h-6 min-w-0 shrink-0 items-center gap-2 overflow-hidden border-t border-[var(--r-line)] bg-[var(--r-recess)] px-2 text-[11px] whitespace-nowrap [--r-on:var(--r-recess)]">
+                {cellState ? (
+                  <>
+                    <span className="tele-label shrink-0 text-[10px] text-[var(--r-ink)]">
+                      {cellStateLabel(cellState)}
+                    </span>
+                    <span className="truncate text-[var(--r-ink-2)]">
+                      {facts ?? "nothing further — the marks on the cell are the whole story"}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-[var(--r-ink-mute)]">
+                    select a cell — its state, reasons and citations read out here
+                  </span>
+                )}
+              </div>
+            );
+          }}
+        </table.Subscribe>
+      )}
     </div>
   );
 }

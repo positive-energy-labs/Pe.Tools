@@ -179,10 +179,10 @@ export function StateDot({ tone, dim }: { tone: string; dim?: boolean }) {
 /** What a row's state/verdict column shows. `note` is the cell title — say what the state MEANS. */
 export interface StateMeta {
   label: string;
-  /** CSS colour, e.g. "var(--cat-clay)". */
+  /** A design-language meaning role, e.g. "var(--r-alarm)". Never a viz/taxonomy colour. */
   tone: string;
   note: string;
-  /** Clay-inked: this row is the one asking for a human. */
+  /** Wears the ONE alarm: this row is the one asking for a human. */
   alarm?: boolean;
   dim?: boolean;
 }
@@ -213,7 +213,7 @@ export function stateColumn<Row>({
       return (
         <span className="tele block truncate px-1.5" title={meta.note}>
           <StateDot tone={meta.tone} dim={meta.dim} />{" "}
-          <span className={meta.alarm ? "text-cat-clay" : "text-muted-foreground"}>
+          <span className={meta.alarm ? "text-[var(--r-alarm)]" : "text-muted-foreground"}>
             {meta.label}
           </span>
         </span>

@@ -68,6 +68,15 @@ export interface StateCellProps {
   grounding?: { doc: string; page: number };
   confidence?: "high" | "low";
   note?: string;
+  /**
+   * ROW SCALE (ruled 2026-08-16, kaitpw): inside a table a cell is ONE CLIPPED LINE — the value
+   * plus the zero-footprint marks (full-bleed body wash, squiggle, fold, square). No footline,
+   * no inline ghost: prose facts and the model's ghost value live in the table's READOUT BAND
+   * (and the title, as the hover shortcut). Fat rows are never allowed; a cell clips rather
+   * than expands, so column alignment and row height are uniform by construction. "card"
+   * (default) keeps the footline — pea's card and standalone specimens have room for it.
+   */
+  scale?: "card" | "row";
   className?: string;
 }
 
@@ -138,9 +147,46 @@ export function cellStateLabel(p: StateCellProps): CellStateName {
   return "clean";
 }
 
+/**
+ * The cell's prose facts as plain text, ranked — for the row-scale title and the table's
+ * readout band. Same ranking as the card footline (capReason ▸ note ▸ citation), with the
+ * ghost model value leading because drift is the one alarm.
+ */
+export function cellFactsText(p: StateCellProps): string | null {
+  const parts: string[] = [];
+  if (p.agree === "drift" && p.modelValue != null) parts.push(`model holds ${p.modelValue}`);
+  if (p.capReason != null) parts.push(p.capReason);
+  if (p.note != null)
+    parts.push(p.confidence != null ? `${p.confidence} confidence — ${p.note}` : p.note);
+  else if (p.confidence === "low") parts.push("low confidence");
+  if (p.grounding != null) parts.push(`${p.grounding.doc} p.${p.grounding.page}`);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
 export function StateCell(props: StateCellProps) {
   const { value, modelValue, capReason, grounding, confidence, note, className } = props;
   const read = readCell(props);
+
+  if (props.scale === "row") {
+    return (
+      <span
+        className={cn("dl-cell", className)}
+        data-scale="row"
+        data-body={read.body ?? undefined}
+        data-seam={read.seam ? "" : undefined}
+        data-unsaved={read.unsaved === "pea" ? "pea" : read.unsaved === "you" ? "" : undefined}
+        title={cellFactsText(props) ?? undefined}
+      >
+        {read.unsettled != null ? (
+          <span className="dl-sq" data-state={read.unsettled}>
+            {value}
+          </span>
+        ) : (
+          value
+        )}
+      </span>
+    );
+  }
 
   // ONE footline, ranked and joined onto a single clamped line rather than stacked.
   const facts: React.ReactNode[] = [];

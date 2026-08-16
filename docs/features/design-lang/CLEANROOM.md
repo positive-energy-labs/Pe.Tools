@@ -232,6 +232,24 @@ Ruling notes to absorb (fixes applied to base + p3 same day):
    grounds or hover badly, in both modes. Fixed as note-4 work; hover states generally are
    an untested axis (the fixture has no hover/focus/selected states — round-1 finding).
 
+## The cell-scale ruling (2026-08-16, kaitpw — supersedes the footline at row scale)
+
+Judged on the live `/design-system` §04 table after the cell-state clause landed. Ruled:
+
+- **A table cell displays the value and nothing else.** Body colorations fill the ENTIRE
+  cell body (the cell is the td's content box), not a pill around the input. Strikeouts,
+  citations, comments, reasons — everything prose-shaped — has a different home.
+- **Fat rows are never allowed.** Cells clip rather than expand or wrap; row height and
+  column x/y alignment are uniform by construction. `StateCell scale="row"` is this,
+  enforced in `lang.css` (`min-height` tied to the h-7 row law).
+- **The different home is the READOUT BAND**: a constant-height strip on the table (the
+  spreadsheet formula-bar motif — cross-software meaning over novelty) that reads out the
+  focused cell's state word, refusal reason, note, citation, and the model's ghost value.
+  The `title` stays as the hover shortcut. Card scale keeps the footline — pea's card is
+  not a table row.
+- This RESOLVES the "footline clamp" frontier knob below at row scale (the clamp now only
+  governs the card) and re-scopes the ghost token: inline ghost is card-scale only.
+
 ## Frontier — grammar doubts that remain after round 2
 
 **Grammar knobs still hard-coded in the base** (each is a constant no round has varied):
