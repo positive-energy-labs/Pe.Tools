@@ -7,6 +7,7 @@
  * `.r10`. This module only names those things and computes display-side geometry.
  */
 import { ProjectA_ZONES, type DeclaredZone } from "#/takeoff/zones-project-a";
+import { boundsOf, type AffineFrame, type Bounds2 } from "#/lib/affine-frame";
 
 // ── Levels ──────────────────────────────────────────────────────────────────
 //
@@ -66,14 +67,7 @@ export interface Zone extends DeclaredZone {
   guid: string;
   /** Declared area (shoelace over even-odd loops) — the accounting law's right-hand side. */
   declaredSqft: number;
-  bounds: Bounds;
-}
-
-export interface Bounds {
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
+  bounds: Bounds2;
 }
 
 /**
@@ -95,27 +89,8 @@ export const shoelace = (loop: readonly (readonly [number, number])[]) => {
   return Math.abs(sum) / 2;
 };
 
-export const boundsOf = (loops: readonly (readonly (readonly [number, number])[])[]): Bounds => {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const loop of loops)
-    for (const [x, y] of loop) {
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (y < minY) minY = y;
-      if (y > maxY) maxY = y;
-    }
-  return { minX, minY, maxX, maxY };
-};
-
-export const mergeBounds = (a: Bounds, b: Bounds): Bounds => ({
-  minX: Math.min(a.minX, b.minX),
-  minY: Math.min(a.minY, b.minY),
-  maxX: Math.max(a.maxX, b.maxX),
-  maxY: Math.max(a.maxY, b.maxY),
-});
+export const loopBounds = (loops: readonly (readonly (readonly [number, number])[])[]) =>
+  boundsOf(loops.flat());
 
 /**
  * Even-odd containment over ALL loops together — the exact rule ZoneScope.ContainsEvenOdd uses,
@@ -140,21 +115,22 @@ export function containsEvenOdd(
 }
 
 /**
- * SVG path in a Y-flipped frame (model Y grows north, SVG Y grows down). `bounds` fixes the
- * flip origin so every shape in one pane shares a frame — preserving the coordinate frame is
- * the whole point; a per-shape fit would silently move rooms relative to their zone.
+ * SVG path in one shared affine frame. Preserving that frame is the whole point: a per-shape fit
+ * would silently move rooms relative to their zone.
  */
 export function pathD(
   loops: readonly (readonly (readonly [number, number])[])[],
-  bounds: Bounds,
+  frame: Pick<AffineFrame, "toViewport">,
 ): string {
-  const flip = (y: number) => bounds.minY + bounds.maxY - y;
   return loops
     .filter((loop) => loop.length >= 3)
     .map(
       (loop) =>
         loop
-          .map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(3)} ${flip(y).toFixed(3)}`)
+          .map(([x, y], i) => {
+            const [px, py] = frame.toViewport([x, y]);
+            return `${i === 0 ? "M" : "L"}${px.toFixed(3)} ${py.toFixed(3)}`;
+          })
           .join("") + "Z",
     )
     .join("");
@@ -175,7 +151,7 @@ export function buildZones(declared: DeclaredZone[] = ProjectA_ZONES): Zone[] {
           key: `${lane.label}#${String(ordinal).padStart(2, "0")}`,
           guid: zoneGuid(levelIndex, ordinal),
           declaredSqft: z.loops.reduce((sum, loop) => sum + shoelace(loop), 0),
-          bounds: boundsOf(z.loops),
+          bounds: loopBounds(z.loops),
         });
       });
   });

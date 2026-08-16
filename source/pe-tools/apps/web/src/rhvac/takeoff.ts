@@ -11,6 +11,7 @@ import type {
   TakeoffResidueShape,
   TakeoffRoomShape,
 } from "#/rhvac/types";
+import { boundsOf, type Bounds2 } from "#/lib/affine-frame";
 
 export function parseTakeoffTsv(tsvText: string): TakeoffLevel {
   let levelName: string | null = null;
@@ -155,34 +156,17 @@ function parseLoop(text: string): [number, number][] {
 
 // ── render geometry helpers ──────────────────────────────────────────────────
 
-export interface Bounds {
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
-}
-
-export function levelBounds(level: TakeoffLevel): Bounds | null {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const shape of [...level.rooms, ...level.residues])
-    for (const [x, y] of shape.outer) {
-      if (x < minX) minX = x;
-      if (y < minY) minY = y;
-      if (x > maxX) maxX = x;
-      if (y > maxY) maxY = y;
-    }
-  return Number.isFinite(minX) ? { minX, minY, maxX, maxY } : null;
+export function levelBounds(level: TakeoffLevel): Bounds2 | null {
+  const points = [...level.rooms, ...level.residues].flatMap((shape) => shape.outer);
+  return points.length > 0 ? boundsOf(points) : null;
 }
 
 /** Model Y is up, SVG Y is down — mirror inside the level's own bounds. */
-const flipY = (y: number, bounds: Bounds) => bounds.minY + bounds.maxY - y;
+const flipY = (y: number, bounds: Bounds2) => bounds.minY + bounds.maxY - y;
 
 export function shapePathD(
   shape: Pick<TakeoffRoomShape, "outer" | "holes">,
-  bounds: Bounds,
+  bounds: Bounds2,
 ): string {
   const loopD = (loop: [number, number][]) =>
     loop
@@ -192,7 +176,7 @@ export function shapePathD(
 }
 
 /** Area-weighted centroid of the outer loop (shoelace), in flipped (SVG) coordinates. */
-export function shapeCentroid(shape: TakeoffRoomShape, bounds: Bounds): [number, number] {
+export function shapeCentroid(shape: TakeoffRoomShape, bounds: Bounds2): [number, number] {
   const pts = shape.outer;
   let area = 0;
   let cx = 0;

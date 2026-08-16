@@ -38,6 +38,7 @@ import {
   useMockFamilyStore,
 } from "#/family/store";
 import { familyModelPlaneOffset, familyModelPrismFaceCoordinate } from "#/family-model/preview";
+import { fitFrame } from "#/lib/affine-frame";
 
 export const Route = createFileRoute("/family")({
   /** Both params are optional, so every `<Link to="/family">` stays search-free. */
@@ -621,12 +622,7 @@ function Triptych({
   const VIEW_W = 258;
   const VIEW_H = 258;
   const M = 14;
-  const scale = Math.min(
-    ...VIEWS.flatMap((view) => [
-      (VIEW_W - 2 * M) / (box[view.u][1] - box[view.u][0]),
-      (VIEW_H - 2 * M) / (box[view.v][1] - box[view.v][0]),
-    ]),
-  );
+  const span = Math.max(...Object.values(box).map(([min, max]) => max - min));
 
   const dimIf = (id: string) => (hovered && hovered !== id ? 0.3 : 1);
 
@@ -635,10 +631,20 @@ function Triptych({
       {VIEWS.map((view) => {
         const [uMin, uMax] = box[view.u];
         const [vMin, vMax] = box[view.v];
-        const cx = (VIEW_W - 2 * M - (uMax - uMin) * scale) / 2;
-        const cy = (VIEW_H - 2 * M - (vMax - vMin) * scale) / 2;
-        const X = (u: number) => M + cx + (u - uMin) * scale;
-        const Y = (v: number) => VIEW_H - M - cy - (v - vMin) * scale;
+        const uMid = (uMin + uMax) / 2;
+        const vMid = (vMin + vMax) / 2;
+        const frame = fitFrame(
+          {
+            minX: uMid - span / 2,
+            minY: vMid - span / 2,
+            maxX: uMid + span / 2,
+            maxY: vMid + span / 2,
+          },
+          { width: VIEW_W, height: VIEW_H },
+          { padding: M, yAxis: "up" },
+        );
+        const X = (u: number) => frame.toViewport([u, 0])[0];
+        const Y = (v: number) => frame.toViewport([0, v])[1];
 
         const solidRect = (geo: SolidGeo) => {
           const du = view.u === "x" ? geo.w : view.u === "y" ? geo.d : null;
@@ -646,7 +652,12 @@ function Triptych({
           if (du == null || dv == null) return null;
           const u0 = -du / 2;
           const v0 = view.v === "z" ? 0 : -dv / 2;
-          return { x: X(u0), y: Y(v0 + dv), w: du * scale, h: dv * scale };
+          return {
+            x: X(u0),
+            y: Y(v0 + dv),
+            w: du * frame.scale,
+            h: dv * frame.scale,
+          };
         };
 
         const dragPlane = (plane: PlaneGeo) => (event: React.PointerEvent<SVGGElement>) => {
@@ -655,12 +666,11 @@ function Triptych({
           const svg = event.currentTarget.ownerSVGElement;
           const along = plane.axis === view.u ? "u" : "v";
           const move = (pointer: PointerEvent) => {
-            const rect = svg?.getBoundingClientRect();
-            if (!rect) return;
-            const world =
-              along === "u"
-                ? uMin + (pointer.clientX - rect.left - M - cx) / scale
-                : vMin + (VIEW_H - (pointer.clientY - rect.top) - M - cy) / scale;
+            const inverse = svg?.getScreenCTM()?.inverse();
+            if (!inverse) return;
+            const point = new DOMPoint(pointer.clientX, pointer.clientY).matrixTransform(inverse);
+            const content = frame.toContent([point.x, point.y]);
+            const world = content[along === "u" ? 0 : 1];
             const value = Math.max(0.5, Math.abs(world));
             update((current) =>
               setOverride(current, typeName, plane.param as string, fmtIn(value)),
@@ -679,6 +689,7 @@ function Triptych({
             <svg
               width={VIEW_W}
               height={VIEW_H}
+              viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
               className="rounded-[2px] border border-[var(--line)] bg-[var(--paper-2)]/30"
               onMouseLeave={() => onHover(null)}
             >
@@ -728,7 +739,7 @@ function Triptych({
                       key={geo.slug}
                       cx={X(0)}
                       cy={Y(0)}
-                      r={(geo.w / 2) * scale}
+                      r={(geo.w / 2) * frame.scale}
                       fill={geo.isVoid ? "none" : "var(--clay-ink)"}
                       fillOpacity={geo.isVoid ? 0 : 0.07}
                       stroke={active ? "var(--pe-blue)" : "var(--clay-ink)"}
@@ -814,7 +825,7 @@ function Triptych({
                         key={conn.slug}
                         cx={X(u)}
                         cy={Y(v)}
-                        r={(conn.w / 2) * scale}
+                        r={(conn.w / 2) * frame.scale}
                         fill={color}
                         fillOpacity={0.14}
                         stroke={color}
@@ -828,8 +839,8 @@ function Triptych({
                         key={conn.slug}
                         x={X(u - conn.w / 2)}
                         y={Y(v + conn.h / 2)}
-                        width={conn.w * scale}
-                        height={conn.h * scale}
+                        width={conn.w * frame.scale}
+                        height={conn.h * frame.scale}
                         fill={color}
                         fillOpacity={0.14}
                         stroke={color}

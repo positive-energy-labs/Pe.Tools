@@ -8,10 +8,9 @@
  * Manual J data in the `.r10`. This module only joins those reads for rendering.
  */
 import {
-  boundsOf,
   containsEvenOdd,
+  loopBounds,
   shoelace,
-  type Bounds,
   type CandidateRegion,
   type DetectedResidue,
   type LiveRegion,
@@ -20,6 +19,7 @@ import {
   type Resolution,
   type ViewFacts,
 } from "#/takeoff/model";
+import type { Bounds2 } from "#/lib/affine-frame";
 import type { RhvacExtractData, RhvacRoomData } from "@pe/host-contracts/operation-types";
 
 // ── Stage vocabulary (was mock-only; now derived from live facts) ───────────
@@ -89,7 +89,7 @@ export interface WorldZoneIdentity {
   color: string;
   loops: readonly (readonly (readonly [number, number])[])[];
   declaredSqft: number;
-  bounds: Bounds;
+  bounds: Bounds2;
 }
 
 export interface WorldRoom {
@@ -484,7 +484,7 @@ export function buildLiveWorld(raw: {
       color: fr.color,
       loops,
       declaredSqft: loops.reduce((sum, loop) => sum + shoelace(loop), 0),
-      bounds: boundsOf(loops),
+      bounds: loopBounds(loops),
     };
     const run = overlay.runs[identity.guid];
     const { rooms, residues } = roomsOf(

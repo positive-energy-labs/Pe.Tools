@@ -11,7 +11,7 @@
 // The atlas renders a `World` and calls back through `AtlasActions` — it owns selection and
 // optimistic decision state, nothing else. The route owns the world, the overlay, and every
 // host call.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   CellSelect,
@@ -25,9 +25,11 @@ import {
 import { MasterTable } from "#/components/master-table/master-table";
 import { fmtNum, type Column } from "#/components/master-table/model";
 import { Button } from "#/components/ui/button";
+import { Pane, PaneWorkspace } from "#/components/ui/pane";
+import { contentViewport, fitFrame, type Bounds2, unionBounds } from "#/lib/affine-frame";
 import { Live, Seam } from "#/takeoff/seam";
 import { ZoneThumb } from "#/takeoff/zone-plan";
-import { boundsOf, FLAG_MEANING, mergeBounds, pathD, type Bounds } from "#/takeoff/model";
+import { FLAG_MEANING, loopBounds, pathD } from "#/takeoff/model";
 import {
   SENSIBLE_CAP_BTUH,
   STAGE_ORDER,
@@ -241,6 +243,7 @@ interface Row {
 const PLAN_MIN_PX = 140;
 const PLAN_MAX_PX = 720;
 const PLAN_DEFAULT_PX = 340;
+const PLAN_CHROME_PX = 34;
 
 export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
   const [stageFilter, setStageFilter] = useState<Stage | null>(null);
@@ -257,11 +260,9 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
     if (!level && world.lanes.length > 0) setLevel(world.lanes[0]!.label);
   }, [level, world.lanes]);
 
-  // Plan geometry: collapsible + draggable, remembered for the session.
+  // Plan geometry: controlled collapse; PaneWorkspace owns and persists its resized height.
   const [planOpen, setPlanOpen] = useState(true);
-  const [planH, setPlanH] = useState(PLAN_DEFAULT_PX);
   const [statsOpen, setStatsOpen] = useState(false);
-  const drag = useRef<{ y: number; h: number } | null>(null);
 
   // Edits live in the route's session overlay (they must survive into the sync payload); the
   // world arrives with them already applied. The atlas only forwards patches.
@@ -555,29 +556,6 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, stageFilter]);
 
-  // ── Plan resize: pointer events only, no library. Below the min cap the plan hides. ──
-  const onHandleDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    drag.current = { y: e.clientY, h: planOpen ? planH : PLAN_MIN_PX };
-  };
-  const onHandleMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const d = drag.current;
-    if (!d) return;
-    const next = d.h + (e.clientY - d.y);
-    if (next < PLAN_MIN_PX - 28) {
-      setPlanOpen(false);
-      return;
-    }
-    setPlanOpen(true);
-    setPlanH(Math.min(PLAN_MAX_PX, Math.max(PLAN_MIN_PX, next)));
-  };
-  const onHandleUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    drag.current = null;
-    if (e.currentTarget.hasPointerCapture(e.pointerId))
-      e.currentTarget.releasePointerCapture(e.pointerId);
-  };
-
   // ── Census ────────────────────────────────────────────────────────────────
   const stageCounts = STAGE_ORDER.map((s) => ({
     stage: s,
@@ -648,293 +626,288 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        {/* ── LEFT: pipeline filter + zone list, progress derived from rooms ── */}
-        <aside className="flex w-72 min-w-72 shrink-0 flex-col border-r border-border bg-background">
-          <div className="shrink-0 border-b border-border px-2 py-1.5">
-            <div className="tele-label mb-1 text-muted-foreground">room states — one per room</div>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-              {ROOM_STATES.map((s) => (
-                <span
-                  key={s}
-                  title={STATE_META[s].note}
-                  className="tele inline-flex items-center gap-1 text-muted-foreground"
-                >
-                  <StateDot {...stateMeta(s)} />
-                  {STATE_META[s].label}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className="shrink-0 border-b border-border px-2 py-2">
-            <div className="tele-label mb-1 text-muted-foreground">
-              zone pipeline — global filter
-            </div>
-            <div className="flex flex-col">
-              {stageCounts.map(({ stage, n }, i) => {
-                const on = stageFilter === stage;
-                return (
-                  <button
-                    key={stage}
-                    type="button"
-                    title={STAGE_BLURB[stage]}
-                    onClick={() => {
-                      setStageFilter(on ? null : stage);
-                      setZoneKey(null);
-                      setCursor(null);
-                    }}
-                    className={cn(
-                      "flex items-baseline gap-1.5 rounded-[var(--radius)] px-1 py-0.5 text-left hover:bg-muted",
-                      on && "bg-primary/[0.08]",
-                    )}
+      <PaneWorkspace
+        className="min-h-0 flex-1"
+        inspectorSpan="visual"
+        resize={{
+          visual: {
+            defaultSize: PLAN_DEFAULT_PX + PLAN_CHROME_PX,
+            minSize: PLAN_MIN_PX + PLAN_CHROME_PX,
+            maxSize: PLAN_MAX_PX + PLAN_CHROME_PX,
+            minOtherSize: 220,
+            persist: "pe.takeoffs.plan-height",
+            collapse: {
+              collapsed: !planOpen,
+              onCollapsedChange: (collapsed) => setPlanOpen(!collapsed),
+              collapsedSize: PLAN_CHROME_PX,
+              collapseBelow: PLAN_MIN_PX + 6,
+            },
+          },
+        }}
+        navigation={
+          <Pane kind="navigation" title="zones" meta={`${world.zones.length} declared`}>
+            <div className="shrink-0 border-b border-border px-2 py-1.5">
+              <div className="tele-label mb-1 text-muted-foreground">
+                room states — one per room
+              </div>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                {ROOM_STATES.map((s) => (
+                  <span
+                    key={s}
+                    title={STATE_META[s].note}
+                    className="tele inline-flex items-center gap-1 text-muted-foreground"
                   >
-                    <span className="tele w-3 shrink-0 text-muted-foreground">{i + 1}</span>
-                    <span className={cn("tele flex-1 truncate", !on && "text-muted-foreground")}>
-                      {stage}
-                    </span>
-                    <span className="tele tabular-nums text-muted-foreground">{n}</span>
-                  </button>
+                    <StateDot {...stateMeta(s)} />
+                    {STATE_META[s].label}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="shrink-0 border-b border-border px-2 py-2">
+              <div className="tele-label mb-1 text-muted-foreground">
+                zone pipeline — global filter
+              </div>
+              <div className="flex flex-col">
+                {stageCounts.map(({ stage, n }, i) => {
+                  const on = stageFilter === stage;
+                  return (
+                    <button
+                      key={stage}
+                      type="button"
+                      title={STAGE_BLURB[stage]}
+                      onClick={() => {
+                        setStageFilter(on ? null : stage);
+                        setZoneKey(null);
+                        setCursor(null);
+                      }}
+                      className={cn(
+                        "flex items-baseline gap-1.5 rounded-[var(--radius)] px-1 py-0.5 text-left hover:bg-muted",
+                        on && "bg-primary/[0.08]",
+                      )}
+                    >
+                      <span className="tele w-3 shrink-0 text-muted-foreground">{i + 1}</span>
+                      <span className={cn("tele flex-1 truncate", !on && "text-muted-foreground")}>
+                        {stage}
+                      </span>
+                      <span className="tele tabular-nums text-muted-foreground">{n}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {stageFilter && (
+                <button
+                  type="button"
+                  className="tele-label mt-1 text-muted-foreground hover:text-foreground"
+                  onClick={() => setStageFilter(null)}
+                >
+                  clear filter — show all {world.zones.length}
+                </button>
+              )}
+            </div>
+
+            {/* Group by level only so the list stays consistent — level is never the organizer. */}
+            <div>
+              {world.lanes.map((lane) => {
+                const zs = filteredZones.filter((z) => z.zone.lane.label === lane.label);
+                if (zs.length === 0) return null;
+                return (
+                  <div key={lane.label}>
+                    <div className="tele-label sticky top-0 z-10 border-y border-[var(--line-soft)] bg-muted px-2 py-0.5 text-muted-foreground">
+                      {lane.label} · {zs.length}
+                    </div>
+                    <ul>
+                      {zs.map((z) => {
+                        const states = zoneStates(z);
+                        const calls = states.filter((s) => s === "call").length;
+                        const on = z.zone.key === zoneKey;
+                        const off = !onPlan(z);
+                        return (
+                          <li key={z.zone.key}>
+                            <button
+                              type="button"
+                              onClick={() => selectZone(on ? null : z)}
+                              title={
+                                off
+                                  ? `off-plan scribble — ${fmtNum(z.zone.declaredSqft, 0)} sf, drawn far from the level cluster; kept in the list, excluded from the plan`
+                                  : `${z.name} · ${z.zone.lane.label} · ${fmtNum(z.zone.declaredSqft, 0)} sf declared`
+                              }
+                              className={cn(
+                                "flex w-full items-center gap-1.5 border-b border-[var(--line-soft)] px-2 py-1 text-left hover:bg-muted",
+                                on && "bg-primary/[0.08]",
+                                off && "opacity-55",
+                              )}
+                            >
+                              <ZoneThumb zone={z.zone} className="size-5" />
+                              <span className="tele shrink-0">{z.zone.key}</span>
+                              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                                {off ? "off-plan scribble" : z.name}
+                              </span>
+                              {calls > 0 && (
+                                <span
+                                  className="tele shrink-0 rounded-[var(--radius)] bg-cat-clay/15 px-1 text-cat-clay"
+                                  title={`${calls} room${calls === 1 ? "" : "s"} in this zone need a human call — an open detector flag or .r10 drift`}
+                                >
+                                  {calls} call{calls === 1 ? "" : "s"}
+                                </span>
+                              )}
+                              <ZoneStateBar zone={z} states={states} />
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
                 );
               })}
             </div>
-            {stageFilter && (
-              <button
-                type="button"
-                className="tele-label mt-1 text-muted-foreground hover:text-foreground"
-                onClick={() => setStageFilter(null)}
-              >
-                clear filter — show all {world.zones.length}
-              </button>
-            )}
-          </div>
+          </Pane>
+        }
+        visual={
+          <Pane
+            kind="visual"
+            toolbar={
+              <>
+                {world.lanes.map((lane) => {
+                  const zs = world.zones.filter((z) => z.zone.lane.label === lane.label);
+                  const calls = zs.reduce((n, z) => n + zoneCalls(z), 0);
+                  return (
+                    <button
+                      key={lane.label}
+                      type="button"
+                      onClick={() => setLevel(lane.label)}
+                      title={`${lane.view}${lane.replayPath ? " · captured this session" : " · not captured yet"}`}
+                      className={cn(
+                        "tele rounded-[var(--radius)] border px-2 py-0.5",
+                        lane.label === level
+                          ? "border-primary/40 bg-primary/[0.08]"
+                          : "border-transparent text-muted-foreground hover:bg-muted",
+                      )}
+                    >
+                      {lane.label}
+                      <span className="ml-1 opacity-60">{zs.length}</span>
+                      {calls > 0 && <span className="ml-1 text-cat-clay">·{calls}</span>}
+                    </button>
+                  );
+                })}
 
-          {/* Zone list, grouped by level only so the list stays consistent — level is never the
-              organizer, the room states are. */}
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {world.lanes.map((lane) => {
-              const zs = filteredZones.filter((z) => z.zone.lane.label === lane.label);
-              if (zs.length === 0) return null;
-              return (
-                <div key={lane.label}>
-                  <div className="tele-label sticky top-0 z-10 border-y border-[var(--line-soft)] bg-muted px-2 py-0.5 text-muted-foreground">
-                    {lane.label} · {zs.length}
-                  </div>
-                  <ul>
-                    {zs.map((z) => {
-                      const states = zoneStates(z);
-                      const calls = states.filter((s) => s === "call").length;
-                      const on = z.zone.key === zoneKey;
-                      const off = !onPlan(z);
-                      return (
-                        <li key={z.zone.key}>
-                          <button
-                            type="button"
-                            onClick={() => selectZone(on ? null : z)}
-                            title={
-                              off
-                                ? `off-plan scribble — ${fmtNum(z.zone.declaredSqft, 0)} sf, drawn far from the level cluster; kept in the list, excluded from the plan`
-                                : `${z.name} · ${z.zone.lane.label} · ${fmtNum(z.zone.declaredSqft, 0)} sf declared`
-                            }
-                            className={cn(
-                              "flex w-full items-center gap-1.5 border-b border-[var(--line-soft)] px-2 py-1 text-left hover:bg-muted",
-                              on && "bg-primary/[0.08]",
-                              off && "opacity-55",
-                            )}
-                          >
-                            {/* Real zone outline, not a colour square — shape is identity. */}
-                            <ZoneThumb zone={z.zone} className="size-5" />
-                            <span className="tele shrink-0">{z.zone.key}</span>
-                            <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                              {off ? "off-plan scribble" : z.name}
-                            </span>
-                            {calls > 0 && (
-                              <span
-                                className="tele shrink-0 rounded-[var(--radius)] bg-cat-clay/15 px-1 text-cat-clay"
-                                title={`${calls} room${calls === 1 ? "" : "s"} in this zone need a human call — an open detector flag or .r10 drift`}
-                              >
-                                {calls} call{calls === 1 ? "" : "s"}
-                              </span>
-                            )}
-                            <ZoneStateBar zone={z} states={states} />
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              );
-            })}
-          </div>
-        </aside>
-
-        {/* ── MIDDLE: the plan (collapsible) + the master table (never hidden) ── */}
-        <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border px-2 py-1">
-            {world.lanes.map((lane) => {
-              const zs = world.zones.filter((z) => z.zone.lane.label === lane.label);
-              const calls = zs.reduce((n, z) => n + zoneCalls(z), 0);
-              return (
                 <button
-                  key={lane.label}
                   type="button"
-                  onClick={() => setLevel(lane.label)}
-                  title={`${lane.view}${lane.replayPath ? " · captured this session" : " · not captured yet"}`}
+                  onClick={() => setStatsOpen((v) => !v)}
+                  title="level-wide totals — the whole-building dashboard was noise; the level is the unit you actually work in"
                   className={cn(
-                    "tele rounded-[var(--radius)] border px-2 py-0.5",
-                    lane.label === level
+                    "tele ml-2 rounded-[var(--radius)] border px-1.5 py-0.5",
+                    statsOpen
                       ? "border-primary/40 bg-primary/[0.08]"
-                      : "border-transparent text-muted-foreground hover:bg-muted",
+                      : "border-[var(--line-2)] text-muted-foreground hover:bg-muted",
                   )}
                 >
-                  {lane.label}
-                  <span className="ml-1 opacity-60">{zs.length}</span>
-                  {calls > 0 && <span className="ml-1 text-cat-clay">·{calls}</span>}
+                  level stats
                 </button>
-              );
-            })}
+                <button
+                  type="button"
+                  onClick={() => setPlanOpen((v) => !v)}
+                  title={
+                    planOpen
+                      ? "collapse the plan — give the table the full height"
+                      : "show the plan"
+                  }
+                  className="tele rounded-[var(--radius)] border border-[var(--line-2)] px-1.5 py-0.5 text-muted-foreground hover:bg-muted"
+                >
+                  {planOpen ? "▴ hide plan" : "▾ show plan"}
+                </button>
 
-            <button
-              type="button"
-              onClick={() => setStatsOpen((v) => !v)}
-              title="level-wide totals — the whole-building dashboard was noise; the level is the unit you actually work in"
-              className={cn(
-                "tele ml-2 rounded-[var(--radius)] border px-1.5 py-0.5",
-                statsOpen
-                  ? "border-primary/40 bg-primary/[0.08]"
-                  : "border-[var(--line-2)] text-muted-foreground hover:bg-muted",
-              )}
-            >
-              level stats
-            </button>
-            <button
-              type="button"
-              onClick={() => setPlanOpen((v) => !v)}
-              title={
-                planOpen ? "collapse the plan — give the table the full height" : "show the plan"
-              }
-              className="tele rounded-[var(--radius)] border border-[var(--line-2)] px-1.5 py-0.5 text-muted-foreground hover:bg-muted"
-            >
-              {planOpen ? "▴ hide plan" : "▾ show plan"}
-            </button>
-
-            <span className="tele ml-auto text-muted-foreground">
-              {selected ? `scoped to ${selected.zone.key}` : "whole house in scope"} — Esc clears
-            </span>
-          </div>
-
-          {planOpen && (
-            <div className="relative shrink-0 overflow-hidden bg-card" style={{ height: planH }}>
-              <LevelPlan
-                zones={levelZones}
-                stageFilter={stageFilter}
-                selectedKey={zoneKey}
-                cursor={cursor}
-                stateOf={stateOf}
-                onSelectZone={selectZone}
-                onCursor={(z, guid) => {
-                  setZoneKey(z.zone.key);
-                  setLevel(z.zone.lane.label);
-                  setCursor(guid);
-                }}
-                onClear={() => {
-                  setZoneKey(null);
-                  setCursor(null);
-                }}
-              />
-              {statsOpen && (
-                <LevelStats
-                  level={level}
-                  zones={levelZones}
-                  stateOf={stateOf}
-                  onClose={() => setStatsOpen(false)}
-                />
-              )}
-            </div>
-          )}
-
-          {/* The grabbable boundary. Drag past the min cap and the plan hides itself. */}
-          <div
-            role="separator"
-            aria-orientation="horizontal"
-            onPointerDown={onHandleDown}
-            onPointerMove={onHandleMove}
-            onPointerUp={onHandleUp}
-            onPointerCancel={onHandleUp}
-            onDoubleClick={() => {
-              setPlanOpen(true);
-              setPlanH(PLAN_DEFAULT_PX);
-            }}
-            title={
-              planOpen
-                ? "drag to resize the plan · drag past the minimum to hide it · double-click to reset"
-                : "drag down to bring the plan back · double-click to reset"
+                <span className="tele ml-auto text-muted-foreground">
+                  {selected ? `scoped to ${selected.zone.key}` : "whole house in scope"} — Esc
+                  clears
+                </span>
+              </>
             }
-            className={cn(
-              "group flex h-2 shrink-0 cursor-row-resize items-center justify-center border-y border-border bg-muted/50 hover:bg-primary/15",
-              !planOpen && "bg-muted",
-            )}
           >
-            <span className="h-px w-8 bg-[var(--line-2)] group-hover:bg-primary/60" />
-          </div>
-
-          {/* The master table. Scoped, never hidden, never a per-zone detail pane. */}
-          <MasterTable
-            rows={rows}
-            columns={columns}
-            rowKey={(row) => row.room.guid}
-            scopeLabel="rooms in scope"
-            searchPlaceholder="name / type / zone…"
-            chips={chips}
-            summary={
-              <>
-                {visibleRows.length} rooms · {fmtNum(scopeSqft, 0)} sf
-                {scopeCalls > 0 && (
-                  <span className="text-cat-clay"> · {scopeCalls} needing a call</span>
-                )}
-                <span className="ml-2 opacity-70">j/k cursor · a/d accept/dismiss</span>
-              </>
-            }
-            empty={
-              <>
-                No rooms in scope. Zones before <span className="tele">partitioned</span> have no
-                rooms yet — widen the rail filter or press <span className="tele">Esc</span>.
-              </>
-            }
-            activeKey={cursor}
-            onRowClick={(row) => {
-              setCursor(row.room.guid);
-              // Clicking a row of the whole-house scope follows the room to its level; when a
-              // zone is already picked on the plan the level is the user's choice, not the row's.
-              if (!selected) setLevel(row.zone.zone.lane.label);
-            }}
-            onVisibleChange={(keys) =>
-              setVisibleKeys((prev) =>
-                prev.length === keys.length && prev.every((k, i) => k === keys[i]) ? prev : keys,
-              )
-            }
-          />
-        </section>
-
-        {/* ── RIGHT: sparse peek at exactly one zone. Opaque on purpose. ────── */}
-        <aside className="flex w-80 min-w-80 shrink-0 flex-col overflow-y-auto border-l border-border bg-background">
-          <Peek
-            zone={peekZone}
-            room={cursorRow?.room ?? null}
-            open={cursorRow?.open ?? []}
-            state={cursorRow?.state ?? null}
-            decided={decided}
-            geoReady={geoReady}
-            live={live}
-            busy={busy}
-            actions={actions}
-            stateOf={stateOf}
-            world={world}
-            onDecide={decide}
-            url={proposedUrl}
-          />
-        </aside>
-      </div>
+            <LevelPlan
+              zones={levelZones}
+              stageFilter={stageFilter}
+              selectedKey={zoneKey}
+              cursor={cursor}
+              stateOf={stateOf}
+              onSelectZone={selectZone}
+              onCursor={(z, guid) => {
+                setZoneKey(z.zone.key);
+                setLevel(z.zone.lane.label);
+                setCursor(guid);
+              }}
+              onClear={() => {
+                setZoneKey(null);
+                setCursor(null);
+              }}
+            />
+            {statsOpen && (
+              <LevelStats
+                level={level}
+                zones={levelZones}
+                stateOf={stateOf}
+                onClose={() => setStatsOpen(false)}
+              />
+            )}
+          </Pane>
+        }
+        content={
+          <Pane kind="content" scroll="clip">
+            <MasterTable
+              rows={rows}
+              columns={columns}
+              rowKey={(row) => row.room.guid}
+              scopeLabel="rooms in scope"
+              searchPlaceholder="name / type / zone…"
+              chips={chips}
+              summary={
+                <>
+                  {visibleRows.length} rooms · {fmtNum(scopeSqft, 0)} sf
+                  {scopeCalls > 0 && (
+                    <span className="text-cat-clay"> · {scopeCalls} needing a call</span>
+                  )}
+                  <span className="ml-2 opacity-70">j/k cursor · a/d accept/dismiss</span>
+                </>
+              }
+              empty={
+                <>
+                  No rooms in scope. Zones before <span className="tele">partitioned</span> have no
+                  rooms yet — widen the rail filter or press <span className="tele">Esc</span>.
+                </>
+              }
+              activeKey={cursor}
+              onRowClick={(row) => {
+                setCursor(row.room.guid);
+                if (!selected) setLevel(row.zone.zone.lane.label);
+              }}
+              onVisibleChange={(keys) =>
+                setVisibleKeys((prev) =>
+                  prev.length === keys.length && prev.every((k, i) => k === keys[i]) ? prev : keys,
+                )
+              }
+            />
+          </Pane>
+        }
+        inspector={
+          <Pane kind="inspector" title="selection" bodyClassName="p-0">
+            <Peek
+              zone={peekZone}
+              room={cursorRow?.room ?? null}
+              open={cursorRow?.open ?? []}
+              state={cursorRow?.state ?? null}
+              decided={decided}
+              geoReady={geoReady}
+              live={live}
+              busy={busy}
+              actions={actions}
+              stateOf={stateOf}
+              world={world}
+              onDecide={decide}
+              url={proposedUrl}
+            />
+          </Pane>
+        }
+      />
     </main>
   );
 }
@@ -965,13 +938,13 @@ function LevelPlan({
   const drawn = useMemo(() => zones.filter(onPlan), [zones]);
   const skipped = zones.length - drawn.length;
 
-  const bounds = useMemo<Bounds | null>(() => {
+  const bounds = useMemo<Bounds2 | null>(() => {
     if (drawn.length === 0) return null;
-    let b: Bounds = drawn[0]!.zone.bounds;
+    let b: Bounds2 = drawn[0]!.zone.bounds;
     for (const z of drawn) {
-      b = mergeBounds(b, z.zone.bounds);
-      for (const r of z.rooms) if (r.outer) b = mergeBounds(b, boundsOf([r.outer]));
-      for (const s of z.residues) b = mergeBounds(b, boundsOf([s.outer]));
+      b = unionBounds(b, z.zone.bounds);
+      for (const r of z.rooms) if (r.outer) b = unionBounds(b, loopBounds([r.outer]));
+      for (const s of z.residues) b = unionBounds(b, loopBounds([s.outer]));
     }
     return b;
   }, [drawn]);
@@ -983,27 +956,25 @@ function LevelPlan({
       </div>
     );
 
-  const w = Math.max(bounds.maxX - bounds.minX, 1e-6);
-  const h = Math.max(bounds.maxY - bounds.minY, 1e-6);
-  const pad = Math.max(w, h) * 0.03;
-  const span = Math.max(w, h);
+  const span = Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY, 1e-6);
   const font = span / 95;
-  const flipY = (y: number) => bounds.minY + bounds.maxY - y;
+  const { viewport, padding } = contentViewport(bounds, 0.03);
+  const frame = fitFrame(bounds, viewport, { padding, yAxis: "up" });
 
   return (
     <div className="size-full">
       <svg
-        viewBox={`${bounds.minX - pad} ${bounds.minY - pad} ${w + pad * 2} ${h + pad * 2}`}
+        viewBox={`0 0 ${viewport.width} ${viewport.height}`}
         preserveAspectRatio="xMidYMid meet"
         className="size-full"
       >
         <title>Level plan — declared zones, detected rooms, held residue</title>
         {/* Clicking nothing returns instantly to the whole house. */}
         <rect
-          x={bounds.minX - pad}
-          y={bounds.minY - pad}
-          width={w + pad * 2}
-          height={h + pad * 2}
+          x={0}
+          y={0}
+          width={viewport.width}
+          height={viewport.height}
           fill="transparent"
           onClick={onClear}
         />
@@ -1012,10 +983,14 @@ function LevelPlan({
           const dimmed = stageFilter !== null && z.stage !== stageFilter;
           const on = z.zone.key === selectedKey;
           const rgb = `rgb(${z.zone.color})`;
+          const [zoneLabelX, zoneLabelY] = frame.toViewport([
+            (z.zone.bounds.minX + z.zone.bounds.maxX) / 2,
+            (z.zone.bounds.minY + z.zone.bounds.maxY) / 2,
+          ]);
           return (
             <g key={z.zone.key} opacity={dimmed ? 0.15 : 1}>
               <path
-                d={pathD(z.zone.loops, bounds)}
+                d={pathD(z.zone.loops, frame)}
                 fillRule="evenodd"
                 fill={`color-mix(in srgb, ${rgb} ${on ? 16 : 8}%, transparent)`}
                 stroke={rgb}
@@ -1033,7 +1008,7 @@ function LevelPlan({
               {z.residues.map((s) => (
                 <path
                   key={s.id}
-                  d={pathD([s.outer, ...s.holes], bounds)}
+                  d={pathD([s.outer, ...s.holes], frame)}
                   fillRule="evenodd"
                   fill="color-mix(in srgb, var(--muted-foreground) 12%, transparent)"
                   stroke="var(--muted-foreground)"
@@ -1049,6 +1024,7 @@ function LevelPlan({
                 const state = stateOf(room);
                 const isCursor = room.guid === cursor;
                 const tone = isCursor ? "var(--primary)" : STATE_META[state].tone;
+                const [labelX, labelY] = frame.toViewport(room.label);
                 const click = (e: React.MouseEvent) => {
                   e.stopPropagation();
                   if (!dimmed) onCursor(z, room.guid);
@@ -1059,8 +1035,8 @@ function LevelPlan({
                   return (
                     <circle
                       key={room.guid}
-                      cx={room.label[0]}
-                      cy={flipY(room.label[1])}
+                      cx={labelX}
+                      cy={labelY}
                       r={span / 260}
                       fill={`color-mix(in srgb, ${tone} 45%, transparent)`}
                       stroke={tone}
@@ -1075,7 +1051,7 @@ function LevelPlan({
                 return (
                   <g key={room.guid} className="cursor-pointer" onClick={click}>
                     <path
-                      d={pathD([room.outer, ...room.holes], bounds)}
+                      d={pathD([room.outer, ...room.holes], frame)}
                       fillRule="evenodd"
                       fill={`color-mix(in srgb, ${tone} ${isCursor ? 34 : state === "unreviewed" ? 7 : 13}%, transparent)`}
                       stroke={tone}
@@ -1088,17 +1064,17 @@ function LevelPlan({
                     </path>
                     {on && room.sqft > 40 && (
                       <text
-                        x={room.label[0]}
-                        y={flipY(room.label[1])}
+                        x={labelX}
+                        y={labelY}
                         textAnchor="middle"
                         fontSize={font}
                         fill="var(--foreground)"
                         className="pointer-events-none select-none"
                       >
-                        <tspan x={room.label[0]} fontWeight={600}>
+                        <tspan x={labelX} fontWeight={600}>
                           {room.name}
                         </tspan>
-                        <tspan x={room.label[0]} dy={font * 1.15} fillOpacity={0.65}>
+                        <tspan x={labelX} dy={font * 1.15} fillOpacity={0.65}>
                           {room.sqft} sf
                         </tspan>
                       </text>
@@ -1109,8 +1085,8 @@ function LevelPlan({
 
               {!on && (
                 <text
-                  x={(z.zone.bounds.minX + z.zone.bounds.maxX) / 2}
-                  y={flipY((z.zone.bounds.minY + z.zone.bounds.maxY) / 2)}
+                  x={zoneLabelX}
+                  y={zoneLabelY}
                   textAnchor="middle"
                   fontSize={font * 0.95}
                   fill="var(--foreground)"
@@ -1585,24 +1561,24 @@ function ZonePeek({
   stateOf: (room: WorldRoom) => RoomState;
 }) {
   const withGeometry = zone.rooms.filter((r) => r.outer !== null);
-  const bounds = useMemo<Bounds>(() => {
-    let b: Bounds = zone.zone.bounds;
-    for (const room of zone.rooms) if (room.outer) b = mergeBounds(b, boundsOf([room.outer]));
-    for (const residue of zone.residues) b = mergeBounds(b, boundsOf([residue.outer]));
+  const bounds = useMemo<Bounds2>(() => {
+    let b: Bounds2 = zone.zone.bounds;
+    for (const room of zone.rooms) if (room.outer) b = unionBounds(b, loopBounds([room.outer]));
+    for (const residue of zone.residues) b = unionBounds(b, loopBounds([residue.outer]));
     return b;
   }, [zone]);
 
-  const w = Math.max(bounds.maxX - bounds.minX, 1e-6);
-  const h = Math.max(bounds.maxY - bounds.minY, 1e-6);
-  const pad = Math.max(w, h) * 0.06;
-  const font = Math.max(w, h) / 26;
-  const flipY = (y: number) => bounds.minY + bounds.maxY - y;
+  const span = Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY, 1e-6);
+  const font = span / 26;
+  const { viewport, padding } = contentViewport(bounds, 0.06);
+  const frame = fitFrame(bounds, viewport, { padding, yAxis: "up" });
+  const [cursorX, cursorY] = cursorRoom ? frame.toViewport(cursorRoom.label) : [0, 0];
 
   return (
     <div>
       <div className="h-52 border-b border-[var(--line)] bg-card">
         <svg
-          viewBox={`${bounds.minX - pad} ${bounds.minY - pad} ${w + pad * 2} ${h + pad * 2}`}
+          viewBox={`0 0 ${viewport.width} ${viewport.height}`}
           preserveAspectRatio="xMidYMid meet"
           className="size-full"
         >
@@ -1610,7 +1586,7 @@ function ZonePeek({
 
           {/* The designer's declared scope. Nothing may be claimed outside it. */}
           <path
-            d={pathD(zone.zone.loops, bounds)}
+            d={pathD(zone.zone.loops, frame)}
             fillRule="evenodd"
             fill={`color-mix(in srgb, rgb(${zone.zone.color}) 8%, transparent)`}
             stroke={`rgb(${zone.zone.color})`}
@@ -1623,7 +1599,7 @@ function ZonePeek({
           {zone.residues.map((residue) => (
             <path
               key={residue.id}
-              d={pathD([residue.outer, ...residue.holes], bounds)}
+              d={pathD([residue.outer, ...residue.holes], frame)}
               fillRule="evenodd"
               fill="color-mix(in srgb, var(--muted-foreground) 12%, transparent)"
               stroke="var(--muted-foreground)"
@@ -1640,13 +1616,14 @@ function ZonePeek({
             const on = cursorRoom?.guid === room.guid;
             const state = stateOf(room);
             const accent = on ? "var(--primary)" : STATE_META[state].tone;
+            const [labelX, labelY] = frame.toViewport(room.label);
             if (!room.outer) {
-              const r = Math.max(Math.sqrt(Math.max(room.sqft, 20)) / 3.2, Math.max(w, h) / 90);
+              const r = Math.max(Math.sqrt(Math.max(room.sqft, 20)) / 3.2, span / 90);
               return (
                 <circle
                   key={room.guid}
-                  cx={room.label[0]}
-                  cy={flipY(room.label[1])}
+                  cx={labelX}
+                  cy={labelY}
                   r={r}
                   fill={`color-mix(in srgb, ${accent} ${on ? 45 : 18}%, transparent)`}
                   stroke={accent}
@@ -1661,7 +1638,7 @@ function ZonePeek({
             return (
               <path
                 key={room.guid}
-                d={pathD([room.outer, ...room.holes], bounds)}
+                d={pathD([room.outer, ...room.holes], frame)}
                 fillRule="evenodd"
                 fill={`color-mix(in srgb, ${accent} ${on ? 32 : 10}%, transparent)`}
                 stroke={accent}
@@ -1677,17 +1654,17 @@ function ZonePeek({
 
           {cursorRoom && (
             <text
-              x={cursorRoom.label[0]}
-              y={flipY(cursorRoom.label[1])}
+              x={cursorX}
+              y={cursorY}
               textAnchor="middle"
               fontSize={font}
               className="pointer-events-none select-none"
               fill="var(--foreground)"
             >
-              <tspan x={cursorRoom.label[0]} fontWeight={600}>
+              <tspan x={cursorX} fontWeight={600}>
                 {cursorRoom.name}
               </tspan>
-              <tspan x={cursorRoom.label[0]} dy={font * 1.15} fillOpacity={0.7}>
+              <tspan x={cursorX} dy={font * 1.15} fillOpacity={0.7}>
                 {fmtNum(cursorRoom.sqft, 0)} sf
               </tspan>
             </text>

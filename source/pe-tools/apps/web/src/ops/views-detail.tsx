@@ -23,6 +23,7 @@ import {
   catVar,
 } from "#/ops/primitives";
 import { type OpViewProps, type OpViewRegistry, asRecord } from "#/ops/registry";
+import { contentViewport, fitFrame } from "#/lib/affine-frame";
 
 /**
  * Curated readonly detail/matrix views. Each view narrows `data` defensively,
@@ -161,22 +162,23 @@ export function SheetCanvas({ entry }: { entry: RevitDetailSheets.Res.SheetDetai
   }
   const w = Math.max(frame.maxX - frame.minX, 1e-6);
   const h = Math.max(frame.maxY - frame.minY, 1e-6);
-  const pad = Math.max(w, h) * 0.03;
   const fontSize = Math.max(w, h) * 0.016;
-  // Sheet coordinates are Y-up; SVG is Y-down.
-  const toY = (y: number) => frame.maxY - y;
+  const sheet = { minX: frame.minX, minY: frame.minY, maxX: frame.minX + w, maxY: frame.minY + h };
+  const { viewport, padding } = contentViewport(sheet, 0.03);
+  const camera = fitFrame(sheet, viewport, { padding, yAxis: "up" });
+  const [sheetX, sheetY] = camera.toViewport([frame.minX, frame.minY + h]);
 
   return (
     <svg
-      viewBox={`${frame.minX - pad} ${-pad} ${w + pad * 2} ${h + pad * 2}`}
+      viewBox={`0 0 ${viewport.width} ${viewport.height}`}
       className="block w-full max-w-[720px]"
       role="img"
       aria-label={`sheet ${entry.summary.sheetNumber} anchor map`}
     >
       {/* sheet / titleblock outline */}
       <rect
-        x={frame.minX}
-        y={0}
+        x={sheetX}
+        y={sheetY}
         width={w}
         height={h}
         fill="none"
@@ -191,11 +193,12 @@ export function SheetCanvas({ entry }: { entry: RevitDetailSheets.Res.SheetDetai
         const hue = catVar(ANCHOR_HUES[anchor.kind] ?? "slate");
         const bw = Math.max(b.maxX - b.minX, 0);
         const bh = Math.max(b.maxY - b.minY, 0);
+        const [x, y] = camera.toViewport([b.minX, b.maxY]);
         return (
           <g key={`${anchor.handle.uniqueId ?? anchor.handle.elementId ?? i}`}>
             <rect
-              x={b.minX}
-              y={toY(b.maxY)}
+              x={x}
+              y={y}
               width={bw}
               height={bh}
               fill={`color-mix(in srgb, ${hue} 10%, transparent)`}
@@ -208,8 +211,8 @@ export function SheetCanvas({ entry }: { entry: RevitDetailSheets.Res.SheetDetai
               </title>
             </rect>
             <text
-              x={b.minX + bw * 0.03}
-              y={toY(b.maxY) + fontSize * 1.3}
+              x={x + bw * 0.03}
+              y={y + fontSize * 1.3}
               fontSize={fontSize}
               fill={hue}
               className="font-[var(--font-mono,_monospace)]"

@@ -16,7 +16,7 @@ tested pure core) is the canon: multi-sort, facet filters over ALL rows (stable 
 cluster headers, chip strip, two honest empty states.
 
 - The atlas migrated onto the canon (2026-08-15): its fork and `takeoff/cells.tsx` are deleted,
-  it gained sorting and a `match` flags filter, and gap 8's `fmtNum` twin is dead.
+  it gained sorting and a `match` flags filter.
 - `ops/primitives.tsx:213` `DataTable<Row>` is a second, incompatible `Column<Row>` interface
   with 12 consumers across the ops views.
 - Hand-rolled besides: `data-tables.tsx:263`, `schedule-grid.tsx:300`, `instances.tsx:214`,
@@ -25,12 +25,11 @@ cluster headers, chip strip, two honest empty states.
 
 Capabilities the canon must absorb before it can abolish the rest:
 - **Selection model** — families hand-rolls `pickedIds: Set<number>` in a cell (`families.tsx:540`).
-  A single cursor IS covered now (`activeKey` + `onVisibleChange`, which is how atlas's j/k walks
-  the visible order); multi-select is not.
-- **Editable cells** — covered: `master-table/cells.tsx` owns `TextCell`/`NumberCell`/`CellSelect`
-  and a column renders them from its `cell`, as the atlas's Manual J columns do.
-- **First col lock** — covered by `Column.lock` (sticky-left with its own ground); no consumer
-  needs it yet.
+  A single cursor IS covered (`activeKey` + `onVisibleChange`, how atlas's j/k walks the visible
+  order); multi-select is not.
+- **Editable cells** — covered: `master-table/cells.tsx` owns `TextCell`/`NumberCell`/`CellSelect`,
+  rendered from a column's `cell`, as the atlas's Manual J columns do.
+- **First col lock** — covered by `Column.lock` (sticky-left with its own ground); no consumer yet.
 - **Cell width control** — only a `width` utility-class string today.
 - **Proposal-aware cells** — see theme 2.
 - **URL-addressable state** — filters/sorts/query are component-local `useState`
@@ -81,9 +80,11 @@ hand-rolled pointer-capture splitter at `atlas.tsx:372-392`) is the best pane st
 `/family` has a fixed `w-[42%]` right rail, no splitter; `/families` is one vertical column.
 `components/ui/side-pane.tsx` (178 LOC, 5 consumers) covers only the overlay case.
 
-Candidate primitive: a **PaneGroup** — horizontal/vertical, resizable, hidable/collapsible,
-size-persistent — so takeoff's resizable visual-pane concept can move into `/family` (doc pane +
-triptych) without a second splitter implementation.
+Resolved 2026-08-15: `components/ui/pane.tsx` — `Pane` (kind-scoped chrome), `PaneSplit` (binary
+resizable split), `PaneWorkspace` (nav | visual/inspector over content grid), keyboard-accessible
+handles with persist + controlled collapse. The atlas is the first consumer; chat, the family
+reshape, and the FOM/BOD tool are the intended next ones. Open question carried forward: whether
+`SidePane` (6 consumers, overlay collapse) and `PaneSplit` remain two primitives once those land.
 
 ### 6. SVG visualization: three camera systems, three math
 
@@ -94,8 +95,12 @@ triptych) without a second splitter implementation.
 - `family/doc-pane.tsx:169-197`: a CSS-transform camera with ResizeObserver + zoom clamp.
 - Two independent pointer-drag implementations (`atlas.tsx:372`, `family.tsx:652`).
 
-Candidate primitive: one bounds/fit/Y-flip utility + an optional pan/zoom camera; Triptych
-migrates onto viewBox. This is the enabler for "bring takeoffs' visual pane to family".
+Resolved 2026-08-15: `lib/affine-frame.ts` is the pure seam for finite bounds, union, uniform fit,
+Y-up/Y-down orientation, renderer-neutral matrix output, and exact forward/inverse point mapping.
+Triptych, the citation doc pane, atlas/zone-plan, sheet canvas, and RHVAC bounds now consume it;
+Triptych uses `viewBox` and native SVG CTM inversion for plane dragging. Domain projection and
+rendering stay outside. A stateful pan/zoom camera was deliberately not added — compose one over
+the frame when a real user-controlled camera earns it.
 
 ### 7. Anti-theme: the route shape (the pattern all three secretly share)
 
@@ -172,7 +177,7 @@ good 7-variant error UI adopted by only 4 of 11 surfaces. Web-side candidate: pe
    `instances.tsx`, `host/target-ui.tsx`, schedule-grid plugin) — plus takeoffs' `.slice(0,10)`.
 6. **`/` index TOOLS lists 6 of 13 routes** — `/takeoffs` is unreachable except by typed URL.
 7. **Esc-handler with input-guard ×3**, each with a different guard list.
-8. ~~**`fmtNum` twice, number-parse twice**~~ — CLOSED 2026-08-15: `takeoff/cells.tsx` is deleted,
+8. ~~**`fmtNum` twice, number-parse twice**~~ — CLOSED 2026-08-15: `takeoff/cells.tsx` deleted,
    every caller consumes `master-table/model.ts`'s stricter pair.
 
 ## Ignored work (noted, not scheduled — SHIMS style)

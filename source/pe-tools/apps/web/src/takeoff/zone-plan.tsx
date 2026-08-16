@@ -9,14 +9,8 @@
 import { useMemo } from "react";
 
 import { fmtNum } from "#/components/master-table/model";
-import {
-  boundsOf,
-  mergeBounds,
-  pathD,
-  type Bounds,
-  type PartitionRun,
-  type Zone,
-} from "#/takeoff/model";
+import { contentViewport, fitFrame, type Bounds2, unionBounds } from "#/lib/affine-frame";
+import { loopBounds, pathD, type PartitionRun, type Zone } from "#/takeoff/model";
 import { cn } from "#/lib/utils";
 
 export function ZoneThumb({
@@ -25,24 +19,23 @@ export function ZoneThumb({
 }: {
   zone: {
     loops: readonly (readonly (readonly [number, number])[])[];
-    bounds: Bounds;
+    bounds: Bounds2;
     color: string;
   };
   className?: string;
 }) {
   const b = zone.bounds;
-  const w = Math.max(b.maxX - b.minX, 1e-6);
-  const h = Math.max(b.maxY - b.minY, 1e-6);
-  const pad = Math.max(w, h) * 0.06;
+  const { viewport, padding } = contentViewport(b, 0.06);
+  const frame = fitFrame(b, viewport, { padding, yAxis: "up" });
   return (
     <svg
-      viewBox={`${b.minX - pad} ${b.minY - pad} ${w + pad * 2} ${h + pad * 2}`}
+      viewBox={`0 0 ${viewport.width} ${viewport.height}`}
       preserveAspectRatio="xMidYMid meet"
       className={cn("size-8 shrink-0", className)}
       aria-hidden
     >
       <path
-        d={pathD(zone.loops, b)}
+        d={pathD(zone.loops, frame)}
         fillRule="evenodd"
         fill={`color-mix(in srgb, rgb(${zone.color}) 30%, transparent)`}
         stroke={`rgb(${zone.color})`}
@@ -64,21 +57,20 @@ export function ZonePlan({
   selectedSubject: string | null;
   onSelect: (subject: string) => void;
 }) {
-  const bounds = useMemo<Bounds>(() => {
+  const bounds = useMemo<Bounds2>(() => {
     let b = zone.bounds;
-    for (const room of run?.rooms ?? []) b = mergeBounds(b, boundsOf([room.outer]));
-    for (const residue of run?.residues ?? []) b = mergeBounds(b, boundsOf([residue.outer]));
+    for (const room of run?.rooms ?? []) b = unionBounds(b, loopBounds([room.outer]));
+    for (const residue of run?.residues ?? []) b = unionBounds(b, loopBounds([residue.outer]));
     return b;
   }, [zone, run]);
 
-  const w = Math.max(bounds.maxX - bounds.minX, 1e-6);
-  const h = Math.max(bounds.maxY - bounds.minY, 1e-6);
-  const pad = Math.max(w, h) * 0.05;
-  const font = Math.max(w, h) / 42;
+  const font = Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY, 1e-6) / 42;
+  const { viewport, padding } = contentViewport(bounds, 0.05);
+  const frame = fitFrame(bounds, viewport, { padding, yAxis: "up" });
 
   return (
     <svg
-      viewBox={`${bounds.minX - pad} ${bounds.minY - pad} ${w + pad * 2} ${h + pad * 2}`}
+      viewBox={`0 0 ${viewport.width} ${viewport.height}`}
       preserveAspectRatio="xMidYMid meet"
       className="size-full bg-card"
     >
@@ -86,7 +78,7 @@ export function ZonePlan({
 
       {/* The designer's declared scope. Nothing may be claimed outside it. */}
       <path
-        d={pathD(zone.loops, bounds)}
+        d={pathD(zone.loops, frame)}
         fillRule="evenodd"
         fill={`color-mix(in srgb, rgb(${zone.color}) 10%, transparent)`}
         stroke={`rgb(${zone.color})`}
@@ -99,7 +91,7 @@ export function ZonePlan({
       {(run?.residues ?? []).map((residue) => (
         <path
           key={residue.id}
-          d={pathD([residue.outer], bounds)}
+          d={pathD([residue.outer], frame)}
           fill="color-mix(in srgb, var(--muted-foreground) 14%, transparent)"
           stroke="var(--muted-foreground)"
           strokeOpacity={0.4}
@@ -112,6 +104,7 @@ export function ZonePlan({
       {(run?.rooms ?? []).map((room) => {
         const flagged = room.flags.length > 0;
         const selected = room.id === selectedSubject;
+        const [labelX, labelY] = frame.toViewport(room.label);
         const accent = selected
           ? "var(--primary)"
           : flagged
@@ -120,7 +113,7 @@ export function ZonePlan({
         return (
           <g key={room.id} className="cursor-pointer" onClick={() => onSelect(room.id)}>
             <path
-              d={pathD([room.outer], bounds)}
+              d={pathD([room.outer], frame)}
               fill={`color-mix(in srgb, ${accent} ${selected ? 30 : 14}%, transparent)`}
               stroke={accent}
               strokeOpacity={0.85}
@@ -130,17 +123,17 @@ export function ZonePlan({
             />
             {room.rawSqft > 20 && (
               <text
-                x={room.label[0]}
-                y={bounds.minY + bounds.maxY - room.label[1]}
+                x={labelX}
+                y={labelY}
                 textAnchor="middle"
                 fontSize={font}
                 className="pointer-events-none select-none"
                 fill="var(--foreground)"
               >
-                <tspan x={room.label[0]} fontWeight={600}>
+                <tspan x={labelX} fontWeight={600}>
                   {room.id}
                 </tspan>
-                <tspan x={room.label[0]} dy={font * 1.15} fillOpacity={0.7}>
+                <tspan x={labelX} dy={font * 1.15} fillOpacity={0.7}>
                   {fmtNum(room.rawSqft, 0)} sf
                 </tspan>
               </text>

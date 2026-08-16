@@ -19,6 +19,7 @@ import type { SettingsProposalSource } from "@pe/agent-contracts";
 
 import { type RealTarget, buildTargets } from "#/lab/estimate";
 import type { ParsedDocView } from "#/grounded-doc/types";
+import { boundsOf, fitFrame } from "#/lib/affine-frame";
 
 const PAGE_GAP = 24;
 
@@ -167,7 +168,8 @@ export function FamilyDocPane({
   if (!grounding) return <UploadSurface onParse={onParse} parsing={parsing} />;
 
   // Camera: frame the union of citations on the page holding the most of them.
-  let cam = { tx: 0, ty: 0, scale: 1 };
+  const viewport = { width: Math.max(pane.vw, 1), height: Math.max(pane.vh, 1) };
+  let cam = fitFrame({ minX: 0, minY: 0, maxX: 1, maxY: 1 }, viewport);
   if (pane.vw > 0) {
     const byPage = new Map<number, CitationTarget[]>();
     for (const citation of citations)
@@ -175,24 +177,33 @@ export function FamilyDocPane({
     const densest = [...byPage.entries()].sort((a, b) => b[1].length - a[1].length)[0];
     if (densest) {
       const [page, group] = densest;
-      const x0 = Math.min(...group.map((c) => c.bbox.x)) - 16;
-      const y0 = Math.min(...group.map((c) => c.bbox.y)) - 16;
-      const x1 = Math.max(...group.map((c) => c.bbox.x + c.bbox.w)) + 16;
-      const y1 = Math.max(...group.map((c) => c.bbox.y + c.bbox.h)) + 16;
-      const frameH = Math.max(y1 - y0, 110);
       const pageTop = tops.get(page) ?? 0;
-      const scale = Math.min(pane.vw / (x1 - x0), pane.vh / frameH, 2.2);
-      cam = {
-        scale,
-        tx: pane.vw / 2 - ((x0 + x1) / 2) * scale,
-        ty: pane.vh / 2 - (pageTop + (y0 + y1) / 2) * scale,
-      };
+      const union = boundsOf(
+        group.flatMap(({ bbox }) => [
+          [bbox.x, pageTop + bbox.y] as const,
+          [bbox.x + bbox.w, pageTop + bbox.y + bbox.h] as const,
+        ]),
+      );
+      const centerY = (union.minY + union.maxY) / 2;
+      const height = Math.max(union.maxY - union.minY + 32, 110);
+      cam = fitFrame(
+        {
+          minX: union.minX - 16,
+          minY: centerY - height / 2,
+          maxX: union.maxX + 16,
+          maxY: centerY + height / 2,
+        },
+        viewport,
+        { maxScale: 2.2 },
+      );
     } else {
       const first = grounding.view.pages[0];
-      if (first) {
-        const scale = Math.min(pane.vw / first.width, pane.vh / first.height, 1.2);
-        cam = { scale, tx: pane.vw / 2 - (first.width / 2) * scale, ty: 24 };
-      }
+      if (first)
+        cam = fitFrame({ minX: 0, minY: 0, maxX: first.width, maxY: first.height }, viewport, {
+          align: [0.5, 0],
+          padding: Math.max(0, Math.min(24, (Math.min(pane.vw, pane.vh) - 1) / 2)),
+          maxScale: 1.2,
+        });
     }
   }
 
@@ -208,7 +219,7 @@ export function FamilyDocPane({
       <div
         className="absolute left-0 top-0"
         style={{
-          transform: `translate(${cam.tx}px, ${cam.ty}px) scale(${cam.scale})`,
+          transform: cam.transform,
           transformOrigin: "top left",
           transition: "transform 0.65s cubic-bezier(0.3, 0.7, 0.2, 1)",
         }}
