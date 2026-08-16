@@ -11,7 +11,7 @@
 // The atlas renders a `World` and calls back through `AtlasActions` — it owns selection and
 // optimistic decision state, nothing else. The route owns the world, the overlay, and every
 // host call.
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 
 import {
   CellSelect,
@@ -25,7 +25,7 @@ import {
 import { MasterTable } from "#/components/master-table/master-table";
 import { fmtNum, type Column } from "#/components/master-table/model";
 import { Button } from "#/components/ui/button";
-import { Pane, PaneWorkspace } from "#/components/ui/pane";
+import { Pane, PaneSplit, PaneWorkspace } from "#/components/ui/pane";
 import { contentViewport, fitFrame, type Bounds2, unionBounds } from "#/lib/affine-frame";
 import { Live, Seam } from "#/takeoff/seam";
 import { ZoneThumb } from "#/takeoff/zone-plan";
@@ -251,6 +251,9 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
   const [zoneKey, setZoneKey] = useState<string | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [decided, setDecided] = useState<Record<string, Verdict>>({});
+  /** Where the per-room Manual J fields live: inline table columns (dense, whole-scope entry)
+   *  or the room panel (narrow table, one room in focus). One home at a time, never both. */
+  const [fieldsMode, setFieldsMode] = useState<"columns" | "panel">("columns");
   /** The row order the user is actually looking at — MasterTable owns filter/sort/search, and
    *  reports the result here so j/k walks the SAME order rather than the pre-filter scope. */
   const [visibleKeys, setVisibleKeys] = useState<string[]>([]);
@@ -455,42 +458,47 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
           />
         ),
       },
-      {
-        key: "ceil",
-        label: "ceil",
-        right: true,
-        width: "w-14",
-        sort: (row) => row.room.ceilingFt,
-        cell: (row) => (
-          <NumberCell
-            value={row.room.ceilingFt}
-            digits={1}
-            min={0}
-            onCommit={(v) => actions.patch(row.room.guid, { ceilingFt: v })}
-          />
-        ),
-      },
-      // The Manual J block: same shape, same law — faded until the room has data, and any
-      // number entered CREATES that data (the room's state moves to "data entered").
-      ...MANUAL_J.map(
-        (mj): Column<Row> => ({
-          key: mj.field,
-          label: mj.label,
-          right: true,
-          width: mj.width,
-          sort: (row) => row.room.data?.[mj.field] ?? 0,
-          cell: (row) => (
-            <NumberCell
-              value={row.room.data?.[mj.field] ?? 0}
-              digits={0}
-              integer
-              min={0}
-              className={row.room.data === null ? "opacity-50" : undefined}
-              onCommit={(v) => actions.patch(row.room.guid, { [mj.field]: v })}
-            />
-          ),
-        }),
-      ),
+      // The Manual J block (+ ceiling): same shape, same law — faded until the room has data,
+      // and any number entered CREATES that data (the room's state moves to "data entered").
+      // In panel mode these fields move to the room panel; the table narrows to identity+status.
+      ...(fieldsMode === "columns"
+        ? [
+            {
+              key: "ceil",
+              label: "ceil",
+              right: true,
+              width: "w-14",
+              sort: (row) => row.room.ceilingFt,
+              cell: (row) => (
+                <NumberCell
+                  value={row.room.ceilingFt}
+                  digits={1}
+                  min={0}
+                  onCommit={(v) => actions.patch(row.room.guid, { ceilingFt: v })}
+                />
+              ),
+            } satisfies Column<Row>,
+            ...MANUAL_J.map(
+              (mj): Column<Row> => ({
+                key: mj.field,
+                label: mj.label,
+                right: true,
+                width: mj.width,
+                sort: (row) => row.room.data?.[mj.field] ?? 0,
+                cell: (row) => (
+                  <NumberCell
+                    value={row.room.data?.[mj.field] ?? 0}
+                    digits={0}
+                    integer
+                    min={0}
+                    className={row.room.data === null ? "opacity-50" : undefined}
+                    onCommit={(v) => actions.patch(row.room.guid, { [mj.field]: v })}
+                  />
+                ),
+              }),
+            ),
+          ]
+        : []),
       {
         key: "flags",
         label: "flags",
@@ -542,7 +550,7 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
         },
       },
     ],
-    [actions, flagVocabulary],
+    [actions, flagVocabulary, fieldsMode],
   );
 
   // Chips the ROUTE owns. The table's own column filters chip themselves.
@@ -568,8 +576,6 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
     `/takeoffs?level=${level}` +
     (selected ? `&zone=${encodeURIComponent(selected.zone.key)}` : "") +
     (cursorRow ? `&room=${shortId(cursorRow.room.guid)}` : "");
-
-  const peekZone = cursorRow?.zone ?? selected ?? null;
 
   return (
     <main className="flex h-screen min-h-0 flex-col bg-background">
@@ -849,61 +855,90 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                 onClose={() => setStatsOpen(false)}
               />
             )}
+            {/* Zone info lives ON the plan, where the zone is — not in a far-away rail. */}
+            {selected && (
+              <ZoneCard
+                zone={selected}
+                cursorRoom={cursorRow?.room ?? null}
+                geoReady={geoReady}
+                live={live}
+                busy={busy}
+                actions={actions}
+                stateOf={stateOf}
+                systems={world.systems}
+                onClose={() => selectZone(null)}
+              />
+            )}
           </Pane>
         }
         content={
           <Pane kind="content" scroll="clip">
-            <MasterTable
-              rows={rows}
-              columns={columns}
-              rowKey={(row) => row.room.guid}
-              scopeLabel="rooms in scope"
-              searchPlaceholder="name / type / zone…"
-              chips={chips}
-              summary={
-                <>
-                  {visibleRows.length} rooms · {fmtNum(scopeSqft, 0)} sf
-                  {scopeCalls > 0 && (
-                    <span className="text-cat-clay"> · {scopeCalls} needing a call</span>
-                  )}
-                  <span className="ml-2 opacity-70">j/k cursor · a/d accept/dismiss</span>
-                </>
-              }
-              empty={
-                <>
-                  No rooms in scope. Zones before <span className="tele">partitioned</span> have no
-                  rooms yet — widen the rail filter or press <span className="tele">Esc</span>.
-                </>
-              }
-              activeKey={cursor}
-              onRowClick={(row) => {
-                setCursor(row.room.guid);
-                if (!selected) setLevel(row.zone.zone.lane.label);
+            {/* Room data sits BESIDE the rooms it describes. The panel exists exactly when a
+                room is under the cursor; Esc clears both. The table never unmounts (its filter
+                state must survive the cursor coming and going). */}
+            <PaneSplit
+              axis="horizontal"
+              resize={{
+                target: "end",
+                defaultSize: 320,
+                minSize: 240,
+                maxSize: 520,
+                minOtherSize: 360,
+                persist: "pe.takeoffs.room-panel-width",
+                collapse: { collapsed: cursorRow == null, collapsedSize: 0 },
               }}
-              onVisibleChange={(keys) =>
-                setVisibleKeys((prev) =>
-                  prev.length === keys.length && prev.every((k, i) => k === keys[i]) ? prev : keys,
+              start={
+                <MasterTable
+                  rows={rows}
+                  columns={columns}
+                  rowKey={(row) => row.room.guid}
+                  scopeLabel="rooms in scope"
+                  searchPlaceholder="name / type / zone…"
+                  chips={chips}
+                  summary={
+                    <>
+                      {visibleRows.length} rooms · {fmtNum(scopeSqft, 0)} sf
+                      {scopeCalls > 0 && (
+                        <span className="text-cat-clay"> · {scopeCalls} needing a call</span>
+                      )}
+                      <span className="ml-2 opacity-70">j/k cursor · a/d accept/dismiss</span>
+                    </>
+                  }
+                  empty={
+                    <>
+                      No rooms in scope. Zones before <span className="tele">partitioned</span> have
+                      no rooms yet — widen the rail filter or press{" "}
+                      <span className="tele">Esc</span>.
+                    </>
+                  }
+                  activeKey={cursor}
+                  onRowClick={(row) => {
+                    setCursor(row.room.guid);
+                    if (!selected) setLevel(row.zone.zone.lane.label);
+                  }}
+                  onVisibleChange={(keys) =>
+                    setVisibleKeys((prev) =>
+                      prev.length === keys.length && prev.every((k, i) => k === keys[i])
+                        ? prev
+                        : keys,
+                    )
+                  }
+                />
+              }
+              end={
+                cursorRow && (
+                  <RoomPanel
+                    row={cursorRow}
+                    decided={decided}
+                    live={live}
+                    fieldsMode={fieldsMode}
+                    onFieldsMode={setFieldsMode}
+                    onDecide={decide}
+                    onPatch={(patch) => actions.patch(cursorRow.room.guid, patch)}
+                    url={proposedUrl}
+                  />
                 )
               }
-            />
-          </Pane>
-        }
-        inspector={
-          <Pane kind="inspector" title="selection" bodyClassName="p-0">
-            <Peek
-              zone={peekZone}
-              room={cursorRow?.room ?? null}
-              open={cursorRow?.open ?? []}
-              state={cursorRow?.state ?? null}
-              decided={decided}
-              geoReady={geoReady}
-              live={live}
-              busy={busy}
-              actions={actions}
-              stateOf={stateOf}
-              world={world}
-              onDecide={decide}
-              url={proposedUrl}
             />
           </Pane>
         }
@@ -1255,6 +1290,303 @@ function Line({ label, value, muted }: { label: string; value: string; muted?: b
   );
 }
 
+/**
+ * The selected zone, ON the plan — locality over the sidebar cliché. Identity, the mini zone
+ * plan, the aggregate room-state bar (which replaced the prose "next action"), accounting
+ * closure, and the zone verbs, floating where the zone itself is drawn. Deselecting (× / Esc /
+ * click-out) removes it, so collapsing the plan hides only plan-local information.
+ */
+function ZoneCard({
+  zone,
+  cursorRoom,
+  geoReady,
+  live,
+  busy,
+  actions,
+  stateOf,
+  systems,
+  onClose,
+}: {
+  zone: WorldZone;
+  cursorRoom: WorldRoom | null;
+  geoReady: boolean;
+  live: boolean;
+  busy: string | null;
+  actions: AtlasActions;
+  stateOf: (room: WorldRoom) => RoomState;
+  systems: WorldSystem[];
+  onClose: () => void;
+}) {
+  const states = zone.rooms.map(stateOf);
+  const run = zone.runs[zone.runs.length - 1] ?? null;
+  const closure = run
+    ? run.declaredSqft - (run.roomSqft + run.claimedWallSqft + zone.heldSqft + run.excludedSqft)
+    : null;
+  const zoneSystems = systems.filter((s) => s.zoneKeys.includes(zone.zone.key));
+
+  return (
+    <div className="absolute top-2 left-2 z-20 w-64 rounded-[var(--radius)] border border-border bg-background/95 shadow-sm backdrop-blur">
+      <div className="flex items-center gap-1.5 px-2 py-1.5">
+        <ZoneThumb zone={zone.zone} className="size-5" />
+        <span className="tele">{zone.zone.key}</span>
+        <span className="tele min-w-0 truncate text-muted-foreground">{zone.name}</span>
+        <button
+          type="button"
+          onClick={onClose}
+          title="deselect this zone (Esc) — the table widens back to the whole house"
+          className="tele ml-auto text-muted-foreground hover:text-foreground"
+        >
+          ×
+        </button>
+      </div>
+
+      <ZonePeek zone={zone} cursorRoom={cursorRoom} geoReady={geoReady} stateOf={stateOf} />
+
+      <div className="space-y-1 px-2 py-1.5">
+        <div className="flex items-center gap-1.5">
+          <ZoneStateBar zone={zone} states={states} className="w-16" />
+          <span className="tele text-muted-foreground" title={STAGE_BLURB[zone.stage]}>
+            {zone.rooms.length} rooms · {fmtNum(zone.zone.declaredSqft, 0)} sf · {zone.stage}
+          </span>
+        </div>
+        {run && (
+          <p
+            className={cn(
+              "tele",
+              closure !== null && Math.abs(closure) < 1 ? "text-cat-green" : "text-cat-clay",
+            )}
+          >
+            {closure !== null && Math.abs(closure) < 1
+              ? "closed — every declared foot accounted"
+              : `${fmtNum(closure ?? 0, 0)} sf unaccounted`}
+          </p>
+        )}
+        {zoneSystems.map((s) => (
+          <p key={s.tag} className="tele text-muted-foreground">
+            {s.tag} · {fmtNum(s.sensibleBtuh, 0)} Btu/h
+            {s.overCap ? ` — over the ${SENSIBLE_CAP_BTUH.toLocaleString()} cap` : ""}
+          </p>
+        ))}
+        {live && (
+          <span className="flex flex-wrap gap-1 pt-0.5">
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={busy !== null}
+              title={`capture ${zone.zone.lane.label}: prepare seed views, export ink, detect — writes replay_<level>.bin`}
+              onClick={() => actions.capture(zone.zone.lane)}
+            >
+              {zone.zone.lane.replayPath ? "re-capture level" : "capture level"}
+            </Button>
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={busy !== null || !zone.zone.lane.replayPath}
+              title={
+                zone.zone.lane.replayPath
+                  ? "replay the capture masked to this zone; materialize Room Regions (rerun never overwrites)"
+                  : "capture the level first — the partition replays its snapshot"
+              }
+              onClick={() => actions.partition(zone)}
+            >
+              partition zone
+            </Button>
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Per-room data, living beside the rooms it narrates. Exists exactly while a row is under the
+ *  cursor. In "panel" fields mode the Manual J fields render here and leave the table narrow;
+ *  in "columns" mode they stay inline and this panel carries calls + provenance only. */
+function RoomPanel({
+  row,
+  decided,
+  live,
+  fieldsMode,
+  onFieldsMode,
+  onDecide,
+  onPatch,
+  url,
+}: {
+  row: Row;
+  decided: Record<string, Verdict>;
+  live: boolean;
+  fieldsMode: "columns" | "panel";
+  onFieldsMode: (mode: "columns" | "panel") => void;
+  onDecide: (room: WorldRoom, flag: string, verb: Verdict) => void;
+  onPatch: (patch: RoomEdit) => void;
+  url: string;
+}) {
+  const { room, zone, state, open } = row;
+  const localDecisions = room.flags
+    .map((f) => ({ flag: f, verb: decided[flagKey(room.guid, f)] }))
+    .filter((x): x is { flag: string; verb: Verdict } => x.verb !== undefined);
+
+  return (
+    <Pane
+      kind="inspector"
+      title="room"
+      meta={`${zone.zone.key} · ${zone.zone.lane.label}`}
+      bodyClassName="p-0"
+      actions={
+        <button
+          type="button"
+          onClick={() => onFieldsMode(fieldsMode === "panel" ? "columns" : "panel")}
+          title={
+            fieldsMode === "panel"
+              ? "Manual J fields are edited HERE for the cursor room; the table stays narrow. Click to move them back into the table as columns."
+              : "Manual J fields are table columns right now. Click to edit them here instead and narrow the table."
+          }
+          className="tele rounded-[var(--radius)] border border-[var(--line-2)] px-1.5 py-px text-muted-foreground hover:bg-muted"
+        >
+          fields: {fieldsMode}
+        </button>
+      }
+    >
+      <div className="divide-y divide-[var(--line)]">
+        <div className="px-2.5 py-2">
+          <h2 className="font-pe-display text-base leading-tight font-semibold tracking-tight">
+            {room.name}
+          </h2>
+          <p className="mt-1 flex flex-wrap items-center gap-x-1.5">
+            <StateDot {...stateMeta(state)} />
+            <span className={cn("tele", state === "call" ? "text-cat-clay" : undefined)}>
+              {STATE_META[state].label}
+            </span>
+            <span className="tele text-muted-foreground">
+              {room.sqft} sf · {fmtNum(room.ceilingFt, 1)} ft clg · {room.type}
+            </span>
+          </p>
+        </div>
+
+        {fieldsMode === "panel" && (
+          <div className="px-2.5 py-2">
+            <p className="section-label mb-1">manual j — this room</p>
+            <div className="grid grid-cols-[4rem_1fr] items-center gap-y-1">
+              <span className="tele pr-1.5 text-right text-muted-foreground">ceil ft</span>
+              <span className="rounded-[1px] border border-[var(--line-soft)]">
+                <NumberCell
+                  value={room.ceilingFt}
+                  digits={1}
+                  min={0}
+                  onCommit={(v) => onPatch({ ceilingFt: v })}
+                />
+              </span>
+              {MANUAL_J.map((mj) => (
+                <Fragment key={mj.field}>
+                  <span className="tele pr-1.5 text-right text-muted-foreground">{mj.label}</span>
+                  <span className="rounded-[1px] border border-[var(--line-soft)]">
+                    <NumberCell
+                      value={room.data?.[mj.field] ?? 0}
+                      digits={0}
+                      integer
+                      min={0}
+                      className={room.data === null ? "opacity-50" : undefined}
+                      onCommit={(v) => onPatch({ [mj.field]: v })}
+                    />
+                  </span>
+                </Fragment>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {open.length > 0 && (
+          <div className="px-2.5 py-2">
+            <p className="section-label mb-1">open calls — {open.length}</p>
+            <ul className="space-y-1">
+              {open.map((flag) => (
+                <li key={flag}>
+                  <p className="tele text-cat-clay">{flag}</p>
+                  <p className="tele text-muted-foreground">{FLAG_MEANING[flag] ?? "no blurb"}</p>
+                  <span className="mt-0.5 flex gap-1">
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      onClick={() => onDecide(room, flag, "accept")}
+                    >
+                      accept <span className="ml-1 opacity-50">a</span>
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      onClick={() => onDecide(room, flag, "dismiss")}
+                    >
+                      dismiss <span className="ml-1 opacity-50">d</span>
+                    </Button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {!live ? (
+              <Seam className="mt-1.5">fixture: verbs stay local, nothing is written</Seam>
+            ) : room.elementId === null ? (
+              <Seam className="mt-1.5">
+                no Room Region home yet — partition must materialize this room before a decision can
+                be written
+              </Seam>
+            ) : (
+              <Live className="mt-1.5">verbs write through to the Room Region provenance blob</Live>
+            )}
+          </div>
+        )}
+
+        <div className="px-2.5 py-2">
+          <p className="section-label mb-1">provenance</p>
+          <Line label="run" value={room.provenance.runId} />
+          <Line
+            label="source sf"
+            value={
+              room.sqft === room.provenance.sourceSqft
+                ? `${fmtNum(room.provenance.sourceSqft, 0)} sf — unchanged since detection`
+                : `${fmtNum(room.provenance.sourceSqft, 0)} sf detected, now ${room.sqft} sf`
+            }
+          />
+          <Line
+            label="boundary"
+            value={room.outer ? `${room.outer.length} pts detected` : "no polygon — dot only"}
+          />
+          <Line label="guid" value={room.guid} />
+          <Line
+            label=".r10"
+            value={
+              room.r10
+                ? `#${room.r10.identifier} · synced ${room.r10.syncedAt.slice(0, 10)} at ${fmtNum(room.r10.lastSyncedSqft, 0)} sf`
+                : "never exported"
+            }
+          />
+          {room.decisions.length === 0 && localDecisions.length === 0 ? (
+            <Line label="decisions" value="none written on this room" muted />
+          ) : (
+            <>
+              {room.decisions.map((d, i) => (
+                <Line
+                  key={`w${i}`}
+                  label={i === 0 ? "decisions" : ""}
+                  value={`${d.verb} ${d.flag} · ${d.at.slice(0, 10)} · ${d.runId}`}
+                />
+              ))}
+              {localDecisions.map((d) => (
+                <Line key={`l${d.flag}`} label="" value={`${d.verb} ${d.flag} · this session`} />
+              ))}
+            </>
+          )}
+        </div>
+
+        <div className="space-y-1 px-2.5 py-2">
+          <p className="section-label">addressable</p>
+          <p className="tele rounded-[var(--radius)] border border-[var(--line)] bg-muted/60 px-1.5 py-1 break-all text-muted-foreground">
+            {url}
+          </p>
+        </div>
+      </div>
+    </Pane>
+  );
+}
+
 function nextAction(zone: WorldZone, calls: number): string {
   if (calls > 0) return `clear ${calls} open call${calls === 1 ? "" : "s"} on this zone`;
   switch (zone.stage) {
@@ -1276,7 +1608,14 @@ function nextAction(zone: WorldZone, calls: number): string {
   }
 }
 
-function Peek({
+/**
+ * POSTERITY — unmounted 2026-08-15. The full-height selection rail: zone + room + calls +
+ * next-action + provenance in one far-away sidebar. Retired because it broke information
+ * locality (zone facts now float on the plan as ZoneCard; room facts sit beside the table as
+ * RoomPanel), but the per-zone-summary composition may matter elsewhere — keep until it does
+ * or a purge proves it never will.
+ */
+export function Peek({
   zone,
   room,
   open,
