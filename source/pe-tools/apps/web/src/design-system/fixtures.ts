@@ -333,7 +333,11 @@ export const CATEGORY_OPTIONS: readonly { value: string; label: string; descript
   { value: "windows", label: "Windows", description: "OST_Windows" },
   { value: "walls", label: "Walls", description: "OST_Walls" },
   { value: "curtain-panels", label: "Curtain Panels", description: "OST_CurtainWallPanels" },
-  { value: "mech-equipment", label: "Mechanical Equipment", description: "OST_MechanicalEquipment" },
+  {
+    value: "mech-equipment",
+    label: "Mechanical Equipment",
+    description: "OST_MechanicalEquipment",
+  },
   { value: "duct-fittings", label: "Duct Fittings", description: "OST_DuctFitting" },
   { value: "pipe-accessories", label: "Pipe Accessories", description: "OST_PipeAccessory" },
   { value: "generic-models", label: "Generic Models", description: "OST_GenericModel" },

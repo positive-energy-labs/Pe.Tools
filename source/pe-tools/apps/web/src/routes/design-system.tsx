@@ -24,14 +24,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-  ChevronsDownUp,
-  RefreshCw,
-  Save,
-  Share2,
-  Sparkles,
-  Upload,
-} from "lucide-react";
+import { ChevronsDownUp, RefreshCw, Save, Share2, Sparkles, Upload } from "lucide-react";
 
 import { ThemeToggle } from "#/components/ThemeToggle";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
@@ -177,16 +170,16 @@ function Thesis() {
         One cell grammar, at three scales.
       </p>
       <p className="max-w-[74ch] text-[13.5px] leading-relaxed text-[var(--r-ink-2)]">
-        Pea proposes; you decide; the model is allowed to disagree. Every surface in pe-tools has
-        to say those three things at a glance, and the language does it with one treatment used at
+        Pea proposes; you decide; the model is allowed to disagree. Every surface in pe-tools has to
+        say those three things at a glance, and the language does it with one treatment used at
         three sizes — the value inside a table cell, the value inside pea&apos;s chat card, and the
-        whole write inside an arming strip are the same marks, scaled. Colour is spent only where
-        a hue is a meaning; type carries the rest.
+        whole write inside an arming strip are the same marks, scaled. Colour is spent only where a
+        hue is a meaning; type carries the rest.
       </p>
       <p className="max-w-[74ch] text-[12px] leading-relaxed text-[var(--r-ink-mute)]">
-        This page catalogues the components that are that language. It is a spec and a
-        demonstration at once: the prose states the ruling, the specimen beside it is the shipping
-        component obeying it. Where the component cannot obey it yet, the page says so.
+        This page catalogues the components that are that language. It is a spec and a demonstration
+        at once: the prose states the ruling, the specimen beside it is the shipping component
+        obeying it. Where the component cannot obey it yet, the page says so.
       </p>
     </section>
   );
@@ -210,8 +203,20 @@ const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
     text: "The only filled blue in the language is the verb that writes beyond the page. Nav is the same blue as TEXT, byte-identical, and the job carries the difference so no second blue is minted.",
     demo: (
       <span className="flex items-center gap-2">
-        <Verb tone="commit" label="apply to Revit" icon={Upload} onClick={noop} reason="Writes 42 parameters into the live model" />
-        <Verb tone="nav" direction="out" label="open in RHVAC" onClick={noop} reason="Opens this system in RHVAC" />
+        <Verb
+          tone="commit"
+          label="apply to Revit"
+          icon={Upload}
+          onClick={noop}
+          reason="Writes 42 parameters into the live model"
+        />
+        <Verb
+          tone="nav"
+          direction="out"
+          label="open in RHVAC"
+          onClick={noop}
+          reason="Opens this system in RHVAC"
+        />
       </span>
     ),
   },
@@ -252,7 +257,11 @@ const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
           </div>
         </ArtifactFrame>
         <div className="pt-2">
-          <OutcomeLine kind="receipt" label="42 parameters written" says="unframed — plain content" />
+          <OutcomeLine
+            kind="receipt"
+            label="42 parameters written"
+            says="unframed — plain content"
+          />
         </div>
       </div>
     ),
@@ -260,7 +269,11 @@ const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
   {
     name: "mono means measured",
     text: "Mono is not chrome. It marks what a machine measured: counts, hashes, timestamps, states, footlines. Type carries meaning on the same terms colour does, which is what lets the colour budget stay small.",
-    demo: <FactChip title="A machine-measured fact: the plan this write was made against.">plan a91f#c04</FactChip>,
+    demo: (
+      <FactChip title="A machine-measured fact: the plan this write was made against.">
+        plan a91f#c04
+      </FactChip>
+    ),
   },
 ];
 
@@ -301,41 +314,142 @@ const TOKEN_GROUPS: readonly { group: string; asks: string; tokens: readonly Tok
     group: "grounds",
     asks: "what surface is this sitting on?",
     tokens: [
-      { token: "--r-page", means: "the page itself; prose and page chrome", modes: "L .985 ↔ .185 — one hue (88°) in both modes" },
-      { token: "--r-artifact", means: "the machine-operated object: table, card, strip", modes: "one lightness step off the page, both modes" },
-      { token: "--r-recess", means: "set INTO an artifact: head/foot bands, the key", modes: "same step size again — the ladder is even" },
-      { token: "--r-select", means: "selection + focus fill. never a hue", modes: "rung 4; the no-hue law made structural" },
+      {
+        token: "--r-page",
+        means: "the page itself; prose and page chrome",
+        modes: "L .985 ↔ .185 — one hue (88°) in both modes",
+      },
+      {
+        token: "--r-artifact",
+        means: "the machine-operated object: table, card, strip",
+        modes: "one lightness step off the page, both modes",
+      },
+      {
+        token: "--r-recess",
+        means: "set INTO an artifact: head/foot bands, the key",
+        modes: "same step size again — the ladder is even",
+      },
+      {
+        token: "--r-select",
+        means: "selection + focus fill. never a hue",
+        modes: "rung 4; the no-hue law made structural",
+      },
     ],
   },
   {
     group: "inks",
     asks: "how loud is this text allowed to be?",
     tokens: [
-      { token: "--r-ink", means: "primary text: values, labels, prose", modes: "inverted pair on the ground's own hue" },
-      { token: "--r-ink-2", means: "annotations, footlines, captions, counts", modes: "light value sits AT the meaning band's lightness" },
-      { token: "--r-ink-mute", means: "locked · dropped · the 'never checked' squiggle", modes: "near-achromatic; ~0 drift and ~0 ΔL across modes" },
+      {
+        token: "--r-ink",
+        means: "primary text: values, labels, prose",
+        modes: "inverted pair on the ground's own hue",
+      },
+      {
+        token: "--r-ink-2",
+        means: "annotations, footlines, captions, counts",
+        modes: "light value sits AT the meaning band's lightness",
+      },
+      {
+        token: "--r-ink-mute",
+        means: "locked · dropped · the 'never checked' squiggle",
+        modes: "near-achromatic; ~0 drift and ~0 ΔL across modes",
+      },
     ],
   },
   {
     group: "hairlines",
     asks: "is this a seam, or a box?",
     tokens: [
-      { token: "--r-line", means: "quiet: row rules, the artifact frame's inset edge", modes: "ink @12% ↔ @14% — derived, so it rides the hue free" },
-      { token: "--r-line-2", means: "firm: seams, citation underline, chip edge, focus", modes: "ink @22% ↔ @26%" },
+      {
+        token: "--r-line",
+        means: "quiet: row rules, the artifact frame's inset edge",
+        modes: "ink @12% ↔ @14% — derived, so it rides the hue free",
+      },
+      {
+        token: "--r-line-2",
+        means: "firm: seams, citation underline, chip edge, focus",
+        modes: "ink @22% ↔ @26%",
+      },
     ],
   },
   {
     group: "meanings",
     asks: "what fact is this hue standing for?",
     tokens: [
-      { token: "--r-pea", means: "pea's MARK: proposal ring, corner fold, card edge", modes: "the display rung — band lightness stepped 0.08 toward its ground" },
-      { token: "--r-pea-ink", means: "pea at ink weight: pea's text, the wash source", modes: "on-band, both modes; h158 unmoved" },
-      { token: "--r-alarm", means: "THE one alarm: drift, refusal, the ghost value", modes: "the one legislated off-band token (+35% chroma), both modes" },
-      { token: "--r-caution", means: "stale · unverified · unsaved · partial · error", modes: "on-band; 2.8× the incumbent kiln's chroma" },
-      { token: "--r-done", means: "it landed: receipts, the post-commit sentence", modes: "on-band; 25° from pea — adjacent, not equal" },
-      { token: "--r-commit", means: "the only filled blue: writes beyond the page", modes: "PE blue's exact hue, band-quantized" },
-      { token: "--r-on-commit", means: "text/icon sitting on a commit fill", modes: "= --r-page. no pure white or black exists in the set" },
-      { token: "--r-nav", means: "nav as blue TEXT — back · forward · out", modes: "byte-identical to commit; the job carries the difference" },
+      {
+        token: "--r-pea",
+        means: "pea's MARK: proposal ring, corner fold, card edge",
+        modes: "the display rung — band lightness stepped 0.08 toward its ground",
+      },
+      {
+        token: "--r-pea-ink",
+        means: "pea at ink weight: pea's text, the wash source",
+        modes: "on-band, both modes; h158 unmoved",
+      },
+      {
+        token: "--r-alarm",
+        means: "THE one alarm: drift, refusal, the ghost value",
+        modes: "the one legislated off-band token (+35% chroma), both modes",
+      },
+      {
+        token: "--r-caution",
+        means: "stale · unverified · unsaved · partial · error",
+        modes: "on-band; 2.8× the incumbent kiln's chroma",
+      },
+      {
+        token: "--r-done",
+        means: "it landed: receipts, the post-commit sentence",
+        modes: "on-band; 25° from pea — adjacent, not equal",
+      },
+      {
+        token: "--r-commit",
+        means: "the only filled blue: writes beyond the page",
+        modes: "PE blue's exact hue, band-quantized",
+      },
+      {
+        token: "--r-on-commit",
+        means: "text/icon sitting on a commit fill",
+        modes: "= --r-page. no pure white or black exists in the set",
+      },
+      {
+        token: "--r-nav",
+        means: "nav as blue TEXT — back · forward · out",
+        modes: "byte-identical to commit; the job carries the difference",
+      },
+    ],
+  },
+  {
+    group: "viz",
+    asks: "which series is this? (kind, never state)",
+    tokens: [
+      {
+        token: "--viz-1",
+        means: "series 1 — carries the old cat-blue identity",
+        modes: "band-quantized: L .470 ↔ .795, hue unmoved",
+      },
+      {
+        token: "--viz-2",
+        means: "series 2 — old cat-green",
+        modes: "same band; no series out-shouts another",
+      },
+      {
+        token: "--viz-3",
+        means: "series 3 — old cat-slate (low chroma)",
+        modes: "C .045 keeps its near-neutral character",
+      },
+      { token: "--viz-4", means: "series 4 — old cat-lichen", modes: "on-band" },
+      {
+        token: "--viz-5",
+        means: "series 5 — old cat-clay",
+        modes: "on-band; a chart clay is not the alarm",
+      },
+      {
+        token: "--viz-6",
+        means: "series 6 — old cat-kiln (low chroma)",
+        modes:
+          "C .055. THE GRAYSCALE LAW: a viz spend must survive grayscale — label, legend, or position carries the distinction",
+      },
     ],
   },
 ];
@@ -374,8 +488,9 @@ function Tokens() {
         The old <code className="font-[family-name:var(--font-pe-mono)] text-[11px]">--act-*</code>{" "}
         / <code className="font-[family-name:var(--font-pe-mono)] text-[11px]">--st-*</code> /{" "}
         <code className="font-[family-name:var(--font-pe-mono)] text-[11px]">--cat-*</code> role
-        vocabulary in <code className="font-[family-name:var(--font-pe-mono)] text-[11px]">styles.css</code>{" "}
-        is superseded but still live: every unmigrated route still runs on it, and the two coexist
+        vocabulary in{" "}
+        <code className="font-[family-name:var(--font-pe-mono)] text-[11px]">styles.css</code> is
+        superseded but still live: every unmigrated route still runs on it, and the two coexist
         until the per-route crusade lands the last one. Swatches below are read off{" "}
         <code className="font-[family-name:var(--font-pe-mono)] text-[11px]">:root</code> at render
         and re-read when you flip the theme — this table cannot drift from the stylesheet.
@@ -466,7 +581,13 @@ function ArtifactFrameBlock() {
           foot={
             <>
               <span className="dl-tag">2 unsaved</span>
-              <Verb tone="commit" label="save profile" icon={Save} onClick={noop} reason="Writes both staged values into the family profile" />
+              <Verb
+                tone="commit"
+                label="save profile"
+                icon={Save}
+                onClick={noop}
+                reason="Writes both staged values into the family profile"
+              />
             </>
           }
         >
@@ -488,8 +609,8 @@ function ArtifactFrameBlock() {
       <GapNote>
         the frame has a head slot, a foot slot and one undifferentiated children slot. A block that
         must sit last inside the frame — the cell-state key in §04 — gets there only because the
-        author wrote it last, which the type cannot enforce. The foot band is a flex control bar
-        and cannot hold a full-width block at all.
+        author wrote it last, which the type cannot enforce. The foot band is a flex control bar and
+        cannot hold a full-width block at all.
       </GapNote>
     </Demo>
   );
@@ -512,22 +633,77 @@ function VerbBlock() {
     >
       <div className="flex flex-wrap gap-x-10 gap-y-5">
         <VerbGroup title="stays here" radius="page · document">
-          <Verb label="collapse" icon={ChevronsDownUp} onClick={noop} reason="Folds every group in this pane" />
+          <Verb
+            label="collapse"
+            icon={ChevronsDownUp}
+            onClick={noop}
+            reason="Folds every group in this pane"
+          />
           <Verb label="refresh" icon={RefreshCw} onClick={noop} reason="Re-reads the model" />
-          <Verb tone="agent" label="ask pea" icon={Sparkles} onClick={noop} reason="Hands this scope to pea" />
+          <Verb
+            tone="agent"
+            label="ask pea"
+            icon={Sparkles}
+            onClick={noop}
+            reason="Hands this scope to pea"
+          />
         </VerbGroup>
 
         <VerbGroup title="goes somewhere" radius="nav splits three ways">
-          <Verb tone="nav" direction="back" label="all types" onClick={noop} reason="Back to the type list" />
-          <Verb tone="nav" direction="forward" label="open family" onClick={noop} reason="Into this family" />
-          <Verb tone="nav" direction="out" label="open in RHVAC" onClick={noop} reason="Leaves pe-tools" />
+          <Verb
+            tone="nav"
+            direction="back"
+            label="all types"
+            onClick={noop}
+            reason="Back to the type list"
+          />
+          <Verb
+            tone="nav"
+            direction="forward"
+            label="open family"
+            onClick={noop}
+            reason="Into this family"
+          />
+          <Verb
+            tone="nav"
+            direction="out"
+            label="open in RHVAC"
+            onClick={noop}
+            reason="Leaves pe-tools"
+          />
         </VerbGroup>
 
         <VerbGroup title="writes beyond the page" radius="document · model · external">
-          <Verb tone="commit" label="save profile" icon={Save} onClick={noop} reason="Writes to the family profile" />
-          <Verb tone="commit" label="apply to Revit" icon={Upload} onClick={noop} reason="Writes 42 parameters into the live model" />
-          <Verb tone="commit" label="sync to .r10" icon={Share2} onClick={noop} disabled reason="no .r10 target bound — bind one in the sentence first" />
-          <Verb tone="commit" label="applying" icon={Upload} busy onClick={noop} reason="In flight" />
+          <Verb
+            tone="commit"
+            label="save profile"
+            icon={Save}
+            onClick={noop}
+            reason="Writes to the family profile"
+          />
+          <Verb
+            tone="commit"
+            label="apply to Revit"
+            icon={Upload}
+            onClick={noop}
+            reason="Writes 42 parameters into the live model"
+          />
+          <Verb
+            tone="commit"
+            label="sync to .r10"
+            icon={Share2}
+            onClick={noop}
+            disabled
+            reason="no .r10 target bound — bind one in the sentence first"
+          />
+          <Verb
+            tone="commit"
+            label="applying"
+            icon={Upload}
+            busy
+            onClick={noop}
+            reason="In flight"
+          />
         </VerbGroup>
       </div>
 
@@ -566,18 +742,30 @@ function ChipBlock() {
           Two components, not two modes of one: round 1 proved a <em>narrowing control</em> cannot
           be built from a <em>state fact</em>, and merging them would give the fact chip an{" "}
           <code className="font-[family-name:var(--font-pe-mono)] text-[11px]">onRemove</code>{" "}
-          nobody fills. Tone comes from the meaning tokens and a chip may not mint a hue. The
-          dashed edge is reserved for one meaning — seam: typed but unproven.
+          nobody fills. Tone comes from the meaning tokens and a chip may not mint a hue. The dashed
+          edge is reserved for one meaning — seam: typed but unproven.
         </>
       }
     >
       <div className="flex flex-wrap items-center gap-2">
-        <FactChip title="Neutral machine-measured fact. Most chips are this.">plan a91f#c04</FactChip>
-        <FactChip tone="pea" title="Pea's own count of what it is proposing.">2 proposed</FactChip>
-        <FactChip tone="caution" title="Unsaved work that will be lost if you leave.">2 unsaved</FactChip>
-        <FactChip tone="done" title="Written and receipted.">42 written</FactChip>
-        <FactChip tone="alarm" title="The model disagrees with 1 value on screen.">1 drift</FactChip>
-        <FactChip dashed title="Fixture data — no host, no document, no element behind it.">fixture</FactChip>
+        <FactChip title="Neutral machine-measured fact. Most chips are this.">
+          plan a91f#c04
+        </FactChip>
+        <FactChip tone="pea" title="Pea's own count of what it is proposing.">
+          2 proposed
+        </FactChip>
+        <FactChip tone="caution" title="Unsaved work that will be lost if you leave.">
+          2 unsaved
+        </FactChip>
+        <FactChip tone="done" title="Written and receipted.">
+          42 written
+        </FactChip>
+        <FactChip tone="alarm" title="The model disagrees with 1 value on screen.">
+          1 drift
+        </FactChip>
+        <FactChip dashed title="Fixture data — no host, no document, no element behind it.">
+          fixture
+        </FactChip>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -619,19 +807,23 @@ const CELL_MATRIX: readonly { row: ParamRow; says: string }[] = PARAM_ROWS.filte
   ].includes(r.key),
 ).map((row) => ({
   row,
-  says: {
-    fireRating: "pea proposes — wash, ring, fold, and pea's square. Fold and square travel together.",
-    sillHeight: "you staged — bold plus the caution square. Bold appears nowhere else, ever.",
-    operatorType: "pea staged — the SAME square, pea's colour, no bold. Authorship is the colour.",
-    panelThickness: "drift — the one alarm, plus the model's value as a struck inline ghost.",
-    frameDepth: "stale read — squiggle rank 2.",
-    roughWidth: "never read — squiggle rank 3, the quietest.",
-    headHeight: "locked by a formula — greyed italic owns the body; no marks are permitted.",
-    mark: "excluded by Revit — renders identically to readonly. Two refusals, one treatment.",
-    zoneArea: "seam — nothing real behind it. The reserved dashed edge and nothing else.",
-    typeComments: "a long value with a citation — the footline clamps to one line, always.",
-    connectedLoad: "THE CRUCIBLE: proposed AND drift. The proposal owns the body, drift owns the squiggle slot, and both marks land.",
-  }[row.key] ?? "",
+  says:
+    {
+      fireRating:
+        "pea proposes — wash, ring, fold, and pea's square. Fold and square travel together.",
+      sillHeight: "you staged — bold plus the caution square. Bold appears nowhere else, ever.",
+      operatorType:
+        "pea staged — the SAME square, pea's colour, no bold. Authorship is the colour.",
+      panelThickness: "drift — the one alarm, plus the model's value as a struck inline ghost.",
+      frameDepth: "stale read — squiggle rank 2.",
+      roughWidth: "never read — squiggle rank 3, the quietest.",
+      headHeight: "locked by a formula — greyed italic owns the body; no marks are permitted.",
+      mark: "excluded by Revit — renders identically to readonly. Two refusals, one treatment.",
+      zoneArea: "seam — nothing real behind it. The reserved dashed edge and nothing else.",
+      typeComments: "a long value with a citation — the footline clamps to one line, always.",
+      connectedLoad:
+        "THE CRUCIBLE: proposed AND drift. The proposal owns the body, drift owns the squiggle slot, and both marks land.",
+    }[row.key] ?? "",
 }));
 
 function StateCellBlock() {
@@ -642,10 +834,14 @@ function StateCellBlock() {
       spec={
         <>
           The winner of round 1, and the reason there is a language at all: one grammar at any
-          scale. Precedence runs <em>uneditable owns the body ▸ pea&apos;s proposal owns it
-          otherwise ▸ the squiggle slot ▸ unsaved composes on top ▸ citation never contends</em>,
-          and it is enforced by cascade order in <code className="font-[family-name:var(--font-pe-mono)] text-[11px]">lang.css</code>,
-          not by discipline in the caller. Icons never go inside a data cell — they break table
+          scale. Precedence runs{" "}
+          <em>
+            uneditable owns the body ▸ pea&apos;s proposal owns it otherwise ▸ the squiggle slot ▸
+            unsaved composes on top ▸ citation never contends
+          </em>
+          , and it is enforced by cascade order in{" "}
+          <code className="font-[family-name:var(--font-pe-mono)] text-[11px]">lang.css</code>, not
+          by discipline in the caller. Icons never go inside a data cell — they break table
           ergonomics the moment a value runs long.
         </>
       }
@@ -716,13 +912,25 @@ function CellKeyBlock() {
   );
 }
 
-const OUTCOMES: readonly { kind: "busy" | "receipt" | "refused" | "dropped" | "advisory" | "partial" | "error"; label: string; says: string }[] = [
+const OUTCOMES: readonly {
+  kind: "busy" | "receipt" | "refused" | "dropped" | "advisory" | "partial" | "error";
+  label: string;
+  says: string;
+}[] = [
   { kind: "busy", label: "applying… 3s", says: "in flight" },
   { kind: "receipt", label: "42 parameters written", says: "it landed" },
-  { kind: "refused", label: "refused · plan hash drift", says: "declined before touching anything" },
+  {
+    kind: "refused",
+    label: "refused · plan hash drift",
+    says: "declined before touching anything",
+  },
   { kind: "dropped", label: "discarded — write already in flight", says: "it never happened" },
   { kind: "advisory", label: "2 types would be skipped", says: "a dry run blocks nothing" },
-  { kind: "partial", label: "38 of 42 written · 4 staged", says: "the failures stay staged for retry" },
+  {
+    kind: "partial",
+    label: "38 of 42 written · 4 staged",
+    says: "the failures stay staged for retry",
+  },
   { kind: "error", label: "bridge busy", says: "one of 7 host issue kinds" },
 ];
 
@@ -862,7 +1070,8 @@ function RealTable() {
         // third time, and it will drift from the cell the first time precedence changes.
         key: "state",
         label: "state",
-        title: "What the cell to the left is saying. Derived here because the table cannot read it.",
+        title:
+          "What the cell to the left is saying. Derived here because the table cannot read it.",
         width: "w-28",
         facet: stateFacet,
         cell: (r) => (
@@ -906,9 +1115,15 @@ function RealTable() {
         head={
           <>
             <span className="dl-tag">overhead coiling door 421 · parameters</span>
-            <FactChip title="Rows in scope before any narrowing.">{PARAM_ROWS.length} params</FactChip>
-            <FactChip tone="alarm" title="Values the model disagrees with.">2 drift</FactChip>
-            <FactChip tone="caution" title="Unsaved work that will be lost if you leave.">2 unsaved</FactChip>
+            <FactChip title="Rows in scope before any narrowing.">
+              {PARAM_ROWS.length} params
+            </FactChip>
+            <FactChip tone="alarm" title="Values the model disagrees with.">
+              2 drift
+            </FactChip>
+            <FactChip tone="caution" title="Unsaved work that will be lost if you leave.">
+              2 unsaved
+            </FactChip>
             <FactChip dashed title="Fixture data — no host, no document, no element behind it.">
               fixture
             </FactChip>
@@ -967,8 +1182,8 @@ function RealTable() {
         </GapNote>
         <GapNote>
           <strong>the hover law does not reach the table.</strong> Rows are{" "}
-          <code>hover:bg-muted/60</code>, a second hover treatment beside{" "}
-          <code>--r-veil</code>, which every control in the language shares.
+          <code>hover:bg-muted/60</code>, a second hover treatment beside <code>--r-veil</code>,
+          which every control in the language shares.
         </GapNote>
         <GapNote>
           <strong>two vocabularies in one object.</strong> The table&apos;s chrome — header strip,{" "}
@@ -990,9 +1205,9 @@ function RealTable() {
           them or the language has two chip families forever.
         </GapNote>
         <GapNote>
-          <strong>no footline row.</strong> A receipt has nowhere in the grid: outcomes can only
-          sit in the frame foot, outside the columns, so a partial write cannot align its
-          &ldquo;4 staged&rdquo; to the four rows it means.
+          <strong>no footline row.</strong> A receipt has nowhere in the grid: outcomes can only sit
+          in the frame foot, outside the columns, so a partial write cannot align its &ldquo;4
+          staged&rdquo; to the four rows it means.
         </GapNote>
       </div>
     </Section>

@@ -16,17 +16,22 @@
    `/design-lang`) as the validation record; the token PREFIX stays `--r-*` for exactly that
    reason — renaming would orphan the evidence.
 
-   THE OLD TOKENS IN `styles.css` (`--st-*`, `--act-*`, `--cat-*`, `--paper*`, …) ARE STILL
-   LIVE. Routes migrate onto `--r-*` one at a time via `components/lang`; nothing here replaces
-   them, and the two vocabularies coexist until the last route is normalized.
+   THE GROUND FLIP (2026-08-16): `styles.css` no longer decides any colour. Its shadcn semantic
+   layer resolves onto the ground/ink ladders here, and the entire old vocabulary (`--st-*`,
+   `--act-*`, `--cat-*`, Lens) survives only as an ALIAS SHIM in `styles.css` resolving onto the
+   meaning band and the viz ladder. Route passes delete shim lines as they migrate; the shim's
+   line count is the migration progress meter.
 
-   ── THE 18 TOKENS ─────────────────────────────────────────────────────────────────────────
+   ── THE 18 TOKENS (+ the viz ladder) ──────────────────────────────────────────────────────
      GROUND LADDER (4)  page · artifact · recess · select
      INK LADDER    (3)  ink · ink-2 · ink-mute
      HAIRLINE      (2)  line · line-2
      MEANING       (9)  pea · pea-ink · alarm · caution · done · commit · on-commit · nav
                         (…that is 8; the 9th is `--r-ink-mute` doing double duty as the
                          "never checked" rank of the squiggle family — see the reuse table)
+     VIZ LADDER    (6)  --viz-1..6 — the PARALLEL palette for taxonomy/series spends; indexed,
+                        band-quantized, governed by the grayscale law (see its block below).
+                        Not part of the meaning contract: a viz colour never carries state.
 
    Tints, washes and hairline-over-fill are NOT tokens. Components mix them from these with
    `color-mix()` against `--r-on`. A surface that wants a different wash STRENGTH is proposing a
@@ -207,6 +212,23 @@
   /* ── plumbing (see the two convention blocks in the header) ── */
   --r-on: var(--r-page); /* the ground a child actually sits on. Root value = the page. */
   --r-veil: color-mix(in srgb, var(--r-ink) 10%, transparent); /* THE ONE HOVER. Buys no hue. */
+
+  /* ── VIZ LADDER — THE PARALLEL PALETTE (taxonomy · charts · series) ─────────────────────────
+     Hue serves the STATE vocabulary; anything coloured by KIND — chart series, Revit category,
+     doc kind, cost class — spends --viz-*, never a meaning role. Indexed, not named: a viz
+     colour asserts "different from its neighbours" and nothing else. Band-quantized like the
+     meaning band (light L .470 / dark L .795) so no series out-shouts another; hues carry the
+     old cat-* identities forward (blue·green·slate·lichen·clay·kiln) so migrated surfaces keep
+     their series identity. Low-chroma rungs 3 and 6 keep slate/kiln's near-neutral character.
+     THE GRAYSCALE LAW (from ops CoverageBar, this palette's first shipped consumer): a viz
+     spend must survive grayscale — label, legend, or position carries the distinction; colour
+     only speeds it up. A chip whose meaning dies in grayscale is spending the wrong palette. */
+  --viz-1: oklch(0.47 0.085 249.5);
+  --viz-2: oklch(0.47 0.085 155);
+  --viz-3: oklch(0.47 0.045 230);
+  --viz-4: oklch(0.47 0.085 123);
+  --viz-5: oklch(0.47 0.085 58);
+  --viz-6: oklch(0.47 0.055 85);
 }
 
 /* The app's dark mechanism is a `.dark` class on `documentElement` (= :root), set by
@@ -237,4 +259,12 @@
   --r-commit: #92c1f1; /* h249.5, on-band */
   --r-on-commit: #15120d; /* = --r-page */
   --r-nav: #92c1f1; /* = --r-commit */
+
+  /* ── viz ladder — dark: L .795, chroma and hue unmoved (same law as the meaning band) ── */
+  --viz-1: oklch(0.795 0.085 249.5);
+  --viz-2: oklch(0.795 0.085 155);
+  --viz-3: oklch(0.795 0.045 230);
+  --viz-4: oklch(0.795 0.085 123);
+  --viz-5: oklch(0.795 0.085 58);
+  --viz-6: oklch(0.795 0.055 85);
 }

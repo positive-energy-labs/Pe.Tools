@@ -206,8 +206,8 @@ function ArmingRoute() {
           <span className="tele-label text-[10px] text-[var(--r-ink)]">what this page found</span>
           <Gap>
             the strip cannot say <strong>how old its own plan is</strong> — the one fact that
-            decides whether to press it. It renders &ldquo;armed against a plan of unknown age&rdquo;
-            rather than hiding the hole. The arming record needs <code>armedAt</code>,{" "}
+            decides whether to press it. It renders &ldquo;armed against a plan of unknown
+            age&rdquo; rather than hiding the hole. The arming record needs <code>armedAt</code>,{" "}
             <code>armedBy</code> and <code>supersededBy</code> before that line can be deleted.
           </Gap>
           <Gap>

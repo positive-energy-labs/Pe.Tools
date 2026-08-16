@@ -57,7 +57,13 @@ function itemCell(item: ProposalItem, committed: boolean): StateCellProps {
     agree: drifts ? "drift" : "agree",
     fresh: "fresh",
     // committed ⇒ nothing is unsaved any more; open ⇒ pea proposes; accepted ⇒ pea staged it.
-    stage: committed ? "clean" : item.review === "open" ? "proposed" : item.review === "accepted" ? "staged" : "clean",
+    stage: committed
+      ? "clean"
+      : item.review === "open"
+        ? "proposed"
+        : item.review === "accepted"
+          ? "staged"
+          : "clean",
     stagedBy: "pea",
     cap: "editable",
     confidence: item.review === "denied" ? undefined : item.confidence,
@@ -99,10 +105,11 @@ function ProposalFlow() {
         <p className="max-w-[78ch] text-[12.5px] leading-relaxed text-[var(--r-ink-2)]">
           Accept, deny or undo anything in pea&apos;s card and watch the row below it move. Both
           surfaces render every value through one function, so the card cannot teach a mark the
-          table does not draw. <strong className="font-normal text-[var(--r-ink)]">Connected
-          Load</strong> is the crucible the design-lang round never forced: pea proposes a value{" "}
-          <em>and</em> the model disagrees with what is on record — two marks on one cell, which
-          precedence asserts and nothing had ever proven.
+          table does not draw.{" "}
+          <strong className="font-normal text-[var(--r-ink)]">Connected Load</strong> is the
+          crucible the design-lang round never forced: pea proposes a value <em>and</em> the model
+          disagrees with what is on record — two marks on one cell, which precedence asserts and
+          nothing had ever proven.
         </p>
 
         {/* ── scale 1 · pea's card, inline in the thread ───────────────────────────────── */}
@@ -137,7 +144,10 @@ function ProposalFlow() {
                     {accepted} staged
                   </FactChip>
                   {attention > 0 ? (
-                    <FactChip tone="alarm" title="Low-confidence values pea wants a person to check.">
+                    <FactChip
+                      tone="alarm"
+                      title="Low-confidence values pea wants a person to check."
+                    >
                       {attention} needs a person
                     </FactChip>
                   ) : null}

@@ -11,53 +11,52 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* PE palette mapped onto shadcn semantic tokens (PE_DESIGN_VIBE.md).
-     Anchors: PE Blue #005695 = primary, PE Green = accent/ring, Basalt = foreground, Mist = secondary/muted. */
-  --background: #fbfaf7; /* warm paper */
-  --foreground: #3e4340; /* Basalt */
-  --card: #ffffff;
-  --card-foreground: #3e4340;
-  --popover: #ffffff;
-  --popover-foreground: #3e4340;
-  --primary: #005695; /* PE Blue */
-  --primary-foreground: #ffffff;
-  --secondary: #e8e4dd; /* Mist */
-  --secondary-foreground: #3e4340;
-  --muted: #f4f1ea; /* soft paper fill */
-  --muted-foreground: #4f6473; /* Slate Field */
-  --accent: #e6f1ea; /* PE Green wash */
-  --accent-foreground: #2f6a4a; /* palm */
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: #e3ded5;
-  --input: #e3ded5;
-  --ring: #005695; /* PE Blue focus ring */
-  /* provenance: you=kiln (slate in dark), pea+tools=green — identity/state across the workbench.
-     One `--user` hue; tint/line derive from it so a theme only re-points `--user`. */
-  --user: var(--kiln);
-  --user-tint: color-mix(in srgb, var(--user) 14%, transparent);
-  --user-line: color-mix(in srgb, var(--user) 36%, transparent);
-  --pea-tint: color-mix(in srgb, var(--pe-green) 12%, transparent);
-  --pea-line: color-mix(in srgb, var(--pe-green) 32%, transparent);
-  /* PE data palette — categorical colors for badges, cells, legends, and status chips.
-     One hue per category; consumers tint it (`/12` bg, `/25` border) and use the full hue as text.
-     Light values are dark enough to read on their own faint tint; .dark lightens them to match. */
-  --cat-blue: #005695; /* PE Blue — built-in / family kind */
-  --cat-green: #2f6a4a; /* palm — family value / proj+shared / success */
-  --cat-slate: #4f6473; /* Slate Field — instance / neutral data */
-  --cat-lichen: #6c7a4f; /* Lichen — shared / formula */
-  --cat-clay: #8a5e3b; /* Clay — project / warning */
-  --cat-kiln: #847a67; /* Kiln — type / not-available / muted */
+  /* ══ THE GROUND FLIP (2026-08-16) ═══════════════════════════════════════════
+     The shadcn semantic layer RESOLVES ONTO the --r-* ladder (design-lang.css).
+     styles.css no longer decides a single colour — every value below is a var()
+     indirection into canon, so both modes track automatically and the old
+     basalt-green dark ground is gone (there is no .dark block in this file).
+     Mapping: page→background · artifact→card/popover · recess→muted/secondary ·
+     select→accent (shadcn's hover/selected fill — the no-hue law for free). */
+  --background: var(--r-page);
+  --foreground: var(--r-ink);
+  --card: var(--r-artifact);
+  --card-foreground: var(--r-ink);
+  --popover: var(--r-artifact);
+  --popover-foreground: var(--r-ink);
+  --primary: var(--r-commit);
+  --primary-foreground: var(--r-on-commit);
+  --secondary: var(--r-recess);
+  --secondary-foreground: var(--r-ink);
+  --muted: var(--r-recess);
+  --muted-foreground: var(--r-ink-2);
+  --accent: var(--r-select);
+  --accent-foreground: var(--r-ink);
+  --destructive: var(--r-alarm);
+  --destructive-foreground: var(--r-on-commit);
+  --border: var(--r-line);
+  --input: var(--r-line);
+  --ring: var(--r-line-2); /* focus is a hairline, never a hue (lang focus law) */
   /* Edge discipline: 2px. Sharp instrument edges, softened one notch off 90° so shadcn
      primitives don't read raw against OS chrome. Data surfaces may go to 0 locally. */
   --radius: 0.125rem;
+  --font-body: var(--font-pe, "Open Sans", system-ui, sans-serif);
+  --font-display: var(--font-pe-display, "Spectral", Georgia, serif);
+  --font-mono: var(--font-pe-mono, ui-monospace, "SF Mono", Menlo, monospace);
 
-  /* ── Unified Lens vocabulary ───────────────────────────────────────────────
-     The chat Lens used to carry its own literal palette, and .pe-ribbon copied a
-     slice of it — three places, hand-kept in sync. It now ALIASES the one base
-     above, so values live in a single spot and dark tracks automatically through
-     the var indirection (no second dark palette). Most map straight to a shadcn
-     token; the few genuine Lens-only tones are the only values defined per-mode. */
+  /* ══ MIGRATION ALIAS SHIM — EVERY LINE BELOW IS DEBT ════════════════════════
+     The entire pre-lang vocabulary (--st- · --act- · --cat- · --pe- · Lens), resolved
+     onto --r-* canon so unmigrated routes render coherently on the new grounds.
+     A route pass replaces its consumers with components/lang + real --r-* roles,
+     then DELETES its lines here. LINE COUNT IS THE PROGRESS METER.
+     Never add a line; never consume these in new code. */
+
+  /* hairlines — chain off --foreground, so they already ride --r-ink */
+  --line: color-mix(in srgb, var(--foreground) 12%, transparent);
+  --line-2: color-mix(in srgb, var(--foreground) 20%, transparent);
+  --line-soft: color-mix(in srgb, var(--foreground) 7%, transparent);
+
+  /* Lens vocabulary — chains through the semantic layer above */
   --paper: var(--background);
   --paper-2: var(--muted);
   --paper-3: color-mix(in srgb, var(--background), var(--muted) 50%);
@@ -67,75 +66,44 @@
   --slate: var(--muted-foreground);
   --lens-ink-2: var(--muted-foreground);
   --pe-blue: var(--primary);
+  --pe-blue-soft: var(--r-nav);
+  --pe-green: var(--r-pea);
   --lichen: var(--cat-lichen);
   --clay: var(--cat-clay);
   --kiln: var(--cat-kiln);
   --fail: var(--destructive);
-  /* Hairlines as alpha off the foreground — adapts over any surface, flips for free. */
-  --line: color-mix(in srgb, var(--foreground) 12%, transparent);
-  --line-2: color-mix(in srgb, var(--foreground) 20%, transparent);
-  --line-soft: color-mix(in srgb, var(--foreground) 7%, transparent);
-  --font-body: var(--font-pe, "Open Sans", system-ui, sans-serif);
-  --font-display: var(--font-pe-display, "Spectral", Georgia, serif);
-  --font-mono: var(--font-pe-mono, ui-monospace, "SF Mono", Menlo, monospace);
-  /* Lens-only tones — no clean shadcn equivalent, so the only Lens values set twice. */
-  --pe-blue-soft: #1f6fa8;
-  --pe-green: #72c6a2; /* provenance "you" / skills / cache-read */
-  --clay-ink: #8a5e3b;
-  --clay-tint: #f3eae0;
+  --clay-ink: var(--r-alarm);
+  --clay-tint: color-mix(in srgb, var(--r-alarm) 10%, var(--r-page));
 
-  /* ── ROLE TOKENS (docs/design/COLOR-ROLES.md) ─────────────────────────────
-     The layer between the palette and the surfaces: meaning is assigned HERE and
-     nowhere else, so reconsidering a color is a one-line edit. Two vocabularies,
-     never mixed — `--act-*` is what pressing does, `--st-*` is what a fact is.
-     A hue may serve one vocabulary only. Components consume roles, not palette. */
-  --act-commit: var(--pe-blue); /* writes beyond the page: save, apply, materialize, bind */
-  --act-hover: color-mix(in srgb, var(--foreground) 40%, transparent); /* safe-verb hover border */
-  --st-proposal: var(--pe-green); /* pea's voice — proposals wear pea's identity, never blue */
-  --st-drift: var(--cat-clay); /* the model disagrees — the ONLY alarm */
-  --st-warn: var(--kiln); /* stale, unsaved, unverified — caution, not alarm */
-  --st-derived: var(--lichen); /* formula-driven, computed, locked-by-derivation */
-  --st-done: var(--cat-green); /* receipts, landed writes, settled */
-  --st-meta: var(--slate); /* neutral machine-measured fact */
-  --st-ground: var(--line-2); /* grounding citation — deliberately spends no colour */
-}
+  /* workbench identity — "you". SHIM: neutral ink until the workbench pass rules
+     whether the user gets an identity hue at all (finding for joint review). */
+  --user: var(--r-ink-2);
+  --user-tint: color-mix(in srgb, var(--user) 14%, transparent);
+  --user-line: color-mix(in srgb, var(--user) 36%, transparent);
+  --pea-tint: color-mix(in srgb, var(--pe-green) 12%, transparent);
+  --pea-line: color-mix(in srgb, var(--pe-green) 32%, transparent);
 
-.dark {
-  /* Dark = the same PE anchors on a basalt-green ground. Calm, low-chroma surfaces;
-     PE Blue/Green lifted just enough to stay legible and keep their identity. */
-  --background: #131c19; /* deep basalt-green */
-  --foreground: #e9ece8;
-  --card: #19231f; /* lifted off the ground so cards read as panels */
-  --card-foreground: #e9ece8;
-  --popover: #1d2823;
-  --popover-foreground: #e9ece8;
-  --primary: #4ea3d6; /* PE Blue, lifted for dark */
-  --primary-foreground: #07151f;
-  --secondary: #283430;
-  --secondary-foreground: #e9ece8;
-  --muted: #1f2925; /* sits between background and card */
-  --muted-foreground: #9fada4; /* Slate Field, lightened */
-  --accent: #233a2f; /* PE Green wash, dark */
-  --accent-foreground: #93dcb6;
-  --destructive: oklch(0.62 0.2 25.5);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: #2b3732;
-  --input: #2b3732;
-  --ring: #4ea3d6;
-  --user: var(--cat-slate); /* dark "you" reads slate, not kiln; tint/line derive from :root */
-  /* PE data palette, lightened for legibility on dark tints. */
-  --cat-blue: #6fb4e0;
-  --cat-green: #82d0a8;
-  --cat-slate: #a3b3c0;
-  --cat-lichen: #b3c191;
-  --cat-clay: #ca9d75;
-  --cat-kiln: #c6bba6;
+  /* categorical palette — now the viz ladder (design-lang.css). Series identity
+     carries over: blue·green·slate·lichen·clay·kiln → viz-1..6. Consumers that
+     spend these as STATE (clay=warning, green=success) are the violation the
+     route passes exist to fix; taxonomy spends migrate to --viz-* directly. */
+  --cat-blue: var(--viz-1);
+  --cat-green: var(--viz-2);
+  --cat-slate: var(--viz-3);
+  --cat-lichen: var(--viz-4);
+  --cat-clay: var(--viz-5);
+  --cat-kiln: var(--viz-6);
 
-  /* Only the Lens-only tones differ in dark; every alias above tracks the base tokens. */
-  --pe-blue-soft: #8fc6e8;
-  --pe-green: #82d0a8;
-  --clay-ink: #d8b48f;
-  --clay-tint: #2c241c;
+  /* role tokens (COLOR-ROLES.md, superseded by the --r-* meaning band) */
+  --act-commit: var(--r-commit);
+  --act-hover: color-mix(in srgb, var(--r-ink) 40%, transparent);
+  --st-proposal: var(--r-pea);
+  --st-drift: var(--r-alarm);
+  --st-warn: var(--r-caution);
+  --st-derived: var(--r-done); /* SHIM: derived has no --r-* role; joint-review finding */
+  --st-done: var(--r-done);
+  --st-meta: var(--r-ink-2);
+  --st-ground: var(--r-line-2);
 }
 
 @theme inline {
@@ -173,6 +141,14 @@
   --color-cat-lichen: var(--cat-lichen);
   --color-cat-clay: var(--cat-clay);
   --color-cat-kiln: var(--cat-kiln);
+  /* Viz ladder utilities (bg-viz-1/12, text-viz-3, border-viz-5/25) — the parallel
+     palette for taxonomy/series spends. cat-* above is its shim-era alias. */
+  --color-viz-1: var(--viz-1);
+  --color-viz-2: var(--viz-2);
+  --color-viz-3: var(--viz-3);
+  --color-viz-4: var(--viz-4);
+  --color-viz-5: var(--viz-5);
+  --color-viz-6: var(--viz-6);
   /* The 2px-radius law is flat: shadcn's derived steps computed NEGATIVE off a 2px base
      (calc(2px - 4px)), which browsers drop to 0. One radius, every step. */
   --radius-sm: var(--radius);
