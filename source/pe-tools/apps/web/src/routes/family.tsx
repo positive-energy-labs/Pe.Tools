@@ -105,7 +105,7 @@ export const Route = createFileRoute("/family")({
   component: FamilyRoute,
 });
 
-/** PROTOTYPE — lazy so the throwaway variants cost nothing on the real route. */
+/** PROTOTYPE — lazy so the throwaway variant costs nothing on the real route. */
 const FamilyProto = lazy(() =>
   import("#/family/proto/variants").then((m) => ({ default: m.FamilyProto })),
 );
@@ -116,7 +116,7 @@ function FamilyRoute() {
   if (variant)
     return (
       <Suspense fallback={null}>
-        <FamilyProto variant={variant} />
+        <FamilyProto />
       </Suspense>
     );
   return mock ? <MockFamily /> : <LiveFamily />;

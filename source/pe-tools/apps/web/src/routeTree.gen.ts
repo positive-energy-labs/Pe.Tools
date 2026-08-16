@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from "./routes/__root";
 import { Route as IndexRouteImport } from "./routes/index";
 import { Route as ChatRouteImport } from "./routes/chat";
 import { Route as DataTablesRouteImport } from "./routes/data-tables";
-import { Route as DesignLangRouteImport } from "./routes/design-lang";
 import { Route as DesignSystemRouteImport } from "./routes/design-system";
 import { Route as DocLabRouteImport } from "./routes/doc-lab";
 import { Route as FamiliesRouteImport } from "./routes/families";
@@ -42,11 +41,6 @@ const ChatRoute = ChatRouteImport.update({
 const DataTablesRoute = DataTablesRouteImport.update({
   id: "/data-tables",
   path: "/data-tables",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const DesignLangRoute = DesignLangRouteImport.update({
-  id: "/design-lang",
-  path: "/design-lang",
   getParentRoute: () => rootRouteImport,
 } as any);
 const DesignSystemRoute = DesignSystemRouteImport.update({
@@ -130,7 +124,6 @@ export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
   "/chat": typeof ChatRoute;
   "/data-tables": typeof DataTablesRoute;
-  "/design-lang": typeof DesignLangRoute;
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
   "/families": typeof FamiliesRoute;
@@ -151,7 +144,6 @@ export interface FileRoutesByTo {
   "/": typeof IndexRoute;
   "/chat": typeof ChatRoute;
   "/data-tables": typeof DataTablesRoute;
-  "/design-lang": typeof DesignLangRoute;
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
   "/families": typeof FamiliesRoute;
@@ -173,7 +165,6 @@ export interface FileRoutesById {
   "/": typeof IndexRoute;
   "/chat": typeof ChatRoute;
   "/data-tables": typeof DataTablesRoute;
-  "/design-lang": typeof DesignLangRoute;
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
   "/families": typeof FamiliesRoute;
@@ -196,7 +187,6 @@ export interface FileRouteTypes {
     | "/"
     | "/chat"
     | "/data-tables"
-    | "/design-lang"
     | "/design-system"
     | "/doc-lab"
     | "/families"
@@ -217,7 +207,6 @@ export interface FileRouteTypes {
     | "/"
     | "/chat"
     | "/data-tables"
-    | "/design-lang"
     | "/design-system"
     | "/doc-lab"
     | "/families"
@@ -238,7 +227,6 @@ export interface FileRouteTypes {
     | "/"
     | "/chat"
     | "/data-tables"
-    | "/design-lang"
     | "/design-system"
     | "/doc-lab"
     | "/families"
@@ -260,7 +248,6 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute;
   ChatRoute: typeof ChatRoute;
   DataTablesRoute: typeof DataTablesRoute;
-  DesignLangRoute: typeof DesignLangRoute;
   DesignSystemRoute: typeof DesignSystemRoute;
   DocLabRoute: typeof DocLabRoute;
   FamiliesRoute: typeof FamiliesRoute;
@@ -298,13 +285,6 @@ declare module "@tanstack/react-router" {
       path: "/data-tables";
       fullPath: "/data-tables";
       preLoaderRoute: typeof DataTablesRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/design-lang": {
-      id: "/design-lang";
-      path: "/design-lang";
-      fullPath: "/design-lang";
-      preLoaderRoute: typeof DesignLangRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/design-system": {
@@ -430,7 +410,6 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ChatRoute: ChatRoute,
   DataTablesRoute: DataTablesRoute,
-  DesignLangRoute: DesignLangRoute,
   DesignSystemRoute: DesignSystemRoute,
   DocLabRoute: DocLabRoute,
   FamiliesRoute: FamiliesRoute,

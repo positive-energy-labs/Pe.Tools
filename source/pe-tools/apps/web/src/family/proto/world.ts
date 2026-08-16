@@ -617,12 +617,3 @@ export const WORLD: ProtoWorld = {
     },
   ],
 };
-
-/** A second, emptier entry state: profile-only, nothing live, no spec yet. Variants may use it
- * to show their empty/entry story. */
-export const WORLD_PROFILE_ONLY: ProtoWorld = {
-  profile: WORLD.profile,
-  live: null,
-  spec: null,
-  proposals: [],
-};
