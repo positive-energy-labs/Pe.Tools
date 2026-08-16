@@ -4,12 +4,7 @@
  * strip it before parsing.
  */
 import { mergeTakeoffLevels, parseTakeoffTsv } from "#/rhvac/takeoff";
-import {
-  normalizeExtract,
-  type RhvacExtract,
-  type RhvacTakeoffData,
-  type RoomMap,
-} from "#/rhvac/types";
+import type { RhvacTakeoffData, RoomMap } from "#/rhvac/types";
 
 const BASE = "/rhvac-fixture";
 
@@ -32,13 +27,6 @@ const sha256 = async (text: string): Promise<string> =>
     .join("");
 
 const fetchJson = async <T>(path: string): Promise<T> => JSON.parse(await fetchText(path)) as T;
-
-export const FIXTURE_SOURCE_LABEL = "project-a fixture (Partition replay + native edit)";
-
-export async function loadFixtureExtract(): Promise<RhvacExtract> {
-  const manifest = await fetchJson<FixtureManifest>("manifest.json");
-  return normalizeExtract(await fetchJson<RhvacExtract>(manifest.extract));
-}
 
 export async function loadFixtureTakeoff(): Promise<RhvacTakeoffData> {
   const manifest = await fetchJson<FixtureManifest>("manifest.json");

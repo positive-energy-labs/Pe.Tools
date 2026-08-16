@@ -163,19 +163,24 @@ good 7-variant error UI adopted by only 4 of 11 surfaces. Web-side candidate: pe
 
 ## Clear gaps — small, sharp, now
 
-1. **Dead plugin registration**: `/family-types` route is deleted but
-   `route-chat-plugins.tsx:52-55` still registers it → `chat-shell` will iframe a 404; ~120 LOC
-   of unreachable renderer + a test asserting the dead registration. (The route-STATE contracts
-   stay — family SHIMS shim 7 — but the web registry entry is pure orphan.)
+1. ~~**Dead plugin registration**: `/family-types` route is deleted but
+   `route-chat-plugins.tsx` still registers it → `chat-shell` will iframe a 404.~~ — CLOSED
+   2026-08-15: `WORKSPACELESS_ROUTES` now filters `family-types` out of `CHAT_PLUGIN_ROUTES`,
+   so no workspace is ever offered. The route-STATE contracts, pea handlers, and the inline
+   chat card stay by decision (family SHIMS shim 7).
 2. **`setBusy(null)` outside `finally` ×3** in `families.tsx` — verb error wedges the route.
-3. **Retired-but-bundled**: `target-chip.tsx` (275 LOC, superseded by Sentence);
+3. ~~**Retired-but-bundled**: `target-chip.tsx` (275 LOC, superseded by Sentence);
    `ui/dropdown-menu.tsx` (253 LOC) + `ui/tooltip.tsx` mounted only in the design-system
-   exhibit; `@tanstack/react-form` declared, zero imports.
+   exhibit; `@tanstack/react-form` declared, zero imports.~~ — CLOSED 2026-08-15: all deleted.
+   `target-chip.tsx` went with its only mount, the `/docs/target` exhibit; see
+   [PURGE-LEARNINGS.md](PURGE-LEARNINGS.md).
 4. **`PROFILE_READ_LIMIT = 40` silently slices** (`families.tsx:382`) while its docblock promises
    "nothing truncates silently".
 5. **`timeAgo` ×6 copies** (`family/live.tsx`, `schedule-grid.tsx`, `settings.tsx`,
    `instances.tsx`, `host/target-ui.tsx`, schedule-grid plugin) — plus takeoffs' `.slice(0,10)`.
-6. **`/` index TOOLS lists 6 of 13 routes** — `/takeoffs` is unreachable except by typed URL.
+6. **`/` index TOOLS lists 7 of 11 routes** — `/data-tables`, `/design-system`,
+   `/parameter-links`, `/schedule-grid` are reachable only by typed URL or (for schedule-grid)
+   as a chat workspace. Was 6 of 13; the two `/docs/*` exhibits were deleted 2026-08-15.
 7. **Esc-handler with input-guard ×3**, each with a different guard list.
 8. ~~**`fmtNum` twice, number-parse twice**~~ — CLOSED 2026-08-15: `takeoff/cells.tsx` deleted,
    every caller consumes `master-table/model.ts`'s stricter pair.

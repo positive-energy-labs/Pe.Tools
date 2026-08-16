@@ -1,5 +1,5 @@
 /** Thread- or workspace-scoped route documents over the host RouteWorkspace API. */
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { Cause, Effect, Option, Queue, Stream } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
@@ -180,31 +180,6 @@ export function useRouteState<TSchema extends z.ZodType>(
         )
       : null,
   };
-}
-
-export interface RouteDraftHandle<T> {
-  value: T;
-  dirty: boolean;
-  edit: (next: T) => void;
-  save: () => Promise<RouteStateWriteResult>;
-  discard: () => void;
-}
-
-/** Hold a local override until save/discard so remote pushes cannot clobber an active edit. */
-export function useRouteDraft<T>(
-  remote: T,
-  persist: (value: T) => Promise<RouteStateWriteResult>,
-): RouteDraftHandle<T> {
-  const [override, setOverride] = useState<Option.Option<T>>(Option.none());
-  const value = Option.getOrElse(override, () => remote);
-  const edit = useCallback((next: T) => setOverride(Option.some(next)), []);
-  const discard = useCallback(() => setOverride(Option.none()), []);
-  const save = useCallback(async () => {
-    const result = await persist(value);
-    if (result.ok) setOverride(Option.none());
-    return result;
-  }, [persist, value]);
-  return { value, dirty: Option.isSome(override), edit, save, discard };
 }
 
 export async function writeRouteState(

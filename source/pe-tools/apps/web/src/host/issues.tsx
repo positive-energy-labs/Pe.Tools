@@ -221,7 +221,3 @@ export function HostConnectionPill({ connected, label }: { connected: boolean; l
     </span>
   );
 }
-
-export function BridgeBusyNotice({ issue }: { issue?: HostIssue }) {
-  return issue?.kind === "bridge_busy" ? <HostIssuePanel issue={issue} compact /> : null;
-}

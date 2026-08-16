@@ -1,5 +1,3 @@
-import type { CSSProperties } from "react";
-
 import {
   selectorLabel,
   type SessionFacts,
@@ -9,8 +7,8 @@ import {
 
 /**
  * The shared visual vocabulary for targets. One tone per resolution state, used identically
- * by the composer chip, the picker, the world inspector, and the docs page — so "dashed means
- * inferred" is learned once.
+ * by the composer chip, the picker, and the world inspector — so "dashed means inferred" is
+ * learned once.
  */
 
 export const LANE_CAT: Record<SessionLane, string> = {
@@ -58,22 +56,6 @@ export function chipDescriptor(r: TargetResolution): {
           };
   }
 }
-
-export const TONE_STYLE: Record<ChipTone, CSSProperties> = {
-  muted: { border: "1px dashed var(--line)", color: "var(--muted-foreground)" },
-  implicit: { border: "1px dashed var(--line-2)", color: "var(--foreground)" },
-  pinned: { border: "1px solid var(--pe-blue)", color: "var(--foreground)" },
-  ambiguous: {
-    border: "1px solid color-mix(in srgb, var(--cat-kiln) 60%, transparent)",
-    background: "color-mix(in srgb, var(--cat-kiln) 12%, transparent)",
-    color: "var(--cat-kiln)",
-  },
-  dangling: {
-    border: "1px solid color-mix(in srgb, var(--cat-clay) 50%, transparent)",
-    background: "color-mix(in srgb, var(--cat-clay) 10%, transparent)",
-    color: "var(--cat-clay)",
-  },
-};
 
 export function toneColor(tone: ChipTone): string {
   return tone === "pinned"
@@ -125,13 +107,6 @@ export function LaneBadge({ lane }: { lane: SessionLane }) {
       {lane.toUpperCase()}
     </span>
   );
-}
-
-/** "obs 4s ago" from an observation timestamp; observation only, never computed staleness. */
-export function ageLabel(observedAtUnixMs: number | undefined, nowMs: number): string {
-  if (!observedAtUnixMs) return "";
-  const s = Math.max(0, Math.round((nowMs - observedAtUnixMs) / 1000));
-  return s < 60 ? `obs ${s}s ago` : `obs ${Math.round(s / 60)}m ago`;
 }
 
 /** One-line mono readout of a resolution — the inspector row. */

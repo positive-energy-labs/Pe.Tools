@@ -25,16 +25,10 @@ import type {
 } from "@pe/host-contracts/generated";
 
 export type FfDiagnostic = FamilyfoundryPlan.Res.FamilyFoundryDiagnostic;
-export type FfLoweredAction = FamilyfoundryPlan.Res.FamilyFoundryLoweredActionData;
-export type FfParameterProvenance = FamilyfoundryPlan.Res.FamilyFoundryParameterProvenanceData;
-export type FfResolvedParameter = FamilyfoundryPlan.Res.FamilyFoundryResolvedParameterData;
 export type FfReconciliationPlan = FamilyfoundryPlan.Res.FamilyFoundryReconciliationPlanData;
 export type FfFamilyPlan = FamilyfoundryPlan.Res.FamilyFoundryFamilyPlanData;
 export type FfPlanData = FamilyfoundryPlan.Res.Response;
-export type FfDiffSummary = FamilyfoundryApply.Res.FamilyFoundryParameterDiffSummary;
-export type FfApplyReceipt = FamilyfoundryApply.Res.FamilyFoundryApplyReceipt;
 export type FfApplyData = FamilyfoundryApply.Res.Response;
-export type FfProjection = FamilyfoundryProject.Res.FamilyFoundryProfileProjectionData;
 export type FfProjectData = FamilyfoundryProject.Res.Response;
 
 /** Compile a profile into per-family reconciliation plans plus the drift hash. */

@@ -5,9 +5,6 @@
  * them in sync with the extract script rather than inventing fields.
  */
 
-/** Wall directions, clockwise from north: 0=N … 7=NW. */
-export const DIRECTIONS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] as const;
-
 export interface RhvacWall {
   /** 1-based wall ordinal within the room — glass/doors point at this via wallReference. */
   index1: number;
@@ -125,24 +122,6 @@ export function normalizeExtract(raw: RhvacExtract): RhvacExtract {
   };
 }
 
-// ── Assembly catalog (rhvac.assemblies op / derived from the fixture) ────────
-
-/** One pickable construction assembly — assemblies are never free-text-created from the web UI. */
-export interface RhvacAssemblyOption {
-  name: string;
-  uValue: number;
-  /** Glass only. */
-  shgc?: number;
-}
-
-export interface RhvacAssemblyCatalog {
-  walls: RhvacAssemblyOption[];
-  glass: RhvacAssemblyOption[];
-  doors: RhvacAssemblyOption[];
-  floors: RhvacAssemblyOption[];
-  roofs: RhvacAssemblyOption[];
-}
-
 // ── Takeoff plan snapshots (source of truth: RhvacCandidateBuilder.ParseTsv) ──
 
 /**
@@ -157,17 +136,6 @@ export const KNOWN_FLAG_KINDS = {
 } as const;
 
 export type TakeoffFlagKind = keyof typeof KNOWN_FLAG_KINDS | (string & {});
-
-// Retired shape-state flags can remain in old snapshots; they are not user decisions.
-const LEGACY_STATE_FLAG_KINDS = new Set([
-  "area-drift",
-  "bridged-loop",
-  "local-straightened",
-  "ruled-seam",
-  "unregularized",
-]);
-
-export const isDecisionFlag = (kind: string) => !LEGACY_STATE_FLAG_KINDS.has(kind);
 
 export interface TakeoffRoomShape {
   id: string;
