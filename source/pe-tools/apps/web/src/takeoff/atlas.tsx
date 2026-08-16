@@ -217,6 +217,29 @@ const MANUAL_J: { field: keyof RoomData; label: string; width: string }[] = [
 
 const flagKey = (guid: string, flag: string) => `${guid}::${flag}`;
 
+/** THE Manual J editor for one field — the table column and the room panel render this same
+ *  element, so fallback, constraints, fade-until-entered, and patch construction exist once. */
+function ManualJField({
+  room,
+  field,
+  onPatch,
+}: {
+  room: WorldRoom;
+  field: keyof RoomData;
+  onPatch: (patch: RoomEdit) => void;
+}) {
+  return (
+    <NumberCell
+      value={room.data?.[field] ?? 0}
+      digits={0}
+      integer
+      min={0}
+      className={room.data === null ? "opacity-50" : undefined}
+      onCommit={(v) => onPatch({ [field]: v })}
+    />
+  );
+}
+
 const shortId = (guid: string) => guid.slice(guid.lastIndexOf("-") + 1);
 
 /**
@@ -486,13 +509,10 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                 width: mj.width,
                 sort: (row) => row.room.data?.[mj.field] ?? 0,
                 cell: (row) => (
-                  <NumberCell
-                    value={row.room.data?.[mj.field] ?? 0}
-                    digits={0}
-                    integer
-                    min={0}
-                    className={row.room.data === null ? "opacity-50" : undefined}
-                    onCommit={(v) => actions.patch(row.room.guid, { [mj.field]: v })}
+                  <ManualJField
+                    room={row.room}
+                    field={mj.field}
+                    onPatch={(patch) => actions.patch(row.room.guid, patch)}
                   />
                 ),
               }),
@@ -634,7 +654,6 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
 
       <PaneWorkspace
         className="min-h-0 flex-1"
-        inspectorSpan="visual"
         resize={{
           visual: {
             defaultSize: PLAN_DEFAULT_PX + PLAN_CHROME_PX,
@@ -902,6 +921,23 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                         <span className="text-cat-clay"> · {scopeCalls} needing a call</span>
                       )}
                       <span className="ml-2 opacity-70">j/k cursor · a/d accept/dismiss</span>
+                      {/* The fields-mode control lives HERE, not in the room panel — the panel
+                          vanishes with the cursor, and a mode's off-switch must not vanish
+                          with it. */}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFieldsMode((mode) => (mode === "panel" ? "columns" : "panel"))
+                        }
+                        title={
+                          fieldsMode === "panel"
+                            ? "Manual J fields are edited in the room panel for the cursor row; the table stays narrow. Click to move them back into the table as columns."
+                            : "Manual J fields are table columns. Click to edit them in the room panel instead and narrow the table."
+                        }
+                        className="ml-2 rounded-[var(--radius)] border border-[var(--line-2)] px-1.5 py-px text-muted-foreground hover:bg-muted"
+                      >
+                        fields: {fieldsMode}
+                      </button>
                     </>
                   }
                   empty={
@@ -932,7 +968,6 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                     decided={decided}
                     live={live}
                     fieldsMode={fieldsMode}
-                    onFieldsMode={setFieldsMode}
                     onDecide={decide}
                     onPatch={(patch) => actions.patch(cursorRow.room.guid, patch)}
                     url={proposedUrl}
@@ -1325,7 +1360,9 @@ function ZoneCard({
   const zoneSystems = systems.filter((s) => s.zoneKeys.includes(zone.zone.key));
 
   return (
-    <div className="absolute top-2 left-2 z-20 w-64 rounded-[var(--radius)] border border-border bg-background/95 shadow-sm backdrop-blur">
+    // Capped to the plan body and scrolling internally — at the default plan height the verbs
+    // at the bottom must stay reachable without enlarging the plan first.
+    <div className="absolute top-2 left-2 z-20 max-h-[calc(100%-1rem)] w-64 overflow-y-auto rounded-[var(--radius)] border border-border bg-background/95 shadow-sm backdrop-blur">
       <div className="flex items-center gap-1.5 px-2 py-1.5">
         <ZoneThumb zone={zone.zone} className="size-5" />
         <span className="tele">{zone.zone.key}</span>
@@ -1406,7 +1443,6 @@ function RoomPanel({
   decided,
   live,
   fieldsMode,
-  onFieldsMode,
   onDecide,
   onPatch,
   url,
@@ -1415,7 +1451,6 @@ function RoomPanel({
   decided: Record<string, Verdict>;
   live: boolean;
   fieldsMode: "columns" | "panel";
-  onFieldsMode: (mode: "columns" | "panel") => void;
   onDecide: (room: WorldRoom, flag: string, verb: Verdict) => void;
   onPatch: (patch: RoomEdit) => void;
   url: string;
@@ -1431,20 +1466,6 @@ function RoomPanel({
       title="room"
       meta={`${zone.zone.key} · ${zone.zone.lane.label}`}
       bodyClassName="p-0"
-      actions={
-        <button
-          type="button"
-          onClick={() => onFieldsMode(fieldsMode === "panel" ? "columns" : "panel")}
-          title={
-            fieldsMode === "panel"
-              ? "Manual J fields are edited HERE for the cursor room; the table stays narrow. Click to move them back into the table as columns."
-              : "Manual J fields are table columns right now. Click to edit them here instead and narrow the table."
-          }
-          className="tele rounded-[var(--radius)] border border-[var(--line-2)] px-1.5 py-px text-muted-foreground hover:bg-muted"
-        >
-          fields: {fieldsMode}
-        </button>
-      }
     >
       <div className="divide-y divide-[var(--line)]">
         <div className="px-2.5 py-2">
@@ -1479,14 +1500,7 @@ function RoomPanel({
                 <Fragment key={mj.field}>
                   <span className="tele pr-1.5 text-right text-muted-foreground">{mj.label}</span>
                   <span className="rounded-[1px] border border-[var(--line-soft)]">
-                    <NumberCell
-                      value={room.data?.[mj.field] ?? 0}
-                      digits={0}
-                      integer
-                      min={0}
-                      className={room.data === null ? "opacity-50" : undefined}
-                      onCommit={(v) => onPatch({ [mj.field]: v })}
-                    />
+                    <ManualJField room={room} field={mj.field} onPatch={onPatch} />
                   </span>
                 </Fragment>
               ))}

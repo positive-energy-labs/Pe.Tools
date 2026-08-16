@@ -73,14 +73,20 @@ describe("affine frame", () => {
     }
   });
 
-  it("clamps an unaffordable padding instead of throwing — sliver panes must not crash", () => {
-    const frame = fitFrame(
-      { minX: 0, minY: 0, maxX: 10, maxY: 10 },
-      { width: 20, height: 20 },
-      { padding: 16 },
+  it("refuses padding the viewport cannot afford, naming the numbers — degradation is the caller's policy", () => {
+    expect(() =>
+      fitFrame(
+        { minX: 0, minY: 0, maxX: 10, maxY: 10 },
+        { width: 20, height: 20 },
+        { padding: 16 },
+      ),
+    ).toThrowError(/20×20.*padding 16/);
+  });
+
+  it("refuses an invalid contentViewport ratio", () => {
+    expect(() => contentViewport({ minX: 0, minY: 0, maxX: 10, maxY: 10 }, -0.5)).toThrowError(
+      /padRatio/,
     );
-    expect(frame.scale).toBeGreaterThan(0);
-    expect(Number.isFinite(frame.toViewport([5, 5])[0])).toBe(true);
   });
 
   it("contentViewport yields a scale-1 frame — pure Y-flip plus pad", () => {

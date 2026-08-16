@@ -54,16 +54,21 @@ export function unionBounds(first: Bounds2, ...rest: readonly Bounds2[]): Bounds
 }
 
 /**
- * The common SVG prelude: a viewport sized to the content itself plus proportional padding, so
- * `fitFrame(bounds, contentViewport(bounds, ratio), { padding })` resolves to scale 1 and the
- * frame is a pure Y-flip + pad. Use when the SVG scales itself via viewBox rather than living in
- * a measured pixel box.
+ * The common SVG prelude: a viewport sized to the content itself plus proportional padding.
+ *
+ *   const { viewport, padding } = contentViewport(bounds, 0.03);
+ *   const frame = fitFrame(bounds, viewport, { padding, yAxis: "up" });
+ *
+ * resolves to scale 1, so the frame is a pure Y-flip + pad. Use when the SVG scales itself via
+ * viewBox rather than living in a measured pixel box.
  */
 export function contentViewport(
   content: Bounds2,
   padRatio = 0.03,
 ): { viewport: Viewport2; padding: number } {
   assertBounds(content);
+  if (!Number.isFinite(padRatio) || padRatio < 0)
+    throw new Error(`contentViewport requires a finite, non-negative padRatio; got ${padRatio}.`);
   const width = Math.max(content.maxX - content.minX, Number.EPSILON);
   const height = Math.max(content.maxY - content.minY, Number.EPSILON);
   const padding = Math.max(width, height) * padRatio;
@@ -81,27 +86,29 @@ export function fitFrame(
   } = {},
 ): AffineFrame {
   assertBounds(content);
-  const { align = [0.5, 0.5], yAxis = "down", maxScale = Infinity } = options;
+  // Exact and fail-fast on purpose: a silent padding clamp would break contentViewport's
+  // scale-1 guarantee invisibly (consumers keep stroke widths and type in content units).
+  // Degradation policy for measured, resizable viewports belongs at the caller — clamp YOUR
+  // padding to what YOUR pane affords before calling.
+  const { align = [0.5, 0.5], padding = 0, yAxis = "down", maxScale = Infinity } = options;
   if (
     !Number.isFinite(viewport.width) ||
     !Number.isFinite(viewport.height) ||
     viewport.width <= 0 ||
     viewport.height <= 0 ||
-    !Number.isFinite(options.padding ?? 0) ||
-    (options.padding ?? 0) < 0 ||
+    !Number.isFinite(padding) ||
+    padding < 0 ||
+    padding * 2 >= viewport.width ||
+    padding * 2 >= viewport.height ||
     (!Number.isFinite(maxScale) && maxScale !== Infinity) ||
     maxScale <= 0 ||
     align.some((value) => !Number.isFinite(value) || value < 0 || value > 1)
   )
     throw new Error(
-      "Affine frame requires a positive viewport, finite padding, maxScale, and alignment.",
+      `Affine frame requires a positive viewport, affordable padding, maxScale, and alignment; ` +
+        `got viewport ${viewport.width}×${viewport.height}, padding ${options.padding ?? 0}, ` +
+        `maxScale ${maxScale}, align [${align.join(",")}].`,
     );
-  // A padding the viewport cannot afford CLAMPS instead of throwing: viewports here are often
-  // measured pixels from resizable panes, and a mid-drag sliver must degrade, never crash.
-  const padding = Math.min(
-    options.padding ?? 0,
-    (Math.min(viewport.width, viewport.height) / 2) * 0.9,
-  );
 
   const contentWidth = Math.max(content.maxX - content.minX, Number.EPSILON);
   const contentHeight = Math.max(content.maxY - content.minY, Number.EPSILON);
