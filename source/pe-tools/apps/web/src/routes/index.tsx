@@ -5,10 +5,15 @@ import {
   DownloadCloud,
   FileScan,
   Boxes,
+  LayoutGrid,
+  Link2,
   Map,
   LoaderCircle,
   MessageSquare,
+  Palette,
+  Server,
   Settings2,
+  Table,
   Table2,
   Terminal,
 } from "lucide-react";
@@ -178,6 +183,46 @@ const TOOLS = [
     label: "Host API",
     icon: Terminal,
     description: "Call any host operation directly and inspect the raw response.",
+  },
+  {
+    to: "/schedule-grid",
+    title: "Schedule Grid",
+    label: "Revit data",
+    icon: LayoutGrid,
+    description:
+      "Any Revit schedule as an editable grid — pea proposes cell values, you review, stage, and push them back to the document.",
+  },
+  {
+    to: "/data-tables",
+    title: "Data Tables",
+    label: "Revit data",
+    icon: Table,
+    description:
+      "Author synthetic data tables — draft columns and keyed rows, then upsert them in one apply; rows deleted here are pruned in Revit.",
+  },
+  {
+    to: "/parameter-links",
+    title: "Parameter Links",
+    label: "Revit data",
+    icon: Link2,
+    description:
+      "Cross-element parameter links — co-edit the link profile with pea, preview the projected target writes, then apply to reconcile them.",
+  },
+  {
+    to: "/instances",
+    title: "Instances",
+    label: "Fleet",
+    icon: Server,
+    description:
+      "Every Revit world the bridge and sandbox registry know about — your own session, pea-owned sandboxes you start and stop, and the ledger of what happened.",
+  },
+  {
+    to: "/design-system",
+    title: "Design System",
+    label: "Design language",
+    icon: Palette,
+    description:
+      "The spec and catalogue for the design language — production components under production tokens, with the gaps they cannot yet express marked in place.",
   },
 ] as const;
 
