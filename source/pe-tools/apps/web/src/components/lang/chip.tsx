@@ -47,7 +47,7 @@ export function FactChip({ children, tone = "meta", dashed, title, className }: 
       data-seam={dashed === true ? "" : undefined}
       title={title}
     >
-      {children}
+      <span className="dl-chip-label">{children}</span>
     </span>
   );
 }

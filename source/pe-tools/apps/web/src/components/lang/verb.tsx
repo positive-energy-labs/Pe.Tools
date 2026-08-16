@@ -13,9 +13,11 @@
  *       Fixed: `commit` is a filled blue, and it is the ONLY filled blue in the language.
  *     · no AGENT tone — COLOR-ROLES Law 0 gave the agent's identity no interaction slot, which
  *       made pea's own verb illegal (4/5 builders hit this). Fixed: `agent`.
- *     · `reason` was TITLE-ONLY, so a refusal was invisible until hover. Fixed: when `disabled`,
- *       the reason renders ON THE SURFACE (SURFACE-PHILOSOPHY §3 — refuse per option, with its
- *       own reason, where a newcomer will see it).
+ *     · `reason` is REQUIRED, always. The constructor argument is the enforcement (§3): every
+ *       refusal at every call site has an explanation. RULED 2026-08-16 (kaitpw, on the live
+ *       takeoffs header): the reason's home is the TITLE — dense chrome never pays a second
+ *       line for it, and four near-identical refusal sentences under one verb lane read as
+ *       noise, not honesty. The earlier visible under-line rendering is superseded.
  *     · mono type collided with "mono means the machine measured this". Verbs are sans now.
  * - BLAST RADIUS IS NOT A TONE. It groups the lane and buys no hue: all three writes wear the
  *   same single blue however far they reach. That is `VerbGroup`, below.
@@ -53,9 +55,9 @@ interface VerbBase {
   onClick: () => void;
   /**
    * What the verb MEANS and what pressing it DOES — or, when `disabled`, why it will not.
-   * Always required: tooltips deepen, they must never rescue, and a refusal with no reason is
-   * the single most-cited defect in the round-1 census. When `disabled`, this also renders as
-   * visible text under the control, not only as the title.
+   * Always required — the constructor argument is what guarantees every refusal has an
+   * explanation — and carried as the control's title (ruled 2026-08-16: hover is the reason's
+   * home; a visible line under every refused verb made dense chrome wrap and repeat itself).
    */
   reason: string;
   disabled?: boolean;
@@ -85,7 +87,7 @@ export function Verb(props: VerbProps) {
   const tone = props.tone ?? "act";
   const inert = disabled === true || busy === true;
 
-  const button = (
+  return (
     <button
       type="button"
       className={cn("dl-verb", className)}
@@ -97,16 +99,6 @@ export function Verb(props: VerbProps) {
       {Icon != null ? <Icon /> : null}
       {busy === true ? `${label}…` : label}
     </button>
-  );
-
-  // A refusal states itself on the surface. Busy does not — "in flight" is not a refusal, and a
-  // line that appeared and vanished on every press would be noise.
-  if (disabled !== true) return button;
-  return (
-    <span className="dl-verb-slot">
-      {button}
-      <span className="dl-refusal">{reason}</span>
-    </span>
   );
 }
 

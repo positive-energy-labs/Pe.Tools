@@ -295,20 +295,9 @@
   border-color: var(--r-line-2);
 }
 
-/* §3 (SURFACE-PHILOSOPHY, honesty): refuse PER OPTION, with the reason ON THE SURFACE — not in
-   a title a newcomer has to hover to discover. */
-.dl-verb-slot {
-  display: inline-flex;
-  flex-direction: column;
-  gap: 2px;
-  max-width: 220px;
-}
-.dl-refusal {
-  font-family: var(--font-pe-mono);
-  font-size: 9.5px;
-  line-height: 1.35;
-  color: var(--r-caution);
-}
+/* §3 (SURFACE-PHILOSOPHY, honesty): refuse PER OPTION, with the reason REQUIRED by the
+   constructor. RULED 2026-08-16: the reason's home is the title — the visible under-line
+   rendering (.dl-refusal) made dense verb lanes wrap and repeat one sentence four times. */
 
 /* blast radius is a GROUPING concern, not a tone. */
 .dl-verb-group-head {
@@ -362,6 +351,11 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  /* RULED 2026-08-16: a chip states a SHORT fact and clips rather than grows — a
+     sentence-length chip is a paragraph wearing a chip's border. The title carries the rest. */
+  max-width: 34ch;
+  white-space: nowrap;
+  overflow: hidden;
   padding: 0 5px;
   height: 18px;
   font-family: var(--font-pe-mono);
@@ -388,6 +382,12 @@
 .dl-chip[data-seam] {
   border-style: dashed;
   border-color: var(--r-line-2);
+}
+.dl-chip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .dl-chip-count {
   color: var(--r-ink-2);

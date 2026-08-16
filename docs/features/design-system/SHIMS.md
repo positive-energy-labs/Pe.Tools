@@ -68,6 +68,10 @@ and named, never renumbered. Context: `docs/features/design-lang/CLEANROOM.md`.
 - **The addressing sentence component.** `NarrowChip` owns removal but nothing owns
   re-adding; the "is the sentence an artifact?" border-budget edge case is unshowable until
   it exists.
+- **Delete `stateColumn`** (queued 2026-08-16): `StateColumn.word` now carries domain
+  vocabularies, so the parallel dot+label renderer in `master-table/cells.tsx` has no
+  remaining reason to exist. Discharged by: takeoffs' room-state column and variant-e's
+  state column migrating onto `state:` + `word`, then the deletion.
 - **The trichotomy reviewer rebuilt on `StateCell`** — named as soon-consumer everywhere;
   the proposal-flow satellite currently stands in for it.
 - **Verb busy+disabled composition** — a busy-and-refused verb is unrenderable.

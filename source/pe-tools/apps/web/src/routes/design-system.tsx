@@ -345,7 +345,7 @@ const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
   },
   {
     name: "refuse per option",
-    text: "List the option you cannot pick, greyed, with its own reason drawn from real validation — strictly more informative than hiding it or greying the whole control. What keeps that true is that the explanation is a required constructor argument: Verb demands a reason, so every refusal at every call site has one.",
+    text: "List the option you cannot pick, greyed, with its own reason drawn from real validation — strictly more informative than hiding it or greying the whole control. What keeps that true is that the explanation is a required constructor argument: Verb demands a reason, so every refusal at every call site has one. The reason's home is the title (ruled 2026-08-16 on the live takeoffs header): dense chrome never pays a second line, and a lane of four refusals repeating one sentence read as noise, not honesty.",
     demo: (
       <span className="flex flex-col gap-3">
         <span className="flex flex-wrap items-start gap-2">
@@ -763,7 +763,7 @@ function VerbBlock() {
           <em>agent</em> is pea&apos;s own (the slot COLOR-ROLES Law 0 never had, which made
           pea&apos;s own verb illegal), <em>commit</em> is the one filled blue, <em>nav</em> is blue
           text with a required direction. Blast radius groups the lane and buys no hue. A refusal
-          states its reason on the surface — never in a title a newcomer has to find.
+          always has a reason — the constructor demands it — carried as the title.
         </>
       }
     >

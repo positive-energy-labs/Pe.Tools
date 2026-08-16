@@ -101,6 +101,13 @@ state is a domain pipeline rather than a value's pseudo-dimension, and gets a `l
 implementation. (a) is cheaper and preserves "the word cannot disagree with the marks" as long as
 the label is derived from the same function the tones are.
 
+> **RULED 2026-08-16 (joint review, kaitpw + main session):** (a), landed as `StateColumn.word`.
+> The marks stay universal; the word may be the route's; sort stays attention order. Accepted
+> with standing skepticism of state growth — a consolidation pass over the whole state
+> vocabulary is queued to squash responsibilities where axes can merge. `stateColumn`'s
+> deletion is the discharge path: takeoffs' room-state column migrates onto `state:` + `word`
+> in a follow-up, then `stateColumn` dies (also discharges #11).
+
 ### 2 · No axis for "a human decision is queued here"
 
 **Surface fact.** A room carries a set of open detector flags. Each is a call a person must accept
@@ -265,6 +272,11 @@ way to defer its refusal to its group.
 ("fixture · no document to stamp into", "fixture · no .r10 to sync into", …). This is better copy
 regardless, but it is a workaround: the underlying repetition returns whenever a whole lane refuses
 for a genuinely shared reason — e.g. every verb during a `busy` transaction.
+
+> **RULED 2026-08-16 (joint review):** the visible under-line refusal is deleted from `Verb`
+> entirely — the reason stays a required constructor argument but its home is the title. That
+> dissolves the repetition (and the wide/wrapping header this finding described) without a
+> lane-level refusal slot; revisit only if hover-height reasons prove insufficient in practice.
 
 **Proposed resolution.** `VerbGroup` gains `refusal?: string`; when set, it renders once at the
 group head and its children suppress their own refusal lines (keeping them as `title`).

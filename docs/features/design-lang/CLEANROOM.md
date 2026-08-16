@@ -250,6 +250,23 @@ Judged on the live `/design-system` §04 table after the cell-state clause lande
 - This RESOLVES the "footline clamp" frontier knob below at row scale (the clamp now only
   governs the card) and re-scopes the ghost token: inline ghost is card-scale only.
 
+**Chrome rulings, same session (judged on the live takeoffs header):**
+
+- **A refusal's reason lives in the title.** `reason` stays a required constructor argument —
+  that is the enforcement — but the visible under-line rendering (`.dl-refusal`) is deleted:
+  a lane of four refused verbs repeated one sentence four times, wrapped the header, and made
+  the buttons read wide. Supersedes the round-1 "on the surface" rendering.
+- **A chip states a SHORT fact and clips.** `.dl-chip` clamps at 34ch with an ellipsis; a
+  sentence-length chip is a paragraph wearing a chip's border. The required `title` carries
+  the sentence.
+- **`StateColumn.word`** — the domain vocabulary override (takeoffs finding #1, accepted with
+  skepticism of state growth): the filter/facet/readout may speak the route's word where the
+  universal seven would lie ("clean" ≠ "no Manual J entered"); the marks stay universal; sort
+  stays attention order. The override is the path to deleting `stateColumn`, the last parallel
+  cell-state renderer — net vocabulary shrinks. Standing caveat from the review: every new
+  state word is more for the user to learn; a consolidation pass over the state vocabulary is
+  queued to squash responsibilities where axes can merge.
+
 ## Frontier — grammar doubts that remain after round 2
 
 **Grammar knobs still hard-coded in the base** (each is a constant no round has varied):

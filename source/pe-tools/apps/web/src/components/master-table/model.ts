@@ -54,6 +54,15 @@ export interface ValueColumn<Row> extends ColumnBase<Row> {
  */
 export interface StateColumn<Row> extends ColumnBase<Row> {
   state: (row: Row) => StateCellProps;
+  /**
+   * Domain vocabulary override (ruled 2026-08-16, takeoffs finding #1): the word the filter,
+   * facet and readout speak for this row, when the grammar's seven universal words would lie —
+   * "clean" where the domain means "no Manual J entered". The MARKS stay universal; only the
+   * word is the route's. Omit it unless the universal word is actually wrong: every override
+   * is one more vocabulary for the user to learn, and this prop is how `stateColumn`'s whole
+   * parallel renderer gets deleted.
+   */
+  word?: (row: Row) => string;
   cell?: never;
 }
 

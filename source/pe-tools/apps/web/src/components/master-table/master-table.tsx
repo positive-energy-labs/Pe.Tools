@@ -79,25 +79,31 @@ const emptyTableState = (): MasterTableState => ({ filters: {}, sorts: [], query
  * the filter can never disagree with the marks in the cell.
  */
 type ResolvedColumn<Row> = ValueColumn<Row> & {
-  /** Kept off the public union: the table's own handle on a state column's reader, so the
+  /** Kept off the public union: the table's own handles on a state column's readers, so the
    * readout band can re-read the focused cell's facts without the consumer re-supplying them. */
   readState?: (row: Row) => StateCellProps;
+  readWord?: (row: Row) => string;
 };
 
 function resolveStateColumn<Row>(column: Column<Row>): ResolvedColumn<Row> {
   const state = column.state;
   if (state === undefined) return column;
-  const label = (row: Row) => cellStateLabel(state(row));
+  // The word the filter/facet/readout speak: the route's domain vocabulary when supplied,
+  // else the grammar's universal seven. Sort stays attention order of the universal reading
+  // either way — the MARKS are universal even when the word is the route's.
+  const word = column.word ?? ((row: Row) => cellStateLabel(state(row)));
   return {
     ...column,
     state: undefined,
+    word: undefined,
     // ROW SCALE (ruled 2026-08-16): the cell IS the td's content box — one clipped line,
     // full-bleed, so the body wash covers the whole cell. Prose facts read out in the band
     // below the table, never inside the row.
     cell: (row: Row) => <StateCell scale="row" {...state(row)} />,
-    facet: column.facet ?? label,
-    sort: column.sort ?? ((row: Row) => CELL_STATE_ORDER.indexOf(label(row))),
+    facet: column.facet ?? word,
+    sort: column.sort ?? ((row: Row) => CELL_STATE_ORDER.indexOf(cellStateLabel(state(row)))),
     readState: state,
+    readWord: word,
   } as ResolvedColumn<Row>;
 }
 
@@ -501,15 +507,16 @@ export function MasterTable<Row extends RowData>({
         >
           {() => {
             const focused = table.getFocusedCell();
-            const reader = focused ? columnByKey.get(focused.column.id)?.readState : undefined;
-            const cellState = focused && reader ? reader(focused.row.original) : undefined;
+            const column = focused ? columnByKey.get(focused.column.id) : undefined;
+            const cellState =
+              focused && column?.readState ? column.readState(focused.row.original) : undefined;
             const facts = cellState ? cellFactsText(cellState) : null;
             return (
               <div className="tele flex h-6 min-w-0 shrink-0 items-center gap-2 overflow-hidden border-t border-[var(--r-line)] bg-[var(--r-recess)] px-2 text-[11px] whitespace-nowrap [--r-on:var(--r-recess)]">
-                {cellState ? (
+                {focused && cellState ? (
                   <>
                     <span className="tele-label shrink-0 text-[10px] text-[var(--r-ink)]">
-                      {cellStateLabel(cellState)}
+                      {column?.readWord?.(focused.row.original) ?? cellStateLabel(cellState)}
                     </span>
                     <span className="truncate text-[var(--r-ink-2)]">
                       {facts ?? "nothing further — the marks on the cell are the whole story"}
