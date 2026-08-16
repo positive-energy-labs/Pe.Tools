@@ -11,6 +11,14 @@ settled position from a surface that has not caught up.
 
 Beating a position here is a finding; record it.
 
+**The ratchet.** This file is prose law; the `/design-system` route is the executable one. Any
+position that *can* be rendered with a shipping canon component migrates into that route as a live
+specimen, and collapses here to a one-line pointer — so the demonstration and the ruling can never
+drift apart, and so a law nobody can render stays visibly unrendered. A position that can render
+lives in the route; this file is the honest list of what can't (yet), plus the process rules that
+never will. Where an unmigrated position is waiting on a specific component, it says so in place:
+*(specimen owed when X ships)*.
+
 The loop that produces surfaces is the `find-the-product` skill.
 
 ---
@@ -60,6 +68,8 @@ means "proposal" in one and "alarm" in the other.
 
 **"Not started" is a state, not a zero.** An entity with no rows yet renders as a labelled empty,
 never as absence, or the untouched half of the project is invisible — and invisible reads as done.
+*(Specimen owed when an EmptyState primitive ships; nothing in `components/lang` renders a labelled
+empty today.)*
 
 **Compute agreement; do not remember it.** Drift, staleness, and agreement are diffs between two
 readings, recomputed each render. A stored verdict goes stale exactly when it matters: a user edit
@@ -68,13 +78,11 @@ should visibly produce the same drift that the model moving underneath would.
 **A parallel list is not a row set.** Derive rows from the model so a verb that changes the row set
 shows its own effect — the row disappearing *is* the receipt.
 
-**Sort by domain order where the column has one.** State columns sort in the order the work happens.
-The shared table defaults to sorting by label, so domain order is opt-in per column.
+**Sort by domain order where the column has one.** → rendered: `/design-system` §01, and live in
+§04.
 
-**A filter's vocabulary is stable under filtering.** Facet options derive from *all* rows, never the
-visible subset, so options never vanish or reshuffle under the cursor and picking one can always
-widen the scope back out. The price is that a chosen option may resolve to zero visible rows — which
-the empty state says, and which is a better answer than an option that quietly disappeared.
+**A filter's vocabulary is stable under filtering.** → rendered: `/design-system` §01, whose exhibit
+is the live table in §04.
 
 ---
 
@@ -84,12 +92,11 @@ A value has real dimensions — which attribute, which entity — and those are 
 else you know about that value (proposed · grounded · live-in-the-model · unsaved) is a
 **pseudo-dimension**, and it is not a column.
 
-**Three columns that are all readings of the same coordinates are one column and a mode switch.**
-This is the operational test. Key every substrate the same way (row × entity) and express each as
-its own lookup function; switching between them then costs no layout.
-
-**Render the pseudo-dimension as cell state** — a corner mark for a proposal, an underline for
-provenance, a dot for unsaved, a whole-table overlay for the other substrate.
+**Three columns that are all readings of the same coordinates are one column and a mode switch**,
+and **the pseudo-dimension renders as cell state**. → rendered: `/design-system` §01 ("cell state,
+not columns"), on the crucible cell that carries a proposal and a disagreement at once. The
+operational half stays prose: key every substrate the same way (row × entity) and express each as
+its own lookup function, so switching between them costs no layout.
 
 **One meaning per shape, and a mark drawn by a different CSS mechanism still occupies the same
 slot.** This is the rule most often broken in practice, including by the prototype that established
@@ -110,11 +117,11 @@ readings of one coordinate pair as three columns.
 
 ## 3 · Honesty
 
-**A stand-in announces itself and says what would replace it.** A surface with no such mark is
-claiming to be real, and that claim has to be true. We have a `Seam` chip for this. It uses a dashed
-border, which is currently the most over-subscribed visual in the codebase — dashed also means
-estimated, not-started, needs-attention, held, void, and open-proposal depending on where you look.
-Do not add a ninth meaning; if you need one, take a different slot.
+**A stand-in announces itself and says what would replace it.** → rendered: `/design-system` §01,
+on the dashed `FactChip`. The dashed edge is reserved for that one meaning; it is currently the
+most over-subscribed visual in the codebase — dashed also means estimated, not-started,
+needs-attention, held, void, and open-proposal depending on where you look. Do not add a ninth
+meaning; if you need one, take a different slot.
 
 **Keep the ledger of open stand-ins beside the feature** at `docs/features/<surface>/SHIMS.md`, one
 numbered entry per gap naming what discharges it. Two rules make it citable across time: an entry
@@ -134,21 +141,16 @@ acceptable shape of exception is a URL-gated mock lane that announces itself wit
 **Refuse rather than act unreliably.** Where the underlying capability is not trustworthy, a refusal
 naming the reason and pointing at the legitimate path beats an action that works four times in five.
 
-**Refuse per option, not per surface.** List the option you cannot pick, greyed, with its own reason
-drawn from real validation output. Strictly more informative than hiding it or greying the whole
-control.
-
-**Make the explanation a required constructor argument.** This is what keeps the previous rule true:
-where the primitive demands a `reason`, every call site has one; where it demands nothing, disabled
-controls ship with no explanation at all. Requiring the string is the enforcement.
+**Refuse per option, not per surface**, and **make the explanation a required constructor
+argument.** → rendered: `/design-system` §01, with the counter-example — the same refusal drawn
+through `ui/button`, which demands nothing and so ships greyed and mute.
 
 **A silent refusal reads as an edit that vanished.** A rejected commit must visibly restore the
 previous value *and* say why, near the cell, without resizing the row. Open defect: the shared cell
 editor keeps invalid text in the box and never commits it, so every consumer inherits the failure.
 
-**Provenance rides with the value, everywhere it appears** — not a detail pane. And provenance that
-cannot be wrong is decoration: a freshness token that is always null means the surface can never
-show stale. That is a defect, not an empty field.
+**Provenance rides with the value, everywhere it appears.** → rendered: `/design-system` §01, on a
+`StateCell` carrying its grounding footline.
 
 **Turn freshness into work, not into a badge.** A stale or mismatched record becomes an item in the
 same queue as everything else needing a person — counted, filtered, and blocking the same way. The
@@ -159,12 +161,10 @@ where the number came from. Store it as a top-level link, independent of any pro
 a proposal destroys the citation and "grounded but unproposed" becomes unrepresentable. Open defect:
 the persisted contract still nests citations inside proposals, so they vanish on accept.
 
-**Ceremony scales with blast radius.** A verb that writes beyond the page carries a human-readable
-reason supplied before it arms, explicit identity in the call rather than "whatever is selected", the
-hash it was planned against with a drift refusal and re-plan guidance, and a receipt with per-item
-outcomes where failures stay staged for retry rather than vanishing. Presented as an arming strip,
-never at hover height. The reason input and the arming strip are the two clauses no surface has built
-yet.
+**Ceremony scales with blast radius.** → rendered: `/design-system` §01, pointing at
+`/design-system/arming` — the satellite *is* this law, driven through unarmed → armed → refused →
+re-plan. Still owed: a shipping consumer. `ArmingStrip` has none (SHIMS entry 3), so the ceremony
+exists as a component and a demonstration but not yet as a path a user can take.
 
 **Agents propose; humans cross.** The agent edits the portable document and links it to source text;
 every crossing into the live model is a human action. Accepting stages — nothing has left the page —
@@ -172,7 +172,9 @@ so the commit is always a separate, explicitly-invoked verb, never a side effect
 
 **Typing beats proposing.** A user editing a proposed cell severs the proposal outright: no accept,
 no dismiss, the user's value stands. Masking the proposal by render precedence is not the same thing:
-discarding the edit resurrects it, which nobody expects. The older surface still masks.
+discarding the edit resurrects it, which nobody expects. The older surface still masks. *(Specimen
+owed when sever ships in the proposal flow; `StateCell` has no `stage` member for severed and
+cannot render the state at all.)*
 
 ---
 
@@ -181,7 +183,8 @@ discarding the edit resurrects it, which nobody expects. The older surface still
 **Addressing is a sentence; narrowing is chips.** What the surface is pointed at reads as a line of
 clickable nouns — the document, the entity, the world — and carries nouns only. Scope and filter
 state live in table chips, never in the sentence. Chips narrow but never hide: every active
-narrowing is visible and individually removable, so the user can always widen back out.
+narrowing is visible and individually removable, so the user can always widen back out. *(Specimen
+owed when the addressing sentence ships; `NarrowChip` owns removal and nothing owns re-adding.)*
 
 **Under compression, identity outranks controls.** A crowded toolbar wraps rather than shrinking the
 addressing line to a sliver. The buttons are what move.
@@ -196,7 +199,8 @@ on the spatial view and row facts beside the table, and a collapse gesture then 
 lived in the collapsed thing.
 
 **One home at a time.** A datum appears in exactly one place per mode — inline in the table *or* in
-the panel, never both. Two homes means two renderers, and they diverge.
+the panel, never both. Two homes means two renderers, and they diverge. *(Specimen owed when a
+detail panel ships beside `MasterTable`; the law is about two surfaces and needs both.)*
 
 **A mode's off-switch cannot live inside what the mode can hide.** A toggle inside a panel that
 exists only while the cursor is on a row is unreachable in exactly the state you want to leave.
@@ -219,7 +223,8 @@ the pane's current height, or its verbs become unreachable at the default size.
 
 **Drill in; do not navigate away.** Detail is a mode entered from a header and left with Esc, laid
 out with the same primitive as the view it came from. A route change is for a genuinely different
-scope, and between routes the URL is the whole handoff.
+scope, and between routes the URL is the whole handoff. *(Specimen owed when a drill-in mode ships
+on `MasterTable`; the primitive has no mode seam today.)*
 
 **Spatial views are load-bearing where the domain is spatial.** Without one, users construct geometry
 in their head or push to the model to look. Real outlines, not colour squares — shape is identity.

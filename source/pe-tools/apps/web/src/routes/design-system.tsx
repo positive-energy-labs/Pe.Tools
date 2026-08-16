@@ -29,17 +29,23 @@ import { ChevronsDownUp, RefreshCw, Save, Share2, Sparkles, Upload } from "lucid
 import { ThemeToggle } from "#/components/ThemeToggle";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { CellStateKey } from "#/components/lang/cell-key";
-import { StateCell } from "#/components/lang/cell";
+import { CELL_STATE_ORDER, StateCell, cellStateLabel } from "#/components/lang/cell";
+import type { StateCellProps } from "#/components/lang/cell";
 import { FactChip, NarrowChip } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb, VerbGroup } from "#/components/lang/verb";
 import { MasterTable } from "#/components/master-table/master-table";
 import type { Column } from "#/components/master-table/model";
+import { Button } from "#/components/ui/button";
 import { PARAM_ROWS, ageText, cellProps, type ParamRow } from "#/design-system/fixtures";
 
 export const Route = createFileRoute("/design-system")({ component: DesignSystem });
 
 const noop = () => {};
+
+/** One fixture row by key. The specimens cite the fixture rather than restating it — a law
+ *  demonstrated on props written to flatter it is not demonstrated. */
+const row = (key: string) => PARAM_ROWS.filter((r) => r.key === key)[0];
 
 /* ═══ page chrome ═══════════════════════════════════════════════════════════════════════════
    The page itself obeys the border budget it documents: sections are plain content under a
@@ -185,7 +191,28 @@ function Thesis() {
   );
 }
 
-/* ═══ 02 · laws ═════════════════════════════════════════════════════════════════════════════ */
+/* ═══ 02 · laws ═════════════════════════════════════════════════════════════════════════════
+   THE RATCHET (ruled 2026-08-16): docs/design/SURFACE-PHILOSOPHY.md is prose law; this route is
+   the executable one. A position that CAN be rendered with a shipping component migrates here as
+   a live specimen and collapses to a one-line pointer in the doc. What stays prose over there is
+   the honest list of what nothing can render yet, plus the process rules that never will. */
+
+/* Declared in a deliberately unhelpful order and sorted by the SHIPPING constant, so the
+   specimen below cannot drift from what a state column with no explicit `sort` actually does. */
+const ORDER_SPECIMENS: readonly StateCellProps[] = [
+  { value: "26 in", fresh: "unverified" },
+  { value: "84 in", cap: "readonly" },
+  { value: "36 in", stage: "staged" },
+  { value: "24 in" },
+  { value: "1.75 in", agree: "drift", modelValue: "1.375 in" },
+  { value: "2 hr", stage: "proposed" },
+  { value: "5.5 in", fresh: "stale" },
+];
+
+const ORDERED_SPECIMENS = [...ORDER_SPECIMENS].sort(
+  (a, b) =>
+    CELL_STATE_ORDER.indexOf(cellStateLabel(a)) - CELL_STATE_ORDER.indexOf(cellStateLabel(b)),
+);
 
 const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
   {
@@ -275,6 +302,115 @@ const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
       </FactChip>
     ),
   },
+  {
+    name: "cell state, not columns",
+    text: "A value's real dimensions — which attribute, which entity — are the grid. Everything else you know about it is a pseudo-dimension, and it is not a column: three columns that are all readings of the same coordinate pair are one column and a mode switch. Pseudo-dimensions render as cell state instead.",
+    demo: (
+      // width is explicit because `.dl-foot` is `nowrap` and clamps only inside a bounded block —
+      // in the table the column supplies that bound; here nothing does.
+      <span className="flex w-[19rem] max-w-full flex-col gap-1.5">
+        <StateCell {...cellProps(row("connectedLoad"))} />
+        <Cap>
+          one coordinate, three readings — pea proposes, you hold, the model disagrees. The body,
+          the squiggle and the struck ghost carry all three. None of them bought a column.
+        </Cap>
+      </span>
+    ),
+  },
+  {
+    name: "sort by domain order",
+    text: "State columns sort in the order attention is owed — fix the drift, review the proposal, commit the staged, re-read the stale, check the unverified, leave clean alone, locked last — never alphabetically. CELL_STATE_ORDER is that order, and a state column with no explicit sort takes it, so the ranking is a constant rather than a habit.",
+    demo: (
+      <span className="flex flex-col gap-1">
+        {ORDERED_SPECIMENS.map((p) => (
+          <span key={cellStateLabel(p)} className="flex items-baseline gap-2">
+            <span className="w-16 shrink-0 font-[family-name:var(--font-pe-mono)] text-[10px] text-[var(--r-ink-mute)]">
+              {cellStateLabel(p)}
+            </span>
+            <StateCell {...p} />
+          </span>
+        ))}
+      </span>
+    ),
+  },
+  {
+    name: "a filter's vocabulary is stable",
+    text: "Facet options derive from ALL rows, never the visible subset, so an option never vanishes or reshuffles under the cursor and picking one can always widen the scope back out. The price is that a chosen option may resolve to zero visible rows — which the empty state says, and which is a better answer than an option that quietly disappeared.",
+    demo: (
+      <Cap>
+        the exhibit is §04 below, live: filter it to instance scope, then open the value column's
+        filter — every state word is still there, because facetOptions reads the whole row set.
+      </Cap>
+    ),
+  },
+  {
+    name: "refuse per option",
+    text: "List the option you cannot pick, greyed, with its own reason drawn from real validation — strictly more informative than hiding it or greying the whole control. What keeps that true is that the explanation is a required constructor argument: Verb demands a reason, so every refusal at every call site has one.",
+    demo: (
+      <span className="flex flex-col gap-3">
+        <span className="flex flex-wrap items-start gap-2">
+          <Verb
+            tone="commit"
+            label="apply to Revit"
+            icon={Upload}
+            onClick={noop}
+            reason="Writes 42 parameters into the live model"
+          />
+          <Verb
+            tone="commit"
+            label="sync to .r10"
+            icon={Share2}
+            onClick={noop}
+            disabled
+            reason="no .r10 target bound — bind one in the sentence first"
+          />
+        </span>
+        <CounterExample why="the same refusal through ui/button, which the unmigrated routes still run on: it takes no reason, so the greying is unfalsifiable and a reader cannot tell a rule from a bug. Requiring the string is the enforcement.">
+          <Button variant="outline" size="sm" disabled>
+            sync to .r10
+          </Button>
+        </CounterExample>
+      </span>
+    ),
+  },
+  {
+    name: "a stand-in announces itself",
+    text: "A surface with no such mark is claiming to be real, and that claim has to be true. The dashed edge is the mark, and it is reserved for ONE meaning — seam: typed but unproven. Dashed already means estimated, not-started, needs-attention, held, void and open-proposal across the unmigrated routes; do not mint a ninth, take a different slot.",
+    demo: (
+      <FactChip dashed title="Fixture data — no host, no document, no element behind it.">
+        fixture
+      </FactChip>
+    ),
+  },
+  {
+    name: "provenance rides with the value",
+    text: "Where a number came from travels with the number, everywhere it appears — not parked in a detail pane a reader has to open. And provenance that cannot be wrong is decoration: a freshness token that is always null means the surface can never show stale, which is a defect, not an empty field.",
+    demo: (
+      // the long-value row on purpose: the citation has to survive the footline clamp, or the
+      // specimen truncates the very thing the law is about.
+      <span className="block w-[19rem] max-w-full">
+        <StateCell {...cellProps(row("typeComments"))} />
+      </span>
+    ),
+  },
+  {
+    name: "ceremony scales with blast radius",
+    text: "A verb that writes beyond the page carries a human-readable reason supplied before it arms, explicit identity in the call rather than whatever is selected, the plan hash it was made against with a drift refusal, and a receipt whose failures stay staged for retry. Presented as an arming strip, never at hover height.",
+    demo: (
+      <span className="flex flex-col gap-1">
+        <Link
+          to="/design-system/arming"
+          className="text-[12px] text-[var(--r-nav)] hover:underline"
+        >
+          /design-system/arming
+        </Link>
+        <Cap>
+          the satellite IS this law — freezing one frame here would teach the shape and hide the
+          mechanism.
+        </Cap>
+      </span>
+    ),
+  },
 ];
 
 function Laws() {
@@ -282,7 +418,7 @@ function Laws() {
     <Section
       n="01"
       title="the laws"
-      note="eight rules that decide every surface — each with the shipping component obeying it"
+      note="fifteen rules that decide every surface — each with the shipping component obeying it. A position lives here the moment a real component can render it; SURFACE-PHILOSOPHY keeps only what nothing can render yet"
     >
       <div className="border-t border-[var(--r-line)]">
         {LAWS.map((law) => (
@@ -1083,6 +1219,23 @@ function RealTable() {
         <code className="font-[family-name:var(--font-pe-mono)] text-[11px]">ArtifactFrame</code>{" "}
         per the border budget, with the cell-state key inside the frame it describes. Sort a column,
         filter one, type in the search box — the grammar has to survive all of it.
+      </p>
+      <p className="max-w-[80ch] text-[12px] leading-relaxed text-[var(--r-ink-2)]">
+        This table is also the exhibit for two of §01&apos;s laws, because neither can be shown on a
+        static specimen. <strong>A filter&apos;s vocabulary is stable under filtering:</strong> the
+        facet options come from{" "}
+        <code className="font-[family-name:var(--font-pe-mono)] text-[11px]">facetOptions</code>{" "}
+        reading ALL rows, never the visible subset, so narrowing by scope leaves the value
+        column&apos;s state vocabulary untouched and picking an option can always widen back out —
+        at the price of a chosen option resolving to zero visible rows, which the empty state says.{" "}
+        <strong>Sort by domain order:</strong> a{" "}
+        <code className="font-[family-name:var(--font-pe-mono)] text-[11px]">state</code> column
+        that declares no{" "}
+        <code className="font-[family-name:var(--font-pe-mono)] text-[11px]">sort</code> falls back
+        to{" "}
+        <code className="font-[family-name:var(--font-pe-mono)] text-[11px]">CELL_STATE_ORDER</code>{" "}
+        — drift first, locked last — rather than to the alphabet. The value column below opts out
+        deliberately: it sorts by the VALUE and lets its facet carry the state.
       </p>
 
       <ArtifactFrame
