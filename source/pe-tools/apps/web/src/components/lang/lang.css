@@ -299,6 +299,51 @@
    constructor. RULED 2026-08-16: the reason's home is the title — the visible under-line
    rendering (.dl-refusal) made dense verb lanes wrap and repeat one sentence four times. */
 
+/* ── HELP TIP · help.tsx ───────────────────────────────────────────────────────────────────
+   Region orientation behind a "?" mark. Reveal is hover/focus, CSS-only; the pop is SANS
+   because orientation is human language. One per region, beside its title, never on a control
+   (controls keep native titles). */
+.dl-help {
+  position: relative;
+  display: inline-flex;
+}
+.dl-help-mark {
+  display: grid;
+  place-items: center;
+  width: 13px;
+  height: 13px;
+  padding: 0;
+  font-family: var(--font-pe-mono);
+  font-size: 9px;
+  line-height: 1;
+  color: var(--r-ink-2);
+  background: transparent;
+  border: 1px solid var(--r-line-2);
+  border-radius: var(--radius);
+  cursor: help;
+}
+.dl-help-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 40;
+  width: max-content;
+  max-width: 38ch;
+  padding: 5px 8px;
+  font-family: var(--font-pe, sans-serif);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--r-ink-2);
+  background: var(--r-artifact);
+  --r-on: var(--r-artifact);
+  border: 1px solid var(--r-line-2);
+  visibility: hidden;
+}
+.dl-help:hover .dl-help-pop,
+.dl-help:focus-within .dl-help-pop {
+  visibility: visible;
+}
+
 /* blast radius is a GROUPING concern, not a tone. */
 .dl-verb-group-head {
   display: flex;

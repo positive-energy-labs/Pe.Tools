@@ -32,6 +32,7 @@ import { CellStateKey } from "#/components/lang/cell-key";
 import { CELL_STATE_ORDER, StateCell, cellStateLabel } from "#/components/lang/cell";
 import type { StateCellProps } from "#/components/lang/cell";
 import { FactChip, NarrowChip } from "#/components/lang/chip";
+import { HelpTip } from "#/components/lang/help";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb, VerbGroup } from "#/components/lang/verb";
 import { MasterTable } from "#/components/master-table/master-table";
@@ -56,11 +57,14 @@ function Section({
   n,
   title,
   note,
+  help,
   children,
 }: {
   n: string;
   title: string;
   note: string;
+  /** Region orientation — the HelpTip paradigm, beside the title it orients. */
+  help?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -68,6 +72,7 @@ function Section({
       <div className="flex items-baseline gap-3 border-b border-[var(--r-line)] pb-1.5">
         <span className="tele-label text-[10px] text-[var(--r-ink-mute)]">{n}</span>
         <span className="text-[11px] font-semibold tracking-[0.09em] uppercase">{title}</span>
+        {help != null ? <HelpTip className="self-center">{help}</HelpTip> : null}
         <span className="min-w-0 flex-1 text-[11.5px] text-[var(--r-ink-2)]">{note}</span>
       </div>
       {children}
@@ -370,6 +375,22 @@ const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
             sync to .r10
           </Button>
         </CounterExample>
+      </span>
+    ),
+  },
+  {
+    name: "orientation hides behind a mark",
+    text: "A title carries a CONTROL-level fact — what pressing does, why it refuses — terse and machine-adjacent, as everywhere today. A HelpTip orients a REGION: what this pane, section or table IS and how to think about it, one per region, beside its title, never on a control. Inline explanatory prose baked into chrome is neither, and dies: its content moves into one of these two homes or it was decoration. (Ruled 2026-08-16; the copy census will drive the purge.)",
+    demo: (
+      <span className="flex items-center gap-2">
+        <span className="text-[11px] font-semibold tracking-[0.09em] uppercase">
+          the real table
+        </span>
+        <HelpTip>
+          The product table primitive with the cell grammar as its renderer. Rows never grow; the
+          readout band under the table speaks for the focused cell. This tip is the paradigm: region
+          orientation lives here, control facts stay on the controls.
+        </HelpTip>
       </span>
     ),
   },
@@ -1212,6 +1233,7 @@ function RealTable() {
       n="04"
       title="the real table"
       note="the actual MasterTable — the primitive atlas, takeoffs and families run on — with StateCell as its cell renderer"
+      help="The product table primitive, unmodified, with the cell grammar as its renderer. Rows never grow; click a cell and the readout band under the table speaks its facts. The gap notes below are the section's deliverable."
     >
       <p className="max-w-[80ch] text-[12px] leading-relaxed text-[var(--r-ink-2)]">
         The design-lang round hand-rolled its table, so the grammar was only ever proven against
