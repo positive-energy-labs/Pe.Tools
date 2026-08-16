@@ -25,6 +25,7 @@ import { Route as TakeoffsRouteImport } from "./routes/takeoffs";
 import { Route as DesignSystemArmingRouteImport } from "./routes/design-system_.arming";
 import { Route as DesignSystemPopoversRouteImport } from "./routes/design-system_.popovers";
 import { Route as DesignSystemProposalFlowRouteImport } from "./routes/design-system_.proposal-flow";
+import { Route as DesignSystemSwatchRouteImport } from "./routes/design-system_.swatch";
 import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
 import { Route as ApiPdfAuditParseParseIdRouteImport } from "./routes/api/pdf-audit/parse.$parseId";
 
@@ -109,6 +110,11 @@ const DesignSystemProposalFlowRoute =
     path: "/design-system/proposal-flow",
     getParentRoute: () => rootRouteImport,
   } as any);
+const DesignSystemSwatchRoute = DesignSystemSwatchRouteImport.update({
+  id: "/design-system_/swatch",
+  path: "/design-system/swatch",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const ApiPdfAuditParseRoute = ApiPdfAuditParseRouteImport.update({
   id: "/api/pdf-audit/parse",
   path: "/api/pdf-audit/parse",
@@ -137,6 +143,7 @@ export interface FileRoutesByFullPath {
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
   "/design-system/proposal-flow": typeof DesignSystemProposalFlowRoute;
+  "/design-system/swatch": typeof DesignSystemSwatchRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
 }
@@ -157,6 +164,7 @@ export interface FileRoutesByTo {
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
   "/design-system/proposal-flow": typeof DesignSystemProposalFlowRoute;
+  "/design-system/swatch": typeof DesignSystemSwatchRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
 }
@@ -178,6 +186,7 @@ export interface FileRoutesById {
   "/design-system_/arming": typeof DesignSystemArmingRoute;
   "/design-system_/popovers": typeof DesignSystemPopoversRoute;
   "/design-system_/proposal-flow": typeof DesignSystemProposalFlowRoute;
+  "/design-system_/swatch": typeof DesignSystemSwatchRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
 }
@@ -200,6 +209,7 @@ export interface FileRouteTypes {
     | "/design-system/arming"
     | "/design-system/popovers"
     | "/design-system/proposal-flow"
+    | "/design-system/swatch"
     | "/api/pdf-audit/parse"
     | "/api/pdf-audit/parse/$parseId";
   fileRoutesByTo: FileRoutesByTo;
@@ -220,6 +230,7 @@ export interface FileRouteTypes {
     | "/design-system/arming"
     | "/design-system/popovers"
     | "/design-system/proposal-flow"
+    | "/design-system/swatch"
     | "/api/pdf-audit/parse"
     | "/api/pdf-audit/parse/$parseId";
   id:
@@ -240,6 +251,7 @@ export interface FileRouteTypes {
     | "/design-system_/arming"
     | "/design-system_/popovers"
     | "/design-system_/proposal-flow"
+    | "/design-system_/swatch"
     | "/api/pdf-audit/parse"
     | "/api/pdf-audit/parse/$parseId";
   fileRoutesById: FileRoutesById;
@@ -261,6 +273,7 @@ export interface RootRouteChildren {
   DesignSystemArmingRoute: typeof DesignSystemArmingRoute;
   DesignSystemPopoversRoute: typeof DesignSystemPopoversRoute;
   DesignSystemProposalFlowRoute: typeof DesignSystemProposalFlowRoute;
+  DesignSystemSwatchRoute: typeof DesignSystemSwatchRoute;
   ApiPdfAuditParseRoute: typeof ApiPdfAuditParseRouteWithChildren;
 }
 
@@ -378,6 +391,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof DesignSystemProposalFlowRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/design-system_/swatch": {
+      id: "/design-system_/swatch";
+      path: "/design-system/swatch";
+      fullPath: "/design-system/swatch";
+      preLoaderRoute: typeof DesignSystemSwatchRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/api/pdf-audit/parse": {
       id: "/api/pdf-audit/parse";
       path: "/api/pdf-audit/parse";
@@ -423,6 +443,7 @@ const rootRouteChildren: RootRouteChildren = {
   DesignSystemArmingRoute: DesignSystemArmingRoute,
   DesignSystemPopoversRoute: DesignSystemPopoversRoute,
   DesignSystemProposalFlowRoute: DesignSystemProposalFlowRoute,
+  DesignSystemSwatchRoute: DesignSystemSwatchRoute,
   ApiPdfAuditParseRoute: ApiPdfAuditParseRouteWithChildren,
 };
 export const routeTree = rootRouteImport

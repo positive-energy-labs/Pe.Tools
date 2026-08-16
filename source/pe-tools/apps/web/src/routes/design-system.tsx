@@ -1373,6 +1373,12 @@ const SATELLITES: readonly { to: string; name: string; purpose: string }[] = [
     purpose:
       "the position harness. Every popover-bearing component the app actually ships, mounted nine times at the corners, edges and centre of the viewport. It does not fix flip/clamp/overflow inconsistency — it makes it one visible fact, which is what queues a single popover foundation (SHIMS entry 7).",
   },
+  {
+    to: "/design-system/swatch",
+    name: "swatch",
+    purpose:
+      "fast lookup — every component in lang/ and the surviving ui/, alphabetical, with its import path on the surface, its grep-derived consumer count, and its whole variant × state grid rendered small. The spec lives here; the swatch is where you FIND the component you are about to change.",
+  },
 ];
 
 function Satellites() {
