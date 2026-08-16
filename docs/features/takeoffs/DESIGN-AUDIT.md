@@ -5,9 +5,16 @@ during the design-language sweep of 2026-08-16. Takeoffs is **consumer #2 of the
 and the first real consumer of `Verb`/`FactChip`/`OutcomeLine` outside the design-system exhibit, so
 the friction here is evidence about the language's interface, not a complaint about this route.
 
-Governance for this pass: `components/lang/*`, `design-lang.css` tokens, and the state-model axes
-were **not** changed. Where the language could not express something, the code was left honest and
-the gap written down below. These are for joint review; nothing here is a decision.
+Governance for this pass: `components/lang/*`, `components/master-table/*`, `design-lang.css`
+tokens, and the state-model axes were **not** changed. Where the language could not express
+something, the code was left honest and the gap written down below. These are for joint review;
+nothing here is a decision.
+
+> **Boundary note.** A concurrent cell-scale ruling (single-line clipped cells + a table readout
+> band) owns `components/master-table/` and `components/lang/`. Findings #1, #5 and #11 all propose
+> edits inside that boundary and none were made — #11 records a four-line change that was made,
+> committed, and then reverted when the boundary was drawn. Every proposal below is input to that
+> ruling, not a claim on it.
 
 Companion ledger of open stand-ins: [`SHIMS.md`](SHIMS.md). Language canon:
 [`../../design/SURFACE-PHILOSOPHY.md`](../../design/SURFACE-PHILOSOPHY.md),
@@ -262,18 +269,36 @@ for a genuinely shared reason — e.g. every verb during a `busy` transaction.
 **Proposed resolution.** `VerbGroup` gains `refusal?: string`; when set, it renders once at the
 group head and its children suppress their own refusal lines (keeping them as `title`).
 
-### 11 · `StateMeta.tone` is an unconstrained string in a shared primitive
+### 11 · `stateColumn`'s alarm branch still spends the viz ladder — a visible split, deliberately left
 
-**Surface fact.** `master-table/cells.tsx` `StateMeta.tone` is `string`, so a consumer can hand it
-any CSS colour. Takeoffs handed it `var(--cat-clay)`, `var(--cat-slate)`, `var(--cat-green)` — three
-*taxonomy* colours carrying *state*, which is precisely the violation the route passes exist to fix,
-and the type could not prevent it.
+**Surface fact.** `master-table/cells.tsx` `StateMeta.tone` is an unconstrained `string`, so a
+consumer can hand it any CSS colour. Takeoffs handed it `var(--cat-clay)`, `var(--cat-slate)`,
+`var(--cat-green)` — three *taxonomy* colours carrying *state*, precisely the violation these route
+passes exist to fix, and the type could not prevent it. Worse, the primitive **hard-codes** the
+alarm word's colour: `stateColumn` renders `className={meta.alarm ? "text-cat-clay" : …}`, so even a
+consumer that supplies a correct `tone` cannot get a correct *label*.
 
-**Fixed here, generically open.** Takeoffs now spends meaning roles, and the primitive's one
-`text-cat-clay` (the `alarm` branch) became `--r-alarm`. But the next consumer can regress it.
+**Left as-is, and it shows.** The route half is fixed (`STATE_META` now spends meaning roles), but
+the primitive half is **not touched** — `components/master-table/` is under a concurrent cell-scale
+ruling and belongs to that session. The visible consequence, until the two halves meet: in the
+takeoffs state column, a "needs a call" row draws its **dot** in `--r-alarm` (rust) and its **word**
+in `--cat-clay` (= `--viz-5`, kiln). One state, two hues, side by side in one cell.
 
-**Proposed resolution.** Narrow `tone` to a union of the meaning-role tokens, or delete
-`stateColumn` in favour of #1's resolution.
+That split is the honest rendering of a boundary, not a regression to hide: it is the same defect
+SURFACE-PHILOSOPHY §1 names — *"one three-way state is currently drawn in two hue vocabularies"* —
+now reproduced inside a single cell where it cannot be missed.
+
+**Proposed resolution.** Two edits, both in the primitive, both for the ruling session to make or
+decline: (a) drop the hard-coded `text-cat-clay` for `text-[var(--r-alarm)]`, since the prop is
+already named `alarm` and the one-alarm law has exactly one colour; (b) narrow `tone` to a union of
+the meaning-role tokens so the next consumer cannot hand it a viz colour. If #1's resolution lands
+instead — `StateColumn` growing a `label` override so domain vocabularies ride the real `StateCell` —
+`stateColumn` disappears and both edits are moot.
+
+**Provenance.** This pass did originally make edit (a) plus two comment corrections, and landed them
+in `b52d891`. They were reverted in the follow-up commit when the boundary was drawn; the working
+tree is byte-identical to pre-sweep `cells.tsx`. `git show b52d891 -- …/master-table/cells.tsx` has
+the four-line diff if the ruling session wants it.
 
 ### 12 · Fixed en route: an error was wearing the seam chip
 
@@ -297,6 +322,9 @@ is NOT the model disagreeing"*).
 | illegal `dashed` re-expressed | 4 | plus 1 legal one added; see #9 |
 | modals on `ui/dialog` | 2 | adopt + sync; the hand-rolled overlay had no focus trap, no `role`, no Esc, and a fake "esc ×" label |
 | dead code deleted | ~460 LOC | `takeoff/seam.tsx` (whole file, `Step` never consumed), `atlas.tsx` `Peek` + `nextAction`, `zone-plan.tsx` `ZonePlan` + `PlanLegend` + `Chip` |
+
+**Files touched:** `takeoff/atlas.tsx`, `takeoff/zone-plan.tsx`, `takeoff/seam.tsx` (deleted),
+`routes/takeoffs.tsx`. Nothing under `components/`.
 
 **Shim lines deleted from `styles.css`: none.** Every token takeoffs gave up (`--cat-clay`,
 `--cat-green`, `--cat-slate`, `--cat-blue`, `--line`, `--line-2`, `--line-soft`, `--primary` as a
