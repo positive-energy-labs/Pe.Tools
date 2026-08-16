@@ -66,8 +66,10 @@ const MARK: Record<Agreement, string> = {
 };
 
 const MARK_TITLE: Record<Agreement, string> = {
-  agree: "The profile and Revit carry the same value for this parameter at this type. Nothing to cross; the verbs would be no-ops.",
-  drift: "DRIFT — the profile and Revit disagree here. Click to open the reconciliation strip and pick which side wins; nothing crosses until you do.",
+  agree:
+    "The profile and Revit carry the same value for this parameter at this type. Nothing to cross; the verbs would be no-ops.",
+  drift:
+    "DRIFT — the profile and Revit disagree here. Click to open the reconciliation strip and pick which side wins; nothing crosses until you do.",
   derived:
     "Derived — the profile authors this as a formula, so Revit's number is an OUTPUT, not a competing value. Neither direction is a crossing: capturing would overwrite the formula with a frozen number, applying would be writing to a read-only cell.",
   "only-profile":

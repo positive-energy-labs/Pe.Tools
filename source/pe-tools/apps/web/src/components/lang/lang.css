@@ -1,0 +1,630 @@
+/* =============================================================================================
+   components/lang — THE DESIGN-LANGUAGE PRIMITIVES, one stylesheet.
+   =============================================================================================
+
+   Every colour below is `var(--r-…)` from `src/design-lang.css`. There is not one colour
+   literal in this file, on purpose: a literal would be invariant against the token layer and
+   would quietly un-decide a colour the palette round already decided. That invariance is the
+   exact defect round 2 found in canon `Button`/`Chip` (CLEANROOM, cross-cutting findings) and
+   `components/lang` exists partly to not have it.
+
+   One file rather than seven: the mechanisms below are genuinely SHARED — the hover law, the
+   one `::before` square that two authors draw, the `--r-on` re-declarations, the squiggle
+   family. Splitting them per component is how they drift apart. Each block names its component.
+
+   SCOPING: every rule is scoped by a `dl-` class. No element selectors, no ancestor scope —
+   these primitives must render correctly anywhere on any route, including routes still on the
+   old token vocabulary.
+
+   ══ THE SLOT TABLE (what may say what — CLEANROOM, ruled through two rounds) ═══════════════
+     CELL BODY (fill + ring)  → pea's PROPOSAL, and UNEDITABLE/DISABLED. Nothing else. Ever.
+     TEXT DECORATION          → the squiggle family: state of the VALUE, ranked by colour.
+     TEXT WEIGHT              → BOLD = unsaved. Reserved; no other use anywhere.
+     CORNER / EDGE MARK       → authorship: top-right fold = pea proposed · bottom-left square
+                                = unsaved, its COLOUR carrying whose.
+     INLINE GHOST TOKEN       → the other side's value, struck, in alarm ink (drift).
+     COLOUR + ICON            → verbs and outcomes only. Never inside a data cell — icons break
+                                table ergonomics the moment a value runs long.
+     FOOTLINE                 → the cell's testimony; one per cell, one line, clamped.
+     PLAIN UNDERLINE          → citation. Lives on the footline's source name, never on the
+                                value — so it can never contend with the squiggle slot.
+
+   ══ PRECEDENCE (the CSS below matches this exactly, by cascade order) ══════════════════════
+     1. uneditable/disabled owns the body. A cell that cannot be written cannot show a
+        proposal you could accept.
+     2. pea's proposal owns the body otherwise.
+     3. the squiggle slot: drift ▸ stale ▸ unverified. One winner draws; losers draw nothing.
+     4. UNSAVED draws the bottom-left square and composes with everything above.
+     5. citation never contends (different element).
+   ============================================================================================= */
+
+/* ── THE ARTIFACT FRAME · artifact-frame.tsx ───────────────────────────────────────────────
+   One ground shift plus one quiet inset hairline. No radius, no shadow. See the border-budget
+   block in design-lang.css for WHAT is allowed to wear one. */
+
+.dl-artifact {
+  background: var(--r-artifact);
+  box-shadow: inset 0 0 0 1px var(--r-line);
+  --r-on: var(--r-artifact);
+}
+.dl-artifact-head,
+.dl-artifact-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  background: var(--r-recess);
+  --r-on: var(--r-recess);
+}
+.dl-artifact-head {
+  align-items: baseline;
+  border-bottom: 1px solid var(--r-line);
+}
+.dl-artifact-foot {
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-top: 1px solid var(--r-line);
+}
+
+/* ── THE CELL · cell.tsx ───────────────────────────────────────────────────────────────────
+   One grammar at any scale: the chat card's staged values, the table's cells and the key's
+   specimens are the same treatment, which is the property that won round 1. */
+
+.dl-cell {
+  position: relative;
+  display: inline-block;
+  padding: 1px 6px;
+  background: var(--dl-cell-fill, transparent);
+  box-shadow: var(--dl-cell-ring, none);
+  color: var(--dl-cell-ink, inherit);
+  font-style: var(--dl-cell-italic, normal);
+}
+
+/* 2 · pea's proposal owns the body: a wash mixed INTO whatever ground the cell sits on (so it
+      never floats), a pea ring, the top-right fold — and the bottom-left unsaved square in
+      pea's own ink. Fold and square TRAVEL TOGETHER on an open proposal: the fold says pea
+      authored it, the square says nothing has been written yet, and they are the same fact seen
+      from two sides (CLEANROOM round-2 ruling note 1). */
+.dl-cell[data-body="proposed"] {
+  --dl-cell-fill: color-mix(in srgb, var(--r-pea-ink) 20%, var(--r-on));
+  --dl-cell-ring: inset 0 0 0 1.5px color-mix(in srgb, var(--r-pea) 70%, transparent);
+  --dl-cell-square: var(--r-pea-ink);
+  padding-right: 14px;
+  padding-left: 10px;
+}
+.dl-cell[data-body="proposed"]::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  border-top: 9px solid var(--r-pea-ink);
+  border-left: 9px solid transparent;
+}
+
+/* 1 · uneditable/disabled owns the body — declared AFTER the proposal so the CASCADE, not
+      discipline, enforces precedence. Greyed italic is the settled "look but don't touch". */
+.dl-cell[data-body="locked"] {
+  --dl-cell-fill: color-mix(in srgb, var(--r-ink) 6%, var(--r-on));
+  --dl-cell-ink: var(--r-ink-mute);
+  --dl-cell-italic: italic;
+  --dl-cell-ring: none;
+  padding-right: 6px;
+  padding-left: 6px;
+}
+/* a cell that cannot be written has no authorship marks to make: no fold, no square. */
+.dl-cell[data-body="locked"]::after,
+.dl-cell[data-body="locked"]::before {
+  content: none;
+}
+/* a SEAM (no real element behind it) keeps the reserved dashed edge and nothing else. The
+   dashed border style means "typed but unproven" and nothing else may use it. */
+.dl-cell[data-seam] {
+  --dl-cell-ring: none;
+  outline: 1px dashed var(--r-line-2);
+  outline-offset: -1px;
+}
+
+/* 4 · UNSAVED — the bottom-left square, plus bold when the unsaved change is YOURS. Bold is
+      reserved for this and appears nowhere else in the language. Pea's open proposal already
+      owns the body, so adding weight there would spend the reserved axis on something the wash
+      already says. */
+.dl-cell[data-unsaved] {
+  --dl-cell-square: var(--r-caution);
+  font-weight: 700;
+  padding-left: 10px;
+}
+.dl-cell[data-unsaved="pea"] {
+  --dl-cell-square: var(--r-pea-ink);
+  font-weight: inherit;
+}
+/* ONE square, two authors — the shape is identical, only `--dl-cell-square` differs, so the two
+   can never diverge into two marks (COLOR-ROLES shape law, with the colour axis doing "whose"). */
+.dl-cell[data-body="proposed"]::before,
+.dl-cell[data-unsaved]::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  bottom: 2px;
+  width: 5px;
+  height: 5px;
+  background: var(--dl-cell-square);
+}
+
+/* 3 · THE SQUIGGLE FAMILY — one decoration family, ranked by colour. The decoration says
+      "state of the value"; the colour says which state; the two primary text colours are
+      untouched. Rides on the TEXT, never on the box. */
+.dl-sq {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.dl-sq[data-state="drift"] {
+  text-decoration-color: var(--r-alarm);
+}
+.dl-sq[data-state="stale"] {
+  text-decoration-color: var(--r-caution);
+}
+.dl-sq[data-state="unverified"] {
+  text-decoration-color: var(--r-ink-mute);
+}
+
+/* drift's second half: the other side's value as a struck ghost token, INLINE, so the one alarm
+   is unmissable and still costs zero row height. */
+.dl-ghost {
+  font-family: var(--font-pe-mono);
+  font-size: 11px;
+  color: var(--r-alarm);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  white-space: nowrap;
+}
+
+.dl-cell-line {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+
+/* the footline — one per cell, one line, clamped, so a grid never re-flows.
+   ponytail: the clamp truncates real sentences, including RFI citations. CLEANROOM's frontier
+   asks whether a clamped row needs a disclosure; ceiling accepted until a reader complains. */
+.dl-foot {
+  display: block;
+  margin-top: 1px;
+  font-family: var(--font-pe-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1.35;
+  color: var(--r-ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 5 · a PLAIN underline is a citation, on the SOURCE NAME in the footline — a different element
+      from the value — so it can never occupy the squiggle's slot. */
+.dl-cite {
+  text-decoration: underline solid var(--r-line-2);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+/* ── VERBS · verb.tsx ──────────────────────────────────────────────────────────────────────
+   The fill is the affordance; the language is border-scarce. Grouping is a LABEL and never
+   buys a hue: all three writes wear the same single blue no matter how far they reach. */
+
+.dl-verb {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  background: transparent;
+  color: var(--r-ink);
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+.dl-verb svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+/* nav — blue TEXT, three directions, no border, no fill. The blue budget's cheap half. */
+.dl-verb[data-tone="nav"] {
+  color: var(--r-nav);
+  padding: 0 4px;
+}
+.dl-verb[data-tone="nav"]:enabled:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+/* act — safe, page-scoped. Neutral. The mix is against `--r-on`, NOT against the artifact
+   token: mixing against the artifact is what made three round-2 buttons land within 1.03:1 of
+   the ground they actually stood on, one of them invisible in dark (CLEANROOM note 4). */
+.dl-verb[data-tone="act"] {
+  background: color-mix(in srgb, var(--r-ink) 10%, var(--r-on));
+}
+/* agent — pea's own verb. COLOR-ROLES Law 0 had no interaction slot for the agent's identity,
+   which made pea's own verb illegal; 4 of 5 round-1 builders hit it. This is that slot. */
+.dl-verb[data-tone="agent"] {
+  color: var(--r-pea-ink);
+  background: color-mix(in srgb, var(--r-pea-ink) 12%, var(--r-on));
+}
+/* commit — the ONLY filled blue in the language, at every blast radius. Scarcity is the signal. */
+.dl-verb[data-tone="commit"] {
+  background: var(--r-commit);
+  color: var(--r-on-commit);
+}
+/* DISABLED — the settled greyed-italic "look but don't touch", but it must still be READ: a
+   refused option a newcomer cannot decipher is indistinguishable from a rendering bug. It keeps
+   a recessed ground (so the slot has a shape), the firm hairline (so the shape has an edge),
+   italic + the secondary ink (so it is plainly not for pressing), and NO hover. Greyed means
+   muted + italic + inert, not illegible: 5.26 | 8.08 against 3.10 | 5.64 before. */
+.dl-verb:disabled {
+  cursor: not-allowed;
+  background: var(--r-recess);
+  color: var(--r-ink-2);
+  font-style: italic;
+  border-color: var(--r-line-2);
+}
+
+/* §3 (SURFACE-PHILOSOPHY, honesty): refuse PER OPTION, with the reason ON THE SURFACE — not in
+   a title a newcomer has to hover to discover. */
+.dl-verb-slot {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 220px;
+}
+.dl-refusal {
+  font-family: var(--font-pe-mono);
+  font-size: 9.5px;
+  line-height: 1.35;
+  color: var(--r-caution);
+}
+
+/* blast radius is a GROUPING concern, not a tone. */
+.dl-verb-group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 6px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--r-line);
+}
+.dl-verb-group-title {
+  font-family: var(--font-pe-mono);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--r-ink);
+}
+.dl-verb-group-radius {
+  font-size: 10.5px;
+  color: var(--r-ink-2);
+}
+.dl-verb-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+/* ── THE ONE HOVER LAW ─────────────────────────────────────────────────────────────────────
+   Every control in the language takes the SAME neutral veil, over whatever fill it already
+   carries, and buys no hue doing it. Focus-visible takes the veil plus the firm hairline —
+   "selection and focus are a fill" applied to controls. Disabled takes neither. Tone-specific
+   hovers (nav's underline above) may ADD, never replace. */
+.dl-verb:enabled:hover,
+.dl-chip-x:enabled:hover {
+  background-image: linear-gradient(var(--r-veil), var(--r-veil));
+}
+.dl-verb:focus-visible,
+.dl-chip-x:focus-visible {
+  background-image: linear-gradient(var(--r-veil), var(--r-veil));
+  outline: 1px solid var(--r-line-2);
+  outline-offset: 0;
+}
+
+/* ── CHIPS · chip.tsx ──────────────────────────────────────────────────────────────────────
+   Two components, not two modes of one: round 1 proved a NARROWING control cannot be built from
+   a STATE FACT. Machine-measured, so mono; a hairline edge because chips routinely sit on a
+   tinted fill and would otherwise dissolve into it. */
+
+.dl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 5px;
+  height: 18px;
+  font-family: var(--font-pe-mono);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  color: var(--dl-chip-ink, var(--r-ink-2));
+  background: var(--r-artifact);
+  border: 1px solid var(--r-line);
+}
+.dl-chip[data-tone="caution"] {
+  --dl-chip-ink: var(--r-caution);
+}
+.dl-chip[data-tone="done"] {
+  --dl-chip-ink: var(--r-done);
+}
+.dl-chip[data-tone="alarm"] {
+  --dl-chip-ink: var(--r-alarm);
+}
+.dl-chip[data-tone="pea"] {
+  --dl-chip-ink: var(--r-pea-ink);
+}
+/* the dashed edge means SEAM — typed but unproven, a fixture, a stand-in. Reserved; nothing
+   else in the language may use this border style. */
+.dl-chip[data-seam] {
+  border-style: dashed;
+  border-color: var(--r-line-2);
+}
+.dl-chip-count {
+  color: var(--r-ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.dl-chip-x {
+  display: grid;
+  place-items: center;
+  width: 12px;
+  height: 12px;
+  color: var(--r-ink-2);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+.dl-chip-x svg {
+  width: 9px;
+  height: 9px;
+}
+
+/* ── OUTCOMES · outcome.tsx ────────────────────────────────────────────────────────────────
+   Coloured mono text + one icon + decoration. NEVER bold — bold is reserved for unsaved, so an
+   outcome gets its punch from colour, its icon and the frame it sits near. No left bars:
+   round 1 measured that vertical bars were simply not understood. Every hue here is a meaning
+   role already in the contract; outcomes buy nothing. */
+
+.dl-outcome {
+  display: grid;
+  grid-template-columns: 14px minmax(0, auto) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 7px;
+  padding: 2px 0;
+  font-family: var(--font-pe-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--dl-outcome-ink);
+}
+.dl-outcome svg {
+  width: 11px;
+  height: 11px;
+  align-self: center;
+  color: var(--dl-outcome-ink);
+}
+.dl-outcome-says {
+  font-family: var(--font-pe);
+  font-size: 10.5px;
+  font-style: italic;
+  color: var(--r-ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dl-outcome[data-kind="busy"],
+.dl-outcome[data-kind="advisory"] {
+  --dl-outcome-ink: var(--r-ink-2);
+}
+.dl-outcome[data-kind="receipt"] {
+  --dl-outcome-ink: var(--r-done);
+}
+.dl-outcome[data-kind="refused"] {
+  --dl-outcome-ink: var(--r-alarm);
+}
+/* dropped never happened — italic, muted, no colour spent. */
+.dl-outcome[data-kind="dropped"] {
+  --dl-outcome-ink: var(--r-ink-mute);
+  font-style: italic;
+}
+.dl-outcome[data-kind="partial"],
+.dl-outcome[data-kind="error"] {
+  --dl-outcome-ink: var(--r-caution);
+}
+/* the squiggly-under says "not settled" — the SAME family the cells use, which is exactly why a
+   partial and an error read as unfinished without touching the type weight. */
+.dl-outcome[data-kind="partial"] .dl-outcome-label,
+.dl-outcome[data-kind="error"] .dl-outcome-label {
+  text-decoration: underline wavy var(--r-caution);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.dl-spin {
+  animation: dl-spin 1.1s linear infinite;
+}
+@keyframes dl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── ARMING · arming-strip.tsx ─────────────────────────────────────────────────────────────
+   The cell grammar at its largest scale: a tinted ground plus one edge — the same "fills
+   separate, borders do not" move that won round 1. Only e's arming strip read as CEREMONY
+   rather than "just another component", and that was attributed to border scarcity.
+
+   The strip declares its own tinted fill as `--r-on`, which is what gives the act verbs inside
+   it a resting shape against the ground they are actually standing on. The fill itself still
+   mixes against `--r-artifact`: the strip is only ever rendered inside a frame, and mixing it
+   against `--r-on` here would be a var cycle. */
+
+/* the small mono tag that names a state or an object. Quiet by default; a phase may tint it. */
+.dl-tag {
+  font-family: var(--font-pe-mono);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  color: var(--r-ink-2);
+}
+/* only the PHASE tag takes the ceremony colour; every other tag in the strip stays quiet. */
+.dl-strip[data-phase="armed"] .dl-tag-phase {
+  color: var(--r-commit);
+}
+.dl-strip[data-phase="refused"] .dl-tag-phase {
+  color: var(--r-alarm);
+}
+
+.dl-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px 11px;
+  border-left: 2px solid var(--dl-strip-edge);
+  background: var(--dl-strip-fill);
+  --r-on: var(--dl-strip-fill);
+}
+/* UNARMED — no ceremony colour yet. The strip is present and legible, the commit verb is
+   disabled with its reason on the surface, and the edge is the firm hairline: this is a thing
+   that WILL be armed, not a thing that is. */
+.dl-strip[data-phase="unarmed"] {
+  --dl-strip-edge: var(--r-line-2);
+  --dl-strip-fill: var(--r-artifact);
+}
+.dl-strip[data-phase="armed"] {
+  --dl-strip-edge: var(--r-commit);
+  --dl-strip-fill: color-mix(in srgb, var(--r-commit) 9%, var(--r-artifact));
+}
+.dl-strip[data-phase="refused"] {
+  --dl-strip-edge: var(--r-alarm);
+  --dl-strip-fill: color-mix(in srgb, var(--r-alarm) 10%, var(--r-artifact));
+}
+.dl-strip-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+.dl-strip-verb {
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.dl-strip-target {
+  font-family: var(--font-pe-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--r-ink-2);
+}
+/* the reason is supplied BEFORE the verb arms and stays visible after — an armed strip that
+   hides its own reason is a button with extra steps. */
+.dl-strip-reason {
+  font-size: 12px;
+  font-style: italic;
+  color: var(--r-ink);
+  padding-left: 8px;
+  border-left: 1px solid var(--r-line-2);
+}
+.dl-strip-reason-input {
+  width: 100%;
+  font: inherit;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--r-ink);
+  background: var(--r-on);
+  border: 0;
+  border-left: 1px solid var(--r-line-2);
+  padding: 2px 0 2px 8px;
+  outline: none;
+}
+.dl-strip-reason-input::placeholder {
+  color: var(--r-ink-mute);
+}
+.dl-strip-reason-input:focus-visible {
+  background-image: linear-gradient(var(--r-veil), var(--r-veil));
+}
+.dl-strip-refusal {
+  margin: 0;
+  max-width: 72ch;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.dl-strip-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── THE CELL-STATE KEY · cell-key.tsx ─────────────────────────────────────────────────────
+   A first-class entity, not a legend strip (CLEANROOM round-2 ruling note 2 — the key was
+   instrumental to the table reading at all). Specimens are REAL `StateCell`s with real props,
+   grouped BY AXIS, ordered inside a group by the cell's own precedence, so the key cannot teach
+   a ranking the cells do not obey. It sits on the recess ground, so specimen washes re-mix. */
+
+.dl-key {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+  gap: 9px 18px;
+  padding: 8px 10px 9px;
+  background: var(--r-recess);
+  border-top: 1px solid var(--r-line);
+  --r-on: var(--r-recess);
+}
+.dl-key-axis {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+.dl-key-axis-head {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--r-line);
+}
+/* the axis names stay QUIET — this is a key, not a legend poster. */
+.dl-key-axis-name {
+  font-family: var(--font-pe-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--r-ink-2);
+}
+.dl-key-axis-asks {
+  min-width: 0;
+  font-size: 9.5px;
+  font-style: italic;
+  color: var(--r-ink-mute);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dl-key-item {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 7px;
+  font-size: 10.5px;
+  color: var(--r-ink-2);
+}
+.dl-key-item .dl-cell,
+.dl-key-item .dl-sq,
+.dl-key-item .dl-cite {
+  font-family: var(--font-pe-mono);
+  font-size: 11.5px;
+}
+/* the specimen carries the page's primary ink — except a locked one, which must keep the muted
+   ink that IS its state, so the `--dl-cell-ink` escape hatch is left alone. */
+.dl-key-item .dl-sq,
+.dl-key-item .dl-cite {
+  color: var(--r-ink);
+}

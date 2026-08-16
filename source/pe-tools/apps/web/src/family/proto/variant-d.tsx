@@ -69,7 +69,12 @@ const SPEC = WORLD.spec;
 const DRIFTS: Drift[] = Object.entries(LIVE?.values ?? {}).flatMap(([param, byType]) =>
   Object.entries(byType)
     .filter(([, cell]) => cell.drift === true)
-    .map(([typeName, cell]) => ({ key: `${param}::${typeName}`, param, typeName, live: cell.value })),
+    .map(([typeName, cell]) => ({
+      key: `${param}::${typeName}`,
+      param,
+      typeName,
+      live: cell.value,
+    })),
 );
 
 const GROUP_ORDER = ["dimensions", "connections", "mechanical", "electrical"] as const;
@@ -359,7 +364,7 @@ export function VariantD() {
           ...current,
           types: {
             ...current.types,
-            [typeName]: { ...(current.types[typeName] ?? {}), [proposal.param]: proposal.proposed },
+            [typeName]: { ...current.types[typeName], [proposal.param]: proposal.proposed },
           },
         };
       }
@@ -380,13 +385,14 @@ export function VariantD() {
       const types = { ...current.types };
       for (const drift of DRIFTS) {
         if (driftOf(drift.key) !== "open") continue;
-        types[drift.typeName] = { ...(types[drift.typeName] ?? {}), [drift.param]: drift.live };
+        types[drift.typeName] = { ...types[drift.typeName], [drift.param]: drift.live };
       }
       return { ...current, types };
     });
     setDrifts((current) => {
       const next = { ...current };
-      for (const drift of DRIFTS) if ((next[drift.key] ?? "open") === "open") next[drift.key] = "captured";
+      for (const drift of DRIFTS)
+        if ((next[drift.key] ?? "open") === "open") next[drift.key] = "captured";
       return next;
     });
     setStamp(null);
@@ -400,7 +406,8 @@ export function VariantD() {
   const materialize = () => {
     setDrifts((current) => {
       const next = { ...current };
-      for (const drift of DRIFTS) if ((next[drift.key] ?? "open") === "open") next[drift.key] = "materialized";
+      for (const drift of DRIFTS)
+        if ((next[drift.key] ?? "open") === "open") next[drift.key] = "materialized";
       return next;
     });
     setStamp(null);
@@ -432,9 +439,7 @@ export function VariantD() {
 
   // ── margin contents, bucketed by the section they argue about ──
   const proposalsFor = (section: string) =>
-    WORLD.proposals.filter(
-      (proposal) => sectionOf(proposal.param, proposal.typeName) === section,
-    );
+    WORLD.proposals.filter((proposal) => sectionOf(proposal.param, proposal.typeName) === section);
 
   const renderProposals = (section: string) =>
     proposalsFor(section).map((proposal) => (
@@ -668,8 +673,7 @@ export function VariantD() {
                           background: lit
                             ? "color-mix(in srgb, var(--pe-blue) 8%, transparent)"
                             : "transparent",
-                          color:
-                            override == null ? "var(--muted-foreground)" : "var(--foreground)",
+                          color: override == null ? "var(--muted-foreground)" : "var(--foreground)",
                           borderBottomColor:
                             verdict === "open"
                               ? "var(--pe-blue)"
@@ -681,7 +685,7 @@ export function VariantD() {
                           borderBottomWidth: verdict != null || driftLive === "open" ? 1.5 : 1,
                         }}
                       >
-                        {override ?? (sheet.params[param.name] ?? param.value)}
+                        {override ?? sheet.params[param.name] ?? param.value}
                         {verdict === "open" && (
                           <span
                             className="ml-1 align-super text-[8px] text-[var(--pe-blue)]"

@@ -1,251 +1,154 @@
+/**
+ * /design-system — THE INDEX. The design language, stated and demonstrated.
+ *
+ * THE INDEX LAW (ruled 2026-08-16, CLEANROOM "cutover"): **nothing exists on this page unless it
+ * is codified as a real component with a real — or soon-to-be — consumer.** The old 1,540-line
+ * shadcn exhibit catalogued components nothing consumed; those are evicted (SHIMS entry 6), not
+ * moved. Every specimen below is the production component, imported from where production
+ * imports it, rendered under the tokens production runs under.
+ *
+ * NO SHIMS. Where a component cannot express something the language needs, the page records a
+ * `GAP:` at the call site and, where a reader would otherwise be misled, a visible gap-note. It
+ * does NOT fork, wrap, or restyle the component to make the demo look finished. A workaround here
+ * is worse than a defect: it is a defect that hides its own signal. The pair principle — this
+ * route FINDS the gaps, the per-route crusade FIXES them — is what makes that rule affordable.
+ *
+ * THE ONE INTEGRATION THE PROTOTYPE COULD NOT DO: section 04 mounts the actual `MasterTable`
+ * (the primitive atlas/takeoffs/families run on) with `StateCell` as its cell renderer. The
+ * design-lang proto hand-rolled its table, so nothing had ever proven the grammar survives the
+ * real primitive. It mostly does not yet — the gap notes in that section are the deliverable.
+ *
+ * Sources: docs/features/design-lang/CLEANROOM.md (verdicts + frontier) ·
+ * docs/features/design-system/SHIMS.md (the stand-in ledger) · docs/design/COLOR-ROLES.md ·
+ * docs/design/SURFACE-PHILOSOPHY.md §5 · src/design-lang.css (the tokens themselves).
+ */
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
 import {
-  ArrowUp,
-  ChevronDown,
-  ChevronRight,
-  Copy,
-  GitFork,
-  Paperclip,
+  ChevronsDownUp,
   RefreshCw,
-  Search,
-  Settings2,
+  Save,
+  Share2,
   Sparkles,
+  Upload,
 } from "lucide-react";
 
 import { ThemeToggle } from "#/components/ThemeToggle";
-import { ModeDial } from "#/components/mode-dial";
-import { Badge } from "#/components/ui/badge";
-import { Button } from "#/components/ui/button";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "#/components/ui/card";
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-  ComboboxTrigger,
-} from "#/components/ui/combobox";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  CommandSeparator,
-  CommandShortcut,
-} from "#/components/ui/command";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "#/components/ui/dialog";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from "#/components/ui/input-group";
-import { Input } from "#/components/ui/input";
-import { Label } from "#/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "#/components/ui/select";
-import { Chip } from "#/components/ui/chip";
-import { PickList } from "#/components/ui/pick-list";
-import { Switcher } from "#/components/ui/switcher";
-import { Verb } from "#/components/ui/verb";
-import { SidePane } from "#/components/ui/side-pane";
-import { ValueDiff } from "#/components/ui/value-diff";
-import { Switch } from "#/components/ui/switch";
-import { Textarea } from "#/components/ui/textarea";
-import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
-import { GroundedDocView } from "#/grounded-doc/GroundedDocView";
-import { useGroundedDoc } from "#/grounded-doc/engine";
-import { SAMPLE_DOC } from "#/grounded-doc/sample";
-import type { Mode } from "#/workbench/depth";
-import { PROSE_CLASS } from "#/workbench/prose";
-import "#/workbench/lens.css";
+import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { CellStateKey } from "#/components/lang/cell-key";
+import { StateCell } from "#/components/lang/cell";
+import { FactChip, NarrowChip } from "#/components/lang/chip";
+import { OutcomeLine } from "#/components/lang/outcome";
+import { Verb, VerbGroup } from "#/components/lang/verb";
+import { MasterTable } from "#/components/master-table/master-table";
+import type { Column } from "#/components/master-table/model";
+import { PARAM_ROWS, ageText, cellProps, type ParamRow } from "#/design-system/fixtures";
 
 export const Route = createFileRoute("/design-system")({ component: DesignSystem });
 
-/* ────────────────────────────────────────────────────────────────────────────
-   LIVING SPEC — the drafting-table instrumentation language.
+const noop = () => {};
 
-   This route IS the reference for the visual language, kept in step with it.
-   The page runs under the `.ds-canon` scope: box-shadows suppressed in-tree and
-   `--border` re-pointed at `--line-2`, so every in-tree surface is a foreground-
-   alpha hairline that flips with the theme for free (the Hairline treatment that
-   won the 2026-07 surface POC round; see branch quarry/poc-2026-07). Portaled
-   overlays (dialog/menu/select/tooltip) render at
-   <body>, out of scope — their own ring is intentional elevation off the page.
-   ──────────────────────────────────────────────────────────────────────────── */
-const CANON_CSS = `
-.ds-canon { --border: var(--line-2); }
-.ds-canon [class*="shadow"] { box-shadow: none !important; }
-.ds-canon [data-slot="button"] { border-color: var(--line-2); }
-`;
+/* ═══ page chrome ═══════════════════════════════════════════════════════════════════════════
+   The page itself obeys the border budget it documents: sections are plain content under a
+   quiet head with a hairline under it, and NOTHING on this page is enclosed except the three
+   objects that are allowed to be — pea's card, the table, the arming strip. */
 
-/* Semantic tokens, each with the ROLE it plays in the language. */
-const SEMANTIC: readonly [string, string, string][] = [
-  ["background", "bg-background", "warm paper ground"],
-  ["foreground", "bg-foreground", "Basalt ink"],
-  ["card", "bg-card", "lifted panel surface"],
-  ["primary", "bg-primary", "PE Blue — the one action peak"],
-  ["secondary", "bg-secondary", "Mist — quiet fill"],
-  ["muted", "bg-muted", "soft paper fill"],
-  ["accent", "bg-accent", "PE Green wash — success/provenance"],
-  ["destructive", "bg-destructive", "error only"],
-  ["border", "bg-border", "hairline"],
-];
-
-/* Categorical data palette (--cat-*) with the MEANING each hue carries, not its name. */
-const CAT: readonly { v: BadgeTone; means: string }[] = [
-  { v: "blue", means: "built-in · family kind" },
-  { v: "green", means: "value · proj+shared · success" },
-  { v: "slate", means: "instance · neutral data" },
-  { v: "lichen", means: "shared · formula" },
-  { v: "clay", means: "project · warning" },
-  { v: "kiln", means: "type · not-available · muted" },
-];
-
-type BadgeTone = "blue" | "green" | "slate" | "lichen" | "clay" | "kiln";
-
-const MODELS = [
-  { id: "opus", name: "Claude Opus 4.8", hint: "anthropic" },
-  { id: "sonnet", name: "Claude Sonnet 4.6", hint: "anthropic" },
-  { id: "haiku", name: "Claude Haiku 4.5", hint: "anthropic" },
-];
-const ACCESS = [
-  { id: "read", name: "Read-only", hint: "Inspect host state, no writes" },
-  { id: "write", name: "Read/Write", hint: "Mutate Revit documents" },
-];
-const FRAMEWORKS = ["Revit", "AutoCAD", "Rhino", "Grasshopper", "Navisworks", "Forma"];
-
-/* Mock telemetry — a tool-call trace set reused across the patterns section. */
-interface Trace {
-  ts: string;
+function Section({
+  n,
+  title,
+  note,
+  children,
+}: {
+  n: string;
   title: string;
-  dur: number;
-  status: "OK" | "CACHE" | "ERR" | "RUN";
-  id: string;
+  note: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="flex flex-col gap-4">
+      <div className="flex items-baseline gap-3 border-b border-[var(--r-line)] pb-1.5">
+        <span className="tele-label text-[10px] text-[var(--r-ink-mute)]">{n}</span>
+        <span className="text-[11px] font-semibold tracking-[0.09em] uppercase">{title}</span>
+        <span className="min-w-0 flex-1 text-[11.5px] text-[var(--r-ink-2)]">{note}</span>
+      </div>
+      {children}
+    </section>
+  );
 }
-const TRACES: Trace[] = [
-  {
-    ts: "14:02:11.204",
-    title: "Read family parameters for FA-Door-Single",
-    dur: 142,
-    status: "OK",
-    id: "trc_8f2a",
-  },
-  {
-    ts: "14:02:11.361",
-    title: "Query all instances in active view",
-    dur: 88,
-    status: "CACHE",
-    id: "trc_8f2b",
-  },
-  {
-    ts: "14:02:12.009",
-    title: "List available family types (built-in)",
-    dur: 431,
-    status: "OK",
-    id: "trc_8f2c",
-  },
-  {
-    ts: "14:02:12.550",
-    title: "Run bounding-box collision pass",
-    dur: 1204,
-    status: "RUN",
-    id: "trc_8f2d",
-  },
-  {
-    ts: "14:02:13.812",
-    title: "Set Mark on 42 selected instances",
-    dur: 366,
-    status: "ERR",
-    id: "trc_8f2e",
-  },
-  {
-    ts: "14:02:17.104",
-    title: "Place 3 instances at grid intersections",
-    dur: 540,
-    status: "OK",
-    id: "trc_8f30",
-  },
-];
-const STATUS_HUE: Record<Trace["status"], string> = {
-  OK: "var(--cat-green)",
-  CACHE: "var(--cat-slate)",
-  ERR: "var(--destructive)",
-  RUN: "var(--cat-clay)",
-};
 
-/* Mock parameter rows for the dense hairline table. */
-const PARAMS: readonly {
-  name: string;
-  value: string;
-  tone: BadgeTone;
-  kind: string;
-  at: string;
-}[] = [
-  { name: "Wall Height", value: "3000 mm", tone: "slate", kind: "Instance", at: "4m ago" },
-  { name: "Fire Rating", value: "2 hr", tone: "kiln", kind: "Type", at: "4m ago" },
-  { name: "Assembly Code", value: "B2010.10", tone: "kiln", kind: "Type", at: "11m ago" },
-  { name: "Structural Usage", value: "Bearing", tone: "slate", kind: "Instance", at: "11m ago" },
-  { name: "Thermal Mass", value: "148.2 kJ/K", tone: "lichen", kind: "Calc", at: "1h ago" },
-];
+/** Spec prose on the left, the living component on the right. The scaffold's whole framing. */
+function Demo({
+  label,
+  spec,
+  consumers,
+  children,
+}: {
+  label: string;
+  spec: React.ReactNode;
+  /** Named inline, always — the index law is enforced by having to write this down. */
+  consumers: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="grid grid-cols-1 items-start gap-x-8 gap-y-3 border-b border-[var(--r-line)] py-4 last:border-b-0 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <span className="tele text-[11px] text-[var(--r-ink)]">{label}</span>
+        <p className="text-[12px] leading-relaxed text-[var(--r-ink-2)]">{spec}</p>
+        <span className="text-[10px] leading-snug text-[var(--r-ink-mute)]">
+          consumers: {consumers}
+        </span>
+      </div>
+      <div className="flex min-w-0 flex-col gap-3">{children}</div>
+    </div>
+  );
+}
 
-/* Mock stat panel (balanced budget) rows. */
-type Status = "done" | "running" | "ready" | "stale" | "failed" | "queued";
-const STAT_ROWS: { name: string; value: string; status: Status }[] = [
-  { name: "wall-basic-200", value: "1,284", status: "done" },
-  { name: "door-single-flush", value: "312", status: "running" },
-  { name: "window-fixed", value: "97", status: "ready" },
-  { name: "ceiling-compound", value: "44", status: "stale" },
-  { name: "railing-guard", value: "8", status: "failed" },
-];
-const STATUS_TONE: Record<Status, BadgeTone> = {
-  done: "green",
-  running: "blue",
-  ready: "slate",
-  stale: "kiln",
-  failed: "clay",
-  queued: "lichen",
-};
+/** A recorded gap, said out loud where a reader would otherwise think the demo was finished. */
+function GapNote({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="max-w-[86ch] border-l border-dashed border-[var(--r-line-2)] pl-2 font-[family-name:var(--font-pe-mono)] text-[10px] leading-relaxed text-[var(--r-ink-2)]">
+      <span className="text-[var(--r-caution)]">gap · </span>
+      {children}
+    </p>
+  );
+}
+
+/** The wrong way — a real component, used against its own ruling, quietly struck. */
+function CounterExample({ why, children }: { why: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1 opacity-55">
+      <div className="w-fit">{children}</div>
+      <span className="font-[family-name:var(--font-pe-mono)] text-[10px] text-[var(--r-ink-mute)]">
+        <span className="line-through">the wrong way</span> — {why}
+      </span>
+    </div>
+  );
+}
+
+/** A quiet caption under a specimen. */
+function Cap({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="font-[family-name:var(--font-pe-mono)] text-[10px] text-[var(--r-ink-2)]">
+      {children}
+    </span>
+  );
+}
+
+/* ═══ 00 · the page ═════════════════════════════════════════════════════════════════════════ */
 
 function DesignSystem() {
   return (
-    <div className="ds-canon min-h-screen">
-      <style>{CANON_CSS}</style>
-      <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur">
-        <div className="page-wrap flex items-center justify-between py-3">
-          <div className="flex items-center gap-2">
-            <span className="size-2 rounded-full bg-primary" />
+    <div className="min-h-screen bg-[var(--r-page)] text-[13px] leading-normal text-[var(--r-ink)]">
+      <header className="sticky top-0 z-20 border-b border-[var(--r-line)] bg-[var(--r-page)]/90 backdrop-blur">
+        <div className="page-wrap flex items-center justify-between py-2.5">
+          <div className="flex min-w-0 items-baseline gap-3">
             <span className="font-pe-display text-sm font-semibold tracking-tight">
-              Design System
+              Design system
             </span>
-            <span className="tele-label ml-1 text-muted-foreground">living spec</span>
-            <Link to="/" className="ml-2 text-xs text-muted-foreground">
+            <span className="tele-label text-[10px] text-[var(--r-ink-mute)]">
+              the language, catalogued
+            </span>
+            <Link to="/" className="text-[11px] text-[var(--r-nav)] hover:underline">
               ← tools
             </Link>
           </div>
@@ -253,309 +156,193 @@ function DesignSystem() {
         </div>
       </header>
 
-      <main className="page-wrap flex flex-col gap-16 py-10">
-        <Intro />
+      <main className="page-wrap flex flex-col gap-14 pt-8 pb-24">
+        <Thesis />
         <Laws />
         <Tokens />
-        <ColorRoles />
-        <Primitives />
-        <Patterns />
-        <GroundedDoc />
+        <Catalogue />
+        <RealTable />
+        <Satellites />
       </main>
     </div>
   );
 }
 
-/* ── page-shell primitives ─────────────────────────────────────────────────── */
+/* ═══ 01 · thesis ═══════════════════════════════════════════════════════════════════════════ */
 
-function Spec({
-  n,
-  title,
-  note,
-  children,
-}: {
-  n: number;
-  title: string;
-  note?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="flex flex-col gap-6">
-      <div className="flex flex-col gap-1.5 border-b border-border pb-2">
-        <div className="flex items-baseline gap-3">
-          <span className="tele-label text-muted-foreground">{String(n).padStart(2, "0")}</span>
-          <h2 className="text-[17px] font-semibold tracking-tight">{title}</h2>
-        </div>
-        {note ? <p className="max-w-[72ch] text-[13px] text-muted-foreground">{note}</p> : null}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-/** A labelled sub-block. Children control their own layout via `wrap` (default flex-wrap row). */
-function Group({
-  label,
-  children,
-  wrap = "flex flex-wrap items-center gap-3",
-}: {
-  label: string;
-  children: React.ReactNode;
-  wrap?: string;
-}) {
-  return (
-    <div className="flex flex-col gap-2.5">
-      <span className="section-label">{label}</span>
-      <div className={wrap}>{children}</div>
-    </div>
-  );
-}
-
-/* ── 00 · intro ─────────────────────────────────────────────────────────────── */
-
-function Intro() {
+function Thesis() {
   return (
     <section className="flex flex-col gap-3">
       <p className="font-pe-display text-3xl font-semibold tracking-tight">
-        Drafting-table instrumentation.
+        One cell grammar, at three scales.
       </p>
-      <p className="max-w-[70ch] text-[14px] leading-relaxed text-muted-foreground">
-        Two type families, hairline surfaces, one 2px edge, a tight density, and a color budget
-        spent only where a hue carries meaning. Mono is reserved for values the machine measured;
-        chrome stays in Open Sans. This page is the reference and is kept in step with the language
-        — every primitive below is the real <code>ui/*</code> component, rendered under the same
-        laws production runs under.
+      <p className="max-w-[74ch] text-[13.5px] leading-relaxed text-[var(--r-ink-2)]">
+        Pea proposes; you decide; the model is allowed to disagree. Every surface in pe-tools has
+        to say those three things at a glance, and the language does it with one treatment used at
+        three sizes — the value inside a table cell, the value inside pea&apos;s chat card, and the
+        whole write inside an arming strip are the same marks, scaled. Colour is spent only where
+        a hue is a meaning; type carries the rest.
+      </p>
+      <p className="max-w-[74ch] text-[12px] leading-relaxed text-[var(--r-ink-mute)]">
+        This page catalogues the components that are that language. It is a spec and a
+        demonstration at once: the prose states the ruling, the specimen beside it is the shipping
+        component obeying it. Where the component cannot obey it yet, the page says so.
       </p>
     </section>
   );
 }
 
-/* ── 01 · laws ──────────────────────────────────────────────────────────────── */
+/* ═══ 02 · laws ═════════════════════════════════════════════════════════════════════════════ */
 
-function Law({
-  name,
-  children,
-  example,
-}: {
-  name: string;
-  children: React.ReactNode;
-  example: React.ReactNode;
-}) {
-  return (
-    <div className="grid grid-cols-[128px_1fr] items-center gap-x-4 gap-y-2 border-b border-border py-3.5 last:border-b-0 sm:grid-cols-[128px_1fr_auto]">
-      <span className="tele-label" style={{ color: "var(--cat-blue)" }}>
-        {name}
+const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
+  {
+    name: "one alarm",
+    text: "--r-alarm means the model disagrees. Nothing else in the product may wear it — not an error, not a warning, not a destructive verb. A busy bridge gets caution, because a busy bridge is not the model disagreeing.",
+    demo: <StateCell value="1.75 in" agree="drift" modelValue="1.375 in" />,
+  },
+  {
+    name: "pea is never blue",
+    text: "The agent's proposals wear the agent's identity — palm green — at every scale. Blue belongs to writes that leave the page, so a blue proposal would read as already committed.",
+    demo: <StateCell value="2 hr" stage="proposed" />,
+  },
+  {
+    name: "one filled blue",
+    text: "The only filled blue in the language is the verb that writes beyond the page. Nav is the same blue as TEXT, byte-identical, and the job carries the difference so no second blue is minted.",
+    demo: (
+      <span className="flex items-center gap-2">
+        <Verb tone="commit" label="apply to Revit" icon={Upload} onClick={noop} reason="Writes 42 parameters into the live model" />
+        <Verb tone="nav" direction="out" label="open in RHVAC" onClick={noop} reason="Opens this system in RHVAC" />
       </span>
-      <p className="text-[13px] leading-relaxed text-muted-foreground">{children}</p>
-      <div className="col-span-2 flex items-center gap-2 sm:col-span-1 sm:justify-self-end">
-        {example}
+    ),
+  },
+  {
+    name: "selection is a fill",
+    text: "Selection, focus and hover buy no hue, ever. Selection is literally the fourth rung of the ground ladder (--r-select); hover is one neutral ink veil identical on every control. The law is structural, not remembered.",
+    demo: (
+      <span className="flex items-center gap-2">
+        <span className="bg-[var(--r-select)] px-2 py-1 text-[11px]">selected row</span>
+        <Verb label="hover me" onClick={noop} reason="Takes the one veil — no hue" />
+      </span>
+    ),
+  },
+  {
+    name: "bold = unsaved",
+    text: "The weight axis is reserved for your unsaved edit and spent on nothing else, anywhere. Pea's proposal does not take it: the wash already said the same thing, and spending the axis twice would leave nothing to say it with.",
+    demo: <StateCell value="36 in" stage="staged" />,
+  },
+  {
+    name: "the squiggle family",
+    text: "One decoration family carries state of the value, ranked by colour: drift ▸ stale ▸ unverified. One winner draws, the losers draw nothing. A PLAIN underline is a citation and lives on a different element, so it can never contend for the slot.",
+    demo: (
+      <span className="flex flex-wrap items-baseline gap-4">
+        <StateCell value="5.5 in" fresh="stale" />
+        <StateCell value="26 in" fresh="unverified" />
+        <StateCell value="2 hr" grounding={{ doc: "RFI-217", page: 2 }} />
+      </span>
+    ),
+  },
+  {
+    name: "the border budget",
+    text: "Plain content is never enclosed. The artifact frame is reserved for a machine-operated object that carries state — the table, pea's card, the arming strip, the sentence. A lane of plain controls or receipts sits on the page ground with nothing around it.",
+    demo: (
+      <div className="w-full max-w-sm">
+        <ArtifactFrame head={<span className="dl-tag">framed — carries state</span>}>
+          <div className="px-2.5 py-2">
+            <StateCell value="2 hr" stage="proposed" />
+          </div>
+        </ArtifactFrame>
+        <div className="pt-2">
+          <OutcomeLine kind="receipt" label="42 parameters written" says="unframed — plain content" />
+        </div>
       </div>
-    </div>
-  );
-}
+    ),
+  },
+  {
+    name: "mono means measured",
+    text: "Mono is not chrome. It marks what a machine measured: counts, hashes, timestamps, states, footlines. Type carries meaning on the same terms colour does, which is what lets the colour budget stay small.",
+    demo: <FactChip title="A machine-measured fact: the plan this write was made against.">plan a91f#c04</FactChip>,
+  },
+];
 
 function Laws() {
   return (
-    <Spec
-      n={1}
-      title="Laws"
-      note="Five rules that decide every surface. Each carries a live example rendered under the same tokens."
+    <Section
+      n="01"
+      title="the laws"
+      note="eight rules that decide every surface — each with the shipping component obeying it"
     >
-      <div className="border-t border-border">
-        <Law
-          name="radius"
-          example={
-            <div
-              className="grid size-10 place-items-center border border-border bg-muted"
-              style={{ borderRadius: "var(--radius)" }}
-            >
-              <span className="tele text-muted-foreground">2px</span>
-            </div>
-          }
-        >
-          Edges are 2px, from <code>--radius</code>. Sharp instrument corners softened one notch off
-          90°; data surfaces may drop to 0 locally. No pills, no rounded-2xl cards.
-        </Law>
-
-        <Law
-          name="hairline"
-          example={
-            <div className="flex flex-col overflow-hidden rounded-[var(--radius)] border border-border">
-              <span className="border-b border-border bg-card px-3 py-1 text-[11px]">surface</span>
-              <span className="bg-card px-3 py-1 text-[11px] text-muted-foreground">divider</span>
-            </div>
-          }
-        >
-          Surfaces are drawn with 1px <code>--line</code> / <code>--line-2</code> borders, never
-          shadows. Hairlines are foreground-alpha, so they flip with the theme on their own.
-        </Law>
-
-        <Law
-          name="mono = measured"
-          example={
-            <div className="flex items-baseline gap-3 rounded-[var(--radius)] border border-border bg-card px-3 py-1.5">
-              <span className="text-[12px]">Duration</span>
-              <span className="tele" style={{ color: "var(--cat-green)" }}>
-                142ms
-              </span>
-            </div>
-          }
-        >
-          Mono means the machine measured this — states, stats, counts, ids, timestamps in the{" "}
-          <code>tele</code> tiers. Labels and prose stay sans; mono is never chrome.
-        </Law>
-
-        <Law
-          name="density"
-          example={
-            <div className="w-44 rounded-[var(--radius)] border border-border bg-card">
-              {["door-single", "window-fixed"].map((r) => (
-                <div
-                  key={r}
-                  className="flex items-baseline justify-between border-b border-border px-2.5 py-1.5 last:border-b-0"
-                >
-                  <span className="text-[12px] font-medium">{r}</span>
-                  <span className="tele-label text-muted-foreground">OK</span>
-                </div>
-              ))}
-            </div>
-          }
-        >
-          Rows breathe at <code>py-1.5</code> with a flat hierarchy — weight and position carry
-          emphasis, size deltas stay ≤1px. Tight, scannable, no nesting theatre.
-        </Law>
-
-        <Law
-          name="color budget"
-          example={
-            <div className="flex items-center gap-2">
-              <Badge variant="green">done</Badge>
-              <Badge variant="clay">warn</Badge>
-              <Button size="sm">Run</Button>
-            </div>
-          }
-        >
-          Balanced: <code>cat-*</code> at /12 bg + /25 border + full-hue text, spent only where a
-          hue means something (provenance, severity). Exactly one PE Blue action peak per view.
-        </Law>
-      </div>
-    </Spec>
-  );
-}
-
-/* ── 02 · tokens ────────────────────────────────────────────────────────────── */
-
-function Tokens() {
-  return (
-    <Spec
-      n={2}
-      title="Tokens"
-      note="Semantic colors and the categorical data palette (styles.css → @theme inline), plus the type tiers. Colors are labelled by the role/meaning they carry, not the hue name."
-    >
-      <Group label="Semantic — role" wrap="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
-        {SEMANTIC.map(([name, bg, role]) => (
-          <div key={name} className="flex items-center gap-2.5">
-            <div className={`size-9 shrink-0 rounded-[var(--radius)] border border-border ${bg}`} />
-            <div className="min-w-0">
-              <div className="tele text-foreground">{name}</div>
-              <div className="text-[11px] leading-tight text-muted-foreground">{role}</div>
-            </div>
-          </div>
-        ))}
-      </Group>
-
-      <Group label="Data palette (--cat-*) — meaning" wrap="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        {CAT.map(({ v, means }) => (
+      <div className="border-t border-[var(--r-line)]">
+        {LAWS.map((law) => (
           <div
-            key={v}
-            className="flex items-center gap-3 rounded-[var(--radius)] border border-border bg-card px-3 py-1.5"
+            key={law.name}
+            className="grid grid-cols-1 items-start gap-x-6 gap-y-2 border-b border-[var(--r-line)] py-3.5 sm:grid-cols-[9rem_minmax(0,1fr)_minmax(0,20rem)]"
           >
-            <Badge variant={v}>{v}</Badge>
-            <span className="text-[12px] text-muted-foreground">{means}</span>
+            <span className="tele-label text-[10px] text-[var(--r-ink)]">{law.name}</span>
+            <p className="text-[12px] leading-relaxed text-[var(--r-ink-2)]">{law.text}</p>
+            <div className="flex flex-wrap items-center gap-2 sm:justify-self-end">{law.demo}</div>
           </div>
         ))}
-      </Group>
-
-      <Group label="Provenance tints" wrap="flex flex-wrap gap-3">
-        <div
-          className="flex items-center gap-2 rounded-[var(--radius)] border px-3 py-1.5 text-[12px]"
-          style={{ backgroundColor: "var(--user-tint)", borderColor: "var(--user-line)" }}
-        >
-          <GitFork size={13} className="opacity-50" />
-          <span className="tele-label">you</span>
-          <span className="text-muted-foreground">— --user (slate/kiln)</span>
-        </div>
-        <div
-          className="flex items-center gap-2 rounded-[var(--radius)] border px-3 py-1.5 text-[12px]"
-          style={{ backgroundColor: "var(--pea-tint)", borderColor: "var(--pea-line)" }}
-        >
-          <span className="tele-label" style={{ color: "var(--pe-green)" }}>
-            pea
-          </span>
-          <span className="text-muted-foreground">— --pea (PE Green)</span>
-        </div>
-      </Group>
-
-      <Group label="Type tiers" wrap="border-t border-border">
-        <TypeSpecimen name=".display" spec="Spectral · page-title garnish only">
-          <span className="font-pe-display text-[22px] font-semibold">Family reconciliation</span>
-        </TypeSpecimen>
-        <TypeSpecimen name=".body" spec="Open Sans · working prose / UI">
-          <span className="text-[14px]">
-            Two instances carry a type-driven Mark; both were skipped.
-          </span>
-        </TypeSpecimen>
-        <TypeSpecimen name="section-label" spec="small-caps · tracked SANS · panel headers">
-          <span className="section-label">Active worksets</span>
-        </TypeSpecimen>
-        <TypeSpecimen name="tele" spec="12px mono · tracked · measured values">
-          <span className="tele">14:02:13.812 · 366ms · trc_8f2e</span>
-        </TypeSpecimen>
-        <TypeSpecimen name="tele-label" spec="11px mono · uppercase · states / statuses">
-          <span className="tele-label">cache-read · reprocessed · readonly</span>
-        </TypeSpecimen>
-      </Group>
-    </Spec>
+      </div>
+    </Section>
   );
 }
 
-function TypeSpecimen({
-  name,
-  spec,
-  children,
-}: {
-  name: string;
-  spec: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="grid grid-cols-[130px_1fr] items-baseline gap-4 border-b border-border py-3 last:border-b-0 sm:grid-cols-[130px_minmax(0,1.3fr)_minmax(0,1.4fr)]">
-      <span className="tele" style={{ color: "var(--cat-blue)" }}>
-        {name}
-      </span>
-      <span className="text-[12px] text-muted-foreground">{spec}</span>
-      <span className="col-span-2 sm:col-span-1">{children}</span>
-    </div>
-  );
+/* ═══ 03 · tokens ═══════════════════════════════════════════════════════════════════════════ */
+
+interface TokenSpec {
+  token: string;
+  means: string;
+  /** How the two sibling renderings differ — this is the pairing table's payload, in one line. */
+  modes: string;
 }
 
-/* ── 03 · color roles ───────────────────────────────────────────────────────── */
-
-/* The state vocabulary, as it is DECLARED in styles.css: role → the palette var it aliases → what
-   the fact is. The resolved value is read back off :root at render, so re-pointing an alias shows
-   up here without this list being touched — the page reports the contract, it does not restate it. */
-const ST_ROLES: readonly { token: string; alias: string; means: string }[] = [
-  { token: "--st-proposal", alias: "--pe-green", means: "pea's voice — proposals, agent marks" },
-  { token: "--st-drift", alias: "--cat-clay", means: "the model disagrees — the only alarm" },
-  { token: "--st-warn", alias: "--kiln", means: "stale · unsaved · unverified" },
-  { token: "--st-derived", alias: "--lichen", means: "formula-driven, computed" },
-  { token: "--st-done", alias: "--cat-green", means: "landed, receipted, settled" },
-  { token: "--st-meta", alias: "--slate", means: "neutral machine-measured fact" },
-  { token: "--st-ground", alias: "--line-2", means: "grounding citation — spends no colour" },
+const TOKEN_GROUPS: readonly { group: string; asks: string; tokens: readonly TokenSpec[] }[] = [
+  {
+    group: "grounds",
+    asks: "what surface is this sitting on?",
+    tokens: [
+      { token: "--r-page", means: "the page itself; prose and page chrome", modes: "L .985 ↔ .185 — one hue (88°) in both modes" },
+      { token: "--r-artifact", means: "the machine-operated object: table, card, strip", modes: "one lightness step off the page, both modes" },
+      { token: "--r-recess", means: "set INTO an artifact: head/foot bands, the key", modes: "same step size again — the ladder is even" },
+      { token: "--r-select", means: "selection + focus fill. never a hue", modes: "rung 4; the no-hue law made structural" },
+    ],
+  },
+  {
+    group: "inks",
+    asks: "how loud is this text allowed to be?",
+    tokens: [
+      { token: "--r-ink", means: "primary text: values, labels, prose", modes: "inverted pair on the ground's own hue" },
+      { token: "--r-ink-2", means: "annotations, footlines, captions, counts", modes: "light value sits AT the meaning band's lightness" },
+      { token: "--r-ink-mute", means: "locked · dropped · the 'never checked' squiggle", modes: "near-achromatic; ~0 drift and ~0 ΔL across modes" },
+    ],
+  },
+  {
+    group: "hairlines",
+    asks: "is this a seam, or a box?",
+    tokens: [
+      { token: "--r-line", means: "quiet: row rules, the artifact frame's inset edge", modes: "ink @12% ↔ @14% — derived, so it rides the hue free" },
+      { token: "--r-line-2", means: "firm: seams, citation underline, chip edge, focus", modes: "ink @22% ↔ @26%" },
+    ],
+  },
+  {
+    group: "meanings",
+    asks: "what fact is this hue standing for?",
+    tokens: [
+      { token: "--r-pea", means: "pea's MARK: proposal ring, corner fold, card edge", modes: "the display rung — band lightness stepped 0.08 toward its ground" },
+      { token: "--r-pea-ink", means: "pea at ink weight: pea's text, the wash source", modes: "on-band, both modes; h158 unmoved" },
+      { token: "--r-alarm", means: "THE one alarm: drift, refusal, the ghost value", modes: "the one legislated off-band token (+35% chroma), both modes" },
+      { token: "--r-caution", means: "stale · unverified · unsaved · partial · error", modes: "on-band; 2.8× the incumbent kiln's chroma" },
+      { token: "--r-done", means: "it landed: receipts, the post-commit sentence", modes: "on-band; 25° from pea — adjacent, not equal" },
+      { token: "--r-commit", means: "the only filled blue: writes beyond the page", modes: "PE blue's exact hue, band-quantized" },
+      { token: "--r-on-commit", means: "text/icon sitting on a commit fill", modes: "= --r-page. no pure white or black exists in the set" },
+      { token: "--r-nav", means: "nav as blue TEXT — back · forward · out", modes: "byte-identical to commit; the job carries the difference" },
+    ],
+  },
 ];
 
-/** Read the role tokens off :root, and re-read them when the theme flips. */
-function useRoleValues(tokens: readonly string[]): Record<string, string> {
+/** Read the live values off :root, and re-read when the theme class flips. The page reports the
+ *  contract rather than restating it — re-pitching a token shows up here untouched. */
+function useTokenValues(tokens: readonly string[]): Record<string, string> {
   const [values, setValues] = useState<Record<string, string>>({});
   useEffect(() => {
     const read = () => {
@@ -566,1043 +353,703 @@ function useRoleValues(tokens: readonly string[]): Record<string, string> {
     const observer = new MutationObserver(read);
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
     return () => observer.disconnect();
+    // token list is a module constant; re-reading on theme flips is the only dependency
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return values;
 }
 
-function ColorRoles() {
-  const [overlay, setOverlay] = useState("draft");
-  const [said, setSaid] = useState<string | null>(null);
-  const values = useRoleValues([...ST_ROLES.map((r) => r.token), "--act-commit", "--act-hover"]);
+function Tokens() {
+  const all = useMemo(() => TOKEN_GROUPS.flatMap((g) => g.tokens.map((t) => t.token)), []);
+  const values = useTokenValues(all);
 
   return (
-    <Spec
-      n={3}
-      title="Color roles"
-      note="The layer between the palette and the surface (docs/design/COLOR-ROLES.md). Two vocabularies, never mixed: --act-* is what pressing DOES, --st-* is what a fact IS. A hue serves one of them only. Components consume roles; raw --pe-blue / --cat-* outside ui/* and the two visual canvases is a review finding."
+    <Section
+      n="02"
+      title="tokens"
+      note="eighteen, and every one of them is oklch(L C h) off a declared band — src/design-lang.css is the one place a colour is decided"
     >
-      <Group label="Interaction roles — live components" wrap="flex flex-col gap-0 border-t border-border">
-        <RoleRow
-          name="commit"
-          rule="Writes beyond the page: save, apply, materialize. The ONLY interactive blue on any surface, and there is at most one per view."
-          example={
-            <Verb
-              label="save profile"
-              tone="commit"
-              onClick={() => setSaid("commit — the write crossed out of the page")}
-              reason="Write the document back to disk. Commit tone is reserved for exactly this: a change that outlives the page."
-            />
-          }
-        />
-        <RoleRow
-          name="act (default)"
-          rule="Safe, page-scoped verb — parse, capture, accept, collapse. Neutral border; hover strengthens to --act-hover and never turns blue."
-          example={
-            <Verb
-              label="parse"
-              onClick={() => setSaid("act — page-local, nothing left the page")}
-              reason="Re-read the source document and rebuild its blocks. Nothing is written anywhere; the page-local state changes and that is all."
-            />
-          }
-        />
-        <RoleRow
-          name="nav"
-          rule="Goes somewhere, or back. Text with an underline affordance and no border — leaving is not an operation on the data."
-          example={
-            <Verb
-              label="← all types"
-              tone="nav"
-              onClick={() => setSaid("nav — you moved, the data did not")}
-              reason="Return to the cross-type table. Nothing is decided by leaving."
-            />
-          }
-        />
-        <RoleRow
-          name="mode"
-          rule="Exclusive view switch. The standing choice is a FILLED mist — selection is a place you stand, not a state of the data, so it spends nothing from the state palette."
-          example={
-            <Switcher
-              ariaLabel="overlay"
-              value={overlay}
-              onChange={setOverlay}
-              options={[
-                { value: "draft", label: "draft", title: "The staged document, editable." },
-                { value: "live", label: "⇄ live", title: "What the model carries, read-only." },
-                { value: "saved", label: "⇄ saved", title: "What is on disk, read-only." },
-              ]}
-            />
-          }
-        />
-        <RoleRow
-          name="chip"
-          rule="A machine-measured fact wearing exactly one state role. `dashed` means SEAM — typed but unproven, a fixture, a stand-in — and that border style is reserved for it."
-          example={
+      <p className="max-w-[80ch] text-[12px] leading-relaxed text-[var(--r-ink-2)]">
+        <code className="font-[family-name:var(--font-pe-mono)] text-[11px]">--r-*</code> is canon.
+        The old <code className="font-[family-name:var(--font-pe-mono)] text-[11px]">--act-*</code>{" "}
+        / <code className="font-[family-name:var(--font-pe-mono)] text-[11px]">--st-*</code> /{" "}
+        <code className="font-[family-name:var(--font-pe-mono)] text-[11px]">--cat-*</code> role
+        vocabulary in <code className="font-[family-name:var(--font-pe-mono)] text-[11px]">styles.css</code>{" "}
+        is superseded but still live: every unmigrated route still runs on it, and the two coexist
+        until the per-route crusade lands the last one. Swatches below are read off{" "}
+        <code className="font-[family-name:var(--font-pe-mono)] text-[11px]">:root</code> at render
+        and re-read when you flip the theme — this table cannot drift from the stylesheet.
+      </p>
+
+      {TOKEN_GROUPS.map((g) => (
+        <div key={g.group} className="flex flex-col gap-1.5">
+          <div className="flex items-baseline gap-3 border-b border-[var(--r-line)] pb-1">
+            <span className="tele-label text-[10px] text-[var(--r-ink)]">{g.group}</span>
+            <span className="text-[10.5px] text-[var(--r-ink-mute)] italic">{g.asks}</span>
+          </div>
+          {g.tokens.map((t) => (
+            <div
+              key={t.token}
+              className="grid grid-cols-[2.25rem_minmax(0,10rem)_minmax(0,1fr)] items-center gap-x-3 gap-y-1 py-1 sm:grid-cols-[2.25rem_minmax(0,10rem)_minmax(0,1fr)_minmax(0,20rem)]"
+            >
+              <span
+                className="h-5 w-9 shrink-0 border border-[var(--r-line-2)]"
+                style={{ background: `var(${t.token})` }}
+                title={values[t.token] ?? t.token}
+              />
+              <span className="tele truncate text-[10.5px]">{t.token}</span>
+              <span className="min-w-0 text-[11.5px] text-[var(--r-ink-2)]">{t.means}</span>
+              <span className="col-span-3 text-[10px] text-[var(--r-ink-mute)] sm:col-span-1">
+                {t.modes}
+              </span>
+            </div>
+          ))}
+        </div>
+      ))}
+
+      <GapNote>
+        the swatch reads a resolved value for every token except the two hairlines, which are
+        declared as <code>color-mix()</code> and read back unresolved. Nothing is wrong with the
+        colour; the ledger of computed contrast lives in the header of{" "}
+        <code>src/design-lang.css</code> because no component can compute it.
+      </GapNote>
+    </Section>
+  );
+}
+
+/* ═══ 04 · the catalogue ════════════════════════════════════════════════════════════════════ */
+
+function Catalogue() {
+  return (
+    <Section
+      n="03"
+      title="the catalogue"
+      note="one block per components/lang primitive — the shipping component, the states that matter, and who consumes it"
+    >
+      <ArtifactFrameBlock />
+      <VerbBlock />
+      <ChipBlock />
+      <StateCellBlock />
+      <CellKeyBlock />
+      <OutcomeBlock />
+      <ArmingBlock />
+    </Section>
+  );
+}
+
+function ArtifactFrameBlock() {
+  return (
+    <Demo
+      label="ArtifactFrame"
+      consumers="the master-table wrapper (§04 below); pea's chat proposal card (/design-system/proposal-flow); ArmingStrip, which draws its own; soon: the addressing sentence"
+      spec={
+        <>
+          The language&apos;s one enclosure: a ground shift plus a quiet inset hairline. No radius,
+          no shadow — round 1 ruled that fills separate and outline borders do not. Optional
+          recessed head and foot bands re-declare{" "}
+          <code className="font-[family-name:var(--font-pe-mono)] text-[11px]">--r-on</code>, so
+          every wash a child mixes lands on the ground it is actually standing on.
+        </>
+      }
+    >
+      <div className="max-w-md">
+        <ArtifactFrame
+          head={
             <>
-              <Chip title="A neutral measured fact: how long ago the model was read.">
-                read 4m ago
-              </Chip>
-              <Chip tone="warn" title="The document has changes that are not on disk.">
-                unsaved draft
-              </Chip>
-              <Chip dashed title="A fixture seam — this surface runs on mock data, not a host.">
-                prototype
-              </Chip>
+              <span className="dl-tag">overhead coiling door 421</span>
+              <FactChip title="Rows currently in scope.">13 params</FactChip>
+              <FactChip dashed title="Fixture data — no host, no document, no element behind it.">
+                fixture
+              </FactChip>
             </>
           }
-        />
-        <div className="flex items-baseline gap-3 py-2">
-          <span className="tele-label text-muted-foreground">receipt</span>
-          <span className="tele text-[12px] text-muted-foreground">
-            {said ?? "press one — every verb above is the real ui/verb.tsx"}
-          </span>
-        </div>
-      </Group>
-
-      <Group label="State roles — token · alias · meaning" wrap="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        {ST_ROLES.map(({ token, alias, means }) => (
-          <div
-            key={token}
-            className="flex items-center gap-3 rounded-[var(--radius)] border border-border bg-card px-3 py-1.5"
-            title={`${token} is declared in styles.css as var(${alias}). Re-point that one line and every surface follows — this card reads the resolved value back off :root, so it cannot drift from the contract.`}
-          >
-            <span
-              className="size-6 shrink-0 rounded-[var(--radius)] border border-border"
-              style={{ backgroundColor: `var(${token})` }}
-            />
-            <div className="min-w-0 flex-1">
-              <div className="tele text-foreground">{token}</div>
-              <div className="text-[11px] leading-tight text-muted-foreground">{means}</div>
-            </div>
-            <div className="w-[104px] shrink-0 text-right">
-              <div className="tele text-[11px] text-muted-foreground">{alias}</div>
-              <div className="tele truncate text-[11px] text-muted-foreground/70">
-                {values[token] || "…"}
-              </div>
-            </div>
-          </div>
-        ))}
-      </Group>
-
-      <Group
-        label="Shape law — position first, colour second"
-        wrap="flex flex-col gap-3 sm:flex-row sm:items-start"
-      >
-        <div className="w-fit rounded-[var(--radius)] border border-border bg-card">
-          <div className="tele-label border-b border-border px-2 py-1 text-muted-foreground">
-            Body Width
-          </div>
-          <div className="flex">
-            <MarkCell
-              value="24in"
-              proposal
-              unsaved
-              caption="proposal + unsaved"
-              title="Corner triangle = a proposal lands on this cell (--st-proposal). The bottom-left dot = saving would write here (--st-warn). Diagonally opposite on purpose: the two marks can never collide or be read as one."
-            />
-            <MarkCell
-              value="18in"
-              ground
-              caption="grounded"
-              title="Dotted underline in --st-ground = this number carries a citation. Deliberately colourless: where a number came from is not a state of the model."
-            />
-            <MarkCell
-              value="30in"
-              drift
-              caption="drift"
-              title="The same underline slot in --st-drift = the model disagrees here. Clay outranks grounding: a cell that is both is more urgently the first."
-            />
-          </div>
-        </div>
-        <p className="max-w-[46ch] text-[12px] leading-relaxed text-muted-foreground">
-          A mark is legible by position and shape before colour — corner triangle = proposal,
-          bottom-left dot = unsaved, dotted underline = grounding (neutral) or drift (clay wins the
-          slot), rail dot = locator. A mark never changes corner or shape between surfaces, so the
-          colour budget stays small and the page survives colour-blind reading.
-        </p>
-      </Group>
-
-      <Group label="Counter-examples — what these roles are NOT" wrap="grid gap-3 sm:grid-cols-2">
-        <div className="flex flex-col gap-2 rounded-[var(--radius)] border border-dashed border-border p-3">
-          <div className="flex items-center gap-2">
-            <span className="tele-label text-muted-foreground">not commit</span>
-            <Verb
-              label="capture ←"
-              onClick={() => setSaid("still act — capture only moves numbers into the draft")}
-              reason="Pull the model's numbers into the staged document. Nothing is written outside the page, so it is an act — and it stays neutral no matter how consequential it feels."
-            />
-          </div>
-          <p className="text-[12px] leading-snug text-muted-foreground">
-            Big, bulk, and scary is not the test. Commit means the write outlives the page — capture
-            only fills the draft, so blue here would spend the one action peak on a no-op.
-          </p>
-        </div>
-        <div className="flex flex-col gap-2 rounded-[var(--radius)] border border-dashed border-border p-3">
-          <div className="flex items-center gap-2">
-            <span className="tele-label text-muted-foreground">not drift</span>
-            <Chip tone="warn" title="Stale: the last read is old, so every live claim is weaker.">
-              read 41m ago
-            </Chip>
-          </div>
-          <p className="text-[12px] leading-snug text-muted-foreground">
-            Stale, unsaved, and unverified are <em>warnings</em> (--st-warn). Clay is the only alarm
-            and means exactly one thing: the model and the document disagree. Wearing it for
-            anything else retires it.
-          </p>
-        </div>
-      </Group>
-    </Spec>
-  );
-}
-
-function RoleRow({
-  name,
-  rule,
-  example,
-}: {
-  name: string;
-  rule: string;
-  example: React.ReactNode;
-}) {
-  return (
-    <div className="grid grid-cols-[110px_1fr] items-center gap-x-4 gap-y-2 border-b border-border py-3 last:border-b-0 sm:grid-cols-[110px_1fr_auto]">
-      <span className="tele-label" style={{ color: "var(--cat-blue)" }}>
-        {name}
-      </span>
-      <p className="text-[13px] leading-relaxed text-muted-foreground">{rule}</p>
-      <div className="col-span-2 flex items-center gap-2 sm:col-span-1 sm:justify-self-end">
-        {example}
-      </div>
-    </div>
-  );
-}
-
-/** One mock value cell carrying the marks in their canonical positions. */
-function MarkCell({
-  value,
-  caption,
-  title,
-  proposal,
-  unsaved,
-  ground,
-  drift,
-}: {
-  value: string;
-  caption: string;
-  title: string;
-  proposal?: boolean;
-  unsaved?: boolean;
-  ground?: boolean;
-  drift?: boolean;
-}) {
-  return (
-    <div className="flex w-28 flex-col border-r border-border last:border-r-0">
-      <span className="relative flex h-7 items-center px-2" title={title}>
-        <span
-          className={
-            drift
-              ? "tele text-[12px] underline decoration-[var(--st-drift)] decoration-dotted underline-offset-[3px]"
-              : ground
-                ? "tele text-[12px] underline decoration-[var(--st-ground)] decoration-dotted underline-offset-[3px]"
-                : "tele text-[12px]"
+          foot={
+            <>
+              <span className="dl-tag">2 unsaved</span>
+              <Verb tone="commit" label="save profile" icon={Save} onClick={noop} reason="Writes both staged values into the family profile" />
+            </>
           }
-          style={proposal ? { color: "var(--st-proposal)" } : undefined}
         >
-          {value}
+          <div className="flex flex-col gap-2 px-2.5 py-2.5">
+            <StateCell value="2 hr" stage="proposed" note="matches the UL listing" />
+            <StateCell value="36 in" stage="staged" />
+          </div>
+        </ArtifactFrame>
+      </div>
+
+      <CounterExample why="an outcomes lane reports on a machine-operated object; it is not one. Framing plain content makes the four real frames read as less special.">
+        <ArtifactFrame>
+          <div className="px-2.5 py-1.5">
+            <OutcomeLine kind="receipt" label="42 parameters written" says="it landed" />
+          </div>
+        </ArtifactFrame>
+      </CounterExample>
+
+      <GapNote>
+        the frame has a head slot, a foot slot and one undifferentiated children slot. A block that
+        must sit last inside the frame — the cell-state key in §04 — gets there only because the
+        author wrote it last, which the type cannot enforce. The foot band is a flex control bar
+        and cannot hold a full-width block at all.
+      </GapNote>
+    </Demo>
+  );
+}
+
+function VerbBlock() {
+  return (
+    <Demo
+      label="Verb · VerbGroup"
+      consumers="ArmingStrip (shipping); pea's card accept/deny (/design-system/proposal-flow); soon: the family clean-room verb lane, the takeoff panes. components/ui/verb.tsx still serves the unmigrated routes — SHIMS entry 1"
+      spec={
+        <>
+          Four tones, and the tones are the whole colour story: <em>act</em> is neutral,{" "}
+          <em>agent</em> is pea&apos;s own (the slot COLOR-ROLES Law 0 never had, which made
+          pea&apos;s own verb illegal), <em>commit</em> is the one filled blue, <em>nav</em> is blue
+          text with a required direction. Blast radius groups the lane and buys no hue. A refusal
+          states its reason on the surface — never in a title a newcomer has to find.
+        </>
+      }
+    >
+      <div className="flex flex-wrap gap-x-10 gap-y-5">
+        <VerbGroup title="stays here" radius="page · document">
+          <Verb label="collapse" icon={ChevronsDownUp} onClick={noop} reason="Folds every group in this pane" />
+          <Verb label="refresh" icon={RefreshCw} onClick={noop} reason="Re-reads the model" />
+          <Verb tone="agent" label="ask pea" icon={Sparkles} onClick={noop} reason="Hands this scope to pea" />
+        </VerbGroup>
+
+        <VerbGroup title="goes somewhere" radius="nav splits three ways">
+          <Verb tone="nav" direction="back" label="all types" onClick={noop} reason="Back to the type list" />
+          <Verb tone="nav" direction="forward" label="open family" onClick={noop} reason="Into this family" />
+          <Verb tone="nav" direction="out" label="open in RHVAC" onClick={noop} reason="Leaves pe-tools" />
+        </VerbGroup>
+
+        <VerbGroup title="writes beyond the page" radius="document · model · external">
+          <Verb tone="commit" label="save profile" icon={Save} onClick={noop} reason="Writes to the family profile" />
+          <Verb tone="commit" label="apply to Revit" icon={Upload} onClick={noop} reason="Writes 42 parameters into the live model" />
+          <Verb tone="commit" label="sync to .r10" icon={Share2} onClick={noop} disabled reason="no .r10 target bound — bind one in the sentence first" />
+          <Verb tone="commit" label="applying" icon={Upload} busy onClick={noop} reason="In flight" />
+        </VerbGroup>
+      </div>
+
+      <Cap>
+        left to right: the refused verb keeps a shape, an edge and its reason; the busy verb is
+        inert but says nothing about refusal — &ldquo;in flight&rdquo; is not a no.
+      </Cap>
+
+      <CounterExample why="all three writes wear the same blue however far they reach. Tinting by blast radius mints hues the reader must learn, and the group head already said it.">
+        <span className="flex items-center gap-2">
+          <Verb tone="commit" label="save profile" icon={Save} onClick={noop} reason="document" />
+          <span className="dl-tag">…would need a second blue for model, a third for external</span>
         </span>
-        {unsaved && (
-          <span
-            aria-hidden
-            className="absolute bottom-px left-px size-1 rounded-[1px] bg-[var(--st-warn)]"
-          />
-        )}
-        {proposal && (
-          <span
-            aria-hidden
-            className="absolute right-0 top-0 size-0 border-l-[7px] border-t-[7px] border-l-transparent border-t-[var(--st-proposal)]"
-          />
-        )}
-      </span>
-      <span className="border-t border-border px-2 py-1 text-[10px] text-muted-foreground">
-        {caption}
-      </span>
-    </div>
+      </CounterExample>
+
+      <GapNote>
+        <code>busy</code> and <code>disabled</code> both render inert, and a busy verb that is ALSO
+        refused cannot be expressed — the props compose but the surface has one state to show it
+        with. No ruling exists; no slot was taken.
+      </GapNote>
+    </Demo>
   );
 }
 
-/* ── 04 · primitives ────────────────────────────────────────────────────────── */
-
-function Primitives() {
+function ChipBlock() {
+  const [narrowings, setNarrowings] = useState<readonly { label: string; count: number }[]>([
+    { label: "needs a person", count: 3 },
+    { label: "type: FDCL-611", count: 1 },
+  ]);
   return (
-    <Spec
-      n={4}
-      title="Primitives"
-      note="The real ui/* components under the language. Everything clickable, every field, every overlay comes from exactly one of these."
+    <Demo
+      label="FactChip · NarrowChip"
+      consumers="FactChip — ArmingStrip's plan hash and count (shipping), every fixture seam on this route and its satellites; NarrowChip — soon, the addressing sentence's narrowing row"
+      spec={
+        <>
+          Two components, not two modes of one: round 1 proved a <em>narrowing control</em> cannot
+          be built from a <em>state fact</em>, and merging them would give the fact chip an{" "}
+          <code className="font-[family-name:var(--font-pe-mono)] text-[11px]">onRemove</code>{" "}
+          nobody fills. Tone comes from the meaning tokens and a chip may not mint a hue. The
+          dashed edge is reserved for one meaning — seam: typed but unproven.
+        </>
+      }
     >
-      <ButtonsBlock />
-      <FieldsBlock />
-      <BadgesBlock />
-      <SurfacesBlock />
-      <OverlaysBlock />
-      <CommandBlock />
-      <SidePaneBlock />
-      <PickListBlock />
-    </Spec>
-  );
-}
-
-function ButtonsBlock() {
-  const variants = ["default", "outline", "secondary", "ghost", "destructive", "link"] as const;
-  const sizes = ["xs", "sm", "default", "lg"] as const;
-  return (
-    <div className="flex flex-col gap-5">
-      <Group label="Button — variants">
-        {variants.map((v) => (
-          <Button key={v} variant={v}>
-            {v}
-          </Button>
-        ))}
-      </Group>
-      <Group label="Button — sizes">
-        {sizes.map((s) => (
-          <Button key={s} size={s}>
-            size {s}
-          </Button>
-        ))}
-      </Group>
-      <Group label="Button — icon · states · tooltip">
-        <Button size="icon" aria-label="settings">
-          <Settings2 />
-        </Button>
-        <Button size="icon-sm" variant="outline" aria-label="copy">
-          <Copy />
-        </Button>
-        <Button>
-          <Sparkles /> with icon
-        </Button>
-        <Button disabled>disabled</Button>
-        <Button
-          variant="outline"
-          title="teach-tooltips ride the native title attribute — the app's one tooltip idiom"
-        >
-          hover me
-        </Button>
-      </Group>
-    </div>
-  );
-}
-
-function FieldsBlock() {
-  const [scope, setScope] = useState("all");
-  const [on, setOn] = useState(true);
-  return (
-    <div className="grid gap-6 sm:grid-cols-2">
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="ds-input">Input</Label>
-        <Input id="ds-input" placeholder="Type something…" />
-      </div>
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="ds-invalid">Input (invalid)</Label>
-        <Input id="ds-invalid" aria-invalid defaultValue="bad value" />
+      <div className="flex flex-wrap items-center gap-2">
+        <FactChip title="Neutral machine-measured fact. Most chips are this.">plan a91f#c04</FactChip>
+        <FactChip tone="pea" title="Pea's own count of what it is proposing.">2 proposed</FactChip>
+        <FactChip tone="caution" title="Unsaved work that will be lost if you leave.">2 unsaved</FactChip>
+        <FactChip tone="done" title="Written and receipted.">42 written</FactChip>
+        <FactChip tone="alarm" title="The model disagrees with 1 value on screen.">1 drift</FactChip>
+        <FactChip dashed title="Fixture data — no host, no document, no element behind it.">fixture</FactChip>
       </div>
 
-      <div className="flex flex-col gap-2 sm:col-span-2">
-        <Label htmlFor="ds-textarea">Textarea</Label>
-        <Textarea id="ds-textarea" placeholder="Multi-line input…" />
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="ds-ig">Input group (addon + inline button)</Label>
-        <InputGroup>
-          <InputGroupAddon>
-            <Search />
-          </InputGroupAddon>
-          <InputGroupInput id="ds-ig" placeholder="Search families…" />
-          <InputGroupAddon align="inline-end">
-            <InputGroupButton>Clear</InputGroupButton>
-          </InputGroupAddon>
-        </InputGroup>
-      </div>
-
-      <div className="flex items-center gap-3 self-end">
-        <Switch checked={on} onCheckedChange={setOn} id="ds-switch" />
-        <Label htmlFor="ds-switch">Switch ({on ? "on" : "off"})</Label>
-        <Switch size="sm" defaultChecked />
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <Label>Select</Label>
-        <Select value={scope} onValueChange={(v: string | null) => v && setScope(v)}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All loaded</SelectItem>
-            <SelectItem value="placed">Placed only</SelectItem>
-            <SelectItem value="unplaced">Unplaced only</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <Label>Combobox (searchable)</Label>
-        <Combobox items={FRAMEWORKS}>
-          <ComboboxInput placeholder="Search a host…" className="w-[240px]" />
-          <ComboboxContent>
-            <ComboboxEmpty>No matches</ComboboxEmpty>
-            <ComboboxList>
-              {(item: string) => (
-                <ComboboxItem key={item} value={item}>
-                  {item}
-                </ComboboxItem>
-              )}
-            </ComboboxList>
-          </ComboboxContent>
-        </Combobox>
-      </div>
-    </div>
-  );
-}
-
-function BadgesBlock() {
-  return (
-    <div className="flex flex-col gap-5">
-      <Group label="Badge — semantic">
-        <Badge>default</Badge>
-        <Badge variant="secondary">secondary</Badge>
-        <Badge variant="outline">outline</Badge>
-        <Badge variant="destructive">destructive</Badge>
-      </Group>
-      <Group label="Badge — data palette (--cat-*)">
-        {CAT.map(({ v }) => (
-          <Badge key={v} variant={v}>
-            {v}
-          </Badge>
-        ))}
-      </Group>
-    </div>
-  );
-}
-
-function SurfacesBlock() {
-  const [view, setView] = useState("clustered");
-  return (
-    <div className="flex flex-col gap-5">
-      <Group label="ToggleGroup — segmented control">
-        <ToggleGroup value={view} onValueChange={setView}>
-          <ToggleGroupItem value="clustered">Clustered</ToggleGroupItem>
-          <ToggleGroupItem value="alpha">Alphabetical</ToggleGroupItem>
-          <ToggleGroupItem value="grouped">Grouped</ToggleGroupItem>
-        </ToggleGroup>
-      </Group>
-      <Group label="Card — panel" wrap="grid gap-4 sm:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <div className="space-y-1">
-              <CardTitle>Selection</CardTitle>
-              <CardDescription>3 walls · Level 2 · Curtain Wall</CardDescription>
-            </div>
-            <CardAction>
-              <Button variant="outline" size="sm">
-                <RefreshCw /> Refresh
-              </Button>
-            </CardAction>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">
-              Header, description, action, and content on one hairline surface.
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Confirm</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">Body content sits here.</p>
-          </CardContent>
-          <CardFooter className="justify-end">
-            <Button variant="outline" size="sm">
-              Cancel
-            </Button>
-            <Button size="sm">Save</Button>
-          </CardFooter>
-        </Card>
-      </Group>
-    </div>
-  );
-}
-
-function OverlaysBlock() {
-  return (
-    <Group label="Overlays — Dialog">
-      <Dialog>
-        <DialogTrigger render={<Button variant="outline" />}>Open dialog</DialogTrigger>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Discard changes?</DialogTitle>
-            <DialogDescription>This can't be undone. Your draft will be lost.</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
-            <DialogClose render={<Button variant="destructive" />}>Discard</DialogClose>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </Group>
-  );
-}
-
-function CommandBlock() {
-  return (
-    <Group label="Command — searchable palette (inline)" wrap="block">
-      <div className="max-w-md overflow-hidden rounded-[var(--radius)] border border-border bg-card">
-        <Command>
-          <CommandInput placeholder="Type a command or search…" />
-          <CommandList>
-            <CommandEmpty>No results.</CommandEmpty>
-            <CommandGroup heading="Actions">
-              <CommandItem>
-                <RefreshCw /> Refresh host state
-                <CommandShortcut>⌘R</CommandShortcut>
-              </CommandItem>
-              <CommandItem>
-                <Sparkles /> Reconcile family types
-                <CommandShortcut>⌘K</CommandShortcut>
-              </CommandItem>
-            </CommandGroup>
-            <CommandSeparator />
-            <CommandGroup heading="Navigate">
-              <CommandItem>
-                <ChevronRight /> Open family matrix
-              </CommandItem>
-              <CommandItem>
-                <ChevronRight /> Open schedule grid
-              </CommandItem>
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </div>
-    </Group>
-  );
-}
-
-function SidePaneBlock() {
-  const [open, setOpen] = useState(true);
-  return (
-    <Group label="SidePane — flanking pane (inline demo frame)" wrap="block">
-      <div className="flex h-64 overflow-hidden rounded-[var(--radius)] border border-border">
-        <SidePane
-          side="left"
-          storageKey="ds.sidepane"
-          open={open}
-          onOpenChange={setOpen}
-          defaultWidth={220}
-          minWidth={180}
-          header={<span className="text-sm font-semibold">Threads</span>}
-        >
-          <ul className="p-1.5">
-            {[
-              "Ductwork clash sweep",
-              "Level 3 core walls",
-              "Curtain wall mullions",
-              "Slab edge audit",
-            ].map((t, i) => (
-              <li key={t}>
-                <button
-                  type="button"
-                  data-active={i === 0}
-                  className="w-full rounded-[var(--radius)] px-2.5 py-1.5 text-left hover:bg-[var(--paper-2)] data-[active=true]:bg-[var(--paper-2)]"
-                >
-                  <div className="truncate text-[13px] font-medium">{t}</div>
-                  <div className="tele-label text-muted-foreground">{(i + 1) * 3}m ago</div>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </SidePane>
-        <section className="min-w-0 flex-1 overflow-y-auto p-5">
-          <p className="max-w-prose text-[13px] leading-relaxed text-muted-foreground">
-            The pane owns its width (drag the inner edge) and persists it. Collapse it with the
-            chevron and it stays a live rail instead of vanishing — the workbench's one flanking
-            primitive. Toggle:
-          </p>
-          <Button size="sm" variant="outline" className="mt-3" onClick={() => setOpen((v) => !v)}>
-            {open ? "Collapse" : "Expand"} left
-          </Button>
-        </section>
-      </div>
-    </Group>
-  );
-}
-
-function PickListBlock() {
-  const [picked, setPicked] = useState("42");
-  return (
-    <Group label="PickList — choose one from many (rail body)" wrap="block">
-      <div className="flex h-64 overflow-hidden rounded-[var(--radius)] border border-border">
-        <div className="w-60 border-r border-border">
-          <PickList
-            items={[
-              { id: "42", label: "Pump Schedule", group: "Mechanical Equipment", meta: 12 },
-              { id: "43", label: "Fan Schedule", group: "Mechanical Equipment", meta: 8 },
-              { id: "44", label: "Boiler Schedule", group: "Mechanical Equipment" },
-              {
-                id: "51",
-                label: "Plumbing Fixture Schedule",
-                group: "Plumbing Fixtures",
-                meta: 31,
-              },
-              { id: "52", label: "Water Supply Fixture Units (WSFU)", group: "Plumbing Fixtures" },
-              {
-                id: "61",
-                label: "Lighting Fixture Schedule",
-                group: "Lighting Fixtures",
-                meta: 24,
-              },
-            ]}
-            activeId={picked}
-            onPick={setPicked}
-            placeholder="Filter schedules…"
-            className="h-full"
+      <div className="flex flex-wrap items-center gap-2">
+        {narrowings.map((n) => (
+          <NarrowChip
+            key={n.label}
+            label={n.label}
+            count={n.count}
+            onRemove={() => setNarrowings((prev) => prev.filter((p) => p.label !== n.label))}
+            title="Narrows the view. Removing it widens back out — it never reveals rows that were being concealed."
           />
-        </div>
-        <section className="min-w-0 flex-1 p-5">
-          <p className="max-w-prose text-[13px] leading-relaxed text-muted-foreground">
-            Type to narrow, ↑/↓ to move, Enter picks (the top match if you haven't moved), Escape
-            clears. The blue left edge marks the open item; groups are section labels. Pair with
-            SidePane, which owns collapse and width — PickList draws no chrome of its own.
-          </p>
-          <p className="tele mt-3 text-muted-foreground">
-            picked → <span className="text-foreground">{picked}</span>
-          </p>
-        </section>
+        ))}
+        {narrowings.length === 0 ? <Cap>nothing narrowing — every row in scope</Cap> : null}
       </div>
-    </Group>
+
+      <GapNote>
+        a removed narrowing has no way back on this surface: <code>NarrowChip</code> owns removal,
+        and nothing owns re-adding. That belongs to the addressing sentence, which has no component
+        yet — so this demo can only be widened, never re-narrowed.
+      </GapNote>
+    </Demo>
   );
 }
 
-/* ── 05 · patterns ──────────────────────────────────────────────────────────── */
+/* the state matrix: every prop combination the grammar rules on, on realistic rows. */
+const CELL_MATRIX: readonly { row: ParamRow; says: string }[] = PARAM_ROWS.filter((r) =>
+  [
+    "fireRating",
+    "sillHeight",
+    "operatorType",
+    "panelThickness",
+    "frameDepth",
+    "roughWidth",
+    "headHeight",
+    "mark",
+    "zoneArea",
+    "typeComments",
+    "connectedLoad",
+  ].includes(r.key),
+).map((row) => ({
+  row,
+  says: {
+    fireRating: "pea proposes — wash, ring, fold, and pea's square. Fold and square travel together.",
+    sillHeight: "you staged — bold plus the caution square. Bold appears nowhere else, ever.",
+    operatorType: "pea staged — the SAME square, pea's colour, no bold. Authorship is the colour.",
+    panelThickness: "drift — the one alarm, plus the model's value as a struck inline ghost.",
+    frameDepth: "stale read — squiggle rank 2.",
+    roughWidth: "never read — squiggle rank 3, the quietest.",
+    headHeight: "locked by a formula — greyed italic owns the body; no marks are permitted.",
+    mark: "excluded by Revit — renders identically to readonly. Two refusals, one treatment.",
+    zoneArea: "seam — nothing real behind it. The reserved dashed edge and nothing else.",
+    typeComments: "a long value with a citation — the footline clamps to one line, always.",
+    connectedLoad: "THE CRUCIBLE: proposed AND drift. The proposal owns the body, drift owns the squiggle slot, and both marks land.",
+  }[row.key] ?? "",
+}));
 
-function Patterns() {
+function StateCellBlock() {
   return (
-    <Spec
-      n={5}
-      title="Patterns"
-      note="Compositions the language keeps producing — assembled from the primitives above, not new components. Copy the markup, don't reach for a fresh abstraction."
+    <Demo
+      label="StateCell"
+      consumers="master-table cells (§04 below, live); the chat proposal card and its table (/design-system/proposal-flow); CellStateKey, which renders its specimens through this component so the key cannot lie about the table; soon: the trichotomy reviewer"
+      spec={
+        <>
+          The winner of round 1, and the reason there is a language at all: one grammar at any
+          scale. Precedence runs <em>uneditable owns the body ▸ pea&apos;s proposal owns it
+          otherwise ▸ the squiggle slot ▸ unsaved composes on top ▸ citation never contends</em>,
+          and it is enforced by cascade order in <code className="font-[family-name:var(--font-pe-mono)] text-[11px]">lang.css</code>,
+          not by discipline in the caller. Icons never go inside a data cell — they break table
+          ergonomics the moment a value runs long.
+        </>
+      }
     >
-      <TelemetryRows />
-      <HairlineTable />
-      <TrichotomyStates />
-      <StatusStrip />
-      <BalancedStatPanel />
-      <ChatSurfaces />
-      <RejectedFootnote />
-    </Spec>
+      <div className="flex flex-col">
+        {CELL_MATRIX.map(({ row, says }) => (
+          <div
+            key={row.key}
+            className="grid grid-cols-1 items-baseline gap-x-5 gap-y-1 border-b border-[var(--r-line)] py-2 last:border-b-0 sm:grid-cols-[8rem_minmax(0,22rem)_minmax(0,1fr)]"
+          >
+            <span className="font-[family-name:var(--font-pe-mono)] text-[10px] text-[var(--r-ink-mute)]">
+              {row.param}
+            </span>
+            <span className="min-w-0">
+              <StateCell {...cellProps(row)} />
+            </span>
+            <span className="text-[10.5px] leading-snug text-[var(--r-ink-2)]">{says}</span>
+          </div>
+        ))}
+      </div>
+
+      <CounterExample why="the weak anchor reserves the cell BODY for pea's proposal and for uneditable. A proposal on a locked cell is swallowed by precedence — correctly: a cell you cannot write cannot show a proposal you could accept. The caller gets no error, which is the finding.">
+        <StateCell value="84 in" cap="readonly" capReason="driven by formula" stage="proposed" />
+      </CounterExample>
+
+      <GapNote>
+        <code>stagedBy</code> exists because the RENDERING is ruled, but the state model has no
+        author on <code>staged</code> — <code>trichotomy.ts</code> stores <code>by</code> and every
+        consumer discards it, so production infers pea-vs-you from <code>origin</code>, which is the
+        author of the VALUE. Both squares above are fixture-supplied. CLEANROOM calls this the
+        round&apos;s strongest signal; SHIMS entry 5 owns it.
+      </GapNote>
+      <GapNote>
+        <code>readonly</code> and <code>excluded</code> are two different refusals — a formula
+        drives it · the model never bound it — and render as one greyed-italic body. The footline
+        carries the difference in words; nothing carries it in marks. And &ldquo;typing beats
+        proposing&rdquo; (severed) has no <code>stage</code> member at all and cannot be rendered.
+      </GapNote>
+    </Demo>
   );
 }
 
-/** Hybrid telemetry row: sans title, mono metadata right-aligned, one row expands to a payload. */
-function TelemetryRows() {
-  const [expanded, setExpanded] = useState(false);
-  const PAYLOAD = `{
-  "tool": "revit.param_write",
-  "param": "Mark",
-  "error": { "code": "READONLY_PARAM", "detail": "type-driven on 2 instances" },
-  "elapsed_ms": 366
-}`;
+function CellKeyBlock() {
   return (
-    <Group label="Hybrid telemetry rows" wrap="block">
-      <div className="max-w-2xl border-t border-border">
-        {TRACES.map((t, i) => {
-          const isExp = i === 4 && expanded;
-          return (
-            <div key={t.id} className="border-b border-border">
-              <button
-                type="button"
-                onClick={() => i === 4 && setExpanded((v) => !v)}
-                className="flex w-full items-baseline justify-between gap-3 py-1.5 text-left"
-              >
-                <div className="flex min-w-0 items-baseline gap-1.5">
-                  {i === 4 &&
-                    (isExp ? (
-                      <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
-                    ) : (
-                      <ChevronRight className="size-3 shrink-0 text-muted-foreground" />
-                    ))}
-                  <span className="truncate text-[13px]">{t.title}</span>
-                </div>
-                <div className="flex shrink-0 items-baseline gap-2.5">
-                  <span className="tele-label" style={{ color: STATUS_HUE[t.status] }}>
-                    {t.status}
-                  </span>
-                  <span className="tele text-muted-foreground tabular-nums">{t.dur}ms</span>
-                </div>
-              </button>
-              {isExp && (
-                <pre className="tele mb-1.5 overflow-x-auto rounded-[var(--radius)] border border-border bg-muted p-2 text-[11px] leading-relaxed">
-                  {PAYLOAD}
-                </pre>
-              )}
-            </div>
-          );
-        })}
+    <Demo
+      label="CellStateKey"
+      consumers="any surface that mounts StateCell — mounted live inside the table's frame in §04; a first-class component since round-2 ruling note 2 promoted it out of legend-strip status"
+      spec={
+        <>
+          Promoted to a component because it was instrumental to the table reading at all. Grouped{" "}
+          <em>by axis</em>, ordered inside a group by the cell&apos;s own precedence — so the key
+          cannot teach a ranking the cells do not obey. Every specimen is a real{" "}
+          <code className="font-[family-name:var(--font-pe-mono)] text-[11px]">StateCell</code> with
+          real props: a key drawn with its own markup can teach a treatment the table does not use,
+          and eventually will.
+        </>
+      }
+    >
+      <div className="max-w-3xl border border-[var(--r-line)]">
+        <CellStateKey />
       </div>
-      <p className="mt-2 text-[11px] text-muted-foreground">
-        (row 5 is clickable → expands payload)
+      <GapNote>
+        the axes are a fixed list, not a subset derived from the rows on screen. A key beside a
+        table with no drift in it still teaches drift. Deriving it needs the table to know what its
+        cells ARE — see the renderer-identity gap in §04.
+      </GapNote>
+    </Demo>
+  );
+}
+
+const OUTCOMES: readonly { kind: "busy" | "receipt" | "refused" | "dropped" | "advisory" | "partial" | "error"; label: string; says: string }[] = [
+  { kind: "busy", label: "applying… 3s", says: "in flight" },
+  { kind: "receipt", label: "42 parameters written", says: "it landed" },
+  { kind: "refused", label: "refused · plan hash drift", says: "declined before touching anything" },
+  { kind: "dropped", label: "discarded — write already in flight", says: "it never happened" },
+  { kind: "advisory", label: "2 types would be skipped", says: "a dry run blocks nothing" },
+  { kind: "partial", label: "38 of 42 written · 4 staged", says: "the failures stay staged for retry" },
+  { kind: "error", label: "bridge busy", says: "one of 7 host issue kinds" },
+];
+
+function OutcomeBlock() {
+  return (
+    <Demo
+      label="OutcomeLine"
+      consumers="the commit receipt on /design-system/proposal-flow; soon: the families and takeoffs receipt lanes"
+      spec={
+        <>
+          Coloured mono text, one icon, one decoration. No left bars — round 1 measured that
+          vertical bars were simply not understood. Every kind reuses a meaning role already in the
+          contract, and two of those are arguments rather than conveniences: a plan-hash{" "}
+          <em>refusal</em> is the model disagreeing, so it earns the one alarm; an <em>error</em> is
+          a busy bridge, which is not, so it takes caution. Never bold.
+        </>
+      }
+    >
+      <div className="flex flex-col">
+        {OUTCOMES.map((o) => (
+          <OutcomeLine key={o.kind} kind={o.kind} label={o.label} says={o.says} />
+        ))}
+      </div>
+      <Cap>
+        an outcomes lane is plain content — it reports on a machine-operated object, it is not one.
+        Never framed.
+      </Cap>
+      <GapNote>
+        an outcome carries no verb, no time, no target and no item list. &ldquo;4 staged for
+        retry&rdquo; has nowhere for the 4 to live, and a lane of these cannot say which write
+        produced which receipt. CLEANROOM calls it &ldquo;outcomes are orphans&rdquo;; the state
+        model moves first, then the signature.
+      </GapNote>
+    </Demo>
+  );
+}
+
+function ArmingBlock() {
+  return (
+    <Demo
+      label="ArmingStrip"
+      consumers="none yet — SHIMS entry 3. The family apply verb is the intended first consumer; the lifecycle is driven live at /design-system/arming"
+      spec={
+        <>
+          The cell grammar at its largest scale, and the ceremony clause SURFACE-PHILOSOPHY §3 has
+          been owed since the honesty rules were written: reason supplied before it arms, explicit
+          target, plan hash, drift refusal, receipt. Only variant e&apos;s strip read as ceremony
+          rather than &ldquo;just another component&rdquo;, and the round attributed that to border
+          scarcity — a tinted ground plus one edge, doing what an outline box could not.
+        </>
+      }
+    >
+      <p className="max-w-[76ch] text-[12px] leading-relaxed text-[var(--r-ink-2)]">
+        The strip is a lifecycle, not a specimen: unarmed → armed → refused → re-plan. Freezing one
+        frame here would teach the shape and hide the mechanism, which is exactly the mistake the
+        round-1 fixture made. All three phases and one live instance are at{" "}
+        <Link to="/design-system/arming" className="text-[var(--r-nav)] hover:underline">
+          /design-system/arming
+        </Link>
+        .
       </p>
-    </Group>
+      <GapNote>
+        arming has no lifecycle or identity in the state model — no armed-at, no armed-by, no link
+        from the verb it arms, and no link from a refusal to a fresh plan hash. The consequence is
+        on the surface rather than hidden: the strip renders &ldquo;armed against a plan of unknown
+        age&rdquo;, which is the one fact that decides whether to press it.
+      </GapNote>
+    </Demo>
   );
 }
 
-/** Dense hairline table: a Revit parameter inspector, cat-badge source column, mono values. */
-function HairlineTable() {
+/* ═══ 05 · the real table ═══════════════════════════════════════════════════════════════════
+   THE INTEGRATION THE PROTOTYPE COULD NOT DO. `MasterTable` is the primitive atlas/takeoffs and
+   families actually run on; `StateCell` is the grammar. Until this section existed, nothing had
+   ever put them in the same DOM, and every claim that the language "works in the table" was an
+   assertion about a hand-rolled table that shares no code with the product.
+
+   The rule for this section: MasterTable IS NOT FORKED, WRAPPED, OR RESTYLED to make the picture
+   come out. Where its contract cannot express something the grammar needs, there is a `GAP:` here
+   and a visible gap-note below. The gap is the deliverable. */
+
+function stateFacet(row: ParamRow): string {
+  if (row.cap !== "editable") return "locked";
+  if (row.agree === "drift") return "drift";
+  if (row.stage === "proposed") return "proposed";
+  if (row.stage === "staged") return "staged";
+  if (row.fresh !== "fresh") return row.fresh;
+  return "clean";
+}
+
+function RealTable() {
+  const columns = useMemo<Column<ParamRow>[]>(
+    () => [
+      {
+        key: "param",
+        label: "parameter",
+        title: "The parameter as Revit names it.",
+        width: "w-44",
+        lock: true,
+        sort: (r) => r.param,
+        search: (r) => r.param,
+        // GAP (MasterTable): `td` is `p-0` and `Column` has no cell-class hook — only
+        // `headerClassName`, `width` and `right`. Every renderer must draw its own box model, so
+        // cell padding is decided thirteen times per table instead of once by the primitive.
+        cell: (r) => <span className="block px-1.5 py-1">{r.param}</span>,
+      },
+      {
+        key: "scope",
+        label: "scope",
+        title: "Type-level or instance-level.",
+        width: "w-24",
+        facet: (r) => r.scope,
+        cell: (r) => (
+          <span className="block px-1.5 py-1 font-[family-name:var(--font-pe-mono)] text-[10px] text-[var(--r-ink-2)]">
+            {r.scope}
+          </span>
+        ),
+      },
+      {
+        key: "value",
+        label: "value",
+        title: "The value as shown, carrying every mark the grammar has to make.",
+        sort: (r) => r.value,
+        search: (r) => r.value,
+        // GAP (MasterTable): `cell` returns an opaque ReactNode. The table cannot know this cell
+        // is a StateCell, so it cannot sort, filter, count or group by cell STATE — see the
+        // `state` column below, which is that same fact modelled a second time by hand.
+        cell: (r) => (
+          <span className="block px-1.5 py-1">
+            <StateCell {...cellProps(r)} />
+          </span>
+        ),
+      },
+      {
+        // GAP (MasterTable): this column exists ONLY because the table cannot read the state out
+        // of the cell beside it. It is `CellFixture` → `StateCellProps` → a string, computed a
+        // third time, and it will drift from the cell the first time precedence changes.
+        key: "state",
+        label: "state",
+        title: "What the cell to the left is saying. Derived here because the table cannot read it.",
+        width: "w-28",
+        facet: stateFacet,
+        cell: (r) => (
+          <span className="block px-1.5 py-1 font-[family-name:var(--font-pe-mono)] text-[10px] text-[var(--r-ink-mute)]">
+            {stateFacet(r)}
+          </span>
+        ),
+      },
+      {
+        key: "read",
+        label: "last read",
+        title: "How old the reading behind the value is.",
+        width: "w-24",
+        right: true,
+        sort: (r) => r.ageMin ?? Number.MAX_SAFE_INTEGER,
+        cell: (r) => (
+          <span className="block px-1.5 py-1 font-[family-name:var(--font-pe-mono)] text-[10px] text-[var(--r-ink-2)]">
+            {ageText(r)}
+          </span>
+        ),
+      },
+    ],
+    [],
+  );
+
   return (
-    <Group label="Dense hairline table" wrap="block">
-      <div
-        className="grid max-w-2xl overflow-hidden rounded-[var(--radius)] border border-border bg-card text-sm"
-        style={{ gridTemplateColumns: "minmax(0,1.6fr) minmax(0,1fr) auto auto" }}
+    <Section
+      n="04"
+      title="the real table"
+      note="the actual MasterTable — the primitive atlas, takeoffs and families run on — with StateCell as its cell renderer"
+    >
+      <p className="max-w-[80ch] text-[12px] leading-relaxed text-[var(--r-ink-2)]">
+        The design-lang round hand-rolled its table, so the grammar was only ever proven against
+        markup written to flatter it. This is the product primitive, unmodified, wrapped in an{" "}
+        <code className="font-[family-name:var(--font-pe-mono)] text-[11px]">ArtifactFrame</code>{" "}
+        per the border budget, with the cell-state key inside the frame it describes. Sort a column,
+        filter one, type in the search box — the grammar has to survive all of it.
+      </p>
+
+      <ArtifactFrame
+        head={
+          <>
+            <span className="dl-tag">overhead coiling door 421 · parameters</span>
+            <FactChip title="Rows in scope before any narrowing.">{PARAM_ROWS.length} params</FactChip>
+            <FactChip tone="alarm" title="Values the model disagrees with.">2 drift</FactChip>
+            <FactChip tone="caution" title="Unsaved work that will be lost if you leave.">2 unsaved</FactChip>
+            <FactChip dashed title="Fixture data — no host, no document, no element behind it.">
+              fixture
+            </FactChip>
+          </>
+        }
+        foot={
+          <>
+            <span className="dl-tag">2 unsaved · 1 refused by Revit</span>
+            <Verb
+              tone="commit"
+              label="apply to Revit"
+              icon={Upload}
+              onClick={noop}
+              disabled
+              reason="fixture data — there is no model behind this table to write to"
+            />
+          </>
+        }
       >
-        {(["Parameter", "Value", "Source", "Read"] as const).map((h) => (
-          <div
-            key={h}
-            className="tele-label border-b border-border bg-muted/60 px-3 py-1.5 text-muted-foreground last:text-right"
-          >
-            {h}
-          </div>
-        ))}
-        {PARAMS.map((p) => (
-          <div key={p.name} className="contents">
-            <div className="border-b border-border px-3 py-1.5 text-foreground">{p.name}</div>
-            <div className="tele border-b border-border px-3 py-1.5 text-foreground">{p.value}</div>
-            <div className="flex items-center border-b border-border px-3 py-1.5">
-              <Badge variant={p.tone}>{p.kind}</Badge>
-            </div>
-            <div className="tele border-b border-border px-3 py-1.5 text-right text-muted-foreground">
-              {p.at}
-            </div>
-          </div>
-        ))}
-      </div>
-    </Group>
-  );
-}
+        {/* MasterTable is `flex min-h-0 flex-1 flex-col` internally and expects a bounded parent. */}
+        <div className="flex h-[26rem] flex-col">
+          <MasterTable
+            rows={PARAM_ROWS}
+            columns={columns}
+            rowKey={(r) => r.key}
+            scopeLabel="params in scope"
+            searchPlaceholder="search params…"
+            summary={<>13 params · 3 types</>}
+          />
+        </div>
+        {/* GAP (ArtifactFrame): the key belongs "inside the frame of the thing it describes", and
+            the only place it fits is last-child-by-authorship. The `foot` slot is a flex control
+            bar; a full-width grid block cannot go in it. */}
+        <CellStateKey />
+      </ArtifactFrame>
 
-/** Trichotomy cell states: how a co-edited value looks in every stage of proposal → staged → pushed. */
-function TrichotomyStates() {
-  const states = [
-    {
-      label: "proposed (pea)",
-      cell: <ValueDiff from="100 VA" to="150 VA" className="font-medium text-cat-clay" />,
-      tint: "bg-cat-clay/12",
-    },
-    {
-      label: "staged (you)",
-      cell: <ValueDiff from="100 VA" to="150 VA" className="font-medium text-cat-green" />,
-      tint: "bg-cat-green/12",
-    },
-    {
-      label: "needs review",
-      cell: <ValueDiff from="100 VA" to="150 VA" className="font-medium" />,
-      tint: "bg-destructive/10",
-    },
-    {
-      label: "blocked (read-only)",
-      cell: <span className="tele text-muted-foreground">100 VA</span>,
-      tint: "bg-muted/40",
-    },
-  ] as const;
-  return (
-    <Group label="Trichotomy cell states (ValueDiff)" wrap="block">
-      <div className="flex max-w-2xl flex-col overflow-hidden rounded-[var(--radius)] border border-border bg-card sm:flex-row">
-        {states.map((state, i) => (
-          <div
-            key={state.label}
-            className={`flex-1 px-3 py-2 ${state.tint} ${i > 0 ? "border-t border-border sm:border-l sm:border-t-0" : ""}`}
-          >
-            <div>{state.cell}</div>
-            <div className="tele-label mt-1 text-muted-foreground">{state.label}</div>
-          </div>
-        ))}
-      </div>
-      <p className="mt-2 text-[11px] text-muted-foreground">
-        ValueDiff is the one way a change is written: struck current → proposed, all mono. Clay =
-        pea proposed, green = human staged, destructive tint = staged but flagged, muted = the
-        binding refuses writes.
-      </p>
-    </Group>
-  );
-}
-
-/** Status strip: a single mono line of machine facts. */
-function StatusStrip() {
-  return (
-    <Group label="Status strip" wrap="block">
-      <div className="tele max-w-2xl rounded-[var(--radius)] border border-border bg-muted/40 px-3 py-1.5 text-muted-foreground">
-        <span className="tele-label">read</span> 4m ago · 581 families · 1,048 types ·{" "}
-        <span className="tele-label" style={{ color: "var(--cat-green)" }}>
-          fresh
+      <div className="flex flex-col gap-1.5 pt-1">
+        <span className="tele-label text-[10px] text-[var(--r-ink)]">
+          what MasterTable cannot express
         </span>
+        <GapNote>
+          <strong>renderer identity.</strong> <code>Column.cell</code> returns an opaque{" "}
+          <code>ReactNode</code>. The table cannot know a cell carries state, so: the{" "}
+          <code>state</code> column above is the same fact modelled by hand a second time;{" "}
+          <code>CellStateKey</code> cannot derive its axes from the rows on screen; and a row
+          holding a proposal can only be marked through <code>rowClassName</code>, which knows
+          nothing about the grammar. A cell-state clause on <code>Column</code> — the renderer
+          declaring what it draws — is the shape this wants.
+        </GapNote>
+        <GapNote>
+          <strong>selection is a hue.</strong> Selected cells and the active row are{" "}
+          <code>bg-primary/[0.06]</code> and focus is <code>ring-primary</code>. The language says
+          selection and focus are a fill and never a hue — <code>--r-select</code>, the fourth rung
+          of the ground ladder. Neither is reachable from <code>Column</code> or{" "}
+          <code>MasterTableProps</code>.
+        </GapNote>
+        <GapNote>
+          <strong>the hover law does not reach the table.</strong> Rows are{" "}
+          <code>hover:bg-muted/60</code>, a second hover treatment beside{" "}
+          <code>--r-veil</code>, which every control in the language shares.
+        </GapNote>
+        <GapNote>
+          <strong>two vocabularies in one object.</strong> The table&apos;s chrome — header strip,{" "}
+          <code>th</code> backgrounds, <code>--line</code>/<code>--line-soft</code> rules, the
+          locked column&apos;s <code>bg-background</code>, the empty-state prose — is all on the old
+          token vocabulary. Inside an <code>--r-artifact</code> frame that is two palettes in one
+          artifact, visible at the frame&apos;s inner edge. This is the crusade&apos;s first
+          table-shaped job.
+        </GapNote>
+        <GapNote>
+          <strong>two heads.</strong> <code>scopeLabel</code> is required and MasterTable always
+          draws its own scope/search/chip strip, so the artifact frame&apos;s head band and the
+          table&apos;s head band stack. There is no way to hand the frame the scope label instead.
+        </GapNote>
+        <GapNote>
+          <strong>a third chip.</strong> The strip&apos;s <code>FilterChip</code> states exactly
+          what <code>NarrowChip</code> states — this narrowing is active, click to widen — as a
+          different component on different tokens. Same fact, two components; the crusade merges
+          them or the language has two chip families forever.
+        </GapNote>
+        <GapNote>
+          <strong>no footline row.</strong> A receipt has nowhere in the grid: outcomes can only
+          sit in the frame foot, outside the columns, so a partial write cannot align its
+          &ldquo;4 staged&rdquo; to the four rows it means.
+        </GapNote>
       </div>
-    </Group>
+    </Section>
   );
 }
 
-/** Balanced-budget stat panel — the winning "balanced" color intensity from the 2026-07 dial POC round (branch quarry/poc-2026-07). */
-function BalancedStatPanel() {
-  const stats = [
-    { k: "elements", v: "1,901" },
-    { k: "errors", v: "3" },
-    { k: "duration", v: "4.2s" },
-    { k: "fresh", v: "98%" },
-  ];
+/* ═══ 06 · satellites ═══════════════════════════════════════════════════════════════════════ */
+
+const SATELLITES: readonly { to: string; name: string; purpose: string }[] = [
+  {
+    to: "/design-system/proposal-flow",
+    name: "proposal flow",
+    purpose:
+      "one shared in-memory world behind pea's chat card AND a StateCell table — accept, deny or undo in the card and the same value moves in the table. The proof that one grammar at two scales is a mechanism and not a resemblance. Carries the two-marks crucible and a commit receipt.",
+  },
+  {
+    to: "/design-system/arming",
+    name: "arming",
+    purpose:
+      "the ArmingStrip lifecycle driven live: type a reason to arm it, commit, take a simulated drift refusal, re-plan. All three phases also stand frozen side by side, because a lifecycle you have to perform to see is a lifecycle nobody reviews.",
+  },
+  {
+    to: "/design-system/popovers",
+    name: "popovers",
+    purpose:
+      "the position harness. Every popover-bearing component the app actually ships, mounted nine times at the corners, edges and centre of the viewport. It does not fix flip/clamp/overflow inconsistency — it makes it one visible fact, which is what queues a single popover foundation (SHIMS entry 7).",
+  },
+];
+
+function Satellites() {
   return (
-    <Group label="Balanced-budget stat panel" wrap="block">
-      <div className="max-w-2xl overflow-hidden rounded-[var(--radius)] border border-border bg-card">
-        {/* head */}
-        <div className="flex items-baseline justify-between border-b border-border px-3 py-2">
-          <div>
-            <div className="text-[13px] font-semibold">Family reconciliation</div>
-            <div className="tele text-muted-foreground">→ families</div>
-          </div>
-          <span className="tele-label text-muted-foreground">balanced</span>
-        </div>
-        {/* stat strip — neutral figures (color only on badges + the one action) */}
-        <div className="grid grid-cols-4 border-b border-border">
-          {stats.map((s, i) => (
-            <div
-              key={s.k}
-              className="px-3 py-2"
-              style={{ borderLeft: i === 0 ? "none" : "1px solid var(--line-soft)" }}
-            >
-              <div className="tele text-[18px] leading-none text-foreground">{s.v}</div>
-              <div className="tele-label mt-1 text-muted-foreground">{s.k}</div>
-            </div>
-          ))}
-        </div>
-        {/* rows — cat badge carries category, nothing else colored */}
-        <div>
-          {STAT_ROWS.map((r) => (
-            <div
-              key={r.name}
-              className="flex items-center justify-between gap-3 border-b border-border px-3 py-1.5 last:border-b-0"
-            >
-              <span className="tele text-foreground">{r.name}</span>
-              <div className="flex items-center gap-3">
-                <span className="tele text-muted-foreground tabular-nums">{r.value}</span>
-                <Badge variant={STATUS_TONE[r.status]}>{r.status}</Badge>
-              </div>
-            </div>
-          ))}
-        </div>
-        {/* alert — one green success moment */}
-        <div
-          className="tele flex items-center gap-2 border-t border-border px-3 py-2"
-          style={{
-            color: "var(--cat-green)",
-            background: "color-mix(in srgb, var(--cat-green) 8%, transparent)",
-          }}
-        >
-          sync complete — 1 row needs review.
-        </div>
-        {/* actions — exactly one PE Blue peak */}
-        <div className="flex justify-end gap-2 border-t border-border px-3 py-2">
-          <Button variant="outline" size="sm">
-            Cancel
-          </Button>
-          <Button size="sm">Run</Button>
-        </div>
-      </div>
-    </Group>
-  );
-}
-
-/* Chat surfaces: header controls (ModeDial + pickers), a real Lens render, and a hairline composer. */
-function ChatSurfaces() {
-  const [mode, setMode] = useState<Mode>("threads");
-  return (
-    <div className="flex flex-col gap-5">
-      <Group label="Chat header controls">
-        <ModeDial mode={mode} setMode={setMode} />
-        <Picker title="Model" options={MODELS} initial="opus" />
-        <Picker title="Access" options={ACCESS} initial="read" />
-      </Group>
-
-      <Group label="Live thread (real Lens render + provenance colors)" wrap="block">
-        <LensThread />
-      </Group>
-
-      <Group label="Composer (hairline)" wrap="block">
-        <ComposerMock />
-      </Group>
-    </div>
-  );
-}
-
-/** A faithful slice of production chat: real .lens-frame, .lens-marker, and PROSE_CLASS. */
-function LensThread() {
-  return (
-    <div className="lens-frame overflow-hidden rounded-[var(--radius)] border border-border">
-      <div className="lens-chat">
-        <div className="lens-moment" data-role="user">
-          <div className="mb-1.5 inline-flex items-center gap-[7px] text-[10px] font-semibold tracking-[0.1em] text-[var(--pe-green)] uppercase">
-            <span>you</span>
-            <GitFork size={12} className="opacity-40" />
-          </div>
-          <div className="ml-auto w-fit max-w-[80%] rounded-[12px_12px_2px_12px] border-[0.5px] border-[var(--user-line)] bg-[var(--user-tint)] px-3 py-2 text-sm leading-normal">
-            Can you list the loaded Revit families and their type counts?
-          </div>
-        </div>
-
-        <div className="lens-moment" data-role="assistant">
-          <div className="mb-1.5 text-[10px] font-semibold tracking-[0.1em] text-[var(--pe-blue)] uppercase">
-            pea
-          </div>
-          <div className="grid gap-2">
-            <div className={PROSE_CLASS}>
-              <h3>Loaded families</h3>
-              <p>
-                Here's what's loaded. I called <code>listLoadedFamilies</code> and grouped by{" "}
-                <a href="#">category</a>:
-              </p>
-              <ul>
-                <li>
-                  <strong>Doors</strong> — 12 types
-                </li>
-                <li>
-                  <strong>Windows</strong> — 8 types
-                </li>
-              </ul>
-              <blockquote>Tip: pass a scope to filter to placed instances only.</blockquote>
-            </div>
-            <div className="lens-marker tool">
-              <span>⌗ listLoadedFamilies</span>
-              <code>scope=all</code>
-            </div>
-            <div className="lens-marker tool active">
-              <span>⌗ readFamilyTypes</span>
-              <code>category=Doors</code>
-            </div>
-            <div className="lens-marker tool failed">
-              <span>⌗ resolveSymbol</span>
-              <code>id=4821</code>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** Model/access picker — Combobox behind a quiet Button trigger, the control-chips idiom. */
-function Picker({
-  title,
-  options,
-  initial,
-}: {
-  title: string;
-  options: { id: string; name: string; hint?: string }[];
-  initial: string;
-}) {
-  const [value, setValue] = useState(initial);
-  const selected = options.find((o) => o.id === value) ?? null;
-  return (
-    <Combobox
-      items={options}
-      value={selected}
-      onValueChange={(option: { id: string; name: string; hint?: string } | null) => {
-        if (option) setValue(option.id);
-      }}
-      itemToStringLabel={(option: { id: string; name: string; hint?: string }) => option.name}
+    <Section
+      n="05"
+      title="satellites"
+      note="mocked complicated cases — sibling routes, not nested; each announces its fixture with a dashed seam"
     >
-      <ComboboxTrigger title={title} render={<Button variant="outline" size="sm" />}>
-        {selected?.name ?? title} <ChevronDown className="opacity-60" />
-      </ComboboxTrigger>
-      <ComboboxContent align="start" className="min-w-52">
-        <ComboboxEmpty>No options.</ComboboxEmpty>
-        <ComboboxList>
-          {(option: { id: string; name: string; hint?: string }) => (
-            <ComboboxItem key={option.id} value={option} className="flex-col items-start">
-              <span className="text-foreground">{option.name}</span>
-              {option.hint ? (
-                <span className="text-xs text-muted-foreground">{option.hint}</span>
-              ) : null}
-            </ComboboxItem>
-          )}
-        </ComboboxList>
-      </ComboboxContent>
-    </Combobox>
-  );
-}
-
-function ComposerMock() {
-  return (
-    <div className="relative w-full max-w-2xl rounded-[var(--radius)] border border-border bg-card">
-      <div className="flex items-end gap-1 p-2">
-        <Button type="button" variant="ghost" size="icon" title="Attach files">
-          <Paperclip />
-        </Button>
-        <Textarea
-          placeholder="Ask Pea…  ( / for commands )"
-          rows={1}
-          className="max-h-48 min-h-9 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
-        />
-        <Button type="button" size="icon" title="Send">
-          <ArrowUp />
-        </Button>
+      <div className="flex flex-col">
+        {SATELLITES.map((s) => (
+          <div
+            key={s.to}
+            className="grid grid-cols-1 items-baseline gap-x-6 gap-y-1 border-b border-[var(--r-line)] py-3 last:border-b-0 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]"
+          >
+            <Link to={s.to} className="text-[12px] text-[var(--r-nav)] hover:underline">
+              {s.name}
+              <span className="ml-2 font-[family-name:var(--font-pe-mono)] text-[10px] text-[var(--r-ink-mute)]">
+                {s.to}
+              </span>
+            </Link>
+            <p className="text-[11.5px] leading-relaxed text-[var(--r-ink-2)]">{s.purpose}</p>
+          </div>
+        ))}
       </div>
-    </div>
-  );
-}
-
-/** One instructive footnote: the two treatments the language explicitly rejects. */
-function RejectedFootnote() {
-  return (
-    <Group label="Rejected — kept as a warning" wrap="flex flex-wrap items-center gap-6">
-      <div className="flex flex-col items-start gap-1.5">
-        <div className="rounded-2xl bg-card px-4 py-2.5 text-[12px] shadow-lg shadow-black/15">
-          elevated card
-        </div>
-        <span className="tele-label" style={{ color: "var(--destructive)" }}>
-          rejected · shadow + rounded-2xl
-        </span>
-      </div>
-      <div className="flex flex-col items-start gap-1.5">
-        <span
-          className="rounded-full border px-3 py-1 text-[12px]"
-          style={{ borderColor: "var(--cat-blue)", color: "var(--cat-blue)" }}
-        >
-          pill chip
-        </span>
-        <span className="tele-label" style={{ color: "var(--destructive)" }}>
-          rejected · fully-round pill
-        </span>
-      </div>
-      <p className="max-w-[38ch] text-[12px] text-muted-foreground">
-        Elevation and pills read as consumer-app chrome. The language draws structure with hairlines
-        and a 2px edge instead — badges are square-ish, surfaces are bordered, never floated.
+      <p className="max-w-[80ch] text-[11px] leading-relaxed text-[var(--r-ink-mute)]">
+        Satellites mock their worlds by construction — null identities, no host calls — and say so
+        on the surface. That is SHIMS entry 4, and it closes only if a satellite is ever promoted to
+        a real route.
       </p>
-    </Group>
-  );
-}
-
-/* ── composed showcase: GroundedDocView over useGroundedDoc() ─────────────────── */
-
-function GroundedDoc() {
-  const engine = useGroundedDoc();
-  useEffect(() => {
-    if (!engine.doc) engine.setDoc(SAMPLE_DOC);
-  }, [engine]);
-
-  return (
-    <Spec
-      n={6}
-      title="Grounded document"
-      note="Reusable <GroundedDocView> over useGroundedDoc() — hover a markdown block or a page box to link the two. Drop it anywhere a parsed PDF needs to stay traceable. Full harness at /doc-lab."
-    >
-      <div className="h-[520px] overflow-hidden rounded-[var(--radius)] border border-border">
-        <GroundedDocView engine={engine} className="h-full" />
-      </div>
-    </Spec>
+    </Section>
   );
 }

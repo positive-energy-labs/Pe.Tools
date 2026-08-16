@@ -232,7 +232,7 @@ export function VariantC() {
       const next = structuredClone(previous);
       if (proposal.typeName) {
         next.types[proposal.typeName] = {
-          ...(next.types[proposal.typeName] ?? {}),
+          ...next.types[proposal.typeName],
           [proposal.param]: proposal.proposed,
         };
       } else {
@@ -274,7 +274,7 @@ export function VariantC() {
           continue;
         }
         if (next.types[typeName]?.[row.name] === liveValue.value) continue;
-        next.types[typeName] = { ...(next.types[typeName] ?? {}), [row.name]: liveValue.value };
+        next.types[typeName] = { ...next.types[typeName], [row.name]: liveValue.value };
         moved += 1;
       }
     }
@@ -401,7 +401,7 @@ export function VariantC() {
             onCommit={(value) =>
               setDraft((previous) => {
                 const next = structuredClone(previous);
-                const bucket = { ...(next.types[typeName] ?? {}) };
+                const bucket = { ...next.types[typeName] };
                 if (value.trim() === "") delete bucket[row.name];
                 else bucket[row.name] = value.trim();
                 next.types[typeName] = bucket;
@@ -547,9 +547,7 @@ export function VariantC() {
                 {proposal.typeName && (
                   <span className="text-muted-foreground">{proposal.typeName} </span>
                 )}
-                <span className="text-muted-foreground/60">
-                  {proposal.current ?? "—"} →{" "}
-                </span>
+                <span className="text-muted-foreground/60">{proposal.current ?? "—"} → </span>
                 <span className="text-[var(--pe-blue)]">{proposal.proposed}</span>
               </span>
               <button
@@ -651,10 +649,7 @@ export function VariantC() {
         cell: (row) => {
           if (row.kind === "live-only")
             return (
-              <ReadCell
-                value=""
-                reason="Not in the profile, so no build could ever produce it."
-              />
+              <ReadCell value="" reason="Not in the profile, so no build could ever produce it." />
             );
           if (draft.built === null)
             return (

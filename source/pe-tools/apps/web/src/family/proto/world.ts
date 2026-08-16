@@ -158,12 +158,23 @@ const PARAMS: ProtoParam[] = [
   { name: "Body Height", dataType: "Length", value: "30in", group: "dimensions" },
   { name: "Top Diameter", dataType: "Length", value: "8in", group: "dimensions" },
   { name: "Top Height", dataType: "Length", value: "4in", group: "dimensions" },
-  { name: "Core Height", dataType: "Length", value: "= Body Height + Top Height", group: "dimensions" },
+  {
+    name: "Core Height",
+    dataType: "Length",
+    value: "= Body Height + Top Height",
+    group: "dimensions",
+  },
   { name: "Return Elevation", dataType: "Length", value: "15in", group: "connections" },
   { name: "Pipe Elevation", dataType: "Length", value: "8in", group: "connections" },
   { name: "Round Duct Diameter", dataType: "Length", value: "6in", group: "connections" },
   { name: "Stub Depth", dataType: "Length", value: "2in", group: "connections" },
-  { name: "Airflow", dataType: "Air Flow", value: "450 CFM", isInstance: true, group: "mechanical" },
+  {
+    name: "Airflow",
+    dataType: "Air Flow",
+    value: "450 CFM",
+    isInstance: true,
+    group: "mechanical",
+  },
   // 240 V, deliberately WRONG against the cut sheet. p3 proposes 277 V, and a proposal whose
   // current and proposed values were identical was a no-op dressed as a decision — accepting it
   // moved nothing, so the surface could not be judged on whether accepting is VISIBLE.
@@ -186,9 +197,24 @@ const GEOMETRY: GeomConstituent[] = [
     slug: "body",
     kind: "Prism",
     dims: [
-      { property: "width", dataType: "Length", binding: "param:Body Width", note: "X extent of the cabinet." },
-      { property: "depth", dataType: "Length", binding: "param:Body Depth", note: "Y extent of the cabinet." },
-      { property: "height", dataType: "Length", binding: "param:Body Height", note: "Extrusion depth, +Z off the base sketch." },
+      {
+        property: "width",
+        dataType: "Length",
+        binding: "param:Body Width",
+        note: "X extent of the cabinet.",
+      },
+      {
+        property: "depth",
+        dataType: "Length",
+        binding: "param:Body Depth",
+        note: "Y extent of the cabinet.",
+      },
+      {
+        property: "height",
+        dataType: "Length",
+        binding: "param:Body Height",
+        note: "Extrusion depth, +Z off the base sketch.",
+      },
     ],
     meta: [
       {
@@ -211,8 +237,18 @@ const GEOMETRY: GeomConstituent[] = [
     slug: "top-neck",
     kind: "Cylinder",
     dims: [
-      { property: "diameter", dataType: "Length", binding: "param:Top Diameter", note: "Outside diameter of the discharge neck." },
-      { property: "height", dataType: "Length", binding: "param:Top Height", note: "How far the neck stands off the cabinet's top face." },
+      {
+        property: "diameter",
+        dataType: "Length",
+        binding: "param:Top Diameter",
+        note: "Outside diameter of the discharge neck.",
+      },
+      {
+        property: "height",
+        dataType: "Length",
+        binding: "param:Top Height",
+        note: "How far the neck stands off the cabinet's top face.",
+      },
     ],
     meta: [
       {
@@ -222,7 +258,13 @@ const GEOMETRY: GeomConstituent[] = [
         value: "top face of body · on the vertical centreline",
         note: "The neck is hosted on the body's top face, so its origin MOVES when Body Height moves. That dependency is geometry, not a value you can type.",
       },
-      { key: "axis", label: "axis", control: "read", value: "+Z", note: "The cylinder's axis, reported from its sketch plane." },
+      {
+        key: "axis",
+        label: "axis",
+        control: "read",
+        value: "+Z",
+        note: "The cylinder's axis, reported from its sketch plane.",
+      },
     ],
   },
   {
@@ -235,7 +277,12 @@ const GEOMETRY: GeomConstituent[] = [
         binding: "3in",
         note: "UNBOUND — the bore's width is frozen at 3in in the geometry. No type can differ, no schedule can read it, and no formula can reach it.",
       },
-      { property: "length", dataType: "Length", binding: "param:Core Height", note: "How far the void runs; driven by the Core Height formula." },
+      {
+        property: "length",
+        dataType: "Length",
+        binding: "param:Core Height",
+        note: "How far the void runs; driven by the Core Height formula.",
+      },
     ],
     meta: [
       {
@@ -260,8 +307,18 @@ const GEOMETRY: GeomConstituent[] = [
     slug: "supply-air",
     kind: "DuctConnector",
     dims: [
-      { property: "diameter", dataType: "Length", binding: "param:Round Duct Diameter", note: "Round connector diameter." },
-      { property: "stub.depth", dataType: "Length", binding: "param:Stub Depth", note: "How far the stub runs before the connector face." },
+      {
+        property: "diameter",
+        dataType: "Length",
+        binding: "param:Round Duct Diameter",
+        note: "Round connector diameter.",
+      },
+      {
+        property: "stub.depth",
+        dataType: "Length",
+        binding: "param:Stub Depth",
+        note: "How far the stub runs before the connector face.",
+      },
     ],
     meta: [
       {
@@ -280,17 +337,44 @@ const GEOMETRY: GeomConstituent[] = [
         options: ["SupplyAir", "ReturnAir", "ExhaustAir"],
         note: "The system classification Revit matches on when it decides what may connect to what.",
       },
-      { key: "normal", label: "normal", control: "read", value: "+Z", note: "The connector's outward normal, taken from its host face." },
-      { key: "origin", label: "frame origin", control: "read", value: "top of top-neck", note: "Hosted on the neck's top face." },
+      {
+        key: "normal",
+        label: "normal",
+        control: "read",
+        value: "+Z",
+        note: "The connector's outward normal, taken from its host face.",
+      },
+      {
+        key: "origin",
+        label: "frame origin",
+        control: "read",
+        value: "top of top-neck",
+        note: "Hosted on the neck's top face.",
+      },
     ],
   },
   {
     slug: "return-air",
     kind: "DuctConnector",
     dims: [
-      { property: "diameter", dataType: "Length", binding: "param:Round Duct Diameter", note: "Shares the supply connector's diameter parameter — one number, two consumers." },
-      { property: "elevation", dataType: "Length", binding: "param:Return Elevation", note: "Centreline height above the datum." },
-      { property: "stub.depth", dataType: "Length", binding: "param:Stub Depth", note: "How far the stub runs before the connector face." },
+      {
+        property: "diameter",
+        dataType: "Length",
+        binding: "param:Round Duct Diameter",
+        note: "Shares the supply connector's diameter parameter — one number, two consumers.",
+      },
+      {
+        property: "elevation",
+        dataType: "Length",
+        binding: "param:Return Elevation",
+        note: "Centreline height above the datum.",
+      },
+      {
+        property: "stub.depth",
+        dataType: "Length",
+        binding: "param:Stub Depth",
+        note: "How far the stub runs before the connector face.",
+      },
     ],
     meta: [
       {
@@ -309,15 +393,32 @@ const GEOMETRY: GeomConstituent[] = [
         options: ["SupplyAir", "ReturnAir", "ExhaustAir"],
         note: "The system classification Revit matches on when it decides what may connect to what.",
       },
-      { key: "normal", label: "normal", control: "read", value: "−X", note: "Faces out of the cabinet's left side." },
-      { key: "origin", label: "frame origin", control: "read", value: "left face of body · at Return Elevation", note: "Hosted on the body's left face." },
+      {
+        key: "normal",
+        label: "normal",
+        control: "read",
+        value: "−X",
+        note: "Faces out of the cabinet's left side.",
+      },
+      {
+        key: "origin",
+        label: "frame origin",
+        control: "read",
+        value: "left face of body · at Return Elevation",
+        note: "Hosted on the body's left face.",
+      },
     ],
   },
   {
     slug: "condensate",
     kind: "PipeConnector",
     dims: [
-      { property: "elevation", dataType: "Length", binding: "param:Pipe Elevation", note: "Centreline height above the datum." },
+      {
+        property: "elevation",
+        dataType: "Length",
+        binding: "param:Pipe Elevation",
+        note: "Centreline height above the datum.",
+      },
       {
         property: "stub.depth",
         dataType: "Length",
@@ -342,8 +443,20 @@ const GEOMETRY: GeomConstituent[] = [
         options: ["SanitaryDrainage", "HydronicReturn", "DomesticColdWater"],
         note: "The piping system classification. It decides what may connect, and it is the field most often left at the template's default.",
       },
-      { key: "normal", label: "normal", control: "read", value: "+X", note: "Faces out of the cabinet's right side." },
-      { key: "origin", label: "frame origin", control: "read", value: "right face of body · at Pipe Elevation", note: "Hosted on the body's right face." },
+      {
+        key: "normal",
+        label: "normal",
+        control: "read",
+        value: "+X",
+        note: "Faces out of the cabinet's right side.",
+      },
+      {
+        key: "origin",
+        label: "frame origin",
+        control: "read",
+        value: "right face of body · at Pipe Elevation",
+        note: "Hosted on the body's right face.",
+      },
     ],
   },
 ];
@@ -438,13 +551,13 @@ export const WORLD: ProtoWorld = {
         id: "b3",
         page: 2,
         kind: "text",
-        md: "Return connection centreline at 15\" AFF on C/S cabinets; 24\" on the tall cabinet.",
+        md: 'Return connection centreline at 15" AFF on C/S cabinets; 24" on the tall cabinet.',
       },
       {
         id: "b4",
         page: 2,
         kind: "table",
-        md: "| Unit | Airflow | Duct Ø |\n|---|---|---|\n| FC42-C | 300 CFM | 6\" |\n| FC42-S | 450 CFM | 6\" |\n| FC42-T | 600 CFM | 8\" |",
+        md: '| Unit | Airflow | Duct Ø |\n|---|---|---|\n| FC42-C | 300 CFM | 6" |\n| FC42-S | 450 CFM | 6" |\n| FC42-T | 600 CFM | 8" |',
       },
       { id: "b5", page: 3, kind: "text", md: "Electrical: 277 V / 1 ph / 60 Hz across all sizes." },
     ],
@@ -469,7 +582,7 @@ export const WORLD: ProtoWorld = {
       current: null,
       proposed: "8in",
       sourceBlockId: "b4",
-      note: "Cut sheet gives the tall cabinet an 8\" duct; the profile has no Tall override so it inherits 6in.",
+      note: 'Cut sheet gives the tall cabinet an 8" duct; the profile has no Tall override so it inherits 6in.',
     },
     {
       id: "p2",
@@ -500,7 +613,7 @@ export const WORLD: ProtoWorld = {
       current: null,
       proposed: "5in",
       sourceBlockId: "b4",
-      note: "LOW CONFIDENCE — read the compact cabinet's duct as 5\", but the block below gives FC42-C a 6\" duct. Check the text before accepting; the two readings cannot both be right.",
+      note: 'LOW CONFIDENCE — read the compact cabinet\'s duct as 5", but the block below gives FC42-C a 6" duct. Check the text before accepting; the two readings cannot both be right.',
     },
   ],
 };

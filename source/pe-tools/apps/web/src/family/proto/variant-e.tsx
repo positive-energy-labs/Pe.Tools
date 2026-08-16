@@ -497,21 +497,25 @@ function paramsOf(description: string): string[] {
     .filter((name) => description.includes(name));
 }
 
-const CONSTITUENTS: { slug: string; kind: "solid" | "connector"; text: string; params: string[] }[] =
-  [
-    ...Object.entries(WORLD.profile.solids).map(([slug, text]) => ({
-      slug,
-      kind: "solid" as const,
-      text,
-      params: paramsOf(text),
-    })),
-    ...Object.entries(WORLD.profile.connectors).map(([slug, text]) => ({
-      slug,
-      kind: "connector" as const,
-      text,
-      params: paramsOf(text),
-    })),
-  ];
+const CONSTITUENTS: {
+  slug: string;
+  kind: "solid" | "connector";
+  text: string;
+  params: string[];
+}[] = [
+  ...Object.entries(WORLD.profile.solids).map(([slug, text]) => ({
+    slug,
+    kind: "solid" as const,
+    text,
+    params: paramsOf(text),
+  })),
+  ...Object.entries(WORLD.profile.connectors).map(([slug, text]) => ({
+    slug,
+    kind: "connector" as const,
+    text,
+    params: paramsOf(text),
+  })),
+];
 
 /** ONE focus for the whole page: either a parameter or a constituent is lit, never both
  * independently. Everything else derives its highlight from this. */
@@ -730,7 +734,7 @@ export function VariantE() {
       const next = structuredClone(previous);
       if (proposal.typeName) {
         next.types[proposal.typeName] = {
-          ...(next.types[proposal.typeName] ?? {}),
+          ...next.types[proposal.typeName],
           [proposal.param]: proposal.proposed,
         };
       } else {
@@ -800,7 +804,7 @@ export function VariantE() {
   const editOverride = (param: string, typeName: string, value: string) =>
     setDraft((previous) => {
       const next = structuredClone(previous);
-      const bucket = { ...(next.types[typeName] ?? {}) };
+      const bucket = { ...next.types[typeName] };
       if (value.trim() === "") delete bucket[param];
       else bucket[param] = value.trim();
       next.types[typeName] = bucket;
@@ -823,7 +827,7 @@ export function VariantE() {
           if (agreementOf(previous, row, typeName) !== "drift") continue;
           const value = next.live[row.name]?.[typeName]?.value;
           if (value == null) continue;
-          const bucket = { ...(next.types[typeName] ?? {}) };
+          const bucket = { ...next.types[typeName] };
           if (value === next.authored[row.name]) delete bucket[row.name];
           else bucket[row.name] = value;
           next.types[typeName] = bucket;
@@ -870,7 +874,9 @@ export function VariantE() {
     // the marks said it would.
     setSaved(savedFrom(draft));
     setDraft((previous) => ({ ...previous, dirty: false }));
-    say(`saved ${WORLD.profile.path} — ${unsavedCount} value${unsavedCount === 1 ? "" : "s"} written`);
+    say(
+      `saved ${WORLD.profile.path} — ${unsavedCount} value${unsavedCount === 1 ? "" : "s"} written`,
+    );
   };
 
   // ── the geometry verbs ────────────────────────────────────────────────────────────────────────
@@ -891,8 +897,8 @@ export function VariantE() {
     setDraft((previous) => {
       const next = structuredClone(previous);
       next.geom[slug] = {
-        dims: { ...(next.geom[slug]?.dims ?? {}), [property]: trimmed },
-        meta: { ...(next.geom[slug]?.meta ?? {}) },
+        dims: { ...next.geom[slug]?.dims, [property]: trimmed },
+        meta: { ...next.geom[slug]?.meta },
       };
       next.dirty = true;
       return next;
@@ -903,8 +909,8 @@ export function VariantE() {
     setDraft((previous) => {
       const next = structuredClone(previous);
       next.geom[slug] = {
-        dims: { ...(next.geom[slug]?.dims ?? {}) },
-        meta: { ...(next.geom[slug]?.meta ?? {}), [key]: value },
+        dims: { ...next.geom[slug]?.dims },
+        meta: { ...next.geom[slug]?.meta, [key]: value },
       };
       next.dirty = true;
       return next;
@@ -924,8 +930,8 @@ export function VariantE() {
     setDraft((previous) => {
       const next = structuredClone(previous);
       next.geom[slug] = {
-        dims: { ...(next.geom[slug]?.dims ?? {}), [property]: `param:${paramName}` },
-        meta: { ...(next.geom[slug]?.meta ?? {}) },
+        dims: { ...next.geom[slug]?.dims, [property]: `param:${paramName}` },
+        meta: { ...next.geom[slug]?.meta },
       };
       next.dirty = true;
       return next;
@@ -938,7 +944,7 @@ export function VariantE() {
   const bindToNew = (slug: string, property: string, dataType: string) => {
     const literal = bindingOf(draft, slug, property);
     const base = paramNameFor(slug, property);
-    const taken = new Set([...Object.keys(draft.authored)]);
+    const taken = new Set(Object.keys(draft.authored));
     let name = base;
     for (let n = 2; taken.has(name); n += 1) name = `${base} ${n}`;
     setDraft((previous) => {
@@ -946,8 +952,8 @@ export function VariantE() {
       next.authored[name] = literal;
       next.newParams = [...next.newParams, { name, dataType, group: "geometry" }];
       next.geom[slug] = {
-        dims: { ...(next.geom[slug]?.dims ?? {}), [property]: `param:${name}` },
-        meta: { ...(next.geom[slug]?.meta ?? {}) },
+        dims: { ...next.geom[slug]?.dims, [property]: `param:${name}` },
+        meta: { ...next.geom[slug]?.meta },
       };
       next.dirty = true;
       return next;
@@ -1120,7 +1126,11 @@ export function VariantE() {
             : ""
       }`;
       return (
-        <ProposedCell proposals={family} onLocate={locate} where={`the family value of ${row.name}`}>
+        <ProposedCell
+          proposals={family}
+          onLocate={locate}
+          where={`the family value of ${row.name}`}
+        >
           <span className="tele block min-w-0 flex-1 truncate px-1.5" title={reason}>
             <span className="block truncate leading-[13px]">
               {row.kind === "live-only" ? (
@@ -1151,7 +1161,9 @@ export function VariantE() {
                 and that join is the point: editing this row moves all of them at once. */}
             {(isFormula(authored) || drives.length > 0) && (
               <span className="block truncate text-[9px] leading-[11px]">
-                {isFormula(authored) && <span className="text-[var(--st-derived)]">{authored}</span>}
+                {isFormula(authored) && (
+                  <span className="text-[var(--st-derived)]">{authored}</span>
+                )}
                 {isFormula(authored) && drives.length > 0 && (
                   <span className="text-muted-foreground/40"> · </span>
                 )}
@@ -1254,7 +1266,9 @@ export function VariantE() {
                 ) : (
                   <>
                     {diskLiteral}
-                    {diskLiteral !== literal && <span className="ml-1 text-[var(--st-warn)]">→</span>}
+                    {diskLiteral !== literal && (
+                      <span className="ml-1 text-[var(--st-warn)]">→</span>
+                    )}
                   </>
                 )
               }
@@ -1272,27 +1286,27 @@ export function VariantE() {
           // against without ever pushing the input onto a second line — a row that grew a pixel
           // when it refused would break the one promise the overlays are built on.
           <span className="relative flex h-7 w-full items-center">
-          <ProposedCell
-            proposals={[]}
-            onLocate={locate}
-            where={row.name}
-            unsaved={
-              isUnsavedAt(draft, saved, row, typeName)
-                ? `UNSAVED — the file ${diskLiteral === null ? "does not carry this dimension at all" : `carries ${diskLiteral}`}; saving writes ${literal}.`
-                : null
-            }
-          >
-            <TextCell
-              key={`${literal}:${refusals}`}
-              value={literal}
-              className="text-foreground"
-              title={`The literal itself, as ONE cell across every type — EDITABLE. Typing here rewrites the number frozen into the geometry; it does not make it reachable. That is what binding is for, and the two are deliberately different acts: this one changes what the family measures, binding changes who is allowed to say so. Emptying it is refused out loud — a dimension with no number is not a state.`}
-              onCommit={(next) => editLiteral(slug, property, next)}
-            />
-          </ProposedCell>
-          {refusal?.key === `geom:${slug}.${property}` && (
-            <RefusalNote text={refusal.text} onDismiss={() => setRefusal(null)} />
-          )}
+            <ProposedCell
+              proposals={[]}
+              onLocate={locate}
+              where={row.name}
+              unsaved={
+                isUnsavedAt(draft, saved, row, typeName)
+                  ? `UNSAVED — the file ${diskLiteral === null ? "does not carry this dimension at all" : `carries ${diskLiteral}`}; saving writes ${literal}.`
+                  : null
+              }
+            >
+              <TextCell
+                key={`${literal}:${refusals}`}
+                value={literal}
+                className="text-foreground"
+                title={`The literal itself, as ONE cell across every type — EDITABLE. Typing here rewrites the number frozen into the geometry; it does not make it reachable. That is what binding is for, and the two are deliberately different acts: this one changes what the family measures, binding changes who is allowed to say so. Emptying it is refused out loud — a dimension with no number is not a state.`}
+                onCommit={(next) => editLiteral(slug, property, next)}
+              />
+            </ProposedCell>
+            {refusal?.key === `geom:${slug}.${property}` && (
+              <RefusalNote text={refusal.text} onDismiss={() => setRefusal(null)} />
+            )}
           </span>
         );
       }
@@ -1399,7 +1413,11 @@ export function VariantE() {
         const willWrite = diskValue !== draftValue;
         return marks(
           <ReadCell
-            className={cn("leading-7", willWrite ? "text-[var(--st-warn)]" : "text-muted-foreground", underline)}
+            className={cn(
+              "leading-7",
+              willWrite ? "text-[var(--st-warn)]" : "text-muted-foreground",
+              underline,
+            )}
             value={
               <>
                 {diskValue || "—"}
@@ -1419,7 +1437,10 @@ export function VariantE() {
       if (isFormula(authored))
         return (
           <ReadCell
-            className={cn("leading-7 text-[var(--st-derived)]/70 italic", options.align === "right" && "text-right")}
+            className={cn(
+              "leading-7 text-[var(--st-derived)]/70 italic",
+              options.align === "right" && "text-right",
+            )}
             value="driven"
             reason={`LOCKED — the family level drives this with ${authored}, so a type cannot override its result. The formula is shown on the parameter's own cell; change what feeds it instead. Switch to ⇄ live to see the number Revit computes for it.`}
           />
@@ -1606,11 +1627,7 @@ export function VariantE() {
    * table by a colour.
    */
   const columns = useMemo<Column<PRow>[]>(() => {
-    const list: Column<PRow>[] = [
-      railColumn(),
-      identityColumn(tableState),
-      stateCol(tableState),
-    ];
+    const list: Column<PRow>[] = [railColumn(), identityColumn(tableState), stateCol(tableState)];
     for (const typeName of TYPE_NAMES) list.push(typeColumn(typeName, { header: true }));
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2082,7 +2099,9 @@ export function VariantE() {
         <p className="tele mb-1.5 text-[9px] text-[var(--st-meta)]">
           {row?.dataType ?? "unknown"} · bound per {row?.isInstance ? "instance" : "type"}
           {row?.group ? ` · ${row.group}` : ""}
-          {MISSING_IN_REVIT.has(name) && <span className="ml-1 text-[var(--st-warn)]">⊘ not in Revit</span>}
+          {MISSING_IN_REVIT.has(name) && (
+            <span className="ml-1 text-[var(--st-warn)]">⊘ not in Revit</span>
+          )}
         </p>
 
         <div className="mb-2 rounded-[2px] border border-[var(--line-soft)] p-1.5">
@@ -2110,7 +2129,10 @@ export function VariantE() {
             onCommit={(next) => editAuthored(name, next)}
           />
           {refusal?.key === `param:${name}` && (
-            <p className="tele mt-1 text-[9px] leading-snug text-[var(--st-warn)]" title={refusal.text}>
+            <p
+              className="tele mt-1 text-[9px] leading-snug text-[var(--st-warn)]"
+              title={refusal.text}
+            >
               {refusal.text}
             </p>
           )}
@@ -2248,43 +2270,47 @@ export function VariantE() {
           />
           <Verb
             label="parse"
-            onClick={() => say(`re-parsed ${SPEC?.fileName ?? "the spec"} — ${SPEC?.blocks.length ?? 0} blocks`)}
+            onClick={() =>
+              say(`re-parsed ${SPEC?.fileName ?? "the spec"} — ${SPEC?.blocks.length ?? 0} blocks`)
+            }
             reason="Read the source document again and rebuild its blocks. Parsing is the doc pane's own verb — it changes what can be cited, and nothing about the profile."
           />
         </>
       }
     >
       <div className="min-h-0 flex-1 overflow-y-auto">
-      {/* proposals — D's margin annotations, docked as a stack above the spec */}
-      <div className="border-b border-[var(--line)] p-2">
-        <p
-          className="tele mb-1 text-[9px] text-[var(--st-meta)]"
-          title="Pea's reading of the spec, aimed at named cells. Accepting moves the value into the table where you can see it land; the citation stays lit either way, because the grounding is a separate fact from the proposal."
-        >
-          pea proposes — ephemeral, page-scoped
-        </p>
-        {WORLD.proposals.map((proposal) => (
-          <ProposalCard
-            key={proposal.id}
-            proposal={proposal}
-            verdict={verdictOf(proposal.id)}
-            // A card lights either because it is the one you located, or because its whole ROW is
-            // the one you located — the two-proposal case has to light both cards or the count on
-            // the rail would be pointing at something the sidebar refuses to show.
-            focused={focusedProposal === proposal.id || pinnedParam === proposal.param}
-            blockMd={SPEC?.blocks.find((block) => block.id === proposal.sourceBlockId)?.md ?? null}
-            onAccept={() => accept(proposal)}
-            onDeny={() => deny(proposal)}
-            onHover={(on) => {
-              setFocus(on ? { kind: "param", id: proposal.param } : null);
-              setFocusedProposal(on ? proposal.id : null);
-            }}
-            register={(node) => {
-              cardRefs.current[proposal.id] = node;
-            }}
-          />
-        ))}
-      </div>
+        {/* proposals — D's margin annotations, docked as a stack above the spec */}
+        <div className="border-b border-[var(--line)] p-2">
+          <p
+            className="tele mb-1 text-[9px] text-[var(--st-meta)]"
+            title="Pea's reading of the spec, aimed at named cells. Accepting moves the value into the table where you can see it land; the citation stays lit either way, because the grounding is a separate fact from the proposal."
+          >
+            pea proposes — ephemeral, page-scoped
+          </p>
+          {WORLD.proposals.map((proposal) => (
+            <ProposalCard
+              key={proposal.id}
+              proposal={proposal}
+              verdict={verdictOf(proposal.id)}
+              // A card lights either because it is the one you located, or because its whole ROW is
+              // the one you located — the two-proposal case has to light both cards or the count on
+              // the rail would be pointing at something the sidebar refuses to show.
+              focused={focusedProposal === proposal.id || pinnedParam === proposal.param}
+              blockMd={
+                SPEC?.blocks.find((block) => block.id === proposal.sourceBlockId)?.md ?? null
+              }
+              onAccept={() => accept(proposal)}
+              onDeny={() => deny(proposal)}
+              onHover={(on) => {
+                setFocus(on ? { kind: "param", id: proposal.param } : null);
+                setFocusedProposal(on ? proposal.id : null);
+              }}
+              register={(node) => {
+                cardRefs.current[proposal.id] = node;
+              }}
+            />
+          ))}
+        </div>
 
         {docMode === "text" ? (
           <SpecText litBlocks={litBlocks} />
@@ -2304,7 +2330,9 @@ export function VariantE() {
           FAMILY
         </span>
         <Sentence
-          prefix={openProposals.length > 0 ? `${openProposals.length} proposals against` : "editing"}
+          prefix={
+            openProposals.length > 0 ? `${openProposals.length} proposals against` : "editing"
+          }
           prefixTone={openProposals.length > 0 ? "awaiting" : "rest"}
           documentLabel={WORLD.profile.path}
           documents={[WORLD.profile.path]}
@@ -2433,7 +2461,9 @@ function ProposedCell({
           className="absolute bottom-px left-px z-20 size-1 rounded-[1px] bg-[var(--st-warn)]"
         />
       )}
-      {first && <ProposalNotch first={first} count={proposals.length} where={where} onLocate={onLocate} />}
+      {first && (
+        <ProposalNotch first={first} count={proposals.length} where={where} onLocate={onLocate} />
+      )}
     </span>
   );
 }
@@ -2545,7 +2575,9 @@ function SpecSheet({
   onZoom: (zoom: number) => void;
 }) {
   if (!SPEC)
-    return <p className="tele p-3 text-[11px] text-[var(--st-meta)]">No spec attached to render.</p>;
+    return (
+      <p className="tele p-3 text-[11px] text-[var(--st-meta)]">No spec attached to render.</p>
+    );
 
   const pages = [...new Set(SPEC.blocks.map((block) => block.page))].sort((a, b) => a - b);
 
@@ -2605,7 +2637,9 @@ function SpecSheet({
                         width={width}
                         height={height}
                         fill={
-                          lit ? "color-mix(in srgb, var(--secondary) 80%, transparent)" : "transparent"
+                          lit
+                            ? "color-mix(in srgb, var(--secondary) 80%, transparent)"
+                            : "transparent"
                         }
                         stroke={lit ? "var(--st-meta)" : "var(--line-2)"}
                         strokeWidth={lit ? 1 : 0.4}
@@ -2711,7 +2745,9 @@ function ProposalCard({
       className="mb-1.5 py-1 pl-2"
       style={{
         borderLeft: "1.5px solid var(--st-proposal)",
-        background: focused ? "color-mix(in srgb, var(--st-proposal) 12%, transparent)" : "transparent",
+        background: focused
+          ? "color-mix(in srgb, var(--st-proposal) 12%, transparent)"
+          : "transparent",
         transition: "background 0.25s",
       }}
       title="A pea proposal — ephemeral and page-scoped. It is not in the document and never will be; accepting is what writes the value, and leaving the page throws the proposal away."
@@ -2803,7 +2839,9 @@ function AnatomyDrawing({
   // a thing, not a status surface. FOCUS, though, is page vocabulary: it lights as a mist fill and
   // a foreground stroke, exactly as the table's focused row does, and spends no state colour.
   const partFill = (slug: string) =>
-    focusedParts.has(slug) ? "color-mix(in srgb, var(--secondary) 80%, transparent)" : "transparent";
+    focusedParts.has(slug)
+      ? "color-mix(in srgb, var(--secondary) 80%, transparent)"
+      : "transparent";
   const partStroke = (slug: string) =>
     focusedParts.has(slug) ? "var(--foreground)" : "var(--clay-ink)";
   // Hovering LIGHTS, clicking OPENS — the same two-step the table's rows use, so the drawing is

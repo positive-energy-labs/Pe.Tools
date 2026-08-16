@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from "./routes/__root";
 import { Route as IndexRouteImport } from "./routes/index";
 import { Route as ChatRouteImport } from "./routes/chat";
 import { Route as DataTablesRouteImport } from "./routes/data-tables";
+import { Route as DesignLangRouteImport } from "./routes/design-lang";
 import { Route as DesignSystemRouteImport } from "./routes/design-system";
 import { Route as DocLabRouteImport } from "./routes/doc-lab";
 import { Route as FamiliesRouteImport } from "./routes/families";
@@ -22,6 +23,9 @@ import { Route as ParameterLinksRouteImport } from "./routes/parameter-links";
 import { Route as ScheduleGridRouteImport } from "./routes/schedule-grid";
 import { Route as SettingsRouteImport } from "./routes/settings";
 import { Route as TakeoffsRouteImport } from "./routes/takeoffs";
+import { Route as DesignSystemArmingRouteImport } from "./routes/design-system_.arming";
+import { Route as DesignSystemPopoversRouteImport } from "./routes/design-system_.popovers";
+import { Route as DesignSystemProposalFlowRouteImport } from "./routes/design-system_.proposal-flow";
 import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
 import { Route as ApiPdfAuditParseParseIdRouteImport } from "./routes/api/pdf-audit/parse.$parseId";
 
@@ -38,6 +42,11 @@ const ChatRoute = ChatRouteImport.update({
 const DataTablesRoute = DataTablesRouteImport.update({
   id: "/data-tables",
   path: "/data-tables",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const DesignLangRoute = DesignLangRouteImport.update({
+  id: "/design-lang",
+  path: "/design-lang",
   getParentRoute: () => rootRouteImport,
 } as any);
 const DesignSystemRoute = DesignSystemRouteImport.update({
@@ -90,6 +99,22 @@ const TakeoffsRoute = TakeoffsRouteImport.update({
   path: "/takeoffs",
   getParentRoute: () => rootRouteImport,
 } as any);
+const DesignSystemArmingRoute = DesignSystemArmingRouteImport.update({
+  id: "/design-system_/arming",
+  path: "/design-system/arming",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const DesignSystemPopoversRoute = DesignSystemPopoversRouteImport.update({
+  id: "/design-system_/popovers",
+  path: "/design-system/popovers",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const DesignSystemProposalFlowRoute =
+  DesignSystemProposalFlowRouteImport.update({
+    id: "/design-system_/proposal-flow",
+    path: "/design-system/proposal-flow",
+    getParentRoute: () => rootRouteImport,
+  } as any);
 const ApiPdfAuditParseRoute = ApiPdfAuditParseRouteImport.update({
   id: "/api/pdf-audit/parse",
   path: "/api/pdf-audit/parse",
@@ -105,6 +130,7 @@ export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
   "/chat": typeof ChatRoute;
   "/data-tables": typeof DataTablesRoute;
+  "/design-lang": typeof DesignLangRoute;
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
   "/families": typeof FamiliesRoute;
@@ -115,6 +141,9 @@ export interface FileRoutesByFullPath {
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
   "/takeoffs": typeof TakeoffsRoute;
+  "/design-system/arming": typeof DesignSystemArmingRoute;
+  "/design-system/popovers": typeof DesignSystemPopoversRoute;
+  "/design-system/proposal-flow": typeof DesignSystemProposalFlowRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
 }
@@ -122,6 +151,7 @@ export interface FileRoutesByTo {
   "/": typeof IndexRoute;
   "/chat": typeof ChatRoute;
   "/data-tables": typeof DataTablesRoute;
+  "/design-lang": typeof DesignLangRoute;
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
   "/families": typeof FamiliesRoute;
@@ -132,6 +162,9 @@ export interface FileRoutesByTo {
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
   "/takeoffs": typeof TakeoffsRoute;
+  "/design-system/arming": typeof DesignSystemArmingRoute;
+  "/design-system/popovers": typeof DesignSystemPopoversRoute;
+  "/design-system/proposal-flow": typeof DesignSystemProposalFlowRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
 }
@@ -140,6 +173,7 @@ export interface FileRoutesById {
   "/": typeof IndexRoute;
   "/chat": typeof ChatRoute;
   "/data-tables": typeof DataTablesRoute;
+  "/design-lang": typeof DesignLangRoute;
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
   "/families": typeof FamiliesRoute;
@@ -150,6 +184,9 @@ export interface FileRoutesById {
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
   "/takeoffs": typeof TakeoffsRoute;
+  "/design-system_/arming": typeof DesignSystemArmingRoute;
+  "/design-system_/popovers": typeof DesignSystemPopoversRoute;
+  "/design-system_/proposal-flow": typeof DesignSystemProposalFlowRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
 }
@@ -159,6 +196,7 @@ export interface FileRouteTypes {
     | "/"
     | "/chat"
     | "/data-tables"
+    | "/design-lang"
     | "/design-system"
     | "/doc-lab"
     | "/families"
@@ -169,6 +207,9 @@ export interface FileRouteTypes {
     | "/schedule-grid"
     | "/settings"
     | "/takeoffs"
+    | "/design-system/arming"
+    | "/design-system/popovers"
+    | "/design-system/proposal-flow"
     | "/api/pdf-audit/parse"
     | "/api/pdf-audit/parse/$parseId";
   fileRoutesByTo: FileRoutesByTo;
@@ -176,6 +217,7 @@ export interface FileRouteTypes {
     | "/"
     | "/chat"
     | "/data-tables"
+    | "/design-lang"
     | "/design-system"
     | "/doc-lab"
     | "/families"
@@ -186,6 +228,9 @@ export interface FileRouteTypes {
     | "/schedule-grid"
     | "/settings"
     | "/takeoffs"
+    | "/design-system/arming"
+    | "/design-system/popovers"
+    | "/design-system/proposal-flow"
     | "/api/pdf-audit/parse"
     | "/api/pdf-audit/parse/$parseId";
   id:
@@ -193,6 +238,7 @@ export interface FileRouteTypes {
     | "/"
     | "/chat"
     | "/data-tables"
+    | "/design-lang"
     | "/design-system"
     | "/doc-lab"
     | "/families"
@@ -203,6 +249,9 @@ export interface FileRouteTypes {
     | "/schedule-grid"
     | "/settings"
     | "/takeoffs"
+    | "/design-system_/arming"
+    | "/design-system_/popovers"
+    | "/design-system_/proposal-flow"
     | "/api/pdf-audit/parse"
     | "/api/pdf-audit/parse/$parseId";
   fileRoutesById: FileRoutesById;
@@ -211,6 +260,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute;
   ChatRoute: typeof ChatRoute;
   DataTablesRoute: typeof DataTablesRoute;
+  DesignLangRoute: typeof DesignLangRoute;
   DesignSystemRoute: typeof DesignSystemRoute;
   DocLabRoute: typeof DocLabRoute;
   FamiliesRoute: typeof FamiliesRoute;
@@ -221,6 +271,9 @@ export interface RootRouteChildren {
   ScheduleGridRoute: typeof ScheduleGridRoute;
   SettingsRoute: typeof SettingsRoute;
   TakeoffsRoute: typeof TakeoffsRoute;
+  DesignSystemArmingRoute: typeof DesignSystemArmingRoute;
+  DesignSystemPopoversRoute: typeof DesignSystemPopoversRoute;
+  DesignSystemProposalFlowRoute: typeof DesignSystemProposalFlowRoute;
   ApiPdfAuditParseRoute: typeof ApiPdfAuditParseRouteWithChildren;
 }
 
@@ -245,6 +298,13 @@ declare module "@tanstack/react-router" {
       path: "/data-tables";
       fullPath: "/data-tables";
       preLoaderRoute: typeof DataTablesRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/design-lang": {
+      id: "/design-lang";
+      path: "/design-lang";
+      fullPath: "/design-lang";
+      preLoaderRoute: typeof DesignLangRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/design-system": {
@@ -317,6 +377,27 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof TakeoffsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/design-system_/arming": {
+      id: "/design-system_/arming";
+      path: "/design-system/arming";
+      fullPath: "/design-system/arming";
+      preLoaderRoute: typeof DesignSystemArmingRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/design-system_/popovers": {
+      id: "/design-system_/popovers";
+      path: "/design-system/popovers";
+      fullPath: "/design-system/popovers";
+      preLoaderRoute: typeof DesignSystemPopoversRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/design-system_/proposal-flow": {
+      id: "/design-system_/proposal-flow";
+      path: "/design-system/proposal-flow";
+      fullPath: "/design-system/proposal-flow";
+      preLoaderRoute: typeof DesignSystemProposalFlowRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/api/pdf-audit/parse": {
       id: "/api/pdf-audit/parse";
       path: "/api/pdf-audit/parse";
@@ -349,6 +430,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ChatRoute: ChatRoute,
   DataTablesRoute: DataTablesRoute,
+  DesignLangRoute: DesignLangRoute,
   DesignSystemRoute: DesignSystemRoute,
   DocLabRoute: DocLabRoute,
   FamiliesRoute: FamiliesRoute,
@@ -359,6 +441,9 @@ const rootRouteChildren: RootRouteChildren = {
   ScheduleGridRoute: ScheduleGridRoute,
   SettingsRoute: SettingsRoute,
   TakeoffsRoute: TakeoffsRoute,
+  DesignSystemArmingRoute: DesignSystemArmingRoute,
+  DesignSystemPopoversRoute: DesignSystemPopoversRoute,
+  DesignSystemProposalFlowRoute: DesignSystemProposalFlowRoute,
   ApiPdfAuditParseRoute: ApiPdfAuditParseRouteWithChildren,
 };
 export const routeTree = rootRouteImport

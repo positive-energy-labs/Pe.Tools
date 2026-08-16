@@ -1,0 +1,171 @@
+/* PROTOTYPE — design-lang base 2, ROUND 2 (the palette round). Throwaway.
+   =========================================================================================
+   THE TOKEN CONTRACT — this file is the round's competitive interface.
+   =========================================================================================
+
+   Round 2 isolates the palette: ONE fixed base (`../base.tsx` + `../base.css`) is rendered
+   byte-identically under rival palette scopes and judged by flipping each in BOTH modes.
+   The base consumes NOTHING but the tokens below — a colour literal anywhere in base.css is
+   a contract violation, because it would be invariant across palettes and would silently
+   decide the round.
+
+   RULES FOR EVERY PALETTE BLOCK
+   -----------------------------
+   1. Redefine ALL 18 tokens. No token may be omitted — there is no inheritance between
+      palette blocks, so a missing token renders as `unset` and the base breaks honestly.
+   2. Light values under `[data-palette="pN"]`, dark values under `.dark [data-palette="pN"]`
+      (the app's dark mechanism is a `.dark` ancestor class — see `src/styles.css`).
+   3. Sibling renderings, not two palettes: the MEANING MAP is identical in both modes.
+      Lightness moves freely; hue angle stays within a declared tolerance; every pairing gets
+      a row in the block's pairing table so drift is a decision, not an accident.
+   4. Tints, washes and hairlines are NOT tokens — the base mixes them from these with
+      `color-mix()`. A palette that wants a different wash strength is proposing a grammar
+      change, which is round 3.
+   5. Standing laws these tokens encode (COLOR-ROLES.md, SURFACE-PHILOSOPHY §5):
+      one alarm · pea is never blue · selection/focus is a FILL, never a hue ·
+      the only filled blue is the verb that writes beyond the page · nav is blue TEXT only.
+
+   THE 18 TOKENS
+   -------------
+   GROUND LADDER (4)   page · artifact · recess · select
+   INK LADDER   (3)   ink · ink-2 · ink-mute
+   HAIRLINE     (2)   line · line-2
+   MEANING      (9)   pea · pea-ink · alarm · caution · done · commit · on-commit · nav
+                       (…that is 8; the 9th is `--r-ink-mute` doing double duty as the
+                        "never checked" rank of the squiggle family — see the reuse table)
+
+   OUTCOME KINDS REUSE THE MEANING ROLES — no outcome gets a hue of its own:
+     busy      → --r-ink-2      (neutral machine fact, in flight)
+     receipt   → --r-done       (it landed)
+     refused   → --r-alarm      (a plan-hash refusal IS the model disagreeing)
+     dropped   → --r-ink-mute   (+ italic — it never happened)
+     advisory  → --r-ink-2      (a dry run blocks nothing)
+     partial   → --r-caution    (failures stay staged = unsaved)
+     error     → --r-caution    (a busy bridge is NOT the model disagreeing)
+
+   THE SQUIGGLE FAMILY (c's axis law) is ranked by these same roles, one shape, three colours:
+     drift → --r-alarm  ▸  stale → --r-caution  ▸  unverified → --r-ink-mute
+   ========================================================================================= */
+
+/* ─────────────────────────────────────────────────────────────────────────────────────────
+   p0 · REFERENCE — the current PE palette, mapped honestly. The "unfixed incumbent".
+   p0 exists so the base runs before rival palettes land, and so every rival is judged
+   against what shipping actually looks like today — including its known weaknesses
+   (pea's display mint is near-invisible on warm paper in light; that is the point).
+
+   PAIRING TABLE — light | dark | hue-drift note
+   ---------------------------------------------------------------------------------------
+   page       #fbfaf7 | #131c19 | warm paper ↔ basalt-green. Ground pair, hue free by design.
+   artifact   #f3efe6 | #19231f | one step IN from page in both modes; same relationship.
+   recess     #e9e4d8 | #1f2925 | two steps in; same relationship.
+   select     #e2ddd0 | #2b3833 | neutral fill, no hue in either mode (Law: selection is a fill).
+   ink        #3e4340 | #e9ece8 | basalt ↔ paper. Inverted pair, near-neutral both sides.
+   ink-2      #4f6473 | #9fada4 | slate. LIGHT is bluer than dark (~205° vs ~150°) — drift of
+                                 ~55°, the incumbent's largest and a known wart.
+   ink-mute   #878d86 | #7d8a83 | warm grey both modes. ~0° drift.
+   line       ink @12% | ink @14% | derived from ink, so hue tracks automatically.
+   line-2     ink @22% | ink @26% | same.
+   pea        #72c6a2 | #82d0a8 | mint. ~5° drift. Light value is DELIBERATELY the weak
+                                 incumbent (`--st-proposal`); rivals are expected to fix it.
+   pea-ink    #2f6a4a | #93dcb6 | palm ↔ light mint. Same hue family, opposite lightness —
+                                 the mixable companion the round-1 grill found missing.
+   alarm      #8a5e3b | #ca9d75 | clay. ~3° drift.
+   caution    #847a67 | #c6bba6 | kiln. ~2° drift.
+   done       #2f6a4a | #82d0a8 | palm ↔ mint. ~5° drift. Shares pea's family on purpose:
+                                 "pea proposed it" and "it landed" are adjacent, not rivals.
+   commit     #005695 | #4ea3d6 | PE blue. ~3° drift.
+   on-commit  #ffffff | #07151f | text ON the commit fill; the only pure white/black in the set.
+   nav        #005695 | #6fb4e0 | same blue as commit, lifted in dark so blue TEXT clears the
+                                 ground. Commit is a FILL, nav is TEXT — same hue, two jobs.
+   ───────────────────────────────────────────────────────────────────────────────────────── */
+
+[data-palette="p0"] {
+  /* ── ground ladder ── */
+  --r-page: #fbfaf7; /* the page itself; prose and page chrome sit here. */
+  --r-artifact: #f3efe6; /* the machine-operated object: table, pea card, arming strip, sentence. Plain content (verb groups, outcomes) is never framed. */
+  --r-recess: #e9e4d8; /* set INTO an artifact: table head/gutter, card footer, key strip. */
+  --r-select: #e2ddd0; /* selection + focus fill. NEVER a hue — only ever this token. */
+
+  /* ── ink ladder — only two PRIMARY text colours on the page (c's axis law) ── */
+  --r-ink: #3e4340; /* primary text: values, labels, prose. */
+  --r-ink-2: #4f6473; /* secondary text: annotations, footlines, captions, counts. */
+  --r-ink-mute: #878d86; /* locked/uneditable/dropped text; also the "never checked" squiggle. */
+
+  /* ── hairlines — border-scarce language; these are for seams, not for boxing things in ── */
+  --r-line: color-mix(in srgb, #3e4340 12%, transparent); /* quiet: row rules, artifact edge. */
+  --r-line-2: color-mix(
+    in srgb,
+    #3e4340 22%,
+    transparent
+  ); /* firm: seams, citation underline, chip edge. */
+
+  /* ── meaning roles ── */
+  --r-pea: #72c6a2; /* pea's DISPLAY hue: rings, corner fold, the card's edge. Never blue. */
+  --r-pea-ink: #2f6a4a; /* pea at ink weight: pea's TEXT, and the mix source for pea washes. */
+  --r-alarm: #8a5e3b; /* the ONE alarm — the model disagrees. Drift squiggle, refusal, ghost value. */
+  --r-caution: #847a67; /* stale · unverified · UNSAVED — the unsaved square, partial/error outcomes. */
+  --r-done: #2f6a4a; /* it landed: receipts, the post-commit sentence. */
+  --r-commit: #005695; /* the ONLY filled blue: verbs that write beyond the page, armed strip. */
+  --r-on-commit: #ffffff; /* text/icon sitting on a --r-commit fill. */
+  --r-nav: #005695; /* nav as blue TEXT (back · forward · out). Never a fill, never a border. */
+}
+
+.dark [data-palette="p0"] {
+  --r-page: #131c19;
+  --r-artifact: #19231f;
+  --r-recess: #1f2925;
+  --r-select: #2b3833;
+
+  --r-ink: #e9ece8;
+  --r-ink-2: #9fada4;
+  --r-ink-mute: #7d8a83;
+
+  --r-line: color-mix(in srgb, #e9ece8 14%, transparent);
+  --r-line-2: color-mix(in srgb, #e9ece8 26%, transparent);
+
+  --r-pea: #82d0a8;
+  --r-pea-ink: #93dcb6;
+  --r-alarm: #ca9d75;
+  --r-caution: #c6bba6;
+  --r-done: #82d0a8;
+  --r-commit: #4ea3d6;
+  --r-on-commit: #07151f;
+  --r-nav: #6fb4e0;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────────────────
+   TEMPLATE FOR A RIVAL PALETTE — copy this whole block, rename pN, fill the table FIRST.
+   Write the pairing table before the values: the table is the argument, the values are its
+   consequence. A row whose "note" says nothing is a pairing nobody decided.
+
+   pN · <one-line thesis: what this palette believes light and dark should share>
+
+   PAIRING TABLE — light | dark | hue-drift note
+   ---------------------------------------------------------------------------------------
+   page       #______ | #______ |
+   artifact   #______ | #______ |
+   recess     #______ | #______ |
+   select     #______ | #______ |
+   ink        #______ | #______ |
+   ink-2      #______ | #______ |
+   ink-mute   #______ | #______ |
+   line       #______ | #______ |
+   line-2     #______ | #______ |
+   pea        #______ | #______ |
+   pea-ink    #______ | #______ |
+   alarm      #______ | #______ |
+   caution    #______ | #______ |
+   done       #______ | #______ |
+   commit     #______ | #______ |
+   on-commit  #______ | #______ |
+   nav        #______ | #______ |
+
+   [data-palette="pN"] {
+     --r-page: ;      --r-artifact: ;  --r-recess: ;   --r-select: ;
+     --r-ink: ;       --r-ink-2: ;     --r-ink-mute: ;
+     --r-line: ;      --r-line-2: ;
+     --r-pea: ;       --r-pea-ink: ;   --r-alarm: ;    --r-caution: ;
+     --r-done: ;      --r-commit: ;    --r-on-commit: ; --r-nav: ;
+   }
+   .dark [data-palette="pN"] { …the same 18, dark values… }
+   ───────────────────────────────────────────────────────────────────────────────────────── */

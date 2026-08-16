@@ -14,9 +14,15 @@ export interface VariantMeta {
 export function ProtoSwitcher({
   variants,
   current,
+  to = "/family",
+  param = "variant",
 }: {
   variants: VariantMeta[];
   current: string;
+  /** Which round this switcher drives. Kept a closed union so a typo cannot route nowhere. */
+  to?: "/family" | "/design-lang";
+  /** The search param the round keys on — `?variant=` for surfaces, `?scope=` for token rounds. */
+  param?: "variant" | "scope";
 }) {
   const navigate = useNavigate();
   const index = Math.max(
@@ -26,8 +32,8 @@ export function ProtoSwitcher({
   const go = (step: number) => {
     const next = variants[(index + step + variants.length) % variants.length]!;
     void navigate({
-      to: "/family",
-      search: (prev: Record<string, unknown>) => ({ ...prev, variant: next.key }),
+      to,
+      search: (prev: Record<string, unknown>) => ({ ...prev, [param]: next.key }),
     });
   };
 

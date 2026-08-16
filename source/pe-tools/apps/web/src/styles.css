@@ -4,6 +4,10 @@
 
 @import "tw-animate-css";
 
+/* THE DESIGN LANGUAGE (canon `--r-*` contract, p3 · wholistic bands). Additive: the tokens
+   below stay live for every route that has not migrated onto `components/lang` yet. */
+@import "./design-lang.css";
+
 @custom-variant dark (&:is(.dark *));
 
 :root {

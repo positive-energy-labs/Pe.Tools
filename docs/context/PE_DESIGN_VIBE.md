@@ -1,5 +1,11 @@
 # Positive Energy — Web Design Guide (for coding agents)
 
+> **STALE (2026-08-16).** A pre-tools first step at a standard; pe-tools is tools-first and
+> the website/portal registers below are out of scope. For tools, authority is
+> `docs/design/COLOR-ROLES.md` + `docs/features/design-lang/CLEANROOM.md`, which absorbed the
+> durable identity content (warm paper, earthy secondary family, type-before-colour,
+> restraint). Do not cite this doc for new work.
+
 Condensed working reference for building internal tools (calculators, AI chat, project portal). Optimized for implementation, not philosophy.
 
 ## The vibe in one line

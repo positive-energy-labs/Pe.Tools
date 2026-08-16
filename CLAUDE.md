@@ -36,6 +36,10 @@ Issues live as GitHub issues in `kaitpw/Pe.Tools` (via the `gh` CLI). See `docs/
 
 Default triage vocabulary (label string equals role name). See `docs/agents/triage-labels.md`.
 
+### Product surfaces
+
+`docs/design/SURFACE-PHILOSOPHY.md` holds what our UI surfaces are for and how they behave; the `find-the-product` skill is the loop that produces and updates it.
+
 ### Domain docs
 
 Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.

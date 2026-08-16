@@ -1,0 +1,140 @@
+/**
+ * VERB — every control that acts, rebuilt against the design language.
+ *
+ * CONSUMERS: soon — the family clean-room's verb lane, the takeoff panes, the chat card's
+ * accept/deny. `components/ui/verb.tsx` still serves the unmigrated routes; absorbing it is the
+ * per-route normalization phase's job, not this file's.
+ *
+ * RULINGS EMBODIED (docs/features/design-lang/CLEANROOM.md):
+ * - THE ROUND-1 GAP CENSUS against canon `ui/verb`, all five builders independently:
+ *     · no ICON SLOT — the three nav directions are only legible as icons. Fixed: `icon`, and
+ *       `direction` supplies nav's arrow for free.
+ *     · no FILLED tone — every variant that took a commit position contested the bordered blue.
+ *       Fixed: `commit` is a filled blue, and it is the ONLY filled blue in the language.
+ *     · no AGENT tone — COLOR-ROLES Law 0 gave the agent's identity no interaction slot, which
+ *       made pea's own verb illegal (4/5 builders hit this). Fixed: `agent`.
+ *     · `reason` was TITLE-ONLY, so a refusal was invisible until hover. Fixed: when `disabled`,
+ *       the reason renders ON THE SURFACE (SURFACE-PHILOSOPHY §3 — refuse per option, with its
+ *       own reason, where a newcomer will see it).
+ *     · mono type collided with "mono means the machine measured this". Verbs are sans now.
+ * - BLAST RADIUS IS NOT A TONE. It groups the lane and buys no hue: all three writes wear the
+ *   same single blue however far they reach. That is `VerbGroup`, below.
+ * - NAV SPLITS THREE WAYS — back, forward, out — because browsers already taught the difference.
+ *   `open in RHVAC` is nav:out; `sync to .r10` is a write, not a nav. `direction` is required on
+ *   nav so the split cannot be skipped.
+ * - THE ONE HOVER LAW: a 10% ink veil composited as a background-IMAGE over whatever fill the
+ *   control already carries, with a `:focus-visible` twin. Hover buys no hue. Disabled takes
+ *   neither. Round 2 found four ad-hoc hover treatments, two of which lit `--r-select` — a token
+ *   that means SELECTION. See lang.css.
+ * - DISABLED IS GREYED-ITALIC AND STILL READABLE: recessed ground so the slot has a shape, firm
+ *   hairline so the shape has an edge, italic secondary ink so it is plainly not for pressing.
+ *   A refusal a newcomer cannot decipher is indistinguishable from a rendering bug.
+ */
+import { ArrowLeft, ArrowRight, ExternalLink, type LucideIcon } from "lucide-react";
+
+import { cn } from "#/lib/utils";
+
+import "./lang.css";
+
+/** `nav` is separated out at the type level because it alone requires a `direction`. */
+export type VerbTone = "act" | "commit" | "nav" | "agent";
+
+/** The three directions browsers already taught. Each supplies its own arrow. */
+export type NavDirection = "back" | "forward" | "out";
+
+const NAV_ICON: Record<NavDirection, LucideIcon> = {
+  back: ArrowLeft,
+  forward: ArrowRight,
+  out: ExternalLink,
+};
+
+interface VerbBase {
+  label: string;
+  onClick: () => void;
+  /**
+   * What the verb MEANS and what pressing it DOES — or, when `disabled`, why it will not.
+   * Always required: tooltips deepen, they must never rescue, and a refusal with no reason is
+   * the single most-cited defect in the round-1 census. When `disabled`, this also renders as
+   * visible text under the control, not only as the title.
+   */
+  reason: string;
+  disabled?: boolean;
+  /** In flight. Inert, but not a refusal — no reason line renders. */
+  busy?: boolean;
+  className?: string;
+}
+
+export type VerbProps =
+  | (VerbBase & {
+      tone?: "act" | "commit" | "agent";
+      icon?: LucideIcon;
+      direction?: never;
+    })
+  | (VerbBase & {
+      tone: "nav";
+      /** Required: the direction IS the icon, and the three-way split is a standing ruling. */
+      direction: NavDirection;
+      icon?: never;
+    });
+
+export function Verb(props: VerbProps) {
+  const { label, onClick, reason, disabled, busy, className } = props;
+  // Narrow on `props.tone`, not on the defaulted local — the discriminant is what carries
+  // `direction` into scope.
+  const Icon = props.tone === "nav" ? NAV_ICON[props.direction] : props.icon;
+  const tone = props.tone ?? "act";
+  const inert = disabled === true || busy === true;
+
+  const button = (
+    <button
+      type="button"
+      className={cn("dl-verb", className)}
+      data-tone={tone}
+      disabled={inert}
+      onClick={onClick}
+      title={reason}
+    >
+      {Icon != null ? <Icon /> : null}
+      {busy === true ? `${label}…` : label}
+    </button>
+  );
+
+  // A refusal states itself on the surface. Busy does not — "in flight" is not a refusal, and a
+  // line that appeared and vanished on every press would be noise.
+  if (disabled !== true) return button;
+  return (
+    <span className="dl-verb-slot">
+      {button}
+      <span className="dl-refusal">{reason}</span>
+    </span>
+  );
+}
+
+export interface VerbGroupProps {
+  /** What this group of verbs has in common, e.g. "writes beyond the page". */
+  title: string;
+  /** The blast radius in words, e.g. "document · model · external". Grouping's whole payload. */
+  radius?: string;
+  className?: string;
+  children: React.ReactNode;
+}
+
+/**
+ * A labelled lane of verbs. Blast radius is an orthogonal descriptor of a verb, not a reason for
+ * more hues (settled before base 2, unchallenged since) — so it lives here, as a LABEL, and the
+ * verbs inside keep their tones.
+ *
+ * BORDER BUDGET: a lane of plain controls carries no state, so it is deliberately NOT wrapped in
+ * an `ArtifactFrame`. The group head is all the grouping it is allowed to buy.
+ */
+export function VerbGroup({ title, radius, className, children }: VerbGroupProps) {
+  return (
+    <div className={className}>
+      <div className="dl-verb-group-head">
+        <span className="dl-verb-group-title">{title}</span>
+        {radius != null ? <span className="dl-verb-group-radius">{radius}</span> : null}
+      </div>
+      <div className="dl-verb-row">{children}</div>
+    </div>
+  );
+}

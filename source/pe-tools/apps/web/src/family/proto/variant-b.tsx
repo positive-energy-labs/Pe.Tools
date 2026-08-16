@@ -75,7 +75,8 @@ function initialDraft(): Draft {
   const family: Record<string, string> = {};
   for (const param of WORLD.profile.params) family[param.name] = param.value;
   const types: Record<string, Record<string, string>> = {};
-  for (const [name, overrides] of Object.entries(WORLD.profile.types)) types[name] = { ...overrides };
+  for (const [name, overrides] of Object.entries(WORLD.profile.types))
+    types[name] = { ...overrides };
   return { family, types };
 }
 
@@ -123,10 +124,7 @@ function Verb({
 /** The stage tag every pane header wears, foreground-lit while that stage holds the room. */
 function StageTag({ stage, detail, focused }: { stage: Stage; detail: string; focused: boolean }) {
   return (
-    <span
-      title={STAGE_BLURB[stage]}
-      style={{ color: focused ? "var(--foreground)" : undefined }}
-    >
+    <span title={STAGE_BLURB[stage]} style={{ color: focused ? "var(--foreground)" : undefined }}>
       {stage.toUpperCase()} · {detail}
     </span>
   );
@@ -212,7 +210,8 @@ export function VariantB() {
   /** proposal lookup by the cell it targets — `param::typeName` ("" for the family-level cell). */
   const proposalByCell = useMemo(() => {
     const map = new Map<string, (typeof WORLD.proposals)[number]>();
-    for (const proposal of WORLD.proposals) map.set(`${proposal.param}::${proposal.typeName ?? ""}`, proposal);
+    for (const proposal of WORLD.proposals)
+      map.set(`${proposal.param}::${proposal.typeName ?? ""}`, proposal);
     return map;
   }, []);
 
@@ -330,7 +329,10 @@ export function VariantB() {
       facet: (row) => row.group,
       all: "every group",
       cell: (row) => (
-        <span className="tele" title={`${row.name} · ${row.group}${row.isInstance ? " · instance" : ""}`}>
+        <span
+          className="tele"
+          title={`${row.name} · ${row.group}${row.isInstance ? " · instance" : ""}`}
+        >
           {row.name}
         </span>
       ),
@@ -559,7 +561,10 @@ export function VariantB() {
                           title={`Revit carries ${drift.live} for ${drift.param} on type ${drift.typeName}; the profile authors ${effective(draft, drift.param, drift.typeName).value}. Apply overwrites Revit; capture overwrites the profile.`}
                           className="flex items-center gap-2 border-b border-[var(--line-soft)] py-1"
                         >
-                          <span className="tele min-w-0 flex-1 truncate" style={{ color: "var(--clay-ink)" }}>
+                          <span
+                            className="tele min-w-0 flex-1 truncate"
+                            style={{ color: "var(--clay-ink)" }}
+                          >
                             {drift.param} · {drift.typeName} — live {drift.live} vs authored{" "}
                             {effective(draft, drift.param, drift.typeName).value}
                           </span>
