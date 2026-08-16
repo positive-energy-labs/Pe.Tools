@@ -1,8 +1,12 @@
 # Color roles — the layer between palette and surface
 
-Decided 2026-08-16 (clean-room grill). The palette (`styles.css` base + `cat-*`) stays as it
-is; MEANING is assigned only by the role tokens in `styles.css` (`--act-*`, `--st-*`).
-Reconsidering a color is a one-line edit to a role alias — never a sweep.
+> **SUPERSEDED (2026-08-16, same day it was decided).** The design-lang base-2 round absorbed
+> this layer into the `--r-*` meaning band: authority is now the header of
+> `apps/web/src/design-lang.css` (tokens + laws) and the live `/design-system` route (spec).
+> The `--act-*`/`--st-*` tokens survive only as the ALIAS SHIM in `styles.css`, deleted line
+> by line as routes migrate. The LAWS below (one alarm · pea never blue · selection is a
+> fill · the only interactive blue) carried forward verbatim into canon; the token names did
+> not. Kept for the reasoning record — do not cite for new work.
 
 ## Law 0 — two vocabularies, never mixed
 

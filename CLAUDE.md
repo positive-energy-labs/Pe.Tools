@@ -38,7 +38,7 @@ Default triage vocabulary (label string equals role name). See `docs/agents/tria
 
 ### Product surfaces
 
-`docs/design/SURFACE-PHILOSOPHY.md` holds what our UI surfaces are for and how they behave; the `find-the-product` skill is the loop that produces and updates it.
+`docs/design/SURFACE-PHILOSOPHY.md` holds what our UI surfaces are for and how they behave; the `find-the-product` skill is the loop that produces and updates it. The one-system design sweep (goal, loop, frontier) lives at `docs/design/DESIGN-SWEEP.md`; the `/design-system` route is the executable design authority.
 
 ### Domain docs
 

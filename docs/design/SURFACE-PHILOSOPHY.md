@@ -244,8 +244,9 @@ say where options come from.
 
 ## 5 · Colour and type
 
-Full rules in [`COLOR-ROLES.md`](COLOR-ROLES.md), including the sweep still owed by the older
-surfaces. Meaning is assigned in one place so that reconsidering a colour is a one-line edit;
+Full rules in the header of `apps/web/src/design-lang.css` — the one place a colour of the
+language is decided — rendered live in `/design-system` §02. (`COLOR-ROLES.md` is the
+superseded ancestor.) Meaning is assigned in one place so that reconsidering a colour is a one-line edit;
 components consume role tokens rather than raw palette. Deliberately alien prototype chrome, such as
 a variant switcher, is exempt — it must not read as part of the design under review.
 

@@ -1,5 +1,11 @@
 # Design-language round — handoff
 
+> **HISTORICAL (2026-08-16).** The fresh pass this fed happened the same day: the one-system
+> sweep (see `DESIGN-SWEEP.md`, the living handoff). Everything here was either ruled (see
+> `../features/design-lang/CLEANROOM.md`) or became sweep work. **§1's adoption census is the
+> one part still load-bearing: those numbers driven to zero are the sweep's exit gates.**
+> Do not cite the rest for new work.
+
 Raw findings for a fresh pass. Numbers and patterns only; verdicts deliberately omitted.
 
 **Code**: `apps/web/src/design-lang/proto/{specimen,scopes}.css|tsx`, route `/design-lang?scope=a…h`.
