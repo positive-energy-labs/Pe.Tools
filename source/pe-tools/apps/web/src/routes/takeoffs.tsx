@@ -12,7 +12,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
-import { Button } from "#/components/ui/button";
+import { FactChip } from "#/components/lang/chip";
+import { OutcomeLine } from "#/components/lang/outcome";
+import { Verb } from "#/components/lang/verb";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "#/components/ui/dialog";
 import { callHostRpc } from "#/host/client";
 import { mintSelector, sessionLabel, type SessionFacts } from "#/host/target";
 import { useTarget } from "#/host/use-target";
@@ -39,7 +42,6 @@ import {
   type ViewFacts,
 } from "#/takeoff/model";
 import { useFixtureWorld } from "#/takeoff/proto/fixture-world";
-import { Live, Seam } from "#/takeoff/seam";
 import {
   applyEdit,
   buildLiveWorld,
@@ -243,25 +245,34 @@ function TakeoffsRoute() {
         />
       )}
 
+      {/* A failed host call is an ERROR, not a seam — the old rendering wore the reserved dashed
+          seam chip, which claimed "this is a stand-in" about a real bridge failure. `error` is
+          caution, deliberately not the alarm: a busy bridge is not the model disagreeing. */}
       {error && (
-        <div className="absolute bottom-2 left-1/2 z-40 max-w-2xl -translate-x-1/2">
-          <Seam className="bg-background shadow-md">
-            {error}{" "}
-            <button type="button" className="tele underline" onClick={() => setError(null)}>
-              dismiss
-            </button>
-          </Seam>
+        <div className="absolute bottom-2 left-1/2 z-40 max-w-2xl -translate-x-1/2 bg-background px-2 py-1 shadow-md">
+          <OutcomeLine kind="error" label={error} />
+          <Verb
+            label="dismiss"
+            onClick={() => setError(null)}
+            reason="Clears this error line. It does not retry — re-run the verb that failed."
+          />
         </div>
       )}
 
       {source === "fixture" && (
-        <button
-          type="button"
-          className="tele absolute bottom-2 right-2 z-40 rounded-[var(--radius)] border border-border bg-background px-2 py-1 text-muted-foreground hover:bg-muted"
-          onClick={() => setSearch({ source: "live" })}
-        >
-          leave fixture → live
-        </button>
+        <div className="absolute right-2 bottom-2 z-40 flex items-center gap-1.5">
+          <FactChip
+            dashed
+            title="The fixture lane is an explicit URL choice (?source=fixture), never a fallback: a live read that fails shows its error rather than quietly becoming a fixture."
+          >
+            fixture lane
+          </FactChip>
+          <Verb
+            label="leave fixture → live"
+            onClick={() => setSearch({ source: "live" })}
+            reason="Switches this route back to the live lane, where reads and writes address the targeted Revit document"
+          />
+        </div>
       )}
 
       {panel === "adopt" && scope && (
@@ -407,7 +418,7 @@ function TargetGate({
             key={s.sessionId}
             type="button"
             onClick={() => onPick(s)}
-            className="flex w-full items-baseline gap-2 border-b border-[var(--line-soft)] px-2.5 py-1.5 text-left last:border-b-0 hover:bg-muted"
+            className="flex w-full items-baseline gap-2 border-b border-[var(--r-line)] px-2.5 py-1.5 text-left last:border-b-0 hover:bg-muted"
           >
             <span className="text-xs">{sessionLabel(s)}</span>
             <span className="tele ml-auto text-muted-foreground">
@@ -415,15 +426,22 @@ function TargetGate({
             </span>
           </button>
         ))}
+        {/* A picker with no options says where options come from (SURFACE-PHILOSOPHY §4). */}
         {sessions.length === 0 && (
-          <p className="tele px-2.5 py-3 text-muted-foreground">
-            start a Revit session with the Pe add-in, or explore the fixture below.
-          </p>
+          <div className="px-2.5 py-3">
+            <p className="tele-label text-muted-foreground">no sessions</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              this list is the live connected-host catalog. Start Revit with the Pe add-in loaded
+              and a session appears here — or take the fixture lane below.
+            </p>
+          </div>
         )}
       </div>
-      <button type="button" className="tele text-muted-foreground underline" onClick={onFixture}>
-        open the project-a fixture instead (explicit dev adapter)
-      </button>
+      <Verb
+        label="open the project-a fixture instead"
+        onClick={onFixture}
+        reason="Mounts the project-a fixture adapter — an explicit dev choice, never a fallback. Nothing in it can be written."
+      />
     </main>
   );
 }
@@ -512,7 +530,7 @@ function AdoptPanel({
               key={v.name}
               type="button"
               onClick={() => pickView(v.name)}
-              className="flex w-full items-baseline gap-2 border-b border-[var(--line-soft)] px-2 py-1 text-left last:border-b-0 hover:bg-muted"
+              className="flex w-full items-baseline gap-2 border-b border-[var(--r-line)] px-2 py-1 text-left last:border-b-0 hover:bg-muted"
             >
               <span className="text-xs">{v.name}</span>
               <span className="tele ml-auto shrink-0 text-muted-foreground">
@@ -523,21 +541,21 @@ function AdoptPanel({
         </div>
       ) : (
         <>
-          <p className="tele mt-2">
-            <button
-              type="button"
-              className="underline"
+          <p className="mt-2 flex items-center gap-2">
+            <Verb
+              tone="nav"
+              direction="back"
+              label="views"
               onClick={() => (setView(null), setRows(null))}
-            >
-              ← views
-            </button>{" "}
-            <span className="text-muted-foreground">{view}</span>
+              reason="Back to the view list — nothing picked here has been stamped yet"
+            />
+            <span className="tele text-muted-foreground">{view}</span>
           </p>
           <div className="mt-1 max-h-96 overflow-y-auto rounded-[var(--radius)] border border-border">
             {(rows ?? []).map((r) => (
               <div
                 key={r.region.elementId}
-                className="flex items-center gap-2 border-b border-[var(--line-soft)] px-2 py-1 last:border-b-0"
+                className="flex items-center gap-2 border-b border-[var(--r-line)] px-2 py-1 last:border-b-0"
               >
                 <input
                   type="checkbox"
@@ -570,24 +588,49 @@ function AdoptPanel({
                   className="tele h-6 w-24 shrink-0 rounded-[var(--radius)] border border-border bg-transparent px-1.5 outline-none focus:border-ring"
                 />
                 {r.region.role === "zoning-region" && (
-                  <span
-                    className="tele shrink-0 text-cat-green"
-                    title="already stamped — re-adopting edits name/tag"
+                  <FactChip
+                    tone="done"
+                    className="shrink-0"
+                    title="This region is already stamped as a Zoning Region. Re-adopting edits its name and system tag in place."
                   >
                     stamped
-                  </span>
+                  </FactChip>
                 )}
               </div>
             ))}
-            {rows === null && <p className="tele px-2 py-3 text-muted-foreground">reading…</p>}
+            {rows === null && (
+              <p className="px-2 py-3">
+                <OutcomeLine kind="busy" label="reading regions" says={view} />
+              </p>
+            )}
+            {rows !== null && rows.length === 0 && (
+              <div className="px-2 py-3">
+                <p className="tele-label text-muted-foreground">no filled regions</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  this view carries no designer-drawn filled regions to adopt. Draw the zones in
+                  Revit first, or pick another view.
+                </p>
+              </div>
+            )}
           </div>
           <div className="mt-2 flex items-center gap-2">
-            <Button size="xs" disabled={busy !== null || picked.length === 0} onClick={adopt}>
-              stamp {picked.length} as zoning regions
-            </Button>
-            <span className="tele text-muted-foreground">
-              already adopted in this doc: {zones.length}
-            </span>
+            {/* Stamping runs a WriteTransaction against the live document — the one filled blue. */}
+            <Verb
+              tone="commit"
+              label={`stamp ${picked.length} as zoning regions`}
+              disabled={busy !== null || picked.length === 0}
+              reason={
+                busy !== null
+                  ? `${busy} is in flight — the host runs one transaction at a time`
+                  : picked.length === 0
+                    ? "tick at least one region — adoption stamps exactly what is ticked, never 'whatever is selected'"
+                    : `Writes role, guid, name and system tag onto ${picked.length} filled region${picked.length === 1 ? "" : "s"} in ${view}. Idempotent: re-adopting edits in place.`
+              }
+              onClick={adopt}
+            />
+            <FactChip title="Zoning Regions already stamped anywhere in this document.">
+              {zones.length} already adopted
+            </FactChip>
           </div>
         </>
       )}
@@ -763,38 +806,68 @@ function SyncPanel({
             </span>
           </p>
         ))}
+        {/* "Nothing eligible" is the route's own story, and it names the three gates. */}
         {inserts.length === 0 && (
-          <p className="tele py-2 text-muted-foreground">
-            nothing eligible — a room syncs once it has a Room Region home, Manual J data, and no
-            existing .r10 link.
-          </p>
+          <div className="py-2">
+            <p className="tele-label text-muted-foreground">nothing eligible</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              a room syncs once it has a Room Region home, Manual J data entered, and no existing
+              .r10 link.
+            </p>
+          </div>
         )}
       </div>
+
+      {/* Refusals, per option, drawn from the real gate that produced them — not a seam. These
+          are advisories: they explain what the sync verb below is already refusing. */}
       {untagged.length > 0 && (
-        <Seam className="mt-1">
-          {untagged.length} room(s) in zones with no system tag — re-adopt those zones with a tag
-          first
-        </Seam>
+        <OutcomeLine
+          className="mt-1"
+          kind="advisory"
+          label={`${untagged.length} room(s) in untagged zones`}
+          says="re-adopt those zones with a system tag first — a room cannot land in a .r10 system that has no name"
+        />
       )}
       {blockedZones.length > 0 && (
-        <Seam className="mt-1">
-          {blockedZones.length} zone(s) excluded: resolve room flags, orphaned regions,
-          materialization failures, or post-sync area drift first
-        </Seam>
+        <OutcomeLine
+          className="mt-1"
+          kind="advisory"
+          label={`${blockedZones.length} zone(s) excluded`}
+          says="resolve room flags, orphaned regions, materialization failures, or post-sync area drift first"
+        />
       )}
+      {report && <OutcomeLine className="mt-1" kind="receipt" label={report} />}
 
       <div className="mt-2 flex items-center gap-2">
-        <Button size="xs" disabled={busy !== null || !r10Path} onClick={loadR10}>
-          load .r10
-        </Button>
-        <Button
-          size="xs"
+        <Verb
+          label="load .r10"
+          disabled={busy !== null || !r10Path}
+          reason={
+            busy !== null
+              ? `${busy} is in flight — the host runs one transaction at a time`
+              : !r10Path
+                ? "type a host-visible path to the target .r10 above"
+                : "Opens the .r10 read-only and joins its rooms and systems onto this world"
+          }
+          onClick={loadR10}
+        />
+        <Verb
+          tone="commit"
+          label={`sync ${inserts.length} rooms`}
           disabled={busy !== null || !r10Path || inserts.length === 0 || untagged.length > 0}
+          reason={
+            busy !== null
+              ? `${busy} is in flight — the host runs one transaction at a time`
+              : !r10Path
+                ? "type a host-visible path to the target .r10 above"
+                : inserts.length === 0
+                  ? "no room is eligible — a room needs a Room Region home, Manual J data, and no existing .r10 link"
+                  : untagged.length > 0
+                    ? `${untagged.length} eligible room(s) sit in zones with no system tag — tag those zones first`
+                    : `Inserts ${inserts.length} rooms into ${r10Path} and writes the {file, room} link back onto each Room Region. Work on a COPY of the template.`
+          }
           onClick={sync}
-        >
-          sync {inserts.length} rooms
-        </Button>
-        {report && <Live>{report}</Live>}
+        />
       </div>
     </Panel>
   );
@@ -802,6 +875,12 @@ function SyncPanel({
 
 // ── Shared panel chrome ─────────────────────────────────────────────────────
 
+/**
+ * Both panels are modals, so they are the shared `ui/dialog` — not a hand-rolled overlay. The
+ * previous implementation was a click-out `div` with no focus trap, no `role="dialog"`, no Esc,
+ * and a fake "esc ×" label for a key it never listened for: a control that lies about what it
+ * responds to. `Dialog` supplies all three for real, and its own close button.
+ */
 function Panel({
   title,
   onClose,
@@ -812,26 +891,15 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <div
-      className="absolute inset-0 z-30 flex items-start justify-center bg-foreground/20 p-8"
-      onClick={onClose}
-    >
-      <div
-        className="max-h-full w-[44rem] overflow-y-auto rounded-[var(--radius)] border border-border bg-background p-3 shadow-lg"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-1 flex items-baseline">
-          <h2 className="font-pe-display text-sm font-semibold tracking-tight">{title}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="tele ml-auto text-muted-foreground hover:text-foreground"
-          >
-            esc ×
-          </button>
-        </div>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[calc(100vh-4rem)] w-[44rem] overflow-y-auto sm:max-w-[44rem]">
+        <DialogHeader>
+          <DialogTitle className="font-pe-display text-sm font-semibold tracking-tight">
+            {title}
+          </DialogTitle>
+        </DialogHeader>
         {children}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

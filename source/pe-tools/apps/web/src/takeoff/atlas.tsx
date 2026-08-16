@@ -22,12 +22,14 @@ import {
   TextCell,
   type StateMeta,
 } from "#/components/master-table/cells";
+import type { StateCellProps } from "#/components/lang/cell";
+import { FactChip } from "#/components/lang/chip";
+import { OutcomeLine } from "#/components/lang/outcome";
+import { Verb, VerbGroup } from "#/components/lang/verb";
 import { MasterTable } from "#/components/master-table/master-table";
 import { fmtNum, type Column } from "#/components/master-table/model";
-import { Button } from "#/components/ui/button";
 import { Pane, PaneSplit, PaneWorkspace } from "#/components/ui/pane";
 import { contentViewport, fitFrame, type Bounds2, unionBounds } from "#/lib/affine-frame";
-import { Live, Seam } from "#/takeoff/seam";
 import { ZoneThumb } from "#/takeoff/zone-plan";
 import { FLAG_MEANING, loopBounds, pathD } from "#/takeoff/model";
 import {
@@ -73,8 +75,20 @@ export interface AtlasProps {
 
 // ── Room state — the one progress vocabulary ────────────────────────────────
 //
-// Derived from the room's own facts, never from its zone's stage label. Four states, one hue
-// budget: clay is the only alarm, green the only "done", everything between is quiet.
+// Derived from the room's own facts, never from its zone's stage label. Four states, spent on the
+// design language's MEANING BAND (`--r-*`) rather than the viz ladder: the old `--cat-*` spends
+// were taxonomy colours carrying state, which is exactly the violation the route passes exist to
+// fix. The mapping is an argument, not a convenience:
+//   call      → --r-alarm     the one alarm: a person is required, because the model or the
+//                             detector disagrees with what is recorded.
+//   unreviewed→ --r-ink-mute  the "never checked" rank — nothing has been entered here at all.
+//   data      → --r-caution   unsaved: the Manual J numbers exist only in this session's overlay
+//                             until a sync moves them into the .r10.
+//   synced    → --r-done      it landed.
+//
+// NOTE (docs/features/takeoff/DESIGN-AUDIT.md #1): these four are NOT the cell grammar's state
+// axes and cannot be expressed as a `state:` column — "a human decision is queued" and "not
+// started" have no rung. The column below therefore stays on `stateColumn`, honestly.
 
 type RoomState = "call" | "unreviewed" | "data" | "synced";
 
@@ -82,28 +96,28 @@ const ROOM_STATES: RoomState[] = ["call", "unreviewed", "data", "synced"];
 
 const STATE_META: Record<RoomState, { tone: string; label: string; note: string }> = {
   call: {
-    tone: "var(--cat-clay)",
+    tone: "var(--r-alarm)",
     label: "needs a call",
     note: "a human must decide: an open detector flag, or the .r10 no longer matches the model",
   },
   unreviewed: {
-    tone: "var(--muted-foreground)",
+    tone: "var(--r-ink-mute)",
     label: "no Manual J",
     note: "nothing open, but no Manual J data entered yet — export would refuse this room",
   },
   data: {
-    tone: "var(--cat-slate)",
+    tone: "var(--r-caution)",
     label: "data entered",
-    note: "Manual J data entered against settled geometry, not yet exported",
+    note: "Manual J data entered against settled geometry, not yet exported — unsaved",
   },
   synced: {
-    tone: "var(--cat-green)",
+    tone: "var(--r-done)",
     label: "in .r10",
     note: "exported and the .r10 still agrees with the model",
   },
 };
 
-/** The state as the shared grid speaks it: clay is the only alarm, "no Manual J" the only dim. */
+/** The one alarm is `call`; `unreviewed` is the one dim. */
 const stateMeta = (state: RoomState): StateMeta => ({
   ...STATE_META[state],
   alarm: state === "call",
@@ -130,9 +144,24 @@ const STAGE_BLURB: Record<Stage, string> = {
 };
 
 /**
+ * SELECTION AND FOCUS ARE A FILL, NEVER A HUE. The plan used `--primary` (= `--r-commit`, the one
+ * filled blue, reserved for writes that leave the page) as its cursor mark, which spent the commit
+ * colour on "where am I". The legal fill — `--r-select` — is a page-adjacent ground and disappears
+ * as an SVG stroke over the designer's own zone colours, so the cursor is drawn in NEUTRAL INK
+ * instead: no hue bought, and still the highest-contrast mark on the plan.
+ */
+const CURSOR_INK = "var(--r-ink)";
+
+/** Held residue and the "no boundary" fallback both mean "nothing real is here". */
+const ABSENT_INK = "var(--r-ink-mute)";
+
+/**
  * Per-zone progress, derived: one equal segment per room, coloured by that room's own state. A
- * zone with no rooms gets a dashed empty bar — "not partitioned" is a real state, not a zero.
+ * zone with no rooms gets an empty outlined bar — "not partitioned" is a real state, not a zero.
  * This replaces the seven-tick zone-stage pip, which said nothing about whether work was needed.
+ *
+ * The empty bar used a DASHED edge, which the language reserves for SEAM (a fixture/stand-in). An
+ * unpartitioned zone is not a stand-in — it is a genuine empty — so it takes the firm hairline.
  */
 function ZoneStateBar({
   zone,
@@ -147,7 +176,7 @@ function ZoneStateBar({
     return (
       <span
         className={cn(
-          "inline-block h-2.5 w-10 shrink-0 rounded-[1px] border border-dashed border-[var(--line-2)]",
+          "inline-block h-2.5 w-10 shrink-0 rounded-[1px] border border-[var(--r-line-2)]",
           className,
         )}
         title={`${zone.zone.key} — not partitioned: no rooms have been materialized yet`}
@@ -177,11 +206,18 @@ function ZoneStateBar({
   );
 }
 
-function Swatch({ tone, label, dashed }: { tone: string; label: string; dashed?: boolean }) {
+/**
+ * A plan legend entry. `seam` is the ONLY reason a dashed edge may be drawn (design-lang.css: the
+ * border style IS that meaning) — it marks a mark that stands in for geometry that does not exist.
+ */
+function Swatch({ tone, label, seam }: { tone: string; label: string; seam?: boolean }) {
   return (
     <span className="tele inline-flex items-center gap-1 text-muted-foreground">
       <span
-        className={cn("inline-block size-2.5 rounded-[1px] border", dashed && "border-dashed")}
+        className={cn(
+          "inline-block size-2.5 rounded-[1px] border",
+          seam === true && "border-dashed",
+        )}
         style={{ background: `color-mix(in srgb, ${tone} 16%, transparent)`, borderColor: tone }}
       />
       {label}
@@ -216,6 +252,27 @@ const MANUAL_J: { field: keyof RoomData; label: string; width: string }[] = [
 ];
 
 const flagKey = (guid: string, flag: string) => `${guid}::${flag}`;
+
+/** Why a verdict verb will (or will not) act, stated where a newcomer reads it. */
+const decideReason = (live: boolean, room: WorldRoom, verb: Verdict): string =>
+  !live
+    ? `Marks this call ${verb === "accept" ? "accepted" : "dismissed"} for this session only — the fixture writes nothing`
+    : room.elementId === null
+      ? "no Room Region home yet — partition must materialize this room before a verdict can be written"
+      : `Writes the ${verb} onto this room's Room Region provenance blob in the live model`;
+
+/**
+ * `Verb.reason` is a REQUIRED constructor argument (SURFACE-PHILOSOPHY §3 — "make the explanation
+ * a required constructor argument") and renders ON THE SURFACE when the verb is disabled, so this
+ * string is what a newcomer reads rather than a tooltip they have to discover.
+ *
+ * `onFixture` is per-verb ON PURPOSE. The whole host lane refuses for one reason at once, and the
+ * language has no lane-level refusal — a shared sentence therefore renders four times across one
+ * header row and reads as a rendering fault (AUDIT #10). Short, verb-specific lines are the only
+ * fix available without changing the primitive.
+ */
+const hostReason = (live: boolean, busy: string | null, does: string, onFixture: string): string =>
+  !live ? onFixture : busy !== null ? `${busy} is in flight — one transaction at a time` : does;
 
 /** THE Manual J editor for one field — the table column and the room panel render this same
  *  element, so fallback, constraints, fade-until-entered, and patch construction exist once. */
@@ -538,9 +595,14 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
           { value: "none", label: "none open" },
           ...flagVocabulary.map((f) => ({ value: f, label: f })),
         ],
+        // A queued human decision is not a cell-grammar state (AUDIT #2) — there is no axis for
+        // "a person is owed a verdict here" — so this column stays hand-rolled, on the alarm role.
         cell: (row) =>
           row.open.length > 0 ? (
-            <span className="tele block truncate px-1.5 text-cat-clay" title={row.open.join(", ")}>
+            <span
+              className="tele block truncate px-1.5 text-[var(--r-alarm)]"
+              title={row.open.join(", ")}
+            >
               {row.open.length} open
             </span>
           ) : row.room.decisions.length > 0 ? (
@@ -550,23 +612,32 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
           ) : null,
       },
       {
+        // THE CELL-STATE CLAUSE, consumer #2. This column is a DIFF — what the .r10 holds against
+        // what the model holds — which is exactly what the grammar's `agree` axis is for. The
+        // column declares what it draws; MasterTable renders `StateCell`, and facet/sort fall
+        // through to the grammar's own vocabulary and attention order. The old hand-rolled
+        // `sort: identifier` is deliberately dropped: drift now sorts to the top, which is the
+        // order the work happens in (SURFACE-PHILOSOPHY §1).
         key: "r10",
         label: ".r10",
         width: "w-28",
-        title: "this room's line in the .r10 — or the drift that must be reconciled before re-sync",
-        sort: (row) => row.room.r10?.identifier ?? "",
-        cell: (row) => {
+        title:
+          "this room's line in the .r10, and whether it still agrees with the model. Read-only: the identifier is assigned by sync, never typed.",
+        state: (row): StateCellProps => {
           const r10 = row.room.r10;
-          if (!r10) return <span className="tele block px-1.5 text-muted-foreground/50">—</span>;
+          // AUDIT #3: "never attempted" has no rung on the five axes. `unverified` — the squiggle
+          // family's "never checked" rank — is the closest TRUE statement (no reading of the .r10
+          // has ever been taken for this room) and it keeps the facet word out of "clean".
+          if (!r10) return { value: "not exported", fresh: "unverified" };
           const drift = row.room.sqft - r10.lastSyncedSqft;
-          return drift !== 0 ? (
-            <span className="tele block truncate px-1.5 text-cat-clay">
-              drift {drift > 0 ? "+" : ""}
-              {drift} sf
-            </span>
-          ) : (
-            <span className="tele block truncate px-1.5 text-cat-green">#{r10.identifier}</span>
-          );
+          return drift === 0
+            ? { value: `#${r10.identifier}`, agree: "agree", fresh: "fresh" }
+            : {
+                value: `#${r10.identifier}`,
+                agree: "drift",
+                // The struck ghost token: what the .r10 still holds, at zero row-height cost.
+                modelValue: `${fmtNum(r10.lastSyncedSqft, 0)} sf`,
+              };
         },
       },
     ],
@@ -606,49 +677,79 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
           the plan is the index; the table is the truth
         </span>
         {live ? (
-          <Live>{world.docName}</Live>
+          <FactChip title="The targeted Revit document. Every read and every write on this page addresses it.">
+            {world.docName}
+          </FactChip>
         ) : (
-          <Seam>fixture world — project-a replay, no document attached</Seam>
+          <FactChip
+            dashed
+            title="The fixture lane — the project-a replay, chosen explicitly by ?source=fixture. No document is attached, and nothing here can be written."
+          >
+            fixture · project-a replay
+          </FactChip>
         )}
-        {world.r10Path && <span className="tele text-muted-foreground">{world.r10Path}</span>}
+        {world.r10Path && (
+          <FactChip title="The .r10 this document is joined against — the Manual J file rooms sync into.">
+            {world.r10Path}
+          </FactChip>
+        )}
         <div className="ml-auto flex items-center gap-1.5">
           {busy ? (
-            <span className="tele text-cat-clay">{busy}…</span>
-          ) : (
-            !geoReady && <span className="tele text-cat-clay">loading room geometry…</span>
-          )}
-          <Button
-            size="xs"
-            variant="outline"
-            disabled={!live || busy !== null}
+            <OutcomeLine kind="busy" label={busy} says="the host runs one transaction at a time" />
+          ) : !geoReady ? (
+            <OutcomeLine
+              kind="busy"
+              label="loading room geometry"
+              says="rooms draw as position dots until their boundaries land"
+            />
+          ) : null}
+          <Verb
+            label="adopt zones"
             onClick={actions.openAdopt}
-          >
-            adopt zones
-          </Button>
-          <Button
-            size="xs"
-            variant="outline"
             disabled={!live || busy !== null}
+            reason={hostReason(
+              live,
+              busy,
+              "Opens the adoption panel: stamp designer-drawn regions in a zoning view as Zoning Regions",
+              "fixture · no document to stamp into",
+            )}
+          />
+          <Verb
+            label="sync .r10"
             onClick={actions.openSync}
-          >
-            sync .r10
-          </Button>
-          <Button
-            size="xs"
-            variant="ghost"
-            disabled={!live || !world.r10Path}
-            onClick={actions.launch}
-          >
-            open in RHVAC
-          </Button>
-          <Button
-            size="xs"
-            variant="ghost"
             disabled={!live || busy !== null}
+            reason={hostReason(
+              live,
+              busy,
+              "Opens the sync panel: insert reviewed rooms with Manual J data into the target .r10",
+              "fixture · no .r10 to sync into",
+            )}
+          />
+          <Verb
+            tone="nav"
+            direction="out"
+            label="open in RHVAC"
+            onClick={actions.launch}
+            disabled={!live || !world.r10Path}
+            reason={
+              !live
+                ? "fixture · no host to launch RHVAC on"
+                : !world.r10Path
+                  ? "no .r10 is joined yet — load one in the sync panel first"
+                  : "Launches RHVAC on the joined .r10, outside this page"
+            }
+          />
+          <Verb
+            label="refresh"
             onClick={actions.refresh}
-          >
-            refresh
-          </Button>
+            disabled={!live || busy !== null}
+            reason={hostReason(
+              live,
+              busy,
+              "Re-reads the model: zones, materialized regions, decisions, and the .r10 join",
+              "fixture · the replay is already the whole world",
+            )}
+          />
         </div>
       </header>
 
@@ -706,9 +807,12 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                         setZoneKey(null);
                         setCursor(null);
                       }}
+                      // Selection is a FILL, never a hue: `bg-accent` resolves to `--r-select`,
+                      // the ground ladder's fourth rung. The old `bg-primary/[0.08]` spent the
+                      // one filled blue — reserved for writes that leave the page — on "what is lit".
                       className={cn(
                         "flex items-baseline gap-1.5 rounded-[var(--radius)] px-1 py-0.5 text-left hover:bg-muted",
-                        on && "bg-primary/[0.08]",
+                        on && "bg-accent",
                       )}
                     >
                       <span className="tele w-3 shrink-0 text-muted-foreground">{i + 1}</span>
@@ -738,7 +842,7 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                 if (zs.length === 0) return null;
                 return (
                   <div key={lane.label}>
-                    <div className="tele-label sticky top-0 z-10 border-y border-[var(--line-soft)] bg-muted px-2 py-0.5 text-muted-foreground">
+                    <div className="tele-label sticky top-0 z-10 border-y border-[var(--r-line)] bg-muted px-2 py-0.5 text-muted-foreground">
                       {lane.label} · {zs.length}
                     </div>
                     <ul>
@@ -758,8 +862,8 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                                   : `${z.name} · ${z.zone.lane.label} · ${fmtNum(z.zone.declaredSqft, 0)} sf declared`
                               }
                               className={cn(
-                                "flex w-full items-center gap-1.5 border-b border-[var(--line-soft)] px-2 py-1 text-left hover:bg-muted",
-                                on && "bg-primary/[0.08]",
+                                "flex w-full items-center gap-1.5 border-b border-[var(--r-line)] px-2 py-1 text-left hover:bg-muted",
+                                on && "bg-accent",
                                 off && "opacity-55",
                               )}
                             >
@@ -769,12 +873,13 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                                 {off ? "off-plan scribble" : z.name}
                               </span>
                               {calls > 0 && (
-                                <span
-                                  className="tele shrink-0 rounded-[var(--radius)] bg-cat-clay/15 px-1 text-cat-clay"
+                                <FactChip
+                                  tone="alarm"
+                                  className="shrink-0"
                                   title={`${calls} room${calls === 1 ? "" : "s"} in this zone need a human call — an open detector flag or .r10 drift`}
                                 >
                                   {calls} call{calls === 1 ? "" : "s"}
-                                </span>
+                                </FactChip>
                               )}
                               <ZoneStateBar zone={z} states={states} />
                             </button>
@@ -805,13 +910,13 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                       className={cn(
                         "tele rounded-[var(--radius)] border px-2 py-0.5",
                         lane.label === level
-                          ? "border-primary/40 bg-primary/[0.08]"
+                          ? "border-[var(--r-line-2)] bg-accent"
                           : "border-transparent text-muted-foreground hover:bg-muted",
                       )}
                     >
                       {lane.label}
                       <span className="ml-1 opacity-60">{zs.length}</span>
-                      {calls > 0 && <span className="ml-1 text-cat-clay">·{calls}</span>}
+                      {calls > 0 && <span className="ml-1 text-[var(--r-alarm)]">·{calls}</span>}
                     </button>
                   );
                 })}
@@ -821,10 +926,8 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                   onClick={() => setStatsOpen((v) => !v)}
                   title="level-wide totals — the whole-building dashboard was noise; the level is the unit you actually work in"
                   className={cn(
-                    "tele ml-2 rounded-[var(--radius)] border px-1.5 py-0.5",
-                    statsOpen
-                      ? "border-primary/40 bg-primary/[0.08]"
-                      : "border-[var(--line-2)] text-muted-foreground hover:bg-muted",
+                    "tele ml-2 rounded-[var(--radius)] border border-[var(--r-line-2)] px-1.5 py-0.5",
+                    statsOpen ? "bg-accent" : "text-muted-foreground hover:bg-muted",
                   )}
                 >
                   level stats
@@ -837,7 +940,7 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                       ? "collapse the plan — give the table the full height"
                       : "show the plan"
                   }
-                  className="tele rounded-[var(--radius)] border border-[var(--line-2)] px-1.5 py-0.5 text-muted-foreground hover:bg-muted"
+                  className="tele rounded-[var(--radius)] border border-[var(--r-line-2)] px-1.5 py-0.5 text-muted-foreground hover:bg-muted"
                 >
                   {planOpen ? "▴ hide plan" : "▾ show plan"}
                 </button>
@@ -918,7 +1021,10 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                     <>
                       {visibleRows.length} rooms · {fmtNum(scopeSqft, 0)} sf
                       {scopeCalls > 0 && (
-                        <span className="text-cat-clay"> · {scopeCalls} needing a call</span>
+                        <span className="text-[var(--r-alarm)]">
+                          {" "}
+                          · {scopeCalls} needing a call
+                        </span>
                       )}
                       <span className="ml-2 opacity-70">j/k cursor · a/d accept/dismiss</span>
                       {/* The fields-mode control lives HERE, not in the room panel — the panel
@@ -934,7 +1040,7 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                             ? "Manual J fields are edited in the room panel for the cursor row; the table stays narrow. Click to move them back into the table as columns."
                             : "Manual J fields are table columns. Click to edit them in the room panel instead and narrow the table."
                         }
-                        className="ml-2 rounded-[var(--radius)] border border-[var(--line-2)] px-1.5 py-px text-muted-foreground hover:bg-muted"
+                        className="ml-2 rounded-[var(--radius)] border border-[var(--r-line-2)] px-1.5 py-px text-muted-foreground hover:bg-muted"
                       >
                         fields: {fieldsMode}
                       </button>
@@ -1019,10 +1125,16 @@ function LevelPlan({
     return b;
   }, [drawn]);
 
+  // A labelled empty, not an absence: say which of the two empties this is, and where the exit is.
   if (!bounds)
     return (
-      <div className="flex size-full items-center justify-center text-xs text-muted-foreground">
-        no zones on this level
+      <div className="flex size-full flex-col items-center justify-center gap-1 px-4 text-center">
+        <p className="tele-label text-muted-foreground">no zones on this level</p>
+        <p className="text-xs text-muted-foreground">
+          {zones.length > 0
+            ? `all ${zones.length} zone${zones.length === 1 ? "" : "s"} on this level are sub-${PLAN_MIN_SQFT} sf scribbles, drawn far from the cluster — they stay in the rail, marked.`
+            : "nothing has been adopted on this level yet. Adopt zones from a zoning-plan view, or pick another level above."}
+        </p>
       </div>
     );
 
@@ -1074,14 +1186,16 @@ function LevelPlan({
                 }}
               />
 
-              {/* Held residue — abstention stays visible; a held area beats a guessed one. */}
+              {/* Held residue — abstention stays visible; a held area beats a guessed one. The
+                  dash is the SEAM reading and is legal here: a residue is declared area with NO
+                  element behind it, which is precisely what the reserved style means. */}
               {z.residues.map((s) => (
                 <path
                   key={s.id}
                   d={pathD([s.outer, ...s.holes], frame)}
                   fillRule="evenodd"
-                  fill="color-mix(in srgb, var(--muted-foreground) 12%, transparent)"
-                  stroke="var(--muted-foreground)"
+                  fill={`color-mix(in srgb, ${ABSENT_INK} 12%, transparent)`}
+                  stroke={ABSENT_INK}
                   strokeOpacity={0.35}
                   strokeDasharray="3 2"
                   strokeWidth={1}
@@ -1093,14 +1207,16 @@ function LevelPlan({
               {z.rooms.map((room) => {
                 const state = stateOf(room);
                 const isCursor = room.guid === cursor;
-                const tone = isCursor ? "var(--primary)" : STATE_META[state].tone;
+                const tone = isCursor ? CURSOR_INK : STATE_META[state].tone;
                 const [labelX, labelY] = frame.toViewport(room.label);
                 const click = (e: React.MouseEvent) => {
                   e.stopPropagation();
                   if (!dimmed) onCursor(z, room.guid);
                 };
                 // Zones the fixture doesn't cover have no polygon — a dot at the label point
-                // is the honest fallback: position is known, boundary is not.
+                // is the honest fallback: position is known, boundary is not. It carries the
+                // reserved DASH, because that is what "a mark standing in for geometry that does
+                // not exist" means in this language.
                 if (!room.outer)
                   return (
                     <circle
@@ -1111,6 +1227,7 @@ function LevelPlan({
                       fill={`color-mix(in srgb, ${tone} 45%, transparent)`}
                       stroke={tone}
                       strokeWidth={isCursor ? 2 : 1}
+                      strokeDasharray="3 2"
                       vectorEffect="non-scaling-stroke"
                       className="cursor-pointer"
                       onClick={click}
@@ -1126,8 +1243,10 @@ function LevelPlan({
                       fill={`color-mix(in srgb, ${tone} ${isCursor ? 34 : state === "unreviewed" ? 7 : 13}%, transparent)`}
                       stroke={tone}
                       strokeOpacity={0.85}
-                      strokeWidth={isCursor ? 2.5 : state === "call" ? 1.5 : 1}
-                      strokeDasharray={state === "call" && !isCursor ? "4 2.5" : undefined}
+                      // A room needing a call used to be DASHED, which collided with the seam
+                      // reading (a room with an open flag is emphatically real). It separates on
+                      // the alarm hue plus stroke weight instead — the one alarm, doing its job.
+                      strokeWidth={isCursor ? 2.5 : state === "call" ? 1.75 : 1}
                       vectorEffect="non-scaling-stroke"
                     >
                       <title>{`${room.name} — ${room.sqft} sf · ${STATE_META[state].label}`}</title>
@@ -1173,15 +1292,10 @@ function LevelPlan({
 
       <div className="pointer-events-none absolute bottom-1 left-2 flex flex-wrap items-center gap-x-3 gap-y-0.5">
         {ROOM_STATES.map((s) => (
-          <Swatch
-            key={s}
-            tone={STATE_META[s].tone}
-            label={STATE_META[s].label}
-            dashed={s === "call"}
-          />
+          <Swatch key={s} tone={STATE_META[s].tone} label={STATE_META[s].label} />
         ))}
-        <Swatch tone="var(--muted-foreground)" label="held residue" dashed />
-        <Swatch tone="var(--primary)" label="cursor" />
+        <Swatch tone={ABSENT_INK} label="held residue" seam />
+        <Swatch tone={CURSOR_INK} label="cursor" />
         {skipped > 0 && (
           <span className="tele text-muted-foreground">
             {skipped} sub-{PLAN_MIN_SQFT} sf scribble{skipped === 1 ? "" : "s"} off-plan — see the
@@ -1264,10 +1378,12 @@ function LevelStats({
             />
           ) : null,
         )}
+        {/* "Not partitioned" is a genuine empty, not a stand-in: firm hairline, never the
+            reserved dash. */}
         {unpartitionedSqft > 0 && (
           <span
             title={`not partitioned — ${fmtNum(unpartitionedSqft, 0)} sf declared, no rooms yet`}
-            className="border border-dashed border-[var(--line-2)]"
+            className="border border-[var(--r-line-2)]"
             style={{ width: `${(unpartitionedSqft / Math.max(totalArea, 1)) * 100}%` }}
           />
         )}
@@ -1286,7 +1402,7 @@ function LevelStats({
         <StatLine
           label="calls"
           value={calls === 0 ? "none open" : `${calls} rooms need a human`}
-          tone={calls > 0 ? "text-cat-clay" : "text-cat-green"}
+          tone={calls > 0 ? "text-[var(--r-alarm)]" : "text-[var(--r-done)]"}
         />
         <StatLine label="held" value={`${fmtNum(held, 0)} sf residue`} />
         <StatLine
@@ -1296,7 +1412,7 @@ function LevelStats({
               ? "closed — every declared foot accounted"
               : `${fmtNum(residual, 0)} sf unaccounted`
           }
-          tone={Math.abs(residual) < 1 ? "text-cat-green" : "text-cat-clay"}
+          tone={Math.abs(residual) < 1 ? "text-[var(--r-done)]" : "text-[var(--r-alarm)]"}
         />
       </div>
     </div>
@@ -1387,16 +1503,17 @@ function ZoneCard({
           </span>
         </div>
         {run && (
-          <p
-            className={cn(
-              "tele",
-              closure !== null && Math.abs(closure) < 1 ? "text-cat-green" : "text-cat-clay",
-            )}
+          // Accounting closure is a machine-measured FACT about the run, so it is a chip, not
+          // prose: `done` when every declared foot is accounted for, `alarm` when it is not —
+          // unaccounted area IS the model disagreeing with the designer's declared scope.
+          <FactChip
+            tone={closure !== null && Math.abs(closure) < 1 ? "done" : "alarm"}
+            title="Declared area minus rooms, claimed walls, held residue and exclusions. Anything left over is area this run neither claimed nor abstained from."
           >
             {closure !== null && Math.abs(closure) < 1
               ? "closed — every declared foot accounted"
               : `${fmtNum(closure ?? 0, 0)} sf unaccounted`}
-          </p>
+          </FactChip>
         )}
         {zoneSystems.map((s) => (
           <p key={s.tag} className="tele text-muted-foreground">
@@ -1404,31 +1521,41 @@ function ZoneCard({
             {s.overCap ? ` — over the ${SENSIBLE_CAP_BTUH.toLocaleString()} cap` : ""}
           </p>
         ))}
+        {/* Both zone verbs run WriteTransaction scripts against the live document — capture
+            stamps cropped seed views, partition materializes Room Region elements — so both wear
+            `commit`, the language's one filled blue for writes that leave the page. Blast radius
+            is not a tone; it groups the lane, which is what the group head below says. */}
         {live && (
-          <span className="flex flex-wrap gap-1 pt-0.5">
-            <Button
-              size="xs"
-              variant="outline"
+          <VerbGroup className="pt-0.5" title="zone verbs" radius="document · model">
+            <Verb
+              tone="commit"
+              label={zone.zone.lane.replayPath ? "re-capture level" : "capture level"}
               disabled={busy !== null}
-              title={`capture ${zone.zone.lane.label}: prepare seed views, export ink, detect — writes replay_<level>.bin`}
+              reason={hostReason(
+                live,
+                busy,
+                `Prepares cropped seed views on ${zone.zone.lane.label}, exports ink, and detects rooms — writes replay_<level>.bin and touches the document`,
+                "fixture · nothing to capture",
+              )}
               onClick={() => actions.capture(zone.zone.lane)}
-            >
-              {zone.zone.lane.replayPath ? "re-capture level" : "capture level"}
-            </Button>
-            <Button
-              size="xs"
-              variant="outline"
+            />
+            <Verb
+              tone="commit"
+              label="partition zone"
               disabled={busy !== null || !zone.zone.lane.replayPath}
-              title={
-                zone.zone.lane.replayPath
-                  ? "replay the capture masked to this zone; materialize Room Regions (rerun never overwrites)"
-                  : "capture the level first — the partition replays its snapshot"
+              reason={
+                zone.zone.lane.replayPath == null
+                  ? "capture the level first — the partition replays that snapshot, it cannot invent one"
+                  : hostReason(
+                      live,
+                      busy,
+                      "Replays the capture masked to this zone and materializes Room Regions in the model (a rerun never overwrites)",
+                      "fixture · nothing to partition",
+                    )
               }
               onClick={() => actions.partition(zone)}
-            >
-              partition zone
-            </Button>
-          </span>
+            />
+          </VerbGroup>
         )}
       </div>
     </div>
@@ -1467,14 +1594,17 @@ function RoomPanel({
       meta={`${zone.zone.key} · ${zone.zone.lane.label}`}
       bodyClassName="p-0"
     >
-      <div className="divide-y divide-[var(--line)]">
+      <div className="divide-y divide-[var(--r-line)]">
         <div className="px-2.5 py-2">
           <h2 className="font-pe-display text-base leading-tight font-semibold tracking-tight">
             {room.name}
           </h2>
           <p className="mt-1 flex flex-wrap items-center gap-x-1.5">
             <StateDot {...stateMeta(state)} />
-            <span className={cn("tele", state === "call" ? "text-cat-clay" : undefined)}>
+            <span
+              className={cn("tele", state === "call" ? "text-[var(--r-alarm)]" : undefined)}
+              title={STATE_META[state].note}
+            >
               {STATE_META[state].label}
             </span>
             <span className="tele text-muted-foreground">
@@ -1488,7 +1618,7 @@ function RoomPanel({
             <p className="section-label mb-1">manual j — this room</p>
             <div className="grid grid-cols-[4rem_1fr] items-center gap-y-1">
               <span className="tele pr-1.5 text-right text-muted-foreground">ceil ft</span>
-              <span className="rounded-[1px] border border-[var(--line-soft)]">
+              <span className="rounded-[1px] border border-[var(--r-line)]">
                 <NumberCell
                   value={room.ceilingFt}
                   digits={1}
@@ -1499,7 +1629,7 @@ function RoomPanel({
               {MANUAL_J.map((mj) => (
                 <Fragment key={mj.field}>
                   <span className="tele pr-1.5 text-right text-muted-foreground">{mj.label}</span>
-                  <span className="rounded-[1px] border border-[var(--line-soft)]">
+                  <span className="rounded-[1px] border border-[var(--r-line)]">
                     <ManualJField room={room} field={mj.field} onPatch={onPatch} />
                   </span>
                 </Fragment>
@@ -1511,39 +1641,59 @@ function RoomPanel({
         {open.length > 0 && (
           <div className="px-2.5 py-2">
             <p className="section-label mb-1">open calls — {open.length}</p>
-            <ul className="space-y-1">
+            <ul className="space-y-2">
               {open.map((flag) => (
                 <li key={flag}>
-                  <p className="tele text-cat-clay">{flag}</p>
+                  <p className="tele text-[var(--r-alarm)]">{flag}</p>
                   <p className="tele text-muted-foreground">{FLAG_MEANING[flag] ?? "no blurb"}</p>
+                  {/* The verdict's TONE is derived from the lane, not maintained: on the live
+                      lane it writes onto the Room Region provenance blob (a write beyond the
+                      page — `commit`), on the fixture it only marks locally (`act`). The route
+                      used to REFUSE SILENTLY when a room had no Room Region home; that refusal
+                      is now the verb's own visible reason. */}
                   <span className="mt-0.5 flex gap-1">
-                    <Button
-                      size="xs"
-                      variant="ghost"
+                    <Verb
+                      tone={live ? "commit" : "act"}
+                      label="accept · a"
+                      disabled={live && room.elementId === null}
+                      reason={decideReason(live, room, "accept")}
                       onClick={() => onDecide(room, flag, "accept")}
-                    >
-                      accept <span className="ml-1 opacity-50">a</span>
-                    </Button>
-                    <Button
-                      size="xs"
-                      variant="ghost"
+                    />
+                    <Verb
+                      tone={live ? "commit" : "act"}
+                      label="dismiss · d"
+                      disabled={live && room.elementId === null}
+                      reason={decideReason(live, room, "dismiss")}
                       onClick={() => onDecide(room, flag, "dismiss")}
-                    >
-                      dismiss <span className="ml-1 opacity-50">d</span>
-                    </Button>
+                    />
                   </span>
                 </li>
               ))}
             </ul>
             {!live ? (
-              <Seam className="mt-1.5">fixture: verbs stay local, nothing is written</Seam>
+              <FactChip
+                dashed
+                className="mt-1.5"
+                title="The fixture lane has no document. Verdicts mark this session only and are lost when the tab closes."
+              >
+                fixture · verdicts stay local
+              </FactChip>
             ) : room.elementId === null ? (
-              <Seam className="mt-1.5">
-                no Room Region home yet — partition must materialize this room before a decision can
-                be written
-              </Seam>
+              <FactChip
+                dashed
+                className="mt-1.5"
+                title="This room was detected but never materialized, so there is no element to write a verdict onto. Partition the zone first."
+              >
+                no Room Region home
+              </FactChip>
             ) : (
-              <Live className="mt-1.5">verbs write through to the Room Region provenance blob</Live>
+              <FactChip
+                tone="done"
+                className="mt-1.5"
+                title="Verdicts are persisted onto this room's Room Region provenance blob before the UI shows them as decided."
+              >
+                writes through to the blob
+              </FactChip>
             )}
           </div>
         )}
@@ -1592,306 +1742,12 @@ function RoomPanel({
 
         <div className="space-y-1 px-2.5 py-2">
           <p className="section-label">addressable</p>
-          <p className="tele rounded-[var(--radius)] border border-[var(--line)] bg-muted/60 px-1.5 py-1 break-all text-muted-foreground">
+          <p className="tele rounded-[var(--radius)] border border-[var(--r-line)] bg-muted/60 px-1.5 py-1 break-all text-muted-foreground">
             {url}
           </p>
         </div>
       </div>
     </Pane>
-  );
-}
-
-function nextAction(zone: WorldZone, calls: number): string {
-  if (calls > 0) return `clear ${calls} open call${calls === 1 ? "" : "s"} on this zone`;
-  switch (zone.stage) {
-    case "declared":
-      return "assign a system tag (adopt zones, re-adopt to edit)";
-    case "registered":
-      return zone.zone.lane.replayPath
-        ? "run the partition to materialize rooms"
-        : "capture this level, then run the partition";
-    case "partitioned":
-    case "reviewed":
-      return "enter Manual J data against settled geometry";
-    case "data":
-      return "sync this zone into the .r10";
-    case "synced":
-      return "nothing pending — this zone is closed";
-    case "drifted":
-      return `reconcile ${fmtNum(zone.driftSqft, 0)} sf of hand-edit drift, then re-sync`;
-  }
-}
-
-/**
- * POSTERITY — unmounted 2026-08-15. The full-height selection rail: zone + room + calls +
- * next-action + provenance in one far-away sidebar. Retired because it broke information
- * locality (zone facts now float on the plan as ZoneCard; room facts sit beside the table as
- * RoomPanel), but the per-zone-summary composition may matter elsewhere — keep until it does
- * or a purge proves it never will.
- */
-export function Peek({
-  zone,
-  room,
-  open,
-  state,
-  decided,
-  geoReady,
-  live,
-  busy,
-  actions,
-  stateOf,
-  world,
-  onDecide,
-  url,
-}: {
-  zone: WorldZone | null;
-  room: WorldRoom | null;
-  open: string[];
-  state: RoomState | null;
-  decided: Record<string, Verdict>;
-  geoReady: boolean;
-  live: boolean;
-  busy: string | null;
-  actions: AtlasActions;
-  stateOf: (room: WorldRoom) => RoomState;
-  world: { systems: WorldSystem[] };
-  onDecide: (room: WorldRoom, flag: string, verb: Verdict) => void;
-  url: string;
-}) {
-  if (!zone)
-    return (
-      <div className="space-y-1 p-3">
-        <p className="tele text-muted-foreground">
-          nothing under the cursor. Click a zone on the plan to scope, or a room to peek.
-        </p>
-        <p className="tele text-muted-foreground">
-          j/k move the cursor · a/d accept or dismiss the first open call · Esc widens back to the
-          whole house.
-        </p>
-      </div>
-    );
-
-  const calls = zone.rooms.filter((r) => stateOf(r) === "call").length;
-  const run = zone.runs[zone.runs.length - 1] ?? null;
-  const closure = run
-    ? run.declaredSqft - (run.roomSqft + run.claimedWallSqft + zone.heldSqft + run.excludedSqft)
-    : null;
-  const systems = world.systems.filter((s) => s.zoneKeys.includes(zone.zone.key));
-  const localDecisions = room
-    ? room.flags
-        .map((f) => ({ flag: f, verb: decided[flagKey(room.guid, f)] }))
-        .filter((x): x is { flag: string; verb: Verdict } => x.verb !== undefined)
-    : [];
-
-  return (
-    <div className="divide-y divide-[var(--line)]">
-      <div className="px-2.5 py-2">
-        <div className="flex items-center gap-1.5">
-          <ZoneThumb zone={zone.zone} className="size-5" />
-          <span className="tele">{zone.zone.key}</span>
-          <span className="tele truncate text-muted-foreground">
-            {zone.name} · {zone.zone.lane.label}
-          </span>
-        </div>
-        <h2 className="mt-1 font-pe-display text-base leading-tight font-semibold tracking-tight">
-          {room ? room.name : zone.name}
-        </h2>
-        <p className="mt-1 flex flex-wrap items-center gap-x-1.5">
-          {room && state ? (
-            <>
-              <StateDot {...stateMeta(state)} />
-              <span className={cn("tele", state === "call" ? "text-cat-clay" : undefined)}>
-                {STATE_META[state].label}
-              </span>
-              <span className="tele text-muted-foreground">
-                {room.sqft} sf · {fmtNum(room.ceilingFt, 1)} ft clg · {room.type}
-              </span>
-            </>
-          ) : (
-            <span className="tele text-muted-foreground">
-              {zone.rooms.length} rooms · {fmtNum(zone.zone.declaredSqft, 0)} sf declared · zone at{" "}
-              {zone.stage}
-            </span>
-          )}
-        </p>
-      </div>
-
-      <ZonePeek zone={zone} cursorRoom={room} geoReady={geoReady} stateOf={stateOf} />
-
-      {open.length > 0 && room && (
-        <div className="px-2.5 py-2">
-          <p className="section-label mb-1">open calls — {open.length}</p>
-          <ul className="space-y-1">
-            {open.map((flag) => (
-              <li key={flag}>
-                <p className="tele text-cat-clay">{flag}</p>
-                <p className="tele text-muted-foreground">{FLAG_MEANING[flag] ?? "no blurb"}</p>
-                <span className="mt-0.5 flex gap-1">
-                  <Button size="xs" variant="ghost" onClick={() => onDecide(room, flag, "accept")}>
-                    accept <span className="ml-1 opacity-50">a</span>
-                  </Button>
-                  <Button size="xs" variant="ghost" onClick={() => onDecide(room, flag, "dismiss")}>
-                    dismiss <span className="ml-1 opacity-50">d</span>
-                  </Button>
-                </span>
-              </li>
-            ))}
-          </ul>
-          {!live ? (
-            <Seam className="mt-1.5">fixture: verbs stay local, nothing is written</Seam>
-          ) : room.elementId === null ? (
-            <Seam className="mt-1.5">
-              no Room Region home yet — partition must materialize this room before a decision can
-              be written
-            </Seam>
-          ) : (
-            <Live className="mt-1.5">verbs write through to the Room Region provenance blob</Live>
-          )}
-        </div>
-      )}
-
-      <div className="space-y-1 px-2.5 py-2">
-        <p className="section-label">next action for this zone</p>
-        <p className="text-xs leading-relaxed">{nextAction(zone, calls)}</p>
-        {live && (
-          <span className="flex flex-wrap gap-1 pt-0.5">
-            <Button
-              size="xs"
-              variant="outline"
-              disabled={busy !== null}
-              title={`capture ${zone.zone.lane.label}: prepare seed views, export ink, detect — writes replay_<level>.bin`}
-              onClick={() => actions.capture(zone.zone.lane)}
-            >
-              {zone.zone.lane.replayPath ? "re-capture level" : "capture level"}
-            </Button>
-            <Button
-              size="xs"
-              variant="outline"
-              disabled={busy !== null || !zone.zone.lane.replayPath}
-              title={
-                zone.zone.lane.replayPath
-                  ? "replay the capture masked to this zone; materialize Room Regions (rerun never overwrites)"
-                  : "capture the level first — the partition replays its snapshot"
-              }
-              onClick={() => actions.partition(zone)}
-            >
-              partition zone
-            </Button>
-          </span>
-        )}
-      </div>
-
-      <div className="px-2.5 py-2">
-        <p className="section-label mb-1">provenance</p>
-        {room ? (
-          <>
-            <Line label="run" value={room.provenance.runId} />
-            <Line
-              label="source sf"
-              value={
-                room.sqft === room.provenance.sourceSqft
-                  ? `${fmtNum(room.provenance.sourceSqft, 0)} sf — unchanged since detection`
-                  : `${fmtNum(room.provenance.sourceSqft, 0)} sf detected, now ${room.sqft} sf`
-              }
-            />
-            <Line
-              label="boundary"
-              value={room.outer ? `${room.outer.length} pts detected` : "no polygon — dot only"}
-            />
-            <Line label="guid" value={room.guid} />
-            <Line
-              label=".r10"
-              value={
-                room.r10
-                  ? `#${room.r10.identifier} · synced ${room.r10.syncedAt.slice(0, 10)} at ${fmtNum(room.r10.lastSyncedSqft, 0)} sf`
-                  : "never exported"
-              }
-            />
-            {room.decisions.length === 0 && localDecisions.length === 0 ? (
-              <Line label="decisions" value="none written on this room" muted />
-            ) : (
-              <>
-                {room.decisions.map((d, i) => (
-                  <Line
-                    key={`w${i}`}
-                    label={i === 0 ? "decisions" : ""}
-                    value={`${d.verb} ${d.flag} · ${d.at.slice(0, 10)} · ${d.runId}`}
-                  />
-                ))}
-                {localDecisions.map((d) => (
-                  <Line key={`l${d.flag}`} label="" value={`${d.verb} ${d.flag} · this session`} />
-                ))}
-              </>
-            )}
-          </>
-        ) : (
-          <>
-            <Line label="zone guid" value={zone.zone.guid} />
-            <Line
-              label="tags"
-              value={zone.tags.length > 0 ? zone.tags.join(", ") : "none typed yet"}
-            />
-            <Line label="declared" value={`${fmtNum(zone.zone.declaredSqft, 0)} sf`} />
-            <Line
-              label="run"
-              value={run ? run.runId : "no partition run against this zone"}
-              muted={!run}
-            />
-          </>
-        )}
-      </div>
-
-      {systems.length > 0 && (
-        <div className="px-2.5 py-2">
-          <p className="section-label mb-1">systems</p>
-          {systems.map((s) => (
-            <Line
-              key={s.tag}
-              label={s.tag}
-              value={`${fmtNum(s.sensibleBtuh, 0)} Btu/h sensible${
-                s.overCap ? ` — over the ${SENSIBLE_CAP_BTUH.toLocaleString()} cap` : ""
-              }`}
-            />
-          ))}
-        </div>
-      )}
-
-      <div className="px-2.5 py-2">
-        <p className="section-label mb-1">accounting closure</p>
-        {run ? (
-          <>
-            <Line label="declared" value={`${fmtNum(run.declaredSqft, 0)} sf`} />
-            <Line label="rooms" value={`${fmtNum(run.roomSqft, 0)} sf · ${run.created} created`} />
-            <Line label="walls" value={`${fmtNum(run.claimedWallSqft, 0)} sf claimed`} />
-            <Line label="held" value={`${fmtNum(zone.heldSqft, 0)} sf · ${run.held} residue`} />
-            <Line label="excluded" value={`${fmtNum(run.excludedSqft, 0)} sf`} />
-            <p
-              className={cn(
-                "tele mt-1 rounded-[var(--radius)] border px-1.5 py-0.5",
-                closure !== null && Math.abs(closure) < 1
-                  ? "border-cat-green/25 bg-cat-green/[0.08] text-cat-green"
-                  : "border-cat-clay/30 bg-cat-clay/[0.08] text-cat-clay",
-              )}
-            >
-              {closure !== null && Math.abs(closure) < 1
-                ? "closed — every declared foot is accounted for"
-                : `${fmtNum(closure ?? 0, 0)} sf unaccounted`}
-            </p>
-          </>
-        ) : (
-          <p className="tele text-muted-foreground">
-            no run yet — nothing has been claimed against this zone's declared area.
-          </p>
-        )}
-      </div>
-
-      <div className="space-y-1 px-2.5 py-2">
-        <p className="section-label">addressable</p>
-        <p className="tele rounded-[var(--radius)] border border-[var(--line)] bg-muted/60 px-1.5 py-1 break-all text-muted-foreground">
-          {url}
-        </p>
-      </div>
-    </div>
   );
 }
 
@@ -1929,7 +1785,7 @@ function ZonePeek({
 
   return (
     <div>
-      <div className="h-52 border-b border-[var(--line)] bg-card">
+      <div className="h-52 border-b border-[var(--r-line)] bg-card">
         <svg
           viewBox={`0 0 ${viewport.width} ${viewport.height}`}
           preserveAspectRatio="xMidYMid meet"
@@ -1948,14 +1804,15 @@ function ZonePeek({
             vectorEffect="non-scaling-stroke"
           />
 
-          {/* Held residue: abstention stays visible; a held area beats a guessed one. */}
+          {/* Held residue: abstention stays visible; a held area beats a guessed one. Dashed is
+              legal — declared area with no element behind it is exactly the seam reading. */}
           {zone.residues.map((residue) => (
             <path
               key={residue.id}
               d={pathD([residue.outer, ...residue.holes], frame)}
               fillRule="evenodd"
-              fill="color-mix(in srgb, var(--muted-foreground) 12%, transparent)"
-              stroke="var(--muted-foreground)"
+              fill={`color-mix(in srgb, ${ABSENT_INK} 12%, transparent)`}
+              stroke={ABSENT_INK}
               strokeOpacity={0.4}
               strokeDasharray="4 3"
               strokeWidth={1}
@@ -1968,7 +1825,7 @@ function ZonePeek({
           {zone.rooms.map((room) => {
             const on = cursorRoom?.guid === room.guid;
             const state = stateOf(room);
-            const accent = on ? "var(--primary)" : STATE_META[state].tone;
+            const accent = on ? CURSOR_INK : STATE_META[state].tone;
             const [labelX, labelY] = frame.toViewport(room.label);
             if (!room.outer) {
               const r = Math.max(Math.sqrt(Math.max(room.sqft, 20)) / 3.2, span / 90);
@@ -1996,8 +1853,9 @@ function ZonePeek({
                 fill={`color-mix(in srgb, ${accent} ${on ? 32 : 10}%, transparent)`}
                 stroke={accent}
                 strokeOpacity={on ? 0.95 : 0.55}
-                strokeWidth={on ? 2 : 1}
-                strokeDasharray={state === "call" && !on ? "5 3" : undefined}
+                // Not dashed: the reserved style means "no element behind this". A room needing
+                // a call is real — it separates on the alarm hue and stroke weight.
+                strokeWidth={on ? 2 : state === "call" ? 1.75 : 1}
                 vectorEffect="non-scaling-stroke"
               >
                 <title>{`${room.name} · ${fmtNum(room.sqft, 0)} sf · ${STATE_META[state].label}`}</title>
@@ -2026,10 +1884,10 @@ function ZonePeek({
       </div>
 
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 px-2.5 py-1">
-        <Swatch tone="var(--primary)" label="cursor room" />
-        <Swatch tone={STATE_META.call.tone} label="needs a call" dashed />
+        <Swatch tone={CURSOR_INK} label="cursor room" />
+        <Swatch tone={STATE_META.call.tone} label="needs a call" />
         {zone.residues.length > 0 && (
-          <Swatch tone="var(--muted-foreground)" label={`held ×${zone.residues.length}`} dashed />
+          <Swatch tone={ABSENT_INK} label={`held ×${zone.residues.length}`} seam />
         )}
         <span className="tele text-muted-foreground">
           {withGeometry.length}/{zone.rooms.length} with real boundaries
@@ -2038,11 +1896,14 @@ function ZonePeek({
 
       {(!geoReady || withGeometry.length < zone.rooms.length) && (
         <p className="px-2.5 pb-1.5">
-          <Seam>
+          <FactChip
+            dashed
+            title="Some rooms here are drawn as position dots rather than boundaries. A dot says the position is known and the shape is not — it is a stand-in, never a measurement."
+          >
             {!geoReady
-              ? "the detector fixture has not loaded yet — rooms are position dots until it does"
-              : "this zone is outside the replayed capture, so its rooms carry label points and areas but no boundary"}
-          </Seam>
+              ? "detector fixture still loading · rooms are position dots"
+              : "outside the replayed capture · label points, no boundaries"}
+          </FactChip>
         </p>
       )}
     </div>
