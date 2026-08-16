@@ -62,6 +62,23 @@ a column group is interrupted and resumed.
    slice would break pea's tools for no gain, so it stays and this entry names why. Replacement:
    retire it when pea's family editing runs through the live lane's own commands.
 
+8. **`family.editor.apply` has no concurrency guard.** No versionToken echo, no refuse-on-drift —
+   unlike `settings.document.save` (`expectedVersionToken`) and `familyfoundry.apply`
+   (`expectedPlanHash`). The live lane's "versionToken" is a client read timestamp; the staleness
+   text in the status strip is the only mitigation. Accepted deliberately for the manual e2e
+   (single user, short transactions). Replacement: a snapshot-token echo on the op, designed
+   AFTER the drift vocabulary settles (clean-room decision, 2026-08-16) — the guard should speak
+   the same agreement language the UI renders.
+9. **The FF profile library predates the surviving schema.** Clean-room decision (2026-08-16):
+   `FamilyModel` (family.json) is the ONE portable profile schema; the desired-state profile and
+   the FFManager/FFMigrator-era profiles are legacy. The 51 on-disk profiles under
+   `CmdFFManager/` and `CmdFFMigrator/` already fail strict deserialization at HEAD and have no
+   upgrade lane. They are NOT disposable: `CmdFFMigrator` MechEquip/ElecEquip/PlumbEquip are
+   essential company documents, `CmdFFManager/CustomFams` is first priority for migration, and
+   `SavedEquip` is retained for its hand-extracted parameter tables. Replacement: a one-shot
+   converter into the survivor schema once its patch semantics (omission = unchanged, null =
+   delete — designed in docs/design/family-model-spec.md, unimplemented) land.
+
 ## Intentional gaps (deliberate, not scheduled)
 
 - **No profile editor UI.** Profiles are input/output artifacts (files); authoring is by hand
@@ -83,6 +100,11 @@ a column group is interrupted and resumed.
   diagnostic channel on the op, which is not a shim — it is a contract change if it is ever wanted.
 - **`/api/pdf-audit/map` deleted, `/api/pdf-audit/parse` kept.** Proposals come from pea via
   route state; the heuristic/direct-Anthropic mapper was a placeholder.
+- **No family switching from inside the live lane.** `family.editor.open` needs a project
+  active; activating a sibling project document from a family-editor context is unreliable in
+  Revit and must never be attempted (decision 2026-08-16). The live lane's family slot renders
+  the refusal honestly instead. A future entry affordance: open an .rfa from Revit's recents
+  list, which is a real path and does not require a project.
 
 ## Harvest gates — family-types deletion checklist (CLOSED)
 

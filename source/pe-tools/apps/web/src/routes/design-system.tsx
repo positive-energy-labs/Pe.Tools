@@ -70,7 +70,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "#/components/ui/select";
+import { Chip } from "#/components/ui/chip";
 import { PickList } from "#/components/ui/pick-list";
+import { Switcher } from "#/components/ui/switcher";
+import { Verb } from "#/components/ui/verb";
 import { SidePane } from "#/components/ui/side-pane";
 import { ValueDiff } from "#/components/ui/value-diff";
 import { Switch } from "#/components/ui/switch";
@@ -254,6 +257,7 @@ function DesignSystem() {
         <Intro />
         <Laws />
         <Tokens />
+        <ColorRoles />
         <Primitives />
         <Patterns />
         <GroundedDoc />
@@ -535,12 +539,303 @@ function TypeSpecimen({
   );
 }
 
-/* ── 03 · primitives ────────────────────────────────────────────────────────── */
+/* ── 03 · color roles ───────────────────────────────────────────────────────── */
+
+/* The state vocabulary, as it is DECLARED in styles.css: role → the palette var it aliases → what
+   the fact is. The resolved value is read back off :root at render, so re-pointing an alias shows
+   up here without this list being touched — the page reports the contract, it does not restate it. */
+const ST_ROLES: readonly { token: string; alias: string; means: string }[] = [
+  { token: "--st-proposal", alias: "--pe-green", means: "pea's voice — proposals, agent marks" },
+  { token: "--st-drift", alias: "--cat-clay", means: "the model disagrees — the only alarm" },
+  { token: "--st-warn", alias: "--kiln", means: "stale · unsaved · unverified" },
+  { token: "--st-derived", alias: "--lichen", means: "formula-driven, computed" },
+  { token: "--st-done", alias: "--cat-green", means: "landed, receipted, settled" },
+  { token: "--st-meta", alias: "--slate", means: "neutral machine-measured fact" },
+  { token: "--st-ground", alias: "--line-2", means: "grounding citation — spends no colour" },
+];
+
+/** Read the role tokens off :root, and re-read them when the theme flips. */
+function useRoleValues(tokens: readonly string[]): Record<string, string> {
+  const [values, setValues] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const read = () => {
+      const style = getComputedStyle(document.documentElement);
+      setValues(Object.fromEntries(tokens.map((t) => [t, style.getPropertyValue(t).trim()])));
+    };
+    read();
+    const observer = new MutationObserver(read);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return values;
+}
+
+function ColorRoles() {
+  const [overlay, setOverlay] = useState("draft");
+  const [said, setSaid] = useState<string | null>(null);
+  const values = useRoleValues([...ST_ROLES.map((r) => r.token), "--act-commit", "--act-hover"]);
+
+  return (
+    <Spec
+      n={3}
+      title="Color roles"
+      note="The layer between the palette and the surface (docs/design/COLOR-ROLES.md). Two vocabularies, never mixed: --act-* is what pressing DOES, --st-* is what a fact IS. A hue serves one of them only. Components consume roles; raw --pe-blue / --cat-* outside ui/* and the two visual canvases is a review finding."
+    >
+      <Group label="Interaction roles — live components" wrap="flex flex-col gap-0 border-t border-border">
+        <RoleRow
+          name="commit"
+          rule="Writes beyond the page: save, apply, materialize. The ONLY interactive blue on any surface, and there is at most one per view."
+          example={
+            <Verb
+              label="save profile"
+              tone="commit"
+              onClick={() => setSaid("commit — the write crossed out of the page")}
+              reason="Write the document back to disk. Commit tone is reserved for exactly this: a change that outlives the page."
+            />
+          }
+        />
+        <RoleRow
+          name="act (default)"
+          rule="Safe, page-scoped verb — parse, capture, accept, collapse. Neutral border; hover strengthens to --act-hover and never turns blue."
+          example={
+            <Verb
+              label="parse"
+              onClick={() => setSaid("act — page-local, nothing left the page")}
+              reason="Re-read the source document and rebuild its blocks. Nothing is written anywhere; the page-local state changes and that is all."
+            />
+          }
+        />
+        <RoleRow
+          name="nav"
+          rule="Goes somewhere, or back. Text with an underline affordance and no border — leaving is not an operation on the data."
+          example={
+            <Verb
+              label="← all types"
+              tone="nav"
+              onClick={() => setSaid("nav — you moved, the data did not")}
+              reason="Return to the cross-type table. Nothing is decided by leaving."
+            />
+          }
+        />
+        <RoleRow
+          name="mode"
+          rule="Exclusive view switch. The standing choice is a FILLED mist — selection is a place you stand, not a state of the data, so it spends nothing from the state palette."
+          example={
+            <Switcher
+              ariaLabel="overlay"
+              value={overlay}
+              onChange={setOverlay}
+              options={[
+                { value: "draft", label: "draft", title: "The staged document, editable." },
+                { value: "live", label: "⇄ live", title: "What the model carries, read-only." },
+                { value: "saved", label: "⇄ saved", title: "What is on disk, read-only." },
+              ]}
+            />
+          }
+        />
+        <RoleRow
+          name="chip"
+          rule="A machine-measured fact wearing exactly one state role. `dashed` means SEAM — typed but unproven, a fixture, a stand-in — and that border style is reserved for it."
+          example={
+            <>
+              <Chip title="A neutral measured fact: how long ago the model was read.">
+                read 4m ago
+              </Chip>
+              <Chip tone="warn" title="The document has changes that are not on disk.">
+                unsaved draft
+              </Chip>
+              <Chip dashed title="A fixture seam — this surface runs on mock data, not a host.">
+                prototype
+              </Chip>
+            </>
+          }
+        />
+        <div className="flex items-baseline gap-3 py-2">
+          <span className="tele-label text-muted-foreground">receipt</span>
+          <span className="tele text-[12px] text-muted-foreground">
+            {said ?? "press one — every verb above is the real ui/verb.tsx"}
+          </span>
+        </div>
+      </Group>
+
+      <Group label="State roles — token · alias · meaning" wrap="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {ST_ROLES.map(({ token, alias, means }) => (
+          <div
+            key={token}
+            className="flex items-center gap-3 rounded-[var(--radius)] border border-border bg-card px-3 py-1.5"
+            title={`${token} is declared in styles.css as var(${alias}). Re-point that one line and every surface follows — this card reads the resolved value back off :root, so it cannot drift from the contract.`}
+          >
+            <span
+              className="size-6 shrink-0 rounded-[var(--radius)] border border-border"
+              style={{ backgroundColor: `var(${token})` }}
+            />
+            <div className="min-w-0 flex-1">
+              <div className="tele text-foreground">{token}</div>
+              <div className="text-[11px] leading-tight text-muted-foreground">{means}</div>
+            </div>
+            <div className="w-[104px] shrink-0 text-right">
+              <div className="tele text-[11px] text-muted-foreground">{alias}</div>
+              <div className="tele truncate text-[11px] text-muted-foreground/70">
+                {values[token] || "…"}
+              </div>
+            </div>
+          </div>
+        ))}
+      </Group>
+
+      <Group
+        label="Shape law — position first, colour second"
+        wrap="flex flex-col gap-3 sm:flex-row sm:items-start"
+      >
+        <div className="w-fit rounded-[var(--radius)] border border-border bg-card">
+          <div className="tele-label border-b border-border px-2 py-1 text-muted-foreground">
+            Body Width
+          </div>
+          <div className="flex">
+            <MarkCell
+              value="24in"
+              proposal
+              unsaved
+              caption="proposal + unsaved"
+              title="Corner triangle = a proposal lands on this cell (--st-proposal). The bottom-left dot = saving would write here (--st-warn). Diagonally opposite on purpose: the two marks can never collide or be read as one."
+            />
+            <MarkCell
+              value="18in"
+              ground
+              caption="grounded"
+              title="Dotted underline in --st-ground = this number carries a citation. Deliberately colourless: where a number came from is not a state of the model."
+            />
+            <MarkCell
+              value="30in"
+              drift
+              caption="drift"
+              title="The same underline slot in --st-drift = the model disagrees here. Clay outranks grounding: a cell that is both is more urgently the first."
+            />
+          </div>
+        </div>
+        <p className="max-w-[46ch] text-[12px] leading-relaxed text-muted-foreground">
+          A mark is legible by position and shape before colour — corner triangle = proposal,
+          bottom-left dot = unsaved, dotted underline = grounding (neutral) or drift (clay wins the
+          slot), rail dot = locator. A mark never changes corner or shape between surfaces, so the
+          colour budget stays small and the page survives colour-blind reading.
+        </p>
+      </Group>
+
+      <Group label="Counter-examples — what these roles are NOT" wrap="grid gap-3 sm:grid-cols-2">
+        <div className="flex flex-col gap-2 rounded-[var(--radius)] border border-dashed border-border p-3">
+          <div className="flex items-center gap-2">
+            <span className="tele-label text-muted-foreground">not commit</span>
+            <Verb
+              label="capture ←"
+              onClick={() => setSaid("still act — capture only moves numbers into the draft")}
+              reason="Pull the model's numbers into the staged document. Nothing is written outside the page, so it is an act — and it stays neutral no matter how consequential it feels."
+            />
+          </div>
+          <p className="text-[12px] leading-snug text-muted-foreground">
+            Big, bulk, and scary is not the test. Commit means the write outlives the page — capture
+            only fills the draft, so blue here would spend the one action peak on a no-op.
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 rounded-[var(--radius)] border border-dashed border-border p-3">
+          <div className="flex items-center gap-2">
+            <span className="tele-label text-muted-foreground">not drift</span>
+            <Chip tone="warn" title="Stale: the last read is old, so every live claim is weaker.">
+              read 41m ago
+            </Chip>
+          </div>
+          <p className="text-[12px] leading-snug text-muted-foreground">
+            Stale, unsaved, and unverified are <em>warnings</em> (--st-warn). Clay is the only alarm
+            and means exactly one thing: the model and the document disagree. Wearing it for
+            anything else retires it.
+          </p>
+        </div>
+      </Group>
+    </Spec>
+  );
+}
+
+function RoleRow({
+  name,
+  rule,
+  example,
+}: {
+  name: string;
+  rule: string;
+  example: React.ReactNode;
+}) {
+  return (
+    <div className="grid grid-cols-[110px_1fr] items-center gap-x-4 gap-y-2 border-b border-border py-3 last:border-b-0 sm:grid-cols-[110px_1fr_auto]">
+      <span className="tele-label" style={{ color: "var(--cat-blue)" }}>
+        {name}
+      </span>
+      <p className="text-[13px] leading-relaxed text-muted-foreground">{rule}</p>
+      <div className="col-span-2 flex items-center gap-2 sm:col-span-1 sm:justify-self-end">
+        {example}
+      </div>
+    </div>
+  );
+}
+
+/** One mock value cell carrying the marks in their canonical positions. */
+function MarkCell({
+  value,
+  caption,
+  title,
+  proposal,
+  unsaved,
+  ground,
+  drift,
+}: {
+  value: string;
+  caption: string;
+  title: string;
+  proposal?: boolean;
+  unsaved?: boolean;
+  ground?: boolean;
+  drift?: boolean;
+}) {
+  return (
+    <div className="flex w-28 flex-col border-r border-border last:border-r-0">
+      <span className="relative flex h-7 items-center px-2" title={title}>
+        <span
+          className={
+            drift
+              ? "tele text-[12px] underline decoration-[var(--st-drift)] decoration-dotted underline-offset-[3px]"
+              : ground
+                ? "tele text-[12px] underline decoration-[var(--st-ground)] decoration-dotted underline-offset-[3px]"
+                : "tele text-[12px]"
+          }
+          style={proposal ? { color: "var(--st-proposal)" } : undefined}
+        >
+          {value}
+        </span>
+        {unsaved && (
+          <span
+            aria-hidden
+            className="absolute bottom-px left-px size-1 rounded-[1px] bg-[var(--st-warn)]"
+          />
+        )}
+        {proposal && (
+          <span
+            aria-hidden
+            className="absolute right-0 top-0 size-0 border-l-[7px] border-t-[7px] border-l-transparent border-t-[var(--st-proposal)]"
+          />
+        )}
+      </span>
+      <span className="border-t border-border px-2 py-1 text-[10px] text-muted-foreground">
+        {caption}
+      </span>
+    </div>
+  );
+}
+
+/* ── 04 · primitives ────────────────────────────────────────────────────────── */
 
 function Primitives() {
   return (
     <Spec
-      n={3}
+      n={4}
       title="Primitives"
       note="The real ui/* components under the language. Everything clickable, every field, every overlay comes from exactly one of these."
     >
@@ -887,12 +1182,12 @@ function PickListBlock() {
   );
 }
 
-/* ── 04 · patterns ──────────────────────────────────────────────────────────── */
+/* ── 05 · patterns ──────────────────────────────────────────────────────────── */
 
 function Patterns() {
   return (
     <Spec
-      n={4}
+      n={5}
       title="Patterns"
       note="Compositions the language keeps producing — assembled from the primitives above, not new components. Copy the markup, don't reach for a fresh abstraction."
     >
@@ -1301,7 +1596,7 @@ function GroundedDoc() {
 
   return (
     <Spec
-      n={5}
+      n={6}
       title="Grounded document"
       note="Reusable <GroundedDocView> over useGroundedDoc() — hover a markdown block or a page box to link the two. Drop it anywhere a parsed PDF needs to stay traceable. Full harness at /doc-lab."
     >

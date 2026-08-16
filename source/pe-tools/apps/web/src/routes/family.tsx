@@ -1,27 +1,66 @@
+/**
+ * /family — THE surface for ONE family, in one of two lanes.
+ *
+ * LANE LAW: binding IS the choice. The sentence's document slot lists the authored
+ * family.json documents AND, whenever the bound session has a family open, one live entry
+ * ("the open family editor"). Picking one binds its lane; there is no toggle, and the lane is
+ * only ever DISPLAYED — as a chip beside the sentence.
+ *
+ *   AUTHORED — a family.json. route:settings owns the document (snapshot, field trichotomy,
+ *     validate/save lifecycle); route:family owns the sibling context: spec doc (OCR blocks +
+ *     image ids) and Revit evidence (resolved per-type values, provenance-stamped for
+ *     staleness). Anatomy pane + type matrix + geometry table + grounded doc pane.
+ *   LIVE — the family open in the bound session's family editor, via family.editor.snapshot.
+ *     Same matrix, formula column, review/staging machinery, doc pane, and inspector; NO
+ *     anatomy (a live family has no authored constituents to draw), no build/evidence lane,
+ *     no validate command. Save is family.editor.apply, where per-edit failure is real.
+ *
+ * CAPTURE IS THE BRIDGE: in the live lane the capture verb promotes the live family to an
+ * authored document (capture_evidence → settings create → bind), landing the user in the
+ * authored lane of the same family. That is the ONLY crossing between the lanes.
+ *
+ * PANE COMPOSITION (mirrors /takeoffs): an IDENTITY row (what is bound, in which lane, and
+ * nothing else), one slim status strip carrying the machine-measured facts on the left and the
+ * verbs that act on them on the right — review · evidence · create, hairline-separated and
+ * stage-aware — and a trouble line that exists only when a refusal, a receipt, or a hint has
+ * something to say.
+ *
+ * Then the workspace. The anatomy is the VISUAL pane (collapsible, its chrome survives
+ * collapse — the collapsed state is what the old "parameters only" mode used to be); the matrix over the
+ * geometry table is the CONTENT pane; the grounded cut sheet is a full-height INSPECTOR
+ * column, always rendered, with the parameter inspector as a strip beneath it when a
+ * parameter is pinned. In the live lane there is no anatomy at all, so the layout drops to a
+ * two-pane split rather than reserving an empty visual row.
+ *
+ * PROVENANCE LAW: one focus, four surfaces — see `#/family/focus`. Hovering a shape, a card,
+ * a chip, a matrix cell, or a geometry row lights the same set everywhere and points the doc
+ * pane's camera at that value's citations. Hover asks; pinning commits. Esc steps back out
+ * one commitment at a time: pinned citation → pinned parameter → hover.
+ */
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   type SettingsProposalSource,
   settingsFieldPointer,
   settingsFieldSegments,
 } from "@pe/agent-contracts";
+
 import { ThemeToggle } from "#/components/ThemeToggle";
 import { RfaChip, RvtChip } from "#/components/document-chips";
 import { Sentence, type SlotSpec } from "#/components/sentence";
+import { Pane, PaneSplit, PaneWorkspace } from "#/components/ui/pane";
+import { AnatomyPane } from "#/family/anatomy";
 import {
   type CitationTarget,
   FamilyDocPane,
+  buildGrounding,
   resolveCitations,
   useFamilyGrounding,
 } from "#/family/doc-pane";
-import {
-  type FormulaProblem,
-  authoredFormulaParams,
-  formulaAncestry,
-  validateFormula,
-} from "#/family/formula";
-import { FamilyInspector, type ParamAssociations } from "#/family/inspector";
+import { focusParamNames, mergeFocus, type Focus } from "#/family/focus";
+import { authoredFormulaParams, formulaAncestry } from "#/family/formula";
+import { FamilyInspector } from "#/family/inspector";
 import {
   LIVE_DOCUMENT_ENTRY,
   type LiveApplyFailure,
@@ -29,6 +68,8 @@ import {
   readAgo,
   useFamilyEditorLane,
 } from "#/family/live";
+import { GeometryTable, TypeMatrix, type CiteContext, type ReviewMarkState } from "#/family/matrix";
+import { paramAssociations, paramSpec, type FamilyModel } from "#/family/model";
 import {
   FAMILY_MODULE,
   type EvidenceSlice,
@@ -37,52 +78,53 @@ import {
   useLiveFamilyStore,
   useMockFamilyStore,
 } from "#/family/store";
-import { familyModelPlaneOffset, familyModelPrismFaceCoordinate } from "#/family-model/preview";
-import { fitFrame } from "#/lib/affine-frame";
+import { SAMPLE_DOC } from "#/grounded-doc/sample";
+import { cn } from "#/lib/utils";
 
 export const Route = createFileRoute("/family")({
-  /** Both params are optional, so every `<Link to="/family">` stays search-free. */
-  validateSearch: (search: Record<string, unknown>): { mock?: true; family?: string } => ({
+  /** Every param is optional, so every `<Link to="/family">` stays search-free. */
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { mock?: true; family?: string; thread?: string; variant?: string } => ({
     mock: search.mock != null && search.mock !== false ? true : undefined,
+    /** PROTOTYPE — `?variant=<key>` mounts the clean-room mock variants (family/proto). */
+    variant:
+      typeof search.variant === "string" && search.variant.trim()
+        ? search.variant.trim()
+        : undefined,
     /** `?family=<elementId>` — /families row navigation. The URL is the only state. */
     family:
       typeof search.family === "string" && search.family.trim() ? search.family.trim() : undefined,
+    /** `?thread=<id>` — the chat side pane iframes this route with a thread id, and
+     * `#/workbench/route-state` reads it straight off the URL to scope route state to that
+     * conversation. Declared here so the router KEEPS it: an undeclared param is dropped on
+     * the first navigation, and the pane silently falls back to workspace scope. */
+    thread:
+      typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
   }),
   component: FamilyRoute,
 });
 
+/** PROTOTYPE — lazy so the throwaway variants cost nothing on the real route. */
+const FamilyProto = lazy(() =>
+  import("#/family/proto/variants").then((m) => ({ default: m.FamilyProto })),
+);
+
 /** The store seam is chosen once, here: `?mock` mounts a self-contained fixture. */
 function FamilyRoute() {
-  const { mock } = Route.useSearch();
+  const { mock, variant } = Route.useSearch();
+  if (variant)
+    return (
+      <Suspense fallback={null}>
+        <FamilyProto variant={variant} />
+      </Suspense>
+    );
   return mock ? <MockFamily /> : <LiveFamily />;
 }
 
 function MockFamily() {
   return <Page store={useMockFamilyStore()} lane={AUTHORED_LANE} />;
 }
-
-/* ------------------------------------------------------------------------------------------------
- * /family — THE surface for ONE family, in one of two lanes.
- *
- * LANE LAW: binding IS the choice. The sentence's document slot lists the authored
- * family.json documents AND, whenever the bound session has a family open, one live entry
- * ("family open in <world>"). Picking one binds its lane; there is no toggle, and the lane
- * is only ever DISPLAYED — as a chip beside the sentence.
- *
- *   AUTHORED — a family.json. route:settings owns the document (snapshot, field trichotomy,
- *     validate/save lifecycle); route:family owns the sibling context: spec doc (OCR blocks
- *     + image ids) and Revit evidence (resolved per-type values, provenance-stamped for
- *     staleness). Anatomy sheet (true-scale triptych) + type flex matrix + grounded doc pane,
- *     one hover vocabulary across all three: cell ↔ constituent ↔ cited document region.
- *   LIVE — the family open in the bound session's family editor, via family.editor.snapshot.
- *     Same matrix, formula column, review/staging machinery, doc pane, and inspector; no
- *     anatomy (a live family has no authored constituents to draw), no build/evidence lane,
- *     no validate command. Save is family.editor.apply, where per-edit failure is real.
- *
- * CAPTURE IS THE BRIDGE: in the live lane the capture verb promotes the live family to an
- * authored document (revit.detail.family-model → settings create → bind), landing the user
- * in the authored lane of the same family. That is the ONLY crossing between the lanes.
- * ---------------------------------------------------------------------------------------------- */
 
 // ── the two lanes ───────────────────────────────────────────────────────────────────────────────
 
@@ -136,1856 +178,48 @@ function LiveFamily() {
   );
 }
 
-// ── model types (v1 authored shape, loosely typed for the projection) ───────────────────────────
-interface ParamSpec {
-  dataType: string;
-  propertiesGroup?: string;
-  resolvedValues?: Record<string, string>;
-  value?: string;
-  formula?: string;
-  /** Authored schema carries a nullable `isInstance`; absent means TYPE (Revit's default). */
-  isInstance?: boolean;
-  /** LIVE lane only: Revit reports the parameter read-only, so no cell here may be edited. */
-  readOnly?: boolean;
-}
-interface PlaneSpec {
-  from: string;
-  by: string;
-  direction: string;
-}
-interface FrameSpec {
-  origin: string[];
-  normal: string;
-  up: string;
-}
-interface SolidSpec {
-  kind: string;
-  frame: string;
-  width?: string;
-  depth?: string;
-  height?: string;
-  diameter?: string;
-}
-interface StubSpec {
-  depth: string;
-  direction: string;
-}
-interface ConnectorSpec {
-  domain: string;
-  frame: string;
-  shape: string;
-  diameter?: string;
-  width?: string;
-  height?: string;
-  stub?: StubSpec;
-  systemType?: string;
-  flowDirection?: string;
-}
-interface NestedSpec {
-  family: string;
-  type?: string;
-  frame: string;
-  parameterBindings?: Record<string, string>;
-}
-interface ArraySpec {
-  kind: string;
-  member: string;
-  axis: string;
-  halfCount: string;
-  limits?: { start: string; end: string };
-}
-interface FamilyModel {
-  family: { name: string; category: string; template: string; placement: string };
-  familyParameters: Record<string, ParamSpec>;
-  sharedParameters?: Record<string, ParamSpec>;
-  types: Record<string, Record<string, string>>;
-  planes?: Record<string, PlaneSpec>;
-  frames?: Record<string, FrameSpec>;
-  solids?: Record<string, SolidSpec>;
-  nestedFamilies?: Record<string, NestedSpec>;
-  connectors?: Record<string, ConnectorSpec>;
-  arrays?: Record<string, ArraySpec>;
-  roomCalculationPoint?: { enabled: boolean };
-  unmodeled?: unknown[];
-}
+// ── header verbs ────────────────────────────────────────────────────────────────────────────────
 
-// ── portable-literal + reference helpers ────────────────────────────────────────────────────────
-function inches(text: string | undefined): number | null {
-  if (!text) return null;
-  const m = /^\s*(?:(\d+(?:\.\d+)?)(?:\s+(\d+)\/(\d+))?|(\d+)\/(\d+))\s*(in|ft|mm)\s*$/.exec(text);
-  if (!m) return null;
-  let n = m[1] ? Number.parseFloat(m[1]) : 0;
-  if (m[2] && m[3]) n += Number(m[2]) / Number(m[3]);
-  if (m[4] && m[5]) n = Number(m[4]) / Number(m[5]);
-  return m[6] === "ft" ? n * 12 : m[6] === "mm" ? n / 25.4 : n;
-}
-const fmtIn = (n: number) => `${Math.round(n * 2) / 2}in`;
-
-const paramRef = (text: string | undefined) =>
-  text?.startsWith("param:") ? text.slice("param:".length) : null;
-
-function paramSpec(model: FamilyModel, name: string): ParamSpec | undefined {
-  return model.familyParameters[name] ?? model.sharedParameters?.[name];
-}
-
-type ValueSource = "override" | "value" | "formula" | "missing";
-function resolveParam(
-  model: FamilyModel,
-  typeName: string,
-  name: string,
-): { text: string; source: ValueSource } {
-  const override = model.types[typeName]?.[name];
-  if (override != null) return { text: override, source: "override" };
-  const spec = paramSpec(model, name);
-  if (!spec) return { text: "—", source: "missing" };
-  if (spec.formula != null)
-    return { text: spec.resolvedValues?.[typeName] ?? `= ${spec.formula}`, source: "formula" };
-  return { text: spec.value ?? "—", source: "value" };
-}
-
-function resolveDim(model: FamilyModel, typeName: string, raw: string | undefined) {
-  if (!raw) return null;
-  const param = paramRef(raw);
-  if (!param) return { label: raw, text: raw, source: "value" as ValueSource, param: null };
-  const resolved = resolveParam(model, typeName, param);
-  return { label: raw, ...resolved, param };
-}
-
-// ── immutable edits (staged via route:settings field patches) ───────────────────────────────────
-type Update = (fn: (model: FamilyModel) => FamilyModel) => void;
-
-const setParamValue = (model: FamilyModel, name: string, value: string): FamilyModel => {
-  const section = model.familyParameters[name] ? "familyParameters" : "sharedParameters";
-  const specs = model[section] ?? {};
-  const spec = specs[name];
-  if (!spec || spec.formula != null) return model; // value XOR formula — formula params are locked
-  return { ...model, [section]: { ...specs, [name]: { ...spec, value } } };
-};
-
-/** Stage a formula at /familyParameters/<name>/formula. An empty draft removes it.
- * The value-XOR-formula law is the HOST's to enforce: staging a formula over a param that
- * still carries values is allowed here and surfaces as an advisory, never a block. */
-const setParamFormula = (model: FamilyModel, name: string, formula: string): FamilyModel => {
-  const section = model.familyParameters[name] ? "familyParameters" : "sharedParameters";
-  const specs = model[section] ?? {};
-  const spec = specs[name];
-  if (!spec) return model;
-  const next: ParamSpec = { ...spec };
-  if (formula.trim()) next.formula = formula.trim();
-  else delete next.formula;
-  return { ...model, [section]: { ...specs, [name]: next } };
-};
-
-const setOverride = (
-  model: FamilyModel,
-  typeName: string,
-  name: string,
-  value: string | null,
-): FamilyModel => {
-  if (paramSpec(model, name)?.formula != null) return model; // schema rule, enforced in the UI too
-  const type = { ...model.types[typeName] };
-  if (value == null) delete type[name];
-  else type[name] = value;
-  return { ...model, types: { ...model.types, [typeName]: type } };
-};
-
-const addType = (model: FamilyModel, name: string): FamilyModel =>
-  name && !model.types[name] ? { ...model, types: { ...model.types, [name]: {} } } : model;
-
-const setSolidDim = (
-  model: FamilyModel,
-  slug: string,
-  field: keyof SolidSpec,
-  value: string,
-): FamilyModel => ({
-  ...model,
-  solids: { ...model.solids, [slug]: { ...(model.solids?.[slug] as SolidSpec), [field]: value } },
-});
-
-const toggleStub = (model: FamilyModel, slug: string): FamilyModel => {
-  const connector = model.connectors?.[slug];
-  if (!connector?.stub) return model;
-  const direction = connector.stub.direction === "Out" ? "In" : "Out";
-  return {
-    ...model,
-    connectors: {
-      ...model.connectors,
-      [slug]: { ...connector, stub: { ...connector.stub, direction } },
-    },
-  };
-};
-
-const toggleRcp = (model: FamilyModel): FamilyModel => ({
-  ...model,
-  roomCalculationPoint: { enabled: !(model.roomCalculationPoint?.enabled ?? false) },
-});
-
-// ── the dumb evaluator: params → arithmetic → plane intersection → face lookup ──────────────────
-type Axis = "x" | "y" | "z";
-interface Vec3 {
-  x: number | null;
-  y: number | null;
-  z: number | null;
-}
-interface SolidGeo {
-  slug: string;
-  kind: string;
-  isVoid: boolean;
-  isCyl: boolean;
-  w: number | null;
-  d: number | null;
-  h: number | null;
-}
-interface PlaneGeo {
-  slug: string;
-  axis: Axis | null;
-  offset: number | null;
-  param: string | null;
-  editable: boolean;
-  text: string;
-}
-interface FrameGeo {
-  slug: string;
-  pos: Vec3;
-  normal: string;
-}
-interface ConnGeo {
-  slug: string;
-  domain: string;
-  shape: string;
-  pos: Vec3;
-  normal: string;
-  w: number | null;
-  h: number | null;
-  stub: number | null;
-  stubDir: string | undefined;
-}
-
-const DATUM_AXIS: Record<string, Axis> = {
-  "plane:family.Bottom": "z",
-  "plane:family.CenterFB": "y",
-  "plane:family.CenterLR": "x",
-};
-
-function evalLen(model: FamilyModel, typeName: string, raw: string | undefined): number | null {
-  if (!raw) return null;
-  const param = paramRef(raw);
-  if (!param) return inches(raw);
-  const resolved = resolveParam(model, typeName, param);
-  return resolved.source === "missing" ? null : inches(resolved.text);
-}
-
-// ponytail: v1 lowering convention — solids centered on the family center planes, sitting ON
-// family.Bottom, +Y is Front (normative dumb-evaluator rules + conformance vectors).
-function solidGeos(model: FamilyModel, typeName: string): SolidGeo[] {
-  return Object.entries(model.solids ?? {}).map(([slug, solid]) => ({
-    slug,
-    kind: solid.kind,
-    isVoid: solid.kind.startsWith("Void"),
-    isCyl: solid.kind.endsWith("Cylinder"),
-    w: evalLen(model, typeName, solid.width ?? solid.diameter),
-    d: evalLen(model, typeName, solid.depth ?? solid.diameter),
-    h: evalLen(model, typeName, solid.height),
-  }));
-}
-
-function planeGeos(model: FamilyModel, typeName: string): PlaneGeo[] {
-  return Object.entries(model.planes ?? {}).map(([slug, plane]) => {
-    const param = paramRef(plane.by);
-    const spec = param ? paramSpec(model, param) : undefined;
-    const value = evalLen(model, typeName, plane.by);
-    return {
-      slug,
-      axis: DATUM_AXIS[plane.from] ?? null,
-      offset:
-        value == null
-          ? null
-          : familyModelPlaneOffset(plane.direction === "In" ? "In" : "Out", value),
-      param,
-      editable: spec != null && spec.formula == null,
-      text: param ? resolveParam(model, typeName, param).text : plane.by,
-    };
-  });
-}
-
-function faceCoord(solids: SolidGeo[], ref: string): { axis: Axis; value: number | null } | null {
-  const [slug, face] = ref.slice("face:".length).split(".");
-  const solid = solids.find((entry) => entry.slug === slug);
-  if (!solid || solid.w == null || solid.d == null || solid.h == null) return null;
-  const coordinate = familyModelPrismFaceCoordinate(face, solid.w, solid.d, solid.h);
-  return coordinate ? { axis: coordinate.axis, value: coordinate.coordinate } : null;
-}
-
-function frameGeos(model: FamilyModel, solids: SolidGeo[], planes: PlaneGeo[]): FrameGeo[] {
-  return Object.entries(model.frames ?? {}).map(([slug, frame]) => {
-    const pos: Vec3 = { x: null, y: null, z: null };
-    for (const ref of frame.origin) {
-      if (ref.startsWith("face:")) {
-        const coordinate = faceCoord(solids, ref);
-        if (coordinate) pos[coordinate.axis] = coordinate.value;
-      } else if (DATUM_AXIS[ref]) {
-        pos[DATUM_AXIS[ref]] = 0;
-      } else if (ref.startsWith("plane:")) {
-        const plane = planes.find((entry) => entry.slug === ref.slice("plane:".length));
-        if (plane?.axis) pos[plane.axis] = plane.offset;
-      }
-    }
-    return { slug, pos, normal: frame.normal };
-  });
-}
-
-function connGeos(model: FamilyModel, typeName: string, frames: FrameGeo[]): ConnGeo[] {
-  return Object.entries(model.connectors ?? {}).map(([slug, connector]) => {
-    const frame =
-      connector.frame === "frame:family"
-        ? { pos: { x: 0, y: 0, z: 0 }, normal: "+Z" }
-        : (frames.find((entry) => entry.slug === connector.frame.slice("frame:".length)) ?? {
-            pos: { x: null, y: null, z: null },
-            normal: "+Z",
-          });
-    const round = connector.shape === "Round";
-    const diameter = evalLen(model, typeName, connector.diameter);
-    return {
-      slug,
-      domain: connector.domain,
-      shape: connector.shape,
-      pos: frame.pos,
-      normal: frame.normal,
-      w: round ? diameter : evalLen(model, typeName, connector.width),
-      h: round ? diameter : evalLen(model, typeName, connector.height),
-      stub: evalLen(model, typeName, connector.stub?.depth),
-      stubDir: connector.stub?.direction,
-    };
-  });
-}
-
-/** Reverse reference index — who uses each constituent. Feeds the relationship caption. */
-function usedByIndex(model: FamilyModel): Record<string, string[]> {
-  const index: Record<string, string[]> = {};
-  const add = (id: string, user: string) => (index[id] = [...(index[id] ?? []), user]);
-  for (const [slug, frame] of Object.entries(model.frames ?? {}))
-    for (const ref of frame.origin) {
-      if (ref.startsWith("face:")) add(`s:${ref.slice(5).split(".")[0]}`, `frame:${slug}`);
-      else if (ref.startsWith("plane:") && !DATUM_AXIS[ref])
-        add(`pl:${ref.slice(6)}`, `frame:${slug}`);
-    }
-  for (const [slug, connector] of Object.entries(model.connectors ?? {}))
-    if (connector.frame !== "frame:family")
-      add(`f:${connector.frame.slice(6)}`, `connector:${slug}`);
-  for (const [slug, arraySpec] of Object.entries(model.arrays ?? {}))
-    for (const limit of [arraySpec.limits?.start, arraySpec.limits?.end])
-      if (limit?.startsWith("plane:") && !DATUM_AXIS[limit])
-        add(`pl:${limit.slice(6)}`, `array:${slug}`);
-  return index;
-}
-
-/** Every param name a constituent's dims reference — links hover to matrix cells + citations. */
-function constituentParams(model: FamilyModel, hovered: string | null): string[] {
-  if (!hovered) return [];
-  const [kind, slug] = [
-    hovered.slice(0, hovered.indexOf(":")),
-    hovered.slice(hovered.indexOf(":") + 1),
-  ];
-  const refs: (string | undefined)[] = [];
-  if (kind === "s") {
-    const solid = model.solids?.[slug];
-    refs.push(solid?.width, solid?.depth, solid?.height, solid?.diameter);
-  } else if (kind === "pl") {
-    refs.push(model.planes?.[slug]?.by);
-  } else if (kind === "c") {
-    const connector = model.connectors?.[slug];
-    refs.push(connector?.diameter, connector?.width, connector?.height, connector?.stub?.depth);
-  } else if (kind === "a") {
-    refs.push(model.arrays?.[slug]?.halfCount);
-  }
-  return refs.map((ref) => paramRef(ref)).filter((name): name is string => name != null);
-}
-
-/** Reverse of `constituentParams`: every authored construct that reads this parameter.
- * This is the inspector's "associates through" — derived from the authored model, not
- * from a host GetAssociated call. */
-function paramAssociations(model: FamilyModel, name: string): ParamAssociations {
-  const reads = (...refs: (string | undefined)[]) => refs.some((ref) => paramRef(ref) === name);
-  const dimensions: string[] = [];
-  for (const [slug, solid] of Object.entries(model.solids ?? {}))
-    if (reads(solid.width, solid.depth, solid.height, solid.diameter))
-      dimensions.push(`solid ${slug}`);
-  for (const [slug, plane] of Object.entries(model.planes ?? {}))
-    if (reads(plane.by)) dimensions.push(`plane ${slug}`);
-  for (const [slug, connector] of Object.entries(model.connectors ?? {}))
-    if (reads(connector.diameter, connector.width, connector.height, connector.stub?.depth))
-      dimensions.push(`connector ${slug}`);
-  const arrays = Object.entries(model.arrays ?? {})
-    .filter(([, spec]) => reads(spec.halfCount))
-    .map(([slug]) => `array ${slug}`);
-  const nested = Object.entries(model.nestedFamilies ?? {}).flatMap(([slug, spec]) =>
-    Object.entries(spec.parameterBindings ?? {})
-      .filter(([, source]) => paramRef(source) === name || source === name)
-      .map(([target]) => `${slug} · ${target}`),
-  );
-  return { dimensions, arrays, nested };
-}
-
-// ── the triptych ────────────────────────────────────────────────────────────────────────────────
-interface ViewDef {
-  key: string;
-  label: string;
-  u: Axis;
-  v: Axis;
-  depth: Axis;
-}
-const VIEWS: ViewDef[] = [
-  { key: "front", label: "FRONT · looking −Y", u: "x", v: "z", depth: "y" },
-  { key: "side", label: "SIDE · looking +X", u: "y", v: "z", depth: "x" },
-  { key: "plan", label: "PLAN · looking −Z", u: "x", v: "y", depth: "z" },
-];
-
-const DOMAIN_COLOR: Record<string, string> = {
-  Duct: "var(--pe-blue)",
-  Pipe: "var(--lichen)",
-  Electrical: "var(--kiln)",
-};
-
-const NORMAL_RE = /^([+-])([XYZ])$/;
-
-interface Sheet {
-  solids: SolidGeo[];
-  planes: PlaneGeo[];
-  frames: FrameGeo[];
-  conns: ConnGeo[];
-  ghosts: Array<{ typeName: string; solids: SolidGeo[] }>;
-  rcp: Vec3 | null;
-}
-
-function buildSheet(model: FamilyModel, typeName: string): Sheet {
-  const solids = solidGeos(model, typeName);
-  const planes = planeGeos(model, typeName);
-  const frames = frameGeos(model, solids, planes);
-  const conns = connGeos(model, typeName, frames);
-  const ghosts = Object.keys(model.types)
-    .filter((name) => name !== typeName)
-    .map((name) => ({ typeName: name, solids: solidGeos(model, name) }));
-  // ponytail: fixed PE room-point convention — 12in, Unhosted → +Z, hosted → −Y (AddRoomDingler)
-  const rcp = model.roomCalculationPoint?.enabled
-    ? model.family.placement === "Unhosted"
-      ? { x: 0, y: 0, z: 12 }
-      : { x: 0, y: -12, z: 0 }
-    : null;
-  return { solids, planes, frames, conns, ghosts, rcp };
-}
-
-/** One shared world bbox (incl. ghosts) → one px/in factor → true relative scale everywhere. */
-function bounds(sheet: Sheet): Record<Axis, [number, number]> {
-  const extent: Record<Axis, number[]> = { x: [], y: [], z: [] };
-  const solid = (geo: SolidGeo) => {
-    if (geo.w != null) extent.x.push(-geo.w / 2, geo.w / 2);
-    if (geo.d != null) extent.y.push(-geo.d / 2, geo.d / 2);
-    if (geo.h != null) extent.z.push(0, geo.h);
-  };
-  sheet.solids.forEach(solid);
-  for (const ghost of sheet.ghosts) ghost.solids.forEach(solid);
-  for (const plane of sheet.planes)
-    if (plane.axis && plane.offset != null) extent[plane.axis].push(plane.offset);
-  for (const conn of sheet.conns)
-    for (const axis of ["x", "y", "z"] as Axis[]) {
-      const p = conn.pos[axis];
-      if (p != null) extent[axis].push(p - (conn.stub ?? 0) - 2, p + (conn.stub ?? 0) + 2);
-    }
-  if (sheet.rcp)
-    for (const axis of ["x", "y", "z"] as Axis[])
-      if (sheet.rcp[axis] != null) extent[axis].push(sheet.rcp[axis] as number);
-  const range = (values: number[]): [number, number] => {
-    if (values.length === 0) return [-12, 12];
-    const lo = Math.min(...values);
-    const hi = Math.max(...values);
-    const pad = Math.max(3, (hi - lo) * 0.14);
-    return [lo - pad, hi + pad];
-  };
-  return { x: range(extent.x), y: range(extent.y), z: range(extent.z) };
-}
-
-function Triptych({
-  model,
-  typeName,
-  update,
-  hovered,
-  onHover,
-}: {
-  model: FamilyModel;
-  typeName: string;
-  update: Update;
-  hovered: string | null;
-  onHover: (id: string | null) => void;
-}) {
-  const sheet = useMemo(() => buildSheet(model, typeName), [model, typeName]);
-  const box = useMemo(() => bounds(sheet), [sheet]);
-  const VIEW_W = 258;
-  const VIEW_H = 258;
-  const M = 14;
-  const span = Math.max(...Object.values(box).map(([min, max]) => max - min));
-
-  const dimIf = (id: string) => (hovered && hovered !== id ? 0.3 : 1);
-
-  return (
-    <div className="flex flex-wrap gap-3">
-      {VIEWS.map((view) => {
-        const [uMin, uMax] = box[view.u];
-        const [vMin, vMax] = box[view.v];
-        const uMid = (uMin + uMax) / 2;
-        const vMid = (vMin + vMax) / 2;
-        const frame = fitFrame(
-          {
-            minX: uMid - span / 2,
-            minY: vMid - span / 2,
-            maxX: uMid + span / 2,
-            maxY: vMid + span / 2,
-          },
-          { width: VIEW_W, height: VIEW_H },
-          { padding: M, yAxis: "up" },
-        );
-        const X = (u: number) => frame.toViewport([u, 0])[0];
-        const Y = (v: number) => frame.toViewport([0, v])[1];
-
-        const solidRect = (geo: SolidGeo) => {
-          const du = view.u === "x" ? geo.w : view.u === "y" ? geo.d : null;
-          const dv = view.v === "z" ? geo.h : view.v === "y" ? geo.d : null;
-          if (du == null || dv == null) return null;
-          const u0 = -du / 2;
-          const v0 = view.v === "z" ? 0 : -dv / 2;
-          return {
-            x: X(u0),
-            y: Y(v0 + dv),
-            w: du * frame.scale,
-            h: dv * frame.scale,
-          };
-        };
-
-        const dragPlane = (plane: PlaneGeo) => (event: React.PointerEvent<SVGGElement>) => {
-          if (!plane.editable || !plane.param || !plane.axis) return;
-          event.currentTarget.setPointerCapture(event.pointerId);
-          const svg = event.currentTarget.ownerSVGElement;
-          const along = plane.axis === view.u ? "u" : "v";
-          const move = (pointer: PointerEvent) => {
-            const inverse = svg?.getScreenCTM()?.inverse();
-            if (!inverse) return;
-            const point = new DOMPoint(pointer.clientX, pointer.clientY).matrixTransform(inverse);
-            const content = frame.toContent([point.x, point.y]);
-            const world = content[along === "u" ? 0 : 1];
-            const value = Math.max(0.5, Math.abs(world));
-            update((current) =>
-              setOverride(current, typeName, plane.param as string, fmtIn(value)),
-            );
-          };
-          const up = () => {
-            window.removeEventListener("pointermove", move);
-            window.removeEventListener("pointerup", up);
-          };
-          window.addEventListener("pointermove", move);
-          window.addEventListener("pointerup", up);
-        };
-
-        return (
-          <div key={view.key}>
-            <svg
-              width={VIEW_W}
-              height={VIEW_H}
-              viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
-              className="rounded-[2px] border border-[var(--line)] bg-[var(--paper-2)]/30"
-              onMouseLeave={() => onHover(null)}
-            >
-              <line
-                x1={X(0)}
-                y1={M}
-                x2={X(0)}
-                y2={VIEW_H - M}
-                stroke="var(--line)"
-                strokeDasharray="2 4"
-              />
-              <line
-                x1={M}
-                y1={Y(0)}
-                x2={VIEW_W - M}
-                y2={Y(0)}
-                stroke="var(--line)"
-                strokeDasharray="2 4"
-              />
-
-              {sheet.ghosts.map((ghost) =>
-                ghost.solids
-                  .filter((geo) => !geo.isVoid)
-                  .map((geo) => {
-                    const rect = solidRect(geo);
-                    return rect ? (
-                      <rect
-                        key={`${ghost.typeName}:${geo.slug}`}
-                        {...{ x: rect.x, y: rect.y, width: rect.w, height: rect.h }}
-                        fill="none"
-                        stroke="var(--slate)"
-                        strokeWidth={0.75}
-                        opacity={0.22}
-                      />
-                    ) : null;
-                  }),
-              )}
-
-              {sheet.solids.map((geo) => {
-                const rect = solidRect(geo);
-                if (!rect) return null;
-                const id = `s:${geo.slug}`;
-                const active = hovered === id;
-                if (view.key === "plan" && geo.isCyl && geo.w != null)
-                  return (
-                    <circle
-                      key={geo.slug}
-                      cx={X(0)}
-                      cy={Y(0)}
-                      r={(geo.w / 2) * frame.scale}
-                      fill={geo.isVoid ? "none" : "var(--clay-ink)"}
-                      fillOpacity={geo.isVoid ? 0 : 0.07}
-                      stroke={active ? "var(--pe-blue)" : "var(--clay-ink)"}
-                      strokeWidth={active ? 1.8 : 1}
-                      strokeDasharray={geo.isVoid ? "4 3" : undefined}
-                      opacity={dimIf(id)}
-                      onMouseEnter={() => onHover(id)}
-                    />
-                  );
-                return (
-                  <rect
-                    key={geo.slug}
-                    {...{ x: rect.x, y: rect.y, width: rect.w, height: rect.h }}
-                    fill={geo.isVoid ? "none" : "var(--clay-ink)"}
-                    fillOpacity={geo.isVoid ? 0 : 0.07}
-                    stroke={hovered === id ? "var(--pe-blue)" : "var(--clay-ink)"}
-                    strokeWidth={hovered === id ? 1.8 : 1}
-                    strokeDasharray={geo.isVoid ? "4 3" : undefined}
-                    opacity={dimIf(id)}
-                    onMouseEnter={() => onHover(id)}
-                  />
-                );
-              })}
-
-              {sheet.planes.map((plane) => {
-                if (!plane.axis || plane.offset == null) return null;
-                const id = `pl:${plane.slug}`;
-                const overridden =
-                  plane.param != null && model.types[typeName]?.[plane.param] != null;
-                const stroke = overridden ? "var(--pe-blue)" : "var(--lichen)";
-                let line: { x1: number; y1: number; x2: number; y2: number } | null = null;
-                if (plane.axis === view.u)
-                  line = { x1: X(plane.offset), y1: M, x2: X(plane.offset), y2: VIEW_H - M };
-                else if (plane.axis === view.v)
-                  line = { x1: M, y1: Y(plane.offset), x2: VIEW_W - M, y2: Y(plane.offset) };
-                if (!line) return null;
-                return (
-                  <g
-                    key={plane.slug}
-                    opacity={dimIf(id)}
-                    onMouseEnter={() => onHover(id)}
-                    onPointerDown={dragPlane(plane)}
-                    style={{
-                      cursor: plane.editable
-                        ? plane.axis === view.u
-                          ? "ew-resize"
-                          : "ns-resize"
-                        : undefined,
-                    }}
-                  >
-                    <line {...line} stroke="transparent" strokeWidth={11} />
-                    <line {...line} stroke={stroke} strokeWidth={hovered === id ? 2 : 1.1} />
-                    {view.key !== "plan" && plane.axis === "z" && (
-                      <text x={line.x1 + 3} y={line.y1 - 3} fontSize={8} fill={stroke}>
-                        {plane.slug} {plane.text}
-                      </text>
-                    )}
-                    {plane.axis !== "z" && plane.axis === view.u && (
-                      <text x={line.x1 + 3} y={M + 8} fontSize={8} fill={stroke}>
-                        {plane.slug}
-                      </text>
-                    )}
-                  </g>
-                );
-              })}
-
-              {sheet.conns.map((conn) => {
-                const id = `c:${conn.slug}`;
-                const color = DOMAIN_COLOR[conn.domain] ?? "var(--slate)";
-                const normal = NORMAL_RE.exec(conn.normal);
-                if (!normal) return null;
-                const [, signText, axisText] = normal;
-                const axis = axisText.toLowerCase() as Axis;
-                const sign = signText === "-" ? -1 : 1;
-                const u = conn.pos[view.u];
-                const v = conn.pos[view.v];
-                if (u == null || v == null) return null;
-                const shared = { opacity: dimIf(id), onMouseEnter: () => onHover(id) };
-                if (axis === view.depth) {
-                  if (conn.shape === "Round" && conn.w != null)
-                    return (
-                      <circle
-                        key={conn.slug}
-                        cx={X(u)}
-                        cy={Y(v)}
-                        r={(conn.w / 2) * frame.scale}
-                        fill={color}
-                        fillOpacity={0.14}
-                        stroke={color}
-                        strokeWidth={hovered === id ? 2 : 1.2}
-                        {...shared}
-                      />
-                    );
-                  if (conn.w != null && conn.h != null)
-                    return (
-                      <rect
-                        key={conn.slug}
-                        x={X(u - conn.w / 2)}
-                        y={Y(v + conn.h / 2)}
-                        width={conn.w * frame.scale}
-                        height={conn.h * frame.scale}
-                        fill={color}
-                        fillOpacity={0.14}
-                        stroke={color}
-                        strokeWidth={hovered === id ? 2 : 1.2}
-                        {...shared}
-                      />
-                    );
-                  return null;
-                }
-                const stubLen = conn.stub ?? 3;
-                const dir = sign * (conn.stubDir === "In" ? -1 : 1);
-                const size = conn.w ?? 2;
-                const isU = axis === view.u;
-                const tip = isU ? X(u + dir * stubLen) : Y(v + dir * stubLen);
-                const base = isU ? X(u) : Y(v);
-                return (
-                  <g key={conn.slug} {...shared}>
-                    {isU ? (
-                      <>
-                        <line
-                          x1={base}
-                          y1={Y(v)}
-                          x2={tip}
-                          y2={Y(v)}
-                          stroke={color}
-                          strokeWidth={hovered === id ? 2.4 : 1.6}
-                        />
-                        <line
-                          x1={base}
-                          y1={Y(v - size / 2)}
-                          x2={base}
-                          y2={Y(v + size / 2)}
-                          stroke={color}
-                          strokeWidth={hovered === id ? 2.4 : 1.6}
-                        />
-                      </>
-                    ) : (
-                      <>
-                        <line
-                          x1={X(u)}
-                          y1={base}
-                          x2={X(u)}
-                          y2={tip}
-                          stroke={color}
-                          strokeWidth={hovered === id ? 2.4 : 1.6}
-                        />
-                        <line
-                          x1={X(u - size / 2)}
-                          y1={base}
-                          x2={X(u + size / 2)}
-                          y2={base}
-                          stroke={color}
-                          strokeWidth={hovered === id ? 2.4 : 1.6}
-                        />
-                      </>
-                    )}
-                  </g>
-                );
-              })}
-
-              {sheet.rcp && sheet.rcp[view.u] != null && sheet.rcp[view.v] != null && (
-                <g opacity={dimIf("rcp")} onMouseEnter={() => onHover("rcp")}>
-                  <line
-                    x1={X(0)}
-                    y1={Y(0)}
-                    x2={X(sheet.rcp[view.u] as number)}
-                    y2={Y(sheet.rcp[view.v] as number)}
-                    stroke="var(--kiln)"
-                    strokeDasharray="1.5 3"
-                  />
-                  <circle
-                    cx={X(sheet.rcp[view.u] as number)}
-                    cy={Y(sheet.rcp[view.v] as number)}
-                    r={3.5}
-                    fill="var(--kiln)"
-                  />
-                </g>
-              )}
-
-              <text x={M} y={VIEW_H - 4} fontSize={8} fill="var(--slate)" className="tele-label">
-                {view.label}
-              </text>
-            </svg>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/** Relationship caption — the authored reference chain of whatever is hovered. */
-function Caption({
-  model,
-  typeName,
-  hovered,
-  usedBy,
-}: {
-  model: FamilyModel;
-  typeName: string;
-  hovered: string | null;
-  usedBy: Record<string, string[]>;
-}) {
-  const line = (() => {
-    if (!hovered)
-      return "hover anything — drawing, card, plane, or matrix cell — to read its authored reference chain";
-    const [kind, slug] = [
-      hovered.slice(0, hovered.indexOf(":")),
-      hovered.slice(hovered.indexOf(":") + 1),
-    ];
-    const users = usedBy[hovered]?.join(" · ");
-    if (hovered === "rcp")
-      return `roomCalculationPoint · authored surface is exactly { enabled: true } · rendered at the fixed PE convention (12in, ${model.family.placement === "Unhosted" ? "+Z" : "−Y"})`;
-    if (kind === "s") {
-      const solid = model.solids?.[slug];
-      const dims = (["width", "depth", "height", "diameter"] as const)
-        .filter((field) => solid?.[field])
-        .map((field) => `${field} ${solid?.[field]}`)
-        .join(" · ");
-      return `solid ${slug} · ${solid?.kind} · ${dims}${users ? ` · faces used by ${users}` : ""}`;
-    }
-    if (kind === "pl") {
-      const plane = model.planes?.[slug];
-      return `plane ${slug} · from ${plane?.from} · by ${plane?.by} (${resolveParam(model, typeName, paramRef(plane?.by) ?? "").text}) · ${plane?.direction}${users ? ` · used by ${users}` : ""}`;
-    }
-    if (kind === "c") {
-      const connector = model.connectors?.[slug];
-      const frame = model.frames?.[connector?.frame.slice("frame:".length) ?? ""];
-      const origin = frame ? frame.origin.join(" ∩ ") : connector?.frame;
-      return `connector ${slug} · ${connector?.domain}/${connector?.shape} · origin = ${origin} · ${
-        connector?.diameter
-          ? `Ø ${connector.diameter}`
-          : `${connector?.width} × ${connector?.height}`
-      }${connector?.stub ? ` · stub ${connector.stub.direction} ${connector.stub.depth}` : ""}`;
-    }
-    return hovered;
-  })();
-  return (
-    <p className="mt-2 min-h-8 rounded-[2px] border border-[var(--line-soft)] bg-[var(--paper-2)]/40 px-2 py-1.5 font-mono text-[10px] leading-relaxed text-[var(--slate)]">
-      {line}
-    </p>
-  );
-}
-
-// ── editable register (cards under the triptych) ────────────────────────────────────────────────
-function DimChip({
+/* ponytail: second copy of the /families `Verb` — promote both into components/ui the day a
+   third route needs one. Two copies is not yet an abstraction. */
+function Verb({
   label,
-  raw,
-  model,
-  typeName,
-  update,
-  onLiteral,
+  onClick,
+  disabled,
+  reason,
+  busy,
+  tone,
 }: {
   label: string;
-  raw: string | undefined;
-  model: FamilyModel;
-  typeName: string;
-  update: Update;
-  onLiteral?: (next: string) => void;
+  onClick: () => void;
+  disabled?: boolean;
+  /** Say what the verb MEANS and what pressing it DOES — or, when disabled, why it will not. */
+  reason: string;
+  busy?: boolean;
+  /** "commit" is the one verb that writes: it wears the pe-blue border, nothing else does. */
+  tone?: "commit";
 }) {
-  const dim = resolveDim(model, typeName, raw);
-  if (!dim) return null;
-  const editable = dim.source !== "formula" && (dim.param != null || onLiteral != null);
-  return (
-    <span
-      className="inline-flex items-center gap-1 rounded-[2px] border border-[var(--line)] bg-[var(--paper-2)]/50 px-1 py-0.5"
-      title={dim.param ? `param:${dim.param}` : "literal"}
-    >
-      <span className="tele-label text-[8px] text-[var(--slate)]">{label}</span>
-      {editable ? (
-        <EditableValue
-          value={dim.text}
-          onCommit={(next) =>
-            dim.param
-              ? update((current) =>
-                  current.types[typeName]?.[dim.param as string] != null
-                    ? setOverride(current, typeName, dim.param as string, next)
-                    : setParamValue(current, dim.param as string, next),
-                )
-              : onLiteral?.(next)
-          }
-          className={`text-[10px] ${dim.source === "override" ? "text-[var(--pe-blue)]" : ""}`}
-        />
-      ) : (
-        <span className="font-mono text-[10px] text-[var(--kiln)]">{dim.text}</span>
-      )}
-    </span>
-  );
-}
-
-function RegisterCard({
-  id,
-  title,
-  tag,
-  hovered,
-  onHover,
-  accent,
-  children,
-}: {
-  id: string;
-  title: string;
-  tag: string;
-  hovered: string | null;
-  onHover: (id: string | null) => void;
-  accent?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      className="rounded-[2px] border p-2 transition-opacity"
-      style={{
-        borderColor: hovered === id ? "var(--pe-blue)" : "var(--line)",
-        boxShadow: accent ? `inset 3px 0 0 ${accent}` : undefined,
-        opacity: hovered && hovered !== id ? 0.45 : 1,
-      }}
-      onMouseEnter={() => onHover(id)}
-      onMouseLeave={() => onHover(null)}
-    >
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="font-mono text-[11px] font-semibold">{title}</span>
-        <span className="tele-label text-[9px] text-[var(--slate)]">{tag}</span>
-      </div>
-      <div className="mt-1 flex flex-wrap items-center gap-1">{children}</div>
-    </div>
-  );
-}
-
-function AnatomySheet({
-  model,
-  typeName,
-  update,
-  hovered,
-  onHover,
-}: {
-  model: FamilyModel;
-  typeName: string;
-  update: Update;
-  hovered: string | null;
-  onHover: (id: string | null) => void;
-}) {
-  const usedBy = useMemo(() => usedByIndex(model), [model]);
-  const ghosts = Object.keys(model.types).filter((name) => name !== typeName);
-  const formulaPlanes = planeGeos(model, typeName).filter((plane) => plane.offset == null);
-  const unmodeled = model.unmodeled ?? [];
-
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <EditableValue
-          value={model.family.name}
-          onCommit={(next) =>
-            update((current) => ({ ...current, family: { ...current.family, name: next } }))
-          }
-          className="text-sm font-semibold text-[var(--clay-ink)]"
-        />
-        <span className="tele-label text-[10px] text-[var(--slate)]">
-          {model.family.category} · {model.family.template} · {model.family.placement}
-        </span>
-        {ghosts.length > 0 && (
-          <span className="ml-auto text-[10px] text-[var(--slate)]">
-            ghost outlines: {ghosts.join(" · ")} — same scale, for comparison
-          </span>
-        )}
-      </div>
-
-      <Triptych
-        model={model}
-        typeName={typeName}
-        update={update}
-        hovered={hovered}
-        onHover={onHover}
-      />
-      <Caption model={model} typeName={typeName} hovered={hovered} usedBy={usedBy} />
-
-      {formulaPlanes.length > 0 && (
-        <div className="space-y-0.5">
-          {formulaPlanes.map((plane) => (
-            <p key={plane.slug} className="font-mono text-[10px] text-[var(--kiln)]">
-              ─ ─ plane {plane.slug} · {plane.text}{" "}
-              <span className="text-[var(--slate)]">
-                (formula-driven — capture or build evidence to draw it)
-              </span>
-            </p>
-          ))}
-        </div>
-      )}
-
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-        {Object.entries(model.solids ?? {}).map(([slug, solid]) => (
-          <RegisterCard
-            key={slug}
-            id={`s:${slug}`}
-            title={slug}
-            tag={solid.kind}
-            hovered={hovered}
-            onHover={onHover}
-          >
-            {(["width", "depth", "height", "diameter"] as const).map((field) => (
-              <DimChip
-                key={field}
-                label={field === "diameter" ? "Ø" : field[0].toUpperCase()}
-                raw={solid[field]}
-                model={model}
-                typeName={typeName}
-                update={update}
-                onLiteral={(next) => update((current) => setSolidDim(current, slug, field, next))}
-              />
-            ))}
-          </RegisterCard>
-        ))}
-        {Object.entries(model.connectors ?? {}).map(([slug, connector]) => (
-          <RegisterCard
-            key={slug}
-            id={`c:${slug}`}
-            title={slug}
-            tag={`${connector.domain} · ${connector.shape}`}
-            hovered={hovered}
-            onHover={onHover}
-            accent={DOMAIN_COLOR[connector.domain] ?? "var(--slate)"}
-          >
-            <DimChip
-              label="Ø"
-              raw={connector.diameter}
-              model={model}
-              typeName={typeName}
-              update={update}
-            />
-            <DimChip
-              label="W"
-              raw={connector.width}
-              model={model}
-              typeName={typeName}
-              update={update}
-            />
-            <DimChip
-              label="H"
-              raw={connector.height}
-              model={model}
-              typeName={typeName}
-              update={update}
-            />
-            {connector.stub && (
-              <button
-                type="button"
-                onClick={() => update((current) => toggleStub(current, slug))}
-                title="Stub direction — click to flip In/Out"
-                className="rounded-[2px] border border-[var(--line)] px-1 py-0.5 font-mono text-[9px] hover:border-[var(--pe-blue)]"
-              >
-                stub {connector.stub.direction === "Out" ? "▸ Out" : "◂ In"}
-              </button>
-            )}
-            {connector.systemType && (
-              <span className="px-1 font-mono text-[9px] text-[var(--slate)]">
-                {connector.systemType}
-              </span>
-            )}
-          </RegisterCard>
-        ))}
-        {Object.entries(model.nestedFamilies ?? {}).map(([slug, spec]) => (
-          <RegisterCard
-            key={slug}
-            id={`n:${slug}`}
-            title={slug}
-            tag={`nested · ${spec.family}`}
-            hovered={hovered}
-            onHover={onHover}
-          >
-            <div className="w-full space-y-0.5 font-mono text-[10px] text-[var(--slate)]">
-              {spec.type && <div>type “{spec.type}”</div>}
-              {Object.entries(spec.parameterBindings ?? {}).map(([target, source]) => (
-                <div key={target}>
-                  {target} ← <span className="text-[var(--pe-blue)]">{source}</span>
-                </div>
-              ))}
-            </div>
-          </RegisterCard>
-        ))}
-        {Object.entries(model.arrays ?? {}).map(([slug, spec]) => (
-          <RegisterCard
-            key={slug}
-            id={`a:${slug}`}
-            title={`${slug} ×2n−1`}
-            tag={`${spec.kind} · ${spec.axis}`}
-            hovered={hovered}
-            onHover={onHover}
-          >
-            <div className="w-full space-y-0.5 font-mono text-[10px] text-[var(--slate)]">
-              <div>
-                member <span className="text-[var(--pe-blue)]">{spec.member}</span>
-              </div>
-              <div>
-                half-count <span className="text-[var(--kiln)]">{spec.halfCount}</span>
-              </div>
-              {spec.limits && (
-                <div>
-                  limits {spec.limits.start} → {spec.limits.end}
-                </div>
-              )}
-            </div>
-          </RegisterCard>
-        ))}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3 border-t border-[var(--line-soft)] pt-2">
-        <button
-          type="button"
-          onClick={() => update(toggleRcp)}
-          onMouseEnter={() => onHover("rcp")}
-          onMouseLeave={() => onHover(null)}
-          className="rounded-[2px] border border-[var(--line)] px-1.5 py-0.5 font-mono text-[10px] hover:border-[var(--pe-blue)]"
-          title='The entire authored surface is { "enabled": true } — direction and offset are the fixed PE convention'
-        >
-          roomCalculationPoint ·{" "}
-          <span
-            className={
-              model.roomCalculationPoint?.enabled ? "text-[var(--pe-blue)]" : "text-[var(--slate)]"
-            }
-          >
-            {model.roomCalculationPoint?.enabled ? "enabled" : "off"}
-          </span>
-        </button>
-        {unmodeled.length === 0 ? (
-          <span className="font-mono text-[10px] text-[var(--lichen)]">
-            unmodeled ∅ — roundtrip equivalence claimable for this contract
-          </span>
-        ) : (
-          <span className="font-mono text-[10px] text-[var(--clay-ink)]">
-            unmodeled ×{unmodeled.length} — captured facts the schema cannot replay
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── tiny shared UI ───────────────────────────────────────────────────────────────────────────────
-function EditableValue({
-  value,
-  onCommit,
-  className = "",
-  title,
-}: {
-  value: string;
-  onCommit: (next: string) => void;
-  className?: string;
-  title?: string;
-}) {
-  const [draft, setDraft] = useState<string | null>(null);
-  if (draft == null)
-    return (
-      <button
-        type="button"
-        title={title ?? "Click to edit"}
-        className={`cursor-text rounded-[2px] px-0.5 font-mono tabular-nums hover:bg-[var(--pe-blue)]/10 ${className}`}
-        onClick={() => setDraft(value)}
-      >
-        {value}
-      </button>
-    );
-  return (
-    <input
-      autoFocus
-      value={draft}
-      size={Math.max(4, draft.length)}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={() => {
-        if (draft.trim()) onCommit(draft.trim());
-        setDraft(null);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") event.currentTarget.blur();
-        if (event.key === "Escape") setDraft(null);
-      }}
-      className={`rounded-[2px] border border-[var(--pe-blue)] bg-[var(--paper)] px-0.5 font-mono tabular-nums outline-none ${className}`}
-    />
-  );
-}
-
-// ═══════════════════════════════════════ TYPE FLEX MATRIX ═══════════════════════════════════════
-/** Field-state-aware matrix: each cell consults route:settings fields (by JSON Pointer)
- * so Pea proposals (dashed, with citation count), staged edits (solid green), and
- * attention marks render in place. Hovering a cited cell grounds it in the doc pane. */
-function TypeMatrix({
-  model,
-  typeName,
-  onType,
-  update,
-  fields,
-  lane,
-  onCite,
-  onPin,
-  onReview,
-  onReviewMark,
-  selectedParam,
-  onSelectParam,
-}: {
-  model: FamilyModel;
-  typeName: string;
-  onType: (name: string) => void;
-  update: Update;
-  fields: Record<string, FieldState>;
-  lane: Lane;
-  onCite: (context: { label: string; sources: SettingsProposalSource[] } | null) => void;
-  onPin: (context: { label: string; sources: SettingsProposalSource[] } | null) => void;
-  onReview: (pointer: string, action: "approve" | "deny") => void;
-  onReviewMark: (pointer: string, next: ReviewMarkState) => void;
-  selectedParam: string | null;
-  onSelectParam: (name: string | null) => void;
-}) {
-  const [newType, setNewType] = useState("");
-  const typeNames = Object.keys(model.types);
-  const groups: Array<[string, Record<string, ParamSpec>]> = [
-    ...groupParameters("family", model.familyParameters),
-    ...(model.sharedParameters ? groupParameters("shared", model.sharedParameters) : []),
-  ];
-  // ONE parameter source for every formula cell in the matrix — the authored model.
-  const formulaParams = useMemo(
-    () => authoredFormulaParams(model.familyParameters, model.sharedParameters),
-    [model.familyParameters, model.sharedParameters],
-  );
-
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-[11px]">
-        <thead>
-          <tr className="text-left">
-            <th className="border-b border-[var(--line-2)] py-1 pr-3 font-normal">
-              <span
-                className="tele-label text-[10px] text-[var(--slate)]"
-                title="Every parameter this family owns, grouped by where it came from and which properties group it sits in. Click a name to inspect how it is wired."
-              >
-                parameter
-              </span>
-            </th>
-            <th className="border-b border-[var(--line-2)] px-2 py-1 font-normal">
-              <span
-                className="tele-label text-[10px] text-[var(--kiln)]"
-                title="A parameter's formula is a first-class cell here, not a hidden property. Authoring one locks the value cells on its row, because a parameter holds a value or a formula, never both."
-              >
-                = formula
-              </span>
-            </th>
-            {/* A live family has no authored global — its types ARE the values. */}
-            {lane.kind === "authored" && (
-              <th className="border-b border-[var(--line-2)] px-2 py-1 text-right font-normal">
-                <span
-                  className="tele-label text-[10px] text-[var(--slate)]"
-                  title="The family-level default. Every type inherits it unless that type overrides it in its own column."
-                >
-                  family value
-                </span>
-              </th>
-            )}
-            {typeNames.map((name) => {
-              const overrides = Object.keys(model.types[name] ?? {}).length;
-              const selected = name === typeName;
-              return (
-                <th
-                  key={name}
-                  className={`cursor-pointer border-b px-2 py-1 text-right font-semibold ${
-                    selected
-                      ? "border-[var(--pe-blue)] text-[var(--pe-blue)]"
-                      : "border-[var(--line-2)] text-[var(--clay-ink)]"
-                  }`}
-                  onClick={() => onType(name)}
-                  title={`Type "${name}" overrides ${overrides} parameter${overrides === 1 ? "" : "s"}; everything else it inherits from the family. Click to flex every exhibit on the page to this type.`}
-                >
-                  {name}
-                  <span className="ml-1 font-normal text-[var(--slate)]">
-                    {overrides > 0 ? overrides : "∅"}
-                  </span>
-                </th>
-              );
-            })}
-          </tr>
-        </thead>
-        <tbody>
-          {groups.map(([origin, specs]) => (
-            <ParamRows
-              key={origin}
-              origin={origin}
-              specs={specs}
-              model={model}
-              typeNames={typeNames}
-              selected={typeName}
-              update={update}
-              fields={fields}
-              lane={lane}
-              formulaParams={formulaParams}
-              onCite={onCite}
-              onPin={onPin}
-              onReview={onReview}
-              onReviewMark={onReviewMark}
-              selectedParam={selectedParam}
-              onSelectParam={onSelectParam}
-            />
-          ))}
-        </tbody>
-      </table>
-      {/* Two ways this matrix can be blank, and they need different answers. */}
-      {groups.length === 0 && (
-        <p className="mt-2 max-w-lg text-[11px] text-[var(--slate)]">
-          {lane.kind === "live"
-            ? "This family exposes no editable parameters — Revit reported none on the open family. Refresh above if you have just added some in the family editor."
-            : "This document declares no parameters yet. Add them under familyParameters in the JSON below, or ask pea to draft them from a spec sheet in the pane on the right."}
-        </p>
-      )}
-      {groups.length > 0 && typeNames.length === 0 && (
-        <p className="mt-2 max-w-lg text-[11px] text-[var(--slate)]">
-          {lane.kind === "live"
-            ? "The family has parameters but no types, so there are no per-type values to show. Types are Revit's to create — add one in the family editor, then refresh."
-            : "No types yet, so every parameter shows only its family value. Name one below and press Enter to get a column to override into."}
-        </p>
-      )}
-      {/* Adding a type authors the document; the live lane edits an OPEN family, whose
-          type roster is Revit's to change. */}
-      {lane.kind === "authored" && (
-        <div className="mt-2 flex items-center gap-2">
-          <input
-            value={newType}
-            onChange={(event) => setNewType(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && newType.trim()) {
-                update((current) => addType(current, newType.trim()));
-                setNewType("");
-              }
-            }}
-            placeholder="New type name…"
-            title="Add a type to this family. It starts with no overrides, so it inherits every family value until you override one — and an empty type is kept, never pruned."
-            className="w-40 rounded-[2px] border border-[var(--line-2)] bg-transparent px-1.5 py-0.5 text-[11px] outline-none focus:border-[var(--pe-blue)]"
-          />
-          <span className="text-[10px] text-[var(--slate)]">
-            Enter adds an empty type — empty types stay visible and preserved, by design.
-          </span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function groupParameters(
-  origin: string,
-  specs: Record<string, ParamSpec>,
-): Array<[string, Record<string, ParamSpec>]> {
-  const grouped = new Map<string, Record<string, ParamSpec>>();
-  for (const [name, spec] of Object.entries(specs)) {
-    const label = spec.propertiesGroup?.trim() || "Other";
-    grouped.set(label, { ...grouped.get(label), [name]: spec });
-  }
-  return [...grouped].map(([label, entries]) => [`${origin} · ${label}`, entries]);
-}
-
-/** One matrix cell's field decorations, derived from route:settings field state. */
-function cellField(fields: Record<string, FieldState>, segments: string[]) {
-  const pointer = settingsFieldPointer(segments);
-  const field = fields[pointer];
-  const staged = field?.staged != null;
-  const proposal = !staged && field?.proposal != null ? field.proposal : null;
-  const sources = (proposal?.sources ?? []) as SettingsProposalSource[];
-  return { pointer, field, staged, proposal, sources, attention: field?.review === "attention" };
-}
-
-function ParamRows({
-  origin,
-  specs,
-  model,
-  typeNames,
-  selected,
-  update,
-  fields,
-  lane,
-  formulaParams,
-  onCite,
-  onPin,
-  onReview,
-  onReviewMark,
-  selectedParam,
-  onSelectParam,
-}: {
-  origin: string;
-  specs: Record<string, ParamSpec>;
-  model: FamilyModel;
-  typeNames: string[];
-  selected: string;
-  update: Update;
-  fields: Record<string, FieldState>;
-  lane: Lane;
-  formulaParams: ReturnType<typeof authoredFormulaParams>;
-  onCite: (context: { label: string; sources: SettingsProposalSource[] } | null) => void;
-  onPin: (context: { label: string; sources: SettingsProposalSource[] } | null) => void;
-  onReview: (pointer: string, action: "approve" | "deny") => void;
-  onReviewMark: (pointer: string, next: ReviewMarkState) => void;
-  selectedParam: string | null;
-  onSelectParam: (name: string | null) => void;
-}) {
-  const section = origin.startsWith("shared") ? "sharedParameters" : "familyParameters";
-  const leadColumns = lane.kind === "authored" ? 3 : 2;
-  return (
-    <>
-      <tr>
-        <td colSpan={leadColumns + typeNames.length} className="pt-2">
-          <span
-            className="tele-label text-[9px] text-[var(--lichen)]"
-            title={`${origin} — grouped by where the parameter is defined (family-owned vs shared) and the properties group Revit files it under. The grouping is descriptive; it changes nothing about how a parameter behaves.`}
-          >
-            {origin} parameters
-          </span>
-        </td>
-      </tr>
-      {Object.entries(specs).map(([name, spec]) => {
-        const isFormula = spec.formula != null;
-        const familyCell = cellField(fields, [section, name, "value"]);
-        const pinned = selectedParam === name;
-        return (
-          <tr key={name} className="group/row border-b border-[var(--line-soft)]">
-            <td className="max-w-48 py-1 pr-3">
-              <button
-                type="button"
-                onClick={() => onSelectParam(pinned ? null : name)}
-                title={`${name} is a ${spec.dataType}${spec.isInstance ? " bound per instance" : ""}. Click to pin it in the inspector, which shows what its formula depends on, what depends on it, and every solid, plane, connector, array, and nested family that reads it. Esc unpins.`}
-                className={`max-w-full truncate text-left ${
-                  pinned ? "font-semibold text-[var(--pe-blue)]" : "hover:text-[var(--pe-blue)]"
-                }`}
-              >
-                {name}
-              </button>
-              {isFormula && (
-                <span className="ml-1 font-mono text-[10px] text-[var(--kiln)]">ƒ</span>
-              )}
-            </td>
-            <td className="px-2 py-1">
-              <FormulaCell
-                paramName={name}
-                formula={spec.formula}
-                readOnly={spec.readOnly === true}
-                hasTypeValues={typeNames.some((type) => model.types[type]?.[name] != null)}
-                cell={cellField(fields, [section, name, "formula"])}
-                params={formulaParams}
-                advisory={lane.live?.advisory(name) ?? null}
-                onCommit={(next) => {
-                  update((current) => setParamFormula(current, name, next));
-                  lane.live?.check(name, next);
-                }}
-                onReviewMark={onReviewMark}
-              />
-            </td>
-            {lane.kind === "authored" && (
-              <td className="px-2 py-1 text-right">
-                {isFormula ? (
-                  <span
-                    className="font-mono text-[10px] text-[var(--kiln)]/60"
-                    title={`${name} carries a formula, and a parameter holds a value OR a formula, never both. Clear the formula to author a family value here.`}
-                  >
-                    locked
-                  </span>
-                ) : (
-                  <CellValue
-                    value={spec.value ?? "—"}
-                    cell={familyCell}
-                    label={`${name} · family value`}
-                    onCommit={(next) => update((current) => setParamValue(current, name, next))}
-                    onCite={onCite}
-                    onPin={onPin}
-                    onReview={onReview}
-                    onReviewMark={onReviewMark}
-                  />
-                )}
-              </td>
-            )}
-            {typeNames.map((typeName) => {
-              const override = model.types[typeName]?.[name];
-              const highlight = typeName === selected ? "bg-[var(--pe-blue)]/5" : "";
-              if (isFormula)
-                return (
-                  <td
-                    key={typeName}
-                    className={`px-2 py-1 text-right ${highlight}`}
-                    title={`Computed from ${name}'s formula for this type, not authored. To change it, edit the formula in the “= formula” column — that is the only editable cell this parameter has.`}
-                  >
-                    <span className="font-mono text-[10px] text-[var(--kiln)]/60">
-                      {spec.resolvedValues?.[typeName] ?? "locked"}
-                    </span>
-                  </td>
-                );
-              if (spec.readOnly)
-                return (
-                  <td
-                    key={typeName}
-                    className={`px-2 py-1 text-right ${highlight}`}
-                    title={`Revit reports ${name} read-only on this family, so no edit here could ever land — it is shown for reading only.`}
-                  >
-                    <span className="font-mono text-[11px] text-[var(--slate)]/60">
-                      {override ?? "—"}
-                    </span>
-                  </td>
-                );
-              const typeCell = cellField(fields, ["types", typeName, name]);
-              return (
-                <td key={typeName} className={`px-2 py-1 text-right ${highlight}`}>
-                  {override != null ? (
-                    <span className="inline-flex items-center gap-1">
-                      <CellValue
-                        value={override}
-                        cell={typeCell}
-                        label={`${name} · ${typeName}`}
-                        onCommit={(next) =>
-                          update((current) => setOverride(current, typeName, name, next))
-                        }
-                        onCite={onCite}
-                        onPin={onPin}
-                        onReview={onReview}
-                        onReviewMark={onReviewMark}
-                        strong
-                      />
-                      {/* Clearing an override reverts to the family value — a live family
-                          has none, so there is nothing to revert to. */}
-                      {lane.kind === "authored" && (
-                        <button
-                          type="button"
-                          title={`Drop this type's override of "${name}" so it inherits the family value again. Staged like any other edit — nothing reaches the document until you save.`}
-                          className="text-[var(--slate)] hover:text-[var(--clay)]"
-                          onClick={() =>
-                            update((current) => setOverride(current, typeName, name, null))
-                          }
-                        >
-                          ×
-                        </button>
-                      )}
-                    </span>
-                  ) : typeCell.proposal != null ? (
-                    <CellValue
-                      value={
-                        typeof typeCell.proposal.value === "string"
-                          ? typeCell.proposal.value
-                          : JSON.stringify(typeCell.proposal.value) || "—"
-                      }
-                      cell={typeCell}
-                      label={`${name} · ${typeName}`}
-                      onCommit={(next) =>
-                        update((current) => setOverride(current, typeName, name, next))
-                      }
-                      onCite={onCite}
-                      onPin={onPin}
-                      onReview={onReview}
-                      onReviewMark={onReviewMark}
-                    />
-                  ) : (
-                    <button
-                      type="button"
-                      title={`Inherited: "${typeName}" has no value of its own for ${name}, so it follows the family value. Click to give this type its own override — the family value stays put.`}
-                      className="rounded-[2px] border border-dashed border-transparent px-0.5 font-mono text-[11px] text-[var(--slate)]/70 hover:border-[var(--line-2)]"
-                      onClick={() =>
-                        update((current) => setOverride(current, typeName, name, spec.value ?? ""))
-                      }
-                    >
-                      {spec.value ?? "—"}
-                    </button>
-                  )}
-                </td>
-              );
-            })}
-          </tr>
-        );
-      })}
-    </>
-  );
-}
-
-/** A value cell with trichotomy decoration: staged (solid green), open proposal
- * (dashed pea + ✓/✕ + citation count), attention (clay). HOVER grounds the citation in
- * the doc pane; CLICKING the citation badge PINS it there (Esc unpins, then deselects). */
-function CellValue({
-  value,
-  cell,
-  label,
-  onCommit,
-  onCite,
-  onPin,
-  onReview,
-  onReviewMark,
-  strong,
-}: {
-  value: string;
-  cell: ReturnType<typeof cellField>;
-  label: string;
-  onCommit: (next: string) => void;
-  onCite: (context: { label: string; sources: SettingsProposalSource[] } | null) => void;
-  onPin: (context: { label: string; sources: SettingsProposalSource[] } | null) => void;
-  onReview: (pointer: string, action: "approve" | "deny") => void;
-  onReviewMark: (pointer: string, next: ReviewMarkState) => void;
-  strong?: boolean;
-}) {
-  /* Colour budget: clay is the alarm and nothing else wears it, so a flagged cell is the one
-     thing on the page asking for a human. Lichen carries STAGED (pending, not done); green is
-     reserved for what actually landed, which only the save receipt can claim. */
-  const tone = cell.attention
-    ? "text-[var(--clay)]"
-    : cell.staged
-      ? "text-[var(--lichen)] font-semibold"
-      : cell.proposal
-        ? "text-[var(--pe-blue)]"
-        : strong
-          ? "text-[var(--pe-blue)] font-semibold"
-          : "";
-  const wrap = cell.proposal
-    ? "rounded-[2px] border border-dashed border-[var(--pe-blue)] bg-[var(--pe-blue)]/5 px-0.5"
-    : cell.staged
-      ? "rounded-[2px] border border-[var(--lichen)]/60 bg-[var(--lichen)]/5 px-0.5"
-      : "";
-  return (
-    <span
-      className={`inline-flex items-center gap-1 ${wrap}`}
-      onMouseEnter={() =>
-        cell.sources.length > 0
-          ? onCite({ label: `${label} → ${value}`, sources: cell.sources })
-          : null
-      }
-      onMouseLeave={() => (cell.sources.length > 0 ? onCite(null) : null)}
-    >
-      <EditableValue
-        value={value}
-        title={
-          cell.staged
-            ? `${label} — edited but NOT written yet. It lives in staging until you save; discard throws it away.`
-            : cell.proposal
-              ? `${label} — pea proposed this value and is waiting on you. Accept (✓) stages it, reject (✕) drops it; typing over it counts as accepting your own version.${cell.proposal.note ? ` Pea's reasoning: ${cell.proposal.note}` : ""}`
-              : `${label} — click to edit. Edits stage first and are never written straight through.`
-        }
-        onCommit={onCommit}
-        className={`text-[11px] ${tone}`}
-      />
-      {cell.sources.length > 0 && (
-        <button
-          type="button"
-          className="font-mono text-[9px] text-[var(--pe-blue)] hover:font-bold"
-          title={`This value is traceable to ${cell.sources.length} region${cell.sources.length === 1 ? "" : "s"} of the spec document. Hovering the cell already highlights them in the pane; click to PIN that highlight so it survives the pointer leaving, and press Esc to unpin.`}
-          onClick={() => onPin({ label: `${label} → ${value}`, sources: cell.sources })}
-        >
-          ¶{cell.sources.length}
-        </button>
-      )}
-      <ReviewMark
-        review={reviewState(cell.field)}
-        onCycle={(next) => onReviewMark(cell.pointer, next)}
-      />
-      {cell.proposal && (
-        <>
-          <button
-            type="button"
-            title="Accept pea's proposal: stage this value as if you had typed it. Staging is not saving — it still has to pass the save gate."
-            className="text-[var(--lichen)] hover:font-bold"
-            onClick={() => onReview(cell.pointer, "approve")}
-          >
-            ✓
-          </button>
-          <button
-            type="button"
-            title="Reject pea's proposal and clear it from this cell. The current value is left exactly as it is."
-            className="text-[var(--slate)] hover:text-[var(--clay)]"
-            onClick={() => onReview(cell.pointer, "deny")}
-          >
-            ✕
-          </button>
-        </>
-      )}
-    </span>
-  );
-}
-
-/* ── review mark: an orthogonal per-field tri-state, cycled by one click ──────────────────────── */
-
-export type ReviewMarkState = "none" | "good" | "attention";
-
-const NEXT_REVIEW: Record<ReviewMarkState, ReviewMarkState> = {
-  none: "good",
-  good: "attention",
-  attention: "none",
-};
-
-function reviewState(field: FieldState | undefined): ReviewMarkState {
-  return field?.review === "good" || field?.review === "attention" ? field.review : "none";
-}
-
-/** none → good → attention → none. A human edit auto-writes "good"; this demotes it. */
-function ReviewMark({
-  review,
-  onCycle,
-}: {
-  review: ReviewMarkState;
-  onCycle: (next: ReviewMarkState) => void;
-}) {
-  const cycle = () => onCycle(NEXT_REVIEW[review]);
-  if (review === "none")
-    return (
-      <button
-        type="button"
-        title="Unreviewed. Click to mark this field as checked by a human — your own edits mark themselves, so this is for values you inherited or accepted from pea."
-        onClick={cycle}
-        className="size-2 shrink-0 rounded-full border border-[var(--line-2)] opacity-0 transition-opacity hover:opacity-100 focus:opacity-100 group-hover/row:opacity-60"
-      />
-    );
-  const good = review === "good";
   return (
     <button
       type="button"
-      title={
-        good
-          ? "Reviewed and accepted. Click to flag it instead — a flagged field BLOCKS the save until it is resolved, which is how you park a doubtful value without losing it."
-          : "Flagged for attention, and this alone is enough to block the save. Click to clear the flag once you have settled the value."
-      }
-      onClick={cycle}
-      className="grid size-3 shrink-0 place-items-center rounded-full font-mono text-[8px] font-bold"
-      style={{
-        background: good
-          ? "color-mix(in srgb, var(--lichen) 24%, transparent)"
-          : "color-mix(in srgb, var(--clay) 24%, transparent)",
-        color: good ? "var(--lichen)" : "var(--clay)",
-      }}
+      onClick={onClick}
+      disabled={disabled || busy}
+      title={reason}
+      className={cn(
+        "tele h-6 shrink-0 rounded-[2px] border px-2",
+        disabled || busy
+          ? "cursor-not-allowed border-[var(--line-soft)] text-muted-foreground"
+          : tone === "commit"
+            ? "border-[var(--pe-blue)] text-[var(--pe-blue)] hover:bg-[var(--pe-blue)]/10"
+            : "border-[var(--line-2)] text-foreground hover:border-[var(--pe-blue)]",
+      )}
     >
-      {good ? "✓" : "!"}
+      {busy ? `${label}…` : label}
     </button>
   );
 }
 
-/* ── @formula as a first-class cell ──────────────────────────────────────────────────────────── */
-
-/**
- * The formula column. A formula-backed parameter's per-type value cells are locked (an
- * authoring-time error in the schema), but its FORMULA is always editable — this is the
- * only cell that can lift the lock. Client validation is ADVISORY: invalid-ref, cycle
- * (with the draft spliced into the graph), and type-refs-instance render as a clay dot
- * whose tooltip carries the problem text. Nothing here blocks staging; the host's
- * validate/save is the final word.
- *
- * In the LIVE lane the same clay dot also carries the host's own verdict: committing a
- * formula fires `family.editor.apply {dryRun:true}` for that one edit and the message
- * comes back as `advisory`. Advisory means advisory — it never blocks staging either.
- */
-function FormulaCell({
-  paramName,
-  formula,
-  readOnly,
-  hasTypeValues,
-  cell,
-  params,
-  advisory,
-  onCommit,
-  onReviewMark,
-}: {
-  paramName: string;
-  formula: string | undefined;
-  readOnly?: boolean;
-  hasTypeValues: boolean;
-  cell: ReturnType<typeof cellField>;
-  params: ReturnType<typeof authoredFormulaParams>;
-  advisory: string | null;
-  onCommit: (next: string) => void;
-  onReviewMark: (pointer: string, next: ReviewMarkState) => void;
-}) {
-  const [draft, setDraft] = useState<string | null>(null);
-  const text = formula ?? "";
-  const problems: FormulaProblem[] = useMemo(() => {
-    const subject = draft ?? text;
-    const found = subject.trim() ? validateFormula({ paramName, draft: subject, params }) : [];
-    const extra: FormulaProblem[] = [];
-    if (subject.trim() && hasTypeValues)
-      extra.push({
-        kind: "invalid-ref",
-        message: `"${paramName}" still carries per-type values — a formula-driven parameter cannot, so the host will reject one of them`,
-      });
-    // The host's dryRun verdict, surfaced on the same dot and named as the host's.
-    if (advisory) extra.push({ kind: "invalid-ref", message: `Revit: ${advisory}` });
-    return [...found, ...extra];
-  }, [draft, text, paramName, params, hasTypeValues, advisory]);
-
-  if (readOnly)
-    return (
-      <span
-        className="font-mono text-[10px] text-[var(--slate)]/50"
-        title="Revit reports this parameter read-only, so it accepts no formula. Editing it here would only produce a refusal at apply time."
-      >
-        {formula ? `= ${formula}` : "—"}
-      </span>
-    );
-
-  const tone = cell.staged
-    ? "text-[var(--lichen)] font-semibold"
-    : formula
-      ? "text-[var(--kiln)]"
-      : "text-[var(--slate)]/50";
-
-  return (
-    <span className="inline-flex items-center gap-1">
-      {draft == null ? (
-        <button
-          type="button"
-          title={
-            formula
-              ? `${paramName} is driven by this formula, which is why its per-type value cells are locked. This cell is the only one that can lift that lock — clear the formula and the values become editable again.`
-              : `${paramName} has no formula. Author one here and every type inherits the computed value; the per-type cells lock, because a parameter carries a value or a formula, never both.`
-          }
-          onClick={() => setDraft(text)}
-          className={`cursor-text rounded-[2px] px-0.5 font-mono text-[10px] hover:bg-[var(--kiln)]/10 ${tone}`}
-        >
-          {formula ? `= ${formula}` : "= …"}
-        </button>
-      ) : (
-        <input
-          autoFocus
-          value={draft}
-          size={Math.max(8, draft.length)}
-          onChange={(event) => setDraft(event.target.value)}
-          onBlur={() => {
-            if (draft.trim() !== text.trim()) onCommit(draft);
-            setDraft(null);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") event.currentTarget.blur();
-            if (event.key === "Escape") setDraft(null);
-          }}
-          placeholder="Width + 2in"
-          title="Author a formula for this parameter. Validation is advisory — an invalid draft still stages, and the dot beside the cell says why it is doubtful."
-          className={`rounded-[2px] border bg-[var(--paper)] px-0.5 font-mono text-[10px] outline-none ${
-            problems.length > 0 ? "border-[var(--clay)]" : "border-[var(--pe-blue)]"
-          }`}
-        />
-      )}
-      {/* The clay dot, as SHIMS names it: the client validator's problems and the host's own
-          dryRun verdict share ONE mark, because both are advisory and neither blocks staging. */}
-      {problems.length > 0 && (
-        <span
-          className="size-1.5 shrink-0 rounded-full bg-[var(--clay)]"
-          title={`${problems.length} problem${problems.length === 1 ? "" : "s"} with this formula. Advisory only — it will still stage, and Revit's own validate/save is the final word:\n\n${problems.map((problem) => `· ${problem.message}`).join("\n")}`}
-        />
-      )}
-      {(formula != null || cell.staged) && (
-        <ReviewMark
-          review={reviewState(cell.field)}
-          onCycle={(next) => onReviewMark(cell.pointer, next)}
-        />
-      )}
-    </span>
-  );
-}
-
-// ═══════════════════════════════════════════ PAGE ═══════════════════════════════════════════════
+// ── document plumbing ───────────────────────────────────────────────────────────────────────────
 
 const MINIMAL_TEMPLATE = (name: string) =>
   JSON.stringify(
@@ -2089,7 +323,7 @@ function changedLeaves(
   return [[prefix, after === undefined ? { delete: true } : { value: after }]];
 }
 
-/** Inject formula resolved values from evidence into the model for the preview. */
+/** Inject formula resolved values from evidence into the model for the drawing. */
 function withEvidence(model: FamilyModel, evidence: EvidenceSlice | null): FamilyModel {
   if (!evidence) return model;
   const next = structuredClone(model);
@@ -2104,6 +338,19 @@ function withEvidence(model: FamilyModel, evidence: EvidenceSlice | null): Famil
   return next;
 }
 
+// ── pane geometry ───────────────────────────────────────────────────────────────────────────────
+
+/** Chrome the anatomy pane keeps when collapsed: its toolbar, and nothing else. */
+const ANATOMY_CHROME_PX = 34;
+const ANATOMY_DEFAULT_PX = 380;
+const ANATOMY_MIN_PX = 180;
+const DOC_DEFAULT_PX = 480;
+const DOC_MIN_PX = 320;
+const GEOMETRY_DEFAULT_PX = 220;
+const GEOMETRY_CHROME_PX = 32;
+
+// ═══════════════════════════════════════════ PAGE ═══════════════════════════════════════════════
+
 function Page({
   store,
   lane,
@@ -2117,24 +364,25 @@ function Page({
   onPickLane?: (live: boolean) => void;
 }) {
   const live = lane.live;
-  const [mode, setMode] = useState<"full" | "parameters">("full");
   const [selectedType, setSelectedType] = useState<string>("");
-  const [hovered, setHovered] = useState<string | null>(null);
-  const [cite, setCite] = useState<{ label: string; sources: SettingsProposalSource[] } | null>(
-    null,
-  );
+  /** The hover half of the focus law. A pinned parameter outranks it — see `mergeFocus`. */
+  const [hovered, setHovered] = useState<Focus>(null);
+  const [selectedParam, setSelectedParam] = useState<string | null>(null);
+  /** A constituent can also be PINNED, from the geometry table's constituent button. */
+  const [pinnedConstituent, setPinnedConstituent] = useState<string | null>(null);
+  const [cite, setCite] = useState<CiteContext | null>(null);
   /** A PINNED citation outranks hover, and survives the pointer leaving the cell. */
-  const [pinnedCite, setPinnedCite] = useState<{
-    label: string;
-    sources: SettingsProposalSource[];
-  } | null>(null);
+  const [pinnedCite, setPinnedCite] = useState<CiteContext | null>(null);
+  const [anatomyCollapsed, setAnatomyCollapsed] = useState(false);
   const [liveFailures, setLiveFailures] = useState<LiveApplyFailure[]>([]);
+  /** A commit-level refusal is staged nowhere; only per-edit failures are "still staged". */
+  const commitFailure = liveFailures.find((failure) => failure.pointer === "commit") ?? null;
+  const stagedLiveFailures = liveFailures.filter((failure) => failure.pointer !== "commit");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<{ text: string; atMs: number } | null>(null);
   const [lastSave, setLastSave] = useState<{ saved: number; failed: number } | null>(null);
-  const [selectedParam, setSelectedParam] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
 
   const snapshot = store.snapshot;
@@ -2146,21 +394,25 @@ function Page({
   );
 
   const evidence: EvidenceSlice | null = store.evidence;
-  const evidenceFresh =
-    evidence != null &&
-    (evidence.from.documentVersionToken == null ||
-      evidence.from.documentVersionToken === snapshot?.versionToken);
-  const previewModel = useMemo(
-    () => (model ? withEvidence(model, evidence) : null),
-    [model, evidence],
-  );
+  /** Freshness is a TRI-state. A missing token is not freshness — it is the absence of the
+   * fact freshness is judged by, and it must say so rather than borrow "fresh". */
+  const evidenceFreshness: "fresh" | "stale" | "unverified" | null =
+    evidence == null
+      ? null
+      : evidence.from.documentVersionToken == null
+        ? "unverified"
+        : evidence.from.documentVersionToken === snapshot?.versionToken
+          ? "fresh"
+          : "stale";
+  /** The model every exhibit renders: authored truth with evidence's resolved values folded in. */
+  const shown = useMemo(() => (model ? withEvidence(model, evidence) : null), [model, evidence]);
 
   const typeName =
     model && Object.hasOwn(model.types, selectedType)
       ? selectedType
       : (Object.keys(model?.types ?? {})[0] ?? "");
 
-  // ── target: bound selector; resolution now lives inside the sentence's world slot ──
+  // ── target: bound selector; resolution lives inside the sentence's world slot ──
   const boundTarget = store.boundTarget;
   /** The doc slot lists the authored documents AND, when offered, the live entry.
    * Picking one IS picking the lane — there is no separate control. */
@@ -2212,7 +464,7 @@ function Page({
   };
 
   // ── edits: diff → JSON Pointer patches into route:settings fields ─────────
-  const update: Update = (fn) => {
+  const update = (fn: (current: FamilyModel) => FamilyModel) => {
     if (!model) return;
     const next = fn(model);
     const patches = changedLeaves(model, next).flatMap(([segments, edit]) => {
@@ -2401,25 +653,79 @@ function Page({
     }
   };
 
-  // ── grounding: hover context or constituent citations ─────────────────────
-  const { grounding } = useFamilyGrounding(store.doc?.parseId);
-  const hoveredParams = model ? constituentParams(model, hovered) : [];
-  const constituentCite = useMemo(() => {
-    if (!model || hoveredParams.length === 0) return null;
-    for (const name of hoveredParams) {
-      for (const segments of [
-        ["familyParameters", name, "value"],
+  // ── focus: pinned outranks hovered, and one answer feeds all four surfaces ─────────────────
+  const focus: Focus = mergeFocus(
+    selectedParam
+      ? { kind: "param", name: selectedParam }
+      : pinnedConstituent
+        ? { kind: "constituent", id: pinnedConstituent }
+        : null,
+    hovered,
+  );
+
+  const pinConstituent = (id: string) => {
+    setSelectedParam(null);
+    setPinnedConstituent((current) => (current === id ? null : id));
+  };
+
+  /* Esc is ONE ladder, one rung per press, most-committed first: a pinned citation, then a
+     pinned subject, then the hover. Nothing else falls out of the page on a keystroke. */
+  useEffect(() => {
+    if (!pinnedCite && !selectedParam && !pinnedConstituent && !hovered) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input,select,textarea,[contenteditable=true]")) return;
+      if (pinnedCite) setPinnedCite(null);
+      else if (selectedParam) setSelectedParam(null);
+      else if (pinnedConstituent) setPinnedConstituent(null);
+      else setHovered(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pinnedCite, selectedParam, pinnedConstituent, hovered]);
+
+  // ── grounding: the focus's citations, or a hovered cell's own ─────────────
+  const { grounding: parsedGrounding } = useFamilyGrounding(store.doc?.parseId);
+  /* SHIM — `?mock` has no parser and no spec doc, so the mock lane grounds against the
+     synthetic sample sheet. This keeps the 70% story (cut sheet beside the matrix, hover a
+     proposed cell, watch the camera land on the region it was read from) judgeable with no
+     host. It is a fixture standing in for a parse; delete it when the mock store can carry a
+     real parse id. */
+  const grounding = useMemo(
+    () => parsedGrounding ?? (store.isMock ? buildGrounding(SAMPLE_DOC) : null),
+    [parsedGrounding, store.isMock],
+  );
+
+  /** The focus's own citations: for every parameter the focus lights, the sources staged or
+   * proposed at its family pointer and — when the focus names a type — that type's override
+   * pointer. This is what makes hovering a SHAPE move the doc pane's camera. */
+  const focusCite = useMemo<CiteContext | null>(() => {
+    if (!shown || !focus) return null;
+    const names = focusParamNames(focus, shown);
+    const focusType = focus.kind === "param" ? focus.typeName : undefined;
+    for (const name of names) {
+      const section = shown.familyParameters[name] ? "familyParameters" : "sharedParameters";
+      const pointers = [
+        [section, name, "value"],
+        ...(focusType ? [["types", focusType, name]] : []),
         ["types", typeName, name],
-      ]) {
+      ];
+      for (const segments of pointers) {
         const pointer = settingsFieldPointer(segments);
         const sources = (fields[pointer]?.proposal?.sources ?? []) as SettingsProposalSource[];
-        if (sources.length > 0) return { label: `${name} (via ${hovered})`, sources };
+        if (sources.length > 0)
+          return {
+            label: focus.kind === "constituent" ? `${name} (via ${focus.id})` : name,
+            sources,
+          };
       }
     }
     return null;
-  }, [model, hoveredParams, typeName, fields, hovered]);
-  /** GROUNDING FOCUS: a pin outranks hover, which outranks a hovered constituent. */
-  const activeCite = pinnedCite ?? cite ?? constituentCite;
+  }, [shown, focus, typeName, fields]);
+
+  /** GROUNDING FOCUS: a pin outranks a hovered cell, which outranks the shared focus. */
+  const activeCite = pinnedCite ?? cite ?? focusCite;
   const citations: CitationTarget[] = useMemo(
     () => resolveCitations(grounding, activeCite?.sources).resolved,
     [grounding, activeCite],
@@ -2435,7 +741,6 @@ function Page({
   const proposalCount = Object.values(fields).filter(
     (field) => field.staged == null && field.proposal != null,
   ).length;
-  const showDocPane = mode === "parameters" || store.doc != null || parsing;
 
   /* ── client-side save gate. The server stays the enforcer (route:settings `save`
      refuses any staged field marked "attention"); this only makes the refusal legible
@@ -2485,27 +790,125 @@ function Page({
     ];
   }, [live]);
 
-  /* ── grounding focus reflex, grafted verbatim from /family-types: hover grounds, click
-     pins, and Esc UNPINS FIRST, then deselects. One key, two steps, never both at once. ── */
-  useEffect(() => {
-    if (!selectedParam && !pinnedCite) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      if (pinnedCite) setPinnedCite(null);
-      else setSelectedParam(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [selectedParam, pinnedCite]);
+  // The anatomy draws AUTHORED constituents; a live family has none, so the pane is absent —
+  // not empty. Absence of the pane is the honest rendering of "there is nothing to draw".
+  const anatomy = lane.kind === "authored" ? shown : null;
+
+  const contentPane = (
+    <Pane kind="content" scroll="clip">
+      {shown ? (
+        /* Matrix over geometry. The split (rather than one scrolling column) is what lets
+           each table keep its own sticky header and its own filter strip. */
+        <PaneSplit
+          axis="vertical"
+          resize={{
+            target: "end",
+            defaultSize: GEOMETRY_DEFAULT_PX,
+            minSize: GEOMETRY_CHROME_PX,
+            /* The matrix is THE table — it is never the squeezed one. */
+            minOtherSize: 280,
+            persist: "pe.family.geometry-height",
+            collapse: { collapsedSize: GEOMETRY_CHROME_PX, collapseBelow: 90 },
+          }}
+          start={
+            <TypeMatrix
+              model={shown}
+              typeName={typeName}
+              onType={setSelectedType}
+              update={update}
+              fields={fields}
+              laneKind={lane.kind}
+              advisory={(name) => live?.advisory(name) ?? null}
+              onFormulaCheck={(name, formula) => live?.check(name, formula)}
+              onCite={setCite}
+              onPin={setPinnedCite}
+              onReview={review}
+              onReviewMark={markReview}
+              selectedParam={selectedParam}
+              onSelectParam={(name) => {
+                setPinnedConstituent(null);
+                setSelectedParam(name);
+              }}
+              focus={focus}
+              onFocus={setHovered}
+            />
+          }
+          end={
+            <GeometryTable
+              model={shown}
+              typeName={typeName}
+              focus={focus}
+              onFocus={setHovered}
+              onPinConstituent={pinConstituent}
+            />
+          }
+        />
+      ) : (
+        <div className="grid h-full place-items-center px-6 text-center">
+          <div className="max-w-md space-y-1">
+            <p className="text-sm text-muted-foreground">
+              {live
+                ? live.reading
+                  ? "Reading the family open in Revit…"
+                  : "Nothing read from the family editor yet."
+                : "No family document bound yet."}
+            </p>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              {live
+                ? "Pick a family in the sentence above to open it in the family editor, or press refresh if one is already open there."
+                : "Pick one in the sentence above, or press “+ new” in the strip to create one from a minimal template. Pea shares whatever you bind, so you can also ask it to capture the family open in Revit or draft one from a spec sheet."}
+            </p>
+          </div>
+        </div>
+      )}
+    </Pane>
+  );
+
+  /* The grounded cut sheet is CO-PRIMARY with the matrix: it is never conditional, and with
+     no document attached it shows its own upload surface, which is a first-class empty state
+     rather than an absence. The parameter inspector is a strip beneath it, present exactly
+     while a parameter is pinned. */
+  const docColumn = (
+    <div className="flex size-full min-h-0 flex-col">
+      <div className="min-h-0 flex-1">
+        <FamilyDocPane
+          grounding={grounding}
+          citations={citations}
+          unresolved={unresolvedCitations}
+          caption={activeCite?.label ?? null}
+          pinned={pinnedCite != null}
+          onUnpin={() => setPinnedCite(null)}
+          onParse={(input) => void parseSpec(input)}
+          parsing={parsing}
+        />
+      </div>
+      {inspected && selectedParam && (
+        <div className="h-[38%] min-h-0 shrink-0 border-t border-[var(--line)]">
+          <FamilyInspector
+            paramName={selectedParam}
+            origin={inspected.origin}
+            dataType={inspected.spec.dataType}
+            formula={inspected.spec.formula}
+            isInstance={inspected.spec.isInstance}
+            dependsOn={inspected.dependsOn}
+            dependents={inspected.dependents}
+            associations={inspected.associations}
+            onSelect={setSelectedParam}
+            onClose={() => setSelectedParam(null)}
+          />
+        </div>
+      )}
+    </div>
+  );
 
   return (
-    <main className="flex h-screen flex-col bg-[var(--paper)] text-[var(--foreground)]">
-      {/* ── control bar ─────────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] bg-[var(--paper)]/95 px-4 py-2">
+    <main className="flex h-screen min-h-0 flex-col bg-[var(--paper)] text-[var(--foreground)]">
+      {/* ── header row 1: IDENTITY ONLY. What is bound, in which lane — no verbs. The verbs
+             live one row down, beside the facts they act on. ───────────────────────────── */}
+      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--line)] px-4 py-2">
         <span className="tele-label text-[10px] tracking-[0.3em] text-[var(--clay-ink)]">
           FAMILY
         </span>
-        {/* THE sentence — doc + world slots stay clickable; staged counts feed the status prefix */}
         <Sentence
           prefix={
             proposalCount > 0
@@ -2518,7 +921,7 @@ function Page({
           }
           documents={documents}
           onPickDocument={(path) => void pickDocument(path)}
-          documentsEmpty="No family.json documents in this world yet — type a name in “new family name…” beside the sentence to create your first one from a minimal template."
+          documentsEmpty="No family.json documents in this world yet — press “+ new” in the strip below to create your first one from a minimal template."
           slots={sentenceSlots}
           target={boundTarget}
           onBind={(selector) => {
@@ -2541,163 +944,25 @@ function Page({
         >
           {lane.chip}
         </span>
-        {lane.kind === "authored" && <NewDocument onCreate={createDocument} busy={busy != null} />}
-        <span className="mx-1 h-4 w-px bg-[var(--line-2)]" />
+        {store.isMock && (
+          <span
+            className="tele shrink-0 rounded-[2px] border border-dashed border-[var(--line-2)] px-1 text-[10px] text-muted-foreground"
+            title="?mock — this page is running on a built-in fixture: a checked-in family.json, a few fake pea proposals, and a synthetic spec sheet standing in for a parse. No Revit host, no pea, no dispatcher, and every host verb refuses. Drop ?mock from the URL to talk to a real world."
+          >
+            fixture · no host
+          </span>
+        )}
+        <span className="ml-auto flex items-center">
+          <ThemeToggle />
+        </span>
+      </header>
 
-        {model && (
-          <>
-            <span
-              className="tele-label text-[9px] text-[var(--slate)]"
-              title="Flex the whole page to one type: the anatomy drawings, the matrix highlight, and every resolved dimension all follow this choice. It selects a viewpoint, it never edits anything."
-            >
-              flex
-            </span>
-            {Object.keys(model.types).map((name) => (
-              <button
-                key={name}
-                type="button"
-                title={`Draw and resolve everything as type "${name}". Nothing is edited — this is the type the exhibits are flexed to.`}
-                onClick={() => setSelectedType(name)}
-                className={`rounded-[2px] px-1.5 py-0.5 font-mono text-[10px] ${
-                  name === typeName
-                    ? "bg-[var(--pe-blue)] text-white"
-                    : "text-[var(--slate)] hover:bg-[var(--pe-blue)]/10"
-                }`}
-              >
-                {name}
-              </button>
-            ))}
-            <span className="mx-1 h-4 w-px bg-[var(--line-2)]" />
-          </>
-        )}
-
-        {/* Anatomy is authored truth — a live family has no authored constituents to draw. */}
-        {lane.kind === "authored" && (
-          <button
-            type="button"
-            onClick={() => setMode(mode === "full" ? "parameters" : "full")}
-            className="rounded-[2px] border border-[var(--line)] px-2 py-0.5 text-[10px] text-[var(--slate)] hover:border-[var(--pe-blue)]"
-            title={
-              mode === "full"
-                ? "Put the anatomy drawings away and give the matrix and spec sheet the whole page — the right choice when you are reconciling numbers against a spec rather than checking geometry."
-                : "Bring the anatomy triptych back: true-scale front/side/plan views of this family, flexed to the selected type."
-            }
-          >
-            {mode === "full" ? "parameters only" : "full anatomy"}
-          </button>
-        )}
-        {live && (
-          <button
-            type="button"
-            disabled={live.reading}
-            onClick={() => live.refresh()}
-            title="Re-read the family from Revit's family editor. Staged edits survive — this only replaces the snapshot underneath them, so use it when someone has changed the family in Revit since you started."
-            className="rounded-[2px] border border-[var(--line)] px-2 py-0.5 text-[10px] text-[var(--slate)] disabled:opacity-40"
-          >
-            {live.reading ? "reading…" : "refresh"}
-          </button>
-        )}
-
-        <span className="ml-auto" />
-        {proposalCount > 0 && (
-          <>
-            <span
-              className="tele text-[10px] text-[var(--pe-blue)]"
-              title="Cells where pea has suggested a value you have not yet answered. They are drawn dashed in the matrix; hovering one grounds it in the spec pane so you can see what it was read from."
-            >
-              {proposalCount} open proposal{proposalCount === 1 ? "" : "s"}
-            </span>
-            <button
-              type="button"
-              onClick={acceptAll}
-              title="Stage every open proposal at once. Cells you have already edited yourself are skipped, so a batch accept can never overwrite your own work — and staging is still not saving."
-              className="rounded-[2px] border border-[var(--pe-blue)] px-2 py-0.5 text-[10px] text-[var(--pe-blue)] hover:bg-[var(--pe-blue)]/10"
-            >
-              accept all
-            </button>
-          </>
-        )}
-        {stagedCount > 0 && (
-          <button
-            type="button"
-            onClick={() => void discardStaged()}
-            title={`Throw away all ${stagedCount} staged edit${stagedCount === 1 ? "" : "s"} and re-read the ${live ? "family editor" : "document"} from scratch. Nothing saved is affected — only the unsaved staging is lost, and it cannot be recovered.`}
-            className="rounded-[2px] border border-[var(--line)] px-2 py-0.5 text-[10px] text-[var(--slate)] hover:border-[var(--clay)] hover:text-[var(--clay)]"
-          >
-            discard {stagedCount}
-          </button>
-        )}
-        {/* validate is the DOCUMENT's schema check — a live family has no document. */}
-        {lane.kind === "authored" && (
-          <button
-            type="button"
-            disabled={!isFamilyDocument || busy != null}
-            onClick={() => void run("validate")}
-            title={
-              isFamilyDocument
-                ? "Check the document against the family schema and report the issues. It writes nothing, and it judges the document as SAVED — staged edits are not part of what it reads."
-                : "Nothing to validate — open a family document in the sentence first."
-            }
-            className="rounded-[2px] border border-[var(--line)] px-2 py-0.5 text-[10px] text-[var(--slate)] disabled:opacity-40"
-          >
-            validate
-          </button>
-        )}
-        <button
-          type="button"
-          disabled={saveBlockedReason != null || busy != null}
-          onClick={() => void (live ? runLiveSave() : run("save"))}
-          title={
-            saveBlockedReason
-              ? `${saveBlockedReason}. The server refuses on the same rule, so this is the refusal you would get anyway, just sooner.`
-              : live
-                ? `Write ${stagedCount} staged edit${stagedCount === 1 ? "" : "s"} into the family open in Revit. Each edit succeeds or fails on its own — anything Revit refuses stays staged and is named in the strip below, so you can fix just that one and press apply again.`
-                : `Write ${stagedCount} staged field${stagedCount === 1 ? "" : "s"} to the document. The document is re-opened afterwards, so what you see next is the file as it actually landed, not what was hoped for.`
-          }
-          className="rounded-[2px] bg-[var(--pe-blue)] px-2 py-0.5 text-[10px] text-white disabled:opacity-40"
-        >
-          {live ? "apply" : "save"} {stagedCount || ""}
-        </button>
-        <span className="mx-1 h-4 w-px bg-[var(--line-2)]" />
-        {/* CAPTURE IS THE BRIDGE: evidence in the authored lane, promotion in the live one. */}
-        <button
-          type="button"
-          disabled={busy != null}
-          onClick={() => void (live ? captureToDocument() : captureEvidence())}
-          title={
-            live
-              ? "The bridge between the two lanes, and the only crossing there is. This reads the live family out of Revit, writes it as a new family.json under captured/, and opens it — so you end up in the authored lane on the same family, where the document can be versioned and pea can propose into it. Revit itself is not modified."
-              : "Read the family currently open in the bound Revit session and fold its real, resolved values into this document as EVIDENCE. It changes no authored value — it is how the numbers on screen earn the right to be believed."
-          }
-          className="rounded-[2px] border border-[var(--line)] px-2 py-0.5 text-[10px] text-[var(--slate)] disabled:opacity-40"
-        >
-          {live ? "capture → doc" : "capture"}
-        </button>
-        {/* build proves a SAVED authored revision; there is no such revision in the live lane. */}
-        {lane.kind === "authored" && (
-          <button
-            type="button"
-            disabled={!isFamilyDocument || busy != null || stagedCount > 0}
-            onClick={() => void buildEvidence()}
-            title={
-              stagedCount > 0
-                ? `Save your ${stagedCount} staged edit${stagedCount === 1 ? "" : "s"} first. A build proves the SAVED revision, so building now would prove a family you have already moved past.`
-                : "Build this saved document into a real .rfa in Revit and read the result back as evidence. This is the proof lane: it is what turns the authored numbers on screen into numbers Revit actually produced."
-            }
-            className="rounded-[2px] border border-[var(--line)] px-2 py-0.5 text-[10px] text-[var(--slate)] disabled:opacity-40"
-          >
-            build
-          </button>
-        )}
-        {/* target chip retired here — the sentence's world slot is the binding control */}
-        <RvtChip target={boundTarget} />
-        <RfaChip target={boundTarget} />
-        <ThemeToggle />
-      </div>
-
-      {/* ── status strip ────────────────────────────────────────────────────── */}
-      {/* Every fact in this strip is machine-measured, so the whole strip is tele/tabular. */}
-      <div className="tele flex flex-wrap items-center gap-3 border-b border-[var(--line-soft)] px-4 py-1 text-[10px] text-[var(--slate)]">
+      {/* ── header row 2: the status strip. Machine-measured facts on the left, the verbs
+             that act on them on the right, in three clusters separated by hairlines:
+             REVIEW (what is waiting on a human), EVIDENCE (what proves the numbers), CREATE.
+             A verb that cannot apply in this lane or at this stage is absent, not disabled —
+             the exception is save, which is always present so its refusal can be READ. ── */}
+      <div className="tele flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--line-soft)] px-4 py-1 text-[10px] text-[var(--slate)]">
         {live ? (
           <>
             <span title="The family currently open in the bound session's family editor. Edits here go to Revit, not to a file — pick a different family in the sentence to move.">
@@ -2731,222 +996,312 @@ function Page({
             </span>
           </>
         )}
-        {/* Freshness is the normal case and gets no ink; only STALE earns a colour. */}
+        {/* Freshness is the normal case and gets no ink; STALE and unverified earn a colour. */}
         {evidence && !live && (
           <span
-            className={evidenceFresh ? undefined : "text-[var(--kiln)]"}
+            className={evidenceFreshness === "fresh" ? undefined : "text-[var(--kiln)]"}
             title={
-              evidenceFresh
+              evidenceFreshness === "fresh"
                 ? `Real values read back out of ${evidence.from.origin} for ${evidence.from.familyName} at ${evidence.from.capturedAt}. They match the revision on screen, so the resolved numbers below are trustworthy.`
-                : "These resolved values were read from an OLDER revision of this document, so they describe a family you have since changed. Save, then build again to refresh them."
+                : evidenceFreshness === "stale"
+                  ? "These resolved values were read from an OLDER revision of this document, so they describe a family you have since changed. Save, then build again to refresh them."
+                  : `This ${evidence.from.origin} carries no document revision — it was read out of Revit, not out of this document — so freshness cannot be judged either way. Build to get evidence that is pinned to a revision.`
             }
           >
             evidence: {evidence.from.origin} · {evidence.parameters.length} params ·{" "}
-            {evidenceFresh ? "fresh" : "STALE"}
+            {evidenceFreshness === "fresh"
+              ? "fresh"
+              : evidenceFreshness === "stale"
+                ? "STALE"
+                : "unverified"}
           </span>
         )}
-        {saveBlockedReason && stagedCount > 0 && (
-          <span
-            className="text-[var(--clay)]"
-            title="The save verb is refusing before the round trip. The server enforces the same rule, so clearing this is the only way through."
-          >
-            Save blocked · {saveBlockedReason}
-          </span>
-        )}
-        {lastSave && busy == null && (
-          <span
-            className={lastSave.failed > 0 ? "text-[var(--clay)]" : "text-[var(--cat-green)]"}
-            title={
-              lastSave.failed > 0
-                ? "Some edits landed and some did not. The failed ones are still staged, named below, so they can be fixed and retried without redoing the rest."
-                : "Every staged edit landed. Green means done — nothing on this page is still waiting to be written."
+
+        <span className="ml-auto flex flex-wrap items-center gap-1.5">
+          {proposalCount > 0 && (
+            <Verb
+              label={`accept all ${proposalCount}`}
+              onClick={acceptAll}
+              reason="Stage every open proposal at once. Cells you have already edited yourself are skipped, so a batch accept can never overwrite your own work — and staging is still not saving."
+            />
+          )}
+          {stagedCount > 0 && (
+            <Verb
+              label={`discard ${stagedCount}`}
+              onClick={() => void discardStaged()}
+              reason={`Throw away all ${stagedCount} staged edit${stagedCount === 1 ? "" : "s"} and re-read the ${live ? "family editor" : "document"} from scratch. Nothing saved is affected — only the unsaved staging is lost, and it cannot be recovered.`}
+            />
+          )}
+          {/* validate is the DOCUMENT's schema check — a live family has no document. */}
+          {lane.kind === "authored" && (
+            <Verb
+              label="validate"
+              onClick={() => void run("validate")}
+              busy={busy === "validate"}
+              disabled={!isFamilyDocument || busy != null}
+              reason={
+                isFamilyDocument
+                  ? "Check the document against the family schema and report the issues. It writes nothing — it validates the candidate the document WOULD BE after saving what is staged (saved content with your staged edits spliced in). Proposals you have not accepted are excluded."
+                  : "Nothing to validate — open a family document in the sentence first."
+              }
+            />
+          )}
+          <Verb
+            label={`${live ? "apply" : "save"}${stagedCount ? ` ${stagedCount}` : ""}`}
+            tone="commit"
+            onClick={() => void (live ? runLiveSave() : run("save"))}
+            busy={busy === "save"}
+            disabled={saveBlockedReason != null || busy != null}
+            reason={
+              saveBlockedReason
+                ? `${saveBlockedReason}. The server refuses on the same rule, so this is the refusal you would get anyway, just sooner.`
+                : live
+                  ? `Write ${stagedCount} staged edit${stagedCount === 1 ? "" : "s"} into the family open in Revit. Each edit succeeds or fails on its own — anything Revit refuses stays staged and is named in the strip below, so you can fix just that one and press apply again.`
+                  : `Write ${stagedCount} staged field${stagedCount === 1 ? "" : "s"} to the document. The document is re-opened afterwards, so what you see next is the file as it actually landed, not what was hoped for.`
             }
-          >
-            Saved {lastSave.saved}
-            {lastSave.failed > 0 ? ` · ${lastSave.failed} failed` : ""}
+          />
+          {/* ── evidence cluster: what makes the numbers believable ── */}
+          <span className="ml-2 flex flex-wrap items-center gap-1.5 border-l border-[var(--line-soft)] pl-2">
+            {/* CAPTURE IS THE BRIDGE: evidence in the authored lane, promotion in the live one. */}
+            <Verb
+              label={live ? "capture → doc" : "capture"}
+              onClick={() => void (live ? captureToDocument() : captureEvidence())}
+              busy={busy === "capture"}
+              disabled={busy != null}
+              reason={
+                live
+                  ? "The bridge between the two lanes, and the only crossing there is. This reads the live family out of Revit, writes it as a new family.json under captured/, and opens it — so you end up in the authored lane on the same family, where the document can be versioned and pea can propose into it. Revit itself is not modified."
+                  : "Read the family currently open in the bound Revit session and fold its real, resolved values into this document as EVIDENCE. It changes no authored value — it is how the numbers on screen earn the right to be believed."
+              }
+            />
+            {/* build proves a SAVED authored revision; there is none in the live lane. */}
+            {lane.kind === "authored" && (
+              <Verb
+                label="build"
+                onClick={() => void buildEvidence()}
+                busy={busy === "build"}
+                disabled={!isFamilyDocument || busy != null || stagedCount > 0}
+                reason={
+                  !isFamilyDocument
+                    ? "Nothing to build — open a family document in the sentence first."
+                    : stagedCount > 0
+                      ? `Save your ${stagedCount} staged edit${stagedCount === 1 ? "" : "s"} first. A build proves the SAVED revision, so building now would prove a family you have already moved past.`
+                      : "Build this saved document into a real .rfa in Revit and read the result back as evidence. This is the proof lane: it is what turns the authored numbers on screen into numbers Revit actually produced."
+                }
+              />
+            )}
+            {live && (
+              <Verb
+                label={live.reading ? "reading" : "refresh"}
+                onClick={() => live.refresh()}
+                busy={live.reading}
+                reason="Re-read the family from Revit's family editor. Staged edits survive — this only replaces the snapshot underneath them, so use it when someone has changed the family in Revit since you started."
+              />
+            )}
+            <RvtChip target={boundTarget} />
+            <RfaChip target={boundTarget} />
           </span>
-        )}
-        {/* A live apply fails PER EDIT — name each one; those edits are still staged. */}
-        {liveFailures.length > 0 && busy == null && (
-          <span
-            className="text-[var(--clay)]"
-            title={`Revit refused these edits individually; the rest of the apply went through. They are still staged, so fix the value and press apply again:\n\n${liveFailures.map((failure) => `· ${failure.label}: ${failure.error}`).join("\n")}`}
-          >
-            still staged: {liveFailures.map((failure) => failure.label).join(" · ")}
-          </span>
-        )}
-        {error && (
-          <span
-            className="text-[var(--clay)]"
-            title="The last command failed and nothing was written. This is the dispatcher's own words, verbatim."
-          >
-            {error}
-          </span>
-        )}
-        {/* The dispatcher's `hint` is a teaching channel, distinct from the error text. */}
-        {hint && (
-          <span
-            className="text-[var(--kiln)]"
-            title="A hint from the command itself about how to get past the error — advice, not a second failure."
-          >
-            hint: {hint}
-          </span>
-        )}
-        {store.isMock && (
-          <span title="?mock — this page is running on a built-in fixture. No Revit host, no pea, no dispatcher; every verb is inert. Drop ?mock from the URL to talk to a real world.">
-            ?mock — fixture store, no host
-          </span>
-        )}
+
+          {/* ── create cluster: one collapsed verb until it is actually wanted ── */}
+          {lane.kind === "authored" && (
+            <span className="ml-2 flex items-center border-l border-[var(--line-soft)] pl-2">
+              <NewDocument onCreate={createDocument} busy={busy != null} />
+            </span>
+          )}
+        </span>
       </div>
 
-      {/* ── body ────────────────────────────────────────────────────────────── */}
-      <div className="flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1 overflow-y-auto px-4 py-3">
-          {!model ? (
-            <div className="grid h-full place-items-center text-sm text-[var(--slate)]">
-              <div className="max-w-md text-center">
-                {live ? (
-                  <>
-                    <p>
-                      {live.reading
-                        ? "Reading the family open in Revit…"
-                        : "Nothing read from the family editor yet."}
-                    </p>
-                    <p className="mt-1 text-[11px]">
-                      Pick a family in the sentence above to open it in the family editor, or press
-                      refresh if one is already open there.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p>No family document bound yet.</p>
-                    <p className="mt-1 text-[11px]">
-                      Pick one in the sentence above, or type a name in “new family name…” to create
-                      one from a minimal template. Pea shares whatever you bind, so you can also ask
-                      it to capture the family open in Revit or draft one from a spec sheet.
-                    </p>
-                  </>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {lane.kind === "authored" && mode === "full" && previewModel && (
-                <AnatomySheet
-                  model={previewModel}
-                  typeName={typeName}
-                  update={update}
-                  hovered={hovered}
-                  onHover={setHovered}
-                />
-              )}
-              <TypeMatrix
-                model={previewModel ?? model}
-                typeName={typeName}
-                onType={setSelectedType}
-                update={update}
-                fields={fields}
-                lane={lane}
-                onCite={setCite}
-                onPin={setPinnedCite}
-                onReview={review}
-                onReviewMark={markReview}
-                selectedParam={selectedParam}
-                onSelectParam={setSelectedParam}
-              />
-              <details className="rounded-[2px] border border-[var(--line)] bg-[var(--paper-2)]/40 px-3 py-2">
-                <summary
-                  className="tele-label cursor-pointer text-[10px] text-[var(--clay-ink)]"
-                  title={
-                    live
-                      ? "The raw snapshot family.editor.snapshot returned, with your staged edits folded in — this is exactly what apply will send back to Revit."
-                      : "The raw family.json every exhibit above is a view of, with your staged edits folded in. If the drawings and the matrix ever disagree, this is the tie-breaker."
-                  }
-                >
-                  {live
-                    ? "LIVE SNAPSHOT — what family.editor.snapshot returned, plus staged edits"
-                    : "AUTHORED TRUTH — the family.json all exhibits are editing"}
-                </summary>
-                <pre className="mt-2 max-h-96 overflow-auto font-mono text-[10px] leading-4 text-[var(--slate)]">
-                  {JSON.stringify(model, null, 2)}
-                </pre>
-              </details>
-            </div>
+      {/* ── trouble line: refusals, receipts, and the dispatcher's own words. It exists only
+             when there is something to say, so an ordinary session shows two rows, not three. */}
+      {(error ||
+        hint ||
+        (saveBlockedReason && stagedCount > 0) ||
+        (busy == null && (lastSave || liveFailures.length > 0))) && (
+        <div className="tele flex shrink-0 flex-wrap items-center gap-3 border-b border-[var(--line-soft)] px-4 py-1 text-[10px] text-[var(--clay)]">
+          {saveBlockedReason && stagedCount > 0 && (
+            <span
+              className="text-[var(--clay)]"
+              title="The save verb is refusing before the round trip. The server enforces the same rule, so clearing this is the only way through."
+            >
+              Save blocked · {saveBlockedReason}
+            </span>
+          )}
+          {lastSave && busy == null && (
+            <span
+              className={lastSave.failed > 0 ? "text-[var(--clay)]" : "text-cat-green"}
+              title={
+                lastSave.failed > 0
+                  ? "Some edits landed and some did not. The failed ones are still staged, named beside this, so they can be fixed and retried without redoing the rest."
+                  : "Every staged edit landed. Green means done — nothing on this page is still waiting to be written."
+              }
+            >
+              Saved {lastSave.saved}
+              {lastSave.failed > 0 ? ` · ${lastSave.failed} failed` : ""}
+            </span>
+          )}
+          {/* A live apply fails PER EDIT — name each one; those edits are still staged.
+              A COMMIT failure belongs to no edit and is staged nowhere, so it is said apart. */}
+          {stagedLiveFailures.length > 0 && busy == null && (
+            <span
+              className="text-[var(--clay)]"
+              title={`Revit refused these edits individually; the rest of the apply went through. They are still staged, so fix the value and press apply again:\n\n${stagedLiveFailures.map((failure) => `· ${failure.label}: ${failure.error}`).join("\n")}`}
+            >
+              still staged: {stagedLiveFailures.map((failure) => failure.label).join(" · ")}
+            </span>
+          )}
+          {commitFailure && busy == null && (
+            <span
+              className="text-[var(--clay)]"
+              title={`Revit refused the transaction as a whole, not any one edit — so there is nothing staged to fix. Revit's own words:\n\n${commitFailure.error}`}
+            >
+              commit refused
+            </span>
+          )}
+          {error && (
+            <span
+              className="text-[var(--clay)]"
+              title="The last command failed and nothing was written. This is the dispatcher's own words, verbatim."
+            >
+              {error}
+            </span>
+          )}
+          {/* The dispatcher's `hint` is a teaching channel, distinct from the error text. */}
+          {hint && (
+            <span
+              className="text-[var(--kiln)]"
+              title="A hint from the command itself about how to get past the error — advice, not a second failure."
+            >
+              hint: {hint}
+            </span>
           )}
         </div>
+      )}
 
-        {(showDocPane || inspected) && (
-          <div className="flex w-[42%] min-w-[380px] shrink-0 flex-col">
-            {showDocPane && (
-              <div className="min-h-0 flex-1">
-                <FamilyDocPane
-                  grounding={grounding}
-                  citations={citations}
-                  unresolved={unresolvedCitations}
-                  caption={activeCite?.label ?? null}
-                  pinned={pinnedCite != null}
-                  onUnpin={() => setPinnedCite(null)}
-                  onParse={(input) => void parseSpec(input)}
-                  parsing={parsing}
-                />
-              </div>
-            )}
-            {inspected && selectedParam && (
-              <div className={showDocPane ? "h-[42%] min-h-0 shrink-0" : "min-h-0 flex-1"}>
-                <FamilyInspector
-                  paramName={selectedParam}
-                  origin={inspected.origin}
-                  dataType={inspected.spec.dataType}
-                  formula={inspected.spec.formula}
-                  isInstance={inspected.spec.isInstance}
-                  dependsOn={inspected.dependsOn}
-                  dependents={inspected.dependents}
-                  associations={inspected.associations}
-                  onSelect={setSelectedParam}
-                  onClose={() => setSelectedParam(null)}
-                />
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      {/* ── the workspace ────────────────────────────────────────────────────────────────── */}
+      {anatomy ? (
+        <PaneWorkspace
+          className="min-h-0 flex-1"
+          resize={{
+            visual: {
+              defaultSize: ANATOMY_DEFAULT_PX + ANATOMY_CHROME_PX,
+              minSize: ANATOMY_MIN_PX + ANATOMY_CHROME_PX,
+              maxSize: 720,
+              /* Room below the drawing for the matrix's chrome plus real rows. */
+              minOtherSize: 320,
+              persist: "pe.family.anatomy-height",
+              collapse: {
+                collapsed: anatomyCollapsed,
+                onCollapsedChange: setAnatomyCollapsed,
+                collapsedSize: ANATOMY_CHROME_PX,
+                collapseBelow: ANATOMY_MIN_PX,
+              },
+            },
+            inspector: {
+              defaultSize: DOC_DEFAULT_PX,
+              minSize: DOC_MIN_PX,
+              maxSize: 900,
+              minOtherSize: 420,
+              persist: "pe.family.doc-width",
+            },
+          }}
+          visual={
+            <AnatomyPane
+              model={anatomy}
+              typeName={typeName}
+              onType={setSelectedType}
+              update={update}
+              focus={focus}
+              onFocus={setHovered}
+              collapsed={anatomyCollapsed}
+              onCollapsedChange={setAnatomyCollapsed}
+            />
+          }
+          content={contentPane}
+          inspectorSpan="full"
+          inspector={docColumn}
+        />
+      ) : (
+        /* No authored anatomy to draw (live lane, or nothing bound): two panes, not an
+           empty visual row pretending there is a drawing behind it. */
+        <PaneSplit
+          className="min-h-0 flex-1"
+          axis="horizontal"
+          resize={{
+            target: "end",
+            defaultSize: DOC_DEFAULT_PX,
+            minSize: DOC_MIN_PX,
+            maxSize: 900,
+            minOtherSize: 420,
+            persist: "pe.family.doc-width",
+          }}
+          start={contentPane}
+          end={docColumn}
+        />
+      )}
     </main>
   );
 }
 
+/**
+ * Creating a family is a RARE act, so it costs one collapsed verb until it is wanted: `+ new`
+ * expands into the name field and its confirm, and collapses again on Esc or on leaving it
+ * empty. Nothing is lost by collapsing — a typed name keeps the field open.
+ */
 function NewDocument({ onCreate, busy }: { onCreate: (name: string) => void; busy: boolean }) {
+  const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
+
+  const create = () => {
+    onCreate(name.trim());
+    setName("");
+    setOpen(false);
+  };
+
+  if (!open)
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        title="Start a new family.json. Clicking opens a name field here — the file is written from a minimal template (one prism, three length parameters, one type) and opened immediately, so you land in it rather than having to go find it."
+        className="tele h-6 shrink-0 rounded-[2px] border border-[var(--line-2)] px-2 text-muted-foreground hover:border-[var(--pe-blue)]"
+      >
+        + new
+      </button>
+    );
+
   return (
-    <span className="inline-flex items-center gap-1">
+    <span
+      className="inline-flex shrink-0 items-center gap-1"
+      onBlur={(event) => {
+        if (!name.trim() && !event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+      }}
+    >
       <input
+        autoFocus
         value={name}
         onChange={(event) => setName(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === "Enter" && name.trim()) {
-            onCreate(name.trim());
+          if (event.key === "Enter" && name.trim()) create();
+          if (event.key === "Escape") {
             setName("");
+            setOpen(false);
           }
         }}
         placeholder="new family name…"
         title="Name a new family.json. It is written from a minimal template — one prism, three length parameters, one type — and opened immediately, so you land in it rather than having to go find it."
-        className="w-36 rounded-[2px] border border-[var(--line)] bg-transparent px-1.5 py-0.5 text-[11px] outline-none focus:border-[var(--pe-blue)]"
+        className="tele h-6 w-36 rounded-[2px] border border-[var(--line)] bg-transparent px-1.5 outline-none focus:border-[var(--pe-blue)]"
       />
-      <button
-        type="button"
-        disabled={!name.trim() || busy}
-        onClick={() => {
-          onCreate(name.trim());
-          setName("");
-        }}
-        title={
+      <Verb
+        label="create"
+        onClick={create}
+        busy={busy}
+        disabled={!name.trim()}
+        reason={
           name.trim()
             ? `Write a new document from the minimal template and open it. The file lands at "${name.trim().replace(/\s+/g, "-").toLowerCase()}".`
             : "Type a family name first — the name becomes the document's path."
         }
-        className="rounded-[2px] border border-[var(--line)] px-1.5 py-0.5 text-[10px] hover:border-[var(--pe-blue)] disabled:opacity-40"
-      >
-        create
-      </button>
+      />
     </span>
   );
 }

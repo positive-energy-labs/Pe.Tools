@@ -79,6 +79,21 @@
   --pe-green: #72c6a2; /* provenance "you" / skills / cache-read */
   --clay-ink: #8a5e3b;
   --clay-tint: #f3eae0;
+
+  /* ── ROLE TOKENS (docs/design/COLOR-ROLES.md) ─────────────────────────────
+     The layer between the palette and the surfaces: meaning is assigned HERE and
+     nowhere else, so reconsidering a color is a one-line edit. Two vocabularies,
+     never mixed — `--act-*` is what pressing does, `--st-*` is what a fact is.
+     A hue may serve one vocabulary only. Components consume roles, not palette. */
+  --act-commit: var(--pe-blue); /* writes beyond the page: save, apply, materialize, bind */
+  --act-hover: color-mix(in srgb, var(--foreground) 40%, transparent); /* safe-verb hover border */
+  --st-proposal: var(--pe-green); /* pea's voice — proposals wear pea's identity, never blue */
+  --st-drift: var(--cat-clay); /* the model disagrees — the ONLY alarm */
+  --st-warn: var(--kiln); /* stale, unsaved, unverified — caution, not alarm */
+  --st-derived: var(--lichen); /* formula-driven, computed, locked-by-derivation */
+  --st-done: var(--cat-green); /* receipts, landed writes, settled */
+  --st-meta: var(--slate); /* neutral machine-measured fact */
+  --st-ground: var(--line-2); /* grounding citation — deliberately spends no colour */
 }
 
 .dark {

@@ -297,17 +297,24 @@ export function useFamilyEditorLane(
       };
     }
 
+    // The host appends COMMIT-level results past the submitted array — a transaction that
+    // refused as a whole belongs to no edit. Those indexes point at nothing, so they can
+    // never be staged, cleared, or retried per-edit; they collapse into one document-level
+    // failure instead of inventing phantom "edit N" rows that staging can never shed.
     const failedIndexes = new Set<number>();
+    const commitErrors: string[] = [];
     for (const result of response.results) {
       if (result.ok) continue;
-      failedIndexes.add(result.index);
       const entry = labels[result.index];
-      failures.push({
-        pointer: entry?.pointer ?? String(result.index),
-        label: entry?.label ?? `edit ${result.index}`,
-        error: result.error ?? "failed",
-      });
+      if (!entry) {
+        commitErrors.push(result.error ?? "failed");
+        continue;
+      }
+      failedIndexes.add(result.index);
+      failures.push({ ...entry, error: result.error ?? "failed" });
     }
+    if (commitErrors.length > 0)
+      failures.push({ pointer: "commit", label: "commit", error: commitErrors.join(" · ") });
     // Clear only what LANDED — a failed edit stays staged so it can be fixed and retried.
     const cleared = labels
       .filter((_, index) => !failedIndexes.has(index))

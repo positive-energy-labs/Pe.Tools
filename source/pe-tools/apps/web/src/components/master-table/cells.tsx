@@ -1,6 +1,6 @@
-/** Dense-grid editing primitives: commit on blur/Enter, Escape reverts, read-only says why. */
 import { useRef } from "react";
 
+import { useCellNavigation } from "#/components/master-table/cell-navigation";
 import { fmtNum, parseCell, type Column } from "#/components/master-table/model";
 import { cn } from "#/lib/utils";
 
@@ -22,6 +22,7 @@ function BaseCell({
   title?: string;
 }) {
   const initial = useRef(display);
+  const move = useCellNavigation();
   initial.current = display;
   return (
     <input
@@ -29,11 +30,19 @@ function BaseCell({
       defaultValue={display}
       placeholder={placeholder}
       title={title}
+      tabIndex={-1}
       inputMode={numeric ? "decimal" : undefined}
       className={cn(CELL_CLASS, numeric && "text-right", className)}
       onKeyDown={(e) => {
-        if (e.key === "Enter") e.currentTarget.blur();
-        else if (e.key === "Escape") {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          if (!move?.(e.shiftKey ? "up" : "down")) e.currentTarget.blur();
+        } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+          e.preventDefault();
+          move?.(e.key === "ArrowUp" ? "up" : "down");
+        } else if (e.key === "Tab") {
+          if (move?.(e.shiftKey ? "left" : "right")) e.preventDefault();
+        } else if (e.key === "Escape") {
           e.currentTarget.value = initial.current;
           e.currentTarget.blur();
         }
@@ -101,7 +110,6 @@ export function NumberCell({
   );
 }
 
-/** Native select styled to sit flush inside a hairline grid cell. */
 export function CellSelect({
   value,
   onChange,
@@ -117,11 +125,16 @@ export function CellSelect({
   className?: string;
   title?: string;
 }) {
+  const move = useCellNavigation();
   return (
     <select
       value={value}
       title={title}
+      tabIndex={-1}
       onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Tab" && move?.(e.shiftKey ? "left" : "right")) e.preventDefault();
+      }}
       className={cn(
         "tele h-7 w-full min-w-0 truncate rounded-none border-0 bg-transparent px-1 outline-none focus:bg-primary/5",
         invalid && "bg-destructive/10 text-destructive",

@@ -6,8 +6,8 @@
  * never hides a family, never becomes the only thing on screen, and never silently narrows scope.
  *
  * The three lanes, in order of commitment:
- *   scope  — categories + placement, draft until Apply (the matrix op is the expensive one, so its
- *            budget is sized to the resolved family list and never fired on keystroke).
+ *   scope  — categories → families → placement, draft until Apply (the matrix op is the expensive
+ *            one, so its budget is sized to the picked family list and never fired on keystroke).
  *   plan   — profile in, per-family reconciliation + planHash out. Read-only; a lens.
  *   apply  — explicit familyIds + expectedPlanHash, gated behind a human-readable reason, receipts
  *            out. Drift is refused by the op, echoed here as an error with re-plan guidance.
@@ -18,12 +18,31 @@
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQueries } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ReadCell, stateColumn, type StateMeta } from "#/components/master-table/cells";
 import { MasterTable } from "#/components/master-table/master-table";
 import type { Column } from "#/components/master-table/model";
 import { Sentence, type SlotOption } from "#/components/sentence";
+import {
+  Combobox,
+  ComboboxChip,
+  ComboboxChips,
+  ComboboxChipsInput,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxTrigger,
+  useComboboxAnchor,
+} from "#/components/ui/combobox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "#/components/ui/select";
 import { callHostRpc } from "#/host/client";
 import {
   FF_PROFILE_MODULE,
@@ -65,12 +84,32 @@ const PROFILE_READ_LIMIT = 40;
 /** A parameter is "common" when it appears on this share of the families in scope. */
 const COMMON_SHARE = 0.3;
 
+/** The placement filter's vocabulary, and what each choice MEANS for the audit. */
+const PLACEMENT_LABELS: Record<LoadedFamilyPlacementScope, string> = {
+  [LoadedFamilyPlacementScope.AllLoaded]: "all loaded",
+  [LoadedFamilyPlacementScope.PlacedOnly]: "placed only",
+  [LoadedFamilyPlacementScope.UnplacedOnly]: "unplaced only",
+};
+const PLACEMENT_NOTES: Record<LoadedFamilyPlacementScope, string> = {
+  [LoadedFamilyPlacementScope.AllLoaded]:
+    "Every family loaded into the project, placed or not — this also catches library families sitting unused in the file.",
+  [LoadedFamilyPlacementScope.PlacedOnly]:
+    "Only families with at least one placed instance — what the project actually uses. Narrower scope, cheaper matrix.",
+  [LoadedFamilyPlacementScope.UnplacedOnly]:
+    "Only families with no placed instance — the loaded-but-unused tail, usually the purge conversation.",
+};
+
 // ── scope model ─────────────────────────────────────────────────────────────────────────────────
 
 interface AppliedScope {
   categoryNames: string[];
   familyNames: string[];
   placementScope: LoadedFamilyPlacementScope;
+}
+
+/** Order-sensitive list equality — both name lists are built in sorted order, so this is enough. */
+function sameNames(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((name, index) => name === b[index]);
 }
 
 /** One table row: a family TYPE. Families repeat down the family column, as a spreadsheet should. */
@@ -276,6 +315,88 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   return <span className="section-label">{children}</span>;
 }
 
+/**
+ * A multi-select over plain names, chips inside the control — the scope row's two pickers.
+ *
+ * It replaces a flex-wrap of toggle buttons: with 40 categories (or 300 families) the button
+ * sprawl pushed the commit verb off the row entirely. Chips scroll inside a two-row box instead,
+ * so the row's HEIGHT is bounded no matter how wide the scope gets.
+ */
+function NamePicker({
+  options,
+  values,
+  onChange,
+  placeholder,
+  ariaLabel,
+  title,
+  empty,
+  disabled,
+}: {
+  options: readonly string[];
+  values: string[];
+  onChange: (values: string[]) => void;
+  placeholder: string;
+  ariaLabel: string;
+  title: string;
+  empty: string;
+  disabled?: boolean;
+}) {
+  const anchor = useComboboxAnchor();
+  /* The whole-set default is a SUMMARY, not a chip flood: 300 auto-picked families as 300
+     chips is bounded but unreadable. One quiet count stands in until the set is narrowed —
+     deselection happens in the popup either way, so nothing is lost but the noise. */
+  const collapsed = values.length > 8 && values.length === options.length;
+  return (
+    <Combobox
+      items={options}
+      multiple
+      value={values}
+      disabled={disabled}
+      onValueChange={(next: string[]) => onChange(next)}
+      itemToStringLabel={(name: string) => name}
+    >
+      {/* ponytail: explicit anchor on the chips row — the chips input must not be the positioner
+          anchor, or the popup roams as chips wrap (same law as control-chips.tsx). */}
+      <ComboboxChips
+        ref={anchor}
+        title={title}
+        className="tele max-h-[3.25rem] min-h-7 min-w-0 flex-1 overflow-y-auto rounded-[var(--radius)] border-[var(--line-2)] bg-transparent py-0.5 text-[11px]"
+      >
+        {collapsed ? (
+          <span
+            className="px-1 text-[11px] text-muted-foreground"
+            title="Every resolved name is in the draft. Open the list to deselect — chips appear once the set is narrowed."
+          >
+            all {values.length}
+          </span>
+        ) : (
+          values.map((name) => (
+            <ComboboxChip key={name} className="tele rounded-[var(--radius)] text-[11px]">
+              {name}
+            </ComboboxChip>
+          ))
+        )}
+        <ComboboxChipsInput
+          aria-label={ariaLabel}
+          placeholder={values.length === 0 ? placeholder : "add…"}
+          className="tele text-[11px] placeholder:text-muted-foreground"
+        />
+        <ComboboxTrigger />
+      </ComboboxChips>
+      <ComboboxContent anchor={anchor} className="rounded-[var(--radius)]">
+        <ComboboxEmpty>{empty}</ComboboxEmpty>
+        <ComboboxList>
+          {(name: string) => (
+            <ComboboxItem key={name} value={name} className="tele pr-7 text-[11px]">
+              <span className="truncate">{name}</span>
+            </ComboboxItem>
+          )}
+        </ComboboxList>
+      </ComboboxContent>
+    </Combobox>
+  );
+}
+
 // ── route ───────────────────────────────────────────────────────────────────────────────────────
 
 function FamiliesRoute() {
@@ -287,6 +408,7 @@ function FamiliesRoute() {
     LoadedFamilyPlacementScope.AllLoaded,
   );
   const [draftCategories, setDraftCategories] = useState<string[]>([]);
+  const [pickedFamilies, setPickedFamilies] = useState<string[]>([]);
   const [applied, setApplied] = useState<AppliedScope | null>(null);
 
   const [profilePath, setProfilePath] = useState<string | null>(null);
@@ -334,7 +456,24 @@ function FamiliesRoute() {
     [draftCatalog.data?.families],
   );
 
-  // Budget sized to the resolved family list so nothing truncates silently, and samples lifted so
+  /* The family picker defaults to ALL of them, and reconciles as the catalog moves: a name that
+     has just BECOME available is picked (widening categories must not silently exclude what it
+     just found), a name that has left the catalog is dropped. A deliberate deselection survives
+     both, because it is the only thing here the user actually said. */
+  const seenFamilies = useRef<ReadonlySet<string>>(new Set<string>());
+  useEffect(() => {
+    const available = new Set(draftFamilyNames);
+    const previouslySeen = seenFamilies.current;
+    seenFamilies.current = available;
+    setPickedFamilies((previous) => {
+      const next = draftFamilyNames.filter(
+        (name) => !previouslySeen.has(name) || previous.includes(name),
+      );
+      return sameNames(previous, next) ? previous : next;
+    });
+  }, [draftFamilyNames]);
+
+  // Budget sized to the picked family list so nothing truncates silently, and samples lifted so
   // no type/cell is dropped from the master table.
   const matrixRequest = useMemo<LoadedFamiliesMatrixRequest | undefined>(
     () =>
@@ -358,7 +497,8 @@ function FamiliesRoute() {
 
   const scopeDrifted =
     applied !== null &&
-    (JSON.stringify(applied.categoryNames) !== JSON.stringify(draftCategories) ||
+    (!sameNames(applied.categoryNames, draftCategories) ||
+      !sameNames(applied.familyNames, pickedFamilies) ||
       applied.placementScope !== placement);
 
   // ── profile library: settings.tree enumerates it, document.open validates each entry ──────────
@@ -536,15 +676,17 @@ function FamiliesRoute() {
       ? ordered
       : ordered.filter((col) => clusterOf(col, totalFamilies) !== "uncommon");
 
+    /* The identity cluster carries NO group: a band reading "family" over columns already named
+       family / type / category says nothing, and a header band that says nothing is noise above
+       every scroll. The parameter clusters keep theirs — "built-in" vs "common" is real news. */
     const identity: Column<TypeRow>[] = [
       {
         key: "pick",
         label: "pick",
-        group: "family",
         title:
           "Picked families feed the projection verb, which reads them back out of the model as profile JSON. Picking changes nothing in Revit — Esc clears the whole set.",
-        /* Wide enough for its own filter select — a facet column narrower than its dropdown
-           clips the word "any" and reads as a rendering bug. */
+        /* Wide enough for its own facet trigger — a facet column narrower than its picker clips
+           the word "any" and reads as a rendering bug. */
         width: "w-16",
         facet: (row) => (pickedIds.has(row.familyId) ? "picked" : ""),
         all: "any",
@@ -573,7 +715,6 @@ function FamiliesRoute() {
       {
         key: "family",
         label: "family",
-        group: "family",
         sort: (row) => row.familyName,
         search: (row) => row.familyName,
         width: "w-56",
@@ -587,7 +728,6 @@ function FamiliesRoute() {
       {
         key: "type",
         label: "type",
-        group: "family",
         sort: (row) => row.typeName,
         search: (row) => row.typeName,
         width: "w-40",
@@ -603,7 +743,6 @@ function FamiliesRoute() {
       {
         key: "category",
         label: "category",
-        group: "family",
         sort: (row) => row.categoryName,
         facet: (row) => row.categoryName,
         all: "any category",
@@ -617,9 +756,8 @@ function FamiliesRoute() {
           />
         ),
       },
-      /* The plan verdict sits AFTER the identity cluster, not inside it: the plan is a lens over
-         these rows, not part of what a family is. Keeping it here also keeps the "family" cluster
-         contiguous, which is what the clustered header row needs to span correctly. */
+      /* The plan verdict sits AFTER the identity columns, not among the parameter clusters: the
+         plan is a lens over these rows, not a parameter of the family. */
       stateColumn<TypeRow>({
         key: "plan-state",
         label: "plan",
@@ -701,10 +839,10 @@ function FamiliesRoute() {
 
   // ── verbs ────────────────────────────────────────────────────────────────────────────────────
   const applyScope = () => {
-    if (draftCategories.length === 0) return;
+    if (draftCategories.length === 0 || pickedFamilies.length === 0) return;
     setApplied({
       categoryNames: [...draftCategories],
-      familyNames: [...draftFamilyNames],
+      familyNames: [...pickedFamilies],
       placementScope: placement,
     });
     setApplyData(null);
@@ -863,90 +1001,112 @@ function FamiliesRoute() {
         )}
       </div>
 
-      {/* ── scope: draft categories, explicit apply ──────────────────────────────────────── */}
+      {/* ── scope: placement → draft categories → picked families, explicit apply ────────── */}
       <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] px-4 py-1.5">
         <SectionLabel>
           <span title="Which families the table loads at all. Scope is a DRAFT until you apply it — the matrix op is the expensive one, so it never fires on a click.">
             scope
           </span>
         </SectionLabel>
-        <select
+        <Select
+          items={PLACEMENT_LABELS}
           value={placement}
-          onChange={(event) => setPlacement(event.target.value as LoadedFamilyPlacementScope)}
-          title="Whether to include families that are loaded but never placed. 'Placed only' audits what the project actually uses; 'all loaded' also catches library families sitting unused in the project."
-          className="tele h-6 rounded-[2px] border border-[var(--line-2)] bg-transparent px-1"
+          onValueChange={(value: LoadedFamilyPlacementScope | null) => value && setPlacement(value)}
         >
-          <option value={LoadedFamilyPlacementScope.AllLoaded}>all loaded</option>
-          <option value={LoadedFamilyPlacementScope.PlacedOnly}>placed only</option>
-          <option value={LoadedFamilyPlacementScope.UnplacedOnly}>unplaced only</option>
-        </select>
-        <div className="flex min-w-0 flex-1 flex-wrap gap-1">
-          {categories.map((name) => {
-            const on = draftCategories.includes(name);
-            return (
-              <button
-                key={name}
-                type="button"
-                title={
-                  on
-                    ? `${name} is in the draft scope. Click to drop it, then apply the scope again to reload the table.`
-                    : `Add ${name} to the draft scope. Nothing loads until you apply the scope — this only changes what will be asked for.`
-                }
-                onClick={() =>
-                  setDraftCategories((prev) =>
-                    prev.includes(name)
-                      ? prev.filter((value) => value !== name)
-                      : [...prev, name].sort((a, b) => a.localeCompare(b)),
-                  )
-                }
-                className={cn(
-                  "tele rounded-[2px] border px-1.5 text-[11px]",
-                  on
-                    ? "border-[var(--pe-blue)] bg-[var(--pe-blue)]/[0.08] text-foreground"
-                    : "border-[var(--line-soft)] text-muted-foreground hover:border-[var(--line-2)]",
-                )}
+          <SelectTrigger
+            aria-label="placement filter"
+            title="Whether to include families that are loaded but never placed. It filters BOTH pickers beside it, so narrowing here changes which families the draft resolves to."
+            className="tele h-6 w-32 shrink-0 rounded-[var(--radius)] border-[var(--line-2)] px-1.5 text-[11px]"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="rounded-[var(--radius)]">
+            {(Object.keys(PLACEMENT_LABELS) as LoadedFamilyPlacementScope[]).map((value) => (
+              <SelectItem
+                key={value}
+                value={value}
+                title={PLACEMENT_NOTES[value]}
+                className="tele text-[11px]"
               >
-                {name}
-              </button>
-            );
-          })}
-          {connected && categoryCatalog.isPending && (
-            <span className="tele text-[11px] text-muted-foreground">reading categories…</span>
-          )}
-          {connected && categories.length === 0 && !categoryCatalog.isPending && (
-            <span className="tele text-[11px] text-muted-foreground">
-              No loaded families in this project — load a family in Revit, or bind a different world
-              in the sentence above.
-            </span>
-          )}
-          {!connected && (
-            <span className="tele text-[11px] text-cat-clay">
-              Bridge disconnected — nothing can be read. Open Revit with the host connected, then
-              bind that world in the sentence above.
-            </span>
-          )}
-        </div>
+                {PLACEMENT_LABELS[value]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {!connected ? (
+          <span className="tele min-w-0 flex-1 text-[11px] text-cat-clay">
+            Bridge disconnected — nothing can be read. Open Revit with the host connected, then bind
+            that world in the sentence above.
+          </span>
+        ) : categoryCatalog.isPending ? (
+          <span className="tele min-w-0 flex-1 text-[11px] text-muted-foreground">
+            reading categories…
+          </span>
+        ) : categories.length === 0 ? (
+          <span className="tele min-w-0 flex-1 text-[11px] text-muted-foreground">
+            No loaded families in this project — load a family in Revit, or bind a different world
+            in the sentence above.
+          </span>
+        ) : (
+          <>
+            <NamePicker
+              options={categories}
+              values={draftCategories}
+              onChange={(next) => setDraftCategories([...next].sort((a, b) => a.localeCompare(b)))}
+              placeholder="add categories…"
+              ariaLabel="draft categories"
+              title="Which Revit categories the draft asks for. Picking one only edits the DRAFT — nothing loads until you apply the scope, because the matrix op is the expensive one."
+              empty="No matching category in this project"
+            />
+            <NamePicker
+              options={draftFamilyNames}
+              values={pickedFamilies}
+              onChange={setPickedFamilies}
+              disabled={draftFamilyNames.length === 0}
+              placeholder={
+                draftCategories.length === 0
+                  ? "pick categories first"
+                  : draftCatalog.isFetching
+                    ? "resolving families…"
+                    : "no families resolved"
+              }
+              ariaLabel="draft families"
+              title="Every family the draft categories resolve to, all picked by default. Dropping one narrows exactly what apply asks the matrix op for — it does not filter a loaded table, it loads less."
+              empty="No matching family in the draft categories"
+            />
+          </>
+        )}
         <span
-          className="tele text-[10px] text-muted-foreground"
-          title="How many families the draft scope currently resolves to. The matrix budget is sized to exactly this number, so nothing is silently truncated."
+          className="tele shrink-0 text-[10px] text-muted-foreground"
+          title="How many families the draft currently commits to. The matrix budget is sized to exactly this number, so nothing is silently truncated."
         >
           {draftCategories.length === 0
             ? "no categories picked yet"
-            : `${draftFamilyNames.length} families in draft`}
+            : draftFamilyNames.length === 0 && draftCatalog.isFetching
+              ? "resolving families…"
+              : pickedFamilies.length === draftFamilyNames.length
+                ? `${draftFamilyNames.length} families in draft`
+                : `${pickedFamilies.length} of ${draftFamilyNames.length} families in draft`}
         </span>
         <Verb
           label={
             applied === null ? "apply scope" : scopeDrifted ? "re-apply scope" : "scope applied"
           }
           onClick={applyScope}
-          disabled={draftCategories.length === 0 || (applied !== null && !scopeDrifted)}
+          disabled={
+            draftCategories.length === 0 ||
+            pickedFamilies.length === 0 ||
+            (applied !== null && !scopeDrifted)
+          }
           busy={matrix.isFetching}
           reason={
             draftCategories.length === 0
               ? "Pick at least one category first. The matrix op is the expensive one, so it never runs on a keystroke — the draft above is free, this button is the commitment."
-              : applied !== null && !scopeDrifted
-                ? "The table already holds exactly this scope. Change a category or the placement filter above to make this button live again."
-                : "Load types × parameters for every family in the draft scope. This replaces what the table currently holds and clears any receipts, which described the old scope."
+              : pickedFamilies.length === 0
+                ? "Every family is deselected, so the scope would resolve to nothing. Re-add at least one in the families picker — or widen the categories, which re-picks whatever appears."
+                : applied !== null && !scopeDrifted
+                  ? "The table already holds exactly this scope. Change a category, a family, or the placement filter above to make this button live again."
+                  : "Load types × parameters for every family picked in the draft scope. This replaces what the table currently holds and clears any receipts, which described the old scope."
           }
         />
       </div>
@@ -1240,7 +1400,7 @@ function FamiliesRoute() {
             ? "Nothing to audit — the bridge is disconnected. Connect the host in Revit, then bind that world in the sentence above."
             : applied === null
               ? "No scope applied yet. Pick one or more categories in the scope row above, then press “apply scope” — the matrix op is expensive, so it waits to be asked."
-              : "The applied scope resolved to no families. Add a category above, or relax the placement filter from “placed only” back to “all loaded”, then re-apply the scope."
+              : "The applied scope resolved to no families. Add a category above, re-add families in the families picker, or relax the placement filter from “placed only” back to “all loaded”, then re-apply the scope."
         }
         /* Fleet → one family. The URL is the whole handoff: /family opens the requested
            family in the bound session's family editor and lands in its live lane. No

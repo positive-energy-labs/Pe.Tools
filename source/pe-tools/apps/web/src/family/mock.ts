@@ -173,4 +173,49 @@ export const MOCK_FAMILY_FIELDS: Record<string, FieldState> = {
     },
     review: "attention",
   },
+  // PROTOTYPE — proposals whose sources point at REAL blocks/cells of SAMPLE_DOC
+  // (grounded-doc/sample.ts), so `?mock` can exercise the side-by-side scraping story:
+  // hovering these cells drives the doc pane camera onto a measured region.
+  // The two fixtures above are deliberately left alone — their block ids resolve to
+  // nothing, which is what keeps the honest "unresolved citation" path on screen.
+  [settingsFieldPointer(["familyParameters", "Body Width", "value"])]: {
+    proposal: {
+      value: "24in",
+      note: 'spec table, Width row, FCU-400-A column — 24"',
+      confidence: "high",
+      sources: [{ blockId: "p1-i2", rowIdx: 4, colIdx: 1 }],
+    },
+    review: "none",
+  },
+  [settingsFieldPointer(["types", "Tall", "Body Width"])]: {
+    proposal: {
+      value: "36in",
+      note: 'the -C column is the tall unit — Width 36"',
+      confidence: "high",
+      sources: [{ blockId: "p1-i2", rowIdx: 4, colIdx: 3 }],
+    },
+    review: "none",
+  },
+  [settingsFieldPointer(["familyParameters", "Pipe Diameter", "value"])]: {
+    proposal: {
+      value: "0.875in",
+      note: 'connection data table: condensate 7/8" OD',
+      confidence: "high",
+      sources: [{ blockId: "p2-i1", rowIdx: 2, colIdx: 1 }],
+    },
+    review: "none",
+  },
+  [settingsFieldPointer(["familyParameters", "Round Duct Diameter", "value"])]: {
+    proposal: {
+      value: "6in",
+      note: "airflow row plus the wiring note — two regions, one value",
+      confidence: "low",
+      sources: [
+        { blockId: "p1-i2", rowIdx: 0, colIdx: 2 },
+        { blockId: "p2-i2" },
+        { blockId: "figure-2" },
+      ],
+    },
+    review: "none",
+  },
 };

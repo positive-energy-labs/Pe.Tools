@@ -56,45 +56,51 @@ export function useFamilyGrounding(parseId: string | null | undefined): {
     };
   }, [parseId, view?.jobId]);
 
-  const grounding = useMemo<FamilyGrounding | null>(() => {
-    if (!view) return null;
-    const targets = new Map<string, RealTarget>(buildTargets(view).map((t) => [t.key, t]));
-    const blockById = new Map(view.blocks.map((block) => [block.id, block]));
-    const imageById = new Map(view.images.map((image) => [image.id, image]));
-    return {
-      view,
-      resolve: (source) => {
-        if (source.rowIdx != null && source.colIdx != null) {
-          const target =
-            targets.get(`${source.blockId}:${source.rowIdx}:${source.colIdx}`) ??
-            targets.get(`${source.blockId}:${source.rowIdx}:span`);
-          if (target)
-            return {
-              source,
-              page: target.page,
-              bbox: target.cellBBox,
-              measured: target.measured,
-              kind: target.spanning ? "row" : "cell",
-            };
-        }
-        const image = imageById.get(source.blockId);
-        if (image)
-          return { source, page: image.page, bbox: image.bbox, measured: true, kind: "image" };
-        const block = blockById.get(source.blockId);
-        if (block?.bboxes.length)
-          return {
-            source,
-            page: block.page,
-            bbox: block.bboxes[0],
-            measured: false,
-            kind: "block",
-          };
-        return null;
-      },
-    };
-  }, [view]);
+  const grounding = useMemo<FamilyGrounding | null>(
+    () => (view ? buildGrounding(view) : null),
+    [view],
+  );
 
   return { grounding };
+}
+
+/** Index one parse view for citation resolution. Split out of the hook so a fixture
+ * (grounded-doc/sample.ts) can be grounded without a parse round trip. */
+export function buildGrounding(view: ParsedDocView): FamilyGrounding {
+  const targets = new Map<string, RealTarget>(buildTargets(view).map((t) => [t.key, t]));
+  const blockById = new Map(view.blocks.map((block) => [block.id, block]));
+  const imageById = new Map(view.images.map((image) => [image.id, image]));
+  return {
+    view,
+    resolve: (source) => {
+      if (source.rowIdx != null && source.colIdx != null) {
+        const target =
+          targets.get(`${source.blockId}:${source.rowIdx}:${source.colIdx}`) ??
+          targets.get(`${source.blockId}:${source.rowIdx}:span`);
+        if (target)
+          return {
+            source,
+            page: target.page,
+            bbox: target.cellBBox,
+            measured: target.measured,
+            kind: target.spanning ? "row" : "cell",
+          };
+      }
+      const image = imageById.get(source.blockId);
+      if (image)
+        return { source, page: image.page, bbox: image.bbox, measured: true, kind: "image" };
+      const block = blockById.get(source.blockId);
+      if (block?.bboxes.length)
+        return {
+          source,
+          page: block.page,
+          bbox: block.bboxes[0],
+          measured: false,
+          kind: "block",
+        };
+      return null;
+    },
+  };
 }
 
 /** Resolve a proposal's citations; unresolved ones are kept, honestly, as nulls. */
@@ -227,7 +233,11 @@ export function FamilyDocPane({
         {grounding.view.pages.map((page) => (
           <div
             key={page.page}
-            className="absolute bg-white shadow-2xl"
+            className={
+              page.screenshotUrl
+                ? "absolute bg-white shadow-2xl"
+                : "absolute rounded-[2px] border border-[var(--line)] bg-[var(--paper-2)]"
+            }
             style={{ top: tops.get(page.page), left: 0, width: page.width, height: page.height }}
           >
             {page.screenshotUrl ? (
@@ -239,10 +249,10 @@ export function FamilyDocPane({
               />
             ) : (
               <div
-                className="flex items-center justify-center text-xs text-muted-foreground"
+                className="tele flex items-center justify-center text-[10px] text-muted-foreground"
                 style={{ width: page.width, height: page.height }}
               >
-                page {page.page} render unavailable
+                page {page.page} · no render — citations still resolve to this page
               </div>
             )}
           </div>

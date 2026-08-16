@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -141,6 +142,10 @@ interface PaneSizeState {
   collapsed: boolean;
   renderedSize: number;
   resizeTo: (size: number, containerSize: number | undefined, commit: boolean) => void;
+  /** Re-clamp against a measured container. Hydrated/persisted sizes are clamped only here —
+   * `minOtherSize` is meaningless until the container has a real size — and never persisted,
+   * so a small window doesn't overwrite the size the user actually chose. */
+  fit: (containerSize: number | undefined) => void;
   reset: () => void;
 }
 
@@ -206,6 +211,13 @@ function usePaneSize(spec: PaneSizeSpec): PaneSizeState {
     [collapsed, setCollapsed, spec],
   );
 
+  const specRef = useRef(spec);
+  specRef.current = spec;
+  const fit = useCallback((containerSize: number | undefined) => {
+    if (containerSize == null || containerSize <= 0) return;
+    setInternalSize((current) => clampSize(current, specRef.current, containerSize));
+  }, []);
+
   const reset = useCallback(() => {
     setCollapsed(false);
     resizeTo(spec.defaultSize, undefined, true);
@@ -216,8 +228,30 @@ function usePaneSize(spec: PaneSizeSpec): PaneSizeState {
     collapsed,
     renderedSize: collapsed ? (spec.collapse?.collapsedSize ?? 0) : size,
     resizeTo,
+    fit,
     reset,
   };
+}
+
+/** Keep a pane size honest against its measured container — at mount and on every container
+ * resize — closing the gap where a persisted size starves the other side until first drag. */
+function usePaneFit(
+  ref: React.RefObject<HTMLDivElement | null>,
+  measure: (rect: DOMRectReadOnly) => void,
+) {
+  const measureRef = useRef(measure);
+  measureRef.current = measure;
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    measureRef.current(el.getBoundingClientRect());
+    if (typeof ResizeObserver === "undefined") return; // jsdom — the initial measure is all there is
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) measureRef.current(entry.contentRect);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref]);
 }
 
 const KEYBOARD_STEP_PX = 16;
@@ -344,6 +378,8 @@ export function PaneSplit({ axis, start, end, resize, className }: PaneSplitProp
     return rect ? (horizontal ? rect.width : rect.height) : undefined;
   };
 
+  usePaneFit(rootRef, (rect) => state.fit(horizontal ? rect.width : rect.height));
+
   const renderSide = (side: "start" | "end", child: ReactNode) => {
     const sized = resize != null && side === target;
     return (
@@ -435,6 +471,12 @@ export function PaneWorkspace({
     const rect = rootRef.current?.getBoundingClientRect();
     return rect ? (axis === "horizontal" ? rect.width : rect.height) : undefined;
   };
+
+  usePaneFit(rootRef, (rect) => {
+    navigationState.fit(rect.width);
+    inspectorState.fit(rect.width);
+    visualState.fit(rect.height);
+  });
 
   const style = {
     gridTemplateColumns: `${navigation ? navigationState.renderedSize : 0}px ${hasNavigationHandle ? 8 : 0}px minmax(0, 1fr) ${hasInspectorHandle ? 8 : 0}px ${inspector ? inspectorState.renderedSize : 0}px`,

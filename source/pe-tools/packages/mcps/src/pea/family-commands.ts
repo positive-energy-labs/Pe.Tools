@@ -123,6 +123,10 @@ export function createFamilyCommandHandlers(
           origin: "capture",
           capturedAt: new Date().toISOString(),
           target: target ?? null,
+          // A capture is read out of REVIT, not out of a document: this slice carries only a
+          // session binding, never a settings documentId, so there is no revision to stamp.
+          // The nulls are the truth, and consumers must render them as UNVERIFIED — never as
+          // fresh. Evidence pinned to a revision comes from `build_evidence`.
           documentId: null,
           documentVersionToken: null,
           familyName: raw.familyName,
@@ -159,9 +163,13 @@ export function createFamilyCommandHandlers(
       })) as { rawContent: string; metadata?: { versionToken?: { value?: string } | null } };
 
       // Resolve host-side: Revit resolves relative paths against ITS cwd (Program Files → denied).
+      // The default name carries a timestamp: `revit.apply.family-model` refuses to overwrite,
+      // so a fixed name would make every rebuild of the same document a Conflict.
       const rfaPath =
         outputPath ??
-        resolve(`.artifacts/tmp/family/${documentId.relativePath.replace(/\//g, "-")}.rfa`);
+        resolve(
+          `.artifacts/tmp/family/${documentId.relativePath.replace(/\//g, "-")}-${stamp()}.rfa`,
+        );
 
       let built: { familyName?: string; outputPath?: string; evidence?: EvidencePayload };
       try {
@@ -200,6 +208,16 @@ export function createFamilyCommandHandlers(
       };
     },
   };
+}
+
+/** Compact local timestamp `YYYYMMDD-HHmmss`, unique enough to keep rebuilds from colliding. */
+function stamp(): string {
+  const now = new Date();
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return (
+    `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}` +
+    `-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+  );
 }
 
 function message(error: unknown): string {
