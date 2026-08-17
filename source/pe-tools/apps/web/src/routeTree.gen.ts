@@ -19,6 +19,7 @@ import { Route as FamilyRouteImport } from "./routes/family";
 import { Route as InstancesRouteImport } from "./routes/instances";
 import { Route as OpsRouteImport } from "./routes/ops";
 import { Route as ParameterLinksRouteImport } from "./routes/parameter-links";
+import { Route as RunsRouteImport } from "./routes/runs";
 import { Route as ScheduleGridRouteImport } from "./routes/schedule-grid";
 import { Route as SettingsRouteImport } from "./routes/settings";
 import { Route as TakeoffsRouteImport } from "./routes/takeoffs";
@@ -27,6 +28,7 @@ import { Route as DesignSystemPopoversRouteImport } from "./routes/design-system
 import { Route as DesignSystemProposalFlowRouteImport } from "./routes/design-system_.proposal-flow";
 import { Route as DesignSystemSwatchRouteImport } from "./routes/design-system_.swatch";
 import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
+import { Route as ApiRunsDataSplatRouteImport } from "./routes/api/runs-data.$";
 import { Route as ApiPdfAuditParseParseIdRouteImport } from "./routes/api/pdf-audit/parse.$parseId";
 
 const IndexRoute = IndexRouteImport.update({
@@ -79,6 +81,11 @@ const ParameterLinksRoute = ParameterLinksRouteImport.update({
   path: "/parameter-links",
   getParentRoute: () => rootRouteImport,
 } as any);
+const RunsRoute = RunsRouteImport.update({
+  id: "/runs",
+  path: "/runs",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const ScheduleGridRoute = ScheduleGridRouteImport.update({
   id: "/schedule-grid",
   path: "/schedule-grid",
@@ -120,6 +127,11 @@ const ApiPdfAuditParseRoute = ApiPdfAuditParseRouteImport.update({
   path: "/api/pdf-audit/parse",
   getParentRoute: () => rootRouteImport,
 } as any);
+const ApiRunsDataSplatRoute = ApiRunsDataSplatRouteImport.update({
+  id: "/api/runs-data/$",
+  path: "/api/runs-data/$",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const ApiPdfAuditParseParseIdRoute = ApiPdfAuditParseParseIdRouteImport.update({
   id: "/$parseId",
   path: "/$parseId",
@@ -137,6 +149,7 @@ export interface FileRoutesByFullPath {
   "/instances": typeof InstancesRoute;
   "/ops": typeof OpsRoute;
   "/parameter-links": typeof ParameterLinksRoute;
+  "/runs": typeof RunsRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
   "/takeoffs": typeof TakeoffsRoute;
@@ -145,6 +158,7 @@ export interface FileRoutesByFullPath {
   "/design-system/proposal-flow": typeof DesignSystemProposalFlowRoute;
   "/design-system/swatch": typeof DesignSystemSwatchRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
+  "/api/runs-data/$": typeof ApiRunsDataSplatRoute;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
 }
 export interface FileRoutesByTo {
@@ -158,6 +172,7 @@ export interface FileRoutesByTo {
   "/instances": typeof InstancesRoute;
   "/ops": typeof OpsRoute;
   "/parameter-links": typeof ParameterLinksRoute;
+  "/runs": typeof RunsRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
   "/takeoffs": typeof TakeoffsRoute;
@@ -166,6 +181,7 @@ export interface FileRoutesByTo {
   "/design-system/proposal-flow": typeof DesignSystemProposalFlowRoute;
   "/design-system/swatch": typeof DesignSystemSwatchRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
+  "/api/runs-data/$": typeof ApiRunsDataSplatRoute;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
 }
 export interface FileRoutesById {
@@ -180,6 +196,7 @@ export interface FileRoutesById {
   "/instances": typeof InstancesRoute;
   "/ops": typeof OpsRoute;
   "/parameter-links": typeof ParameterLinksRoute;
+  "/runs": typeof RunsRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
   "/takeoffs": typeof TakeoffsRoute;
@@ -188,6 +205,7 @@ export interface FileRoutesById {
   "/design-system_/proposal-flow": typeof DesignSystemProposalFlowRoute;
   "/design-system_/swatch": typeof DesignSystemSwatchRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
+  "/api/runs-data/$": typeof ApiRunsDataSplatRoute;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
 }
 export interface FileRouteTypes {
@@ -203,6 +221,7 @@ export interface FileRouteTypes {
     | "/instances"
     | "/ops"
     | "/parameter-links"
+    | "/runs"
     | "/schedule-grid"
     | "/settings"
     | "/takeoffs"
@@ -211,6 +230,7 @@ export interface FileRouteTypes {
     | "/design-system/proposal-flow"
     | "/design-system/swatch"
     | "/api/pdf-audit/parse"
+    | "/api/runs-data/$"
     | "/api/pdf-audit/parse/$parseId";
   fileRoutesByTo: FileRoutesByTo;
   to:
@@ -224,6 +244,7 @@ export interface FileRouteTypes {
     | "/instances"
     | "/ops"
     | "/parameter-links"
+    | "/runs"
     | "/schedule-grid"
     | "/settings"
     | "/takeoffs"
@@ -232,6 +253,7 @@ export interface FileRouteTypes {
     | "/design-system/proposal-flow"
     | "/design-system/swatch"
     | "/api/pdf-audit/parse"
+    | "/api/runs-data/$"
     | "/api/pdf-audit/parse/$parseId";
   id:
     | "__root__"
@@ -245,6 +267,7 @@ export interface FileRouteTypes {
     | "/instances"
     | "/ops"
     | "/parameter-links"
+    | "/runs"
     | "/schedule-grid"
     | "/settings"
     | "/takeoffs"
@@ -253,6 +276,7 @@ export interface FileRouteTypes {
     | "/design-system_/proposal-flow"
     | "/design-system_/swatch"
     | "/api/pdf-audit/parse"
+    | "/api/runs-data/$"
     | "/api/pdf-audit/parse/$parseId";
   fileRoutesById: FileRoutesById;
 }
@@ -267,6 +291,7 @@ export interface RootRouteChildren {
   InstancesRoute: typeof InstancesRoute;
   OpsRoute: typeof OpsRoute;
   ParameterLinksRoute: typeof ParameterLinksRoute;
+  RunsRoute: typeof RunsRoute;
   ScheduleGridRoute: typeof ScheduleGridRoute;
   SettingsRoute: typeof SettingsRoute;
   TakeoffsRoute: typeof TakeoffsRoute;
@@ -275,6 +300,7 @@ export interface RootRouteChildren {
   DesignSystemProposalFlowRoute: typeof DesignSystemProposalFlowRoute;
   DesignSystemSwatchRoute: typeof DesignSystemSwatchRoute;
   ApiPdfAuditParseRoute: typeof ApiPdfAuditParseRouteWithChildren;
+  ApiRunsDataSplatRoute: typeof ApiRunsDataSplatRoute;
 }
 
 declare module "@tanstack/react-router" {
@@ -349,6 +375,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof ParameterLinksRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/runs": {
+      id: "/runs";
+      path: "/runs";
+      fullPath: "/runs";
+      preLoaderRoute: typeof RunsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/schedule-grid": {
       id: "/schedule-grid";
       path: "/schedule-grid";
@@ -405,6 +438,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof ApiPdfAuditParseRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/api/runs-data/$": {
+      id: "/api/runs-data/$";
+      path: "/api/runs-data/$";
+      fullPath: "/api/runs-data/$";
+      preLoaderRoute: typeof ApiRunsDataSplatRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/api/pdf-audit/parse/$parseId": {
       id: "/api/pdf-audit/parse/$parseId";
       path: "/$parseId";
@@ -437,6 +477,7 @@ const rootRouteChildren: RootRouteChildren = {
   InstancesRoute: InstancesRoute,
   OpsRoute: OpsRoute,
   ParameterLinksRoute: ParameterLinksRoute,
+  RunsRoute: RunsRoute,
   ScheduleGridRoute: ScheduleGridRoute,
   SettingsRoute: SettingsRoute,
   TakeoffsRoute: TakeoffsRoute,
@@ -445,6 +486,7 @@ const rootRouteChildren: RootRouteChildren = {
   DesignSystemProposalFlowRoute: DesignSystemProposalFlowRoute,
   DesignSystemSwatchRoute: DesignSystemSwatchRoute,
   ApiPdfAuditParseRoute: ApiPdfAuditParseRouteWithChildren,
+  ApiRunsDataSplatRoute: ApiRunsDataSplatRoute,
 };
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

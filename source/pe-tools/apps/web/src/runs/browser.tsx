@@ -1,15 +1,17 @@
-// COMBO — find-the-product round 2. The round-1 ruling: no variant won its layout, all three
-// won their product argument. This page is ALL THREE, docked: the SHEET is the body (two
-// columns of information-rich zone cards, level sections), the PLAN docks collapsible +
-// resizable at the TOP (atlas presentation law), the LEDGER docks collapsible at the BOTTOM
-// (its row marks ARE the run selector). A/B against the chronological predecessor is the
-// DEFAULT state; clearing the baseline never shifts the layout.
+// The takeoff run browser — the one /runs surface. A sheet of two-column zone cards is the page
+// body, grouped into level sections; the PLAN docks collapsible + resizable at the TOP (atlas
+// presentation law); the LEDGER docks collapsible at the BOTTOM, and its row marks ARE the run
+// selector. A/B against the chronological predecessor is the DEFAULT state, not a mode you enter:
+// clearing the baseline never shifts the layout, it only empties the A side of each card.
 //
-// Underlay law (new this round): every canvas underlay is DESATURATED — received ink is a
-// solid mid-gray, invented closures are lighter + screened (honesty survives the muting:
-// solid = drawn, screened = synthetic). SVG decisions are rebalanced to read against the
-// muted paper. The raster layer is togglable. Chrome is light-mode role tokens; round-1's
-// dark sheet/ledger chrome is dead.
+// Underlay law: every canvas underlay is DESATURATED — received ink is a solid mid-gray, invented
+// closures are lighter + screened (honesty survives the muting: solid = drawn/received, screened =
+// synthetic/invented). SVG decisions are rebalanced to read against the muted paper. The raster
+// layer is togglable. Chrome is light-mode role tokens.
+//
+// Promoted from the round-2 `combo` prototype at round close, 2026-08-17 — the three round-1
+// variants (sheet/ledger/light) and the variant switcher are deleted; git history holds them at
+// a26916e/33139e2. Open stand-ins are ledgered in docs/features/takeoff-runs/SHIMS.md.
 import {
   type CSSProperties,
   type Dispatch,
@@ -29,6 +31,9 @@ import { fmtNum, type Column, type MasterTableState } from "#/components/master-
 import { Chip } from "#/components/ui/chip";
 import { Pane, PaneSplit } from "#/components/ui/pane";
 import { cn } from "#/lib/utils";
+// The app's one EmptyState primitive lives in ops/primitives (components/lang has none). It is
+// pure presentation — no ops coupling — so /runs borrows it rather than forking a second one.
+import { EmptyState } from "#/ops/primitives";
 
 import {
   boardSummary,
@@ -88,12 +93,10 @@ function fmtTime(utc: string): string {
 
 const zoneShort = (name: string) => (name.includes("#") ? `#${name.split("#")[1]}` : name);
 
-// gap: world.ts ZoneRecord doesn't type adaptedKnobs — when the solver self-tunes a zone the
-// harness writes the adapted knob values into the zone record; read untyped until the field
-// joins the ZoneRecord type at persist time.
+/** The zone's adaptive-policy deviations. Typed on ZoneRecord now; empty on every run in the
+ * pool because the adaptive seam carries no live rules yet — the card simply shows nothing. */
 function adaptedKnobs(zone: ZoneRecord): [string, string][] {
-  const raw = (zone as unknown as { adaptedKnobs?: Record<string, unknown> }).adaptedKnobs;
-  return raw ? Object.entries(raw).map(([k, v]) => [k, String(v)]) : [];
+  return Object.entries(zone.adaptedKnobs ?? {});
 }
 
 function topRejections(zone: ZoneRecord, n = 3): [string, number][] {
@@ -227,8 +230,9 @@ function ZonePanel(props: {
       for (const res of geom.residues) {
         fill(res.loops, res.reason === "rejected" ? HELD_FILL : VOID_FILL);
       }
-      // gap: world.ts paintRaster has no speck filter — the python renderer hides closure
-      // components < 0.25 sf; here single-cell closure speckle paints as-is (muted, at least).
+      // gap (SHIMS.md #6): world.ts paintRaster has no speck filter — the python renderer hides
+      // closure components < 0.25 sf; here single-cell closure speckle paints as-is (muted, at
+      // least). The two renderers therefore disagree about what a closure "looks like".
       try {
         if (close) paintRaster(ctx, close, vp, CLOSE_M, true);
         if (seals) paintRaster(ctx, seals, vp, SEAL_M, true);
@@ -579,9 +583,9 @@ function RunStrip(props: {
 type Frame = { minX: number; minY: number; maxX: number; maxY: number };
 type View = { tx: number; ty: number; scale: number };
 
-// gap: world.ts's zoneViewport is zone-shaped; a whole-level page needs a bounds-shaped
-// viewport (carried finding from round 1 — the registration primitive wants to be bounds-first
-// with zoneViewport as a convenience on top).
+// gap (SHIMS.md #7): world.ts's zoneViewport is zone-shaped; a whole-level page needs a
+// bounds-shaped viewport (carried finding from round 1 — the registration primitive wants to be
+// bounds-first with zoneViewport as a convenience on top).
 function levelViewport(f: Frame): ZoneViewport {
   return {
     ...f,
@@ -1328,10 +1332,9 @@ type RunRow = {
   delta: { solved: number; rooms: number; sqft: number; held: number } | null;
 };
 
-// gap: world.boardSummary stops at report.json facts — scores.json (savedWork et al.) is not
-// part of the run package yet, so the ledger cannot carry scorer columns (persist-time gap).
-// gap: world.fetchRunIndex discards the middleware's `pool` path, so the dock cannot say WHICH
-// .artifacts directory it is reading.
+// gap (SHIMS.md #1): world.boardSummary stops at report.json facts — scores.json (savedWork et
+// al.) is not part of the run package, so the ledger cannot carry scorer columns or rank runs by
+// saved work. Persist-time gap; not recomputing the python scorer here.
 async function buildLedgerRows(index: RunIndexEntry[]): Promise<RunRow[]> {
   const reports = await Promise.all(index.map((entry) => loadRunReport(entry.id)));
   return index.map((entry, i) => {
@@ -1360,6 +1363,8 @@ const runName = (row: Pick<RunRow, "label" | "hash">) => row.label ?? `run ${row
 
 function LedgerDock(props: {
   runs: RunIndexEntry[];
+  /** Absolute directory the pool resolved to — the dock says WHICH .artifacts it is reading. */
+  pool: string | null;
   curId: string | null;
   prevId: string | null;
   open: boolean;
@@ -1367,7 +1372,7 @@ function LedgerDock(props: {
   onPickCur: (id: string) => void;
   onPickBaseline: (id: string) => void;
 }) {
-  const { runs, curId, prevId, open, onToggle, onPickCur, onPickBaseline } = props;
+  const { runs, pool, curId, prevId, open, onToggle, onPickCur, onPickBaseline } = props;
   const [rows, setRows] = useState<RunRow[] | null>(null);
   const [tableState, setTableState] = useState<MasterTableState>({
     filters: {},
@@ -1586,6 +1591,17 @@ function LedgerDock(props: {
       </button>
       {open && (
         <div className="flex flex-col" style={{ height: 320 }}>
+          {/* Provenance: the surface names the directory it read, so "which pool am I looking
+              at?" is never an inference from the run labels. */}
+          {pool && (
+            <div
+              className="tele shrink-0 truncate border-b px-3 py-1 text-[10px] text-muted-foreground"
+              style={{ borderColor: "var(--line-2)" }}
+              title="The run pool this page is reading — PE_TAKEOFF_RUNS_DIR if set, else <repo>/.artifacts/takeoff-runs."
+            >
+              pool {pool}
+            </div>
+          )}
           {rows === null ? (
             <div className="tele p-4 text-sm text-muted-foreground">loading the run ledger…</div>
           ) : (
@@ -1617,8 +1633,9 @@ function LedgerDock(props: {
  * default), null is comparison off, a run id is an explicit pick. */
 type Baseline = "auto" | null | string;
 
-export default function Combo() {
+export default function RunBrowser() {
   const [runs, setRuns] = useState<RunIndexEntry[] | null>(null);
+  const [pool, setPool] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [curId, setCurId] = useState<string | null>(null);
   const [baseline, setBaseline] = useState<Baseline>("auto");
@@ -1633,8 +1650,9 @@ export default function Combo() {
   useEffect(() => {
     fetchRunIndex()
       .then((index) => {
-        setRuns(index);
-        setCurId((prev) => prev ?? index[0]?.id ?? null);
+        setRuns(index.runs);
+        setPool(index.pool);
+        setCurId((prev) => prev ?? index.runs[0]?.id ?? null);
       })
       .catch((err: unknown) => setError(String(err)));
   }, []);
@@ -1674,8 +1692,8 @@ export default function Combo() {
     };
   }, [prevId]);
 
-  // ↑/↓ scrub the current run through the pool (light.tsx donation — ←/→ belong to the
-  // variant switcher, which eats the best keys; carried finding).
+  // ↑/↓ scrub the current run through the pool. (←/→ are free again now that the round-1
+  // variant switcher is gone; left unbound until there is a second axis worth scrubbing.)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
@@ -1709,10 +1727,10 @@ export default function Combo() {
     setFocus((f) => ({ zone, nonce: (f?.nonce ?? 0) + 1 }));
   }, []);
 
-  // Zone matching across runs by name. gap: world.ts offers no stable cross-run zone identity —
-  // Zone name ("Main Level#03") is positional by construction, so an A/B pair can silently
-  // compare different geography when zoning itself changed between runs (round-1 backlog: a
-  // persisted zone key belongs in report.json).
+  // Zone matching across runs by name. gap (SHIMS.md #2): there is no stable cross-run zone
+  // identity — Zone name ("Main Level#03") is positional by construction, so an A/B pair can
+  // silently compare different geography when zoning itself changed between runs. A persisted
+  // zone key belongs in report.json.
   const comparing = prevId !== null && reportPrev !== null;
   const prevZones = useMemo(() => {
     const map = new Map<string, ZoneRecord>();
@@ -1771,10 +1789,28 @@ export default function Combo() {
   if (!runs) {
     return <div className="tele p-8 text-sm text-muted-foreground">loading run pool…</div>;
   }
+  // Empty pool is a SYSTEM story, not a filter story: nothing is hidden, nothing has been
+  // captured. The page says which directory it watched and what fills it.
   if (runs.length === 0 || !curId) {
     return (
-      <div className="tele p-8 text-sm text-muted-foreground">
-        No runs in the pool yet — run the zone-bounded detect harness once and it will auto-persist here.
+      <div className="mx-auto flex max-w-xl flex-col gap-2 p-8">
+        <EmptyState note="No runs captured yet — the pool fills itself the next time the harness runs." />
+        <p className="tele text-[11px] leading-relaxed text-muted-foreground">
+          Every run of{" "}
+          <span className="text-foreground">
+            ZoneBoundedDetectTests.ProjectA_zones_partition_within_declared_scope
+          </span>{" "}
+          auto-persists its package (report.json, zone TSVs, INKP bins) into the pool; this page
+          reads whatever is there. Nothing to configure.
+        </p>
+        {pool && (
+          <p
+            className="tele break-all text-[10px] text-muted-foreground"
+            title="The run pool this page is reading — PE_TAKEOFF_RUNS_DIR if set, else <repo>/.artifacts/takeoff-runs."
+          >
+            pool {pool}
+          </p>
+        )}
       </div>
     );
   }
@@ -1835,6 +1871,7 @@ export default function Combo() {
       </main>
       <LedgerDock
         runs={runs}
+        pool={pool}
         curId={curId}
         prevId={prevId}
         open={ledgerOpen}
@@ -1852,7 +1889,7 @@ export default function Combo() {
         style={{ borderColor: "var(--line-2)" }}
       >
         <div className="flex flex-wrap items-baseline gap-3">
-          <h1 className="tele text-sm font-semibold">runs / combo</h1>
+          <h1 className="tele text-sm font-semibold">runs</h1>
           {board && (
             <span className="tele text-xs text-muted-foreground">
               B: {board.solved}/{board.zones} solved · {board.acceptedRooms} rooms ·{" "}

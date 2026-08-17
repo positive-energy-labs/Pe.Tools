@@ -1,11 +1,14 @@
-// Shared fixture loader for the /runs prototypes. READ-ONLY for variant builders — parallel
-// writes collide; comment gaps here at your call site instead.
+// The canon data layer for /runs: the run pool, its packages, and the one registration transform
+// the canvas underlay and the SVG overlay both use (so they cannot drift).
 //
-// Data source: the dev-only vite middleware `pe:takeoff-runs-pool` (vite.config.ts) serving the
-// run pool (.artifacts/takeoff-runs or PE_TAKEOFF_RUNS_DIR). A run package is exactly what the
-// C# harness persists: report.json (v3) + zones/rooms_*.tsv + input/{ink,seals,close}_*.bin.
+// Data source: the dev-only run-pool file server at `src/routes/api/runs-data.$.ts` (the
+// `pe:takeoff-runs-pool` role; it is a TanStack Start API route, not a vite plugin). It serves
+// the pool at .artifacts/takeoff-runs or PE_TAKEOFF_RUNS_DIR, and reports which directory that
+// resolved to. A run package is exactly what the C# harness persists: report.json (v3) +
+// zones/rooms_*.tsv + input/{ink,seals,close}_*.bin.
 // Underlay law (kaitpw 2026-08-16): raster = what the run actually solved on (its own bins);
-// rooms/residues/zones = SVG on top. Revit export images are queued as a later alternate underlay.
+// rooms/residues/zones = SVG on top. Revit export images are queued as a later alternate underlay
+// (docs/features/takeoff-runs/SHIMS.md #5).
 
 export type RunMeta = {
   runId: string;
@@ -15,6 +18,11 @@ export type RunMeta = {
 };
 
 export type RunIndexEntry = { id: string; meta: RunMeta | null };
+
+/** The index answers WHICH pool it read, not just what was in it — `pool` is the absolute
+ * directory the server resolved (PE_TAKEOFF_RUNS_DIR, else <repo>/.artifacts/takeoff-runs). An
+ * empty `runs` with a real `pool` is the honest "nothing captured here yet" state. */
+export type RunPool = { pool: string; runs: RunIndexEntry[] };
 
 export type ZoneRecord = {
   Level: string;
@@ -43,6 +51,11 @@ export type ZoneRecord = {
   Contained: boolean;
   Rejections: Record<string, number>;
   RejectionDetails: Record<string, string>;
+  /** Per-zone adaptive-policy deviations: knob name → the value this zone actually ran with.
+   * Persisted on every zone (`ZonePolicy.AdaptedKnobs`, IReadOnlyDictionary<string,string>), but
+   * empty across the whole current pool — the adaptive seam carries no live rules yet
+   * (Contracts.cs `AdaptivePolicy = false`). Empty is a fact, not a missing field. */
+  adaptedKnobs: Record<string, string>;
   census: { zoneSqft: number; inkSqft: number; inkRatio: number; edgeBandInkFraction: number };
   triage: { verdict: "solve" | "hold"; reason: string };
   closure: {
@@ -84,12 +97,12 @@ export type ZoneGeometry = {
 
 const BASE = "/api/runs-data";
 
-export async function fetchRunIndex(): Promise<RunIndexEntry[]> {
+export async function fetchRunIndex(): Promise<RunPool> {
   const res = await fetch(`${BASE}/index.json`);
   if (!res.ok) throw new Error(`run index: ${res.status}`);
-  const body = (await res.json()) as { runs: RunIndexEntry[] };
+  const body = (await res.json()) as RunPool;
   // Newest first — ids are timestamp-prefixed by construction.
-  return [...body.runs].sort((a, b) => (a.id < b.id ? 1 : -1));
+  return { pool: body.pool, runs: [...body.runs].sort((a, b) => (a.id < b.id ? 1 : -1)) };
 }
 
 const reportCache = new Map<string, Promise<RunReport>>();
@@ -278,7 +291,8 @@ export function paintRaster(
 }
 
 // Convenience: the derived board line a run card shows. Kept minimal — anything richer belongs
-// to scores.json once the python scorer's output joins the run package (not yet persisted).
+// to scores.json once the python scorer's output joins the run package
+// (docs/features/takeoff-runs/SHIMS.md #1).
 export function boardSummary(report: RunReport) {
   const zones = report.Zones;
   return {
