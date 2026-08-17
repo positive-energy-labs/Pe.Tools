@@ -34,6 +34,20 @@ lands in `optionsHash`, so artifacts can't be misattributed.
 Trap: persisted `ink_*.bin` are stale vs replay seed ink (Attic −45%). score-looks-good.py reads
 seed ink from `replay_*.bin` directly; do not score against `ink_*.bin`.
 
+## Baseline (fresh homogeneous bins, 2026-08-16 recapture, commit 80e6448)
+
+Board: recall **0.276**, held-recall **0.569**, missing 18, savedWork **0.334**, edgeOnInk
+acc 0.848 / held 0.781, swallow 176.9 sf, edit cost 8.38. 127/127 tests green.
+Report-card: LL06 saved 0.538 · LL08 0.060 · ML05 0.464 · ML09 0.232 · Attic00 0.138 (0 accepted,
+held-recall 0.833!) · Attic01 0.113 (0 accepted, held 0.667, swallow 48 sf).
+Registration: Lower UNTRUSTED (and floor-mapping suspect — floor 1 chamfers better than floor 0),
+Main/Upper drifted, Attic registered.
+
+**Run-snapshot protocol**: `dotnet test` wipes `.artifacts/takeoff-zone-promotion/`, and
+report.json references artifact-relative Tsv/Ink paths — comparing against an old report whose
+artifacts are gone silently zeroes the A side. After every run you intend to compare against,
+copy the WHOLE `.artifacts/takeoff-zone-promotion/` dir to `.artifacts/runs/<name>/`.
+
 ## Report-card zones
 
 LL06, LL08 (ink starvation; LL08 backing is ~all door-head evidence), ML05, ML09 (diagonal wing),
