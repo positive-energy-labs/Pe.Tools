@@ -86,13 +86,15 @@ public static class TakeoffPromotion
         TakeoffOptions options,
         Func<double, double, double> distanceToInk,
         Action<string>? log = null,
-        ZoneCensus? census = null)
+        ZoneCensus? census = null,
+        Func<double, double, double>? distanceToWallInk = null)
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
         if (zone == null) throw new ArgumentNullException(nameof(zone));
         if (options == null) throw new ArgumentNullException(nameof(options));
         if (distanceToInk == null) throw new ArgumentNullException(nameof(distanceToInk));
-        var state = new PromotionState(source, zone, options, distanceToInk, log) { Census = census };
+        var state = new PromotionState(source, zone, options, distanceToInk, log)
+            { Census = census, DistanceToWallInk = distanceToWallInk ?? distanceToInk };
         var timer = System.Diagnostics.Stopwatch.StartNew();
         long lastMilliseconds = 0;
         foreach (var stage in Stages)
@@ -121,6 +123,10 @@ public static class TakeoffPromotion
         internal readonly ZoneScope Zone = zone;
         internal readonly TakeoffOptions Options = options;
         internal readonly Func<double, double, double> DistanceToInk = distanceToInk;
+        // Seed-ink-only oracle for judgments about WALLS (door-heads back edges for trust, but a
+        // door is an opening, not a wall). Falls back to the evidence oracle when the caller has
+        // no raw-ink oracle to give.
+        internal Func<double, double, double> DistanceToWallInk = distanceToInk;
         internal readonly Action<string>? Log = log;
 
         internal readonly TakeoffResult Result = Clone(source);
@@ -188,16 +194,86 @@ public static class TakeoffPromotion
             var geometry = ToPolygon(room);
             double perimeter = geometry.Length;
             if (perimeter <= Epsilon) continue;
-            var target = LargestSharedNeighbor(state.Result, room, geometry);
+            var neighbors = Neighbors(state.Result, room, geometry);
+            var target = neighbors.Count == 0
+                ? ((RoomResult Room, double SharedLength)?)null
+                : neighbors.OrderByDescending(item => item.SharedLength)
+                    .ThenBy(item => item.Room.Id, StringComparer.Ordinal).First();
             double share = target == null ? 0 : target.Value.SharedLength / perimeter;
+            bool absorb = target != null
+                          && share >= state.Options.AbsorbNeighborSharedPerimeterFraction;
+            // A lattice cell can hand its perimeter to SEVERAL neighbors, each below the
+            // single-neighbor bar. Split share alone is not enough — a genuine closet is also
+            // mostly surrounded — so this path additionally requires the separating boundary to
+            // stand on nothing: no ink, no door-scale door-head. An unbacked separator is a
+            // watershed line, not a wall (kaitpw, round 2: LL09's sliver).
+            double totalShare = perimeter <= Epsilon
+                ? 0 : neighbors.Sum(item => item.SharedLength) / perimeter;
+            double naked = neighbors.Count == 0
+                ? double.NaN
+                : SeparatorNakedFraction(geometry, neighbors, state.DistanceToWallInk);
+            if (!absorb && target != null
+                && state.Options.AbsorbNakedSeparatorFraction > 0
+                && totalShare >= state.Options.AbsorbNeighborSharedPerimeterFraction)
+                absorb = naked >= state.Options.AbsorbNakedSeparatorFraction;
             state.Log?.Invoke($"[promotion] absorb candidate={room.Id} sqft={room.RawSqft:F0} " +
-                              $"share={share:P0} target={target?.Room.Id ?? "none"}");
-            if (target == null
-                || share < state.Options.AbsorbNeighborSharedPerimeterFraction) continue;
+                              $"share={share:P0} total={totalShare:P0} naked={naked:F2} " +
+                              $"target={target?.Room.Id ?? "none"}");
+            if (!absorb || target == null) continue;
             if (TryMerge(state.Result, room, target.Value.Room, requireStrictEditability: false))
                 merged++;
         }
         Settle(state, "absorb:merged", merged);
+    }
+
+    /// <summary>
+    /// Fraction of a room's neighbor-shared boundary samples standing on NO wall ink within the
+    /// backing hit distance. Sampling mirrors <see cref="TakeoffEvidenceFidelity"/>: 0.25 ft step
+    /// per shared component, 0.25 ft hit. The oracle is the WALL-ink oracle (seed ink only) — a
+    /// door-head backs an edge for trust, but a door is an opening, not a wall, so it cannot make
+    /// a watershed line into a room separator.
+    /// </summary>
+    private static double SeparatorNakedFraction(
+        Polygon geometry,
+        List<(RoomResult Room, double SharedLength)> neighbors,
+        Func<double, double, double> distanceToInk)
+    {
+        const double SampleStepFt = 0.25;
+        const double HitFt = 0.25;
+        int naked = 0, sampled = 0;
+        foreach (var neighbor in neighbors)
+        {
+            var shared = ToPolygon(neighbor.Room).Boundary.Intersection(geometry.Boundary);
+            foreach (var component in LineComponents(shared))
+            {
+                var coords = component.Coordinates;
+                for (int i = 0; i + 1 < coords.Length; i++)
+                {
+                    double dx = coords[i + 1].X - coords[i].X;
+                    double dy = coords[i + 1].Y - coords[i].Y;
+                    double length = Math.Sqrt(dx * dx + dy * dy);
+                    if (length <= Epsilon) continue;
+                    int count = Math.Max(2, (int)Math.Ceiling(length / SampleStepFt) + 1);
+                    for (int index = 0; index < count; index++)
+                    {
+                        double t = (double)index / (count - 1);
+                        if (distanceToInk(coords[i].X + t * dx, coords[i].Y + t * dy)
+                            > HitFt + Epsilon) naked++;
+                        sampled++;
+                    }
+                }
+            }
+        }
+        return sampled == 0 ? 0 : (double)naked / sampled;
+    }
+
+    private static IEnumerable<LineString> LineComponents(Geometry geometry)
+    {
+        if (geometry is LineString line) { yield return line; yield break; }
+        if (geometry is GeometryCollection collection)
+            foreach (var item in collection.Geometries)
+            foreach (var component in LineComponents(item))
+                yield return component;
     }
 
     /// <summary>

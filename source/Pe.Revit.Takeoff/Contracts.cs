@@ -120,6 +120,14 @@ public sealed class TakeoffOptions
     public double AbsorbNeighborSharedPerimeterFraction = 0.45; // ...holding this share of its perimeter; measured
                                             // project-a ceiling is 0.54 (0.6 never fires); 0.30 is a per-zone lever
                                             // that cracks lattice zones (LL08) but bulldozes good rooms elsewhere
+    public double AbsorbNakedSeparatorFraction = 0.6; // multi-neighbor absorb: when no single neighbor
+                                            // clears the share bar but the TOTAL neighbor-shared perimeter does,
+                                            // merge only if at least this fraction of the shared boundary stands
+                                            // on NO WALL INK (seed ink; door-heads are openings, plugs are
+                                            // heuristics — neither is a wall). An unbacked separator is a
+                                            // watershed line, not a wall. Board raw census 2026-08-16: genuine
+                                            // small rooms (closets) top out at 0.46 naked; watershed slivers sit
+                                            // at 0.64-1.00 (LL09 R04 = 0.95). 0.6 splits with margin. 0 = off.
     public double EdgeBandFt = 2.0;            // band inside the zone boundary that recombines outward (0 = off)
     public double EdgeBandAreaFraction = 0.5;  // room with this much area inside the band merges inward
     // ---- Frame-local projection (FrameLocalProjector.cs) ----

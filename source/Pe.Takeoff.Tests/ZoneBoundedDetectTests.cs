@@ -280,6 +280,9 @@ public sealed class ZoneBoundedDetectTests
             // Door-head seals are model-derived evidence, so the promotion oracle counts them;
             // wall-run and gap-close plugs stay heuristic and do not back a room's boundary.
             var distanceToInk = snap.EvidenceInkDistance(profile);
+            // Wall-ink oracle (seed ink only): the absorb stage's separator judgment asks "is this
+            // boundary a WALL", and a door-head is an opening, not a wall.
+            var distanceToWallInk = snap.SeedInkDistance();
             var oracle = OracleCentroids(floor);
             effectiveOptions[view] = profile.Options;
             string token = LevelMap.Single(item => item.View == view).BinToken;
@@ -347,7 +350,7 @@ public sealed class ZoneBoundedDetectTests
                 var promotion = TakeoffPromotion.PromoteZone(
                     result, zone, policy.Options, distanceToInk,
                     message => File.AppendAllText(progress, message + Environment.NewLine),
-                    census);
+                    census, distanceToWallInk);
                 var triage = promotion.Diagnostics.Triage ?? ZoneTriageVerdict.Solve;
                 long promotionMilliseconds = timer.ElapsedMilliseconds;
                 // Append, not overwrite: the promotion stage log written above this point is the

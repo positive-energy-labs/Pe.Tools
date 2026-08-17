@@ -283,7 +283,8 @@ public static class TakeoffAtlas
         var result = snapshot.ReplayInferred(log, null, zone.CellMask(snapshot.Field));
         var profile = TakeoffPolicy.InferLevelProfile(snapshot);
         var promotion = TakeoffPromotion.PromoteZone(
-            result, zone, profile.Options, snapshot.EvidenceInkDistance(profile), log);
+            result, zone, profile.Options, snapshot.EvidenceInkDistance(profile), log,
+            distanceToWallInk: snapshot.SeedInkDistance());
         result = promotion.Result;
 
         var view = FindView(doc, args.View);
