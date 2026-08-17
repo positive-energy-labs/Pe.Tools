@@ -135,13 +135,6 @@ public static class ZoneTriage
         // nothing to partition and wanders. Hold them whole.
         if (options.SmallZoneSqft > 0 && census.ZoneSqft <= options.SmallZoneSqft)
             return new ZoneTriageVerdict(ZoneTriageAction.HoldWhole, "small-zone");
-        // Wall-ratio refinement: a zone with barely any ink has no wall network to follow, so a
-        // LARGER small-zone threshold applies before the solver is trusted with it.
-        if (options.SmallZoneLowInkSqft > 0
-            && options.MinZoneInkRatio > 0
-            && census.InkRatio < options.MinZoneInkRatio
-            && census.ZoneSqft <= options.SmallZoneLowInkSqft)
-            return new ZoneTriageVerdict(ZoneTriageAction.HoldWhole, "low-wall-ratio");
         return ZoneTriageVerdict.Solve;
     }
 }

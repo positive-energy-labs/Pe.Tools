@@ -236,12 +236,10 @@ public sealed class TakeoffReplayTests
                 "profile-specific closing must not change replay evidence");
             Assert.That(doubleProfile.DoubleHeightFraction, Is.GreaterThan(0.4));
             Assert.That(doubleProfile.Options.StoryCapFt, Is.EqualTo(20));
-            // Seeding is Hybrid by DEFAULT since the 2026-08-14 fan-out, and the profile only ever
-            // upgrades to Hybrid — it never asks for RegionCores back. So the stepped-ceiling branch
-            // no longer distinguishes these two levels: the basement arrives Hybrid too. The branch
-            // is kept because it is the only thing that would re-assert Hybrid if the default were
-            // rolled back, but below-grade/non-flat levels are no longer steered to RegionCores by
-            // inference, and RegionCores is now reachable only by asking for it explicitly.
+            // Seeding is Hybrid by DEFAULT since the 2026-08-14 fan-out; the stepped-ceiling
+            // upgrade branch (dead by override order once Hybrid became the default) was deleted
+            // 2026-08-16 per DECISIONS. Every inferred profile arrives Hybrid, and RegionCores is
+            // reachable only by asking for it explicitly.
             Assert.That(hybridProfile.Options.SeedSource, Is.EqualTo(TakeoffSeedSource.Hybrid));
             Assert.That(basementProfile.Options.SeedSource, Is.EqualTo(TakeoffSeedSource.Hybrid));
             Assert.That(new TakeoffOptions().SeedSource, Is.EqualTo(TakeoffSeedSource.Hybrid));

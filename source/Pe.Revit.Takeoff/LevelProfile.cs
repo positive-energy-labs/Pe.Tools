@@ -47,7 +47,6 @@ public sealed class LevelProfileThresholds
     public double DoubleHeightFractionMin = 0.02;
     public double CeilingStepFt = 2.5;
     public double CeilingStepNearInkFt = 1.5;
-    public double CeilingStepInkLiftMin = 1.3;
 }
 
 public sealed class LevelProfile
@@ -201,9 +200,10 @@ public static class TakeoffPolicy
             profile.Options.StoryCapFt = Math.Ceiling(maxCeilingAboveLevel);
         }
 
-        bool regionCores = snap.LevelElevation < 0 || !flat;
-        if (!regionCores && profile.CeilingStepInkLift >= thresholds.CeilingStepInkLiftMin)
-            profile.Options.SeedSource = TakeoffSeedSource.Hybrid;
+        // SeedSource stays at the Hybrid default everywhere; the old stepped-ceiling upgrade rule
+        // (and the below-grade -> RegionCores steer it once guarded) was dead by override order
+        // once Hybrid became the default, and was deleted 2026-08-16 per DECISIONS 2026-08-14
+        // ("revive it consciously or delete it"). RegionCores is reachable only by explicit ask.
         if (profile.NoHabitableDomain)
             profile.Flags.Add("no-habitable-domain");
         return profile;

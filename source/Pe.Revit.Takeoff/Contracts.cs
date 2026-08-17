@@ -88,17 +88,14 @@ public sealed class TakeoffOptions
     public double SuspectMaxSqft = 60;         // non-geometric suspect signals only target pockets
     public double MinSuspectCeilingStdDevFt = 0.5; // chases/voids cross multiple ceiling bands; uniform closets do not
     // ---- Pre-solve zone triage (ZoneTriage.cs) ----
-    // Defaults are the project-a-tuned values (2026-08-14 A/B sweep, exp-e4/e7 in the reeval doc);
-    // 0 disables any of them. SmallZoneLowInkSqft/MinZoneInkRatio stay off: with band-composed ink
-    // the ratio measures clutter, not wall density — revisit when ink comes from the DWG lane.
+    // SmallZoneSqft is a user-exposed per-project toggle (kaitpw 2026-08-16): high-end residential
+    // wants ~750, typical projects smaller. Do not fixture-tune the default. The low-ink refinement
+    // (SmallZoneLowInkSqft/MinZoneInkRatio) was deleted 2026-08-16: never armed, and inkRatio was
+    // falsified as a per-zone discriminator on framing-clean bins (DECISIONS 2026-08-16).
     public double SmallZoneSqft = 750;      // zone at or under this holds whole, unsolved (0 = off);
                                             // 17 of 19 such project-a zones never produced an accepted room
-    public double SmallZoneLowInkSqft = 0;  // larger hold threshold for a zone below MinZoneInkRatio (0 = off)
-    public double MinZoneInkRatio = 0.0;    // in-zone ink cells / zone cells below which ink is too
-                                            // sparse to be a wall network worth partitioning
     // ---- Pre-solve ink hygiene (InkHygiene.cs) ----
     public int InkClusterWhiteoutCells = 100; // drop floating in-zone ink clusters smaller than this (0 = off)
-    public double InkClusterWhiteoutBboxFt = 0; // ...or fitting inside this square, whatever their cell count
     // ---- Post-solve disposition recombination (TakeoffPromotion.cs stages) ----
     public double AbsorbNeighborMaxSqft = 60;  // room under this area may absorb into a neighbor (0 = off)
     public double AbsorbNeighborSharedPerimeterFraction = 0.45; // ...holding this share of its perimeter; measured
@@ -151,19 +148,13 @@ public sealed class TakeoffOptions
     public double InkBackedZoneEdgeExemptFt = 1.0; // boundary samples this close to the zone edge don't count
     // ---- Per-zone adaptive policy (ZonePolicy.cs) ----
     // On: a zone's census + raw partition may override the knobs above for that zone alone, and
-    // every deviation is reported into report.json. See ZonePolicy for the rules and their grounding.
-    // MEASURED COST, 2026-08-14 composite: ON costs 6 accepted rooms and 115 sf against OFF, all of
-    // it in the two zones the sparse-wall rule fires on (Lower 08: 8 vs 12, Lower 09: 7 vs 9). The
-    // rule was calibrated when the frame projector held those lattice cells at 1.5 ft / 10% drift,
-    // so absorbing them was a gain; under the relaxed 2.5 ft / 20% budget the projector now ACCEPTS
-    // them as rooms and the rule spends them. OFF by that evidence: the seam stays (pure, inert,
-    // fully attributed via adaptedKnobs) but its one live rule is falsified at the current drift
-    // budget — rearm only after recalibrating SparseWallInkRatio against a projector this loose.
+    // every deviation is reported into report.json. The seam is pure and fully attributed via
+    // adaptedKnobs, but it currently carries NO live rules: the sparse-wall absorb rule and its
+    // SparseWall* knobs were falsified at the 2.5 ft drift budget (measured -6 rooms; DECISIONS
+    // 2026-08-14) and their keying signal, inkRatio, was falsified as a discriminator on
+    // framing-clean bins (DECISIONS 2026-08-16); both deleted 2026-08-16. The earned successor
+    // keys on ZoneCensus.EdgeBandInkFraction (attic-scoped, round-2 slate).
     public bool AdaptivePolicy = false;
-    public double SparseWallInkRatio = 0.09;   // below this in-zone ink ratio the wall network is too
-                                               // sparse to certify the partitions drawn against it
-    public int SparseWallMinRawRooms = 4;      // ...and only where a real multi-room partition exists
-    public double SparseWallAbsorbSharedPerimeterFraction = 0.30; // absorb share such a zone uses
     public string Marker = "PE-TAKEOFF";    // stamped into Comments of everything we create
     public string? ArtifactDir;             // where TSV/PNG artifacts land (default: temp)
 

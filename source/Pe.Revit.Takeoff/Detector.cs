@@ -77,12 +77,11 @@ internal sealed class PreparedTakeoffDetection
         // network". A removal invalidates the level-derived footprint and evidence rasters, so both
         // are recomputed from the cleaned obstruction — otherwise the whited clutter would leave a
         // hole in the domain instead of joining the room around it.
-        if (this.options.InkClusterWhiteoutCells > 0 || this.options.InkClusterWhiteoutBboxFt > 0)
+        if (this.options.InkClusterWhiteoutCells > 0)
         {
             var hygiene = InkHygiene.RemoveFloatingClusters(
                 croppedObstruction, croppedMask, width, height,
-                this.options.InkClusterWhiteoutCells, this.options.InkClusterWhiteoutBboxFt,
-                this.field.CellFt);
+                this.options.InkClusterWhiteoutCells);
             whiteoutCells = hygiene.RemovedCells;
             if (hygiene.RemovedCells > 0)
             {

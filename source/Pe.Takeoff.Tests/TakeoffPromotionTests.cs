@@ -659,28 +659,25 @@ public sealed class TakeoffPromotionTests
     }
 
     [Test]
-    public void Zone_policy_relaxes_absorb_only_where_the_wall_network_is_too_sparse_to_certify()
+    public void Zone_policy_carries_no_live_rules_and_attributes_nothing()
     {
+        // The sparse-wall absorb rule and its SparseWall* knobs were deleted 2026-08-16 (falsified
+        // at the 2.5 ft drift budget on 2026-08-14; inkRatio falsified as a discriminator on
+        // framing-clean bins on 2026-08-16). The seam itself stays per the tombstone: pure,
+        // attributed, and — until a rule earns its way in — an identity even when armed.
         var baseline = Options(minimumRoomSqft: 30);
-        baseline.AdaptivePolicy = true; // armed explicitly: default is off (falsified at 2.5ft drift)
+        baseline.AdaptivePolicy = true;
         var sparse = new ZoneCensus(4000, 120, 0.03, [], 0.2);
-        var dense = new ZoneCensus(4000, 600, 0.15, [], 0.2);
         var lattice = new ZonePartitionStats(8, 90, 2.0);
-        var single = new ZonePartitionStats(1, 3000, 0.25);
 
-        var relaxed = ZonePolicy.Adapt(sparse, lattice, baseline);
-        var untouched = ZonePolicy.Adapt(dense, lattice, baseline);
-        var noLattice = ZonePolicy.Adapt(sparse, single, baseline);
+        var armed = ZonePolicy.Adapt(sparse, lattice, baseline);
         baseline.AdaptivePolicy = false;
         var disarmed = ZonePolicy.Adapt(sparse, lattice, baseline);
 
         Assert.Multiple(() => {
-            Assert.That(relaxed.Options.AbsorbNeighborSharedPerimeterFraction,
-                Is.EqualTo(0.30).Within(1e-9));
-            Assert.That(relaxed.AdaptedKnobs.Keys,
-                Is.EqualTo(new[] { "AbsorbNeighborSharedPerimeterFraction" }));
-            Assert.That(untouched.AdaptedKnobs, Is.Empty, "dense ink certifies its own partitions");
-            Assert.That(noLattice.AdaptedKnobs, Is.Empty, "no lattice to absorb, so no rule fires");
+            Assert.That(armed.AdaptedKnobs, Is.Empty, "no live rules: armed adapts nothing");
+            Assert.That(armed.Options.AbsorbNeighborSharedPerimeterFraction,
+                Is.EqualTo(0.45).Within(1e-9));
             Assert.That(disarmed.AdaptedKnobs, Is.Empty);
             Assert.That(disarmed.Options.AbsorbNeighborSharedPerimeterFraction,
                 Is.EqualTo(0.45).Within(1e-9));

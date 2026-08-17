@@ -5,13 +5,7 @@ namespace Pe.Revit.Takeoff;
 /// clutter: does it weld to the zone's boundary ink ring, or does it float free inside the zone?
 /// Stairs, fixtures, roof framing and site linework arrive as floating blobs; walls do not.
 /// </summary>
-internal sealed record InkCluster(
-    IReadOnlyList<int> Cells, bool TouchesZoneBoundary, int MinX, int MinY, int MaxX, int MaxY)
-{
-    internal int WidthCells => this.MaxX - this.MinX + 1;
-
-    internal int HeightCells => this.MaxY - this.MinY + 1;
-}
+internal sealed record InkCluster(IReadOnlyList<int> Cells, bool TouchesZoneBoundary);
 
 /// <summary>Outcome of a raster hygiene pass: the cleaned mask and how much it cost.</summary>
 public sealed record InkHygieneResult(bool[] Ink, int RemovedCells);
@@ -25,33 +19,25 @@ public static class InkHygiene
 {
     /// <summary>
     /// Drops 8-connected ink clusters that float free inside the zone (never touching the zone
-    /// boundary or the grid edge) and are either smaller than <paramref name="minClusterCells"/>
-    /// or fit inside a <paramref name="maxClusterBboxFt"/> square. Boundary-welded ink — the wall
-    /// network — is never touched, whatever its size.
+    /// boundary or the grid edge) and are smaller than <paramref name="minClusterCells"/>.
+    /// Boundary-welded ink — the wall network — is never touched, whatever its size.
     /// </summary>
     public static InkHygieneResult RemoveFloatingClusters(
         bool[] ink,
         bool[] zoneMask,
         int w,
         int h,
-        int minClusterCells,
-        double maxClusterBboxFt,
-        double cellFt)
+        int minClusterCells)
     {
-        if (minClusterCells <= 0 && maxClusterBboxFt <= 0)
+        if (minClusterCells <= 0)
             return new InkHygieneResult((bool[])ink.Clone(), 0);
         var clusters = Clusters(ink, zoneMask, w, h);
-        double maxBboxCells = cellFt > 0 ? maxClusterBboxFt / cellFt : 0;
         var cleaned = (bool[])ink.Clone();
         int removed = 0;
         foreach (var cluster in clusters)
         {
             if (cluster.TouchesZoneBoundary) continue;
-            bool small = minClusterCells > 0 && cluster.Cells.Count < minClusterCells;
-            bool compact = maxBboxCells > 0
-                           && cluster.WidthCells <= maxBboxCells + 1e-9
-                           && cluster.HeightCells <= maxBboxCells + 1e-9;
-            if (!small && !compact) continue;
+            if (cluster.Cells.Count >= minClusterCells) continue;
             foreach (int cell in cluster.Cells)
             {
                 cleaned[cell] = false;
@@ -82,16 +68,11 @@ public static class InkHygiene
             stack.Push(start);
             var cells = new List<int>();
             bool touches = false;
-            int minX = w, minY = h, maxX = 0, maxY = 0;
             while (stack.Count > 0)
             {
                 int cell = stack.Pop();
                 cells.Add(cell);
                 int x = cell % w, y = cell / w;
-                if (x < minX) minX = x;
-                if (x > maxX) maxX = x;
-                if (y < minY) minY = y;
-                if (y > maxY) maxY = y;
                 for (int dy = -1; dy <= 1; dy++)
                 for (int dx = -1; dx <= 1; dx++)
                 {
@@ -106,7 +87,7 @@ public static class InkHygiene
                 }
             }
             cells.Sort();
-            clusters.Add(new InkCluster(cells, touches, minX, minY, maxX, maxY));
+            clusters.Add(new InkCluster(cells, touches));
         }
         return clusters;
     }

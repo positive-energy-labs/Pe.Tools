@@ -60,6 +60,11 @@ LEVELS = {
 
 SAMPLE_STEP_FT = 0.25
 HIT_FT = 0.25
+# Registration-audit coverage radius: a wall sample with no ink within this many feet has nothing
+# to register against — the detector is ink-starved there (LL06/LL08 quadrant, measured 2026-08-16:
+# walls 8-12 ft from ink where the raster simply has none). Chamfer on such samples measures
+# starvation, not drift, so the audit reports the two separately.
+AUDIT_COVER_FT = 6.0
 EXEMPT_FT = 1.0          # InkBackedZoneEdgeExemptFt in the report options
 WALL_BAND_FT = 1.5       # interior-containment wall-claim band
 OFF_FRAME_DEG = 3.0
@@ -531,6 +536,13 @@ def score_report(report_path):
     total = len(room_status)
     accepted_total = sum(1 for s, _ in room_status.values() if s == "accepted")
     held_total = sum(1 for s, _ in room_status.values() if s == "held")
+    # Oracle rooms no zone ever claimed (representative point outside every zone on their floor).
+    # They are excluded from recall by construction — but silently shrinking the oracle is how a
+    # board lies, so they are named here. (2026-08-16 audit: Powder 004 + AV Equipment 025, both
+    # in the theatre/entry area outside the Lower zoning plan.)
+    unzoned = [dict(number=r["number"], name=r["name"], floor=floor_key)
+               for floor_key, floor_rooms in oracle_rooms.items()
+               for r in floor_rooms if r["number"] not in room_status]
     all_polys = [p for z in zones_out for p in z["polygons"]]
     all_dist = [d for z in zones_out for d in z["oracleBoundaryDistance"]]
     board = dict(
@@ -547,7 +559,8 @@ def score_report(report_path):
                                             if p["disposition"] == "accepted"]), 2)
         if any(p["disposition"] == "accepted" for p in all_polys) else None,
         distanceBuckets={b: sum(1 for d in all_dist if d["bucket"] == b)
-                         for b in ("as-is", "nudge", "redraw")})
+                         for b in ("as-is", "nudge", "redraw")},
+        unzonedOracleRooms=unzoned)
     return dict(report=os.path.abspath(report_path),
                 generatedUtc=report.get("GeneratedUtc"), board=board, zones=zones_out)
 
@@ -572,6 +585,10 @@ def cmd_score(args):
     print(f"       edgeOnInk acc={board['edgeOnInkAccepted']} held={board['edgeOnInkHeld']} "
           f"swallowSf={board['swallowSf']} editCost={board['meanEditCostAccepted']} "
           f"buckets={board['distanceBuckets']}")
+    if board.get("unzonedOracleRooms"):
+        names = ", ".join(f"{r['name']} (floor {r['floor']})"
+                          for r in board["unzonedOracleRooms"])
+        print(f"       unzoned oracle rooms (in no zone, excluded from recall): {names}")
     header = (f"{'zone':<18}{'orc':>4}{'acc':>4}{'held':>5}{'miss':>5}{'recall':>8}"
               f"{'edgeAcc':>9}{'edgeHeld':>9}{'C#ibef':>8}{'agree':>8}{'swallow':>9}"
               f"{'edit':>6}{'saved':>7}")
@@ -612,11 +629,14 @@ def cmd_audit(args):
 
     print("registration audit: chamfer distance (ft) from oracle geometry to raw evidence ink")
     print("thresholds: registered = wall median<=0.5 & p90<=2.0 (2 cells; within wall half-")
-    print("thickness + rasterization); drifted = median<=1.5; untrusted otherwise.\n")
+    print("thickness + rasterization); drifted = median<=1.5; untrusted otherwise.")
+    print(f"covered = samples with ink within {AUDIT_COVER_FT} ft; a starved sample has no ink to")
+    print("register against, so raw chamfer there measures detector ink starvation, not drift.\n")
 
     tokens = list(levels)
     floors = sorted(set(f for _, (t, f) in LEVELS.items() if t in tokens))
     matrix = {}
+    covered_matrix = {}   # (token, floor) -> (covered median, starved fraction)
     verdicts = {}
     for level_name, (token, floor) in LEVELS.items():
         if token not in levels:
@@ -633,7 +653,12 @@ def cmd_audit(args):
             dist = dist[np.isfinite(dist)]
             matrix[(token, probe_floor)] = (float(np.median(dist)),
                                             float(np.percentile(dist, 90)))
+            covered = dist[dist <= AUDIT_COVER_FT]
+            covered_matrix[(token, probe_floor)] = (
+                float(np.median(covered)) if covered.size else math.inf,
+                1.0 - covered.size / dist.size if dist.size else 1.0)
         wall_median, wall_p90 = matrix.get((token, floor), (math.inf, math.inf))
+        cov_median, starved = covered_matrix.get((token, floor), (math.inf, 1.0))
 
         xs, ys = [], []
         for room in rooms.get(floor, []):
@@ -648,6 +673,8 @@ def cmd_audit(args):
 
         verdict = ("registered" if wall_median <= 0.5 and wall_p90 <= 2.0
                    else "drifted" if wall_median <= 1.5 else "untrusted")
+        if starved >= 0.10 and verdict != "registered":
+            verdict += f" ({starved:.0%} ink-starved; covered drift median {cov_median:.2f})"
         verdicts[level_name] = verdict
         print(f"{level_name:<14} walls: median {wall_median:5.2f}  p90 {wall_p90:5.2f}   "
               f"rooms: median {room_median:5.2f}  p90 {room_p90:5.2f}   -> {verdict}")
@@ -657,16 +684,47 @@ def cmd_audit(args):
                              png, f"{level_name} — {verdict}")
         print(f"{'':<14} overlay: {png}")
 
-    print("\nfloor-assignment cross-check (wall median ft, rows=ink level, cols=oracle floor):")
+    # Cross-check on COVERED medians only (starved samples say nothing about assignment), and
+    # stacking-aware: floors of one building stack their walls, so "another floor's walls chamfer
+    # better" is only evidence of misassignment when those wall sets are NOT vertically coincident.
+    # 2026-08-16 audit: Lower's old "BEST IS FLOOR 1" flag was exactly this artifact — floor 0/1
+    # walls stack within ~1 ft while Lower's ink is starved in the bar quadrant.
+    print("\nfloor-assignment cross-check (covered wall median ft, rows=ink level, cols=oracle floor):")
     print(f"{'':<24}" + "".join(f"floor {f:>2}  " for f in floors))
     for level_name, (token, floor) in LEVELS.items():
         if token not in levels:
             continue
-        cells = "".join(f"{matrix.get((token, f), (math.nan,))[0]:>8.2f}  " for f in floors)
-        best = min(floors, key=lambda f: matrix.get((token, f), (math.inf,))[0])
-        flag = "" if best == floor else f"  <-- BEST IS FLOOR {best}, MAPPING SUSPECT"
+        cells = "".join(
+            f"{covered_matrix.get((token, f), (math.nan, 0))[0]:>8.2f}  " for f in floors)
+        best = min(floors, key=lambda f: covered_matrix.get((token, f), (math.inf, 1.0))[0])
+        flag = ""
+        if best != floor:
+            margin = (covered_matrix.get((token, floor), (math.inf, 1.0))[0]
+                      - covered_matrix.get((token, best), (math.inf, 1.0))[0])
+            stack = _wall_stacking(walls_by_floor, floor, best)
+            if margin <= 0.25:
+                flag = f"  (floor {best} better by {margin:.2f} ft: within noise)"
+            elif stack <= 1.0:
+                flag = (f"  (floor {best} better by {margin:.2f} ft, but floors stack: "
+                        f"wall-to-wall median {stack:.2f} ft — uninformative)")
+            else:
+                flag = f"  <-- BEST IS FLOOR {best} by {margin:.2f} ft, MAPPING SUSPECT"
         print(f"{level_name:<24}{cells}{flag}")
     return verdicts
+
+
+def _wall_stacking(walls_by_floor, floor_a, floor_b):
+    """Median distance (ft) from floor_b wall samples to floor_a wall polylines — oracle-only
+    geometry, so it measures whether two floors' declared walls vertically coincide."""
+    lines_a = [LineString(w) for w in walls_by_floor.get(floor_a, []) if len(w) >= 2]
+    if not lines_a:
+        return math.inf
+    target = shapely.union_all(lines_a)
+    dists = []
+    for wall in walls_by_floor.get(floor_b, []):
+        xs, ys = boundary_samples(wall)
+        dists.extend(target.distance(Point(x, y)) for x, y in zip(xs, ys))
+    return float(np.median(dists)) if dists else math.inf
 
 
 def _render_registration(ink, walls, rooms, out_path, caption):
