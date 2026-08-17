@@ -386,7 +386,13 @@ public static class TakeoffPromotion
                 var fitted = original;
                 bool didSnap = false, didClip = false, didSquare = false;
                 if (withSnap && snapping
-                    && SnapToZone(fitted, zoneBoundary, neighbors, state.Options.ZoneSnapFt)
+                    && SnapToZone(fitted, zoneBoundary, neighbors, state.Options.ZoneSnapFt,
+                        // Where a wall hugs the declared line, the ink face is where the room
+                        // ends, and a snap may not sweep the boundary back across it. The zone
+                        // stays authority — the room simply never reached it (kaitpw, round-2
+                        // summon: zone edges often clip walls).
+                        state.DistanceToInk,
+                        1.2 * state.Options.CellFt)
                         is { } moved)
                 {
                     fitted = moved;
@@ -510,7 +516,8 @@ public static class TakeoffPromotion
     /// </summary>
     private static Polygon? SnapToZone(
         Polygon room, Geometry zoneBoundary,
-        List<(string Id, Polygon Geometry)> neighbors, double snapFt)
+        List<(string Id, Polygon Geometry)> neighbors, double snapFt,
+        Func<double, double, double>? distanceToInk = null, double inkTolFt = 0)
     {
         // Edge-wise, frame-preserving: a room EDGE moves onto the zone line only when a zone
         // segment runs parallel to it (within a few degrees) and both endpoints are within snapFt
@@ -565,6 +572,24 @@ public static class TakeoffPromotion
                     if (Math.Abs(offsetA) > snapFt || Math.Abs(offsetB) > snapFt) continue;
                     double t0 = Math.Min(TOf(a), TOf(b)), t1 = Math.Max(TOf(a), TOf(b));
                     if (t1 < 0 || t0 > len) continue;
+                    // Ink between the edge and its target line means the declared line runs on the
+                    // far side of a wall the zone clipped; the room already ends at the wall's
+                    // face, and snapping across the ink would swallow the clipped half-wall the
+                    // zone-edge ink pull just kept out of the partition. Midpoints of the sweep
+                    // sitting on ink refuse the move; everywhere else the zone line stays the
+                    // snap target it has always been.
+                    if (distanceToInk != null)
+                    {
+                        bool crossesInk = false;
+                        for (double t = 0; t <= 1 && !crossesInk; t += 0.25)
+                        {
+                            double px = a.X + (b.X - a.X) * t, py = a.Y + (b.Y - a.Y) * t;
+                            double offset = offsetA + (offsetB - offsetA) * t;
+                            crossesInk = distanceToInk(
+                                px - 0.5 * offset * -uy, py - 0.5 * offset * ux) <= inkTolFt;
+                        }
+                        if (crossesInk) continue;
+                    }
                     points[i] = new Coordinate(a.X - offsetA * -uy, a.Y - offsetA * ux);
                     points[(i + 1) % count] = new Coordinate(b.X - offsetB * -uy, b.Y - offsetB * ux);
                     moved = true;

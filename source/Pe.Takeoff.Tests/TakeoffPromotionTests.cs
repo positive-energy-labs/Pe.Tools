@@ -523,7 +523,42 @@ public sealed class TakeoffPromotionTests
     {
         // The right edge sits 0.4 ft inside the zone's parallel right edge — a void sliver that no
         // gate is wrong about and every gate leaves behind. The zone edge is authority, so the room
-        // moves onto it rather than the sliver being explained.
+        // moves onto it rather than the sliver being explained. The ink model says the sliver is
+        // EMPTY (backed boundary everywhere, no wall between edge and zone line) — the historical
+        // `(_, _) => 0` stub put ink inside the sweep and now means the opposite thing (see the
+        // sibling test below).
+        var source = new TakeoffResult {
+            LevelName = "Level 1",
+            Rooms = { Room("room", (2, 2), (19.6, 2), (19.6, 18), (2, 18)) },
+            DomainSqft = 281.6,
+        };
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, Zone("all", (0, 0), (20, 0), (20, 20), (0, 20)),
+            Options(minimumRoomSqft: 0, boundarySimplifyFt: 0), (x, _) => x > 19.7 ? 5 : 0,
+            TestContext.Out.WriteLine);
+
+        var room = promotion.Result.Rooms.Single();
+        Assert.Multiple(() => {
+            Assert.That(room.RawSqft, Is.EqualTo(288).Within(1e-6),
+                "the 0.4 ft sliver along the zone edge is now inside the room");
+            Assert.That(room.Polygon.Max(point => point[0]), Is.EqualTo(20).Within(1e-9));
+            Assert.That(room.Flags, Contains.Item("zone-fit"));
+            Assert.That(promotion.Diagnostics.Rejections["zonefit:snapped"], Is.EqualTo(1));
+            Assert.That(promotion.Diagnostics.Rejections.Keys, Has.No.Member("zonefit:fallback"));
+            Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
+            Assert.That(promotion.Diagnostics.IsStrictlyEditable, Is.True);
+        });
+    }
+
+    [Test]
+    public void Zone_fit_snap_refuses_to_sweep_the_edge_across_ink_hugging_the_zone_line()
+    {
+        // Same room, same zone — but now the 0.4 ft between the room's edge and the declared line
+        // is wall ink (distance 0 everywhere): the designer drew the zone through the wall, and the
+        // room already ends at the wall's face. Snapping onto the line would swallow the clipped
+        // half-wall, so the snap refuses and the room stands accepted exactly where the ink says
+        // it ends. The zone stays authority — the room simply never reached it.
         var source = new TakeoffResult {
             LevelName = "Level 1",
             Rooms = { Room("room", (2, 2), (19.6, 2), (19.6, 18), (2, 18)) },
@@ -537,12 +572,10 @@ public sealed class TakeoffPromotionTests
 
         var room = promotion.Result.Rooms.Single();
         Assert.Multiple(() => {
-            Assert.That(room.RawSqft, Is.EqualTo(288).Within(1e-6),
-                "the 0.4 ft sliver along the zone edge is now inside the room");
-            Assert.That(room.Polygon.Max(point => point[0]), Is.EqualTo(20).Within(1e-9));
-            Assert.That(room.Flags, Contains.Item("zone-fit"));
-            Assert.That(promotion.Diagnostics.Rejections["zonefit:snapped"], Is.EqualTo(1));
-            Assert.That(promotion.Diagnostics.Rejections.Keys, Has.No.Member("zonefit:fallback"));
+            Assert.That(room.RawSqft, Is.EqualTo(281.6).Within(1e-6),
+                "the clipped half-wall stays out of the room");
+            Assert.That(room.Polygon.Max(point => point[0]), Is.EqualTo(19.6).Within(1e-9));
+            Assert.That(promotion.Diagnostics.Rejections.Keys, Has.No.Member("zonefit:snapped"));
             Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
             Assert.That(promotion.Diagnostics.IsStrictlyEditable, Is.True);
         });

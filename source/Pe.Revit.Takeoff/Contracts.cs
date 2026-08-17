@@ -97,6 +97,24 @@ public sealed class TakeoffOptions
                                             // 17 of 19 such project-a zones never produced an accepted room
     // ---- Pre-solve ink hygiene (InkHygiene.cs) ----
     public int InkClusterWhiteoutCells = 100; // drop floating in-zone ink clusters smaller than this (0 = off)
+    // ---- Zone-edge ink pull (PartitionFormulation.Run) ----
+    // Designers draw zone edges THROUGH walls (2026-08-16 survey: 83% of all project-a zone-boundary
+    // length has ink within 0.5 ft), so the mask clips a wall-thickness band of ink — and, raster-
+    // side, often a free sliver between that band and the declared line. Both are padding, not
+    // room: armed, the partition's effective domain pulls to the ink band's INTERIOR face.
+    // Edge-hugging obstruction within this depth of the declared edge leaves the working mask
+    // (never claimable), together with free slivers sealed between that ink and the edge; a free
+    // strip that opens into the room (an OPEN zone edge — the zone is authority, not evidence) is
+    // never touched. The declared zone remains the authority for clip, scope, and accounting.
+    // DEFAULT 0 — falsified as a global default (2026-08-16 R3c): the hybrid seeder reads
+    // distance-transform plateaus over the domain, so shaving even 0.75 ft off the domain edge
+    // moves seeds deep inside edge-adjacent rooms and re-rolls whole partitions (UL02 +4 oracle
+    // rooms, ML09 0->3, LL08 0->1 — but ML00 3->0, UL03 6->2, UL05 8->3, Attic00 4->1; board
+    // savedWork -16% at every swept depth). Reopen only WITH seed placement that is stable under
+    // edge shave. The zone-fit snap's refusal to sweep an edge across ink (same taste source:
+    // kaitpw round-2, "zone edges often clip walls") is unconditional and lives in SnapToZone,
+    // not behind this knob.
+    public double ZoneEdgeInkPullFt = 0;
     // ---- Post-solve disposition recombination (TakeoffPromotion.cs stages) ----
     public double AbsorbNeighborMaxSqft = 60;  // room under this area may absorb into a neighbor (0 = off)
     public double AbsorbNeighborSharedPerimeterFraction = 0.45; // ...holding this share of its perimeter; measured
