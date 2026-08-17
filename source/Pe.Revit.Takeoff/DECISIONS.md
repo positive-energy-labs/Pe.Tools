@@ -2,6 +2,30 @@
 
 Dated, append-only. Newest batch first. Each entry: what was decided, and the why that makes it stick. Reopen one only with new evidence — and record the reopening here.
 
+## 2026-08-16 (round 2, R2a) — one disease, three instances: axis-denominated motion priced in Euclidean
+
+**Adopted: drift audit re-priced in world-axis L∞ against the de-staircased reference
+(`FrameLocalProjector.AxisOrientedDistance`).** The boundary simplifier licenses a
+`BoundarySimplifyFt` BOX of motion (2.0 ft in x and y) — which is 2.0 ft of Euclidean offset
+perpendicular to an orthogonal wall but 2.83 ft perpendicular to a 45° wall. The Euclidean
+Hausdorff charged rotated frames √2 for the same licensed motion: 45° drifts clustered at
+2.59–2.98 against the 2.5 budget, argmax vectors perpendicular to the walls. Same disease as
+the sealer's diagonal steps (round 1), same shape of fix; budget untouched. LL08 4→7 accepted,
+UL02/UL03 +1 oracle room each, zero orthogonal-frame disposition changes, honesty up.
+**ML09 falsified as a family member** — its holds are genuine wander (up to 18 ft); it needs a
+different answer.
+
+**Adopted: zone-fit squaring (`ZoneClipSquareFt = 1.0`).** Clipping manufactures off-frame
+edges the audit then refuses (every off-frame edge in a fitted polygon is fit output by
+construction — the room already passed canonical audit). The squarer re-decomposes such edges
+along the frame, budgeted by the DISPLACEMENT the repair introduces (not edge length), and the
+unmodified audit re-judges. Attic01 R05 + ML08 R03 convert (+520 sf honest), zonefit:fallback
+58→46, Main 10's trivially-correct room finally clips cleanly. Standing falsifier: a kaitpw
+A/B reading Attic01 R05's shape as junk → knob to 0.
+
+Residual named instances for round 3: repair-debris dissolve (MicroStepRun after squaring —
+Attic00 R01's 598 sf), paired-coverage fits (ML05's coordinated two-room refusals).
+
 ## 2026-08-16 (round 2, R2d) — door-head evidence is bounded to door scale
 
 **Adopted: `DoorHeadMaxComponentFt = 9.0` + oversize-never-backs.** The door-head sealer's
