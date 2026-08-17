@@ -2,6 +2,23 @@
 
 Dated, append-only. Newest batch first. Each entry: what was decided, and the why that makes it stick. Reopen one only with new evidence — and record the reopening here.
 
+## 2026-08-16 (round 2, R2d) — door-head evidence is bounded to door scale
+
+**Adopted: `DoorHeadMaxComponentFt = 9.0` + oversize-never-backs.** The door-head sealer's
+lintel predicate had no width bound, so duct soffits and low basement ceilings sealed wholesale
+(Lower: one 204 sf component, 33×49 ft bbox) and — worse — those cells counted as BACKING
+evidence, manufacturing trust: LL08 read 0.68 backed on a 0.23 ink-only floor. Empirical cap
+from the all-real-doors level: Upper's 95 door-head components top out at 8.25 ft. Components
+over 9 ft now seal only their wall-adjacent fringe (new class `SealDoorHeadOversize`, still
+closure so doorways under soffits keep closing) and never back a boundary
+(`EvidenceInkDistance` counts `SealDoorHead` only). Result: LL08 4→1 accepted, LL06 4→3,
+LL09 4→3, ML08 1→0 — **not one dead room was oracle-matched; recall is bit-identical** — board
+savedWork flat (0.3784→0.3780), accepted edge-on-ink +2.4 pts, Upper's sealing 100% preserved.
+LL08's board contribution was always fake. AMENDS 2026-08-14 "door-head seals count as backing":
+still true, now only at door scale. Falsifier on record: a real >9 ft cased archway losing its
+only backing — if a genuine archway room dies, re-key the bound on component MIN dimension
+(strip vs blob), not bbox max.
+
 ## 2026-08-16 (adversarial wave 1) — the machine shrinks; both stage merges refuse to happen
 
 **Adopted: six-knob kill + one dead rule, zones byte-identical, 125/125.** Deleted as
