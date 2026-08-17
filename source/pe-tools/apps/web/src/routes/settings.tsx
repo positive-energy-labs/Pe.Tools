@@ -50,7 +50,9 @@ export const Route = createFileRoute("/settings")({
    * See docs/features/settings/PRODUCT.md. */
   validateSearch: (search: Record<string, unknown>): { variant?: string } => ({
     variant:
-      typeof search.variant === "string" && search.variant.trim() ? search.variant.trim() : undefined,
+      typeof search.variant === "string" && search.variant.trim()
+        ? search.variant.trim()
+        : undefined,
   }),
   component: SettingsRouteGate,
 });

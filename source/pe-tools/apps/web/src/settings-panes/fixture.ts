@@ -152,7 +152,11 @@ export const fixtureDocument: SettingsRouteDocument = {
  * tiny stub profile — the tree story, not the file contents, is under review. */
 export function fixtureRawFor(relativePath: string): string {
   if (relativePath === "mechanical/vav-boxes.json") return fixtureRawContent;
-  const name = relativePath.split("/").at(-1)?.replace(/\.json$/, "") ?? relativePath;
+  const name =
+    relativePath
+      .split("/")
+      .at(-1)
+      ?.replace(/\.json$/, "") ?? relativePath;
   return JSON.stringify(
     {
       name: name.replace(/-/g, " "),

@@ -46,6 +46,33 @@ fixture chip — variants must be comparable without a live host.
 | C | annotated file | thin popover from the sentence | the raw JSON IS the page; trichotomy renders as line-anchored gutter marks/overlays; approve/deny on lines; validation issues joined to lines (fixes audit #5) | edits parse-diff to per-pointer stage/sever |
 | D | embedding proof | inside each host pane | two mock host panes (family-ish, schedule-profile-ish) each embedding the kit with minimal props | whichever props are smallest — the point is the prop contract |
 
+### Round 1 built — 2026-08-17, awaiting rulings
+
+All four variants ship behind `?variant=` (a/b/c/d; no param = shipping surface), verified
+interactive on the worktree dev server. Flip order: `a → b → c → d`.
+
+**Builder findings worth a ruling (surfaced during the build, before any flip-through):**
+
+1. **Positional array pointers are unstable** (C): an array element insert/delete stages a
+   shift-storm of index moves rather than one semantic change. A's dodge: equal-length arrays
+   diff per index, length-changed arrays stage whole. A real fix wants identity-aware array keys
+   (e.g. `parameterName`) — a schema/contract question, not a UI one.
+2. **Arrays-are-leaves vs recurse-by-index** (B vs shipping): the shipping surface treats arrays
+   as leaf values; B's flatten recurses into them so `/fields/2/columnHeader` is a row. The fixture's
+   seeded attention field only addresses cleanly under B's reading. One rule must win.
+3. **The kit contract that survived two consumers** (D): stateless panes — one
+   `SettingsRouteDocument` in, pointer-keyed intents out (`onApprove/onDeny/onUnstage(pointer)`),
+   zero owned state. The prescribed `onChange` on the JSON pane died unearned; A/B's write models
+   are what would earn it back.
+4. **Chat-plugin compatibility favors parse-diff** (A, C): both keep pointer-keyed `fields` as the
+   one substrate, so pea/SSE/chat stay sighted through raw edits. B's whole-file lane goes blind
+   while dirty and needs a new host op (`settings.document.saveRaw`) — it renders that dishonesty
+   visibly as its experiment.
+5. **No outcome kind for "the page refused your input"** (A): parse refusal rides `error`/caution;
+   `refused` is reserved for the model disagreeing. Possible lang gap.
+6. **Missing web lanes** (D): `revit.apply.schedule` has no web path (desktop runs
+   `ApplyScheduleProfile` in a transaction); "open file in default app" has no web equivalent.
+
 ### Verdicts (owed)
 
 _(recorded here after the user flips through — which frame won, which write model, what B/C/D

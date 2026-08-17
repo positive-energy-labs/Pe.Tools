@@ -67,7 +67,12 @@ export function JsonEditor({
 
   return (
     <div className={cn("jsonpane jsonpane--editor face-mono t-value", className)}>
-      <div ref={preRef} aria-hidden className="jsonpane-paint" dangerouslySetInnerHTML={{ __html: html }} />
+      <div
+        ref={preRef}
+        aria-hidden
+        className="jsonpane-paint"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
       <textarea
         className="jsonpane-input"
         value={value}
