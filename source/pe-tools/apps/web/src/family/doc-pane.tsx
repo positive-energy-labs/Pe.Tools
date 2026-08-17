@@ -9,10 +9,11 @@
  * PROPOSALS DOCK ON TOP OF IT, so the verdict is always beside the spec text that justifies it —
  * the whole reason the table's rail and folds only ever LOCATE and never decide.
  */
+import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
 import { Switcher } from "#/components/lang/switcher";
-import { EMPTY_CLASS, SPEC, hashOf, type CellVerdict } from "#/family/model";
+import { SPEC, hashOf, type CellVerdict } from "#/family/model";
 import type { ProtoProposal } from "#/family/world";
 import { cn } from "#/lib/utils";
 
@@ -20,12 +21,9 @@ export function SpecText({ litBlocks }: { litBlocks: Set<string> }) {
   const spec = SPEC;
   if (!spec)
     return (
-      <p
-        className={cn(EMPTY_CLASS, "p-3")}
-        title="No document is attached to this profile, so no number in it can be cited. Parsing a cut sheet is what fills this pane."
-      >
+      <EmptyState story="scope" exit="parse a cut sheet to attach one" className="p-3">
         no spec attached — every number in the profile is asserted rather than sourced
-      </p>
+      </EmptyState>
     );
   return (
     <div className="space-y-2 p-2">
@@ -78,12 +76,9 @@ export function SpecSheet({
   const spec = SPEC;
   if (!spec)
     return (
-      <p
-        className={cn(EMPTY_CLASS, "p-3")}
-        title="There is no parsed document behind this pane, so there are no block placements to draw."
-      >
-        no spec attached to render
-      </p>
+      <EmptyState story="scope" exit="parse a cut sheet to attach one" className="p-3">
+        no spec attached to render — there are no block placements to draw
+      </EmptyState>
     );
 
   const pages = [...new Set(spec.blocks.map((block) => block.page))].sort((a, b) => a - b);

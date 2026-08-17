@@ -469,11 +469,3 @@ export function hashOf(text: string): number {
   }
   return hash;
 }
-
-/**
- * THE LABELLED EMPTY, inline and consistent — "not started" is a state, not a zero
- * (SURFACE-PHILOSOPHY §1). `components/lang` has no `EmptyState` primitive and this pass did not
- * invent one; every empty on this surface wears these classes and carries a `title` saying what
- * would fill it. DESIGN-AUDIT #2 names the primitive that is owed.
- */
-export const EMPTY_CLASS = "tele text-[11px] italic text-[var(--r-ink-mute)]";

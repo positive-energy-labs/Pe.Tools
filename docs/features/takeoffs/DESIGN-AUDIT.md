@@ -86,6 +86,27 @@ strict "no axis whatsoever" set is 2, 3-as-borrowed, 9, 13, 14, 17, 18, 27).
 > where a fill cannot separate — blessed) · #9 → R13(b) (SVG dasharray occupies the dashed
 > slot — confirmed) · #11 → R5 (`verdict:` column replaces `stateColumn`; tone narrowed).
 
+> **ADOPTED 2026-08-16 — the adoption pass** (same sweep, after the consolidation batch landed
+> in `components/lang`). **#3 RULED-DISCHARGED** — the `.r10` column's borrowed
+> `fresh: "unverified"` moved onto the real `never` rung (no squiggle, muted value), with
+> `StateColumn.word` speaking the route's sharper fact "not exported"; the marks stay
+> universal. The Manual J columns' route-invented `opacity-50` became the never rung's own
+> ink (`--r-ink-mute`). **#5(a) partially consumed, and JUDGED:** the editable `StateCell`
+> exists, but the Manual J columns STAY on `NumberCell` — `onCommit(text: string)` would
+> re-implement the numeric contract (`parseCell`'s integer/min refusal, `inputMode="decimal"`,
+> right-aligned formatting) per column for no mark the grammar would add. Recorded here so the
+> next pass does not re-litigate it; revisit only if `StateCell` grows a numeric commit.
+> **Head rail** — the hand-rolled header recomposed onto lang `AddressingBar` (families #11's
+> five-slot rule): doc identity became the sentence, `.r10` path the fact lane, `sync .r10`
+> the one page-blast verb, the fixture chip the right-aligned seam; `adopt zones` + `refresh`
+> moved into the zones pane's action strip (the pane whose world they fill), `open in RHVAC`
+> into the sync panel beside the join it launches, and the "plan is the index" slogan died —
+> nothing else may live on the rail. The four labelled empties (plan, table, target gate,
+> adopt panel, sync panel) migrated onto `EmptyState` with per-site story judgments — the
+> sub-60 sf scribble plan-empty and the sync panel's eligibility gates are FILTER stories
+> (rooms/zones exist; the surface's own narrowing hid them); the table empty derives its story
+> instead of asserting one. See #13 for a colour bug found and fixed during the pass.
+
 ### 1 · The four-word room-state vocabulary is not the cell grammar, and cannot be
 
 **Surface fact.** `/takeoffs` derives one four-state progress word per room (`call`, `unreviewed`,
@@ -329,6 +350,17 @@ Not a language gap; a straight misuse, recorded because it is the kind of drift 
 supposed to make findable. Now an `OutcomeLine kind="error"` (caution, not alarm — *"a busy bridge
 is NOT the model disagreeing"*).
 
+### 13 · Fixed en route (adoption pass): a tone NAME was being poured into `color-mix`
+
+**Surface fact (2026-08-16 adoption pass).** `ZonePeek` computed its room accent as
+`STATE_META[state].tone` — the tone's *name* (`"alarm"`, `"done"`), not its ink — and handed it
+to `color-mix(...)` and `stroke`, producing an invalid colour: every non-cursor room in the zone
+peek silently rendered stroke-less and fill-less. Its legend swatch had the same defect. Both
+now go through `stateInk(state)`, the one derivation the other two surfaces already used. Not a
+language gap; recorded because it is exactly the drift the "one derivation, three surfaces"
+comment exists to prevent — and the type system could not catch a `VerdictTone` flowing into a
+CSS-colour slot, which is worth remembering when the `--viz-*` recipe lands.
+
 ---
 
 ## C · What migrated
@@ -338,8 +370,10 @@ is NOT the model disagreeing"*).
 | `Verb` | 15 | atlas 8: 4 header (1 `nav:out`), 2 zone `commit` in a `VerbGroup`, 2 verdict (tone derived from the lane). route 7: 2 adopt (1 `commit`, 1 `nav:back`), 2 sync (1 `commit`), fixture-entry, fixture-exit, error-dismiss |
 | `FactChip` | 12 | atlas 9: doc identity, fixture lane, `.r10` path, zone calls, closure, verdict-lane ×3, no-boundary. route 3: fixture lane, stamped, adopted count |
 | `OutcomeLine` | 7 | atlas 2 (busy, geometry-loading). route 5: reading, error, advisory ×2, receipt |
-| `state:` columns | 1 | `.r10` — consumer #2 of the clause |
-| honest labelled empties | 4 | no zones on level, no sessions, no filled regions, nothing eligible |
+| `state:` columns | 1 | `.r10` — consumer #2 of the clause. **Adoption pass 2026-08-16: borrowed `unverified` → the real `fresh: "never"` rung + `StateColumn.word` "not exported" (#3 discharged)** |
+| honest labelled empties | 4 | no zones on level, no sessions, no filled regions, nothing eligible. **Adoption pass: all on lang `EmptyState` (story judged per site — scribbles + eligibility gates are filter stories; the table empty derives scope vs filter), plus the table empty itself, previously bare prose** |
+| `AddressingBar` head *(adoption pass)* | 1 | five-slot rail: sentence = doc identity, facts = `.r10` path, verb = `sync .r10`, advisory = busy/geometry lines, seam = fixture chip. `adopt zones` + `refresh` → zones pane action strip; `open in RHVAC` → sync panel; the slogan line deleted |
+| never rung on Manual J *(adoption pass)* | 6 columns | `opacity-50` → `--r-ink-mute` (the grammar's never treatment); columns stay `NumberCell` by judgment (numeric contract), recorded in the adoption banner |
 | illegal `dashed` re-expressed | 4 | plus 1 legal one added; see #9 |
 | modals on `ui/dialog` | 2 | adopt + sync; the hand-rolled overlay had no focus trap, no `role`, no Esc, and a fake "esc ×" label |
 | dead code deleted | ~460 LOC | `takeoff/seam.tsx` (whole file, `Step` never consumed), `atlas.tsx` `Peek` + `nextAction`, `zone-plan.tsx` `ZonePlan` + `PlanLegend` + `Chip` |

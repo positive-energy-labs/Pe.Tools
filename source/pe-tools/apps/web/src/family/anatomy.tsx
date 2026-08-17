@@ -14,9 +14,9 @@
  * FOCUS is page vocabulary, not drawing vocabulary: it lights as a `--r-select` fill and an ink
  * stroke, exactly as the table's focused row does, and spends no state colour.
  */
+import { EmptyState } from "#/components/lang/empty";
 import {
   CONSTITUENTS,
-  EMPTY_CLASS,
   GEOM_BY_SLUG,
   bindingOf,
   effective,
@@ -54,13 +54,14 @@ export function AnatomyDrawing({
 
   if (bodyW == null || bodyH == null)
     return (
-      <p
-        className={cn(EMPTY_CLASS, "p-3")}
-        title="The drawing only ever shows numbers the profile actually holds. Give Body Width and Body Height literal values at this type — or switch the stage to a type that has them — and the elevation appears."
+      <EmptyState
+        story="scope"
+        exit="give Body Width and Body Height literal values at this type, or stage a type that has them"
+        className="p-3"
       >
         no shape to draw — the body&apos;s width or height is not a literal at this type, and
         nothing here guesses
-      </p>
+      </EmptyState>
     );
 
   // Fixed viewBox, fixed scale: the drawing must be comparable between types, so a taller type

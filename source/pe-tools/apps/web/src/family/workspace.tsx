@@ -92,6 +92,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { FactChip } from "#/components/lang/chip";
+import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
 import {
@@ -109,11 +110,10 @@ import { AddressingBar } from "#/components/lang/addressing-bar";
 import { Switcher } from "#/components/lang/switcher";
 import { AnatomyDrawing } from "#/family/anatomy";
 import { ProposalCard, SpecSheet, SpecText } from "#/family/doc-pane";
-import { ProposedCell, RefusalNote } from "#/family/marks";
+import { NavStateCell, ProposedCell } from "#/family/marks";
 import {
   AGREEMENT_TONE,
   CONSTITUENTS,
-  EMPTY_CLASS,
   GEOM_BY_SLUG,
   GROUNDING,
   LIVE,
@@ -170,17 +170,6 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
   const [overlay, setOverlay] = useState<Overlay>("draft");
   /** The disk. Seeded from the fixture — the profile starts saved — and re-snapshotted on save. */
   const [saved, setSaved] = useState<SavedProfile>(() => savedFrom(initialDraft()));
-  /** Bumped on every REFUSED commit. It keys the editors that can refuse, so a refused edit puts
-   * the old value back in the box: leaving the emptied text sitting there while the model kept the
-   * old number would be the input lying about what happened. */
-  const [refusals, setRefusals] = useState(0);
-  /**
-   * The LAST refusal, held next to the cell that refused. The header receipt says it too, but a
-   * receipt at the top of the page relaxes after four seconds and is nowhere near the box you were
-   * typing in — a refusal has to be legible where the refusal happened. It clears when that cell
-   * commits something acceptable, or when another one refuses.
-   */
-  const [refusal, setRefusal] = useState<{ key: string; text: string } | null>(null);
   /** Table state is OWNED here, because the sort direction is an input to the ghost-pinning
    * workaround — the sort key has to know which way it is about to be read. */
   const [tableState, setTableState] = useState<MasterTableState>(() => ({
@@ -374,18 +363,18 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
    * exactly as typing in a type cell severs a per-type one — the law does not care which level you
    * beat pea to.
    */
-  const editAuthored = (param: string, value: string) => {
+  const editAuthored = (param: string, value: string): string | void => {
     const trimmed = value.trim();
     // A parameter with no family value is not a state — but a REFUSAL has to be audible. A silent
-    // dropped commit looks exactly like an edit that landed and then vanished.
+    // dropped commit looks exactly like an edit that landed and then vanished. Returning the
+    // reason REFUSES the commit in the editable `StateCell` (R8): the cell restores the prior
+    // value and wears the dismissible caution note; the header receipt says it too, so the
+    // refusal survives the note being dismissed.
     if (trimmed === "") {
       const text = `Refused — "${param}" cannot have an empty family value. Every type inherits it; clearing it would leave ${TYPE_NAMES.length} types resolving to nothing. To make one type differ, override it in that type's cell instead.`;
-      setRefusals((count) => count + 1);
-      setRefusal({ key: `param:${param}`, text });
       say(text);
-      return;
+      return text;
     }
-    setRefusal((current) => (current?.key === `param:${param}` ? null : current));
     setDraft((previous) => {
       const next = structuredClone(previous);
       next.authored[param] = trimmed;
@@ -476,18 +465,16 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
   // ── the geometry verbs ────────────────────────────────────────────────────────────────────────
 
   /** Retype a frozen literal. It stays frozen — this edits the number, not its reachability. */
-  const editLiteral = (slug: string, property: string, value: string) => {
+  const editLiteral = (slug: string, property: string, value: string): string | void => {
     const trimmed = value.trim();
     // An emptied literal is not a value — the geometry would have no number at all. Refused OUT
-    // LOUD: the box puts the old literal back and the receipt says what would have happened.
+    // LOUD: returning the reason makes the editable `StateCell` restore the old literal and wear
+    // the caution note (R8), and the receipt says what would have happened.
     if (trimmed === "") {
       const text = `Refused — ${slug}.${property} is a frozen literal, so it cannot be emptied: the geometry would have no dimension at all. Type a number, or bind it to a parameter to give it somewhere else to come from.`;
-      setRefusals((count) => count + 1);
-      setRefusal({ key: `geom:${slug}.${property}`, text });
       say(text);
-      return;
+      return text;
     }
-    setRefusal((current) => (current?.key === `geom:${slug}.${property}` ? null : current));
     setDraft((previous) => {
       const next = structuredClone(previous);
       next.geom[slug] = {
@@ -878,33 +865,22 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
               }
             />
           );
+        // THE EDITABLE CELL (R8, families #6 discharged here): the grammar draws the caution
+        // square + bold for the unsaved staged value and carries the refusal itself — returning
+        // the reason from `editLiteral` restores the literal and shows the dismissible note,
+        // without the row growing a pixel. The route-drawn RefusalNote this replaced is deleted.
         return (
-          // The wrapper is unconditional here so the refusal chip has something to be positioned
-          // against without ever pushing the input onto a second line — a row that grew a pixel
-          // when it refused would break the one promise the overlays are built on.
-          <span className="relative flex h-7 w-full items-center">
-            <ProposedCell
-              proposals={[]}
-              onLocate={locate}
-              where={row.name}
-              unsaved={
-                isUnsavedAt(draft, saved, row, typeName)
-                  ? `UNSAVED — the file ${diskLiteral === null ? "does not carry this dimension at all" : `carries ${diskLiteral}`}; saving writes ${literal}.`
-                  : null
-              }
-            >
-              <TextCell
-                key={`${literal}:${refusals}`}
-                value={literal}
-                className="text-[var(--r-ink)]"
-                title={`The literal itself, as ONE cell across every type — EDITABLE. Typing here rewrites the number frozen into the geometry; it does not make it reachable. That is what binding is for, and the two are deliberately different acts: this one changes what the family measures, binding changes who is allowed to say so. Emptying it is refused out loud — a dimension with no number is not a state.`}
-                onCommit={(next) => editLiteral(slug, property, next)}
-              />
-            </ProposedCell>
-            {refusal?.key === `geom:${slug}.${property}` && (
-              <RefusalNote text={refusal.text} onDismiss={() => setRefusal(null)} />
-            )}
-          </span>
+          <NavStateCell
+            value={literal}
+            stage={isUnsavedAt(draft, saved, row, typeName) ? "staged" : "clean"}
+            stagedBy="you"
+            note={`The literal itself, as ONE cell across every type — EDITABLE. Typing here rewrites the number frozen into the geometry; it does not make it reachable. That is what binding is for. Emptying it is refused out loud — a dimension with no number is not a state.${
+              isUnsavedAt(draft, saved, row, typeName)
+                ? ` UNSAVED — the file ${diskLiteral === null ? "does not carry this dimension at all" : `carries ${diskLiteral}`}; saving writes ${literal}.`
+                : ""
+            }`}
+            onCommit={(next) => editLiteral(slug, property, next)}
+          />
         );
       }
 
@@ -1030,6 +1006,13 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
       }
 
       // ── DRAFT: the staged document, editable ────────────────────────────────────────────────
+      //
+      // NOT migrated onto the editable `StateCell` (adoption pass 2026-08-16, findings #13/#14):
+      // an override-less type cell shows the FAMILY value as a placeholder — the inheritance
+      // showing through, not a value the type holds — and the grammar's editable slot has no
+      // placeholder, so an empty `StateCell` here would claim "no value" where the cell resolves
+      // to the authored one. The fold also LOCATES here (the notch is a button); `StateCell`'s
+      // fold is CSS. Both stay honest on `ProposedCell` + `TextCell` until the axes can say them.
       if (isFormula(authored))
         return (
           <ReadCell
@@ -1219,7 +1202,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
     for (const typeName of TYPE_NAMES) list.push(typeColumn(typeName, { header: true }));
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft, saved, overlay, refusals, stageType, binding, consumers, tableState]);
+  }, [draft, saved, overlay, stageType, binding, consumers, tableState]);
 
   /**
    * THE DRILL-IN, on the same primitive. Same MasterTable, same identity cell, same editable type
@@ -1294,7 +1277,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
       },
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft, saved, overlay, refusals, drillType, stageType, binding, consumers, drillState]);
+  }, [draft, saved, overlay, drillType, stageType, binding, consumers, drillState]);
 
   // ── the anatomy pane ──────────────────────────────────────────────────────────────────────────
 
@@ -1404,10 +1387,18 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
         </span>
       }
       empty={
-        <span className={EMPTY_CLASS}>
-          no parameters in this profile — nothing to audit until one is authored or a geometry
-          literal is promoted
-        </span>
+        // §4's two kinds of empty, told apart: the fixture profile always has rows, so a bare
+        // table is almost always the table's OWN narrowing — but the claim is derived, not
+        // assumed, so each story renders only when it is true.
+        rows.length === 0 ? (
+          <EmptyState story="scope" exit="author a parameter, or promote a geometry literal">
+            no parameters in this profile — nothing to audit
+          </EmptyState>
+        ) : (
+          <EmptyState story="filter" exit="clear a column filter or the search">
+            the narrowing hid all {rows.length} rows
+          </EmptyState>
+        )
       }
     />
   );
@@ -1442,10 +1433,16 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
         </span>
       }
       empty={
-        <span className={EMPTY_CLASS}>
-          no parameters to reconcile at this type — the profile authors none, so there is nothing
-          for Revit to agree or disagree with
-        </span>
+        rows.some((row) => row.kind === "profile") ? (
+          <EmptyState story="filter" exit="clear a column filter or the search">
+            the narrowing hid every parameter at this type
+          </EmptyState>
+        ) : (
+          <EmptyState story="scope" exit="author a parameter in the profile first">
+            no parameters to reconcile at this type — the profile authors none, so there is nothing
+            for Revit to agree or disagree with
+          </EmptyState>
+        )
       }
     />
   ) : null;
@@ -1647,11 +1644,12 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
               ) : (
                 <>
                   <span className="min-w-0 flex-1">
-                    <TextCell
-                      key={`${bindingOf(draft, part.slug, dim.property)}:${refusals}`}
+                    {/* The SAME editable cell as the ghost row it mirrors — one grammar, and the
+                        refusal (an emptied literal) is the cell's own note in both places. */}
+                    <NavStateCell
                       value={bindingOf(draft, part.slug, dim.property)}
-                      className="h-5 rounded-[2px] border border-[var(--r-line-2)] px-1 text-[10px] text-[var(--r-caution)]"
-                      title={`UNBOUND — the literal frozen into ${part.slug}. Editable, exactly as it is on its ghost row at the bottom of the table; editing it changes the number, not who can reach it.`}
+                      className="rounded-[2px] border border-[var(--r-line-2)] text-[10px] text-[var(--r-caution)]"
+                      note={`UNBOUND — the literal frozen into ${part.slug}. Editable, exactly as it is on its ghost row at the bottom of the table; editing it changes the number, not who can reach it.`}
                       onCommit={(next) => editLiteral(part.slug, dim.property, next)}
                     />
                   </span>
@@ -1708,31 +1706,31 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
           >
             family value {isFormula(authored) ? "· formula" : ""}
           </p>
-          <TextCell
-            // Keyed on the refusal counter so a refused empty commit puts the number back in the
-            // box. A box that kept showing the empty text while the model kept the old value would
-            // be the one place on this page where what you see is not what is stored.
-            key={`${authored}:${refusals}`}
+          {/* THE FAMILY-LEVEL VALUE CELL, on the editable `StateCell` (R8, families #6): pea's
+              open family-level proposal takes the body (fold + wash), your unwritten edit takes
+              the staged square + bold, and a refused empty commit is the cell's own restore +
+              caution note — the route's refusal paragraph this replaced is deleted. */}
+          <NavStateCell
             value={authored}
+            stage={
+              family.length > 0
+                ? "proposed"
+                : (saved.authored[name] ?? null) !== authored
+                  ? "staged"
+                  : "clean"
+            }
+            stagedBy={family.length > 0 ? "pea" : "you"}
             className={cn(
-              "h-6 rounded-[2px] border border-[var(--r-line-2)] px-1 text-[11px]",
+              "rounded-[2px] border border-[var(--r-line-2)] text-[11px]",
               isFormula(authored) && "italic",
             )}
-            title={
+            note={
               isFormula(authored)
                 ? `A FORMULA — ${authored}. Its result is derived, so no type may override it and Revit's number for it is an output rather than a competing value. Edit the expression here; change what feeds it to change the result.`
                 : `The value every type inherits unless it authors its own. Editing it moves all ${TYPE_NAMES.filter((typeName) => draft.types[typeName]?.[name] === undefined).length} inheriting type${TYPE_NAMES.filter((typeName) => draft.types[typeName]?.[name] === undefined).length === 1 ? "" : "s"} at once — watch the grey placeholders in the table change. Begin with = to make it a formula.`
             }
             onCommit={(next) => editAuthored(name, next)}
           />
-          {refusal?.key === `param:${name}` && (
-            <p
-              className="tele mt-1 text-[9px] leading-snug text-[var(--r-caution)]"
-              title={refusal.text}
-            >
-              {refusal.text}
-            </p>
-          )}
           {family.length > 0 && (
             <p className="tele mt-1 text-[9px] text-[var(--r-pea-ink)]">
               pea proposes {family[0]!.proposed} here — the card is above; typing your own value
@@ -1749,12 +1747,9 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
             drives {drives.length} geometry propert{drives.length === 1 ? "y" : "ies"}
           </p>
           {drives.length === 0 ? (
-            <p
-              className={EMPTY_CLASS}
-              title="Nothing in the profile's geometry reads this parameter. Binding a ghost row to it is what would fill this list."
-            >
+            <EmptyState story="scope" exit="bind a ghost row to this parameter to fill this list">
               drives nothing — fine for schedule data, suspicious for a Length
-            </p>
+            </EmptyState>
           ) : (
             drives.map((entry) => (
               <button
@@ -1778,12 +1773,12 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
             grounding
           </p>
           {blocks.length === 0 ? (
-            <p
-              className={EMPTY_CLASS}
-              title={`Nothing in ${SPEC?.fileName ?? "the spec"} claims this number, so it is asserted rather than sourced. Parsing a document that mentions it, or citing an existing block, is what fills this.`}
+            <EmptyState
+              story="scope"
+              exit={`parse a document that claims this number, or cite a block of ${SPEC?.fileName ?? "the spec"}`}
             >
               ungrounded — asserted, not sourced
-            </p>
+            </EmptyState>
           ) : (
             blocks.map((id) => (
               <p
@@ -1888,12 +1883,9 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
             pea proposes — ephemeral, page-scoped
           </p>
           {WORLD.proposals.length === 0 ? (
-            <p
-              className={EMPTY_CLASS}
-              title="Pea has read nothing into this profile yet. Proposals arrive when pea is asked to read the attached spec against the family."
-            >
+            <EmptyState story="scope" exit="ask pea to read the attached spec against the family">
               no proposals — pea has not read this spec against the profile
-            </p>
+            </EmptyState>
           ) : (
             WORLD.proposals.map((proposal) => (
               <ProposalCard
@@ -2046,12 +2038,9 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
 function partProseOnly(slug: string) {
   const prose = CONSTITUENTS.find((entry) => entry.slug === slug)?.text ?? null;
   return (
-    <p
-      className={EMPTY_CLASS}
-      title="The profile mentions this constituent in its prose but declares no bindable dims and no metadata for it, so there is nothing here to edit. Declaring its geometry is what fills this panel."
-    >
+    <EmptyState story="scope" exit="declare its geometry in the profile to make it editable here">
       no structured geometry declared for {slug}
       {prose ? ` — the profile says only: ${prose}` : ""}
-    </p>
+    </EmptyState>
   );
 }

@@ -88,6 +88,26 @@ as borrowed rungs).
 > owed specimen closed by ruling) · #8 → R3 (row fact, gutter marker) · #9 → R8 (refusal is
 > the editable cell's job) · #10 → R13(b) · #11 → R11 (`AddressingBar` shipped).
 
+> **ADOPTED 2026-08-16 — the adoption pass** (same sweep, after the consolidation batch
+> landed in `components/lang`). What each ruling's shipped primitive now actually carries on
+> these two routes: **#2 RULED-DISCHARGED** — all 20 labelled empties (plus one the census
+> missed) migrated onto lang `EmptyState` with per-site `story` judgments and required exits;
+> both `EMPTY_CLASS` constants deleted at zero consumers (`family/model.ts`,
+> `routes/families.tsx`). **#5 RULED-DISCHARGED for `/families`** — `unplanned` rides the
+> `verdict:` column, which never needed the rung; `/family`'s `unread` deliberately keeps its
+> route word (the live column's `·` already marks it — two marks for one fact stays worse
+> than one). **#6 PARTIALLY DISCHARGED** — the ghost literal cell, the inspector's unbound
+> literal, and the family-level value now ride the editable `StateCell` (stage/stagedBy for
+> pea's fold and your caution square, refusal returned from `onCommit`, `onNavigate` wired to
+> the table's cell navigation); the TYPE-OVERRIDE cells stayed honest on
+> `ProposedCell` + `TextCell` — see the two new findings #13 (inherited placeholder) and #14
+> (the fold is a locator). **#9 RULED-DISCHARGED** — `RefusalNote` deleted from
+> `family/marks.tsx`; both refusing editors return the reason from `onCommit` and the cell
+> restores + says why itself. **#11 RULED-DISCHARGED** — `/families` recomposed onto
+> `AddressingBar` (this pass) beside `/family` (the reference): `apply` is the one page-blast
+> verb on the rail; `plan` and `project → profile` moved into the table's own strip per the
+> standing rule.
+
 ### 1 · The plan-verdict vocabulary is not the cell grammar, and cannot be — again
 
 **Surface fact.** `/families` derives one word per family from the plan lens: `unplanned`,
@@ -351,6 +371,40 @@ one colour that may only ever mean "the model disagrees" — and drew the `inclu
 both are straight violations, recorded because a reserved colour is supposed to make them findable.
 Both now sit on neutral ink / the caution rank.
 
+### 13 · The editable `StateCell` cannot render INHERITED-PLACEHOLDER — found during adoption
+
+**Surface fact (adoption pass, 2026-08-16).** A type cell with no override shows the family value
+as a grey placeholder — the inheritance showing through, not a value the type holds. Typing
+creates the override; clearing hands the type back. This is the majority state of the whole
+matrix.
+
+**What the language lacks.** The editable `StateCell` (R8) renders `value` into a caret-safe
+input with no placeholder slot. Migrating the type cells would render an override-less cell as
+EMPTY, which claims "no value" where the cell resolves to the authored one — a confident wrong
+statement, the §0 failure class. The ghost literal, the unbound-literal inspector line and the
+family-level value all migrated cleanly (their value is always their own); the type cells did
+not, and were left on `ProposedCell` + `TextCell`.
+
+**Proposed resolution.** Either `StateCellProps.placeholder?: string` (rendered only when
+editable, in `--r-ink-mute`, documented as "what this cell resolves to when empty"), or an
+explicit ruling that inherited-resolution is a route concern the grammar never draws — in which
+case `ProposedCell` is the sanctioned wrapper for it and its docblock should say so permanently.
+
+### 14 · The grammar's proposal fold LOCATES nothing — found during adoption
+
+**Surface fact (adoption pass, 2026-08-16).** This route's fold is a button: clicking the notch
+brings the proposal's card into the sidebar ("the table points, the sidebar decides"). The
+grammar's fold (`data-body="proposed"`) is a CSS pseudo-element with no hit target.
+
+**What the language lacks.** An `onLocate` (or similar) hook on the editable `StateCell`, so the
+fold can keep being the cell-level locator the rail's dot is at row level. Without it, migrating
+a proposed EDITABLE cell onto the grammar silently deletes the affordance — the rail dot would
+become the only way to locate, which weakens the two-level pointing the round-3 ruling praised.
+
+**Proposed resolution.** `onLocate?: () => void` on `StateCellProps`; present ⇒ the fold renders
+as a real (caret-safe, `onMouseDown`-suppressed) button. Falls out of the same "every mark stays
+outside the text box" law R8 already wrote.
+
 ---
 
 ## C · What migrated
@@ -360,7 +414,11 @@ Both now sit on neutral ink / the caution rank.
 | lang `Verb` call sites | 22 | `/families` 6: plan (`act`), apply (`commit`), project (`act`), apply-scope (`act`), artifacts (`nav:out`), copy (`act`). `/family` 16: save profile (`commit`), anatomy hide/show, doc parse, inspector close (`nav:back`), drill-in back (`nav:back`) + capture (`act`) + apply (`commit`), bulk capture (`act`) + apply (`commit`), per-ghost `bind…` (`act`, one per unbound dim), per-proposal accept (`agent`) + deny (`act`) |
 | `FactChip` | 12 | `/families` 8: 2 seams, plan hash, recompiled hash (alarm when the hashes differ), draft count, queue count, projection count, per-receipt applied/failed. `/family` 4: live read-age, dirty/saved + unsaved count, open-proposal count (`pea`), the fixture seam |
 | `OutcomeLine` | 11 | `/families` 8: bridge disconnected, reading categories, resolving families, command failed / apply refused, plan diagnostics, projection diagnostics, projection failure. `/family` 3: sheet-mode stand-in, the `?family` advisory, (route receipts ride the sentence) |
-| honest labelled empties | 20 | `/families` 12, `/family` 8 — all on one shared class per surface, none on a primitive (#2) |
+| honest labelled empties | 20 | `/families` 12, `/family` 8 — all on one shared class per surface, none on a primitive (#2). **Adoption pass 2026-08-16: all 20 (plus the drill-in empty the census missed) now on lang `EmptyState` — story judged per site (filter for the two combobox lists and the tables' narrowed-to-nothing branches, scope everywhere else), exit required; both `EMPTY_CLASS` constants deleted.** |
+| lang `EmptyState` call sites *(adoption pass)* | 21 | `/families` 12: 2 combobox pickers (filter), no-loaded-families, no-categories-picked, decision-queue empty, receipts empty, projection empty, 4-branch table empty (3 scope + 1 filter). `/family` 9: 2-branch cross-type + 2-branch drill-in table empties, drives-nothing, ungrounded, no-proposals, prose-only constituent, spec-text, spec-sheet, no-shape-to-draw |
+| editable `StateCell` (R8) call sites *(adoption pass)* | 3 | `/family`: the ghost literal's ONE merged cell (staged square + bold + built-in refusal + cell navigation), the inspector's unbound-literal line, the inspector's family-level value (pea's proposal takes the body; your edit takes the staged square; empty commit refused via `onCommit` return). Type cells stayed honest — #13/#14 |
+| `AddressingBar` (R11) heads *(adoption pass)* | 2 | `/family` (reference, promoted head) + `/families` (this pass): name · sentence · plan-hash fact · `apply` as the one page-blast verb · unproven-ops seam right-aligned. `plan` + `project → profile` moved into the table's own strip |
+| route-drawn marks deleted *(adoption pass)* | 1 file shrunk | `family/marks.tsx`: `RefusalNote` deleted (zero consumers — refusal is the editable cell's, R8); `ProposedCell` survives on findings #13/#14; `NavStateCell` (the cell-navigation adapter) added |
 | `stateColumn` tones re-based | 2 columns | `/families` plan verdict (7 words), `/family` agreement (7 words incl. `unbound`) |
 | `--st-*` / `--act-*` spends migrated | 78 | 76 in `variant-e.tsx` — the largest single concentration of the old vocabulary in the repo — plus 2 `--act-hover` |
 | forked `Verb` copies deleted | 2 | `routes/families.tsx` (which made `reason` optional and so shipped refusals with no explanation), `routes/family.tsx` |

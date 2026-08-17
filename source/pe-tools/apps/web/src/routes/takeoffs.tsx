@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
 import { FactChip } from "#/components/lang/chip";
+import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "#/components/ui/dialog";
@@ -207,13 +208,6 @@ function TakeoffsRoute() {
             : prev,
         );
         setOverlay((prev) => ({ ...prev, runs: { ...prev.runs, [zone.zone.guid]: result } }));
-      });
-    },
-
-    launch: () => {
-      if (!scope || !r10Path) return;
-      void run("launching RHVAC", async () => {
-        await callHostRpc("rhvac.launch", { path: r10Path }, scope);
       });
     },
 
@@ -429,11 +423,12 @@ function TargetGate({
         {/* A picker with no options says where options come from (SURFACE-PHILOSOPHY §4). */}
         {sessions.length === 0 && (
           <div className="px-2.5 py-3">
-            <p className="tele-label text-muted-foreground">no sessions</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              this list is the live connected-host catalog. Start Revit with the Pe add-in loaded
-              and a session appears here — or take the fixture lane below.
-            </p>
+            <EmptyState
+              story="scope"
+              exit="start Revit with the Pe add-in loaded and a session appears here — or take the fixture lane below"
+            >
+              no sessions — this list is the live connected-host catalog
+            </EmptyState>
           </div>
         )}
       </div>
@@ -605,11 +600,12 @@ function AdoptPanel({
             )}
             {rows !== null && rows.length === 0 && (
               <div className="px-2 py-3">
-                <p className="tele-label text-muted-foreground">no filled regions</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  this view carries no designer-drawn filled regions to adopt. Draw the zones in
-                  Revit first, or pick another view.
-                </p>
+                <EmptyState
+                  story="scope"
+                  exit="draw the zones in Revit first, or pick another view"
+                >
+                  no filled regions — this view carries no designer-drawn regions to adopt
+                </EmptyState>
               </div>
             )}
           </div>
@@ -806,14 +802,16 @@ function SyncPanel({
             </span>
           </p>
         ))}
-        {/* "Nothing eligible" is the route's own story, and it names the three gates. */}
+        {/* The FILTER story: rooms exist, and the three eligibility gates — the surface's own
+            narrowing — hid them. The exit names the gates. */}
         {inserts.length === 0 && (
           <div className="py-2">
-            <p className="tele-label text-muted-foreground">nothing eligible</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              a room syncs once it has a Room Region home, Manual J data entered, and no existing
-              .r10 link.
-            </p>
+            <EmptyState
+              story="filter"
+              exit="a room becomes eligible once it has a Room Region home, Manual J data entered, and no existing .r10 link"
+            >
+              nothing eligible to insert
+            </EmptyState>
           </div>
         )}
       </div>
@@ -867,6 +865,26 @@ function SyncPanel({
                     : `Inserts ${inserts.length} rooms into ${r10Path} and writes the {file, room} link back onto each Room Region. Work on a COPY of the template.`
           }
           onClick={sync}
+        />
+        {/* Moved off the head when it became the five-slot rail (families #11): this verb acts
+            on the joined .r10, and the join is made — and continued — here. */}
+        <Verb
+          tone="nav"
+          direction="out"
+          label="open in RHVAC"
+          disabled={busy !== null || !r10Path}
+          reason={
+            busy !== null
+              ? `${busy} is in flight — the host runs one transaction at a time`
+              : !r10Path
+                ? "type a host-visible path to the target .r10 above"
+                : "Launches RHVAC on the target .r10, outside this page"
+          }
+          onClick={() =>
+            void run("launching RHVAC", async () => {
+              await callHostRpc("rhvac.launch", { path: r10Path }, scope);
+            })
+          }
         />
       </div>
     </Panel>
