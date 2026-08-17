@@ -82,7 +82,25 @@ public sealed class ZoneBoundedDetectTests
         // read off the drawing. closureSqft is the door/window closure area drawn on the panel;
         // the closure block splits it and reports the generic morphological close separately.
         [property: JsonProperty("closureSqft")] double ClosureSqft,
-        [property: JsonProperty("closure")] object Closure);
+        [property: JsonProperty("closure")] object Closure,
+        // report.json v4: stable cross-run zone identity (SHIMS.md #2). Zone names are ordinals
+        // assigned during zoning; this key is what A/B pairing may trust.
+        [property: JsonProperty("zoneKey")] string ZoneKey);
+
+    /// <summary>
+    /// Stable cross-run zone identity: sha256 over the level name plus the zone's bbox quantized
+    /// to 0.5 ft, first 12 hex chars. Nothing ordinal goes in, so the key survives re-zoning
+    /// REORDERINGS and sub-half-foot jitter; it changes exactly when the zone's geography
+    /// actually moves — which is the event A/B pairing must refuse to paper over.
+    /// </summary>
+    private static string ZoneKey(string view, double minX, double minY, double maxX, double maxY)
+    {
+        static double Quantized(double value) => Math.Round(value * 2, MidpointRounding.AwayFromZero) / 2;
+        string payload = FormattableString.Invariant(
+            $"{view}|{Quantized(minX):F1}|{Quantized(minY):F1}|{Quantized(maxX):F1}|{Quantized(maxY):F1}");
+        byte[] hash = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(payload));
+        return Convert.ToHexString(hash)[..12].ToLowerInvariant();
+    }
 
     [Test]
     public void Zone_mask_bounds_partition_to_west_block()
@@ -437,13 +455,17 @@ public sealed class ZoneBoundedDetectTests
                     }
                 }
                 var points = zone.Loops.SelectMany(loop => loop).ToList();
+                double zoneMinX = points.Min(point => point[0]);
+                double zoneMinY = points.Min(point => point[1]);
+                double zoneMaxX = points.Max(point => point[0]);
+                double zoneMaxY = points.Max(point => point[1]);
                 reports.Add(new PromotionZoneReport(
                     view,
                     zone.Name,
-                    points.Min(point => point[0]),
-                    points.Min(point => point[1]),
-                    points.Max(point => point[0]),
-                    points.Max(point => point[1]),
+                    zoneMinX,
+                    zoneMinY,
+                    zoneMaxX,
+                    zoneMaxY,
                     zone.Loops,
                     Path.GetRelativePath(artifactDir, tsv).Replace('\\', '/'),
                     Path.GetRelativePath(artifactDir, copiedInk).Replace('\\', '/'),
@@ -497,7 +519,8 @@ public sealed class ZoneBoundedDetectTests
                         doorHeadOversizeSqft = doorHeadOversizeCells * cellSqft,
                         wallRunGapSqft = wallRunCells * cellSqft,
                         gapCloseSqft = gapCloseCells * cellSqft,
-                    }));
+                    },
+                    ZoneKey(view, zoneMinX, zoneMinY, zoneMaxX, zoneMaxY)));
                 TestContext.Out.WriteLine(
                     $"{zone.Name}: raw={result.Rooms.Count} accepted={promotion.Diagnostics.AcceptedRooms} " +
                     $"held={promotion.Diagnostics.HeldRooms} ink={promotion.Diagnostics.InkBackedEdgeFraction:P0} " +
@@ -518,9 +541,11 @@ public sealed class ZoneBoundedDetectTests
             : effectiveOptions[canonicalLevel];
         File.WriteAllText(Path.Combine(artifactDir, "report.json"),
             JsonConvert.SerializeObject(new {
-                // v3 adds per-zone closure attribution (closureSqft/closure) and the Seals/Close
-                // raster paths. Readers tolerate their absence, so v2 artifacts still render.
-                SchemaVersion = 3,
+                // v3 added per-zone closure attribution (closureSqft/closure) and the Seals/Close
+                // raster paths; v4 adds zoneKey (stable cross-run zone identity — sha256 of level
+                // + 0.5ft-quantized bbox). Readers tolerate absence, so older artifacts still
+                // render — they just cannot claim what they do not carry.
+                SchemaVersion = 4,
                 GeneratedUtc = DateTimeOffset.UtcNow,
                 options = JsonConvert.DeserializeObject(JsonConvert.SerializeObject(canonicalOptions)),
                 optionsHash = OptionsHash(canonicalOptions),
