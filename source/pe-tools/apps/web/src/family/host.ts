@@ -44,11 +44,29 @@ export interface FamilySnapshot {
   validation?: { isValid: boolean; issues: unknown[] } | null;
 }
 
+/** The shape `familyEvidenceSchema` guarantees, narrowed to what the route reads. `source` is
+ * load-bearing rather than informational: `Formula` is what makes a live number an OUTPUT rather
+ * than a competing value, which is the difference between the page's `derived` and `drift`. */
 export interface EvidenceSlice {
   typeNames: string[];
   parameters: Array<{
     name: string;
-    valuesPerType: Record<string, { value?: string | null }>;
+    isShared?: boolean;
+    propertiesGroup?: string | null;
+    valuesPerType: Record<
+      string,
+      {
+        value?: string | null;
+        source?:
+          | "AuthoredGlobal"
+          | "AuthoredTypeOverride"
+          | "Formula"
+          | "RevitDefault"
+          | "Unresolved";
+        provenance?: "Exact" | "Inferred" | "Unresolved";
+        formula?: string | null;
+      }
+    >;
   }>;
   diagnostics: unknown[];
   from: {

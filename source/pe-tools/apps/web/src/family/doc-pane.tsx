@@ -13,12 +13,19 @@ import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
 import { Switcher } from "#/components/lang/switcher";
-import { SPEC, hashOf, type CellVerdict } from "#/family/model";
-import type { ProtoProposal } from "#/family/world";
+import { hashOf, type CellVerdict } from "#/family/model";
+import type { ProtoProposal, ProtoSpec } from "#/family/world";
 import { cn } from "#/lib/utils";
 
-export function SpecText({ litBlocks }: { litBlocks: Set<string> }) {
-  const spec = SPEC;
+export function SpecText({
+  spec,
+  litBlocks,
+}: {
+  /** The open document's spec, THREADED rather than imported: on the live lane there is not one
+   * yet, and a pane that kept rendering the fixture's cut sheet would be citing another family. */
+  spec: ProtoSpec | null;
+  litBlocks: Set<string>;
+}) {
   if (!spec)
     return (
       <EmptyState story="scope" exit="parse a cut sheet to attach one" className="p-3">
@@ -65,15 +72,16 @@ export function SpecText({ litBlocks }: { litBlocks: Set<string> }) {
  * stand-in that moved between renders would be worse than nothing.
  */
 export function SpecSheet({
+  spec,
   litBlocks,
   zoom,
   onZoom,
 }: {
+  spec: ProtoSpec | null;
   litBlocks: Set<string>;
   zoom: number;
   onZoom: (zoom: number) => void;
 }) {
-  const spec = SPEC;
   if (!spec)
     return (
       <EmptyState story="scope" exit="parse a cut sheet to attach one" className="p-3">
@@ -182,12 +190,15 @@ export function ProposalCard({
   verdict,
   focused,
   blockMd,
+  specFileName,
   onAccept,
   onDeny,
   onHover,
   register,
 }: {
   proposal: ProtoProposal;
+  /** Named so the citation line can say WHICH document it read from. */
+  specFileName?: string | null;
   verdict: CellVerdict;
   focused: boolean;
   blockMd: string | null;
@@ -267,7 +278,7 @@ export function ProposalCard({
       {blockMd && (
         <p
           className="face-mono mt-1 line-clamp-3 whitespace-pre-line t-caption leading-snug text-[var(--r-ink-2)]"
-          title={`Read from ${proposal.sourceBlockId} of ${SPEC?.fileName ?? "the spec"} — the source text verbatim, so the claim is checkable without leaving the page.`}
+          title={`Read from ${proposal.sourceBlockId} of ${specFileName ?? "the spec"} — the source text verbatim, so the claim is checkable without leaving the page.`}
         >
           {blockMd}
         </p>

@@ -13,12 +13,14 @@
  *     reads it straight off the URL to scope route state to that conversation. Declared here
  *     because an undeclared param is dropped on the first navigation, and the pane would then
  *     silently fall back to workspace scope. Nothing on the page reads it; the router does.
- *   `family` — `/families` row navigation passes an element id. The promoted surface reads one
- *     fixture profile and cannot open an arbitrary family, so it is handed to the workspace and
- *     SAID rather than swallowed: the header renders an advisory naming what would honour it.
+ *   `family` — `/families` row navigation passes an ELEMENT id. Phase B gave the surface a real
+ *     document lane, but a placed element is still not a document: nothing maps an element id to a
+ *     `family.json` path. So it is handed to the workspace and SAID rather than swallowed — the
+ *     header renders an advisory pointing at the sentence's document slot, which is where you pick.
  *
- * WHAT WENT: `?mock`, because the whole surface is now a declared fixture lane and a flag that
- * chooses between fixture and fixture is a lie; `?variant`, because there is nothing to switch to.
+ * WHAT WENT: `?mock`, because the lane is decided by whether a family document is OPEN — a flag
+ * that chose the lane would be able to contradict the page's own state; `?variant`, because there
+ * is nothing to switch to.
  */
 import { createFileRoute } from "@tanstack/react-router";
 

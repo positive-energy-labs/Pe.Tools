@@ -12,6 +12,13 @@
  * faces their frames name. ponytail: placement rules are per-slug constants for the one fixture
  * family; a real placement evaluator arrives with the host lane's structured frames.
  *
+ * PHASE B took the world off the module scope and put it on a PROP, so this drawing reads whichever
+ * document is open. What it did NOT do is generalise `buildParts`, which still knows six fixture
+ * slugs by name: a document whose constituents are called something else draws only what it
+ * recognises and says so with the empty state. The real evaluator already exists next door —
+ * `family-model.ts`'s `buildSheet` resolves frames, planes and faces properly — and adopting it is
+ * phase C's job, not a change to smuggle in behind a projection.
+ *
  * GHOSTS: every OTHER type is drawn behind the staged one as a thin outline at the same fixed
  * scale, so a type comparison needs no second drawing. Fixed scale is the law here — a taller
  * type draws TALLER rather than being refitted to the box.
@@ -25,15 +32,14 @@
  */
 import { EmptyState } from "#/components/lang/empty";
 import {
-  CONSTITUENTS,
-  GEOM_BY_SLUG,
   bindingOf,
   effective,
   inches,
   type Draft,
   type Focus,
+  type PageWorld,
 } from "#/family/model";
-import { WORLD, boundParam } from "#/family/world";
+import { boundParam } from "#/family/world";
 import { cn } from "#/lib/utils";
 
 // ── the parts, resolved for one type ────────────────────────────────────────────────────────────
@@ -65,14 +71,20 @@ type Part =
 
 /** A dim resolved THROUGH its binding: bound → the parameter at this type, unbound → the frozen
  * literal. This is what makes bind/unbind and ghost-row edits visible in the drawing. */
-function dimOf(draft: Draft, typeName: string, slug: string, property: string): number | null {
-  const binding = bindingOf(draft, slug, property);
+function dimOf(
+  world: PageWorld,
+  draft: Draft,
+  typeName: string,
+  slug: string,
+  property: string,
+): number | null {
+  const binding = bindingOf(world, draft, slug, property);
   const param = boundParam(binding);
   return param ? inches(effective(draft, param, typeName)) : inches(binding);
 }
 
-function buildParts(draft: Draft, typeName: string): Part[] {
-  const dim = (slug: string, property: string) => dimOf(draft, typeName, slug, property);
+function buildParts(world: PageWorld, draft: Draft, typeName: string): Part[] {
+  const dim = (slug: string, property: string) => dimOf(world, draft, typeName, slug, property);
   const bodyW = dim("body", "width");
   const bodyD = dim("body", "depth");
   const bodyH = dim("body", "height");
@@ -92,7 +104,15 @@ function buildParts(draft: Draft, typeName: string): Part[] {
     inches(effective(draft, "Core Height", typeName)) ??
     (bodyH != null && topH != null ? bodyH + topH : null);
   if (boreDia != null && coreLen != null)
-    parts.push({ slug: "core-bore", kind: "cyl", isVoid: true, w: boreDia, d: boreDia, z0: 0, h: coreLen });
+    parts.push({
+      slug: "core-bore",
+      kind: "cyl",
+      isVoid: true,
+      w: boreDia,
+      d: boreDia,
+      z0: 0,
+      h: coreLen,
+    });
 
   const supplyDia = dim("supply-air", "diameter");
   if (supplyDia != null && bodyH != null)
@@ -160,6 +180,7 @@ function range(part: Extract<Part, { kind: "box" | "cyl" }>, axis: Axis): [numbe
 }
 
 export function AnatomyDrawing({
+  world,
   draft,
   typeName,
   focusedParts,
@@ -167,6 +188,7 @@ export function AnatomyDrawing({
   onInspect,
   inspecting,
 }: {
+  world: PageWorld;
   draft: Draft;
   typeName: string;
   focusedParts: Set<string>;
@@ -175,7 +197,7 @@ export function AnatomyDrawing({
   onInspect: (slug: string) => void;
   inspecting: string | null;
 }) {
-  const parts = buildParts(draft, typeName);
+  const parts = buildParts(world, draft, typeName);
   const body = parts.find((part) => part.slug === "body");
 
   if (!body)
@@ -193,7 +215,7 @@ export function AnatomyDrawing({
   /** Every OTHER type's solids, as outlines at the same scale. */
   const ghosts = Object.keys(draft.types)
     .filter((name) => name !== typeName)
-    .map((name) => ({ typeName: name, parts: buildParts(draft, name) }));
+    .map((name) => ({ typeName: name, parts: buildParts(world, draft, name) }));
 
   const partFill = (slug: string) => (focusedParts.has(slug) ? "var(--r-select)" : "transparent");
   const partStroke = (slug: string) => (focusedParts.has(slug) ? "var(--r-ink)" : "var(--r-ink-2)");
@@ -299,8 +321,7 @@ export function AnatomyDrawing({
             {parts.map((part) => {
               if (part.kind !== "conn") {
                 const active = focusedParts.has(part.slug);
-                const prose =
-                  WORLD.profile.solids[part.slug as keyof typeof WORLD.profile.solids] ?? "";
+                const prose = world.source.profile.solids[part.slug] ?? "";
                 const title = (
                   <title>
                     {part.isVoid
@@ -322,7 +343,13 @@ export function AnatomyDrawing({
                 };
                 if (view.depth === "z" && part.kind === "cyl")
                   return (
-                    <circle key={part.slug} cx={X(0)} cy={Y(0)} r={(part.w / 2) * SCALE} {...shared}>
+                    <circle
+                      key={part.slug}
+                      cx={X(0)}
+                      cy={Y(0)}
+                      r={(part.w / 2) * SCALE}
+                      {...shared}
+                    >
                       {title}
                     </circle>
                   );
@@ -333,8 +360,7 @@ export function AnatomyDrawing({
                 );
               }
 
-              const prose =
-                WORLD.profile.connectors[part.slug as keyof typeof WORLD.profile.connectors] ?? "";
+              const prose = world.source.profile.connectors[part.slug] ?? "";
               const stroke = connectorStroke(part.slug);
               const u = part.pos[view.u];
               const v = part.pos[view.v];
@@ -431,11 +457,11 @@ export function AnatomyDrawing({
         >
           constituents · {typeName}
         </p>
-        {CONSTITUENTS.map((part) => {
-          const geom = GEOM_BY_SLUG.get(part.slug);
+        {world.constituents.map((part) => {
+          const geom = world.geomBySlug.get(part.slug);
           const unbound =
             geom?.dims.filter(
-              (dim) => boundParam(bindingOf(draft, part.slug, dim.property)) == null,
+              (dim) => boundParam(bindingOf(world, draft, part.slug, dim.property)) == null,
             ).length ?? 0;
           return (
             <button
