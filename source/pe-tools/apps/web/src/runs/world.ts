@@ -64,6 +64,10 @@ export type ZoneRecord = {
     wallRunGapSqft: number;
     gapCloseSqft: number;
   };
+  /** Stable cross-run zone identity (report v4, SHIMS.md #2 close): sha256 of level +
+   * 0.5ft-quantized bbox, 12 hex chars. Absent on pre-v4 packages — pairing then falls back to
+   * the positional zone NAME and must say so. */
+  zoneKey?: string;
 };
 
 export type RunReport = {
@@ -85,7 +89,16 @@ export type Raster = {
 };
 
 export type Ring = { kind: string; points: [number, number][] };
-export type TsvRoom = { id: string; sqft: number; lx: number; ly: number; ceil: number };
+/** disposition: persisted 8th ROOM column (SHIMS.md #3 close). `null` = the package predates the
+ * column (or is raw detector output) — UNKNOWN, and the renderer must never dress it as accepted. */
+export type TsvRoom = {
+  id: string;
+  sqft: number;
+  lx: number;
+  ly: number;
+  ceil: number;
+  disposition: "accepted" | "held" | null;
+};
 export type TsvResidue = { id: string; reason: string; sqft: number; loops: [number, number][][] };
 export type ZoneGeometry = {
   rooms: TsvRoom[];
@@ -116,6 +129,124 @@ export function loadRunReport(runId: string): Promise<RunReport> {
     reportCache.set(runId, cached);
   }
   return cached;
+}
+
+// ---- scores.json (SHIMS.md #1 close) ---------------------------------------------------------
+// Written into the run package at persist time by the C# harness invoking
+// eval/rhvac/score-looks-good.py — the scorer stays the single measure authority, this layer only
+// READS its output. A missing scores.json is an explicit absent state (`null`), never a recompute.
+
+/** One board from the scorer. Field semantics belong to score-looks-good.py, not this file. */
+export type ScoreBoard = {
+  oracleRoomsInZones: number;
+  roomRecall: number | null;
+  heldRecall: number | null;
+  missing: number;
+  savedWork: number | null;
+  edgeOnInkAccepted: number | null;
+  edgeOnInkHeld: number | null;
+  swallowSf: number | null;
+  meanEditCostAccepted: number | null;
+};
+
+export type RunScores = {
+  /** e.g. "v1.1 (cleaned oracle)". Absent on files written by the pre-v1.1 scorer. */
+  currency?: string;
+  board: ScoreBoard;
+  /** The raw-oracle v1 board, carried alongside during the currency transition. */
+  boardV1RawOracle?: ScoreBoard;
+};
+
+/** The two currency boards of a scores.json. A pre-v1.1 file (no currency label) is a v1 board;
+ * it never impersonates v1.1. */
+export function scoreBoards(scores: RunScores): { v11: ScoreBoard | null; v1: ScoreBoard | null } {
+  const isV11 = scores.currency?.startsWith("v1.1") ?? false;
+  return {
+    v11: isV11 ? scores.board : null,
+    v1: scores.boardV1RawOracle ?? (isV11 ? null : scores.board),
+  };
+}
+
+const scoresCache = new Map<string, Promise<RunScores | null>>();
+/** Resolves `null` when the package has no scores.json — the caller must SAY so, not substitute. */
+export function loadRunScores(runId: string): Promise<RunScores | null> {
+  let cached = scoresCache.get(runId);
+  if (!cached) {
+    cached = fetch(`${BASE}/${runId}/scores.json`).then(async (res) => {
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(`scores ${runId}: ${res.status}`);
+      return (await res.json()) as RunScores;
+    });
+    scoresCache.set(runId, cached);
+  }
+  return cached;
+}
+
+// ---- A/B zone pairing (SHIMS.md #2 close) ----------------------------------------------------
+
+export type ZonePair = {
+  /** Stable card identity: the shared zoneKey under key pairing, else the zone name. */
+  id: string;
+  level: string;
+  /** Display name — the B side's name wins when both exist (names are per-run ordinals). */
+  name: string;
+  a: ZoneRecord | null;
+  b: ZoneRecord | null;
+  pairedBy: "key" | "name";
+};
+
+/** True when every zone in the report carries the v4 stable zone key. */
+export function reportKeyed(report: RunReport | null): boolean {
+  return !!report && report.Zones.length > 0 && report.Zones.every((zone) => !!zone.zoneKey);
+}
+
+/**
+ * Pair the current run's zones against a baseline. Key pairing runs only when BOTH packages are
+ * fully keyed: zones join on identity and anything unmatched is an honest orphan. Name pairing is
+ * the pre-key fallback ONLY — names are positional ordinals, so a name pair can compare different
+ * geography when zoning moved; callers must surface `pairedBy === "name"` as a caveat.
+ */
+export function pairZones(cur: RunReport, prev: RunReport | null): ZonePair[] {
+  const byKey = reportKeyed(cur) && reportKeyed(prev);
+  const pairedBy: ZonePair["pairedBy"] = byKey ? "key" : "name";
+  const prevZones = prev?.Zones ?? [];
+  const matched = new Set<ZoneRecord>();
+  const pairs: ZonePair[] = cur.Zones.map((zone) => {
+    const twin = byKey
+      ? (prevZones.find((candidate) => candidate.zoneKey === zone.zoneKey) ?? null)
+      : (prevZones.find((candidate) => candidate.Zone === zone.Zone) ?? null);
+    if (twin) matched.add(twin);
+    return {
+      id: byKey ? zone.zoneKey! : zone.Zone,
+      level: zone.Level,
+      name: zone.Zone,
+      a: twin,
+      b: zone,
+      pairedBy,
+    };
+  });
+  // Baseline-only zones (geography the current run does not have) render as orphans.
+  for (const zone of prevZones) {
+    if (matched.has(zone)) continue;
+    pairs.push({
+      id: byKey ? zone.zoneKey! : zone.Zone,
+      level: zone.Level,
+      name: zone.Zone,
+      a: zone,
+      b: null,
+      pairedBy,
+    });
+  }
+  return pairs;
+}
+
+/** The A-side twin of one B zone (plan-dock peek): by key when both sides carry keys, by name
+ * only as the pre-key fallback. A keyed miss is an orphan, not a name match. */
+export function matchZone(candidates: ZoneRecord[], target: ZoneRecord): ZoneRecord | null {
+  const keyed =
+    !!target.zoneKey && candidates.length > 0 && candidates.every((zone) => !!zone.zoneKey);
+  if (keyed) return candidates.find((zone) => zone.zoneKey === target.zoneKey) ?? null;
+  return candidates.find((zone) => zone.Zone === target.Zone) ?? null;
 }
 
 // INKP raster: magic "INKP" (0x504B4E49 LE), int32 w, int32 h, f64 minX/minY/cellFt, then a
@@ -183,6 +314,8 @@ export function parseZoneTsv(text: string): ZoneGeometry {
         lx: Number(parts[4]),
         ly: Number(parts[5]),
         ceil: Number(parts[6]),
+        disposition:
+          parts[7] === "accepted" || parts[7] === "held" ? parts[7] : null,
       });
     } else if (parts[0] === "POLY") {
       const rings = polys.get(parts[1]!) ?? [];
@@ -290,9 +423,9 @@ export function paintRaster(
   ctx.putImageData(image, 0, 0);
 }
 
-// Convenience: the derived board line a run card shows. Kept minimal — anything richer belongs
-// to scores.json once the python scorer's output joins the run package
-// (docs/features/takeoff-runs/SHIMS.md #1).
+// Convenience: the derived board line a run card shows. Kept minimal on purpose — report.json
+// facts only. Scorer numbers (savedWork et al.) come from the package's scores.json via
+// loadRunScores; they are never derived here (the scorer is the one measure authority).
 export function boardSummary(report: RunReport) {
   const zones = report.Zones;
   return {

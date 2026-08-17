@@ -126,6 +126,25 @@ place in `components/lang`, both callers move together.)*
 Revit-export underlay, the speck filter, and the bounds-shaped viewport. Each in-code `// gap:`
 comment points at its number.
 
+## De-shim pass — SHIMS #1/#2/#3 CLOSED (2026-08-17)
+
+kaitpw ruling for the tuning round: /runs is THE medium tuning results are judged through — "no
+shims should exist in the ui… if a service is stubbed/mocked that should be fixed immediately (we
+don't wanna align on fake information)." All three data shims closed at persist time (C# harness /
+python scorer), never as a TS recompute; full write-up in [SHIMS.md](SHIMS.md)'s closed section.
+
+- **#1** the harness now writes `scores.json` into every run package by invoking
+  `score-looks-good.py` (single measure authority; python-less machines degrade to an honest
+  absent state). Pool backfilled machine-run. UI: savedWork v1.1/v1 + recall + edgeOnInk on the
+  header and ledger, currency-matched deltas, explicit "no scores.json" mark.
+- **#2** report.json v4 `zoneKey` (sha256 of level + 0.5ft-quantized bbox); A/B pairs on identity
+  when both packages are keyed, orphans stay orphans; name pairing only for pre-key packages,
+  called out with a card chip.
+- **#3** promoted TSVs persist the ROOM disposition column (`accepted`); pre-column packages
+  render disposition-unknown (neutral, tooltipped) rather than defaulting to accepted. Correction
+  for the record: held-room GEOMETRY was already persisted per-room (Rejected residues) and both
+  renderers already toned it held — the round-2 ledger overstated that half of the shim.
+
 ## Philosophy fold-in owed at merge
 
 Durable findings this loop produced that belong in `docs/design/SURFACE-PHILOSOPHY.md`. **Do not

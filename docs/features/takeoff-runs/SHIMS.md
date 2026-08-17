@@ -9,47 +9,6 @@ Opened at round-2 close, 2026-08-17.
 
 ---
 
-## 1. `scores.json` is not part of the run package
-
-**What is true:** the harness persists `report.json` + zone TSVs + INKP bins. The scorer's board
-(`savedWork`, `roomRecall`, `heldRecall`, `edgeOnInk*`, `swallowSf`, `meanEditCost*`) comes from
-`eval/rhvac/score-looks-good.py score <report.json> --out scores.json`, run by hand. Two of the
-seven pool runs happen to carry a `scores.json` because someone pointed `--out` at the run
-directory; five do not. A file that exists only when a human remembers is not a contract.
-
-**What it blocks:** `world.boardSummary` and the ledger dock stop at report.json facts — solved
-zones, accepted rooms, accepted/held sqft, the rejection histogram's head. No savedWork column, no
-ranking runs by saved work, no "did the score actually move" answer on this page.
-
-**Where the fix lives:** persist time. Either the harness invokes the scorer at the end of
-`ZoneBoundedDetectTests.ProjectA_zones_partition_within_declared_scope` and drops `scores.json` into
-the run directory, or the scorer's board joins `report.json` itself. Not a TS recompute — the
-scorer is the measure's authority and there must be exactly one of it.
-
-## 2. Zone identity is positional across runs
-
-**What is true:** `Zone` ("Main Level#03") is an ordinal assigned during zoning. Nothing in the
-package ties a zone in run B to the same geography in run A.
-
-**What it blocks:** the A/B pairing matches zones by name, so if the zoning itself moved between
-runs the sheet can put two different rooms-worth of building side by side and call it a delta. The
-surface cannot detect this, and therefore cannot warn about it.
-
-**Where the fix lives:** a stable zone key (bbox hash, or a seeded id carried through zoning) in
-`report.json`. Then A/B pairs on identity and orphans on both sides read as orphans.
-
-## 3. TSV rooms carry no accepted/held flag
-
-**What is true:** `ROOM` lines in `zones/rooms_*.tsv` carry id, sqft, and a label point — no
-disposition. The accepted/held split exists only as counts in `report.json`.
-
-**What it blocks:** the SVG overlay draws every TSV room in the accepted tone. Held rooms are
-visible as numbers, never as geometry — you cannot see *which* rooms the run held. The python
-renderer works around this with its own convention; the two renderers therefore disagree.
-
-**Where the fix lives:** the disposition joins the TSV at persist time. The convention currently
-living in the python renderer should become a persisted column.
-
 ## 4. Overlay-diff A/B needs per-run room masks
 
 **What is true:** A/B is side-by-side, which is the ruled default and is not itself a shim. The
@@ -98,6 +57,40 @@ wants to be bounds-first with `zoneViewport` as a convenience on top.
 **Where the fix lives:** `world.ts`, whenever a third caller makes it worth the churn.
 
 ---
+
+## Closed at the de-shim pass, 2026-08-17 (kaitpw ruling: "no shims should exist in the ui")
+
+- **#1 `scores.json` joins the run package at persist time.** The harness
+  (`ZoneBoundedDetectTests.PersistScores`) invokes
+  `python eval/rhvac/score-looks-good.py score <runDir>/report.json --out <runDir>/scores.json`
+  after copying the package; the python scorer stays the single measure authority and a machine
+  without python degrades to an honest gap (console warning, no scores.json, never a failed gate
+  run, never a TS recompute). The pool was backfilled by running the scorer against every
+  persisted report.json — including refreshing the two files written by the pre-v1.1 scorer, so
+  every package now carries the v1.1 board plus `boardV1RawOracle`. UI: `world.loadRunScores`
+  (404 = explicit `null`), savedWork v1.1/v1 + roomRecall + edgeOnInk on the board header and as
+  ledger columns, currency-matched Δ savedWork (vs A in the header, vs the chronological
+  predecessor in the ledger), and a run without the file says **no scores.json** — never a
+  computed stand-in.
+- **#2 Stable zone identity.** report.json is now SchemaVersion 4: every zone carries `zoneKey` =
+  first 12 hex of sha256 over `level|bbox` with the bbox quantized to 0.5 ft
+  (`ZoneBoundedDetectTests.ZoneKey`). Nothing ordinal goes into the key, so re-zoning
+  REORDERINGS keep identity while an actual geography move changes it — which is exactly the
+  event pairing must refuse to paper over. `world.pairZones`/`matchZone` pair A/B on the key
+  when BOTH packages are fully keyed, with unmatched zones rendered as orphans (no name rescue);
+  name pairing survives only as the pre-key-package fallback and every such card carries a
+  visible "paired by name — pre-key package" caveat chip.
+- **#3 Room disposition is a persisted TSV column.** The promoted TSV's `ROOM` lines now carry an
+  8th column (`accepted`), written because `TakeoffPromotion.Close` marks the result
+  (`TakeoffResult.DispositionsResolved`); raw detector TSVs stay 7-column and honestly
+  disposition-less. Held rooms were ALREADY persisted per-room as `META residue … rejected` lines
+  (`MoveToRejectedResidue` keeps id + geometry; `HeldRooms` is literally the count of Rejected
+  residues), and both renderers already drew them in the held tone — the round-2 ledger
+  overstated that part. What was real: "ROOM = accepted" lived as a convention in readers'
+  heads, not in the package. Now the column says it, `TakeoffTsv`/`world.parseZoneTsv` parse it
+  (unknown token = parse error), and a 7-column ROOM line renders in an explicit
+  **disposition-unknown** treatment (neutral gray, dashed, tooltip naming the pre-column package)
+  on cards, zone peek and plan — never defaulted to accepted.
 
 ## Closed at round-2 close
 

@@ -40,14 +40,21 @@ import {
   fetchRunIndex,
   loadRaster,
   loadRunReport,
+  loadRunScores,
   loadZoneGeometry,
+  matchZone,
   paintRaster,
+  pairZones,
   type Raster,
   ringPath,
   type RunIndexEntry,
   type RunReport,
+  type RunScores,
+  scoreBoards,
   toPx,
+  type TsvRoom,
   type ZoneGeometry,
+  type ZonePair,
   type ZoneRecord,
   type ZoneViewport,
   zoneViewport,
@@ -72,9 +79,24 @@ const HELD_STROKE = "#a97e16";
 const HELD_FILL = "rgba(196,150,44,0.10)";
 const VOID_STROKE = "rgba(146,142,138,0.7)";
 const VOID_FILL = "rgba(146,142,138,0.07)";
+// disposition-unknown rooms: pre-column packages (SHIMS.md #3). Neutral warm gray — deliberately
+// NOT the accepted blue; unknown must never dress as accepted.
+const UNKNOWN_STROKE = "rgba(120,113,108,0.9)";
+const UNKNOWN_FILL = "rgba(120,113,108,0.08)";
 const ZONE_STROKE = "rgb(108,52,140)";
 const MIST = "rgba(100,116,139,0.14)"; // focus-is-mist law, even on the drawing
 const LABEL = "rgba(120,113,108,0.85)";
+
+const UNKNOWN_TITLE =
+  "Disposition unknown — this package predates the persisted ROOM disposition column. " +
+  "Not drawn as accepted; re-run the harness for a package that says which rooms it accepted.";
+
+/** Room tones follow the PERSISTED disposition column only. */
+function roomTone(disposition: TsvRoom["disposition"]): { stroke: string; fill: string } {
+  if (disposition === "accepted") return { stroke: ACCEPT_STROKE, fill: ACCEPT_FILL };
+  if (disposition === "held") return { stroke: HELD_STROKE, fill: HELD_FILL };
+  return { stroke: UNKNOWN_STROKE, fill: UNKNOWN_FILL };
+}
 
 const PX_PER_FT = 4; // plan world px per model foot at scale=1 (1px per 0.25ft cell)
 
@@ -145,7 +167,8 @@ function Delta({
   suffix?: string;
 }) {
   if (value === null) return <span className="text-muted-foreground/60">—</span>;
-  const eps = digits === 0 ? 0.5 : 0.05;
+  const eps = 0.5 * 10 ** -digits; // half a display unit — matches every precision, incl. scorer's 3
+
   if (Math.abs(value) < eps) {
     return (
       <span className="text-muted-foreground/60" title="No change vs the baseline run.">
@@ -225,7 +248,7 @@ function ZonePanel(props: {
       };
       for (const room of geom.rooms) {
         const rings = geom.polys.get(room.id);
-        if (rings) fill(rings.map((r) => r.points), ACCEPT_FILL);
+        if (rings) fill(rings.map((r) => r.points), roomTone(room.disposition).fill);
       }
       for (const res of geom.residues) {
         fill(res.loops, res.reason === "rejected" ? HELD_FILL : VOID_FILL);
@@ -264,15 +287,20 @@ function ZonePanel(props: {
         <svg className="absolute inset-0" width={vp.widthPx} height={vp.heightPx} aria-hidden>
           {geom?.rooms.map((room) => {
             const rings = geom.polys.get(room.id);
-            return rings ? (
+            if (!rings) return null;
+            const unknown = room.disposition === null;
+            return (
               <path
                 key={room.id}
                 d={ringPath(vp, rings.map((r) => r.points))}
                 fill="none"
-                stroke={ACCEPT_STROKE}
-                strokeWidth={1.75}
-              />
-            ) : null;
+                stroke={roomTone(room.disposition).stroke}
+                strokeWidth={unknown ? 1.25 : 1.75}
+                strokeDasharray={unknown ? "2 2" : undefined}
+              >
+                {unknown ? <title>{UNKNOWN_TITLE}</title> : null}
+              </path>
+            );
           })}
           {geom?.residues.map((res) => (
             <path
@@ -370,6 +398,10 @@ function ZoneCard(props: {
   name: string;
   a: ZoneRecord | null; // baseline (older)
   b: ZoneRecord | null; // current
+  /** How the A side was matched: "key" = stable zone identity (report v4); "name" = positional
+   * ordinal fallback for pre-key packages — surfaced as a caveat because it can silently compare
+   * different geography (SHIMS.md #2). */
+  pairedBy: "key" | "name";
   runA: string | null;
   runB: string;
   panelFullW: number;
@@ -378,7 +410,7 @@ function ZoneCard(props: {
   underlay: boolean;
   onLocate: (zone: ZoneRecord) => void;
 }) {
-  const { name, a, b, runA, runB, panelFullW, panelHalfW, panelH, underlay, onLocate } = props;
+  const { name, a, b, pairedBy, runA, runB, panelFullW, panelHalfW, panelH, underlay, onLocate } = props;
   const comparing = runA !== null;
   const deltaSf = comparing && a && b ? Math.round(b.AcceptedSqft - a.AcceptedSqft) : null;
   const locatable = b ?? a;
@@ -405,6 +437,15 @@ function ZoneCard(props: {
             baseline only
           </Chip>
         )}
+        {comparing && pairedBy === "name" ? (
+          <Chip
+            tone="meta"
+            dashed
+            title="One or both packages predate the stable zone key (report v4), so A/B was matched by the positional zone NAME. If zoning itself moved between the runs, this pair can compare different geography without warning."
+          >
+            paired by name — pre-key package
+          </Chip>
+        ) : null}
         {deltaSf !== null && deltaSf !== 0 ? (
           <span className="tele text-[11px]">
             Δ<Delta value={deltaSf} suffix=" sf" />
@@ -774,17 +815,22 @@ function PlanPane(props: {
           />,
         );
       }
+      const dispositionById = new Map(geom.rooms.map((room) => [room.id, room.disposition]));
       for (const [roomId, rings] of geom.polys) {
+        const disposition = dispositionById.get(roomId) ?? null;
+        const tone = roomTone(disposition);
         nodes.push(
           <path
             key={`r:${zone.Zone}/${roomId}`}
             d={ringPath(vp, rings.map((ring) => ring.points))}
             fillRule="evenodd"
-            fill={ACCEPT_FILL}
-            stroke={ACCEPT_STROKE}
+            fill={tone.fill}
+            stroke={tone.stroke}
             strokeOpacity={0.85}
             style={{ strokeWidth: "calc(var(--sw) * 1.4px)" }}
-          />,
+          >
+            {disposition === null ? <title>{UNKNOWN_TITLE}</title> : null}
+          </path>,
         );
       }
     }
@@ -981,8 +1027,9 @@ function LegendFloater(props: { underlay: boolean }) {
       </div>
       <span className="mt-0.5 font-semibold uppercase tracking-wide">decisions — drawn on top</span>
       <div className="flex flex-col gap-0.5">
-        {row(sw(ACCEPT_FILL, { border: `1.5px solid ${ACCEPT_STROKE}` }), "accepted room", "A room the solver accepted into the takeoff.")}
+        {row(sw(ACCEPT_FILL, { border: `1.5px solid ${ACCEPT_STROKE}` }), "accepted room", "A room the solver accepted into the takeoff — per the persisted disposition column.")}
         {row(line(HELD_STROKE, true), "held residue", "Area the solver found but did not trust — held for review, not counted.")}
+        {row(sw(UNKNOWN_FILL, { border: `1px dashed ${UNKNOWN_STROKE}` }), "room — disposition unknown", UNKNOWN_TITLE)}
         {row(sw(VOID_FILL, { border: `1px solid ${VOID_STROKE}` }), "void / excluded", "Area inside the zone the solver deliberately excluded.")}
         {row(line(ZONE_STROKE), "zone — solid = solve", "Zone boundary. Solid stroke: triage verdict solve.")}
         {row(line(ZONE_STROKE, true), "zone — dashed = hold", "Zone boundary. Dashed stroke: triage verdict hold.")}
@@ -1234,7 +1281,9 @@ function PlanDock(props: {
 
   const peekZone = hoverZone ?? pinnedZone;
   const zoneCur = peekZone ? (dataCur?.zones.find((z) => z.Zone === peekZone) ?? null) : null;
-  const zonePrev = peekZone ? (dataPrev?.zones.find((z) => z.Zone === peekZone) ?? null) : null;
+  // A-side twin by the stable zone key when both packages carry it; positional-name matching
+  // only as the pre-key fallback (SHIMS.md #2 close).
+  const zonePrev = zoneCur ? matchZone(dataPrev?.zones ?? [], zoneCur) : null;
 
   return (
     <div className="flex size-full min-h-0 flex-col">
@@ -1321,22 +1370,60 @@ function PlanDock(props: {
 
 type Board = ReturnType<typeof boardSummary>;
 
+/** Scorer columns lifted from the package's scores.json. The python scorer is the only author
+ * of these numbers (SHIMS.md #1 close) — this row NEVER computes a stand-in. */
+type RowScores = {
+  savedV11: number | null;
+  savedV1: number | null;
+  recall: number | null;
+  edgeAcc: number | null;
+};
+
 type RunRow = {
   id: string;
   label: string | null;
   hash: string;
   when: string;
   board: Board;
+  /** Null = the run package has no scores.json — rendered as an explicit mark. */
+  scores: RowScores | null;
+  /** savedWork vs the chronological predecessor, currency-matched (v1.1 against v1.1, else v1
+   * against v1). Null when either side lacks a comparable board. */
+  scoreDelta: number | null;
   /** Null on the oldest run — nothing earlier to diff against. Deltas are CHRONOLOGICAL
    * (vs the run before it in time), never "the row below after sorting". */
   delta: { solved: number; rooms: number; sqft: number; held: number } | null;
 };
 
-// gap (SHIMS.md #1): world.boardSummary stops at report.json facts — scores.json (savedWork et
-// al.) is not part of the run package, so the ledger cannot carry scorer columns or rank runs by
-// saved work. Persist-time gap; not recomputing the python scorer here.
+function rowScores(scores: RunScores | null): RowScores | null {
+  if (!scores) return null;
+  const { v11, v1 } = scoreBoards(scores);
+  const primary = v11 ?? v1;
+  return {
+    savedV11: v11?.savedWork ?? null,
+    savedV1: v1?.savedWork ?? null,
+    recall: primary?.roomRecall ?? null,
+    edgeAcc: primary?.edgeOnInkAccepted ?? null,
+  };
+}
+
+/** Currency-matched savedWork delta: v1.1 diffs only against v1.1, v1 only against v1. */
+function savedWorkDelta(cur: RunScores | null, prev: RunScores | null): number | null {
+  if (!cur || !prev) return null;
+  const c = scoreBoards(cur);
+  const p = scoreBoards(prev);
+  if (c.v11?.savedWork != null && p.v11?.savedWork != null)
+    return c.v11.savedWork - p.v11.savedWork;
+  if (c.v11 || p.v11) return null; // one side is v1-only — not the same currency, no fake delta
+  if (c.v1?.savedWork != null && p.v1?.savedWork != null) return c.v1.savedWork - p.v1.savedWork;
+  return null;
+}
+
 async function buildLedgerRows(index: RunIndexEntry[]): Promise<RunRow[]> {
-  const reports = await Promise.all(index.map((entry) => loadRunReport(entry.id)));
+  const [reports, scoresAll] = await Promise.all([
+    Promise.all(index.map((entry) => loadRunReport(entry.id))),
+    Promise.all(index.map((entry) => loadRunScores(entry.id))),
+  ]);
   return index.map((entry, i) => {
     const report = reports[i]!;
     const board = boardSummary(report);
@@ -1347,6 +1434,11 @@ async function buildLedgerRows(index: RunIndexEntry[]): Promise<RunRow[]> {
       hash: entry.meta?.optionsHash ?? report.optionsHash,
       when: entry.meta?.generatedUtc ?? report.GeneratedUtc,
       board,
+      scores: rowScores(scoresAll[i]!),
+      scoreDelta: savedWorkDelta(
+        scoresAll[i]!,
+        i + 1 < index.length ? scoresAll[i + 1]! : null,
+      ),
       delta: prev
         ? {
             solved: board.solved - prev.solved,
@@ -1359,7 +1451,69 @@ async function buildLedgerRows(index: RunIndexEntry[]): Promise<RunRow[]> {
   });
 }
 
+const NO_SCORES_TITLE =
+  "No scores.json in this run package — the scorer never ran for it (python unavailable at " +
+  "persist time, or the package predates persist-time scoring). Nothing is recomputed in its place.";
+
+/** A scorer cell: explicit "no scores" mark when the package has no scores.json; "—" when the
+ * file exists but the scorer could not produce this number. */
+function scoreCell(row: RunRow, value: number | null): ReactNode {
+  if (row.scores === null) {
+    return (
+      <span
+        className="tele block px-1.5 text-right text-[10px] text-muted-foreground"
+        title={NO_SCORES_TITLE}
+      >
+        no scores
+      </span>
+    );
+  }
+  return (
+    <span className="tele block px-1.5 text-right tabular-nums">
+      {value === null ? "—" : value.toFixed(3)}
+    </span>
+  );
+}
+
 const runName = (row: Pick<RunRow, "label" | "hash">) => row.label ?? `run ${row.hash.slice(0, 6)}`;
+
+/** The scorer's board line for the current run (B) — read from the package's scores.json, with a
+ * currency-matched savedWork delta vs the A baseline. An absent file is said out loud; nothing
+ * here is ever computed as a stand-in (SHIMS.md #1 close). */
+function HeaderScores(props: {
+  cur: RunScores | null | undefined;
+  prev: RunScores | null | undefined;
+}) {
+  const { cur, prev } = props;
+  if (cur === undefined) return null; // still loading — silence beats a flashed fake absent state
+  if (cur === null) {
+    return (
+      <Chip tone="warn" title={NO_SCORES_TITLE}>
+        no scores.json
+      </Chip>
+    );
+  }
+  const { v11, v1 } = scoreBoards(cur);
+  const primary = v11 ?? v1;
+  const delta = savedWorkDelta(cur, prev ?? null);
+  const f = (value: number | null | undefined) => (value == null ? "—" : value.toFixed(3));
+  return (
+    <span
+      className="tele text-xs text-muted-foreground"
+      title="scores.json — the python scorer's board (score-looks-good.py, the single measure authority), persisted into the run package at harness time."
+    >
+      saved {f(primary?.savedWork)} {v11 ? "v1.1" : "v1"}
+      {v11 && v1 ? ` · ${f(v1.savedWork)} v1` : ""}
+      {delta !== null ? (
+        <>
+          {" · Δ vs A "}
+          <Delta value={delta} digits={3} />
+        </>
+      ) : null}
+      {` · recall ${f(primary?.roomRecall)} · edgeOnInk ${f(primary?.edgeOnInkAccepted)}`}
+    </span>
+  );
+}
 
 function LedgerDock(props: {
   runs: RunIndexEntry[];
@@ -1492,6 +1646,67 @@ function LedgerDock(props: {
         cell: (row) => (
           <span className="tele block px-1.5 text-right tabular-nums text-muted-foreground">
             {fmtNum(row.board.heldSqft, 0)}
+          </span>
+        ),
+      },
+      // scores.json columns (SHIMS.md #1 close): the python scorer's board, read from the run
+      // package. A missing file is an explicit mark — the ledger never computes a stand-in.
+      {
+        key: "saved",
+        label: "saved",
+        group: "scores.json",
+        right: true,
+        width: "w-16",
+        title:
+          "Board savedWork under currency v1.1 (cleaned oracle), from the package's scores.json. The python scorer (score-looks-good.py) is the only author of this number.",
+        sort: (row) => row.scores?.savedV11 ?? Number.NEGATIVE_INFINITY,
+        cell: (row) => scoreCell(row, row.scores?.savedV11 ?? null),
+      },
+      {
+        key: "saved-v1",
+        label: "saved v1",
+        group: "scores.json",
+        right: true,
+        width: "w-16",
+        title:
+          "Board savedWork under currency v1 (raw oracle) — carried alongside v1.1 during the currency transition.",
+        sort: (row) => row.scores?.savedV1 ?? Number.NEGATIVE_INFINITY,
+        cell: (row) => scoreCell(row, row.scores?.savedV1 ?? null),
+      },
+      {
+        key: "recall",
+        label: "recall",
+        group: "scores.json",
+        right: true,
+        width: "w-16",
+        title:
+          "Board roomRecall from scores.json (v1.1 board when present, else the v1 board the file carries).",
+        sort: (row) => row.scores?.recall ?? Number.NEGATIVE_INFINITY,
+        cell: (row) => scoreCell(row, row.scores?.recall ?? null),
+      },
+      {
+        key: "edge-acc",
+        label: "edgeOnInk",
+        group: "scores.json",
+        right: true,
+        width: "w-20",
+        title:
+          "Board edgeOnInkAccepted from scores.json — how much of the accepted boundary stands on evidence.",
+        sort: (row) => row.scores?.edgeAcc ?? Number.NEGATIVE_INFINITY,
+        cell: (row) => scoreCell(row, row.scores?.edgeAcc ?? null),
+      },
+      {
+        key: "d-saved",
+        label: "Δ saved",
+        group: "scores.json",
+        right: true,
+        width: "w-16",
+        title:
+          "savedWork vs the chronological predecessor, currency-matched (v1.1 against v1.1, else v1 against v1). Empty when either run lacks a comparable scores.json board.",
+        sort: (row) => row.scoreDelta ?? Number.NEGATIVE_INFINITY,
+        cell: (row) => (
+          <span className="tele block px-1.5 text-right">
+            <Delta value={row.scoreDelta} digits={3} />
           </span>
         ),
       },
@@ -1646,6 +1861,9 @@ export default function RunBrowser() {
   const [focus, setFocus] = useState<FocusRequest | null>(null);
   const [reportCur, setReportCur] = useState<RunReport | null>(null);
   const [reportPrev, setReportPrev] = useState<RunReport | null>(null);
+  // scores.json per side: undefined = loading, null = the package has no scores.json.
+  const [scoresCur, setScoresCur] = useState<RunScores | null | undefined>(undefined);
+  const [scoresPrev, setScoresPrev] = useState<RunScores | null | undefined>(undefined);
 
   useEffect(() => {
     fetchRunIndex()
@@ -1669,9 +1887,16 @@ export default function RunBrowser() {
     if (!curId) return;
     let live = true;
     setReportCur(null);
+    setScoresCur(undefined);
     loadRunReport(curId)
       .then((r) => live && setReportCur(r))
       .catch((err: unknown) => live && setError(String(err)));
+    loadRunScores(curId)
+      .then((s) => live && setScoresCur(s))
+      .catch((err: unknown) => {
+        console.error("runs: scores.json load failed", err);
+        if (live) setScoresCur(null);
+      });
     return () => {
       live = false;
     };
@@ -1680,13 +1905,18 @@ export default function RunBrowser() {
   useEffect(() => {
     if (!prevId) {
       setReportPrev(null);
+      setScoresPrev(undefined);
       return;
     }
     let live = true;
     setReportPrev(null);
+    setScoresPrev(undefined);
     loadRunReport(prevId)
       .then((r) => live && setReportPrev(r))
       .catch(() => live && setReportPrev(null));
+    loadRunScores(prevId)
+      .then((s) => live && setScoresPrev(s))
+      .catch(() => live && setScoresPrev(null));
     return () => {
       live = false;
     };
@@ -1727,46 +1957,26 @@ export default function RunBrowser() {
     setFocus((f) => ({ zone, nonce: (f?.nonce ?? 0) + 1 }));
   }, []);
 
-  // Zone matching across runs by name. gap (SHIMS.md #2): there is no stable cross-run zone
-  // identity — Zone name ("Main Level#03") is positional by construction, so an A/B pair can
-  // silently compare different geography when zoning itself changed between runs. A persisted
-  // zone key belongs in report.json.
+  // A/B zone pairing on the stable zone key when both packages carry it (report v4); the
+  // positional-name fallback for pre-key packages is surfaced as a caveat on every card
+  // (SHIMS.md #2 close). Orphans under key pairing are honest orphans, never name-matched.
   const comparing = prevId !== null && reportPrev !== null;
-  const prevZones = useMemo(() => {
-    const map = new Map<string, ZoneRecord>();
-    for (const zone of reportPrev?.Zones ?? []) map.set(zone.Zone, zone);
-    return map;
-  }, [reportPrev]);
-  const curZones = useMemo(() => {
-    const map = new Map<string, ZoneRecord>();
-    for (const zone of reportCur?.Zones ?? []) map.set(zone.Zone, zone);
-    return map;
-  }, [reportCur]);
-
+  const pairs = useMemo(
+    () => (reportCur ? pairZones(reportCur, comparing ? reportPrev : null) : []),
+    [reportCur, reportPrev, comparing],
+  );
   const levels = useMemo(() => {
-    if (!reportCur) return [];
     const order: string[] = [];
-    const byLevel = new Map<string, string[]>();
-    for (const zone of reportCur.Zones) {
-      if (!byLevel.has(zone.Level)) {
-        byLevel.set(zone.Level, []);
-        order.push(zone.Level);
+    const byLevel = new Map<string, ZonePair[]>();
+    for (const pair of pairs) {
+      if (!byLevel.has(pair.level)) {
+        byLevel.set(pair.level, []);
+        order.push(pair.level);
       }
-      byLevel.get(zone.Level)!.push(zone.Zone);
+      byLevel.get(pair.level)!.push(pair);
     }
-    // Baseline-only zones still deserve a card — appended to their level's tail.
-    if (comparing && reportPrev) {
-      for (const zone of reportPrev.Zones) {
-        if (curZones.has(zone.Zone)) continue;
-        if (!byLevel.has(zone.Level)) {
-          byLevel.set(zone.Level, []);
-          order.push(zone.Level);
-        }
-        byLevel.get(zone.Level)!.push(zone.Zone);
-      }
-    }
-    return order.map((level) => ({ level, zoneNames: byLevel.get(level)! }));
-  }, [reportCur, reportPrev, comparing, curZones]);
+    return order.map((level) => ({ level, zonePairs: byLevel.get(level)! }));
+  }, [pairs]);
 
   const board = reportCur ? boardSummary(reportCur) : null;
   const boardPrev = comparing && reportPrev ? boardSummary(reportPrev) : null;
@@ -1822,14 +2032,14 @@ export default function RunBrowser() {
           <div className="tele p-8 text-sm text-muted-foreground">loading run…</div>
         ) : (
           <div className="flex flex-col gap-5 p-4">
-            {levels.map(({ level, zoneNames }) => {
-              const visible = zoneNames.filter((name) => {
+            {levels.map(({ level, zonePairs }) => {
+              const visible = zonePairs.filter((pair) => {
                 if (!comparing || !changedOnly) return true;
-                return materiallyChanged(prevZones.get(name) ?? null, curZones.get(name) ?? null);
+                return materiallyChanged(pair.a, pair.b);
               });
-              const hidden = zoneNames.length - visible.length;
-              const solved = zoneNames.filter((n) => curZones.get(n)?.triage.verdict === "solve").length;
-              const sf = zoneNames.reduce((sum, n) => sum + (curZones.get(n)?.AcceptedSqft ?? 0), 0);
+              const hidden = zonePairs.length - visible.length;
+              const solved = zonePairs.filter((pair) => pair.b?.triage.verdict === "solve").length;
+              const sf = zonePairs.reduce((sum, pair) => sum + (pair.b?.AcceptedSqft ?? 0), 0);
               return (
                 <section key={level}>
                   <div
@@ -1838,7 +2048,7 @@ export default function RunBrowser() {
                   >
                     <h2 className="tele text-xs font-semibold uppercase tracking-wide">{level}</h2>
                     <span className="tele text-[11px] text-muted-foreground">
-                      {solved}/{zoneNames.length} solved · {fmtSqft(sf)}
+                      {solved}/{zonePairs.length} solved · {fmtSqft(sf)}
                     </span>
                     {hidden > 0 && (
                       <Chip tone="meta" title="Zones with no material A/B change, hidden by the 'changed only' filter.">
@@ -1847,12 +2057,13 @@ export default function RunBrowser() {
                     )}
                   </div>
                   <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
-                    {visible.map((name) => (
+                    {visible.map((pair) => (
                       <ZoneCard
-                        key={name}
-                        name={name}
-                        a={comparing ? (prevZones.get(name) ?? null) : null}
-                        b={curZones.get(name) ?? null}
+                        key={pair.id}
+                        name={pair.name}
+                        a={comparing ? pair.a : null}
+                        b={pair.b}
+                        pairedBy={pair.pairedBy}
                         runA={comparing ? prevId : null}
                         runB={curId}
                         panelFullW={panelFullW}
@@ -1903,6 +2114,7 @@ export default function RunBrowser() {
               <Delta value={board.heldSqft - boardPrev.heldSqft} goodWhenUp={false} suffix=" sf held" />
             </span>
           )}
+          <HeaderScores cur={scoresCur} prev={comparing ? scoresPrev : undefined} />
           <span className="ml-auto flex items-center gap-1.5">
             {prevId ? (
               <Chip

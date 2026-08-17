@@ -585,8 +585,59 @@ public sealed class ZoneBoundedDetectTests
             optionsHash = OptionsHash(canonicalOptions),
             label = Environment.GetEnvironmentVariable("PE_TAKEOFF_RUN_LABEL"),
         }, Formatting.Indented) + Environment.NewLine);
+        PersistScores(repoRoot, runDir);
         TestContext.Out.WriteLine($"run persisted: {runDir}");
         Assert.That(failures, Is.Empty, string.Join("\n", failures.OrderBy(item => item)));
+    }
+
+    /// <summary>
+    /// scores.json joins the run package at persist time (SHIMS.md #1). The python scorer stays
+    /// the single measure authority — the harness only invokes it against the run's own persisted
+    /// report. A machine without python, or a scorer failure, degrades to an honest gap: the run
+    /// carries no scores.json and the /runs surface says exactly that. It never fails the gate
+    /// run, and it never becomes a TypeScript recompute.
+    /// </summary>
+    private static void PersistScores(string repoRoot, string runDir)
+    {
+        var psi = new System.Diagnostics.ProcessStartInfo {
+            FileName = "python",
+            WorkingDirectory = repoRoot,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        psi.ArgumentList.Add(Path.Combine(repoRoot, "eval", "rhvac", "score-looks-good.py"));
+        psi.ArgumentList.Add("score");
+        psi.ArgumentList.Add(Path.Combine(runDir, "report.json"));
+        psi.ArgumentList.Add("--out");
+        psi.ArgumentList.Add(Path.Combine(runDir, "scores.json"));
+        try
+        {
+            using var process = System.Diagnostics.Process.Start(psi)
+                ?? throw new InvalidOperationException("Process.Start returned null");
+            var stdout = process.StandardOutput.ReadToEndAsync();
+            var stderr = process.StandardError.ReadToEndAsync();
+            if (!process.WaitForExit(600_000))
+            {
+                process.Kill(entireProcessTree: true);
+                TestContext.Out.WriteLine("scores.json SKIPPED: scorer exceeded 10 minutes");
+                return;
+            }
+            if (process.ExitCode != 0)
+            {
+                TestContext.Out.WriteLine(
+                    $"scores.json SKIPPED: scorer exit {process.ExitCode}\n{stderr.Result.Trim()}");
+                return;
+            }
+            TestContext.Out.WriteLine(
+                $"scores.json written by score-looks-good.py: " +
+                $"{stdout.Result.Split('\n').FirstOrDefault(l => l.Contains("board"))?.Trim()}");
+        }
+        catch (Exception exception) when (
+            exception is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            TestContext.Out.WriteLine($"scores.json SKIPPED: python unavailable ({exception.Message})");
+        }
     }
 
     [Test]
