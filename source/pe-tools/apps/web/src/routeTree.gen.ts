@@ -9,111 +9,46 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from "./routes/__root";
-import { Route as SettingsRouteImport } from "./routes/settings";
-import { Route as ScheduleGridRouteImport } from "./routes/schedule-grid";
-import { Route as ParameterLinksRouteImport } from "./routes/parameter-links";
-import { Route as OpsRouteImport } from "./routes/ops";
-import { Route as InstancesRouteImport } from "./routes/instances";
-import { Route as FamilyTypesRouteImport } from "./routes/family-types";
-import { Route as FamilyModelRouteImport } from "./routes/family-model";
-import { Route as FamilyMatrixRouteImport } from "./routes/family-matrix";
-import { Route as FamilyDocRouteImport } from "./routes/family-doc";
-import { Route as FamilyAuditRouteImport } from "./routes/family-audit";
-import { Route as FamilyRouteImport } from "./routes/family";
-import { Route as DocLabRouteImport } from "./routes/doc-lab";
-import { Route as DesignSystemRouteImport } from "./routes/design-system";
-import { Route as DataTablesRouteImport } from "./routes/data-tables";
-import { Route as ChatRouteImport } from "./routes/chat";
 import { Route as IndexRouteImport } from "./routes/index";
-import { Route as PocTypeRouteImport } from "./routes/poc.type";
-import { Route as PocSurfacesRouteImport } from "./routes/poc.surfaces";
-import { Route as PocSidepaneRouteImport } from "./routes/poc.sidepane";
-import { Route as PocSentenceChatRouteImport } from "./routes/poc.sentence-chat";
-import { Route as PocInstancesDRouteImport } from "./routes/poc.instances-d";
-import { Route as PocInstancesCRouteImport } from "./routes/poc.instances-c";
-import { Route as PocInstancesBRouteImport } from "./routes/poc.instances-b";
-import { Route as PocInstancesARouteImport } from "./routes/poc.instances-a";
-import { Route as PocInstancesRouteImport } from "./routes/poc.instances";
-import { Route as PocFamilyLensRouteImport } from "./routes/poc.family-lens";
-import { Route as PocDialRouteImport } from "./routes/poc.dial";
-import { Route as PocChipCRouteImport } from "./routes/poc.chip-c";
-import { Route as PocChipBRouteImport } from "./routes/poc.chip-b";
-import { Route as PocChipARouteImport } from "./routes/poc.chip-a";
-import { Route as DocsTargetRouteImport } from "./routes/docs.target";
-import { Route as DocsRuntimeRouteImport } from "./routes/docs.runtime";
+import { Route as ChatRouteImport } from "./routes/chat";
+import { Route as DataTablesRouteImport } from "./routes/data-tables";
+import { Route as DesignSystemRouteImport } from "./routes/design-system";
+import { Route as DocLabRouteImport } from "./routes/doc-lab";
+import { Route as FamilyRouteImport } from "./routes/family";
+import { Route as FamilyAuditRouteImport } from "./routes/family-audit";
+import { Route as FamilyDocRouteImport } from "./routes/family-doc";
+import { Route as FamilyMatrixRouteImport } from "./routes/family-matrix";
+import { Route as FamilyModelRouteImport } from "./routes/family-model";
+import { Route as FamilyTypesRouteImport } from "./routes/family-types";
+import { Route as InstancesRouteImport } from "./routes/instances";
+import { Route as OpsRouteImport } from "./routes/ops";
+import { Route as ParameterLinksRouteImport } from "./routes/parameter-links";
+import { Route as ScheduleGridRouteImport } from "./routes/schedule-grid";
+import { Route as SettingsRouteImport } from "./routes/settings";
 import { Route as DemoTanstackQueryRouteImport } from "./routes/demo/tanstack-query";
-import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
+import { Route as DocsRuntimeRouteImport } from "./routes/docs.runtime";
+import { Route as DocsTargetRouteImport } from "./routes/docs.target";
+import { Route as PocChipARouteImport } from "./routes/poc.chip-a";
+import { Route as PocChipBRouteImport } from "./routes/poc.chip-b";
+import { Route as PocChipCRouteImport } from "./routes/poc.chip-c";
+import { Route as PocDialRouteImport } from "./routes/poc.dial";
+import { Route as PocFamilyLensRouteImport } from "./routes/poc.family-lens";
+import { Route as PocInstancesRouteImport } from "./routes/poc.instances";
+import { Route as PocInstancesARouteImport } from "./routes/poc.instances-a";
+import { Route as PocInstancesBRouteImport } from "./routes/poc.instances-b";
+import { Route as PocInstancesCRouteImport } from "./routes/poc.instances-c";
+import { Route as PocInstancesDRouteImport } from "./routes/poc.instances-d";
+import { Route as PocSentenceChatRouteImport } from "./routes/poc.sentence-chat";
+import { Route as PocSidepaneRouteImport } from "./routes/poc.sidepane";
+import { Route as PocSurfacesRouteImport } from "./routes/poc.surfaces";
+import { Route as PocTypeRouteImport } from "./routes/poc.type";
 import { Route as ApiPdfAuditMapRouteImport } from "./routes/api/pdf-audit/map";
+import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
 import { Route as ApiPdfAuditParseParseIdRouteImport } from "./routes/api/pdf-audit/parse.$parseId";
 
-const SettingsRoute = SettingsRouteImport.update({
-  id: "/settings",
-  path: "/settings",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const ScheduleGridRoute = ScheduleGridRouteImport.update({
-  id: "/schedule-grid",
-  path: "/schedule-grid",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const ParameterLinksRoute = ParameterLinksRouteImport.update({
-  id: "/parameter-links",
-  path: "/parameter-links",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const OpsRoute = OpsRouteImport.update({
-  id: "/ops",
-  path: "/ops",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const InstancesRoute = InstancesRouteImport.update({
-  id: "/instances",
-  path: "/instances",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const FamilyTypesRoute = FamilyTypesRouteImport.update({
-  id: "/family-types",
-  path: "/family-types",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const FamilyModelRoute = FamilyModelRouteImport.update({
-  id: "/family-model",
-  path: "/family-model",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const FamilyMatrixRoute = FamilyMatrixRouteImport.update({
-  id: "/family-matrix",
-  path: "/family-matrix",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const FamilyDocRoute = FamilyDocRouteImport.update({
-  id: "/family-doc",
-  path: "/family-doc",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const FamilyAuditRoute = FamilyAuditRouteImport.update({
-  id: "/family-audit",
-  path: "/family-audit",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const FamilyRoute = FamilyRouteImport.update({
-  id: "/family",
-  path: "/family",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const DocLabRoute = DocLabRouteImport.update({
-  id: "/doc-lab",
-  path: "/doc-lab",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const DesignSystemRoute = DesignSystemRouteImport.update({
-  id: "/design-system",
-  path: "/design-system",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const DataTablesRoute = DataTablesRouteImport.update({
-  id: "/data-tables",
-  path: "/data-tables",
+const IndexRoute = IndexRouteImport.update({
+  id: "/",
+  path: "/",
   getParentRoute: () => rootRouteImport,
 } as any);
 const ChatRoute = ChatRouteImport.update({
@@ -121,89 +56,74 @@ const ChatRoute = ChatRouteImport.update({
   path: "/chat",
   getParentRoute: () => rootRouteImport,
 } as any);
-const IndexRoute = IndexRouteImport.update({
-  id: "/",
-  path: "/",
+const DataTablesRoute = DataTablesRouteImport.update({
+  id: "/data-tables",
+  path: "/data-tables",
   getParentRoute: () => rootRouteImport,
 } as any);
-const PocTypeRoute = PocTypeRouteImport.update({
-  id: "/poc/type",
-  path: "/poc/type",
+const DesignSystemRoute = DesignSystemRouteImport.update({
+  id: "/design-system",
+  path: "/design-system",
   getParentRoute: () => rootRouteImport,
 } as any);
-const PocSurfacesRoute = PocSurfacesRouteImport.update({
-  id: "/poc/surfaces",
-  path: "/poc/surfaces",
+const DocLabRoute = DocLabRouteImport.update({
+  id: "/doc-lab",
+  path: "/doc-lab",
   getParentRoute: () => rootRouteImport,
 } as any);
-const PocSidepaneRoute = PocSidepaneRouteImport.update({
-  id: "/poc/sidepane",
-  path: "/poc/sidepane",
+const FamilyRoute = FamilyRouteImport.update({
+  id: "/family",
+  path: "/family",
   getParentRoute: () => rootRouteImport,
 } as any);
-const PocSentenceChatRoute = PocSentenceChatRouteImport.update({
-  id: "/poc/sentence-chat",
-  path: "/poc/sentence-chat",
+const FamilyAuditRoute = FamilyAuditRouteImport.update({
+  id: "/family-audit",
+  path: "/family-audit",
   getParentRoute: () => rootRouteImport,
 } as any);
-const PocInstancesDRoute = PocInstancesDRouteImport.update({
-  id: "/poc/instances-d",
-  path: "/poc/instances-d",
+const FamilyDocRoute = FamilyDocRouteImport.update({
+  id: "/family-doc",
+  path: "/family-doc",
   getParentRoute: () => rootRouteImport,
 } as any);
-const PocInstancesCRoute = PocInstancesCRouteImport.update({
-  id: "/poc/instances-c",
-  path: "/poc/instances-c",
+const FamilyMatrixRoute = FamilyMatrixRouteImport.update({
+  id: "/family-matrix",
+  path: "/family-matrix",
   getParentRoute: () => rootRouteImport,
 } as any);
-const PocInstancesBRoute = PocInstancesBRouteImport.update({
-  id: "/poc/instances-b",
-  path: "/poc/instances-b",
+const FamilyModelRoute = FamilyModelRouteImport.update({
+  id: "/family-model",
+  path: "/family-model",
   getParentRoute: () => rootRouteImport,
 } as any);
-const PocInstancesARoute = PocInstancesARouteImport.update({
-  id: "/poc/instances-a",
-  path: "/poc/instances-a",
+const FamilyTypesRoute = FamilyTypesRouteImport.update({
+  id: "/family-types",
+  path: "/family-types",
   getParentRoute: () => rootRouteImport,
 } as any);
-const PocInstancesRoute = PocInstancesRouteImport.update({
-  id: "/poc/instances",
-  path: "/poc/instances",
+const InstancesRoute = InstancesRouteImport.update({
+  id: "/instances",
+  path: "/instances",
   getParentRoute: () => rootRouteImport,
 } as any);
-const PocFamilyLensRoute = PocFamilyLensRouteImport.update({
-  id: "/poc/family-lens",
-  path: "/poc/family-lens",
+const OpsRoute = OpsRouteImport.update({
+  id: "/ops",
+  path: "/ops",
   getParentRoute: () => rootRouteImport,
 } as any);
-const PocDialRoute = PocDialRouteImport.update({
-  id: "/poc/dial",
-  path: "/poc/dial",
+const ParameterLinksRoute = ParameterLinksRouteImport.update({
+  id: "/parameter-links",
+  path: "/parameter-links",
   getParentRoute: () => rootRouteImport,
 } as any);
-const PocChipCRoute = PocChipCRouteImport.update({
-  id: "/poc/chip-c",
-  path: "/poc/chip-c",
+const ScheduleGridRoute = ScheduleGridRouteImport.update({
+  id: "/schedule-grid",
+  path: "/schedule-grid",
   getParentRoute: () => rootRouteImport,
 } as any);
-const PocChipBRoute = PocChipBRouteImport.update({
-  id: "/poc/chip-b",
-  path: "/poc/chip-b",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const PocChipARoute = PocChipARouteImport.update({
-  id: "/poc/chip-a",
-  path: "/poc/chip-a",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const DocsTargetRoute = DocsTargetRouteImport.update({
-  id: "/docs/target",
-  path: "/docs/target",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const DocsRuntimeRoute = DocsRuntimeRouteImport.update({
-  id: "/docs/runtime",
-  path: "/docs/runtime",
+const SettingsRoute = SettingsRouteImport.update({
+  id: "/settings",
+  path: "/settings",
   getParentRoute: () => rootRouteImport,
 } as any);
 const DemoTanstackQueryRoute = DemoTanstackQueryRouteImport.update({
@@ -211,14 +131,94 @@ const DemoTanstackQueryRoute = DemoTanstackQueryRouteImport.update({
   path: "/demo/tanstack-query",
   getParentRoute: () => rootRouteImport,
 } as any);
-const ApiPdfAuditParseRoute = ApiPdfAuditParseRouteImport.update({
-  id: "/api/pdf-audit/parse",
-  path: "/api/pdf-audit/parse",
+const DocsRuntimeRoute = DocsRuntimeRouteImport.update({
+  id: "/docs/runtime",
+  path: "/docs/runtime",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const DocsTargetRoute = DocsTargetRouteImport.update({
+  id: "/docs/target",
+  path: "/docs/target",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PocChipARoute = PocChipARouteImport.update({
+  id: "/poc/chip-a",
+  path: "/poc/chip-a",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PocChipBRoute = PocChipBRouteImport.update({
+  id: "/poc/chip-b",
+  path: "/poc/chip-b",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PocChipCRoute = PocChipCRouteImport.update({
+  id: "/poc/chip-c",
+  path: "/poc/chip-c",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PocDialRoute = PocDialRouteImport.update({
+  id: "/poc/dial",
+  path: "/poc/dial",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PocFamilyLensRoute = PocFamilyLensRouteImport.update({
+  id: "/poc/family-lens",
+  path: "/poc/family-lens",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PocInstancesRoute = PocInstancesRouteImport.update({
+  id: "/poc/instances",
+  path: "/poc/instances",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PocInstancesARoute = PocInstancesARouteImport.update({
+  id: "/poc/instances-a",
+  path: "/poc/instances-a",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PocInstancesBRoute = PocInstancesBRouteImport.update({
+  id: "/poc/instances-b",
+  path: "/poc/instances-b",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PocInstancesCRoute = PocInstancesCRouteImport.update({
+  id: "/poc/instances-c",
+  path: "/poc/instances-c",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PocInstancesDRoute = PocInstancesDRouteImport.update({
+  id: "/poc/instances-d",
+  path: "/poc/instances-d",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PocSentenceChatRoute = PocSentenceChatRouteImport.update({
+  id: "/poc/sentence-chat",
+  path: "/poc/sentence-chat",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PocSidepaneRoute = PocSidepaneRouteImport.update({
+  id: "/poc/sidepane",
+  path: "/poc/sidepane",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PocSurfacesRoute = PocSurfacesRouteImport.update({
+  id: "/poc/surfaces",
+  path: "/poc/surfaces",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PocTypeRoute = PocTypeRouteImport.update({
+  id: "/poc/type",
+  path: "/poc/type",
   getParentRoute: () => rootRouteImport,
 } as any);
 const ApiPdfAuditMapRoute = ApiPdfAuditMapRouteImport.update({
   id: "/api/pdf-audit/map",
   path: "/api/pdf-audit/map",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const ApiPdfAuditParseRoute = ApiPdfAuditParseRouteImport.update({
+  id: "/api/pdf-audit/parse",
+  path: "/api/pdf-audit/parse",
   getParentRoute: () => rootRouteImport,
 } as any);
 const ApiPdfAuditParseParseIdRoute = ApiPdfAuditParseParseIdRouteImport.update({
@@ -499,102 +499,11 @@ export interface RootRouteChildren {
 
 declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
-    "/settings": {
-      id: "/settings";
-      path: "/settings";
-      fullPath: "/settings";
-      preLoaderRoute: typeof SettingsRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/schedule-grid": {
-      id: "/schedule-grid";
-      path: "/schedule-grid";
-      fullPath: "/schedule-grid";
-      preLoaderRoute: typeof ScheduleGridRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/parameter-links": {
-      id: "/parameter-links";
-      path: "/parameter-links";
-      fullPath: "/parameter-links";
-      preLoaderRoute: typeof ParameterLinksRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/ops": {
-      id: "/ops";
-      path: "/ops";
-      fullPath: "/ops";
-      preLoaderRoute: typeof OpsRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/instances": {
-      id: "/instances";
-      path: "/instances";
-      fullPath: "/instances";
-      preLoaderRoute: typeof InstancesRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/family-types": {
-      id: "/family-types";
-      path: "/family-types";
-      fullPath: "/family-types";
-      preLoaderRoute: typeof FamilyTypesRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/family-model": {
-      id: "/family-model";
-      path: "/family-model";
-      fullPath: "/family-model";
-      preLoaderRoute: typeof FamilyModelRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/family-matrix": {
-      id: "/family-matrix";
-      path: "/family-matrix";
-      fullPath: "/family-matrix";
-      preLoaderRoute: typeof FamilyMatrixRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/family-doc": {
-      id: "/family-doc";
-      path: "/family-doc";
-      fullPath: "/family-doc";
-      preLoaderRoute: typeof FamilyDocRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/family-audit": {
-      id: "/family-audit";
-      path: "/family-audit";
-      fullPath: "/family-audit";
-      preLoaderRoute: typeof FamilyAuditRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/family": {
-      id: "/family";
-      path: "/family";
-      fullPath: "/family";
-      preLoaderRoute: typeof FamilyRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/doc-lab": {
-      id: "/doc-lab";
-      path: "/doc-lab";
-      fullPath: "/doc-lab";
-      preLoaderRoute: typeof DocLabRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/design-system": {
-      id: "/design-system";
-      path: "/design-system";
-      fullPath: "/design-system";
-      preLoaderRoute: typeof DesignSystemRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/data-tables": {
-      id: "/data-tables";
-      path: "/data-tables";
-      fullPath: "/data-tables";
-      preLoaderRoute: typeof DataTablesRouteImport;
+    "/": {
+      id: "/";
+      path: "/";
+      fullPath: "/";
+      preLoaderRoute: typeof IndexRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/chat": {
@@ -604,123 +513,102 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof ChatRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/": {
-      id: "/";
-      path: "/";
-      fullPath: "/";
-      preLoaderRoute: typeof IndexRouteImport;
+    "/data-tables": {
+      id: "/data-tables";
+      path: "/data-tables";
+      fullPath: "/data-tables";
+      preLoaderRoute: typeof DataTablesRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/poc/type": {
-      id: "/poc/type";
-      path: "/poc/type";
-      fullPath: "/poc/type";
-      preLoaderRoute: typeof PocTypeRouteImport;
+    "/design-system": {
+      id: "/design-system";
+      path: "/design-system";
+      fullPath: "/design-system";
+      preLoaderRoute: typeof DesignSystemRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/poc/surfaces": {
-      id: "/poc/surfaces";
-      path: "/poc/surfaces";
-      fullPath: "/poc/surfaces";
-      preLoaderRoute: typeof PocSurfacesRouteImport;
+    "/doc-lab": {
+      id: "/doc-lab";
+      path: "/doc-lab";
+      fullPath: "/doc-lab";
+      preLoaderRoute: typeof DocLabRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/poc/sidepane": {
-      id: "/poc/sidepane";
-      path: "/poc/sidepane";
-      fullPath: "/poc/sidepane";
-      preLoaderRoute: typeof PocSidepaneRouteImport;
+    "/family": {
+      id: "/family";
+      path: "/family";
+      fullPath: "/family";
+      preLoaderRoute: typeof FamilyRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/poc/sentence-chat": {
-      id: "/poc/sentence-chat";
-      path: "/poc/sentence-chat";
-      fullPath: "/poc/sentence-chat";
-      preLoaderRoute: typeof PocSentenceChatRouteImport;
+    "/family-audit": {
+      id: "/family-audit";
+      path: "/family-audit";
+      fullPath: "/family-audit";
+      preLoaderRoute: typeof FamilyAuditRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/poc/instances-d": {
-      id: "/poc/instances-d";
-      path: "/poc/instances-d";
-      fullPath: "/poc/instances-d";
-      preLoaderRoute: typeof PocInstancesDRouteImport;
+    "/family-doc": {
+      id: "/family-doc";
+      path: "/family-doc";
+      fullPath: "/family-doc";
+      preLoaderRoute: typeof FamilyDocRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/poc/instances-c": {
-      id: "/poc/instances-c";
-      path: "/poc/instances-c";
-      fullPath: "/poc/instances-c";
-      preLoaderRoute: typeof PocInstancesCRouteImport;
+    "/family-matrix": {
+      id: "/family-matrix";
+      path: "/family-matrix";
+      fullPath: "/family-matrix";
+      preLoaderRoute: typeof FamilyMatrixRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/poc/instances-b": {
-      id: "/poc/instances-b";
-      path: "/poc/instances-b";
-      fullPath: "/poc/instances-b";
-      preLoaderRoute: typeof PocInstancesBRouteImport;
+    "/family-model": {
+      id: "/family-model";
+      path: "/family-model";
+      fullPath: "/family-model";
+      preLoaderRoute: typeof FamilyModelRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/poc/instances-a": {
-      id: "/poc/instances-a";
-      path: "/poc/instances-a";
-      fullPath: "/poc/instances-a";
-      preLoaderRoute: typeof PocInstancesARouteImport;
+    "/family-types": {
+      id: "/family-types";
+      path: "/family-types";
+      fullPath: "/family-types";
+      preLoaderRoute: typeof FamilyTypesRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/poc/instances": {
-      id: "/poc/instances";
-      path: "/poc/instances";
-      fullPath: "/poc/instances";
-      preLoaderRoute: typeof PocInstancesRouteImport;
+    "/instances": {
+      id: "/instances";
+      path: "/instances";
+      fullPath: "/instances";
+      preLoaderRoute: typeof InstancesRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/poc/family-lens": {
-      id: "/poc/family-lens";
-      path: "/poc/family-lens";
-      fullPath: "/poc/family-lens";
-      preLoaderRoute: typeof PocFamilyLensRouteImport;
+    "/ops": {
+      id: "/ops";
+      path: "/ops";
+      fullPath: "/ops";
+      preLoaderRoute: typeof OpsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/poc/dial": {
-      id: "/poc/dial";
-      path: "/poc/dial";
-      fullPath: "/poc/dial";
-      preLoaderRoute: typeof PocDialRouteImport;
+    "/parameter-links": {
+      id: "/parameter-links";
+      path: "/parameter-links";
+      fullPath: "/parameter-links";
+      preLoaderRoute: typeof ParameterLinksRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/poc/chip-c": {
-      id: "/poc/chip-c";
-      path: "/poc/chip-c";
-      fullPath: "/poc/chip-c";
-      preLoaderRoute: typeof PocChipCRouteImport;
+    "/schedule-grid": {
+      id: "/schedule-grid";
+      path: "/schedule-grid";
+      fullPath: "/schedule-grid";
+      preLoaderRoute: typeof ScheduleGridRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/poc/chip-b": {
-      id: "/poc/chip-b";
-      path: "/poc/chip-b";
-      fullPath: "/poc/chip-b";
-      preLoaderRoute: typeof PocChipBRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/poc/chip-a": {
-      id: "/poc/chip-a";
-      path: "/poc/chip-a";
-      fullPath: "/poc/chip-a";
-      preLoaderRoute: typeof PocChipARouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/docs/target": {
-      id: "/docs/target";
-      path: "/docs/target";
-      fullPath: "/docs/target";
-      preLoaderRoute: typeof DocsTargetRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/docs/runtime": {
-      id: "/docs/runtime";
-      path: "/docs/runtime";
-      fullPath: "/docs/runtime";
-      preLoaderRoute: typeof DocsRuntimeRouteImport;
+    "/settings": {
+      id: "/settings";
+      path: "/settings";
+      fullPath: "/settings";
+      preLoaderRoute: typeof SettingsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/demo/tanstack-query": {
@@ -730,11 +618,116 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof DemoTanstackQueryRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/api/pdf-audit/parse": {
-      id: "/api/pdf-audit/parse";
-      path: "/api/pdf-audit/parse";
-      fullPath: "/api/pdf-audit/parse";
-      preLoaderRoute: typeof ApiPdfAuditParseRouteImport;
+    "/docs/runtime": {
+      id: "/docs/runtime";
+      path: "/docs/runtime";
+      fullPath: "/docs/runtime";
+      preLoaderRoute: typeof DocsRuntimeRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/docs/target": {
+      id: "/docs/target";
+      path: "/docs/target";
+      fullPath: "/docs/target";
+      preLoaderRoute: typeof DocsTargetRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/poc/chip-a": {
+      id: "/poc/chip-a";
+      path: "/poc/chip-a";
+      fullPath: "/poc/chip-a";
+      preLoaderRoute: typeof PocChipARouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/poc/chip-b": {
+      id: "/poc/chip-b";
+      path: "/poc/chip-b";
+      fullPath: "/poc/chip-b";
+      preLoaderRoute: typeof PocChipBRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/poc/chip-c": {
+      id: "/poc/chip-c";
+      path: "/poc/chip-c";
+      fullPath: "/poc/chip-c";
+      preLoaderRoute: typeof PocChipCRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/poc/dial": {
+      id: "/poc/dial";
+      path: "/poc/dial";
+      fullPath: "/poc/dial";
+      preLoaderRoute: typeof PocDialRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/poc/family-lens": {
+      id: "/poc/family-lens";
+      path: "/poc/family-lens";
+      fullPath: "/poc/family-lens";
+      preLoaderRoute: typeof PocFamilyLensRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/poc/instances": {
+      id: "/poc/instances";
+      path: "/poc/instances";
+      fullPath: "/poc/instances";
+      preLoaderRoute: typeof PocInstancesRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/poc/instances-a": {
+      id: "/poc/instances-a";
+      path: "/poc/instances-a";
+      fullPath: "/poc/instances-a";
+      preLoaderRoute: typeof PocInstancesARouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/poc/instances-b": {
+      id: "/poc/instances-b";
+      path: "/poc/instances-b";
+      fullPath: "/poc/instances-b";
+      preLoaderRoute: typeof PocInstancesBRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/poc/instances-c": {
+      id: "/poc/instances-c";
+      path: "/poc/instances-c";
+      fullPath: "/poc/instances-c";
+      preLoaderRoute: typeof PocInstancesCRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/poc/instances-d": {
+      id: "/poc/instances-d";
+      path: "/poc/instances-d";
+      fullPath: "/poc/instances-d";
+      preLoaderRoute: typeof PocInstancesDRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/poc/sentence-chat": {
+      id: "/poc/sentence-chat";
+      path: "/poc/sentence-chat";
+      fullPath: "/poc/sentence-chat";
+      preLoaderRoute: typeof PocSentenceChatRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/poc/sidepane": {
+      id: "/poc/sidepane";
+      path: "/poc/sidepane";
+      fullPath: "/poc/sidepane";
+      preLoaderRoute: typeof PocSidepaneRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/poc/surfaces": {
+      id: "/poc/surfaces";
+      path: "/poc/surfaces";
+      fullPath: "/poc/surfaces";
+      preLoaderRoute: typeof PocSurfacesRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/poc/type": {
+      id: "/poc/type";
+      path: "/poc/type";
+      fullPath: "/poc/type";
+      preLoaderRoute: typeof PocTypeRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/api/pdf-audit/map": {
@@ -742,6 +735,13 @@ declare module "@tanstack/react-router" {
       path: "/api/pdf-audit/map";
       fullPath: "/api/pdf-audit/map";
       preLoaderRoute: typeof ApiPdfAuditMapRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/api/pdf-audit/parse": {
+      id: "/api/pdf-audit/parse";
+      path: "/api/pdf-audit/parse";
+      fullPath: "/api/pdf-audit/parse";
+      preLoaderRoute: typeof ApiPdfAuditParseRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/api/pdf-audit/parse/$parseId": {

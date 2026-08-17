@@ -35,8 +35,61 @@ import { RouteWorkspaceShell } from "#/workbench/route-workspace-shell";
  * (settings.workspaces / settings.tree) to choose which document `open` targets.
  */
 export const Route = createFileRoute("/settings")({
-  component: SettingsRoute,
+  /** PROTOTYPE (settings-panes round 1, throwaway): `?variant=` mounts the pane-composition
+   * variants beside the shipping surface. No variant param = the shipping surface, unchanged.
+   * See docs/features/settings/PRODUCT.md. */
+  validateSearch: (search: Record<string, unknown>): { variant?: string } => ({
+    variant:
+      typeof search.variant === "string" && search.variant.trim() ? search.variant.trim() : undefined,
+  }),
+  component: SettingsRouteGate,
 });
+
+/* ── PROTOTYPE GATE — everything between these markers dies with the round ── */
+import { lazy, Suspense } from "react";
+import { ProtoSwitcher } from "#/settings-panes/proto-switcher";
+
+const PROTO_VARIANTS = [
+  { key: "ship", name: "shipping surface" },
+  { key: "a", name: "modeful document" },
+  { key: "b", name: "workbench" },
+  { key: "c", name: "annotated file" },
+  { key: "d", name: "embedding proof" },
+];
+
+const VariantA = lazy(() =>
+  import("#/settings-panes/variants/a-modeful-doc").then((m) => ({ default: m.VariantA })),
+);
+const VariantB = lazy(() =>
+  import("#/settings-panes/variants/b-workbench").then((m) => ({ default: m.VariantB })),
+);
+const VariantC = lazy(() =>
+  import("#/settings-panes/variants/c-annotated-file").then((m) => ({ default: m.VariantC })),
+);
+const VariantD = lazy(() =>
+  import("#/settings-panes/variants/d-embedding-proof").then((m) => ({ default: m.VariantD })),
+);
+
+function SettingsRouteGate() {
+  const { variant } = Route.useSearch();
+  const key = variant ?? "ship";
+  return (
+    <>
+      {key === "ship" ? (
+        <SettingsRoute />
+      ) : (
+        <Suspense fallback={null}>
+          {key === "a" ? <VariantA /> : null}
+          {key === "b" ? <VariantB /> : null}
+          {key === "c" ? <VariantC /> : null}
+          {key === "d" ? <VariantD /> : null}
+        </Suspense>
+      )}
+      <ProtoSwitcher variants={PROTO_VARIANTS} current={key} />
+    </>
+  );
+}
+/* ── END PROTOTYPE GATE ── */
 
 function isAuthoringFile(entry: SettingsFileEntry) {
   return (

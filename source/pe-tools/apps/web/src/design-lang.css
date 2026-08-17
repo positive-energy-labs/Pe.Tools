@@ -1,0 +1,289 @@
+/* =============================================================================================
+   THE DESIGN LANGUAGE — CANON. Imported by `./styles.css`; loaded on every route.
+   =============================================================================================
+
+   This file is the one place a colour of the design language is decided. Reconsidering a colour
+   is a ONE-LINE EDIT here and nowhere else: no component, no route, and no CSS file downstream
+   may name a colour literal. `components/lang/*` consumes `var(--r-…)` exclusively — that is
+   what makes the language palette-invariant, and it is the fix for the round-2 finding that
+   canon `Button`/`Chip` reached app tokens no palette scope could retint.
+
+   PROVENANCE — this is not a fresh opinion. It is palette **p3 · wholistic bands**, which won
+   design-lang base 2 round 2 (ruled 2026-08-16) against three rivals plus the unfixed
+   incumbent, judged by flipping each in both modes over one byte-identical base. Every verdict,
+   every honest cost, and the open frontier live in `docs/features/design-lang/CLEANROOM.md`.
+   The prototype that validated this contract still stands at `src/design-lang/proto/` (route
+   `/design-lang`) as the validation record; the token PREFIX stays `--r-*` for exactly that
+   reason — renaming would orphan the evidence.
+
+   THE GROUND FLIP (2026-08-16): `styles.css` no longer decides any colour. Its shadcn semantic
+   layer resolves onto the ground/ink ladders here, and the entire old vocabulary (`--st-*`,
+   `--act-*`, `--cat-*`, Lens) survives only as an ALIAS SHIM in `styles.css` resolving onto the
+   meaning band and the viz ladder. Route passes delete shim lines as they migrate; the shim's
+   line count is the migration progress meter.
+
+   ── THE 18 TOKENS (+ the viz ladder) ──────────────────────────────────────────────────────
+     GROUND LADDER (4)  page · artifact · recess · select
+     INK LADDER    (3)  ink · ink-2 · ink-mute
+     HAIRLINE      (2)  line · line-2
+     MEANING       (9)  pea · pea-ink · alarm · caution · done · commit · on-commit · nav
+                        (…that is 8; the 9th is `--r-ink-mute` doing double duty as the
+                         "never checked" rank of the squiggle family — see the reuse table)
+     VIZ LADDER    (6)  --viz-1..6 — the PARALLEL palette for taxonomy/series spends; indexed,
+                        band-quantized, governed by the grayscale law (see its block below).
+                        Not part of the meaning contract: a viz colour never carries state.
+
+   Tints, washes and hairline-over-fill are NOT tokens. Components mix them from these with
+   `color-mix()` against `--r-on`. A surface that wants a different wash STRENGTH is proposing a
+   grammar change, not a colour change — take it to CLEANROOM's frontier section.
+
+   ── STANDING LAWS THESE TOKENS ENCODE (COLOR-ROLES.md, SURFACE-PHILOSOPHY §5) ──────────────
+     · ONE ALARM. `--r-alarm` means "the model disagrees". Nothing else may wear it.
+     · PEA IS NEVER BLUE. The agent's proposals wear the agent's identity.
+     · SELECTION AND FOCUS ARE A FILL, NEVER A HUE — only ever `--r-select`, which is literally
+       the 4th rung of the ground ladder, so the law is structural rather than remembered.
+       EXTENSION (ruled 2026-08-16, R13a): on a spatial view where a fill cannot separate —
+       coloured plan fills, zone peeks — the locate mark is `--r-ink`: neutral, no hue bought,
+       the highest-contrast mark available. Takeoffs' cursor is the precedent.
+     · THE ONLY FILLED BLUE is the verb that writes beyond the page (`--r-commit`).
+       Nav is blue TEXT (`--r-nav`, byte-identical) and nothing else in the language is blue.
+       "BEYOND THE PAGE" (ruled 2026-08-16, fit reviews): the write leaves the current page's
+       state — disk, host document, external system; a write that only moves this page's own
+       state is not blue.
+     · THE GRAYSCALE EXTENSION (ruled 2026-08-16, fit reviews): a meaning-band spend on a fill
+       SMALLER THAN A WORD requires a non-hue channel — pattern, weight, outline or position
+       must carry the distinction too. Hue-only fills at rail/pip scale ride the priced
+       alarm/caution CVD collision (honest costs, below) exactly where a wrong read is dear.
+     · MONO MEANS THE MACHINE MEASURED THIS. Type carries meaning on the same terms as colour.
+     · BOLD IS RESERVED FOR UNSAVED, everywhere, always.
+
+   ── OUTCOME KINDS REUSE THE MEANING ROLES — no outcome gets a hue of its own ────────────────
+     busy      → --r-ink-2      (neutral machine fact, in flight)
+     receipt   → --r-done       (it landed)
+     refused   → --r-alarm      (a plan-hash refusal IS the model disagreeing)
+     dropped   → --r-ink-mute   (+ italic — it never happened)
+     advisory  → --r-ink-2      (a dry run blocks nothing)
+     partial   → --r-caution    (failures stay staged = unsaved)
+     error     → --r-caution    (a busy bridge is NOT the model disagreeing)
+
+   ── THE SQUIGGLE FAMILY — one shape, three colours, ranked (c's axis law) ──────────────────
+     drift → --r-alarm  ▸  stale → --r-caution  ▸  unverified → --r-ink-mute
+     `never` (nothing ever attempted — ruled 2026-08-16) draws NO squiggle: the family
+     distrusts an existing value; a never-started cell has nothing to distrust. Its value
+     sits in --r-ink-mute alone. "Not started is a state, not a zero" — this is the rung.
+
+   ── THE BORDER BUDGET (ruled 2026-08-16, CLEANROOM note 3) ────────────────────────────────
+   PLAIN CONTENT IS NEVER ENCLOSED. The artifact frame — one ground shift plus one quiet inset
+   hairline — is reserved for a MACHINE-OPERATED OBJECT THAT CARRIES STATE: the table, pea's
+   chat card, the arming strip, the addressing sentence. A group of plain controls or receipts
+   (the verb lane, the outcomes lane) sits directly on the page ground with nothing around it.
+   Every frame spent on something with no state to separate makes the real ones read as less
+   special. Enforced in code by `components/lang/artifact-frame.tsx` being the only thing that
+   draws one.
+
+   THE DASHED SLOT COUNTS EVERY MECHANISM (ruled 2026-08-16, R13b): `border-style: dashed`,
+   SVG `stroke-dasharray`, and any other way of drawing a broken edge occupy the SAME slot and
+   carry the same reserved meaning — SEAM: a stand-in for something that does not exist
+   (a fixture lane, a declared area with no element behind it, a position with no boundary).
+   A dashed mark meaning anything else is a violation wherever the CSS lives.
+
+   ── THE `--r-on` PLUMBING CONVENTION ──────────────────────────────────────────────────────
+   `--r-on` is THE GROUND A CHILD ACTUALLY SITS ON. It is declared here as `--r-page` and
+   RE-DECLARED by every container that shifts the ground: the artifact frame, its recessed
+   head/foot bands, a selected table row, the arming strip's tinted fill. Every wash the
+   language mixes (`color-mix(… , var(--r-on))`) therefore lands on the right ground
+   automatically instead of being re-declared per container.
+
+   This is not cosmetic. Round 2's note-4 defect — three buttons that computed to within 1.03:1
+   of their own background, one of them literally invisible in dark — was ONE bug: controls
+   mixing their fill against the artifact token while standing on a different ground. A
+   container that shifts the ground and forgets to re-declare `--r-on` reintroduces it.
+
+   RULE: if you set `background`, set `--r-on` to the same value on the same rule.
+
+   ── THE HOVER LAW ─────────────────────────────────────────────────────────────────────────
+   `--r-veil` is a neutral ink veil, identical on every control in the language, composited as a
+   background-IMAGE so it lands OVER whatever fill the control already carries (tinted, filled,
+   or transparent) without replacing it. Ink is dark in light mode and pale in dark, so one
+   declaration reads as "lifted" in both. Hover buys no hue — same law as selection and focus.
+
+   ── p3 · THE BAND SYSTEM (why these values and not others) ─────────────────────────────────
+   Every one of the 18 tokens is `oklch(L C h)` with L, C and h taken from a declared band.
+   Nothing was eyeballed; the pairing table below is the consequence, not the argument.
+
+   1 · THE NEUTRAL HUE — 88° (warm paper), used by EVERY ground and EVERY ink, BOTH MODES.
+       Hue drift across the whole neutral half of the palette: 0°.
+         GROUND LADDER  C=0.011 h=88   light L: .985 .949 .910 .876  (page·artifact·recess·select)
+                                        dark L: .185 .225 .265 .310
+         INK LADDER     h=88            light L/C: .330/.014 · .470/.020 · .620/.006
+                                         dark L/C: .940/.012 · .795/.020 · .615/.006
+
+   2 · THE MEANING BAND — ONE lightness, ONE chroma, per mode; all meaning hues sit on it.
+         light  L = 0.470   C = 0.085
+         dark   L = 0.795   C = 0.085     (0.000 chroma drift, 0.325 lightness inversion)
+       Because L is shared, no meaning role can out-shout another by weight; because C is
+       shared, none can out-shout another by saturation. Side by side they are one family.
+
+   3 · THE HUE WHEEL — six angles, IDENTICAL in both modes. Declared hue tolerance: ±0°.
+         alarm 42° rust · caution 74° ochre · done 133° lichen · pea 158° palm · commit 249.5°
+       The two SMALL gaps are deliberate: alarm↔caution are the loud and quiet ranks of one
+       warning idea; done↔pea are "pea proposed it" and "it landed". The 59° gap sits exactly
+       where confusion would be expensive — between caution and done, which share an outcome list.
+
+   4 · THE DISPLAY RUNG — `--r-pea` is the only token that is a MARK rather than text or ground
+       (the proposal ring, the card edge). Band lightness stepped 0.080 toward its own ground:
+       light .470 → .550, dark .795 → .715. Mode-mirrored, one rule.
+
+   5 · THE ONE LEGISLATED EXCEPTION — `--r-alarm` is the only token permitted off-band, and only
+       in CHROMA: C .115 vs the band's .085 (+35%), both modes. This is the one-alarm law made
+       PHYSICAL rather than remembered: the band is what makes a single deviation findable, and
+       there is exactly one deviation.
+
+   ── HONEST COSTS (do not rediscover these; they were priced and accepted) ──────────────────
+   · alarm vs caution have a 1.04 | 1.03 luminance ratio — as fills they separate ONLY by hue
+     and chroma. A red/green-deficient viewer reads squiggle rank 1 and rank 2 as near-identical.
+   · dark alarm is not the highest-contrast dark meaning colour (8.64 vs done's 9.17); its
+     loudness there rests entirely on chroma + hue quadrant.
+   · the pea ring over its own wash is the weakest legibility point in light (2.08:1).
+   · light `--r-ink-mute` on the locked wash is 2.83 — below 3:1, defensible only because WCAG
+     exempts disabled controls and greyed-italic is the settled treatment.
+   · dark grounds are warm charcoal, not the incumbent's basalt green (168° → 88°), bought to
+     get 0° hue drift across the whole neutral half. Anyone who reads basalt-green as PE
+     identity experiences that as a loss.
+
+   ── CONTRAST LEDGER (WCAG, computed; light | dark) ─────────────────────────────────────────
+   ink on page       11.74 | 15.67      ink-2 on page      6.58 | 9.85
+   ink on artifact   10.56 | 14.29      ink-2 on artifact  5.92 | 8.98
+   ink on recess      9.37 | 12.85      ink-2 on recess    5.25 | 8.08
+   ink on select      8.43 | 11.03      ink-2 on select    4.73 | 6.93
+   ink-mute on artifact 3.13 | 4.57     ← locked/disabled text, WCAG-exempt by role
+   ink-2 vs ink-mute  1.89 | 1.97       ← the fragile pair; separated by chroma too (70%
+                                          desaturation), because pure-lightness separation is
+                                          what breaks first at 10px
+   meaning as TEXT on artifact (light | dark)
+     alarm  6.19 | 8.64   caution 5.96 | 8.84   done   5.69 | 9.17
+     commit 5.86 | 9.02   nav     5.86 | 9.02   pea-ink 5.65 | 9.27
+     pea    4.00 | 7.03   ← display rung; never used as body text
+   commit fill vs on-commit 6.51 | 9.89 · select vs artifact 1.25 | 1.30 · artifact vs page 1.11 | 1.10
+
+   ── PAIRING TABLE — light | dark | note ────────────────────────────────────────────────────
+   Sibling renderings, not two palettes: the MEANING MAP is identical in both modes, lightness
+   moves freely, hue angle does not. Every pairing has a row so drift is a decision.
+
+   page       #fdfaf2 | #15120d | h88 both. L .985↔.185. Ground ladder rung 1. drift 0°.
+   artifact   #f1eee6 | #1e1c16 | h88. rung 2 (.949↔.225). one lightness step, no hue change.
+   recess     #e4e1d9 | #27251f | h88. rung 3 (.910↔.265). same step size as rung 2.
+   select     #d9d6ce | #33302a | h88. rung 4 (.876↔.310). the "no hue" law, made structural.
+   ink        #38352d | #eeebe2 | h88, C .014/.012. Inverted pair on the ground's own hue.
+   ink-2      #5f5a4e | #c1bcae | h88, C .020. Light value sits AT the meaning band's L (.470),
+                                  which is why a busy outcome and a receipt read as the same
+                                  weight of statement, differing only in whether they carry hue.
+   ink-mute   #888682 | #868481 | h88, C .006. Near-achromatic by design; ~0° drift, ~0 ΔL.
+   line       ink @12% | ink @14% | derived from ink, so it inherits h88 automatically.
+   line-2     ink @22% | ink @26% | same derivation; the firm seam.
+   pea        #42815e | #74b48f | h158 (palm, unmoved). The DISPLAY rung: band L ∓0.080.
+   pea-ink    #296948 | #8dcda7 | h158, on-band. Text weight + the wash mix source.
+   alarm      #8e4120 | #fba381 | h42 (clay 58.6° → 42°, for distance from the 88° ground).
+                                  C .115 — THE one legislated off-band token.
+   caution    #77531b | #ddb47e | h74 (kiln 83.5° → 74°, off the ground hue). on-band C .085 —
+                                  a 2.8× chroma lift on incumbent kiln, so it can no longer be
+                                  mistaken for ink-2 the way `--user`/`--st-warn` were.
+   done       #486531 | #a7c890 | h133 (lichen 123° → 133°). 25° from pea: adjacent, not equal.
+   commit     #325e88 | #92c1f1 | h249.5 — PE blue's exact hue, band-quantized in L and C.
+   on-commit  #fdfaf2 | #15120d | the page ground. There is no pure white or pure black in the set.
+   nav        #325e88 | #92c1f1 | byte-identical to commit in both modes. Same hue, two jobs:
+                                  commit is a FILL, nav is TEXT. The job carries the difference,
+                                  so no second blue is minted to carry it.
+   ============================================================================================= */
+
+:root {
+  /* ── ground ladder — oklch(L .011 88), L = .985 / .949 / .910 / .876 ── */
+  --r-page: #fdfaf2; /* the page itself; prose and page chrome sit here. */
+  --r-artifact: #f1eee6; /* the machine-operated object: table, pea card, arming strip, sentence. */
+  --r-recess: #e4e1d9; /* set INTO an artifact: table head/gutter, card foot, key strip. */
+  --r-select: #d9d6ce; /* selection + focus fill. NEVER a hue — only ever this token. */
+
+  /* ── ink ladder — h88; L .330/.470/.620, C .014/.020/.006.
+        Only TWO primary text colours on the page (c's axis law): ink and ink-2. ── */
+  --r-ink: #38352d; /* primary text: values, labels, prose. */
+  --r-ink-2: #5f5a4e; /* secondary text: annotations, footlines, captions, counts. */
+  --r-ink-mute: #888682; /* locked/uneditable/dropped text; also the "never checked" squiggle. */
+
+  /* ── hairlines — this is a border-scarce language; these are for SEAMS, not for boxing in.
+        Mixed from ink, so they ride the neutral hue for free. ── */
+  --r-line: color-mix(in srgb, #38352d 12%, transparent); /* quiet: row rules, artifact edge. */
+  --r-line-2: color-mix(
+    in srgb,
+    #38352d 22%,
+    transparent
+  ); /* firm: seams, citation underline, chip edge, focus outline. */
+
+  /* ── meaning band — L .470, C .085; alarm alone at C .115 ── */
+  --r-pea: #42815e; /* h158, display rung L .550 — pea's MARK: rings, corner fold, card edge. */
+  --r-pea-ink: #296948; /* h158, on-band — pea at ink weight: pea's TEXT and the pea wash source. */
+  --r-alarm: #8e4120; /* h42, C .115 — the ONE alarm: drift squiggle, refusal, ghost value. */
+  --r-caution: #77531b; /* h74 — stale · unverified · UNSAVED; the unsaved square, partial/error. */
+  --r-done: #486531; /* h133 — it landed: receipts, the post-commit sentence. */
+  --r-commit: #325e88; /* h249.5 — the ONLY filled blue: writes beyond the page, armed strip. */
+  --r-on-commit: #fdfaf2; /* = --r-page. Text/icon sitting on a --r-commit fill. */
+  --r-nav: #325e88; /* = --r-commit. Nav as blue TEXT (back · forward · out). Never a fill. */
+
+  /* ── plumbing (see the two convention blocks in the header) ── */
+  --r-on: var(--r-page); /* the ground a child actually sits on. Root value = the page. */
+  --r-veil: color-mix(in srgb, var(--r-ink) 10%, transparent); /* THE ONE HOVER. Buys no hue. */
+
+  /* ── VIZ LADDER — THE PARALLEL PALETTE (taxonomy · charts · series) ─────────────────────────
+     Hue serves the STATE vocabulary; anything coloured by KIND — chart series, Revit category,
+     doc kind, cost class — spends --viz-*, never a meaning role. Indexed, not named: a viz
+     colour asserts "different from its neighbours" and nothing else. Band-quantized like the
+     meaning band (light L .470 / dark L .795) so no series out-shouts another; hues carry the
+     old cat-* identities forward (blue·green·slate·lichen·clay·kiln) so migrated surfaces keep
+     their series identity. Low-chroma rungs 3 and 6 keep slate/kiln's near-neutral character.
+     THE GRAYSCALE LAW (from ops CoverageBar, this palette's first shipped consumer): a viz
+     spend must survive grayscale — label, legend, or position carries the distinction; colour
+     only speeds it up. A chip whose meaning dies in grayscale is spending the wrong palette. */
+  --viz-1: oklch(0.47 0.085 249.5);
+  --viz-2: oklch(0.47 0.085 155);
+  --viz-3: oklch(0.47 0.045 230);
+  --viz-4: oklch(0.47 0.085 123);
+  --viz-5: oklch(0.47 0.085 58);
+  --viz-6: oklch(0.47 0.055 85);
+}
+
+/* The app's dark mechanism is a `.dark` class on `documentElement` (= :root), set by
+   `components/ThemeToggle.tsx` and matched by `@custom-variant dark` in styles.css. Equal
+   specificity to `:root`, declared later, so it wins. `--r-on` and `--r-veil` are NOT
+   re-declared: both are `var()` indirections that re-resolve against the values below. */
+.dark {
+  /* ── ground ladder — oklch(L .011 88), L = .185 / .225 / .265 / .310 ── */
+  --r-page: #15120d;
+  --r-artifact: #1e1c16;
+  --r-recess: #27251f;
+  --r-select: #33302a;
+
+  /* ── ink ladder — h88; L .940/.795/.615, C .012/.020/.006 ── */
+  --r-ink: #eeebe2;
+  --r-ink-2: #c1bcae;
+  --r-ink-mute: #868481;
+
+  --r-line: color-mix(in srgb, #eeebe2 14%, transparent);
+  --r-line-2: color-mix(in srgb, #eeebe2 26%, transparent);
+
+  /* ── meaning band — L .795, C .085; alarm alone at C .115. Hues identical to light. ── */
+  --r-pea: #74b48f; /* h158, display rung L .715 */
+  --r-pea-ink: #8dcda7; /* h158, on-band */
+  --r-alarm: #fba381; /* h42, C .115 — 94% of the sRGB chroma ceiling at this lightness */
+  --r-caution: #ddb47e; /* h74, on-band */
+  --r-done: #a7c890; /* h133, on-band */
+  --r-commit: #92c1f1; /* h249.5, on-band */
+  --r-on-commit: #15120d; /* = --r-page */
+  --r-nav: #92c1f1; /* = --r-commit */
+
+  /* ── viz ladder — dark: L .795, chroma and hue unmoved (same law as the meaning band) ── */
+  --viz-1: oklch(0.795 0.085 249.5);
+  --viz-2: oklch(0.795 0.085 155);
+  --viz-3: oklch(0.795 0.045 230);
+  --viz-4: oklch(0.795 0.085 123);
+  --viz-5: oklch(0.795 0.085 58);
+  --viz-6: oklch(0.795 0.055 85);
+}

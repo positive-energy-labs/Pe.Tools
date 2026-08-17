@@ -24,6 +24,7 @@
     "@pe/agent-contracts": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "@t3-oss/env-core": "^0.13.10",
+    "@tanstack/highlight": "catalog:",
     "@tanstack/react-devtools": "latest",
     "@tanstack/react-form": "latest",
     "@tanstack/react-hotkeys": "catalog:",
