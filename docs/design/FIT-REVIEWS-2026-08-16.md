@@ -28,6 +28,39 @@ Remaining nonzero gates all live in **shared chrome no route pass owns**: `compo
 exhibit pages. Review A's closing point: the per-route governance that made the sweep safe is now
 the thing preventing the last mile.
 
+## RULED 2026-08-16 (kaitpw delegated the sitting: "choose the occam approach — what matters
+## is everything fits the system and tokens propagate, not perfect discipline")
+
+Agreed items 1–4 + 7–8 below: **implement as written**, with two Occam trims — the owed
+marker ships as the MasterTable gutter only (no workbench mapdial twin yet), and of the
+state-model batch only the one-line `partial` kind lands now; outcome links / staged-author /
+freshness thresholds stay queued model work on the CLEANROOM frontier (they are contract
+work, not token propagation).
+
+Collision rulings:
+- **Refusal-to-title** → B wins, narrowly: a DISABLED `commit` verb renders its reason
+  visibly (small line by the verb — no new slot); everything else stays title-only. Fix the
+  stale atlas docblock.
+- **Grayscale for the meaning band** → law extended: a meaning-band spend on a fill smaller
+  than a word needs a non-hue channel. Takeoffs' `call` gets one (implementer picks the
+  minimal channel).
+- **Vocabulary stacking on /takeoffs** → no code change. The zone-stage column is a
+  disclaimed container label used as a filter, which §1 explicitly permits. The census
+  TEMPLATE is rewritten instead (grade against all five carriers: axes · verdict · outcome ·
+  row-fact · viz).
+- **AddressingBar on form routes** → released: the five-slot rule binds table/workspace
+  routes; form routes may use a Section-style head. `name` normalized (lowercase at call
+  sites; the CSS already uppercases). Settings collapses its two rows.
+- **Mandates** → `ReadCell.reason` becomes optional. `EmptyState` keeps its required
+  story+exit, but hover-readouts-at-rest and combobox no-match slots are RULED not-empty-
+  states — plain muted text; the three absurd call sites revert.
+- **Readout band** → renders only while a cell is focused; the idle tutorial placeholder
+  dies. The focused-cell verb path is deferred (design work, not fit work).
+- Also in: blue-boundary sentence in the law ("beyond the page" = leaves the current
+  page's state — disk, host, external); boilerplate honesty stamps deduped per surface;
+  instances' crash payload un-muted; NarrowChip adopted by MasterTable (FilterChip dies) or
+  deleted if adoption fights back — implementer's call, adoption default.
+
 ## Synthesis — where the two reviews agree (high confidence)
 
 1. **The owed/attention marker is the single highest-leverage build.** Ruled (R3), never built;
