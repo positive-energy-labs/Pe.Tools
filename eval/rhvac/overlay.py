@@ -44,6 +44,36 @@ def load_ink(path):
     return w, h, minx, miny, cell, bits
 
 
+def load_replay_seed_ink(path):
+    """Seed ink straight from a gzipped DetectSnapshot (replay_*.bin), in load_ink's
+    return shape. The separately persisted ink_*.bin can be STALE relative to the replay
+    (verified 2026-08-16: Attic ink bin was missing 51% of replay seed cells), so any
+    surface that claims to show solver input must read this, not the ink bin."""
+    import gzip, struct as _struct
+
+    def read_7bit_length(stream):
+        shift = value = 0
+        while True:
+            byte = stream.read(1)[0]
+            value |= (byte & 0x7F) << shift
+            if not byte & 0x80:
+                return value
+            shift += 7
+
+    with gzip.open(path, "rb") as f:
+        magic, _version = _struct.unpack("<Ii", f.read(8))
+        if magic != 0x54414B53:  # "SKAT"
+            raise ValueError(f"{path}: not a detect snapshot")
+        f.read(read_7bit_length(f))            # level name
+        f.read(8)                              # elevation
+        f.read(read_7bit_length(f))            # capture options
+        w, h = _struct.unpack("<ii", f.read(8))
+        minx, miny, cell = _struct.unpack("<ddd", f.read(24))
+        f.read(8 * w * h)                      # FloorZ + CeilZ floats
+        bits = f.read((w * h + 7) // 8)
+    return w, h, minx, miny, cell, bits
+
+
 def load_tsv(path):
     rooms, polys = {}, {}
     for line in open(path, encoding="utf-8"):

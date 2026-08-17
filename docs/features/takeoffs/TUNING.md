@@ -96,6 +96,16 @@ Success = better on every regime, no regime sacrificed.
 
 ## Adversarial backlog
 
+- **Door-head sealer manufactures backing evidence over low ceilings (2026-08-16 render
+  forensics)**: the lintel predicate has no door-width bound, so duct soffits/low basement
+  ceilings seal wholesale (LL08: one 255 sf door-head component), and `EvidenceInkDistance`
+  counts those cells as BACKING — LL08's edge-on-ink is 0.73 with them, 0.09 ink-only. Teal
+  must mean trustworthy; manufactured backing inflates trust. → R2d experiment.
+- **Seals bin: persist door-head and wall-run as separate rasters (INKP v4)** — per-cell
+  attribution is unrecoverable downstream (validated recompute drifts up to ~72 sf/zone).
+- **Stale `ink_*.bin` lane, stronger evidence**: Attic bin missing 51% of replay seed cells in
+  the Attic00 crop. Renderer + scorer now bypass it; delete or repair the lane.
+
 - Knob census: ~70 public TakeoffOptions fields; kill the dead, merge the correlated.
 - The stale `ink_*.bin` lane: fix the persistence or delete the lane (one truth for evidence ink).
 - Stage mutual-exclusivity audit: zone-fit vs editability vs ink-backing overlap; Main 10 has

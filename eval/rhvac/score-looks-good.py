@@ -95,31 +95,10 @@ class Grid:
         This is the raster the C# promotion actually scored against. The separately
         persisted ink_*.bin can be STALE relative to it (verified 2026-08-16: Upper Level
         ink bin was missing 33% of replay seed cells, Attic 45%), so evidence metrics
-        must come from the replay, never the ink bin.
+        must come from the replay, never the ink bin. Parsing lives in overlay.py — one
+        parser for every surface that claims to show solver input.
         """
-        import gzip
-        import struct
-
-        def read_7bit_length(stream):
-            shift = value = 0
-            while True:
-                byte = stream.read(1)[0]
-                value |= (byte & 0x7F) << shift
-                if not byte & 0x80:
-                    return value
-                shift += 7
-
-        with gzip.open(path, "rb") as stream:
-            magic, _version = struct.unpack("<Ii", stream.read(8))
-            if magic != 0x54414B53:  # "SKAT"
-                raise ValueError(f"{path}: not a detect snapshot")
-            stream.read(read_7bit_length(stream))            # level name
-            stream.read(8)                                   # elevation
-            stream.read(read_7bit_length(stream))            # capture options
-            w, h = struct.unpack("<ii", stream.read(8))
-            minx, miny, cell = struct.unpack("<ddd", stream.read(24))
-            stream.read(8 * w * h)                           # FloorZ + CeilZ floats
-            bits = stream.read((w * h + 7) // 8)
+        w, h, minx, miny, cell, bits = overlay.load_replay_seed_ink(path)
         flat = np.unpackbits(np.frombuffer(bits, dtype=np.uint8), bitorder="little")[: w * h]
         return cls(flat.reshape(h, w).astype(bool), minx, miny, cell)
 

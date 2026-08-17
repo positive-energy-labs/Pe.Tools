@@ -6,26 +6,38 @@ import json
 import math
 from pathlib import Path
 
+import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 import overlay
 
 
+# The panel answers four questions, and every color belongs to exactly one of them:
+#   RECEIVED  what the solver partitioned on as captured evidence — replay seed ink, solid
+#             near-black, never denoised, never painted over. If the input is noisy (attic
+#             framing lattice), showing that noise is the point.
+#   ADDED     obstruction the sealers invented — screened (checkerboard), never solid, so
+#             synthetic cells cannot be mistaken for drawn walls. SEAL is the door-head +
+#             wall-run closure as persisted (seals_*.bin merges the two classes; the per-zone
+#             door/run sf split in the subtitle is the C# truth). CLOSE is the stud-gap
+#             morphological close, muted because it rims every wall by construction.
+#   DECIDED   accepted / held / void rooms — crisp outlines over pale solid fills that sit
+#             UNDER the evidence, so a decision can never obscure the ink it was made on.
+#   REFERENCE the zone boundary.
 ACCEPTED = (24, 91, 122)
+ACCEPTED_FILL = (229, 237, 241)
 HELD = (219, 150, 55)
-HELD_FILL = (250, 231, 197)
+HELD_FILL = (250, 238, 217)
 VOID = (145, 145, 145)
-VOID_FILL = (232, 232, 232)
-INK = (190, 190, 190)
-# Closure rasters: obstruction the sealers invented, drawn under the room outlines so a reviewer
-# can see which "walls" the drawing never drew. SEAL is the door/window closure (saturated
-# orange-red, unmistakable against amber HELD_FILL and teal ACCEPTED even at thumbnail scale);
-# CLOSE is the generic stud-gap morphology, muted because it rims every wall by construction.
+VOID_FILL = (236, 236, 236)
+INK = (25, 25, 25)
 SEAL = (222, 58, 20)
-CLOSE = (206, 178, 168)
+CLOSE = (200, 165, 130)
 ZONE = (112, 44, 138)
 TRIAGE = (183, 46, 46)
-DISPOSITION_ALPHA = 64
+# Closure components smaller than this carry no reviewable signal (single-cell ceiling-height
+# speckle); they are hidden from the CLOSURE layers only. Evidence ink is never denoised.
+SPECK_SQFT = 0.25
 
 HEADER_HEIGHT = 62
 
@@ -113,13 +125,45 @@ def header_lines(report):
     ]
 
 
+def unpack_mask(bits, width, height):
+    flat = np.unpackbits(np.frombuffer(bits, dtype=np.uint8),
+                         bitorder="little")[: width * height]
+    return flat.reshape(height, width).astype(bool)
+
+
+def despeckle(mask, cell):
+    """Drop closure components below SPECK_SQFT. Closure layers only — never evidence."""
+    try:
+        from scipy.ndimage import label
+    except ImportError:
+        return mask
+    labels, count = label(mask)
+    if not count:
+        return mask
+    sizes = np.bincount(labels.ravel())
+    keep = sizes * cell * cell >= SPECK_SQFT
+    keep[0] = False
+    return keep[labels]
+
+
 def render_zone(root, zone, output, padding_cells=12, scale=2):
     ink_path = root / zone["Ink"]
     tsv_path = root / zone["Tsv"]
     width, height, min_x, min_y, cell, bits = overlay.load_ink(ink_path)
+    # Evidence authority: the replay snapshot's seed ink — the raster the solver actually
+    # partitioned on. The persisted ink_*.bin drifts stale (Attic was missing 51% of seed
+    # cells); it is only a last-resort fallback, and the panel says so when it is used.
+    ink_source = "ink STALE-BIN"
+    replay_path = ink_path.parent / f"replay_{ink_path.stem.removeprefix('ink_')}.bin"
+    if replay_path.exists():
+        r_width, r_height, *_, r_bits = overlay.load_replay_seed_ink(replay_path)
+        if (r_width, r_height) == (width, height):
+            bits, ink_source = r_bits, "ink replay-seed"
+    ink_mask = unpack_mask(bits, width, height)
+
     # Optional (schemaVersion 3+) closure rasters. They ride the detection grid, so a mismatch
     # means the artifact is inconsistent — drop them rather than draw cells at the wrong place.
-    def closure_bits(key):
+    def closure_mask(key):
         relative = zone.get(key)
         if not relative:
             return None
@@ -127,10 +171,12 @@ def render_zone(root, zone, output, padding_cells=12, scale=2):
         if not path.exists():
             return None
         seal_width, seal_height, *_, seal_bits = overlay.load_ink(path)
-        return seal_bits if (seal_width, seal_height) == (width, height) else None
+        if (seal_width, seal_height) != (width, height):
+            return None
+        return despeckle(unpack_mask(seal_bits, width, height), cell)
 
-    seal_bits = closure_bits("Seals")
-    close_bits = closure_bits("Close")
+    seal_mask = closure_mask("Seals")
+    close_mask = closure_mask("Close")
     x0 = max(0, math.floor((zone["MinX"] - min_x) / cell) - padding_cells)
     x1 = min(width, math.ceil((zone["MaxX"] - min_x) / cell) + padding_cells)
     y0 = max(0, math.floor((zone["MinY"] - min_y) / cell) - padding_cells)
@@ -144,41 +190,46 @@ def render_zone(root, zone, output, padding_cells=12, scale=2):
             panel.save(output)
         return panel
 
-    image = Image.new("RGB", (x1 - x0, y1 - y0), "white")
-    pixels = image.load()
-    for y in range(y0, y1):
-        row = y * width
-        py = y1 - 1 - y
-        for x in range(x0, x1):
-            index = row + x
-            if close_bits is not None and (close_bits[index >> 3] >> (index & 7)) & 1:
-                pixels[x - x0, py] = CLOSE
-            if (bits[index >> 3] >> (index & 7)) & 1:
-                pixels[x - x0, py] = INK
-            # Seals paint last of the three: a closure is the claim under review, so it must never
-            # be hidden by the raw ink it bridges.
-            if seal_bits is not None and (seal_bits[index >> 3] >> (index & 7)) & 1:
-                pixels[x - x0, py] = SEAL
-
     rooms, polygons, residues = overlay.load_disposition_tsv(tsv_path)
 
     def point(value):
         return ((value[0] - min_x) / cell - x0,
                 y1 - (value[1] - min_y) / cell)
 
+    # Decision fills go down FIRST so nothing they claim can hide a single evidence cell.
+    image = Image.new("RGB", (x1 - x0, y1 - y0), "white")
+    fill_draw = ImageDraw.Draw(image)
     for residue in residues:
         loops = residue["loops"]
         if not loops:
             continue
-        color, fill = ((HELD, HELD_FILL) if residue["reason"] == "rejected"
-                       else (VOID, VOID_FILL))
-        layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
-        layer_draw = ImageDraw.Draw(layer)
-        layer_draw.polygon([point(value) for value in loops[0]],
-                           fill=(*fill, DISPOSITION_ALPHA))
+        fill = HELD_FILL if residue["reason"] == "rejected" else VOID_FILL
+        fill_draw.polygon([point(value) for value in loops[0]], fill=fill)
         for hole in loops[1:]:
-            layer_draw.polygon([point(value) for value in hole], fill=(0, 0, 0, 0))
-        image = Image.alpha_composite(image.convert("RGBA"), layer).convert("RGB")
+            fill_draw.polygon([point(value) for value in hole], fill="white")
+    for room_id in sorted(rooms):
+        for kind, loop in polygons.get(room_id, []):
+            if len(loop) >= 3:
+                fill_draw.polygon([point(value) for value in loop],
+                                  fill=ACCEPTED_FILL if kind == "outer" else "white")
+
+    # Raster layers over the fills: synthetic closures screened (checkerboard — never solid,
+    # so they cannot read as drawn walls), then evidence ink solid black on top of everything.
+    pixels = np.asarray(image).copy()          # rows top-down; grid rows bottom-up
+
+    def paint(mask, color, screened):
+        crop = mask[y0:y1, x0:x1]
+        if screened:
+            yy, xx = np.mgrid[y0:y1, x0:x1]
+            crop = crop & ((yy + xx) % 2 == 0)
+        pixels[crop[::-1]] = color
+
+    if close_mask is not None:
+        paint(close_mask, CLOSE, screened=True)
+    if seal_mask is not None:
+        paint(seal_mask, SEAL, screened=True)
+    paint(ink_mask, INK, screened=False)
+    image = Image.fromarray(pixels)
 
     draw = ImageDraw.Draw(image)
     for residue in residues:
@@ -205,7 +256,7 @@ def render_zone(root, zone, output, padding_cells=12, scale=2):
 
     if scale != 1:
         image = image.resize((image.width * scale, image.height * scale), Image.Resampling.NEAREST)
-    image.thumbnail((900, 650), Image.Resampling.LANCZOS)
+    image.thumbnail((900, 588), Image.Resampling.LANCZOS)
     verdict, reason = triage_of(zone)
     # A held zone still shows its raster and zone loops: triage is a routing verdict a reviewer
     # must be able to argue with, not a reason to hide the evidence.
@@ -229,9 +280,9 @@ def render_zone(root, zone, output, padding_cells=12, scale=2):
                 + (f"ink-ratio {ratio:.0%}   " if ratio is not None else "")
                 + closure_text
                 + f"shared {zone['SharedEdgePairs']}/{zone['LostSharedEdgePairs']} lost   "
-                f"leak {zone['ClosureErrorSqft']:.3f} sf")
+                f"leak {zone['ClosureErrorSqft']:.3f} sf   {ink_source}")
     panel = Image.new("RGB", (900, 700), "white")
-    panel.paste(image, ((900 - image.width) // 2, 66 + (630 - image.height) // 2))
+    panel.paste(image, ((900 - image.width) // 2, 66 + (588 - image.height) // 2))
     panel_draw = ImageDraw.Draw(panel)
     # The banner is prominent but must not push the counts off the panel: shrink to fit instead.
     size = 18
@@ -243,9 +294,48 @@ def render_zone(root, zone, output, padding_cells=12, scale=2):
         x += panel_draw.textlength(banner, font=font(size + 1))
     panel_draw.text((x, 10), title, fill=(30, 30, 30), font=font(size))
     panel_draw.text((14, 32), subtitle, fill=(70, 70, 70), font=font(16))
+    draw_legend(panel_draw)
     if output is not None:
         panel.save(output)
     return panel
+
+
+LEGEND_ROWS = (
+    ((INK, "solid", "received ink"),
+     (SEAL, "screen", "added: door/run seal"),
+     (CLOSE, "screen", "added: gap-close")),
+    ((ACCEPTED, "outline", "accepted"),
+     (HELD, "outline", "held"),
+     (VOID, "outline", "void"),
+     (ZONE, "outline", "zone")),
+)
+
+
+def draw_legend(panel_draw):
+    """The in-image key every panel carries: received / added / decided / reference."""
+    legend_font = font(14)
+
+    def swatch(x, y, color, style):
+        if style == "outline":
+            panel_draw.rectangle((x, y + 3, x + 13, y + 16), outline=color, width=2)
+        elif style == "screen":
+            for sy in range(14):
+                for sx in range(14):
+                    if (sx + sy) % 2 == 0:
+                        panel_draw.point((x + sx, y + 3 + sy), fill=color)
+        else:
+            panel_draw.rectangle((x, y + 3, x + 13, y + 16), fill=color)
+        return x + 18
+
+    for row_index, row in enumerate(LEGEND_ROWS):
+        x, y = 14, 656 + row_index * 21
+        for color, style, label in row:
+            x = swatch(x, y, color, style)
+            panel_draw.text((x, y), label, fill=(60, 60, 60), font=legend_font)
+            x += panel_draw.textlength(label, font=legend_font) + 14
+        if row_index == 0:
+            panel_draw.text((x, y), f"(closure specks <{SPECK_SQFT} sf hidden)",
+                            fill=(140, 140, 140), font=legend_font)
 
 
 def main():
