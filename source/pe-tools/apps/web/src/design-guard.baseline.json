@@ -1,0 +1,8 @@
+{
+  "//": "Ratchet baselines for design-guard.test.ts — counts may only FALL. Lower a number in the same commit as the win; never raise one. Seeded 2026-08-16 at sweep close.",
+  "textPx": 41,
+  "rawButton": 56,
+  "uiButtonImports": 12,
+  "dashed": 7,
+  "longTitle": 8
+}

@@ -341,6 +341,15 @@ at the next joint sitting; none contradicts a prior joint ruling.
   the frontier; the workbench "you" hue stays neutral ink until the workbench pass produces
   evidence.
 
+### Sweep close-out (2026-08-16)
+
+The one-system sweep closed the same day: the census rerun and the two opinionated fit
+reviews live in `docs/design/FIT-REVIEWS-2026-08-16.md` (the next joint sitting's agenda for
+everything not already ruled there), and the token discipline these rulings assume is now
+enforced by `apps/web/src/design-guard.test.ts` — five hard zeros on the deleted vocabulary
+plus five ratchets against `src/design-guard.baseline.json`, running in `vp test`. A grammar
+or vocabulary change now lands as ruling + code + guard update in the same commit.
+
 ## Frontier — grammar doubts that remain after round 2
 
 **Grammar knobs still hard-coded in the base** (each is a constant no round has varied):

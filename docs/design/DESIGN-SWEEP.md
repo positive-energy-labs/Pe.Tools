@@ -4,6 +4,57 @@ Started 2026-08-16 after the base-2 design-language round. This is the crusade's
 handoff: goal, loop, current frontier. Update it when the frontier moves; everything else
 lives in the documents it points to.
 
+## CLOSED (2026-08-16)
+
+The sweep is done. The [DESIGN-LANG-HANDOFF.md](DESIGN-LANG-HANDOFF.md) §1 exit gates were
+driven to their targets, the ALIAS SHIM meter reads **0 lines**, and the enforcement lever
+landed: **`apps/web/src/design-guard.test.ts` is now the gate** (SHIMS entry 8, closed).
+It runs in `vp test` (the `ready` lane — the web app has no CI, so the test is the lint):
+five hard zeros hold the deleted vocabulary at zero forever; five ratchets in
+`src/design-guard.baseline.json` may only fall, and a fall fails the test until the baseline
+is lowered in the same commit. Checks + 122 tests green at close.
+
+### Final census (§1 gates, sweep start → close)
+
+| gate | sweep start | close |
+|---|---|---|
+| forked `Verb` components | 5 | **0** |
+| `--st-*`/`--act-*` consumers | 6 files | **0** (hard zero) |
+| dead-shim `var()` tokens of any family | app-wide | **0** (hard zero) |
+| hex colour literals outside `design-lang.css` | (uncounted) | **0** (hard zero) |
+| `tele`/`tele-label`/`section-label` | app-wide (152/15 files at rerun) | **0** — bundles deleted (hard zero) |
+| sub-10px `text-[Npx]` | 20+ (family flagship) | **0** (hard zero) |
+| ALIAS SHIM meter | ~40 lines | **0 lines** |
+| `ui/verb`/`ui/chip`/`ui/switcher` | alive | **deleted** |
+| raw palette refs outside ui | ~640 / 50 files | **0** (comment mentions only) |
+| `text-[Npx]` (any size) | 381 / 12 sizes | 41 / 9 files (ratcheted) |
+| raw `<button>` outside ui+lang | 137 / 37 files | 56 / 22 files (ratcheted) |
+| `ui/button` importers / JSX sites | 22 / 64 | 12 / 24 (ratcheted) |
+| `useVerb` adoption | 2 sites, 11 hand-rolls | 5 sites, hand-rolled idiom gone from routes |
+| `ui/dialog` product importers | 0 (takeoffs hand-rolled a modal) | takeoffs on `ui/dialog` (real focus trap/Esc/role) |
+| confirmation dialogs in production | 0 | 2 (takeoffs adopt/sync) |
+
+### Honestly still open (tracked, not blocking the close)
+
+- **`ui/button`'s tail** — 12 importers / 24 JSX sites (ui internals: combobox · dialog ·
+  input-group · side-pane; chat chrome: composer · chat-shell · control-chips · ThemeToggle;
+  exhibits + ops) and 56 raw `<button>` sites of non-verb machinery. SHIMS entry 1's open
+  half; the ratchet holds the line, an icon-only `Verb` form closes most of it.
+- **The queued state-model work** — outcome links (verb·time·target·items), staged author
+  beyond you/pea, freshness thresholds (SHIMS entry 5; fit-review synthesis #6: the model,
+  not the grammar, is the bottleneck).
+- **The popover foundation** (SHIMS entry 7) — combobox/select/pickers still inconsistent.
+- **Satellite mocks** (SHIMS entry 4) — deliberate, close only on promotion to real routes.
+- **Exhibit `text-[Npx]` tail** — 32 of the 41 remaining spends are design-system exhibit
+  chrome (arming · popovers · proposal-flow · swatch); the other 9 sit in thread-palette,
+  command, field-options, issues, Lens. All ≥10px, all ratcheted.
+- **The 8 >240-char `title=` props** (family/workspace ×5, anatomy, families) — the
+  hover-shadow-doc ratchet from fit review B·5 holds them from growing.
+
+**Standing rule: the design-guard test is the gate.** New vocabulary, tokens, or exemptions
+go through a ruling first, then the guard changes in the same commit — never the reverse.
+This file is now historical; live work continues on the CLEANROOM frontier and SHIMS ledger.
+
 ## Goal
 
 **One design system rules every surface, and the code is the spec.** `components/lang` +

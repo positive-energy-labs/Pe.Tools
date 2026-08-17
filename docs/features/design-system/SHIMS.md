@@ -38,10 +38,17 @@ and named, never renumbered. Context: `docs/features/design-lang/CLEANROOM.md`.
    Discharged by: one popover foundation in `components/lang/` that every popover-bearing
    component sits on, adopted during the crusade.
 
-8. **No enforcement lever guards the token discipline.** Nothing stops a `lang/` file (or
-   any migrated route) from taking a raw colour; the contract holds by review only.
-   Discharged by: the chosen lever (oxlint JS-plugin rule vs staged hook vs CI check) landing
-   with the crusade — candidates already scoped in `DESIGN-LANG-HANDOFF.md` §6.
+8. ~~**No enforcement lever guards the token discipline.**~~ **CLOSED 2026-08-16 (sweep
+   close-out)** — the design-guard test landed: `apps/web/src/design-guard.test.ts` (vitest,
+   runs in `vp test` and therefore the `ready` lane; the web app has no CI, so the test IS
+   the lint — oxlint stays an optional later hardening). One directory walk, plain regexes.
+   Five HARD ZEROS (dead shim `var(--st/act/cat/pe/…)` tokens, bare `var(--line)`/`--line-2`,
+   tele/tele-label/section-label class words, hex colour literals outside `design-lang.css`,
+   sub-10px `text-[Npx]`) and five RATCHETS against `src/design-guard.baseline.json`
+   (`text-[Npx]` 41 · raw `<button>` outside ui+lang 56 · `ui/button` imports 12 ·
+   dashed-mechanism spends outside lang 7 · >240-char `title=` 8). Baselines may only fall;
+   a count above its baseline fails with the offenders, a count below fails asking for the
+   baseline to be lowered in the same commit — the ratchet cannot silently slacken.
 
 ## Queued (not started — gated on route-set alignment)
 
