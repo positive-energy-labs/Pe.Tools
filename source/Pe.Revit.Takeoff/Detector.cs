@@ -206,11 +206,15 @@ public static class Detector
             // Headerless doorways (framing models): a gap counts as a door only when it is a short
             // colinear break between two solid ink runs. Scanning H, V and both diagonals covers
             // rotated wings; diagonal walls >= 2 cells thick stay contiguous along 45-degree lines.
-            int maxGap = (int)Math.Round(opt.DoorGapMaxFt / opt.CellFt);
-            int minRun = (int)Math.Round(opt.DoorJambMinFt / opt.CellFt);
             var filled = new bool[n];
             void Scan(int sx, int sy, int dx, int dy)
             {
+                // Thresholds are declared in FEET along the scan line. A diagonal step spans
+                // cell*sqrt(2), so cell-count thresholds must shrink accordingly or diagonal
+                // scans bridge DoorGapMaxFt*sqrt(2) where DoorGapMaxFt was declared.
+                double stepFt = opt.CellFt * (dx != 0 && dy != 0 ? Math.Sqrt(2.0) : 1.0);
+                int maxGap = (int)Math.Round(opt.DoorGapMaxFt / stepFt);
+                int minRun = (int)Math.Round(opt.DoorJambMinFt / stepFt);
                 int x = sx, y = sy;
                 var line = new List<int>();
                 while (x >= 0 && x < W && y >= 0 && y < H) { line.Add(y * W + x); x += dx; y += dy; }

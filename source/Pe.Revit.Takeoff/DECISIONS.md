@@ -2,6 +2,57 @@
 
 Dated, append-only. Newest batch first. Each entry: what was decided, and the why that makes it stick. Reopen one only with new evidence — and record the reopening here.
 
+## 2026-08-16 (round 1 of the tuning orchestration) — five-agent wave on fresh homogeneous bins
+
+Context: first recapture with the F/F0 framing veto live on all four levels (bins were previously
+split-generation). New currency: `eval/rhvac/score-looks-good.py` savedWork (see
+docs/features/takeoffs/TUNING.md); kaitpw A/B verdicts in worktree TASTE.md.
+
+**Adopted:**
+
+- **Wall-run scan thresholds are honored in feet on every scan direction
+  (`Detector.BuildObstruction`, per-direction `maxGap`/`minRun` from `stepFt = CellFt·√2` on
+  diagonals) + `DoorGapMaxFt` 4.5 → 6.0.** The angle-blind sealer defect deferred on 2026-08-15 is
+  fixed: diagonal scans bridged 6.36 ft where 4.5 was declared and jammed 2.83 where 2.0 was.
+  The fix alone unwound fat-plug propping in five zones (board slightly down); the honest 6.0
+  gap re-tune on top recovers them: board savedWork 0.334 → 0.378, recall 0.276 → 0.336,
+  edge-on-ink UP 0.848 → 0.868, Main 00 0→3 accepted, Attic 00 0→4 (first ever). kaitpw A/B:
+  "better in every image"; the LL08/ML09 rooms lost in the retune "were no good in the first
+  place" (LL08's was 0.636 edge-on-ink). 6.0 is valid ONLY on diagonal-honest steps — the old
+  6.75 tombstone (angle-blind code) stands separately.
+- **`SmallZoneSqft` is a user-exposed per-project toggle, default stays ~750 (700–800 band).**
+  kaitpw: project-a is high-end residential; typical projects have smaller "small" rooms. Do not
+  fixture-tune the default (X=730's +1 room is ML13-specific) and do not build pipeline behavior
+  around the value. Full release (X=0) falsified as a free lunch: only 2/14 released oracle rooms
+  convert; 4 are lost to missing (LL05 releases and solves to *nothing* — the residue evaporates).
+
+**Falsified / re-sealed:**
+
+- **`FrameMaxSourceDropFt` relaxation (3.5–8.0), re-swept on savedWork: fails honesty at every
+  point.** The 2026-08-15 conjecture that drops are double-backstopped does not hold: every
+  admitted room carries more unbacked boundary than the accepted mean (board edge-on-ink falls
+  monotonically), 3.5–6.5 is a dead band, and the old "clean 547 sf LL08 room" converts
+  un-oracle'd with swallow. Keep 2.5. Salvage note: UL06's 464 sf oracle room converts only at
+  8.0 with decent edges — zone-conditional harvest territory, not a default.
+- **Global `BoundarySnap 45/20` tombstone RE-SEALED on framing-clean ink.** Its exact named
+  victims (Main 10's trivially-correct room, LL08 backing) reproduce — the damage was never
+  framing noise. Per-zone reopening is EARNED (see round-2 slate): attic-scoped
+  {snap 45/20, drift 3.0, support 0.375} converts Attic 00 0→1 and Attic 01 4→6 honestly
+  in-zone, keyed on `edgeBandInkFraction ≤ ~0.35` — which cleanly separates attic (≤0.31) from
+  every other rasterized zone (≥0.41) where the old key, inkRatio, is falsified as a
+  discriminator (fresh attic 0.198–0.204 overlaps productive zones exactly).
+- **`DoorJambMinFt` 1.5: strictly dominated** (ink stubs qualify as jambs; sealing balloons,
+  accepted recall collapses).
+- **Relaxing `InkBackedAcceptMin` is pointless, not just forbidden**: the ink gate blocks ZERO
+  oracle-bearing rooms on fresh bins (10 rooms, 638 sf, all junk). Honesty is free; the
+  direction is closed.
+
+**Known, deferred to round 2:** the 45° measurement-inflation family (drift magnitudes at 45°
+land at ≈ BoundarySimplifyFt·√2 — the drift metric inflates like the sealer did; diagonal-frame
+strict editability blocks 24 held oracle rooms, the single largest pool); Attic 01 projection
+defects (MultiPolygon / ExcessiveDetail); oracle floor-mapping audit (Lower chamfers better
+against floor 1 than floor 0; Main 14/15 accept with zero oracle rooms).
+
 ## 2026-08-15 (the authority-vs-estimate batch) — three-agent fan-out, verified and merged
 
 **Adopted:**

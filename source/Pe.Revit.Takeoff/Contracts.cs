@@ -30,7 +30,7 @@ public sealed class TakeoffOptions
     public double DoorHeadMaxFt = 8.75;     // max headroom that can still be a door/opening lintel
     public double DoorHeadContrastFt = 1.5; // neighbor must be this much taller to call the low cell a lintel
     public bool SealWallRunGaps = false;    // close a colinear break in a wall run (headerless doorway)
-    public double DoorGapMaxFt = 4.5;       // widest colinear break that can still be a doorway
+    public double DoorGapMaxFt = 6.0;       // widest colinear break that can still be a doorway (6.0 valid only atop diagonal-honest scan steps; kaitpw A/B 2026-08-16)
     public double DoorJambMinFt = 2.0;      // ink run required on BOTH sides to call it a doorway
     public double StoryCapFt = 14.0;        // ceiling search cap above the level plane
     public double CeilingCloseFt = 0;       // close gaps <= this in the ceiling mask (rafter-only roofs read patchy)
