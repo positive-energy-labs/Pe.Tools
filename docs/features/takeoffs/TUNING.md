@@ -113,6 +113,14 @@ Success = better on every regime, no regime sacrificed.
   parallel-on-same-wall pairs; the missing move is a snap ALONG ink (room edge joins the zone
   line when both stand on one wall band), which the guard currently refuses no differently
   than a crossing sweep. Annotated image in kaitpw's round-3 reply; TASTE.md entry.
+- **Round-4 — tilted-longest-edge anchor election (C2 test discovery, pinned as
+  `LIMITATION_a_tilted_longest_edge_wins_the_anchor_election_and_is_not_squared`)**: when an
+  off-frame edge is the ring's LONGEST, the anchor law elects the tilt itself as frame
+  authority and the squarer squares the short sides into the tilted frame. Pipeline-safe today
+  (admission audit refuses, zero live rooms hit it) but unrepairable; adjacent to
+  parallel-on-ink unification.
+- **Round-4 — review-takeoff.py still reads ink bins** (C1 residual): the sha256-manifest A/B
+  bundle lane, not a silent fallback — migrating it touches the C#-emitted manifest contract.
 - **Round-4 design — mixed-frame room projection (ML09's true mechanism)**: rooms speaking two
   frames (45° + orthogonal fixture walls, curves) cannot be expressed by single-frame
   projection; segment-wise frame assignment on the zone's declared frame families, unmodified
