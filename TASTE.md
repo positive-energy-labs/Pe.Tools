@@ -19,3 +19,18 @@ Also ruled: SmallZoneSqft stays in the 700–800 band and is a **user-exposed pe
 room size") — do not build the pipeline around the number, and do not fixture-tune it.
 
 Process: reports must be colloquial; walls of numbers hindered the verdicts.
+
+## 2026-08-16 — Round 2 summon: 45° fix + projector repair + round-3 direction
+
+Images: `.artifacts/ab-round2/` (Attic01, UL02, UL03) and `.artifacts/ab-r2b/` (LL08, LL09).
+
+- **45° drift fix: "Looks right, keep it."** Rotated-wing rooms stand on ink; falsifier did not
+  fire; adoption stands.
+- **Projector repair: adopt, AND the honesty bar becomes per-zone** — "no zone's own
+  edge-on-ink falls" replaces the board-mean rule (board-mean dilution by ink-poor zones is a
+  statistical artifact, not dishonesty).
+- **Round 3 ruled: one more wave before consolidating** — wing residuals (a) + ML09 diagnosis
+  (b), plus two new taste items verbatim: "LL09 shows a small room that should be squashed into
+  others." and "consider that zone edges often clip walls, we can ignore padding of pixels
+  along a zone edge, maybe treat that as the new zone bounds for the solver (UL02 shows this
+  problem on left side)".

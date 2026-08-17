@@ -651,11 +651,12 @@ internal static class FrameLocalProjector
         double areaDrift = Math.Abs(candidate.Area - sourceRoom.Geometry.Area) /
                            Math.Max(sourceRoom.Geometry.Area, Epsilon);
         if (areaDrift > knobs.MaxAreaDrift) return false;
-        double invention = new DiscreteHausdorffDistance(
-            candidate.Boundary, sourceRoom.Geometry.Boundary).OrientedDistance();
+        // Same pricing as the main drift gate: axis-L∞ against the de-staircased reference, so a
+        // repair in a rotated frame pays the same price as one in an orthogonal frame.
+        var reference = DeStaircase(sourceRoom.Geometry, knobs.DeStaircaseFt).Boundary;
+        double invention = AxisOrientedDistance(candidate.Boundary, reference);
         if (invention > knobs.MaxBoundaryDriftFt) return false;
-        double sourceDrop = new DiscreteHausdorffDistance(
-            sourceRoom.Geometry.Boundary, candidate.Boundary).OrientedDistance();
+        double sourceDrop = AxisOrientedDistance(reference, candidate.Boundary);
         if (sourceDrop > knobs.MaxSourceDropFt) return false;
         var label = Factory.CreatePoint(
             new Coordinate(sourceRoom.Room.LabelX, sourceRoom.Room.LabelY));

@@ -6,8 +6,10 @@ agent reads this first. Orchestrator: the session's Fable. Verdict authority: ka
 ## Mission (kaitpw-locked, 2026-08-16)
 
 Raise **accepted coverage** by making more geometry good enough to pass the existing honesty
-gates — **never by loosening the gates**. A change that gains rooms while dropping board
-edge-on-ink is a regression by definition. Second-order: residual held geometry should get less
+gates — **never by loosening the gates**. Honesty bar (kaitpw-reformulated 2026-08-16, round-2
+summon): **per-zone** — a change may not drop any zone's own accepted edge-on-ink; the board
+MEAN is diagnostic only (ink-poor zones gaining honest rooms dilute the mean — a statistical
+artifact, not dishonesty). Second-order: residual held geometry should get less
 horrendous (held FRs are designer-visible), never at the cost of accepted coverage.
 
 Baseline fact that frames everything: accepted recall 0.284 but **held-recall 0.578** — the solver

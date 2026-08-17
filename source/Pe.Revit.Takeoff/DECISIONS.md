@@ -2,6 +2,23 @@
 
 Dated, append-only. Newest batch first. Each entry: what was decided, and the why that makes it stick. Reopen one only with new evidence — and record the reopening here.
 
+## 2026-08-16 (round 2, R2b) — projection technicalities die with magnitudes; the gates were mostly right
+
+**Adopted: fragment dissolve + detail repair in the projector (kaitpw-ruled at the round-2
+summon).** MultiPolygon output (checkerboard pinch / orphan-across-strip) is dissolved by a
+minimal axis bridge refused on rival cells; handle-scale-detail refusals get ONE de-jog attempt
+whose expansion is carved out of every neighbor, renoded, and re-judged by the unmodified audit
+under a never-uglier rule. `frame:InvalidGeometry` is extinct (bare refusals became
+magnitude-carrying holds — what rejection mining needs), and repairs pay the same axis-L∞ drift
+price as everything else. **The strong hypothesis was falsified**: most fragmented rooms hid
+genuine lattice losses (Attic01 R02: 5.6 ft real drop behind the MultiPolygon mask) — held
+correctly. On the merged incumbent the repair converts nothing (its LL08/LL09 targets were
+already resolved by R2d/R2a) — adopted as robustness: H1 showed InvalidGeometry RISES when
+partitions reshape, so this protects future gains from being eaten by representation debris.
+**Honesty bar reformulated per kaitpw: per-zone** — no zone's own accepted edge-on-ink may
+fall; the board mean is diagnostic only (dilution by ink-poor zones gaining honest rooms is a
+statistical artifact). TUNING.md updated.
+
 ## 2026-08-16 (round 2, R2a) — one disease, three instances: axis-denominated motion priced in Euclidean
 
 **Adopted: drift audit re-priced in world-axis L∞ against the de-staircased reference
