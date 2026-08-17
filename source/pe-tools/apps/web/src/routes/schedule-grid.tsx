@@ -406,6 +406,23 @@ function ScheduleGridRoute() {
                 rows={snapshot.rows}
                 columns={gridColumns}
                 rowKey={(row) => String(row.rowNumber)}
+                // THE OWED MARKER (fit reviews, ruled 2026-08-16): staged cells flagged for
+                // review owe a decision, and push refuses while any remain — the gutter
+                // locates them per row with the count in caution ink.
+                gutter={(row) => {
+                  const owed = snapshot.columns.filter(
+                    (column) =>
+                      cells[scheduleCellKey(row.rowNumber, column.columnNumber)]?.review ===
+                      "attention",
+                  ).length;
+                  return owed > 0
+                    ? {
+                        count: owed,
+                        tone: "caution" as const,
+                        title: `${owed} staged cell${owed === 1 ? "" : "s"} on this row ${owed === 1 ? "is" : "are"} flagged for review — push refuses while any remain`,
+                      }
+                    : null;
+                }}
                 scopeLabel="schedule rows"
                 searchPlaceholder="find in cells"
                 activeKey={activeRow}
@@ -483,10 +500,12 @@ function PendingStrip({
     <div className="shrink-0 border-t border-[var(--r-line)]">
       <div className="flex items-baseline gap-2 border-b border-[var(--r-line)] px-3 py-1.5">
         <span className="t-caption t-upper text-[var(--r-ink-2)]">pending</span>
+        {/* The "nothing reaches Revit until you push" stamp lives in ONE home — the push
+            verb's own reason (fit reviews, ruled 2026-08-16: repeated stamps train users to
+            stop reading). */}
         <HelpTip>
           Every open diff on this schedule, one line each. Pea proposes; approving stages; typing
-          over a proposed cell severs the proposal and stages your value instead. Nothing reaches
-          Revit until you push.
+          over a proposed cell severs the proposal and stages your value instead.
         </HelpTip>
         <FactChip
           tone={proposalCount > 0 ? "pea" : "meta"}
@@ -496,7 +515,7 @@ function PendingStrip({
         </FactChip>
         <FactChip
           tone={stagedCount > 0 ? "caution" : "meta"}
-          title="Staged cells are unsaved — they exist only on this page until push writes them into Revit."
+          title="Cells staged for the next push."
         >
           {stagedCount} staged
         </FactChip>
@@ -552,12 +571,12 @@ function PendingStrip({
                   <>
                     <Verb
                       label="deny"
-                      reason="Clear pea's proposal for this cell. Nothing was ever written; the snapshot value stands."
+                      reason="Clear pea's proposal for this cell — the snapshot value stands."
                       onClick={() => deny(key)}
                     />
                     <Verb
                       label="approve"
-                      reason={`Approve and stage "${String(cell.proposal?.value ?? "")}". Staging stays on this page — nothing reaches Revit until you push.`}
+                      reason={`Approve and stage "${String(cell.proposal?.value ?? "")}" for the next push.`}
                       onClick={() => stageValue(key, String(cell.proposal?.value ?? ""))}
                     />
                   </>

@@ -1,9 +1,11 @@
 /**
  * ARMING STRIP — the ceremony surface for a write that leaves the page.
  *
- * CONSUMER: soon — the family apply verb. No surface has ever shipped an arming strip; this is
- * the first, and SURFACE-PHILOSOPHY §3 has been owed it since the honesty rules were written
- * (reason supplied before it arms · explicit identity · plan hash · drift refusal · receipt).
+ * CONSUMER: /parameter-links (fit reviews, ruled 2026-08-16 — the first shipping consumer:
+ * its preview→stale→apply gate IS this lifecycle, `refused`'s re-plan = preview). The family
+ * apply verb is next. SURFACE-PHILOSOPHY §3 has been owed this strip since the honesty rules
+ * were written (reason supplied before it arms · explicit identity · plan hash · drift
+ * refusal · receipt).
  *
  * RULINGS EMBODIED (docs/features/design-lang/CLEANROOM.md):
  * - ROUND 1's SECOND MECHANICAL FINDING: **only variant e's arming strip read as ceremony rather

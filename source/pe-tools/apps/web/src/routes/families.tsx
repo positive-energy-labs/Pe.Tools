@@ -303,8 +303,6 @@ function NamePicker({
   placeholder,
   ariaLabel,
   title,
-  empty,
-  emptyExit,
   disabled,
 }: {
   options: readonly string[];
@@ -313,10 +311,6 @@ function NamePicker({
   placeholder: string;
   ariaLabel: string;
   title: string;
-  /** What is empty, in the picker's own words — the `EmptyState` statement. */
-  empty: string;
-  /** REQUIRED way out of the empty list — where its options come from / how to widen. */
-  emptyExit: string;
   disabled?: boolean;
 }) {
   const anchor = useComboboxAnchor();
@@ -362,12 +356,10 @@ function NamePicker({
         <ComboboxTrigger />
       </ComboboxChips>
       <ComboboxContent anchor={anchor} className="rounded-[var(--radius)]">
-        {/* A picker with no options says where options come from (SURFACE-PHILOSOPHY §4). The
-            list exists and the typed text narrowed it to nothing, so this is the FILTER story. */}
-        <ComboboxEmpty className="face-mono t-label">
-          <EmptyState story="filter" exit={emptyExit}>
-            {empty}
-          </EmptyState>
+        {/* RULED not-an-empty-state (fit reviews, 2026-08-16): a combobox no-match slot is
+            "you typed a string that matched nothing" — plain muted text, no story/exit. */}
+        <ComboboxEmpty className="face-mono t-label text-[var(--r-ink-mute)]">
+          no matches
         </ComboboxEmpty>
         <ComboboxList>
           {(name: string) => (
@@ -1042,8 +1034,6 @@ function FamiliesRoute() {
               placeholder="add categories…"
               ariaLabel="draft categories"
               title="Which Revit categories the draft asks for. Picking one only edits the DRAFT — nothing loads until you apply the scope, because the matrix op is the expensive one."
-              empty="no matching category"
-              emptyExit="the list is every category the loaded families report — load the family in Revit to add one"
             />
             <NamePicker
               options={draftFamilyNames}
@@ -1059,20 +1049,14 @@ function FamiliesRoute() {
               }
               ariaLabel="draft families"
               title="Every family the draft categories resolve to, all picked by default. Dropping one narrows exactly what apply asks the matrix op for — it does not filter a loaded table, it loads less."
-              empty="no matching family"
-              emptyExit="the list comes from the drafted categories and the placement filter — widen either to see more"
             />
           </>
         )}
-        {draftCategories.length === 0 ? (
-          <EmptyState
-            story="scope"
-            exit="pick one in the categories box — the families it resolves to appear beside it"
-            className="shrink-0"
-          >
-            no categories picked yet
-          </EmptyState>
-        ) : draftFamilyNames.length === 0 && draftCatalog.isFetching ? (
+        {/* RULED 2026-08-16 (fit reviews): the third EmptyState that sat here — "no categories
+            picked yet" — is deleted; the two visibly-empty pickers beside it announce
+            themselves. */}
+        {draftCategories.length === 0 ? null : draftFamilyNames.length === 0 &&
+          draftCatalog.isFetching ? (
           <OutcomeLine className="shrink-0" kind="busy" label="resolving families" />
         ) : (
           <FactChip title="How many families the draft currently commits to. The matrix budget is sized to exactly this number, so nothing is silently truncated.">

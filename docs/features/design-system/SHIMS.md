@@ -14,9 +14,11 @@ and named, never renumbered. Context: `docs/features/design-lang/CLEANROOM.md`.
    record**, not yet deleted.~~ **CLOSED 2026-08-16** — proto and route deleted; rivals live
    on snapshot branch `proto/design-lang-base2-round2`; palette values single-homed in
    `src/design-lang.css`; verdicts stay in CLEANROOM.md.
-3. **`ArmingStrip` ships with no live consumer.** The family apply verb is the intended
-   first consumer (the ceremony clause no surface has built). Discharged by: family route
-   normalization wiring it to a real `write:model` commit.
+3. ~~**`ArmingStrip` ships with no live consumer.**~~ **CLOSED 2026-08-16 (fit reviews,
+   wave 2)** — `/parameter-links` is the first shipping consumer: its preview→stale→apply
+   gate maps onto the strip's own lifecycle (no fresh preview → `refused` with re-plan =
+   preview; preview verified → `arming`, the reason input arms the one commit = apply).
+   The family apply verb remains the intended second consumer.
 4. **Satellite demos mock their worlds.** They render fixture data by construction (null
    identities, no host calls) and announce it. Discharged by: never — satellites are
    deliberately mocked complicated cases; entries close only if a satellite is promoted to
@@ -75,11 +77,12 @@ and named, never renumbered. Context: `docs/features/design-lang/CLEANROOM.md`.
   verdict and family's agreement columns migrated in the same commit; the parallel renderer
   is deleted. (The `state:` + `word` path was overruled by families #1's evidence: a pipeline
   verdict is a second legitimate form, not a value pseudo-dimension.)
-- **The gutter marker** (ruled 2026-08-16 R3, not yet built): queued human decisions and
-  unreachability are ROW facts — a count-bearing locate mark in a MasterTable gutter, per
-  SURFACE-PHILOSOPHY §4. Two proven consumers waiting: takeoffs' flags column and
-  `/family`'s ghost-row bind affordance. Discharged by: the gutter seam landing on
-  MasterTable and both routes migrating their marks onto it.
+- ~~**The gutter marker** (ruled 2026-08-16 R3, not yet built)~~ **CLOSED 2026-08-16 (fit
+  reviews, wave 2)** — the `gutter` prop landed on MasterTable and the proven consumers
+  migrated: takeoffs' flags (count of open calls, alarm; the flags column trimmed to its
+  filterable words), `/family`'s ghost rows (count 1, caution, the bind crossing named),
+  schedule-grid's flagged cells per row; `/settings` hand-carries the same mark on its
+  non-table field grid.
 - **The trichotomy reviewer rebuilt on `StateCell`** — named as soon-consumer everywhere;
   the proposal-flow satellite currently stands in for it.
 - **Verb busy+disabled composition** — a busy-and-refused verb is unrenderable.

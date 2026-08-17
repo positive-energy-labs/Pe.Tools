@@ -147,6 +147,15 @@ function OpsPlayground() {
     });
   }, [ops, query]);
 
+  /** Glances match the search exactly like ops do — key, name, and blurb. */
+  const matchedGlances = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return syntheticOps;
+    return syntheticOps.filter((glance) =>
+      [glance.key, glance.displayName, glance.blurb].join(" ").toLowerCase().includes(q),
+    );
+  }, [query]);
+
   function select(op: HostOperationCatalogEntry) {
     const nextSchema = requestJsonSchema(op);
     const nextArgs = op.requestExamples?.[0]?.json ?? op.safeDefaultRequestJson ?? "{}";
@@ -223,17 +232,19 @@ function OpsPlayground() {
           />
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto pb-4">
-          {/* Glance: synthetic composed surfaces, pinned above the raw op domains. */}
-          {!query.trim() && syntheticOps.length > 0 && (
+          {/* Glance: synthetic composed surfaces, pinned above the raw op domains. They match
+              the search like ops do (fit reviews, 2026-08-16 — pinning that vanished under any
+              query was search-hostile). */}
+          {matchedGlances.length > 0 && (
             <section>
               <h2 className="t-label t-upper sticky top-0 z-10 bg-[var(--r-page)] px-3 pb-1 pt-3 text-[var(--r-ink-2)]">
                 Glance
                 <span className="face-mono t-caption ml-1.5 text-[var(--r-ink-2)]">
-                  {syntheticOps.length}
+                  {matchedGlances.length}
                 </span>
               </h2>
               <ul className="px-1">
-                {syntheticOps.map((glance) => {
+                {matchedGlances.map((glance) => {
                   const active = selectedGlance?.key === glance.key;
                   return (
                     <li key={glance.key}>

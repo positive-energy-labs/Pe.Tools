@@ -1357,6 +1357,18 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
       rows={rows}
       columns={columns}
       rowKey={(row) => row.key}
+      // THE OWED MARKER (fit reviews, ruled 2026-08-16): a ghost row owes exactly one human
+      // decision — its bind crossing. Count is always 1; the caution ink matches the band the
+      // ghost section already wears.
+      gutter={(row) =>
+        row.kind === "ghost"
+          ? {
+              count: 1,
+              tone: "caution" as const,
+              title: `${row.slug ?? ""}.${row.property ?? ""} is unbound — a bind decision is owed: give it a parameter (its one crossing) or it stays a number nothing can reach`,
+            }
+          : null
+      }
       scopeLabel="parameters"
       searchPlaceholder="parameter"
       onRowHover={hoverRow}

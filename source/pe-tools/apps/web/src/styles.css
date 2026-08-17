@@ -44,21 +44,10 @@
   --font-display: var(--font-pe-display, "Spectral", Georgia, serif);
   --font-mono: var(--font-pe-mono, ui-monospace, "SF Mono", Menlo, monospace);
 
-  /* ══ MIGRATION ALIAS SHIM — EVERY LINE BELOW IS DEBT ════════════════════════
-     The entire pre-lang vocabulary (--st- · --act- · --cat- · --pe- · Lens), resolved
-     onto --r-* canon so unmigrated routes render coherently on the new grounds.
-     A route pass replaces its consumers with components/lang + real --r-* roles,
-     then DELETES its lines here. LINE COUNT IS THE PROGRESS METER.
-     Never add a line; never consume these in new code. */
-
-  /* THE LAST SHIM LINE (2026-08-16, chrome pass): Lens vocabulary, the you-identity block,
-     the role tokens (--st-/--act-), the categorical palette and both hairlines are ALL GONE
-     at verified zero consumers. One survivor: */
-  --line-soft: color-mix(
-    in srgb,
-    var(--foreground) 7%,
-    transparent
-  ); /* 1 consumer: design-system_.popovers exhibit — dies with the exhibit cleanup */
+  /* ══ MIGRATION ALIAS SHIM — THE METER READS ZERO ════════════════════════════
+     The entire pre-lang vocabulary (--st- · --act- · --cat- · --pe- · Lens, and finally
+     --line-soft with the 2026-08-16 exhibit cleanup) is DELETED at verified zero consumers.
+     LINE COUNT IS THE PROGRESS METER, and it is 0. Never add a line back. */
 }
 
 @theme inline {
@@ -120,8 +109,8 @@ body,
             tier — that one decision retires the seven hand-rolled section-head forks.
    WEIGHT LAW (ruled with it): bold = unsaved on data surfaces, or emphasis inside t-prose —
    never chrome emphasis. Semibold = t-title and t-upper heads ONLY. Chrome never buys weight.
-   tele / tele-label / section-label below are LEGACY bundles: routes shed them during their
-   sweep pass; new code composes tier × face × case instead. */
+   The legacy tele / tele-label / section-label bundles are DELETED (2026-08-16 exhibit
+   cleanup, verified zero consumers); everything composes tier × face × case. */
 @utility t-caption {
   font-size: 10px;
   line-height: 1.4;
@@ -162,32 +151,6 @@ body,
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-weight: 600;
-}
-
-/* ── Legacy type bundles (superseded by tier × face × case above) ────────────
-   Two families only. Open Sans for anything a human reads as language; mono for
-   anything the machine measured. The law: "mono means the machine measured this" —
-   states, stats, statuses, timestamps, durations, counts, ids get tele/tele-label;
-   mono is never chrome. Section headers are small-caps tracked SANS (not mono). */
-@utility tele {
-  font-family: var(--font-pe-mono);
-  font-size: 12px;
-  letter-spacing: 0.05em;
-  font-variant-numeric: tabular-nums;
-}
-@utility tele-label {
-  font-family: var(--font-pe-mono);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  font-variant-numeric: tabular-nums;
-}
-@utility section-label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted-foreground);
 }
 
 /* Centered content column — the one piece of the old shell worth keeping. */

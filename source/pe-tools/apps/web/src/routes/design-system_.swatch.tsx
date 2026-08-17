@@ -133,12 +133,12 @@ function Block({
       className="grid scroll-mt-14 grid-cols-1 items-start gap-x-6 gap-y-2 border-b border-[var(--r-line)] py-3.5 last:border-b-0 lg:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]"
     >
       <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="tele text-[11px] text-[var(--r-ink)]">{name}</span>
+        <span className="face-mono t-label text-[var(--r-ink)]">{name}</span>
         {/* `code` is display:block app-wide; `w-fit` keeps the path a token you select, not a band. */}
         <code className="w-fit font-[family-name:var(--font-pe-mono)] text-[10px] break-all text-[var(--r-ink-2)] select-all">
           #/components/{group}/{file}
         </code>
-        <span className="font-[family-name:var(--font-pe-mono)] text-[9.5px] text-[var(--r-ink-mute)]">
+        <span className="face-mono t-caption text-[var(--r-ink-mute)]">
           {consumers} · {COUNTED}
         </span>
       </div>
@@ -167,9 +167,7 @@ function Spec({
   return (
     <div className={cn("flex min-w-0 flex-col items-start gap-1", className)}>
       <div className="flex min-h-6 items-center">{children}</div>
-      <span className="tele-label text-[9px] whitespace-nowrap text-[var(--r-ink-mute)]">
-        {cap}
-      </span>
+      <span className="face-mono t-caption whitespace-nowrap text-[var(--r-ink-mute)]">{cap}</span>
     </div>
   );
 }
@@ -191,13 +189,13 @@ function Grid<R extends string, C extends string>({
     >
       <span />
       {cols.map((c) => (
-        <span key={c} className="tele-label text-[9px] text-[var(--r-ink-mute)]">
+        <span key={c} className="face-mono t-caption text-[var(--r-ink-mute)]">
           {c}
         </span>
       ))}
       {rows.map((r) => (
         <Fragment key={r}>
-          <span className="tele-label text-[9px] whitespace-nowrap text-[var(--r-ink-mute)]">
+          <span className="face-mono t-caption whitespace-nowrap text-[var(--r-ink-mute)]">
             {r}
           </span>
           {cols.map((c) => (
@@ -213,11 +211,7 @@ function Grid<R extends string, C extends string>({
 
 /** What a frozen specimen cannot show. One line, mono, never a paragraph. */
 function Note({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="font-[family-name:var(--font-pe-mono)] text-[9.5px] leading-snug text-[var(--r-ink-mute)]">
-      {children}
-    </p>
-  );
+  return <p className="face-mono t-caption leading-snug text-[var(--r-ink-mute)]">{children}</p>;
 }
 
 /** A minimal bound around a component that fills its container. */
@@ -269,7 +263,7 @@ const UI_FILES = [
 function Jump({ group, files }: { group: "lang" | "ui"; files: readonly string[] }) {
   return (
     <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-      <span className="tele-label text-[10px] text-[var(--r-ink)]">{group}</span>
+      <span className="t-caption t-upper text-[var(--r-ink)]">{group}</span>
       {files.map((f) => (
         <a
           key={f}
@@ -698,7 +692,7 @@ function LangGroup() {
         <div className="flex flex-col">
           {OUTCOME_SPECS.map((o) => (
             <div key={o.kind} className="flex items-baseline gap-3">
-              <span className="tele-label w-16 shrink-0 text-[9px] text-[var(--r-ink-mute)]">
+              <span className="face-mono t-caption w-16 shrink-0 text-[var(--r-ink-mute)]">
                 {o.kind}
               </span>
               <OutcomeLine kind={o.kind} label={o.label} />
@@ -1163,7 +1157,7 @@ function UiGroup() {
                 storageKey="swatch.side-pane.open"
                 defaultWidth={150}
                 minWidth={110}
-                header={<span className="tele text-[10px]">header</span>}
+                header={<span className="face-mono t-caption">header</span>}
               >
                 <div className="p-2 text-[11px] text-[var(--r-ink-2)]">body</div>
               </SidePane>
@@ -1178,7 +1172,7 @@ function UiGroup() {
                 defaultOpen={false}
                 defaultWidth={150}
                 minWidth={110}
-                header={<span className="tele text-[10px]">header</span>}
+                header={<span className="face-mono t-caption">header</span>}
               >
                 <div className="p-2 text-[11px] text-[var(--r-ink-2)]">body</div>
               </SidePane>

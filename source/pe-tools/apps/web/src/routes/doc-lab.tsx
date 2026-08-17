@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { FlaskConical, X } from "lucide-react";
 
 import { FactChip } from "#/components/lang/chip";
-import { EmptyState } from "#/components/lang/empty";
 import { HelpTip } from "#/components/lang/help";
 import { Verb } from "#/components/lang/verb";
 import { GroundedDocView } from "#/grounded-doc/GroundedDocView";
@@ -83,9 +82,11 @@ function DocLabRoute() {
             )}
           </>
         ) : (
-          <EmptyState story="scope" exit="hover a block, image, or page region; click to pin">
-            nothing focused
-          </EmptyState>
+          // RULED not-an-empty-state (fit reviews, 2026-08-16): a hover readout at rest is
+          // idle chrome, not a missing scope — plain muted text, no story/exit ceremony.
+          <span className="t-label text-[var(--r-ink-mute)]">
+            nothing focused — hover a block, image, or page region; click to pin
+          </span>
         )}
       </div>
 

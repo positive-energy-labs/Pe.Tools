@@ -637,15 +637,16 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
           { value: "none", label: "none open" },
           ...flagVocabulary.map((f) => ({ value: f, label: f })),
         ],
-        // A queued human decision is not a cell-grammar state (AUDIT #2) — there is no axis for
-        // "a person is owed a verdict here" — so this column stays hand-rolled, on the alarm role.
+        // The owed COUNT and the alarm ink now live in the table's gutter (the owed marker,
+        // ruled 2026-08-16) — this column keeps only the FILTER job, so its cell is trimmed to
+        // the filterable words themselves: the open flag names, plain ink, no double mark.
         cell: (row) =>
           row.open.length > 0 ? (
             <span
-              className="face-mono t-value block truncate px-1.5 text-[var(--r-alarm)]"
+              className="face-mono t-value block truncate px-1.5 text-muted-foreground"
               title={row.open.join(", ")}
             >
-              {row.open.length} open
+              {row.open.join(", ")}
             </span>
           ) : row.room.decisions.length > 0 ? (
             <span className="face-mono t-value block truncate px-1.5 text-muted-foreground">
@@ -1068,6 +1069,19 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                   rows={rows}
                   columns={columns}
                   rowKey={(row) => row.room.guid}
+                  // THE OWED MARKER (fit reviews, ruled 2026-08-16): open detector calls owe a
+                  // human verdict — the gutter locates them with the count in the one alarm.
+                  // The flags column keeps the FILTER job; its cell dropped the duplicate
+                  // alarm count when this landed.
+                  gutter={(row) =>
+                    row.open.length > 0
+                      ? {
+                          count: row.open.length,
+                          tone: "alarm" as const,
+                          title: `${row.open.length} open detector call${row.open.length === 1 ? "" : "s"} owe a verdict — ${row.open.join(", ")} (a/d accepts or dismisses the first)`,
+                        }
+                      : null
+                  }
                   scopeLabel="rooms in scope"
                   searchPlaceholder="name / type / zone…"
                   chips={chips}

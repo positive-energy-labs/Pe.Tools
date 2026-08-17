@@ -10,14 +10,12 @@ import {
 } from "@pe/agent-contracts";
 import { SettingsFileKind, type SettingsFileEntry } from "@pe/host-contracts/operation-types";
 
-import { AddressingBar } from "#/components/lang/addressing-bar";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { StateCell } from "#/components/lang/cell";
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
-import { Label } from "#/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -133,88 +131,141 @@ function SettingsRoute() {
 
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-[var(--r-page)]">
-      <AddressingBar
-        name="settings"
-        sentence={
-          snapshot ? (
-            <span className="face-mono t-value text-[var(--r-ink)]">
-              {snapshot.documentId.moduleKey} · {snapshot.documentId.relativePath}
-              {snapshot.versionToken ? ` · v${snapshot.versionToken}` : ""}
-            </span>
-          ) : (
-            <span className="t-value italic text-[var(--r-ink-mute)]">no document open</span>
-          )
-        }
-        facts={
+      {/* ── THE HEAD — a Section-style form head, deliberately NOT the AddressingBar (fit
+          reviews, ruled 2026-08-16: the five-slot rule binds TABLE/WORKSPACE routes only; a
+          form route addresses through its pickers, so the pickers ARE the sentence). The two
+          header rows this route used to pay — an inert mono path in the sentence slot plus a
+          second strip of exiled pickers — collapse into this one row. ── */}
+      <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-[var(--r-line)] px-3 py-1.5">
+        <h1 className="t-label t-upper text-[var(--r-ink-2)]">settings</h1>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Picker
+            id="workspace"
+            label="workspace"
+            value={workspaceKey}
+            placeholder="workspace…"
+            onChange={(v) => {
+              setWorkspaceKey(v);
+              setModuleKey(undefined);
+              setRootKey(undefined);
+              setFilePath(undefined);
+            }}
+            options={workspaces.map((w) => ({
+              value: w.workspaceKey,
+              label: w.displayName || w.workspaceKey,
+            }))}
+          />
+          <Picker
+            id="module"
+            label="module"
+            value={moduleKey}
+            placeholder="module…"
+            disabled={modules.length === 0}
+            onChange={(v) => {
+              setModuleKey(v);
+              const nextModule = modules.find((m) => m.moduleKey === v);
+              const defaultRoot =
+                nextModule?.roots.find((r) => r.rootKey === nextModule.defaultRootKey) ??
+                nextModule?.roots[0];
+              setRootKey(defaultRoot?.rootKey);
+              setFilePath(undefined);
+            }}
+            options={modules.map((m) => ({ value: m.moduleKey, label: m.moduleKey }))}
+          />
+          <Picker
+            id="root"
+            label="root"
+            value={rootKey}
+            placeholder="root…"
+            disabled={roots.length === 0}
+            onChange={(v) => {
+              setRootKey(v);
+              setFilePath(undefined);
+            }}
+            options={roots.map((r) => ({ value: r.rootKey, label: r.displayName || r.rootKey }))}
+          />
+          <Picker
+            id="file"
+            label="authoring file"
+            value={filePath}
+            placeholder="file…"
+            disabled={files.length === 0}
+            onChange={openFile}
+            options={files.map((f) => ({ value: f.relativePath, label: f.relativePath }))}
+          />
+          {snapshot?.versionToken ? (
+            <FactChip title="The snapshot's version token — bumped every time the document is re-read or saved.">
+              v{snapshot.versionToken}
+            </FactChip>
+          ) : null}
+        </div>
+        <FactChip
+          tone={route.connected ? "meta" : "caution"}
+          title={
+            route.connected
+              ? "The route-state bridge is connected — pea's proposals arrive live over SSE."
+              : "The route-state bridge is not connected. Nothing arrives and nothing can be sent; a busy bridge is not the model disagreeing."
+          }
+        >
+          bridge {route.connected ? "connected" : "disconnected"}
+        </FactChip>
+        <FactChip
+          title={
+            document?.binding?.target
+              ? `This document is bound to ${document.binding.target}. Cycling targets is not offered here.`
+              : "No target is bound to this document yet."
+          }
+        >
+          {document?.binding?.target ?? "unbound"}
+        </FactChip>
+        {snapshot ? (
           <>
             <FactChip
-              tone={route.connected ? "meta" : "caution"}
-              title={
-                route.connected
-                  ? "The route-state bridge is connected — pea's proposals arrive live over SSE."
-                  : "The route-state bridge is not connected. Nothing arrives and nothing can be sent; a busy bridge is not the model disagreeing."
-              }
+              tone={proposalCount > 0 ? "pea" : "meta"}
+              title="Open pea proposals awaiting your review — approving stages the value."
             >
-              bridge {route.connected ? "connected" : "disconnected"}
+              {proposalCount} proposed
             </FactChip>
             <FactChip
-              title={
-                document?.binding?.target
-                  ? `This document is bound to ${document.binding.target}. Cycling targets is not offered here.`
-                  : "No target is bound to this document yet."
-              }
+              tone={stagedCount > 0 ? "caution" : "meta"}
+              title="Values staged for the next save."
             >
-              {document?.binding?.target ?? "unbound"}
+              {stagedCount} staged
             </FactChip>
-            {snapshot ? (
-              <>
-                <FactChip
-                  tone={proposalCount > 0 ? "pea" : "meta"}
-                  title="Open pea proposals awaiting your review. Approving stages the value; nothing is written until save."
-                >
-                  {proposalCount} proposed
-                </FactChip>
-                <FactChip
-                  tone={stagedCount > 0 ? "caution" : "meta"}
-                  title="Staged values are unsaved — they exist only on this page until save writes them to disk."
-                >
-                  {stagedCount} staged
-                </FactChip>
-                {attentionCount > 0 ? (
-                  <FactChip
-                    tone="caution"
-                    title="Fields whose review flag is 'attention' — save refuses while any remain."
-                  >
-                    {attentionCount} need attention
-                  </FactChip>
-                ) : null}
-                {validation ? (
-                  <FactChip
-                    tone={validation.isValid ? "done" : "caution"}
-                    title={
-                      validation.isValid
-                        ? "The last validate run found the saved file schema-valid."
-                        : `The last validate run reported ${validation.issues.length} issue(s): ${validation.issues
-                            .slice(0, 3)
-                            .map((issue) => issue.message)
-                            .join(" · ")}`
-                    }
-                  >
-                    {validation.isValid
-                      ? "valid"
-                      : `${validation.issues.length} validation issue${validation.issues.length === 1 ? "" : "s"}`}
-                  </FactChip>
-                ) : null}
-                {document?.savedAt ? (
-                  <FactChip title="When save last wrote this document to disk.">
-                    saved {timeAgo(document.savedAt)}
-                  </FactChip>
-                ) : null}
-              </>
+            {attentionCount > 0 ? (
+              <FactChip
+                tone="caution"
+                title="Fields whose review flag is 'attention' — save refuses while any remain."
+              >
+                {attentionCount} need attention
+              </FactChip>
+            ) : null}
+            {validation ? (
+              <FactChip
+                tone={validation.isValid ? "done" : "caution"}
+                title={
+                  validation.isValid
+                    ? "The last validate run found the saved file schema-valid."
+                    : `The last validate run reported ${validation.issues.length} issue(s): ${validation.issues
+                        .slice(0, 3)
+                        .map((issue) => issue.message)
+                        .join(" · ")}`
+                }
+              >
+                {validation.isValid
+                  ? "valid"
+                  : `${validation.issues.length} validation issue${validation.issues.length === 1 ? "" : "s"}`}
+              </FactChip>
+            ) : null}
+            {document?.savedAt ? (
+              <FactChip title="When save last wrote this document to disk.">
+                saved {timeAgo(document.savedAt)}
+              </FactChip>
             ) : null}
           </>
-        }
-        verb={
+        ) : null}
+        <span className="ml-auto flex items-center gap-2">
+          {route.peaActive ? <OutcomeLine kind="busy" label="pea is working" /> : null}
           <Verb
             tone="commit"
             label={`save ${stagedCount}`}
@@ -230,69 +281,8 @@ function SettingsRoute() {
               )
             }
           />
-        }
-        advisory={route.peaActive ? <OutcomeLine kind="busy" label="pea is working" /> : undefined}
-      />
-
-      {/* ── picker — which document `open` targets ── */}
-      <div className="shrink-0 border-b border-[var(--r-line)] px-5 py-2.5">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Picker
-            id="workspace"
-            label="Workspace"
-            value={workspaceKey}
-            placeholder="Choose a workspace"
-            onChange={(v) => {
-              setWorkspaceKey(v);
-              setModuleKey(undefined);
-              setRootKey(undefined);
-              setFilePath(undefined);
-            }}
-            options={workspaces.map((w) => ({
-              value: w.workspaceKey,
-              label: w.displayName || w.workspaceKey,
-            }))}
-          />
-          <Picker
-            id="module"
-            label="Module"
-            value={moduleKey}
-            placeholder="Choose a module"
-            disabled={modules.length === 0}
-            onChange={(v) => {
-              setModuleKey(v);
-              const nextModule = modules.find((m) => m.moduleKey === v);
-              const defaultRoot =
-                nextModule?.roots.find((r) => r.rootKey === nextModule.defaultRootKey) ??
-                nextModule?.roots[0];
-              setRootKey(defaultRoot?.rootKey);
-              setFilePath(undefined);
-            }}
-            options={modules.map((m) => ({ value: m.moduleKey, label: m.moduleKey }))}
-          />
-          <Picker
-            id="root"
-            label="Root"
-            value={rootKey}
-            placeholder="Choose a root"
-            disabled={roots.length === 0}
-            onChange={(v) => {
-              setRootKey(v);
-              setFilePath(undefined);
-            }}
-            options={roots.map((r) => ({ value: r.rootKey, label: r.displayName || r.rootKey }))}
-          />
-          <Picker
-            id="file"
-            label="Authoring file"
-            value={filePath}
-            placeholder="Choose a JSON file"
-            disabled={files.length === 0}
-            onChange={openFile}
-            options={files.map((f) => ({ value: f.relativePath, label: f.relativePath }))}
-          />
-        </div>
-      </div>
+        </span>
+      </header>
 
       {/* ── field grid ── */}
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
@@ -444,6 +434,19 @@ function FieldRow({
 
   return (
     <div className="flex min-h-12 items-center gap-3 px-3 py-2">
+      {/* THE OWED MARKER (fit reviews, ruled 2026-08-16), hand-carried: this grid is not a
+          MasterTable, so the gutter is a fixed slot at the row's left edge — a count in the
+          caution ink when a review decision is owed, blank otherwise. Locate-only. */}
+      <span
+        className="face-mono t-caption w-3 shrink-0 text-center text-[var(--r-caution)]"
+        title={
+          attention
+            ? `${row.path} was flagged for attention — a review decision is owed here; save refuses while it stands`
+            : undefined
+        }
+      >
+        {attention ? 1 : null}
+      </span>
       <div className="min-w-0 flex-1">
         <div className="face-mono t-label truncate text-[var(--r-ink-2)]">{row.path}</div>
         <StateCell
@@ -467,13 +470,13 @@ function FieldRow({
           <Verb
             label="deny"
             disabled={busy}
-            reason="Clear pea's proposal for this field. Nothing was ever written; the saved value stands."
+            reason="Clear pea's proposal for this field — the saved value stands."
             onClick={onDeny}
           />
           <Verb
             label="approve"
             disabled={busy}
-            reason={`Approve and stage "${display(proposal.value)}". Staging stays on this page — nothing is written until save.`}
+            reason={`Approve and stage "${display(proposal.value)}" for the next save.`}
             onClick={() => onApprove(proposal.value)}
           />
         </span>
@@ -501,29 +504,28 @@ function Picker({
   options: { value: string; label: string }[];
   onChange: (value: string | undefined) => void;
 }) {
+  // Head-inline: the pickers live ON the head row (the form-route head ruling), so the
+  // stacked label died — the trigger carries the label as its accessible name and title.
+  // `items` lets Base UI's Value render the LABEL of the sentinel, not the raw "__none".
   return (
-    <div className="space-y-1">
-      <Label htmlFor={id} className="t-caption t-upper text-[var(--r-ink-2)]">
-        {label}
-      </Label>
-      <Select
-        value={value ?? "__none"}
-        onValueChange={(v: string | null) => onChange(v === "__none" || !v ? undefined : v)}
-        disabled={disabled}
-      >
-        <SelectTrigger id={id} className="w-full">
-          <SelectValue placeholder={placeholder} />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="__none">{placeholder}</SelectItem>
-          {options.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+    <Select
+      items={[{ value: "__none", label: placeholder }, ...options]}
+      value={value ?? "__none"}
+      onValueChange={(v: string | null) => onChange(v === "__none" || !v ? undefined : v)}
+      disabled={disabled}
+    >
+      <SelectTrigger id={id} aria-label={label} title={label} className="h-6 max-w-52">
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="__none">{placeholder}</SelectItem>
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 

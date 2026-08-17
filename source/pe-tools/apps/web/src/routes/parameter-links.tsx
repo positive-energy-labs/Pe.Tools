@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Check, Eye, RefreshCw, Save } from "lucide-react";
+import { Eye, RefreshCw, Save } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { ParameterLinkProfile } from "@pe/agent-contracts";
 import { parameterLinksRouteState } from "@pe/agent-contracts";
 
 import { AddressingBar } from "#/components/lang/addressing-bar";
+import { ArmingStrip } from "#/components/lang/arming-strip";
 import { FactChip } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { OutcomeLine, type OutcomeKind } from "#/components/lang/outcome";
@@ -29,6 +30,18 @@ export const Route = createFileRoute("/parameter-links")({ component: ParameterL
 
 type CommandName = "refresh" | "preview" | "apply";
 
+/** A short content hash of a profile — the plan identity the arming strip cites, so a refusal
+ * and the plan it names can be matched by eye. Djb2 over the canonical JSON; not cryptographic,
+ * just stable and short. */
+function profileHash(profile: ParameterLinkProfile | null): string {
+  const json = JSON.stringify(profile ?? null);
+  let hash = 5381;
+  for (let index = 0; index < json.length; index += 1) {
+    hash = ((hash << 5) + hash + json.charCodeAt(index)) | 0;
+  }
+  return (hash >>> 0).toString(36);
+}
+
 function ParameterLinksRoute() {
   const route = useRouteState(parameterLinksRouteState);
   const document = route.slice;
@@ -44,6 +57,8 @@ function ParameterLinksRoute() {
   const [busy, setBusy] = useState<CommandName | "save" | null>(null);
   const [outcome, setOutcome] = useState<{ kind: OutcomeKind; text: string } | null>(null);
   const [previewed, setPreviewed] = useState<ParameterLinkProfile | null>(null);
+  /** The arming reason — the strip's own gate: apply arms only once a reason is supplied. */
+  const [writeReason, setWriteReason] = useState("");
 
   /**
    * The draft is edited locally to keep inputs stable; remote changes (pea, another tab,
@@ -127,6 +142,7 @@ function ParameterLinksRoute() {
           setOutcome({ kind: "receipt", text: "preview landed — projection is current" });
         } else {
           setPreviewed(null);
+          setWriteReason(""); // the write landed; the strip disarms
           setOutcome({ kind: "receipt", text: "applied — target parameters reconciled" });
         }
       } catch (caught) {
@@ -141,20 +157,33 @@ function ParameterLinksRoute() {
     [route.command, previewed, editing, hasUnsavedEdits, saveDraft],
   );
 
-  const applyReason = applyReady
-    ? "Store the previewed profile and reconcile the changed target parameters in Revit"
-    : !editing
-      ? "no profile yet — add a definition first"
-      : errorCount > 0
-        ? `resolve ${errorCount} blocking error${errorCount === 1 ? "" : "s"} first`
-        : evaluation != null && !reviewed
-          ? "pea's preview is shown — run Preview yourself to verify it and arm Apply"
-          : "preview the current draft first — Apply only trusts a preview run from this pane";
+  /**
+   * THE ARMING STRIP'S STATE (fit reviews, ruled 2026-08-16 — SHIMS entry 3's first shipping
+   * consumer): the preview→stale→apply gate IS the arming lifecycle, so it maps onto the
+   * strip's own phases instead of hiding in a hover title —
+   *   · no fresh preview (never run, pea's run, or the draft moved since) → `refused`, and
+   *     re-plan IS preview: the only way forward is a fresh projection from this pane;
+   *   · preview verified → `arming`: the reason input arms the one commit;
+   *   · the commit = apply.
+   */
+  const armingState =
+    applyReady || editing == null
+      ? ({ phase: "arming" } as const)
+      : {
+          phase: "refused" as const,
+          refusal:
+            errorCount > 0
+              ? `${errorCount} blocking error${errorCount === 1 ? "" : "s"} in the evaluation — apply refuses this plan until they are resolved`
+              : evaluation != null && !reviewed
+                ? "the draft no longer matches the last preview (an edit, or pea's own run) — apply trusts only a preview of exactly this draft, run from this pane"
+                : "no preview yet — apply trusts only a projection of this draft, run from this pane",
+          onReplan: () => void runCommand("preview"),
+        };
 
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-background">
       <AddressingBar
-        name="PARAMETER LINKS"
+        name="parameter links"
         sentence={
           <span className="flex items-center gap-2">
             <span
@@ -167,11 +196,12 @@ function ParameterLinksRoute() {
             >
               {document?.binding.target ?? "unbound"}
             </span>
+            {/* The write's safety model lives ON the arming strip below (its one home) — this
+                tip only orients. */}
             <HelpTip>
               Cross-element parameter links: pea and you co-edit one draft profile of link
-              definitions + assignments. Preview evaluates it against Revit into projected target
-              writes without writing anything; Apply is human-only and trusts only a preview run
-              from this pane.
+              definitions + assignments. Preview projects the draft's target writes; the arming
+              strip is where an apply is armed and committed.
             </HelpTip>
           </span>
         }
@@ -215,17 +245,9 @@ function ParameterLinksRoute() {
             )}
           </>
         }
-        verb={
-          <Verb
-            tone="commit"
-            label="apply"
-            icon={Check}
-            busy={busy === "apply"}
-            disabled={busy != null || !applyReady}
-            onClick={() => void runCommand("apply")}
-            reason={applyReason}
-          />
-        }
+        // The page-blast verb slot is deliberately EMPTY: apply lives on the ArmingStrip in
+        // the draft column, because the gate's whole safety model (plan freshness · reason ·
+        // refusal) is the strip's payload and a second apply here would be a parallel path.
       />
 
       {(busy || outcome || route.error) && (
@@ -282,6 +304,25 @@ function ParameterLinksRoute() {
                   }
                 />
               </VerbGroup>
+              {/* SHIMS entry 3's first shipping consumer: the preview→stale→apply gate, ON
+                  the surface. Refused = the plan is stale (re-plan runs preview); arming =
+                  the reason input is the last gate before the one commit. */}
+              {editing != null ? (
+                <ArmingStrip
+                  className="mb-4"
+                  verb="apply"
+                  target={document?.binding.target ?? "unbound"}
+                  count={evaluation?.changedWriteCount ?? 0}
+                  planHash={profileHash(previewed ?? editing)}
+                  reason={writeReason}
+                  onReasonChange={setWriteReason}
+                  state={armingState}
+                  onCommit={() => {
+                    if (busy == null) void runCommand("apply");
+                  }}
+                  onCancel={() => setWriteReason("")}
+                />
+              ) : null}
               <ProfileEditor
                 profile={editing}
                 disabled={busy != null || route.peaActive}

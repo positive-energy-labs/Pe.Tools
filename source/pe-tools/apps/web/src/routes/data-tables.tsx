@@ -107,7 +107,7 @@ function DataTablesRoute() {
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-background">
       <AddressingBar
-        name="DATA TABLES"
+        name="data tables"
         sentence={
           <span className="flex items-center gap-2">
             <span className="t-value face-mono text-foreground">

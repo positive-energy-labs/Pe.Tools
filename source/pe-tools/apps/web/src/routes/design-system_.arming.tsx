@@ -203,7 +203,7 @@ function ArmingRoute() {
         </section>
 
         <section className="flex flex-col gap-1.5">
-          <span className="tele-label text-[10px] text-[var(--r-ink)]">what this page found</span>
+          <span className="t-caption t-upper text-[var(--r-ink)]">what this page found</span>
           <Gap>
             the strip cannot say <strong>how old its own plan is</strong> — the one fact that
             decides whether to press it. It renders &ldquo;armed against a plan of unknown
@@ -248,7 +248,7 @@ function Frozen({
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-2">
-      <span className="tele-label text-[10px] text-[var(--r-ink-mute)]">{phase}</span>
+      <span className="face-mono t-caption text-[var(--r-ink-mute)]">{phase}</span>
       {children}
       <p className="text-[10.5px] leading-relaxed text-[var(--r-ink-2)]">{says}</p>
     </div>
@@ -280,7 +280,7 @@ function Header({ title, note }: { title: string; note: string }) {
 function SectionHead({ n, title, note }: { n: string; title: string; note: string }) {
   return (
     <div className="flex items-baseline gap-3 border-b border-[var(--r-line)] pb-1.5">
-      <span className="tele-label text-[10px] text-[var(--r-ink-mute)]">{n}</span>
+      <span className="face-mono t-caption text-[var(--r-ink-mute)]">{n}</span>
       <span className="text-[11px] font-semibold tracking-[0.09em] uppercase">{title}</span>
       <span className="min-w-0 flex-1 text-[11.5px] text-[var(--r-ink-2)]">{note}</span>
     </div>
