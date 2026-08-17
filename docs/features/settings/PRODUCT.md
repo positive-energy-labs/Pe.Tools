@@ -115,6 +115,21 @@ schema fall back to the flat pointer reviewer. Client-side ajv validation (`sett
 stays in `recovered/` — the host validate verb covers the baseline; re-add `ajv` if as-you-type
 validation is wanted.
 
+**The fixture lane (`?source=fixture`, added 2026-08-17 on user request — takeoffs pattern):**
+the shipped route runs with NO host at all. The fixture is the REAL world captured live:
+the actual module catalog, schedules tree, `MechEquip/TEST.json` ($include directives intact),
+and the actual ScheduleProfile schema with x-options (`settings-panes/fixture-schema.ts`;
+re-capture when the C# schema moves). `useFixtureSettingsRoute` mirrors the route-state
+surface in memory — open/refresh/save/apply all work, save splices staged into local raw and
+refuses on attention exactly like the real op; nothing can reach a host or disk. Dashed chip +
+"leave fixture → live" verb; the no-document empty state offers the lane. Verified rendering:
+the generated form draws the full schema (remote-source suggestions, enum constraints, arrays
+with $include items, nested TitleStyle) plus the proposal lane, on a hostless page.
+Known seams: (1) remote option sources (`settings.field-options`) still speak the host in
+fixture mode — suggestion lists stay empty/loading without one; inputs remain typable
+(custom allowed). (2) The live SSE still connects underneath the fixture and logs 503 noise
+in the console; nothing renders from it.
+
 **Environment finding (not a code defect):** the running host instance (5180) serves `/call`
 fully but its `/pe` agent surface (route-state, SSE, pea) is degraded to 503 — the documented
 Mastra-thread/livelock class. Until that host restarts, no web lane can open documents through

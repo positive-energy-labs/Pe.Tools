@@ -1,11 +1,13 @@
 /**
- * PROTOTYPE FIXTURE — settings-panes round 1 (throwaway; see docs/features/settings/PRODUCT.md).
+ * PROTOTYPE FIXTURE — the settings fixture world (see docs/features/settings/PRODUCT.md).
  *
- * The one shared world every `?variant=` fork of /settings renders. Real domain data — a
- * schedule-profile settings module shaped after `SharedScheduleProfile` (the CmdScheduleManager
- * story) — NOT placeholder lorem, because verdicts on density/legibility need real values.
- * Declared fixture lane: variants render a fixture chip; nothing here can be written through
- * (null-token snapshot, no host calls) — inert by construction.
+ * Upgraded 2026-08-17 from an invented VAV profile to the REAL world, captured live:
+ * the actual CmdScheduleManager module catalog, the actual schedules tree, the actual
+ * MechEquip/TEST.json (fragment $includes intact — fixture-content.ts), and the actual
+ * ScheduleProfile schema with its x-options (fixture-schema.ts). Shared by the shipped
+ * route's `?source=fixture` lane AND the round `?variant=` forks — one world, comparable
+ * verdicts. Declared fixture lane: a chip announces it; nothing here can be written
+ * through (null version token) — inert by construction.
  */
 import type { SettingsRouteDocument, SettingsFieldState } from "@pe/agent-contracts";
 import {
@@ -14,32 +16,41 @@ import {
   type SettingsWorkspaceDescriptor,
 } from "@pe/host-contracts/operation-types";
 
-/* ── the workspace / module / root world (settings.workspaces) ─────────────── */
+import { FIXTURE_DOCUMENT_RAW } from "./fixture-content";
+
+export { FIXTURE_SCHEMA_JSON } from "./fixture-schema";
+
+/* ── the workspace / module / root world — as settings.workspaces served it live ── */
 
 export const fixtureWorkspaces: SettingsWorkspaceDescriptor[] = [
   {
-    workspaceKey: "office",
-    displayName: "PE Office",
-    basePath: "C:/ProgramData/pe/settings",
+    workspaceKey: "default",
+    displayName: "Default Workspace",
+    basePath: "C:/Users/kaitp/OneDrive/Documents/Pe.Tools/settings",
     modules: [
       {
-        moduleKey: "pe.schedules",
-        defaultRootKey: "profiles",
+        moduleKey: "CmdScheduleManager",
+        defaultRootKey: "schedules",
         roots: [
-          { rootKey: "profiles", displayName: "Schedule profiles" },
-          { rootKey: "batch", displayName: "Batch runs" },
+          { rootKey: "schedules", displayName: "schedules" },
+          { rootKey: "batch", displayName: "batch" },
         ],
       },
       {
-        moduleKey: "pe.families",
-        defaultRootKey: "profiles",
-        roots: [{ rootKey: "profiles", displayName: "Family profiles" }],
+        moduleKey: "FamilyFoundry",
+        defaultRootKey: "models",
+        roots: [{ rootKey: "models", displayName: "Family Models" }],
+      },
+      {
+        moduleKey: "Global",
+        defaultRootKey: "fragments",
+        roots: [{ rootKey: "fragments", displayName: "fragments" }],
       },
     ],
   },
 ];
 
-/* ── the file listing (settings.tree, recursive) — enough depth for a real tree ── */
+/* ── the file listing — the real schedules tree as settings.tree served it live ── */
 
 function file(relativePath: string, modifiedUtc: string): SettingsFileEntry {
   const baseName = relativePath.split("/").at(-1) ?? relativePath;
@@ -54,67 +65,51 @@ function file(relativePath: string, modifiedUtc: string): SettingsFileEntry {
     kind: SettingsFileKind.Profile,
     modifiedUtc,
     name: baseName.replace(/\.json$/, ""),
-    path: `C:/ProgramData/pe/settings/pe.schedules/profiles/${relativePath}`,
+    path: `C:/Users/kaitp/OneDrive/Documents/Pe.Tools/settings/CmdScheduleManager/schedules/${relativePath}`,
     relativePath,
     relativePathWithoutExtension: relativePath.replace(/\.json$/, ""),
   };
 }
 
 export const fixtureFiles: SettingsFileEntry[] = [
-  file("mechanical/vav-boxes.json", "2026-08-14T18:22:00Z"),
-  file("mechanical/fans.json", "2026-08-11T09:05:00Z"),
-  file("mechanical/ahu.json", "2026-07-30T15:41:00Z"),
-  file("plumbing/fixtures.json", "2026-08-02T12:12:00Z"),
-  file("plumbing/water-heaters.json", "2026-06-19T10:00:00Z"),
-  file("electrical/panels.json", "2026-08-16T20:30:00Z"),
-  file("lighting-fixtures.json", "2026-05-28T08:00:00Z"),
+  file("MechEquip/TEST.json", "2026-06-16T22:50:54Z"),
+  file("MechEquip/WS.json", "2026-06-12T15:20:00Z"),
+  file("MechEquip/IU VRF.json", "2026-06-10T09:41:00Z"),
+  file("MechEquip/IU VRF Perf.json", "2026-06-10T09:44:00Z"),
+  file("MechEquip/IU Hydronic.json", "2026-05-28T11:02:00Z"),
+  file("MechEquip/IU Hydronic Perf.json", "2026-05-28T11:05:00Z"),
+  file("MechEquip/UH.json", "2026-05-21T16:30:00Z"),
+  file("MechEquip/MA.json", "2026-05-19T08:15:00Z"),
+  file("WIP/WSFU.json", "2026-07-02T14:00:00Z"),
+  file("profiles/invalid-but-saved.json", "2026-04-30T10:00:00Z"),
 ];
 
-/* ── the open document — mechanical/vav-boxes.json ─────────────────────────── */
+/* ── the open document — the real MechEquip/TEST.json ──────────────────────── */
 
-const vavProfile = {
-  name: "VAV Boxes",
-  categoryName: "Mechanical Equipment",
-  isItemized: true,
-  viewTemplateName: "PE Mech Schedule",
-  fields: [
-    { parameterName: "Mark", columnHeader: "TAG", width: 0.6 },
-    { parameterName: "Family and Type", columnHeader: "DESCRIPTION", width: 2.0 },
-    { parameterName: "Air Flow", columnHeader: "CFM", width: 0.8 },
-    { parameterName: "Static Pressure", columnHeader: "ESP (in WC)", width: 0.8 },
-    { parameterName: "Level", columnHeader: "LEVEL", width: 0.7 },
-  ],
-  sortGroup: [
-    { fieldName: "Level", sortOrder: "Ascending", showHeader: true },
-    { fieldName: "Mark", sortOrder: "Ascending", showHeader: false },
-  ],
-  filters: [{ fieldName: "Air Flow", filterType: "GreaterThan", value: 0 }],
-};
+export const fixtureRawContent = FIXTURE_DOCUMENT_RAW;
 
-export const fixtureRawContent = JSON.stringify(vavProfile, null, 2);
-
-/** Seeded trichotomy states — one of each thing a reviewer must be able to see:
- * an open pea proposal (with note + confidence), a staged value, and a staged
- * value flagged `attention` (the save gate's one hard refusal). */
+/** Seeded trichotomy states on REAL pointers in the real document — one of each thing
+ * a reviewer must be able to see: an open pea proposal (note + confidence), a staged
+ * value, and a staged value flagged `attention` (the save gate's one hard refusal). */
 const fixtureFields: Record<string, SettingsFieldState> = {
-  "/viewTemplateName": {
+  "/ViewTemplateName": {
     proposal: {
-      value: "PE Mech Schedule v2",
+      value: "Schedule - PE Standard v2",
       by: "pea",
-      note: "spec sheet 23-09 names the v2 template for VAV schedules",
+      note: "office template register lists v2 as current for performance schedules",
       confidence: "high",
     },
     staged: null,
     review: "none",
   },
-  "/isItemized": {
+  "/IsItemized": {
     proposal: null,
     staged: { value: false },
     review: "good",
   },
-  "/fields/2/columnHeader": {
+  "/Fields/1/ColumnHeaderOverride": {
     proposal: null,
-    staged: { value: "AIRFLOW (CFM)" },
+    staged: { value: "REFRIGERANT TYPE (FULL DESIGNATION)" },
     review: "attention",
   },
 };
@@ -123,35 +118,37 @@ export const fixtureDocument: SettingsRouteDocument = {
   binding: { target: "thread:fixture" },
   snapshot: {
     documentId: {
-      moduleKey: "pe.schedules",
-      rootKey: "profiles",
-      relativePath: "mechanical/vav-boxes.json",
+      moduleKey: "CmdScheduleManager",
+      rootKey: "schedules",
+      relativePath: "MechEquip/TEST.json",
     },
-    rawContent: fixtureRawContent,
+    rawContent: FIXTURE_DOCUMENT_RAW,
     composedContent: null,
-    // ponytail: null version token — the fixture cannot be saved through, by construction.
+    // ponytail: null version token — the fixture cannot be written through, by construction.
     versionToken: null,
-    modifiedUtc: "2026-08-14T18:22:00Z",
+    modifiedUtc: "2026-06-16T22:50:54Z",
     validation: {
       isValid: false,
       issues: [
         {
-          message: 'string "AIRFLOW (CFM)" exceeds maxLength 10 for column headers',
+          // Seeded scenario (the real file is valid): exercises issue-to-field joinery.
+          message:
+            'seeded fixture issue — "REFRIGERANT TYPE (FULL DESIGNATION)" exceeds the column-header budget',
           severity: "error",
-          path: "/fields/2/columnHeader",
+          path: "/Fields/1/ColumnHeaderOverride",
         },
       ],
     },
     takenAt: "2026-08-17T00:00:00Z",
   },
   fields: fixtureFields,
-  savedAt: "2026-08-14T18:22:00Z",
+  savedAt: "2026-06-16T22:50:54Z",
 };
 
 /** Raw content for the other tree files so tree clicks feel real. Falls back to a
- * tiny stub profile — the tree story, not the file contents, is under review. */
+ * small real-shaped profile — the tree story, not the file contents, is under review. */
 export function fixtureRawFor(relativePath: string): string {
-  if (relativePath === "mechanical/vav-boxes.json") return fixtureRawContent;
+  if (relativePath === "MechEquip/TEST.json") return FIXTURE_DOCUMENT_RAW;
   const name =
     relativePath
       .split("/")
@@ -159,14 +156,16 @@ export function fixtureRawFor(relativePath: string): string {
       ?.replace(/\.json$/, "") ?? relativePath;
   return JSON.stringify(
     {
-      name: name.replace(/-/g, " "),
-      categoryName: "Mechanical Equipment",
-      isItemized: true,
-      fields: [
-        { parameterName: "Mark", columnHeader: "TAG", width: 0.6 },
-        { parameterName: "Family and Type", columnHeader: "DESCRIPTION", width: 2.0 },
+      Name: `${name} Schedule`,
+      CategoryName: "Mechanical Equipment",
+      ViewTemplateName: "Schedule - PE Standard",
+      IsItemized: true,
+      Fields: [
+        { $include: "@local/_fields/Header" },
+        { ParameterName: "PE_G___NotesInstance", ColumnHeaderOverride: "Notes" },
       ],
-      sortGroup: [{ fieldName: "Mark", sortOrder: "Ascending", showHeader: false }],
+      SortGroup: [{ FieldName: "PE_G___TagInstance" }],
+      Filters: [],
     },
     null,
     2,

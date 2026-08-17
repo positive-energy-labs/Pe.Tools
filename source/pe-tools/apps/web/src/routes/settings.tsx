@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 
@@ -21,6 +21,8 @@ import {
 } from "@pe/schema-core";
 
 import { SchemaToFieldRender } from "#/lib/schema-to-field-render";
+import { FIXTURE_SCHEMA_JSON, fixtureFiles, fixtureWorkspaces } from "#/settings-panes/fixture";
+import { useFixtureSettingsRoute } from "#/settings-panes/fixture-route";
 
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { StateCell } from "#/components/lang/cell";
@@ -59,12 +61,17 @@ import { useRouteState } from "#/workbench/route-state";
 export const Route = createFileRoute("/settings")({
   /** PROTOTYPE (settings-panes round 1, throwaway): `?variant=` mounts the pane-composition
    * variants beside the shipping surface. No variant param = the shipping surface, unchanged.
-   * See docs/features/settings/PRODUCT.md. */
-  validateSearch: (search: Record<string, unknown>): { variant?: string } => ({
+   * See docs/features/settings/PRODUCT.md.
+   *
+   * `?source=fixture` mounts the settings fixture lane (the takeoffs pattern) — an explicit
+   * dev choice, never a fallback: a live lane that fails shows its error, it does not
+   * quietly become a fixture. */
+  validateSearch: (search: Record<string, unknown>): { variant?: string; source?: "fixture" } => ({
     variant:
       typeof search.variant === "string" && search.variant.trim()
         ? search.variant.trim()
         : undefined,
+    source: search.source === "fixture" ? "fixture" : undefined,
   }),
   component: SettingsRouteGate,
 });
@@ -126,7 +133,22 @@ function isAuthoringFile(entry: SettingsFileEntry) {
 }
 
 function SettingsRoute() {
-  const route = useRouteState(settingsRouteState);
+  /* ── the fixture lane (?source=fixture, takeoffs pattern) — both hooks always run;
+     the fixture object simply isn't consulted on the live lane, and vice versa. The
+     live SSE may still connect underneath the fixture; nothing renders from it. ── */
+  const { source } = Route.useSearch();
+  const navigate = useNavigate();
+  const fixture = source === "fixture";
+  const setSource = (next: "fixture" | undefined) =>
+    void navigate({
+      to: ".",
+      search: (prev: Record<string, unknown>) => ({ ...prev, source: next }),
+      replace: true,
+    });
+
+  const liveRoute = useRouteState(settingsRouteState);
+  const fixtureRoute = useFixtureSettingsRoute();
+  const route = fixture ? fixtureRoute : liveRoute;
   const document = route.slice;
   const snapshot = document?.snapshot ?? null;
 
@@ -136,8 +158,8 @@ function SettingsRoute() {
   const [filePath, setFilePath] = useState<string>();
   const verb = useVerb();
 
-  const workspacesQuery = useWorkspacesQuery();
-  const workspaces = workspacesQuery.data?.workspaces ?? [];
+  const workspacesQuery = useWorkspacesQuery({ enabled: !fixture });
+  const workspaces = fixture ? fixtureWorkspaces : (workspacesQuery.data?.workspaces ?? []);
   const workspace = workspaces.find((w) => w.workspaceKey === workspaceKey);
   const modules = workspace?.modules ?? [];
   const module = modules.find((m) => m.moduleKey === moduleKey);
@@ -154,10 +176,16 @@ function SettingsRoute() {
           includeSchemas: false,
         }
       : undefined;
-  const treeQuery = useTreeQuery(treeRequest, { enabled: Boolean(treeRequest) });
+  const treeQuery = useTreeQuery(treeRequest, { enabled: !fixture && Boolean(treeRequest) });
   const files = useMemo(
-    () => (treeQuery.data?.files ?? []).filter(isAuthoringFile),
-    [treeQuery.data?.files],
+    () =>
+      (fixture && moduleKey === "CmdScheduleManager" && rootKey === "schedules"
+        ? fixtureFiles
+        : fixture
+          ? []
+          : (treeQuery.data?.files ?? [])
+      ).filter(isAuthoringFile),
+    [fixture, moduleKey, rootKey, treeQuery.data?.files],
   );
 
   /* ── THE GENERATED FORM (restored 2026-08-17, forensics in PRODUCT.md) — the module's
@@ -173,8 +201,14 @@ function SettingsRoute() {
     : moduleKey && rootKey
       ? { moduleKey, rootKey }
       : undefined;
-  const schemaQuery = useSchemaQuery(schemaRequest, { enabled: Boolean(schemaRequest) });
-  const schemaJson = schemaQuery.data?.schemaJson ?? undefined;
+  const schemaQuery = useSchemaQuery(schemaRequest, {
+    enabled: !fixture && Boolean(schemaRequest),
+  });
+  const schemaJson = fixture
+    ? snapshot?.documentId.moduleKey === "CmdScheduleManager"
+      ? FIXTURE_SCHEMA_JSON
+      : undefined
+    : (schemaQuery.data?.schemaJson ?? undefined);
   const renderSchema = useMemo(
     () => (schemaJson ? parseSchema(schemaJson) : undefined),
     [schemaJson],
@@ -336,16 +370,33 @@ function SettingsRoute() {
             </FactChip>
           ) : null}
         </div>
-        <FactChip
-          tone={route.connected ? "meta" : "caution"}
-          title={
-            route.connected
-              ? "The route-state bridge is connected — pea's proposals arrive live over SSE."
-              : "The route-state bridge is not connected. Nothing arrives and nothing can be sent; a busy bridge is not the model disagreeing."
-          }
-        >
-          bridge {route.connected ? "connected" : "disconnected"}
-        </FactChip>
+        {fixture ? (
+          <>
+            <FactChip
+              dashed
+              tone="caution"
+              title="The fixture lane is an explicit URL choice (?source=fixture), never a fallback: the real world (schema, document, tree) captured 2026-08-17, run entirely in memory. Nothing here can reach a host or a disk."
+            >
+              fixture lane
+            </FactChip>
+            <Verb
+              label="leave fixture → live"
+              reason="Drop ?source=fixture and return to the live host lane. Whatever the live lane's state is, it shows honestly — including its errors."
+              onClick={() => setSource(undefined)}
+            />
+          </>
+        ) : (
+          <FactChip
+            tone={route.connected ? "meta" : "caution"}
+            title={
+              route.connected
+                ? "The route-state bridge is connected — pea's proposals arrive live over SSE."
+                : "The route-state bridge is not connected. Nothing arrives and nothing can be sent; a busy bridge is not the model disagreeing."
+            }
+          >
+            bridge {route.connected ? "connected" : "disconnected"}
+          </FactChip>
+        )}
         <FactChip
           title={
             document?.binding?.target
@@ -555,12 +606,23 @@ function SettingsRoute() {
               </EmptyState>
             )
           ) : (
-            <EmptyState
-              story="scope"
-              exit="choose a workspace, module, root, and authoring file above"
-            >
-              no document open
-            </EmptyState>
+            <>
+              <EmptyState
+                story="scope"
+                exit="choose a workspace, module, root, and authoring file above"
+              >
+                no document open
+              </EmptyState>
+              {!fixture ? (
+                <div className="flex justify-center pt-3">
+                  <Verb
+                    label="open the fixture instead"
+                    reason="Mounts the settings fixture lane (?source=fixture) — the real ScheduleProfile schema and MechEquip/TEST.json captured 2026-08-17, entirely in memory. An explicit dev choice, never a fallback; nothing in it can be written."
+                    onClick={() => setSource("fixture")}
+                  />
+                </div>
+              ) : null}
+            </>
           )}
         </div>
       </div>
