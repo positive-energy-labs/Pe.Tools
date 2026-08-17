@@ -28,13 +28,9 @@ Read [AGENTS.md](AGENTS.md) for operating rules, [docs/ARCHITECTURE.md](docs/ARC
 
 ## Agent skills
 
-### Issue tracker
+### Docs conventions
 
-Issues live as GitHub issues in `kaitpw/Pe.Tools` (via the `gh` CLI). See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Default triage vocabulary (label string equals role name). See `docs/agents/triage-labels.md`.
+No external issue tracker. Durable knowledge lives in feature ledgers (`docs/features/<name>/LEDGER.md`), ADRs (`docs/adr/`), authority docs, and disposable handoffs (`.artifacts/handoffs/`). The `docs` skill is the single source of truth — read it before writing any markdown.
 
 ### Product surfaces
 
@@ -42,4 +38,4 @@ Default triage vocabulary (label string equals role name). See `docs/agents/tria
 
 ### Domain docs
 
-Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+Single-context: one `CONTEXT.md` (glossary, created lazily) + `docs/adr/` at the repo root. The `domain-modeling` skill owns both.

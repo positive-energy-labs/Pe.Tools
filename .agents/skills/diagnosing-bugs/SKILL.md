@@ -136,3 +136,4 @@ Required before declaring done:
 - [ ] All `[DEBUG-...]` instrumentation removed (`grep` the prefix)
 - [ ] Throwaway prototypes deleted (or moved to a clearly-marked debug location)
 - [ ] The hypothesis that turned out correct is stated in the commit / PR message — so the next debugger learns
+- [ ] Expensively falsified hypotheses (and any "no correct seam" finding) recorded as Tried & rejected lines in the feature's `LEDGER.md` (see the `docs` skill) — cheap dead ends don't need recording
