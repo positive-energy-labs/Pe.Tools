@@ -98,11 +98,11 @@ import {
   ReadCell,
   StateDot,
   TextCell,
-  stateColumn,
-  type StateMeta,
+  VERDICT_INK,
+  VerdictCell,
 } from "#/components/master-table/cells";
 import { MasterTable } from "#/components/master-table/master-table";
-import type { Column, MasterTableState } from "#/components/master-table/model";
+import type { Column, MasterTableState, Verdict } from "#/components/master-table/model";
 import { Sentence } from "#/components/sentence";
 import { Pane, PaneWorkspace } from "#/components/ui/pane";
 import { Switcher } from "#/components/ui/switcher";
@@ -1068,55 +1068,47 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
   // header rows; a column WITHOUT a group spans both, and a spanning cell distorts the first
   // row's measured height — which is exactly what the sticky offset is measured from, so the
   // group labels end up hidden under the leaf row. Uniform grouping keeps the two rows honest.
-  const stateCol = (state: MasterTableState): Column<PRow> => {
-    const base = stateColumn<PRow>({
-      key: "state",
-      label: "state",
-      title:
-        "The row's worst verdict across all three types — what this parameter is most asking of you. Filter it to work one kind of trouble at a time. A ghost row's state is `unbound`, which is filterable like any other: that is how you ask the table for every number in this family that nothing can reach.",
-      /* THIS COLUMN STAYS ON `stateColumn`, NOT the `state:` clause (DESIGN-AUDIT #1). Of its
-         seven words only `drift` has an axis; `unbound`, `derived`, `only-live`, `only-profile`
-         and `unread` have none, and `state:` + `word` would draw six of seven as an unmarked
-         "clean" cell wearing a route label — the marks saying nothing while the word said
-         everything. Only the TONES moved onto the meaning band. */
-      of: (row): StateMeta =>
-        row.kind === "ghost"
-          ? {
-              label: "unbound",
-              tone: "var(--r-caution)",
-              note: `UNBOUND — ${row.name} is a bindable dimension with no parameter driving it. It is not drift and it is not disagreement: both sides carry the same number. It is UNREACHABILITY, and the only verb that answers it is bind.`,
-            }
-          : (() => {
-              const state = rowAgreement(draft, row);
-              return {
-                label: state,
-                tone: AGREEMENT_TONE[state],
-                alarm: state === "drift",
-                dim: state === "agree" || state === "unread",
-                note: MARK_TITLE[state],
-              };
-            })(),
-    });
+  /* The row's verdict (DESIGN-AUDIT #1, re-ruled 2026-08-16 R5: rides the meaning band via the
+     narrow tone union — `stateColumn` and its unconstrained CSS-string tone are gone). */
+  const rowVerdict = (row: PRow): Verdict => {
+    if (row.kind === "ghost")
+      return {
+        word: "unbound",
+        tone: "caution",
+        note: `UNBOUND — ${row.name} is a bindable dimension with no parameter driving it. It is not drift and it is not disagreement: both sides carry the same number. It is UNREACHABILITY, and the only verb that answers it is bind.`,
+      };
+    const state = rowAgreement(draft, row);
     return {
-      ...base,
-      group: "PARAMETER",
-      width: "w-36",
-      // The state column SURVIVES the live column's death, and is careful about why. It carries no
-      // live VALUE — it carries the row's worst agreement, which is a diff and not a reading, and
-      // it is the only thing on the page you can filter by ("show me only drift", "show me only
-      // unbound"). A facet is a use a cell state cannot serve.
-      sort: (row) =>
-        pinnedSort(
-          row,
-          row.kind === "ghost" ? "unbound" : rowAgreement(draft, row),
-          sortDirOf(state, "state"),
-        ),
-      // A ghost's state cell carries its ONE crossing. Every other row's verbs live in the doc
-      // sidebar or the drill-in, because they are decisions between two substrates; binding is
-      // not — there is nothing to weigh, so it belongs on the row it changes.
-      cell: (row) => (row.kind === "ghost" ? ghostStateCell(row) : base.cell(row)),
+      word: state,
+      tone: AGREEMENT_TONE[state],
+      dim: state === "agree" || state === "unread",
+      note: MARK_TITLE[state],
     };
   };
+  const stateCol = (state: MasterTableState): Column<PRow> => ({
+    key: "state",
+    label: "state",
+    title:
+      "The row's worst verdict across all three types — what this parameter is most asking of you. Filter it to work one kind of trouble at a time. A ghost row's state is `unbound`, which is filterable like any other: that is how you ask the table for every number in this family that nothing can reach.",
+    group: "PARAMETER",
+    width: "w-36",
+    facet: (row) => rowVerdict(row).word,
+    // The state column SURVIVES the live column's death, and is careful about why. It carries no
+    // live VALUE — it carries the row's worst agreement, which is a diff and not a reading, and
+    // it is the only thing on the page you can filter by ("show me only drift", "show me only
+    // unbound"). A facet is a use a cell state cannot serve.
+    sort: (row) =>
+      pinnedSort(
+        row,
+        row.kind === "ghost" ? "unbound" : rowAgreement(draft, row),
+        sortDirOf(state, "state"),
+      ),
+    // A ghost's state cell carries its ONE crossing. Every other row's verbs live in the doc
+    // sidebar or the drill-in, because they are decisions between two substrates; binding is
+    // not — there is nothing to weigh, so it belongs on the row it changes.
+    cell: (row) =>
+      row.kind === "ghost" ? ghostStateCell(row) : <VerdictCell verdict={rowVerdict(row)} />,
+  });
 
   /**
    * The bind picker — a plain render FUNCTION, not a component, and deliberately so: a component
@@ -1200,7 +1192,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
       );
     return (
       <span className="flex h-7 items-center gap-1 px-1.5">
-        <StateDot tone="var(--r-caution)" />
+        <StateDot tone="caution" />
         <span
           className="tele text-[10px] text-[var(--r-caution)]"
           title={`UNBOUND — ${literal} is frozen into the geometry of ${slug}. Nothing in the profile, no type, and no schedule can reach it.`}
@@ -1257,7 +1249,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
           return (
             <span
               className="tele block px-1.5 text-center"
-              style={{ color: AGREEMENT_TONE[state] }}
+              style={{ color: VERDICT_INK[AGREEMENT_TONE[state]] }}
               title={MARK_TITLE[state]}
             >
               {MARK[state]}

@@ -22,6 +22,7 @@ import {
   type StateCellProps,
 } from "#/components/lang/cell";
 import { CellNavigationProvider, type CellMove } from "#/components/master-table/cell-navigation";
+import { VerdictCell } from "#/components/master-table/cells";
 import {
   facetOptions,
   type Column,
@@ -86,6 +87,18 @@ type ResolvedColumn<Row> = ValueColumn<Row> & {
 };
 
 function resolveStateColumn<Row>(column: Column<Row>): ResolvedColumn<Row> {
+  // THE VERDICT CLAUSE (ruled 2026-08-16, R5): a row-level pipeline verdict — dot + the
+  // route's own word, tone from the narrow meaning-role union. Facet/sort default to the word.
+  if (column.verdict !== undefined) {
+    const verdict = column.verdict;
+    return {
+      ...column,
+      verdict: undefined,
+      cell: (row: Row) => <VerdictCell verdict={verdict(row)} />,
+      facet: column.facet ?? ((row: Row) => verdict(row).word),
+      sort: column.sort ?? ((row: Row) => verdict(row).word),
+    } as ResolvedColumn<Row>;
+  }
   const state = column.state;
   if (state === undefined) return column;
   // The word the filter/facet/readout speak: the route's domain vocabulary when supplied,

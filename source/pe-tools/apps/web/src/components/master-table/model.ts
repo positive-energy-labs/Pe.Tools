@@ -42,6 +42,23 @@ interface ColumnBase<Row> {
 export interface ValueColumn<Row> extends ColumnBase<Row> {
   cell: (row: Row) => ReactNode;
   state?: never;
+  verdict?: never;
+}
+
+/** The meaning-band tones a verdict may wear. NARROW BY CONSTRUCTION (takeoffs #11(b), ruled
+ * 2026-08-16 R5): a consumer physically cannot hand this a viz/taxonomy colour, which is the
+ * defect that let one cell draw its dot in alarm and its word in kiln. */
+export type VerdictTone = "alarm" | "caution" | "done" | "ink" | "mute";
+
+/** A row-level pipeline verdict — what the plan/receipts/pipeline says about the ROW. */
+export interface Verdict {
+  /** The route's own word — `applied`, `synced`, `needs a call`. Domain vocabulary is the
+   * point: a pipeline verdict is not a value state and never lies in the grammar's seven. */
+  word: string;
+  tone: VerdictTone;
+  /** The cell title — say what the verdict MEANS, not what it is called. */
+  note: string;
+  dim?: boolean;
 }
 
 /**
@@ -59,15 +76,32 @@ export interface StateColumn<Row> extends ColumnBase<Row> {
    * facet and readout speak for this row, when the grammar's seven universal words would lie —
    * "clean" where the domain means "no Manual J entered". The MARKS stay universal; only the
    * word is the route's. Omit it unless the universal word is actually wrong: every override
-   * is one more vocabulary for the user to learn, and this prop is how `stateColumn`'s whole
-   * parallel renderer gets deleted.
+   * is one more vocabulary for the user to learn. (Row-level PIPELINE verdicts do not belong
+   * here at all — they ride the `verdict:` clause below.)
    */
   word?: (row: Row) => string;
   cell?: never;
+  verdict?: never;
 }
 
-/** Exactly one of `cell` and `state` — a column draws a body or declares one, never both. */
-export type Column<Row> = ValueColumn<Row> | StateColumn<Row>;
+/**
+ * THE VERDICT CLAUSE (ruled 2026-08-16, consolidation batch R5 — families #1's evidence).
+ * A row-level PIPELINE VERDICT is a second legitimate form, distinct from a value's
+ * pseudo-dimension: at seven words with one axis mapping, riding `state:` + `word` would draw
+ * marks that say nothing under a word that says everything, and a reader who has learned the
+ * marks would read six different states as "clean". The table renders the dot + word itself;
+ * facet and sort default to the word. This clause replaces and deletes `stateColumn`, the
+ * last parallel cell-state renderer.
+ */
+export interface VerdictColumn<Row> extends ColumnBase<Row> {
+  verdict: (row: Row) => Verdict;
+  state?: never;
+  word?: never;
+  cell?: never;
+}
+
+/** Exactly one of `cell`, `state` and `verdict` — a column draws a body or declares one. */
+export type Column<Row> = ValueColumn<Row> | StateColumn<Row> | VerdictColumn<Row>;
 
 export interface SortKey {
   key: string;

@@ -171,6 +171,58 @@
   background: var(--dl-cell-square);
 }
 
+/* ── THE EDITABLE CELL (ruled 2026-08-16, R8) ─────────────────────────────────────────────
+   The input IS the value slot: transparent, full-bleed, inheriting the cell's ink, weight and
+   style, so every mark (wash, ring, fold, square, squiggle) composes around a caret instead of
+   a text node. Focus is a hairline, never a hue (the lang focus law) — an inset ring, because
+   the cell may already carry a wash that a background fill would erase. */
+.dl-cell-input {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-style: inherit;
+  font-weight: inherit;
+  color: inherit;
+  line-height: inherit;
+}
+.dl-cell:has(.dl-cell-input:focus-visible) {
+  box-shadow:
+    var(--dl-cell-ring, 0 0 #0000),
+    inset 0 0 0 1px var(--r-line-2);
+}
+
+/* THE REFUSAL NOTE (R8, folding families' RefusalNote into the grammar): absolutely
+   positioned so the row can NEVER grow — §3's "restore AND say why, near the cell, without
+   resizing the row". Caution, dismiss-on-click, full sentence in the title. It suppresses
+   mousedown so it cannot steal the caret from the input it sits over. */
+.dl-refuse {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  max-width: 75%;
+  padding: 0 5px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--font-pe-mono);
+  font-size: 10px;
+  font-style: italic;
+  color: var(--r-caution);
+  background: color-mix(in srgb, var(--r-caution) 12%, var(--r-on));
+  border: 0;
+  border-left: 2px solid var(--r-caution);
+  cursor: pointer;
+}
+
 /* 3 · THE SQUIGGLE FAMILY — one decoration family, ranked by colour. The decoration says
       "state of the value"; the colour says which state; the two primary text colours are
       untouched. Rides on the TEXT, never on the box. */
@@ -238,6 +290,27 @@
   text-decoration: underline solid var(--r-line-2);
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
+}
+
+/* ── EMPTY STATE · empty.tsx ───────────────────────────────────────────────────────────────
+   The labelled empty: the statement is italic muted (absence is quiet), the EXIT is upright
+   secondary ink (a way out is an instruction, not an absence). `data-story` distinguishes the
+   route's story (scope) from the surface's own (filter) — no visual difference today; the
+   attribute exists so the distinction is authored, greppable and styleable when one is earned. */
+.dl-empty {
+  display: block;
+  font-size: 11px;
+  line-height: 1.5;
+  font-style: italic;
+  color: var(--r-ink-mute);
+}
+.dl-empty-exit {
+  font-style: normal;
+  color: var(--r-ink-2);
+}
+.dl-empty-exit::before {
+  content: " — ";
+  color: var(--r-ink-mute);
 }
 
 /* ── VERBS · verb.tsx ──────────────────────────────────────────────────────────────────────

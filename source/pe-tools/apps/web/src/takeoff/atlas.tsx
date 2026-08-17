@@ -18,16 +18,20 @@ import {
   NumberCell,
   ReadCell,
   StateDot,
-  stateColumn,
   TextCell,
-  type StateMeta,
+  VERDICT_INK,
 } from "#/components/master-table/cells";
 import type { StateCellProps } from "#/components/lang/cell";
 import { FactChip } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb, VerbGroup } from "#/components/lang/verb";
 import { MasterTable } from "#/components/master-table/master-table";
-import { fmtNum, type Column } from "#/components/master-table/model";
+import {
+  fmtNum,
+  type Column,
+  type Verdict as RowVerdict,
+  type VerdictTone,
+} from "#/components/master-table/model";
 import { Pane, PaneSplit, PaneWorkspace } from "#/components/ui/pane";
 import { contentViewport, fitFrame, type Bounds2, unionBounds } from "#/lib/affine-frame";
 import { ZoneThumb } from "#/takeoff/zone-plan";
@@ -86,41 +90,46 @@ export interface AtlasProps {
 //                             until a sync moves them into the .r10.
 //   synced    → --r-done      it landed.
 //
-// NOTE (docs/features/takeoff/DESIGN-AUDIT.md #1): these four are NOT the cell grammar's state
-// axes and cannot be expressed as a `state:` column — "a human decision is queued" and "not
-// started" have no rung. The column below therefore stays on `stateColumn`, honestly.
+// NOTE (docs/features/takeoff/DESIGN-AUDIT.md #1, re-ruled 2026-08-16 R5): these four are a
+// row-level PIPELINE VERDICT, not the cell grammar's state axes — the column rides the table's
+// `verdict:` clause, whose tone union is the meaning band by construction.
 
 type RoomState = "call" | "unreviewed" | "data" | "synced";
 
 const ROOM_STATES: RoomState[] = ["call", "unreviewed", "data", "synced"];
 
-const STATE_META: Record<RoomState, { tone: string; label: string; note: string }> = {
+const STATE_META: Record<RoomState, { tone: VerdictTone; label: string; note: string }> = {
   call: {
-    tone: "var(--r-alarm)",
+    tone: "alarm",
     label: "needs a call",
     note: "a human must decide: an open detector flag, or the .r10 no longer matches the model",
   },
   unreviewed: {
-    tone: "var(--r-ink-mute)",
+    tone: "mute",
     label: "no Manual J",
     note: "nothing open, but no Manual J data entered yet — export would refuse this room",
   },
   data: {
-    tone: "var(--r-caution)",
+    tone: "caution",
     label: "data entered",
     note: "Manual J data entered against settled geometry, not yet exported — unsaved",
   },
   synced: {
-    tone: "var(--r-done)",
+    tone: "done",
     label: "in .r10",
     note: "exported and the .r10 still agrees with the model",
   },
 };
 
-/** The one alarm is `call`; `unreviewed` is the one dim. */
-const stateMeta = (state: RoomState): StateMeta => ({
-  ...STATE_META[state],
-  alarm: state === "call",
+/** The CSS ink behind a room state — for the SVG plan fills and rail bars, which cannot take
+ * a tone name. One derivation, so the three surfaces cannot diverge. */
+const stateInk = (state: RoomState): string => VERDICT_INK[STATE_META[state].tone];
+
+/** The one alarm is `call` (tone carries it); `unreviewed` is the one dim. */
+const stateMeta = (state: RoomState): RowVerdict => ({
+  word: STATE_META[state].label,
+  tone: STATE_META[state].tone,
+  note: STATE_META[state].note,
   dim: state === "unreviewed",
 });
 
@@ -197,7 +206,7 @@ function ZoneStateBar({
           key={i}
           className="min-w-px flex-1 rounded-[1px]"
           style={{
-            background: STATE_META[s].tone,
+            background: stateInk(s),
             opacity: s === "unreviewed" ? 0.3 : 0.9,
           }}
         />
@@ -459,12 +468,11 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
         ),
       },
       {
-        ...stateColumn<Row>({
-          label: "state",
-          title:
-            "this ROOM's derived state — the same vocabulary the rail bars and the plan fills use",
-          of: (row) => stateMeta(row.state),
-        }),
+        key: "state",
+        label: "state",
+        title:
+          "this ROOM's derived state — the same vocabulary the rail bars and the plan fills use",
+        verdict: (row) => stateMeta(row.state),
         // Pipeline order, not alphabetical: "needs a call" sorts before "in .r10" because that
         // is the order the work happens in.
         sort: (row) => ROOM_STATES.indexOf(row.state),
@@ -783,7 +791,7 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                     title={STATE_META[s].note}
                     className="tele inline-flex items-center gap-1 text-muted-foreground"
                   >
-                    <StateDot {...stateMeta(s)} />
+                    <StateDot tone={STATE_META[s].tone} dim={s === "unreviewed"} />
                     {STATE_META[s].label}
                   </span>
                 ))}
@@ -1207,7 +1215,7 @@ function LevelPlan({
               {z.rooms.map((room) => {
                 const state = stateOf(room);
                 const isCursor = room.guid === cursor;
-                const tone = isCursor ? CURSOR_INK : STATE_META[state].tone;
+                const tone = isCursor ? CURSOR_INK : stateInk(state);
                 const [labelX, labelY] = frame.toViewport(room.label);
                 const click = (e: React.MouseEvent) => {
                   e.stopPropagation();
@@ -1292,7 +1300,7 @@ function LevelPlan({
 
       <div className="pointer-events-none absolute bottom-1 left-2 flex flex-wrap items-center gap-x-3 gap-y-0.5">
         {ROOM_STATES.map((s) => (
-          <Swatch key={s} tone={STATE_META[s].tone} label={STATE_META[s].label} />
+          <Swatch key={s} tone={stateInk(s)} label={STATE_META[s].label} />
         ))}
         <Swatch tone={ABSENT_INK} label="held residue" seam />
         <Swatch tone={CURSOR_INK} label="cursor" />
@@ -1372,7 +1380,7 @@ function LevelStats({
               title={`${STATE_META[s].label} — ${fmtNum(area[s], 0)} sf`}
               style={{
                 width: `${(area[s] / Math.max(totalArea, 1)) * 100}%`,
-                background: STATE_META[s].tone,
+                background: stateInk(s),
                 opacity: s === "unreviewed" ? 0.35 : 0.9,
               }}
             />

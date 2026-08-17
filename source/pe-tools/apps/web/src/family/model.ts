@@ -9,7 +9,7 @@
  * and says so with a dashed seam chip in its header. The host lane is not disabled here; it does
  * not exist yet, and pretending otherwise is the one thing these surfaces may not do.
  */
-import type { MasterTableState } from "#/components/master-table/model";
+import type { MasterTableState, VerdictTone } from "#/components/master-table/model";
 import {
   WORLD,
   boundParam,
@@ -93,13 +93,13 @@ export const MARK_TITLE: Record<Agreement, string> = {
  * (DESIGN-AUDIT #3), and the `ƒ` glyph plus italic already carry it. Borrowing `--r-done` — which
  * is what the retired `--st-derived` shim resolved to — would have claimed the value LANDED.
  */
-export const AGREEMENT_TONE: Record<Agreement, string> = {
-  agree: "var(--r-ink-2)",
-  drift: "var(--r-alarm)",
-  derived: "var(--r-ink-2)",
-  "only-profile": "var(--r-caution)",
-  "only-live": "var(--r-caution)",
-  unread: "var(--r-ink-mute)",
+export const AGREEMENT_TONE: Record<Agreement, VerdictTone> = {
+  agree: "ink",
+  drift: "alarm",
+  derived: "ink",
+  "only-profile": "caution",
+  "only-live": "caution",
+  unread: "mute",
 };
 
 /** Worst-first, so a row's one-word state is the thing it is most asking of you. */

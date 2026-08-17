@@ -1,7 +1,7 @@
 import { useRef } from "react";
 
 import { useCellNavigation } from "#/components/master-table/cell-navigation";
-import { fmtNum, parseCell, type ValueColumn } from "#/components/master-table/model";
+import { fmtNum, parseCell, type Verdict, type VerdictTone } from "#/components/master-table/model";
 import { cn } from "#/lib/utils";
 
 const CELL_CLASS = "tele h-7 w-full min-w-0 bg-transparent px-1.5 outline-none focus:bg-primary/5";
@@ -166,58 +166,37 @@ export function ReadCell({
   );
 }
 
-/** The state/verdict swatch — one hue budget: clay alarms, green is done, the rest is quiet. */
-export function StateDot({ tone, dim }: { tone: string; dim?: boolean }) {
+/** The verdict swatch. Tone is the NARROW meaning-role union — never a raw CSS colour
+ * (takeoffs #11, ruled 2026-08-16 R5; `stateColumn`, which took any string, died with it). */
+export function StateDot({ tone, dim }: { tone: VerdictTone; dim?: boolean }) {
   return (
     <span
       className="inline-block size-2 shrink-0 rounded-[1px] align-middle"
-      style={{ background: tone, opacity: dim ? 0.35 : 1 }}
+      style={{ background: VERDICT_INK[tone], opacity: dim ? 0.35 : 1 }}
     />
   );
 }
 
-/** What a row's state/verdict column shows. `note` is the cell title — say what the state MEANS. */
-export interface StateMeta {
-  label: string;
-  /** A design-language meaning role, e.g. "var(--r-alarm)". Never a viz/taxonomy colour. */
-  tone: string;
-  note: string;
-  /** Wears the ONE alarm: this row is the one asking for a human. */
-  alarm?: boolean;
-  dim?: boolean;
-}
+export const VERDICT_INK: Record<VerdictTone, string> = {
+  alarm: "var(--r-alarm)",
+  caution: "var(--r-caution)",
+  done: "var(--r-done)",
+  ink: "var(--r-ink-2)",
+  mute: "var(--r-ink-mute)",
+};
 
-/**
- * The state/verdict column slot: a dot + label whose vocabulary the route owns. Filterable and
- * sortable on the state's label, so "show me only what needs a call" is one select away.
- */
-export function stateColumn<Row>({
-  key = "state",
-  label = "state",
-  title,
-  of,
-}: {
-  key?: string;
-  label?: string;
-  title?: string;
-  of: (row: Row) => StateMeta;
-}): ValueColumn<Row> {
-  return {
-    key,
-    label,
-    title,
-    facet: (row) => of(row).label,
-    sort: (row) => of(row).label,
-    cell: (row) => {
-      const meta = of(row);
-      return (
-        <span className="tele block truncate px-1.5" title={meta.note}>
-          <StateDot tone={meta.tone} dim={meta.dim} />{" "}
-          <span className={meta.alarm ? "text-[var(--r-alarm)]" : "text-muted-foreground"}>
-            {meta.label}
-          </span>
-        </span>
-      );
-    },
-  };
+/** How a `verdict:` column draws — the table calls this itself (master-table.tsx resolve). The
+ * WORD wears its tone only at alarm rank (the one alarm must be unmissable); every quieter
+ * verdict keeps the word in secondary ink and lets the dot carry the tone. */
+export function VerdictCell({ verdict }: { verdict: Verdict }) {
+  return (
+    <span className="tele block truncate px-1.5" title={verdict.note}>
+      <StateDot tone={verdict.tone} dim={verdict.dim} />{" "}
+      <span
+        className={verdict.tone === "alarm" ? "text-[var(--r-alarm)]" : "text-muted-foreground"}
+      >
+        {verdict.word}
+      </span>
+    </span>
+  );
 }

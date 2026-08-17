@@ -29,6 +29,8 @@
  *   1 uneditable owns the body · 2 pea's proposal owns it otherwise · 3 the squiggle slot ·
  *   4 unsaved composes on top · 5 citation never contends.
  */
+import { useRef, useState } from "react";
+
 import { cn } from "#/lib/utils";
 
 import "./lang.css";
@@ -87,6 +89,17 @@ export interface StateCellProps {
    * (default) keeps the footline — pea's card and standalone specimens have room for it.
    */
   scale?: "card" | "row";
+  /**
+   * THE EDITABLE CELL (ruled 2026-08-16, consolidation batch R8 — families #6, "the strongest
+   * finding of the sweep"). Present ⇒ the value slot renders as a caret-safe input; every mark
+   * stays OUTSIDE the text box ("do not steal the caret"). Return a string to REFUSE the
+   * commit: the cell restores the prior value and shows a dismissible caution note carrying
+   * the reason — §3's "restore AND say why, near the cell, without resizing the row". Requires
+   * `scale="row"` and a string `value`; `cap` other than editable wins and renders locked.
+   */
+  onCommit?: (text: string) => string | void;
+  /** Cell-to-cell navigation hook (Enter/Tab/arrows). Return true when the move was taken. */
+  onNavigate?: (dir: "up" | "down" | "left" | "right") => boolean;
   className?: string;
 }
 
@@ -181,8 +194,27 @@ export function cellFactsText(p: StateCellProps): string | null {
 export function StateCell(props: StateCellProps) {
   const { value, modelValue, capReason, grounding, confidence, note, className } = props;
   const read = readCell(props);
+  // Refusal machinery lives here so hooks run unconditionally; it only ever fires on an
+  // editable row-scale cell. `nonce` re-keys the input so a refused edit visibly restores.
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const [nonce, setNonce] = useState(0);
+  const initial = useRef(typeof value === "string" ? value : "");
+  initial.current = typeof value === "string" ? value : "";
+
+  const editable = props.onCommit != null && read.body !== "locked" && typeof value === "string";
 
   if (props.scale === "row") {
+    const commit = (el: HTMLInputElement) => {
+      const text = el.value;
+      if (text === initial.current) return;
+      const refused = props.onCommit?.(text);
+      if (typeof refused === "string") {
+        setRefusal(refused);
+        setNonce((n) => n + 1); // restore the prior value, visibly
+      } else if (refusal != null) {
+        setRefusal(null);
+      }
+    };
     return (
       <span
         className={cn("dl-cell", className)}
@@ -193,13 +225,51 @@ export function StateCell(props: StateCellProps) {
         data-unsaved={read.unsaved === "pea" ? "pea" : read.unsaved === "you" ? "" : undefined}
         title={cellFactsText(props) ?? undefined}
       >
-        {read.unsettled != null ? (
+        {editable ? (
+          <input
+            key={`${value}·${nonce}`}
+            defaultValue={value as string}
+            tabIndex={-1}
+            className={cn("dl-cell-input", read.unsettled != null && "dl-sq")}
+            data-state={read.unsettled ?? undefined}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commit(e.currentTarget);
+                if (!props.onNavigate?.(e.shiftKey ? "up" : "down")) e.currentTarget.blur();
+              } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                e.preventDefault();
+                commit(e.currentTarget);
+                props.onNavigate?.(e.key === "ArrowUp" ? "up" : "down");
+              } else if (e.key === "Tab") {
+                commit(e.currentTarget);
+                if (props.onNavigate?.(e.shiftKey ? "left" : "right")) e.preventDefault();
+              } else if (e.key === "Escape") {
+                e.currentTarget.value = initial.current;
+                e.currentTarget.blur();
+              }
+            }}
+            onBlur={(e) => commit(e.currentTarget)}
+          />
+        ) : read.unsettled != null ? (
           <span className="dl-sq" data-state={read.unsettled}>
             {value}
           </span>
         ) : (
           value
         )}
+        {refusal != null ? (
+          <button
+            type="button"
+            className="dl-refuse"
+            title={`${refusal} — click to dismiss`}
+            // "do not steal the caret": the note must never take focus from the input under it.
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setRefusal(null)}
+          >
+            {refusal}
+          </button>
+        ) : null}
       </span>
     );
   }

@@ -23,9 +23,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { FactChip } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
-import { ReadCell, stateColumn, type StateMeta } from "#/components/master-table/cells";
+import { ReadCell } from "#/components/master-table/cells";
 import { MasterTable } from "#/components/master-table/master-table";
-import type { Column } from "#/components/master-table/model";
+import type { Column, Verdict } from "#/components/master-table/model";
 import { Sentence, type SlotOption } from "#/components/sentence";
 import {
   Combobox,
@@ -592,47 +592,46 @@ function FamiliesRoute() {
 
   const familyState = useMemo(
     () =>
-      (familyId: number): StateMeta => {
+      (familyId: number): Verdict => {
         const done = receiptByFamilyId.get(familyId);
         if (done) {
           return done.success
             ? {
-                label: "applied",
-                tone: "var(--r-done)",
+                word: "applied",
+                tone: "done",
                 note: `${done.parametersChanged} parameter(s) changed · +${done.diffSummary.added} −${done.diffSummary.removed} ~${done.diffSummary.modified}`,
               }
             : {
                 // A refused write is the one thing on this row asking for a person: the ONE alarm.
-                label: "failed",
-                tone: "var(--r-alarm)",
-                alarm: true,
+                word: "failed",
+                tone: "alarm",
                 note: done.error ?? "apply failed with no reported reason",
               };
         }
         const entry = planByFamilyId.get(familyId);
         if (!plan) {
           return {
-            label: "unplanned",
-            tone: "var(--r-ink-mute)",
+            word: "unplanned",
+            tone: "mute",
             dim: true,
             note: "no plan compiled yet — the table is scope, not judgment",
           };
         }
         if (!entry) {
           return {
-            label: "outside profile",
-            tone: "var(--r-ink-mute)",
+            word: "outside profile",
+            tone: "mute",
             dim: true,
             note: "in scope, but the bound profile does not claim this family",
           };
         }
         const flag = familyFlag(entry);
         // Not a warning about the model and not a refusal — a verdict with nothing behind it.
-        if (flag) return { label: "no actions", tone: "var(--r-ink-mute)", note: flag };
+        if (flag) return { word: "no actions", tone: "mute", note: flag };
         return excludedIds.has(familyId)
           ? {
-              label: "excluded",
-              tone: "var(--r-ink-mute)",
+              word: "excluded",
+              tone: "mute",
               dim: true,
               note: "excluded from apply in the decision queue",
             }
@@ -640,8 +639,8 @@ function FamiliesRoute() {
               /* Queued actions are UNSAVED work: nothing has left the page, and caution is the
                  language's staged rank. Deliberately NOT the commit blue — that is the verb's,
                  and a state dot wearing it would spend the one filled blue on a readout. */
-              label: "included",
-              tone: "var(--r-caution)",
+              word: "included",
+              tone: "caution",
               note: `${entry.plan.loweredActions.length} action(s) queued`,
             };
       },
@@ -745,20 +744,16 @@ function FamiliesRoute() {
       /* The plan verdict sits AFTER the identity columns, not among the parameter clusters: the
          plan is a lens over these rows, not a parameter of the family.
 
-         IT STAYS ON `stateColumn`, NOT the `state:` clause (DESIGN-AUDIT #1). Of the seven
-         words this column speaks, exactly one has an axis — `included` is `stage: "staged"`.
-         `applied`, `failed`, `no actions`, `outside profile`, `excluded` and `unplanned` have
-         none, and `state:` + `word` would render six of seven as an unmarked "clean" cell
-         wearing a route label: the marks would say nothing while the word said everything,
-         which is worse than the dot the route draws itself. Only the TONES moved onto the
-         meaning band. */
-      stateColumn<TypeRow>({
+         It rides the table's `verdict:` clause (DESIGN-AUDIT #1, re-ruled 2026-08-16 R5): a
+         pipeline verdict about the ROW, whose word the route owns and whose tone union is the
+         meaning band by construction. */
+      {
         key: "plan-state",
         label: "plan",
         title:
           "What the compiled plan says about this family. The plan is a LENS: it tints rows and fills the decision queue, but it never hides a family or narrows the scope you asked for.",
-        of: (row) => familyState(row.familyId),
-      }),
+        verdict: (row) => familyState(row.familyId),
+      },
     ];
 
     const parameterColumns: Column<TypeRow>[] = shown.map((col) => {
