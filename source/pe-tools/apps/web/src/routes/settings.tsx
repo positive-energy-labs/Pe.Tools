@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useForm, useStore } from "@tanstack/react-form";
 
 import {
   type SettingsFieldState,
@@ -8,7 +9,18 @@ import {
   settingsFieldSegments,
   settingsRouteState,
 } from "@pe/agent-contracts";
-import { SettingsFileKind, type SettingsFileEntry } from "@pe/host-contracts/operation-types";
+import {
+  SettingsFileKind,
+  type SettingsFileEntry,
+  type SettingsValidationResult,
+} from "@pe/host-contracts/operation-types";
+import {
+  applySchemaDefaultsToValue,
+  parseSchema,
+  removeSchemaDefaultsFromValue,
+} from "@pe/schema-core";
+
+import { SchemaToFieldRender } from "#/lib/schema-to-field-render";
 
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { StateCell } from "#/components/lang/cell";
@@ -23,7 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "#/components/ui/select";
-import { useTreeQuery, useWorkspacesQuery } from "#/host/queries";
+import { useSchemaQuery, useTreeQuery, useWorkspacesQuery } from "#/host/queries";
 import { useVerb } from "#/lib/use-verb";
 import { timeAgo } from "#/lib/utils";
 import { useRouteState } from "#/workbench/route-state";
@@ -148,13 +160,55 @@ function SettingsRoute() {
     [treeQuery.data?.files],
   );
 
+  /* ── THE GENERATED FORM (restored 2026-08-17, forensics in PRODUCT.md) — the module's
+     schema (settings.schema, Revit-tuned x-options intact) drives a SchemaToFieldRender
+     form over the open document. Form edits are staged as pointer-keyed field values and
+     ride the SAME substrate save as pea's approved proposals — one write path, chat lane
+     stays sighted. No schema for the module → the flat pointer reviewer below is the
+     honest fallback. ── */
+  // The OPEN DOCUMENT names its own module/root — pea can open a document the pickers
+  // never touched, and the form must still generate. Pickers only seed the next open.
+  const schemaRequest = snapshot
+    ? { moduleKey: snapshot.documentId.moduleKey, rootKey: snapshot.documentId.rootKey }
+    : moduleKey && rootKey
+      ? { moduleKey, rootKey }
+      : undefined;
+  const schemaQuery = useSchemaQuery(schemaRequest, { enabled: Boolean(schemaRequest) });
+  const schemaJson = schemaQuery.data?.schemaJson ?? undefined;
+  const renderSchema = useMemo(
+    () => (schemaJson ? parseSchema(schemaJson) : undefined),
+    [schemaJson],
+  );
+  const parsedRaw = useMemo(() => safeParse(snapshot?.rawContent), [snapshot?.rawContent]);
+
+  const formBaseline = useMemo(() => {
+    if (!renderSchema || !parsedRaw) return undefined;
+    const withDefaults = applySchemaDefaultsToValue(renderSchema, parsedRaw, renderSchema);
+    return withDefaults && typeof withDefaults === "object" && !Array.isArray(withDefaults)
+      ? (withDefaults as Record<string, unknown>)
+      : undefined;
+  }, [renderSchema, parsedRaw]);
+
+  const form = useForm({ defaultValues: formBaseline ?? {} });
+  const formValues = useStore(form.store, (state) => state.values);
+  // A fresh snapshot or schema resets the form to the file's truth (open, re-read, save).
+  const formResetToken = `${snapshot?.documentId.relativePath ?? ""}:${snapshot?.versionToken ?? ""}:${schemaJson ?? ""}`;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- reset exactly when the token moves
+  useEffect(() => form.reset(formBaseline ?? {}), [formResetToken]);
+
+  const formMode = Boolean(snapshot && renderSchema && formBaseline);
+  const formDirty = formMode && JSON.stringify(formValues) !== JSON.stringify(formBaseline ?? {});
+
   const rows = useMemo(() => (document ? buildFieldRows(document) : []), [document]);
   const stagedCount = rows.filter((row) => row.field?.staged != null).length;
   const attentionCount = rows.filter((row) => row.field?.review === "attention").length;
   const proposalCount = rows.filter(
     (row) => row.field?.proposal && row.field.staged == null,
   ).length;
-  const canSave = stagedCount > 0 && attentionCount === 0;
+  const proposalRows = rows.filter((row) => row.field?.proposal && row.field.staged == null);
+  const canSave = formMode
+    ? (formDirty || stagedCount > 0) && attentionCount === 0
+    : stagedCount > 0 && attentionCount === 0;
 
   /** One in-flight command at a time; op-level failures surface on the outcome lane. */
   const runCommand = (label: string, name: string, input?: unknown, receipt?: string) =>
@@ -162,6 +216,30 @@ function SettingsRoute() {
       const result = await route.command(name, input);
       if (!result.ok) throw new Error(result.error ?? result.hint ?? `${name} failed.`);
       return receipt;
+    });
+
+  /** Form-mode save: strip schema defaults back off the values (only authored content is
+   * written), diff leaf pointers against the file's parse, stage every change, then run
+   * the substrate save — which splices ALL staged fields (form edits AND approved
+   * proposals) with the captured version token. */
+  const saveForm = () =>
+    void verb.run("save", async () => {
+      if (!renderSchema || !parsedRaw) throw new Error("No schema or document to save against.");
+      const authored = removeSchemaDefaultsFromValue(renderSchema, formValues, renderSchema);
+      const authoredRecord =
+        authored && typeof authored === "object" && !Array.isArray(authored)
+          ? (authored as Record<string, unknown>)
+          : {};
+      const patches = diffLeafPatches(parsedRaw, authoredRecord);
+      if (patches.length > 0) {
+        const applied = await route.apply(patches);
+        if (!applied.ok)
+          throw new Error(applied.error ?? applied.hint ?? "Staging form edits failed.");
+      }
+      const result = await route.command("save", undefined);
+      if (!result.ok) throw new Error(result.error ?? result.hint ?? "save failed.");
+      const total = patches.length + stagedCount;
+      return `saved ${total} field${total === 1 ? "" : "s"}`;
     });
 
   const applyPatches = async (patches: { path: (string | number)[]; value?: unknown }[]) => {
@@ -178,11 +256,15 @@ function SettingsRoute() {
 
   const validation = snapshot?.validation;
   const saveReason =
-    stagedCount === 0
-      ? "Nothing is staged — approve a proposal or stage a value first. Save writes the staged values into the settings file on disk."
-      : attentionCount > 0
-        ? `${attentionCount} staged field${attentionCount === 1 ? "" : "s"} need attention before anything is written.`
-        : `Write ${stagedCount} staged value${stagedCount === 1 ? "" : "s"} into the settings file on disk — the only verb here that leaves the page.`;
+    attentionCount > 0
+      ? `${attentionCount} staged field${attentionCount === 1 ? "" : "s"} need attention before anything is written.`
+      : formMode
+        ? formDirty || stagedCount > 0
+          ? `Write your form edits${stagedCount > 0 ? ` and ${stagedCount} staged value${stagedCount === 1 ? "" : "s"}` : ""} into the settings file on disk — the only verb here that leaves the page.`
+          : "Nothing to write — edit the form or approve a proposal first. Save writes into the settings file on disk."
+        : stagedCount === 0
+          ? "Nothing is staged — approve a proposal or stage a value first. Save writes the staged values into the settings file on disk."
+          : `Write ${stagedCount} staged value${stagedCount === 1 ? "" : "s"} into the settings file on disk — the only verb here that leaves the page.`;
 
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-[var(--r-page)]">
@@ -323,17 +405,19 @@ function SettingsRoute() {
           {route.peaActive ? <OutcomeLine kind="busy" label="pea is working" /> : null}
           <Verb
             tone="commit"
-            label={`save ${stagedCount}`}
+            label={formMode ? "save" : `save ${stagedCount}`}
             busy={verb.busy === "save"}
             disabled={!canSave || verb.busy != null}
             reason={saveReason}
             onClick={() =>
-              runCommand(
-                "save",
-                "save",
-                undefined,
-                `saved ${stagedCount} field${stagedCount === 1 ? "" : "s"}`,
-              )
+              formMode
+                ? saveForm()
+                : runCommand(
+                    "save",
+                    "save",
+                    undefined,
+                    `saved ${stagedCount} field${stagedCount === 1 ? "" : "s"}`,
+                  )
             }
           />
         </span>
@@ -379,7 +463,59 @@ function SettingsRoute() {
             ) : null}
           </div>
 
-          {snapshot ? (
+          {snapshot && formMode && renderSchema ? (
+            <>
+              {/* THE GENERATED FORM — schema-shaped, x-options-fed. Edits live in the form
+                  until save stages+writes them; pea's open proposals ride the lane below. */}
+              <ArtifactFrame>
+                <div className="px-4 py-3">
+                  <SchemaToFieldRender
+                    // tanstack-form's full api is a structural superset of the lib's form contract.
+                    form={form as unknown as Parameters<typeof SchemaToFieldRender>[0]["form"]}
+                    schema={renderSchema}
+                    moduleKey={snapshot.documentId.moduleKey}
+                    rootKey={snapshot.documentId.rootKey}
+                    baselineValues={formBaseline ?? {}}
+                    validationResult={toValidationResult(validation)}
+                  />
+                </div>
+              </ArtifactFrame>
+              {proposalRows.length > 0 ? (
+                <div className="pt-4">
+                  <div className="t-label t-upper pb-1.5 text-[var(--r-ink-2)]">open proposals</div>
+                  <ArtifactFrame>
+                    <div className="divide-y divide-[var(--r-line)]">
+                      {proposalRows.map((row) => (
+                        <FieldRow
+                          key={row.path}
+                          row={row}
+                          busy={verb.busy != null}
+                          onApprove={(value) =>
+                            void applyPatches([
+                              { path: ["fields", row.path, "staged"], value: { value } },
+                              { path: ["fields", row.path, "review"], value: "good" },
+                            ])
+                          }
+                          onDeny={() =>
+                            void applyPatches([
+                              { path: ["fields", row.path, "proposal"] },
+                              { path: ["fields", row.path, "review"], value: "none" },
+                            ])
+                          }
+                          onUndo={() =>
+                            void applyPatches([
+                              { path: ["fields", row.path, "staged"] },
+                              { path: ["fields", row.path, "review"], value: "none" },
+                            ])
+                          }
+                        />
+                      ))}
+                    </div>
+                  </ArtifactFrame>
+                </div>
+              ) : null}
+            </>
+          ) : snapshot ? (
             rows.length > 0 ? (
               <ArtifactFrame>
                 <div className="divide-y divide-[var(--r-line)]">
@@ -582,6 +718,53 @@ function Picker({
       </SelectContent>
     </Select>
   );
+}
+
+/* ── generated-form helpers ──────────────────────────────────────────────── */
+
+/** Route-state validation (loose) → the host-contracts shape the field renderer projects.
+ * Paths pass through untouched; the renderer's projector owns dotted-vs-pointer forgiveness. */
+function toValidationResult(
+  validation:
+    | {
+        isValid: boolean;
+        issues: { message: string; severity?: string | null; path?: string | null }[];
+      }
+    | null
+    | undefined,
+): SettingsValidationResult | undefined {
+  if (!validation) return undefined;
+  return {
+    isValid: validation.isValid,
+    issues: validation.issues.map((issue) => ({
+      path: issue.path ?? "$",
+      code: "host",
+      severity: issue.severity ?? "error",
+      message: issue.message,
+    })),
+  };
+}
+
+/** Leaf-pointer diff of the authored form values against the file's parse, as route.apply
+ * patches staging each change. Arrays are leaves (this route's flatten rule — round-1
+ * finding #2 owns reconciling this with per-index addressing). */
+function diffLeafPatches(
+  fileParse: Record<string, unknown>,
+  authored: Record<string, unknown>,
+): { path: (string | number)[]; value?: unknown }[] {
+  const pointers = new Set([...flattenLeafPaths(fileParse), ...flattenLeafPaths(authored)]);
+  const patches: { path: (string | number)[]; value?: unknown }[] = [];
+  for (const pointer of pointers) {
+    const segments = settingsFieldSegments(pointer);
+    const before = valueAtPath(fileParse, segments);
+    const after = valueAtPath(authored, segments);
+    if (JSON.stringify(before) === JSON.stringify(after)) continue;
+    patches.push({
+      path: ["fields", pointer, "staged"],
+      value: after === undefined ? { delete: true } : { value: after },
+    });
+  }
+  return patches;
 }
 
 /* ── json helpers ────────────────────────────────────────────────────────── */

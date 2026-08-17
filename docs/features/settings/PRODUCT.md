@@ -105,10 +105,21 @@ machinery intact. `settings.field-options` / `settings.parameter-catalog` never 
   `@tanstack/react-form` re-added.
 - The three schema queries back in `host/queries.ts`.
 
-**Not yet done (alignment owed): wiring the pipeline into the shipped route.** The old renderer
-rendered a whole document as a form; the shipped route renders flat pointer rows with trichotomy
-state. The reconnect must marry them — schema-shaped form structure, field-options-fed inputs,
-trichotomy state per field. That is exactly the A/B frame question of round 2.
+**Wired 2026-08-17 (user ruling: "the shipped route should be a real baseline that has form
+gen"):** the shipped route now generates its form. Schema comes from the OPEN document's own
+module/root (pea-opened documents form-generate too, pickers only seed the next open); values =
+file parse + schema defaults; save strips defaults back off, leaf-diffs against the file parse,
+stages every change pointer-keyed, and runs the one substrate save — form edits and approved pea
+proposals splice in the same write. Open proposals ride a lane below the form; modules with no
+schema fall back to the flat pointer reviewer. Client-side ajv validation (`settings-validation`)
+stays in `recovered/` — the host validate verb covers the baseline; re-add `ajv` if as-you-type
+validation is wanted.
+
+**Environment finding (not a code defect):** the running host instance (5180) serves `/call`
+fully but its `/pe` agent surface (route-state, SSE, pea) is degraded to 503 — the documented
+Mastra-thread/livelock class. Until that host restarts, no web lane can open documents through
+route-state, whatever the code does. The dev proxy is opt-in (`PE_TOOLS_HOST_BASE_URL`) to
+preserve per-worktree lane isolation; unset = takeover-era behavior, untouched.
 
 ## Component catalogue (owed by the settings product)
 
