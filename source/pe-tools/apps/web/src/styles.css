@@ -51,33 +51,14 @@
      then DELETES its lines here. LINE COUNT IS THE PROGRESS METER.
      Never add a line; never consume these in new code. */
 
-  /* hairlines — chain off --foreground, so they already ride --r-ink */
-  --line: color-mix(in srgb, var(--foreground) 12%, transparent);
-  --line-2: color-mix(in srgb, var(--foreground) 20%, transparent);
-  --line-soft: color-mix(in srgb, var(--foreground) 7%, transparent);
-
-  /* Lens vocabulary — 16 lines deleted 2026-08-16 (route passes verified zero consumers);
-     the workbench "you" identity block died whole: ruled NO user hue (workbench audit #1 —
-     alignment, role label and band position carry authorship). Three survivors: */
-  --paper: var(--background); /* 2 consumers: components/sentence.tsx */
-  --pe-blue: var(--primary); /* 11 consumers: host/, ui internals — dies with target-ui pass */
-  --lichen: var(--cat-lichen); /* 1 consumer: host/field-options */
-
-  /* categorical palette — now the viz ladder (design-lang.css). Series identity
-     carries over: blue·green·slate·lichen·clay·kiln → viz-1..6. Consumers that
-     spend these as STATE (clay=warning, green=success) are the violation the
-     route passes exist to fix; taxonomy spends migrate to --viz-* directly. */
-  --cat-blue: var(--viz-1);
-  --cat-green: var(--viz-2);
-  --cat-slate: var(--viz-3);
-  --cat-lichen: var(--viz-4);
-  --cat-clay: var(--viz-5);
-  --cat-kiln: var(--viz-6);
-
-  /* role tokens (COLOR-ROLES.md): GONE. −9 lines total — `--st-derived`/`--st-ground` died
-     with the /family promotion; the remaining seven died 2026-08-16 (R10) when `ui/verb` and
-     `ui/chip` were deleted at zero importers and `Switcher` was promoted to components/lang
-     on real `--r-*` tokens. SHIMS entry 1 is discharged in full. */
+  /* THE LAST SHIM LINE (2026-08-16, chrome pass): Lens vocabulary, the you-identity block,
+     the role tokens (--st-/--act-), the categorical palette and both hairlines are ALL GONE
+     at verified zero consumers. One survivor: */
+  --line-soft: color-mix(
+    in srgb,
+    var(--foreground) 7%,
+    transparent
+  ); /* 1 consumer: design-system_.popovers exhibit — dies with the exhibit cleanup */
 }
 
 @theme inline {
@@ -107,16 +88,8 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  /* Categorical data palette as real utilities (bg-cat-blue/12, text-cat-clay, border-cat-green/25)
-     so consumers stop reaching for bg-[var(--cat-*)] brackets. One hue per category; tint it. */
-  --color-cat-blue: var(--cat-blue);
-  --color-cat-green: var(--cat-green);
-  --color-cat-slate: var(--cat-slate);
-  --color-cat-lichen: var(--cat-lichen);
-  --color-cat-clay: var(--cat-clay);
-  --color-cat-kiln: var(--cat-kiln);
   /* Viz ladder utilities (bg-viz-1/12, text-viz-3, border-viz-5/25) — the parallel
-     palette for taxonomy/series spends. cat-* above is its shim-era alias. */
+     palette for taxonomy/series spends. The cat-* shim-era aliases are gone. */
   --color-viz-1: var(--viz-1);
   --color-viz-2: var(--viz-2);
   --color-viz-3: var(--viz-3);
