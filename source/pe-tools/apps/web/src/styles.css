@@ -56,32 +56,12 @@
   --line-2: color-mix(in srgb, var(--foreground) 20%, transparent);
   --line-soft: color-mix(in srgb, var(--foreground) 7%, transparent);
 
-  /* Lens vocabulary — chains through the semantic layer above */
-  --paper: var(--background);
-  --paper-2: var(--muted);
-  --paper-3: color-mix(in srgb, var(--background), var(--muted) 50%);
-  --mist: var(--secondary);
-  --basalt: var(--foreground);
-  --ink: var(--foreground);
-  --slate: var(--muted-foreground);
-  --lens-ink-2: var(--muted-foreground);
-  --pe-blue: var(--primary);
-  --pe-blue-soft: var(--r-nav);
-  --pe-green: var(--r-pea);
-  --lichen: var(--cat-lichen);
-  --clay: var(--cat-clay);
-  --kiln: var(--cat-kiln);
-  --fail: var(--destructive);
-  --clay-ink: var(--r-alarm);
-  --clay-tint: color-mix(in srgb, var(--r-alarm) 10%, var(--r-page));
-
-  /* workbench identity — "you". SHIM: neutral ink until the workbench pass rules
-     whether the user gets an identity hue at all (finding for joint review). */
-  --user: var(--r-ink-2);
-  --user-tint: color-mix(in srgb, var(--user) 14%, transparent);
-  --user-line: color-mix(in srgb, var(--user) 36%, transparent);
-  --pea-tint: color-mix(in srgb, var(--pe-green) 12%, transparent);
-  --pea-line: color-mix(in srgb, var(--pe-green) 32%, transparent);
+  /* Lens vocabulary — 16 lines deleted 2026-08-16 (route passes verified zero consumers);
+     the workbench "you" identity block died whole: ruled NO user hue (workbench audit #1 —
+     alignment, role label and band position carry authorship). Three survivors: */
+  --paper: var(--background); /* 2 consumers: components/sentence.tsx */
+  --pe-blue: var(--primary); /* 11 consumers: host/, ui internals — dies with target-ui pass */
+  --lichen: var(--cat-lichen); /* 1 consumer: host/field-options */
 
   /* categorical palette — now the viz ladder (design-lang.css). Series identity
      carries over: blue·green·slate·lichen·clay·kiln → viz-1..6. Consumers that
