@@ -2,35 +2,51 @@
  * /family — the anatomy triptych: true-scale FRONT / SIDE / PLAN of the profile.
  *
  * Honest elevations, drawn from the numbers the table is showing for the type on stage. It is a
- * reading of the PROFILE, not a render of Revit — every dimension resolves through its BINDING
- * (a bound dim reads its parameter at the staged type; an unbound dim reads its frozen literal),
- * so a rebind or a ghost-row edit moves the drawing on the next render. When a value is a formula
- * or missing, the drawing draws from what feeds it or says so in words rather than guessing.
+ * reading of the PROFILE, not a render of Revit — every value resolves through the same paths the
+ * table uses, so a rebind, a ghost-row edit, or a typed override moves the drawing on the next
+ * render. When a value is a formula or missing, the drawing draws from what feeds it or says so
+ * in words rather than guessing.
  *
- * PLACEMENT is the fixture's frame prose made geometric: the body sits on the datum, the neck is
- * hosted on the body's top face (so it MOVES when Body Height moves), the connectors sit on the
- * faces their frames name. ponytail: placement rules are per-slug constants for the one fixture
- * family; a real placement evaluator arrives with the host lane's structured frames.
+ * TWO HONEST PATHS, ONE DRAWING (phase C, 2026-08-17):
  *
- * PHASE B took the world off the module scope and put it on a PROP, so this drawing reads whichever
- * document is open. What it did NOT do is generalise `buildParts`, which still knows six fixture
- * slugs by name: a document whose constituents are called something else draws only what it
- * recognises and says so with the empty state. The real evaluator already exists next door —
- * `family-model.ts`'s `buildSheet` resolves frames, planes and faces properly — and adopting it is
- * phase C's job, not a change to smuggle in behind a projection.
+ *   FIXTURE  — no document open. `buildParts` below still knows the six fixture slugs by name,
+ *              placement rules as per-slug constants. Unchanged, and honest about its scope: a
+ *              world it does not recognise draws the empty state.
+ *   LIVE     — a `model` prop arrives (the parsed document). The DRAFT is composed over it
+ *              (`draftedModel`) and the real evaluator (`family-model`'s `buildSheet`) resolves
+ *              frames, planes, faces and connectors properly — so the drawing shows the page's
+ *              live truth: type a number in the table and the geometry moves.
+ *
+ * THE RPs ARE DRAWN. A reference plane whose axis is in-plane renders as a labelled line — these
+ * are the dims the FF processor will create, so hovering a param-driven plane lights its
+ * parameter's row exactly as a dim chip would. A plane the evaluator cannot place (formula-driven,
+ * no resolvable offset) is NAMED in words under the drawing, never drawn at a guess. Frames get a
+ * small origin cross only where every needed axis resolves; the room point keeps its old marker
+ * (leader + dot) on a viz rung, because it is a KIND of thing, not a state.
  *
  * GHOSTS: every OTHER type is drawn behind the staged one as a thin outline at the same fixed
  * scale, so a type comparison needs no second drawing. Fixed scale is the law here — a taller
- * type draws TALLER rather than being refitted to the box.
+ * type draws TALLER rather than being refitted to the box. On the live lane the scale comes from
+ * `sheetBounds` INCLUDING ghosts, so it holds still while you stage different types.
  *
  * COLOUR HERE IS TAXONOMY, NOT STATE. A solid and a connector are two KINDS of thing, which is
  * exactly what the viz ladder is for; nothing in this drawing carries a verdict, so nothing in it
  * may wear a meaning role. Material is plain ink; connectors keep their taxonomy hue; the void's
- * dash is the one legal dash (declared volume with no material behind it). FOCUS is page
- * vocabulary, not drawing vocabulary: a `--r-select` fill and an ink stroke, exactly as the
- * table's focused row does.
+ * dash is the one legal dash AMONG PARTS (declared volume with no material behind it) — the datum
+ * crosshair and the room point's leader are annotation, not parts, and DESIGN-AUDIT #19 owes that
+ * distinction a ruling. FOCUS is page vocabulary, not drawing vocabulary: a `--r-select` fill and
+ * an ink stroke, exactly as the table's focused row does.
  */
+import { useMemo } from "react";
+
 import { EmptyState } from "#/components/lang/empty";
+import {
+  buildSheet,
+  sheetBounds,
+  type FamilyModel,
+  type ConnGeo,
+  type SolidGeo,
+} from "#/family/family-model";
 import {
   bindingOf,
   effective,
@@ -39,6 +55,7 @@ import {
   type Focus,
   type PageWorld,
 } from "#/family/model";
+import { draftedModel } from "#/family/project";
 import { boundParam } from "#/family/world";
 import { cn } from "#/lib/utils";
 
@@ -172,6 +189,11 @@ const SCALE = 3;
 const BOX = 200;
 const M = 12;
 
+const AXES: Axis[] = ["x", "y", "z"];
+
+/** "+Z" / "-X" → axis + sign; the evaluator reports normals as signed axis names. */
+const NORMAL_RE = /^([+-])([XYZ])$/;
+
 /** World extent of a box/cyl part along one axis. */
 function range(part: Extract<Part, { kind: "box" | "cyl" }>, axis: Axis): [number, number] {
   if (axis === "x") return [-part.w / 2, part.w / 2];
@@ -179,11 +201,26 @@ function range(part: Extract<Part, { kind: "box" | "cyl" }>, axis: Axis): [numbe
   return [part.z0, part.z0 + part.h];
 }
 
+/** Hovering LIGHTS, clicking OPENS — the same two-step the table's rows use, so the drawing is
+ * not a separate interaction vocabulary you have to learn beside it. */
+const hoverProps = (
+  slug: string,
+  onFocus: (focus: Focus) => void,
+  onInspect: (slug: string) => void,
+) => ({
+  onMouseEnter: () => onFocus({ kind: "part" as const, id: slug }),
+  onMouseLeave: () => onFocus(null),
+  onClick: () => onInspect(slug),
+  style: { cursor: "pointer" as const },
+});
+
 export function AnatomyDrawing({
   world,
   draft,
   typeName,
+  model,
   focusedParts,
+  focusedParams,
   onFocus,
   onInspect,
   inspecting,
@@ -191,11 +228,114 @@ export function AnatomyDrawing({
   world: PageWorld;
   draft: Draft;
   typeName: string;
+  /** null → the declared fixture lane (buildParts). Non-null → the parsed document, drawn through
+   * the real evaluator with the draft composed over it. */
+  model: FamilyModel | null;
   focusedParts: Set<string>;
+  /** Which parameter rows are lit — a param-driven plane IS a dim of its parameter, so it lights
+   * with the row and lights the row back. */
+  focusedParams: Set<string>;
   onFocus: (focus: Focus) => void;
   /** A constituent is something you can OPEN, not just light. */
   onInspect: (slug: string) => void;
   inspecting: string | null;
+}) {
+  const views =
+    model == null ? (
+      <FixtureViews
+        world={world}
+        draft={draft}
+        typeName={typeName}
+        focusedParts={focusedParts}
+        onFocus={onFocus}
+        onInspect={onInspect}
+      />
+    ) : (
+      <ModelViews
+        model={model}
+        world={world}
+        draft={draft}
+        typeName={typeName}
+        focusedParts={focusedParts}
+        focusedParams={focusedParams}
+        onFocus={onFocus}
+        onInspect={onInspect}
+      />
+    );
+
+  return (
+    <div className="flex size-full min-h-0">
+      {views}
+      <div className="min-w-0 flex-1 overflow-y-auto p-2">
+        <p
+          className="face-mono mb-1 t-caption text-[var(--r-ink-2)]"
+          title="The profile's own constituent list. Hovering one lights both the shape and the table rows it drives, because there is only ever ONE thing in focus. Clicking OPENS it in the doc pane's lower half, where the half of it no parameter can drive — direction, system type, where its frame sits — is edited."
+        >
+          constituents · {typeName}
+        </p>
+        {world.constituents.map((part) => {
+          const geom = world.geomBySlug.get(part.slug);
+          const unbound =
+            geom?.dims.filter(
+              (dim) => boundParam(bindingOf(world, draft, part.slug, dim.property)) == null,
+            ).length ?? 0;
+          return (
+            <button
+              key={part.slug}
+              type="button"
+              onMouseEnter={() => onFocus({ kind: "part", id: part.slug })}
+              onMouseLeave={() => onFocus(null)}
+              onClick={() => onInspect(part.slug)}
+              title={`${part.text} — consumes ${part.params.length > 0 ? part.params.join(", ") : "no parameter the profile names, which is worth a second look"}.${
+                geom
+                  ? ` Click to open it: ${geom.kind}, ${geom.dims.length} bindable dims${unbound > 0 ? ` (${unbound} of them UNBOUND — frozen literals, waiting at the bottom of the table)` : " (all bound)"}, and ${geom.meta.length} non-bindable properties that live only in the inspector.`
+                  : ""
+              }`}
+              className={cn(
+                "face-mono flex w-full items-center gap-1 truncate rounded-[2px] border px-1 py-0.5 text-left t-caption",
+                // Selection is a FILL, not a hue: the open constituent sits in the selection rung,
+                // the hovered one wears a hairline. Neither is a state of the model.
+                inspecting === part.slug
+                  ? "border-[var(--r-line-2)] bg-[var(--r-select)] text-[var(--r-ink)]"
+                  : focusedParts.has(part.slug)
+                    ? "border-[var(--r-line-2)] text-[var(--r-ink)]"
+                    : "border-transparent text-[var(--r-ink)]",
+              )}
+            >
+              <span className="text-[var(--r-ink-2)]">{part.kind} </span>
+              <span className="min-w-0 truncate">{part.slug}</span>
+              {unbound > 0 && (
+                <span
+                  className="ml-auto shrink-0 t-caption text-[var(--r-caution)]"
+                  title={`${unbound} of this constituent's dimensions are frozen literals no parameter drives. They are the ghost rows at the bottom of the table.`}
+                >
+                  {unbound}⚠
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── the FIXTURE lane: the six known slugs, per-slug placement constants ─────────────────────────
+
+function FixtureViews({
+  world,
+  draft,
+  typeName,
+  focusedParts,
+  onFocus,
+  onInspect,
+}: {
+  world: PageWorld;
+  draft: Draft;
+  typeName: string;
+  focusedParts: Set<string>;
+  onFocus: (focus: Focus) => void;
+  onInspect: (slug: string) => void;
 }) {
   const parts = buildParts(world, draft, typeName);
   const body = parts.find((part) => part.slug === "body");
@@ -222,17 +362,10 @@ export function AnatomyDrawing({
   /** Connectors are a KIND, not a state — the one legitimate viz spend on this page. */
   const connectorStroke = (slug: string) =>
     focusedParts.has(slug) ? "var(--r-ink)" : "var(--viz-4)";
-  // Hovering LIGHTS, clicking OPENS — the same two-step the table's rows use, so the drawing is
-  // not a separate interaction vocabulary you have to learn beside it.
-  const hover = (slug: string) => ({
-    onMouseEnter: () => onFocus({ kind: "part", id: slug }),
-    onMouseLeave: () => onFocus(null),
-    onClick: () => onInspect(slug),
-    style: { cursor: "pointer" as const },
-  });
+  const hover = (slug: string) => hoverProps(slug, onFocus, onInspect);
 
   return (
-    <div className="flex size-full min-h-0">
+    <>
       {VIEWS.map((view) => {
         // Elevations hang off the datum at the bottom; the plan centres on the origin.
         const X = (u: number) => BOX / 2 + u * SCALE;
@@ -329,7 +462,7 @@ export function AnatomyDrawing({
                       : `${part.slug} — ${prose}. Drawn true to the ${typeName} type's numbers; hovering it lights the parameters it consumes in the table.`}
                   </title>
                 );
-                /* THE ONE LEGAL DASH IN THIS DRAWING: a void must never read as material. */
+                /* THE ONE LEGAL DASH AMONG PARTS: a void must never read as material. */
                 const shared = {
                   ...hover(part.slug),
                   fill: part.isVoid ? "none" : partFill(part.slug),
@@ -449,57 +582,437 @@ export function AnatomyDrawing({
           </svg>
         );
       })}
+    </>
+  );
+}
 
-      <div className="min-w-0 flex-1 overflow-y-auto p-2">
-        <p
-          className="face-mono mb-1 t-caption text-[var(--r-ink-2)]"
-          title="The profile's own constituent list. Hovering one lights both the shape and the table rows it drives, because there is only ever ONE thing in focus. Clicking OPENS it in the doc pane's lower half, where the half of it no parameter can drive — direction, system type, where its frame sits — is edited."
-        >
-          constituents · {typeName}
-        </p>
-        {world.constituents.map((part) => {
-          const geom = world.geomBySlug.get(part.slug);
-          const unbound =
-            geom?.dims.filter(
-              (dim) => boundParam(bindingOf(world, draft, part.slug, dim.property)) == null,
-            ).length ?? 0;
-          return (
-            <button
-              key={part.slug}
-              type="button"
-              onMouseEnter={() => onFocus({ kind: "part", id: part.slug })}
-              onMouseLeave={() => onFocus(null)}
-              onClick={() => onInspect(part.slug)}
-              title={`${part.text} — consumes ${part.params.length > 0 ? part.params.join(", ") : "no parameter the profile names, which is worth a second look"}.${
-                geom
-                  ? ` Click to open it: ${geom.kind}, ${geom.dims.length} bindable dims${unbound > 0 ? ` (${unbound} of them UNBOUND — frozen literals, waiting at the bottom of the table)` : " (all bound)"}, and ${geom.meta.length} non-bindable properties that live only in the inspector.`
-                  : ""
-              }`}
-              className={cn(
-                "face-mono flex w-full items-center gap-1 truncate rounded-[2px] border px-1 py-0.5 text-left t-caption",
-                // Selection is a FILL, not a hue: the open constituent sits in the selection rung,
-                // the hovered one wears a hairline. Neither is a state of the model.
-                inspecting === part.slug
-                  ? "border-[var(--r-line-2)] bg-[var(--r-select)] text-[var(--r-ink)]"
-                  : focusedParts.has(part.slug)
-                    ? "border-[var(--r-line-2)] text-[var(--r-ink)]"
-                    : "border-transparent text-[var(--r-ink)]",
-              )}
-            >
-              <span className="text-[var(--r-ink-2)]">{part.kind} </span>
-              <span className="min-w-0 truncate">{part.slug}</span>
-              {unbound > 0 && (
-                <span
-                  className="ml-auto shrink-0 t-caption text-[var(--r-caution)]"
-                  title={`${unbound} of this constituent's dimensions are frozen literals no parameter drives. They are the ghost rows at the bottom of the table.`}
+// ── the LIVE lane: whatever document is open, through the real evaluator ───────────────────────
+
+function ModelViews({
+  model,
+  world,
+  draft,
+  typeName,
+  focusedParts,
+  focusedParams,
+  onFocus,
+  onInspect,
+}: {
+  model: FamilyModel;
+  world: PageWorld;
+  draft: Draft;
+  typeName: string;
+  focusedParts: Set<string>;
+  focusedParams: Set<string>;
+  onFocus: (focus: Focus) => void;
+  onInspect: (slug: string) => void;
+}) {
+  // THE DRAFT IS THE TRUTH BEING DRAWN: page edits not yet saved are composed over the parsed
+  // document before the evaluator sees it — type a number, watch the geometry move.
+  const drafted = useMemo(() => draftedModel(model, draft, world), [model, draft, world]);
+  const sheet = useMemo(() => buildSheet(drafted, typeName), [drafted, typeName]);
+  const bounds = useMemo(() => sheetBounds(sheet), [sheet]);
+
+  const drawable = sheet.solids.some((geo) => geo.h != null && (geo.w != null || geo.d != null));
+  if (!drawable)
+    return (
+      <EmptyState
+        story="scope"
+        exit="give the document's solids values that resolve to numbers at this type, or stage a type where they do"
+        className="p-3"
+      >
+        no shape to draw — no solid&apos;s dimensions resolve to numbers at this type, and nothing
+        here guesses
+      </EmptyState>
+    );
+
+  // ONE scale for all three views, from the bounds INCLUDING ghosts — so it does not move when a
+  // different type takes the stage, and a taller type draws taller.
+  const span = Math.max(...AXES.map((axis) => bounds[axis][1] - bounds[axis][0]));
+  const scale = (BOX - 2 * M) / span;
+
+  const partFill = (slug: string) => (focusedParts.has(slug) ? "var(--r-select)" : "transparent");
+  const partStroke = (slug: string) => (focusedParts.has(slug) ? "var(--r-ink)" : "var(--r-ink-2)");
+  const connectorStroke = (slug: string) =>
+    focusedParts.has(slug) ? "var(--r-ink)" : "var(--viz-4)";
+  const hover = (slug: string) => hoverProps(slug, onFocus, onInspect);
+
+  /** What the drawing cannot place, said in words below it rather than drawn at a guess. */
+  const unplottablePlanes = sheet.planes.filter(
+    (plane) => plane.axis == null || plane.offset == null,
+  );
+  const partialSolids = sheet.solids.filter(
+    (geo) => geo.w == null || geo.d == null || geo.h == null,
+  );
+
+  return (
+    <div className="flex min-w-0 flex-col">
+      <div className="flex min-h-0 flex-1">
+        {VIEWS.map((view) => {
+          const [uMin, uMax] = bounds[view.u];
+          const [vMin, vMax] = bounds[view.v];
+          const uMid = (uMin + uMax) / 2;
+          const vMid = (vMin + vMax) / 2;
+          const X = (u: number) => BOX / 2 + (u - uMid) * scale;
+          const Y = (v: number) => BOX / 2 - (v - vMid) * scale;
+
+          const solidRange = (geo: SolidGeo, axis: Axis): [number, number] | null => {
+            if (axis === "x") return geo.w == null ? null : [-geo.w / 2, geo.w / 2];
+            if (axis === "y") return geo.d == null ? null : [-geo.d / 2, geo.d / 2];
+            // v1 lowering convention: solids sit ON the datum, so z runs 0 → height.
+            return geo.h == null ? null : [0, geo.h];
+          };
+          const solidRect = (geo: SolidGeo) => {
+            const uRange = solidRange(geo, view.u);
+            const vRange = solidRange(geo, view.v);
+            if (!uRange || !vRange) return null;
+            return {
+              x: X(uRange[0]),
+              y: Y(vRange[1]),
+              width: (uRange[1] - uRange[0]) * scale,
+              height: (vRange[1] - vRange[0]) * scale,
+            };
+          };
+
+          const connMark = (conn: ConnGeo) => {
+            const parsed = NORMAL_RE.exec(conn.normal);
+            if (!parsed) return null;
+            const axis = parsed[2]!.toLowerCase() as Axis;
+            const sign = parsed[1] === "-" ? -1 : 1;
+            const u = conn.pos[view.u];
+            const v = conn.pos[view.v];
+            // A frame axis the evaluator could not resolve is a position this drawing may not
+            // invent — the connector simply does not appear in this view.
+            if (u == null || v == null) return null;
+            const active = focusedParts.has(conn.slug);
+            const stroke = connectorStroke(conn.slug);
+            const prose =
+              world.source.profile.connectors[conn.slug] ?? `${conn.domain} · ${conn.shape}`;
+
+            // Face-on: the normal runs along the view's depth, so the face projects true.
+            if (axis === view.depth) {
+              if (conn.shape === "Round" && conn.w != null)
+                return (
+                  <circle
+                    key={conn.slug}
+                    {...hover(conn.slug)}
+                    cx={X(u)}
+                    cy={Y(v)}
+                    r={(conn.w / 2) * scale}
+                    fill={partFill(conn.slug)}
+                    stroke={stroke}
+                    strokeWidth={active ? 1.4 : 0.8}
+                  >
+                    <title>{`${conn.slug} — ${prose}. Face-on in this view, ${conn.w}in across, drawn where its frame resolves.`}</title>
+                  </circle>
+                );
+              if (conn.w != null && conn.h != null)
+                return (
+                  <rect
+                    key={conn.slug}
+                    {...hover(conn.slug)}
+                    x={X(u - conn.w / 2)}
+                    y={Y(v + conn.h / 2)}
+                    width={conn.w * scale}
+                    height={conn.h * scale}
+                    fill={partFill(conn.slug)}
+                    stroke={stroke}
+                    strokeWidth={active ? 1.4 : 0.8}
+                  >
+                    <title>{`${conn.slug} — ${prose}. Face-on in this view, ${conn.w}×${conn.h}in, drawn where its frame resolves.`}</title>
+                  </rect>
+                );
+              return (
+                <circle
+                  key={conn.slug}
+                  {...hover(conn.slug)}
+                  cx={X(u)}
+                  cy={Y(v)}
+                  r={3}
+                  fill={partFill(conn.slug)}
+                  stroke={stroke}
+                  strokeWidth={active ? 1.4 : 0.8}
                 >
-                  {unbound}⚠
-                </span>
+                  <title>{`${conn.slug} — ${prose}. Face-on — its size dims do not resolve at this type, so the size here is a glyph, not a claim.`}</title>
+                </circle>
+              );
+            }
+
+            // In-plane: the stub — a line along the normal with a face tick at the connection
+            // plane. The stub direction is the document's; In pulls it back into the family.
+            const stubLen = conn.stub ?? 2;
+            const dir = sign * (conn.stubDir === "In" ? -1 : 1);
+            const girth = conn.w ?? 2;
+            const du = axis === view.u ? dir : 0;
+            const dv = axis === view.v ? dir : 0;
+            const x0 = X(u);
+            const y0 = Y(v);
+            const x1 = X(u + du * stubLen);
+            const y1 = Y(v + dv * stubLen);
+            return (
+              <g key={conn.slug} {...hover(conn.slug)}>
+                <title>
+                  {`${conn.slug} — ${prose}. The tick is the connection face; the line is the stub${conn.stub != null ? `, ${conn.stub}in ${conn.stubDir === "In" ? "into the family" : "standing off"}` : ""}.`}
+                </title>
+                {/* a fat transparent hit line, so a 1px stub is still hoverable */}
+                <line x1={x0} y1={y0} x2={x1} y2={y1} stroke="transparent" strokeWidth={9} />
+                <line
+                  x1={x0}
+                  y1={y0}
+                  x2={x1}
+                  y2={y1}
+                  stroke={stroke}
+                  strokeWidth={active ? 1.6 : 1}
+                />
+                {du !== 0 ? (
+                  <line
+                    x1={x0}
+                    y1={Y(v - girth / 2)}
+                    x2={x0}
+                    y2={Y(v + girth / 2)}
+                    stroke={stroke}
+                    strokeWidth={active ? 1.6 : 1}
+                  />
+                ) : (
+                  <line
+                    x1={X(u - girth / 2)}
+                    y1={y0}
+                    x2={X(u + girth / 2)}
+                    y2={y0}
+                    stroke={stroke}
+                    strokeWidth={active ? 1.6 : 1}
+                  />
+                )}
+              </g>
+            );
+          };
+
+          return (
+            <svg
+              key={view.key}
+              viewBox={`0 0 ${BOX} ${BOX}`}
+              className="h-full border-r border-[var(--r-line)]"
+              role="img"
+              aria-label={`family ${view.key} view`}
+            >
+              <title>{`${view.label} — true scale, resolved as the ${typeName} type through the document's own bindings. The other types are the thin outlines behind it.`}</title>
+
+              {/* datum: elevations get a ground line, the plan gets the origin crosshair */}
+              {view.v === "z" ? (
+                <line
+                  x1={M}
+                  y1={Y(0)}
+                  x2={BOX - M}
+                  y2={Y(0)}
+                  stroke="var(--r-line-2)"
+                  strokeWidth={0.5}
+                />
+              ) : (
+                <>
+                  <line
+                    x1={M}
+                    y1={Y(0)}
+                    x2={BOX - M}
+                    y2={Y(0)}
+                    stroke="var(--r-line)"
+                    strokeWidth={0.5}
+                    strokeDasharray="2 4"
+                  />
+                  <line
+                    x1={X(0)}
+                    y1={M}
+                    x2={X(0)}
+                    y2={BOX - M}
+                    stroke="var(--r-line)"
+                    strokeWidth={0.5}
+                    strokeDasharray="2 4"
+                  />
+                </>
               )}
-            </button>
+
+              {/* ghost outlines — non-interactive, so they never steal a hover */}
+              {sheet.ghosts.map((ghost) =>
+                ghost.solids
+                  .filter((geo) => !geo.isVoid)
+                  .map((geo) => {
+                    const shared = {
+                      fill: "none",
+                      stroke: "var(--r-line-2)",
+                      strokeWidth: 0.75,
+                      opacity: 0.5,
+                      pointerEvents: "none" as const,
+                    };
+                    if (view.depth === "z" && geo.isCyl && geo.w != null)
+                      return (
+                        <circle
+                          key={`${ghost.typeName}:${geo.slug}`}
+                          cx={X(0)}
+                          cy={Y(0)}
+                          r={(geo.w / 2) * scale}
+                          {...shared}
+                        />
+                      );
+                    const rect = solidRect(geo);
+                    return rect ? (
+                      <rect key={`${ghost.typeName}:${geo.slug}`} {...rect} {...shared} />
+                    ) : null;
+                  }),
+              )}
+
+              {sheet.solids.map((geo) => {
+                const active = focusedParts.has(geo.slug);
+                const prose = world.source.profile.solids[geo.slug] ?? geo.kind;
+                const title = (
+                  <title>
+                    {geo.isVoid
+                      ? `${geo.slug} — ${prose}. Dashed because it is a SUBTRACTION: declared volume with no material behind it.`
+                      : `${geo.slug} — ${prose}. Drawn true to the ${typeName} type's numbers; hovering it lights the parameters it consumes in the table.`}
+                  </title>
+                );
+                /* THE ONE LEGAL DASH AMONG PARTS: a void must never read as material. */
+                const shared = {
+                  ...hover(geo.slug),
+                  fill: geo.isVoid ? "none" : partFill(geo.slug),
+                  stroke: geo.isVoid
+                    ? active
+                      ? "var(--r-ink)"
+                      : "var(--r-line-2)"
+                    : partStroke(geo.slug),
+                  strokeWidth: 0.8,
+                  strokeDasharray: geo.isVoid ? "3 2" : undefined,
+                };
+                if (view.depth === "z" && geo.isCyl && geo.w != null)
+                  return (
+                    <circle key={geo.slug} cx={X(0)} cy={Y(0)} r={(geo.w / 2) * scale} {...shared}>
+                      {title}
+                    </circle>
+                  );
+                const rect = solidRect(geo);
+                if (!rect) return null;
+                return (
+                  <rect key={geo.slug} {...rect} {...shared}>
+                    {title}
+                  </rect>
+                );
+              })}
+
+              {/* reference planes — the dims the processor will create. A plane is a reading of
+                  its parameter, so it lights with that ROW, not with a constituent. */}
+              {sheet.planes.map((plane) => {
+                if (plane.axis == null || plane.offset == null) return null;
+                if (plane.axis !== view.u && plane.axis !== view.v) return null;
+                const param = plane.param;
+                const lit = param != null && focusedParams.has(param);
+                const stroke = lit ? "var(--r-ink)" : "var(--r-line-2)";
+                const line =
+                  plane.axis === view.u
+                    ? { x1: X(plane.offset), y1: M, x2: X(plane.offset), y2: BOX - M }
+                    : { x1: M, y1: Y(plane.offset), x2: BOX - M, y2: Y(plane.offset) };
+                return (
+                  <g
+                    key={plane.slug}
+                    onMouseEnter={param ? () => onFocus({ kind: "param", id: param }) : undefined}
+                    onMouseLeave={param ? () => onFocus(null) : undefined}
+                  >
+                    <title>
+                      {param
+                        ? `plane ${plane.slug} — a reference plane sitting ${plane.text} off its datum, driven by ${param}. It is a dim the processor will create; hovering lights that parameter's row in the table.`
+                        : `plane ${plane.slug} — a reference plane sitting ${plane.text} off its datum. No parameter drives it.`}
+                    </title>
+                    <line {...line} stroke="transparent" strokeWidth={7} />
+                    <line {...line} stroke={stroke} strokeWidth={lit ? 1.2 : 0.6} />
+                    <text
+                      x={plane.axis === view.u ? line.x1 + 2 : M + 1}
+                      y={plane.axis === view.u ? M + 6 : line.y1 - 2}
+                      fontSize={6}
+                      fill={lit ? "var(--r-ink)" : "var(--r-ink-2)"}
+                      className="face-mono"
+                    >
+                      {plane.slug} {plane.text}
+                    </text>
+                  </g>
+                );
+              })}
+
+              {/* frame origins — a small cross ONLY where both in-plane axes resolve; a frame
+                  with a null axis is skipped, never guessed. */}
+              {sheet.frames.map((frame) => {
+                const u = frame.pos[view.u];
+                const v = frame.pos[view.v];
+                if (u == null || v == null) return null;
+                return (
+                  <g key={frame.slug} stroke="var(--r-ink-2)" strokeWidth={0.6}>
+                    <title>{`frame ${frame.slug} — its origin, where the document's plane and face references intersect. Facing ${frame.normal}. Whatever sits on this frame is placed here.`}</title>
+                    <line x1={X(u) - 2.5} y1={Y(v)} x2={X(u) + 2.5} y2={Y(v)} />
+                    <line x1={X(u)} y1={Y(v) - 2.5} x2={X(u)} y2={Y(v) + 2.5} />
+                  </g>
+                );
+              })}
+
+              {sheet.conns.map(connMark)}
+
+              {/* the room point: a KIND of thing, so it wears a viz rung. Its leader is
+                  annotation, not a part — see the dash note in the header. */}
+              {sheet.rcp && sheet.rcp[view.u] != null && sheet.rcp[view.v] != null && (
+                <g>
+                  <title>
+                    {`roomCalculationPoint — enabled, drawn at the fixed PE convention (12in, ${model.family.placement === "Unhosted" ? "+Z" : "−Y"}). The leader ties it back to the family origin.`}
+                  </title>
+                  <line
+                    x1={X(0)}
+                    y1={Y(0)}
+                    x2={X(sheet.rcp[view.u] as number)}
+                    y2={Y(sheet.rcp[view.v] as number)}
+                    stroke="var(--viz-5)"
+                    strokeWidth={0.8}
+                    strokeDasharray="1.5 3"
+                  />
+                  <circle
+                    cx={X(sheet.rcp[view.u] as number)}
+                    cy={Y(sheet.rcp[view.v] as number)}
+                    r={2.5}
+                    fill="var(--viz-5)"
+                  />
+                </g>
+              )}
+
+              <text
+                x={M}
+                y={BOX - 5}
+                fontSize={7}
+                fill="var(--r-ink-2)"
+                className="face-mono uppercase"
+              >
+                {view.label}
+              </text>
+            </svg>
           );
         })}
       </div>
+
+      {(unplottablePlanes.length > 0 || partialSolids.length > 0) && (
+        <div className="shrink-0 border-t border-[var(--r-line)] px-2 py-1">
+          {partialSolids.map((geo) => (
+            <p key={geo.slug} className="face-mono t-caption text-[var(--r-ink-2)]">
+              ─ ─ solid {geo.slug} · {world.source.profile.solids[geo.slug] ?? geo.kind}{" "}
+              <span className="text-[var(--r-ink-mute)]">
+                (a dimension does not resolve to a number at this type — named rather than drawn at
+                a guess)
+              </span>
+            </p>
+          ))}
+          {unplottablePlanes.map((plane) => (
+            <p key={plane.slug} className="face-mono t-caption text-[var(--r-ink-2)]">
+              ─ ─ plane {plane.slug} · {plane.text}{" "}
+              <span className="text-[var(--r-ink-mute)]">
+                {plane.offset == null
+                  ? "(formula-driven — no resolvable offset, so it is named rather than drawn at a guess)"
+                  : "(off a datum this drawing does not recognise)"}
+              </span>
+            </p>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

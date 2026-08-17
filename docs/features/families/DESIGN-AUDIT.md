@@ -465,3 +465,30 @@ Recorded per sweep governance: gaps become numbered findings; no unilateral lang
     everywhere else — the read verb likely wants that word.
 18. **Arming survives drill-in but cannot be initiated there.** Probably right (build is
     whole-family); wants a ruling.
+
+## Phase-C findings (2026-08-17, the anatomy adopts the evaluator)
+
+Recorded per sweep governance: gaps become numbered findings; no unilateral language changes.
+
+19. **The dash law needs an annotation scope.** The anatomy's stated law is "the void's dash is
+    the one legal dash" — a claim about PARTS (declared volume, no material). But the drawing has
+    always dashed its plan datum crosshair, and the room point's ported marker dashes its leader
+    too. Either the law scopes itself explicitly (parts may dash only for void; annotation —
+    datums, leaders — is a different register), or the RCP leader needs a non-dash idiom. The
+    drawing currently assumes the scoped reading and says so in its header; wants a ruling.
+20. **The `dashed` guard ratchet cannot see SVG dashes.** design-guard.test.ts matches
+    `stroke-dasharray` (kebab), but JSX spells it `strokeDasharray`, so every dash in the anatomy
+    triptych — legal or not — is invisible to the ratchet. The drawing's dash discipline is held
+    by review only. If R13b is to hold by assertion, the regex wants the camelCase form too
+    (and a baseline entry for the audited drawing spends).
+21. **Reference planes have no taxonomy rung.** On the live lane the triptych draws RPs — the
+    dims the FF processor will create — as `--r-line-2` hairlines at rest, ink when their
+    parameter's row is lit. A hairline is a SEAM spend, not an identity, so a plane and a ghost
+    outline separate only by label and extent. If plane-as-future-dim is a KIND (like
+    connectors, which wear `--viz-4`), it may deserve a viz rung; this pass deliberately minted
+    nothing. Wants a ruling.
+22. **Frames (and the room point) have no focus vocabulary.** `Focus` is `param | part`; a frame
+    origin cross is neither a constituent nor a parameter, so it can neither light nor be lit —
+    it is a mark with a tooltip. The old evaluator triptych gave the room point the ad-hoc focus
+    id `rcp`, which no current focus law recognises, so it too is title-only now. If the FF
+    processor makes frames first-class, the one-focus law needs a third word.

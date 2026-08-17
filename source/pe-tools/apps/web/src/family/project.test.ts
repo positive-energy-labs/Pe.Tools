@@ -14,10 +14,10 @@
  */
 import { describe, expect, it } from "vite-plus/test";
 
-import type { FamilyModel } from "./family-model.ts";
+import { buildSheet, planeGeos, type FamilyModel } from "./family-model.ts";
 import type { EvidenceSlice } from "./host.ts";
 import { buildPageWorld, ghostRows, initialDraft, type Draft } from "./model.ts";
-import { draftToPatches, projectFamilyModel } from "./project.ts";
+import { draftToPatches, draftedModel, projectFamilyModel } from "./project.ts";
 
 const L = "Length (Common)";
 
@@ -398,5 +398,101 @@ describe("draftToPatches — draft → staged field patches", () => {
         value: { value: "param:Core Bore Diameter" },
       },
     ]);
+  });
+});
+
+describe("draftedModel — the draft laid over the document, for the drawing", () => {
+  it("an untouched draft draws the document exactly", () => {
+    const page = world();
+    expect(draftedModel(SHOWCASE, initialDraft(page), page)).toEqual(SHOWCASE);
+  });
+
+  it("an edited Body Width moves the drawn rect", () => {
+    const page = world();
+    const { draft } = edited((d) => {
+      d.authored["Body Width"] = "30in";
+    });
+    const sheet = buildSheet(draftedModel(SHOWCASE, draft, page), "Standard");
+    expect(sheet.solids.find((solid) => solid.slug === "body")?.w).toBe(30);
+    // The type that OVERRIDES Body Width is unmoved — the family value is what was edited.
+    const compact = buildSheet(draftedModel(SHOWCASE, draft, page), "Compact");
+    expect(compact.solids.find((solid) => solid.slug === "body")?.w).toBe(18);
+  });
+
+  it("an edited plane param moves the line", () => {
+    const page = world();
+    const { draft } = edited((d) => {
+      d.types.Standard = { ...d.types.Standard, "Return Elevation": "20in" };
+    });
+    const planes = planeGeos(draftedModel(SHOWCASE, draft, page), "Standard");
+    expect(planes.find((plane) => plane.slug === "return-elevation")?.offset).toBe(20);
+    // And the frame that intersects the plane follows it — the connector's origin moves too.
+    const sheet = buildSheet(draftedModel(SHOWCASE, draft, page), "Standard");
+    expect(sheet.conns.find((conn) => conn.slug === "return-air")?.pos.z).toBe(20);
+  });
+
+  it("a retyped geometry literal moves the solid, through the same path a save writes", () => {
+    const page = world();
+    const { draft } = edited((d) => {
+      d.geom.body!.dims.width = "36in";
+    });
+    const sheet = buildSheet(draftedModel(SHOWCASE, draft, page), "Standard");
+    expect(sheet.solids.find((solid) => solid.slug === "body")?.w).toBe(36);
+  });
+
+  it("a promoted literal resolves through its NEW parameter, geometry unmoved", () => {
+    const frozen: FamilyModel = {
+      ...SHOWCASE,
+      solids: {
+        ...SHOWCASE.solids,
+        "core-bore": { ...SHOWCASE.solids!["core-bore"]!, diameter: "3in" },
+      },
+    };
+    const page = buildPageWorld(projectFamilyModel(frozen, null));
+    const draft = structuredClone(initialDraft(page));
+    draft.authored["Core Bore Diameter"] = "3in";
+    draft.newParams = [{ name: "Core Bore Diameter", dataType: L, group: "geometry" }];
+    draft.geom["core-bore"]!.dims.diameter = "param:Core Bore Diameter";
+
+    const drafted = draftedModel(frozen, draft, page);
+    expect(drafted.familyParameters["Core Bore Diameter"]?.value).toBe("3in");
+    expect(drafted.solids?.["core-bore"]?.diameter).toBe("param:Core Bore Diameter");
+    // Byte-identical geometry: the drawn void is 3in before and after the promotion.
+    expect(buildSheet(drafted, "Standard").solids.find((s) => s.slug === "core-bore")?.w).toBe(3);
+  });
+
+  it("keeps value XOR formula, and drops resolved values a changed formula no longer earns", () => {
+    const withResolved: FamilyModel = structuredClone(SHOWCASE);
+    withResolved.familyParameters["Core Height"]!.resolvedValues = { Standard: "34in" };
+    const page = buildPageWorld(projectFamilyModel(withResolved, null));
+
+    // Untouched: the evidence-resolved value survives the composition.
+    const untouched = draftedModel(withResolved, initialDraft(page), page);
+    expect(untouched.familyParameters["Core Height"]?.resolvedValues).toEqual({
+      Standard: "34in",
+    });
+
+    // Retyped as a different formula: the stale resolution must not resurrect the old number.
+    const { draft } = edited((d) => {
+      d.authored["Core Height"] = "= Body Height * 2";
+    });
+    const drafted = draftedModel(withResolved, draft, page);
+    expect(drafted.familyParameters["Core Height"]?.formula).toBe("Body Height * 2");
+    expect(drafted.familyParameters["Core Height"]?.value).toBeUndefined();
+    expect(drafted.familyParameters["Core Height"]?.resolvedValues).toBeUndefined();
+  });
+
+  it("lands editable connector metadata and refuses reported rows a home, in silence", () => {
+    const page = world();
+    const { draft } = edited((d) => {
+      d.geom["supply-air"]!.meta["stub.direction"] = "In";
+      d.geom["supply-air"]!.meta.systemType = "ExhaustAir";
+      // `normal` is reported from the sketch — no document path, so it must land nowhere.
+      d.geom["supply-air"]!.meta.normal = "−X";
+    });
+    const drafted = draftedModel(SHOWCASE, draft, page);
+    expect(drafted.connectors?.["supply-air"]?.stub?.direction).toBe("In");
+    expect(drafted.connectors?.["supply-air"]?.systemType).toBe("ExhaustAir");
+    expect(drafted.connectors?.["supply-air"]?.frame).toBe("frame:supply-air");
   });
 });

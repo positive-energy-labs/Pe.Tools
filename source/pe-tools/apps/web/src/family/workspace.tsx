@@ -1576,7 +1576,9 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
         world={world}
         draft={draft}
         typeName={stageType}
+        model={lane.document?.model ?? null}
         focusedParts={focusedParts}
+        focusedParams={focusedParams}
         onFocus={setFocus}
         onInspect={(slug) => setInspect({ kind: "part", slug })}
         inspecting={inspect?.kind === "part" ? inspect.slug : null}

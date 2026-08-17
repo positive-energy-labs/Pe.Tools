@@ -28,7 +28,7 @@ import { timeAgo } from "#/lib/utils";
 import type { ConnectorSpec, FamilyModel, ParamSpec, SolidSpec } from "#/family/family-model";
 import { paramRef, paramSpec } from "#/family/family-model";
 import type { EvidenceSlice } from "#/family/host";
-import { type Draft, isFormula } from "#/family/model";
+import { bindingOf, isFormula, type Draft, type PageWorld } from "#/family/model";
 import type {
   GeomConstituent,
   GeomDim,
@@ -329,6 +329,86 @@ function projectEvidence(
       (name) => !reported.has(name) && paramSpec(model, name)?.formula == null,
     ),
   };
+}
+
+/* ── forward: draft over document → the model the anatomy draws ──────────── */
+
+const SOLID_DIM_FIELDS = ["width", "depth", "height", "diameter"] as const;
+const CONNECTOR_DIM_FIELDS = ["diameter", "width", "height"] as const;
+
+/**
+ * The DRAFT laid over the parsed document — what the anatomy triptych actually draws.
+ *
+ * The page's live truth is the draft: edits staged but not yet saved. `buildSheet` reads a
+ * `FamilyModel`, so without this composition the drawing would show the DISK while the table
+ * shows your keystroke — two truths on one page. The mapping is deliberately the same one the
+ * reverse projection stages (`draftToPatches` → `dimSegments`/`metaSegments`): a value the save
+ * path could not write is a value the drawing may not preview, and a dim with no document path
+ * is skipped in silence here exactly as it stages nothing there.
+ *
+ * Pure, and conservative about what it touches: an untouched cell is left alone, so a formula's
+ * evidence-resolved values survive (a blanket rewrite would erase them); an untouched draft
+ * returns a model that draws identically to the document.
+ */
+export function draftedModel(model: FamilyModel, draft: Draft, world: PageWorld): FamilyModel {
+  const next = structuredClone(model);
+
+  // Promoted literals are WHOLE new parameters — seeded first, so their authored value below
+  // has a spec to land on and the drawing moves in the same beat as the promotion.
+  for (const param of draft.newParams) {
+    next.familyParameters[param.name] = {
+      dataType: param.dataType,
+      ...(param.group ? { propertiesGroup: param.group } : {}),
+    };
+  }
+
+  // Family-level values: value XOR formula, applied only where the draft MOVED the cell.
+  for (const [name, value] of Object.entries(draft.authored)) {
+    const spec = next.familyParameters[name] ?? next.sharedParameters?.[name];
+    if (!spec) continue;
+    const seeded = spec.formula != null ? `= ${spec.formula}` : (spec.value ?? "");
+    if (value === seeded) continue;
+    if (isFormula(value)) spec.formula = value.replace(/^\s*=\s*/, "");
+    else {
+      spec.value = value;
+      delete spec.formula;
+    }
+    if (isFormula(value)) delete spec.value;
+    // Either way the old resolved values described a value that no longer stands.
+    delete spec.resolvedValues;
+  }
+
+  // The type matrix is the draft's, wholesale: an override typed and an override cleared are
+  // both just the record as it now stands.
+  next.types = structuredClone(draft.types);
+
+  // Geometry: a dim's drafted value IS its binding, written to exactly the paths the reverse
+  // projection stages — solids' four fields, connectors' three plus the nested stub. Metadata
+  // lands only on its editable connector homes; `read` rows have no path and get none.
+  for (const part of world.geom) {
+    const solid = next.solids?.[part.slug];
+    const connector = next.connectors?.[part.slug];
+    for (const dim of part.dims) {
+      const binding = bindingOf(world, draft, part.slug, dim.property);
+      if (binding === "") continue;
+      if (solid && (SOLID_DIM_FIELDS as readonly string[]).includes(dim.property)) {
+        solid[dim.property as (typeof SOLID_DIM_FIELDS)[number]] = binding;
+      } else if (connector) {
+        if (dim.property === "stub.depth") {
+          if (connector.stub) connector.stub.depth = binding;
+        } else if ((CONNECTOR_DIM_FIELDS as readonly string[]).includes(dim.property)) {
+          connector[dim.property as (typeof CONNECTOR_DIM_FIELDS)[number]] = binding;
+        }
+      }
+    }
+    if (!connector) continue;
+    for (const [key, value] of Object.entries(draft.geom[part.slug]?.meta ?? {})) {
+      if (key === "flowDirection" || key === "systemType") connector[key] = value;
+      else if (key === "stub.direction" && connector.stub) connector.stub.direction = value;
+    }
+  }
+
+  return next;
 }
 
 /* ── reverse: draft → staged field patches ───────────────────────────────── */
