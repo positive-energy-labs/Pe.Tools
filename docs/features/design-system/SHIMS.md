@@ -4,10 +4,12 @@ Ledger per SURFACE-PHILOSOPHY §3: one numbered entry per gap, naming what disch
 Entries leave only when the replacement ships; numbers are stable — closed entries are struck
 and named, never renumbered. Context: `docs/features/design-lang/CLEANROOM.md`.
 
-1. **Old `ui/verb`, `ui/chip`, and blue-default `ui/button` still live** beside their
-   `components/lang/` successors. They stay because the in-flight family clean-room and 22
-   button importers consume them. Discharged by: the per-route normalization crusade
-   migrating each consumer onto `lang/`, then deleting the superseded primitives.
+1. **~~Old `ui/verb`, `ui/chip`~~ and blue-default `ui/button` still live** beside their
+   `components/lang/` successors. **PARTIALLY CLOSED 2026-08-16 (R10):** `ui/verb` and
+   `ui/chip` deleted at zero importers; `Switcher` promoted to `components/lang` on real
+   `--r-*` tokens; the seven `--act-*`/`--st-*` shim lines deleted with them. STILL OPEN:
+   `ui/button` (22 importers) — discharged by the route passes migrating each consumer onto
+   `lang/Verb`, then deleting the file.
 2. ~~**The design-lang proto (`src/design-lang/*`, `/design-lang` route) is the validation
    record**, not yet deleted.~~ **CLOSED 2026-08-16** — proto and route deleted; rivals live
    on snapshot branch `proto/design-lang-base2-round2`; palette values single-homed in
@@ -68,10 +70,16 @@ and named, never renumbered. Context: `docs/features/design-lang/CLEANROOM.md`.
 - **The addressing sentence component.** `NarrowChip` owns removal but nothing owns
   re-adding; the "is the sentence an artifact?" border-budget edge case is unshowable until
   it exists.
-- **Delete `stateColumn`** (queued 2026-08-16): `StateColumn.word` now carries domain
-  vocabularies, so the parallel dot+label renderer in `master-table/cells.tsx` has no
-  remaining reason to exist. Discharged by: takeoffs' room-state column and variant-e's
-  state column migrating onto `state:` + `word`, then the deletion.
+- ~~**Delete `stateColumn`**~~ **CLOSED 2026-08-16 (R5)** — replaced by the typed `verdict:`
+  column clause (narrow meaning-role tone union); takeoffs' room-state, families' plan
+  verdict and family's agreement columns migrated in the same commit; the parallel renderer
+  is deleted. (The `state:` + `word` path was overruled by families #1's evidence: a pipeline
+  verdict is a second legitimate form, not a value pseudo-dimension.)
+- **The gutter marker** (ruled 2026-08-16 R3, not yet built): queued human decisions and
+  unreachability are ROW facts — a count-bearing locate mark in a MasterTable gutter, per
+  SURFACE-PHILOSOPHY §4. Two proven consumers waiting: takeoffs' flags column and
+  `/family`'s ghost-row bind affordance. Discharged by: the gutter seam landing on
+  MasterTable and both routes migrating their marks onto it.
 - **The trichotomy reviewer rebuilt on `StateCell`** — named as soon-consumer everywhere;
   the proposal-flow satellite currently stands in for it.
 - **Verb busy+disabled composition** — a busy-and-refused verb is unrenderable.

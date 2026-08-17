@@ -21,6 +21,7 @@ import {
   cellStateLabel,
   type StateCellProps,
 } from "#/components/lang/cell";
+import { EmptyState } from "#/components/lang/empty";
 import { CellNavigationProvider, type CellMove } from "#/components/master-table/cell-navigation";
 import { VerdictCell } from "#/components/master-table/cells";
 import {
@@ -302,7 +303,7 @@ export function MasterTable<Row extends RowData>({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--r-line)] px-2 py-1">
         <span
-          className="tele-label text-[var(--r-ink-2)]"
+          className="t-label t-upper text-[var(--r-ink-2)]"
           title="Everything currently in scope. This table is never hidden and never narrowed silently — every filter acting on it is a chip in this strip."
         >
           {scopeLabel}
@@ -313,19 +314,19 @@ export function MasterTable<Row extends RowData>({
             onChange={(event) => updateState((state) => ({ ...state, query: event.target.value }))}
             placeholder={searchPlaceholder}
             title="Free-text filter. It reads only the columns that declare themselves searchable, so a match here always points at a visible column."
-            className="tele h-6 w-44 rounded-[var(--radius)] border border-[var(--r-line-2)] bg-transparent px-1.5 outline-none focus:border-[var(--r-line-2)] focus:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
+            className="face-mono t-value h-6 w-44 rounded-[var(--radius)] border border-[var(--r-line-2)] bg-transparent px-1.5 outline-none focus:border-[var(--r-line-2)] focus:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
           />
         )}
         {/* The search box says how much it cut, right where the typing happens. */}
         {resolvedState.query && (
           <span
-            className="tele text-[var(--r-ink-2)]"
+            className="face-mono t-value text-[var(--r-ink-2)]"
             title="How many rows survive the free-text filter, out of every row in scope."
           >
             {visibleRows.length} of {rows.length}
           </span>
         )}
-        {summary && <span className="tele text-[var(--r-ink-2)]">{summary}</span>}
+        {summary && <span className="face-mono t-value text-[var(--r-ink-2)]">{summary}</span>}
 
         {chips.map((chip) => (
           <FilterChip key={chip.label} label={chip.label} onClear={chip.onClear} />
@@ -348,7 +349,7 @@ export function MasterTable<Row extends RowData>({
             type="button"
             onClick={() => updateState((state) => ({ ...state, filters: {} }))}
             title="Drop every column filter at once. Filters owned by the route have their own chips and are left alone."
-            className="tele rounded-[var(--radius)] px-1 text-[var(--r-ink-2)] hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
+            className="t-label rounded-[var(--radius)] px-1 text-[var(--r-ink-2)] hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
           >
             clear column filters
           </button>
@@ -395,7 +396,7 @@ export function MasterTable<Row extends RowData>({
                       colSpan={header.colSpan}
                       rowSpan={header.rowSpan}
                       style={{ top: stickyTop(rowIndex) }}
-                      className="tele-label sticky z-10 whitespace-nowrap border-b border-l border-[var(--r-line)] bg-[var(--r-recess)] px-1.5 py-px text-left font-normal text-[var(--r-ink-2)] [--r-on:var(--r-recess)] first:border-l-0"
+                      className="t-caption t-upper sticky z-10 whitespace-nowrap border-b border-l border-[var(--r-line)] bg-[var(--r-recess)] px-1.5 py-px text-left text-[var(--r-ink-2)] [--r-on:var(--r-recess)] first:border-l-0"
                     >
                       <table.FlexRender header={header} />
                     </th>
@@ -498,11 +499,20 @@ export function MasterTable<Row extends RowData>({
           </tbody>
         </table>
         {visibleRows.length === 0 && (
-          <p className="tele mx-auto max-w-md p-6 text-center text-[11px] text-[var(--r-ink-2)]">
-            {rows.length > 0
-              ? `All ${rows.length} rows in scope are filtered out — clear a chip in the strip above to bring them back.`
-              : (empty ?? "Nothing in scope yet. Widen the scope above to fill the table.")}
-          </p>
+          <div className="mx-auto max-w-md p-6 text-center">
+            {rows.length > 0 ? (
+              <EmptyState
+                story="filter"
+                exit="clear a chip in the strip above to bring them back"
+              >{`all ${rows.length} rows in scope are filtered out`}</EmptyState>
+            ) : (
+              (empty ?? (
+                <EmptyState story="scope" exit="widen the scope above to fill the table">
+                  nothing in scope yet
+                </EmptyState>
+              ))
+            )}
+          </div>
         )}
       </div>
 
@@ -525,10 +535,10 @@ export function MasterTable<Row extends RowData>({
               focused && column?.readState ? column.readState(focused.row.original) : undefined;
             const facts = cellState ? cellFactsText(cellState) : null;
             return (
-              <div className="tele flex h-6 min-w-0 shrink-0 items-center gap-2 overflow-hidden border-t border-[var(--r-line)] bg-[var(--r-recess)] px-2 text-[11px] whitespace-nowrap [--r-on:var(--r-recess)]">
+              <div className="face-mono t-label flex h-6 min-w-0 shrink-0 items-center gap-2 overflow-hidden border-t border-[var(--r-line)] bg-[var(--r-recess)] px-2 whitespace-nowrap [--r-on:var(--r-recess)]">
                 {focused && cellState ? (
                   <>
-                    <span className="tele-label shrink-0 text-[10px] text-[var(--r-ink)]">
+                    <span className="dl-tag shrink-0 text-[var(--r-ink)]">
                       {column?.readWord?.(focused.row.original) ?? cellStateLabel(cellState)}
                     </span>
                     <span className="truncate text-[var(--r-ink-2)]">
@@ -590,7 +600,7 @@ function LeafHeader<Row>({
           type="button"
           onClick={(event) => onSort(event.shiftKey)}
           title="Sort by this column. Clicking again flips the direction; shift-click appends it as a tie-breaker behind the sorts already applied, numbered in the header."
-          className="tele-label block w-full text-left text-[var(--r-ink-2)] hover:text-[var(--r-ink)]"
+          className="t-caption t-upper block w-full text-left text-[var(--r-ink-2)] hover:text-[var(--r-ink)]"
         >
           {column.header ?? column.label}
           {direction && (
@@ -601,7 +611,7 @@ function LeafHeader<Row>({
           )}
         </button>
       ) : (
-        <span className="tele-label block text-[var(--r-ink-2)]">
+        <span className="t-caption t-upper block text-[var(--r-ink-2)]">
           {column.header ?? column.label}
         </span>
       )}
@@ -651,7 +661,7 @@ function ColFilter({
           aria-label={`${label} filter`}
           title="Narrow the table to one value of this column. The choices are every value present across ALL rows, so they stay put as other filters move."
           className={cn(
-            "tele flex h-5 w-full min-w-0 max-w-32 items-center justify-between gap-0.5 rounded-[var(--radius)] border bg-transparent px-1 font-normal outline-none",
+            "face-mono t-caption flex h-5 w-full min-w-0 max-w-32 items-center justify-between gap-0.5 rounded-[var(--radius)] border bg-transparent px-1 font-normal outline-none",
             // An active filter is "lit" — the select fill, never a hue.
             value
               ? "border-[var(--r-line-2)] bg-[var(--r-select)] text-[var(--r-ink)]"
@@ -684,7 +694,7 @@ export function FilterChip({ label, onClear }: { label: string; onClear: () => v
       type="button"
       onClick={onClear}
       title="This filter is narrowing the table right now. Click to drop it and widen the scope back out."
-      className="tele inline-flex items-center gap-1 rounded-[var(--radius)] border border-[var(--r-line-2)] bg-[var(--r-recess)] px-1.5 py-px hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
+      className="face-mono t-caption inline-flex items-center gap-1 rounded-[var(--radius)] border border-[var(--r-line-2)] bg-[var(--r-recess)] px-1.5 py-px hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
     >
       <span className="normal-case">{label}</span>
       <span className="opacity-60">×</span>

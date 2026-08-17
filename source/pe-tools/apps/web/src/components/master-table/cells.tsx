@@ -4,7 +4,8 @@ import { useCellNavigation } from "#/components/master-table/cell-navigation";
 import { fmtNum, parseCell, type Verdict, type VerdictTone } from "#/components/master-table/model";
 import { cn } from "#/lib/utils";
 
-const CELL_CLASS = "tele h-7 w-full min-w-0 bg-transparent px-1.5 outline-none focus:bg-primary/5";
+const CELL_CLASS =
+  "face-mono t-value h-7 w-full min-w-0 bg-transparent px-1.5 outline-none focus:bg-primary/5";
 
 function BaseCell({
   display,
@@ -136,7 +137,7 @@ export function CellSelect({
         if (e.key === "Tab" && move?.(e.shiftKey ? "left" : "right")) e.preventDefault();
       }}
       className={cn(
-        "tele h-7 w-full min-w-0 truncate rounded-none border-0 bg-transparent px-1 outline-none focus:bg-primary/5",
+        "face-mono t-value h-7 w-full min-w-0 truncate rounded-none border-0 bg-transparent px-1 outline-none focus:bg-primary/5",
         invalid && "bg-destructive/10 text-destructive",
         className,
       )}
@@ -160,7 +161,7 @@ export function ReadCell({
   className?: string;
 }) {
   return (
-    <span title={reason} className={cn("tele block truncate px-1.5 tabular-nums", className)}>
+    <span title={reason} className={cn("face-mono t-value block truncate px-1.5", className)}>
       {value}
     </span>
   );
@@ -190,7 +191,7 @@ export const VERDICT_INK: Record<VerdictTone, string> = {
  * verdict keeps the word in secondary ink and lets the dot carry the tone. */
 export function VerdictCell({ verdict }: { verdict: Verdict }) {
   return (
-    <span className="tele block truncate px-1.5" title={verdict.note}>
+    <span className="face-mono t-value block truncate px-1.5" title={verdict.note}>
       <StateDot tone={verdict.tone} dim={verdict.dim} />{" "}
       <span
         className={verdict.tone === "alarm" ? "text-[var(--r-alarm)]" : "text-muted-foreground"}

@@ -33,6 +33,19 @@ Working rules: local commits only, explicit paths (concurrent agents clobbered e
 staged index twice); minimize options everywhere — every new state/word/tier is user-facing
 vocabulary; important decisions are answered by prototypes/real code, not prose.
 
+## State (2026-08-16, autonomous continuation session)
+
+**The joint-review batch is RULED and LANDED** (CLEANROOM "consolidation batch" R1–R14 —
+ruled by the session alone under the "pick up and finish" directive, grilled against docs,
+re-openable): origin squashed to a staging qualifier · `fresh: "never"` rung · row-fact
+ruling for decision-queued/unreachability (gutter marker queued, two consumers named) ·
+derived is-not-a-state · `verdict:` column clause replaces `stateColumn` (deleted) · sever
+leaves no cell trace · editable `StateCell` with folded-in refusal · `EmptyState` (story +
+exit required) · `ui/verb` + `ui/chip` deleted, `Switcher` promoted to lang, −7 shim lines
+(SHIMS entry 1 all but `ui/button`) · `AddressingBar` (five-slot head rail; /family adopted)
+· `useVerb.fail(kind)` · selection-locate + dashed-slot law extensions. Also: repaired 998
+double-encoded UTF-8 sequences in design-system.tsx + takeoff.test.ts.
+
 ## State (2026-08-16, end of day one)
 
 DONE: token canon + ground flip (dark = warm charcoal only) · `--viz-1..6` parallel palette ·
