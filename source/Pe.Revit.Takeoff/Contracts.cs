@@ -248,6 +248,11 @@ public sealed class TakeoffResult
     public List<string> LevelFlags = new();
     public string? SeedViewA, SeedViewB;    // names of the stripped seed views (until cleanup)
     public string? EvidenceView;            // rainbow view name (after Annotate)
+    // True once TakeoffPromotion has closed this result: every surviving ROOM is accepted (held
+    // rooms were moved to Rejected residues) and ToTsv persists that disposition as an explicit
+    // ROOM column instead of leaving it as a convention readers must know. Raw detector output
+    // stays false — its rooms have no disposition yet, and its TSV honestly omits the column.
+    public bool DispositionsResolved;
 
     // Tab-separated payload; F6 precision is load-bearing — rounding flips geometric tie-breaks and
     // changes room counts. Never serialize detection geometry at display precision.
@@ -261,9 +266,15 @@ public sealed class TakeoffResult
         sb.AppendLine($"META\trooms\t{this.Rooms.Count}\nMETA\ttotalSqft\t{this.TotalSqft.ToString("F1", ic)}");
         if (this.ProfileProvenance != null) sb.AppendLine($"META\tprofile\t{this.ProfileProvenance}");
         foreach (string flag in this.LevelFlags) sb.AppendLine($"META\tflag\t{flag}");
+        // Disposition column (SHIMS.md #3 close): a promoted TSV says "accepted" on every ROOM
+        // line outright. Held rooms are the Rejected residues below — that mapping is the
+        // persisted contract (ZonePromotionDiagnostics counts HeldRooms exactly that way), not a
+        // renderer convention. A 7-column ROOM line means the package predates the column or is
+        // raw detector output: disposition unknown, and readers must not assume accepted.
+        string disposition = this.DispositionsResolved ? "\taccepted" : "";
         foreach (var r in this.Rooms)
         {
-            sb.AppendLine($"ROOM\t{r.Id}\t{r.RawSqft.ToString("F1", ic)}\t{r.PerimeterFt.ToString("F1", ic)}\t{r.LabelX.ToString("F6", ic)}\t{r.LabelY.ToString("F6", ic)}\t{r.MeanCeilingFt.ToString("F2", ic)}");
+            sb.AppendLine($"ROOM\t{r.Id}\t{r.RawSqft.ToString("F1", ic)}\t{r.PerimeterFt.ToString("F1", ic)}\t{r.LabelX.ToString("F6", ic)}\t{r.LabelY.ToString("F6", ic)}\t{r.MeanCeilingFt.ToString("F2", ic)}{disposition}");
             sb.AppendLine($"POLY\t{r.Id}\touter\t{PolyStr(r.Polygon)}");
             foreach (var h in r.Holes) sb.AppendLine($"POLY\t{r.Id}\thole\t{PolyStr(h)}");
         }

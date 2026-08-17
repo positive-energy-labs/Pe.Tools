@@ -17,6 +17,9 @@ public sealed record TakeoffRoomShape(
     public double[] Label { get; init; } = Array.Empty<double>();
     public string? SplitFrom { get; set; }
     public string? MergedFrom { get; set; }
+    /// <summary>Persisted disposition ("accepted"); null on 7-column ROOM lines — packages that
+    /// predate the column or raw detector TSVs. Null means UNKNOWN, never accepted.</summary>
+    public string? Disposition { get; init; }
 }
 
 public sealed record TakeoffResidueShape(
@@ -80,7 +83,12 @@ public static class TakeoffTsv
                         ApplyProvenance(parts[2], byId, (room, value) => room.MergedFrom = value);
                     // totalSqft and other META fields are display metadata; ignored.
                     break;
-                case "ROOM" when parts.Length == 7:
+                case "ROOM" when parts.Length is 7 or 8:
+                    // Column 8 (optional) is the persisted disposition (SHIMS.md #3). Its absence
+                    // means unknown — a reader that assumes accepted is inventing information.
+                    string? disposition = parts.Length == 8 ? parts[7] : null;
+                    if (disposition is not (null or "accepted" or "held"))
+                        throw Malformed(lineIndex, $"unknown room disposition '{disposition}'");
                     var room = new TakeoffRoomShape(
                         parts[1],
                         Parse(parts[2], lineIndex),
@@ -88,7 +96,10 @@ public static class TakeoffTsv
                         Parse(parts[6], lineIndex),
                         new List<double[]>(),
                         new List<List<double[]>>()
-                    ) { Label = new[] { Parse(parts[4], lineIndex), Parse(parts[5], lineIndex) } };
+                    ) {
+                        Label = new[] { Parse(parts[4], lineIndex), Parse(parts[5], lineIndex) },
+                        Disposition = disposition,
+                    };
                     rooms.Add(room);
                     byId.Add(room.Id, room);
                     break;

@@ -1461,6 +1461,9 @@ public static class TakeoffPromotion
             throw new InvalidOperationException(
                 $"zone promotion violated a binding law: strict={strict} contained={contained} " +
                 $"closure={closureError:F9}sf");
+        // The disposition is settled: surviving rooms are accepted, Rejected residues are the held
+        // rooms. Marking the result makes ToTsv persist that fact as a ROOM column (SHIMS.md #3).
+        result.DispositionsResolved = true;
         var diagnostics = new ZonePromotionDiagnostics(
             state.Source.Rooms.Count,
             state.SharedNetworkStrictRooms,
