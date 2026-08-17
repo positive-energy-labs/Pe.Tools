@@ -1,0 +1,96 @@
+# Room-solve tuning rounds — standing brief
+
+Living doc for the 2026-08 tuning orchestration (worktree `room-solve-tuning`). Every experiment
+agent reads this first. Orchestrator: the session's Fable. Verdict authority: kaitpw, via TASTE.md.
+
+## Mission (kaitpw-locked, 2026-08-16)
+
+Raise **accepted coverage** by making more geometry good enough to pass the existing honesty
+gates — **never by loosening the gates**. A change that gains rooms while dropping board
+edge-on-ink is a regression by definition. Second-order: residual held geometry should get less
+horrendous (held FRs are designer-visible), never at the cost of accepted coverage.
+
+Baseline fact that frames everything: accepted recall 0.284 but **held-recall 0.578** — the solver
+already finds most rooms; the work is converting held→accepted honestly.
+
+## Currency
+
+`eval/rhvac/score-looks-good.py` (v1, commit 39d8352). Board **savedWork** is the number to beat;
+per-zone recall / edgeOnInk / swallowed-wall-sf / edit-cost carry the gradient. Oracle boundary
+distance is diagnostic-only, confidence=high only, and near-meaningless on Lower Level
+(registration UNTRUSTED — median 1.95 ft chamfer; Main/Upper drifted, Attic registered).
+Conservation gates in the test suite stay the only gates.
+
+```
+dotnet test source/Pe.Takeoff.Tests -c Debug          # writes .artifacts/takeoff-zone-promotion/report.json
+python eval/rhvac/score-looks-good.py score  .artifacts/takeoff-zone-promotion/report.json
+python eval/rhvac/score-looks-good.py compare <baseline-report.json> <candidate-report.json>
+```
+
+Knob overrides without recompiling: `PE_TAKEOFF_KNOBS="Name=Value;Name=Value"` (exact field names
+from `TakeoffOptions`, Contracts.cs). `PE_TAKEOFF_ZONE=<name>` filters to one zone. Every override
+lands in `optionsHash`, so artifacts can't be misattributed.
+
+Trap: persisted `ink_*.bin` are stale vs replay seed ink (Attic −45%). score-looks-good.py reads
+seed ink from `replay_*.bin` directly; do not score against `ink_*.bin`.
+
+## Report-card zones
+
+LL06, LL08 (ink starvation; LL08 backing is ~all door-head evidence), ML05, ML09 (diagonal wing),
+Attic 00 / Attic 01 (same level, opposite sealing needs), Main 10 + 2–3 boring orthogonal canaries.
+Success = better on every regime, no regime sacrificed.
+
+## Sacred (adversarial waves included)
+
+- The five conservation gates (closure, containment, identity, edit preservation, no vacuous pass).
+- Zone clip+snap authority law; "proposals live nowhere"; the stage array stays a flat list.
+- DECISIONS.md tombstones: reopenable ONLY with new evidence (post-recapture ink counts as new
+  evidence — several tombstones were sealed on framing-polluted ink); record the reopening.
+
+## Round protocol
+
+1. Experiments run as fresh Fable agents (low/med), one hypothesis each, in isolated agent
+   worktrees (seeded from last commit — orchestrator checkpoints before fan-out).
+2. Every experiment reports: knobs/code changed, board+report-card score table vs baseline,
+   rejection-histogram shifts, and an honest "what would falsify this" line.
+3. Adopted change = one checkpoint commit + DECISIONS.md entry. Falsified = DECISIONS.md tombstone.
+4. Adversarial waves interleave: prune knobs, merge stages, delete dead levers; board score must
+   not regress; sacred list above.
+5. kaitpw summoned only on: board savedWork ±10%, report-card regime flip, or subtle-unmeasured
+   win needing a verdict (which then becomes a metric). A/B image bundles via
+   compare-zone-runs.py; verdicts recorded in TASTE.md (zone, images, pick, kaitpw's words).
+   A proxy that disagrees with a recorded verdict is wrong by fiat.
+
+## Hypothesis backlog (seeded from DECISIONS deferred items + baseline)
+
+- **H0 (analysis-first, highest value)**: mine fresh-baseline RejectionDetails magnitudes — which
+  gate owns the held-vs-accepted recall gap (0.578→0.284), per zone. Output: ranked lever list
+  with the tolerance each rejection says it needed.
+- **H1**: wall-run sealer is angle-blind (diagonal scans bridge 6.4 ft where 4.5 declared;
+  95% of ML05's run plugs are diagonal-scan-owned). Re-tune on framing-filtered (post-recapture)
+  ink. ML05's four `frame:BoundaryDrift` holds (4.0–6.4 ft) are the expected converts.
+- **H2**: `FrameMaxSourceDropFt` — old sweep said only ≥7.8 ft buys anything (one clean 547 sf
+  LL08 room); re-sweep against savedWork instead of counts.
+- **H3**: door-head levers on Lower (LL08 edge-on-ink 0.094 ink-only vs 0.732 with seals — the
+  zone lives on door-head evidence; DoorGapMaxFt=6.75 is tombstoned, door-head-specific paths are
+  not).
+- **H4**: interior-ink-containment as a shape defect signal (ML09 26.7 sf, Attic 01 48.2 sf,
+  Main 10 21.2 sf swallowed) — does penalizing swallow in partition/recombination move savedWork?
+- **H5**: per-zone adaptive rules keyed on ink-ratio — re-measure attic ratios post-recapture
+  first (pre-recapture ratios were framing-noise-inflated; AdaptivePolicy tombstone says the
+  inkRatio signal itself is real).
+
+## Adversarial backlog
+
+- Knob census: ~70 public TakeoffOptions fields; kill the dead, merge the correlated.
+- The stale `ink_*.bin` lane: fix the persistence or delete the lane (one truth for evidence ink).
+- Stage mutual-exclusivity audit: zone-fit vs editability vs ink-backing overlap; Main 10 has
+  0 oracle rooms in-zone (zone def or oracle floor-mapping oddity — cheap to resolve).
+- report.json is test-harness-owned; product-side emitter is a known gap (do not build during
+  tuning; note only).
+
+## TASTE.md
+
+Worktree-root ledger of kaitpw verdicts. Append-only. Entry: date, zones, image paths, pick,
+kaitpw's words verbatim, metric agreement (did savedWork rank the same way — if not, the metric
+owes a recalibration entry).
