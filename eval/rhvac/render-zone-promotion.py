@@ -17,10 +17,12 @@ import overlay
 #             near-black, never denoised, never painted over. If the input is noisy (attic
 #             framing lattice), showing that noise is the point.
 #   ADDED     obstruction the sealers invented — screened (checkerboard), never solid, so
-#             synthetic cells cannot be mistaken for drawn walls. SEAL is the door-head +
-#             wall-run closure as persisted (seals_*.bin merges the two classes; the per-zone
-#             door/run sf split in the subtitle is the C# truth). CLOSE is the stud-gap
-#             morphological close, muted because it rims every wall by construction.
+#             synthetic cells cannot be mistaken for drawn walls. When the INKC sidecar
+#             (classes_<token>.bin, derived from the zone's Seals path) is present the seal
+#             layer splits honestly: SEAL_DOOR is door-head (+ oversize fringe) closure,
+#             SEAL_RUN is the heuristic wall-run gap sealer. Older artifacts fall back to
+#             the merged seals_*.bin drawn as one SEAL_DOOR-colored layer. CLOSE is the
+#             stud-gap morphological close, muted because it rims every wall by construction.
 #   DECIDED   accepted / held / void rooms — crisp outlines over pale solid fills that sit
 #             UNDER the evidence, so a decision can never obscure the ink it was made on.
 #   REFERENCE the zone boundary.
@@ -31,7 +33,8 @@ HELD_FILL = (250, 238, 217)
 VOID = (145, 145, 145)
 VOID_FILL = (236, 236, 236)
 INK = (25, 25, 25)
-SEAL = (222, 58, 20)
+SEAL_DOOR = (222, 58, 20)      # door-head (+ oversize fringe) closure; also merged-bin fallback
+SEAL_RUN = (235, 130, 20)      # heuristic wall-run gap sealer (never backs a boundary)
 CLOSE = (200, 165, 130)
 ZONE = (112, 44, 138)
 TRIAGE = (183, 46, 46)
@@ -175,7 +178,26 @@ def render_zone(root, zone, output, padding_cells=12, scale=2):
             return None
         return despeckle(unpack_mask(seal_bits, width, height), cell)
 
-    seal_mask = closure_mask("Seals")
+    # Per-cell seal attribution (INKC sidecar, derived from the Seals path — no report field).
+    # When present, door-head and wall-run closure draw as separate layers; when absent (older
+    # artifacts), the merged seals bin draws as one layer in the door color.
+    def class_masks():
+        relative = zone.get("Seals")
+        if not relative:
+            return None
+        seal_path = root / relative
+        classes_path = seal_path.parent / seal_path.name.replace("seals_", "classes_")
+        if not classes_path.exists():
+            return None
+        class_width, class_height, *_, data = overlay.load_classes(classes_path)
+        if (class_width, class_height) != (width, height):
+            return None
+        grid = np.frombuffer(data, dtype=np.uint8).reshape(height, width)
+        return (despeckle(np.isin(grid, (2, 4)), cell),   # door-head + oversize fringe
+                despeckle(grid == 3, cell))               # wall-run gap
+
+    split = class_masks()
+    door_mask, run_mask = split if split is not None else (closure_mask("Seals"), None)
     close_mask = closure_mask("Close")
     x0 = max(0, math.floor((zone["MinX"] - min_x) / cell) - padding_cells)
     x1 = min(width, math.ceil((zone["MaxX"] - min_x) / cell) + padding_cells)
@@ -226,8 +248,10 @@ def render_zone(root, zone, output, padding_cells=12, scale=2):
 
     if close_mask is not None:
         paint(close_mask, CLOSE, screened=True)
-    if seal_mask is not None:
-        paint(seal_mask, SEAL, screened=True)
+    if run_mask is not None:
+        paint(run_mask, SEAL_RUN, screened=True)
+    if door_mask is not None:
+        paint(door_mask, SEAL_DOOR, screened=True)
     paint(ink_mask, INK, screened=False)
     image = Image.fromarray(pixels)
 
@@ -302,7 +326,8 @@ def render_zone(root, zone, output, padding_cells=12, scale=2):
 
 LEGEND_ROWS = (
     ((INK, "solid", "received ink"),
-     (SEAL, "screen", "added: door/run seal"),
+     (SEAL_DOOR, "screen", "added: door-head seal"),
+     (SEAL_RUN, "screen", "added: wall-run seal"),
      (CLOSE, "screen", "added: gap-close")),
     ((ACCEPTED, "outline", "accepted"),
      (HELD, "outline", "held"),

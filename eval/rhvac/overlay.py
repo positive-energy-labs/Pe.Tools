@@ -44,6 +44,20 @@ def load_ink(path):
     return w, h, minx, miny, cell, bits
 
 
+def load_classes(path):
+    """Per-cell seal-class raster (INKC): INKP's header, but a raw byte-per-cell payload.
+    Classes (Detector.Seal* in Pe.Revit.Takeoff/Detector.cs): 0 none, 1 gap-close,
+    2 door-head, 3 wall-run, 4 door-head-oversize. Written as classes_<token>.bin next to
+    the merged seals_<token>.bin, which cannot attribute door vs run per cell."""
+    with open(path, "rb") as f:
+        magic, w, h = struct.unpack("<Iii", f.read(12))
+        if magic != 0x434B4E49:
+            raise ValueError(f"{path}: not an INKC class raster")
+        minx, miny, cell = struct.unpack("<ddd", f.read(24))
+        data = f.read(w * h)
+    return w, h, minx, miny, cell, data
+
+
 def load_replay_seed_ink(path):
     """Seed ink straight from a gzipped DetectSnapshot (replay_*.bin), in load_ink's
     return shape. The separately persisted ink_*.bin can be STALE relative to the replay

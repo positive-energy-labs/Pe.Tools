@@ -313,6 +313,14 @@ public sealed class ZoneBoundedDetectTests
                 snap.Field.MinX, snap.Field.MinY, snap.Field.CellFt, doorClosure);
             InkSupport.Save(closeBin, snap.Field.W, snap.Field.H,
                 snap.Field.MinX, snap.Field.MinY, snap.Field.CellFt, gapClose);
+            // The merged seals bin is lossy (door-head + oversize + wall-run collapse to one bit);
+            // the INKC sidecar keeps per-cell attribution so review can split door/run honestly.
+            // No report field: readers derive classes_<token>.bin from the zone's Seals path, so
+            // the report schema (and older artifacts) stay valid.
+            InkSupport.SaveClasses(
+                Path.Combine(artifactDir, "input", $"classes_{token}.bin"),
+                snap.Field.W, snap.Field.H,
+                snap.Field.MinX, snap.Field.MinY, snap.Field.CellFt, sealClasses);
             double cellSqft = snap.Field.CellFt * snap.Field.CellFt;
             TestContext.Out.WriteLine($"{view}: profile {profile.Provenance}");
             TestContext.Out.WriteLine(

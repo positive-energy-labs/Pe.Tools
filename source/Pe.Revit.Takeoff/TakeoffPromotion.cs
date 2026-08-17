@@ -495,20 +495,13 @@ public static class TakeoffPromotion
                     dropped = parts.Skip(1).ToList();
                     didClip = true;
                 }
-                if ((didSnap || didClip) && state.Options.ZoneClipSquareFt > 0)
+                if ((didSnap || didClip) && state.Options.ZoneClipSquareFt > 0
+                    && RepairFitArtifacts(fitted, state.ZoneGeometry, neighbors,
+                        state.Options.ZoneClipSquareFt, didClip) is { } repair)
                 {
-                    var trace = new List<string>();
-                    if (RepairFitArtifacts(fitted, state.ZoneGeometry, neighbors,
-                            state.Options.ZoneClipSquareFt, didClip, trace.Add) is { } repair)
-                    {
-                        fitted = repair.Polygon;
-                        didSquare = repair.Squared;
-                        didDissolve = repair.Dissolved;
-                    }
-                    // Only an engaged repair is worth a diagnostic row; a clean gate is silence.
-                    if (trace.Any(entry => entry.Contains("gate:open")))
-                        state.RejectionDetails[$"zfrepair/{room.Id}~snap{(withSnap ? 1 : 0)}"] =
-                            string.Join(" ", trace);
+                    fitted = repair.Polygon;
+                    didSquare = repair.Squared;
+                    didDissolve = repair.Dissolved;
                 }
                 return didSnap || didClip
                     ? (fitted, dropped, didSnap, didClip, didSquare, didDissolve)
@@ -716,7 +709,7 @@ public static class TakeoffPromotion
     /// not grow past the polygon that entered, and the unmodified admission test in Fits stays
     /// the only judge — a repair that still fails falls back exactly as before.
     /// </summary>
-    private static (Polygon Polygon, bool Squared, bool Dissolved)? RepairFitArtifacts(
+    internal static (Polygon Polygon, bool Squared, bool Dissolved)? RepairFitArtifacts(
         Polygon fitted, Geometry zone, List<(string Id, Polygon Geometry)> neighbors,
         double maxDisplacementFt, bool clipped, Action<string>? trace = null)
     {
@@ -927,13 +920,13 @@ public static class TakeoffPromotion
     /// pays the same price against the chain it replaces. Containment and neighbor overlap may
     /// not grow, reversals are refused, and the unmodified admission test stays the only judge.
     /// </summary>
-    private static Polygon? SquareDebrisRuns(
+    internal static Polygon? SquareDebrisRuns(
         Polygon fitted, Geometry zone, List<(string Id, Polygon Geometry)> neighbors,
         double maxDisplacementFt, double allowedOutside, double allowedOverlap,
         Action<string>? trace = null)
     {
-        const double angleTolerance = 0.25 * Math.PI / 180;
-        const double anchorMinFt = 2.0;
+        const double angleTolerance = TakeoffEditability.AngleTolerance;
+        const double anchorMinFt = TakeoffEditability.FrameAnchorMinFt;
         const int maxRepairs = 16;
         var current = fitted;
         bool changed = false;
@@ -1223,15 +1216,15 @@ public static class TakeoffPromotion
     /// audit, containment, neighbor-overlap, and shared-edge laws all re-judge the squared
     /// polygon, and a repair that still fails falls back exactly as an unrepaired one would.
     /// </summary>
-    private static Polygon? SquareFitArtifacts(
+    internal static Polygon? SquareFitArtifacts(
         Polygon fitted, Geometry zone, List<(string Id, Polygon Geometry)> neighbors,
         double maxDisplacementFt)
     {
         // The audit's own frame tolerance: an edge this close to its neighbour's axis (mod 90) is
-        // already lawful and must not be touched. The anchor floor mirrors the audit's
-        // FrameAnchorMinFt: only an edge long enough to speak for the frame may define the axis.
-        const double angleTolerance = 0.25 * Math.PI / 180;
-        const double anchorMinFt = 2.0;
+        // already lawful and must not be touched. The anchor floor is the audit's own: only an
+        // edge long enough to speak for the frame may define the axis.
+        const double angleTolerance = TakeoffEditability.AngleTolerance;
+        const double anchorMinFt = TakeoffEditability.FrameAnchorMinFt;
         const int maxRepairs = 16;
         double allowedOutside = PolygonDifference(fitted, zone).Area + Epsilon;
         double allowedOverlap = neighbors

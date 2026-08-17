@@ -7,6 +7,14 @@ internal static class InkSupport
 {
     private const uint Magic = 0x504B4E49; // "INKP"
 
+    // Class-raster variant ("INKC"): identical header (w, h, minX, minY, cellFt), but the payload
+    // is one raw byte per cell instead of a bit-pack, carrying the Detector.Seal* class of each
+    // sealed cell (0 = none). A bit-pack cannot express five classes, and the distinct magic keeps
+    // INKP readers from misparsing the byte payload as bits. Written next to seals_*.bin as
+    // classes_*.bin so per-cell door-head vs wall-run attribution survives downstream (the merged
+    // seals bin is lossy; validated recompute drifts up to ~72 sf/zone).
+    private const uint ClassesMagic = 0x434B4E49; // "INKC"
+
     /// <summary>
     /// Writes a boolean raster in the INKP layout. Deterministic byte-for-byte: the header is the
     /// caller's grid and the payload is a pure bit-pack, so a rerun of the same inputs rewrites the
@@ -22,6 +30,34 @@ internal static class InkSupport
         for (int i = 0; i < w * h; i++)
             if (ink[i]) bits[i >> 3] |= (byte)(1 << (i & 7));
         writer.Write(bits);
+    }
+
+    /// <summary>
+    /// Writes a per-cell class raster in the INKC layout (see <see cref="ClassesMagic"/>).
+    /// Deterministic byte-for-byte like <see cref="Save"/>: header is the caller's grid, payload
+    /// is the class array verbatim.
+    /// </summary>
+    internal static void SaveClasses(
+        string path, int w, int h, double minX, double minY, double cellFt, byte[] classes)
+    {
+        using var writer = new BinaryWriter(File.Create(path));
+        writer.Write(ClassesMagic);
+        writer.Write(w); writer.Write(h);
+        writer.Write(minX); writer.Write(minY); writer.Write(cellFt);
+        writer.Write(classes, 0, w * h);
+    }
+
+    /// <summary>Reads an INKC class raster, or null if the file is absent (older artifacts).</summary>
+    internal static (int W, int H, double MinX, double MinY, double CellFt, byte[] Classes)?
+        LoadClasses(string path)
+    {
+        if (!File.Exists(path)) return null;
+        using var reader = new BinaryReader(File.OpenRead(path));
+        if (reader.ReadUInt32() != ClassesMagic)
+            throw new InvalidOperationException($"{path} is not an ink class raster");
+        int w = reader.ReadInt32(), h = reader.ReadInt32();
+        double minX = reader.ReadDouble(), minY = reader.ReadDouble(), cellFt = reader.ReadDouble();
+        return (w, h, minX, minY, cellFt, reader.ReadBytes(w * h));
     }
 
     // Returns an oracle answering "is any raw ink within radiusFt of (x, y)", or null if the file

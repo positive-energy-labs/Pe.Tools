@@ -53,8 +53,11 @@ public sealed record LevelEditabilityAudit(
 /// </summary>
 public static class TakeoffEditability
 {
-    private const double AngleTolerance = 0.25 * Math.PI / 180;
-    private const double FrameAnchorMinFt = 2;
+    // The audit's frame tolerance and anchor floor are the one home for these two numbers: the
+    // zone-fit repair composite (SquareFitArtifacts / SquareDebrisRuns) references them so a
+    // repair can never judge "on frame" or "anchor" differently than the audit that re-judges it.
+    internal const double AngleTolerance = 0.25 * Math.PI / 180;
+    internal const double FrameAnchorMinFt = 2;
     private const double FrameMinSupport = 0.80;
     private const double AcuteAngle = 75 * Math.PI / 180;
     private const double MicroEdgeMaxFt = 1;
