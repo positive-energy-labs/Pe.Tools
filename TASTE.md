@@ -49,3 +49,20 @@ Images: `.artifacts/ab-round2/` (Attic01, UL02, UL03) and `.artifacts/ab-r2b/` (
   others." and "consider that zone edges often clip walls, we can ignore padding of pixels
   along a zone edge, maybe treat that as the new zone bounds for the solver (UL02 shows this
   problem on left side)".
+
+## 2026-08-17 — Wave-1 verdict: parallel-on-ink unification (exp/parallel-on-ink a5cbbde)
+
+Zone: UL02 (Upper Level#02), A=20260817-160730 (baseline) vs B=20260817-161910 (unify 0.5).
+Images: kaitpw's own flagged export
+`proto-runs-feedback/.artifacts/takeoff-runs/_exports/20260817-125136/01-upper-level-02.png`
+(flags: R08, R06, R04, R05 — made through the /runs feedback tray, first live use).
+Pick: **direction adopted, coverage insufficient — iterate, not tombstone.**
+
+kaitpw verbatim: "r05 is the only room that seems to have any change. in general the absorption
+of the wall doesn't seem to have worked. all the biggest offenders, r08, 06, and 04, still have
+room edges parallel to the zone boundary that overlap with the wall underneath. The other
+improvement on ML15 looks good thought. that closing of the gap is exactly what i wanted."
+
+Metric agreement: board savedWork was flat (+0.0001) and blind to both the win and the miss —
+the promised "remaining double-line pairs" diagnostic is now owed BEFORE the coverage iteration
+lands, so the next A/B prices exactly what this verdict judged by eye.
