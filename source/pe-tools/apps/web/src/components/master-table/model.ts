@@ -53,7 +53,7 @@ export type VerdictTone = "alarm" | "caution" | "done" | "ink" | "mute";
 /** A row-level pipeline verdict — what the plan/receipts/pipeline says about the ROW. */
 export interface Verdict {
   /** The route's own word — `applied`, `synced`, `needs a call`. Domain vocabulary is the
-   * point: a pipeline verdict is not a value state and never lies in the grammar's seven. */
+   * point: a pipeline verdict is not a value state and never lies in the grammar's eight. */
   word: string;
   tone: VerdictTone;
   /** The cell title — say what the verdict MEANS, not what it is called. */
@@ -73,8 +73,9 @@ export interface StateColumn<Row> extends ColumnBase<Row> {
   state: (row: Row) => StateCellProps;
   /**
    * Domain vocabulary override (ruled 2026-08-16, takeoffs finding #1): the word the filter,
-   * facet and readout speak for this row, when the grammar's seven universal words would lie —
-   * "clean" where the domain means "no Manual J entered". The MARKS stay universal; only the
+   * facet and readout speak for this row, when the grammar's eight universal words (the
+   * `CELL_STATE_ORDER` vocabulary, `never` included) would lie — "clean" where the domain means
+   * "no Manual J entered". The MARKS stay universal; only the
    * word is the route's. Omit it unless the universal word is actually wrong: every override
    * is one more vocabulary for the user to learn. (Row-level PIPELINE verdicts do not belong
    * here at all — they ride the `verdict:` clause below.)
@@ -141,18 +142,7 @@ export function facetOptions<Row>(
   return [...set].sort().map((v) => ({ value: v, label: v }));
 }
 
-/** Round for display without float noise: 22.200000762 -> "22.2", 599.99994 -> "600". */
-export function fmtNum(value: number, digits = 2): string {
-  return String(Number(value.toFixed(digits)));
-}
-
-/** Parse an edited number cell. Returns null when the text is not a number (commit is refused). */
-export function parseCell(
-  text: string,
-  opts: { integer?: boolean; min?: number } = {},
-): number | null {
-  if (text.trim() === "") return null; // blank is not zero — an emptied cell commits nothing
-  const parsed = opts.integer ? Number.parseInt(text, 10) : Number(text);
-  if (Number.isNaN(parsed)) return null;
-  return opts.min !== undefined && parsed < opts.min ? opts.min : parsed;
-}
+/** The numeric-cell semantics moved into the language with the editor (fit reviews 2026-08-16,
+ * #2 — `StateCell.numeric` is the one commit path now). Re-exported so table consumers keep
+ * their import site. */
+export { fmtNum, parseCell } from "#/components/lang/cell";

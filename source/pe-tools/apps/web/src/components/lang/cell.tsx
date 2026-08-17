@@ -98,9 +98,41 @@ export interface StateCellProps {
    * `scale="row"` and a string `value`; `cap` other than editable wins and renders locked.
    */
   onCommit?: (text: string) => string | void;
+  /**
+   * NUMERIC COMMIT (ruled 2026-08-16, fit reviews #2 — §3's named silent-swallow defect, killed
+   * here): present ⇒ the commit path parses per `parseCell` before `onCommit` sees anything. A
+   * refused parse (blank, not a number) RETURNS a reason, so the built-in refusal note fires —
+   * never a silent restore. Integers truncate, `min` clamps, and `onCommit` receives the
+   * normalized text (`fmtNum`, `digits`).
+   */
+  numeric?: { integer?: boolean; min?: number; digits?: number };
+  /** Placeholder for the editable value slot — e.g. an inherited value the cell would take. */
+  placeholder?: string;
+  /**
+   * Locate what this cell describes (ruled 2026-08-16, fit reviews — families #14): a click on
+   * the cell BODY when not editing. The marks stay non-focusable and an editable cell's clicks
+   * belong to the caret — the input swallows them — so locate never contends with editing.
+   */
+  onLocate?: () => void;
   /** Cell-to-cell navigation hook (Enter/Tab/arrows). Return true when the move was taken. */
   onNavigate?: (dir: "up" | "down" | "left" | "right") => boolean;
   className?: string;
+}
+
+/** Round for display without float noise: 22.200000762 -> "22.2", 599.99994 -> "600". */
+export function fmtNum(value: number, digits = 2): string {
+  return String(Number(value.toFixed(digits)));
+}
+
+/** Parse an edited number cell. Returns null when the text is not a number (commit is refused). */
+export function parseCell(
+  text: string,
+  opts: { integer?: boolean; min?: number } = {},
+): number | null {
+  if (text.trim() === "") return null; // blank is not zero — an emptied cell commits nothing
+  const parsed = opts.integer ? Number.parseInt(text, 10) : Number(text);
+  if (Number.isNaN(parsed)) return null;
+  return opts.min !== undefined && parsed < opts.min ? opts.min : parsed;
 }
 
 interface CellRead {
@@ -195,30 +227,55 @@ export function StateCell(props: StateCellProps) {
   const { value, modelValue, capReason, grounding, confidence, note, className } = props;
   const read = readCell(props);
   // Refusal machinery lives here so hooks run unconditionally; it only ever fires on an
-  // editable row-scale cell. `nonce` re-keys the input so a refused edit visibly restores.
+  // editable row-scale cell. A refused edit restores the input's value IMPERATIVELY (the same
+  // move Escape makes) rather than re-keying it, so the DOM node — and anything holding a
+  // reference to it — survives the refusal.
   const [refusal, setRefusal] = useState<string | null>(null);
-  const [nonce, setNonce] = useState(0);
   const initial = useRef(typeof value === "string" ? value : "");
   initial.current = typeof value === "string" ? value : "";
 
   const editable = props.onCommit != null && read.body !== "locked" && typeof value === "string";
+  // Locate is a click on the cell BODY when not editing; an editable cell's input swallows its
+  // own clicks (the caret owns them), so the handler can sit on the wrapper unconditionally.
+  const locate =
+    props.onLocate != null
+      ? (event: React.MouseEvent) => {
+          if ((event.target as HTMLElement).closest("input,button") != null) return;
+          props.onLocate?.();
+        }
+      : undefined;
 
   if (props.scale === "row") {
     const commit = (el: HTMLInputElement) => {
       const text = el.value;
       if (text === initial.current) return;
-      const refused = props.onCommit?.(text);
+      let out = text;
+      if (props.numeric != null) {
+        const parsed = parseCell(text, props.numeric);
+        if (parsed === null) {
+          el.value = initial.current; // restore the prior value, visibly
+          setRefusal(
+            text.trim() === ""
+              ? "blank commits nothing — a cleared cell is not zero"
+              : `"${text}" is not a number — nothing committed`,
+          );
+          return;
+        }
+        out = fmtNum(parsed, props.numeric.digits);
+      }
+      const refused = props.onCommit?.(out);
       if (typeof refused === "string") {
+        el.value = initial.current; // restore the prior value, visibly
         setRefusal(refused);
-        setNonce((n) => n + 1); // restore the prior value, visibly
       } else if (refusal != null) {
         setRefusal(null);
       }
     };
     return (
       <span
-        className={cn("dl-cell", className)}
+        className={cn("dl-cell", locate != null && "cursor-pointer", className)}
         data-scale="row"
+        onClick={locate}
         data-body={read.body ?? undefined}
         data-seam={read.seam ? "" : undefined}
         data-never={read.never ? "" : undefined}
@@ -227,8 +284,10 @@ export function StateCell(props: StateCellProps) {
       >
         {editable ? (
           <input
-            key={`${value}·${nonce}`}
+            key={value as string}
             defaultValue={value as string}
+            placeholder={props.placeholder}
+            inputMode={props.numeric != null ? "decimal" : undefined}
             tabIndex={-1}
             className={cn("dl-cell-input", read.unsettled != null && "dl-sq")}
             data-state={read.unsettled ?? undefined}
@@ -288,7 +347,7 @@ export function StateCell(props: StateCellProps) {
     );
 
   return (
-    <span className={cn(className)}>
+    <span className={cn(locate != null && "cursor-pointer", className)} onClick={locate}>
       <span className="dl-cell-line">
         <span
           className="dl-cell"

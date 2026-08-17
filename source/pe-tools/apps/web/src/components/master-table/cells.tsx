@@ -1,60 +1,18 @@
-import { useRef } from "react";
-
+/**
+ * MASTER-TABLE CELL RENDERERS — thin wrappers over the language, not a second editor.
+ *
+ * RULED 2026-08-16 (fit reviews, #2 — "the editable cell fractured into parallel editors"):
+ * `BaseCell` was a parallel implementation of `StateCell`'s keyboard/commit contract, and it
+ * silently swallowed refused numeric commits (§3's named defect, in canon). It is deleted.
+ * `TextCell`/`NumberCell` now RENDER `StateCell` at row scale — one editor, one refusal
+ * mechanism (the visible dismissible note), one focus treatment (the inset hairline, per the
+ * focus law). `CellSelect` is the one forced wrapper: a `<select>` cannot be an input, so it
+ * keeps its own element and routes its refusal through the alarm mixes instead.
+ */
 import { useCellNavigation } from "#/components/master-table/cell-navigation";
-import { fmtNum, parseCell, type Verdict, type VerdictTone } from "#/components/master-table/model";
+import { StateCell, fmtNum } from "#/components/lang/cell";
+import type { Verdict, VerdictTone } from "#/components/master-table/model";
 import { cn } from "#/lib/utils";
-
-const CELL_CLASS =
-  "face-mono t-value h-7 w-full min-w-0 bg-transparent px-1.5 outline-none focus:bg-primary/5";
-
-function BaseCell({
-  display,
-  onText,
-  numeric,
-  className,
-  placeholder,
-  title,
-}: {
-  display: string;
-  onText: (text: string) => void;
-  numeric?: boolean;
-  className?: string;
-  placeholder?: string;
-  title?: string;
-}) {
-  const initial = useRef(display);
-  const move = useCellNavigation();
-  initial.current = display;
-  return (
-    <input
-      key={display}
-      defaultValue={display}
-      placeholder={placeholder}
-      title={title}
-      tabIndex={-1}
-      inputMode={numeric ? "decimal" : undefined}
-      className={cn(CELL_CLASS, numeric && "text-right", className)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          if (!move?.(e.shiftKey ? "up" : "down")) e.currentTarget.blur();
-        } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-          e.preventDefault();
-          move?.(e.key === "ArrowUp" ? "up" : "down");
-        } else if (e.key === "Tab") {
-          if (move?.(e.shiftKey ? "left" : "right")) e.preventDefault();
-        } else if (e.key === "Escape") {
-          e.currentTarget.value = initial.current;
-          e.currentTarget.blur();
-        }
-      }}
-      onBlur={(e) => {
-        const text = e.currentTarget.value;
-        if (text !== initial.current) onText(text);
-      }}
-    />
-  );
-}
 
 export function TextCell({
   value,
@@ -69,13 +27,16 @@ export function TextCell({
   placeholder?: string;
   title?: string;
 }) {
+  const move = useCellNavigation();
   return (
-    <BaseCell
-      display={value}
-      onText={onCommit}
-      className={className}
+    <StateCell
+      scale="row"
+      value={value}
       placeholder={placeholder}
-      title={title}
+      note={title}
+      onCommit={(text) => onCommit(text)}
+      onNavigate={(direction) => move?.(direction) ?? false}
+      className={cn("face-mono t-value", className)}
     />
   );
 }
@@ -97,20 +58,24 @@ export function NumberCell({
   className?: string;
   title?: string;
 }) {
+  const move = useCellNavigation();
   return (
-    <BaseCell
-      display={fmtNum(value, digits)}
-      numeric
-      className={className}
-      title={title}
-      onText={(text) => {
-        const parsed = parseCell(text, { integer, min });
-        if (parsed !== null) onCommit(parsed);
-      }}
+    <StateCell
+      scale="row"
+      value={fmtNum(value, digits)}
+      numeric={{ integer, min, digits }}
+      note={title}
+      // `numeric` already parsed, clamped and normalized — a refused parse never reaches here.
+      onCommit={(text) => onCommit(Number(text))}
+      onNavigate={(direction) => move?.(direction) ?? false}
+      className={cn("face-mono t-value text-right", className)}
     />
   );
 }
 
+/** The forced wrapper: a select-shaped editor cannot ride `StateCell`'s input. Focus takes the
+ * select fill (the focus law — a fill, never a hue); `invalid` is its refusal mechanism and
+ * spends the one alarm as an ink + wash mix, visibly on the surface. */
 export function CellSelect({
   value,
   onChange,
@@ -137,8 +102,8 @@ export function CellSelect({
         if (e.key === "Tab" && move?.(e.shiftKey ? "left" : "right")) e.preventDefault();
       }}
       className={cn(
-        "face-mono t-value h-7 w-full min-w-0 truncate rounded-none border-0 bg-transparent px-1 outline-none focus:bg-primary/5",
-        invalid && "bg-destructive/10 text-destructive",
+        "face-mono t-value h-7 w-full min-w-0 truncate rounded-none border-0 bg-transparent px-1 outline-none focus:bg-[var(--r-select)]",
+        invalid && "bg-[color-mix(in_srgb,var(--r-alarm)_10%,var(--r-on))] text-[var(--r-alarm)]",
         className,
       )}
     >
@@ -148,8 +113,10 @@ export function CellSelect({
 }
 
 /**
- * A cell the user may not edit. `reason` is REQUIRED and surfaces as the title: a value that
- * refuses editing must say why (e.g. "detected area — geometry is edited in Revit").
+ * A cell the user may not edit. `reason` surfaces as the title — a value that refuses editing
+ * should say why (e.g. "detected area — geometry is edited in Revit"). OPTIONAL since the fit
+ * reviews (ruled 2026-08-16): requiring it farmed ceremony on identity columns ("a tooltip
+ * that tells you what a table is"); supply it where the refusal is a fact worth stating.
  */
 export function ReadCell({
   value,
@@ -157,7 +124,7 @@ export function ReadCell({
   className,
 }: {
   value: React.ReactNode;
-  reason: string;
+  reason?: string;
   className?: string;
 }) {
   return (
@@ -194,7 +161,7 @@ export function VerdictCell({ verdict }: { verdict: Verdict }) {
     <span className="face-mono t-value block truncate px-1.5" title={verdict.note}>
       <StateDot tone={verdict.tone} dim={verdict.dim} />{" "}
       <span
-        className={verdict.tone === "alarm" ? "text-[var(--r-alarm)]" : "text-muted-foreground"}
+        className={verdict.tone === "alarm" ? "text-[var(--r-alarm)]" : "text-[var(--r-ink-2)]"}
       >
         {verdict.word}
       </span>

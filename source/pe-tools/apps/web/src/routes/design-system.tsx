@@ -340,7 +340,7 @@ const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
   },
   {
     name: "refuse per option",
-    text: "List the option you cannot pick, greyed, with its own reason drawn from real validation — strictly more informative than hiding it or greying the whole control. What keeps that true is that the explanation is a required constructor argument: Verb demands a reason, so every refusal at every call site has one. The reason's home is the title (ruled 2026-08-16 on the live takeoffs header): dense chrome never pays a second line, and a lane of four refusals repeating one sentence read as noise, not honesty.",
+    text: "List the option you cannot pick, greyed, with its own reason drawn from real validation — strictly more informative than hiding it or greying the whole control. What keeps that true is that the explanation is a required constructor argument: Verb demands a reason, so every refusal at every call site has one. The reason's home is the title (ruled 2026-08-16 on the live takeoffs header): dense chrome never pays a second line, and a lane of four refusals repeating one sentence read as noise, not honesty. The one exception (fit reviews, same date): a DISABLED commit verb says its reason on the surface — a small quiet line beside the verb — because the highest-stakes refusal must pass §0's no-tooltips bar and the lane-spam argument never applied to the lone page-blast verb.",
     demo: (
       <span className="flex flex-col gap-3">
         <span className="flex flex-wrap items-start gap-2">
@@ -766,7 +766,8 @@ function VerbBlock() {
           <em>agent</em> is pea&apos;s own (the slot COLOR-ROLES Law 0 never had, which made
           pea&apos;s own verb illegal), <em>commit</em> is the one filled blue, <em>nav</em> is blue
           text with a required direction. Blast radius groups the lane and buys no hue. A refusal
-          always has a reason — the constructor demands it — carried as the title.
+          always has a reason — the constructor demands it — carried as the title, except a disabled
+          commit verb, which says it on the surface (fit reviews, 2026-08-16).
         </>
       }
     >
@@ -1281,6 +1282,21 @@ function RealTable() {
             scopeLabel="params in scope"
             searchPlaceholder="search params…"
             summary={<>13 params · 3 types</>}
+            // THE OWED MARKER (ruled 2026-08-16, fit reviews): the gutter locates the rows a
+            // person must act on — count in the tone's ink, sentence in the title, no verb.
+            // The locked param column offsets past it, which is the lock interaction the prop
+            // documents, exercised here on purpose.
+            gutter={(r) =>
+              r.agree === "drift"
+                ? {
+                    count: 1,
+                    title: "the model disagrees — a person must pick the real value",
+                    tone: "alarm",
+                  }
+                : r.stage === "staged"
+                  ? { count: 1, title: "staged and unsaved — commit or discard before leaving" }
+                  : null
+            }
           />
         </div>
         {/* GAP (ArtifactFrame): the key belongs "inside the frame of the thing it describes", and
@@ -1312,10 +1328,10 @@ function RealTable() {
           table&apos;s head band stack. There is no way to hand the frame the scope label instead.
         </GapNote>
         <GapNote>
-          <strong>a third chip.</strong> The strip&apos;s <code>FilterChip</code> states exactly
-          what <code>NarrowChip</code> states — this narrowing is active, click to widen — as a
-          different component on different tokens. Same fact, two components; the crusade merges
-          them or the language has two chip families forever.
+          <strong>one chip family now.</strong> The strip&apos;s chips ARE <code>NarrowChip</code>{" "}
+          (fit reviews, ruled 2026-08-16 — <code>FilterChip</code> deleted). The honest residue: the
+          strip has no per-narrowing denominator, so every chip&apos;s count is rows still in scope
+          under ALL active narrowings, not what this one alone admits.
         </GapNote>
         <GapNote>
           <strong>no footline row.</strong> A receipt has nowhere in the grid: outcomes can only sit

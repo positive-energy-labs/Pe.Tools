@@ -17,7 +17,11 @@
  *       refusal at every call site has an explanation. RULED 2026-08-16 (kaitpw, on the live
  *       takeoffs header): the reason's home is the TITLE — dense chrome never pays a second
  *       line for it, and four near-identical refusal sentences under one verb lane read as
- *       noise, not honesty. The earlier visible under-line rendering is superseded.
+ *       noise, not honesty. AMENDED at the fit-review sitting (2026-08-16): a DISABLED `commit`
+ *       verb is the one exception — its reason renders visibly as a small quiet line beside the
+ *       verb (no new slot, no new component), because the highest-stakes refusal on a page must
+ *       pass §0's "why is that one disabled, without tooltips" bar and the lane-spam problem
+ *       never applied to the lone page-blast verb. All other tones stay title-only.
  *     · mono type collided with "mono means the machine measured this". Verbs are sans now.
  * - BLAST RADIUS IS NOT A TONE. It groups the lane and buys no hue: all three writes wear the
  *   same single blue however far they reach. That is `VerbGroup`, below.
@@ -58,6 +62,8 @@ interface VerbBase {
    * Always required — the constructor argument is what guarantees every refusal has an
    * explanation — and carried as the control's title (ruled 2026-08-16: hover is the reason's
    * home; a visible line under every refused verb made dense chrome wrap and repeat itself).
+   * EXCEPTION (fit reviews, 2026-08-16): a disabled `commit` verb ALSO renders it visibly,
+   * as a small quiet line beside the verb.
    */
   reason: string;
   disabled?: boolean;
@@ -88,17 +94,24 @@ export function Verb(props: VerbProps) {
   const inert = disabled === true || busy === true;
 
   return (
-    <button
-      type="button"
-      className={cn("dl-verb", className)}
-      data-tone={tone}
-      disabled={inert}
-      onClick={onClick}
-      title={reason}
-    >
-      {Icon != null ? <Icon /> : null}
-      {busy === true ? `${label}…` : label}
-    </button>
+    <>
+      <button
+        type="button"
+        className={cn("dl-verb", className)}
+        data-tone={tone}
+        disabled={inert}
+        onClick={onClick}
+        title={reason}
+      >
+        {Icon != null ? <Icon /> : null}
+        {busy === true ? `${label}…` : label}
+      </button>
+      {/* THE UN-GAGGED COMMIT (fit reviews, ruled 2026-08-16): only a disabled commit verb says
+          its reason on the surface; busy is not a refusal and every other tone keeps the title. */}
+      {tone === "commit" && disabled === true ? (
+        <span className="dl-verb-reason">{reason}</span>
+      ) : null}
+    </>
   );
 }
 

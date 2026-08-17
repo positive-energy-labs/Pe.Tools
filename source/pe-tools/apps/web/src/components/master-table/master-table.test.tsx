@@ -181,6 +181,28 @@ test("grid keys move the roving cell focus and release Tab at the outer boundary
   expect(fireEvent.keyDown(last, { key: "Tab" })).toBe(true);
 });
 
+test("the owed gutter marks rows without entering the navigation order", () => {
+  renderTable({
+    gutter: (row) =>
+      row.flags.length > 0
+        ? { count: row.flags.length, title: `${row.flags.length} open flags — a person decides` }
+        : null,
+  });
+
+  // Marked rows carry the count; the sentence rides the title; unmarked rows stay empty.
+  expect(screen.getByTitle("1 open flags — a person decides").textContent).toBe("1");
+  expect(screen.getByTitle("2 open flags — a person decides").textContent).toBe("2");
+
+  // The gutter is a marker, not a data cell: ArrowLeft from the first data column goes nowhere.
+  const grid = screen.getByRole("grid");
+  const firstDataCell = within(grid)
+    .getAllByRole("gridcell")
+    .find((cell) => cell.textContent === "VAV Box") as HTMLTableCellElement;
+  firstDataCell.focus();
+  fireEvent.keyDown(firstDataCell, { key: "ArrowLeft" });
+  expect(document.activeElement).toBe(firstDataCell);
+});
+
 test("cell editing and navigation stay spreadsheet-fast", () => {
   const onCommit = vi.fn();
   let renders = 0;

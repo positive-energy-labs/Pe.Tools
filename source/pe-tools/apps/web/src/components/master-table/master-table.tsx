@@ -21,6 +21,7 @@ import {
   cellStateLabel,
   type StateCellProps,
 } from "#/components/lang/cell";
+import { NarrowChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { CellNavigationProvider, type CellMove } from "#/components/master-table/cell-navigation";
 import { VerdictCell } from "#/components/master-table/cells";
@@ -69,9 +70,24 @@ export interface MasterTableProps<Row extends RowData> {
   /** Supply this with onTableStateChange when a route or agent owns table state. */
   tableState?: MasterTableState;
   onTableStateChange?: (state: MasterTableState) => void;
+  /**
+   * THE OWED MARKER (ruled 2026-08-16 — fit reviews' highest-leverage build; R3's row-fact
+   * primitive, finally real): "a person must act on this row". Presence-based — return null
+   * for a row owing nothing. Renders a narrow leading GUTTER cell carrying the count in the
+   * tone's ink (`caution` by default); the `title` carries the sentence. It LOCATES, nothing
+   * more: no verb, no click — the row's own verbs do the acting.
+   *
+   * LOCK INTERACTION: the gutter is sticky at `left-0`, and when it is present the table
+   * shifts `lock` columns right by the gutter's fixed width (GUTTER_PX) so both stay visible
+   * while the table scrolls. Do not lock a column to a width that assumes `left-0`.
+   */
+  gutter?: (row: Row) => { count: number; title: string; tone?: "alarm" | "caution" } | null;
 }
 
 const emptyTableState = (): MasterTableState => ({ filters: {}, sorts: [], query: "" });
+
+/** The gutter's one width — the th/td class and the lock-column offset must agree. */
+const GUTTER_PX = 18;
 
 /**
  * THE CELL-STATE CLAUSE, executed once at the boundary. A `state` column resolves to a plain
@@ -103,8 +119,9 @@ function resolveStateColumn<Row>(column: Column<Row>): ResolvedColumn<Row> {
   const state = column.state;
   if (state === undefined) return column;
   // The word the filter/facet/readout speak: the route's domain vocabulary when supplied,
-  // else the grammar's universal seven. Sort stays attention order of the universal reading
-  // either way — the MARKS are universal even when the word is the route's.
+  // else the grammar's universal eight (CELL_STATE_ORDER, `never` included). Sort stays
+  // attention order of the universal reading either way — the MARKS are universal even when
+  // the word is the route's.
   const word = column.word ?? ((row: Row) => cellStateLabel(state(row)));
   return {
     ...column,
@@ -137,6 +154,7 @@ export function MasterTable<Row extends RowData>({
   onVisibleChange,
   tableState,
   onTableStateChange,
+  gutter,
 }: MasterTableProps<Row>) {
   const columns = useMemo(() => rawColumns.map(resolveStateColumn), [rawColumns]);
   const [internalState, setInternalState] = useState(emptyTableState);
@@ -274,6 +292,10 @@ export function MasterTable<Row extends RowData>({
     if (!target && wrapHorizontal && direction === "right") {
       target = row.nextElementSibling?.firstElementChild;
     }
+    // The gutter is a marker, not a data cell: leftward moves stop before it, wraps land past it.
+    if (target instanceof HTMLElement && target.hasAttribute("data-master-gutter")) {
+      target = direction === "left" ? null : target.nextElementSibling;
+    }
     if (!(target instanceof HTMLElement)) return false;
     target.focus();
     return true;
@@ -328,20 +350,34 @@ export function MasterTable<Row extends RowData>({
         )}
         {summary && <span className="face-mono t-value text-[var(--r-ink-2)]">{summary}</span>}
 
+        {/* THE STRIP'S CHIPS ARE THE LANGUAGE'S NarrowChip (fit reviews, ruled 2026-08-16 —
+            FilterChip stated the same fact on different tokens and is deleted). The count is
+            rows still in scope under ALL active narrowings — the strip has no per-chip
+            denominator, and "what survives right now" is the honest number it can state. */}
         {chips.map((chip) => (
-          <FilterChip key={chip.label} label={chip.label} onClear={chip.onClear} />
+          <NarrowChip
+            key={chip.label}
+            label={chip.label}
+            count={visibleRows.length}
+            onRemove={chip.onClear}
+            title="A route-owned filter narrowing this table right now. The count is rows still in scope; removing it widens back out."
+          />
         ))}
         {resolvedState.query && (
-          <FilterChip
+          <NarrowChip
             label={`search: ${resolvedState.query}`}
-            onClear={() => updateState((state) => ({ ...state, query: "" }))}
+            count={visibleRows.length}
+            onRemove={() => updateState((state) => ({ ...state, query: "" }))}
+            title="The free-text filter narrowing this table right now. The count is rows still in scope; removing it widens back out."
           />
         )}
         {activeFilters.map((column) => (
-          <FilterChip
+          <NarrowChip
             key={column.key}
             label={`${column.label}: ${labelOf(column, rows, resolvedState.filters[column.key] ?? "")}`}
-            onClear={() => setFilter(column.key, null)}
+            count={visibleRows.length}
+            onRemove={() => setFilter(column.key, null)}
+            title="A column filter narrowing this table right now. The count is rows still in scope; removing it widens back out."
           />
         ))}
         {activeFilters.length > 0 && (
@@ -360,12 +396,20 @@ export function MasterTable<Row extends RowData>({
         <table
           role="grid"
           aria-rowcount={visibleRows.length}
-          aria-colcount={columns.length}
+          aria-colcount={columns.length + (gutter ? 1 : 0)}
           className="w-full border-collapse text-xs"
         >
           <thead ref={theadRef}>
             {table.getHeaderGroups().map((headerGroup, rowIndex) => (
               <tr key={headerGroup.id}>
+                {gutter && rowIndex === 0 && (
+                  <th
+                    rowSpan={table.getHeaderGroups().length}
+                    style={{ top: 0, width: GUTTER_PX, minWidth: GUTTER_PX }}
+                    title="Rows marked in this gutter owe a person a decision — the mark's own title says what."
+                    className="sticky left-0 z-20 border-b border-[var(--r-line)] bg-[var(--r-recess)] p-0 [--r-on:var(--r-recess)]"
+                  />
+                )}
                 {headerGroup.headers.map((header) => {
                   if (header.rowSpan === 0) return null;
                   const column = columnByKey.get(header.column.id);
@@ -375,6 +419,7 @@ export function MasterTable<Row extends RowData>({
                       column={column}
                       rowSpan={header.rowSpan}
                       stickyTop={stickyTop(rowIndex)}
+                      lockLeft={gutter ? GUTTER_PX : 0}
                       direction={header.column.getIsSorted()}
                       rank={header.column.getSortIndex()}
                       sortCount={table.state.sorting.length}
@@ -433,6 +478,27 @@ export function MasterTable<Row extends RowData>({
                     onRowClick?.(tableRow.original);
                   }}
                 >
+                  {gutter &&
+                    (() => {
+                      const owed = gutter(tableRow.original);
+                      return (
+                        <td
+                          data-master-gutter=""
+                          title={owed?.title}
+                          style={{ width: GUTTER_PX, minWidth: GUTTER_PX }}
+                          className="sticky left-0 z-[5] border-b border-[var(--r-line)] bg-[var(--r-on)] p-0 text-center align-middle"
+                        >
+                          {owed && (
+                            <span
+                              className="face-mono t-caption"
+                              style={{ color: `var(--r-${owed.tone ?? "caution"})` }}
+                            >
+                              {owed.count}
+                            </span>
+                          )}
+                        </td>
+                      );
+                    })()}
                   {cells.map((cell, columnIndex) => {
                     const column = columnByKey.get(cell.column.id);
                     if (!column) return null;
@@ -470,6 +536,7 @@ export function MasterTable<Row extends RowData>({
                               }
                             }}
                             onMouseEnter={cell.getSelectionExtendHandler()}
+                            style={column.lock ? { left: gutter ? GUTTER_PX : 0 } : undefined}
                             className={cn(
                               // Focus is a firm hairline; selection is the select fill. Locked
                               // columns sit on --r-on — the ground of whatever contains the table.
@@ -477,7 +544,7 @@ export function MasterTable<Row extends RowData>({
                               selection & 2 && "bg-[var(--r-select)] [--r-on:var(--r-select)]",
                               column.right && "text-right",
                               column.width,
-                              column.lock && "sticky left-0 z-[5] bg-[var(--r-on)]",
+                              column.lock && "sticky z-[5] bg-[var(--r-on)]",
                             )}
                           >
                             <CellNavigationProvider
@@ -516,10 +583,11 @@ export function MasterTable<Row extends RowData>({
         )}
       </div>
 
-      {/* THE READOUT BAND (ruled 2026-08-16): rows never grow, so the focused cell's prose —
-          state word, refusal reason, note, citation, the model's ghost value — reads out HERE,
-          at constant height, the way a spreadsheet's formula bar reads out the active cell.
-          Present exactly when the table carries state columns, so plain tables pay nothing. */}
+      {/* THE READOUT BAND (ruled 2026-08-16; narrowed at the fit-review sitting): rows never
+          grow, so the focused cell's prose — state word, refusal reason, note, citation, the
+          model's ghost value — reads out HERE, the way a spreadsheet's formula bar reads out
+          the active cell. It renders ONLY while a state cell is focused — the idle tutorial
+          placeholder is dead; when nothing is focused the band is absent entirely. */}
       {columns.some((column) => column.readState) && (
         <table.Subscribe
           source={table.atoms.cellSelection}
@@ -533,23 +601,16 @@ export function MasterTable<Row extends RowData>({
             const column = focused ? columnByKey.get(focused.column.id) : undefined;
             const cellState =
               focused && column?.readState ? column.readState(focused.row.original) : undefined;
-            const facts = cellState ? cellFactsText(cellState) : null;
+            if (!focused || !cellState) return null;
+            const facts = cellFactsText(cellState);
             return (
               <div className="face-mono t-label flex h-6 min-w-0 shrink-0 items-center gap-2 overflow-hidden border-t border-[var(--r-line)] bg-[var(--r-recess)] px-2 whitespace-nowrap [--r-on:var(--r-recess)]">
-                {focused && cellState ? (
-                  <>
-                    <span className="dl-tag shrink-0 text-[var(--r-ink)]">
-                      {column?.readWord?.(focused.row.original) ?? cellStateLabel(cellState)}
-                    </span>
-                    <span className="truncate text-[var(--r-ink-2)]">
-                      {facts ?? "nothing further — the marks on the cell are the whole story"}
-                    </span>
-                  </>
-                ) : (
-                  <span className="text-[var(--r-ink-mute)]">
-                    select a cell — its state, reasons and citations read out here
-                  </span>
-                )}
+                <span className="dl-tag shrink-0 text-[var(--r-ink)]">
+                  {column?.readWord?.(focused.row.original) ?? cellStateLabel(cellState)}
+                </span>
+                <span className="truncate text-[var(--r-ink-2)]">
+                  {facts ?? "nothing further — the marks on the cell are the whole story"}
+                </span>
               </div>
             );
           }}
@@ -567,6 +628,7 @@ function LeafHeader<Row>({
   column,
   rowSpan,
   stickyTop,
+  lockLeft,
   direction,
   rank,
   sortCount,
@@ -576,6 +638,8 @@ function LeafHeader<Row>({
   column: Column<Row>;
   rowSpan: number;
   stickyTop: number;
+  /** Where a locked column pins: 0, or the gutter's width when the owed marker is present. */
+  lockLeft: number;
   direction: false | "asc" | "desc";
   rank: number;
   sortCount: number;
@@ -586,12 +650,12 @@ function LeafHeader<Row>({
     <th
       title={column.title}
       rowSpan={rowSpan}
-      style={{ top: stickyTop }}
+      style={{ top: stickyTop, left: column.lock ? lockLeft : undefined }}
       className={cn(
         "sticky z-10 align-top whitespace-nowrap border-b border-l border-[var(--r-line)] bg-[var(--r-recess)] px-1.5 py-1 font-normal [--r-on:var(--r-recess)] first:border-l-0",
         column.right ? "text-right" : "text-left",
         column.width,
-        column.lock && "left-0 z-20",
+        column.lock && "z-20",
         column.headerClassName,
       )}
     >
@@ -685,20 +749,6 @@ function ColFilter({
         </ComboboxList>
       </ComboboxContent>
     </Combobox>
-  );
-}
-
-export function FilterChip({ label, onClear }: { label: string; onClear: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClear}
-      title="This filter is narrowing the table right now. Click to drop it and widen the scope back out."
-      className="face-mono t-caption inline-flex items-center gap-1 rounded-[var(--radius)] border border-[var(--r-line-2)] bg-[var(--r-recess)] px-1.5 py-px hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
-    >
-      <span className="normal-case">{label}</span>
-      <span className="opacity-60">×</span>
-    </button>
   );
 }
 

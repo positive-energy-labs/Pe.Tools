@@ -189,6 +189,12 @@
   font-weight: inherit;
   color: inherit;
   line-height: inherit;
+  /* numeric cells right-align on the WRAPPER; the input must follow, not reset to start. */
+  text-align: inherit;
+}
+.dl-cell-input::placeholder {
+  color: var(--r-ink-mute);
+  font-style: italic;
 }
 .dl-cell:has(.dl-cell-input:focus-visible) {
   box-shadow:
@@ -377,7 +383,19 @@
 
 /* §3 (SURFACE-PHILOSOPHY, honesty): refuse PER OPTION, with the reason REQUIRED by the
    constructor. RULED 2026-08-16: the reason's home is the title — the visible under-line
-   rendering (.dl-refusal) made dense verb lanes wrap and repeat one sentence four times. */
+   rendering (.dl-refusal) made dense verb lanes wrap and repeat one sentence four times.
+   THE ONE EXCEPTION (fit reviews, ruled 2026-08-16): a DISABLED COMMIT verb renders its reason
+   visibly as this small quiet line beside the verb — the highest-stakes refusal on a page must
+   pass §0's no-tooltips bar, and the lane-spam argument never applied to the lone page-blast
+   verb. Every other verb keeps title-only. */
+.dl-verb-reason {
+  font-size: 10px;
+  font-style: italic;
+  line-height: 1.35;
+  color: var(--r-ink-2);
+  align-self: center;
+  max-width: 36ch;
+}
 
 /* ── HELP TIP · help.tsx ───────────────────────────────────────────────────────────────────
    Region orientation behind a "?" mark. Reveal is hover/focus, CSS-only; the pop is SANS

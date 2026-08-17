@@ -399,8 +399,7 @@ const VERB_MAKERS: Record<VerbRow, (f: VerbFlags) => React.ReactNode> = {
 };
 
 function verbFlags(state: VerbState): VerbFlags {
-  if (state === "disabled")
-    return { disabled: true, reason: "no target bound — the refusal rides in the title" };
+  if (state === "disabled") return { disabled: true, reason: "no target bound" };
   if (state === "busy") return { busy: true, reason: "In flight" };
   return { reason: "What pressing this does" };
 }
@@ -554,8 +553,8 @@ function LangGroup() {
       <Block
         group="lang"
         file="cell"
-        name="StateCell · CELL_STATE_ORDER · cellStateLabel · cellFactsText"
-        consumers="6 consumers — master-table (×2), fixtures, design-system, proposal-flow, takeoff/atlas"
+        name="StateCell · CELL_STATE_ORDER · cellStateLabel · cellFactsText · parseCell · fmtNum"
+        consumers="7 consumers — master-table (×3; its Text/Number cells are StateCell wrappers since 2026-08-16), fixtures, design-system, proposal-flow, takeoff/atlas"
       >
         <Lane>
           {CELL_BY_STATE.map(({ state, props }) => (
@@ -588,6 +587,11 @@ function LangGroup() {
               <EditableCellSpec />
             </Bound>
           </Spec>
+          <Spec cap="numeric={{ min: 0, digits: 1 }} · the built-in parse refusal">
+            <Bound className="w-40">
+              <NumericCellSpec />
+            </Bound>
+          </Spec>
         </Lane>
         <Note>
           row scale is full-bleed and sized by its container — the boxes above are the bound a table
@@ -610,7 +614,7 @@ function LangGroup() {
         group="lang"
         file="chip"
         name="FactChip · NarrowChip"
-        consumers="8 consumers — family/workspace, design-system (×4 routes), families, takeoffs, takeoff/atlas"
+        consumers="9 consumers — family/workspace, design-system (×4 routes), families, takeoffs, takeoff/atlas, master-table (NarrowChip is its filter strip — FilterChip deleted 2026-08-16)"
       >
         <Lane>
           {FACT_TONES.map((tone) => (
@@ -761,7 +765,8 @@ function LangGroup() {
         </Lane>
         <Note>
           hover and :focus-visible take the one 10% ink veil and cannot be frozen — hover a specimen
-          above.
+          above. A disabled COMMIT verb renders its reason visibly beside the verb (fit reviews,
+          2026-08-16); every other tone keeps the reason in the title.
         </Note>
       </Block>
     </section>
@@ -1339,6 +1344,21 @@ function EditableCellSpec() {
         if (!/^\d/.test(text.trim())) return "a dimension starts with a number";
         setValue(text);
       }}
+    />
+  );
+}
+
+/** The numeric cell (fit reviews, 2026-08-16): `numeric` parses before `onCommit` — blank or
+ *  not-a-number fires the built-in refusal note, so nothing is ever swallowed silently. */
+function NumericCellSpec() {
+  const [value, setValue] = useState("24");
+  return (
+    <StateCell
+      scale="row"
+      className="face-mono t-value text-right"
+      value={value}
+      numeric={{ min: 0, digits: 1 }}
+      onCommit={(text) => setValue(text)}
     />
   );
 }

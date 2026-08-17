@@ -15,8 +15,10 @@ export interface VerbReceipt {
 
 /** The failure kinds a verb can carry (ruled 2026-08-16, R12 — families #4): a thrown host
  * call is `error` (caution — a busy bridge is not the model disagreeing), an op-level refusal
- * is `refused` (the one alarm), and a success path with something to say is `advisory`. */
-export type VerbFailKind = "error" | "refused" | "advisory";
+ * is `refused` (the one alarm), a success path with something to say is `advisory`, and a
+ * write that landed some items while the rest stay staged is `partial` (caution — staged is
+ * unsaved; added at the fit-review sitting, the schedule-grid audit's one-line fix). */
+export type VerbFailKind = "error" | "refused" | "advisory" | "partial";
 
 export function useVerb() {
   const [busy, setBusy] = useState<string | null>(null);
