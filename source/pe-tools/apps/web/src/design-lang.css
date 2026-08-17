@@ -42,6 +42,9 @@
      · PEA IS NEVER BLUE. The agent's proposals wear the agent's identity.
      · SELECTION AND FOCUS ARE A FILL, NEVER A HUE — only ever `--r-select`, which is literally
        the 4th rung of the ground ladder, so the law is structural rather than remembered.
+       EXTENSION (ruled 2026-08-16, R13a): on a spatial view where a fill cannot separate —
+       coloured plan fills, zone peeks — the locate mark is `--r-ink`: neutral, no hue bought,
+       the highest-contrast mark available. Takeoffs' cursor is the precedent.
      · THE ONLY FILLED BLUE is the verb that writes beyond the page (`--r-commit`).
        Nav is blue TEXT (`--r-nav`, byte-identical) and nothing else in the language is blue.
      · MONO MEANS THE MACHINE MEASURED THIS. Type carries meaning on the same terms as colour.
@@ -70,6 +73,12 @@
    Every frame spent on something with no state to separate makes the real ones read as less
    special. Enforced in code by `components/lang/artifact-frame.tsx` being the only thing that
    draws one.
+
+   THE DASHED SLOT COUNTS EVERY MECHANISM (ruled 2026-08-16, R13b): `border-style: dashed`,
+   SVG `stroke-dasharray`, and any other way of drawing a broken edge occupy the SAME slot and
+   carry the same reserved meaning — SEAM: a stand-in for something that does not exist
+   (a fixture lane, a declared area with no element behind it, a position with no boundary).
+   A dashed mark meaning anything else is a violation wherever the CSS lives.
 
    ── THE `--r-on` PLUMBING CONVENTION ──────────────────────────────────────────────────────
    `--r-on` is THE GROUND A CHILD ACTUALLY SITS ON. It is declared here as `--r-page` and

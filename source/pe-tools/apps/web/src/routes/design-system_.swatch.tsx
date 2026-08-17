@@ -91,6 +91,7 @@ import {
 } from "#/components/ui/select";
 import { SidePane } from "#/components/ui/side-pane";
 import { Switch } from "#/components/ui/switch";
+import { AddressingBar } from "#/components/lang/addressing-bar";
 import { EmptyState } from "#/components/lang/empty";
 import { Switcher } from "#/components/lang/switcher";
 import { Textarea } from "#/components/ui/textarea";
@@ -225,6 +226,7 @@ function Bound({ className, children }: { className?: string; children: React.Re
 /* ═══ the roster ════════════════════════════════════════════════════════════════════════════ */
 
 const LANG_FILES = [
+  "addressing-bar",
   "arming-strip",
   "artifact-frame",
   "cell",
@@ -406,6 +408,47 @@ function LangGroup() {
         title="lang"
         note="the design language itself — every component here runs on --r-* tokens only"
       />
+
+      <Block
+        group="lang"
+        file="addressing-bar"
+        name="AddressingBar"
+        consumers="1 consumer — family/workspace (the head the shape was proven on); families + takeoffs adopt in their route passes"
+      >
+        <Bound className="w-full max-w-2xl">
+          <AddressingBar
+            name="family"
+            sentence={
+              <span className="t-label text-[var(--r-ink-2)]">editing profiles/door.pea.json</span>
+            }
+            facts={
+              <FactChip tone="caution" title="Unsaved draft — two edits not on disk.">
+                unsaved draft · 2
+              </FactChip>
+            }
+            verb={
+              <Verb
+                tone="commit"
+                label="save profile"
+                onClick={noop}
+                reason="Writes the profile back to disk"
+              />
+            }
+            seam={
+              <FactChip
+                dashed
+                title="Fixture lane — the swatch mounts no Sentence; the real consumer wires components/sentence here."
+              >
+                fixture
+              </FactChip>
+            }
+          />
+        </Bound>
+        <Note>
+          the five-slot rule: name · sentence · facts · the one page-blast verb · seam,
+          right-aligned. A verb that acts on one pane belongs in that pane&apos;s strip.
+        </Note>
+      </Block>
 
       <Block
         group="lang"

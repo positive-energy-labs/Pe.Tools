@@ -533,6 +533,30 @@
   height: 9px;
 }
 
+/* ── ADDRESSING BAR · addressing-bar.tsx ───────────────────────────────────────────────────
+   The one head rail. Plain content on the page ground (the border budget: a head rail is
+   chrome, not a machine-operated object) under a single hairline. Wraps under compression —
+   identity outranks controls. */
+.dl-addr {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--r-line);
+}
+.dl-addr-name {
+  font-family: var(--font-pe-mono);
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--r-ink-2);
+}
+.dl-addr-seam {
+  margin-left: auto;
+}
+
 /* ── SWITCHER · switcher.tsx ───────────────────────────────────────────────────────────────
    Mode is a place you are standing: the active option takes the SELECT fill and the primary
    ink; inactive options are quiet secondary ink under the one veil on hover. The firm hairline

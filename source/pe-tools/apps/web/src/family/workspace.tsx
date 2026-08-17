@@ -105,6 +105,7 @@ import { MasterTable } from "#/components/master-table/master-table";
 import type { Column, MasterTableState, Verdict } from "#/components/master-table/model";
 import { Sentence } from "#/components/sentence";
 import { Pane, PaneWorkspace } from "#/components/ui/pane";
+import { AddressingBar } from "#/components/lang/addressing-bar";
 import { Switcher } from "#/components/lang/switcher";
 import { AnatomyDrawing } from "#/family/anatomy";
 import { ProposalCard, SpecSheet, SpecText } from "#/family/doc-pane";
@@ -1933,81 +1934,89 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
 
   return (
     <main className="flex h-screen min-h-0 flex-col bg-[var(--r-page)] text-[var(--r-ink)]">
-      {/* ── ONE head rail. The addressing sentence carries nouns only; the facts beside it are
-             chips; the one verb that leaves the page is the only blue on the row. Everything
-             else — the overlay switch, the crossings, the doc's own verbs — lives in the pane
-             that owns it, so no fact and no verb is ever far from the thing it describes
-             (SURFACE-PHILOSOPHY §4). This replaces three stacked strips in three idioms. ── */}
-      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--r-line)] px-4 py-2">
-        <span className="tele-label text-[10px] tracking-[0.3em] text-[var(--r-ink-2)]">
-          FAMILY
-        </span>
-        <Sentence
-          prefix={
-            openProposals.length > 0 ? `${openProposals.length} proposals against` : "editing"
-          }
-          prefixTone={openProposals.length > 0 ? "awaiting" : "rest"}
-          documentLabel={WORLD.profile.path}
-          documents={[WORLD.profile.path]}
-          documentsEmpty="The fixture world carries exactly one profile; a document library arrives with the host lane."
-          slots={[
-            {
-              key: "family",
-              joiner: "against",
-              text: LIVE ? `${LIVE.familyName} in ${LIVE.worldLabel}` : null,
-              placeholder: "nothing live",
-              options: null,
-              title:
-                "The family open in the bound Revit session — what the ⇄ live overlay reads and the only thing apply writes into. Without it the profile still edits; it just cannot disagree with anything.",
-            },
-          ]}
-          target={target}
-          onBind={(selector) => setTarget(selector ?? "")}
-          receipt={receipt}
-        />
-        {LIVE && (
-          <FactChip title="How long ago the live family was read. Every claim under the ⇄ live overlay is only as true as this number — an old read is a weaker claim, not a wrong one.">
-            live · read {LIVE.readAgo}
-          </FactChip>
-        )}
-        <FactChip
-          tone={draft.dirty ? "caution" : "meta"}
-          title={
-            draft.dirty
-              ? "The profile document has changes that are not on disk — an edit, an accepted proposal, or a capture. Nothing about Revit is implied by this; it is a fact about the file."
-              : "The profile on disk matches what you are looking at. Edits and accepted proposals flip this the moment they land."
-          }
-        >
-          {draft.dirty ? `unsaved draft · ${unsavedCount}` : "saved"}
-        </FactChip>
-        <Verb
-          label="save profile"
-          tone="commit"
-          onClick={save}
-          disabled={!draft.dirty}
-          reason={
-            draft.dirty
-              ? `Write the profile back to ${WORLD.profile.path}. This commits the DOCUMENT — it touches nothing in Revit, which is what apply is for.`
-              : "Nothing to save — the document already matches the file."
-          }
-        />
-        {/* `?family=<id>` arrives from /families' row click. This surface reads one fixture
-            profile and cannot honour it, and saying so is cheaper than pretending. */}
-        {requestedFamily != null && (
-          <OutcomeLine
-            kind="advisory"
-            label={`?family=${requestedFamily} ignored`}
-            says="this surface reads one fixture profile — opening a requested family needs the host lane"
+      {/* ── ONE head rail (lang AddressingBar — the five-slot rule this head proved).
+             Everything else — the overlay switch, the crossings, the doc's own verbs — lives
+             in the pane that owns it, so no fact and no verb is ever far from the thing it
+             describes (SURFACE-PHILOSOPHY §4). ── */}
+      <AddressingBar
+        name="family"
+        sentence={
+          <Sentence
+            prefix={
+              openProposals.length > 0 ? `${openProposals.length} proposals against` : "editing"
+            }
+            prefixTone={openProposals.length > 0 ? "awaiting" : "rest"}
+            documentLabel={WORLD.profile.path}
+            documents={[WORLD.profile.path]}
+            documentsEmpty="The fixture world carries exactly one profile; a document library arrives with the host lane."
+            slots={[
+              {
+                key: "family",
+                joiner: "against",
+                text: LIVE ? `${LIVE.familyName} in ${LIVE.worldLabel}` : null,
+                placeholder: "nothing live",
+                options: null,
+                title:
+                  "The family open in the bound Revit session — what the ⇄ live overlay reads and the only thing apply writes into. Without it the profile still edits; it just cannot disagree with anything.",
+              },
+            ]}
+            target={target}
+            onBind={(selector) => setTarget(selector ?? "")}
+            receipt={receipt}
           />
-        )}
-        <FactChip
-          dashed
-          className="ml-auto"
-          title="FIXTURE LANE, declared rather than fallen back to. Every value, proposal and live reading on this page comes from the checked-in world in `src/family/world.ts`; no host, no store, no network, and every verb rewrites page-local state. What replaces it: route:settings for the document, family.editor.snapshot/apply for the live half, and the grounded-doc camera for the sheet mode."
-        >
-          fixture · no host
-        </FactChip>
-      </header>
+        }
+        facts={
+          <>
+            {LIVE && (
+              <FactChip title="How long ago the live family was read. Every claim under the ⇄ live overlay is only as true as this number — an old read is a weaker claim, not a wrong one.">
+                live · read {LIVE.readAgo}
+              </FactChip>
+            )}
+            <FactChip
+              tone={draft.dirty ? "caution" : "meta"}
+              title={
+                draft.dirty
+                  ? "The profile document has changes that are not on disk — an edit, an accepted proposal, or a capture. Nothing about Revit is implied by this; it is a fact about the file."
+                  : "The profile on disk matches what you are looking at. Edits and accepted proposals flip this the moment they land."
+              }
+            >
+              {draft.dirty ? `unsaved draft · ${unsavedCount}` : "saved"}
+            </FactChip>
+          </>
+        }
+        verb={
+          <Verb
+            label="save profile"
+            tone="commit"
+            onClick={save}
+            disabled={!draft.dirty}
+            reason={
+              draft.dirty
+                ? `Write the profile back to ${WORLD.profile.path}. This commits the DOCUMENT — it touches nothing in Revit, which is what apply is for.`
+                : "Nothing to save — the document already matches the file."
+            }
+          />
+        }
+        advisory={
+          /* `?family=<id>` arrives from /families' row click. This surface reads one fixture
+             profile and cannot honour it, and saying so is cheaper than pretending. */
+          requestedFamily != null ? (
+            <OutcomeLine
+              kind="advisory"
+              label={`?family=${requestedFamily} ignored`}
+              says="this surface reads one fixture profile — opening a requested family needs the host lane"
+            />
+          ) : undefined
+        }
+        seam={
+          <FactChip
+            dashed
+            title="FIXTURE LANE, declared rather than fallen back to. Every value, proposal and live reading on this page comes from the checked-in world in `src/family/world.ts`; no host, no store, no network, and every verb rewrites page-local state. What replaces it: route:settings for the document, family.editor.snapshot/apply for the live half, and the grounded-doc camera for the sheet mode."
+          >
+            fixture · no host
+          </FactChip>
+        }
+      />
 
       <PaneWorkspace
         className="min-h-0 flex-1"
