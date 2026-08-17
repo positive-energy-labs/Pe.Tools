@@ -30,8 +30,13 @@ python eval/rhvac/score-looks-good.py compare <baseline-report.json> <candidate-
 ```
 
 Knob overrides without recompiling: `PE_TAKEOFF_KNOBS="Name=Value;Name=Value"` (exact field names
-from `TakeoffOptions`, Contracts.cs). `PE_TAKEOFF_ZONE=<name>` filters to one zone. Every override
-lands in `optionsHash`, so artifacts can't be misattributed.
+from `TakeoffOptions`, Contracts.cs). `PE_TAKEOFF_ZONE=<name>` filters to one zone. Knob overrides
+land in `optionsHash`; since 2026-08-17 the zone filter does too, AND is persisted explicitly as
+`zoneFilter` in report.json/meta.json (`null` = unfiltered). Before that fix a filtered run's
+package hashed identically to the full baseline's — run `20260817-161144-5973e5c14825` carried 1
+zone under the 45-zone baseline's hash and burned a review sitting as an inexplicably empty A side.
+Pre-fix packages remain ambiguous; /runs marks them "possibly partial" by the modal-zone-count
+heuristic.
 
 Trap: persisted `ink_*.bin` are stale vs replay seed ink (Attic −45%). score-looks-good.py reads
 seed ink from `replay_*.bin` directly; do not score against `ink_*.bin`.

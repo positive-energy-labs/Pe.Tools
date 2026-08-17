@@ -1,11 +1,14 @@
 // The honesty seams of the /runs data layer: the persisted ROOM disposition column (SHIMS.md #3),
-// stable-key A/B pairing with name-pairing only as a surfaced fallback (SHIMS.md #2), and the
-// two-currency scores.json reading (SHIMS.md #1). No solver logic here — parsing and pairing only.
+// stable-key A/B pairing with name-pairing only as a surfaced fallback (SHIMS.md #2), the
+// two-currency scores.json reading (SHIMS.md #1), and partial-run detection (the 20260817-161144
+// misattribution close). No solver logic here — parsing, pairing and partiality only.
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  modalZoneCount,
   pairZones,
   parseZoneTsv,
+  partiality,
   reportKeyed,
   type RunReport,
   type RunScores,
@@ -97,5 +100,59 @@ describe("scoreBoards", () => {
     const legacy = { board: { savedWork: 0.38 } } as unknown as RunScores;
     expect(scoreBoards(legacy).v11).toBeNull();
     expect(scoreBoards(legacy).v1?.savedWork).toBe(0.38);
+  });
+});
+
+// Partial-run honesty (the 20260817-161144 misattribution close): a zone-filtered package must
+// be detectable, a pre-field package must degrade to "possibly", and a full package must never
+// be dressed as partial.
+
+const filteredReport = (zones: number, zoneFilter?: string | null): RunReport => {
+  const base = report(Array.from({ length: zones }, (_, i) => zone({ Zone: `Main Level#${i}` })));
+  // Absent vs explicit-null is the load-bearing distinction — only spread the key in when given.
+  return zoneFilter === undefined ? base : { ...base, zoneFilter };
+};
+
+describe("partiality", () => {
+  it("declared filter = partial, regardless of zone count", () => {
+    expect(partiality(filteredReport(1, "Lower Level#08"), 45)).toEqual({
+      kind: "partial",
+      zone: "Lower Level#08",
+    });
+    expect(partiality(filteredReport(45, "Lower Level"), 45).kind).toBe("partial");
+  });
+
+  it("explicit null = full, even when the count looks suspicious", () => {
+    expect(partiality(filteredReport(1, null), 45)).toEqual({ kind: "full" });
+  });
+
+  it("pre-field package below the modal count = possibly partial (161144's lie)", () => {
+    expect(partiality(filteredReport(1), 45)).toEqual({
+      kind: "possibly-partial",
+      zones: 1,
+      modal: 45,
+    });
+  });
+
+  it("pre-field package at the modal count = full", () => {
+    expect(partiality(filteredReport(45), 45)).toEqual({ kind: "full" });
+  });
+
+  it("unknown modal count disables the heuristic — honest cannot-assess, never a guess", () => {
+    expect(partiality(filteredReport(1), null)).toEqual({ kind: "full" });
+  });
+});
+
+describe("modalZoneCount", () => {
+  it("returns the most common zone count", () => {
+    expect(modalZoneCount([filteredReport(45), filteredReport(45), filteredReport(1)])).toBe(45);
+  });
+
+  it("ties break toward the LARGER count — filtered runs must not vote filtered into full", () => {
+    expect(modalZoneCount([filteredReport(1), filteredReport(45)])).toBe(45);
+  });
+
+  it("null on an empty pool", () => {
+    expect(modalZoneCount([])).toBeNull();
   });
 });

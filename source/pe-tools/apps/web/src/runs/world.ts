@@ -15,6 +15,10 @@ export type RunMeta = {
   generatedUtc: string;
   optionsHash: string;
   label: string | null;
+  /** The PE_TAKEOFF_ZONE filter the run executed under. `null` = explicitly unfiltered (full
+   * scope); ABSENT = pre-field package, which can only be assessed heuristically. Duplicated
+   * from report.json so the index can mark partial packages without opening reports. */
+  zoneFilter?: string | null;
 };
 
 export type RunIndexEntry = { id: string; meta: RunMeta | null };
@@ -75,6 +79,10 @@ export type RunReport = {
   GeneratedUtc: string;
   optionsHash: string;
   options: Record<string, unknown>;
+  /** PE_TAKEOFF_ZONE the run executed under (additive on v4, 2026-08-17). `null` = explicitly
+   * unfiltered; ABSENT = pre-field package (see `partiality`). Since the same date the filter
+   * also lands in optionsHash, so a filtered run can no longer share the full baseline's hash. */
+  zoneFilter?: string | null;
   Zones: ZoneRecord[];
   RejectionHistogram: Record<string, number>;
 };
@@ -180,6 +188,60 @@ export function loadRunScores(runId: string): Promise<RunScores | null> {
     scoresCache.set(runId, cached);
   }
   return cached;
+}
+
+// ---- partial-run honesty (the 20260817-161144 misattribution close) --------------------------
+// A PE_TAKEOFF_ZONE run persists a package whose zones are a SUBSET of the baseline scope. Since
+// 2026-08-17 the filter lands in optionsHash AND as report/meta `zoneFilter` (null = explicitly
+// unfiltered). Pre-field packages can still lie — 161144 proved it — so absence degrades to a
+// cheap heuristic against the pool's modal zone count. Always inform, never block.
+
+export type Partiality =
+  | { kind: "full" }
+  /** The package SAYS it was zone-filtered: report/meta `zoneFilter` is a string. */
+  | { kind: "partial"; zone: string }
+  /** Pre-field package with suspiciously few zones vs the pool's modal count — it cannot say
+   * whether it was filtered, so the surface must say "possibly", not "is". */
+  | { kind: "possibly-partial"; zones: number; modal: number };
+
+/** Partiality of one report. `modalZones` is the pool's modal zone count (null = unknown, which
+ * disables the pre-field heuristic — an honest "cannot assess", never a guess). */
+export function partiality(report: RunReport, modalZones: number | null): Partiality {
+  if (typeof report.zoneFilter === "string") return { kind: "partial", zone: report.zoneFilter };
+  if ("zoneFilter" in report) return { kind: "full" }; // explicit null = explicitly unfiltered
+  if (modalZones !== null && report.Zones.length < modalZones) {
+    return { kind: "possibly-partial", zones: report.Zones.length, modal: modalZones };
+  }
+  return { kind: "full" };
+}
+
+/** The pool's modal (most common) zone count — the cheap "what does a full run look like here"
+ * yardstick for pre-field packages. Null on an empty pool. */
+export function modalZoneCount(reports: RunReport[]): number | null {
+  const counts = new Map<number, number>();
+  for (const report of reports) {
+    counts.set(report.Zones.length, (counts.get(report.Zones.length) ?? 0) + 1);
+  }
+  let best: number | null = null;
+  let bestVotes = 0;
+  for (const [zones, votes] of counts) {
+    // Ties break toward the LARGER zone count: a pool half-full of filtered runs must not vote
+    // the filtered size into "full".
+    if (votes > bestVotes || (votes === bestVotes && best !== null && zones > best)) {
+      best = zones;
+      bestVotes = votes;
+    }
+  }
+  return best;
+}
+
+/** Modal zone count across the whole pool by run id. Reports are promise-cached, so the ledger
+ * and the header share the fetches. Unreadable reports are skipped, not fatal. */
+export async function poolModalZones(runIds: string[]): Promise<number | null> {
+  const reports = await Promise.all(
+    runIds.map((id) => loadRunReport(id).catch(() => null)),
+  );
+  return modalZoneCount(reports.filter((report): report is RunReport => report !== null));
 }
 
 // ---- A/B zone pairing (SHIMS.md #2 close) ----------------------------------------------------

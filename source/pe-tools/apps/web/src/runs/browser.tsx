@@ -43,8 +43,12 @@ import {
   loadRunScores,
   loadZoneGeometry,
   matchZone,
+  modalZoneCount,
   paintRaster,
   pairZones,
+  type Partiality,
+  partiality,
+  poolModalZones,
   type Raster,
   ringPath,
   type RunIndexEntry,
@@ -125,6 +129,63 @@ function topRejections(zone: ZoneRecord, n = 3): [string, number][] {
   return Object.entries(zone.Rejections)
     .sort((a, b) => b[1] - a[1])
     .slice(0, n);
+}
+
+// ---- partial-run marks (the 20260817-161144 misattribution close) ----
+// A zone-filtered package must SAY so wherever it can be mistaken for a baseline. Never block,
+// always inform.
+
+const partialTitle = (zone: string) =>
+  `Partial run — the harness executed under PE_TAKEOFF_ZONE, so this package holds only zones ` +
+  `matching "${zone}". Its board and scores cover that slice, not the full baseline scope; ` +
+  `pairing it against a full run measures the filter, not the knobs.`;
+
+const possiblyPartialTitle = (zones: number, modal: number) =>
+  `Possibly partial — pre-field package: it predates the persisted zoneFilter field, so it ` +
+  `cannot say whether it ran zone-filtered, and it holds ${zones} zones where the pool's modal ` +
+  `full run holds ${modal} (run 20260817-161144 lied exactly this way). Trust it as a baseline ` +
+  `accordingly.`;
+
+/** The partiality mark. `compact` for tight table cells; full sentence otherwise. */
+function PartialityChip(props: { part: Partiality | null; prefix?: string; compact?: boolean }) {
+  const { part, prefix = "", compact = false } = props;
+  if (!part || part.kind === "full") return null;
+  if (part.kind === "partial") {
+    return (
+      <Chip tone="warn" title={partialTitle(part.zone)}>
+        {prefix}
+        {compact ? `partial · ${zoneShort(part.zone)}` : `partial run — zone-filtered: ${part.zone}`}
+      </Chip>
+    );
+  }
+  return (
+    <Chip tone="warn" dashed title={possiblyPartialTitle(part.zones, part.modal)}>
+      {prefix}
+      {compact
+        ? `partial? ${part.zones}/${part.modal}`
+        : `possibly partial — pre-field package (${part.zones}/${part.modal} zones)`}
+    </Chip>
+  );
+}
+
+/** Why this A/B pairing is suspect, or null when it is clean. Both-sides-filtered-to-the-same-
+ * zone is the tuning loop's legitimate case and gets no caveat. */
+function pairingCaveat(a: Partiality, b: Partiality): string | null {
+  const aFull = a.kind === "full";
+  const bFull = b.kind === "full";
+  if (aFull && bFull) return null;
+  if (a.kind === "partial" && b.kind === "partial") {
+    return a.zone === b.zone
+      ? null
+      : `A and B were filtered to DIFFERENT zones ("${a.zone}" vs "${b.zone}") — this A/B compares different slices of the building.`;
+  }
+  if (!aFull && !bFull) {
+    return "Both sides of this A/B are partial (or possibly partial) packages with no declared common filter — the pairing may compare different slices of the building.";
+  }
+  if (!aFull) {
+    return "The baseline (A) is a partial (or possibly partial) package paired against a full current run — the Δs measure the missing zones, not the knobs.";
+  }
+  return "The current run (B) is a partial (or possibly partial) package paired against a full baseline — the Δs measure the missing zones, not the knobs.";
 }
 
 /** Did the zone materially move between the two runs? (ledger's materiality donation) */
@@ -587,6 +648,11 @@ function RunStrip(props: {
               </span>
               <span className="tele text-[10px] leading-3 text-muted-foreground">
                 {meta?.optionsHash.slice(0, 8) ?? "?"} · {meta ? fmtTime(meta.generatedUtc) : ""}
+                {typeof meta?.zoneFilter === "string" ? (
+                  <span style={{ color: "var(--st-warn)" }} title={partialTitle(meta.zoneFilter)}>
+                    {" "}· partial
+                  </span>
+                ) : null}
               </span>
             </button>
             <button
@@ -1393,6 +1459,9 @@ type RunRow = {
   /** Null on the oldest run — nothing earlier to diff against. Deltas are CHRONOLOGICAL
    * (vs the run before it in time), never "the row below after sorting". */
   delta: { solved: number; rooms: number; sqft: number; held: number } | null;
+  /** Partial-run honesty: declared zoneFilter, or the pre-field heuristic vs the pool's modal
+   * zone count (the 20260817-161144 misattribution close). */
+  partiality: Partiality;
 };
 
 function rowScores(scores: RunScores | null): RowScores | null {
@@ -1424,6 +1493,7 @@ async function buildLedgerRows(index: RunIndexEntry[]): Promise<RunRow[]> {
     Promise.all(index.map((entry) => loadRunReport(entry.id))),
     Promise.all(index.map((entry) => loadRunScores(entry.id))),
   ]);
+  const modal = modalZoneCount(reports);
   return index.map((entry, i) => {
     const report = reports[i]!;
     const board = boardSummary(report);
@@ -1447,6 +1517,7 @@ async function buildLedgerRows(index: RunIndexEntry[]): Promise<RunRow[]> {
             held: board.heldSqft - prev.heldSqft,
           }
         : null,
+      partiality: partiality(report, modal),
     };
   });
 }
@@ -1555,6 +1626,7 @@ function LedgerDock(props: {
               {runName(row)}
             </span>
             <span className="shrink-0 text-[10px] text-muted-foreground/70">{fmtTime(row.when)}</span>
+            <PartialityChip part={row.partiality} compact />
           </span>
         ),
       },
@@ -1582,11 +1654,22 @@ function LedgerDock(props: {
             return <span className="tele block px-1.5 font-semibold text-foreground">B</span>;
           }
           const isA = row.id === prevId;
+          // Picker warning, not a block: a partial package can still be a legitimate baseline
+          // (e.g. against another run under the SAME filter) — but never silently.
+          const caveat =
+            row.partiality.kind === "partial"
+              ? ` WARNING: ${partialTitle(row.partiality.zone)}`
+              : row.partiality.kind === "possibly-partial"
+                ? ` WARNING: ${possiblyPartialTitle(row.partiality.zones, row.partiality.modal)}`
+                : "";
           return (
             <button
               type="button"
               onClick={() => onPickBaseline(row.id)}
-              title={isA ? "This is the baseline (A) — click to clear it." : "Set this run as the baseline (A)."}
+              title={
+                (isA ? "This is the baseline (A) — click to clear it." : "Set this run as the baseline (A).") +
+                caveat
+              }
               className={cn(
                 "tele h-7 w-full px-1.5 text-left",
                 isA ? "font-semibold text-foreground" : "text-muted-foreground/60 hover:text-muted-foreground",
@@ -1864,6 +1947,21 @@ export default function RunBrowser() {
   // scores.json per side: undefined = loading, null = the package has no scores.json.
   const [scoresCur, setScoresCur] = useState<RunScores | null | undefined>(undefined);
   const [scoresPrev, setScoresPrev] = useState<RunScores | null | undefined>(undefined);
+  // The pool's modal zone count — the pre-field partiality heuristic's yardstick. Null until
+  // computed (heuristic disabled, never guessed).
+  const [modalZones, setModalZones] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!runs || runs.length === 0) return;
+    let live = true;
+    poolModalZones(runs.map((entry) => entry.id)).then(
+      (modal) => live && setModalZones(modal),
+      () => {},
+    );
+    return () => {
+      live = false;
+    };
+  }, [runs]);
 
   useEffect(() => {
     fetchRunIndex()
@@ -1981,6 +2079,11 @@ export default function RunBrowser() {
   const board = reportCur ? boardSummary(reportCur) : null;
   const boardPrev = comparing && reportPrev ? boardSummary(reportPrev) : null;
   const prevMeta = runs?.find((r) => r.id === prevId)?.meta ?? null;
+  // Partial-run honesty on the header: a filtered/partial package says so next to its board,
+  // and a suspect A/B pairing carries an explicit caveat (never a block).
+  const partCur = reportCur ? partiality(reportCur, modalZones) : null;
+  const partPrev = comparing && reportPrev ? partiality(reportPrev, modalZones) : null;
+  const abCaveat = partCur && partPrev ? pairingCaveat(partPrev, partCur) : null;
 
   // Sheet geometry: measured once at the scroll container, cards derive their panel boxes.
   const [sheetRef, sheetW] = useElementWidth();
@@ -2107,6 +2210,8 @@ export default function RunBrowser() {
               {fmtSqft(board.acceptedSqft)} accepted · {fmtSqft(board.heldSqft)} held
             </span>
           )}
+          <PartialityChip part={partCur} prefix="B: " />
+          <PartialityChip part={partPrev} prefix="A: " />
           {boardPrev && board && (
             <span className="tele text-xs text-muted-foreground">
               Δ vs A: <Delta value={board.solved - boardPrev.solved} /> solved ·{" "}
@@ -2114,6 +2219,11 @@ export default function RunBrowser() {
               <Delta value={board.heldSqft - boardPrev.heldSqft} goodWhenUp={false} suffix=" sf held" />
             </span>
           )}
+          {abCaveat ? (
+            <Chip tone="warn" title={abCaveat}>
+              A/B pairing caveat
+            </Chip>
+          ) : null}
           <HeaderScores cur={scoresCur} prev={comparing ? scoresPrev : undefined} />
           <span className="ml-auto flex items-center gap-1.5">
             {prevId ? (

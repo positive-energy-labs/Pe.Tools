@@ -58,6 +58,25 @@ wants to be bounds-first with `zoneViewport` as a convenience on top.
 
 ---
 
+## Closed at the wave-2 honesty fix, 2026-08-17
+
+- **Zone-filtered runs can no longer impersonate baselines.** Provenance: run
+  `20260817-161144-5973e5c14825` executed under `PE_TAKEOFF_ZONE` and persisted 1 zone under the
+  SAME `optionsHash` as the 45-zone full baseline — kaitpw selected it as an A/B baseline and got
+  an inexplicably empty side (a burned review sitting; TUNING.md's "every override lands in
+  optionsHash" claim was false for the zone filter). Fix, at persist time where it belongs
+  (`ZoneBoundedDetectTests`): the zone filter now feeds `OptionsHash` (absent = unfiltered = the
+  historical hash, so full packages keep their identity) and is persisted explicitly as
+  `zoneFilter` in report.json AND meta.json — `null` means "explicitly unfiltered", absent means
+  pre-field. SchemaVersion stays 4: the field is additive-optional and readers tolerate absence.
+  UI (`world.partiality`/`modalZoneCount`/`poolModalZones` + `browser.tsx` marks): a declared
+  partial package is marked in the ledger row, the run strip, and the board header ("partial run —
+  zone-filtered: <zone>"); a pre-field package with fewer zones than the pool's modal count is
+  marked "possibly partial — pre-field package" (161144 proved old packages can still lie); and a
+  suspect A/B pairing carries an explicit caveat chip + a warning on the baseline picker. Two
+  runs filtered to the SAME declared zone pair without caveat — that is the tuning loop's
+  legitimate case. Never blocked, always informed.
+
 ## Closed at the de-shim pass, 2026-08-17 (kaitpw ruling: "no shims should exist in the ui")
 
 - **#1 `scores.json` joins the run package at persist time.** The harness

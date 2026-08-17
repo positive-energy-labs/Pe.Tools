@@ -543,12 +543,17 @@ public sealed class ZoneBoundedDetectTests
             JsonConvert.SerializeObject(new {
                 // v3 added per-zone closure attribution (closureSqft/closure) and the Seals/Close
                 // raster paths; v4 adds zoneKey (stable cross-run zone identity — sha256 of level
-                // + 0.5ft-quantized bbox). Readers tolerate absence, so older artifacts still
-                // render — they just cannot claim what they do not carry.
+                // + 0.5ft-quantized bbox) and, additively (2026-08-17, still v4), zoneFilter.
+                // Readers tolerate absence, so older artifacts still render — they just cannot
+                // claim what they do not carry.
                 SchemaVersion = 4,
                 GeneratedUtc = DateTimeOffset.UtcNow,
                 options = JsonConvert.DeserializeObject(JsonConvert.SerializeObject(canonicalOptions)),
-                optionsHash = OptionsHash(canonicalOptions),
+                optionsHash = OptionsHash(canonicalOptions, zoneFilter),
+                // Partial-run truth: the PE_TAKEOFF_ZONE filter this run executed under. An
+                // explicit null says "unfiltered — the full baseline scope"; a pre-field package
+                // lacks the key entirely and can only be assessed heuristically.
+                zoneFilter,
                 // Level-profile inference can hand each level its own effective options; per-level
                 // hashes make that divergence visible instead of hiding behind one top-level blob.
                 optionsHashPerLevel = LevelMap.Select(item => item.View)
@@ -570,7 +575,7 @@ public sealed class ZoneBoundedDetectTests
         var runsPool = Environment.GetEnvironmentVariable("PE_TAKEOFF_RUNS_DIR")
             ?? Path.Combine(repoRoot, ".artifacts", "takeoff-runs");
         var runStamp = DateTimeOffset.UtcNow;
-        var runId = $"{runStamp:yyyyMMdd-HHmmss}-{OptionsHash(canonicalOptions)}";
+        var runId = $"{runStamp:yyyyMMdd-HHmmss}-{OptionsHash(canonicalOptions, zoneFilter)}";
         var runDir = Path.Combine(runsPool, runId);
         Directory.CreateDirectory(runDir);
         foreach (var file in Directory.EnumerateFiles(artifactDir, "*", SearchOption.AllDirectories))
@@ -582,8 +587,11 @@ public sealed class ZoneBoundedDetectTests
         File.WriteAllText(Path.Combine(runDir, "meta.json"), JsonConvert.SerializeObject(new {
             runId,
             generatedUtc = runStamp,
-            optionsHash = OptionsHash(canonicalOptions),
+            optionsHash = OptionsHash(canonicalOptions, zoneFilter),
             label = Environment.GetEnvironmentVariable("PE_TAKEOFF_RUN_LABEL"),
+            // Duplicated from report.json so the index (which never opens reports) can mark
+            // partial packages without a fetch. null = explicitly unfiltered.
+            zoneFilter,
         }, Formatting.Indented) + Environment.NewLine);
         PersistScores(repoRoot, runDir);
         TestContext.Out.WriteLine($"run persisted: {runDir}");
@@ -641,6 +649,20 @@ public sealed class ZoneBoundedDetectTests
     }
 
     [Test]
+    public void Zone_filter_lands_in_options_hash()
+    {
+        // The 20260817-161144 law: a PE_TAKEOFF_ZONE run may never persist under the full
+        // baseline's hash, and an unfiltered run keeps its historical hash.
+        var options = new TakeoffOptions();
+        Assert.Multiple(() => {
+            Assert.That(OptionsHash(options, "Lower Level#08"), Is.Not.EqualTo(OptionsHash(options)));
+            Assert.That(OptionsHash(options, null), Is.EqualTo(OptionsHash(options)));
+            Assert.That(OptionsHash(options, "Lower Level#08"),
+                Is.Not.EqualTo(OptionsHash(options, "Main Level#03")));
+        });
+    }
+
+    [Test]
     public void ProjectA_zone_rerun_is_deterministic()
     {
         string? bin = FindReplayBin("Level_1_Main_Level");
@@ -680,6 +702,8 @@ public sealed class ZoneBoundedDetectTests
     /// compiled: <c>PE_TAKEOFF_KNOBS="SmallZoneSqft=750;EdgeBandFt=2.0"</c>. Unset — the normal
     /// case — this changes nothing, and whatever it does change lands in report.json's
     /// <c>options</c>/<c>optionsHash</c>, so no artifact can be misattributed to the wrong knobs.
+    /// PE_TAKEOFF_ZONE is the other run-shaping input, and it lands too — in
+    /// <c>optionsHash</c>/runId AND explicitly as <c>zoneFilter</c> in report.json + meta.json.
     /// </summary>
     private static void ApplyKnobOverrides(TakeoffOptions options)
     {
@@ -701,10 +725,18 @@ public sealed class ZoneBoundedDetectTests
         }
     }
 
-    /// <summary>First 12 hex chars of SHA-256 over key-sorted, unindented JSON of the options.</summary>
-    private static string OptionsHash(TakeoffOptions options)
+    /// <summary>
+    /// First 12 hex chars of SHA-256 over key-sorted, unindented JSON of the options. The zone
+    /// filter is run IDENTITY, not a solver knob — but a PE_TAKEOFF_ZONE run must never hash like
+    /// the full baseline (run 20260817-161144-5973e5c14825 carried 1 zone under the 45-zone
+    /// baseline's hash and got picked as an A/B baseline). Filter absent = unfiltered = the
+    /// historical hash, so every existing full package keeps its identity.
+    /// </summary>
+    private static string OptionsHash(TakeoffOptions options, string? zoneFilter = null)
     {
-        string canonical = Canonical(JToken.FromObject(options)).ToString(Formatting.None);
+        var canonicalToken = (JObject)Canonical(JToken.FromObject(options));
+        if (zoneFilter != null) canonicalToken["~zoneFilter"] = zoneFilter;
+        string canonical = canonicalToken.ToString(Formatting.None);
         using var sha = System.Security.Cryptography.SHA256.Create();
         return Convert.ToHexString(sha.ComputeHash(Encoding.UTF8.GetBytes(canonical)))
             .ToLowerInvariant()[..12];
