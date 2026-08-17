@@ -1,8 +1,12 @@
-// THROWAWAY — /runs feedback-loop round 1 (proto). Dev-only export sink for the staging
-// variants: accepts composited PNGs (base64) + a manifest, writes them under
-// <pool>/_exports/<stamp>/, returns the absolute paths, and — for the snip verb — opens the
-// first PNG in Windows Snipping Tool for freehand annotation (the drawing UI Windows already
-// ships; deliberately not rebuilt in the browser).
+// Dev-only export sink for the /runs feedback loop: accepts composited PNGs (base64) + a
+// manifest + a clip-block template, writes them under <pool>/_exports/<stamp>/ (a COLLIDING
+// stamp gets a numeric suffix — an export never overwrites an earlier set), resolves the
+// template's {{DIR}}/{{SET}} placeholders, ALWAYS writes clip.txt, sets the OS clipboard as
+// the PRIMARY copy path (round-2 ruling; navigator.clipboard is the client's fallback), and —
+// for the snip verb — opens the first PNG in Windows Snipping Tool.
+//
+// Rehydration has no handler here on purpose: manifest.json lives inside the pool, so the
+// pool file server (runs-data.$.ts) already serves /_exports/<stamp>/manifest.json.
 //
 // Snipping Tool launch: verified live on this Windows 11 machine 2026-08-17 —
 // `SnippingTool.exe <file>` IGNORES the file argument (opens blank), but the
@@ -14,8 +18,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-// Pool resolution duplicated from runs-data.$.ts (route files export route defs, not helpers;
-// proto keeps its hands off the promoted file).
+// Pool resolution duplicated from runs-data.$.ts (route files export route defs, not helpers).
 function findPool(): string {
   const override = process.env.PE_TAKEOFF_RUNS_DIR;
   if (override) return override;
@@ -33,51 +36,41 @@ function findPool(): string {
 
 type ExportPayload = {
   stamp: string;
+  origin?: string;
   openSnip?: boolean;
+  clipboardVerb?: "text" | "image" | null;
+  clipTemplate?: string;
   items: { fileName: string; pngBase64: string }[];
   sheetBase64?: string | null;
-  manifest: { items: { png: string | null }[] } & Record<string, unknown>;
-};
-
-/** OS-clipboard fallback payload — used when the browser denies navigator.clipboard (no user
- * activation, unfocused pane). Windows-native Set-Clipboard is the one clipboard that always
- * exists on this machine; the text also lands in <dir>/clip.txt as the export's own record. */
-type ClipboardPayload = {
-  clipboard: { text?: string; imagePath?: string; dir?: string };
+  manifest: { stamp: string | null; setUrl: string | null; items: { png: string | null }[] } & Record<string, unknown>;
 };
 
 const psq = (s: string) => `'${s.replace(/'/g, "''")}'`;
 
-function setOsClipboard(req: ClipboardPayload["clipboard"], pool: string): { ok: boolean; detail: string } {
-  if (req.text !== undefined) {
-    // Round-trip through a UTF-8 file — clip.exe mangles non-ASCII, PS args mangle newlines.
-    const dir = req.dir && path.normalize(req.dir).startsWith(path.normalize(pool)) ? req.dir : pool;
-    mkdirSync(dir, { recursive: true });
-    const txt = path.join(dir, "clip.txt");
-    writeFileSync(txt, req.text, "utf8");
+/** Windows-native clipboard — the PRIMARY copy path (Set-Clipboard needs no user activation
+ * and works when the pane is embedded/unfocused, where navigator.clipboard throws). */
+function setOsClipboard(req: { textPath?: string; imagePath?: string }): { ok: boolean; detail: string } {
+  if (req.textPath) {
+    // Round-trip through the UTF-8 clip.txt — clip.exe mangles non-ASCII, PS args mangle newlines.
     const r = spawnSync(
       "powershell.exe",
-      ["-NoProfile", "-STA", "-Command", `Get-Content -Raw -Encoding UTF8 ${psq(txt)} | Set-Clipboard`],
+      ["-NoProfile", "-STA", "-Command", `Get-Content -Raw -Encoding UTF8 ${psq(req.textPath)} | Set-Clipboard`],
       { timeout: 15_000 },
     );
-    return { ok: r.status === 0, detail: r.status === 0 ? txt : String(r.stderr) };
+    return { ok: r.status === 0, detail: r.status === 0 ? req.textPath : String(r.stderr) };
   }
   if (req.imagePath) {
-    const img = path.normalize(req.imagePath);
-    if (!img.startsWith(path.normalize(pool)) || !existsSync(img)) {
-      return { ok: false, detail: "image path outside pool or missing" };
-    }
     const r = spawnSync(
       "powershell.exe",
       [
         "-NoProfile",
         "-STA",
         "-Command",
-        `Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $img=[System.Drawing.Image]::FromFile(${psq(img)}); [System.Windows.Forms.Clipboard]::SetImage($img); $img.Dispose()`,
+        `Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $img=[System.Drawing.Image]::FromFile(${psq(req.imagePath)}); [System.Windows.Forms.Clipboard]::SetImage($img); $img.Dispose()`,
       ],
       { timeout: 15_000 },
     );
-    return { ok: r.status === 0, detail: r.status === 0 ? img : String(r.stderr) };
+    return { ok: r.status === 0, detail: r.status === 0 ? req.imagePath : String(r.stderr) };
   }
   return { ok: false, detail: "empty clipboard request" };
 }
@@ -89,16 +82,19 @@ export const Route = createFileRoute("/api/runs-export")({
         if (!import.meta.env.DEV) {
           return Response.json({ error: "dev-only" }, { status: 403 });
         }
-        const body = (await request.json()) as ExportPayload | ClipboardPayload;
-        if ("clipboard" in body) {
-          const result = setOsClipboard(body.clipboard, findPool());
-          return Response.json(result, { status: result.ok ? 200 : 500 });
-        }
-        const stamp = (body.stamp ?? "").replace(/[^0-9-]/g, "");
-        if (!stamp || !Array.isArray(body.items) || body.items.length === 0) {
+        const body = (await request.json()) as ExportPayload;
+        const requested = (body.stamp ?? "").replace(/[^0-9-]/g, "");
+        if (!requested || !Array.isArray(body.items) || body.items.length === 0) {
           return Response.json({ error: "bad payload" }, { status: 400 });
         }
-        const dir = path.join(findPool(), "_exports", stamp);
+
+        // NEVER overwrite an existing set — a colliding stamp gets a numeric suffix.
+        const exportsRoot = path.join(findPool(), "_exports");
+        let stamp = requested;
+        for (let n = 2; existsSync(path.join(exportsRoot, stamp)); n++) {
+          stamp = `${requested}-${n}`;
+        }
+        const dir = path.join(exportsRoot, stamp);
         mkdirSync(dir, { recursive: true });
 
         const files: { name: string; path: string }[] = [];
@@ -114,14 +110,36 @@ export const Route = createFileRoute("/api/runs-export")({
           files.push({ name: "sheet.png", path: abs });
         }
 
-        // Fill the absolute PNG paths into the manifest before writing it — the manifest on
-        // disk is complete; the client never has to guess server paths.
+        const setUrl = `${body.origin ?? ""}/runs?set=${stamp}`;
+
+        // Fill stamp/setUrl/PNG paths into the manifest before writing it — the manifest on
+        // disk is complete and self-describing; the client never guesses server paths.
         const manifest = body.manifest;
+        manifest.stamp = stamp;
+        manifest.setUrl = setUrl;
         manifest.items?.forEach((m, i) => {
           m.png = files[i]?.path ?? null;
         });
         const manifestPath = path.join(dir, "manifest.json");
         writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+
+        // clip.txt is ALWAYS written (every verb) — the export dir carries its own
+        // paste-ready record even when no clipboard was touched.
+        const clipText = (body.clipTemplate ?? "")
+          .replaceAll("{{DIR}}/", dir + path.sep)
+          .replaceAll("{{SET}}", setUrl);
+        const clipPath = path.join(dir, "clip.txt");
+        writeFileSync(clipPath, clipText, "utf8");
+
+        let clipboard: { ok: boolean; detail: string } | null = null;
+        if (body.clipboardVerb === "text") {
+          clipboard = setOsClipboard({ textPath: clipPath });
+        } else if (body.clipboardVerb === "image") {
+          const sheet = files.find((f) => f.name === "sheet.png");
+          clipboard = sheet
+            ? setOsClipboard({ imagePath: sheet.path })
+            : { ok: false, detail: "sheet.png missing from the export" };
+        }
 
         let opened: string | null = null;
         if (body.openSnip && files.length > 0) {
@@ -132,7 +150,7 @@ export const Route = createFileRoute("/api/runs-export")({
           opened = target;
         }
 
-        return Response.json({ dir, files, manifestPath, opened });
+        return Response.json({ dir, stamp, files, manifestPath, clipPath, clipText, setUrl, clipboard, opened });
       },
     },
   },

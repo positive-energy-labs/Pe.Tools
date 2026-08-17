@@ -1,12 +1,21 @@
-// THROWAWAY — /runs feedback-loop round 1 (proto). The three export verbs, all REAL:
-//   chat  — write per-item PNGs + manifest.json to <pool>/_exports/<stamp>/, then copy a
-//           COMPACT TEXT BLOCK (ids, flags, notes, absolute PNG paths) to the clipboard.
-//           Text-with-paths is the lingua franca: agent TUIs can't paste images.
-//   sheet — one stitched contact-sheet PNG to the clipboard as an image (GUI chats), and the
-//           same files written for the record.
+// The /runs feedback export verbs, all REAL:
+//   chat  — write per-item PNGs + manifest.json + clip.txt to <pool>/_exports/<stamp>/, and
+//           put the compact text block (ids, flags, notes, absolute PNG paths, the set's own
+//           ?set= URL) on the clipboard. Text-with-paths is the lingua franca: agent TUIs
+//           can't paste images.
+//   sheet — one stitched contact-sheet PNG on the clipboard as an image (GUI chats); same
+//           files + clip.txt written for the record.
 //   snip  — same write, then the server opens the first PNG in Windows Snipping Tool
-//           (ms-screensketch:edit — verified live on this machine) for freehand annotation.
-// Compositing is client-side (composite.ts); the server only writes files and launches the tool.
+//           (ms-screensketch:edit — verified live) for freehand annotation.
+//
+// Clipboard order (round-2 ruling): the server-side OS clipboard (Set-Clipboard / SetImage)
+// is the PRIMARY copy path — it needs no user-activation and works from embedded panes —
+// navigator.clipboard is the fallback. clip.txt is ALWAYS written, every verb: the export
+// dir carries its own paste-ready record.
+//
+// Persistence law: the manifest is the ONLY persistence. Re-export mints a NEW stamp (the
+// server suffixes on collision, never overwrites); each export's clip block carries its own
+// ?set= URL so any chat message that quotes it can reopen the staging.
 import { canvasToBlob, canvasToPngBase64, compositeItem, stitchSheet } from "./composite";
 import { type ExportRecord, fb, flagLabel, type StagedItem } from "./staging";
 
@@ -21,35 +30,36 @@ function slug(item: StagedItem, index: number): string {
   return `${String(index + 1).padStart(2, "0")}-${zone}`;
 }
 
-const shortRun = (id: string | null) => (id ? id : "(none)");
+const shortRun = (id: string | null) => (id ?? "(none)");
 
 type ServerResult = {
   dir: string;
+  stamp: string;
   files: { name: string; path: string }[];
   manifestPath: string;
+  clipPath: string;
+  clipText: string;
+  setUrl: string;
+  clipboard: { ok: boolean; detail: string } | null;
   opened: string | null;
 };
 
-/** The compact clipboard block for agent TUIs. Per item: zone, A/B run ids, flagged element
- * ids, the note, the absolute PNG path. Agents read the PNGs from the paths. */
-export function buildTextBlock(
-  items: StagedItem[],
-  server: ServerResult,
-  pool: string | null,
-): string {
+/** The clip block TEMPLATE. `{{DIR}}/<file>` and `{{SET}}` are resolved by the export server
+ * (it owns the final stamp — collisions get suffixed — and the absolute paths). */
+function buildClipTemplate(items: StagedItem[], pool: string | null): string {
   const lines: string[] = [];
   lines.push(`takeoff /runs feedback — ${items.length} staged item${items.length === 1 ? "" : "s"}`);
+  lines.push(`set: {{SET}}`);
   if (pool) lines.push(`pool: ${pool}`);
   lines.push("");
   items.forEach((item, i) => {
-    const png = server.files.find((f) => f.name === `${slug(item, i)}.png`)?.path ?? "(missing)";
     lines.push(`[${i + 1}] ${item.zone} · A=${shortRun(item.runA)} · B=${item.runB}`);
     lines.push(`    flags: ${item.flags.length > 0 ? item.flags.map(flagLabel).join(", ") : "none"}`);
     if (item.note.trim()) lines.push(`    note: ${item.note.trim()}`);
-    lines.push(`    png: ${png}`);
+    lines.push(`    png: {{DIR}}/${slug(item, i)}.png`);
     lines.push("");
   });
-  lines.push(`manifest: ${server.manifestPath}`);
+  lines.push(`manifest: {{DIR}}/manifest.json`);
   return lines.join("\n");
 }
 
@@ -68,8 +78,19 @@ function manifestFor(items: StagedItem[], pool: string | null, verb: string) {
         }
       : null;
   return {
-    surface: "/runs feedback-loop round 1 (proto)",
+    surface: "/runs feedback",
+    schemaNote:
+      "takeoff-runs feedback export manifest v2. This file is the ONLY persistence of a staged " +
+      "set. Rehydrate: open <origin>/runs?set=<stamp> — the page reloads `items` into the " +
+      "staging tray, editable; re-export mints a NEW stamp, never overwrites this one. Per " +
+      "item: zone (positional name, SHIMS #2), level, runA/runB = the PINNED A/B pair " +
+      "(runA null = staged without a baseline), flags = element ids judged on B " +
+      "('room:R06' | 'residue:R03'), note = the one free-text verdict, stagedAt = epoch ms, " +
+      "a/b = stat summaries at stage time (report.json in the run package stays the source of " +
+      "truth), png = the composited panel image, absolute path, server-filled.",
     verb,
+    stamp: null as string | null, // server fills the final (collision-suffixed) stamp
+    setUrl: null as string | null, // server fills <origin>/runs?set=<stamp>
     generatedUtc: new Date().toISOString(),
     pool,
     items: items.map((item, i) => ({
@@ -81,6 +102,7 @@ function manifestFor(items: StagedItem[], pool: string | null, verb: string) {
       // The flags ARE data: element ids from the run package (rooms/residues in B's TSV).
       flags: item.flags,
       note: item.note.trim() || null,
+      stagedAt: item.stagedAt,
       a: sideStats(item.a),
       b: sideStats(item.b),
       png: null as string | null, // server fills the absolute path
@@ -103,13 +125,17 @@ export async function runExport(
       verb === "sheet"
         ? stitchSheet(composites, `takeoff /runs feedback — ${items.length} staged — ${new Date().toISOString()}`)
         : null;
-    // The clipboard image blob is made BEFORE the POST so the write stays inside the user
-    // gesture's transient activation.
+    // Blob made up-front so a navigator fallback still sits inside the user gesture's
+    // transient activation window when the server clipboard refuses.
     const sheetBlob = sheetCanvas ? await canvasToBlob(sheetCanvas) : null;
 
     const payload = {
       stamp: stamp(),
+      origin: window.location.origin,
       openSnip: verb === "snip",
+      // OS clipboard is the PRIMARY copy path (round-2 ruling); clip.txt always written.
+      clipboardVerb: verb === "chat" ? "text" : verb === "sheet" ? "image" : null,
+      clipTemplate: buildClipTemplate(items, pool),
       items: await Promise.all(
         items.map(async (item, i) => ({
           fileName: `${slug(item, i)}.png`,
@@ -128,47 +154,33 @@ export async function runExport(
     if (!res.ok) throw new Error(`export server: ${res.status} ${await res.text()}`);
     const server = (await res.json()) as ServerResult;
 
-    // Clipboard AFTER the write: a clipboard denial must not un-happen the export — the files
-    // are on disk. Browser clipboard first; on denial (no user activation, unfocused pane) fall
-    // back to the OS clipboard through the export server (Set-Clipboard — REAL, and it drops
-    // clip.txt next to the PNGs as the export's own record).
-    let text: string | null = null;
+    // Copy result: OS clipboard already attempted server-side. Fall back to the browser
+    // clipboard only if that refused — and never let a copy failure un-happen the export.
+    let copiedVia: ExportRecord["copiedVia"] = server.clipboard?.ok ? "os" : null;
     let warning: string | null = null;
-    const osClipboard = async (req: { text?: string; imagePath?: string; dir?: string }) => {
-      const r = await fetch("/api/runs-export", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ clipboard: req }),
-      });
-      if (!r.ok) throw new Error(`os clipboard: ${r.status} ${await r.text()}`);
-    };
-    try {
-      if (verb === "chat") {
-        text = buildTextBlock(items, server, pool);
-        try {
-          await navigator.clipboard.writeText(text);
-        } catch {
-          await osClipboard({ text, dir: server.dir });
-        }
-      } else if (verb === "sheet" && sheetBlob) {
-        try {
+    if (payload.clipboardVerb && !server.clipboard?.ok) {
+      try {
+        if (payload.clipboardVerb === "text") {
+          await navigator.clipboard.writeText(server.clipText);
+        } else if (sheetBlob) {
           await navigator.clipboard.write([new ClipboardItem({ "image/png": sheetBlob })]);
-        } catch {
-          const sheetPath = server.files.find((f) => f.name === "sheet.png")?.path;
-          if (!sheetPath) throw new Error("sheet.png missing from the export");
-          await osClipboard({ imagePath: sheetPath });
         }
+        copiedVia = "browser";
+        warning = `OS clipboard refused (${server.clipboard?.detail ?? "?"}) — copied via the browser instead`;
+      } catch (err) {
+        warning = `files + clip.txt written, but both clipboards refused (os: ${server.clipboard?.detail ?? "?"}; browser: ${String(err)})${verb === "chat" ? " — copy from the block below" : ""}`;
       }
-    } catch (err) {
-      warning = `files written, but the clipboard write failed (${String(err)})${verb === "chat" ? " — copy from the block below" : ""}`;
     }
 
     fb.exportDone({
       verb,
       dir: server.dir,
+      stamp: server.stamp,
       files: server.files.map((f) => f.path),
       manifestPath: server.manifestPath,
-      text,
+      setUrl: server.setUrl,
+      text: server.clipText,
+      copiedVia,
       opened: server.opened,
       warning,
       atUtc: new Date().toISOString(),

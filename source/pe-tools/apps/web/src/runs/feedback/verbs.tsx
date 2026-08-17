@@ -1,6 +1,6 @@
-// THROWAWAY — /runs feedback-loop round 1 (proto). Shared bits the three variants compose:
-// the export verb strip (all three verbs REAL), flag chips, the one-line note input, and the
-// post-export status block that proves what happened (dir, paths, clipboard payload).
+// Shared feedback verb chrome: the export verb strip (all three verbs REAL), flag chips, the
+// one-line note input, and the post-export status block that proves what happened (dir, paths,
+// where the copy landed, the set's own ?set= URL).
 import { cn } from "#/lib/utils";
 
 import { runExport } from "./export";
@@ -36,18 +36,18 @@ export function ExportVerbs(props: { items: StagedItem[]; pool: string | null; c
       {btn(
         "chat",
         "copy for chat",
-        "Write per-item PNGs + manifest to the pool's _exports/, then copy a compact text block (ids, flags, notes, absolute PNG paths) — paste it into an agent TUI; agents read the PNGs from the paths.",
+        "Write per-item PNGs + manifest.json + clip.txt to the pool's _exports/, then copy the compact text block (ids, flags, notes, absolute PNG paths, the set's ?set= URL) via the OS clipboard — paste it into an agent TUI; agents read the PNGs from the paths.",
         true,
       )}
       {btn(
         "sheet",
         "copy sheet png",
-        "Stitch every staged item into one contact-sheet PNG and put it on the clipboard as an image (for GUI chats). Files are written to _exports/ too.",
+        "Stitch every staged item into one contact-sheet PNG and put it on the OS clipboard as an image (for GUI chats). Files + clip.txt are written to _exports/ too.",
       )}
       {btn(
         "snip",
         "save + snip",
-        "Write the export, then open the first PNG in Windows Snipping Tool for freehand annotation.",
+        "Write the export (files + manifest + clip.txt), then open the first PNG in Windows Snipping Tool for freehand annotation.",
       )}
     </div>
   );
@@ -73,25 +73,31 @@ export function ExportStatus(props: { className?: string }) {
   return (
     <div className={cn("tele flex flex-col gap-0.5 text-[10px] text-muted-foreground", props.className)}>
       <span className="break-all">
-        wrote {lastExport.files.length} file{lastExport.files.length === 1 ? "" : "s"} →{" "}
+        wrote {lastExport.files.length} file{lastExport.files.length === 1 ? "" : "s"} + clip.txt →{" "}
         <span className="text-foreground">{lastExport.dir}</span>
       </span>
       <span>
-        {lastExport.verb === "chat" && !lastExport.warning && "text block on clipboard — paste into the agent TUI"}
-        {lastExport.verb === "sheet" && !lastExport.warning && "contact-sheet PNG on clipboard — paste into a GUI chat"}
+        {lastExport.verb === "chat" && lastExport.copiedVia && "text block on clipboard — paste into the agent TUI"}
+        {lastExport.verb === "sheet" && lastExport.copiedVia && "contact-sheet PNG on clipboard — paste into a GUI chat"}
         {lastExport.verb === "snip" && `opened in Snipping Tool: ${lastExport.opened ?? "?"}`}
+        {lastExport.copiedVia === "browser" && " (browser fallback)"}
       </span>
+      <a
+        href={`/runs?set=${lastExport.stamp}`}
+        title="This export's rehydration link — open it (or paste it) to reload this staged set, editable. Re-exporting mints a new stamp."
+        className="break-all underline decoration-dotted hover:text-foreground"
+      >
+        ?set={lastExport.stamp}
+      </a>
       {lastExport.warning && (
         <span style={{ color: "var(--r-alarm)" }}>{lastExport.warning}</span>
       )}
-      {lastExport.text && (
-        <details>
-          <summary className="cursor-pointer">view the copied text block</summary>
-          <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all border p-1.5" style={{ borderColor: "var(--line-2)", borderRadius: 2 }}>
-            {lastExport.text}
-          </pre>
-        </details>
-      )}
+      <details>
+        <summary className="cursor-pointer">view the clip block</summary>
+        <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all border p-1.5" style={{ borderColor: "var(--line-2)", borderRadius: 2 }}>
+          {lastExport.text}
+        </pre>
+      </details>
     </div>
   );
 }
@@ -99,7 +105,7 @@ export function ExportStatus(props: { className?: string }) {
 /** The staged item's flags as removable alarm chips. A flag is DATA — the element id shows. */
 export function FlagChips(props: { item: StagedItem }) {
   if (props.item.flags.length === 0) {
-    return <span className="tele text-[10px] text-muted-foreground/60">no flags — click rooms/residues on the staged panel</span>;
+    return <span className="tele text-[10px] text-muted-foreground/60">no flags — click rooms/residues on the staged B panel</span>;
   }
   return (
     <span className="flex flex-wrap gap-1">
@@ -125,7 +131,7 @@ export function NoteInput(props: { item: StagedItem; className?: string; autoFoc
       value={props.item.note}
       onChange={(e) => fb.setNote(props.item.key, e.target.value)}
       placeholder='note — verdict-shaped, e.g. "top wall of the thin room is bad"'
-      title="One free-text note for this staged item (TASTE.md verdict shape). Lands in the manifest, the caption strip, and the clipboard text."
+      title="One free-text note for this staged item (TASTE.md verdict shape). Lands in the manifest, the caption strip, and the clip block."
       autoFocus={props.autoFocus}
       className={cn(
         "tele w-full border bg-background px-1.5 py-0.5 text-[11px] placeholder:text-muted-foreground/50",

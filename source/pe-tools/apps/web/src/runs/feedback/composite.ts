@@ -1,8 +1,27 @@
-// THROWAWAY — /runs feedback-loop round 1 (proto). Client-side PNG compositing for the export
-// verbs: each staged item becomes one PNG — canvas underlay (the run's own rasters, muted per
-// the underlay law) + the serialized SVG decision overlay (flags in the alarm family) + a
-// caption strip carrying the DATA (zone, run ids, key stats, flagged element ids, the note).
-// The caption makes each PNG self-describing so an agent reading it off disk needs no manifest.
+// Client-side PNG compositing for the /runs feedback export verbs: each staged item becomes
+// one PNG — canvas underlay (the run's own rasters, muted per the underlay law) + the
+// serialized SVG decision overlay (flags in the alarm family) + a caption strip carrying the
+// DATA (zone, run ids, key stats, flagged element ids, the note). The caption makes each PNG
+// self-describing so an agent reading it off disk needs no manifest in-context.
+//
+// Palette is shared with the on-screen surface via ../palette (round-1 friction #1 resolved —
+// the export can no longer drift from the screen). Known residual duplication: this painter
+// re-implements ZonePanel's layer order instead of calling a world-owned panel painter; still
+// ledgered as promotion debt in CLEANROOM's round-1 friction list.
+import {
+  ACCEPT_FILL,
+  ACCEPT_STROKE,
+  alarmColor,
+  CLOSE_M,
+  HELD_FILL,
+  HELD_STROKE,
+  INK_M,
+  PAPER,
+  SEAL_M,
+  VOID_FILL,
+  VOID_STROKE,
+  ZONE_STROKE,
+} from "../palette";
 import {
   loadRaster,
   loadZoneGeometry,
@@ -16,28 +35,8 @@ import {
 
 import { flagLabel, type StagedItem } from "./staging";
 
-// Palette duplicated from browser.tsx (proto: the promoted surface does not export its
-// constants and this round is not allowed to restyle it). Light-mode values — /runs pins light.
-const PAPER = "#fcfbf9";
-const INK_M: [number, number, number, number] = [122, 118, 114, 235];
-const SEAL_M: [number, number, number, number] = [184, 126, 118, 175];
-const CLOSE_M: [number, number, number, number] = [196, 178, 152, 165];
-const ACCEPT_STROKE = "rgb(23,98,135)";
-const ACCEPT_FILL = "rgba(35,118,158,0.12)";
-const HELD_STROKE = "#a97e16";
-const VOID_STROKE = "rgba(146,142,138,0.7)";
-const VOID_FILL = "rgba(146,142,138,0.07)";
-const ZONE_STROKE = "rgb(108,52,140)";
 const TEXT = "#44403c";
 const MUTED = "#78716c";
-
-/** The one alarm. Resolved from the live tokens so the export matches the screen; falls back
- * to the light-mode literal when the DOM is not around. */
-function alarmColor(): string {
-  if (typeof document === "undefined") return "#8e4120";
-  const v = getComputedStyle(document.documentElement).getPropertyValue("--r-alarm").trim();
-  return v || "#8e4120";
-}
 
 const PANEL_W = 640;
 const PANEL_H = 460;
@@ -110,7 +109,8 @@ function svgToImage(svg: string): Promise<HTMLImageElement> {
 }
 
 /** One panel tile: PANEL_W×PANEL_H, paper ground, underlay per the paint-order law (decision
- * fills under, invented closures screened, received ink LAST), then the serialized SVG overlay. */
+ * fills under, invented closures translucent, received ink LAST), then the serialized SVG
+ * overlay. */
 async function paintPanelTile(
   runId: string,
   zone: ZoneRecord,
@@ -150,7 +150,7 @@ async function paintPanelTile(
     ctx.fill(new Path2D(ringPath(vp, rings.map((r) => r.points))), "evenodd");
   }
   for (const res of geom.residues) {
-    ctx.fillStyle = res.reason === "rejected" ? "rgba(196,150,44,0.10)" : VOID_FILL;
+    ctx.fillStyle = res.reason === "rejected" ? HELD_FILL : VOID_FILL;
     ctx.fill(new Path2D(ringPath(vp, res.loops)), "evenodd");
   }
   try {
@@ -159,9 +159,9 @@ async function paintPanelTile(
       zone.Seals ? loadRaster(runId, zone.Seals).catch(() => null) : null,
       zone.Close ? loadRaster(runId, zone.Close).catch(() => null) : null,
     ]);
-    if (close) paintRaster(ctx, close, vp, CLOSE_M, true);
-    if (seals) paintRaster(ctx, seals, vp, SEAL_M, true);
-    if (ink) paintRaster(ctx, ink, vp, INK_M, false);
+    if (close) paintRaster(ctx, close, vp, CLOSE_M);
+    if (seals) paintRaster(ctx, seals, vp, SEAL_M);
+    if (ink) paintRaster(ctx, ink, vp, INK_M);
   } catch {
     // evidence layer failed — decisions stay visible
   }
