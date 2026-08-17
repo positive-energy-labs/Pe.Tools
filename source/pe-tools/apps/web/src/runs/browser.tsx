@@ -35,6 +35,9 @@ import { cn } from "#/lib/utils";
 // pure presentation — no ops coupling — so /runs borrows it rather than forking a second one.
 import { EmptyState } from "#/ops/primitives";
 
+// proto (feedback-loop round 1, THROWAWAY): the ?fb= staging/export seam. Everything below is
+// inert when no fb variant is active — see src/runs/proto-fb/.
+import { FbAboveLedger, FbRoot, FbStageButton, itemKey, useFbPanel } from "./proto-fb/mount";
 import {
   boardSummary,
   fetchRunIndex,
@@ -173,14 +176,18 @@ function Delta({
 // SVG: rebalanced decision strokes on top. One shared viewport so layers cannot drift.
 // ---------------------------------------------------------------------------
 
-function ZonePanel(props: {
+export function ZonePanel(props: {
   runId: string;
   zone: ZoneRecord;
   maxW: number;
   maxH: number;
   underlay: boolean;
+  /** proto (feedback-loop): staged-item key — when set AND the item is staged, rooms/residues
+   * become flaggable (click toggles; flagged = alarm family). */
+  fbKey?: string;
 }) {
   const { runId, zone, maxW, maxH, underlay } = props;
+  const fbPanel = useFbPanel(props.fbKey);
   const vp: ZoneViewport = useMemo(() => {
     const pad = 4;
     const wFt = zone.MaxX - zone.MinX + pad * 2;
@@ -264,26 +271,44 @@ function ZonePanel(props: {
         <svg className="absolute inset-0" width={vp.widthPx} height={vp.heightPx} aria-hidden>
           {geom?.rooms.map((room) => {
             const rings = geom.polys.get(room.id);
-            return rings ? (
+            if (!rings) return null;
+            // proto (feedback-loop): a flag is DATA — the element id, not pixels.
+            const flagged = fbPanel?.flags.has(`room:${room.id}`) ?? false;
+            return (
               <path
                 key={room.id}
                 d={ringPath(vp, rings.map((r) => r.points))}
-                fill="none"
-                stroke={ACCEPT_STROKE}
-                strokeWidth={1.75}
-              />
-            ) : null;
+                fill={flagged ? "var(--r-alarm)" : "none"}
+                fillOpacity={flagged ? 0.18 : 0}
+                stroke={flagged ? "var(--r-alarm)" : ACCEPT_STROKE}
+                strokeWidth={flagged ? 2.5 : 1.75}
+                pointerEvents={fbPanel ? "all" : undefined}
+                style={fbPanel ? { cursor: "crosshair" } : undefined}
+                onClick={fbPanel ? () => fbPanel.toggle(`room:${room.id}`) : undefined}
+              >
+                {fbPanel ? <title>{flagged ? `room ${room.id} — flagged; click to unflag` : `room ${room.id} — click to flag`}</title> : null}
+              </path>
+            );
           })}
-          {geom?.residues.map((res) => (
-            <path
-              key={res.id}
-              d={ringPath(vp, res.loops)}
-              fill="none"
-              stroke={res.reason === "rejected" ? HELD_STROKE : VOID_STROKE}
-              strokeWidth={res.reason === "rejected" ? 1.6 : 0.75}
-              strokeDasharray={res.reason === "rejected" ? "4 3" : undefined}
-            />
-          ))}
+          {geom?.residues.map((res) => {
+            const flagged = fbPanel?.flags.has(`residue:${res.id}`) ?? false;
+            return (
+              <path
+                key={res.id}
+                d={ringPath(vp, res.loops)}
+                fill={flagged ? "var(--r-alarm)" : "none"}
+                fillOpacity={flagged ? 0.14 : 0}
+                stroke={flagged ? "var(--r-alarm)" : res.reason === "rejected" ? HELD_STROKE : VOID_STROKE}
+                strokeWidth={flagged ? 2.5 : res.reason === "rejected" ? 1.6 : 0.75}
+                strokeDasharray={!flagged && res.reason === "rejected" ? "4 3" : undefined}
+                pointerEvents={fbPanel ? "all" : undefined}
+                style={fbPanel ? { cursor: "crosshair" } : undefined}
+                onClick={fbPanel ? () => fbPanel.toggle(`residue:${res.id}`) : undefined}
+              >
+                {fbPanel ? <title>{flagged ? `residue ${res.id} — flagged; click to unflag` : `residue ${res.id} — click to flag`}</title> : null}
+              </path>
+            );
+          })}
           <path
             d={ringPath(vp, zone.ZoneLoops as [number, number][][])}
             fill="none"
@@ -383,6 +408,9 @@ function ZoneCard(props: {
   const deltaSf = comparing && a && b ? Math.round(b.AcceptedSqft - a.AcceptedSqft) : null;
   const locatable = b ?? a;
   const knobs = b ? adaptedKnobs(b) : [];
+  // proto (feedback-loop): the staged-item key for THIS A/B pair. Flags land on the B side —
+  // the current run is the one under judgment.
+  const fbKey = itemKey(name, runA, runB);
 
   return (
     <div
@@ -410,17 +438,21 @@ function ZoneCard(props: {
             Δ<Delta value={deltaSf} suffix=" sf" />
           </span>
         ) : null}
-        {locatable ? (
-          <button
-            type="button"
-            onClick={() => onLocate(locatable)}
-            title="Open the plan dock (if closed) and center this zone on its level."
-            className="tele ml-auto shrink-0 border px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
-            style={{ borderColor: "var(--line-2)", borderRadius: 2 }}
-          >
-            ⌖ plan
-          </button>
-        ) : null}
+        <span className="ml-auto flex shrink-0 items-center gap-1.5">
+          {/* proto (feedback-loop): stage this card's A/B for export. */}
+          <FbStageButton name={name} runA={runA} runB={runB} a={a} b={b} />
+          {locatable ? (
+            <button
+              type="button"
+              onClick={() => onLocate(locatable)}
+              title="Open the plan dock (if closed) and center this zone on its level."
+              className="tele shrink-0 border px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+              style={{ borderColor: "var(--line-2)", borderRadius: 2 }}
+            >
+              ⌖ plan
+            </button>
+          ) : null}
+        </span>
       </div>
 
       {/* Panel strip: A|B when a baseline is set; the single panel SPANS the same footprint
@@ -434,13 +466,13 @@ function ZoneCard(props: {
               <MissingPanel w={panelHalfW} h={panelH} label="not in baseline" />
             )}
             {b ? (
-              <ZonePanel runId={runB} zone={b} maxW={panelHalfW} maxH={panelH} underlay={underlay} />
+              <ZonePanel runId={runB} zone={b} maxW={panelHalfW} maxH={panelH} underlay={underlay} fbKey={fbKey} />
             ) : (
               <MissingPanel w={panelHalfW} h={panelH} label="not in current" />
             )}
           </>
         ) : b ? (
-          <ZonePanel runId={runB} zone={b} maxW={panelFullW} maxH={panelH} underlay={underlay} />
+          <ZonePanel runId={runB} zone={b} maxW={panelFullW} maxH={panelH} underlay={underlay} fbKey={fbKey} />
         ) : (
           <MissingPanel w={panelFullW} h={panelH} label="not in run" />
         )}
@@ -1869,6 +1901,8 @@ export default function RunBrowser() {
           </div>
         )}
       </main>
+      {/* proto (feedback-loop): fb=ledger's staged strip rides the dock. */}
+      <FbAboveLedger pool={pool} />
       <LedgerDock
         runs={runs}
         pool={pool}
@@ -2018,6 +2052,8 @@ export default function RunBrowser() {
           end={sheetAndLedger}
         />
       </div>
+      {/* proto (feedback-loop): variant chrome (tray/deck) + the off-system fb switcher. */}
+      <FbRoot pool={pool} ZonePanel={ZonePanel} underlay={underlay} />
     </div>
   );
 }

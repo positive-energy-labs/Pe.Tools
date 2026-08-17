@@ -126,6 +126,89 @@ place in `components/lang`, both callers move together.)*
 Revit-export underlay, the speck filter, and the bounds-shaped viewport. Each in-code `// gap:`
 comment points at its number.
 
+## Feedback loop — round 1 (proto/runs-feedback, 2026-08-17)
+
+The surface's next loop: handing kaitpw's visual verdicts on tuning runs BACK to the
+orchestrating agent. Settled product shape (kaitpw grill, 2026-08-17):
+
+- **Stage for export** on every zone A/B card.
+- **Staged panels are annotatable**: click an accepted-room or residue polygon to FLAG it
+  (alarm family). A flag is DATA — the element id (`room:R06`, `residue:R03`) goes in the
+  manifest, not just pixels. Zone boundary/edges are NOT flaggable (ruled out for now).
+- **One free-text note per staged item**, TASTE.md-verdict shaped. No per-flag notes.
+- **Export, three verbs, all real**: (a) *copy for chat* (PRIMARY) — per-item composited PNGs
+  (underlay + SVG overlay + caption strip) + manifest.json written to
+  `<pool>/_exports/<stamp>/`, and a compact TEXT BLOCK (zone, A/B run ids, flagged element
+  ids, note, absolute PNG path per item) on the clipboard — text-with-paths is the lingua
+  franca because agent TUIs can't paste images; (b) *copy sheet PNG* — one stitched contact
+  sheet on the clipboard as an image for GUI chats; (c) *save + open in Snipping Tool* —
+  Windows already ships the freehand-annotation UI, deliberately not rebuilt.
+- Compositing is client-side (canvas underlay + serialized SVG + caption). The server
+  (`src/routes/api/runs-export.ts`, sibling of the pool route) only writes files, fills the
+  manifest's absolute paths, launches Snipping Tool, and provides the OS-clipboard fallback.
+
+**Round-1 variants** — one route, `?fb=tray|deck|ledger`, floating off-system switcher
+(idiom from a26916e), all three sharing the staging store + export plumbing
+(`src/runs/proto-fb/`, throwaway-marked). Structurally different answers to "where does
+staging live":
+
+- `fb=tray` — staging lives in a docked TRAY (cart pattern); flags in place on the card
+  SVGs; the page stays the page.
+- `fb=deck` — staging collects quietly; "review N staged" opens a full-viewport REVIEW DECK,
+  one item at a time at maximum size, keyboard prev/next, export verbs at deck end. Checkout
+  flow.
+- `fb=ledger` — staging RIDES THE LEDGER dock: staged items as marked entries beside their
+  runs, the dock grows the export verbs. No new chrome regions.
+
+**Live-verified 2026-08-17** (real pool copy, A=baseline-fresh vs B=124019): all three verbs
+ran for real from the tray; chat verb re-ran from the deck's export step and sheet verb from
+the ledger strip; clipboard text block's absolute paths resolve; the contact sheet landed on
+the Windows clipboard as an image (1316×1262); Snipping Tool opened the exported PNG
+(window-captured to prove the file loaded, not just the app).
+
+**Windows fact, verified by invocation**: `SnippingTool.exe <file>` IGNORES the file argument
+(opens blank). `ms-screensketch:edit?filePath=<url-encoded>` opens the PNG in the editor.
+The server uses the protocol.
+
+**Build friction (round output):**
+
+1. *ZonePanel does not expose its pixels.* Export compositing re-paints panels from
+   `world.ts` primitives and duplicates browser.tsx's palette constants (the promoted file
+   doesn't export them; this round wasn't allowed to restructure it). If feedback promotes,
+   the panel painter (underlay + decisions at arbitrary size) wants to be world-owned, called
+   by both the DOM panel and the exporter.
+2. *The decision overlay is display-only by construction.* `fill="none"` SVG paths take no
+   interior clicks; flaggability needed `pointerEvents="all"` + cursor + handlers threaded
+   into the promoted ZonePanel. Making a read overlay interactive is a mode flip, not a prop.
+3. *Zone-peek is a READ surface.* fb=ledger's brief (annotate in the existing zone-peek)
+   fought the peek's `pointer-events-none`, hover-transient nature. Notes moved inline into
+   the dock strip. Finding: annotation needs a pinned interactive surface; the peek is
+   deliberately not one.
+4. *Positional zone identity (SHIMS #2) leaks into staging.* The staged key is
+   zone-name + run pair, snapshotted at stage time. Change the baseline afterwards and the
+   card no longer reads "staged ✓" even though the tray holds the item — correct snapshot
+   semantics, but name-keyed identity cannot say "same zone, different pair".
+5. *Module-singleton store vs HMR.* The external staging store (useSyncExternalStore
+   singleton) splits across vite hot-swaps — observed live as an export whose status never
+   rendered. Full reload heals it; a promoted version belongs in context or a router store.
+6. *navigator.clipboard demands user activation.* Any non-gesture invocation (and embedded
+   panes) gets NotAllowedError. The server-side `Set-Clipboard` fallback (which also drops
+   `clip.txt` beside the PNGs as the export's own record) proved the robust lane on Windows —
+   candidate to become the PRIMARY clipboard, not the fallback.
+7. *Rooms and residues share the R-number namespace* (zone #08 has both room R06 and residue
+   R03 vocabulary; #06 has room R03 AND residue R03 lineage). The `kind:` prefix in flag ids
+   is load-bearing. Adjacent to SHIMS #3 — a persisted stable element id would serve
+   annotation better.
+8. *Arrow-key contention.* The deck's prev/next and the switcher's variant-cycle both want
+   ←/→; the deck captures while open. Throwaway-grade fix; a promoted review mode should own
+   an explicit key scope.
+
+**Practice corrections to the settled shape:** flags draw on the B panel only — a flag is a
+judgment about the current run; mirroring it on A would double-report (the brief said
+"staged panels are annotatable", practice narrowed it to B). The caption strip earned its
+place: it makes each PNG self-describing so an agent reading images off the paths needs no
+manifest in-context.
+
 ## Philosophy fold-in owed at merge
 
 Durable findings this loop produced that belong in `docs/design/SURFACE-PHILOSOPHY.md`. **Do not
