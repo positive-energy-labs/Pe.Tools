@@ -1,8 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import { PHASE_COLOR, useFleet, type WorldFacts } from "#/host/fleet";
+import { EmptyState } from "#/components/lang/empty";
+import { HelpTip } from "#/components/lang/help";
+import { OutcomeLine, type OutcomeKind } from "#/components/lang/outcome";
+import { Verb, VerbGroup } from "#/components/lang/verb";
+import { MasterTable } from "#/components/master-table/master-table";
+import type { Column, Verdict } from "#/components/master-table/model";
+import { useFleet, type WorldFacts } from "#/host/fleet";
 import { HOST_QUERY_KEY } from "#/host/queries";
 import { useWorldLog } from "#/host/use-target";
 
@@ -17,6 +23,12 @@ import { useWorldLog } from "#/host/use-target";
  * actions go through POST /sessions/sandboxes only — the same `pe-revit sandbox` CLI pea's
  * pe_sandbox tool shells, so both actors leave the same trace and there is exactly one way a
  * sandbox comes to exist. World rows derive from fuseFleet — the same fusion the sentence speaks.
+ *
+ * Design-language pass 2026-08-16: the fleet renders through `MasterTable` with a `verdict:`
+ * phase column (live · booting · unresponsive on the meaning band — `PHASE_COLOR`'s blue/kiln/
+ * clay spends die here); lifecycle controls are lang `Verb`s (all commit — every one writes
+ * beyond the page); dashed declare buttons lose the seam edge they were squatting on. Gaps in
+ * docs/features/instances/DESIGN-AUDIT.md.
  */
 
 export const Route = createFileRoute("/instances")({ component: Page });
@@ -58,56 +70,32 @@ function worldSub(world: WorldFacts): string {
         .join(" · ");
 }
 
-function worldDocs(world: WorldFacts): string {
+/** The phase word, spoken as a row-level pipeline verdict on the meaning band. */
+function phaseVerdict(world: WorldFacts): Verdict {
   if (world.session)
-    return world.activeDocumentTitle
-      ? `${world.activeDocumentTitle}${world.openDocumentCount > 1 ? ` +${world.openDocumentCount - 1}` : ""}`
-      : "—";
-  return world.registry?.detail ?? "—";
-}
-
-// ── ui atoms ───────────────────────────────────────────────────────────────────────────────────
-
-function Mono({
-  children,
-  size = 10,
-  color = "var(--muted-foreground)",
-}: {
-  children: React.ReactNode;
-  size?: number;
-  color?: string;
-}) {
-  return (
-    <span
-      className="font-[var(--font-pe-mono)] tracking-[0.04em]"
-      style={{ fontSize: size, color }}
-    >
-      {children}
-    </span>
-  );
-}
-
-function Btn({
-  children,
-  onClick,
-  danger,
-  disabled,
-}: {
-  children: React.ReactNode;
-  onClick: () => void;
-  danger?: boolean;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={`tele ml-2 cursor-pointer rounded-[var(--radius)] border px-1.5 py-0.5 text-[9px] disabled:cursor-default disabled:opacity-40 ${danger ? "border-cat-clay/25 text-cat-clay" : "border-[var(--line-2)] text-muted-foreground"}`}
-    >
-      {children}
-    </button>
-  );
+    return {
+      word: "live",
+      tone: "done",
+      note: "The bridge holds an open connection to this world — the strongest truth this page can offer.",
+    };
+  if (world.phase === "booting")
+    return {
+      word: world.registry?.state ?? "booting",
+      tone: "ink",
+      note: "The registry says this process is in its boot window; no bridge connection exists yet, so everything about it is registry testimony.",
+    };
+  if (world.phase === "unresponsive")
+    return {
+      word: "unresponsive",
+      tone: "caution",
+      note: "The process exists but stopped answering. A busy world is not the model disagreeing — stop offers force for exactly this state.",
+    };
+  return {
+    word: world.registry?.state ?? "dead",
+    tone: "mute",
+    dim: true,
+    note: "The registry says this world is gone.",
+  };
 }
 
 // ── page ───────────────────────────────────────────────────────────────────────────────────────
@@ -119,7 +107,7 @@ function Page() {
 
   const [localLog, setLocalLog] = useState<{ atMs: number; actor: "you"; label: string }[]>([]);
   const [busy, setBusy] = useState<string | null>(null); // action key while a POST is in flight
-  const [error, setError] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<{ kind: OutcomeKind; text: string } | null>(null);
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
@@ -129,7 +117,7 @@ function Page() {
 
   const act = async (request: SandboxAction, label: string, busyKey: string) => {
     setBusy(busyKey);
-    setError(null);
+    setOutcome(null);
     setLocalLog((l) => [...l.slice(-99), { atMs: Date.now(), actor: "you", label }]);
     try {
       const response = await fetch("/sessions/sandboxes", {
@@ -141,10 +129,21 @@ function Page() {
         error?: string;
         diagnostics?: { detail?: string }[];
       };
-      if (!response.ok) setError(body.error ?? `request failed (${response.status})`);
-      else if (body.diagnostics?.length) setError(body.diagnostics[0]?.detail ?? null);
+      if (!response.ok)
+        setOutcome({
+          kind: "error",
+          text: body.error ?? `${label} failed (${response.status})`,
+        });
+      else if (body.diagnostics?.length)
+        setOutcome({
+          kind: "advisory",
+          text: body.diagnostics[0]?.detail ?? `${label} reported a diagnostic`,
+        });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "request failed");
+      setOutcome({
+        kind: "error",
+        text: caught instanceof Error ? caught.message : `${label} failed`,
+      });
     } finally {
       setBusy(null);
       void queryClient.invalidateQueries({ queryKey: HOST_QUERY_KEY });
@@ -170,156 +169,241 @@ function Page() {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
   }, [ledger.length, ledgerOpen]);
 
-  return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto flex min-h-[85vh] max-w-5xl gap-0 px-6 py-6">
-        <div className="flex-1 border-r border-[var(--line-2)] pr-5">
-          {/* declare a new world — the only way a sandbox comes to exist from this surface */}
-          <div className="flex items-center gap-2 pb-4">
-            <Mono size={10}>declare a new world:</Mono>
-            {YEARS.map((y) => (
-              <button
-                key={y}
-                type="button"
+  const fleetColumns = useMemo<Column<WorldFacts>[]>(
+    () => [
+      {
+        key: "world",
+        label: "world",
+        title: "The one human name for a world: your own Revit, or a sandbox id.",
+        search: (w) => (w.kind === "user" ? "your revit" : w.id),
+        sort: (w) => (w.kind === "user" ? "" : w.id),
+        cell: (w) => (
+          <span className="t-value block truncate px-1.5 text-[var(--r-ink)]">
+            {w.kind === "user" ? "your Revit" : <span className="face-mono">{w.id}</span>}
+          </span>
+        ),
+      },
+      {
+        key: "phase",
+        label: "phase",
+        title:
+          "What the fusion of bridge sessions and the sandbox registry says this world is doing.",
+        width: "w-32",
+        verdict: phaseVerdict,
+      },
+      {
+        key: "detail",
+        label: "lane · year · pid",
+        title: "Machine identity of the process behind the world.",
+        cell: (w) => (
+          <span className="face-mono t-caption block truncate px-1.5 text-[var(--r-ink-2)]">
+            {worldSub(w)}
+          </span>
+        ),
+      },
+      {
+        key: "docs",
+        label: "documents",
+        title: "The active document the bridge observes, or the registry's own detail line.",
+        cell: (w) => {
+          if (w.session)
+            return w.activeDocumentTitle ? (
+              <span className="face-mono t-caption block truncate px-1.5 text-[var(--r-ink-2)]">
+                {w.activeDocumentTitle}
+                {w.openDocumentCount > 1 ? ` +${w.openDocumentCount - 1}` : ""}
+              </span>
+            ) : (
+              <span
+                className="t-caption block truncate px-1.5 italic text-[var(--r-ink-mute)]"
+                title="The bridge is connected and reports no open document — a state, not a zero."
+              >
+                no open document
+              </span>
+            );
+          return w.registry?.detail ? (
+            <span className="face-mono t-caption block truncate px-1.5 text-[var(--r-ink-2)]">
+              {w.registry.detail}
+            </span>
+          ) : (
+            <span
+              className="t-caption block truncate px-1.5 italic text-[var(--r-ink-mute)]"
+              title="No bridge connection exists yet, so nothing is known about this world's documents."
+            >
+              nothing observed
+            </span>
+          );
+        },
+      },
+      {
+        key: "seen",
+        label: "seen",
+        title:
+          "How long ago the bridge last observed this world (or, before a connection exists, when the registry says it started).",
+        right: true,
+        width: "w-24",
+        sort: (w) =>
+          (w.session ? w.session.observedAtUnixMs : parseUtc(w.registry?.startedAtUtc)) ?? 0,
+        cell: (w) => {
+          const seen = w.session
+            ? age(w.session.observedAtUnixMs, nowMs)
+            : age(parseUtc(w.registry?.startedAtUtc), nowMs);
+          return (
+            <span className="face-mono t-caption block px-1.5 text-right text-[var(--r-ink-2)]">
+              {seen ? `${seen} ago` : ""}
+            </span>
+          );
+        },
+      },
+      {
+        key: "acts",
+        label: "lifecycle",
+        title:
+          "Start, stop and restart go through POST /sessions/sandboxes — the same lane pea's pe_sandbox tool shells, so both actors leave the same trace.",
+        right: true,
+        cell: (w) => {
+          const sandboxId = w.kind === "sandbox" ? w.id : undefined;
+          if (!sandboxId)
+            return (
+              <span
+                className="t-caption block truncate px-1.5 text-right italic text-[var(--r-ink-mute)]"
+                title="Your own Revit is display-only here — this page never starts or stops the session you own."
+              >
+                yours — not managed here
+              </span>
+            );
+          const unresponsive = w.phase === "unresponsive";
+          return (
+            <span className="flex justify-end gap-1.5 px-1">
+              <Verb
+                tone="commit"
+                label="restart"
+                busy={busy === `restart-${sandboxId}`}
                 disabled={busy != null}
+                reason={`Kill and re-boot ${sandboxId} — a fresh Revit process on this machine, same id.`}
+                onClick={() =>
+                  void act(
+                    { action: "restart", id: sandboxId },
+                    `restart ${sandboxId}`,
+                    `restart-${sandboxId}`,
+                  )
+                }
+              />
+              <Verb
+                tone="commit"
+                label={unresponsive ? "force stop" : "stop"}
+                busy={busy === `stop-${sandboxId}`}
+                disabled={busy != null}
+                reason={
+                  unresponsive
+                    ? `${sandboxId} stopped answering, so a polite stop cannot land — force kills the process outright.`
+                    : `Stop ${sandboxId} — asks the process to shut down and demotes it to the killed list.`
+                }
+                onClick={() =>
+                  void act(
+                    { action: "stop", id: sandboxId, force: unresponsive },
+                    `${unresponsive ? "force-" : ""}stop ${sandboxId}`,
+                    `stop-${sandboxId}`,
+                  )
+                }
+              />
+            </span>
+          );
+        },
+      },
+    ],
+    [busy, nowMs],
+  );
+
+  return (
+    <div className="min-h-screen bg-[var(--r-page)]">
+      <div className="mx-auto flex min-h-[85vh] max-w-5xl gap-0 px-6 py-6">
+        <div className="flex flex-1 flex-col border-r border-[var(--r-line)] pr-5">
+          {/* declare a new world — the only way a sandbox comes to exist from this surface */}
+          <VerbGroup
+            title="declare a new world"
+            radius="boots a Revit process on this machine"
+            className="pb-4"
+          >
+            {YEARS.map((y) => (
+              <Verb
+                key={y}
+                tone="commit"
+                label={`+ 20${y}`}
+                busy={busy === `start-${y}`}
+                disabled={busy != null}
+                reason={`Boot a fresh Revit 20${y} sandbox. Same lane as pea's pe_sandbox tool — the ledger records it either way.`}
                 onClick={() =>
                   void act({ action: "start", year: y }, `start a 20${y} sandbox`, `start-${y}`)
                 }
-                className={`tele flex-1 cursor-pointer rounded-[var(--radius)] border border-dashed border-[var(--line-2)] py-1.5 text-[10px] text-muted-foreground disabled:cursor-default ${busy === `start-${y}` ? "opacity-50" : ""}`}
-              >
-                {busy === `start-${y}` ? "starting…" : `+ 20${y}`}
-              </button>
+              />
             ))}
-          </div>
+          </VerbGroup>
 
-          <div className="pb-2">
-            <Mono size={10}>FLEET</Mono>
-          </div>
-          <table className="w-full border-collapse">
-            <tbody>
-              {fleet.map((world) => {
-                const sandboxId = world.kind === "sandbox" ? world.id : undefined;
-                const unresponsive = world.phase === "unresponsive";
-                const seen = world.session
-                  ? age(world.session.observedAtUnixMs, nowMs)
-                  : age(parseUtc(world.registry?.startedAtUtc), nowMs);
-                return (
-                  <tr key={world.id} className="border-t border-[var(--line-soft)]">
-                    <td className="w-[8px] py-2 pr-3">
-                      <span
-                        className="inline-block size-[6px] rounded-[3px]"
-                        style={{ backgroundColor: PHASE_COLOR[world.phase] }}
-                      />
-                    </td>
-                    <td className="py-2 pr-4">
-                      <div className="text-[13px] text-foreground">
-                        {world.kind === "user" ? "your Revit" : world.id}
-                      </div>
-                      <Mono size={9}>{worldSub(world)}</Mono>
-                    </td>
-                    <td className="py-2 pr-4">
-                      <Mono size={10} color={PHASE_COLOR[world.phase]}>
-                        {(world.session
-                          ? "live"
-                          : (world.registry?.state ?? world.phase)
-                        ).toUpperCase()}
-                      </Mono>
-                    </td>
-                    <td className="max-w-[220px] py-2 pr-4">
-                      <Mono size={9}>{worldDocs(world)}</Mono>
-                    </td>
-                    <td className="py-2 pr-4 text-right">
-                      <Mono size={9}>{seen ? `seen ${seen} ago` : ""}</Mono>
-                    </td>
-                    <td className="whitespace-nowrap py-2 text-right">
-                      {sandboxId ? (
-                        <>
-                          <Btn
-                            disabled={busy != null}
-                            onClick={() =>
-                              void act(
-                                { action: "restart", id: sandboxId },
-                                `restart ${sandboxId}`,
-                                `restart-${sandboxId}`,
-                              )
-                            }
-                          >
-                            restart
-                          </Btn>
-                          <Btn
-                            disabled={busy != null}
-                            danger={unresponsive}
-                            onClick={() =>
-                              void act(
-                                { action: "stop", id: sandboxId, force: unresponsive },
-                                `${unresponsive ? "force-" : ""}stop ${sandboxId}`,
-                                `stop-${sandboxId}`,
-                              )
-                            }
-                          >
-                            {unresponsive ? "force stop" : "stop"}
-                          </Btn>
-                        </>
-                      ) : (
-                        <Mono size={9}>yours — not managed here</Mono>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-              {fleet.length === 0 && !isLoading ? (
-                <tr>
-                  <td className="py-3" colSpan={6}>
-                    <Mono size={10}>no worlds running — declare one above</Mono>
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
+          <MasterTable
+            rows={fleet}
+            columns={fleetColumns}
+            rowKey={(w) => w.id}
+            scopeLabel="fleet"
+            empty={
+              isLoading ? (
+                <OutcomeLine kind="busy" label="reading the fleet" />
+              ) : (
+                <EmptyState story="scope" exit="declare a new world above — pick a year">
+                  no worlds running
+                </EmptyState>
+              )
+            }
+          />
 
-          {error ? (
+          {outcome ? (
             <div className="mt-2">
-              <Mono size={9} color="var(--cat-clay)">
-                {error}
-              </Mono>
+              <OutcomeLine kind={outcome.kind} label={outcome.text} />
             </div>
           ) : null}
 
           {killed.length ? (
             <div className="mt-8">
-              <div className="pb-2">
-                <Mono size={10}>KILLED</Mono>
+              <div className="flex items-center gap-1.5 pb-2">
+                <span className="t-caption t-upper text-[var(--r-ink-2)]">killed</span>
+                <HelpTip>
+                  The registry&apos;s recent tail — sandboxes that stopped or died, newest first.
+                  They never happened as far as the bridge is concerned now; start again boots a
+                  fresh process under the same id.
+                </HelpTip>
               </div>
-              <table className="w-full border-collapse opacity-[0.55]">
+              <table className="w-full border-collapse">
                 <tbody>
                   {killed.map((world) => {
                     const died = age(parseUtc(world.registry?.stoppedAtUtc), nowMs);
                     return (
-                      <tr key={world.id} className="border-t border-[var(--line-soft)]">
-                        <td className="w-[8px] py-2 pr-3">
-                          <span className="inline-block size-[6px] rounded-[3px] border border-muted-foreground" />
-                        </td>
+                      <tr key={world.id} className="border-t border-[var(--r-line)]">
                         <td className="py-2 pr-4">
-                          <div className="text-[13px] text-muted-foreground">{world.id}</div>
-                          <Mono size={9}>
+                          <div className="face-mono t-value italic text-[var(--r-ink-mute)]">
+                            {world.id}
+                          </div>
+                          <span className="face-mono t-caption italic text-[var(--r-ink-mute)]">
                             {yearLabel(world.year) ?? "?"} · was pid {world.pid ?? "?"}
-                          </Mono>
+                          </span>
                         </td>
                         <td className="max-w-[260px] py-2 pr-4">
-                          <Mono size={9}>
+                          <span className="face-mono t-caption block truncate italic text-[var(--r-ink-mute)]">
                             {world.registry?.firstFailureEvent?.message ??
                               world.registry?.detail ??
                               ""}
-                          </Mono>
+                          </span>
                         </td>
                         <td className="py-2 pr-4">
-                          <Mono size={9}>
+                          <span className="face-mono t-caption italic text-[var(--r-ink-mute)]">
                             {died ? `died ${died} ago` : (world.registry?.state ?? "dead")}
-                          </Mono>
+                          </span>
                         </td>
                         <td className="py-2 text-right">
-                          <Btn
+                          <Verb
+                            tone="commit"
+                            label="start again"
+                            busy={busy === `restart-${world.id}`}
                             disabled={busy != null}
+                            reason={`Boot a fresh Revit process under the id ${world.id}. Nothing of the dead process survives into it.`}
                             onClick={() =>
                               void act(
                                 { action: "restart", id: world.id },
@@ -327,9 +411,7 @@ function Page() {
                                 `restart-${world.id}`,
                               )
                             }
-                          >
-                            start again
-                          </Btn>
+                          />
                         </td>
                       </tr>
                     );
@@ -344,34 +426,51 @@ function Page() {
         {ledgerOpen ? (
           <div className="flex w-72 flex-col pl-5">
             <div className="flex items-baseline justify-between pb-2">
-              <Mono size={10}>LEDGER — observed from this tab</Mono>
+              <span className="flex items-center gap-1.5">
+                <span className="t-caption t-upper text-[var(--r-ink-2)]">ledger</span>
+                <HelpTip>
+                  The honest record of this tab: bridge-observed world events merged with the
+                  actions you took here, oldest first. Pea&apos;s actions arrive through the same
+                  bridge lane, so both actors leave the same trace.
+                </HelpTip>
+              </span>
               <button
                 type="button"
                 onClick={() => setLedgerOpen(false)}
-                className="tele cursor-pointer rounded-[var(--radius)] border border-[var(--line-2)] px-1 text-[9px] text-muted-foreground"
+                title="Collapse the ledger to its rail — nothing is lost; events keep accumulating."
+                className="t-caption cursor-pointer rounded-[var(--radius)] border border-[var(--r-line-2)] px-1 text-[var(--r-ink-2)] hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
               >
                 ›
               </button>
             </div>
             <div ref={logRef} className="max-h-[82vh] min-h-0 flex-1 overflow-y-auto">
               {ledger.length === 0 ? (
-                <Mono size={9}>quiet — world changes and your actions land here</Mono>
+                <EmptyState
+                  story="scope"
+                  exit="act on the fleet, or let the bridge observe a change"
+                >
+                  nothing observed yet
+                </EmptyState>
               ) : null}
               {ledger.map((e, idx) => (
-                <div key={idx} className="border-t border-[var(--line-soft)] py-1.5">
-                  <Mono
-                    size={9}
-                    color={e.actor === "bridge" ? "var(--pe-blue)" : "var(--foreground)"}
+                <div key={idx} className="border-t border-[var(--r-line)] py-1.5">
+                  <span
+                    className={`face-mono t-caption ${e.actor === "bridge" ? "text-[var(--r-ink-2)]" : "text-[var(--r-ink)]"}`}
+                    title={
+                      e.actor === "bridge"
+                        ? "Observed by the bridge — a world changed underneath this tab."
+                        : "An action you took from this tab."
+                    }
                   >
                     {e.actor}
-                  </Mono>
-                  <div className="text-[11px] text-foreground">{e.label}</div>
-                  <Mono size={8}>
+                  </span>
+                  <div className="t-label text-[var(--r-ink)]">{e.label}</div>
+                  <span className="face-mono t-caption text-[var(--r-ink-2)]">
                     {(() => {
                       const s = Math.max(0, Math.round((nowMs - e.atMs) / 1000));
                       return s < 60 ? `${s}s ago` : `${Math.floor(s / 60)}m ago`;
                     })()}
-                  </Mono>
+                  </span>
                 </div>
               ))}
             </div>
@@ -380,11 +479,11 @@ function Page() {
           <button
             type="button"
             onClick={() => setLedgerOpen(true)}
-            title="open the ledger"
-            className="ml-2 flex w-6 self-stretch cursor-pointer flex-col items-center gap-2 rounded-[var(--radius)] border border-[var(--line-2)] bg-transparent py-2"
+            title="Open the ledger — bridge-observed world events merged with your own actions from this tab."
+            className="ml-2 flex w-6 cursor-pointer flex-col items-center gap-2 self-stretch rounded-[var(--radius)] border border-[var(--r-line-2)] bg-transparent py-2 hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
           >
-            <span className="font-[var(--font-pe-mono)] text-[9px] tracking-[0.08em] text-muted-foreground [writing-mode:vertical-rl]">
-              LEDGER · {ledger.length}
+            <span className="t-caption t-upper text-[var(--r-ink-2)] [writing-mode:vertical-rl]">
+              ledger · {ledger.length}
             </span>
           </button>
         )}

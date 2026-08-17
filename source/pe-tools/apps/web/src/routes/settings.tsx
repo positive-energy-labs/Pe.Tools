@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState, type ReactNode } from "react";
-import { Check, CheckCheck, RefreshCw, RotateCcw, ShieldCheck, Sparkles, X } from "lucide-react";
+import { useMemo, useState } from "react";
 
 import {
   type SettingsFieldState,
@@ -11,7 +10,13 @@ import {
 } from "@pe/agent-contracts";
 import { SettingsFileKind, type SettingsFileEntry } from "@pe/host-contracts/operation-types";
 
-import { Button } from "#/components/ui/button";
+import { AddressingBar } from "#/components/lang/addressing-bar";
+import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { StateCell } from "#/components/lang/cell";
+import { FactChip } from "#/components/lang/chip";
+import { EmptyState } from "#/components/lang/empty";
+import { OutcomeLine } from "#/components/lang/outcome";
+import { Verb } from "#/components/lang/verb";
 import { Label } from "#/components/ui/label";
 import {
   Select,
@@ -21,9 +26,9 @@ import {
   SelectValue,
 } from "#/components/ui/select";
 import { useTreeQuery, useWorkspacesQuery } from "#/host/queries";
+import { useVerb } from "#/lib/use-verb";
 import { timeAgo } from "#/lib/utils";
 import { useRouteState } from "#/workbench/route-state";
-import { RouteWorkspaceShell } from "#/workbench/route-workspace-shell";
 
 /**
  * /settings — the substrate-backed replacement for the old settings-prototype form.
@@ -34,6 +39,12 @@ import { RouteWorkspaceShell } from "#/workbench/route-workspace-shell";
  * saves. Writes go through the route-state dispatcher as `actor:"human"` — pea's
  * proposals arrive identically over SSE. The picker still speaks the host directly
  * (settings.workspaces / settings.tree) to choose which document `open` targets.
+ *
+ * Design-language pass 2026-08-16: head is the one `AddressingBar` (this route no longer
+ * rides `RouteWorkspaceShell`); the field grid is the machine-operated object and wears the
+ * one `ArtifactFrame`; field values render through `StateCell` (proposed / staged / clean);
+ * verbs are lang `Verb`s bracketed by `useVerb`. Gaps are recorded in
+ * docs/features/settings/DESIGN-AUDIT.md.
  */
 export const Route = createFileRoute("/settings")({
   component: SettingsRoute,
@@ -58,8 +69,7 @@ function SettingsRoute() {
   const [moduleKey, setModuleKey] = useState<string>();
   const [rootKey, setRootKey] = useState<string>();
   const [filePath, setFilePath] = useState<string>();
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const verb = useVerb();
 
   const workspacesQuery = useWorkspacesQuery();
   const workspaces = workspacesQuery.data?.workspaces ?? [];
@@ -93,115 +103,139 @@ function SettingsRoute() {
   ).length;
   const canSave = stagedCount > 0 && attentionCount === 0;
 
-  const runCommand = async (name: string, input?: unknown) => {
-    setBusy(name);
-    setError(null);
-    try {
+  /** One in-flight command at a time; op-level failures surface on the outcome lane. */
+  const runCommand = (label: string, name: string, input?: unknown, receipt?: string) =>
+    void verb.run(label, async () => {
       const result = await route.command(name, input);
-      if (!result.ok) setError(result.error ?? result.hint ?? `${name} failed.`);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : `${name} failed.`);
-    } finally {
-      setBusy(null);
-    }
-  };
+      if (!result.ok) throw new Error(result.error ?? result.hint ?? `${name} failed.`);
+      return receipt;
+    });
 
   const applyPatches = async (patches: { path: (string | number)[]; value?: unknown }[]) => {
-    setError(null);
+    verb.fail("error", null);
     const result = await route.apply(patches);
-    if (!result.ok) setError(result.error ?? result.hint ?? "Update failed.");
+    if (!result.ok) verb.fail("error", result.error ?? result.hint ?? "Update failed.");
   };
 
   const openFile = (relativePath?: string) => {
     setFilePath(relativePath);
     if (moduleKey && rootKey && relativePath)
-      void runCommand("open", { documentId: { moduleKey, rootKey, relativePath } });
+      runCommand("open", "open", { documentId: { moduleKey, rootKey, relativePath } });
   };
 
   const validation = snapshot?.validation;
+  const saveReason =
+    stagedCount === 0
+      ? "Nothing is staged — approve a proposal or stage a value first. Save writes the staged values into the settings file on disk."
+      : attentionCount > 0
+        ? `${attentionCount} staged field${attentionCount === 1 ? "" : "s"} need attention before anything is written.`
+        : `Write ${stagedCount} staged value${stagedCount === 1 ? "" : "s"} into the settings file on disk — the only verb here that leaves the page.`;
 
   return (
-    <RouteWorkspaceShell
-      title="Settings"
-      connected={route.connected}
-      connectionLabel="Bridge connected"
-      binding={document?.binding}
-      subtitle={
-        <span className="text-xs text-[var(--lichen)]">
-          {snapshot
-            ? `${snapshot.documentId.moduleKey} · ${snapshot.documentId.relativePath}${
-                snapshot.versionToken ? ` · v${snapshot.versionToken}` : ""
-              }`
-            : "no document open"}
-        </span>
-      }
-      actions={
-        <>
-          {route.peaActive ? (
-            <span className="inline-flex items-center gap-1.5 rounded-[2px] bg-[var(--pea-tint)] px-2 py-0.5 text-xs font-medium text-[var(--cat-green)]">
-              <Sparkles className="size-3 animate-pulse" />
-              pea is working…
+    <main className="flex h-screen flex-col overflow-hidden bg-[var(--r-page)]">
+      <AddressingBar
+        name="settings"
+        sentence={
+          snapshot ? (
+            <span className="face-mono t-value text-[var(--r-ink)]">
+              {snapshot.documentId.moduleKey} · {snapshot.documentId.relativePath}
+              {snapshot.versionToken ? ` · v${snapshot.versionToken}` : ""}
             </span>
-          ) : null}
-
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!snapshot || busy != null}
-            onClick={() => void runCommand("refresh")}
-          >
-            <RefreshCw className={busy === "refresh" ? "animate-spin" : ""} />
-            Refresh
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!snapshot || busy != null}
-            onClick={() => void runCommand("validate", { includeProposals: false })}
-          >
-            <ShieldCheck />
-            Validate
-          </Button>
-          <Button
-            size="sm"
-            disabled={!canSave || busy != null}
-            title={
-              stagedCount === 0
-                ? "nothing staged"
-                : attentionCount > 0
-                  ? `${attentionCount} field${attentionCount === 1 ? "" : "s"} need attention`
-                  : undefined
+          ) : (
+            <span className="t-value italic text-[var(--r-ink-mute)]">no document open</span>
+          )
+        }
+        facts={
+          <>
+            <FactChip
+              tone={route.connected ? "meta" : "caution"}
+              title={
+                route.connected
+                  ? "The route-state bridge is connected — pea's proposals arrive live over SSE."
+                  : "The route-state bridge is not connected. Nothing arrives and nothing can be sent; a busy bridge is not the model disagreeing."
+              }
+            >
+              bridge {route.connected ? "connected" : "disconnected"}
+            </FactChip>
+            <FactChip
+              title={
+                document?.binding?.target
+                  ? `This document is bound to ${document.binding.target}. Cycling targets is not offered here.`
+                  : "No target is bound to this document yet."
+              }
+            >
+              {document?.binding?.target ?? "unbound"}
+            </FactChip>
+            {snapshot ? (
+              <>
+                <FactChip
+                  tone={proposalCount > 0 ? "pea" : "meta"}
+                  title="Open pea proposals awaiting your review. Approving stages the value; nothing is written until save."
+                >
+                  {proposalCount} proposed
+                </FactChip>
+                <FactChip
+                  tone={stagedCount > 0 ? "caution" : "meta"}
+                  title="Staged values are unsaved — they exist only on this page until save writes them to disk."
+                >
+                  {stagedCount} staged
+                </FactChip>
+                {attentionCount > 0 ? (
+                  <FactChip
+                    tone="caution"
+                    title="Fields whose review flag is 'attention' — save refuses while any remain."
+                  >
+                    {attentionCount} need attention
+                  </FactChip>
+                ) : null}
+                {validation ? (
+                  <FactChip
+                    tone={validation.isValid ? "done" : "caution"}
+                    title={
+                      validation.isValid
+                        ? "The last validate run found the saved file schema-valid."
+                        : `The last validate run reported ${validation.issues.length} issue(s): ${validation.issues
+                            .slice(0, 3)
+                            .map((issue) => issue.message)
+                            .join(" · ")}`
+                    }
+                  >
+                    {validation.isValid
+                      ? "valid"
+                      : `${validation.issues.length} validation issue${validation.issues.length === 1 ? "" : "s"}`}
+                  </FactChip>
+                ) : null}
+                {document?.savedAt ? (
+                  <FactChip title="When save last wrote this document to disk.">
+                    saved {timeAgo(document.savedAt)}
+                  </FactChip>
+                ) : null}
+              </>
+            ) : null}
+          </>
+        }
+        verb={
+          <Verb
+            tone="commit"
+            label={`save ${stagedCount}`}
+            busy={verb.busy === "save"}
+            disabled={!canSave || verb.busy != null}
+            reason={saveReason}
+            onClick={() =>
+              runCommand(
+                "save",
+                "save",
+                undefined,
+                `saved ${stagedCount} field${stagedCount === 1 ? "" : "s"}`,
+              )
             }
-            onClick={() => void runCommand("save")}
-            className="bg-[var(--cat-green)] text-white hover:bg-[var(--cat-green)]/85 disabled:opacity-50"
-          >
-            <CheckCheck />
-            Save {stagedCount}
-          </Button>
-        </>
-      }
-      error={route.error}
-      subline={
-        <>
-          <Metric value={proposalCount} label="open proposals" />
-          <Metric value={stagedCount} label="staged" />
-          <Metric value={attentionCount} label="need attention" issue />
-          {validation ? (
-            <span className={validation.isValid ? "text-[var(--cat-green)]" : "text-[var(--fail)]"}>
-              {validation.isValid
-                ? "valid"
-                : `${validation.issues.length} validation issue${validation.issues.length === 1 ? "" : "s"}`}
-            </span>
-          ) : null}
-          {document?.savedAt ? (
-            <span className="text-[var(--lichen)]">saved {timeAgo(document.savedAt)}</span>
-          ) : null}
-          {error ? <span className="text-[var(--cat-clay)]">{error}</span> : null}
-        </>
-      }
-    >
-      {/* ── picker ── */}
-      <div className="shrink-0 border-b border-[var(--line-2)] bg-[var(--paper)] px-5 py-2.5">
+          />
+        }
+        advisory={route.peaActive ? <OutcomeLine kind="busy" label="pea is working" /> : undefined}
+      />
+
+      {/* ── picker — which document `open` targets ── */}
+      <div className="shrink-0 border-b border-[var(--r-line)] px-5 py-2.5">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Picker
             id="workspace"
@@ -262,45 +296,94 @@ function SettingsRoute() {
 
       {/* ── field grid ── */}
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
-        {snapshot ? (
-          rows.length > 0 ? (
-            <div className="mx-auto max-w-3xl divide-y divide-[var(--line-2)] rounded-[2px] border border-[var(--line)]">
-              {rows.map((row) => (
-                <FieldRow
-                  key={row.path}
-                  row={row}
-                  busy={busy != null}
-                  onApprove={(value) =>
-                    void applyPatches([
-                      { path: ["fields", row.path, "staged"], value: { value } },
-                      { path: ["fields", row.path, "review"], value: "good" },
-                    ])
-                  }
-                  onDeny={() =>
-                    void applyPatches([
-                      { path: ["fields", row.path, "proposal"] },
-                      { path: ["fields", row.path, "review"], value: "none" },
-                    ])
-                  }
-                  onUndo={() =>
-                    void applyPatches([
-                      { path: ["fields", row.path, "staged"] },
-                      { path: ["fields", row.path, "review"], value: "none" },
-                    ])
-                  }
-                />
-              ))}
-            </div>
+        <div className="mx-auto max-w-3xl">
+          {/* page-scoped read verbs + the outcome lane — plain content, never enclosed */}
+          <div className="flex flex-wrap items-center gap-2 pb-3">
+            <Verb
+              label="re-read"
+              busy={verb.busy === "re-read"}
+              disabled={!snapshot || verb.busy != null}
+              reason={
+                snapshot
+                  ? "Read the settings file from disk again — replaces the snapshot; staged values and open proposals stay."
+                  : "No document is open — choose one above."
+              }
+              onClick={() => runCommand("re-read", "refresh")}
+            />
+            <Verb
+              label="validate"
+              busy={verb.busy === "validate"}
+              disabled={!snapshot || verb.busy != null}
+              reason={
+                snapshot
+                  ? "Dry-run the schema over the saved file (staged values excluded). Advisory — it blocks nothing and writes nothing."
+                  : "No document is open — choose one above."
+              }
+              onClick={() => runCommand("validate", "validate", { includeProposals: false })}
+            />
+            {verb.busy ? (
+              <OutcomeLine kind="busy" label={`${verb.busy} — ${verb.seconds}s`} />
+            ) : null}
+            {verb.outcome ? (
+              <OutcomeLine kind={verb.outcome.kind} label={verb.outcome.text} />
+            ) : verb.receipt ? (
+              <OutcomeLine kind="receipt" label={verb.receipt.text} />
+            ) : null}
+            {route.error ? (
+              <OutcomeLine kind="error" label="route stream failed" says={route.error} />
+            ) : null}
+          </div>
+
+          {snapshot ? (
+            rows.length > 0 ? (
+              <ArtifactFrame>
+                <div className="divide-y divide-[var(--r-line)]">
+                  {rows.map((row) => (
+                    <FieldRow
+                      key={row.path}
+                      row={row}
+                      busy={verb.busy != null}
+                      onApprove={(value) =>
+                        void applyPatches([
+                          { path: ["fields", row.path, "staged"], value: { value } },
+                          { path: ["fields", row.path, "review"], value: "good" },
+                        ])
+                      }
+                      onDeny={() =>
+                        void applyPatches([
+                          { path: ["fields", row.path, "proposal"] },
+                          { path: ["fields", row.path, "review"], value: "none" },
+                        ])
+                      }
+                      onUndo={() =>
+                        void applyPatches([
+                          { path: ["fields", row.path, "staged"] },
+                          { path: ["fields", row.path, "review"], value: "none" },
+                        ])
+                      }
+                    />
+                  ))}
+                </div>
+              </ArtifactFrame>
+            ) : (
+              <EmptyState
+                story="scope"
+                exit="pea can propose fields into it, or add keys to the JSON file itself and re-read"
+              >
+                this document has no fields
+              </EmptyState>
+            )
           ) : (
-            <EmptyNote>This document has no fields yet.</EmptyNote>
-          )
-        ) : (
-          <EmptyNote>
-            Choose a workspace, module, root, and authoring file to open a document.
-          </EmptyNote>
-        )}
+            <EmptyState
+              story="scope"
+              exit="choose a workspace, module, root, and authoring file above"
+            >
+              no document open
+            </EmptyState>
+          )}
+        </div>
       </div>
-    </RouteWorkspaceShell>
+    </main>
   );
 }
 
@@ -342,68 +425,58 @@ function FieldRow({
   const staged = field?.staged != null;
   const proposal = !staged ? field?.proposal : undefined;
   const attention = field?.review === "attention";
+  const shown = staged ? field?.staged?.value : proposal ? proposal.value : row.current;
+
+  // The cell's prose facts, ranked onto the one footline. "needs attention" leads because it
+  // blocks save; the prior value and pea's own words follow. NOTE (audit #2): the review
+  // "attention" flag has no cell-grammar axis — it rides the note.
+  const note =
+    [
+      attention
+        ? "needs attention — review flagged this value; save refuses while it stands"
+        : null,
+      staged || proposal ? `was ${display(row.current)}` : null,
+      proposal?.confidence ? `pea confidence: ${proposal.confidence}` : null,
+      proposal?.note ?? null,
+    ]
+      .filter(Boolean)
+      .join(" · ") || undefined;
 
   return (
     <div className="flex min-h-12 items-center gap-3 px-3 py-2">
       <div className="min-w-0 flex-1">
-        <div className="truncate font-mono text-xs font-medium text-[var(--clay-ink)]">
-          {row.path}
-        </div>
-        <div className="truncate text-xs text-[var(--slate)]">
-          <span className="text-[var(--lichen)]">current:</span> {display(row.current)}
-          {staged ? (
-            <>
-              {" "}
-              <span className="text-[var(--cat-green)]">→ staged:</span>{" "}
-              <span className="text-[var(--clay-ink)]">{display(field?.staged?.value)}</span>
-            </>
-          ) : proposal ? (
-            <>
-              {" "}
-              <span className="text-[var(--pe-blue)]">→ pea:</span>{" "}
-              <span className="text-[var(--clay-ink)]">{display(proposal.value)}</span>
-            </>
-          ) : null}
-        </div>
-        {proposal && (proposal.confidence || proposal.note) ? (
-          <div
-            className={`truncate text-[10px] ${attention ? "text-[var(--fail)]" : "text-[var(--lichen)]"}`}
-          >
-            {[proposal.confidence, proposal.note].filter(Boolean).join(" · ")}
-          </div>
-        ) : null}
+        <div className="face-mono t-label truncate text-[var(--r-ink-2)]">{row.path}</div>
+        <StateCell
+          className="face-mono t-value"
+          value={display(shown)}
+          stage={staged ? "staged" : proposal ? "proposed" : "clean"}
+          stagedBy="you"
+          note={note}
+        />
       </div>
 
       {staged ? (
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          title="Undo approval"
+        <Verb
+          label="unstage"
           disabled={busy}
+          reason="Return this field to its saved value. The proposal it came from is restored to the open list."
           onClick={onUndo}
-        >
-          <RotateCcw />
-        </Button>
+        />
       ) : proposal ? (
-        <div className="flex shrink-0 gap-1">
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            title="Deny suggestion"
+        <span className="flex shrink-0 gap-1.5">
+          <Verb
+            label="deny"
             disabled={busy}
+            reason="Clear pea's proposal for this field. Nothing was ever written; the saved value stands."
             onClick={onDeny}
-          >
-            <X />
-          </Button>
-          <Button
-            size="icon-sm"
-            title="Approve and stage suggestion"
+          />
+          <Verb
+            label="approve"
             disabled={busy}
+            reason={`Approve and stage "${display(proposal.value)}". Staging stays on this page — nothing is written until save.`}
             onClick={() => onApprove(proposal.value)}
-          >
-            <Check />
-          </Button>
-        </div>
+          />
+        </span>
       ) : null}
     </div>
   );
@@ -430,7 +503,7 @@ function Picker({
 }) {
   return (
     <div className="space-y-1">
-      <Label htmlFor={id} className="tele-label text-[var(--lichen)]">
+      <Label htmlFor={id} className="t-caption t-upper text-[var(--r-ink-2)]">
         {label}
       </Label>
       <Select
@@ -450,33 +523,6 @@ function Picker({
           ))}
         </SelectContent>
       </Select>
-    </div>
-  );
-}
-
-function Metric({
-  value,
-  label,
-  issue = false,
-}: {
-  value: number;
-  label: string;
-  issue?: boolean;
-}) {
-  return (
-    <span
-      className={`inline-flex items-baseline gap-1 ${issue && value > 0 ? "text-[var(--fail)]" : "text-[var(--slate)]"}`}
-    >
-      <span className="tele">{value}</span>
-      <span className="tele-label">{label}</span>
-    </span>
-  );
-}
-
-function EmptyNote({ children }: { children: ReactNode }) {
-  return (
-    <div className="mx-auto mt-6 max-w-3xl rounded-[2px] border border-dashed border-[var(--line)] p-6 text-center text-xs text-[var(--lichen)]">
-      {children}
     </div>
   );
 }
@@ -523,5 +569,3 @@ function display(value: unknown): string {
   if (typeof value === "string") return value;
   return JSON.stringify(value);
 }
-
-/** Compact relative-time label for an ISO timestamp. */
