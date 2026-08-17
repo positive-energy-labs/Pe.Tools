@@ -95,11 +95,26 @@
  *   FIXTURE  — no document. `FIXTURE_WORLD`, wearing the dashed seam chip, save page-local. Not a
  *              fallback: a DECLARED lane, and the chip says what replaces it.
  *
- * STILL PAGE-LOCAL ON BOTH LANES, and honest about it: capture / apply (they write to Revit —
- * `family.editor.apply`, phase D), the proposals and their accept/deny (they need `route:settings`
- * field proposals, which the projection deliberately does not invent), and the doc pane's parse.
- * On the live lane those verbs are dark rather than lying: the projection carries no proposals and
- * no live values until evidence arrives, so there is nothing for them to move.
+ * ── THE TWO HOST CROSSINGS (phase D, 2026-08-17) ────────────────────────────────────────────
+ * The table pane header's last two verbs are the only two on this page that talk to Revit, and they
+ * are the two directions evidence travels:
+ *
+ *   capture live   `route:family` `capture_evidence` → `revit.detail.family-model`. A READ. Its
+ *                  result lands in the evidence slice, the projection turns it into the live half,
+ *                  and the ⇄ live overlay, the drift marks and the freshness chip are all readings
+ *                  OF it. Refuses in the host's own words when no family document is active in
+ *                  Revit. It moves nothing into the profile — `capture all` does that, under the
+ *                  overlay, once there is a reading to move.
+ *   build .rfa     `route:family` `build_evidence` → `revit.apply.family-model`. A WRITE, and the
+ *                  only one that leaves both the page and the document: it re-opens the SAVED
+ *                  family.json host-side and materializes a timestamped .rfa. Because it reads the
+ *                  file rather than the table, it is armed rather than pressed — the ceremony, its
+ *                  refusal predicates and its receipt live in `#/family/build`.
+ *
+ * STILL PAGE-LOCAL ON BOTH LANES, and honest about it: `apply` in both its bulk and per-type shapes
+ * (`family.editor.apply` is a later phase — the profile-wins direction has no concurrency guard yet,
+ * SHIMS shim 8), and the proposals with their accept/deny (they need `route:settings` field
+ * proposals, which the projection deliberately does not invent), and the doc pane's parse.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -121,6 +136,17 @@ import { Pane, PaneWorkspace } from "#/components/ui/pane";
 import { AddressingBar } from "#/components/lang/addressing-bar";
 import { Switcher } from "#/components/lang/switcher";
 import { AnatomyDrawing } from "#/family/anatomy";
+import {
+  BUILD_OUTCOME_UNKNOWN,
+  BUILD_VERB,
+  BuildStrip,
+  buildOutputPath,
+  buildReceiptLine,
+  buildRefusals,
+  readBuildReceipt,
+  type BuildFacts,
+  type BuildRefusal,
+} from "#/family/build";
 import { ProposalCard, SpecSheet, SpecText } from "#/family/doc-pane";
 import { NavStateCell, ProposedCell } from "#/family/marks";
 import { FAMILY_MODULE } from "#/family/host";
@@ -575,6 +601,132 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
     } finally {
       setSaving(false);
     }
+  };
+
+  // ── THE HOST CROSSINGS (phase D) ──────────────────────────────────────────────────────────────
+  //
+  // Two verbs, and they are the only two on this page that talk to Revit. Everything else above is
+  // arithmetic on the draft — a page-local move that becomes real when `save profile` writes it.
+  //
+  //   capture live   READS. `route:family`'s `capture_evidence` wraps `revit.detail.family-model`
+  //                  and stamps the result into the evidence slice. It moves nothing into the
+  //                  profile; that is `capture all`'s job, under the ⇄ live overlay, once there is
+  //                  a reading to move.
+  //   build .rfa     WRITES, outside the page and outside the document: `build_evidence` re-opens
+  //                  the SAVED family.json host-side and hands it to `revit.apply.family-model`,
+  //                  which materializes an .rfa and returns evidence pinned to that revision. It
+  //                  is the whole reason the arming ceremony exists — see `#/family/build`.
+  //
+  // `family.editor.apply` is deliberately NOT wired: the profile-wins direction is a later phase,
+  // and the apply verbs above stay page-local and honest about it.
+
+  const [capturing, setCapturing] = useState(false);
+  /** null → unarmed. Carries the token the plan was armed against — the plan hash a drift cites. */
+  const [armedBuild, setArmedBuild] = useState<{ token: string | null; reason: string } | null>(
+    null,
+  );
+  const [building, setBuilding] = useState(false);
+  /** The host's own last word on a build, or a latched unknown outcome. Outranks the predicates. */
+  const [buildSaid, setBuildSaid] = useState<BuildRefusal | null>(null);
+
+  /** Fields staged onto `route:settings` but not yet written — unsaved by another route. */
+  const stagedCount = useMemo(
+    () => Object.values(store.fields).filter((field) => field.staged != null).length,
+    [store.fields],
+  );
+
+  /** Everything the ceremony reads, in one flat record. The predicates live in `#/family/build`. */
+  const buildFacts = useMemo<BuildFacts>(
+    () => ({
+      relativePath: lane.document?.relativePath ?? null,
+      versionToken: lane.document?.versionToken ?? null,
+      validation,
+      unsavedCount,
+      stagedCount,
+      boundTarget: store.boundTarget,
+      armedToken: armedBuild?.token ?? null,
+    }),
+    [lane.document, validation, unsavedCount, stagedCount, store.boundTarget, armedBuild],
+  );
+
+  /**
+   * A FRESH READ IS NOT A NEW DOCUMENT. Evidence arriving — from either crossing — has to reach the
+   * LIVE half of the draft, and must not touch the authored half: `lane.seedKey` deliberately does
+   * not move for a capture, because re-seeding would throw away edits in progress. A live value is
+   * a READING of Revit, not part of what you are editing, so it is folded in on its own.
+   */
+  const evidenceStamp = store.evidence?.from.capturedAt ?? null;
+  const liveValues = world.live?.values ?? null;
+  const evidenceRef = useRef(evidenceStamp);
+  useEffect(() => {
+    if (evidenceRef.current === evidenceStamp) return;
+    evidenceRef.current = evidenceStamp;
+    setDraft((previous) => ({ ...previous, live: structuredClone(liveValues ?? {}) }));
+  }, [evidenceStamp, liveValues]);
+
+  const captureLive = async () => {
+    setCapturing(true);
+    try {
+      const read = await store.familyCommand("capture_evidence", {});
+      if (!read.ok) {
+        // The host's words verbatim — "is a family document active in the bound session?" IS the
+        // exit, and paraphrasing it into "capture failed" would throw away the only help there is.
+        say(
+          `Could not read the live family — ${read.hint ?? read.error ?? "the host refused, without saying why"}`,
+        );
+        return;
+      }
+      const payload = (read.result ?? {}) as { familyName?: string; parameterCount?: number };
+      say(
+        `read ${payload.familyName ?? "the live family"} out of Revit — ${payload.parameterCount ?? 0} parameters; the ⇄ live overlay is now stamped with this read`,
+      );
+    } finally {
+      setCapturing(false);
+    }
+  };
+
+  /**
+   * THE COMMIT. Fires only from the armed strip, and only once its own predicates are silent — but
+   * it re-checks them here anyway, because the strip's arming is page state and this is the write.
+   */
+  const runBuild = async () => {
+    const relativePath = lane.document?.relativePath;
+    if (relativePath == null || armedBuild == null) return;
+    if (buildRefusals({ ...buildFacts, armedToken: armedBuild.token }).length > 0) return;
+    setBuilding(true);
+    setBuildSaid(null);
+    try {
+      const built = await store.familyCommand("build_evidence", {
+        documentId: { ...FAMILY_MODULE, relativePath },
+      });
+      if (!built.ok) {
+        const says = built.hint ?? built.error ?? "the host refused, without saying why";
+        setBuildSaid({ code: "host", says });
+        say(`Build refused — ${says}`);
+        return;
+      }
+      const receipt = readBuildReceipt(built.result);
+      if (receipt == null) {
+        // OUTCOME UNKNOWN, latched. `build_evidence` mutates outside the page — it writes a file —
+        // so an answer with no receipt is neither a success nor a refusal, and claiming either
+        // would be the surface inventing a fact about the disk.
+        setBuildSaid({ code: "unknown", says: BUILD_OUTCOME_UNKNOWN });
+        say(BUILD_OUTCOME_UNKNOWN);
+        return;
+      }
+      // Disarm on the way out: the plan was spent, and a strip still armed against a token the
+      // build has already consumed would invite a second, differently-named .rfa.
+      setArmedBuild(null);
+      say(buildReceiptLine(receipt, new Date().toLocaleTimeString()));
+    } finally {
+      setBuilding(false);
+    }
+  };
+
+  /** Re-arm against the file as it now stands. Writes nothing — the one exit every refusal shares. */
+  const replanBuild = () => {
+    setBuildSaid(null);
+    setArmedBuild({ token: lane.document?.versionToken ?? null, reason: "" });
   };
 
   // ── the geometry verbs ────────────────────────────────────────────────────────────────────────
@@ -1669,10 +1821,60 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
                     : `Let the profile win on all ${driftCells.length} drifting cells — every alarm cell on screen goes back to the draft's number. This is the direction that writes into the model, which is why it is the only verb here in the commit colour.`
               }
             />
+            {/* THE TWO HOST CROSSINGS, last in the lane and in escalating blast radius: the switch
+                changes what you are looking at, capture all / apply all move the draft, and these
+                two leave the page. `capture live` reads Revit; `build .rfa` writes an .rfa. */}
+            <Verb
+              label="capture live"
+              busy={capturing}
+              disabled={lane.document == null || capturing}
+              onClick={() => void captureLive()}
+              reason={
+                lane.document == null
+                  ? "The fixture lane has no session behind it — its live readings are checked into `src/family/world.ts`. Open a real family.json to read Revit."
+                  : "Re-read the family open in Revit and re-stamp the evidence — this is what the ⇄ live overlay and the drift marks are readings OF. It moves nothing into the profile: that is capture all, under the overlay. Refuses in Revit's own words if no family document is active there."
+              }
+            />
+            <Verb
+              label={BUILD_VERB}
+              tone="commit"
+              busy={building}
+              disabled={lane.document == null || building}
+              onClick={() =>
+                setArmedBuild({ token: lane.document?.versionToken ?? null, reason: "" })
+              }
+              reason={
+                lane.document == null
+                  ? "Nothing to build — this page is reading its declared fixture, which has no file behind it. Pick a document in the sentence first."
+                  : `Materialize ${lane.document.relativePath} into a real .rfa inside Revit, at ${buildOutputPath(lane.document.relativePath)}. Pressing this ARMS the ceremony below the header — it does not build. The strip states which family, from which revision, to which path, and refuses out loud if the file on disk is not the file this table is showing.`
+              }
+            />
           </>
         )
       }
     >
+      {/* THE CEREMONY SLOT. It sits inside the pane that owns the crossing, above the table it is
+          about, and it is EMPTY until the verb arms it — "never hover-height" (CLEANROOM round 2)
+          means the reason, the refusals and the receipt all get room at strip scale. The build is a
+          whole-family write, so the slot is the same in the drill-in: no type is on the plan. */}
+      <BuildStrip
+        className="mx-2 mt-2 shrink-0"
+        armed={armedBuild}
+        building={building}
+        said={buildSaid}
+        facts={buildFacts}
+        familyName={world.familyName}
+        count={world.paramRows.length}
+        onReasonChange={(reason) =>
+          setArmedBuild((previous) => (previous == null ? previous : { ...previous, reason }))
+        }
+        onCommit={() => void runBuild()}
+        onCancel={() => {
+          setArmedBuild(null);
+          setBuildSaid(null);
+        }}
+        onReplan={replanBuild}
+      />
       {drillIn ?? crossType}
     </Pane>
   );

@@ -443,3 +443,25 @@ consumers repo-wide after the promotion. `--st-{proposal,drift,warn,done,meta}` 
 through the exhibits above. `--cat-*`, `--line*`, `--pe-blue` and the Lens vocabulary all still have
 real consumers (ops, workbench, grounded-doc, sentence, pane), so their lines stay until those
 passes land.
+
+## Phase-D findings (2026-08-17, build-lane wiring on /family)
+
+Recorded per sweep governance: gaps become numbered findings; no unilateral language changes.
+
+13. **ArmingStrip refusals want a LIST.** `ArmingState.refused` carries one string; several
+    refusals are legitimately true at once (dirty draft AND schema failure). /family joins
+    them with `·` inside build.tsx. The honest shape is `refusals: {code, says}[]`.
+14. **ArmingStrip owes a `building` (in-flight) phase.** A write that leaves the page and runs
+    seconds inside Revit must say so at strip scale; /family stands in with OutcomeLine
+    kind="busy" in the strip's slot.
+15. **ArmingStrip owes an unknown-outcome phase.** build_evidence mutates outside the page; an
+    `ok` with no rfaPath is neither success nor refusal. OutcomeLine has partial/dropped; the
+    strip has no equivalent, and this is the write that most needs it.
+16. **Refused-phase exit is hardcoded to `re-plan`.** Honest for /family's refusals, but a strip
+    whose refusals have different exits ("save first", "bind a world") cannot express them.
+    Wants `exit: {label, onExit}` on the refused phase.
+17. **"capture" collides.** `capture live` (Revit → evidence, a read) sits beside `capture all`
+    (Revit wins → profile draft, a crossing). The surface already says "read" for the former
+    everywhere else — the read verb likely wants that word.
+18. **Arming survives drill-in but cannot be initiated there.** Probably right (build is
+    whole-family); wants a ruling.

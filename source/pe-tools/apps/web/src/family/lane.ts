@@ -48,6 +48,24 @@ export interface FamilyLane {
   seedKey: string;
 }
 
+/**
+ * THE STALENESS LAW, as a function rather than an expression, because phase D gave it two writers.
+ *
+ * Evidence stamped with a DIFFERENT token describes a revision you are no longer editing. Equal
+ * tokens, and an UNSTAMPED read, claim nothing either way — `capture_evidence` reads out of Revit
+ * rather than out of a document and therefore has no revision to stamp, so `null` must never be
+ * treated as fresh OR as stale (see `family-commands.ts`: "the nulls are the truth").
+ *
+ * Both crossings clear staleness the same way and for the same reason: they replace the stamp. A
+ * build stamps the revision it read; a capture stamps null. Neither is special-cased.
+ */
+export function isEvidenceStale(
+  evidenceToken: string | null | undefined,
+  documentToken: string | null,
+): boolean {
+  return evidenceToken != null && documentToken != null && evidenceToken !== documentToken;
+}
+
 export function useFamilyLane(): FamilyLane {
   const store = useLiveFamilyStore();
   const { snapshot, evidence } = store;
@@ -88,12 +106,7 @@ export function useFamilyLane(): FamilyLane {
           model,
           relativePath,
           versionToken,
-          // THE STALENESS LAW: evidence stamped with a different token describes a revision you are
-          // no longer editing. Equal tokens (or an unstamped read) claim nothing either way.
-          evidenceStale:
-            evidence?.from.documentVersionToken != null &&
-            versionToken != null &&
-            evidence.from.documentVersionToken !== versionToken,
+          evidenceStale: isEvidenceStale(evidence?.from.documentVersionToken, versionToken),
         }
       : null,
     parseError: parsed?.error ?? null,
