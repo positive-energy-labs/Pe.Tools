@@ -2,6 +2,32 @@
 
 Dated, append-only. Newest batch first. Each entry: what was decided, and the why that makes it stick. Reopen one only with new evidence — and record the reopening here.
 
+## 2026-08-16 (adversarial wave 1) — the machine shrinks; both stage merges refuse to happen
+
+**Adopted: six-knob kill + one dead rule, zones byte-identical, 125/125.** Deleted as
+perturbation-proven inert: `SparseWallInkRatio`, `SparseWallMinRawRooms`,
+`SparseWallAbsorbSharedPerimeterFraction` (unreachable behind `AdaptivePolicy=false`),
+`SmallZoneLowInkSqft` + `MinZoneInkRatio` (two halves of a permanently-off conjunction whose
+keying signal, inkRatio, was falsified as a discriminator this same day),
+`InkClusterWhiteoutBboxFt` (never armed), and the LevelProfile `regionCores` seed rule +
+`CeilingStepInkLiftMin` (only effect assigned the field's default; 08-14 sanction). The
+`AdaptivePolicy` seam itself stays — a contract test now asserts it carries no live rules, and
+the earned attic rule (keyed on `EdgeBandInkFraction`) is slated for it.
+
+**Falsified — both stage-merge hypotheses, by their own experiments (gates earn their keep):**
+`scope` is not a shadow of zonefit — disabling it breaks the containment law in 4 real zones
+(it is the enforcement arm for rooms whose rescue clip was refused; "never binds alone" was true
+of the histogram, false of the gate). `evidence` is not a duplicate of ink-backing — deleting it
+lets a misaligned neighbor survive to shared-audit and kill ML08's good accepted room; it binds
+earlier, at rail granularity.
+
+**Oracle cleared; the audit lied, not the markups.** Lower's "floor mapping suspect" decomposed
+into uniform page drift + the LL06/LL08 ink-starved quadrant (chamfer was measuring missing
+detector ink) + stacked walls; floor labels correct across all 118 rooms. Main 10/14/15 are
+genuinely empty (they stack under the Upper wing, correctly counted there). Scorer audit now
+separates drift from starvation and names the 2 unzoned theatre-area rooms the board silently
+dropped. Board numbers stand unchanged.
+
 ## 2026-08-16 (round 1 of the tuning orchestration) — five-agent wave on fresh homogeneous bins
 
 Context: first recapture with the F/F0 framing veto live on all four levels (bins were previously
