@@ -68,8 +68,8 @@ means "proposal" in one and "alarm" in the other.
 
 **"Not started" is a state, not a zero.** An entity with no rows yet renders as a labelled empty,
 never as absence, or the untouched half of the project is invisible — and invisible reads as done.
-*(Specimen owed when an EmptyState primitive ships; nothing in `components/lang` renders a labelled
-empty today.)*
+→ rendered: `components/lang/empty.tsx` (`EmptyState`, required `story` + `exit`; specimen on
+`/design-system/swatch`), and at cell scale the `fresh: "never"` rung (consolidation ruling R2).
 
 **Compute agreement; do not remember it.** Drift, staleness, and agreement are diffs between two
 readings, recomputed each render. A stored verdict goes stale exactly when it matters: a user edit
@@ -172,9 +172,10 @@ so the commit is always a separate, explicitly-invoked verb, never a side effect
 
 **Typing beats proposing.** A user editing a proposed cell severs the proposal outright: no accept,
 no dismiss, the user's value stands. Masking the proposal by render precedence is not the same thing:
-discarding the edit resurrects it, which nobody expects. The older surface still masks. *(Specimen
-owed when sever ships in the proposal flow; `StateCell` has no `stage` member for severed and
-cannot render the state at all.)*
+discarding the edit resurrects it, which nobody expects. The older surface still masks. *(RULED
+2026-08-16, consolidation R6: sever leaves NO cell trace — it is history, and history is not
+computable from current facts. The record lives in the proposal ledger's settled "superseded" card;
+`StateCell` will never grow a severed member. `/family` ships the behaviour.)*
 
 ---
 
@@ -183,8 +184,9 @@ cannot render the state at all.)*
 **Addressing is a sentence; narrowing is chips.** What the surface is pointed at reads as a line of
 clickable nouns — the document, the entity, the world — and carries nouns only. Scope and filter
 state live in table chips, never in the sentence. Chips narrow but never hide: every active
-narrowing is visible and individually removable, so the user can always widen back out. *(Specimen
-owed when the addressing sentence ships; `NarrowChip` owns removal and nothing owns re-adding.)*
+narrowing is visible and individually removable, so the user can always widen back out.
+→ rendered: `components/lang/addressing-bar.tsx` (the five-slot head rail, R11; `/family` is the
+reference adoption). Still open: `NarrowChip` owns removal and nothing owns re-adding.
 
 **Under compression, identity outranks controls.** A crowded toolbar wraps rather than shrinking the
 addressing line to a sliver. The buttons are what move.
