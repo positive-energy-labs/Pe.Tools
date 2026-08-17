@@ -17,7 +17,7 @@ import { Check, RotateCcw, X } from "lucide-react";
 
 import { type CellReview, cellSummary, stagedEntries } from "@pe/agent-contracts";
 
-import { Button } from "#/components/ui/button";
+import { Verb } from "#/components/lang/verb";
 import { useWorkbench } from "./provider";
 import { type RouteStateWriteResult, writeRouteState } from "./route-state";
 
@@ -45,8 +45,8 @@ export interface CellTrichotomyReviewerProps {
   cells: Record<string, ReviewerCell>;
   /** The human-only commit command, e.g. "save" | "push". */
   commitCommand: string;
-  /** Commit button label, given the staged count (e.g. `Save 3`, `Push 3 to Revit`). */
-  commitLabel: (stagedCount: number) => ReactNode;
+  /** Commit verb label, given the staged count (e.g. `Save 3`, `Push 3 to Revit`). */
+  commitLabel: (stagedCount: number) => string;
   /** Idle hint shown in the summary line when nothing needs attention. */
   reviewHint: string;
   /** Per-key row label (route-specific: field path / row·col / param·type). */
@@ -121,57 +121,51 @@ export function CellTrichotomyReviewer({
     });
 
   return (
-    <div className="mt-1.5 w-full border-t border-[var(--line-2)]">
+    <div className="mt-1.5 w-full border-t border-[var(--r-line-2)]">
       <div className="max-h-64 overflow-y-auto">
         {items.map(([key, cell]) => {
           const staged = cell.staged != null;
           return (
             <div
               key={key}
-              className="flex min-h-12 items-center gap-2 border-b border-[var(--line-2)] py-1.5 last:border-b-0"
+              className="flex min-h-12 items-center gap-2 border-b border-[var(--r-line)] py-1.5 last:border-b-0"
             >
               <div className="min-w-0 flex-1">
-                <div className="truncate font-medium text-[var(--clay-ink)]">
-                  {renderLabel(key, cell)}
-                </div>
-                <div className="truncate text-[var(--slate)]">
+                <div className="truncate t-value text-[var(--r-ink)]">{renderLabel(key, cell)}</div>
+                <div className="truncate text-[var(--r-ink-2)]">
                   {renderValue(staged ? cell.staged?.value : cell.proposal?.value, key, cell)}
                 </div>
+                {/* pea's confidence/note ride the proposal — agent testimony at text weight */}
                 {!staged && (cell.proposal?.confidence || cell.proposal?.note) ? (
-                  <div className="truncate text-[10px] text-[var(--lichen)]">
+                  <div className="truncate t-caption text-[var(--r-pea-ink)]">
                     {[cell.proposal.confidence, cell.proposal.note].filter(Boolean).join(" · ")}
                   </div>
                 ) : null}
               </div>
               {staged ? (
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  title="Undo approval"
+                <Verb
+                  label="Undo"
+                  icon={RotateCcw}
                   disabled={busy != null}
+                  reason="Unstage this value and reopen pea's proposal for review"
                   onClick={() => undo(key)}
-                >
-                  <RotateCcw />
-                </Button>
+                />
               ) : (
                 <div className="flex shrink-0 gap-1">
-                  <Button
-                    size="icon-sm"
-                    variant="ghost"
-                    title="Deny suggestion"
+                  <Verb
+                    label="Deny"
+                    icon={X}
                     disabled={busy != null}
+                    reason="Drop pea's proposal — the current value stands"
                     onClick={() => deny(key)}
-                  >
-                    <X />
-                  </Button>
-                  <Button
-                    size="icon-sm"
-                    title="Approve and stage suggestion"
+                  />
+                  <Verb
+                    label="Approve"
+                    icon={Check}
                     disabled={busy != null || !cell.proposal}
+                    reason="Stage pea's proposal — nothing leaves the page until you commit"
                     onClick={() => approve(key, cell)}
-                  >
-                    <Check />
-                  </Button>
+                  />
                 </div>
               )}
             </div>
@@ -180,20 +174,27 @@ export function CellTrichotomyReviewer({
       </div>
 
       <div className="flex items-center justify-between gap-2 pt-1.5">
-        <span className="min-w-0 truncate text-[10px] text-[var(--lichen)]">
+        <span className="min-w-0 truncate t-caption text-[var(--r-ink-2)]">
           {error ??
             (summary.attention > 0
               ? `${summary.attention} value${summary.attention === 1 ? " needs" : "s need"} review`
               : reviewHint)}
         </span>
-        <Button
-          size="sm"
+        {/* the one commit: writes beyond the page — the only filled blue */}
+        <Verb
+          tone="commit"
+          label={commitLabel(stagedCount)}
+          icon={Check}
           disabled={!canCommit || busy != null}
+          reason={
+            !canCommit
+              ? stagedCount === 0
+                ? "Nothing staged yet — approve a proposal first"
+                : "Blocked: staged values still need review"
+              : "Write every staged value through — this leaves the page"
+          }
           onClick={() => void write("__commit", "command", { command: commitCommand, input: {} })}
-        >
-          <Check />
-          {commitLabel(stagedCount)}
-        </Button>
+        />
       </div>
     </div>
   );

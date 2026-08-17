@@ -1,19 +1,29 @@
 /*
- * Lens/World/Moment styles. The palette is NOT defined here anymore — the Lens vocabulary
- * (--paper, --basalt, --pe-blue, --slate, --line, …) is aliased onto the one shadcn base in
- * styles.css, so colors live in a single place and flip with the global theme for free. The
- * old `--muted` collision (a fill in shadcn, dim TEXT in the Lens) is gone: Lens dim text now
- * uses --muted-foreground directly.
+ * Lens/World/Moment styles — MIGRATED onto the `--r-*` canon (workbench pass, 2026-08-16).
+ * No Lens-vocabulary token (--paper*, --basalt, --slate, --pe-*, --user*, --line*) survives
+ * here; every colour is a real role from design-lang.css. Per the --r-on rule, every rule that
+ * sets a ground background re-declares --r-on beside it.
+ *
+ * Colour decisions this file encodes (see docs/features/workbench/DESIGN-AUDIT.md):
+ *   · THE "YOU" IDENTITY IS NEUTRAL INK (standing question, ruled here by evidence): the user's
+ *     turns separate by position (right-aligned block) and the role line; their marks are ink
+ *     washes, no hue bought. Pea keeps the agent identity (--r-pea) — asymmetry is the point:
+ *     the agent is the marked case, the human is the ground.
+ *   · LOCATE MARKS ARE --r-ink (R13a): the viewport reticle, the focal caret, and the focal
+ *     turn's left rule all answer "where am I" — they were blue/provenance-hued, now neutral.
+ *   · The dashed tool rail is gone (dashed = seam ONLY); a tool marker separates on the pea
+ *     rail + the ⌗ glyph.
  *
  * What remains here is the keep-as-CSS zone — the stuff a Tailwind class genuinely can't express:
  * (1) JS-driven geometry — map-dial, candlestick, fisheye trace lane, parallax grid — positioned
- * by inline styles the rAF/scroll controller sets per frame; (2) [data-mode] lane widths; (3) pseudo-elements, descendant/state selectors, and keyframe animations (caret
- * blink, sheen, pulse). Flat single-element styling has moved to Tailwind on the elements.
+ * by inline styles the rAF/scroll controller sets per frame; (2) [data-mode] lane widths;
+ * (3) pseudo-elements, descendant/state selectors, and keyframe animations (caret blink, sheen).
  */
 .lens-frame {
   font-family: var(--font-body);
-  color: var(--foreground);
-  background: var(--background);
+  color: var(--r-ink);
+  background: var(--r-page);
+  --r-on: var(--r-page);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -73,8 +83,9 @@
   top: 0;
   height: var(--vp, 560px);
   overflow: hidden;
-  border-left: 0.5px solid var(--line);
-  background: var(--paper-3);
+  border-left: 0.5px solid var(--r-line);
+  background: var(--r-artifact);
+  --r-on: var(--r-artifact);
   touch-action: none;
   user-select: none;
   cursor: ns-resize;
@@ -97,7 +108,7 @@
     background 0.14s ease;
 }
 /* number rides on the band, to its left. Hidden by default; revealed on hover (below) and
-   ALWAYS on the focal band (the reticle readout). Telemetry type: mono 12px, tracked, tabular. */
+   ALWAYS on the focal band (the reticle readout). Machine-measured: mono, tracked, tabular. */
 .mapdial-band .num {
   position: absolute;
   /* band is 8px at right:14px of the 64px lane; 12px inset leaves ~38px of leftward room —
@@ -109,7 +120,7 @@
   font-size: 12px;
   letter-spacing: 0.05em;
   font-variant-numeric: tabular-nums;
-  color: var(--muted-foreground);
+  color: var(--r-ink-2);
   white-space: nowrap;
   text-align: right;
   opacity: 0;
@@ -128,18 +139,21 @@
   opacity: 1;
 }
 /* focal = the single band on the focal axis. Emphasis is WIDTH + full strength of the band's OWN
-   provenance hue — never a hue swap (blue would undermine the color coding). */
+   provenance colour — never a hue swap. */
 .mapdial-band.focal {
   opacity: 1;
   width: 16px;
 }
+/* provenance: "you" is neutral ink (no identity hue — the standing question, answered NO);
+   pea wears the agent identity. Focal = the same colour at full strength; non-focal = a wash. */
 .mapdial-band.user.focal {
-  background: var(--user);
+  background: var(--r-ink-2);
 }
 .mapdial-band.assistant.focal {
-  background: var(--pe-green);
+  background: var(--r-pea);
 }
-/* delta = the newest band when context changed this send */
+/* delta = the newest band when context changed this send — changed-this-send is the caution
+   family (attention, not disagreement). */
 .mapdial-band.delta {
   opacity: 0.95;
 }
@@ -151,43 +165,46 @@
   top: 50%;
   transform: translateY(-50%);
   border: 3px solid transparent;
-  border-right-color: var(--clay-ink, #8a5e3b);
+  border-right-color: var(--r-caution);
 }
 .mapdial-band.focal .num {
   opacity: 1;
-  color: var(--foreground);
+  color: var(--r-ink);
 }
-/* provenance segment tints — the -line (soft) variants when NOT focal */
+/* provenance segment washes when NOT focal — same colours, mixed down. */
 .mapdial-band.user:not(.focal) {
-  background: var(--user-line);
+  background: color-mix(in srgb, var(--r-ink-2) 36%, transparent);
 }
 .mapdial-band.assistant:not(.focal) {
-  background: var(--pea-line);
+  background: color-mix(in srgb, var(--r-pea) 32%, transparent);
 }
-/* tool = pea acting → hollow green (matches the pea provenance color) */
+/* tool = pea acting → hollow ring in the agent identity (a solid edge; dashed is reserved
+   for seam and a tool call is not a stand-in). */
 .mapdial-band.tool {
   background: transparent;
-  box-shadow: inset 0 0 0 1.25px var(--pe-green);
+  box-shadow: inset 0 0 0 1.25px var(--r-pea);
 }
 .mapdial-band.tool.focal {
-  box-shadow: inset 0 0 0 2px var(--pe-green); /* thicker ring, no halo */
+  box-shadow: inset 0 0 0 2px var(--r-pea); /* thicker ring, no halo */
 }
+/* memory / event lanes are taxonomy (which lane is this), so they spend the viz ladder;
+   approval = a decision owed → caution. */
 .mapdial-band.memory {
-  background: var(--clay);
+  background: var(--viz-5);
 }
 .mapdial-band.approval {
-  background: var(--clay-ink);
+  background: var(--r-caution);
 }
 .mapdial-band.event {
-  background: var(--kiln);
+  background: var(--viz-6);
   opacity: 0.55;
 }
 
 /* ---- viewport reticle: a hard-square box around the aperture ----
    .cs-wick is repositioned by the rAF controller (top = aperture top, height = aperture
-   extent in dial space); here it is styled as a hard 1px box — no radius, no halo, no glow.
-   The caps + full-width focal line of the old candlestick are retired (display:none) so the
-   controller can keep writing their `top` harmlessly while the box carries the whole marker. */
+   extent in dial space). The reticle answers "where am I" — a locate mark, so it is neutral
+   ink (R13a), not blue. The caps + full-width focal line of the old candlestick are retired
+   (display:none) so the controller can keep writing their `top` harmlessly. */
 .cs-focal {
   display: none;
 }
@@ -195,7 +212,7 @@
   position: absolute;
   left: 4px;
   right: 4px;
-  border: 1px solid color-mix(in srgb, var(--pe-blue) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--r-ink) 70%, transparent);
   border-radius: 0;
   pointer-events: none;
   z-index: 3;
@@ -210,12 +227,13 @@
   height: 0;
   border-top: 6px solid transparent;
   border-bottom: 6px solid transparent;
-  border-left: 7px solid var(--pe-blue);
+  border-left: 7px solid var(--r-ink);
   transform: translateY(-50%);
   pointer-events: none;
   z-index: 5;
 }
-/* jump-to-tail — shown only while detached from the live tail */
+/* jump-to-tail — shown only while detached from the live tail. Within-page navigation, so it
+   wears nav's blue TEXT (never a fill). Hover is the one veil. */
 .mapdial-tail {
   position: absolute;
   bottom: 8px;
@@ -225,10 +243,11 @@
   height: 22px;
   display: grid;
   place-items: center;
-  border: 0.5px solid var(--line);
+  border: 0.5px solid var(--r-line);
   border-radius: 2px;
-  background: var(--paper-3);
-  color: var(--pe-blue);
+  background: var(--r-artifact);
+  --r-on: var(--r-artifact);
+  color: var(--r-nav);
   font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1;
@@ -236,8 +255,7 @@
   z-index: 6;
 }
 .mapdial-tail:hover {
-  background: var(--paper-2, var(--paper-3));
-  border-color: var(--pe-blue);
+  background-image: linear-gradient(var(--r-veil), var(--r-veil));
 }
 
 /* chat — near plane, the real scroll. The composer floats over the bottom; pad the tail by its
@@ -254,18 +272,16 @@
    compartments. Same-role runs stay unruled (the rule marks the handoff, not every message). */
 .lens-moment[data-role="user"] + .lens-moment[data-role="assistant"],
 .lens-moment[data-role="assistant"] + .lens-moment[data-role="user"] {
-  border-top: 0.5px solid var(--line-soft);
+  border-top: 0.5px solid var(--r-line);
 }
-/* The focal turn carries a hard left rule in its OWN provenance hue (never a hue swap) — the
-   in-chat twin of the mapdial's widened focal band. Inset shadow = zero layout shift. */
-.lens-moment.focal[data-role="user"] {
-  box-shadow: inset 2px 0 0 var(--user);
-}
-.lens-moment.focal[data-role="assistant"] {
-  box-shadow: inset 2px 0 0 var(--pe-green);
+/* The focal turn's left rule answers "where am I" — a locate mark, neutral ink for BOTH roles
+   (R13a). The old per-role provenance hue spent identity on a selection question.
+   Inset shadow = zero layout shift. */
+.lens-moment.focal {
+  box-shadow: inset 2px 0 0 var(--r-ink);
 }
 .lens-marker {
-  /* full-width ledger row: identifiers left, the tele status hugs the right edge (ml-auto) */
+  /* full-width ledger row: identifiers left, the mono status hugs the right edge (ml-auto) */
   display: flex;
   align-items: center;
   gap: 7px;
@@ -273,12 +289,12 @@
      grows the track to the long target's min-content) so the target can ellipsis-truncate. */
   min-width: 0;
   max-width: 100%;
-  border-left: 2px solid var(--pe-green);
+  border-left: 2px solid var(--r-pea);
   padding: 1px 7px 1px 9px;
   border-radius: 0; /* instrument surface — hard square */
   font-size: 12px;
   line-height: 1.3;
-  color: var(--slate);
+  color: var(--r-ink-2);
   transition:
     background 0.14s ease,
     border-color 0.14s ease,
@@ -288,18 +304,16 @@
 .lens-marker > span {
   flex: none;
 }
-/* tool = pea acting → dashed green rail (matches the pea provenance color); memory = clay */
-.lens-marker.tool {
-  border-left-style: dashed;
-}
+/* tool = pea acting → SOLID pea rail (dashed is reserved for seam; a tool call is real).
+   memory = the memory lane's taxonomy hue. */
 .lens-marker.memory {
-  border-left-color: var(--clay);
+  border-left-color: var(--viz-5);
 }
 .lens-marker.active {
-  border-left-color: var(--pe-green);
+  border-left-color: var(--r-pea);
 }
 .lens-marker.failed {
-  border-left-color: var(--fail);
+  border-left-color: var(--r-caution);
 }
 /* focal stub → heavier rail + tint, but ONLY the single tool at the focal point (`.tool-focal`,
    set per-marker by the scroll controller), not the whole message's tool group. Hover still tints
@@ -309,14 +323,14 @@
 }
 .lens-marker.tool-focal,
 .lens-moment.hover .lens-marker {
-  background: color-mix(in srgb, var(--pe-green) 6%, transparent);
+  background: color-mix(in srgb, var(--r-pea) 6%, transparent);
 }
 .lens-marker code {
   flex: 0 1 auto;
   min-width: 0; /* allow the ellipsis (the marker is a flex row) */
   font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--lichen);
+  color: var(--r-ink-2);
   /* Reset the global `code` pill (border + muted fill) — the marker target is inline. */
   background: transparent;
   border: 0;
@@ -334,7 +348,7 @@
 }
 
 /* The side lane is the shared SidePane primitive (`.lens-side-pane`): it carries the sticky top,
-   --vp height, border, and paper-3 fill via Tailwind on its className, and owns width/drag/collapse.
+   --vp height, border, and artifact fill via Tailwind on its className, and owns width/drag/collapse.
    Only the trace fisheye's fixed frame stays here — the pin translates within it, so it needs a
    positioned, clipped, full-height box (SidePane's own body is overflow-y:auto for world/threads).
    The frame sits INSIDE SidePane's body, which starts HEAD_H (40px, the SidePane header) below the
@@ -346,7 +360,7 @@
   background-image: repeating-linear-gradient(
     to bottom,
     transparent 0 27px,
-    color-mix(in srgb, var(--basalt) 5%, transparent) 27px 28px
+    color-mix(in srgb, var(--r-ink) 5%, transparent) 27px 28px
   );
 }
 
@@ -364,10 +378,11 @@
 .lens-cell {
   margin: 0 12px 4px;
   height: 28px;
-  border: 0.5px solid var(--line);
+  border: 0.5px solid var(--r-line);
   border-radius: 0; /* trace row — hard square */
   overflow: hidden;
-  background: var(--paper);
+  background: var(--r-page);
+  --r-on: var(--r-page);
   opacity: 0.62;
   transition:
     border-color 0.16s ease,
@@ -375,12 +390,12 @@
 }
 .lens-cell.hover {
   opacity: 1;
-  border-color: color-mix(in srgb, var(--pe-green) 40%, transparent);
+  border-color: color-mix(in srgb, var(--r-pea) 40%, transparent);
 }
 .lens-cell.focal {
   opacity: 1;
   /* emphasis by intensity of the row's own hue — no glow, no elevation */
-  border-color: color-mix(in srgb, var(--pe-green) 70%, transparent);
+  border-color: color-mix(in srgb, var(--r-pea) 70%, transparent);
 }
 
 /* Pinned inspect window: the focal/hovered tool's prettified I/O, fixed at the lane top —
@@ -398,8 +413,9 @@
   max-height: calc(var(--vp, 560px) / 2 - 70px);
   display: flex;
   flex-direction: column;
-  background: var(--paper);
-  border-bottom: 0.5px solid var(--line-2);
+  background: var(--r-page);
+  --r-on: var(--r-page);
+  border-bottom: 0.5px solid var(--r-line-2);
 }
 .lens-inspect .h {
   flex: none;
@@ -407,7 +423,7 @@
 .lens-inspect .io-label {
   flex: none;
   padding: 3px 8px 0;
-  color: var(--muted-foreground);
+  color: var(--r-ink-2);
 }
 .lens-inspect pre {
   margin: 0;
@@ -415,17 +431,17 @@
   font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.4;
-  color: var(--lens-ink-2);
+  color: var(--r-ink-2);
   white-space: pre-wrap;
   word-break: break-word;
   min-height: 0;
   overflow: auto;
 }
 .lens-inspect .io-error {
-  color: var(--fail);
+  color: var(--r-caution); /* a failed bridge call is an ERROR, not the model disagreeing */
 }
 /* hybrid row: sans title on the left, machine-measured metadata (status/duration) right-aligned
-   in the telemetry tier. Tight density so the collapsed strip stays ~28px. */
+   in mono. Tight density so the collapsed strip stays ~28px. */
 .lens-cell .h,
 .lens-inspect .h {
   display: flex;
@@ -433,14 +449,15 @@
   justify-content: space-between;
   gap: 8px;
   padding: 5px 8px;
-  background: var(--paper-2);
+  background: var(--r-recess);
+  --r-on: var(--r-recess);
   white-space: nowrap;
 }
 .lens-cell .h .h-title,
 .lens-inspect .h .h-title {
   min-width: 0;
   font-size: 13px;
-  color: var(--foreground);
+  color: var(--r-ink);
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -450,13 +467,13 @@
   flex: none;
   align-items: baseline;
   gap: 8px;
-  color: var(--muted-foreground);
+  color: var(--r-ink-2);
 }
 .lens-inspect .tool-img {
   display: block;
   width: 100%;
   height: auto;
-  border-top: 0.5px solid var(--line);
+  border-top: 0.5px solid var(--r-line);
   min-height: 0;
   overflow: auto;
 }
@@ -469,20 +486,21 @@
   z-index: 6;
   background: linear-gradient(
     to bottom,
-    color-mix(in srgb, var(--paper) 55%, transparent) 0%,
-    color-mix(in srgb, var(--paper) 15%, transparent) 20%,
+    color-mix(in srgb, var(--r-page) 55%, transparent) 0%,
+    color-mix(in srgb, var(--r-page) 15%, transparent) 20%,
     transparent 35%
   );
 }
 
 /* ===== Loading / streaming / pending — baked into the elements ======== */
-/* streaming caret: a blinking bar tailing the live assistant turn */
+/* streaming caret: a blinking bar tailing the live assistant turn — pea's own act, so it
+   wears the agent identity (it was blue, which the language reserves for commit/nav). */
 .mg-caret {
   display: inline-block;
   width: 2px;
   height: 1.05em;
   vertical-align: text-bottom;
-  background: var(--pe-blue);
+  background: var(--r-pea);
   border-radius: 0;
   animation: mg-blink 1s steps(2, start) infinite;
 }
@@ -492,13 +510,13 @@
   }
 }
 
-/* active tool: a slow green sheen sweeps the marker while it runs */
+/* active tool: a slow sheen in the agent identity sweeps the marker while it runs */
 .mg-marker.active,
 .lens-marker.active {
   background-image: linear-gradient(
     90deg,
     transparent 0%,
-    color-mix(in srgb, var(--pe-green) 9%, transparent) 50%,
+    color-mix(in srgb, var(--r-pea) 9%, transparent) 50%,
     transparent 100%
   );
   background-size: 45% 100%;
@@ -513,23 +531,6 @@
     background-position: 160% 0;
   }
 }
-@keyframes mg-await {
-  0%,
-  100% {
-    border-left-color: var(--clay);
-  }
-  50% {
-    border-left-color: var(--clay-ink);
-  }
-}
-@keyframes mg-scan {
-  0% {
-    background-position: -40% 0;
-  }
-  100% {
-    background-position: 140% 0;
-  }
-}
 .lens-fork {
   display: inline-grid;
   place-items: center;
@@ -538,7 +539,7 @@
   border: none;
   border-radius: 0;
   background: transparent;
-  color: var(--muted-foreground);
+  color: var(--r-ink-2);
   opacity: 0;
   transition:
     opacity 0.14s ease,
@@ -549,8 +550,8 @@
   opacity: 1;
 }
 .lens-fork:hover {
-  background: var(--user-tint);
-  color: var(--pe-green);
+  background-image: linear-gradient(var(--r-veil), var(--r-veil));
+  color: var(--r-ink);
 }
 
 @media (prefers-reduced-motion: reduce) {
