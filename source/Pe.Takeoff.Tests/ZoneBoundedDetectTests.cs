@@ -528,6 +528,28 @@ public sealed class ZoneBoundedDetectTests
         TestContext.Out.WriteLine(
             $"zones={zonesRun} withRooms={zonesWithRooms} abstained={abstained} " +
             $"artifact={artifactDir}");
+        // Auto-persist every run into the pool the /runs dev surface scrolls. Pool lives in
+        // .artifacts by ruling (kaitpw 2026-08-16: occasional wipes are no harm); PE_TAKEOFF_RUNS_DIR
+        // points experiment worktrees at a shared pool when cross-worktree history matters.
+        var runsPool = Environment.GetEnvironmentVariable("PE_TAKEOFF_RUNS_DIR")
+            ?? Path.Combine(repoRoot, ".artifacts", "takeoff-runs");
+        var runStamp = DateTimeOffset.UtcNow;
+        var runId = $"{runStamp:yyyyMMdd-HHmmss}-{OptionsHash(canonicalOptions)}";
+        var runDir = Path.Combine(runsPool, runId);
+        Directory.CreateDirectory(runDir);
+        foreach (var file in Directory.EnumerateFiles(artifactDir, "*", SearchOption.AllDirectories))
+        {
+            var target = Path.Combine(runDir, Path.GetRelativePath(artifactDir, file));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target, overwrite: true);
+        }
+        File.WriteAllText(Path.Combine(runDir, "meta.json"), JsonConvert.SerializeObject(new {
+            runId,
+            generatedUtc = runStamp,
+            optionsHash = OptionsHash(canonicalOptions),
+            label = Environment.GetEnvironmentVariable("PE_TAKEOFF_RUN_LABEL"),
+        }, Formatting.Indented) + Environment.NewLine);
+        TestContext.Out.WriteLine($"run persisted: {runDir}");
         Assert.That(failures, Is.Empty, string.Join("\n", failures.OrderBy(item => item)));
     }
 
