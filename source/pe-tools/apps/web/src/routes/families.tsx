@@ -286,7 +286,7 @@ function Seam({ op }: { op: string }) {
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <span className="section-label">{children}</span>;
+  return <span className="t-label t-upper text-muted-foreground">{children}</span>;
 }
 
 /**
@@ -338,18 +338,18 @@ function NamePicker({
       <ComboboxChips
         ref={anchor}
         title={title}
-        className="tele max-h-[3.25rem] min-h-7 min-w-0 flex-1 overflow-y-auto rounded-[var(--radius)] border-[var(--r-line-2)] bg-transparent py-0.5 text-[11px]"
+        className="face-mono max-h-[3.25rem] min-h-7 min-w-0 flex-1 overflow-y-auto rounded-[var(--radius)] border-[var(--r-line-2)] bg-transparent py-0.5 t-label"
       >
         {collapsed ? (
           <span
-            className="px-1 text-[11px] text-muted-foreground"
+            className="px-1 t-label text-muted-foreground"
             title="Every resolved name is in the draft. Open the list to deselect — chips appear once the set is narrowed."
           >
             all {values.length}
           </span>
         ) : (
           values.map((name) => (
-            <ComboboxChip key={name} className="tele rounded-[var(--radius)] text-[11px]">
+            <ComboboxChip key={name} className="face-mono rounded-[var(--radius)] t-label">
               {name}
             </ComboboxChip>
           ))
@@ -357,21 +357,21 @@ function NamePicker({
         <ComboboxChipsInput
           aria-label={ariaLabel}
           placeholder={values.length === 0 ? placeholder : "add…"}
-          className="tele text-[11px] placeholder:text-muted-foreground"
+          className="face-mono t-label placeholder:text-muted-foreground"
         />
         <ComboboxTrigger />
       </ComboboxChips>
       <ComboboxContent anchor={anchor} className="rounded-[var(--radius)]">
         {/* A picker with no options says where options come from (SURFACE-PHILOSOPHY §4). The
             list exists and the typed text narrowed it to nothing, so this is the FILTER story. */}
-        <ComboboxEmpty className="tele text-[11px]">
+        <ComboboxEmpty className="face-mono t-label">
           <EmptyState story="filter" exit={emptyExit}>
             {empty}
           </EmptyState>
         </ComboboxEmpty>
         <ComboboxList>
           {(name: string) => (
-            <ComboboxItem key={name} value={name} className="tele pr-7 text-[11px]">
+            <ComboboxItem key={name} value={name} className="face-mono pr-7 t-label">
               <span className="truncate">{name}</span>
             </ComboboxItem>
           )}
@@ -694,7 +694,7 @@ function FamiliesRoute() {
                 return next;
               })
             }
-            className="tele h-7 w-full px-1.5 text-left text-muted-foreground hover:text-foreground"
+            className="face-mono t-value h-7 w-full px-1.5 text-left text-muted-foreground hover:text-foreground"
           >
             {pickedIds.has(row.familyId) ? "▪" : "□"}
           </button>
@@ -997,7 +997,7 @@ function FamiliesRoute() {
           <SelectTrigger
             aria-label="placement filter"
             title="Whether to include families that are loaded but never placed. It filters BOTH pickers beside it, so narrowing here changes which families the draft resolves to."
-            className="tele h-6 w-32 shrink-0 rounded-[var(--radius)] border-[var(--r-line-2)] px-1.5 text-[11px]"
+            className="face-mono h-6 w-32 shrink-0 rounded-[var(--radius)] border-[var(--r-line-2)] px-1.5 t-label"
           >
             <SelectValue />
           </SelectTrigger>
@@ -1007,7 +1007,7 @@ function FamiliesRoute() {
                 key={value}
                 value={value}
                 title={PLACEMENT_NOTES[value]}
-                className="tele text-[11px]"
+                className="face-mono t-label"
               >
                 {PLACEMENT_LABELS[value]}
               </SelectItem>
@@ -1187,21 +1187,21 @@ function FamiliesRoute() {
                             return next;
                           })
                         }
-                        className="tele text-muted-foreground hover:text-foreground disabled:cursor-not-allowed"
+                        className="face-mono t-value text-muted-foreground hover:text-foreground disabled:cursor-not-allowed"
                       >
                         {flag !== null ? "✕" : excluded ? "□" : "▪"}
                       </button>
                     </td>
-                    <td className="tele py-0.5 text-[11px]">{entry.familyName}</td>
+                    <td className="face-mono py-0.5 t-label">{entry.familyName}</td>
                     <td
-                      className="tele w-24 py-0.5 text-[11px] text-muted-foreground"
+                      className="face-mono w-24 py-0.5 t-label text-muted-foreground"
                       title="Lowered actions: the concrete parameter edits the plan compiled for this family. Zero means the family already matches the profile."
                     >
                       {entry.plan.loweredActions.length} action
                       {entry.plan.loweredActions.length === 1 ? "" : "s"}
                     </td>
                     <td
-                      className="tele truncate py-0.5 text-[10px] text-muted-foreground"
+                      className="face-mono truncate py-0.5 t-caption text-muted-foreground"
                       title="Which layers of the profile decided this family's parameter facets, counted. It is a rollup of what the op reported, with no interpretation added — use it to see which part of the profile is doing the work."
                     >
                       {provenanceSummary(entry.plan)}
@@ -1209,7 +1209,7 @@ function FamiliesRoute() {
                     {/* A family the plan compiled nothing for is a verdict with nothing behind
                         it, not a warning about the model: quiet ink, off the meaning band. */}
                     <td
-                      className="tele w-64 truncate py-0.5 text-[10px] text-[var(--r-ink-mute)]"
+                      className="face-mono w-64 truncate py-0.5 t-caption text-[var(--r-ink-mute)]"
                       title={flag ?? ""}
                     >
                       {flag ?? ""}
@@ -1223,11 +1223,11 @@ function FamiliesRoute() {
                   className="border-b border-[var(--r-line)] opacity-60"
                 >
                   <td className="w-8 py-0.5 text-center">
-                    <span className="tele text-muted-foreground">✕</span>
+                    <span className="face-mono t-value text-muted-foreground">✕</span>
                   </td>
-                  <td className="tele py-0.5 text-[11px]">{family.familyName}</td>
-                  <td className="tele w-24 py-0.5 text-[11px] text-muted-foreground">—</td>
-                  <td className="tele py-0.5 text-[10px] text-muted-foreground" colSpan={2}>
+                  <td className="face-mono py-0.5 t-label">{family.familyName}</td>
+                  <td className="face-mono w-24 py-0.5 t-label text-muted-foreground">—</td>
+                  <td className="face-mono py-0.5 t-caption text-muted-foreground" colSpan={2}>
                     in scope, but the bound profile does not claim this family
                   </td>
                 </tr>
@@ -1274,7 +1274,7 @@ function FamiliesRoute() {
             <tbody>
               {applyData.receipts.map((entry) => (
                 <tr key={entry.familyId} className="border-b border-[var(--r-line)]">
-                  <td className="tele w-56 truncate py-0.5 text-[11px]">
+                  <td className="face-mono w-56 truncate py-0.5 t-label">
                     {entry.familyName ?? `element ${entry.familyId}`}
                   </td>
                   <td className="w-20 py-0.5">
@@ -1291,14 +1291,14 @@ function FamiliesRoute() {
                     </FactChip>
                   </td>
                   <td
-                    className="tele w-40 py-0.5 text-[10px] text-muted-foreground"
+                    className="face-mono w-40 py-0.5 t-caption text-muted-foreground"
                     title={`${entry.parametersChanged} parameter(s) written, breaking down as ${entry.diffSummary.added} added, ${entry.diffSummary.removed} removed, ${entry.diffSummary.modified} modified against the family's prior state.`}
                   >
                     {entry.parametersChanged} changed · +{entry.diffSummary.added} −
                     {entry.diffSummary.removed} ~{entry.diffSummary.modified}
                   </td>
                   <td
-                    className="tele truncate py-0.5 text-[10px] text-muted-foreground"
+                    className="face-mono truncate py-0.5 t-caption text-muted-foreground"
                     title={
                       entry.operationsRun.length > 0
                         ? `Migrator operations that ran on this family, in order: ${entry.operationsRun.join(", ")}.`
@@ -1357,7 +1357,7 @@ function FamiliesRoute() {
             </SectionLabel>
             <FactChip
               className="ml-2"
-              title="How many picked families the projection read back out of the model. Nothing was written anywhere."
+              title="How many picked families the projection read back out of the model."
             >
               {projection.projections.length} famil
               {projection.projections.length === 1 ? "y" : "ies"}
@@ -1386,12 +1386,12 @@ function FamiliesRoute() {
           {projection.projections.map((entry) => (
             <div key={entry.familyId} className="mt-2">
               <div className="flex items-center gap-2">
-                <span className="tele text-[11px]">{entry.familyName ?? entry.familyId}</span>
+                <span className="face-mono t-label">{entry.familyName ?? entry.familyId}</span>
                 {entry.profileJson && (
                   <Verb
                     label="copy"
                     onClick={() => void navigator.clipboard.writeText(entry.profileJson ?? "")}
-                    reason="Copy this family's projected profile JSON to the clipboard. There is no profile editor here by design — profiles are files, so paste it into one. Nothing is written."
+                    reason="Copy this family's projected profile JSON to the clipboard. There is no profile editor here by design — profiles are files, so paste it into one."
                   />
                 )}
                 {!entry.success && (
@@ -1403,7 +1403,7 @@ function FamiliesRoute() {
                 )}
               </div>
               {entry.profileJson && (
-                <pre className="tele mt-1 max-h-40 overflow-auto rounded-[2px] border border-[var(--r-line)] p-2 text-[10px] text-muted-foreground">
+                <pre className="face-mono mt-1 max-h-40 overflow-auto rounded-[2px] border border-[var(--r-line)] p-2 t-caption text-muted-foreground">
                   {entry.profileJson}
                 </pre>
               )}

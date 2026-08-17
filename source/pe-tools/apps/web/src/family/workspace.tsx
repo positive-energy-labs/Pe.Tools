@@ -629,10 +629,10 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
             /* Pea's identity, never the commit colour: a MARK takes `--r-pea` (the display rung),
                a counted chip is text and takes pea's ink. */
             className={cn(
-              "tele flex items-center justify-center",
+              "face-mono flex items-center justify-center",
               open.length === 1
                 ? "size-2 rounded-[1px] bg-[var(--r-pea)]"
-                : "h-3.5 min-w-3.5 rounded-[2px] border border-[var(--r-pea)] px-0.5 text-[9px] leading-none text-[var(--r-pea-ink)]",
+                : "h-3.5 min-w-3.5 rounded-[2px] border border-[var(--r-pea)] px-0.5 t-caption leading-none text-[var(--r-pea-ink)]",
             )}
           >
             {open.length > 1 ? open.length : null}
@@ -675,10 +675,10 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
               type="button"
               onClick={() => setInspect({ kind: "part", slug })}
               title={`${slug}.${property} — a bindable ${row.dataType} dimension that NO parameter drives. ${dim?.note ?? ""} It is ${literal} for every type of this family, forever: no type can differ, no schedule can read it, no formula can reach it. Its value is the ONE merged cell to the right, spanning every type column, because there is exactly one of it. Click to open ${slug} in the inspector; use "bind…" in the state column to give it a parameter.`}
-              className="tele block w-full truncate text-left text-[10px] italic leading-[12px] text-[var(--r-ink-mute)] hover:text-[var(--r-ink)]"
+              className="face-mono block w-full truncate text-left t-caption italic leading-[12px] text-[var(--r-ink-mute)] hover:text-[var(--r-ink)]"
             >
               {row.name}
-              <span className="ml-1 not-italic text-[9px] text-[var(--r-caution)]">geom</span>
+              <span className="ml-1 not-italic t-caption text-[var(--r-caution)]">geom</span>
             </button>
           </span>
         );
@@ -713,7 +713,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
           onLocate={locate}
           where={`the family value of ${row.name}`}
         >
-          <span className="tele block min-w-0 flex-1 truncate px-1.5" title={reason}>
+          <span className="face-mono t-value block min-w-0 flex-1 truncate px-1.5" title={reason}>
             <span className="block truncate leading-[13px]">
               {row.kind === "live-only" ? (
                 <span className="text-[var(--r-ink-2)]">{row.name}</span>
@@ -728,13 +728,13 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
                 </button>
               )}
               {row.isInstance && (
-                <span className="ml-1 text-[9px] text-[var(--r-ink-mute)]">inst</span>
+                <span className="ml-1 t-caption text-[var(--r-ink-mute)]">inst</span>
               )}
               {MISSING_IN_REVIT.has(row.name) && (
-                <span className="ml-1 text-[9px] text-[var(--r-caution)]">⊘</span>
+                <span className="ml-1 t-caption text-[var(--r-caution)]">⊘</span>
               )}
               {blocks.length > 0 && (
-                <span className="ml-1 text-[9px] text-[var(--r-ink-mute)]">{blocks.join(" ")}</span>
+                <span className="ml-1 t-caption text-[var(--r-ink-mute)]">{blocks.join(" ")}</span>
               )}
             </span>
             {/* The family level, on ONE line: the formula, and what the parameter DRIVES. A bound
@@ -745,7 +745,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
                 DERIVED SPENDS NO COLOUR (DESIGN-AUDIT #3): the language has no role for "a formula
                 computed this", and the leading `=` already says it. Italic carries the rest. */}
             {(isFormula(authored) || drives.length > 0) && (
-              <span className="block truncate text-[9px] leading-[11px]">
+              <span className="block truncate t-caption leading-[11px]">
                 {isFormula(authored) && (
                   <span className="italic text-[var(--r-ink-2)]">{authored}</span>
                 )}
@@ -801,7 +801,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
           setOverlay("draft");
         }}
         title={`Drill into "${typeName}". The table pane swaps to the same table, narrowed to this one type and opened up with the spine and the crossing verbs. "← all types" in the pane header, or Esc, comes back.`}
-        className="tele-label block w-full text-left normal-case text-[var(--r-ink-2)] hover:text-[var(--r-ink)]"
+        className="face-mono t-label block w-full text-left text-[var(--r-ink-2)] hover:text-[var(--r-ink)]"
       >
         {typeName} <span className="opacity-60">⤢</span>
       </button>
@@ -1132,7 +1132,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
             else bindTo(slug, property, choice);
           }}
           className={cn(
-            "tele h-6 w-full min-w-0 truncate rounded-[2px] border-0 bg-[var(--r-recess)] px-1 text-[10px] text-[var(--r-ink)] outline-none",
+            "face-mono h-6 w-full min-w-0 truncate rounded-[2px] border-0 bg-[var(--r-recess)] px-1 t-caption text-[var(--r-ink)] outline-none",
             className,
           )}
         >
@@ -1157,7 +1157,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
     return (
       <Verb
         label="bind…"
-        className={cn("h-4 px-1 text-[9px]", className)}
+        className={cn("h-4 px-1 t-caption", className)}
         onClick={() => setBinding({ slug, property })}
         reason={`Bind ${slug}.${property} to a parameter — its one crossing, and the only verb that changes what CAN be said about this number. Offers every ${dataType} parameter already in the profile, or a new one named "${newName}" seeded with ${literal}. The ghost row then disappears into the parameter row that now represents it. Nothing leaves the page.`}
       />
@@ -1178,7 +1178,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
       <span className="flex h-7 items-center gap-1 px-1.5">
         <StateDot tone="caution" />
         <span
-          className="tele text-[10px] text-[var(--r-caution)]"
+          className="face-mono t-caption text-[var(--r-caution)]"
           title={`UNBOUND — ${literal} is frozen into the geometry of ${slug}. Nothing in the profile, no type, and no schedule can reach it.`}
         >
           unbound
@@ -1232,7 +1232,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
           const state = agreementOf(draft, row, typeName);
           return (
             <span
-              className="tele block px-1.5 text-center"
+              className="face-mono t-value block px-1.5 text-center"
               style={{ color: VERDICT_INK[AGREEMENT_TONE[state]] }}
               title={MARK_TITLE[state]}
             >
@@ -1560,10 +1560,10 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
     if (meta.control === "read")
       return (
         <span
-          className="tele text-[10px] text-[var(--r-ink-2)]"
+          className="face-mono t-caption text-[var(--r-ink-2)]"
           title={`${meta.note} READ-ONLY — a box you could type in would be claiming an edit that nothing downstream would actually make.`}
         >
-          {value} <span className="text-[9px] opacity-50">reported</span>
+          {value} <span className="t-caption opacity-50">reported</span>
         </span>
       );
     if (meta.control === "toggle")
@@ -1592,7 +1592,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
         onChange={(event) => editMeta(slug, meta.key, event.target.value)}
         title={meta.note}
         aria-label={meta.label}
-        className="tele h-5 w-full rounded-[2px] border border-[var(--r-line-2)] bg-transparent px-1 text-[10px] outline-none"
+        className="face-mono h-5 w-full rounded-[2px] border border-[var(--r-line-2)] bg-transparent px-1 t-caption outline-none"
       >
         {(meta.options ?? []).map((option) => (
           <option key={option} value={option}>
@@ -1606,7 +1606,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
   const partInspector = (part: GeomConstituent): React.ReactNode => (
     <>
       <p
-        className="tele mb-1.5 text-[9px] text-[var(--r-ink-2)]"
+        className="face-mono mb-1.5 t-caption text-[var(--r-ink-2)]"
         title={`${part.slug} is a ${part.kind}. The kind is READ-ONLY here: a prism does not become a cylinder because a word changed, and the profile's job is to say what the geometry is, not to pretend it can be retyped.`}
       >
         {part.kind} · {part.dims.length} bindable · {part.meta.length} non-bindable
@@ -1614,7 +1614,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
 
       <div className="mb-2 rounded-[2px] border border-[var(--r-line)] p-1.5">
         <p
-          className="tele mb-1 text-[9px] text-[var(--r-ink-2)]"
+          className="face-mono mb-1 t-caption text-[var(--r-ink-2)]"
           title="The constituent's bindable numbers, shown here as a STATEMENT OF WHERE EACH ONE LIVES rather than as a second place to work. A bound dim names the parameter that represents it in the table; an unbound one carries its literal and the very same bind verb its ghost row carries."
         >
           bindable dims — represented in the table
@@ -1624,7 +1624,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
           return (
             <div key={dim.property} className="flex items-center gap-2 py-0.5">
               <span
-                className="tele w-24 shrink-0 truncate text-[9px] text-[var(--r-ink-2)]"
+                className="face-mono w-24 shrink-0 truncate t-caption text-[var(--r-ink-2)]"
                 title={dim.note}
               >
                 {dim.property}
@@ -1637,7 +1637,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
                     setPinnedParam(bound);
                   }}
                   title={`Driven by "${bound}", currently ${draft.authored[bound] ?? "—"}. Click to select that parameter: the value is edited on its row and in its own inspector, never in two places.`}
-                  className="tele min-w-0 flex-1 truncate text-left text-[10px] text-[var(--r-ink)] hover:underline"
+                  className="face-mono min-w-0 flex-1 truncate text-left t-caption text-[var(--r-ink)] hover:underline"
                 >
                   {bound}
                 </button>
@@ -1648,7 +1648,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
                         refusal (an emptied literal) is the cell's own note in both places. */}
                     <NavStateCell
                       value={bindingOf(draft, part.slug, dim.property)}
-                      className="rounded-[2px] border border-[var(--r-line-2)] text-[10px] text-[var(--r-caution)]"
+                      className="rounded-[2px] border border-[var(--r-line-2)] t-caption text-[var(--r-caution)]"
                       note={`UNBOUND — the literal frozen into ${part.slug}. Editable, exactly as it is on its ghost row at the bottom of the table; editing it changes the number, not who can reach it.`}
                       onCommit={(next) => editLiteral(part.slug, dim.property, next)}
                     />
@@ -1663,7 +1663,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
 
       <div className="rounded-[2px] border border-[var(--r-line)] p-1.5">
         <p
-          className="tele mb-1 text-[9px] text-[var(--r-ink-2)]"
+          className="face-mono mb-1 t-caption text-[var(--r-ink-2)]"
           title="The half of the constituent no parameter can drive. It has no column in the table because it does not vary by type and it is not a number — and this is the ONLY place it appears, which is exactly the claim: it lives somewhere else."
         >
           non-bindable metadata — lives only here
@@ -1671,7 +1671,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
         {part.meta.map((meta) => (
           <div key={meta.key} className="flex items-baseline gap-2 py-0.5">
             <span
-              className="tele w-24 shrink-0 truncate text-[9px] text-[var(--r-ink-2)]"
+              className="face-mono w-24 shrink-0 truncate t-caption text-[var(--r-ink-2)]"
               title={meta.note}
             >
               {meta.label}
@@ -1691,7 +1691,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
     const family = proposalsAt(name, null);
     return (
       <>
-        <p className="tele mb-1.5 text-[9px] text-[var(--r-ink-2)]">
+        <p className="face-mono mb-1.5 t-caption text-[var(--r-ink-2)]">
           {row?.dataType ?? "unknown"} · bound per {row?.isInstance ? "instance" : "type"}
           {row?.group ? ` · ${row.group}` : ""}
           {MISSING_IN_REVIT.has(name) && (
@@ -1701,7 +1701,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
 
         <div className="mb-2 rounded-[2px] border border-[var(--r-line)] p-1.5">
           <p
-            className="tele mb-1 text-[9px] text-[var(--r-ink-2)]"
+            className="face-mono mb-1 t-caption text-[var(--r-ink-2)]"
             title="THE FAMILY-LEVEL VALUE — what every type inherits unless it overrides. The table shows it only as the grey placeholder in each type cell, and a placeholder is not an editor; this is where it is actually authored. Type an expression beginning with = to make it a formula instead, which locks every type column on the row."
           >
             family value {isFormula(authored) ? "· formula" : ""}
@@ -1721,7 +1721,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
             }
             stagedBy={family.length > 0 ? "pea" : "you"}
             className={cn(
-              "rounded-[2px] border border-[var(--r-line-2)] text-[11px]",
+              "rounded-[2px] border border-[var(--r-line-2)] t-label",
               isFormula(authored) && "italic",
             )}
             note={
@@ -1732,7 +1732,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
             onCommit={(next) => editAuthored(name, next)}
           />
           {family.length > 0 && (
-            <p className="tele mt-1 text-[9px] text-[var(--r-pea-ink)]">
+            <p className="face-mono mt-1 t-caption text-[var(--r-pea-ink)]">
               pea proposes {family[0]!.proposed} here — the card is above; typing your own value
               severs it instead.
             </p>
@@ -1741,7 +1741,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
 
         <div className="mb-2 rounded-[2px] border border-[var(--r-line)] p-1.5">
           <p
-            className="tele mb-1 text-[9px] text-[var(--r-ink-2)]"
+            className="face-mono mb-1 t-caption text-[var(--r-ink-2)]"
             title="Every geometry property this parameter drives. These have no rows of their own — this parameter IS their row — so editing the value above moves all of them together. That fan-out is the thing worth knowing before you type."
           >
             drives {drives.length} geometry propert{drives.length === 1 ? "y" : "ies"}
@@ -1757,7 +1757,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
                 type="button"
                 onClick={() => setInspect({ kind: "part", slug: entry.slug })}
                 title={`Open ${entry.slug} — its kind, its other dims, and the non-bindable metadata no parameter can drive.`}
-                className="tele block w-full truncate text-left text-[10px] text-[var(--r-ink)] hover:underline"
+                className="face-mono block w-full truncate text-left t-caption text-[var(--r-ink)] hover:underline"
               >
                 → {entry.slug}.{entry.property}
               </button>
@@ -1767,7 +1767,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
 
         <div className="rounded-[2px] border border-[var(--r-line)] p-1.5">
           <p
-            className="tele mb-1 text-[9px] text-[var(--r-ink-2)]"
+            className="face-mono mb-1 t-caption text-[var(--r-ink-2)]"
             title="Where this number came from. Grounding is its own fact, independent of any proposal — accepting or denying pea's reading never erases the citation."
           >
             grounding
@@ -1783,7 +1783,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
             blocks.map((id) => (
               <p
                 key={id}
-                className="tele line-clamp-3 whitespace-pre-line text-[10px] leading-snug text-[var(--r-ink)]"
+                className="face-mono line-clamp-3 whitespace-pre-line t-caption leading-snug text-[var(--r-ink)]"
                 title={`Block ${id} of ${SPEC?.fileName ?? "the spec"}, verbatim. If it does not say what the value says, the value is wrong.`}
               >
                 <span className="text-[var(--r-ink-2)]">{id} · </span>
@@ -1800,10 +1800,11 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
     inspect == null ? null : (
       <div className="flex max-h-[58%] min-h-0 shrink-0 flex-col border-t-2 border-[var(--r-line)]">
         <div className="flex h-6 shrink-0 items-center gap-2 border-b border-[var(--r-line)] bg-[var(--r-recess)] px-2">
-          <span className="tele-label shrink-0 text-[9px] text-[var(--r-ink-2)]">
+          {/* A machine tag naming the inspected object's kind — the lang tag voice. */}
+          <span className="dl-tag shrink-0">
             {inspect.kind === "part" ? "constituent" : "parameter"}
           </span>
-          <span className="tele min-w-0 flex-1 truncate text-[10px] text-[var(--r-ink)]">
+          <span className="face-mono min-w-0 flex-1 truncate t-caption text-[var(--r-ink)]">
             {inspect.kind === "part" ? inspect.slug : inspect.name}
           </span>
           <Verb
@@ -1877,7 +1878,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
         {/* proposals — margin annotations, docked as a stack above the spec */}
         <div className="border-b border-[var(--r-line)] p-2">
           <p
-            className="tele mb-1 text-[9px] text-[var(--r-ink-2)]"
+            className="face-mono mb-1 t-caption text-[var(--r-ink-2)]"
             title="Pea's reading of the spec, aimed at named cells. Accepting moves the value into the table where you can see it land; the citation stays lit either way, because the grounding is a separate fact from the proposal."
           >
             pea proposes — ephemeral, page-scoped

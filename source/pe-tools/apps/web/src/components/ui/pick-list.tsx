@@ -7,15 +7,15 @@ import { cn } from "#/lib/utils";
  * PickList — the workbench's "choose one from many" rail body. A filter field over a
  * grouped, keyboard-navigable list: type to narrow, ↑/↓ to move, Enter to pick (the top
  * match when you haven't moved), Escape to clear. Groups render in insertion order as
- * section-label headers. Pair it with SidePane, which owns collapse/expand and width —
- * PickList never draws its own chrome.
+ * small-caps sans section heads. Pair it with SidePane, which owns collapse/expand and
+ * width — PickList never draws its own chrome.
  */
 export interface PickListItem {
   id: string;
   label: string;
   /** Section header this item sorts under; omitted items group under the empty header. */
   group?: string;
-  /** Right-aligned measured fact (rendered in `tele`), e.g. a row count. */
+  /** Right-aligned measured fact (rendered mono at the caption tier), e.g. a row count. */
   meta?: ReactNode;
   /** Native tooltip. */
   hint?: string;
@@ -113,7 +113,9 @@ export function PickList({
         ) : (
           [...groups.entries()].map(([group, groupItems]) => (
             <div key={group} className="mb-1">
-              {group && <p className="section-label px-3 pb-0.5 pt-2">{group}</p>}
+              {group && (
+                <p className="t-label t-upper px-3 pb-0.5 pt-2 text-muted-foreground">{group}</p>
+              )}
               {groupItems.map((item) => {
                 index += 1;
                 const itemIndex = index;
@@ -132,8 +134,10 @@ export function PickList({
                     onMouseEnter={() => setCursor(itemIndex)}
                     className={cn(
                       "flex w-full items-baseline gap-2 border-l-2 px-3 py-1 text-left text-xs",
+                      // Selection is a FILL, never a hue: the select rung plus a neutral
+                      // ink locate mark. No weight — chrome never buys weight.
                       active
-                        ? "border-primary bg-primary/8 font-medium text-primary"
+                        ? "border-[var(--r-ink)] bg-[var(--r-select)] text-foreground"
                         : "border-transparent text-foreground",
                       cursored && !active && "bg-muted",
                       disabled && "opacity-50",
@@ -141,7 +145,7 @@ export function PickList({
                   >
                     <span className="min-w-0 flex-1 truncate">{item.label}</span>
                     {item.meta != null && (
-                      <span className="tele shrink-0 text-[10px] text-muted-foreground">
+                      <span className="face-mono t-caption shrink-0 text-muted-foreground">
                         {item.meta}
                       </span>
                     )}

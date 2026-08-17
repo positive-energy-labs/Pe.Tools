@@ -56,13 +56,6 @@ export function worldName(session: SessionFacts): string {
   return session.lane === "sandbox" ? (session.sandboxId ?? session.sessionId) : "your Revit";
 }
 
-export const PHASE_COLOR: Record<WorldPhase, string> = {
-  live: "var(--pe-blue)",
-  booting: "var(--cat-kiln)",
-  unresponsive: "var(--cat-clay)",
-  dead: "var(--muted-foreground)",
-};
-
 /** Bridge sessions win; registry entries not bridge-connected fill the boot/death tail. */
 export function fuseFleet(
   sessions: readonly SessionFacts[],

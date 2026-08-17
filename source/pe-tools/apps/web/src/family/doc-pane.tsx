@@ -44,13 +44,13 @@ export function SpecText({ litBlocks }: { litBlocks: Set<string> }) {
               lit ? "border-[var(--r-line-2)] bg-[var(--r-select)]" : "border-[var(--r-line)]",
             )}
           >
-            <div className="tele flex items-baseline justify-between text-[9px] text-[var(--r-ink-2)]">
+            <div className="face-mono flex items-baseline justify-between t-caption text-[var(--r-ink-2)]">
               <span>
                 {block.id} · p{block.page}
               </span>
               <span>{block.kind}</span>
             </div>
-            <pre className="mt-1 whitespace-pre-wrap break-words font-sans text-[10px] leading-snug text-[var(--r-ink)]">
+            <pre className="mt-1 whitespace-pre-wrap break-words font-sans t-caption leading-snug text-[var(--r-ink)]">
               {block.md}
             </pre>
           </div>
@@ -121,7 +121,7 @@ export function SpecSheet({
           const blocks = spec.blocks.filter((block) => block.page === page);
           return (
             <div key={page} style={{ width: `${100 * zoom}%`, minWidth: 180 }}>
-              <div className="tele mb-0.5 text-[9px] text-[var(--r-ink-2)]">page {page}</div>
+              <div className="face-mono mb-0.5 t-caption text-[var(--r-ink-2)]">page {page}</div>
               <svg
                 viewBox="0 0 100 130"
                 className="block w-full border border-[var(--r-line-2)] bg-[var(--r-page)]"
@@ -231,7 +231,7 @@ export function ProposalCard({
         ref={register}
         onMouseEnter={() => onHover(true)}
         onMouseLeave={() => onHover(false)}
-        className="tele flex items-baseline gap-1 py-0.5 text-[9px]"
+        className="face-mono flex items-baseline gap-1 py-0.5 t-caption"
         title={settled.note}
         style={{ color: settled.colour }}
       >
@@ -259,14 +259,14 @@ export function ProposalCard({
       }}
       title="A pea proposal — ephemeral and page-scoped. It is not in the document and never will be; accepting is what writes the value, and leaving the page throws the proposal away."
     >
-      <div className="tele text-[9px] text-[var(--r-ink-2)]">{target}</div>
-      <div className="tele text-[11px] text-[var(--r-pea-ink)]">
+      <div className="face-mono t-caption text-[var(--r-ink-2)]">{target}</div>
+      <div className="face-mono t-label text-[var(--r-pea-ink)]">
         {proposal.current ?? "—"} → {proposal.proposed}
       </div>
-      <p className="mt-0.5 text-[10px] leading-snug text-[var(--r-ink)]">{proposal.note}</p>
+      <p className="mt-0.5 t-caption leading-snug text-[var(--r-ink)]">{proposal.note}</p>
       {blockMd && (
         <p
-          className="tele mt-1 line-clamp-3 whitespace-pre-line text-[9px] leading-snug text-[var(--r-ink-2)]"
+          className="face-mono mt-1 line-clamp-3 whitespace-pre-line t-caption leading-snug text-[var(--r-ink-2)]"
           title={`Read from ${proposal.sourceBlockId} of ${SPEC?.fileName ?? "the spec"} — the source text verbatim, so the claim is checkable without leaving the page.`}
         >
           {blockMd}

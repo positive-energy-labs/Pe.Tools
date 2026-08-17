@@ -25,8 +25,8 @@ import { useWorldLog } from "#/host/use-target";
  * sandbox comes to exist. World rows derive from fuseFleet — the same fusion the sentence speaks.
  *
  * Design-language pass 2026-08-16: the fleet renders through `MasterTable` with a `verdict:`
- * phase column (live · booting · unresponsive on the meaning band — `PHASE_COLOR`'s blue/kiln/
- * clay spends die here); lifecycle controls are lang `Verb`s (all commit — every one writes
+ * phase column (live · booting · unresponsive on the meaning band — fleet's old `PHASE_COLOR`
+ * map is deleted); lifecycle controls are lang `Verb`s (all commit — every one writes
  * beyond the page); dashed declare buttons lose the seam edge they were squatting on. Gaps in
  * docs/features/instances/DESIGN-AUDIT.md.
  */
@@ -386,7 +386,13 @@ function Page() {
                           </span>
                         </td>
                         <td className="max-w-[260px] py-2 pr-4">
-                          <span className="face-mono t-caption block truncate italic text-[var(--r-ink-mute)]">
+                          {/* The crash payload is the row's one live fact — it must not wear the
+                              dropped/muted-italic styling the dead identity cells wear (ruled
+                              2026-08-16: "instances' crash payload un-muted"). */}
+                          <span
+                            className="face-mono t-caption block truncate text-[var(--r-ink-2)]"
+                            title={world.registry?.firstFailureEvent?.message ?? undefined}
+                          >
                             {world.registry?.firstFailureEvent?.message ??
                               world.registry?.detail ??
                               ""}

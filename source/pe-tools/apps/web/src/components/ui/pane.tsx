@@ -81,10 +81,13 @@ export function Pane({
         >
           <div className="flex min-w-0 flex-1 items-baseline gap-2">
             {title != null && (
-              <h2 className="tele-label min-w-0 truncate text-muted-foreground">{title}</h2>
+              // Pane titles are human heads — small-caps tracked SANS, never mono (heads law).
+              <h2 className="t-label t-upper min-w-0 truncate text-muted-foreground">{title}</h2>
             )}
             {meta != null && (
-              <span className="tele min-w-0 truncate text-muted-foreground">{meta}</span>
+              <span className="face-mono t-value min-w-0 truncate text-muted-foreground">
+                {meta}
+              </span>
             )}
           </div>
           {actions != null && (
@@ -338,14 +341,15 @@ function PaneResizeHandle({
       onKeyDown={onKeyDown}
       onDoubleClick={onReset}
       className={cn(
-        "group z-20 flex touch-none items-center justify-center bg-muted/50 outline-none hover:bg-primary/15 focus-visible:bg-primary/15",
+        // Hover buys no hue (the one hover law): the gutter lifts with the neutral veil.
+        "group z-20 flex touch-none items-center justify-center bg-muted/50 outline-none hover:bg-[var(--r-veil)] focus-visible:bg-[var(--r-veil)]",
         axis === "horizontal" ? "h-full w-2 cursor-col-resize" : "h-2 w-full cursor-row-resize",
         className,
       )}
     >
       <span
         className={cn(
-          "bg-[var(--line-2)] group-hover:bg-primary/60 group-focus-visible:bg-primary/60",
+          "bg-[var(--r-line-2)] group-hover:bg-[var(--r-ink-2)] group-focus-visible:bg-[var(--r-ink-2)]",
           axis === "horizontal" ? "h-8 w-px" : "h-px w-8",
         )}
       />

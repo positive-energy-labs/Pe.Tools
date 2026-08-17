@@ -189,7 +189,7 @@ export function AnatomyDrawing({
 
       <div className="min-w-0 flex-1 overflow-y-auto border-l border-[var(--r-line)] p-2">
         <p
-          className="tele mb-1 text-[9px] text-[var(--r-ink-2)]"
+          className="face-mono mb-1 t-caption text-[var(--r-ink-2)]"
           title="The profile's own constituent list. Hovering one lights both the shape and the table rows it drives, because there is only ever ONE thing in focus. Clicking OPENS it in the doc pane's lower half, where the half of it no parameter can drive — direction, system type, where its frame sits — is edited."
         >
           constituents · {typeName}
@@ -213,7 +213,7 @@ export function AnatomyDrawing({
                   : ""
               }`}
               className={cn(
-                "tele flex w-full items-center gap-1 truncate rounded-[2px] border px-1 py-0.5 text-left text-[10px]",
+                "face-mono flex w-full items-center gap-1 truncate rounded-[2px] border px-1 py-0.5 text-left t-caption",
                 // Selection is a FILL, not a hue: the open constituent sits in the selection rung,
                 // the hovered one wears a hairline. Neither is a state of the model.
                 inspecting === part.slug
@@ -227,7 +227,7 @@ export function AnatomyDrawing({
               <span className="min-w-0 truncate">{part.slug}</span>
               {unbound > 0 && (
                 <span
-                  className="ml-auto shrink-0 text-[9px] text-[var(--r-caution)]"
+                  className="ml-auto shrink-0 t-caption text-[var(--r-caution)]"
                   title={`${unbound} of this constituent's dimensions are frozen literals no parameter drives. They are the ghost rows at the bottom of the table.`}
                 >
                   {unbound}⚠
