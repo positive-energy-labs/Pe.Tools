@@ -33,7 +33,8 @@ import { cn } from "#/lib/utils";
 
 import "./lang.css";
 
-/** The one squiggle slot. Ranked; exactly one may draw. */
+/** The one squiggle slot. Ranked; exactly one may draw. `never` is NOT here on purpose —
+ * nothing exists to distrust, so it draws no squiggle (ruled 2026-08-16, consolidation batch). */
 export type Unsettled = "drift" | "stale" | "unverified";
 
 export interface StateCellProps {
@@ -44,14 +45,23 @@ export interface StateCellProps {
    * beside the value — drift's second half, at zero row-height cost.
    */
   modelValue?: string;
-  /** How old the reading behind the value is. Ranks below `agree` in the squiggle slot. */
-  fresh?: "fresh" | "stale" | "unverified";
+  /**
+   * The epistemic ladder — how much do we know about this value (ruled 2026-08-16):
+   * `fresh` checked recently · `stale` checked long ago · `unverified` a value exists but was
+   * never checked · `never` nothing was ever attempted — no reading, no value. The first three
+   * rank in the squiggle slot below `agree`; `never` draws NO squiggle at all (there is nothing
+   * to distrust) — the value slot renders muted. "Not started is a state, not a zero"
+   * (SURFACE-PHILOSOPHY §1) finally has its rung; three routes were borrowing `unverified`.
+   */
+  fresh?: "fresh" | "stale" | "unverified" | "never";
   /** Whether the model holds the same value. `drift` is the ONE alarm. */
   agree?: "agree" | "drift";
   /** Whose unsaved event, if any, is sitting on this cell. */
   stage?: "clean" | "proposed" | "staged";
   /**
    * Who staged it — pea's square is pea's ink, yours is caution and carries the bold.
+   * RULED 2026-08-16 (consolidation batch): authorship is a QUALIFIER of staging, not a fifth
+   * axis — it only reads when `stage` is not clean. Census tables count four axes + qualifier.
    *
    * ponytail: the state model has no author on `staged` (CLEANROOM: "staging has no author",
    * the round's strongest signal — `trichotomy.ts` stores `by` and every consumer discards it).
@@ -87,6 +97,8 @@ interface CellRead {
   seam: boolean;
   /** The one squiggle slot; one winner. */
   unsettled: Unsettled | null;
+  /** Nothing was ever attempted here — muted value, no squiggle, no marks. */
+  never: boolean;
   /** Your unsaved edit (bold + caution square), pea's (pea square, no bold), or none. */
   unsaved: "you" | "pea" | null;
 }
@@ -110,6 +122,7 @@ function readCell(p: StateCellProps): CellRead {
           : p.fresh === "unverified"
             ? "unverified"
             : null,
+    never: p.fresh === "never",
     // An open proposal is unsaved too, but its square is drawn off `body: "proposed"` — see
     // lang.css. This slot is only for a STAGED value, whose author is the open question.
     unsaved: !locked && stage === "staged" ? (p.stagedBy ?? "you") : null,
@@ -128,6 +141,7 @@ export const CELL_STATE_ORDER = [
   "staged",
   "stale",
   "unverified",
+  "never",
   "clean",
   "locked",
 ] as const;
@@ -144,6 +158,7 @@ export function cellStateLabel(p: StateCellProps): CellStateName {
   if (read.body === "proposed") return "proposed";
   if (read.unsaved != null) return "staged";
   if (read.unsettled != null) return read.unsettled;
+  if (read.never) return "never";
   return "clean";
 }
 
@@ -174,6 +189,7 @@ export function StateCell(props: StateCellProps) {
         data-scale="row"
         data-body={read.body ?? undefined}
         data-seam={read.seam ? "" : undefined}
+        data-never={read.never ? "" : undefined}
         data-unsaved={read.unsaved === "pea" ? "pea" : read.unsaved === "you" ? "" : undefined}
         title={cellFactsText(props) ?? undefined}
       >
@@ -208,6 +224,7 @@ export function StateCell(props: StateCellProps) {
           className="dl-cell"
           data-body={read.body ?? undefined}
           data-seam={read.seam ? "" : undefined}
+          data-never={read.never ? "" : undefined}
           data-unsaved={read.unsaved === "pea" ? "pea" : read.unsaved === "you" ? "" : undefined}
         >
           {read.unsettled != null ? (

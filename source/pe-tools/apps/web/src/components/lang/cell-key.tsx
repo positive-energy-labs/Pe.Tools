@@ -61,10 +61,11 @@ const AXES: readonly KeyAxis[] = [
   },
   {
     axis: "freshness",
-    asks: "how old is the reading behind it?",
+    asks: "how much do we know about it?",
     items: [
       { label: "stale read", specimen: <StateCell value="5.5 in" fresh="stale" /> },
-      { label: "never read", specimen: <StateCell value="26 in" fresh="unverified" /> },
+      { label: "unverified — value never checked", specimen: <StateCell value="26 in" fresh="unverified" /> },
+      { label: "never — nothing attempted yet", specimen: <StateCell value="—" fresh="never" /> },
     ],
   },
   {

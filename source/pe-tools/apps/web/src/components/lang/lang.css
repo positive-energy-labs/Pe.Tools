@@ -190,6 +190,13 @@
   text-decoration-color: var(--r-ink-mute);
 }
 
+/* NEVER (ruled 2026-08-16) — nothing was ever attempted here. Draws NO squiggle: the squiggle
+   family distrusts an existing value, and here nothing exists to distrust. The value alone goes
+   muted. Distinct from locked (no italic, no fill — the cell is writable, just untouched). */
+.dl-cell[data-never] {
+  --dl-cell-ink: var(--r-ink-mute);
+}
+
 /* drift's second half: the other side's value as a struck ghost token, INLINE, so the one alarm
    is unmissable and still costs zero row height. */
 .dl-ghost {

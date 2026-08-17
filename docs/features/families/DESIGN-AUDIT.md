@@ -79,6 +79,15 @@ as borrowed rungs).
 
 ## B · Findings
 
+> **RULED 2026-08-16 — the consolidation batch** (CLEANROOM "consolidation batch" section;
+> autonomous sweep session, grilled against docs, re-openable). Mapping: #1 → R5 (`verdict:`
+> column — the second form is blessed, lang-native, `stateColumn` dies) · #2 → R9 (`EmptyState`
+> shipped: required `story` + `exit`) · #3 → R4 (derived is not a state; no `--r-derived`,
+> ever) · #4 → R12 (`useVerb.fail`) · #5 → R2 (`fresh: "never"`) · #6 → R8 (editable
+> `StateCell` with refusal folded in) · #7 → R6 (sever leaves NO cell trace — ledger only,
+> owed specimen closed by ruling) · #8 → R3 (row fact, gutter marker) · #9 → R8 (refusal is
+> the editable cell's job) · #10 → R13(b) · #11 → R11 (`AddressingBar` shipped).
+
 ### 1 · The plan-verdict vocabulary is not the cell grammar, and cannot be — again
 
 **Surface fact.** `/families` derives one word per family from the plan lens: `unplanned`,

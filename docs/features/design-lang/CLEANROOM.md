@@ -267,6 +267,80 @@ Judged on the live `/design-system` §04 table after the cell-state clause lande
   state word is more for the user to learn; a consolidation pass over the state vocabulary is
   queued to squash responsibilities where axes can merge.
 
+## The consolidation batch (ruled 2026-08-16, autonomous sweep session)
+
+Ruled by the sweep session alone under kaitpw's "pick up DESIGN-SWEEP and finish" directive,
+grilled against the recorded verdicts, anchors and audit evidence rather than a live review
+(the grill record is this section — each ruling names its grounds). Any of these is re-openable
+at the next joint sitting; none contradicts a prior joint ruling.
+
+- **R1 · Origin is a qualifier, not an axis.** `stagedBy` only reads when `stage` ≠ clean —
+  the census tables' five axes collapse to four (freshness · agreement · staging · capability)
+  plus an authorship qualifier on staging. Grounds: standing skepticism of state growth; every
+  census row showed origin empty except where staged. The model-side gap ("staging has no
+  author") stays open unchanged.
+- **R2 · `fresh: "never"` — freshness becomes the epistemic ladder.** fresh ▸ stale ▸
+  unverified ▸ never: checked recently ▸ checked long ago ▸ value exists, never checked ▸
+  nothing ever attempted. `never` draws NO squiggle (nothing exists to distrust); the value
+  sits in `--r-ink-mute`; universal word "never", ranked after `unverified` in attention
+  order. Grounds: takeoffs #3 + families #5 — three consumers borrowing `unverified`, and
+  §1's "not started is a state, not a zero" demanding the rung in terms.
+- **R3 · A queued human decision and unreachability are ROW facts — no sixth axis.** Both
+  takeoffs #2 (verdict owed) and families #8 (unbound ghost rows) independently converge on
+  "a row fact with one verb attached", which is §4's gutter marker verbatim: the mark
+  LOCATES and counts; the decision happens where the evidence is. The gutter seam on
+  MasterTable is the component; takeoffs' flags column and `/family`'s ghost rows are its two
+  proven consumers.
+- **R4 · DERIVED is not a state.** A formula-computed value rides the ink ladder
+  (`--r-ink-2`) plus `cap: "readonly"` with its `capReason`; the `ƒ` glyph is route
+  vocabulary. There will be no `--r-derived`. Grounds: families #3's honest fix already
+  proved nothing is lost but the hue; skepticism of state growth; the shim line is already
+  deleted at zero consumers.
+- **R5 · Pipeline verdicts are a second legitimate form — the `verdict:` column.** Families
+  #1's evidence stands: a seven-word pipeline verdict with one axis mapping is not a value's
+  pseudo-dimension wearing the wrong word; it is a row-level verdict. `stateColumn` is
+  replaced by a typed `verdict:` column clause on MasterTable (word · tone from a NARROW
+  meaning-role union · note), which lands takeoffs #11(a)+(b) and deletes the last parallel
+  cell-state renderer. `StateColumn.word` survives for value-state columns whose domain word
+  differs (takeoffs' `.r10` column).
+- **R6 · Sever leaves NO cell trace.** "Severed" cannot be computed from current facts — it
+  is history, and §1 says compute, never remember. The record lives in the proposal ledger
+  (the settled "superseded by your edit" card); `StateCell` never grows a severed member.
+  This closes §3's owed severed specimen by ruling: there is deliberately nothing to render.
+- **R7 · Grounding ambiguity 0/1/N — deferred.** Fails the ≥2-route bar; only takeoffs'
+  targeting states want it today. Stays on the frontier.
+- **R8 · The editable StateCell.** `onCommit?: (text: string) => string | void` — present ⇒
+  the value slot renders as a caret-safe input; every mark stays outside the text box.
+  Returning a string REFUSES the commit: the cell restores the prior value and shows an
+  absolutely-positioned, dismissible caution note carrying the reason (§3's "restore AND say
+  why, near the cell, without resizing the row"). `CellRefusal` is folded in — no separate
+  primitive. Grounds: families #6 ("the strongest finding of the sweep"), #9, takeoffs #5(a),
+  #7 — bold-is-unsaved is unenforceable in any column a user can type into until this exists.
+- **R9 · `EmptyState` ships in lang.** Required `story: "scope" | "filter"` (§4's two kinds
+  have different exits) and required `exit: string` — the constructor-argument enforcement
+  that made `Verb.reason` work. ~24 call sites across three routes waiting.
+- **R10 · The superseded primitives die.** `ui/verb` and `ui/chip` are at zero importers —
+  deleted; history lives in git and the snapshot branches, not in a living exhibit.
+  `Switcher` obeys the language already (mode = fill, never a hue) and has three consumers —
+  PROMOTED to `components/lang/switcher.tsx` on real `--r-*` tokens; `ui/switcher` dies.
+  All seven remaining role-token shim lines (`--act-*`, `--st-*`) go with them. Discharges
+  SHIMS entry 1 in full.
+- **R11 · `AddressingBar` ships in lang** per the families #11 five-slot standing rule
+  (name · sentence · fact lane · the one page-blast verb · seam chip), receipt-rides-the-
+  sentence built in. Three hand-rolled rails are the evidence; adopting it discharges §4's
+  owed addressing specimen.
+- **R12 · `useVerb` grows `fail(kind, text)`** so an outcome's kind is carried, not sniffed
+  (families #4). `catch` defaults to `error`.
+- **R13 · Two law extensions, written into design-lang.css:** (a) selection is `--r-select`
+  as a fill; where a fill cannot separate (spatial views), the locate mark is `--r-ink` —
+  neutral, no hue bought (takeoffs #8's local fix, blessed). (b) SVG `stroke-dasharray`
+  occupies the dashed slot — §2's mechanism clause made explicit (takeoffs #9, families #10
+  both already treated it as counting).
+- **R14 · Standing defaults confirmed, not reopened:** pea display vs pea-ink stays two
+  tokens (p3's own pairing table is the argument); wash strength stays a grammar constant on
+  the frontier; the workbench "you" hue stays neutral ink until the workbench pass produces
+  evidence.
+
 ## Frontier — grammar doubts that remain after round 2
 
 **Grammar knobs still hard-coded in the base** (each is a constant no round has varied):

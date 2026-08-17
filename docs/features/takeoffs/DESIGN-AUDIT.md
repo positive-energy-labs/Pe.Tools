@@ -77,6 +77,15 @@ strict "no axis whatsoever" set is 2, 3-as-borrowed, 9, 13, 14, 17, 18, 27).
 
 ## B · Findings
 
+> **RULED 2026-08-16 — the consolidation batch** (CLEANROOM "consolidation batch" section;
+> autonomous sweep session, grilled against docs, re-openable). Mapping: #2 → R3 (row fact,
+> gutter marker — no sixth axis) · #3 → R2 (`fresh: "never"` shipped) · #4 → R12 (`useVerb.fail`
+> carries the kind; the item link stays open) · #5(a) → R8 (editable `StateCell` shipped) ·
+> #5(b) → declined — the readout band and column `title` are the column-reason's home; no new
+> slot (§6: no designed-but-unused slots) · #7 → R8 · #8 → R13(a) (locate mark is `--r-ink`
+> where a fill cannot separate — blessed) · #9 → R13(b) (SVG dasharray occupies the dashed
+> slot — confirmed) · #11 → R5 (`verdict:` column replaces `stateColumn`; tone narrowed).
+
 ### 1 · The four-word room-state vocabulary is not the cell grammar, and cannot be
 
 **Surface fact.** `/takeoffs` derives one four-state progress word per room (`call`, `unreviewed`,
