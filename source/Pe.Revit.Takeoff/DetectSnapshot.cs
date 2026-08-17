@@ -72,6 +72,9 @@ public sealed class DetectSnapshot
             throw new InvalidOperationException("snapshot ink disagrees with its captured grid");
         var seals = TakeoffPolicy.SealClasses(this, profile);
         var evidence = new bool[this.SeedInk.Length];
+        // Door-scaled components only: an oversize lintel component (SealDoorHeadOversize) is a
+        // soffit or low slab, not door geometry — its fringe may close the partition but must not
+        // back a boundary. Counting it manufactured trust (LL08: 0.73 "backed" vs 0.09 ink-only).
         for (int i = 0; i < evidence.Length; i++)
             evidence[i] = this.SeedInk[i] || seals[i] == Detector.SealDoorHead;
         var cells = Detector.Chamfer(evidence, width, height, invert: false);

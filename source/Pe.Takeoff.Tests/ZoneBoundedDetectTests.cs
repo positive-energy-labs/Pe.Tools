@@ -300,7 +300,8 @@ public sealed class ZoneBoundedDetectTests
             var gapClose = new bool[sealClasses.Length];
             for (int i = 0; i < sealClasses.Length; i++)
             {
-                doorClosure[i] = sealClasses[i] is Detector.SealDoorHead or Detector.SealWallRunGap;
+                doorClosure[i] = sealClasses[i] is Detector.SealDoorHead
+                    or Detector.SealDoorHeadOversize or Detector.SealWallRunGap;
                 gapClose[i] = sealClasses[i] == Detector.SealGapClose;
             }
             string sealBin = Path.Combine(artifactDir, "input", $"seals_{token}.bin");
@@ -315,6 +316,7 @@ public sealed class ZoneBoundedDetectTests
                 $"{view}: sealDoorHeads={profile.Options.SealDoorHeads} " +
                 $"sealWallRunGaps={profile.Options.SealWallRunGaps} " +
                 $"doorHead={sealClasses.Count(c => c == Detector.SealDoorHead) * cellSqft:F0}sf " +
+                $"doorHeadOversize={sealClasses.Count(c => c == Detector.SealDoorHeadOversize) * cellSqft:F0}sf " +
                 $"wallRunGap={sealClasses.Count(c => c == Detector.SealWallRunGap) * cellSqft:F0}sf " +
                 $"gapClose={sealClasses.Count(c => c == Detector.SealGapClose) * cellSqft:F0}sf");
             var zones = ZonesFor(view)
@@ -411,13 +413,14 @@ public sealed class ZoneBoundedDetectTests
 
                 string tsv = Path.Combine(artifactDir, "zones", $"rooms_{slug}.tsv");
                 File.WriteAllText(tsv, promotion.Result.ToTsv());
-                int doorHeadCells = 0, wallRunCells = 0, gapCloseCells = 0;
+                int doorHeadCells = 0, doorHeadOversizeCells = 0, wallRunCells = 0, gapCloseCells = 0;
                 for (int i = 0; i < sealClasses.Length; i++)
                 {
                     if (!mask[i]) continue;
                     switch (sealClasses[i])
                     {
                         case Detector.SealDoorHead: doorHeadCells++; break;
+                        case Detector.SealDoorHeadOversize: doorHeadOversizeCells++; break;
                         case Detector.SealWallRunGap: wallRunCells++; break;
                         case Detector.SealGapClose: gapCloseCells++; break;
                     }
@@ -477,9 +480,10 @@ public sealed class ZoneBoundedDetectTests
                         roomsPer1000Sqft = stats.RoomsPer1000Sqft,
                     },
                     policy.AdaptedKnobs,
-                    (doorHeadCells + wallRunCells) * cellSqft,
+                    (doorHeadCells + doorHeadOversizeCells + wallRunCells) * cellSqft,
                     new {
                         doorHeadSqft = doorHeadCells * cellSqft,
+                        doorHeadOversizeSqft = doorHeadOversizeCells * cellSqft,
                         wallRunGapSqft = wallRunCells * cellSqft,
                         gapCloseSqft = gapCloseCells * cellSqft,
                     }));

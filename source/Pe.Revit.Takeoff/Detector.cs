@@ -145,6 +145,15 @@ public static class Detector
     public const byte SealWallRunGap = 3;
 
     /// <summary>
+    /// Cell sealed by the door-head pass but belonging to a connected lintel component wider than
+    /// a plausible door (<see cref="TakeoffOptions.DoorHeadMaxComponentFt"/>): a duct soffit, low
+    /// slab, or ceiling step, not a doorway. Only the wall-adjacent fringe of such a component
+    /// seals (closure the partition may use); it is NOT model-door evidence and must not back a
+    /// room boundary the way <see cref="SealDoorHead"/> does.
+    /// </summary>
+    public const byte SealDoorHeadOversize = 4;
+
+    /// <summary>
     /// The sealing decisions BuildObstruction makes, as a reviewable raster: one class byte per
     /// cell, zero everywhere the obstruction mask is just raw seed ink. Closures are otherwise
     /// invisible in review — a sealed doorway looks exactly like a drawn wall downstream.
@@ -182,22 +191,76 @@ public static class Detector
                 tallCore[i] = !float.IsNaN(hf.FloorZ[i]) && !float.IsNaN(hf.CeilZ[i])
                               && hf.CeilZ[i] - hf.FloorZ[i] > opt.DoorHeadMaxFt + opt.DoorHeadContrastFt;
             var dist = Chamfer(tallCore, W, H, false);
-            var tall = new bool[n];
-            for (int i = 0; i < n; i++) tall[i] = dist[i] <= 3f + 1e-4f;
-            int sealed_ = 0;
+            var cand = new bool[n];
             for (int i = 0; i < n; i++)
             {
-                if (obst[i] || !tall[i]) continue;
+                if (obst[i] || dist[i] > 3f + 1e-4f) continue;
                 if (float.IsNaN(hf.FloorZ[i]) || float.IsNaN(hf.CeilZ[i])) continue;
                 double head = hf.CeilZ[i] - hf.FloorZ[i];
-                if (head >= opt.MinHeadroomFt && head <= opt.DoorHeadMaxFt)
+                cand[i] = head >= opt.MinHeadroomFt && head <= opt.DoorHeadMaxFt;
+            }
+            // Door-width bound: the lintel predicate alone cannot tell a doorway from a duct
+            // soffit or a low basement slab — both are "low covered headroom near taller cover".
+            // A doorway lintel is a compact component; sealing an oversized component wholesale
+            // turns a soffit crossing a room into a wall (LL08: one 255 sf component, ~34x54 ft
+            // bbox). Oversized components keep only their wall-adjacent fringe (within GapSealFt
+            // of pre-existing obstruction) so doorways *under* a soffit still close, and carry a
+            // distinct class so they can be excluded from backing evidence.
+            var wallDist = Chamfer(obst, W, H, false);
+            float fringeCells = (float)(opt.GapSealFt / opt.CellFt) + 1e-4f;
+            var comp = new int[n];
+            int sealedDoor = 0, sealedFringe = 0, droppedCells = 0, oversizeComponents = 0;
+            var stack = new Stack<int>();
+            var members = new List<int>();
+            for (int i = 0; i < n; i++)
+            {
+                if (!cand[i] || comp[i] != 0) continue;
+                members.Clear();
+                int minX = int.MaxValue, minY = int.MaxValue, maxX = -1, maxY = -1;
+                stack.Push(i);
+                comp[i] = 1;
+                while (stack.Count > 0)
                 {
-                    obst[i] = true;
-                    sealClass[i] = SealDoorHead;
-                    sealed_++;
+                    int c = stack.Pop();
+                    int cx = c % W, cy = c / W;
+                    members.Add(c);
+                    minX = Math.Min(minX, cx); minY = Math.Min(minY, cy);
+                    maxX = Math.Max(maxX, cx); maxY = Math.Max(maxY, cy);
+                    for (int dy = -1; dy <= 1; dy++)
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        if (dx == 0 && dy == 0) continue;
+                        int nx = cx + dx, ny = cy + dy;
+                        if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+                        int ni = ny * W + nx;
+                        if (cand[ni] && comp[ni] == 0) { comp[ni] = 1; stack.Push(ni); }
+                    }
+                }
+                double maxDimFt = Math.Max(maxX - minX + 1, maxY - minY + 1) * opt.CellFt;
+                if (maxDimFt <= opt.DoorHeadMaxComponentFt)
+                {
+                    foreach (int c in members) { obst[c] = true; sealClass[c] = SealDoorHead; }
+                    sealedDoor += members.Count;
+                }
+                else
+                {
+                    oversizeComponents++;
+                    foreach (int c in members)
+                    {
+                        if (wallDist[c] <= fringeCells)
+                        {
+                            obst[c] = true;
+                            sealClass[c] = SealDoorHeadOversize;
+                            sealedFringe++;
+                        }
+                        else droppedCells++;
+                    }
                 }
             }
-            log($"[detect] door-head seal: {sealed_ * opt.CellFt * opt.CellFt:F0} sf of lintel cells became obstruction");
+            double cellSf = opt.CellFt * opt.CellFt;
+            log($"[detect] door-head seal: {sealedDoor * cellSf:F0} sf of lintel cells became obstruction; " +
+                $"{oversizeComponents} oversize components (> {opt.DoorHeadMaxComponentFt:F1} ft) kept " +
+                $"{sealedFringe * cellSf:F0} sf wall fringe, dropped {droppedCells * cellSf:F0} sf");
         }
 
         if (opt.SealWallRunGaps)

@@ -29,6 +29,7 @@ public sealed class TakeoffOptions
     public bool SealDoorHeads = false;      // seal a doorway where a low lintel sits between taller ceilings
     public double DoorHeadMaxFt = 8.75;     // max headroom that can still be a door/opening lintel
     public double DoorHeadContrastFt = 1.5; // neighbor must be this much taller to call the low cell a lintel
+    public double DoorHeadMaxComponentFt = 9.0; // widest connected lintel component that still reads as a door/opening; larger is a soffit/low slab (seals wall fringe only, never backs)
     public bool SealWallRunGaps = false;    // close a colinear break in a wall run (headerless doorway)
     public double DoorGapMaxFt = 6.0;       // widest colinear break that can still be a doorway (6.0 valid only atop diagonal-honest scan steps; kaitpw A/B 2026-08-16)
     public double DoorJambMinFt = 2.0;      // ink run required on BOTH sides to call it a doorway
