@@ -554,15 +554,58 @@ public sealed class TakeoffPromotionTests
     [Test]
     public void Zone_fit_snap_refuses_to_sweep_the_edge_across_ink_hugging_the_zone_line()
     {
-        // Same room, same zone — but now the 0.4 ft between the room's edge and the declared line
-        // is wall ink: the designer drew the zone through the wall, and the room already ends at
-        // the wall's FACE (free floor on the room side of the edge). Snapping onto the line would
-        // swallow the clipped half-wall, so the snap refuses and the room stands accepted exactly
-        // where the ink says it ends. The zone stays authority — the room simply never reached it.
-        // (The fixture was sharpened for the round-4 parallel-on-ink unification: the old
-        // distance-0-everywhere stub put wall ink INSIDE the room too, which now states the
-        // opposite — an edge standing inside the wall band. Walls ring the room; the interior
-        // is free floor.)
+        // The room ends on its OWN thin wall (18.6-18.9), then 0.8 ft of FREE FLOOR, then the
+        // zone's wall (19.7-20.0) carrying the declared line at x=20. Two walls, a moat of
+        // genuine floor between them: the room never reached the zone's wall, so neither move
+        // may claim the line — the unify because the strip between edge and line is mostly off
+        // wall ink (absorption is for walls, not for floor), and nothing else because the edge
+        // stands beyond ZoneSnapFt, where only the unify move may reach. The room stands
+        // accepted exactly where the detector left it. (The wave-1 fixture put the edge at a
+        // single shared band's interior FACE and asserted refusal; the 2026-08-17 kaitpw
+        // verdict ruled that configuration must ABSORB the wall instead — that case now lives
+        // in the sibling face-absorption test below, and the refusal here is what the guard
+        // still protects.)
+        var source = new TakeoffResult {
+            LevelName = "Level 1",
+            Rooms = { Room("room", (2, 2), (18.6, 2), (18.6, 18), (2, 18)) },
+            DomainSqft = 265.6,
+        };
+        double Ink(double x, double y)
+        {
+            if (x <= 2.4 || y <= 2.4 || y >= 17.6 || x >= 19.7 || (x >= 18.6 && x <= 18.9))
+                return 0;
+            return x < 18.6
+                ? Math.Min(Math.Min(x - 2.4, 18.6 - x), Math.Min(y - 2.4, 17.6 - y))
+                : Math.Min(x - 18.9, 19.7 - x);
+        }
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, Zone("all", (0, 0), (20, 0), (20, 20), (0, 20)),
+            Options(minimumRoomSqft: 0, boundarySimplifyFt: 0), Ink,
+            TestContext.Out.WriteLine);
+
+        var room = promotion.Result.Rooms.Single();
+        Assert.Multiple(() => {
+            Assert.That(room.RawSqft, Is.EqualTo(265.6).Within(1e-6),
+                "the free-floor moat and the zone's wall beyond it stay out of the room");
+            Assert.That(room.Polygon.Max(point => point[0]), Is.EqualTo(18.6).Within(1e-9));
+            Assert.That(promotion.Diagnostics.Rejections.Keys, Has.No.Member("zonefit:snapped"));
+            Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
+            Assert.That(promotion.Diagnostics.IsStrictlyEditable, Is.True);
+        });
+    }
+
+    [Test]
+    public void Zone_fit_snap_absorbs_the_wall_when_it_stands_wholly_between_edge_and_zone_line()
+    {
+        // The wave-2 coverage case (kaitpw 2026-08-17: "the absorption of the wall doesn't seem
+        // to have worked" — UL02 R04/R06/R08): the wall band runs 19.6–20.0, the declared line
+        // stands on its far side at x=20, and the room edge stands at its interior FACE at
+        // x=19.6 — free floor on the room side, the wall WHOLLY between edge and line. Wave-1's
+        // probe-past-the-edge trigger refused this exact configuration; the verdict says the
+        // edge and the line are still two authorities for one wall, so the edge joins the line
+        // and the room absorbs the band. This fixture is byte-for-byte the wave-1 refusal
+        // fixture with the assertion flipped to the verdict.
         var source = new TakeoffResult {
             LevelName = "Level 1",
             Rooms = { Room("room", (2, 2), (19.6, 2), (19.6, 18), (2, 18)) },
@@ -580,10 +623,12 @@ public sealed class TakeoffPromotionTests
 
         var room = promotion.Result.Rooms.Single();
         Assert.Multiple(() => {
-            Assert.That(room.RawSqft, Is.EqualTo(281.6).Within(1e-6),
-                "the clipped half-wall stays out of the room");
-            Assert.That(room.Polygon.Max(point => point[0]), Is.EqualTo(19.6).Within(1e-9));
-            Assert.That(promotion.Diagnostics.Rejections.Keys, Has.No.Member("zonefit:snapped"));
+            Assert.That(room.RawSqft, Is.EqualTo(288).Within(1e-6),
+                "the room edge absorbed the wall band and joined the declared line");
+            Assert.That(room.Polygon.Max(point => point[0]), Is.EqualTo(20).Within(1e-9));
+            Assert.That(promotion.Diagnostics.Rejections["zonefit:snapped"], Is.EqualTo(1));
+            Assert.That(promotion.Diagnostics.Rejections["zonefit:snap-unified-on-ink"],
+                Is.EqualTo(1));
             Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
             Assert.That(promotion.Diagnostics.IsStrictlyEditable, Is.True);
         });
@@ -597,8 +642,8 @@ public sealed class TakeoffPromotionTests
         // x=19.6 — OFFSET INSIDE the band, wall ink continuing past it into the room. Two
         // authorities for one wall. The zone line is the authority, so the room edge joins it —
         // a snap ALONG ink the crossing guard used to refuse no differently than a real sweep
-        // across a wall (the sibling test above, where the room side of the edge is free floor,
-        // still refuses).
+        // across a wall (the sibling test above, where a free-floor moat separates the edge
+        // from the wall the line stands on, still refuses).
         var source = new TakeoffResult {
             LevelName = "Level 1",
             Rooms = { Room("room", (2, 2), (19.6, 2), (19.6, 18), (2, 18)) },

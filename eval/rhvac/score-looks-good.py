@@ -365,6 +365,107 @@ def interior_swallow(geometry, ink, zone_boundary=None, band_ft=WALL_BAND_FT):
     return ink.ink_inside(core)
 
 
+# ---- double-line pairs (round-4 wave-2 diagnostic, never a gate) -------------
+#
+# Prices the kaitpw wave-1 verdict (TASTE.md 2026-08-17, UL02 flags R08/R06/R04/R05):
+# "room edges parallel to the zone boundary that overlap with the wall underneath" —
+# two authorities for one wall, the room edge sitting offset INSIDE the wall band the
+# declared line also stands on. A pair = a room-edge segment that (a) runs parallel to
+# a declared zone segment within PAIR_TOL_DEG, (b) sits offset from that segment's
+# line by more than PAIR_NOISE_FT (an edge ON the line is unified, not a pair) and at
+# most WALL_BAND_FT (the wall-claim distance), and (c) stands on the SAME wall band's
+# ink — every strip sample between the edge and the line within PAIR_INK_TOL_FT of
+# seed WALL ink (the unify move's own tolerance; evidence seals are openings, not
+# walls). Qualifying length below PAIR_MIN_LEN_FT is corner debris, not a double line.
+
+PAIR_TOL_DEG = 3.0        # parallel tolerance, mirrors SnapToZone
+PAIR_NOISE_FT = 0.06      # below this the edge IS the declared line
+PAIR_INK_TOL_FT = 0.3     # 1.2 * CellFt at 0.25 — the C# unify ink tolerance
+PAIR_STEP_FT = 0.25
+PAIR_MIN_LEN_FT = 1.0
+
+
+def zone_loop_segments(loops):
+    segments = []
+    for loop in loops:
+        pts = [tuple(p[:2]) for p in loop]
+        if len(pts) >= 2 and pts[0] == pts[-1]:
+            pts = pts[:-1]
+        for i in range(len(pts)):
+            a, b = pts[i], pts[(i + 1) % len(pts)]
+            if math.hypot(b[0] - a[0], b[1] - a[1]) > EPS:
+                segments.append((a, b))
+    return segments
+
+
+def double_line_pairs(geometry, segments, ink, band_ft=WALL_BAND_FT):
+    """Remaining double-line pairs for one polygon: list of dicts
+    (a, b, lengthFt, meanOffsetFt, segment). lengthFt is the qualifying (on-wall-ink,
+    in-band) portion of the edge, so a partially-qualifying edge is priced by exactly
+    the stretch the eye sees doubled."""
+    pairs = []
+    for part in _polygon_parts(geometry):
+        for ring in [part.exterior.coords] + [r.coords for r in part.interiors]:
+            pts = collapse_collinear(list(ring))
+            for i in range(len(pts)):
+                (x0, y0), (x1, y1) = pts[i], pts[(i + 1) % len(pts)]
+                edge_len = math.hypot(x1 - x0, y1 - y0)
+                if edge_len <= EPS:
+                    continue
+                edge_angle = math.atan2(y1 - y0, x1 - x0)
+                for si, (sa, sb) in enumerate(segments):
+                    ux, uy = sb[0] - sa[0], sb[1] - sa[1]
+                    seg_len = math.hypot(ux, uy)
+                    ux, uy = ux / seg_len, uy / seg_len
+                    delta = abs(edge_angle - math.atan2(sb[1] - sa[1], sb[0] - sa[0])) % math.pi
+                    delta = min(delta, math.pi - delta)
+                    if delta > math.radians(PAIR_TOL_DEG):
+                        continue
+
+                    def offset_of(px, py):
+                        return (px - sa[0]) * -uy + (py - sa[1]) * ux
+
+                    def t_of(px, py):
+                        return (px - sa[0]) * ux + (py - sa[1]) * uy
+
+                    o0, o1 = offset_of(x0, y0), offset_of(x1, y1)
+                    if max(abs(o0), abs(o1)) <= PAIR_NOISE_FT:
+                        continue                      # already unified
+                    if min(abs(o0), abs(o1)) > band_ft:
+                        continue                      # beyond the wall-claim distance
+                    t0, t1 = t_of(x0, y0), t_of(x1, y1)
+                    if max(t0, t1) < 0 or min(t0, t1) > seg_len:
+                        continue                      # no overlap with the declared segment
+                    # sample columns along the edge, keeping only those whose projection
+                    # falls on the declared segment and whose offset is in-band
+                    count = max(2, int(math.ceil(edge_len / PAIR_STEP_FT)) + 1)
+                    ts = np.linspace(0.0, 1.0, count)
+                    col_len = edge_len / (count - 1)
+                    qual_len = 0.0
+                    offsets = []
+                    for te in ts:
+                        px, py = x0 + (x1 - x0) * te, y0 + (y1 - y0) * te
+                        o = o0 + (o1 - o0) * te
+                        t = t0 + (t1 - t0) * te
+                        if t < -EPS or t > seg_len + EPS:
+                            continue
+                        if abs(o) <= PAIR_NOISE_FT or abs(o) > band_ft:
+                            continue
+                        sxs = [px - s * o * -uy for s in (0, 0.25, 0.5, 0.75, 1.0)]
+                        sys_ = [py - s * o * ux for s in (0, 0.25, 0.5, 0.75, 1.0)]
+                        if bool(np.all(ink.distance_ft(sxs, sys_) <= PAIR_INK_TOL_FT + EPS)):
+                            qual_len += col_len
+                            offsets.append(abs(o))
+                    if qual_len >= PAIR_MIN_LEN_FT:
+                        pairs.append(dict(
+                            a=(round(x0, 2), round(y0, 2)), b=(round(x1, 2), round(y1, 2)),
+                            lengthFt=round(qual_len, 1),
+                            meanOffsetFt=round(float(np.mean(offsets)), 2),
+                            segment=si))
+                        break                          # one pair per room edge
+    return pairs
+
+
 # ---- report loading ----------------------------------------------------------
 
 def load_report(path):
@@ -557,6 +658,7 @@ def score_report(report_path, clean=True):
         zboundary = zgeom.boundary
         frame = frame_angle_deg(zone["ZoneLoops"])
         accepted, held = load_zone_polygons(os.path.join(base, zone["Tsv"]))
+        zsegments = zone_loop_segments(zone["ZoneLoops"])
 
         polys_out = []
         agg = {"accepted": [0, 0], "held": [0, 0]}          # evidence-rail hits/samples
@@ -585,6 +687,10 @@ def score_report(report_path, clean=True):
                     row.update(swallowSf=round(swallow, 1),
                                swallowFraction=round(swallow / geometry.area, 4)
                                if geometry.area > EPS else 0.0)
+                    pairs = double_line_pairs(geometry, zsegments, grids["ink"])
+                    row.update(doubleLinePairs=len(pairs),
+                               doubleLineFt=round(sum(p["lengthFt"] for p in pairs), 1),
+                               doubleLineDetail=pairs)
                 row.update(ortho_stats(geometry, frame))
                 polys_out.append(row)
 
@@ -666,6 +772,14 @@ def score_report(report_path, clean=True):
                                                 if p["disposition"] == "accepted"]), 2)
             if any(p["disposition"] == "accepted" for p in polys_out) else None,
             savedWork=round(float(np.mean(contributions)), 4) if contributions else None,
+            doubleLinePairsAccepted=sum(p.get("doubleLinePairs", 0) for p in polys_out
+                                        if p["disposition"] == "accepted"),
+            doubleLineFtAccepted=round(sum(p.get("doubleLineFt", 0.0) for p in polys_out
+                                           if p["disposition"] == "accepted"), 1),
+            doubleLinePairsHeld=sum(p.get("doubleLinePairs", 0) for p in polys_out
+                                    if p["disposition"] == "held"),
+            doubleLineFtHeld=round(sum(p.get("doubleLineFt", 0.0) for p in polys_out
+                                       if p["disposition"] == "held"), 1),
             polygons=polys_out, oracleRoomStatus=oracle_rows,
             oracleBoundaryDistance=distance_rows))
 
@@ -696,6 +810,10 @@ def score_report(report_path, clean=True):
         if any(p["disposition"] == "accepted" for p in all_polys) else None,
         distanceBuckets={b: sum(1 for d in all_dist if d["bucket"] == b)
                          for b in ("as-is", "nudge", "redraw")},
+        doubleLinePairsAccepted=sum(z["doubleLinePairsAccepted"] for z in zones_out),
+        doubleLineFtAccepted=round(sum(z["doubleLineFtAccepted"] for z in zones_out), 1),
+        doubleLinePairsHeld=sum(z["doubleLinePairsHeld"] for z in zones_out),
+        doubleLineFtHeld=round(sum(z["doubleLineFtHeld"] for z in zones_out), 1),
         unzonedOracleRooms=unzoned)
     return dict(report=os.path.abspath(report_path),
                 generatedUtc=report.get("GeneratedUtc"),
@@ -721,6 +839,9 @@ def _print_board(label, board):
           f"held={board['edgeOnInkHeld']} "
           f"swallowSf={board['swallowSf']} editCost={board['meanEditCostAccepted']} "
           f"buckets={board['distanceBuckets']}")
+    print(f"{' ' * len(label)} doubleLine acc={board['doubleLinePairsAccepted']} pairs "
+          f"/ {board['doubleLineFtAccepted']} ft, "
+          f"held={board['doubleLinePairsHeld']} pairs / {board['doubleLineFtHeld']} ft")
 
 
 def cmd_score(args):
@@ -743,7 +864,7 @@ def cmd_score(args):
         print(f"       unzoned oracle rooms (in no zone, excluded from recall): {names}")
     header = (f"{'zone':<18}{'orc':>4}{'acc':>4}{'held':>5}{'miss':>5}{'recall':>8}"
               f"{'edgeAcc':>9}{'edgeHeld':>9}{'C#ibef':>8}{'agree':>8}{'swallow':>9}"
-              f"{'edit':>6}{'saved':>7}")
+              f"{'edit':>6}{'saved':>7}{'dbl':>5}{'dblFt':>7}")
     print(header)
     for z in scores["zones"]:
         if z["oracleRooms"] == 0 and not z["polygons"]:
@@ -756,7 +877,8 @@ def cmd_score(args):
               f"{_fmt(z['roomRecall']):>8}{_fmt(z['edgeOnInkAccepted']):>9}"
               f"{_fmt(z['edgeOnInkHeld']):>9}{theirs:>8.3f}{agree:>8}"
               f"{z['swallowSf']:>9}{_fmt(z['meanEditCostAccepted']):>6}"
-              f"{_fmt(z['savedWork']):>7}")
+              f"{_fmt(z['savedWork']):>7}{z['doubleLinePairsAccepted']:>5}"
+              f"{z['doubleLineFtAccepted']:>7}")
     if args.out:
         scores["boardV1RawOracle"] = scores_v1["board"]
         with open(args.out, "w", encoding="utf-8") as f:
@@ -922,7 +1044,9 @@ def _card_zone_names(zone_names):
 
 
 COMPARE_KEYS = ["roomRecall", "heldRecall", "edgeOnInkAccepted", "edgeOnInkHeld",
-                "swallowSf", "meanEditCostAccepted", "savedWork"]
+                "swallowSf", "meanEditCostAccepted", "savedWork",
+                "doubleLinePairsAccepted", "doubleLineFtAccepted",
+                "doubleLinePairsHeld", "doubleLineFtHeld"]
 
 HONESTY_TOL = 0.005  # kaitpw round-3 wording: "beyond ~0.005 noise"
 
@@ -951,9 +1075,19 @@ def honesty_check(a, b, tol=HONESTY_TOL):
                                      edgeOnInkWas=poly_a["edgeOnInk"]))
             elif (poly_b.get("edgeOnInk") is not None
                   and poly_a["edgeOnInk"] - poly_b["edgeOnInk"] > tol):
+                # Rail attribution (2026-08-17 wave-2): the bar's rail is ink|seals, which
+                # OVER-counts manufactured backing (door-head/wall-run seals — R2d). A fall
+                # that exists ONLY on the seals rail while ink-only stands flat is the
+                # boundary stepping off manufactured cells, not off real wall evidence; it
+                # is surfaced with its rails so kaitpw can arbitrate, never hidden.
+                ink_a, ink_b = poly_a.get("edgeOnInkInkOnly"), poly_b.get("edgeOnInkInkOnly")
+                seals_only = (ink_a is not None and ink_b is not None
+                              and ink_a - ink_b <= tol)
                 violations.append(dict(zone=zone_a["zone"], id=poly_a["id"],
                                        edgeOnInkA=poly_a["edgeOnInk"],
                                        edgeOnInkB=poly_b["edgeOnInk"],
+                                       inkOnlyA=ink_a, inkOnlyB=ink_b,
+                                       sealsRailOnly=seals_only,
                                        fell=round(poly_a["edgeOnInk"]
                                                   - poly_b["edgeOnInk"], 4)))
     return violations, departed
@@ -968,8 +1102,13 @@ def cmd_compare(args):
     print(f"HONESTY (accepted rooms whose edgeOnInk fell >{HONESTY_TOL}; empty = pass)")
     if violations:
         for v in violations:
+            rail = ""
+            if v.get("sealsRailOnly"):
+                rail = (f"  [seals rail only: ink-only "
+                        f"{v['inkOnlyA']:.4f} -> {v['inkOnlyB']:.4f} — manufactured "
+                        f"backing, not wall evidence]")
             print(f"  FALL {v['zone']:<20}{v['id']:<10}"
-                  f"{v['edgeOnInkA']:.4f} -> {v['edgeOnInkB']:.4f}  (-{v['fell']})")
+                  f"{v['edgeOnInkA']:.4f} -> {v['edgeOnInkB']:.4f}  (-{v['fell']}){rail}")
     else:
         print("  pass - no previously-accepted room got less honest")
     if departed:
@@ -1004,6 +1143,115 @@ def cmd_compare(args):
     emit("BOARD", a["board"], b["board"])
 
 
+# ---- pairs (double-line detail + unify refusal census) -----------------------
+#
+# For every remaining pair, replays the C# SnapToZone unify trigger (TakeoffPromotion.cs,
+# wave-2 form: strip-majority on wall ink, reach = the wall-claim distance, no probe) on
+# the shipped geometry and names the FIRST condition that refuses:
+#   pinned-endpoint     an endpoint lies on a neighbour's boundary (shared wall); SnapRing
+#                       skips the whole edge
+#   angle-impure        the declared segment is more than the audit's 0.25 deg tolerance off
+#                       the edge's direction — joining it would manufacture an off-frame
+#                       edge (the mixed-frame problem, round-4 backlog)
+#   beyond-unify-reach  an endpoint offset exceeds max(ZoneSnapFt, ZoneSnapUnifyOnInkFt)
+#   no-overlap          the edge's projection misses the declared segment
+#   strip-moat          fewer than 4 of the 5 sweep columns stand wholly on wall ink —
+#                       free floor between the edge and the line
+#   trigger-passes      the unify would FIRE on this geometry — the refusal happened
+#                       downstream (strict audit fallback; see zonefit/<id> in the report)
+# Census caveat: runs on POST-fit TSV geometry (the pre-fit ring is not persisted), and
+# neighbours are the shipped accepted+held polygons — both are the best available stand-ins.
+
+def _census_edge(a, b, segment, neighbors, ink, snap_ft, unify_max_ft, ink_tol_ft):
+    (x0, y0), (x1, y1) = a, b
+    sa, sb = segment
+    ux, uy = sb[0] - sa[0], sb[1] - sa[1]
+    seg_len = math.hypot(ux, uy)
+    ux, uy = ux / seg_len, uy / seg_len
+    o0 = (x0 - sa[0]) * -uy + (y0 - sa[1]) * ux
+    o1 = (x1 - sa[0]) * -uy + (y1 - sa[1]) * ux
+    t0 = (x0 - sa[0]) * ux + (y0 - sa[1]) * uy
+    t1 = (x1 - sa[0]) * ux + (y1 - sa[1]) * uy
+
+    point_a, point_b = Point(x0, y0), Point(x1, y1)
+    pin_a = min((g.boundary.distance(point_a) for _, g in neighbors), default=math.inf)
+    pin_b = min((g.boundary.distance(point_b) for _, g in neighbors), default=math.inf)
+    if min(pin_a, pin_b) <= 1e-6:
+        return f"pinned-endpoint (a={pin_a:.3f} ft, b={pin_b:.3f} ft to neighbour)"
+    delta = abs(math.atan2(y1 - y0, x1 - x0)
+                - math.atan2(sb[1] - sa[1], sb[0] - sa[0])) % math.pi
+    delta = min(delta, math.pi - delta)
+    if delta > 0.25 * math.pi / 180:
+        return f"angle-impure (segment {math.degrees(delta):.2f} deg off edge > 0.25)"
+    reach = max(snap_ft, unify_max_ft)
+    if max(abs(o0), abs(o1)) > reach:
+        return f"beyond-unify-reach (offsets {o0:+.2f}/{o1:+.2f} ft vs reach {reach})"
+    if max(t0, t1) < 0 or min(t0, t1) > seg_len:
+        return "no-overlap with declared segment"
+    backed = 0
+    worst = None
+    for t in (0.0, 0.25, 0.5, 0.75, 1.0):
+        px, py = x0 + (x1 - x0) * t, y0 + (y1 - y0) * t
+        o = o0 + (o1 - o0) * t
+        column = True
+        for s in (0.0, 0.25, 0.5, 0.75, 1.0):
+            d = float(ink.distance_ft([px - s * o * -uy], [py - s * o * ux])[0])
+            if d > ink_tol_ft + EPS:
+                column = False
+                if worst is None or d > worst[2]:
+                    worst = (t, s, d)
+                break
+        backed += column
+    if backed < 4:
+        t, s, d = worst
+        return (f"strip-moat ({backed}/5 columns on wall ink; worst t={t:.2f} s={s:.2f} "
+                f"dist {d:.2f} ft > {ink_tol_ft:.2f})")
+    return "trigger-passes (refusal is downstream: strict-audit fallback)"
+
+
+def cmd_pairs(args):
+    report, base = load_report(args.report)
+    levels = load_levels(report, base)
+    options = report.get("options", {})
+    snap_ft = options.get("ZoneSnapFt", 1.0)
+    unify_max_ft = options.get("ZoneSnapUnifyOnInkFt", 1.5) or 1.5
+    ink_tol_ft = 1.2 * options.get("CellFt", 0.25)
+    total_pairs = total_ft = 0
+    for zone in report["Zones"]:
+        if args.zone and args.zone not in zone["Zone"]:
+            continue
+        token, _ = LEVELS[zone["Level"]]
+        grids = levels.get(token)
+        if not grids:
+            continue
+        zsegments = zone_loop_segments(zone["ZoneLoops"])
+        accepted, held = load_zone_polygons(os.path.join(base, zone["Tsv"]))
+        all_polys = list(accepted.items()) + list(held.items())
+        rows = []
+        for disposition, table in (("accepted", accepted), ("held", held)):
+            for pid, geometry in sorted(table.items()):
+                for pair in double_line_pairs(geometry, zsegments, grids["ink"]):
+                    neighbors = [(other_id, g) for other_id, g in all_polys
+                                 if other_id != pid]
+                    reason = _census_edge(
+                        pair["a"], pair["b"], zsegments[pair["segment"]], neighbors,
+                        grids["ink"], snap_ft, unify_max_ft, ink_tol_ft)
+                    detail = zone.get("RejectionDetails", {}).get(f"zonefit/{pid}")
+                    rows.append((pid, disposition, pair, reason, detail))
+        if not rows:
+            continue
+        print(f"\n{zone['Zone']} — {len(rows)} remaining double-line pair(s)")
+        for pid, disposition, pair, reason, detail in rows:
+            total_pairs += 1
+            total_ft += pair["lengthFt"]
+            print(f"  {pid:<8}{disposition:<10}{pair['lengthFt']:>6.1f} ft  "
+                  f"off {pair['meanOffsetFt']:.2f} ft  {pair['a']}->{pair['b']}")
+            print(f"          refusal: {reason}")
+            if detail and args.verbose:
+                print(f"          zonefit detail: {detail}")
+    print(f"\nboard: {total_pairs} pair(s), {total_ft:.1f} ft")
+
+
 # ---- entry -------------------------------------------------------------------
 
 def main():
@@ -1020,6 +1268,11 @@ def main():
     p.add_argument("report_a")
     p.add_argument("report_b")
     p.set_defaults(func=cmd_compare)
+    p = sub.add_parser("pairs", help="double-line pair detail + unify refusal census")
+    p.add_argument("report")
+    p.add_argument("--zone", default=None, help="substring filter on zone name")
+    p.add_argument("--verbose", action="store_true")
+    p.set_defaults(func=cmd_pairs)
     args = parser.parse_args()
     args.func(args)
 

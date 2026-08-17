@@ -31,7 +31,8 @@ internal static class TakeoffEvidenceFidelity
         RoomResult room,
         Func<double, double, double> distanceToInk,
         Geometry? exemptBoundary,
-        double exemptFt)
+        double exemptFt,
+        double hitFt = 0.25)
     {
         int supported = 0, sampled = 0;
         foreach (var edge in Edges(ToPolygon(room)))
@@ -44,7 +45,7 @@ internal static class TakeoffEvidenceFidelity
                 if (exemptBoundary != null
                     && exemptBoundary.Distance(Factory.CreatePoint(point)) <= exemptFt + Epsilon)
                     continue;
-                if (distanceToInk(point.X, point.Y) <= 0.25 + Epsilon) supported++;
+                if (distanceToInk(point.X, point.Y) <= hitFt + Epsilon) supported++;
                 sampled++;
             }
         }

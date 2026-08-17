@@ -177,6 +177,39 @@ def test_zone_geometry_even_odd():
     assert geom.contains(slg.Point(1, 1))
 
 
+def _wall_band_grid():
+    """84x84 cells at 0.25 ft over (0,0)-(21,21); wall ink where cell-center x >= 19.
+    The extra foot keeps the declared line at x=20 interior to the raster (a sample on
+    the grid's outer boundary reads +inf, exactly like the C# distance oracle)."""
+    mask = np.zeros((84, 84), dtype=bool)
+    centers = (np.arange(84) + 0.5) * 0.25
+    mask[:, centers >= 19] = True
+    return slg.Grid(mask, 0.0, 0.0, 0.25)
+
+
+def test_double_line_pairs_prices_edge_on_wall_band():
+    # Zone line at x=20 stands on a wall band 19-20; the room's right edge at x=19.4 sits
+    # inside that band -> one pair, priced by the edge's length. Left/top/bottom edges are
+    # 2 ft from their zone lines (beyond the wall-claim distance) and free of ink.
+    segments = slg.zone_loop_segments([[[0, 0], [20, 0], [20, 20], [0, 20]]])
+    room = Polygon([(2, 2), (19.4, 2), (19.4, 18), (2, 18)])
+    pairs = slg.double_line_pairs(room, segments, _wall_band_grid())
+    assert len(pairs) == 1
+    assert abs(pairs[0]["meanOffsetFt"] - 0.6) < 0.01
+    assert 14.0 <= pairs[0]["lengthFt"] <= 16.5
+
+
+def test_double_line_pairs_ignores_unified_and_bare_floor_edges():
+    segments = slg.zone_loop_segments([[[0, 0], [20, 0], [20, 20], [0, 20]]])
+    # right edge ON the declared line (offset 0.02 < noise floor): unified, not a pair
+    unified = Polygon([(2, 2), (19.98, 2), (19.98, 18), (2, 18)])
+    assert slg.double_line_pairs(unified, segments, _wall_band_grid()) == []
+    # same offset geometry but NO ink anywhere: a gap, not a double line
+    bare = slg.Grid(np.zeros((84, 84), dtype=bool), 0.0, 0.0, 0.25)
+    offset = Polygon([(2, 2), (19.4, 2), (19.4, 18), (2, 18)])
+    assert slg.double_line_pairs(offset, segments, bare) == []
+
+
 def test_symmetric_boundary_distance_offset_squares():
     a = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
     b = Polygon([(1, 0), (11, 0), (11, 10), (1, 10)])  # shifted 1 ft in x

@@ -440,6 +440,19 @@ public static class TakeoffPromotion
     /// lies on no neighbour's boundary, so a shared wall cannot be dragged by its endpoint.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// The zone-fit unification strictness ladder. Wide is the wave-2 trigger (strip-majority on
+    /// wall ink, wall-claim reach, audit-tolerance angular purity); Conservative is the wave-1
+    /// trigger kept as the guaranteed floor (full strip + band continuing past the edge, snap
+    /// reach); Off disables unification and leaves the plain snap/clip behavior.
+    /// </summary>
+    private enum UnifyRung { Wide, Conservative, Off }
+
+    // The conservative rung's band-continuation probe distance — wave-1's ZoneSnapUnifyOnInkFt
+    // default (2 cells at 0.25 ft), frozen here when the knob's meaning changed to the wide
+    // rung's wall-claim reach.
+    private const double ConservativeUnifyProbeFt = 0.5;
+
     private static void RunZoneFit(PromotionState state)
     {
         bool snapping = state.Options.ZoneSnapFt > 0;
@@ -459,24 +472,26 @@ public static class TakeoffPromotion
             // that would have stood on its own: if the combined candidate fails the strict audit,
             // the clip-only candidate gets its own hearing before the room falls back.
             (Polygon Fitted, List<Polygon> Dropped, bool DidSnap, bool DidClip, bool DidSquare,
-                bool DidDissolve, bool DidUnify)? Attempt(bool withSnap)
+                bool DidDissolve, bool DidUnify, UnifyRung Rung)? Attempt(
+                bool withSnap, UnifyRung rung)
             {
                 var fitted = original;
                 bool didSnap = false, didClip = false, didSquare = false, didDissolve = false;
                 bool didUnify = false;
                 if (withSnap && snapping
                     && SnapToZone(fitted, zoneBoundary, neighbors, state.Options.ZoneSnapFt,
-                        // Where a wall hugs the declared line, the ink face is where the room
-                        // ends, and a snap may not sweep the boundary back across it. The zone
-                        // stays authority — the room simply never reached it (kaitpw, round-2
-                        // summon: zone edges often clip walls). One exception: an edge standing
-                        // INSIDE the wall band whose ink the declared line also stands on joins
-                        // the line — two authorities for one wall unify (round-4, kaitpw UL02).
+                        // Where free floor separates a room edge from the declared line, the
+                        // snap may not sweep the boundary across it — the room never reached the
+                        // line. But where the strip between them is ONE wall band's ink, edge and
+                        // line are two authorities for one wall and the edge joins the line,
+                        // absorbing the band (round-4 unification, kaitpw UL02; wave-2 widened it
+                        // to face-hugging edges after the 2026-08-17 coverage verdict).
                         state.DistanceToInk,
                         1.2 * state.Options.CellFt,
                         state.DistanceToWallInk,
-                        state.Options.ZoneSnapUnifyOnInkFt,
-                        () => didUnify = true)
+                        rung == UnifyRung.Off ? 0 : state.Options.ZoneSnapUnifyOnInkFt,
+                        () => didUnify = true,
+                        conservativeUnify: rung == UnifyRung.Conservative)
                         is { } moved)
                 {
                     fitted = moved;
@@ -501,9 +516,14 @@ public static class TakeoffPromotion
                     dropped = parts.Skip(1).ToList();
                     didClip = true;
                 }
+                // The dissolve loop repairs FORCED geometry: a clip's cut debris, and — wave-2 —
+                // a unify's connector debris (a sub-edge joining the declared line while its
+                // collinear neighbour stays leaves a tilted connector the audit rightly refuses;
+                // without the repair every flagged UL02 absorption died at fallback). A plain
+                // snap-only fit still skips it: falling back loses nothing there.
                 if ((didSnap || didClip) && state.Options.ZoneClipSquareFt > 0
                     && RepairFitArtifacts(fitted, state.ZoneGeometry, neighbors,
-                        state.Options.ZoneClipSquareFt, didClip) is { } repair)
+                        state.Options.ZoneClipSquareFt, didClip || didUnify) is { } repair)
                 {
                     fitted = repair.Polygon;
                     didSquare = repair.Squared;
@@ -511,13 +531,25 @@ public static class TakeoffPromotion
                 }
                 return didSnap || didClip
                     ? (fitted, dropped, didSnap, didClip, didSquare, didDissolve,
-                        didSnap && didUnify)
+                        didSnap && didUnify, rung)
                     : null;
             }
 
+            // The strictness ladder (wave-2): one over-eager absorption must never cost a room
+            // its good moves. Rung 1 unifies at the wide trigger; when the audit (or the honesty
+            // admission) refuses that shape, rung 2 retries at the conservative wave-1 trigger —
+            // so every room wave-1 could fit still fits at least as well — and rung 3 retries
+            // with unification off entirely. Rungs whose geometry is identical to an earlier
+            // attempt are skipped: auditing the same polygon twice buys nothing.
             var attempts = new List<(Polygon Fitted, List<Polygon> Dropped, bool DidSnap,
-                bool DidClip, bool DidSquare, bool DidDissolve, bool DidUnify)>();
-            if (Attempt(withSnap: true) is { } combined) attempts.Add(combined);
+                bool DidClip, bool DidSquare, bool DidDissolve, bool DidUnify, UnifyRung Rung)>();
+            foreach (var rung in new[] { UnifyRung.Wide, UnifyRung.Conservative, UnifyRung.Off })
+            {
+                if (Attempt(withSnap: true, rung) is not { } attempt) break;
+                if (attempts.Count == 0
+                    || !attempt.Fitted.EqualsExact(attempts[^1].Fitted)) attempts.Add(attempt);
+                if (!attempt.DidUnify) break;   // lower rungs cannot differ once nothing unified
+            }
             // The rescue keys on DidSnap alone: a snap can also EAT the overhang (a unified snap
             // pulls the overhanging edge onto the zone line, so the combined attempt never clips),
             // and when the audit then refuses the snapped shape, the room must still get the
@@ -525,7 +557,7 @@ public static class TakeoffPromotion
             // 209 sf room dies at scope over a 0.11 sf sliver (UL02 R06, round-4). Attempt
             // returns null when there is nothing to clip, so this adds no new geometry path.
             if (attempts.Count > 0 && attempts[0].DidSnap
-                && Attempt(withSnap: false) is { } clipOnly) attempts.Add(clipOnly);
+                && Attempt(withSnap: false, UnifyRung.Off) is { } clipOnly) attempts.Add(clipOnly);
             if (attempts.Count == 0) continue;
 
             bool committed = false;
@@ -535,7 +567,8 @@ public static class TakeoffPromotion
                 candidate.Flags = candidate.Flags.Append("zone-fit")
                     .Distinct(StringComparer.Ordinal).OrderBy(value => value, StringComparer.Ordinal)
                     .ToList();
-                if (!Fits(state, candidate, attempt.Fitted, original, neighbors)) continue;
+                if (!Fits(state, candidate, attempt.Fitted, original, neighbors,
+                        attempt.DidUnify, attempt.Rung)) continue;
 
                 state.Result.Rooms[index] = candidate;
                 foreach (var part in attempt.Dropped)
@@ -574,7 +607,8 @@ public static class TakeoffPromotion
     /// </summary>
     private static bool Fits(
         PromotionState state, RoomResult candidate, Polygon fitted, Polygon original,
-        List<(string Id, Polygon Geometry)> neighbors)
+        List<(string Id, Polygon Geometry)> neighbors, bool unified = false,
+        UnifyRung rung = UnifyRung.Off)
     {
         // Each refusal names itself in RejectionDetails: a fallback whose cause is invisible is a
         // dead end for tuning, and the zone-fit stage is where diagonal zones go to die quietly.
@@ -589,6 +623,38 @@ public static class TakeoffPromotion
             { Refuse("still-overhangs-zone"); return false; }
         if (neighbors.Any(other => PolygonIntersection(fitted, other.Geometry).Area > Epsilon))
             { Refuse("overlaps-neighbor"); return false; }
+        // The per-room honesty bar as an admission law (kaitpw round-3 wording, enforced here
+        // after the wave-2 ML05 R02 fall): a unified fit may not step the room's own boundary
+        // off evidence. Only unified attempts are asked — plain snap and clip cannot claim ink
+        // the room never stood on, and re-judging them would change proven behavior for no
+        // reason. The WIDE rung must not fall AT ALL: the external bar is measured by a sibling
+        // sampler (score-looks-good.py) whose EDT-vs-chamfer and edge-collapse accounting can
+        // read a C#-0.004 fall as 0.018, so the new move leaves the whole ~0.005 noise budget
+        // to the measurement gap. The conservative rung keeps the bar's own noise allowance —
+        // wave-1 shipped under it, and refusing wave-1's floor would regress adopted behavior.
+        // A refusal here sends the room down the strictness ladder.
+        if (unified)
+        {
+            // The wide rung is judged at a hit radius a cell-diagonal INSIDE the canonical
+            // 0.25 ft, with zero fall allowed: the external bar's EDT sampler and this chamfer
+            // oracle disagree exactly in the 0.25-to-0.30 band, so geometry whose support
+            // depends on that band cannot be allowed to ship on measurement luck (ML05 R02
+            // shipped a C#-flat, scorer minus 0.018 absorption before this). The conservative
+            // rung keeps the canonical radius and the bar's own noise allowance — wave-1
+            // shipped under exactly those terms.
+            var zoneEdge = state.ZoneGeometry.Boundary;
+            double hitFt = rung == UnifyRung.Wide ? 0.20 : 0.25;
+            double margin = rung == UnifyRung.Wide ? 0.0 : 0.005;
+            double? before = TakeoffEvidenceFidelity.RoomBoundarySupportFraction(
+                Clone(candidate, original), state.DistanceToInk, zoneEdge,
+                state.Options.InkBackedZoneEdgeExemptFt, hitFt);
+            double? after = TakeoffEvidenceFidelity.RoomBoundarySupportFraction(
+                candidate, state.DistanceToInk, zoneEdge,
+                state.Options.InkBackedZoneEdgeExemptFt, hitFt);
+            if (before is { } supportBefore && after is { } supportAfter
+                && supportAfter < supportBefore - margin)
+                { Refuse($"unify-dishonest support {supportBefore:F4}->{supportAfter:F4}"); return false; }
+        }
         // Shared-edge survival on the same terms the shared-audit stage enforces: a wall two rooms
         // agreed on may not quietly stop existing because one of them was fitted.
         foreach (var other in neighbors)
@@ -623,8 +689,8 @@ public static class TakeoffPromotion
         Polygon room, Geometry zoneBoundary,
         List<(string Id, Polygon Geometry)> neighbors, double snapFt,
         Func<double, double, double>? distanceToInk = null, double inkTolFt = 0,
-        Func<double, double, double>? distanceToWallInk = null, double unifyProbeFt = 0,
-        Action? onUnify = null)
+        Func<double, double, double>? distanceToWallInk = null, double unifyMaxFt = 0,
+        Action? onUnify = null, bool conservativeUnify = false)
     {
         // Edge-wise, frame-preserving: a room EDGE moves onto the zone line only when a zone
         // segment runs parallel to it (within a few degrees) and both endpoints are within snapFt
@@ -676,46 +742,75 @@ public static class TakeoffPromotion
                         (p.X - segment.A.X) * ux + (p.Y - segment.A.Y) * uy;
                     double offsetA = OffsetOf(a), offsetB = OffsetOf(b);
                     if (Math.Abs(offsetA) <= Epsilon && Math.Abs(offsetB) <= Epsilon) continue;
-                    if (Math.Abs(offsetA) > snapFt || Math.Abs(offsetB) > snapFt) continue;
+                    // The WIDE unify move reaches to unifyMaxFt — the wall-claim distance —
+                    // because it demands the whole strip between edge and line stand on one wall
+                    // band's ink; every other snap stays bounded by snapFt exactly as before. It
+                    // also demands ANGULAR PURITY at the audit's own tolerance: joining the line
+                    // rewrites the edge's direction to the segment's, so a segment more than
+                    // AngleTolerance off the edge would manufacture an off-frame edge and
+                    // non-right corners, the strict audit would refuse the whole fitted shape,
+                    // and the room would lose even its good plain snaps to the fallback (Main
+                    // Level#10 R01 regressed exactly this way before the guard). A wall whose
+                    // declared segment disagrees with the room's rails is the mixed-frame
+                    // problem — named in the round-4 backlog, not this move's to solve. The
+                    // CONSERVATIVE rung is the wave-1 trigger verbatim (snap reach, full strip,
+                    // band continuing past the edge) so the ladder always has wave-1 as a floor.
+                    bool canUnify = unifyMaxFt > 0 && distanceToInk != null
+                        && distanceToWallInk != null
+                        && (conservativeUnify || delta <= TakeoffEditability.AngleTolerance);
+                    double reachFt = Math.Max(snapFt,
+                        canUnify && !conservativeUnify ? unifyMaxFt : 0);
+                    if (Math.Abs(offsetA) > reachFt || Math.Abs(offsetB) > reachFt) continue;
+                    bool beyondSnap = Math.Abs(offsetA) > snapFt || Math.Abs(offsetB) > snapFt;
                     double t0 = Math.Min(TOf(a), TOf(b)), t1 = Math.Max(TOf(a), TOf(b));
                     if (t1 < 0 || t0 > len) continue;
                     // Ink between the edge and its target line means the declared line runs on the
-                    // far side of a wall the zone clipped; the room already ends at the wall's
-                    // face, and snapping across the ink would swallow the clipped half-wall the
-                    // zone-edge ink pull just kept out of the partition. Midpoints of the sweep
-                    // sitting on ink refuse the move; everywhere else the zone line stays the
-                    // snap target it has always been.
-                    //
-                    // ONE sanctioned exception (round-4 parallel-on-ink unification, kaitpw UL02
-                    // annotation): when the edge and the declared line BOTH stand on the same
-                    // wall's ink — every sample of the sweep on wall ink, and the band continuing
-                    // unifyProbeFt past the edge into the room — they are two authorities for one
-                    // wall, the edge sitting offset INSIDE the band rather than at its interior
-                    // face. The zone line is the authority, so the edge joins it: a snap ALONG
-                    // ink, not across it. An edge at the band's face (free floor on its room
-                    // side) never qualifies and refuses exactly as before.
+                    // far side of a wall — and since round-4, that wall is ABSORBED, not argued
+                    // with. Parallel-on-ink unification (kaitpw UL02 annotation; wave-2 widening
+                    // after the 2026-08-17 verdict "the absorption of the wall doesn't seem to
+                    // have worked"): when the whole strip between the edge and the declared line
+                    // stands on one wall band's ink, they are two authorities for one wall —
+                    // whether the edge sits offset INSIDE the band (wave-1's only case) or at its
+                    // interior FACE with the wall wholly between edge and line (the flagged UL02
+                    // rooms; wave-1's probe-past-the-edge test refused every one of them). The
+                    // declared line is wall authority, a wall hugging it is the zone's own
+                    // perimeter wall, so the edge joins the line: a snap ALONG ink. One of the
+                    // five sweep columns may be off wall ink — a door opening in the wall being
+                    // absorbed — but a majority off ink is a free-floor moat, and the move
+                    // refuses: that is what remains, and all that ever needs to remain, of the
+                    // R3c crossing guard on this path (a snap may still never cross free floor
+                    // plus a wall to claim a line the room never reached).
                     if (distanceToInk != null)
                     {
                         bool unified = false;
-                        if (unifyProbeFt > 0 && distanceToWallInk != null)
+                        if (canUnify)
                         {
                             double side = offsetA + offsetB >= 0 ? 1 : -1;
-                            unified = true;
-                            for (double t = 0; t <= 1 && unified; t += 0.25)
+                            int backedColumns = 0, columnsNeeded = conservativeUnify ? 5 : 4;
+                            for (double t = 0; t <= 1; t += 0.25)
                             {
                                 double px = a.X + (b.X - a.X) * t, py = a.Y + (b.Y - a.Y) * t;
                                 double offset = offsetA + (offsetB - offsetA) * t;
-                                for (double s = 0; s <= 1 && unified; s += 0.25)
-                                    unified = distanceToWallInk(
+                                bool columnBacked = true;
+                                for (double s = 0; s <= 1 && columnBacked; s += 0.25)
+                                    columnBacked = distanceToWallInk(
                                         px - s * offset * -uy, py - s * offset * ux) <= inkTolFt;
-                                if (unified)
-                                    unified = distanceToWallInk(
-                                        px + side * unifyProbeFt * -uy,
-                                        py + side * unifyProbeFt * ux) <= inkTolFt;
+                                // Wave-1's band-continuation probe, conservative rung only: the
+                                // wall must continue past the edge into the room for the edge to
+                                // count as INSIDE the band (the wide rung deliberately dropped
+                                // this — face-hugging edges absorb the wall by verdict).
+                                if (columnBacked && conservativeUnify)
+                                    columnBacked = distanceToWallInk(
+                                        px + side * ConservativeUnifyProbeFt * -uy,
+                                        py + side * ConservativeUnifyProbeFt * ux) <= inkTolFt;
+                                if (columnBacked) backedColumns++;
                             }
+                            unified = backedColumns >= columnsNeeded;
                         }
                         if (!unified)
                         {
+                            // Beyond ZoneSnapFt only the unify move may touch the edge.
+                            if (beyondSnap) continue;
                             bool crossesInk = false;
                             for (double t = 0; t <= 1 && !crossesInk; t += 0.25)
                             {
@@ -772,10 +867,12 @@ public static class TakeoffPromotion
             squared = true;
         }
         trace?.Invoke($"sq0={squared}");
-        // The dissolve rescues CUT geometry — the debris a clip manufactures and squaring
-        // strands. A snap-only fit that cannot pass the audit loses nothing by falling back
-        // (the room was never forced to change), and repairing it would supplant already-good
-        // shipped geometry with a repaired shape that paid displacement for no need.
+        // The dissolve rescues FORCED geometry — the debris a clip's cut manufactures, the
+        // connectors a unify's absorption tilts, and whatever squaring strands of either. A
+        // plain snap-only fit that cannot pass the audit loses nothing by falling back (the
+        // room was never forced to change), and repairing it would supplant already-good
+        // shipped geometry with a repaired shape that paid displacement for no need — so the
+        // caller passes `clipped` = clip OR unify, never bare snap.
         const int maxPasses = 12;
         for (int pass = 0; pass < (clipped ? maxPasses : 0); pass++)
         {

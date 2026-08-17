@@ -165,19 +165,22 @@ public sealed class TakeoffOptions
     // (trimming instead of rejecting). Both re-run the strict editability audit and fall back to the
     // pre-fit geometry on failure — e.g. a zone edge diagonal to the room's frame.
     public double ZoneSnapFt = 1.0;         // room vertex this close to the zone boundary snaps onto it (0 = off)
-    // Round-4 parallel-on-ink unification (kaitpw UL02 annotation, TASTE 2026-08-16 round-3):
-    // where the declared line and a room edge run PARALLEL and BOTH stand on one wall's ink —
-    // the whole sweep between them on wall ink AND the band continuing past the edge into the
-    // room — they are two authorities for one wall, the room edge sitting offset inside the
-    // wall band. The zone line is the authority, so the edge joins it: a snap ALONG ink. This
-    // is the one sanctioned exception to the R3c snap-never-crosses-ink guard; an edge at the
-    // band's interior FACE (no wall ink on its room side) still refuses — that room genuinely
-    // ends at the wall, and snapping it would swallow the clipped half-wall (the R3c case).
+    // Round-4 parallel-on-ink unification (kaitpw UL02 annotation, TASTE 2026-08-16 round-3;
+    // wave-2 widening after the 2026-08-17 verdict "the absorption of the wall doesn't seem
+    // to have worked"): where the declared line and a room edge run PARALLEL and the whole
+    // strip between them stands on one wall's ink, they are two authorities for one wall —
+    // whether the edge sits offset INSIDE the band (wave-1's only covered case) or at its
+    // interior FACE with the wall wholly between edge and line (the flagged UL02 rooms, which
+    // wave-1's probe-past-the-edge test refused wholesale). The declared line is wall
+    // authority — a wall hugging it is the zone's own perimeter wall — so the edge joins the
+    // line and absorbs the band: a snap ALONG ink. One of the five sweep columns may be off
+    // wall ink (a door opening in the wall being absorbed); a majority off ink is a free-floor
+    // moat and refuses — that refusal is what remains of the R3c crossing guard on this path.
     // Judged against the seed-ink WALL oracle, never evidence ink (a door-head is an opening).
-    // Value = how far past the edge, into the room, wall ink must continue for the edge to
-    // count as INSIDE the band; 2 cells at 0.25 ft keeps face-hugging edges (whose adjacent
-    // free cell reads within a cell of ink) out. 0 = off.
-    public double ZoneSnapUnifyOnInkFt = 0.5;
+    // Value = the wall-claim distance: the maximum offset from the declared line at which an
+    // edge may still unify. It is the unify move's own reach — beyond ZoneSnapFt only this
+    // move, with its strictly stronger evidence demand, may touch an edge. 0 = off.
+    public double ZoneSnapUnifyOnInkFt = 1.5;
     public bool ZoneClipEnabled = true;     // a room overhanging the zone is intersected with it, not rejected
     // Clipping a rail-aligned room against the zone MANUFACTURES edges the detector never proposed:
     // where the zone line crosses a projected corner or runs a fraction of a degree off the room's
