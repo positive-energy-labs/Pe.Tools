@@ -92,7 +92,9 @@ import {
 import { SidePane } from "#/components/ui/side-pane";
 import { Switch } from "#/components/ui/switch";
 import { AddressingBar } from "#/components/lang/addressing-bar";
+import { CoverageBar } from "#/components/lang/coverage-bar";
 import { EmptyState } from "#/components/lang/empty";
+import { Provenance, Section } from "#/components/lang/section";
 import { Switcher } from "#/components/lang/switcher";
 import { Textarea } from "#/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
@@ -232,9 +234,11 @@ const LANG_FILES = [
   "cell",
   "cell-key",
   "chip",
+  "coverage-bar",
   "empty",
   "help",
   "outcome",
+  "section",
   "switcher",
   "verb",
 ] as const;
@@ -631,6 +635,29 @@ function LangGroup() {
 
       <Block
         group="lang"
+        file="coverage-bar"
+        name="CoverageBar"
+        consumers="promoted for the ops pass 2026-08-16 — src/ops glance views migrate here; THE viz ladder's first catalogued consumer"
+      >
+        <div className="w-full max-w-md">
+          <CoverageBar
+            segments={[
+              { label: "grounded", count: 34, viz: 2 },
+              { label: "staged", count: 11, viz: 1 },
+              { label: "unread", count: 6, viz: 6 },
+            ]}
+            total={60}
+          />
+        </div>
+        <Note>
+          segments spend --viz-N by index (never a meaning role); width + legend carry the meaning —
+          the grayscale law. Empty denominators render nothing: the caller owns its EmptyState
+          because only it knows the exit.
+        </Note>
+      </Block>
+
+      <Block
+        group="lang"
         file="empty"
         name="EmptyState"
         consumers="promoted 2026-08-16 (R9) — ~24 EMPTY_CLASS sites across families, family, takeoffs migrate onto it"
@@ -673,6 +700,24 @@ function LangGroup() {
               <OutcomeLine kind={o.kind} label={o.label} />
             </div>
           ))}
+        </div>
+      </Block>
+
+      <Block
+        group="lang"
+        file="section"
+        name="Section · Provenance"
+        consumers="promoted for the ops pass 2026-08-16 — 44 OpSection + 80+ Provenance/MonoNote sites in src/ops migrate here; route section heads shed their hand-rolled copies in their passes"
+      >
+        <div className="w-full max-w-md">
+          <Section
+            label="loaded families"
+            help={<HelpTip>What this section shows and how to read it.</HelpTip>}
+            aside={<FactChip title="Rows currently in scope.">214 rows</FactChip>}
+          >
+            <p className="t-label text-[var(--r-ink-2)]">section content sits unenclosed.</p>
+            <Provenance>read 2026-08-16 14:02 · 3 sessions · sheets truncated at 10</Provenance>
+          </Section>
         </div>
       </Block>
 

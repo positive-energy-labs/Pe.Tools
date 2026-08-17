@@ -534,6 +534,85 @@
   height: 9px;
 }
 
+/* ── SECTION + PROVENANCE · section.tsx ────────────────────────────────────────────────────
+   The page-chrome unit: a sans small-caps head over a hairline, an optional aside, and no
+   box — plain content is never enclosed. Provenance is the composed-read honesty line:
+   mono (the machine measured this), caption tier, secondary ink. */
+.dl-section {
+  min-width: 0;
+}
+.dl-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--r-line);
+}
+.dl-section-label {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--r-ink);
+}
+.dl-section-aside {
+  display: flex;
+  margin-left: auto;
+  align-items: center;
+  gap: 6px;
+}
+.dl-provenance {
+  margin: 6px 0 0;
+  font-family: var(--font-pe-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  color: var(--r-ink-2);
+}
+
+/* ── COVERAGE BAR · coverage-bar.tsx — the viz ladder's first catalogued consumer ─────────
+   Width, order and the legend carry the meaning (the grayscale law); colour reinforces. */
+.dl-coverage {
+  display: flex;
+  height: 10px;
+  overflow: hidden;
+  border: 1px solid var(--r-line);
+}
+.dl-coverage-seg {
+  border-right: 1px solid var(--r-on);
+}
+.dl-coverage-rest {
+  background: var(--r-recess);
+}
+.dl-coverage-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin-top: 4px;
+}
+.dl-coverage-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-pe-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--r-ink);
+}
+.dl-coverage-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
+}
+.dl-coverage-label,
+.dl-coverage-of {
+  color: var(--r-ink-2);
+}
+
 /* ── ADDRESSING BAR · addressing-bar.tsx ───────────────────────────────────────────────────
    The one head rail. Plain content on the page ground (the border budget: a head rail is
    chrome, not a machine-operated object) under a single hairline. Wraps under compression —
