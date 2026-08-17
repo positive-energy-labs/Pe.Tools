@@ -368,7 +368,7 @@ public static class TakeoffPromotion
         bool snapping = state.Options.ZoneSnapFt > 0;
         if ((!snapping && !state.Options.ZoneClipEnabled) || state.Result.Rooms.Count == 0) return;
         var zoneBoundary = state.ZoneGeometry.Boundary;
-        int snapped = 0, clipped = 0, fellBack = 0;
+        int snapped = 0, clipped = 0, fellBack = 0, squared = 0;
         foreach (var room in state.Result.Rooms
                      .OrderBy(item => item.Id, StringComparer.Ordinal).ToList())
         {
@@ -381,10 +381,10 @@ public static class TakeoffPromotion
             // Snap and clip are tried together first, but a snap is never allowed to sink a clip
             // that would have stood on its own: if the combined candidate fails the strict audit,
             // the clip-only candidate gets its own hearing before the room falls back.
-            (Polygon Fitted, List<Polygon> Dropped, bool DidSnap, bool DidClip)? Attempt(bool withSnap)
+            (Polygon Fitted, List<Polygon> Dropped, bool DidSnap, bool DidClip, bool DidSquare)? Attempt(bool withSnap)
             {
                 var fitted = original;
-                bool didSnap = false, didClip = false;
+                bool didSnap = false, didClip = false, didSquare = false;
                 if (withSnap && snapping
                     && SnapToZone(fitted, zoneBoundary, neighbors, state.Options.ZoneSnapFt)
                         is { } moved)
@@ -411,10 +411,17 @@ public static class TakeoffPromotion
                     dropped = parts.Skip(1).ToList();
                     didClip = true;
                 }
-                return didSnap || didClip ? (fitted, dropped, didSnap, didClip) : null;
+                if ((didSnap || didClip) && state.Options.ZoneClipSquareFt > 0
+                    && SquareFitArtifacts(fitted, state.ZoneGeometry, neighbors,
+                        state.Options.ZoneClipSquareFt) is { } squaredPolygon)
+                {
+                    fitted = squaredPolygon;
+                    didSquare = true;
+                }
+                return didSnap || didClip ? (fitted, dropped, didSnap, didClip, didSquare) : null;
             }
 
-            var attempts = new List<(Polygon Fitted, List<Polygon> Dropped, bool DidSnap, bool DidClip)>();
+            var attempts = new List<(Polygon Fitted, List<Polygon> Dropped, bool DidSnap, bool DidClip, bool DidSquare)>();
             if (Attempt(withSnap: true) is { } combined) attempts.Add(combined);
             if (attempts.Count > 0 && attempts[0].DidSnap && attempts[0].DidClip
                 && Attempt(withSnap: false) is { } clipOnly) attempts.Add(clipOnly);
@@ -435,6 +442,7 @@ public static class TakeoffPromotion
                         ResidueReason.Rejected, part, room.MeanCeilingFt);
                 if (attempt.DidSnap) snapped++;
                 if (attempt.DidClip) clipped++;
+                if (attempt.DidSquare) squared++;
                 state.Log?.Invoke(
                     $"[promotion] zone-fit room={room.Id} snap={attempt.DidSnap} " +
                     $"clip={attempt.DidClip} sqft={original.Area:F0}->{attempt.Fitted.Area:F0} " +
@@ -450,6 +458,7 @@ public static class TakeoffPromotion
         }
         if (snapped > 0) state.Rejections["zonefit:snapped"] = snapped;
         if (clipped > 0) state.Rejections["zonefit:clipped"] = clipped;
+        if (squared > 0) state.Rejections["zonefit:squared"] = squared;
         if (fellBack > 0) state.Rejections["zonefit:fallback"] = fellBack;
         state.Result.TotalSqft = state.Result.Rooms.Sum(item => item.RawSqft);
     }
@@ -570,6 +579,159 @@ public static class TakeoffPromotion
         {
             var vertex = GeometryFactory.CreatePoint(point);
             return neighbors.Any(other => other.Geometry.Boundary.Distance(vertex) <= Epsilon);
+        }
+    }
+
+    /// <summary>
+    /// Squares clip/snap-manufactured off-frame edges so the strict audit judges the geometry the
+    /// fit MEANT instead of the arithmetic debris the cut left behind. Returns null when nothing
+    /// needed repair. Every room entering zone-fit already passed the canonical editability audit,
+    /// so an off-frame edge in the fitted polygon is fit output by construction — the cut of a
+    /// zone segment across a rail corner, or a zone line a fraction of a degree off the rails —
+    /// never detector-proposed geometry. The repair replaces such an edge with its own axis
+    /// decomposition along an anchor-scale adjacent edge: two frame-aligned edges through
+    /// whichever corner point keeps the room inside the zone (preferring the larger room when
+    /// both do). The budget is the boundary DISPLACEMENT the repair introduces — the edge's
+    /// perpendicular deviation from the axis — so a long zone cut a hair off frame is repairable
+    /// while a genuine corner chamfer is not. Nothing is exempted downstream: the full strict
+    /// audit, containment, neighbor-overlap, and shared-edge laws all re-judge the squared
+    /// polygon, and a repair that still fails falls back exactly as an unrepaired one would.
+    /// </summary>
+    private static Polygon? SquareFitArtifacts(
+        Polygon fitted, Geometry zone, List<(string Id, Polygon Geometry)> neighbors,
+        double maxDisplacementFt)
+    {
+        // The audit's own frame tolerance: an edge this close to its neighbour's axis (mod 90) is
+        // already lawful and must not be touched. The anchor floor mirrors the audit's
+        // FrameAnchorMinFt: only an edge long enough to speak for the frame may define the axis.
+        const double angleTolerance = 0.25 * Math.PI / 180;
+        const double anchorMinFt = 2.0;
+        const int maxRepairs = 16;
+        double allowedOutside = PolygonDifference(fitted, zone).Area + Epsilon;
+        double allowedOverlap = neighbors
+            .Sum(other => PolygonIntersection(fitted, other.Geometry).Area) + Epsilon;
+        var current = fitted;
+        bool changed = false;
+        for (int repair = 0; repair < maxRepairs; repair++)
+        {
+            var next = SquareOne(current);
+            if (next == null) break;
+            current = next;
+            changed = true;
+        }
+        return changed ? current : null;
+
+        Polygon? SquareOne(Polygon polygon)
+        {
+            var rings = new List<LineString> { polygon.ExteriorRing };
+            rings.AddRange(Enumerable.Range(0, polygon.NumInteriorRings)
+                .Select(polygon.GetInteriorRingN));
+            for (int ringIndex = 0; ringIndex < rings.Count; ringIndex++)
+            {
+                var points = rings[ringIndex].Coordinates
+                    .Take(rings[ringIndex].NumPoints - 1).ToList();
+                int count = points.Count;
+                if (count < 4) continue;
+                for (int i = 0; i < count; i++)
+                {
+                    var a = points[i];
+                    var b = points[(i + 1) % count];
+                    double ex = b.X - a.X, ey = b.Y - a.Y;
+                    double edgeLength = Math.Sqrt(ex * ex + ey * ey);
+                    if (edgeLength <= Epsilon) continue;
+
+                    // The axis is defined by the longer adjacent edge — a repair needs at least one
+                    // anchor-scale neighbour to speak for the frame.
+                    var previous = points[(i + count - 1) % count];
+                    var following = points[(i + 2) % count];
+                    double ix = a.X - previous.X, iy = a.Y - previous.Y;
+                    double ox = following.X - b.X, oy = following.Y - b.Y;
+                    double incoming = Math.Sqrt(ix * ix + iy * iy);
+                    double outgoing = Math.Sqrt(ox * ox + oy * oy);
+                    if (Math.Max(incoming, outgoing) < anchorMinFt) continue;
+                    double ux, uy;
+                    if (incoming >= outgoing) { ux = ix / incoming; uy = iy / incoming; }
+                    else { ux = ox / outgoing; uy = oy / outgoing; }
+
+                    // Off-frame test, mod 90, on the audit's own tolerance.
+                    double difference = Math.Abs(
+                        Math.Atan2(ey, ex) - Math.Atan2(uy, ux)) % (Math.PI / 2);
+                    difference = Math.Min(difference, Math.PI / 2 - difference);
+                    if (difference <= angleTolerance) continue;
+
+                    // Decompose along whichever axis of the anchor's frame leaves the smaller
+                    // perpendicular remainder — an edge tilted off the PERPENDICULAR axis squares
+                    // onto that axis, not onto the anchor's own direction.
+                    if (Math.Abs(-ex * uy + ey * ux) > Math.Abs(ex * ux + ey * uy))
+                        (ux, uy) = (-uy, ux);
+
+                    double along = ex * ux + ey * uy;
+                    double px = ex - along * ux, py = ey - along * uy;
+                    double perpendicular = Math.Sqrt(px * px + py * py);
+                    if (Math.Abs(along) <= Epsilon || perpendicular <= Epsilon) continue;
+                    // The budget: how far the repair may move the boundary.
+                    if (perpendicular > maxDisplacementFt) continue;
+
+                    Polygon? best = null;
+                    foreach (var corner in new[]
+                             {
+                                 new Coordinate(a.X + along * ux, a.Y + along * uy),
+                                 new Coordinate(a.X + px, a.Y + py),
+                             })
+                    {
+                        // A repair may not manufacture a reversal: if the path doubles back at
+                        // either end of the inserted corner, this candidate is debris of its own.
+                        if (Reverses(previous, a, corner) || Reverses(a, corner, b)
+                            || Reverses(corner, b, following)) continue;
+                        var repairedPoints = points.Take(i + 1)
+                            .Append(corner).Concat(points.Skip(i + 1)).ToList();
+                        var candidate = Rebuild(polygon, ringIndex, repairedPoints);
+                        if (candidate == null || !candidate.IsValid || candidate.Area <= Epsilon)
+                            continue;
+                        if (PolygonDifference(candidate, zone).Area > allowedOutside) continue;
+                        // The outward corner-restore may land on a neighbour; that candidate would
+                        // only die at the overlap law later, taking the whole fit with it.
+                        if (neighbors.Sum(other =>
+                                PolygonIntersection(candidate, other.Geometry).Area) > allowedOverlap)
+                            continue;
+                        if (best == null || candidate.Area > best.Area) best = candidate;
+                    }
+                    if (best != null) return best;
+                }
+            }
+            return null;
+        }
+
+        static bool Reverses(Coordinate a, Coordinate b, Coordinate c)
+        {
+            double ix = b.X - a.X, iy = b.Y - a.Y, ox = c.X - b.X, oy = c.Y - b.Y;
+            double cross = Math.Abs(ix * oy - iy * ox);
+            double dot = ix * ox + iy * oy;
+            return dot < 0 && cross <= Math.Sin(angleTolerance)
+                * Math.Sqrt(ix * ix + iy * iy) * Math.Sqrt(ox * ox + oy * oy);
+        }
+
+        static Polygon? Rebuild(Polygon polygon, int ringIndex, List<Coordinate> openRing)
+        {
+            try
+            {
+                var closed = openRing.Select(point => point.Copy()).ToList();
+                closed.Add(closed[0].Copy());
+                var replacement = GeometryFactory.CreateLinearRing(closed.ToArray());
+                var exterior = ringIndex == 0
+                    ? replacement
+                    : (LinearRing)polygon.ExteriorRing.Copy();
+                var holes = Enumerable.Range(0, polygon.NumInteriorRings)
+                    .Select(index => index == ringIndex - 1
+                        ? replacement
+                        : (LinearRing)polygon.GetInteriorRingN(index).Copy())
+                    .ToArray();
+                return GeometryFactory.CreatePolygon(exterior, holes);
+            }
+            catch
+            {
+                return null;
+            }
         }
     }
 

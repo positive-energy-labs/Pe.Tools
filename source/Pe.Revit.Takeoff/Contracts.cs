@@ -140,6 +140,23 @@ public sealed class TakeoffOptions
     // pre-fit geometry on failure — e.g. a zone edge diagonal to the room's frame.
     public double ZoneSnapFt = 1.0;         // room vertex this close to the zone boundary snaps onto it (0 = off)
     public bool ZoneClipEnabled = true;     // a room overhanging the zone is intersected with it, not rejected
+    // Clipping a rail-aligned room against the zone MANUFACTURES edges the detector never proposed:
+    // where the zone line crosses a projected corner or runs a fraction of a degree off the room's
+    // rails, the cut leaves off-frame edges (plus non-right corners), the strict audit refuses
+    // them, and the refusal sends the whole room back to die at the scope gate over a sub-1%
+    // overhang sliver. Every room entering zone-fit already passed the canonical editability audit,
+    // so an off-frame edge in the fitted polygon is fit output by construction — never detector
+    // geometry. Squaring replaces such an edge with the two frame-aligned edges of its own axis
+    // decomposition, preferring the repair that keeps the room inside the zone, and the FULL
+    // strict audit re-judges the squared polygon: input hygiene for the audit, never a relaxation
+    // of it. The budget is the DISPLACEMENT the repair introduces (the edge's perpendicular
+    // deviation from the frame axis), not the edge's length — a 20 ft zone cut 1 degree off frame
+    // moves the boundary 0.35 ft; a genuine 5 ft corner chamfer would move it 3.5 ft and is
+    // refused as the geometric statement it is. The default equals ZoneSnapFt: squaring licenses
+    // exactly the motion this stage already licenses for snapping, no more. Swept 1.0/1.5/2.5 on
+    // the 2026-08-16 bins: board-identical, so the tightest value that achieves the effect wins.
+    // 0 disables.
+    public double ZoneClipSquareFt = 1.0;   // max boundary displacement a squaring repair may introduce
     // ---- Ink-backing acceptance gate (TakeoffPromotion ink-backing stage) ----
     // Teal must mean trustworthy: an accepted room's boundary must actually stand on wall ink.
     // Samples near the zone edge are exempt (zone is authority, not evidence), so a room whose

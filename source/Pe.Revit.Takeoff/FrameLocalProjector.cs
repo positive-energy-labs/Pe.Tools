@@ -1,4 +1,3 @@
-using NetTopologySuite.Algorithm.Distance;
 using NetTopologySuite.Geometries;
 using NetTopologySuite.Geometries.Utilities;
 using NetTopologySuite.Operation.Union;
@@ -377,20 +376,28 @@ internal static class FrameLocalProjector
             // attribution; guessing the magnitudes afterwards is not available at any price.
             double areaDrift = Math.Abs(candidate.Area - room.Source.Geometry.Area) /
                                Math.Max(room.Source.Geometry.Area, Epsilon);
-            double boundaryDrift = DiscreteHausdorffDistance.Distance(
-                room.Source.Geometry.Boundary, candidate.Boundary);
-            // The symmetric Hausdorff above is one number for two different failures, and they are
-            // not equally dishonest. projected->source is INVENTION: an accepted boundary standing
-            // where the detector proposed nothing. source->projected is a DROP: a thin source
-            // appendage the rail lattice swallowed. Invention has no other backstop and stays on the
-            // tight tolerance; a drop is already bounded twice over — by the area-drift gate above,
-            // and downstream by ink-backing, which refuses any accepted boundary that no ink
-            // supports. Measuring them together made a 547 sf room with a 0.3 ft-wide spike
-            // indistinguishable from a room whose walls had wandered off the evidence.
-            double sourceDrop = new DiscreteHausdorffDistance(
-                room.Source.Geometry.Boundary, candidate.Boundary).OrientedDistance();
-            double invention = new DiscreteHausdorffDistance(
-                candidate.Boundary, room.Source.Geometry.Boundary).OrientedDistance();
+            // Drift is measured against the DE-STAIRCASED source (the same geometry the frame
+            // estimator, frame support, and rails already trust — never the raw raster trace), and
+            // in AXIS units, not Euclidean feet. The upstream boundary simplifier moves vertices of
+            // an axis-aligned raster staircase, so the motion it licenses is a BoundarySimplifyFt
+            // box in x and y — which composes to BoundarySimplifyFt·√2 of Euclidean offset
+            // perpendicular to a 45-degree wall but only BoundarySimplifyFt perpendicular to an
+            // orthogonal one. A Euclidean Hausdorff therefore taxed rotated frames ~√2 for licensed
+            // motion orthogonal frames paid face value for: 45-degree drifts clustered at 2.59–2.98
+            // against the 2.5 budget, argmax pairs perpendicular to the walls. Measuring the
+            // vertex-to-boundary offsets with the axis-frame L∞ norm charges every frame the same
+            // price for the same licensed motion — the sealer's stepFt = CellFt·√2 fix, applied to
+            // the drift audit. The budget itself is unchanged.
+            var reference = DeStaircase(room.Source.Geometry, knobs.DeStaircaseFt).Boundary;
+            // projected->source is INVENTION: an accepted boundary standing where the detector
+            // proposed nothing; it has no other backstop and keeps the tight tolerance.
+            // source->projected is a DROP: a thin source appendage the rail lattice swallowed,
+            // already bounded by the area-drift gate above and by ink-backing downstream. One
+            // symmetric number made a 547 sf room with a 0.3 ft spike indistinguishable from a
+            // room whose walls had wandered off the evidence.
+            double sourceDrop = AxisOrientedDistance(reference, candidate.Boundary);
+            double invention = AxisOrientedDistance(candidate.Boundary, reference);
+            double boundaryDrift = Math.Max(sourceDrop, invention);
             string probe = $"frameDeg={frame * 180 / Math.PI:F2} " +
                 $"support={FrameSupport(room.Source.Geometry, frame, knobs.DeStaircaseFt):F3} " +
                 $"srcArea={room.Source.Geometry.Area:F0} " +
@@ -545,6 +552,28 @@ internal static class FrameLocalProjector
             result[^1].Add(value);
         }
         return result;
+    }
+
+    // The discrete oriented Hausdorff (max over FROM's vertices of distance to TO), except the
+    // vertex-to-boundary offset is priced with the world-axis L∞ norm instead of Euclidean length.
+    // The raster and its simplifier move boundaries in axis-aligned steps, so axis units are the
+    // units the licensed motion is actually denominated in; Euclidean pricing charges rotated
+    // frames √2 on the same motion. The nearest point is still found euclideanly — for offsets
+    // perpendicular to a straight wall (the drift regime) the two argmins coincide, and anywhere
+    // they differ the Euclidean choice only overestimates, never forgives.
+    private static double AxisOrientedDistance(Geometry from, Geometry to)
+    {
+        double max = 0;
+        foreach (var vertex in from.Coordinates)
+        {
+            var nearest = NetTopologySuite.Operation.Distance.DistanceOp
+                .NearestPoints(Factory.CreatePoint(vertex), to);
+            double distance = Math.Max(
+                Math.Abs(nearest[0].X - nearest[1].X),
+                Math.Abs(nearest[0].Y - nearest[1].Y));
+            if (distance > max) max = distance;
+        }
+        return max;
     }
 
     // A rotated wall traced from the raster is a staircase of cell-scale axis-aligned steps, and a
