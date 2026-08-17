@@ -668,17 +668,24 @@ internal static class FrameLocalProjector
     /// Straightens lattice micro-jogs in an axis-aligned (frame-local) polygon: a perpendicular
     /// step no longer than <paramref name="stepFt"/> between two edges continuing in the same
     /// direction is removed by extending the longer edge over the shorter one. Geometry-only —
-    /// every honesty judgment stays with the gates that re-measure the result.
+    /// every honesty judgment stays with the gates that re-measure the result. Internal because
+    /// zone-fit runs the same dissolve on squared fit polygons (rotated into the audit's frame,
+    /// budgeted by ZoneClipSquareFt); the judgment there stays with the zone-fit admission test.
+    /// The optional <paramref name="jogMovable"/> predicate (points in the local frame) lets a
+    /// caller that may not edit shared linework restrict the dissolve to free boundary: a jog
+    /// whose chain touches a forbidden line is left standing. The projector passes null — it
+    /// carves neighbors instead.
     /// </summary>
-    private static Geometry? DeJog(Geometry local, double stepFt)
+    internal static Geometry? DeJog(
+        Geometry local, double stepFt, Func<Coordinate, bool>? jogMovable = null)
     {
         if (local is not Polygon polygon) return null;
-        var shell = DeJogRing(polygon.ExteriorRing, stepFt);
+        var shell = DeJogRing(polygon.ExteriorRing, stepFt, jogMovable);
         if (shell == null) return null;
         var holes = new List<LinearRing>();
         for (int i = 0; i < polygon.NumInteriorRings; i++)
         {
-            var hole = DeJogRing(polygon.GetInteriorRingN(i), stepFt);
+            var hole = DeJogRing(polygon.GetInteriorRingN(i), stepFt, jogMovable);
             if (hole == null) return null;
             holes.Add(hole);
         }
@@ -686,7 +693,8 @@ internal static class FrameLocalProjector
         return repaired.IsValid && repaired.Area > Epsilon ? repaired : null;
     }
 
-    private static LinearRing? DeJogRing(LineString ring, double stepFt)
+    private static LinearRing? DeJogRing(
+        LineString ring, double stepFt, Func<Coordinate, bool>? jogMovable = null)
     {
         var points = ring.Coordinates.Take(ring.NumPoints - 1)
             .Select(coordinate => new Coordinate(coordinate.X, coordinate.Y))
@@ -724,6 +732,13 @@ internal static class FrameLocalProjector
                 double prev = Along(b) - Along(a);
                 double next = Along(d) - Along(c);
                 if (prev * next <= AxisEps * AxisEps) continue;
+                // A caller that may not edit shared linework vetoes any jog whose REMOVED step
+                // sits on a forbidden line — that is a jag OF the shared wall, jagged on both
+                // sides, and straightening one side alone breaks the sharing. The end vertices
+                // that merely slide are exempt: each slides along the LINE of its own far-end
+                // perpendicular edge, so a shared line it sits on is shortened, never left.
+                if (jogMovable != null && !(jogMovable(b) && jogMovable(c)))
+                    continue;
                 // Two ways to remove the jog: drop the next edge onto prev's offset (sliding d), or
                 // raise the prev edge onto next's offset (sliding a). Prefer moving the shorter
                 // edge; either slide is legal only if the perpendicular edge at its far end keeps

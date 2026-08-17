@@ -1,4 +1,5 @@
 using NetTopologySuite.Geometries;
+using NetTopologySuite.Geometries.Utilities;
 using NetTopologySuite.Operation.Overlay;
 using NetTopologySuite.Operation.OverlayNG;
 
@@ -444,7 +445,7 @@ public static class TakeoffPromotion
         bool snapping = state.Options.ZoneSnapFt > 0;
         if ((!snapping && !state.Options.ZoneClipEnabled) || state.Result.Rooms.Count == 0) return;
         var zoneBoundary = state.ZoneGeometry.Boundary;
-        int snapped = 0, clipped = 0, fellBack = 0, squared = 0;
+        int snapped = 0, clipped = 0, fellBack = 0, squared = 0, dissolved = 0;
         foreach (var room in state.Result.Rooms
                      .OrderBy(item => item.Id, StringComparer.Ordinal).ToList())
         {
@@ -457,10 +458,11 @@ public static class TakeoffPromotion
             // Snap and clip are tried together first, but a snap is never allowed to sink a clip
             // that would have stood on its own: if the combined candidate fails the strict audit,
             // the clip-only candidate gets its own hearing before the room falls back.
-            (Polygon Fitted, List<Polygon> Dropped, bool DidSnap, bool DidClip, bool DidSquare)? Attempt(bool withSnap)
+            (Polygon Fitted, List<Polygon> Dropped, bool DidSnap, bool DidClip, bool DidSquare,
+                bool DidDissolve)? Attempt(bool withSnap)
             {
                 var fitted = original;
-                bool didSnap = false, didClip = false, didSquare = false;
+                bool didSnap = false, didClip = false, didSquare = false, didDissolve = false;
                 if (withSnap && snapping
                     && SnapToZone(fitted, zoneBoundary, neighbors, state.Options.ZoneSnapFt,
                         // Where a wall hugs the declared line, the ink face is where the room
@@ -493,17 +495,28 @@ public static class TakeoffPromotion
                     dropped = parts.Skip(1).ToList();
                     didClip = true;
                 }
-                if ((didSnap || didClip) && state.Options.ZoneClipSquareFt > 0
-                    && SquareFitArtifacts(fitted, state.ZoneGeometry, neighbors,
-                        state.Options.ZoneClipSquareFt) is { } squaredPolygon)
+                if ((didSnap || didClip) && state.Options.ZoneClipSquareFt > 0)
                 {
-                    fitted = squaredPolygon;
-                    didSquare = true;
+                    var trace = new List<string>();
+                    if (RepairFitArtifacts(fitted, state.ZoneGeometry, neighbors,
+                            state.Options.ZoneClipSquareFt, didClip, trace.Add) is { } repair)
+                    {
+                        fitted = repair.Polygon;
+                        didSquare = repair.Squared;
+                        didDissolve = repair.Dissolved;
+                    }
+                    // Only an engaged repair is worth a diagnostic row; a clean gate is silence.
+                    if (trace.Any(entry => entry.Contains("gate:open")))
+                        state.RejectionDetails[$"zfrepair/{room.Id}~snap{(withSnap ? 1 : 0)}"] =
+                            string.Join(" ", trace);
                 }
-                return didSnap || didClip ? (fitted, dropped, didSnap, didClip, didSquare) : null;
+                return didSnap || didClip
+                    ? (fitted, dropped, didSnap, didClip, didSquare, didDissolve)
+                    : null;
             }
 
-            var attempts = new List<(Polygon Fitted, List<Polygon> Dropped, bool DidSnap, bool DidClip, bool DidSquare)>();
+            var attempts = new List<(Polygon Fitted, List<Polygon> Dropped, bool DidSnap,
+                bool DidClip, bool DidSquare, bool DidDissolve)>();
             if (Attempt(withSnap: true) is { } combined) attempts.Add(combined);
             if (attempts.Count > 0 && attempts[0].DidSnap && attempts[0].DidClip
                 && Attempt(withSnap: false) is { } clipOnly) attempts.Add(clipOnly);
@@ -525,6 +538,7 @@ public static class TakeoffPromotion
                 if (attempt.DidSnap) snapped++;
                 if (attempt.DidClip) clipped++;
                 if (attempt.DidSquare) squared++;
+                if (attempt.DidDissolve) dissolved++;
                 state.Log?.Invoke(
                     $"[promotion] zone-fit room={room.Id} snap={attempt.DidSnap} " +
                     $"clip={attempt.DidClip} sqft={original.Area:F0}->{attempt.Fitted.Area:F0} " +
@@ -541,6 +555,7 @@ public static class TakeoffPromotion
         if (snapped > 0) state.Rejections["zonefit:snapped"] = snapped;
         if (clipped > 0) state.Rejections["zonefit:clipped"] = clipped;
         if (squared > 0) state.Rejections["zonefit:squared"] = squared;
+        if (dissolved > 0) state.Rejections["zonefit:dissolved"] = dissolved;
         if (fellBack > 0) state.Rejections["zonefit:fallback"] = fellBack;
         state.Result.TotalSqft = state.Result.Rooms.Sum(item => item.RawSqft);
     }
@@ -581,7 +596,13 @@ public static class TakeoffPromotion
         var kinds = audit.Rooms.Where(room => !room.IsStrictlyEditable)
             .SelectMany(room => room.Violations.Select(violation => $"{room.RoomId}:{violation.Kind}"))
             .Distinct().Take(6);
-        Refuse($"editability {string.Join(",", kinds)}");
+        // The fitted room's own violations carry their coordinates and magnitudes: a fallback
+        // hold that names where and how much is minable; a bare kind list is a dead end.
+        var where = audit.Rooms.Where(room => room.RoomId == candidate.Id)
+            .SelectMany(room => room.Violations.Select(violation =>
+                $"{violation.Kind}@({violation.At.X:F2},{violation.At.Y:F2})m={violation.Measured:F2}"))
+            .Take(8);
+        Refuse($"editability {string.Join(",", kinds)} [{string.Join(" ", where)}]");
         return false;
     }
 
@@ -681,6 +702,510 @@ public static class TakeoffPromotion
             var vertex = GeometryFactory.CreatePoint(point);
             return neighbors.Any(other => other.Geometry.Boundary.Distance(vertex) <= Epsilon);
         }
+    }
+
+    /// <summary>
+    /// The zone-fit repair composite: squaring first (the unchanged SquareFitArtifacts
+    /// discipline), then — only while the canonical audit still refuses the polygon for
+    /// handle-scale debris — the projector's de-jog dissolve, rotated into the audit's own frame
+    /// and budgeted by the same displacement knob, alternating with re-squaring until the debris
+    /// is gone or nothing moves. Squaring decomposes an off-frame cut into frame edges but can
+    /// strand micro-step runs and sub-anchor off-frame stubs the audit then refuses (the R2a
+    /// residual: repair-debris after squaring); the dissolve is gated on the audit refusing, so
+    /// a fit that would already pass ships byte-identical. Containment and neighbor overlap may
+    /// not grow past the polygon that entered, and the unmodified admission test in Fits stays
+    /// the only judge — a repair that still fails falls back exactly as before.
+    /// </summary>
+    private static (Polygon Polygon, bool Squared, bool Dissolved)? RepairFitArtifacts(
+        Polygon fitted, Geometry zone, List<(string Id, Polygon Geometry)> neighbors,
+        double maxDisplacementFt, bool clipped, Action<string>? trace = null)
+    {
+        double allowedOutside = PolygonDifference(fitted, zone).Area + Epsilon;
+        double allowedOverlap = neighbors
+            .Sum(other => PolygonIntersection(fitted, other.Geometry).Area) + Epsilon;
+        var current = fitted;
+        bool squared = false, dissolved = false;
+        if (SquareFitArtifacts(current, zone, neighbors, maxDisplacementFt) is { } first)
+        {
+            current = first;
+            squared = true;
+        }
+        trace?.Invoke($"sq0={squared}");
+        // The dissolve rescues CUT geometry — the debris a clip manufactures and squaring
+        // strands. A snap-only fit that cannot pass the audit loses nothing by falling back
+        // (the room was never forced to change), and repairing it would supplant already-good
+        // shipped geometry with a repaired shape that paid displacement for no need.
+        const int maxPasses = 12;
+        for (int pass = 0; pass < (clipped ? maxPasses : 0); pass++)
+        {
+            if (FitDebrisFrame(current, trace) is not { } frameRadians) break;
+            var before = current;
+            bool moved = false;
+            if (DeJogFit(current, frameRadians, maxDisplacementFt,
+                    zone, neighbors, allowedOutside, allowedOverlap) is { } dejogged)
+            {
+                current = dejogged;
+                moved = true;
+            }
+            bool jogged = moved;
+            if (SquareDebrisRuns(current, zone, neighbors, maxDisplacementFt,
+                    allowedOutside, allowedOverlap, pass == 0 ? trace : null) is { } collapsed)
+            {
+                current = collapsed;
+                moved = true;
+            }
+            trace?.Invoke($"p{pass}:dejog={jogged},runs={moved && true},moved={moved}");
+            if (!moved) break;
+            dissolved = true;
+            if (SquareFitArtifacts(current, zone, neighbors, maxDisplacementFt) is { } resquared)
+            {
+                current = resquared;
+                squared = true;
+            }
+            // Fixpoint guard: a repair the resquarer immediately undoes is churn, not progress.
+            if (current.EqualsExact(before)) break;
+        }
+        if (dissolved)
+        {
+            // The canonical coverage contract demands vertex-matched shared linework: a repair
+            // that dropped vertices a neighbor still holds on our boundary would die at
+            // InvalidCoverage even though the SHAPES agree. Re-absorbing those vertices changes
+            // segmentation, never geometry — the one-sided half of the projector's RenodeShared.
+            current = RenodeAgainstNeighbors(current, neighbors);
+        }
+        return squared || dissolved ? (current, squared, dissolved) : null;
+    }
+
+    /// <summary>
+    /// Inserts every neighbor boundary vertex that lies on this polygon's edges into its rings.
+    /// Segmentation-only: the shape is unchanged, but the coverage validator's vertex-matching
+    /// contract is restored after a repair simplified an edge a neighbor still holds points on.
+    /// </summary>
+    private static Polygon RenodeAgainstNeighbors(
+        Polygon polygon, List<(string Id, Polygon Geometry)> neighbors)
+    {
+        var vertices = neighbors.SelectMany(other => other.Geometry.Coordinates)
+            .GroupBy(coordinate => (coordinate.X, coordinate.Y))
+            .Select(group => group.First())
+            .ToList();
+        if (vertices.Count == 0) return polygon;
+        LinearRing Renode(LineString ring)
+        {
+            var coordinates = ring.Coordinates;
+            var output = new List<Coordinate>();
+            for (int i = 0; i < coordinates.Length - 1; i++)
+            {
+                var from = coordinates[i];
+                var to = coordinates[i + 1];
+                output.Add(from);
+                var segment = new NetTopologySuite.Geometries.LineSegment(from, to);
+                output.AddRange(vertices
+                    .Where(vertex => !vertex.Equals2D(from) && !vertex.Equals2D(to)
+                        && segment.Distance(vertex) <= 1e-9)
+                    .Select(vertex => new { vertex, t = segment.ProjectionFactor(vertex) })
+                    .Where(item => item.t > 0 && item.t < 1)
+                    .OrderBy(item => item.t)
+                    .Select(item => new Coordinate(item.vertex.X, item.vertex.Y)));
+            }
+            output.Add(coordinates[^1]);
+            return GeometryFactory.CreateLinearRing(output.ToArray());
+        }
+        try
+        {
+            return GeometryFactory.CreatePolygon(
+                Renode(polygon.ExteriorRing),
+                Enumerable.Range(0, polygon.NumInteriorRings)
+                    .Select(index => Renode(polygon.GetInteriorRingN(index))).ToArray());
+        }
+        catch
+        {
+            return polygon;
+        }
+    }
+
+    /// <summary>
+    /// Audits the candidate alone and returns its frame angle (radians) when every violation is
+    /// repairable handle-scale debris — off-frame edges, the corners they break, micro-step runs,
+    /// and short-turn detail. Null means either nothing to repair (a clean polygon must ship
+    /// untouched) or the refusal is structural (invalid loop, no coherent frame) and no jog
+    /// dissolution may speak for it. Coverage violations never appear in a single-room audit,
+    /// which is correct: shared-linework disagreements belong to Fits, not to the repair.
+    /// </summary>
+    private static double? FitDebrisFrame(Polygon polygon, Action<string>? trace = null)
+    {
+        var level = new LevelTakeoff("zonefit-repair", 0, [
+            new TakeoffRoomShape("fit", polygon.Area, polygon.Length, 0,
+                Coordinates(polygon.ExteriorRing, true),
+                Enumerable.Range(0, polygon.NumInteriorRings)
+                    .Select(index => Coordinates(polygon.GetInteriorRingN(index), false))
+                    .ToList()),
+        ]);
+        var audit = TakeoffEditability.Evaluate(level).Rooms[0];
+        if (audit.Violations.Count == 0)
+        {
+            trace?.Invoke("gate:clean");
+            return null;
+        }
+        var repairable = new[]
+        {
+            EditabilityViolationKind.OffFrameEdge,
+            EditabilityViolationKind.NonRightCorner,
+            EditabilityViolationKind.AcuteTip,
+            EditabilityViolationKind.DiagonalShortcut,
+            EditabilityViolationKind.MicroStepRun,
+            EditabilityViolationKind.ExcessiveDetail,
+        };
+        if (!audit.Violations.All(violation => repairable.Contains(violation.Kind)))
+        {
+            trace?.Invoke("gate:structural:" + string.Join("|",
+                audit.Violations.Select(violation => violation.Kind.ToString()).Distinct()));
+            return null;
+        }
+        trace?.Invoke($"gate:open:f={audit.FrameDegrees:F2}:" + string.Join("|",
+            audit.Violations.Select(violation => violation.Kind.ToString()).Distinct()));
+        return audit.FrameDegrees * Math.PI / 180;
+    }
+
+    /// <summary>
+    /// One de-jog dissolve in the audit's frame: rotate local, run the projector's DeJog under
+    /// the zone-fit displacement budget, rotate back, and pin every vertex the dissolve did not
+    /// move back onto its exact pre-rotation coordinate so shared linework stays vertex-matched
+    /// through the rotation round-trip. Zone-fit may not edit a neighbor, so the dissolve is
+    /// fenced to free boundary: a jog touching any neighbor's linework is left standing (the
+    /// projector straightens such walls by carving both sides — a move zone-fit's laws forbid),
+    /// and a candidate that still loses a shared edge is refused here rather than shipped to
+    /// die at the admission test. Containment and neighbor overlap may not grow beyond the
+    /// allowance of the polygon that entered the repair.
+    /// </summary>
+    private static Polygon? DeJogFit(
+        Polygon polygon, double frameRadians, double stepFt, Geometry zone,
+        List<(string Id, Polygon Geometry)> neighbors,
+        double allowedOutside, double allowedOverlap)
+    {
+        const double sharedLineworkFt = 1e-6;
+        var toLocal = AffineTransformation.RotationInstance(-frameRadians);
+        var local = toLocal.Transform(polygon);
+        var neighborLinework = neighbors
+            .Select(other => toLocal.Transform(other.Geometry.Boundary)).ToList();
+        bool JogMovable(Coordinate point)
+        {
+            var probe = GeometryFactory.CreatePoint(point);
+            return neighborLinework.All(line => line.Distance(probe) > sharedLineworkFt);
+        }
+        if (FrameLocalProjector.DeJog(local, stepFt, JogMovable) is not { } dejogged) return null;
+        if (AffineTransformation.RotationInstance(frameRadians).Transform(dejogged)
+                is not Polygon candidate || !candidate.IsValid || candidate.Area <= Epsilon)
+            return null;
+        candidate = PinUnmovedVertices(candidate, polygon);
+        if (!candidate.IsValid || candidate.Area <= Epsilon) return null;
+        if (candidate.EqualsExact(polygon)) return null;
+        if (PolygonDifference(candidate, zone).Area > allowedOutside) return null;
+        if (neighbors.Sum(other => PolygonIntersection(candidate, other.Geometry).Area)
+            > allowedOverlap) return null;
+        foreach (var other in neighbors)
+        {
+            if (Intersection(polygon.Boundary, other.Geometry.Boundary).Length <= Epsilon)
+                continue;
+            if (Intersection(candidate.Boundary, other.Geometry.Boundary).Length <= Epsilon)
+                return null;
+        }
+        return candidate;
+    }
+
+    /// <summary>
+    /// Collapses a maximal run of sub-anchor debris edges into its own axis decomposition. The
+    /// single-edge squarer needs an anchor-scale adjacent edge to speak for the frame, so a CHAIN
+    /// of handle-scale edges — which squaring itself manufactures when it decomposes a cut one
+    /// edge at a time — is unrepairable by it: no member of the chain ever has an anchor
+    /// neighbor. Here the whole run (every edge under anchor scale, flanked by anchor-scale
+    /// edges on both sides) is replaced at once: by the straight flank-axis chord when the chord
+    /// lies on the frame, else by two frame edges through one corner. The run must contain at
+    /// least one off-frame edge — rooms enter zone-fit audit-clean, so an off-frame member is
+    /// the provenance marker of fit debris, and a lawful lattice notch (all on-frame) is never
+    /// touched. The budget is displacement: no erased vertex may sit farther than
+    /// <paramref name="maxDisplacementFt"/> from the replacement path, and an inserted corner
+    /// pays the same price against the chain it replaces. Containment and neighbor overlap may
+    /// not grow, reversals are refused, and the unmodified admission test stays the only judge.
+    /// </summary>
+    private static Polygon? SquareDebrisRuns(
+        Polygon fitted, Geometry zone, List<(string Id, Polygon Geometry)> neighbors,
+        double maxDisplacementFt, double allowedOutside, double allowedOverlap,
+        Action<string>? trace = null)
+    {
+        const double angleTolerance = 0.25 * Math.PI / 180;
+        const double anchorMinFt = 2.0;
+        const int maxRepairs = 16;
+        var current = fitted;
+        bool changed = false;
+        for (int repair = 0; repair < maxRepairs; repair++)
+        {
+            var next = CollapseOne(current);
+            if (next == null) break;
+            current = next;
+            changed = true;
+        }
+        return changed ? current : null;
+
+        Polygon? CollapseOne(Polygon polygon)
+        {
+            var rings = new List<LineString> { polygon.ExteriorRing };
+            rings.AddRange(Enumerable.Range(0, polygon.NumInteriorRings)
+                .Select(polygon.GetInteriorRingN));
+            for (int ringIndex = 0; ringIndex < rings.Count; ringIndex++)
+            {
+                var points = rings[ringIndex].Coordinates
+                    .Take(rings[ringIndex].NumPoints - 1).ToList();
+                int count = points.Count;
+                if (count < 5) continue;
+                double Length(int edge)
+                {
+                    var from = points[edge % count];
+                    var to = points[(edge + 1) % count];
+                    return from.Distance(to);
+                }
+                for (int start = 0; start < count; start++)
+                {
+                    if (Length(start + count - 1) < anchorMinFt) continue;   // left flank
+                    if (Length(start) >= anchorMinFt) continue;              // run starts short
+                    int length = 0;
+                    while (length < count && Length(start + length) < anchorMinFt) length++;
+                    if (length >= count - 2) continue;                       // ring is all debris
+                    var flankStart = points[(start + count - 1) % count];
+                    var a = points[start];
+                    var b = points[(start + length) % count];
+                    var flankEnd = points[(start + length + 1) % count];
+                    var interior = Enumerable.Range(1, length - 1)
+                        .Select(offset => points[(start + offset) % count]).ToList();
+                    if (interior.Count == 0) continue;                       // single edges: SquareOne's job
+
+                    // Flank axis from the longer flank edge.
+                    double lx = a.X - flankStart.X, ly = a.Y - flankStart.Y;
+                    double rx = flankEnd.X - b.X, ry = flankEnd.Y - b.Y;
+                    double left = Math.Sqrt(lx * lx + ly * ly);
+                    double right = Math.Sqrt(rx * rx + ry * ry);
+                    double ux, uy;
+                    if (left >= right) { ux = lx / left; uy = ly / left; }
+                    else { ux = rx / right; uy = ry / right; }
+                    double axisAngle = Math.Atan2(uy, ux);
+                    bool OffFrame(Coordinate from, Coordinate to)
+                    {
+                        double difference = Math.Abs(
+                            Math.Atan2(to.Y - from.Y, to.X - from.X) - axisAngle) % (Math.PI / 2);
+                        difference = Math.Min(difference, Math.PI / 2 - difference);
+                        return difference > angleTolerance;
+                    }
+                    bool hasOffFrame = false;
+                    var chain = new List<Coordinate> { a };
+                    chain.AddRange(interior);
+                    chain.Add(b);
+                    for (int edge = 0; edge < chain.Count - 1 && !hasOffFrame; edge++)
+                        hasOffFrame = OffFrame(chain[edge], chain[edge + 1]);
+                    if (!hasOffFrame) continue;
+                    trace?.Invoke($"run@({a.X:F1},{a.Y:F1})n={length}");
+
+                    // A run of short edges can span a GENUINE frame corner (an L in the cut):
+                    // collapsing across it would erase real shape for the run's full rise. Split
+                    // the chain at every lawful frame vertex — both adjacent edges on-frame —
+                    // and repair each debris fragment on its own.
+                    var splits = new List<int> { 0 };
+                    for (int vertex = 1; vertex < chain.Count - 1; vertex++)
+                        if (!OffFrame(chain[vertex - 1], chain[vertex])
+                            && !OffFrame(chain[vertex], chain[vertex + 1]))
+                            splits.Add(vertex);
+                    splits.Add(chain.Count - 1);
+
+                    for (int fragment = 0; fragment < splits.Count - 1; fragment++)
+                    {
+                        int f0 = splits[fragment], f1 = splits[fragment + 1];
+                        if (f1 <= f0) continue;
+                        var fa = chain[f0];
+                        var fb = chain[f1];
+                        var fInterior = chain.GetRange(f0 + 1, f1 - f0 - 1);
+                        var fChain = chain.GetRange(f0, f1 - f0 + 1);
+                        bool fragmentOffFrame = false;
+                        for (int edge = 0; edge < fChain.Count - 1 && !fragmentOffFrame; edge++)
+                            fragmentOffFrame = OffFrame(fChain[edge], fChain[edge + 1]);
+                        if (!fragmentOffFrame) continue;
+                        var fFlankStart = f0 == 0 ? flankStart : chain[f0 - 1];
+                        var fFlankEnd = f1 == chain.Count - 1 ? flankEnd : chain[f1 + 1];
+
+                        // Chord decomposition on the flank frame, perpendicular-preferring like
+                        // the single-edge squarer.
+                        double ex = fb.X - fa.X, ey = fb.Y - fa.Y;
+                        if (Math.Sqrt(ex * ex + ey * ey) <= Epsilon) continue;
+                        double vx = ux, vy = uy;
+                        if (Math.Abs(-ex * vy + ey * vx) > Math.Abs(ex * vx + ey * vy))
+                            (vx, vy) = (-vy, vx);
+                        double along = ex * vx + ey * vy;
+                        double px = ex - along * vx, py = ey - along * vy;
+                        double perpendicular = Math.Sqrt(px * px + py * py);
+
+                        var replacements = new List<List<Coordinate>>();
+                        if (perpendicular <= Epsilon || !OffFrame(fa, fb))
+                            replacements.Add([]);                            // straight chord
+                        else if (Math.Abs(along) > Epsilon)
+                        {
+                            replacements.Add([new Coordinate(fa.X + along * vx, fa.Y + along * vy)]);
+                            replacements.Add([new Coordinate(fa.X + px, fa.Y + py)]);
+                            // A long shallow cut cannot be one corner (the corner would displace
+                            // the boundary by the fragment's full rise); its lawful frame
+                            // decomposition is a staircase at HANDLE scale — treads above the
+                            // audit's short-turn threshold, risers within the displacement
+                            // budget, every corner square. Fewest risers that fit the budget:
+                            // the simplest lawful geometry.
+                            const double treadMinFt = 2.3;
+                            int riserCount = (int)Math.Ceiling(
+                                perpendicular / maxDisplacementFt - 1e-9);
+                            int riserCap = (int)Math.Floor(Math.Abs(along) / treadMinFt + 1e-9);
+                            if (riserCount >= 2 && riserCount <= riserCap)
+                            {
+                                double sx = along * vx / riserCount, sy = along * vy / riserCount;
+                                double qx = px / riserCount, qy = py / riserCount;
+                                List<Coordinate> Staircase(bool treadFirst)
+                                {
+                                    var corners = new List<Coordinate>();
+                                    double x = fa.X, y = fa.Y;
+                                    for (int step = 0; step < riserCount; step++)
+                                    {
+                                        if (treadFirst) { x += sx; y += sy; }
+                                        else { x += qx; y += qy; }
+                                        corners.Add(new Coordinate(x, y));
+                                        if (treadFirst) { x += qx; y += qy; }
+                                        else { x += sx; y += sy; }
+                                        if (step < riserCount - 1)
+                                            corners.Add(new Coordinate(x, y));
+                                    }
+                                    return corners;
+                                }
+                                replacements.Add(Staircase(treadFirst: true));
+                                replacements.Add(Staircase(treadFirst: false));
+                            }
+                        }
+                        Polygon? best = null;
+                        foreach (var inserted in replacements)
+                        {
+                            var path = new List<Coordinate> { fa };
+                            path.AddRange(inserted);
+                            path.Add(fb);
+                            if (path.Count < 3 && fInterior.Count == 0) continue;
+                            bool reverses = Reverses(fFlankStart, fa, path[1])
+                                || Reverses(path[^2], fb, fFlankEnd);
+                            for (int knee = 1; knee < path.Count - 1 && !reverses; knee++)
+                                reverses = Reverses(path[knee - 1], path[knee], path[knee + 1]);
+                            if (reverses) { trace?.Invoke("x:rev"); continue; }
+                            double displacement = fInterior.Count == 0 ? 0 : fInterior
+                                .Max(vertex => DistanceToPath(vertex, path));
+                            foreach (var corner in inserted)
+                                displacement = Math.Max(
+                                    displacement, DistanceToPath(corner, fChain));
+                            if (displacement > maxDisplacementFt)
+                                { trace?.Invoke($"x:disp={displacement:F2}"); continue; }
+                            // Rebuild the open ring: the kept stretch of the ring, in order,
+                            // with the replacement path spliced between fa and fb.
+                            var repairedPoints = SpliceRun(
+                                points, (start + f0) % count, f1 - f0, inserted);
+                            var candidate = RebuildRing(polygon, ringIndex, repairedPoints);
+                            if (candidate == null || !candidate.IsValid
+                                || candidate.Area <= Epsilon)
+                                { trace?.Invoke("x:invalid"); continue; }
+                            if (PolygonDifference(candidate, zone).Area > allowedOutside)
+                                { trace?.Invoke($"x:out={PolygonDifference(candidate, zone).Area:F3}"); continue; }
+                            if (neighbors.Sum(other =>
+                                    PolygonIntersection(candidate, other.Geometry).Area)
+                                > allowedOverlap) { trace?.Invoke("x:ovl"); continue; }
+                            if (best == null || candidate.Area > best.Area) best = candidate;
+                        }
+                        if (best != null) return best;
+                    }
+                }
+            }
+            return null;
+        }
+
+        static bool Reverses(Coordinate a, Coordinate b, Coordinate c)
+        {
+            double ix = b.X - a.X, iy = b.Y - a.Y, ox = c.X - b.X, oy = c.Y - b.Y;
+            double cross = Math.Abs(ix * oy - iy * ox);
+            double dot = ix * ox + iy * oy;
+            return dot < 0 && cross <= Math.Sin(angleTolerance)
+                * Math.Sqrt(ix * ix + iy * iy) * Math.Sqrt(ox * ox + oy * oy);
+        }
+
+        static double DistanceToPath(Coordinate point, IReadOnlyList<Coordinate> path)
+        {
+            double distance = double.MaxValue;
+            for (int i = 0; i < path.Count - 1; i++)
+                distance = Math.Min(distance, new NetTopologySuite.Geometries.LineSegment(
+                    path[i], path[i + 1]).Distance(point));
+            return distance;
+        }
+
+        static List<Coordinate> SpliceRun(
+            List<Coordinate> points, int start, int length, List<Coordinate> inserted)
+        {
+            int count = points.Count;
+            var result = new List<Coordinate>();
+            // Walk the ring once starting just after the run, so the kept stretch is contiguous:
+            // b, flank..., flankStart, a, then the inserted corner(s).
+            for (int step = start + length; step <= start + count; step++)
+            {
+                if (step == start + count) break;
+                result.Add(points[step % count]);
+            }
+            result.Add(points[start % count]);
+            result.AddRange(inserted);
+            return result;
+        }
+
+        static Polygon? RebuildRing(Polygon polygon, int ringIndex, List<Coordinate> openRing)
+        {
+            try
+            {
+                var closed = openRing.Select(point => point.Copy()).ToList();
+                closed.Add(closed[0].Copy());
+                var replacement = GeometryFactory.CreateLinearRing(closed.ToArray());
+                var exterior = ringIndex == 0
+                    ? replacement
+                    : (LinearRing)polygon.ExteriorRing.Copy();
+                var holes = Enumerable.Range(0, polygon.NumInteriorRings)
+                    .Select(index => index == ringIndex - 1
+                        ? replacement
+                        : (LinearRing)polygon.GetInteriorRingN(index).Copy())
+                    .ToArray();
+                return GeometryFactory.CreatePolygon(exterior, holes);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Restores exact pre-rotation coordinates for vertices the dissolve did not move. The
+    /// rotation round-trip perturbs every coordinate by floating-point dust (~1e-13 ft at model
+    /// scale), which is enough to unmatch shared linework the coverage validator demands be
+    /// vertex-exact; a genuinely moved vertex sits at least the jog step (>1e-6 ft) from any
+    /// original and is never pinned.
+    /// </summary>
+    private static Polygon PinUnmovedVertices(Polygon candidate, Polygon original)
+    {
+        const double pinTolerance = 1e-9;
+        var originals = original.Coordinates;
+        Coordinate Pin(Coordinate point)
+        {
+            foreach (var source in originals)
+                if (Math.Abs(source.X - point.X) <= pinTolerance
+                    && Math.Abs(source.Y - point.Y) <= pinTolerance)
+                    return new Coordinate(source.X, source.Y);
+            return new Coordinate(point.X, point.Y);
+        }
+        LinearRing PinRing(LineString ring) =>
+            GeometryFactory.CreateLinearRing(ring.Coordinates.Select(Pin).ToArray());
+        return GeometryFactory.CreatePolygon(
+            PinRing(candidate.ExteriorRing),
+            Enumerable.Range(0, candidate.NumInteriorRings)
+                .Select(index => PinRing(candidate.GetInteriorRingN(index))).ToArray());
     }
 
     /// <summary>
