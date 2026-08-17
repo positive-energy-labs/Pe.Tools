@@ -120,6 +120,19 @@ public sealed class TakeoffOptions
     public double AbsorbNeighborSharedPerimeterFraction = 0.45; // ...holding this share of its perimeter; measured
                                             // project-a ceiling is 0.54 (0.6 never fires); 0.30 is a per-zone lever
                                             // that cracks lattice zones (LL08) but bulldozes good rooms elsewhere
+    public double AbsorbNakedMaxSqft = 0;   // naked-separator absorb candidacy extends to rooms under this
+                                            // area (0 = candidacy stays AbsorbNeighborMaxSqft). FALSIFIED AS
+                                            // A GLOBAL DEFAULT at 400 (exp/ll08-forensics 2026-08-17): in the
+                                            // starved zone it was aimed at (LL08 inkRatio 0.05) nakedness
+                                            // cannot tell a real wall from a watershed line — it absorbed the
+                                            // zone's one high-confidence oracle room (Mech 023, naked=0.93,
+                                            // its real walls have no raster ink) — and elsewhere one 64 sf
+                                            // naked=0.94 merge re-rolled a neighbor's zone-fit and broke the
+                                            // per-room honesty bar (ML05 R12 edge-on-ink -0.021). Nakedness
+                                            // ordering cannot separate the harm (0.94) from the good (ML08's
+                                            // honest +2 rooms came at naked=0.84). Reopen only as a per-zone
+                                            // rule keyed on ink trust (AdaptivePolicy seam, recalibration
+                                            // ritual) — never as a default.
     public double AbsorbNakedSeparatorFraction = 0.6; // multi-neighbor absorb: when no single neighbor
                                             // clears the share bar but the TOTAL neighbor-shared perimeter does,
                                             // merge only if at least this fraction of the shared boundary stands

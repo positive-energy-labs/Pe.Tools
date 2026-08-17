@@ -185,9 +185,14 @@ public static class TakeoffPromotion
     private static void RunAbsorbNeighbor(PromotionState state)
     {
         if (state.Options.AbsorbNeighborMaxSqft <= 0) return;
+        // The naked-separator path may extend candidacy past the closet-scale cap: a big watershed
+        // cell in an ink-starved zone is still not a room. The single-neighbor share path keeps the
+        // original cap — it never checks ink and must not start bulldozing genuine rooms.
+        double candidacyCap = Math.Max(
+            state.Options.AbsorbNeighborMaxSqft, state.Options.AbsorbNakedMaxSqft);
         int merged = 0;
         foreach (var room in state.Result.Rooms
-                     .Where(item => item.RawSqft < state.Options.AbsorbNeighborMaxSqft)
+                     .Where(item => item.RawSqft < candidacyCap)
                      .OrderBy(item => item.RawSqft).ThenBy(item => item.Id, StringComparer.Ordinal)
                      .ToList())
         {
@@ -202,6 +207,7 @@ public static class TakeoffPromotion
                     .ThenBy(item => item.Room.Id, StringComparer.Ordinal).First();
             double share = target == null ? 0 : target.Value.SharedLength / perimeter;
             bool absorb = target != null
+                          && room.RawSqft < state.Options.AbsorbNeighborMaxSqft
                           && share >= state.Options.AbsorbNeighborSharedPerimeterFraction;
             // A lattice cell can hand its perimeter to SEVERAL neighbors, each below the
             // single-neighbor bar. Split share alone is not enough — a genuine closet is also

@@ -2,6 +2,38 @@
 
 Dated, append-only. Newest batch first. Each entry: what was decided, and the why that makes it stick. Reopen one only with new evidence — and record the reopening here.
 
+## 2026-08-17 (round 4, LL08 forensics) — the cray polygons are the fail-closed law drawing an evidence vacuum
+
+**Diagnosed, harness-side unfixable: LL08's pathology is input starvation, not stage misbehavior.**
+The census (exp/ll08-forensics): 3,272 sf zone, 163 sf of seed ink (inkRatio 0.050, board minimum),
+73% of that ink in the zone-edge band, 48 floating clusters — the interior is evidence-free. The
+oracle names TWO rooms here (Hall 001/Stair#2 614 sf flagged; Mech 023 295 sf high); the watershed,
+given nothing to hold onto, cuts 17. Every gate then behaves correctly: 8 fragments die at
+ink:unbacked (0–28% backed — those separators ARE watershed lines), and the fail-closed hold law
+restores raw 0.25 ft-cell source geometry, so 13 held residues render as 200–1,272-vertex
+staircases wandering through open space. That is the "absolutely cray polygons" exhibit — the
+correct fail-closed answer to a zone whose walls the raster never captured. Mech 023's own walls:
+68% of boundary samples have no ink within 1 ft, 31% none within 3 ft (registration drift is ~1.6 ft;
+the rest is starvation). Its solver twin R03 (srcArea 297) holds at frame:BoundaryDrift 3.51 ft.
+The fix lane is CAPTURE — recover the LL06/LL08 quadrant's wall ink (known ink-starved quadrant,
+adversarial wave 1) — not promotion tuning. Falsifier for this diagnosis: a recapture that restores
+the quadrant's ink and does NOT collapse the fragment count / convert Mech 023.
+
+**Falsified: extending naked-separator absorb candidacy past the closet cap
+(`AbsorbNakedMaxSqft`, tried at 400; knob stays, default 0 = off).** The census said the 60 sf cap
+strands 76–327 sf naked-separator fragments (naked 0.73–1.00) that then die one by one at
+ink:unbacked. Measured at 400: (1) in LL08 it absorbed Mech 023 itself — in a starved zone
+nakedness cannot distinguish a real wall from a watershed line, so the lever erases exactly the
+rooms it was meant to save; LL08 accepted stays 1, savedWork flat 0.063, 657 sf of held review
+turned into excluded void (less visible, not more honest). (2) It broke the per-room honesty bar:
+ML05's R17 (64 sf, naked 0.94) merge re-rolled neighbor zone-fit and dropped accepted R12's
+edge-on-ink 0.956→0.934. (3) The one genuine win — ML08 +2 accepted / +342 sf, orthogonal zone,
+honest merge at naked 0.84 — is invisible to savedWork (ML08 has zero oracle rooms) and cannot be
+separated from the ML05 harm by any naked threshold (harm fired at 0.94, good at 0.84). Board
+savedWork 0.420→0.420, edge-on-ink accepted −0.002, swallow +13 sf. Reopen shape: per-zone rule
+keyed on ink trust through the AdaptivePolicy seam after its recalibration ritual; the ML08
+conversion is the reopen evidence.
+
 ## 2026-08-16 (round 3) — the designer's pen is data: zone edges, slivers, debris chains
 
 Composite of three adoptions lands board savedWork 0.3916 → **0.432**, recall 0.3534 → 0.4052,
