@@ -20,6 +20,21 @@ room size") — do not build the pipeline around the number, and do not fixture-
 
 Process: reports must be colloquial; walls of numbers hindered the verdicts.
 
+## 2026-08-16 — Round 3 summon: A/B verdict + honesty bar + consolidation go
+
+Images: `.artifacts/ab-round3/` (ML05, UL02, LL09, Attic01).
+
+- **"B's look better."** Round-3 adoptions stand. BUT the UL02 wall-clip fix "did not fix what
+  i was looking at specifically. on UL02, the top side of the long thin room on the right has
+  bad walls" — kaitpw annotated the thin room: red lines mark spots where **zone and room lines
+  are parallel AND both live on wall ink** (two authorities for one wall; the snap guard stops
+  crossing ink but nothing unifies parallel-on-same-wall pairs). Queued in TUNING.md round-4
+  backlog per kaitpw ("queue this in the mds somewhere").
+- **Honesty bar re-worded per-room** (kaitpw-approved): no previously-accepted ROOM may get
+  less honest beyond ~0.005 noise; zone and board averages are diagnostic only.
+- **Consolidation slate approved as listed** (oracle v1.1, seal-class split, stale-ink-lane
+  delete, constant dedupe, repair tests, docs), then round-4 backlog + session wrap.
+
 ## 2026-08-16 — Round 2 summon: 45° fix + projector repair + round-3 direction
 
 Images: `.artifacts/ab-round2/` (Attic01, UL02, UL03) and `.artifacts/ab-r2b/` (LL08, LL09).

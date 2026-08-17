@@ -6,10 +6,10 @@ agent reads this first. Orchestrator: the session's Fable. Verdict authority: ka
 ## Mission (kaitpw-locked, 2026-08-16)
 
 Raise **accepted coverage** by making more geometry good enough to pass the existing honesty
-gates — **never by loosening the gates**. Honesty bar (kaitpw-reformulated 2026-08-16, round-2
-summon): **per-zone** — a change may not drop any zone's own accepted edge-on-ink; the board
-MEAN is diagnostic only (ink-poor zones gaining honest rooms dilute the mean — a statistical
-artifact, not dishonesty). Second-order: residual held geometry should get less
+gates — **never by loosening the gates**. Honesty bar (kaitpw-reformulated 2026-08-16, round-3
+summon): **per-room** — no previously-accepted room's own edge-on-ink may fall beyond ~0.005
+noise; zone and board averages are diagnostic only (dilution by honest newcomers is a
+statistical artifact, not dishonesty). Second-order: residual held geometry should get less
 horrendous (held FRs are designer-visible), never at the cost of accepted coverage.
 
 Baseline fact that frames everything: accepted recall 0.284 but **held-recall 0.578** — the solver
@@ -106,6 +106,13 @@ Success = better on every regime, no regime sacrificed.
   v1.1 — report both v1 and v1.1 during the transition; falsifier: a dropped room later
   accepted cleanly at its exact footprint means the dedupe kept the wrong copy. Prototype:
   R3b scratchpad `score_clean_oracle.py`.
+- **Round-4 — parallel-on-ink zone/room edge unification (kaitpw annotation, UL02 thin room,
+  2026-08-16)**: spots where the declared zone line and the detected room line run PARALLEL and
+  BOTH live on the same wall's ink — two authorities for one wall, room edge offset inside the
+  wall band. The R3c snap guard stops edges crossing ink but nothing unifies
+  parallel-on-same-wall pairs; the missing move is a snap ALONG ink (room edge joins the zone
+  line when both stand on one wall band), which the guard currently refuses no differently
+  than a crossing sweep. Annotated image in kaitpw's round-3 reply; TASTE.md entry.
 - **Round-4 design — mixed-frame room projection (ML09's true mechanism)**: rooms speaking two
   frames (45° + orthogonal fixture walls, curves) cannot be expressed by single-frame
   projection; segment-wise frame assignment on the zone's declared frame families, unmodified
