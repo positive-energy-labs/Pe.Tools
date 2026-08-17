@@ -20,6 +20,8 @@ public sealed class BridgeOperationAttribute(string key) : Attribute {
     public string[]? SearchTerms { get; init; }
     public HostOperationIntent Intent { get; init; } = HostOperationIntent.Read;
     public bool RequiresActiveDocument { get; init; } = true;
+    public HostOperationActiveDocumentKind SupportedActiveDocumentKind { get; init; } =
+        HostOperationActiveDocumentKind.Any;
 }
 
 /// <summary>
@@ -48,6 +50,15 @@ public static class BridgeOpRegistry {
                 .Where(assembly => !assembly.IsDynamic)
                 .Where(assembly =>
                     assembly.GetName().Name?.StartsWith("Pe.", StringComparison.Ordinal) == true)
+                // A type can only declare BridgeOp members or BridgeOperationAttribute methods
+                // when its assembly directly references this contract assembly. Avoid reflecting
+                // across unrelated feature assemblies: optional feature dependencies need not be
+                // loaded merely because the host bridge reconnects after a script used them.
+                .Where(assembly => ReferenceEquals(assembly, typeof(BridgeOpRegistry).Assembly)
+                    || assembly.GetReferencedAssemblies().Any(reference =>
+                        string.Equals(reference.Name,
+                            typeof(BridgeOpRegistry).Assembly.GetName().Name,
+                            StringComparison.Ordinal)))
                 .ToArray()
         );
 
@@ -140,7 +151,8 @@ public static class BridgeOpRegistry {
             attribute.Description ?? attribute.DisplayName ?? attribute.Key,
             attribute.SearchTerms,
             attribute.Intent,
-            attribute.RequiresActiveDocument
+            attribute.RequiresActiveDocument,
+            supportedActiveDocumentKind: attribute.SupportedActiveDocumentKind
         );
         var create = typeof(BridgeOp)
             .GetMethods(BindingFlags.Public | BindingFlags.Static)
@@ -220,7 +232,7 @@ public static class BridgeOpRegistry {
             return false;
         if (!string.Equals(parts[0], "revit", StringComparison.Ordinal))
             return false;
-        return parts[1] is "context" or "catalog" or "matrix" or "detail" or "resolve" or "apply"
+        return parts[1] is "glance" or "context" or "catalog" or "matrix" or "detail" or "resolve" or "apply"
             && !string.IsNullOrWhiteSpace(parts[2])
             && (parts.Length == 3 || !string.IsNullOrWhiteSpace(parts[3]));
     }
@@ -233,6 +245,7 @@ public sealed record HostOpsCatalogEntry(
     string CostTier,
     string Visibility,
     bool RequiresActiveDocument,
+    string SupportedActiveDocumentKind,
     string Description,
     IReadOnlyList<string> SearchTerms,
     IReadOnlyList<HostOperationRequestExample> RequestExamples,
@@ -240,7 +253,33 @@ public sealed record HostOpsCatalogEntry(
     IReadOnlyList<string> CallGuidance,
     string RequestSchemaJson,
     string ResponseSchemaJson
-);
+) {
+    /// <summary>
+    ///     The single projection from a registered op to its catalog entry — used by the live
+    ///     host.ops.catalog op and the offline pe-dev ops-catalog dump alike, so both lanes
+    ///     serve byte-identical entries.
+    /// </summary>
+    public static HostOpsCatalogEntry FromOp(BridgeOp op) {
+        var definition = op.Definition;
+        var metadata = definition.AgentMetadata;
+        return new HostOpsCatalogEntry(
+            definition.Key,
+            definition.DisplayName,
+            metadata.Intent.ToString(),
+            metadata.CostTier.ToString(),
+            metadata.Visibility.ToString(),
+            metadata.RequiresActiveDocument,
+            metadata.SupportedActiveDocumentKind.ToString(),
+            metadata.Description,
+            metadata.SearchTerms,
+            metadata.RequestExamples,
+            metadata.SafeDefaultRequestJson,
+            metadata.CallGuidance,
+            BridgeOpSchemaGenerator.GetRequestSchemaJson(definition.RequestType),
+            BridgeOpSchemaGenerator.GetResponseSchemaJson(definition.ResponseType)
+        );
+    }
+}
 
 public sealed record HostOpsCatalogData(
     IReadOnlyList<HostOpsCatalogEntry> Operations

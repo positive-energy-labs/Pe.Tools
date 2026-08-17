@@ -47,8 +47,9 @@
     "test": "vp test",
     "check": "vp check",
     "prepublishOnly": "vp run build",
-    "codegen": "vpx node --import jiti/register scripts/host-typegen.ts",
-    "codegen:check": "vpx node --import jiti/register scripts/host-typegen.ts --check"
+    "codegen": "dotnet run --project ../../../Pe.Dev.Cli -- ops-catalog --out .cache/ops-catalog.json && vpx node --import jiti/register scripts/host-typegen.ts --catalog .cache/ops-catalog.json",
+    "codegen:check": "dotnet run --project ../../../Pe.Dev.Cli -- ops-catalog --out .cache/ops-catalog.json && vpx node --import jiti/register scripts/host-typegen.ts --catalog .cache/ops-catalog.json --check",
+    "codegen:verify-live": "vpx node --import jiti/register scripts/host-typegen.ts --check"
   },
   "dependencies": {
     "effect": "4.0.0-beta.92"

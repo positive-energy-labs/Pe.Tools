@@ -1,8 +1,7 @@
 import { expect, test } from "vite-plus/test";
 import {
   cellText,
-  decodeMatrixData,
-  excludedParameters,
+  type FamilySnapshotRecord,
   visibleParameters,
 } from "../src/host/loaded-families-view";
 
@@ -85,25 +84,20 @@ const matrixResponse = {
   issues: [],
 };
 
-test("matrix response decodes and helpers split visible/excluded on excludedReason", () => {
-  const { families } = decodeMatrixData(matrixResponse);
-  const fam = families[0];
+test("matrix response preserves the generated shape and filters excluded parameters", () => {
+  const fam = matrixResponse.families[0] as FamilySnapshotRecord;
 
   // canonical record fields survive decode as-is
   expect(fam.typeNames).toEqual(["!Mechanical Equipment_Clearance_Rectangular_UH"]);
   expect(fam.isPartial).toBe(false);
   expect(fam.parameters).toHaveLength(3);
 
-  // one parameters list, split by excludedReason
+  // visibleParameters projects the single wire list by excludedReason
   const visible = visibleParameters(fam);
-  const excluded = excludedParameters(fam);
   expect(visible.map((p) => p.definition.identity.name)).toEqual([
     "Appears in Schedule",
     "Clearance Block Material",
   ]);
-  expect(excluded).toHaveLength(1);
-  expect(excluded[0].definition.identity.name).toBe("Area");
-  expect(excluded[0].excludedReason).toBe("ProjectObservedBuiltIn");
 
   // nested definition + native scope field on the wire
   const [vp, vp2] = visible;
@@ -114,8 +108,8 @@ test("matrix response decodes and helpers split visible/excluded on excludedReas
   expect(vp2.scope).toBe("Family");
 });
 
-test("null vs empty-string cells are preserved by decode and coerced only at render", () => {
-  const fam = decodeMatrixData(matrixResponse).families[0];
+test("null vs empty-string cells are coerced only at render", () => {
+  const fam = matrixResponse.families[0] as FamilySnapshotRecord;
   const [vp, vp2] = visibleParameters(fam);
 
   // decode preserves the wire distinction: null = no value, "" = empty string

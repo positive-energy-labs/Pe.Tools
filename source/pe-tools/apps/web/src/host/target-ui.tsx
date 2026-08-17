@@ -1,5 +1,3 @@
-import type { CSSProperties } from "react";
-
 import {
   selectorLabel,
   type SessionFacts,
@@ -9,19 +7,26 @@ import {
 
 /**
  * The shared visual vocabulary for targets. One tone per resolution state, used identically
- * by the composer chip, the picker, the world inspector, and the docs page — so "dashed means
- * inferred" is learned once.
+ * by the composer chip, the picker, and the world inspector — so "dashed means inferred" is
+ * learned once.
+ *
+ * Colour (2026-08-16 shared-chrome pass): lanes are TAXONOMY — they spend the viz ladder
+ * (label carries the meaning; colour only speeds it up). Resolution states spend meaning
+ * roles: a resolved live connection is `--r-done` (the /instances phase verdict precedent),
+ * ambiguity and a dangling pin are `--r-caution` (attention/stale — a busy or stale target
+ * is not the model disagreeing), and "nothing there" is a hairline. No blue: pinned-by-you
+ * is authorship, and authorship never buys the commit hue.
  */
 
-export const LANE_CAT: Record<SessionLane, string> = {
-  installed: "slate",
-  rrd: "green",
-  sandbox: "lichen",
-  unknown: "kiln", // attention hue — an unlaned session is unreachable via `user`
+export const LANE_VIZ: Record<SessionLane, string> = {
+  installed: "3", // slate's viz rung — series identity carried over from cat-slate
+  dev: "2",
+  sandbox: "4",
+  unknown: "6", // the label says "unknown"; the taxonomy colour just separates it
 };
 
 export function laneVar(lane: SessionLane): string {
-  return `var(--cat-${LANE_CAT[lane]})`;
+  return `var(--viz-${LANE_VIZ[lane]})`;
 }
 
 export type ChipTone = "muted" | "implicit" | "pinned" | "ambiguous" | "dangling";
@@ -59,47 +64,19 @@ export function chipDescriptor(r: TargetResolution): {
   }
 }
 
-export const TONE_STYLE: Record<ChipTone, CSSProperties> = {
-  muted: { border: "1px dashed var(--line)", color: "var(--muted-foreground)" },
-  implicit: { border: "1px dashed var(--line-2)", color: "var(--foreground)" },
-  pinned: { border: "1px solid var(--pe-blue)", color: "var(--foreground)" },
-  ambiguous: {
-    border: "1px solid color-mix(in srgb, var(--cat-kiln) 60%, transparent)",
-    background: "color-mix(in srgb, var(--cat-kiln) 12%, transparent)",
-    color: "var(--cat-kiln)",
-  },
-  dangling: {
-    border: "1px solid color-mix(in srgb, var(--cat-clay) 50%, transparent)",
-    background: "color-mix(in srgb, var(--cat-clay) 10%, transparent)",
-    color: "var(--cat-clay)",
-  },
-};
-
-export function toneColor(tone: ChipTone): string {
-  return tone === "pinned"
-    ? "var(--pe-blue)"
-    : tone === "ambiguous"
-      ? "var(--cat-kiln)"
-      : tone === "dangling"
-        ? "var(--cat-clay)"
-        : tone === "implicit"
-          ? "var(--line-2)"
-          : "var(--line)";
-}
-
 export function LiveDot({ tone, lane }: { tone: ChipTone; lane?: SessionLane }) {
   const color =
     tone === "pinned"
-      ? "var(--pe-blue)"
+      ? "var(--r-done)"
       : tone === "implicit"
         ? lane
           ? laneVar(lane)
-          : "var(--muted-foreground)"
+          : "var(--r-ink-2)"
         : tone === "ambiguous"
-          ? "var(--cat-kiln)"
+          ? "var(--r-caution)"
           : tone === "dangling"
-            ? "var(--cat-clay)"
-            : "var(--line-2)";
+            ? "var(--r-caution)"
+            : "var(--r-line-2)";
   return (
     <span
       className="inline-block shrink-0"
@@ -111,10 +88,8 @@ export function LiveDot({ tone, lane }: { tone: ChipTone; lane?: SessionLane }) 
 export function LaneBadge({ lane }: { lane: SessionLane }) {
   return (
     <span
-      className="font-[var(--font-pe-mono)]"
+      className="face-mono t-caption"
       style={{
-        fontSize: 9,
-        letterSpacing: "0.06em",
         padding: "0 4px",
         borderRadius: 2,
         color: laneVar(lane),
@@ -125,13 +100,6 @@ export function LaneBadge({ lane }: { lane: SessionLane }) {
       {lane.toUpperCase()}
     </span>
   );
-}
-
-/** "obs 4s ago" from an observation timestamp; observation only, never computed staleness. */
-export function ageLabel(observedAtUnixMs: number | undefined, nowMs: number): string {
-  if (!observedAtUnixMs) return "";
-  const s = Math.max(0, Math.round((nowMs - observedAtUnixMs) / 1000));
-  return s < 60 ? `obs ${s}s ago` : `obs ${Math.round(s / 60)}m ago`;
 }
 
 /** One-line mono readout of a resolution — the inspector row. */

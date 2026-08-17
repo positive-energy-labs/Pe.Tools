@@ -1,0 +1,13 @@
+# Candidate takeoffs, scorecards and takeoff scoreboards are per-run outputs, not fixtures.
+*/candidate.rooms.json
+*/scorecard.*
+*/scoreboard.txt
+*/scoreboard.json
+*/overlay_*.png
+# Local copies of engineer originals and edit-lane self-check outputs — never committed.
+*/*.r10
+*/edit-check.*
+# Bluebeam takeoff PDFs are local copies from the G: drive — mine them, never commit them.
+*/bluebeam/**/*.pdf
+*/bluebeam/**/*.png
+*/probe/harvest_*.json

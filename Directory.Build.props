@@ -43,4 +43,12 @@
         <PeRevitAddinManifestFileName>Pe.App.addin</PeRevitAddinManifestFileName>
         <PeRevitRuntimeDescriptorFileName>Pe.App.runtime.json</PeRevitRuntimeDescriptorFileName>
     </PropertyGroup>
+
+    <!-- D20 posture for the installed product: every assembly ships its doc-comment XML so
+         local tooling (docs search, agents) can read Pe API docs next to the binaries.
+         Undocumented publics stay legal — CS1591 is noise at this stage. -->
+    <PropertyGroup>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+    </PropertyGroup>
 </Project>

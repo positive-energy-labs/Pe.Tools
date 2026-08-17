@@ -1,23 +1,27 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Check, CheckCheck, List, Loader2, RefreshCw, RotateCcw, Sparkles, X } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import {
-  type ScheduleCellBinding,
   type ScheduleGridDocument,
   scheduleCellKey,
   scheduleGridRouteState,
   splitScheduleCellKey,
 } from "@pe/agent-contracts";
 
-import { Badge } from "#/components/ui/badge";
-import { Button } from "#/components/ui/button";
-import { Input } from "#/components/ui/input";
+import { AddressingBar } from "#/components/lang/addressing-bar";
+import type { StateCellProps } from "#/components/lang/cell";
+import { FactChip } from "#/components/lang/chip";
+import { EmptyState } from "#/components/lang/empty";
+import { HelpTip } from "#/components/lang/help";
+import { OutcomeLine } from "#/components/lang/outcome";
+import { Verb } from "#/components/lang/verb";
+import { MasterTable } from "#/components/master-table/master-table";
+import type { Column } from "#/components/master-table/model";
 import { PickList } from "#/components/ui/pick-list";
 import { SidePane } from "#/components/ui/side-pane";
 import { ValueDiff } from "#/components/ui/value-diff";
-import { HostConnectionPill } from "#/host/issues";
-import { cn } from "#/lib/utils";
+import { useVerb } from "#/lib/use-verb";
+import { timeAgo } from "#/lib/utils";
 import { useRouteState } from "#/workbench/route-state";
 
 /**
@@ -26,13 +30,21 @@ import { useRouteState } from "#/workbench/route-state";
  * into the grid with cell binding handles. pea proposes cell values; the engineer reviews in
  * the grid or the pending-changes strip, stages, and pushes back to Revit. All state lives in
  * the route-state document, written through the dispatcher as `actor:"human"`. Cells carry a
- * proposal → staged → pushed trichotomy rendered as ValueDiff; only the human can push.
+ * proposal → staged → pushed trichotomy; only the human can push.
+ *
+ * Design-language pass 2026-08-16: the grid is `MasterTable` with one `state:` column per
+ * schedule column — proposal wash, unsaved square, squiggles and the readout band all come from
+ * the cell grammar; editing rides `StateCell.onCommit` (typing a proposed cell severs the
+ * proposal — §3 "typing beats proposing"). In-cell approve/deny icons died with the hand-rolled
+ * table; the pending strip is the reviewer. Gaps in docs/features/schedule-grid/DESIGN-AUDIT.md.
  */
 export const Route = createFileRoute("/schedule-grid")({
   component: ScheduleGridRoute,
 });
 
 type CellState = NonNullable<ScheduleGridDocument["cells"][string]>;
+type Snapshot = NonNullable<ScheduleGridDocument["snapshot"]>;
+type ScheduleRow = Snapshot["rows"][number];
 
 function ScheduleGridRoute() {
   const { slice, hydrated, apply, command, peaActive, connected } =
@@ -42,9 +54,9 @@ function ScheduleGridRoute() {
   const catalog = document?.catalog ?? null;
   const cells = document?.cells ?? {};
 
-  const [busy, setBusy] = useState<null | "catalog" | "refresh" | "push">(null);
-  const [error, setError] = useState<string | null>(null);
-  const [edit, setEdit] = useState<{ key: string; value: string } | null>(null);
+  const verb = useVerb();
+  const [partial, setPartial] = useState<string | null>(null);
+  const [activeRow, setActiveRow] = useState<string | null>(null);
 
   const staged = Object.entries(cells).filter(([, cell]) => cell.staged != null);
   const stagedCount = staged.length;
@@ -57,25 +69,42 @@ function ScheduleGridRoute() {
   );
   const pushable = stagedCount > 0 && attention === 0;
 
-  const run = async (kind: "catalog" | "refresh" | "push", input: Record<string, unknown> = {}) => {
-    setBusy(kind);
-    setError(null);
-    try {
+  /** One in-flight command; a push's per-cell failures surface as a `partial` outcome —
+   * the failed cells stay staged, which is exactly what the caution kind says. */
+  const runCommand = (
+    label: string,
+    kind: "catalog" | "refresh" | "push",
+    input: Record<string, unknown> = {},
+    receipt?: string,
+  ) =>
+    void verb.run(label, async () => {
+      setPartial(null);
       const result = await command(kind, input);
-      if (!result.ok) setError(result.error ?? result.hint ?? `${kind} failed.`);
-      else setError(pushFailureNote(result.result));
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : `${kind} failed.`);
-    } finally {
-      setBusy(null);
-    }
-  };
+      if (!result.ok) throw new Error(result.error ?? result.hint ?? `${label} failed.`);
+      const failureNote = pushFailureNote(result.result);
+      if (failureNote != null) {
+        setPartial(failureNote);
+        return;
+      }
+      return receipt;
+    });
 
   const stageValue = (key: string, value: string) =>
     void apply([
       { path: ["cells", key, "staged"], value: { value } },
       { path: ["cells", key, "review"], value: "good" },
     ]);
+  /** Typing beats proposing (§3): a user edit severs an open proposal outright. */
+  const stageEdit = (key: string, value: string): string | void => {
+    if (value.length === 0)
+      return "an empty value cannot be staged — type a value, or leave the cell as it was";
+    const patches: { path: (string | number)[]; value?: unknown }[] = [
+      { path: ["cells", key, "staged"], value: { value } },
+      { path: ["cells", key, "review"], value: "good" },
+    ];
+    if (cells[key]?.proposal != null) patches.push({ path: ["cells", key, "proposal"] });
+    void apply(patches);
+  };
   const deny = (key: string) =>
     void apply([
       { path: ["cells", key, "proposal"] },
@@ -86,11 +115,6 @@ function ScheduleGridRoute() {
       { path: ["cells", key, "staged"] },
       { path: ["cells", key, "review"], value: "none" },
     ]);
-
-  const commitEdit = () => {
-    if (edit && edit.value.length > 0) stageValue(edit.key, edit.value);
-    setEdit(null);
-  };
 
   const columnHeader = (columnNumber: number) =>
     snapshot?.columns.find((column) => column.columnNumber === columnNumber)?.headerText ??
@@ -104,62 +128,184 @@ function ScheduleGridRoute() {
     return binding?.displayValue ?? (columnIndex >= 0 ? (row?.values[columnIndex] ?? null) : null);
   };
 
-  return (
-    <main className="flex h-screen flex-col overflow-hidden bg-background">
-      <header className="shrink-0 border-b border-border px-4 pb-2 pt-2.5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex min-w-0 items-baseline gap-3">
-            <h1 className="truncate font-pe-display text-lg font-semibold tracking-tight">
-              {snapshot?.scheduleName ?? "Schedules"}
-            </h1>
-            <span className="tele text-muted-foreground">
-              {snapshot
-                ? `${snapshot.columns.length}×${snapshot.rows.length}${
-                    snapshot.truncated ? " · truncated" : ""
-                  }${snapshot.takenAt ? ` · read ${timeAgo(snapshot.takenAt)}` : ""}`
-                : hydrated
-                  ? "no schedule open"
-                  : "connecting…"}
-            </span>
-          </div>
+  /** THE CELL-STATE CLAUSE: one `state:` column per schedule column. The grammar draws the
+   * proposal wash, the unsaved square and the locked body; prose facts (binding, blocker,
+   * pea's note, "needs review") ride the note and read out in the band under the table. */
+  const gridColumns = useMemo<Column<ScheduleRow>[]>(() => {
+    if (!snapshot) return [];
+    return [
+      {
+        key: "row",
+        label: "#",
+        title: "Schedule row number. ×N marks a grouped row standing for N elements.",
+        right: true,
+        width: "w-12",
+        lock: true,
+        sort: (row) => row.rowNumber,
+        cell: (row) => (
+          <span
+            className="face-mono t-caption block truncate px-1.5 text-right text-[var(--r-ink-2)]"
+            title={`row ${row.rowNumber} · ${row.kind}${row.subjectIds.length > 0 ? ` · elements [${row.subjectIds.join(",")}]` : ""}`}
+          >
+            {row.rowNumber}
+            {row.subjectIds.length > 1 ? ` ×${row.subjectIds.length}` : ""}
+          </span>
+        ),
+      },
+      ...snapshot.columns.map((column): Column<ScheduleRow> => {
+        const columnIndex = snapshot.columns.findIndex(
+          (candidate) => candidate.columnNumber === column.columnNumber,
+        );
+        const kindNote = [
+          column.isCalculated ? "ƒ calculated — Revit derives it; never writable" : null,
+          column.isCombinedParameter
+            ? "combined parameter — several parameters in one column"
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+        return {
+          key: `c${column.columnNumber}`,
+          label: column.headerText || `col ${column.columnNumber}`,
+          header:
+            column.isCalculated || column.isCombinedParameter
+              ? `${column.headerText} · ${column.isCalculated ? "ƒ" : "comb"}`
+              : undefined,
+          title: kindNote || "Schedule column — values write through the cell's parameter binding.",
+          search: (row) => row.values[columnIndex] ?? "",
+          state: (row): StateCellProps => {
+            const key = scheduleCellKey(row.rowNumber, column.columnNumber);
+            const binding = row.bindings.find(
+              (candidate) => candidate.columnNumber === column.columnNumber,
+            );
+            const cell = cells[key];
+            const isStaged = cell?.staged != null;
+            const isProposal = !isStaged && cell?.proposal != null;
+            const current = binding?.displayValue ?? row.values[columnIndex] ?? "";
+            const shown = isStaged
+              ? (cell?.staged?.value ?? "")
+              : isProposal
+                ? String(cell?.proposal?.value ?? "")
+                : current;
+            const editable = binding?.isEditable === true && binding.blocker === "None";
+            const capReason =
+              binding == null
+                ? "no parameter behind this cell — the row is unbound here"
+                : editable
+                  ? undefined
+                  : binding.blocker !== "None"
+                    ? `blocked: ${binding.blocker}`
+                    : "read-only — this parameter cannot be written from a schedule";
+            const note =
+              [
+                cell?.review === "attention"
+                  ? "needs review — flagged; push refuses while it stands"
+                  : null,
+                (isStaged || isProposal) && shown !== current ? `was ${current || "—"}` : null,
+                isProposal
+                  ? cell?.proposal?.note
+                    ? `pea: ${cell.proposal.note}`
+                    : "pea proposed this"
+                  : null,
+                binding?.isTypeParameter
+                  ? "type parameter — shared across every row of this type"
+                  : null,
+                binding?.hasMixedValues ? "mixed values across targets" : null,
+                binding
+                  ? `param ${binding.parameterName ?? "—"} · ${binding.storageType} · targets [${binding.targetElementIds.join(",")}]`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ") || undefined;
+            return {
+              value: shown,
+              stage: isStaged ? "staged" : isProposal ? "proposed" : "clean",
+              stagedBy: "you",
+              cap: binding == null ? "nohome" : editable ? "editable" : "readonly",
+              capReason,
+              note,
+              onCommit: editable ? (text) => stageEdit(key, text) : undefined,
+            };
+          },
+        };
+      }),
+    ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stageEdit closes over `cells`, listed
+  }, [snapshot, cells]);
 
-          <div className="flex flex-wrap items-center gap-2">
-            <HostConnectionPill connected={connected} label="Connected" />
-            {peaActive && (
-              <span className="tele-label inline-flex items-center gap-1.5 rounded-[var(--radius)] border border-[var(--pea-line)] bg-[var(--pea-tint)] px-2 py-0.5 text-[var(--pe-green)]">
-                <Sparkles className="size-3 animate-pulse" />
-                pea working
-              </span>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy != null || !snapshot}
-              onClick={() => void run("refresh", { scheduleId: snapshot?.scheduleId })}
-              title="Re-read this schedule from Revit"
-            >
-              <RefreshCw className={busy === "refresh" ? "animate-spin" : ""} />
-              Re-read
-            </Button>
-            <Button
-              size="sm"
-              disabled={!pushable || busy != null}
-              onClick={() => void run("push")}
+  const pushReason =
+    stagedCount === 0
+      ? "Nothing is staged yet — approve a proposal or type into a cell first. Push writes staged values through the bridge into Revit."
+      : attention > 0
+        ? `${attention} staged cell${attention === 1 ? "" : "s"} need review before anything is written.`
+        : `Write ${stagedCount} staged cell${stagedCount === 1 ? "" : "s"} through the bridge into Revit — the only verb here that leaves the page.`;
+
+  return (
+    <main className="flex h-screen flex-col overflow-hidden bg-[var(--r-page)]">
+      <AddressingBar
+        name="schedules"
+        sentence={
+          snapshot ? (
+            <span className="t-value text-[var(--r-ink)]">{snapshot.scheduleName}</span>
+          ) : (
+            <span className="t-value italic text-[var(--r-ink-mute)]">
+              {hydrated ? "no schedule open" : "connecting"}
+            </span>
+          )
+        }
+        facts={
+          <>
+            <FactChip
+              tone={connected ? "meta" : "caution"}
               title={
-                stagedCount === 0
-                  ? "Nothing staged yet — approve a proposal or edit a cell"
-                  : attention > 0
-                    ? `${attention} staged cell${attention === 1 ? "" : "s"} need review first`
-                    : undefined
+                connected
+                  ? "The route-state bridge is connected — pea's proposals arrive live over SSE."
+                  : "The route-state bridge is not connected. Nothing arrives and nothing can be pushed; a busy bridge is not the model disagreeing."
               }
             >
-              {busy === "push" ? <Loader2 className="animate-spin" /> : <CheckCheck />}
-              {busy === "push" ? "Pushing…" : `Push ${stagedCount} to Revit`}
-            </Button>
-          </div>
-        </div>
-        {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
-      </header>
+              bridge {connected ? "connected" : "disconnected"}
+            </FactChip>
+            {snapshot ? (
+              <>
+                <FactChip title="Columns × rows in this snapshot, as read from Revit.">
+                  {snapshot.columns.length}×{snapshot.rows.length}
+                </FactChip>
+                {snapshot.truncated ? (
+                  <FactChip
+                    tone="caution"
+                    title="The read hit its row cap — rows beyond it are not shown and cannot be edited here. Narrow the schedule in Revit or push what is visible."
+                  >
+                    truncated
+                  </FactChip>
+                ) : null}
+                {snapshot.takenAt ? (
+                  <FactChip title="When this snapshot was read from Revit. The model may have moved since — re-read to check.">
+                    read {timeAgo(snapshot.takenAt)}
+                  </FactChip>
+                ) : null}
+              </>
+            ) : null}
+          </>
+        }
+        verb={
+          <Verb
+            tone="commit"
+            label={`push ${stagedCount} to Revit`}
+            busy={verb.busy === "push"}
+            disabled={!pushable || verb.busy != null}
+            reason={pushReason}
+            onClick={() =>
+              runCommand(
+                "push",
+                "push",
+                {},
+                `pushed ${stagedCount} cell${stagedCount === 1 ? "" : "s"} to Revit`,
+              )
+            }
+          />
+        }
+        advisory={peaActive ? <OutcomeLine kind="busy" label="pea is working" /> : undefined}
+      />
 
       <div className="flex min-h-0 flex-1">
         <SidePane
@@ -169,41 +315,40 @@ function ScheduleGridRoute() {
           defaultWidth={264}
           header={
             <div className="flex items-center justify-between gap-2">
-              <span className="section-label">
-                Schedules
-                {catalog && (
-                  <span className="tele ml-1.5 normal-case text-muted-foreground">
+              <span className="flex items-baseline gap-1.5">
+                <span className="t-caption t-upper text-[var(--r-ink-2)]">schedules</span>
+                {catalog ? (
+                  <span className="face-mono t-caption normal-case text-[var(--r-ink-2)]">
                     {catalog.schedules.length}
                     {catalog.takenAt ? ` · ${timeAgo(catalog.takenAt)}` : ""}
                   </span>
-                )}
+                ) : null}
               </span>
-              <Button
-                size="icon-sm"
-                variant="ghost"
-                title="Re-list the document's schedules"
-                disabled={busy != null}
-                onClick={() => void run("catalog")}
-              >
-                {busy === "catalog" ? <Loader2 className="animate-spin" /> : <List />}
-              </Button>
+              <Verb
+                label="re-list"
+                busy={verb.busy === "re-list"}
+                disabled={verb.busy != null}
+                reason="Read the document's schedule list from Revit again. A read — nothing is written."
+                onClick={() => runCommand("re-list", "catalog")}
+              />
             </div>
           }
         >
           {catalog == null ? (
-            <div className="px-3 py-3">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy != null}
-                onClick={() => void run("catalog")}
+            <div className="space-y-2 px-3 py-3">
+              <EmptyState
+                story="scope"
+                exit="list schedules to fill this rail — a read, nothing is changed"
               >
-                {busy === "catalog" ? <Loader2 className="animate-spin" /> : <List />}
-                List schedules
-              </Button>
-              <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-                Reads every schedule in the document so you (or pea) can open any of them.
-              </p>
+                no schedule list yet
+              </EmptyState>
+              <Verb
+                label="list schedules"
+                busy={verb.busy === "list schedules"}
+                disabled={verb.busy != null}
+                reason="Reads every schedule in the document so you (or pea) can open any of them. A read — nothing is written."
+                onClick={() => runCommand("list schedules", "catalog")}
+              />
             </div>
           ) : (
             <PickList
@@ -216,9 +361,9 @@ function ScheduleGridRoute() {
                 hint: `id ${entry.scheduleId}${entry.isPlacedOnSheet ? " · placed on sheet" : ""}`,
               }))}
               activeId={snapshot ? String(snapshot.scheduleId) : null}
-              onPick={(id) => void run("refresh", { scheduleId: Number(id) })}
+              onPick={(id) => runCommand("open", "refresh", { scheduleId: Number(id) })}
               placeholder="Filter schedules…"
-              disabled={busy != null}
+              disabled={verb.busy != null}
               emptyNote="No schedules in the document."
               className="h-full"
             />
@@ -226,31 +371,82 @@ function ScheduleGridRoute() {
         </SidePane>
 
         <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 overflow-auto p-3">
+          {/* grid-pane strip: the pane's own verb + the outcome lane — plain content */}
+          <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--r-line)] px-3 py-1">
+            <Verb
+              label="re-read"
+              busy={verb.busy === "re-read"}
+              disabled={!snapshot || verb.busy != null}
+              reason={
+                snapshot
+                  ? `Read “${snapshot.scheduleName}” from Revit again — replaces this snapshot; proposals and staged cells stay.`
+                  : "No schedule is open — pick one from the rail."
+              }
+              onClick={() => runCommand("re-read", "refresh", { scheduleId: snapshot?.scheduleId })}
+            />
+            {verb.busy ? (
+              <OutcomeLine kind="busy" label={`${verb.busy} — ${verb.seconds}s`} />
+            ) : null}
+            {verb.outcome ? (
+              <OutcomeLine kind={verb.outcome.kind} label={verb.outcome.text} />
+            ) : partial != null ? (
+              <OutcomeLine
+                kind="partial"
+                label={partial}
+                says="failed cells stay staged — fix and push again"
+              />
+            ) : verb.receipt ? (
+              <OutcomeLine kind="receipt" label={verb.receipt.text} />
+            ) : null}
+          </div>
+
+          <div className="flex min-h-0 flex-1 flex-col">
             {snapshot ? (
-              <ScheduleTable
-                snapshot={snapshot}
-                cells={cells}
-                edit={edit}
-                setEdit={setEdit}
-                commitEdit={commitEdit}
-                stageValue={stageValue}
-                deny={deny}
-                undo={undo}
+              <MasterTable
+                rows={snapshot.rows}
+                columns={gridColumns}
+                rowKey={(row) => String(row.rowNumber)}
+                // THE OWED MARKER (fit reviews, ruled 2026-08-16): staged cells flagged for
+                // review owe a decision, and push refuses while any remain — the gutter
+                // locates them per row with the count in caution ink.
+                gutter={(row) => {
+                  const owed = snapshot.columns.filter(
+                    (column) =>
+                      cells[scheduleCellKey(row.rowNumber, column.columnNumber)]?.review ===
+                      "attention",
+                  ).length;
+                  return owed > 0
+                    ? {
+                        count: owed,
+                        tone: "caution" as const,
+                        title: `${owed} staged cell${owed === 1 ? "" : "s"} on this row ${owed === 1 ? "is" : "are"} flagged for review — push refuses while any remain`,
+                      }
+                    : null;
+                }}
+                scopeLabel="schedule rows"
+                searchPlaceholder="find in cells"
+                activeKey={activeRow}
+                empty={
+                  <EmptyState
+                    story="scope"
+                    exit="re-read the schedule, or pick another from the rail"
+                  >
+                    this schedule has no rows
+                  </EmptyState>
+                }
               />
             ) : (
-              <div className="grid h-full place-items-center">
-                <div className="max-w-sm text-center">
-                  <p className="text-sm text-foreground">
-                    {hydrated ? "Open a schedule to start editing" : "Connecting to the workbench…"}
-                  </p>
-                  {hydrated && (
-                    <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                      Pick one from the rail (type to filter, ↑/↓ then Enter), or ask pea — it can
-                      list, open, and propose; only you can push.
-                    </p>
-                  )}
-                </div>
+              <div className="grid h-full place-items-center p-6">
+                {hydrated ? (
+                  <EmptyState
+                    story="scope"
+                    exit="pick one from the rail (type to filter, ↑/↓ then Enter), or ask pea to open one"
+                  >
+                    no schedule open
+                  </EmptyState>
+                ) : (
+                  <OutcomeLine kind="busy" label="connecting to the workbench" />
+                )}
               </div>
             )}
           </div>
@@ -266,268 +462,12 @@ function ScheduleGridRoute() {
               stageValue={stageValue}
               deny={deny}
               undo={undo}
+              locate={(key) => setActiveRow(String(splitScheduleCellKey(key).rowNumber))}
             />
           )}
         </section>
       </div>
     </main>
-  );
-}
-
-/* ── the grid — dense hairline table, tele values, trichotomy tints ─────────── */
-
-function ScheduleTable({
-  snapshot,
-  cells,
-  edit,
-  setEdit,
-  commitEdit,
-  stageValue,
-  deny,
-  undo,
-}: {
-  snapshot: NonNullable<ScheduleGridDocument["snapshot"]>;
-  cells: Record<string, CellState>;
-  edit: { key: string; value: string } | null;
-  setEdit: (edit: { key: string; value: string } | null) => void;
-  commitEdit: () => void;
-  stageValue: (key: string, value: string) => void;
-  deny: (key: string) => void;
-  undo: (key: string) => void;
-}) {
-  return (
-    <div className="inline-block min-w-0 max-w-full overflow-auto rounded-[var(--radius)] border border-border bg-card">
-      <table className="border-collapse text-xs">
-        <thead className="sticky top-0 z-10">
-          <tr>
-            <th className="tele-label border-b border-border bg-muted px-2.5 py-1.5 text-right font-normal text-muted-foreground">
-              #
-            </th>
-            {snapshot.columns.map((column) => (
-              <th
-                key={column.columnNumber}
-                className="tele-label border-b border-l border-border bg-muted px-2.5 py-1.5 text-left font-normal text-muted-foreground"
-              >
-                {column.headerText}
-                {column.isCalculated && (
-                  <Badge variant="kiln" className="ml-1.5 align-middle">
-                    calc
-                  </Badge>
-                )}
-                {column.isCombinedParameter && (
-                  <Badge variant="kiln" className="ml-1.5 align-middle">
-                    comb
-                  </Badge>
-                )}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {snapshot.rows.map((row) => (
-            <tr key={row.rowNumber}>
-              <td
-                className="tele whitespace-nowrap border-b border-[var(--line-soft)] px-2.5 py-1 text-right text-muted-foreground"
-                title={`row ${row.rowNumber} · ${row.kind}${row.subjectIds.length > 0 ? ` · elements [${row.subjectIds.join(",")}]` : ""}`}
-              >
-                {row.rowNumber}
-                {row.subjectIds.length > 1 ? ` ×${row.subjectIds.length}` : ""}
-              </td>
-              {snapshot.columns.map((column, columnIndex) => {
-                const key = scheduleCellKey(row.rowNumber, column.columnNumber);
-                const binding = row.bindings.find(
-                  (candidate) => candidate.columnNumber === column.columnNumber,
-                );
-                return (
-                  <Cell
-                    key={column.columnNumber}
-                    cellKey={key}
-                    text={row.values[columnIndex] ?? ""}
-                    binding={binding}
-                    cell={cells[key]}
-                    editing={edit?.key === key ? edit.value : null}
-                    onEditStart={() =>
-                      binding?.isEditable && binding.blocker === "None"
-                        ? setEdit({
-                            key,
-                            value: cells[key]?.staged?.value ?? row.values[columnIndex] ?? "",
-                          })
-                        : undefined
-                    }
-                    onEditChange={(value) => setEdit({ key, value })}
-                    onEditCommit={commitEdit}
-                    onEditCancel={() => setEdit(null)}
-                    onApprove={stageValue}
-                    onDeny={deny}
-                    onUndo={undo}
-                  />
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-interface CellProps {
-  cellKey: string;
-  text: string;
-  binding: ScheduleCellBinding | undefined;
-  cell: CellState | undefined;
-  editing: string | null;
-  onEditStart: () => void;
-  onEditChange: (value: string) => void;
-  onEditCommit: () => void;
-  onEditCancel: () => void;
-  onApprove: (key: string, value: string) => void;
-  onDeny: (key: string) => void;
-  onUndo: (key: string) => void;
-}
-
-function Cell({
-  cellKey,
-  text,
-  binding,
-  cell,
-  editing,
-  onEditStart,
-  onEditChange,
-  onEditCommit,
-  onEditCancel,
-  onApprove,
-  onDeny,
-  onUndo,
-}: CellProps) {
-  const staged = cell?.staged != null;
-  const proposal = !staged && cell?.proposal != null;
-  const attention = cell?.review === "attention";
-  const editable = binding?.isEditable === true && binding.blocker === "None";
-  const current = binding?.displayValue ?? text;
-  const next = staged
-    ? (cell?.staged?.value ?? "")
-    : proposal
-      ? String(cell?.proposal?.value ?? "")
-      : null;
-
-  const tooltip = binding
-    ? [
-        `param: ${binding.parameterName ?? "—"} (${binding.parameterId ?? "—"})`,
-        `storage: ${binding.storageType}`,
-        `targets: [${binding.targetElementIds.join(",")}]`,
-        binding.blocker !== "None" ? `blocker: ${binding.blocker}` : null,
-        binding.hasMixedValues ? "mixed values" : null,
-        proposal && cell?.proposal?.note ? `pea: ${cell.proposal.note}` : null,
-      ]
-        .filter(Boolean)
-        .join("\n")
-    : "no binding (row unbound)";
-
-  return (
-    <td
-      id={`cell-${cellKey}`}
-      className={cn(
-        "border-b border-l border-[var(--line-soft)] px-2.5 py-1 align-top",
-        !editable && "bg-muted/40 text-muted-foreground",
-        editable && "cursor-text hover:bg-primary/5",
-        staged && "bg-cat-green/12",
-        proposal && "bg-cat-clay/12",
-        attention && "bg-destructive/10",
-      )}
-      title={tooltip}
-      onClick={editing == null && !proposal ? onEditStart : undefined}
-    >
-      {editing != null ? (
-        <Input
-          autoFocus
-          value={editing}
-          onChange={(event) => onEditChange(event.target.value)}
-          onBlur={onEditCancel}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") onEditCommit();
-            else if (event.key === "Escape") onEditCancel();
-          }}
-          className="tele h-6 min-w-20 rounded-none border-primary bg-background px-1"
-        />
-      ) : (
-        <div className="flex items-start gap-1.5">
-          <ValueDiff
-            from={next != null ? current : null}
-            to={next ?? current}
-            className={cn(
-              "min-w-8 whitespace-pre-wrap",
-              staged && "font-medium text-cat-green",
-              proposal && "font-medium text-cat-clay",
-            )}
-          />
-          {binding?.isTypeParameter && (
-            <span
-              className="tele-label text-cat-kiln"
-              title="type parameter — shared across rows of this type"
-            >
-              T
-            </span>
-          )}
-          <span className="ml-auto flex shrink-0 items-center gap-0.5">
-            {proposal ? (
-              <>
-                <CellAction
-                  title={`Deny — ${cell?.proposal?.note ?? "pea proposal"}`}
-                  hover="hover:text-destructive"
-                  onClick={() => onDeny(cellKey)}
-                >
-                  <X className="size-3.5" />
-                </CellAction>
-                <CellAction
-                  title={`Approve and stage "${cell?.proposal?.value ?? ""}"`}
-                  hover="hover:text-cat-green"
-                  onClick={() =>
-                    onApprove(cellKey, (cell?.proposal?.value as string | undefined) ?? "")
-                  }
-                >
-                  <Check className="size-3.5" />
-                </CellAction>
-              </>
-            ) : staged ? (
-              <CellAction
-                title="Undo stage"
-                hover="hover:text-foreground"
-                onClick={() => onUndo(cellKey)}
-              >
-                <RotateCcw className="size-3.5" />
-              </CellAction>
-            ) : null}
-          </span>
-        </div>
-      )}
-    </td>
-  );
-}
-
-function CellAction({
-  title,
-  hover,
-  onClick,
-  children,
-}: {
-  title: string;
-  hover: string;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      title={title}
-      className={cn("text-muted-foreground", hover)}
-      onClick={(event) => {
-        event.stopPropagation();
-        onClick();
-      }}
-    >
-      {children}
-    </button>
   );
 }
 
@@ -543,6 +483,7 @@ function PendingStrip({
   stageValue,
   deny,
   undo,
+  locate,
 }: {
   pending: [string, CellState][];
   proposalCount: number;
@@ -553,18 +494,36 @@ function PendingStrip({
   stageValue: (key: string, value: string) => void;
   deny: (key: string) => void;
   undo: (key: string) => void;
+  locate: (key: string) => void;
 }) {
   return (
-    <div className="shrink-0 border-t border-border bg-card">
-      <div className="flex items-baseline gap-3 border-b border-[var(--line-soft)] px-3 py-1.5">
-        <span className="section-label">Pending changes</span>
-        <span className="tele text-muted-foreground">
-          {proposalCount} proposed · {stagedCount} staged
-          {attention > 0 ? ` · ${attention} need review` : ""}
-        </span>
-        <span className="ml-auto text-[11px] text-muted-foreground">
-          Pea can propose; only you can push.
-        </span>
+    <div className="shrink-0 border-t border-[var(--r-line)]">
+      <div className="flex items-baseline gap-2 border-b border-[var(--r-line)] px-3 py-1.5">
+        <span className="t-caption t-upper text-[var(--r-ink-2)]">pending</span>
+        {/* The "nothing reaches Revit until you push" stamp lives in ONE home — the push
+            verb's own reason (fit reviews, ruled 2026-08-16: repeated stamps train users to
+            stop reading). */}
+        <HelpTip>
+          Every open diff on this schedule, one line each. Pea proposes; approving stages; typing
+          over a proposed cell severs the proposal and stages your value instead.
+        </HelpTip>
+        <FactChip
+          tone={proposalCount > 0 ? "pea" : "meta"}
+          title="Open pea proposals awaiting your review."
+        >
+          {proposalCount} proposed
+        </FactChip>
+        <FactChip
+          tone={stagedCount > 0 ? "caution" : "meta"}
+          title="Cells staged for the next push."
+        >
+          {stagedCount} staged
+        </FactChip>
+        {attention > 0 ? (
+          <FactChip tone="caution" title="Flagged staged cells — push refuses while any remain.">
+            {attention} need review
+          </FactChip>
+        ) : null}
       </div>
       <div className="max-h-36 overflow-y-auto">
         {pending.map(([key, cell]) => {
@@ -574,59 +533,52 @@ function PendingStrip({
           return (
             <div
               key={key}
-              className="flex items-center gap-3 border-b border-[var(--line-soft)] px-3 py-1 last:border-b-0"
+              className="flex items-center gap-3 border-b border-[var(--r-line)] px-3 py-1 last:border-b-0"
             >
               <button
                 type="button"
-                className="flex min-w-0 shrink-0 items-baseline gap-1.5 text-left hover:underline"
-                title="Show this cell in the grid"
-                onClick={() =>
-                  document
-                    .getElementById(`cell-${key}`)
-                    ?.scrollIntoView({ block: "center", behavior: "smooth" })
-                }
+                className="flex min-w-0 shrink-0 items-baseline gap-1.5 rounded-[var(--radius)] px-0.5 text-left hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
+                title="Highlight this cell's row in the grid and scroll it into view."
+                onClick={() => locate(key)}
               >
-                <span className="max-w-44 truncate text-xs font-medium">
+                <span className="t-label max-w-44 truncate text-[var(--r-ink)]">
                   {columnHeader(columnNumber)}
                 </span>
-                <span className="tele text-[10px] text-muted-foreground">r{rowNumber}</span>
+                <span className="face-mono t-caption text-[var(--r-ink-2)]">r{rowNumber}</span>
               </button>
               <ValueDiff
                 from={currentText(key)}
                 to={next}
-                className={cn(
-                  "min-w-0 flex-1 truncate",
-                  isStaged ? "text-cat-green" : "text-cat-clay",
-                )}
+                className={
+                  isStaged
+                    ? "min-w-0 flex-1 truncate font-bold text-[var(--r-caution)]"
+                    : "min-w-0 flex-1 truncate text-[var(--r-pea-ink)]"
+                }
               />
               {!isStaged && cell.proposal?.note && (
-                <span className="hidden max-w-56 truncate text-[11px] text-muted-foreground sm:block">
+                <span className="t-label hidden max-w-56 truncate text-[var(--r-ink-2)] sm:block">
                   {cell.proposal.note}
                 </span>
               )}
-              <span className="flex shrink-0 items-center gap-0.5">
+              <span className="flex shrink-0 items-center gap-1.5">
                 {isStaged ? (
-                  <Button
-                    size="icon-sm"
-                    variant="ghost"
-                    title="Undo stage"
+                  <Verb
+                    label="unstage"
+                    reason="Return this cell to its snapshot value. A proposal it was approved from is restored to the open list."
                     onClick={() => undo(key)}
-                  >
-                    <RotateCcw />
-                  </Button>
+                  />
                 ) : (
                   <>
-                    <Button size="icon-sm" variant="ghost" title="Deny" onClick={() => deny(key)}>
-                      <X />
-                    </Button>
-                    <Button
-                      size="icon-sm"
-                      variant="ghost"
-                      title="Approve and stage"
+                    <Verb
+                      label="deny"
+                      reason="Clear pea's proposal for this cell — the snapshot value stands."
+                      onClick={() => deny(key)}
+                    />
+                    <Verb
+                      label="approve"
+                      reason={`Approve and stage "${String(cell.proposal?.value ?? "")}" for the next push.`}
                       onClick={() => stageValue(key, String(cell.proposal?.value ?? ""))}
-                    >
-                      <Check />
-                    </Button>
+                    />
                   </>
                 )}
               </span>
@@ -647,15 +599,4 @@ function pushFailureNote(result: unknown): string | null {
   return `${failures.length} cell${failures.length === 1 ? "" : "s"} failed${
     first?.error ? `: ${first.error}` : "."
   }`;
-}
-
-function timeAgo(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime();
-  if (Number.isNaN(ms)) return "";
-  const min = Math.round(ms / 60000);
-  if (min < 1) return "just now";
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  return `${Math.round(hr / 24)}d ago`;
 }

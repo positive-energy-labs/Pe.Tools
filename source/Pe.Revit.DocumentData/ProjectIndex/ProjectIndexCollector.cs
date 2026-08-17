@@ -157,7 +157,16 @@ public static class ProjectIndexCollector {
         var truncated = returnedCount < totalCount;
 
         var result = new ProjectIndexData(
-            new ProjectIndexSummary(levels.Count, sheets.Count, views.Count, scheduleEntries.Count, CreateCategoryNames(familiesByCategory, schedulesByCategory, instancesByCategory, []).Count, families.Count, truncated),
+            new ProjectIndexSummary(
+                levels.Count,
+                sheets.Count,
+                views.Count,
+                scheduleEntries.Count,
+                CreateCategoryNames(familiesByCategory, schedulesByCategory, instancesByCategory, []).Count,
+                families.Count,
+                truncated,
+                AgentContext.RevitAgentContextCollector.CreateBrowserSummary(document)
+            ),
             levelEntries,
             sheetEntries,
             viewEntries,

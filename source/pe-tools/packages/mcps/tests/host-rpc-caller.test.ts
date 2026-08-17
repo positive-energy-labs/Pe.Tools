@@ -153,6 +153,42 @@ test("unmatched mutate searches hint at the script_execute tool, not a scripting
   expect(results.map((result) => result.key)).not.toContain("scripting.execute");
 });
 
+test("a bare browse surfaces only the DefaultVisible tier plus a hidden-count hint", async () => {
+  const tieredCatalog: HostOperationDefinition[] = [
+    { ...catalog[0], visibility: "DefaultVisible" },
+    {
+      key: "revit.catalog.project-index",
+      displayName: "Project Index",
+      description: "Names/handles index of levels, sheets, views, schedules, families.",
+      searchTerms: ["project-index", "levels", "sheets"],
+      intent: "Read",
+      requiresActiveDocument: true,
+      costTier: "Cheap",
+      visibility: "EscalationVisible",
+      requestTypeName: "ProjectIndexRequest",
+      responseTypeName: "ProjectIndexData",
+    },
+  ];
+  const caller = new HostRpcCaller({ catalogOverride: tieredCatalog });
+
+  const browse = await caller.searchOperations({});
+  expect(Array.isArray(browse)).toBe(true);
+  if (!Array.isArray(browse)) throw new Error("expected matches projection");
+  expect(browse.map((result) => result.key)).toEqual([
+    "revit.context.summary",
+    "catalog.more-operations",
+  ]);
+
+  // Escalation stays reachable by query and by explicit visibility filter.
+  const byQuery = await caller.searchOperations({ query: "project-index sheets" });
+  if (!Array.isArray(byQuery)) throw new Error("expected matches projection");
+  expect(byQuery.map((result) => result.key)).toContain("revit.catalog.project-index");
+
+  const byTier = await caller.searchOperations({ visibility: "EscalationVisible" });
+  if (!Array.isArray(byTier)) throw new Error("expected matches projection");
+  expect(byTier.map((result) => result.key)).toEqual(["revit.catalog.project-index"]);
+});
+
 test("unknown dynamic operation keys fail at transport with catalog enrichment absent", async () => {
   const result = await new HostRpcCaller({
     hostBaseUrl: "http://127.0.0.1:1",

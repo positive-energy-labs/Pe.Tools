@@ -3,6 +3,7 @@ using Pe.Dev.Cli;
 const string usage = """
                      Usage:
                        pe-dev automation <auth|browse|manifest|submit|inspect|cache> ...
+                       pe-dev ops-catalog [--out <path>]   Offline bridge op catalog JSON (typegen input).
 
                      Global options:
                        --repo-root <path>   Override repo root discovery.
@@ -34,8 +35,13 @@ for (var index = 0; index < args.Length; index++) {
     repoRoot = args[index];
 }
 
+if (commandArgs.Count > 0 && string.Equals(commandArgs[0], "ops-catalog", StringComparison.OrdinalIgnoreCase)) {
+    Environment.ExitCode = await OpsCatalogCommand.RunAsync(commandArgs.Skip(1).ToArray());
+    return;
+}
+
 if (commandArgs.Count == 0 || !string.Equals(commandArgs[0], "automation", StringComparison.OrdinalIgnoreCase)) {
-    Console.Error.WriteLine("The only pe-dev command is `automation`.");
+    Console.Error.WriteLine("pe-dev commands: `automation`, `ops-catalog`.");
     Console.Error.WriteLine(usage);
     Environment.ExitCode = 10;
     return;

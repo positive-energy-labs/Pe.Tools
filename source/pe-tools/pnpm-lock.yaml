@@ -15,9 +15,6 @@ catalogs:
     '@base-ui/react':
       specifier: ^1.6.0
       version: 1.6.0
-    '@tanstack/highlight':
-      specifier: 0.0.10
-      version: 0.0.10
     '@tanstack/react-hotkeys':
       specifier: ^0.10.0
       version: 0.10.0
@@ -146,18 +143,9 @@ importers:
       '@pe/host-contracts':
         specifier: workspace:*
         version: link:../../packages/host-contracts
-      '@t3-oss/env-core':
-        specifier: ^0.13.10
-        version: 0.13.11(typescript@6.0.3)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3)
-      '@tanstack/highlight':
-        specifier: 'catalog:'
-        version: 0.0.10
       '@tanstack/react-devtools':
         specifier: latest
         version: 0.10.10(@neodrag/core@3.0.0-next.11)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(bufferutil@4.1.0)(csstype@3.2.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(solid-js@1.9.13)
-      '@tanstack/react-form':
-        specifier: latest
-        version: 1.33.5(@tanstack/react-start@1.168.46(esbuild@0.28.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rolldown@1.0.3)(vite@8.0.16(@types/node@25.9.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0)))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@tanstack/react-hotkeys':
         specifier: 'catalog:'
         version: 0.10.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -179,9 +167,9 @@ importers:
       '@tanstack/react-start':
         specifier: latest
         version: 1.168.46(esbuild@0.28.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rolldown@1.0.3)(vite@8.0.16(@types/node@25.9.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0))
-      '@tanstack/router-plugin':
-        specifier: ^1.132.0
-        version: 1.168.18(@tanstack/react-router@1.170.29(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(esbuild@0.28.1)(rolldown@1.0.3)(vite@8.0.16(@types/node@25.9.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0))
+      '@tanstack/react-table':
+        specifier: 9.1.2
+        version: 9.1.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -3291,23 +3279,6 @@ packages:
   '@standard-schema/utils@0.3.0':
     resolution: {integrity: sha512-e7Mew686owMaPJVNNLs55PUvgz371nKgwsc4vxE49zsODpJEnxgxRo2y/OKrqueavXgZNMDVj3DdHFlaSAeU8g==}
 
-  '@t3-oss/env-core@0.13.11':
-    resolution: {integrity: sha512-sM7GYY+KL7H/Hl0BE0inWfk3nRHZOLhmVn7sHGxaZt9FAR6KqREXAE+6TqKfiavfXmpRxO/OZ2QgKRd+oiBYRQ==}
-    peerDependencies:
-      arktype: ^2.1.0
-      typescript: '>=5.0.0'
-      valibot: ^1.0.0-beta.7 || ^1.0.0
-      zod: ^3.24.0 || ^4.0.0
-    peerDependenciesMeta:
-      arktype:
-        optional: true
-      typescript:
-        optional: true
-      valibot:
-        optional: true
-      zod:
-        optional: true
-
   '@tailwindcss/node@4.3.1':
     resolution: {integrity: sha512-6NDaqRoAMSXD1mr/RXu0HBvNE9a2n5tHPsxu9XHLws8o4Twes5rBM2205SUUiJ9goAtadrN6xTGX0UDEwp/N4A==}
 
@@ -3419,11 +3390,6 @@ packages:
     resolution: {integrity: sha512-2LHzhwBFlKHCcklsQrGe8TeyjHd4XAF8nuCO6wHmva5fePUkJUULbu6CsCNAlGlCi0KkEsMXZSvRdR4HgMq4yA==}
     engines: {node: '>=18'}
 
-  '@tanstack/devtools-event-client@0.4.4':
-    resolution: {integrity: sha512-6T5Yop/793YI+H+5J8Hsyj4kCih9sl4t3ElLgKioW5hk3ocn+ZdSJ94tT7vL7uabxSugWYBZlOTMPzEw2puvQw==}
-    engines: {node: '>=18'}
-    hasBin: true
-
   '@tanstack/devtools-event-client@0.5.0':
     resolution: {integrity: sha512-H+OH3zC6Vhu/K0NaVfQKknEKawc/+2PT+D3SB3Ox0V8SiMlTo0abbmH2rH0721R2aNYbjdMXA1oENOd8E2UVoA==}
     engines: {node: '>=18'}
@@ -3449,13 +3415,6 @@ packages:
     peerDependencies:
       solid-js: '>=1.9.7'
 
-  '@tanstack/form-core@1.33.5':
-    resolution: {integrity: sha512-3dfx9MBP0aq5sXKteikG629X9oviptrQj0IFRk9YGcb+lB7Kv5x8S17oOSk1wUWgjQZ4xVJEMbKwOAODymocgA==}
-
-  '@tanstack/highlight@0.0.10':
-    resolution: {integrity: sha512-RNWn4BYgroDnHSdWduHVUN3hXM5OZUVwynuY2Fwh4el2hVy0woe9XZBZ5IIxC50h1y8SEYkBipS+cPgdzRc7Zg==}
-    engines: {node: '>=18'}
-
   '@tanstack/history@1.162.0':
     resolution: {integrity: sha512-79pf/RkhteYZTRgcR4F9kbk84P2N8rugQJswxfIqovlbRiT3yI7eBE+5QorIrZaOKktsgzRlXh1l/du/xpl4iA==}
     engines: {node: '>=20.19'}
@@ -3466,10 +3425,6 @@ packages:
 
   '@tanstack/hotkeys@0.8.0':
     resolution: {integrity: sha512-vqH7X9nb0MTJ/O08++dB5bP9jgj4+BIPOUu/U+6myG86lDsirZSVSobpq5UQpE7nBuk62i8eIYeOhd+OMl/UrA==}
-    engines: {node: '>=18'}
-
-  '@tanstack/pacer-lite@0.1.1':
-    resolution: {integrity: sha512-y/xtNPNt/YeyoVxE/JCx+T7yjEzpezmbb+toK8DDD1P4m7Kzs5YR956+7OKexG3f8aXgC3rLZl7b1V+yNUSy5w==}
     engines: {node: '>=18'}
 
   '@tanstack/query-core@5.101.2':
@@ -3489,15 +3444,6 @@ packages:
       '@types/react-dom': '>=16.8'
       react: '>=16.8'
       react-dom: '>=16.8'
-
-  '@tanstack/react-form@1.33.5':
-    resolution: {integrity: sha512-LlRB28qJwO/QCGaHvWnbdh4haBgTFiZVmzA2uzxSBS3YA7/IqrQ6HOBK70CkFQ+DbflZ7NawsmSln13h5iIdTA==}
-    peerDependencies:
-      '@tanstack/react-start': '*'
-      react: ^17.0.0 || ^18.0.0 || ^19.0.0
-    peerDependenciesMeta:
-      '@tanstack/react-start':
-        optional: true
 
   '@tanstack/react-hotkeys@0.10.0':
     resolution: {integrity: sha512-GwOSndI5j3qBVYTmgP1mYyRTnlxb2MS17cwGlsavSxMQPSnmDf+m3LzMIpRMs+3zzQMjg3cYhHsFYizYlFI2tw==}
@@ -3611,6 +3557,12 @@ packages:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
+  '@tanstack/react-table@9.1.2':
+    resolution: {integrity: sha512-YQPZFJ1nIi/bjjwsPZVouABgahDcl7Gdm33CdTStUJBn0DjEVJ2uhSTVmIoWt9MVKdQziXGAsXipSzy949Hygg==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      react: '>=18'
+
   '@tanstack/react-virtual@3.14.5':
     resolution: {integrity: sha512-4EKRXh7zBLkbKbFmG3AUVkircuHd+7OdT1pocJSepxtfBd3qnrJgJ5rtPkRYyo9fmyVb2+pI2xPy5oYvMLQy6A==}
     peerDependencies:
@@ -3647,27 +3599,6 @@ packages:
   '@tanstack/router-generator@1.167.30':
     resolution: {integrity: sha512-Tf9TJfdpP0yL3k1D1ke6hR1dvPCgKShTik3HcBRDeTK5eNrp9/X0Q0YApN8thE6pVcXL6a78O3ZE7XN7s7KwNw==}
     engines: {node: '>=20.19'}
-
-  '@tanstack/router-plugin@1.168.18':
-    resolution: {integrity: sha512-MofS28/axfnfnhOD2RSgJEaU882aX5RsAzhGz5Vc4XhAmvCjy919u9JrNs4QsTWFbTD1P7IJ8WFlFVsrg0pStg==}
-    engines: {node: '>=20.19'}
-    peerDependencies:
-      '@rsbuild/core': '>=1.0.2 || ^2.0.0'
-      '@tanstack/react-router': ^1.170.15
-      vite: '>=5.0.0 || >=6.0.0 || >=7.0.0 || >=8.0.0'
-      vite-plugin-solid: ^2.11.10 || ^3.0.0-0
-      webpack: '>=5.92.0'
-    peerDependenciesMeta:
-      '@rsbuild/core':
-        optional: true
-      '@tanstack/react-router':
-        optional: true
-      vite:
-        optional: true
-      vite-plugin-solid:
-        optional: true
-      webpack:
-        optional: true
 
   '@tanstack/router-plugin@1.168.32':
     resolution: {integrity: sha512-P+qYIY9b/K+ZGUPNiyLqsd20vN/1abgmSNG0Ch9KTKldag3icR7TlrJgnM2km86yuRdXa4nJ5YT7+JLV5rJRZg==}
@@ -3734,6 +3665,10 @@ packages:
 
   '@tanstack/store@0.9.3':
     resolution: {integrity: sha512-8reSzl/qGWGGVKhBoxXPMWzATSbZLZFWhwBAFO9NAyp0TxzfBP0mIrGb8CP8KrQTmvzXlR/vFPPUrHTLBGyFyw==}
+
+  '@tanstack/table-core@9.1.2':
+    resolution: {integrity: sha512-ONpWQeass1sfg80CWF1NSwQ8r3GiqxA2lT/EdqIcrDEPZ0Z+0mM94eQoFYLPN0Kztzj8TQVb2+PrSZSItqA61g==}
+    engines: {node: '>=20'}
 
   '@tanstack/virtual-core@3.17.3':
     resolution: {integrity: sha512-8Np/TFELpI0ySuJoVmjvOrQYXH/8sTX0Biv9szhFhY39xOdAAY+smrMxjxOum/ux3eM8MUJQsEJ0/R0UpvC8dw==}
@@ -9154,9 +9089,9 @@ snapshots:
 
   '@marijn/find-cluster-break@1.0.3': {}
 
-  '@mastra/agent-browser@0.4.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(bufferutil@4.1.0)(zod@4.4.3)':
+  '@mastra/agent-browser@0.4.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(bufferutil@4.1.0)(zod@4.4.3)':
     dependencies:
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
       agent-browser: 0.19.0(bufferutil@4.1.0)
       zod: 4.4.3
     transitivePeerDependencies:
@@ -9186,11 +9121,11 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@mastra/client-js@1.31.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)':
+  '@mastra/client-js@1.31.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)':
     dependencies:
       '@ai-sdk/ui-utils': 1.2.11(zod@4.4.3)
       '@lukeed/uuid': 2.0.1
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
       '@mastra/schema-compat': 1.3.3(zod@4.4.3)
       canonicalize: 1.0.8
       jose: 6.2.3
@@ -9211,7 +9146,7 @@ snapshots:
     dependencies:
       '@ai-sdk/ui-utils': 1.2.11(zod@4.4.3)
       '@lukeed/uuid': 2.0.1
-      '@mastra/core': 1.50.1(bufferutil@4.1.0)(zod@4.4.3)
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
       '@mastra/schema-compat': 1.3.3(zod@4.4.3)
       canonicalize: 1.0.8
       jose: 6.2.3
@@ -9320,56 +9255,10 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@mastra/core@1.50.1(bufferutil@4.1.0)(zod@4.4.3)':
-    dependencies:
-      '@a2a-js/sdk': 0.3.13(@bufbuild/protobuf@2.12.0)(express@5.2.1)
-      '@ai-sdk/provider-utils-v5': '@ai-sdk/provider-utils@3.0.25(zod@4.4.3)'
-      '@ai-sdk/provider-utils-v6': '@ai-sdk/provider-utils@4.0.27(zod@4.4.3)'
-      '@ai-sdk/provider-utils-v7': '@ai-sdk/provider-utils@5.0.0(zod@4.4.3)'
-      '@ai-sdk/provider-v5': '@ai-sdk/provider@2.0.3'
-      '@ai-sdk/provider-v6': '@ai-sdk/provider@3.0.10'
-      '@ai-sdk/provider-v7': '@ai-sdk/provider@4.0.0'
-      '@ai-sdk/ui-utils-v5': '@ai-sdk/ui-utils@1.2.11(zod@4.4.3)'
-      '@isaacs/ttlcache': 2.1.5
-      '@lukeed/uuid': 2.0.1
-      '@mastra/schema-compat': 1.3.3(zod@4.4.3)
-      '@modelcontextprotocol/sdk': 1.29.0(zod@4.4.3)
-      '@sindresorhus/slugify': 2.2.1
-      '@standard-schema/spec': 1.1.0
-      ajv: 8.20.0
-      chat: 4.30.0(ai@6.0.199(zod@4.4.3))(zod@4.4.3)
-      croner: 10.0.1
-      dotenv: 17.4.2
-      execa: 9.6.1
-      fastq: 1.20.1
-      gray-matter: 4.0.3
-      ignore: 7.0.5
-      jpeg-js: 0.4.4
-      json-schema: 0.4.0
-      lru-cache: 11.5.1
-      p-map: 7.0.4
-      p-retry: 7.1.1
-      picomatch: 4.0.4
-      posthog-node: 5.38.3(rxjs@7.8.1)
-      tokenx: 1.3.0
-      ws: 8.21.0(bufferutil@4.1.0)
-      xxhash-wasm: 1.1.0
-      zod: 4.4.3
-    transitivePeerDependencies:
-      - '@bufbuild/protobuf'
-      - '@cfworker/json-schema'
-      - '@grpc/grpc-js'
-      - ai
-      - bufferutil
-      - express
-      - rxjs
-      - supports-color
-      - utf-8-validate
-
-  '@mastra/duckdb@1.5.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))':
+  '@mastra/duckdb@1.5.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))':
     dependencies:
       '@duckdb/node-api': 1.5.2-r.2
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
 
   '@mastra/fastembed@1.2.0':
     dependencies:
@@ -9379,10 +9268,24 @@ snapshots:
       progress: 2.0.3
       tar: 7.5.16
 
-  '@mastra/github-signals@0.2.2(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)':
+  '@mastra/github-signals@0.2.2(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)':
     dependencies:
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
       zod: 4.4.3
+
+  '@mastra/hono@1.5.6(@hono/node-server@1.19.14(hono@4.12.24))(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(bufferutil@4.1.0)(hono@4.12.24)(zod@4.4.3)':
+    dependencies:
+      '@hono/node-ws': 1.3.1(@hono/node-server@1.19.14(hono@4.12.24))(bufferutil@4.1.0)(hono@4.12.24)
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/server': 1.50.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)
+      fetch-to-node: 2.1.0
+      hono: 4.12.24
+      ws: 8.21.0(bufferutil@4.1.0)
+    transitivePeerDependencies:
+      - '@hono/node-server'
+      - bufferutil
+      - utf-8-validate
+      - zod
 
   '@mastra/hono@1.5.6(@hono/node-server@1.19.14(hono@4.12.24))(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(bufferutil@4.1.0)(hono@4.12.24)(zod@4.4.3)':
     dependencies:
@@ -9398,6 +9301,14 @@ snapshots:
       - utf-8-validate
       - zod
 
+  '@mastra/libsql@1.15.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(bufferutil@4.1.0)':
+    dependencies:
+      '@libsql/client': 0.17.4(bufferutil@4.1.0)
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
   '@mastra/libsql@1.15.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(bufferutil@4.1.0)':
     dependencies:
       '@libsql/client': 0.17.4(bufferutil@4.1.0)
@@ -9405,6 +9316,20 @@ snapshots:
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
+
+  '@mastra/mcp@1.13.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.4.3)':
+    dependencies:
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@modelcontextprotocol/ext-apps': 1.7.4(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.4.3)
+      '@modelcontextprotocol/sdk': 1.29.0(zod@4.4.3)
+      exit-hook: 5.1.0
+      fast-deep-equal: 3.1.3
+    transitivePeerDependencies:
+      - '@cfworker/json-schema'
+      - react
+      - react-dom
+      - supports-color
+      - zod
 
   '@mastra/mcp@1.13.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.4.3)':
     dependencies:
@@ -9419,6 +9344,22 @@ snapshots:
       - react-dom
       - supports-color
       - zod
+
+  '@mastra/memory@1.22.2(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))':
+    dependencies:
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/schema-compat': 1.3.3(zod@4.4.3)
+      async-mutex: 0.5.0
+      diff: 8.0.4
+      image-size: 1.2.1
+      json-schema: 0.4.0
+      lru-cache: 11.5.1
+      probe-image-size: 7.3.0
+      tokenx: 1.3.0
+      xxhash-wasm: 1.1.0
+      zod: 4.4.3
+    transitivePeerDependencies:
+      - supports-color
 
   '@mastra/memory@1.22.2(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))':
     dependencies:
@@ -9436,14 +9377,14 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@mastra/observability@1.16.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)':
+  '@mastra/observability@1.16.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)':
     dependencies:
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
       zod: 4.4.3
 
-  '@mastra/pg@1.15.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))':
+  '@mastra/pg@1.15.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))':
     dependencies:
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
       async-mutex: 0.5.0
       pg: 8.21.0
       pg-connection-string: 2.13.0
@@ -9451,7 +9392,7 @@ snapshots:
     transitivePeerDependencies:
       - pg-native
 
-  '@mastra/playground-ui@40.0.1(f6d04caa9365c19240bacf49ec4e574b)':
+  '@mastra/playground-ui@40.0.1(76107874cf0f46073261024daa502d77)':
     dependencies:
       '@base-ui/react': 1.6.0(@types/react@19.2.17)(date-fns@4.4.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@codemirror/autocomplete': 6.20.3
@@ -9466,10 +9407,10 @@ snapshots:
       '@codemirror/view': 6.43.6
       '@hello-pangea/dnd': 18.0.1(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@lezer/highlight': 1.2.3
-      '@mastra/client-js': 1.31.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
-      '@mastra/memory': 1.22.2(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))
-      '@mastra/react': 1.2.4(@bufbuild/protobuf@2.12.0)(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/client-js': 1.31.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/memory': 1.22.2(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))
+      '@mastra/react': 1.2.4(@bufbuild/protobuf@2.12.0)(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.1)(zod@4.4.3)
       '@radix-ui/react-visually-hidden': 1.2.6(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@tanstack/react-query': 5.101.2(react@19.2.7)
       '@tanstack/react-virtual': 3.14.5(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -9505,16 +9446,16 @@ snapshots:
       - supports-color
       - use-sync-external-store
 
-  '@mastra/railway@0.3.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))':
+  '@mastra/railway@0.3.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))':
     dependencies:
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
       railway: 3.4.2
 
-  '@mastra/react@1.2.4(@bufbuild/protobuf@2.12.0)(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.1)(zod@4.4.3)':
+  '@mastra/react@1.2.4(@bufbuild/protobuf@2.12.0)(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.1)(zod@4.4.3)':
     dependencies:
       '@lukeed/uuid': 2.0.1
-      '@mastra/client-js': 1.31.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/client-js': 1.31.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
       '@radix-ui/react-tooltip': 1.2.10(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       hast-util-to-jsx-runtime: 2.3.6
       lucide-react: 0.522.0(react@19.2.7)
@@ -9544,16 +9485,22 @@ snapshots:
       zod-from-json-schema-v3: zod-from-json-schema@0.0.5
       zod-to-json-schema: 3.25.2(zod@4.4.3)
 
+  '@mastra/server@1.50.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)':
+    dependencies:
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      hono: 4.12.24
+      zod: 4.4.3
+
   '@mastra/server@1.50.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)':
     dependencies:
       '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
       hono: 4.12.24
       zod: 4.4.3
 
-  '@mastra/stagehand@0.3.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(playwright-core@1.60.0)(zod@4.4.3)':
+  '@mastra/stagehand@0.3.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(playwright-core@1.60.0)(zod@4.4.3)':
     dependencies:
       '@browserbasehq/stagehand': 3.5.0(playwright-core@1.60.0)(zod@4.4.3)
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
       zod: 4.4.3
     transitivePeerDependencies:
       - '@cfworker/json-schema'
@@ -9564,9 +9511,9 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@mastra/tavily@1.1.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)':
+  '@mastra/tavily@1.1.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)':
     dependencies:
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
       '@tavily/core': 0.7.6
       zod: 4.4.3
     transitivePeerDependencies:
@@ -10999,12 +10946,6 @@ snapshots:
 
   '@standard-schema/utils@0.3.0': {}
 
-  '@t3-oss/env-core@0.13.11(typescript@6.0.3)(valibot@1.4.2(typescript@6.0.3))(zod@4.4.3)':
-    optionalDependencies:
-      typescript: 6.0.3
-      valibot: 1.4.2(typescript@6.0.3)
-      zod: 4.4.3
-
   '@tailwindcss/node@4.3.1':
     dependencies:
       '@jridgewell/remapping': 2.3.5
@@ -11104,8 +11045,6 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@tanstack/devtools-event-client@0.4.4': {}
-
   '@tanstack/devtools-event-client@0.5.0': {}
 
   '@tanstack/devtools-ui@0.7.0(csstype@3.2.3)(solid-js@1.9.13)':
@@ -11148,14 +11087,6 @@ snapshots:
       - csstype
       - utf-8-validate
 
-  '@tanstack/form-core@1.33.5':
-    dependencies:
-      '@tanstack/devtools-event-client': 0.4.4
-      '@tanstack/pacer-lite': 0.1.1
-      '@tanstack/store': 0.11.0
-
-  '@tanstack/highlight@0.0.10': {}
-
   '@tanstack/history@1.162.0': {}
 
   '@tanstack/history@1.162.1': {}
@@ -11163,8 +11094,6 @@ snapshots:
   '@tanstack/hotkeys@0.8.0':
     dependencies:
       '@tanstack/store': 0.11.0
-
-  '@tanstack/pacer-lite@0.1.1': {}
 
   '@tanstack/query-core@5.101.2': {}
 
@@ -11185,16 +11114,6 @@ snapshots:
       - csstype
       - solid-js
       - utf-8-validate
-
-  '@tanstack/react-form@1.33.5(@tanstack/react-start@1.168.46(esbuild@0.28.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rolldown@1.0.3)(vite@8.0.16(@types/node@25.9.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0)))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
-    dependencies:
-      '@tanstack/form-core': 1.33.5
-      '@tanstack/react-store': 0.11.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      react: 19.2.7
-    optionalDependencies:
-      '@tanstack/react-start': 1.168.46(esbuild@0.28.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rolldown@1.0.3)(vite@8.0.16(@types/node@25.9.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0))
-    transitivePeerDependencies:
-      - react-dom
 
   '@tanstack/react-hotkeys@0.10.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
@@ -11337,6 +11256,14 @@ snapshots:
       react-dom: 19.2.7(react@19.2.7)
       use-sync-external-store: 1.6.0(react@19.2.7)
 
+  '@tanstack/react-table@9.1.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+    dependencies:
+      '@tanstack/react-store': 0.11.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@tanstack/table-core': 9.1.2
+      react: 19.2.7
+    transitivePeerDependencies:
+      - react-dom
+
   '@tanstack/react-virtual@3.14.5(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@tanstack/virtual-core': 3.17.3
@@ -11398,30 +11325,6 @@ snapshots:
       zod: 4.4.3
     transitivePeerDependencies:
       - supports-color
-
-  '@tanstack/router-plugin@1.168.18(@tanstack/react-router@1.170.29(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(esbuild@0.28.1)(rolldown@1.0.3)(vite@8.0.16(@types/node@25.9.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0))':
-    dependencies:
-      '@babel/core': 7.29.7
-      '@babel/template': 7.29.7
-      '@babel/types': 7.29.7
-      '@tanstack/router-core': 1.171.13
-      '@tanstack/router-generator': 1.167.17
-      '@tanstack/router-utils': 1.162.2
-      chokidar: 5.0.0
-      unplugin: 3.2.0(esbuild@0.28.1)(rolldown@1.0.3)(vite@8.0.16(@types/node@25.9.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0))
-      zod: 4.4.3
-    optionalDependencies:
-      '@tanstack/react-router': 1.170.29(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      vite: 8.0.16(@types/node@25.9.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0)
-    transitivePeerDependencies:
-      - '@farmfe/core'
-      - '@rspack/core'
-      - bun-types-no-globals
-      - esbuild
-      - rolldown
-      - rollup
-      - supports-color
-      - unloader
 
   '@tanstack/router-plugin@1.168.32(@tanstack/react-router@1.170.29(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(esbuild@0.28.1)(rolldown@1.0.3)(vite@8.0.16(@types/node@25.9.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0))':
     dependencies:
@@ -11531,6 +11434,10 @@ snapshots:
   '@tanstack/store@0.11.0': {}
 
   '@tanstack/store@0.9.3': {}
+
+  '@tanstack/table-core@9.1.2':
+    dependencies:
+      '@tanstack/store': 0.11.0
 
   '@tanstack/virtual-core@3.17.3': {}
 
@@ -13713,26 +13620,26 @@ snapshots:
       '@aws-sdk/credential-providers': 3.1075.0
       '@earendil-works/pi-tui': 0.79.10
       '@hono/node-server': 1.19.14(hono@4.12.24)
-      '@mastra/agent-browser': 0.4.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(bufferutil@4.1.0)(zod@4.4.3)
+      '@mastra/agent-browser': 0.4.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(bufferutil@4.1.0)(zod@4.4.3)
       '@mastra/auth-workos': 1.6.2(hono@4.12.24)(typescript@6.0.3)
-      '@mastra/client-js': 1.31.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
-      '@mastra/duckdb': 1.5.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))
+      '@mastra/client-js': 1.31.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/duckdb': 1.5.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))
       '@mastra/fastembed': 1.2.0
-      '@mastra/github-signals': 0.2.2(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)
-      '@mastra/hono': 1.5.6(@hono/node-server@1.19.14(hono@4.12.24))(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(bufferutil@4.1.0)(hono@4.12.24)(zod@4.4.3)
-      '@mastra/libsql': 1.15.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(bufferutil@4.1.0)
-      '@mastra/mcp': 1.13.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.4.3)
-      '@mastra/memory': 1.22.2(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))
-      '@mastra/observability': 1.16.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)
-      '@mastra/pg': 1.15.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))
-      '@mastra/playground-ui': 40.0.1(f6d04caa9365c19240bacf49ec4e574b)
-      '@mastra/railway': 0.3.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))
-      '@mastra/react': 1.2.4(@bufbuild/protobuf@2.12.0)(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/github-signals': 0.2.2(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)
+      '@mastra/hono': 1.5.6(@hono/node-server@1.19.14(hono@4.12.24))(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(bufferutil@4.1.0)(hono@4.12.24)(zod@4.4.3)
+      '@mastra/libsql': 1.15.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(bufferutil@4.1.0)
+      '@mastra/mcp': 1.13.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.4.3)
+      '@mastra/memory': 1.22.2(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))
+      '@mastra/observability': 1.16.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)
+      '@mastra/pg': 1.15.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))
+      '@mastra/playground-ui': 40.0.1(76107874cf0f46073261024daa502d77)
+      '@mastra/railway': 0.3.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))
+      '@mastra/react': 1.2.4(@bufbuild/protobuf@2.12.0)(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.1)(zod@4.4.3)
       '@mastra/schema-compat': 1.3.3(zod@4.4.3)
-      '@mastra/server': 1.50.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)
-      '@mastra/stagehand': 0.3.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(playwright-core@1.60.0)(zod@4.4.3)
-      '@mastra/tavily': 1.1.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)
+      '@mastra/server': 1.50.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)
+      '@mastra/stagehand': 0.3.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(playwright-core@1.60.0)(zod@4.4.3)
+      '@mastra/tavily': 1.1.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)
       '@mastra/voice-deepgram': 0.13.0(bufferutil@4.1.0)(zod@4.4.3)
       '@mastra/voice-openai': 0.13.0(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3)
       '@octokit/auth-app': 8.2.0

@@ -21,7 +21,7 @@ Pea is a Revit operator and a builder of shareable Pods. Optimize its public sur
 - Keep deterministic sequencing, validation, safety, and freshness in the harness; put reusable judgment-heavy workflows in skills and changing maps in generated artifacts.
 - Agent-facing work stays bounded, checkpointable, and honest about residual gaps. A timeout is a diagnostic boundary, not a blind retry.
 - Long time on task or unprogressing loops warrant a look at underlying problems. Time on task for subagents in particular reveal high "this architecture is bad" signal, in part becasue your context is not contaminated with the implementation history.
-- Name the proof lane. Source compile, package artifact, AttachedRrd, FreshRevitProcess, and installed behavior prove different things. Protect the user-owned RRD; SDK `pe-revit` owns live-loop orchestration.
+- Name the proof lane. Source compile, package artifact, AttachedRrd, FreshRevitProcess, and installed behavior prove different things. Protect the user-owned dev session; SDK `pe-revit` owns live-loop orchestration.
 - Delete a data-integrity or runtime seam only when the simpler replacement preserves its behavior and proof.
 
 Read [AGENTS.md](AGENTS.md) for operating rules, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for product direction, [docs/BUILD.md](docs/BUILD.md) for proof/runbook guidance, and the nearest package `AGENTS.md` before local changes.
@@ -35,6 +35,10 @@ Issues live as GitHub issues in `kaitpw/Pe.Tools` (via the `gh` CLI). See `docs/
 ### Triage labels
 
 Default triage vocabulary (label string equals role name). See `docs/agents/triage-labels.md`.
+
+### Product surfaces
+
+`docs/design/SURFACE-PHILOSOPHY.md` holds what our UI surfaces are for and how they behave; the `find-the-product` skill is the loop that produces and updates it. The one-system design sweep (goal, loop, frontier) lives at `docs/design/DESIGN-SWEEP.md`; the `/design-system` route is the executable design authority.
 
 ### Domain docs
 

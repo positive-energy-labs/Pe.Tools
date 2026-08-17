@@ -18,6 +18,15 @@ public enum HostOperationVisibility {
     ExpertOnly
 }
 
+// Which active document kind a bridge-backed operation supports (see AGENTS.md
+// "supported active document kind"). Metadata/gating signal only — request scopes
+// (selection, active view, handles) stay separate.
+public enum HostOperationActiveDocumentKind {
+    Any,
+    ProjectOnly,
+    FamilyOnly
+}
+
 // Machine-readable failure classification the host emits in problem.extensions.kind,
 // so callers classify errors from a C#-owned taxonomy instead of regexing messages.
 public enum HostErrorKind {
@@ -39,6 +48,7 @@ public sealed record HostOperationAgentMetadata(
     IReadOnlyList<string> SearchTerms,
     HostOperationIntent Intent,
     bool RequiresActiveDocument,
+    HostOperationActiveDocumentKind SupportedActiveDocumentKind,
     HostOperationCostTier CostTier,
     HostOperationVisibility Visibility,
     IReadOnlyList<HostOperationRequestExample> RequestExamples,
@@ -54,12 +64,14 @@ public sealed record HostOperationAgentMetadata(
         HostOperationVisibility? visibility = null,
         IReadOnlyList<HostOperationRequestExample>? requestExamples = null,
         string? safeDefaultRequestJson = null,
-        IReadOnlyList<string>? callGuidance = null
+        IReadOnlyList<string>? callGuidance = null,
+        HostOperationActiveDocumentKind supportedActiveDocumentKind = HostOperationActiveDocumentKind.Any
     ) => new(
         description,
         searchTerms ?? Array.Empty<string>(),
         intent,
         requiresActiveDocument,
+        supportedActiveDocumentKind,
         costTier ?? InferCostTier(intent),
         visibility ?? HostOperationVisibility.EscalationVisible,
         requestExamples ?? Array.Empty<HostOperationRequestExample>(),
@@ -183,9 +195,22 @@ public sealed record HostOperationDefinition(
         string key,
         HostOperationVisibility fallback
     ) {
-        if (key is "revit.context.summary" or "revit.catalog.project-index" or "revit.resolve.references")
+        // Demotion rule (ADR 0003): a composed glance op that embeds a constituent's
+        // handles hides that constituent from the default surface. revit.glance.model
+        // carries project-index's totals, so project-index dropped to EscalationVisible.
+        if (key is "revit.context.summary" or "revit.resolve.references"
+            || key.StartsWith("revit.glance.", StringComparison.Ordinal))
             return HostOperationVisibility.DefaultVisible;
-        if (key is "revit.matrix.schedule-profiles" or "revit.catalog.electrical-load-classifications")
+        // ExpertOnly = admin/plumbing surfaces (schema/field-option feeds for UIs,
+        // cache admin) and heavy diagnostics; reachable only by explicit tier filter.
+        // Rationale per key: docs/op-audit.md.
+        if (key is "revit.matrix.schedule-profiles"
+            or "revit.catalog.electrical-load-classifications"
+            or "revit.catalog.field-options"
+            or "revit.catalog.loaded-families.filter-field-options"
+            or "revit.catalog.loaded-families.filter-schema"
+            or "revit.apply.parameters-service-cache.refresh"
+            or "settings.field-options")
             return HostOperationVisibility.ExpertOnly;
         if (key.StartsWith("scripting.", StringComparison.Ordinal))
             return HostOperationVisibility.ExpertOnly;

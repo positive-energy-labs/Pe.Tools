@@ -37,7 +37,8 @@ public static class FamilyModelHostOperations {
         HostOperationAgentMetadata.Create(
             "Capture the active Revit family document as portable family.json authored truth, including explicit unmodeled diagnostics.",
             ["family-model", "family-json", "capture", "roundtrip", "family-foundry"],
-            requiresActiveDocument: true
+            requiresActiveDocument: true,
+            supportedActiveDocumentKind: HostOperationActiveDocumentKind.FamilyOnly
         ),
         handler
     );

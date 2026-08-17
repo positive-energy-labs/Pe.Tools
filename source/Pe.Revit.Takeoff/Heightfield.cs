@@ -1,16 +1,12 @@
 namespace Pe.Revit.Takeoff;
 
-// Physics layer: per-cell floor / ceiling from the raw triangle soup (round-2 heightfield pod
-// lineage). Role division is strict — see Detector: the FLOOR edge may shape room boundaries
-// (subfloor data is dense and reliable; stair voids and double-height volumes end rooms exactly
-// where the floor ends), the CEILING only GATES regions (headroom fraction kills open-to-sky
-// courtyards/terraces). Ceiling data is too patchy at framing stage (joist gaps, tilted planes)
-// to touch boundary geometry — letting it do so was the wavy-room-edge regression.
-//
-// Earned data-quality lessons (project-a framing IFC): joist-only floors (no subfloor sheathing yet)
-// need a small morphological gap-fill; roof planes near the level plane masquerade as floors ->
-// constrain the floor window tightly around the level; site geometry (topo, planting) must be
-// excluded or tree canopies read as ceilings and terraces as floors.
+// Physics layer: per-cell floor / ceiling from the raw triangle soup. Role division is strict:
+// the FLOOR edge may shape room boundaries (subfloor data is dense; stair voids and double-height
+// volumes end rooms where the floor ends), the CEILING only GATES regions (headroom fraction kills
+// open-to-sky courtyards). Ceiling data is too patchy at framing stage to touch boundary geometry.
+// Data-quality constraints: joist-only floors need a small morphological gap-fill; the floor window
+// stays tight around the level or roof planes masquerade as floors; site geometry is excluded or
+// tree canopies read as ceilings and terraces as floors.
 public sealed class Heightfield
 {
     public int W, H;
@@ -26,8 +22,8 @@ public sealed class Heightfield
     public static Heightfield Build(
         Document doc, Level level, BoundingBoxXYZ crop, TakeoffOptions opt, Action<string> log)
     {
-        double lvlZ = level.ProjectElevation; // NEVER Level.Elevation: survey datum put projectA
-                                              // levels +348 ft off the geometry (2026-07-06)
+        double lvlZ = level.ProjectElevation; // NEVER Level.Elevation: a survey datum can offset it
+                                              // hundreds of ft from the geometry
         var hf = new Heightfield {
             MinX = crop.Min.X, MinY = crop.Min.Y, CellFt = opt.CellFt,
             W = (int)Math.Ceiling((crop.Max.X - crop.Min.X) / opt.CellFt),
@@ -37,23 +33,21 @@ public sealed class Heightfield
         hf.FloorZ = new float[n]; hf.CeilZ = new float[n];
         for (int i = 0; i < n; i++) { hf.FloorZ[i] = float.NaN; hf.CeilZ[i] = float.NaN; }
 
-        double zLo = lvlZ - opt.FloorTolFt - 1.0, zHi = lvlZ + 14.0;
+        double zLo = lvlZ - opt.FloorTolFt - 1.0, zHi = lvlZ + opt.StoryCapFt;
         var geoOpt = new Options { DetailLevel = ViewDetailLevel.Medium, IncludeNonVisibleObjects = false };
         int nElems = 0, nTris = 0;
         foreach (var src in EnumerateSources(doc))
         {
             foreach (var e in new FilteredElementCollector(src.doc).WhereElementIsNotElementType())
             {
-                // Site geometry must NOT feed the field: tree canopies read as ceilings and
-                // sloped terraces as floors — a whole gatehouse YARD detected as a room on
-                // project-a until these were excluded. Room floors/ceilings are building geometry.
+                // Site geometry must NOT feed the field: tree canopies read as ceilings and sloped
+                // terraces as floors. Room floors/ceilings are building geometry only.
                 var cid = e.Category?.Id;
                 if (cid != null && SiteCategories.Contains(cid)) continue;
                 var bb = e.get_BoundingBox(null);
                 if (bb == null) continue;
-                // bb is in LINK coords; the window test must happen in HOST coords. IFC link
-                // transforms are non-identity (project-a origin z -18.2) — round-1 pods silently
-                // prefiltered the wrong slab of the building by skipping this.
+                // bb is in LINK coords; the window test must run in HOST coords. IFC link transforms
+                // are non-identity, so skipping this prefilters the wrong slab of the building.
                 if (!BoxCrossesWindow(bb, src.xf, zLo, zHi, crop)) continue;
                 var ge = e.get_Geometry(geoOpt);
                 if (ge == null) continue;
@@ -62,9 +56,11 @@ public sealed class Heightfield
             }
         }
 
-        // joist-only floors (framing stage, no subfloor yet): close <= 0.75 ft gaps in the floor
-        // mask by copying the nearest floor z — round-2 heightfield pod lesson.
+        // joist-only floors (no subfloor yet): close <= 0.75 ft gaps by copying the nearest floor z.
         FillFloorGaps(hf, (int)Math.Ceiling(0.75 / opt.CellFt));
+        // rafter-only roofs (attic): the ceiling mask is equally gappy; close it symmetrically so
+        // RequireCeiling can hold on sloped levels. Off (0) by default.
+        CloseCeilingGaps(hf, opt.CeilingCloseFt);
 
         int floorCells = 0;
         for (int i = 0; i < n; i++)
@@ -73,8 +69,13 @@ public sealed class Heightfield
         return hf;
     }
 
-    // The envelope can span multiple links (Snowdon needed Facades+Structural to close "outside")
-    // and host-modeled geometry counts too — merge host + every loaded link.
+    internal static void CloseCeilingGaps(Heightfield hf, double closeFt)
+    {
+        if (closeFt > 0)
+            FillGaps(hf.CeilZ, hf.W, hf.H, (int)Math.Ceiling(closeFt / hf.CellFt));
+    }
+
+    // The envelope can span multiple links and host geometry counts too — merge host + every link.
     private static IEnumerable<(Document doc, Transform xf)> EnumerateSources(Document host)
     {
         yield return (host, Transform.Identity);
@@ -111,6 +112,7 @@ public sealed class Heightfield
             {
                 foreach (Face f in s.Faces)
                 {
+                    if (f is PlanarFace planar && IsVertical(planar.FaceNormal, xf)) continue;
                     Mesh? m; try { m = f.Triangulate(); } catch { continue; }
                     if (m != null) n += StampMesh(m, xf, hf, lvlZ, opt);
                 }
@@ -123,6 +125,13 @@ public sealed class Heightfield
             }
         }
         return n;
+    }
+
+    private static bool IsVertical(XYZ normal, Transform transform)
+    {
+        XYZ transformed = transform.OfVector(normal);
+        double length = transformed.GetLength();
+        return length > 1e-12 && Math.Abs(transformed.Z) / length < 0.5;
     }
 
     private static int StampMesh(Mesh m, Transform xf, Heightfield hf, double lvlZ, TakeoffOptions opt)
@@ -189,21 +198,23 @@ public sealed class Heightfield
         }
     }
 
-    private static void FillFloorGaps(Heightfield hf, int radius)
+    private static void FillFloorGaps(Heightfield hf, int radius) => FillGaps(hf.FloorZ, hf.W, hf.H, radius);
+
+    private static void FillGaps(float[] field, int W, int H, int radius)
     {
         if (radius <= 0) return;
-        var src = (float[])hf.FloorZ.Clone();
-        for (int y = 0; y < hf.H; y++)
-            for (int x = 0; x < hf.W; x++)
+        var src = (float[])field.Clone();
+        for (int y = 0; y < H; y++)
+            for (int x = 0; x < W; x++)
             {
-                int i = y * hf.W + x;
+                int i = y * W + x;
                 if (!float.IsNaN(src[i])) continue;
-                for (int dy = -radius; dy <= radius && float.IsNaN(hf.FloorZ[i]); dy++)
+                for (int dy = -radius; dy <= radius && float.IsNaN(field[i]); dy++)
                     for (int dx = -radius; dx <= radius; dx++)
                     {
                         int nx2 = x + dx, ny2 = y + dy;
-                        if (nx2 < 0 || ny2 < 0 || nx2 >= hf.W || ny2 >= hf.H) continue;
-                        if (!float.IsNaN(src[ny2 * hf.W + nx2])) { hf.FloorZ[i] = src[ny2 * hf.W + nx2]; break; }
+                        if (nx2 < 0 || ny2 < 0 || nx2 >= W || ny2 >= H) continue;
+                        if (!float.IsNaN(src[ny2 * W + nx2])) { field[i] = src[ny2 * W + nx2]; break; }
                     }
             }
     }

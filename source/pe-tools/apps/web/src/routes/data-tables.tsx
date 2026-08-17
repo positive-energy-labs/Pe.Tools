@@ -1,13 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { CheckCheck, List, Loader2, Plus, Trash2 } from "lucide-react";
+import { CheckCheck, List, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 
-import { Button } from "#/components/ui/button";
+import { AddressingBar } from "#/components/lang/addressing-bar";
+import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { FactChip } from "#/components/lang/chip";
+import { EmptyState } from "#/components/lang/empty";
+import { HelpTip } from "#/components/lang/help";
+import { OutcomeLine } from "#/components/lang/outcome";
+import { Verb } from "#/components/lang/verb";
 import { Input } from "#/components/ui/input";
 import { PickList } from "#/components/ui/pick-list";
 import { SidePane } from "#/components/ui/side-pane";
 import { callHostDynamic } from "#/host/client";
 import { useHostOpDynamic } from "#/host/queries";
+import { useVerb } from "#/lib/use-verb";
 import { cn } from "#/lib/utils";
 
 /**
@@ -49,11 +56,10 @@ function DataTablesRoute() {
   const tables = (detail.data as DetailData | undefined)?.tables ?? [];
 
   const [draft, setDraft] = useState<Draft | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
+  const verb = useVerb();
 
   const openTable = (handle: TableHandle) => {
-    setNote(null);
+    verb.setError(null);
     setDraft({
       name: handle.name,
       isNew: false,
@@ -63,7 +69,7 @@ function DataTablesRoute() {
   };
 
   const newTable = () => {
-    setNote(null);
+    verb.setError(null);
     setDraft({
       name: "New Table",
       isNew: true,
@@ -72,11 +78,9 @@ function DataTablesRoute() {
     });
   };
 
-  const applyDraft = async () => {
-    if (!draft) return;
-    setBusy(true);
-    setNote(null);
-    try {
+  const applyDraft = () =>
+    verb.run("apply", async () => {
+      if (!draft) return;
       const result = (await callHostDynamic("revit.apply.schedule", {
         table: {
           name: draft.name,
@@ -85,35 +89,67 @@ function DataTablesRoute() {
           pruneMissingRows: true,
         },
       })) as { warnings?: string[] };
-      setNote(result.warnings?.length ? result.warnings.join(" · ") : "Applied.");
       setDraft((d) => (d ? { ...d, isNew: false } : d));
       await detail.refetch();
-    } catch (caught) {
-      setNote(caught instanceof Error ? caught.message : "Apply failed.");
-    } finally {
-      setBusy(false);
-    }
-  };
+      if (result.warnings?.length) {
+        verb.fail("advisory", result.warnings.join(" · "));
+        return;
+      }
+      return `applied — ${draft.name} upserted (${draft.columns.length}×${draft.rows.length})`;
+    });
+
+  const applyReason = !draft
+    ? "open or create a table first"
+    : draft.name.trim().length === 0
+      ? "name the table first — apply upserts by name"
+      : "Upsert this draft into Revit by name + row key; rows missing from the draft are pruned";
 
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-background">
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border px-4 pb-2 pt-2.5">
-        <div className="flex min-w-0 items-baseline gap-3">
-          <h1 className="font-pe-display text-lg font-semibold tracking-tight">Data Tables</h1>
-          <span className="tele text-muted-foreground">
-            {draft ? `${draft.columns.length}×${draft.rows.length}` : "synthetic key schedules"}
+      <AddressingBar
+        name="data tables"
+        sentence={
+          <span className="flex items-center gap-2">
+            <span className="t-value face-mono text-foreground">
+              {draft ? draft.name : "no table open"}
+            </span>
+            <HelpTip>
+              Data tables are freely editable key schedules whose cells stay addressable by a stable
+              row key. Apply upserts by table name + row key, and prunes rows the draft no longer
+              carries — deleting a row here deletes it in Revit.
+            </HelpTip>
           </span>
+        }
+        facts={
+          draft ? (
+            <FactChip title="columns × rows in the open draft">
+              {draft.columns.length}×{draft.rows.length}
+            </FactChip>
+          ) : undefined
+        }
+        verb={
+          <Verb
+            tone="commit"
+            label="apply to revit"
+            icon={CheckCheck}
+            busy={verb.busy === "apply"}
+            disabled={!draft || draft.name.trim().length === 0}
+            onClick={() => void applyDraft()}
+            reason={applyReason}
+          />
+        }
+      />
+      {(verb.busy || verb.outcome || verb.receipt) && (
+        <div className="shrink-0 border-b border-border px-4 py-0.5">
+          {verb.busy ? (
+            <OutcomeLine kind="busy" label={`${verb.busy} · ${verb.seconds}s`} />
+          ) : verb.outcome ? (
+            <OutcomeLine kind={verb.outcome.kind} label={verb.outcome.text} />
+          ) : verb.receipt ? (
+            <OutcomeLine kind="receipt" label={verb.receipt.text} />
+          ) : null}
         </div>
-        <div className="flex items-center gap-2">
-          {draft && (
-            <Button size="sm" disabled={busy || draft.name.trim().length === 0} onClick={() => void applyDraft()}>
-              {busy ? <Loader2 className="animate-spin" /> : <CheckCheck />}
-              {busy ? "Applying…" : "Apply to Revit"}
-            </Button>
-          )}
-        </div>
-      </header>
-      {note && <p className="shrink-0 border-b border-border px-4 py-1 text-xs text-muted-foreground">{note}</p>}
+      )}
 
       <div className="flex min-h-0 flex-1">
         <SidePane
@@ -123,23 +159,24 @@ function DataTablesRoute() {
           defaultWidth={248}
           header={
             <div className="flex items-center justify-between gap-2">
-              <span className="section-label">
-                Tables
-                <span className="tele ml-1.5 normal-case text-muted-foreground">{tables.length}</span>
+              <span className="t-label t-upper text-muted-foreground">
+                Tables{" "}
+                <span className="t-label face-mono normal-case font-normal">{tables.length}</span>
               </span>
-              <span className="flex items-center">
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  title="Re-read data tables"
-                  disabled={detail.isFetching}
+              <span className="flex items-center gap-1">
+                <Verb
+                  label="re-read"
+                  icon={List}
+                  busy={detail.isFetching}
                   onClick={() => void detail.refetch()}
-                >
-                  {detail.isFetching ? <Loader2 className="animate-spin" /> : <List />}
-                </Button>
-                <Button size="icon-sm" variant="ghost" title="New table" onClick={newTable}>
-                  <Plus />
-                </Button>
+                  reason="Re-read every data table from the document"
+                />
+                <Verb
+                  label="new"
+                  icon={Plus}
+                  onClick={newTable}
+                  reason="Start a blank draft — nothing exists in Revit until apply"
+                />
               </span>
             </div>
           }
@@ -149,7 +186,10 @@ function DataTablesRoute() {
               id: t.name,
               label: t.name,
               meta: `${t.columns.length}×${t.rows.length}`,
-              hint: t.placements.length > 0 ? `on ${t.placements.map((p) => p.sheetNumber).join(", ")}` : undefined,
+              hint:
+                t.placements.length > 0
+                  ? `on ${t.placements.map((p) => p.sheetNumber).join(", ")}`
+                  : undefined,
             }))}
             activeId={draft && !draft.isNew ? draft.name : null}
             onPick={(id) => {
@@ -157,7 +197,15 @@ function DataTablesRoute() {
               if (handle) openTable(handle);
             }}
             placeholder="Filter tables…"
-            emptyNote={detail.isLoading ? "Reading…" : "No data tables yet — create one."}
+            emptyNote={
+              detail.isLoading ? (
+                <OutcomeLine kind="busy" label="reading data tables" />
+              ) : (
+                <EmptyState story="scope" exit="create one with the new verb above">
+                  no data tables in this document
+                </EmptyState>
+              )
+            }
             className="h-full"
           />
         </SidePane>
@@ -167,13 +215,13 @@ function DataTablesRoute() {
             <DraftEditor draft={draft} setDraft={setDraft} />
           ) : (
             <div className="grid h-full place-items-center">
-              <div className="max-w-sm text-center">
-                <p className="text-sm text-foreground">Pick a table from the rail, or create one</p>
-                <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                  Data tables are freely editable key schedules whose cells stay addressable by row
-                  key. Apply upserts by name + row key.
-                </p>
-              </div>
+              <EmptyState
+                story="scope"
+                exit="pick a table from the rail, or start one with the new verb"
+                className="text-center"
+              >
+                no table open
+              </EmptyState>
             </div>
           )}
         </section>
@@ -232,27 +280,30 @@ function DraftEditor({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <Input
-          value={draft.name}
-          onChange={(e) => patch((d) => ({ ...d, name: e.target.value }))}
-          className="h-8 max-w-72 font-medium"
-          placeholder="Table name"
-        />
-        {!draft.isNew && (
-          <span className="text-[11px] text-muted-foreground">
-            renaming creates a new table — applies upsert by name
-          </span>
-        )}
-      </div>
+      <Input
+        value={draft.name}
+        onChange={(e) => patch((d) => ({ ...d, name: e.target.value }))}
+        className="t-value h-8 max-w-72"
+        placeholder="Table name"
+        title={
+          draft.isNew
+            ? "The table's name — apply upserts by name"
+            : "Renaming creates a NEW table on apply — upserts match by name"
+        }
+      />
 
-      <div className="inline-block max-w-full overflow-auto rounded-[var(--radius)] border border-border bg-card">
-        <table className="border-collapse text-xs">
+      {/* The draft grid is the machine-operated object this route exists to edit —
+          it carries the state apply will write, so it takes the one enclosure. */}
+      <ArtifactFrame className="inline-block max-w-full overflow-auto">
+        <table className="border-collapse">
           <thead>
             <tr>
-              <th className="border-b border-border bg-muted" />
+              <th className="border-b border-border bg-[var(--r-recess)]" />
               {draft.columns.map((column, columnIndex) => (
-                <th key={columnIndex} className="min-w-36 border-b border-l border-border bg-muted px-1.5 py-1 text-left">
+                <th
+                  key={columnIndex}
+                  className="min-w-36 border-b border-l border-border bg-[var(--r-recess)] px-1.5 py-1 text-left"
+                >
                   <div className="flex items-center gap-1">
                     <Input
                       value={column.heading}
@@ -264,12 +315,13 @@ function DraftEditor({
                           ),
                         }))
                       }
-                      className="tele-label h-6 rounded-none border-transparent bg-transparent px-1 font-normal hover:border-border"
+                      className="t-label h-6 rounded-none border-transparent bg-transparent px-1 font-normal hover:border-border"
+                      title="Column heading — written to the schedule on apply"
                     />
                     <select
                       value={column.kind}
-                      title="Column type"
-                      className="tele h-6 rounded-[var(--radius)] border border-transparent bg-transparent text-muted-foreground hover:border-border"
+                      title="Column type: txt = Text, num = Number"
+                      className="t-caption face-mono h-6 rounded-[var(--radius)] border border-transparent bg-transparent text-muted-foreground hover:border-border"
                       onChange={(e) =>
                         patch((d) => ({
                           ...d,
@@ -284,8 +336,12 @@ function DraftEditor({
                     </select>
                     <button
                       type="button"
-                      title="Remove column"
-                      className="text-muted-foreground hover:text-destructive disabled:opacity-30"
+                      title={
+                        draft.columns.length === 1
+                          ? "a table keeps at least one column"
+                          : "Remove this column and its values from the draft"
+                      }
+                      className="text-muted-foreground hover:text-foreground disabled:opacity-30"
                       disabled={draft.columns.length === 1}
                       onClick={() => removeColumn(columnIndex)}
                     >
@@ -294,10 +350,13 @@ function DraftEditor({
                   </div>
                 </th>
               ))}
-              <th className="border-b border-l border-border bg-muted px-1">
-                <Button size="icon-sm" variant="ghost" title="Add column" onClick={addColumn}>
-                  <Plus />
-                </Button>
+              <th className="border-b border-l border-border bg-[var(--r-recess)] px-1">
+                <Verb
+                  label="col"
+                  icon={Plus}
+                  onClick={addColumn}
+                  reason="Add a column to the draft"
+                />
               </th>
             </tr>
           </thead>
@@ -305,30 +364,30 @@ function DraftEditor({
             {draft.rows.map((row, rowIndex) => (
               <tr key={row.key}>
                 <td
-                  className="tele whitespace-nowrap border-b border-[var(--line-soft)] px-2 py-1 text-right text-muted-foreground"
-                  title={`row key: ${row.key}`}
+                  className="t-caption face-mono whitespace-nowrap border-b border-border px-2 py-1 text-right text-muted-foreground"
+                  title={`row key: ${row.key} — the stable address apply upserts by`}
                 >
                   {rowIndex + 1}
                 </td>
                 {draft.columns.map((column, columnIndex) => (
-                  <td key={columnIndex} className="border-b border-l border-[var(--line-soft)] p-0">
+                  <td key={columnIndex} className="border-b border-l border-border p-0">
                     <input
                       value={row.values[columnIndex] ?? ""}
                       placeholder={column.kind === "Number" ? "0" : ""}
                       inputMode={column.kind === "Number" ? "decimal" : undefined}
                       onChange={(e) => setCell(rowIndex, columnIndex, e.target.value)}
                       className={cn(
-                        "tele h-7 w-full min-w-36 bg-transparent px-2 outline-none focus:bg-primary/5",
+                        "t-value face-mono h-7 w-full min-w-36 bg-transparent px-2 outline-none focus:bg-[var(--r-select)]",
                         column.kind === "Number" && "text-right",
                       )}
                     />
                   </td>
                 ))}
-                <td className="border-b border-l border-[var(--line-soft)] px-1 text-center">
+                <td className="border-b border-l border-border px-1 text-center">
                   <button
                     type="button"
-                    title="Remove row (deleted in Revit on apply)"
-                    className="text-muted-foreground hover:text-destructive"
+                    title="Remove this row — it is deleted in Revit on apply"
+                    className="text-muted-foreground hover:text-foreground"
                     onClick={() => removeRow(rowIndex)}
                   >
                     <Trash2 className="size-3" />
@@ -338,14 +397,17 @@ function DraftEditor({
             ))}
             <tr>
               <td colSpan={draft.columns.length + 2} className="px-1 py-0.5">
-                <Button size="sm" variant="ghost" onClick={addRow}>
-                  <Plus /> Add row
-                </Button>
+                <Verb
+                  label="add row"
+                  icon={Plus}
+                  onClick={addRow}
+                  reason="Add a row with a fresh stable key"
+                />
               </td>
             </tr>
           </tbody>
         </table>
-      </div>
+      </ArtifactFrame>
     </div>
   );
 }

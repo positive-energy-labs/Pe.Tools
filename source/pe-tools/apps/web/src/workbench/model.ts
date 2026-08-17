@@ -34,9 +34,12 @@ export function nextTailFollowState(
   metrics: ScrollMetrics,
   previousScrollTop: number,
 ): TailFollowState {
+  // Any upward scroll detaches — even inside the tail zone. Otherwise the user scrolls up
+  // within TAIL_THRESHOLD_PX, stays "following", and the next re-measure snaps them back
+  // to the bottom (the "stuck near the tail" bug). Scrolling back down into the zone re-attaches.
+  if (metrics.scrollTop < previousScrollTop) return "detached";
   if (isNearTail(metrics)) return "following";
-  if (current === "following" && metrics.scrollTop >= previousScrollTop) return "following";
-  return "detached";
+  return current;
 }
 
 export function scrollTopForIntent(

@@ -107,6 +107,17 @@ export const hostLogsRequestSchema = Schema.Struct({
   tailLineCount: Schema.Number,
 });
 
+export const hostShellOpenRequestSchema = Schema.Struct({
+  path: Schema.String,
+});
+export type HostShellOpenRequest = Schema.Schema.Type<typeof hostShellOpenRequestSchema>;
+
+export const hostShellOpenDataSchema = Schema.Struct({
+  opened: Schema.Boolean,
+  path: Schema.String,
+});
+export type HostShellOpenData = Schema.Schema.Type<typeof hostShellOpenDataSchema>;
+
 export const RevitRecentDocumentSource = {
   RevitIni: "RevitIni",
   RegistryProfileMru: "RegistryProfileMru",
@@ -412,7 +423,10 @@ export const bridgeSessionsListSchema = Schema.Struct({
   sessions: Schema.Array(
     Schema.Struct({
       activeDocumentTitle: Schema.optional(Schema.NullOr(Schema.String)),
-      // Observed facts reported at registration: normalized lane (rrd | sandbox | installed),
+      activeDocumentIsFamilyDocument: Schema.optional(Schema.NullOr(Schema.Boolean)),
+      // Observation time of the active-document facts — an observation, never computed staleness.
+      activeDocumentObservedAtUnixMs: Schema.optional(Schema.NullOr(Schema.Number)),
+      // Observed facts reported at registration: normalized lane (dev | sandbox | installed),
       // logical sandbox id, and the LOADED payload's build stamp. The host never computes
       // staleness from these — the SDK owns desired-state/freshness.
       buildStamp: Schema.optional(Schema.NullOr(Schema.String)),
@@ -455,6 +469,17 @@ export const hostProbeDataSchema = Schema.Struct({
   serviceName: Schema.String,
   sourceRoot: Schema.optional(Schema.NullOr(Schema.String)),
 });
+
+// The operator's map (ADR 0003 glance tier, host-side): host identity + every
+// connected session in one snapshot, replacing the host.status + bridge.sessions.list
+// client-side join. observedAtUtc is host clock — topology is a transport fact.
+export const hostTopologyDataSchema = Schema.Struct({
+  observedAtUtc: Schema.String,
+  host: hostProbeDataSchema,
+  sessions: bridgeSessionsListSchema.fields.sessions,
+});
+
+export type HostTopologyData = Schema.Schema.Type<typeof hostTopologyDataSchema>;
 
 export type HostResourceFileStateData = Schema.Schema.Type<typeof hostResourceFileStateDataSchema>;
 
@@ -518,6 +543,223 @@ export const hostSessionSummaryDataSchema = Schema.Struct({
   workbenchResources: hostWorkbenchResourcesDataSchema,
 });
 
+// --- RHVAC .r10 ops (TS-owned; spawn the repo's 32-bit Jet scripts) ------------
+// The extract projection is the camelCase JSON emitted by
+// source/Pe.Revit.Takeoff/Rhvac/extract-rhvac.ps1 — these schemas mirror it, not
+// the C# RhvacRoom write shape (the host converts on save).
+
+export const rhvacPathRequestSchema = Schema.Struct({
+  /** Absolute host-visible path to the .r10 project file. */
+  path: Schema.String,
+});
+export type RhvacPathRequest = Schema.Schema.Type<typeof rhvacPathRequestSchema>;
+
+export const rhvacAssemblyOptionSchema = Schema.Struct({
+  name: Schema.String,
+  uValue: Schema.Number,
+  shgc: Schema.optional(Schema.Number),
+});
+
+export const rhvacAssemblyCatalogSchema = Schema.Struct({
+  sourceFile: Schema.optional(Schema.String),
+  floors: Schema.Array(rhvacAssemblyOptionSchema),
+  roofs: Schema.Array(rhvacAssemblyOptionSchema),
+  walls: Schema.Array(rhvacAssemblyOptionSchema),
+  glass: Schema.Array(rhvacAssemblyOptionSchema),
+  doors: Schema.Array(rhvacAssemblyOptionSchema),
+});
+export type RhvacAssemblyCatalogData = Schema.Schema.Type<typeof rhvacAssemblyCatalogSchema>;
+
+/**
+ * Everything about a room except its autonumber PK. A room being INSERTED has no PK yet — Jet
+ * assigns it — so the insert lane takes these fields alone and reports the assigned identifier back.
+ */
+const rhvacRoomFields = {
+  number: Schema.Number,
+  name: Schema.String,
+  systemNumber: Schema.Number,
+  zoneNumber: Schema.Number,
+  areaSquareFeet: Schema.Number,
+  ceilingHeightFeet: Schema.Number,
+  people: Schema.Number,
+  lightingWatts: Schema.Number,
+  equipmentSensibleBtuh: Schema.Number,
+  equipmentLatentBtuh: Schema.Number,
+  ventilationCfm: Schema.Number,
+  /** Stored RHVAC calc outputs — read-only, ignored on save. */
+  loads: Schema.optional(Schema.Record(Schema.String, Schema.Number)),
+  floors: Schema.Array(
+    Schema.Struct({
+      assembly: Schema.String,
+      uValue: Schema.Number,
+      areaSquareFeet: Schema.Number,
+      exposedPerimeterFeet: Schema.Number,
+    }),
+  ),
+  roofs: Schema.Array(
+    Schema.Struct({
+      assembly: Schema.String,
+      uValue: Schema.Number,
+      areaSquareFeet: Schema.Number,
+      areaMultiplier: Schema.Number,
+    }),
+  ),
+  walls: Schema.Array(
+    Schema.Struct({
+      /** 1-based wall ordinal — glass/doors point at this via wallReference. */
+      index1: Schema.Number,
+      assembly: Schema.String,
+      uValue: Schema.Number,
+      lengthFeet: Schema.Number,
+      heightFeet: Schema.Number,
+      direction: Schema.Number,
+    }),
+  ),
+  glass: Schema.Array(
+    Schema.Struct({
+      assembly: Schema.String,
+      uValue: Schema.Number,
+      widthFeet: Schema.Number,
+      heightFeet: Schema.Number,
+      wallReference: Schema.Number,
+      shgc: Schema.Number,
+      occurrences: Schema.Number,
+    }),
+  ),
+  doors: Schema.Array(
+    Schema.Struct({
+      assembly: Schema.String,
+      uValue: Schema.Number,
+      widthFeet: Schema.Number,
+      heightFeet: Schema.Number,
+      wallReference: Schema.Number,
+    }),
+  ),
+} as const;
+
+/** A room being inserted: no `identifier` yet — Jet's COUNTER assigns it. */
+export const rhvacInsertRoomSchema = Schema.Struct(rhvacRoomFields);
+export type RhvacInsertRoomData = Schema.Schema.Type<typeof rhvacInsertRoomSchema>;
+
+export const rhvacRoomSchema = Schema.Struct({
+  /** Room autonumber PK — the edit lane's row target; distinct from `number`. */
+  identifier: Schema.Number,
+  ...rhvacRoomFields,
+});
+export type RhvacRoomData = Schema.Schema.Type<typeof rhvacRoomSchema>;
+
+/** Weak .r10 identity: file name plus a stamp over project/client titles. */
+export const rhvacFileIdentitySchema = Schema.Struct({
+  fileName: Schema.String,
+  projectTitle: Schema.String,
+  clientName: Schema.String,
+  stamp: Schema.String,
+});
+export type RhvacFileIdentity = Schema.Schema.Type<typeof rhvacFileIdentitySchema>;
+
+export const rhvacExtractSchema = Schema.Struct({
+  sourceFile: Schema.String,
+  fileIdentity: rhvacFileIdentitySchema,
+  building: Schema.Record(Schema.String, Schema.Number),
+  systems: Schema.Array(Schema.Struct({ number: Schema.Number, name: Schema.String })),
+  rooms: Schema.Array(rhvacRoomSchema),
+});
+export type RhvacExtractData = Schema.Schema.Type<typeof rhvacExtractSchema>;
+
+export const rhvacSyncRequestSchema = Schema.Struct({
+  /** The .r10 to sync IN PLACE — behind a lock check, a working copy, and a timestamped backup. */
+  targetPath: Schema.String,
+  /** New rooms. Their assigned `identifier`s come back in the result. */
+  inserts: Schema.Array(rhvacInsertRoomSchema),
+  /** Existing rooms, targeted by `identifier`; written back whole. */
+  updates: Schema.Array(rhvacRoomSchema),
+  /**
+   * Systems the rooms reference. An existing `number` is left exactly as the engineer has it
+   * (never renamed); a missing one is seeded by cloning the lowest-numbered System row and
+   * overriding number + name only. See eval/rhvac/template/SYSTEM-INSERT-PROBE.md.
+   */
+  systems: Schema.optional(
+    Schema.Array(Schema.Struct({ number: Schema.Number, name: Schema.String })),
+  ),
+  /** Delete the template's blank Room (Identifier 1) — only if it is still untouched. */
+  deleteUntouchedSeedRoom: Schema.optional(Schema.Boolean),
+  /** Validate and keep the working copy without swapping the target. */
+  whatIf: Schema.optional(Schema.Boolean),
+});
+export type RhvacSyncRequest = Schema.Schema.Type<typeof rhvacSyncRequestSchema>;
+
+/**
+ * Weak by necessity: an .r10 carries NO GUID or stable id anywhere (probed — Project is 9 free-text
+ * columns, Client 9, Version 6 build numbers). `stamp` hashes the engineer-facing project + client
+ * titles, so it survives copying or renaming the FILE and changes when the project is retitled.
+ * All four parts are reported so a caller pairing {fileIdentity, roomIdentifier} into Revit
+ * provenance can detect drift rather than silently trust a match.
+ */
+export const rhvacSyncResultSchema = Schema.Struct({
+  targetPath: Schema.String,
+  /** Null when nothing was swapped (whatIf). */
+  backupPath: Schema.NullOr(Schema.String),
+  swapped: Schema.Boolean,
+  fileIdentity: rhvacFileIdentitySchema,
+  /** Every requested system, with `seeded` false for ones that already existed. */
+  systems: Schema.Array(
+    Schema.Struct({
+      number: Schema.Number,
+      name: Schema.String,
+      identifier: Schema.Number,
+      seeded: Schema.Boolean,
+    }),
+  ),
+  /** Room number -> the Jet-assigned autonumber PK, read back after the insert. */
+  insertedRooms: Schema.Array(
+    Schema.Struct({ number: Schema.Number, name: Schema.String, identifier: Schema.Number }),
+  ),
+  updated: Schema.Number,
+  seedRoom: Schema.Struct({
+    identifier: Schema.Number,
+    action: Schema.Literals(["deleted", "kept", "not-requested"]),
+    reason: Schema.String,
+  }),
+  /**
+   * Rooms whose assembly was in neither the target file nor the preset catalog: that category was
+   * written as one explicit zero row (no load), never a guessed material. Surface these.
+   */
+  assemblyFallbacks: Schema.Array(
+    Schema.Struct({
+      roomNumber: Schema.Number,
+      roomName: Schema.String,
+      category: Schema.String,
+      assemblies: Schema.Array(Schema.String),
+    }),
+  ),
+  roomsBefore: Schema.Number,
+  roomsAfter: Schema.Number,
+  /** The safety envelope's own transcript (lock check, census, validation, swap). */
+  log: Schema.String,
+});
+export type RhvacSyncResult = Schema.Schema.Type<typeof rhvacSyncResultSchema>;
+
+export const rhvacLaunchResultSchema = Schema.Struct({
+  path: Schema.String,
+  /** True once the shell accepted the open; RHVAC's own startup is not awaited. */
+  launched: Schema.Boolean,
+});
+export type RhvacLaunchResult = Schema.Schema.Type<typeof rhvacLaunchResultSchema>;
+
+export const rhvacRoomMapSchema = Schema.Struct({
+  matches: Schema.Array(Schema.Struct({ oracleNumber: Schema.Number, candidate: Schema.String })),
+  skip: Schema.Array(Schema.Struct({ oracleNumber: Schema.Number, reason: Schema.String })),
+});
+
+/** Raw takeoff snapshots next to the .r10 — the client parses the TSV texts itself. */
+export const rhvacTakeoffDataSchema = Schema.Struct({
+  tsvs: Schema.Array(
+    Schema.Struct({ name: Schema.String, text: Schema.String, sha256: Schema.String }),
+  ),
+  roomMap: Schema.NullOr(rhvacRoomMapSchema),
+});
+export type RhvacTakeoffData = Schema.Schema.Type<typeof rhvacTakeoffDataSchema>;
+
 export const tsOnlyOperationSchemas = {
   "aps.auth.login": {
     request: apsTokenRequestSchema,
@@ -543,6 +785,13 @@ export const tsOnlyOperationSchemas = {
   "host.status": {
     response: hostProbeDataSchema,
   },
+  "host.shell.open": {
+    request: hostShellOpenRequestSchema,
+    response: hostShellOpenDataSchema,
+  },
+  "host.topology": {
+    response: hostTopologyDataSchema,
+  },
   "logs.tail": {
     request: hostLogsRequestSchema,
     response: hostLogsDataSchema,
@@ -550,6 +799,26 @@ export const tsOnlyOperationSchemas = {
   "revit.catalog.recent-documents": {
     request: revitRecentDocumentsRequestSchema,
     response: revitRecentDocumentsDataSchema,
+  },
+  "rhvac.open": {
+    request: rhvacPathRequestSchema,
+    response: rhvacExtractSchema,
+  },
+  "rhvac.assemblies": {
+    request: rhvacPathRequestSchema,
+    response: rhvacAssemblyCatalogSchema,
+  },
+  "rhvac.sync": {
+    request: rhvacSyncRequestSchema,
+    response: rhvacSyncResultSchema,
+  },
+  "rhvac.launch": {
+    request: rhvacPathRequestSchema,
+    response: rhvacLaunchResultSchema,
+  },
+  "rhvac.takeoff": {
+    request: rhvacPathRequestSchema,
+    response: rhvacTakeoffDataSchema,
   },
   "settings.document.open": {
     request: openSettingsDocumentRequestSchema,
@@ -617,6 +886,20 @@ export type HostLocalCatalogEntry = HostOperationDefinition & {
  */
 export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
   {
+    key: "host.shell.open",
+    origin: "host-local",
+    displayName: "Open Path",
+    description:
+      "Open an existing absolute file or directory path with the operating system default handler. No Revit session is needed.",
+    intent: "Mutate",
+    visibility: "EscalationVisible",
+    costTier: "Mutation",
+    requiresActiveDocument: false,
+    requestTypeName: "HostShellOpenRequest",
+    responseTypeName: "HostShellOpenData",
+    searchTerms: ["host", "shell", "open", "file", "directory", "default app", "artifact"],
+  },
+  {
     key: "revit.catalog.recent-documents",
     origin: "host-local",
     displayName: "Recent Documents",
@@ -639,12 +922,92 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     ],
   },
   {
+    key: "rhvac.open",
+    origin: "host-local",
+    displayName: "Open RHVAC Project",
+    description:
+      "Extract an Elite RHVAC .r10 Manual J project to JSON: building totals, systems, and rooms with identifiers. Runs the repo's 32-bit Jet lane; no Revit session needed.",
+    intent: "Read",
+    visibility: "DefaultVisible",
+    costTier: "Bounded",
+    requiresActiveDocument: false,
+    requestTypeName: "RhvacPathRequest",
+    responseTypeName: "RhvacExtractData",
+    searchTerms: ["rhvac", "r10", "manual j", "open", "extract", "rooms", "loads"],
+  },
+  {
+    key: "rhvac.assemblies",
+    origin: "host-local",
+    displayName: "RHVAC Assemblies",
+    description:
+      "Distinct construction assemblies per category (floors/roofs/walls/glass/doors) used in an .r10 file, with U-values (glass: + SHGC). The editor's assembly picker source.",
+    intent: "Read",
+    visibility: "DefaultVisible",
+    costTier: "Bounded",
+    requiresActiveDocument: false,
+    requestTypeName: "RhvacPathRequest",
+    responseTypeName: "RhvacAssemblyCatalogData",
+    searchTerms: ["rhvac", "r10", "assemblies", "constructions", "u-value", "materials"],
+  },
+  {
+    key: "rhvac.sync",
+    origin: "host-local",
+    displayName: "Sync RHVAC Project",
+    description:
+      "One atomic sync of an .r10 IN PLACE: seed systems, insert new rooms, update existing ones, optionally drop the template's blank seed room. Refuses while RHVAC holds the file, works on a copy, validates, then swaps with a timestamped backup. Returns each inserted room's assigned identifier plus the file identity to pair with Revit provenance.",
+    intent: "Mutate",
+    visibility: "DefaultVisible",
+    costTier: "Mutation",
+    requiresActiveDocument: false,
+    requestTypeName: "RhvacSyncRequest",
+    responseTypeName: "RhvacSyncResult",
+    searchTerms: [
+      "rhvac",
+      "r10",
+      "sync",
+      "export",
+      "insert",
+      "rooms",
+      "systems",
+      "takeoff",
+      "backup",
+    ],
+  },
+  {
+    key: "rhvac.launch",
+    origin: "host-local",
+    displayName: "Open .r10 in RHVAC",
+    description:
+      "Open an .r10 file with its Windows file association (Elite RHVAC). Fire-and-forget: the shell owns the app, and load recalculation is a manual step in RHVAC.",
+    intent: "Mutate",
+    visibility: "DefaultVisible",
+    costTier: "Cheap",
+    requiresActiveDocument: false,
+    requestTypeName: "RhvacPathRequest",
+    responseTypeName: "RhvacLaunchResult",
+    searchTerms: ["rhvac", "r10", "launch", "open", "start", "elite", "shell"],
+  },
+  {
+    key: "rhvac.takeoff",
+    origin: "host-local",
+    displayName: "RHVAC Takeoff Snapshots",
+    description:
+      "Raw takeoff TSV snapshots (<dir>/takeoff/*.tsv) and room-map.json found next to an .r10 file. Empty result when none exist.",
+    intent: "Read",
+    visibility: "DefaultVisible",
+    costTier: "Cheap",
+    requiresActiveDocument: false,
+    requestTypeName: "RhvacPathRequest",
+    responseTypeName: "RhvacTakeoffData",
+    searchTerms: ["rhvac", "takeoff", "tsv", "room map", "plan", "polygons"],
+  },
+  {
     key: "settings.workspaces",
     origin: "host-local",
     displayName: "Settings Workspaces",
     description: "Settings workspaces available to author, with their modules and roots.",
     intent: "Read",
-    visibility: "DefaultVisible",
+    visibility: "EscalationVisible",
     costTier: "Cheap",
     requestTypeName: "NoRequest",
     responseTypeName: "SettingsWorkspacesData",
@@ -657,7 +1020,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     description:
       "Browse the settings document tree (profiles, fragments, schemas) for a module and root.",
     intent: "Read",
-    visibility: "DefaultVisible",
+    visibility: "EscalationVisible",
     costTier: "Cheap",
     requestTypeName: "SettingsTreeRequest",
     responseTypeName: "SettingsDiscoveryResult",
@@ -670,7 +1033,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     description:
       "Open a settings document: raw + composed content, metadata, dependencies, and validation.",
     intent: "Read",
-    visibility: "DefaultVisible",
+    visibility: "EscalationVisible",
     costTier: "Bounded",
     requestTypeName: "OpenSettingsDocumentRequest",
     responseTypeName: "SettingsDocumentSnapshot",
@@ -694,7 +1057,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "Validate Settings Document",
     description: "Validate settings document content against its schema without saving.",
     intent: "Read",
-    visibility: "DefaultVisible",
+    visibility: "EscalationVisible",
     costTier: "Bounded",
     requestTypeName: "ValidateSettingsDocumentRequest",
     responseTypeName: "SettingsValidationResult",
@@ -707,7 +1070,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     description:
       "Save a settings document with optimistic concurrency (version token); reports conflicts and validation.",
     intent: "Mutate",
-    visibility: "DefaultVisible",
+    visibility: "EscalationVisible",
     costTier: "Mutation",
     requestTypeName: "SaveSettingsDocumentRequest",
     responseTypeName: "SaveSettingsDocumentResult",
@@ -720,7 +1083,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     description:
       "Autodesk Platform Services persisted-token status for the requested scope profile.",
     intent: "Read",
-    visibility: "DefaultVisible",
+    visibility: "EscalationVisible",
     costTier: "Cheap",
     requestTypeName: "ApsTokenRequest",
     responseTypeName: "ApsPersistedTokenStatus",
@@ -732,7 +1095,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "APS Auth Login",
     description: "Begin an Autodesk Platform Services auth flow and persist the resulting token.",
     intent: "Mutate",
-    visibility: "DefaultVisible",
+    visibility: "EscalationVisible",
     costTier: "Bounded",
     requestTypeName: "ApsTokenRequest",
     responseTypeName: "ApsPersistedTokenStatus",
@@ -744,7 +1107,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     displayName: "APS Auth Logout",
     description: "Clear the persisted Autodesk Platform Services token.",
     intent: "Mutate",
-    visibility: "DefaultVisible",
+    visibility: "EscalationVisible",
     costTier: "Cheap",
     requestTypeName: "NoRequest",
     responseTypeName: "ApsLogoutResult",
@@ -762,6 +1125,20 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     requestTypeName: "ApsTokenRequest",
     responseTypeName: "ApsTokenResult",
     searchTerms: ["aps", "autodesk", "token", "access token", "scope"],
+  },
+  {
+    key: "host.topology",
+    origin: "host-local",
+    displayName: "Session Topology",
+    description:
+      "The operator's map in one snapshot: host identity/health plus every connected Revit session (lane, sandbox id, pid, open documents). Replaces the host.status + bridge.sessions.list join; observedAtUtc stamps freshness (host clock).",
+    intent: "Read",
+    visibility: "DefaultVisible",
+    costTier: "Cheap",
+    requiresActiveDocument: false,
+    requestTypeName: "NoRequest",
+    responseTypeName: "HostTopologyData",
+    searchTerms: ["topology", "sessions", "glance", "operator", "map", "connected", "lanes"],
   },
   {
     key: "host.status",

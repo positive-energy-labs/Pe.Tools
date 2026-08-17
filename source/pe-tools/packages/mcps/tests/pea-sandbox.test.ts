@@ -10,12 +10,11 @@ import {
 import type { HostOpResponse } from "@pe/host-contracts/operation-types";
 
 // Pea's presentation contract: no broker/SDK lane vocabulary in compact output.
-const LANE_WORDS = /\b(rrd|lane|installed|payloadSource)\b/i;
+const LANE_WORDS = /\b(dev|lane|installed|payloadSource)\b/i;
 
 // --- session kind presentation ------------------------------------------------------------------
 
 test("every non-sandbox lane presents as the user's session", () => {
-  expect(presentSessionKind("rrd", null)).toEqual({ kind: "user" });
   expect(presentSessionKind("dev", null)).toEqual({ kind: "user" });
   expect(presentSessionKind("installed", null)).toEqual({ kind: "user" });
   expect(presentSessionKind(null, null)).toEqual({ kind: "user" });
@@ -37,7 +36,7 @@ test("pe_status compact output carries no lane words for any session mix", () =>
     bridgeIsConnected: true,
     sessionId: "session-a",
     processId: 100,
-    lane: "rrd",
+    lane: "dev",
     sandboxId: null,
     buildStamp: "stamp-a",
     revitVersion: "2025",
@@ -49,7 +48,7 @@ test("pe_status compact output carries no lane words for any session mix", () =>
     {
       sessionId: "session-a",
       processId: 100,
-      lane: "rrd",
+      lane: "dev",
       sandboxId: null,
       buildStamp: "stamp-a",
       revitVersion: "2025",

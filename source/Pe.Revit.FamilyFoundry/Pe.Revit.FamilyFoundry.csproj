@@ -13,7 +13,9 @@
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
         <PackageReference Include="Nice3point.Revit.Toolkit" Version="$(RevitVersion).*"/>
-        <PackageReference Include="Nice3point.Revit.Extensions" Version="$(RevitVersion).*"/>
+        <!-- ponytail: 2025.2.4 adds long.ToElementId() ambiguous with Pe.Revit.Compat (CS0121); unpin when one owner is chosen -->
+        <PackageReference Include="Nice3point.Revit.Extensions" Version="2025.2.4" Condition="'$(RevitVersion)' == '2025'"/>
+        <PackageReference Include="Nice3point.Revit.Extensions" Version="$(RevitVersion).*" Condition="'$(RevitVersion)' != '2025'"/>
     </ItemGroup>
 
     <ItemGroup>

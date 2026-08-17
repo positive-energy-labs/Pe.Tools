@@ -1,0 +1,59 @@
+{
+  "outputPath": "C:\\Users\\kaitp\\AppData\\Local\\Temp\\claude\\C--Users-kaitp-source-repos-Pe-Tools\\6af24c6f-7eb0-4b0e-abe2-a9d6e7378682\\scratchpad\\synctest.r10",
+  "fileIdentity": {
+    "fileName": "synctest.r10",
+    "projectTitle": "Smith Residence",
+    "clientName": "Smith Residence",
+    "stamp": "93303178f55f7efd"
+  },
+  "systems": [
+    {
+      "number": 3,
+      "name": "Great Room - IU-3",
+      "identifier": 4,
+      "seeded": true
+    },
+    {
+      "number": 4,
+      "name": "Primary Suite - IU-4",
+      "identifier": 5,
+      "seeded": true
+    }
+  ],
+  "insertedRooms": [
+    {
+      "number": 101,
+      "name": "Great Room",
+      "identifier": 2
+    },
+    {
+      "number": 102,
+      "name": "Primary Bedroom",
+      "identifier": 3
+    }
+  ],
+  "updated": 0,
+  "deleted": [],
+  "seedRoom": {
+    "identifier": 1,
+    "action": "deleted",
+    "reason": "blank template row: no name, no dimensions, no loads, no exposure rows"
+  },
+  "assemblyFallbacks": [
+    {
+      "roomNumber": 102,
+      "roomName": "Primary Bedroom",
+      "category": "walls",
+      "assemblies": [
+        "PROBE - assembly in neither the file nor the catalog"
+      ]
+    }
+  ],
+  "roomCount": 2,
+  "targetPath": "C:\\Users\\kaitp\\AppData\\Local\\Temp\\claude\\C--Users-kaitp-source-repos-Pe-Tools\\6af24c6f-7eb0-4b0e-abe2-a9d6e7378682\\scratchpad\\synctest.r10",
+  "backupPath": "C:\\Users\\kaitp\\AppData\\Local\\Temp\\claude\\C--Users-kaitp-source-repos-Pe-Tools\\6af24c6f-7eb0-4b0e-abe2-a9d6e7378682\\scratchpad\\backups\\synctest.20260814-220945.bak.r10",
+  "swapped": true,
+  "roomsBefore": 1,
+  "roomsAfter": 2,
+  "workingPath": "C:\\Users\\kaitp\\AppData\\Local\\Temp\\claude\\C--Users-kaitp-source-repos-Pe-Tools\\6af24c6f-7eb0-4b0e-abe2-a9d6e7378682\\scratchpad\\synctest.sync-working.r10"
+}

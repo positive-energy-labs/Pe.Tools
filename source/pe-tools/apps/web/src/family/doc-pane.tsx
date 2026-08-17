@@ -1,396 +1,294 @@
 /**
- * /family doc pane — the parsed spec sheet with MULTI-citation grounding.
+ * /family — the doc sidebar's contents: the spec in two modes, and pea's proposal cards.
  *
- * Provenance law (the reason this pane exists at all):
- *   - a citation is drawn ONLY when it resolves to parser geometry — a measured OCR
- *     line box (solid), an interpolated table-cell estimate (dashed), or a parser-
- *     measured image region (solid). Anything else is listed as "unresolved", never
- *     drawn as a guessed box.
- *   - one proposal may carry several citations (a table cell AND a figure); all of
- *     them are drawn at once and the camera frames their union on the densest page.
+ * ONE PANE, TWO MODES. `text` is the spec as OCR read it — markdown blocks, checkable word for
+ * word, which is what a citation actually resolves to. `sheet` is a STAND-IN for the grounded-doc
+ * camera: it draws where the blocks sit on the page, not what they say, which is the one question
+ * the text mode cannot answer. It announces itself as a stand-in rather than pretending.
  *
- * Geometry never enters route state: the durable doc carries markdown blocks and
- * image ids; this pane refetches the full geometry-bearing view from the parse cache.
+ * PROPOSALS DOCK ON TOP OF IT, so the verdict is always beside the spec text that justifies it —
+ * the whole reason the table's rail and folds only ever LOCATE and never decide.
  */
-import { Loader2 } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { EmptyState } from "#/components/lang/empty";
+import { OutcomeLine } from "#/components/lang/outcome";
+import { Verb } from "#/components/lang/verb";
+import { Switcher } from "#/components/lang/switcher";
+import { SPEC, hashOf, type CellVerdict } from "#/family/model";
+import type { ProtoProposal } from "#/family/world";
+import { cn } from "#/lib/utils";
 
-import type { SettingsProposalSource } from "@pe/agent-contracts";
-
-import { type RealTarget, buildTargets } from "#/lab/estimate";
-import type { ParsedDocView } from "#/grounded-doc/types";
-
-const PAGE_GAP = 24;
-
-export interface CitationTarget {
-  source: SettingsProposalSource;
-  page: number;
-  bbox: { x: number; y: number; w: number; h: number };
-  /** true = parser-measured geometry (OCR line box or image region); false = estimated. */
-  measured: boolean;
-  kind: "cell" | "row" | "block" | "image";
-}
-
-export interface FamilyGrounding {
-  view: ParsedDocView;
-  resolve: (source: SettingsProposalSource) => CitationTarget | null;
-}
-
-/** Fetch the geometry-bearing parse view for a parseId and index it for citations. */
-export function useFamilyGrounding(parseId: string | null | undefined): {
-  grounding: FamilyGrounding | null;
-} {
-  const [view, setView] = useState<ParsedDocView | null>(null);
-  useEffect(() => {
-    if (!parseId || parseId === view?.jobId) return;
-    let cancelled = false;
-    void fetch(`/api/pdf-audit/parse/${parseId}`)
-      .then(async (response) => (response.ok ? ((await response.json()) as ParsedDocView) : null))
-      .then((fetched) => {
-        if (fetched && !cancelled) setView(fetched);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [parseId, view?.jobId]);
-
-  const grounding = useMemo<FamilyGrounding | null>(() => {
-    if (!view) return null;
-    const targets = new Map<string, RealTarget>(buildTargets(view).map((t) => [t.key, t]));
-    const blockById = new Map(view.blocks.map((block) => [block.id, block]));
-    const imageById = new Map(view.images.map((image) => [image.id, image]));
-    return {
-      view,
-      resolve: (source) => {
-        if (source.rowIdx != null && source.colIdx != null) {
-          const target =
-            targets.get(`${source.blockId}:${source.rowIdx}:${source.colIdx}`) ??
-            targets.get(`${source.blockId}:${source.rowIdx}:span`);
-          if (target)
-            return {
-              source,
-              page: target.page,
-              bbox: target.cellBBox,
-              measured: target.measured,
-              kind: target.spanning ? "row" : "cell",
-            };
-        }
-        const image = imageById.get(source.blockId);
-        if (image)
-          return { source, page: image.page, bbox: image.bbox, measured: true, kind: "image" };
-        const block = blockById.get(source.blockId);
-        if (block?.bboxes.length)
-          return {
-            source,
-            page: block.page,
-            bbox: block.bboxes[0],
-            measured: false,
-            kind: "block",
-          };
-        return null;
-      },
-    };
-  }, [view]);
-
-  return { grounding };
-}
-
-/** Resolve a proposal's citations; unresolved ones are kept, honestly, as nulls. */
-export function resolveCitations(
-  grounding: FamilyGrounding | null,
-  sources: SettingsProposalSource[] | null | undefined,
-): { resolved: CitationTarget[]; unresolved: SettingsProposalSource[] } {
-  if (!grounding || !sources?.length) return { resolved: [], unresolved: sources ?? [] };
-  const resolved: CitationTarget[] = [];
-  const unresolved: SettingsProposalSource[] = [];
-  for (const source of sources) {
-    const target = grounding.resolve(source);
-    if (target) resolved.push(target);
-    else unresolved.push(source);
-  }
-  return { resolved, unresolved };
-}
-
-export function FamilyDocPane({
-  grounding,
-  citations,
-  unresolved,
-  caption,
-  onParse,
-  parsing,
-}: {
-  grounding: FamilyGrounding | null;
-  citations: CitationTarget[];
-  unresolved: SettingsProposalSource[];
-  /** One line describing what the citations belong to (field + proposed value). */
-  caption?: string | null;
-  onParse: (input: { url?: string; file?: File }) => void;
-  parsing: boolean;
-}) {
-  const paneRef = useRef<HTMLDivElement>(null);
-  const [pane, setPane] = useState({ vw: 0, vh: 0 });
-
-  const measure = useCallback(() => {
-    const el = paneRef.current;
-    if (!el) return;
-    setPane((prev) =>
-      prev.vw === el.clientWidth && prev.vh === el.clientHeight
-        ? prev
-        : { vw: el.clientWidth, vh: el.clientHeight },
+export function SpecText({ litBlocks }: { litBlocks: Set<string> }) {
+  const spec = SPEC;
+  if (!spec)
+    return (
+      <EmptyState story="scope" exit="parse a cut sheet to attach one" className="p-3">
+        no spec attached — every number in the profile is asserted rather than sourced
+      </EmptyState>
     );
-  }, []);
-  useLayoutEffect(() => {
-    measure();
-    const el = paneRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [measure]);
+  return (
+    <div className="space-y-2 p-2">
+      {spec.blocks.map((block) => {
+        const lit = litBlocks.has(block.id);
+        return (
+          <div
+            key={block.id}
+            title={
+              lit
+                ? "This is the block the focused parameter is grounded in. That correspondence is the whole claim — if the text does not say what the cell says, the cell is wrong."
+                : `Page ${block.page} of ${spec.fileName}, as OCR read it. Hover a grounded row in the table to light the block it cites.`
+            }
+            /* Lighting is a FILL and never a hue (SURFACE-PHILOSOPHY §5): `--r-select` is
+               literally the ground ladder's selection rung, so the law is structural here. */
+            className={cn(
+              "rounded-[2px] border p-2",
+              lit ? "border-[var(--r-line-2)] bg-[var(--r-select)]" : "border-[var(--r-line)]",
+            )}
+          >
+            <div className="face-mono flex items-baseline justify-between t-caption text-[var(--r-ink-2)]">
+              <span>
+                {block.id} · p{block.page}
+              </span>
+              <span>{block.kind}</span>
+            </div>
+            <pre className="mt-1 whitespace-pre-wrap break-words font-sans t-caption leading-snug text-[var(--r-ink)]">
+              {block.md}
+            </pre>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
-  const tops = useMemo(() => {
-    const map = new Map<number, number>();
-    let y = 0;
-    for (const page of grounding?.view.pages ?? []) {
-      map.set(page.page, y);
-      y += page.height + PAGE_GAP;
-    }
-    return map;
-  }, [grounding]);
+/**
+ * The sheet mode. Positions are hashed from the block id, so they are arbitrary but STABLE; a
+ * stand-in that moved between renders would be worse than nothing.
+ */
+export function SpecSheet({
+  litBlocks,
+  zoom,
+  onZoom,
+}: {
+  litBlocks: Set<string>;
+  zoom: number;
+  onZoom: (zoom: number) => void;
+}) {
+  const spec = SPEC;
+  if (!spec)
+    return (
+      <EmptyState story="scope" exit="parse a cut sheet to attach one" className="p-3">
+        no spec attached to render — there are no block placements to draw
+      </EmptyState>
+    );
 
-  if (!grounding) return <UploadSurface onParse={onParse} parsing={parsing} />;
-
-  // Camera: frame the union of citations on the page holding the most of them.
-  let cam = { tx: 0, ty: 0, scale: 1 };
-  if (pane.vw > 0) {
-    const byPage = new Map<number, CitationTarget[]>();
-    for (const citation of citations)
-      byPage.set(citation.page, [...(byPage.get(citation.page) ?? []), citation]);
-    const densest = [...byPage.entries()].sort((a, b) => b[1].length - a[1].length)[0];
-    if (densest) {
-      const [page, group] = densest;
-      const x0 = Math.min(...group.map((c) => c.bbox.x)) - 16;
-      const y0 = Math.min(...group.map((c) => c.bbox.y)) - 16;
-      const x1 = Math.max(...group.map((c) => c.bbox.x + c.bbox.w)) + 16;
-      const y1 = Math.max(...group.map((c) => c.bbox.y + c.bbox.h)) + 16;
-      const frameH = Math.max(y1 - y0, 110);
-      const pageTop = tops.get(page) ?? 0;
-      const scale = Math.min(pane.vw / (x1 - x0), pane.vh / frameH, 2.2);
-      cam = {
-        scale,
-        tx: pane.vw / 2 - ((x0 + x1) / 2) * scale,
-        ty: pane.vh / 2 - (pageTop + (y0 + y1) / 2) * scale,
-      };
-    } else {
-      const first = grounding.view.pages[0];
-      if (first) {
-        const scale = Math.min(pane.vw / first.width, pane.vh / first.height, 1.2);
-        cam = { scale, tx: pane.vw / 2 - (first.width / 2) * scale, ty: 24 };
-      }
-    }
-  }
-
-  const stroke = 1.75 / cam.scale;
+  const pages = [...new Set(spec.blocks.map((block) => block.page))].sort((a, b) => a - b);
 
   return (
-    <div
-      ref={paneRef}
-      className="relative h-full overflow-hidden border-l border-[var(--line)] bg-[color-mix(in_srgb,var(--basalt)_88%,var(--pe-blue))]"
-    >
-      <div
-        className="absolute left-0 top-0"
-        style={{
-          transform: `translate(${cam.tx}px, ${cam.ty}px) scale(${cam.scale})`,
-          transformOrigin: "top left",
-          transition: "transform 0.65s cubic-bezier(0.3, 0.7, 0.2, 1)",
-        }}
-      >
-        {grounding.view.pages.map((page) => (
-          <div
-            key={page.page}
-            className="absolute bg-white shadow-2xl"
-            style={{ top: tops.get(page.page), left: 0, width: page.width, height: page.height }}
-          >
-            {page.screenshotUrl ? (
-              <img
-                src={page.screenshotUrl}
-                alt={`page ${page.page}`}
-                style={{ width: page.width, height: page.height }}
-                draggable={false}
-              />
-            ) : (
-              <div
-                className="flex items-center justify-center text-xs text-muted-foreground"
-                style={{ width: page.width, height: page.height }}
-              >
-                page {page.page} render unavailable
-              </div>
-            )}
-          </div>
-        ))}
+    <div className="p-2">
+      <div className="mb-2 flex items-center gap-1">
+        {/* A stand-in announces itself AND says what would replace it (SURFACE-PHILOSOPHY §3).
+            An advisory, not a warning: it blocks nothing and claims nothing about the model. */}
+        <OutcomeLine
+          className="flex-1"
+          kind="advisory"
+          label="stand-in for the page camera"
+          says="block placement only — the real surface renders the PDF here through the grounded-doc camera, at which point these outlines become the real text"
+        />
+        {/* An exclusive choice among a fixed set is a MODE, so it wears the mode treatment (a
+            neutral fill) rather than becoming two verbs that both look pressable. */}
+        <Switcher
+          ariaLabel="page zoom"
+          value={zoom === 1 ? "fit" : "in"}
+          onChange={(next) => onZoom(next === "fit" ? 1 : 1.6)}
+          options={[
+            {
+              value: "fit",
+              label: "fit",
+              title: "Fit the whole page in the sidebar — the view for locating a citation.",
+            },
+            {
+              value: "in",
+              label: "1.6×",
+              title:
+                "Zoom in. The sidebar scrolls; the highlighted block stays highlighted, so zooming never loses the thing you were looking at.",
+            },
+          ]}
+        />
+      </div>
 
-        {citations.map((citation, index) => {
-          const color = citation.measured ? "var(--pe-green, var(--lichen))" : "var(--pe-blue)";
+      <div className="space-y-3 overflow-x-auto">
+        {pages.map((page) => {
+          const blocks = spec.blocks.filter((block) => block.page === page);
           return (
-            <div
-              key={`${citation.source.blockId}:${index}`}
-              className="absolute animate-in fade-in duration-300"
-              style={{ left: 0, top: tops.get(citation.page) }}
-            >
-              <div
-                className="absolute rounded-[2px]"
-                style={{
-                  left: citation.bbox.x,
-                  top: citation.bbox.y,
-                  width: citation.bbox.w,
-                  height: citation.bbox.h,
-                  border: citation.measured
-                    ? `${stroke}px solid ${color}`
-                    : `${stroke}px dashed ${color}`,
-                  background: `color-mix(in srgb, ${color} 9%, transparent)`,
-                }}
-              />
-              {citations.length > 1 && (
-                <div
-                  className="absolute grid size-4 place-items-center rounded-full text-[9px] font-semibold text-white"
-                  style={{
-                    left: citation.bbox.x - 8 / cam.scale,
-                    top: citation.bbox.y - 8 / cam.scale,
-                    background: color,
-                    transform: `scale(${1 / cam.scale})`,
-                    transformOrigin: "top left",
-                  }}
-                >
-                  {index + 1}
-                </div>
-              )}
+            <div key={page} style={{ width: `${100 * zoom}%`, minWidth: 180 }}>
+              <div className="face-mono mb-0.5 t-caption text-[var(--r-ink-2)]">page {page}</div>
+              <svg
+                viewBox="0 0 100 130"
+                className="block w-full border border-[var(--r-line-2)] bg-[var(--r-page)]"
+                role="img"
+                aria-label={`stand-in page ${page}`}
+              >
+                {blocks.map((block, index) => {
+                  const hash = hashOf(block.id);
+                  const x = 8 + (hash % 18);
+                  const y = 12 + index * 34;
+                  const width = Math.min(84 - (x - 8), 42 + ((hash >>> 7) % 40));
+                  const height = block.kind === "table" ? 24 : block.kind === "heading" ? 7 : 14;
+                  const lit = litBlocks.has(block.id);
+                  return (
+                    <g key={block.id}>
+                      <rect
+                        x={x}
+                        y={y}
+                        width={width}
+                        height={height}
+                        fill={lit ? "var(--r-select)" : "transparent"}
+                        /* A neutral mark, not a hue: a fill cannot separate at this size, so
+                           the highest-contrast neutral is what lights it (takeoffs #8). */
+                        stroke={lit ? "var(--r-ink)" : "var(--r-line-2)"}
+                        strokeWidth={lit ? 1 : 0.4}
+                      >
+                        <title>
+                          {lit
+                            ? `${block.id} — cited by the parameter in focus. This is roughly where it sits on page ${page}.`
+                            : `${block.id} · ${block.kind} on page ${page}. Hover a grounded row in the table to light it.`}
+                        </title>
+                      </rect>
+                      {lit && (
+                        <text
+                          x={x}
+                          y={y - 1.5}
+                          fontSize={4}
+                          fill="var(--r-ink-2)"
+                          style={{ fontFamily: "ui-monospace, monospace" }}
+                        >
+                          {block.id}
+                        </text>
+                      )}
+                    </g>
+                  );
+                })}
+              </svg>
             </div>
           );
         })}
-      </div>
-
-      <div className="absolute inset-x-4 bottom-4 space-y-1">
-        {caption ? (
-          <div className="rounded-[2px] border border-[var(--line)] bg-card/95 px-3 py-2 shadow-xl backdrop-blur">
-            <div className="flex items-center justify-between gap-2">
-              <span className="truncate font-mono text-[10px] text-muted-foreground">
-                {caption}
-              </span>
-              <span className="flex shrink-0 gap-1">
-                {citations.map((citation, index) => (
-                  <span
-                    key={index}
-                    className="rounded-full px-1.5 py-0.5 text-[9px] font-medium"
-                    style={{
-                      background: citation.measured
-                        ? "color-mix(in srgb, var(--lichen) 16%, transparent)"
-                        : "color-mix(in srgb, var(--pe-blue) 14%, transparent)",
-                      color: citation.measured ? "var(--lichen)" : "var(--pe-blue)",
-                    }}
-                  >
-                    {citations.length > 1 ? `${index + 1} · ` : ""}
-                    {citation.kind === "image"
-                      ? "image measured"
-                      : citation.measured
-                        ? "cell measured"
-                        : `${citation.kind} estimated`}
-                  </span>
-                ))}
-                {unresolved.map((source, index) => (
-                  <span
-                    key={`u${index}`}
-                    className="rounded-full px-1.5 py-0.5 text-[9px] font-medium"
-                    style={{
-                      background: "color-mix(in srgb, var(--kiln) 14%, transparent)",
-                      color: "var(--kiln)",
-                    }}
-                    title={`Citation ${source.blockId} does not resolve to parser geometry — not drawn.`}
-                  >
-                    unresolved · {source.blockId}
-                  </span>
-                ))}
-              </span>
-            </div>
-          </div>
-        ) : (
-          <div className="text-center text-[11px] text-white/50">
-            hover a cited cell or constituent to ground it here
-          </div>
-        )}
       </div>
     </div>
   );
 }
 
-function UploadSurface({
-  onParse,
-  parsing,
+export function ProposalCard({
+  proposal,
+  verdict,
+  focused,
+  blockMd,
+  onAccept,
+  onDeny,
+  onHover,
+  register,
 }: {
-  onParse: (input: { url?: string; file?: File }) => void;
-  parsing: boolean;
+  proposal: ProtoProposal;
+  verdict: CellVerdict;
+  focused: boolean;
+  blockMd: string | null;
+  onAccept: () => void;
+  onDeny: () => void;
+  onHover: (on: boolean) => void;
+  register: (node: HTMLDivElement | null) => void;
 }) {
-  const [url, setUrl] = useState("");
-  const [dragging, setDragging] = useState(false);
+  const target = proposal.typeName
+    ? `${proposal.param} · ${proposal.typeName}`
+    : `${proposal.param} · family value`;
+
+  // A settled proposal collapses to one line rather than disappearing: the sidebar keeps the
+  // record that a claim was made and answered, and the citation link stays hoverable.
+  if (verdict !== "open") {
+    const settled = {
+      accepted: {
+        mark: "✓",
+        word: "accepted",
+        colour: "var(--r-done)",
+        note: `Accepted — the table now reads ${proposal.proposed} for ${target}. The proposal itself was never persisted; only the value it argued for is in the document, and its citation is still live.`,
+      },
+      denied: {
+        mark: "—",
+        word: "denied",
+        colour: "var(--r-ink-mute)",
+        note: `Denied — the profile keeps its own value for ${target}. Nothing was written, and the citation is unaffected: grounding is a fact about the spec, not about pea.`,
+      },
+      superseded: {
+        mark: "—",
+        word: "superseded by your edit",
+        colour: "var(--r-ink-mute)",
+        // MUTED, never `--r-done`: nothing of pea's was adopted. Accepted and superseded look
+        // different because they ARE different — one is agreement, the other is being overtaken.
+        // The CELL shows nothing at all; the grammar has no `severed` stage (DESIGN-AUDIT #7).
+        note: `Superseded — you typed your own value into ${target}, so pea's ${proposal.proposed} has nothing left to argue for. There was no accept and no deny; the cell simply moved on. The grounding citation is untouched, because where a number came from is a separate fact from what pea read.`,
+      },
+    }[verdict];
+    return (
+      <div
+        ref={register}
+        onMouseEnter={() => onHover(true)}
+        onMouseLeave={() => onHover(false)}
+        className="face-mono flex items-baseline gap-1 py-0.5 t-caption"
+        title={settled.note}
+        style={{ color: settled.colour }}
+      >
+        <span>{settled.mark}</span>
+        <span className="truncate">{target}</span>
+        <span className="ml-auto shrink-0 opacity-70">{settled.word}</span>
+      </div>
+    );
+  }
+
   return (
     <div
-      onDragOver={(event) => {
-        event.preventDefault();
-        setDragging(true);
+      ref={register}
+      onMouseEnter={() => onHover(true)}
+      onMouseLeave={() => onHover(false)}
+      className="mb-1.5 py-1 pl-2"
+      /* Pea's identity, never the commit colour: the card edge is a MARK (`--r-pea`, the display
+         rung) and the focus wash is mixed from pea's ink. */
+      style={{
+        borderLeft: "1.5px solid var(--r-pea)",
+        background: focused
+          ? "color-mix(in srgb, var(--r-pea-ink) 12%, transparent)"
+          : "transparent",
+        transition: "background 0.25s",
       }}
-      onDragLeave={() => setDragging(false)}
-      onDrop={(event) => {
-        event.preventDefault();
-        setDragging(false);
-        const file = event.dataTransfer.files?.[0];
-        if (file) onParse({ file });
-      }}
-      className={
-        "flex h-full flex-col items-center justify-center gap-3 border-l border-[var(--line)] px-8 transition-colors " +
-        (dragging
-          ? "bg-[color-mix(in_srgb,var(--pe-blue)_20%,var(--basalt))]"
-          : "bg-[color-mix(in_srgb,var(--basalt)_88%,var(--pe-blue))]")
-      }
+      title="A pea proposal — ephemeral and page-scoped. It is not in the document and never will be; accepting is what writes the value, and leaving the page throws the proposal away."
     >
-      <p className="text-xs text-muted-foreground">
-        {parsing
-          ? "Parsing spec sheet (takes a minute or two)…"
-          : "No spec sheet parsed — drop a PDF here, paste a URL, or ask pea to do it."}
-      </p>
-      {parsing ? (
-        <Loader2 className="size-4 animate-spin text-muted-foreground" />
-      ) : (
-        <>
-          <div className="flex w-full max-w-md items-center gap-2">
-            <input
-              value={url}
-              onChange={(event) => setUrl(event.target.value)}
-              placeholder="https://…/submittal.pdf"
-              className="h-8 min-w-0 flex-1 rounded-[2px] border border-[var(--line)] bg-white/70 px-2.5 text-xs outline-none focus:border-[var(--pe-blue)]"
-            />
-            <button
-              type="button"
-              disabled={!url.trim()}
-              onClick={() => onParse({ url: url.trim() })}
-              className="rounded-[2px] border border-[var(--line)] px-2.5 py-1 text-xs hover:border-[var(--pe-blue)] disabled:opacity-40"
-            >
-              Parse
-            </button>
-          </div>
-          <label className="cursor-pointer text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground">
-            or upload a PDF
-            <input
-              type="file"
-              accept="application/pdf"
-              className="hidden"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) onParse({ file });
-              }}
-            />
-          </label>
-        </>
+      <div className="face-mono t-caption text-[var(--r-ink-2)]">{target}</div>
+      <div className="face-mono t-label text-[var(--r-pea-ink)]">
+        {proposal.current ?? "—"} → {proposal.proposed}
+      </div>
+      <p className="mt-0.5 t-caption leading-snug text-[var(--r-ink)]">{proposal.note}</p>
+      {blockMd && (
+        <p
+          className="face-mono mt-1 line-clamp-3 whitespace-pre-line t-caption leading-snug text-[var(--r-ink-2)]"
+          title={`Read from ${proposal.sourceBlockId} of ${SPEC?.fileName ?? "the spec"} — the source text verbatim, so the claim is checkable without leaving the page.`}
+        >
+          {blockMd}
+        </p>
       )}
+      {/* Both verbs are page-scoped ACTS, and accept deliberately so: it STAGES the value into the
+          draft, where the unsaved square then says the file has not moved. `accept` wears the
+          AGENT tone because it adopts pea's reading; `deny` is an ordinary safe verb. Only
+          `save profile` crosses out of the page, and it is not on this sidebar. */}
+      <div className="mt-1 flex gap-1">
+        <Verb
+          label="accept"
+          tone="agent"
+          onClick={onAccept}
+          reason={`Write ${proposal.proposed} into the table for ${target}. You will see it land in the cell — that IS the accept; the profile then reads unsaved until you save it.`}
+        />
+        <Verb
+          label="deny"
+          onClick={onDeny}
+          reason="Throw the proposal away and keep the profile as authored. The card collapses to a struck line so the sidebar still records that it was answered."
+        />
+      </div>
     </div>
   );
 }

@@ -48,11 +48,12 @@ export function RouteWorkspaceShell({
 }: RouteWorkspaceShellProps) {
   const hasSubline = subline != null || error != null;
   return (
-    <main className="flex h-screen flex-col overflow-hidden bg-[var(--paper)]">
-      <header className="shrink-0 border-b border-[var(--line-2)] px-5 pb-2.5 pt-3">
+    <main className="flex h-screen flex-col overflow-hidden bg-[var(--r-page)] [--r-on:var(--r-page)]">
+      <header className="shrink-0 border-b border-[var(--r-line-2)] px-5 pb-2.5 pt-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-baseline gap-3">
-            <h1 className="font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight text-[var(--clay-ink)]">
+            {/* a page title is chrome — ink, not a meaning hue (it wore the alarm via shim) */}
+            <h1 className="font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight text-[var(--r-ink)]">
               {title}
             </h1>
             {subtitle}
@@ -66,9 +67,10 @@ export function RouteWorkspaceShell({
         </div>
 
         {hasSubline ? (
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 t-label">
             {subline}
-            {error ? <span className="text-[var(--cat-clay)]">{error}</span> : null}
+            {/* a route-level error is an ERROR — caution, never a viz hue as state */}
+            {error ? <span className="text-[var(--r-caution)]">{error}</span> : null}
           </div>
         ) : null}
       </header>
@@ -83,7 +85,7 @@ function BindingChip({ binding }: { binding: RouteBinding | null }) {
   const target = binding?.target ?? null;
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-[2px] border border-[var(--line)] px-1.5 py-0.5 text-[10px] text-[var(--lichen)]"
+      className="inline-flex items-center gap-1 rounded-[2px] border border-[var(--r-line)] px-1.5 py-0.5 t-caption face-mono text-[var(--r-ink-2)]"
       title={target ? `bound to ${target}` : "no target bound"}
     >
       <Link2 className="size-2.5" />

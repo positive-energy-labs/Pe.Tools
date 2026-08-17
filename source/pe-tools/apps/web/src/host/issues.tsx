@@ -164,8 +164,9 @@ export function HostIssuePanel({
     <div
       className={cn(
         "rounded-lg border p-3 text-sm",
+        // a busy bridge / doc conflict is NOT the model disagreeing — caution, not alarm.
         issue.kind === "conflict" || issue.kind === "bridge_busy"
-          ? "border-[var(--cat-clay)]/30 bg-[var(--cat-clay)]/10 text-[var(--cat-clay)]"
+          ? "border-[var(--r-caution)]/30 bg-[var(--r-caution)]/10 text-[var(--r-caution)]"
           : "border-destructive/30 bg-destructive/10 text-destructive",
         compact && "p-2 text-xs",
       )}
@@ -220,8 +221,4 @@ export function HostConnectionPill({ connected, label }: { connected: boolean; l
       {connected ? (label ?? "Connected") : "Disconnected"}
     </span>
   );
-}
-
-export function BridgeBusyNotice({ issue }: { issue?: HostIssue }) {
-  return issue?.kind === "bridge_busy" ? <HostIssuePanel issue={issue} compact /> : null;
 }

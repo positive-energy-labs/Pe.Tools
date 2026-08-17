@@ -1,0 +1,277 @@
+﻿{
+    "sourceFile":  "synctest.r10",
+    "building":  {
+                     "areaSquareFeet":  0,
+                     "people":  0,
+                     "coolingLoadNetBtuh":  0,
+                     "coolingLoadRecommendedBtuh":  0,
+                     "heatingLoadBtuh":  0,
+                     "heatingLoadRecommendedBtuh":  0
+                 },
+    "systems":  [
+                    {
+                        "number":  1,
+                        "calculatedCoolingSensibleLoadAverage":  0,
+                        "calculatedCoolingLatentLoadAverage":  0,
+                        "calculatedCoolingNetLoadAverage":  0,
+                        "calculatedCoolingRecommendedLoadAverage":  0,
+                        "calculatedRoomsOnlySensibleGainAverage":  0,
+                        "calculatedRoomsOnlyLatentGainAverage":  0,
+                        "calculatedCoolingVentilationCFMAverage":  0,
+                        "calculatedCoolingSupplyCFMAverage":  0,
+                        "calculatedCoolingSensibleLoadPeak":  0,
+                        "calculatedCoolingLatentLoadPeak":  0,
+                        "calculatedCoolingNetLoadPeak":  0,
+                        "calculatedCoolingRecommendedLoadPeak":  0,
+                        "calculatedRoomsOnlySensibleGainPeak":  0,
+                        "calculatedRoomsOnlyLatentGainPeak":  0,
+                        "calculatedCoolingVentilationCFMPeak":  0,
+                        "calculatedCoolingSupplyCFMPeak":  0,
+                        "calculatedLeavingCoolingCoilDB":  55,
+                        "calculatedHeatingLoad":  0,
+                        "calculatedHeatingSupplyCFM":  0,
+                        "calculatedDrawThroughFanGain":  0,
+                        "calculatedPeakMethodForSystem":  0,
+                        "calculatedPeakMethodForRooms":  0,
+                        "calculatedHeatingLoadRecommended":  0,
+                        "calculatedActualSystemCFM":  0,
+                        "calculatedVentilationCFMUsedWithActualSystemCFM":  0,
+                        "calculatedCoolingNominalCFM":  0,
+                        "calculatedHeatingNominalCFM":  0,
+                        "calculatedTemperatureInDuct":  55,
+                        "calculatedHeatRecoveryTemperatureRiseWinter":  0,
+                        "calculatedHeatRecoveryTemperatureDropSummer":  0,
+                        "calculatedInfiltrationACPerHourSummer":  0,
+                        "calculatedInfiltrationACPerHourWinter":  0,
+                        "calculatedSupplyDuctTemperatureRise":  0,
+                        "calculatedReturnDuctTemperatureRise":  0
+                    },
+                    {
+                        "number":  2,
+                        "calculatedCoolingSensibleLoadAverage":  0,
+                        "calculatedCoolingLatentLoadAverage":  0,
+                        "calculatedCoolingNetLoadAverage":  0,
+                        "calculatedCoolingRecommendedLoadAverage":  0,
+                        "calculatedRoomsOnlySensibleGainAverage":  0,
+                        "calculatedRoomsOnlyLatentGainAverage":  0,
+                        "calculatedCoolingVentilationCFMAverage":  0,
+                        "calculatedCoolingSupplyCFMAverage":  0,
+                        "calculatedCoolingSensibleLoadPeak":  0,
+                        "calculatedCoolingLatentLoadPeak":  0,
+                        "calculatedCoolingNetLoadPeak":  0,
+                        "calculatedCoolingRecommendedLoadPeak":  0,
+                        "calculatedRoomsOnlySensibleGainPeak":  0,
+                        "calculatedRoomsOnlyLatentGainPeak":  0,
+                        "calculatedCoolingVentilationCFMPeak":  0,
+                        "calculatedCoolingSupplyCFMPeak":  0,
+                        "calculatedLeavingCoolingCoilDB":  55,
+                        "calculatedHeatingLoad":  0,
+                        "calculatedHeatingSupplyCFM":  0,
+                        "calculatedDrawThroughFanGain":  0,
+                        "calculatedPeakMethodForSystem":  0,
+                        "calculatedPeakMethodForRooms":  0,
+                        "calculatedHeatingLoadRecommended":  0,
+                        "calculatedActualSystemCFM":  0,
+                        "calculatedVentilationCFMUsedWithActualSystemCFM":  0,
+                        "calculatedCoolingNominalCFM":  0,
+                        "calculatedHeatingNominalCFM":  0,
+                        "calculatedTemperatureInDuct":  0,
+                        "calculatedHeatRecoveryTemperatureRiseWinter":  0,
+                        "calculatedHeatRecoveryTemperatureDropSummer":  0,
+                        "calculatedInfiltrationACPerHourSummer":  0,
+                        "calculatedInfiltrationACPerHourWinter":  0,
+                        "calculatedSupplyDuctTemperatureRise":  0,
+                        "calculatedReturnDuctTemperatureRise":  0
+                    },
+                    {
+                        "number":  3,
+                        "calculatedCoolingSensibleLoadAverage":  0,
+                        "calculatedCoolingLatentLoadAverage":  0,
+                        "calculatedCoolingNetLoadAverage":  0,
+                        "calculatedCoolingRecommendedLoadAverage":  0,
+                        "calculatedRoomsOnlySensibleGainAverage":  0,
+                        "calculatedRoomsOnlyLatentGainAverage":  0,
+                        "calculatedCoolingVentilationCFMAverage":  0,
+                        "calculatedCoolingSupplyCFMAverage":  0,
+                        "calculatedCoolingSensibleLoadPeak":  0,
+                        "calculatedCoolingLatentLoadPeak":  0,
+                        "calculatedCoolingNetLoadPeak":  0,
+                        "calculatedCoolingRecommendedLoadPeak":  0,
+                        "calculatedRoomsOnlySensibleGainPeak":  0,
+                        "calculatedRoomsOnlyLatentGainPeak":  0,
+                        "calculatedCoolingVentilationCFMPeak":  0,
+                        "calculatedCoolingSupplyCFMPeak":  0,
+                        "calculatedLeavingCoolingCoilDB":  55,
+                        "calculatedHeatingLoad":  0,
+                        "calculatedHeatingSupplyCFM":  0,
+                        "calculatedDrawThroughFanGain":  0,
+                        "calculatedPeakMethodForSystem":  0,
+                        "calculatedPeakMethodForRooms":  0,
+                        "calculatedHeatingLoadRecommended":  0,
+                        "calculatedActualSystemCFM":  0,
+                        "calculatedVentilationCFMUsedWithActualSystemCFM":  0,
+                        "calculatedCoolingNominalCFM":  0,
+                        "calculatedHeatingNominalCFM":  0,
+                        "calculatedTemperatureInDuct":  55,
+                        "calculatedHeatRecoveryTemperatureRiseWinter":  0,
+                        "calculatedHeatRecoveryTemperatureDropSummer":  0,
+                        "calculatedInfiltrationACPerHourSummer":  0,
+                        "calculatedInfiltrationACPerHourWinter":  0,
+                        "calculatedSupplyDuctTemperatureRise":  0,
+                        "calculatedReturnDuctTemperatureRise":  0
+                    },
+                    {
+                        "number":  4,
+                        "calculatedCoolingSensibleLoadAverage":  0,
+                        "calculatedCoolingLatentLoadAverage":  0,
+                        "calculatedCoolingNetLoadAverage":  0,
+                        "calculatedCoolingRecommendedLoadAverage":  0,
+                        "calculatedRoomsOnlySensibleGainAverage":  0,
+                        "calculatedRoomsOnlyLatentGainAverage":  0,
+                        "calculatedCoolingVentilationCFMAverage":  0,
+                        "calculatedCoolingSupplyCFMAverage":  0,
+                        "calculatedCoolingSensibleLoadPeak":  0,
+                        "calculatedCoolingLatentLoadPeak":  0,
+                        "calculatedCoolingNetLoadPeak":  0,
+                        "calculatedCoolingRecommendedLoadPeak":  0,
+                        "calculatedRoomsOnlySensibleGainPeak":  0,
+                        "calculatedRoomsOnlyLatentGainPeak":  0,
+                        "calculatedCoolingVentilationCFMPeak":  0,
+                        "calculatedCoolingSupplyCFMPeak":  0,
+                        "calculatedLeavingCoolingCoilDB":  55,
+                        "calculatedHeatingLoad":  0,
+                        "calculatedHeatingSupplyCFM":  0,
+                        "calculatedDrawThroughFanGain":  0,
+                        "calculatedPeakMethodForSystem":  0,
+                        "calculatedPeakMethodForRooms":  0,
+                        "calculatedHeatingLoadRecommended":  0,
+                        "calculatedActualSystemCFM":  0,
+                        "calculatedVentilationCFMUsedWithActualSystemCFM":  0,
+                        "calculatedCoolingNominalCFM":  0,
+                        "calculatedHeatingNominalCFM":  0,
+                        "calculatedTemperatureInDuct":  55,
+                        "calculatedHeatRecoveryTemperatureRiseWinter":  0,
+                        "calculatedHeatRecoveryTemperatureDropSummer":  0,
+                        "calculatedInfiltrationACPerHourSummer":  0,
+                        "calculatedInfiltrationACPerHourWinter":  0,
+                        "calculatedSupplyDuctTemperatureRise":  0,
+                        "calculatedReturnDuctTemperatureRise":  0
+                    }
+                ],
+    "rooms":  [
+                  {
+                      "identifier":  2,
+                      "number":  101,
+                      "name":  "Great Room",
+                      "systemNumber":  3,
+                      "zoneNumber":  1,
+                      "areaSquareFeet":  420.5,
+                      "ceilingHeightFeet":  11.25,
+                      "people":  0,
+                      "lightingWatts":  105,
+                      "equipmentSensibleBtuh":  0,
+                      "equipmentLatentBtuh":  0,
+                      "loads":  {
+                                    "cfmSupplyCooling":  0,
+                                    "cfmSupplyHeating":  0,
+                                    "cfmSupplyActual":  0,
+                                    "temperatureInDuct":  0,
+                                    "registersCalculated":  0
+                                },
+                      "floors":  [
+                                     {
+                                         "assembly":  "passive, heavy dry or light wet soil",
+                                         "uValue":  1.1799999475479126,
+                                         "areaSquareFeet":  420.5,
+                                         "exposedPerimeterFeet":  38
+                                     }
+                                 ],
+                      "roofs":  [
+                                    {
+                                        "assembly":  "R49 closed cell sprayfoam in 2x14 joist cavity",
+                                        "uValue":  0.024000000208616257,
+                                        "areaSquareFeet":  420.5,
+                                        "areaMultiplier":  1
+                                    }
+                                ],
+                      "walls":  [
+                                    {
+                                        "index1":  1,
+                                        "assembly":  "Tasting Room Wall",
+                                        "uValue":  0.085000000894069672,
+                                        "lengthFeet":  22,
+                                        "heightFeet":  11.25,
+                                        "direction":  0
+                                    },
+                                    {
+                                        "index1":  2,
+                                        "assembly":  "Tasting Room Wall",
+                                        "uValue":  0.085000000894069672,
+                                        "lengthFeet":  19,
+                                        "heightFeet":  11.25,
+                                        "direction":  2
+                                    }
+                                ],
+                      "glass":  [
+                                    {
+                                        "assembly":  "U-0.55 SHGC-0.40",
+                                        "uValue":  0.550000011920929,
+                                        "widthFeet":  6,
+                                        "heightFeet":  8,
+                                        "wallReference":  1,
+                                        "shgc":  0.40000000596046448,
+                                        "occurrences":  2
+                                    }
+                                ],
+                      "doors":  [
+                                    {
+                                        "assembly":  "Wood - Solid Core",
+                                        "uValue":  0.38999998569488525,
+                                        "widthFeet":  3,
+                                        "heightFeet":  8,
+                                        "wallReference":  2
+                                    }
+                                ]
+                  },
+                  {
+                      "identifier":  3,
+                      "number":  102,
+                      "name":  "Primary Bedroom",
+                      "systemNumber":  4,
+                      "zoneNumber":  1,
+                      "areaSquareFeet":  310,
+                      "ceilingHeightFeet":  10,
+                      "people":  2,
+                      "lightingWatts":  78,
+                      "equipmentSensibleBtuh":  0,
+                      "equipmentLatentBtuh":  0,
+                      "loads":  {
+                                    "cfmSupplyCooling":  0,
+                                    "cfmSupplyHeating":  0,
+                                    "cfmSupplyActual":  0,
+                                    "temperatureInDuct":  0,
+                                    "registersCalculated":  0
+                                },
+                      "floors":  [
+                                     {
+                                         "assembly":  "WR R20",
+                                         "uValue":  0.05000000074505806,
+                                         "areaSquareFeet":  310,
+                                         "exposedPerimeterFeet":  0
+                                     }
+                                 ],
+                      "roofs":  [
+
+                                ],
+                      "walls":  [
+
+                                ],
+                      "glass":  [
+
+                                ],
+                      "doors":  [
+
+                                ]
+                  }
+              ]
+}

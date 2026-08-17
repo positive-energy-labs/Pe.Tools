@@ -14,4 +14,18 @@
         <UseWPF>true</UseWPF>
     </PropertyGroup>
 
+    <ItemGroup>
+        <!-- long.ToElementId comes from Extensions since SDK beta.116 ceded its Compat copy. -->
+        <PackageReference Include="Nice3point.Revit.Extensions" Version="2025.2.4" Condition="'$(RevitVersion)' == '2025'"/>
+        <PackageReference Include="Nice3point.Revit.Extensions" Version="$(RevitVersion).*" Condition="'$(RevitVersion)' != '2025'"/>
+        <PackageReference Include="NetTopologySuite" Version="2.6.0"/>
+        <PackageReference Include="Newtonsoft.Json" Version="13.0.3"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- TakeoffCarriers rides SharedParameterBinder/TempSharedParamFile — the one sanctioned
+             persistence path (ES is banned). Takeoff stays otherwise leaf. -->
+        <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj"/>
+    </ItemGroup>
+
 </Project>

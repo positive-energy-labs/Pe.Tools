@@ -2,68 +2,18 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "web",
+      "name": "host",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": [
-        "--filter",
-        "@pe/web",
-        "exec",
-        "node",
-        "../../node_modules/vite-plus/bin/vp",
-        "dev",
-        "--port",
-        "3000"
-      ],
+      "runtimeArgs": ["-C", "source/pe-tools", "--filter", "@pe/host", "run", "dev"],
+      "port": 61625,
+      "autoPort": true
+    },
+    {
+      "name": "web-only",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["-C", "source/pe-tools", "--filter", "@pe/web", "run", "dev"],
       "port": 3000,
-      "autoPort": false
-    },
-    {
-      "name": "web-3020",
-      "runtimeExecutable": "pnpm",
-      "runtimeArgs": [
-        "--filter",
-        "@pe/web",
-        "exec",
-        "node",
-        "../../node_modules/vite-plus/bin/vp",
-        "dev",
-        "--port",
-        "3020"
-      ],
-      "port": 3020,
-      "autoPort": false
-    },
-    {
-      "name": "web-3030",
-      "runtimeExecutable": "pnpm",
-      "runtimeArgs": [
-        "--filter",
-        "@pe/web",
-        "exec",
-        "node",
-        "../../node_modules/vite-plus/bin/vp",
-        "dev",
-        "--port",
-        "3030"
-      ],
-      "port": 3030,
-      "autoPort": false
-    },
-    {
-      "name": "web-3010",
-      "runtimeExecutable": "pnpm",
-      "runtimeArgs": [
-        "--filter",
-        "@pe/web",
-        "exec",
-        "node",
-        "../../node_modules/vite-plus/bin/vp",
-        "dev",
-        "--port",
-        "3010"
-      ],
-      "port": 3010,
-      "autoPort": false
+      "autoPort": true
     }
   ]
 }

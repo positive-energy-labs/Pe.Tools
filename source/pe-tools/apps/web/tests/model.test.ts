@@ -60,6 +60,26 @@ test("tail follow survives content growth until the user scrolls up", () => {
   ).toBe("detached");
 });
 
+test("upward scroll inside the tail zone detaches (no snap-back)", () => {
+  // scrollTop 1450 is within TAIL_THRESHOLD_PX of the bottom (max 1500) — previously this
+  // stayed "following" and the next measure snapped the view back down.
+  expect(
+    nextTailFollowState(
+      "following",
+      { scrollTop: 1450, scrollHeight: 2000, clientHeight: 500 },
+      1500,
+    ),
+  ).toBe("detached");
+  // scrolling back down into the zone re-attaches
+  expect(
+    nextTailFollowState(
+      "detached",
+      { scrollTop: 1450, scrollHeight: 2000, clientHeight: 500 },
+      1400,
+    ),
+  ).toBe("following");
+});
+
 test("focal point reports the current turn", () => {
   expect(
     turnAtFocalPoint(

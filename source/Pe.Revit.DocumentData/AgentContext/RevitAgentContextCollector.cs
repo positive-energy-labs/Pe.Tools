@@ -44,15 +44,19 @@ public static class RevitAgentContextCollector {
         var issues = new List<RevitDataIssue>();
         var maxCategories = BoundRequestedCount(
             request.MaxCategories,
+            fallback: 12,
             1,
             50,
+            nameof(RevitAgentVisibleContextRequest),
             nameof(RevitAgentVisibleContextRequest.MaxCategories),
             issues
         );
         var maxSampleElements = BoundRequestedCount(
             request.MaxSampleElementsPerCategory,
+            fallback: 0,
             0,
             12,
+            nameof(RevitAgentVisibleContextRequest),
             nameof(RevitAgentVisibleContextRequest.MaxSampleElementsPerCategory),
             issues
         );
@@ -60,8 +64,10 @@ public static class RevitAgentContextCollector {
         var returnSamples = request.Projection == RevitAgentVisibleProjection.Samples;
         var maxElementHandles = BoundRequestedCount(
             request.MaxElementHandlesPerCategory,
+            fallback: 0,
             0,
             1000,
+            nameof(RevitAgentVisibleContextRequest),
             nameof(RevitAgentVisibleContextRequest.MaxElementHandlesPerCategory),
             issues
         );
@@ -71,8 +77,10 @@ public static class RevitAgentContextCollector {
             maxSampleElements = 0;
         var maxViews = BoundRequestedCount(
             request.MaxViews,
+            fallback: 10,
             1,
             25,
+            nameof(RevitAgentVisibleContextRequest),
             nameof(RevitAgentVisibleContextRequest.MaxViews),
             issues
         );
@@ -115,11 +123,12 @@ public static class RevitAgentContextCollector {
         RevitAgentViewRenderingStateRequest request
     ) {
         var issues = new List<RevitDataIssue>();
-        var maxViews = BoundRequestedCount(request.MaxViews, 1, 12, nameof(RevitAgentViewRenderingStateRequest.MaxViews), issues);
-        var maxFilters = BoundRequestedCount(request.MaxFiltersPerView, 0, 100, nameof(RevitAgentViewRenderingStateRequest.MaxFiltersPerView), issues);
-        var maxHiddenCategories = BoundRequestedCount(request.MaxHiddenCategoriesPerView, 0, 100, nameof(RevitAgentViewRenderingStateRequest.MaxHiddenCategoriesPerView), issues);
-        var maxLinks = BoundRequestedCount(request.MaxLinksPerView, 0, 50, nameof(RevitAgentViewRenderingStateRequest.MaxLinksPerView), issues);
-        var maxWorksets = BoundRequestedCount(request.MaxWorksetsPerView, 0, 100, nameof(RevitAgentViewRenderingStateRequest.MaxWorksetsPerView), issues);
+        const string requestTypeName = nameof(RevitAgentViewRenderingStateRequest);
+        var maxViews = BoundRequestedCount(request.MaxViews, fallback: 6, 1, 12, requestTypeName, nameof(RevitAgentViewRenderingStateRequest.MaxViews), issues);
+        var maxFilters = BoundRequestedCount(request.MaxFiltersPerView, fallback: 60, 0, 100, requestTypeName, nameof(RevitAgentViewRenderingStateRequest.MaxFiltersPerView), issues);
+        var maxHiddenCategories = BoundRequestedCount(request.MaxHiddenCategoriesPerView, fallback: 40, 0, 100, requestTypeName, nameof(RevitAgentViewRenderingStateRequest.MaxHiddenCategoriesPerView), issues);
+        var maxLinks = BoundRequestedCount(request.MaxLinksPerView, fallback: 25, 0, 50, requestTypeName, nameof(RevitAgentViewRenderingStateRequest.MaxLinksPerView), issues);
+        var maxWorksets = BoundRequestedCount(request.MaxWorksetsPerView, fallback: 40, 0, 100, requestTypeName, nameof(RevitAgentViewRenderingStateRequest.MaxWorksetsPerView), issues);
         var visibleRequest = new RevitAgentVisibleContextRequest(
             Scope: request.Scope == RevitAgentViewRenderingScope.ActiveView
                 ? RevitAgentVisibleContextScope.ActiveViewVisible
@@ -495,7 +504,8 @@ public static class RevitAgentContextCollector {
         return new RevitAgentContextResolveData(referenceText, results.Count, results, issues);
     }
 
-    private static RevitAgentActiveViewContext CreateActiveViewContext(Document document, View view) =>
+    // Shared with GlanceAttentionCollector (same assembly).
+    internal static RevitAgentActiveViewContext CreateActiveViewContext(Document document, View view) =>
         CreateActiveViewContext(document, view, CreateSheetPlacementIndex(document));
 
     private static RevitAgentActiveViewContext CreateActiveViewContext(
@@ -605,7 +615,9 @@ public static class RevitAgentContextCollector {
         );
     }
 
-    private static RevitAgentBrowserSummary CreateBrowserSummary(Document document) => new(
+    // Shared with ProjectIndexCollector and GlanceModelCollector: the one source of
+    // unfiltered, non-template project totals ("true totals" in the read-envelope ADR).
+    internal static RevitAgentBrowserSummary CreateBrowserSummary(Document document) => new(
         new FilteredElementCollector(document).OfClass(typeof(View)).Cast<View>().Count(view => !view.IsTemplate),
         new FilteredElementCollector(document).OfClass(typeof(ViewSheet)).Cast<ViewSheet>().Count(sheet => !sheet.IsTemplate),
         new FilteredElementCollector(document).OfClass(typeof(ViewSchedule)).Cast<ViewSchedule>().Count(schedule => !schedule.IsTemplate),
@@ -1202,20 +1214,27 @@ public static class RevitAgentContextCollector {
 
     private static int Clamp(int value, int min, int max) => Math.Min(Math.Max(value, min), max);
 
+    // Omitted (null) limits take the generous default silently; only a caller-supplied
+    // out-of-range value earns an AgentContextRequestLimitAdjusted warning.
     private static int BoundRequestedCount(
-        int requested,
+        int? requested,
+        int fallback,
         int min,
         int max,
+        string typeName,
         string propertyName,
         List<RevitDataIssue> issues
     ) {
-        var bounded = Clamp(requested, min, max);
-        if (bounded != requested) {
+        if (requested is not { } value)
+            return Clamp(fallback, min, max);
+
+        var bounded = Clamp(value, min, max);
+        if (bounded != value) {
             issues.Add(new RevitDataIssue(
                 "AgentContextRequestLimitAdjusted",
                 RevitDataIssueSeverity.Warning,
                 $"{propertyName} must be between {min} and {max}; using {bounded}.",
-                TypeName: nameof(RevitAgentVisibleContextRequest),
+                TypeName: typeName,
                 ParameterName: propertyName
             ));
         }

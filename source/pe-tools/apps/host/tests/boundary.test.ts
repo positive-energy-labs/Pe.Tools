@@ -92,7 +92,7 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
     expect(((await status.json()) as { lane?: string }).lane).toBe("dev");
 
     // Discovery uses the same selector surface as /call and echoes its resolved identity so
-    // typegen can reject an accidental RRD-vs-sandbox lane mismatch.
+    // typegen can reject an accidental dev-vs-sandbox lane mismatch.
     const ops = await fetch(`${base}/ops`, {
       headers: { [HOST_RPC_BRIDGE_SESSION_HEADER]: "sandbox:boundary" },
     });
@@ -101,7 +101,7 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
       bridgeSessionId: "sandbox:boundary",
     });
 
-    const conflictingOps = await fetch(`${base}/ops?session=rrd:other`, {
+    const conflictingOps = await fetch(`${base}/ops?session=dev:other`, {
       headers: { [HOST_RPC_BRIDGE_SESSION_HEADER]: "sandbox:boundary" },
     });
     expect(conflictingOps.status).toBe(400);

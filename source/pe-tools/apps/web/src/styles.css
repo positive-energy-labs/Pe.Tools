@@ -4,119 +4,50 @@
 
 @import "tw-animate-css";
 
+/* THE DESIGN LANGUAGE (canon `--r-*` contract, p3 · wholistic bands). Additive: the tokens
+   below stay live for every route that has not migrated onto `components/lang` yet. */
+@import "./design-lang.css";
+
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* PE palette mapped onto shadcn semantic tokens (PE_DESIGN_VIBE.md).
-     Anchors: PE Blue #005695 = primary, PE Green = accent/ring, Basalt = foreground, Mist = secondary/muted. */
-  --background: #fbfaf7; /* warm paper */
-  --foreground: #3e4340; /* Basalt */
-  --card: #ffffff;
-  --card-foreground: #3e4340;
-  --popover: #ffffff;
-  --popover-foreground: #3e4340;
-  --primary: #005695; /* PE Blue */
-  --primary-foreground: #ffffff;
-  --secondary: #e8e4dd; /* Mist */
-  --secondary-foreground: #3e4340;
-  --muted: #f4f1ea; /* soft paper fill */
-  --muted-foreground: #4f6473; /* Slate Field */
-  --accent: #e6f1ea; /* PE Green wash */
-  --accent-foreground: #2f6a4a; /* palm */
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: #e3ded5;
-  --input: #e3ded5;
-  --ring: #005695; /* PE Blue focus ring */
-  /* provenance: you=kiln (slate in dark), pea+tools=green — identity/state across the workbench.
-     One `--user` hue; tint/line derive from it so a theme only re-points `--user`. */
-  --user: var(--kiln);
-  --user-tint: color-mix(in srgb, var(--user) 14%, transparent);
-  --user-line: color-mix(in srgb, var(--user) 36%, transparent);
-  --pea-tint: color-mix(in srgb, var(--pe-green) 12%, transparent);
-  --pea-line: color-mix(in srgb, var(--pe-green) 32%, transparent);
-  /* PE data palette — categorical colors for badges/cells/legends (family-matrix, status chips).
-     One hue per category; consumers tint it (`/12` bg, `/25` border) and use the full hue as text.
-     Light values are dark enough to read on their own faint tint; .dark lightens them to match. */
-  --cat-blue: #005695; /* PE Blue — built-in / family kind */
-  --cat-green: #2f6a4a; /* palm — family value / proj+shared / success */
-  --cat-slate: #4f6473; /* Slate Field — instance / neutral data */
-  --cat-lichen: #6c7a4f; /* Lichen — shared / formula */
-  --cat-clay: #8a5e3b; /* Clay — project / warning */
-  --cat-kiln: #847a67; /* Kiln — type / not-available / muted */
+  /* ══ THE GROUND FLIP (2026-08-16) ═══════════════════════════════════════════
+     The shadcn semantic layer RESOLVES ONTO the --r-* ladder (design-lang.css).
+     styles.css no longer decides a single colour — every value below is a var()
+     indirection into canon, so both modes track automatically and the old
+     basalt-green dark ground is gone (there is no .dark block in this file).
+     Mapping: page→background · artifact→card/popover · recess→muted/secondary ·
+     select→accent (shadcn's hover/selected fill — the no-hue law for free). */
+  --background: var(--r-page);
+  --foreground: var(--r-ink);
+  --card: var(--r-artifact);
+  --card-foreground: var(--r-ink);
+  --popover: var(--r-artifact);
+  --popover-foreground: var(--r-ink);
+  --primary: var(--r-commit);
+  --primary-foreground: var(--r-on-commit);
+  --secondary: var(--r-recess);
+  --secondary-foreground: var(--r-ink);
+  --muted: var(--r-recess);
+  --muted-foreground: var(--r-ink-2);
+  --accent: var(--r-select);
+  --accent-foreground: var(--r-ink);
+  --destructive: var(--r-alarm);
+  --destructive-foreground: var(--r-on-commit);
+  --border: var(--r-line);
+  --input: var(--r-line);
+  --ring: var(--r-line-2); /* focus is a hairline, never a hue (lang focus law) */
   /* Edge discipline: 2px. Sharp instrument edges, softened one notch off 90° so shadcn
      primitives don't read raw against OS chrome. Data surfaces may go to 0 locally. */
   --radius: 0.125rem;
-
-  /* ── Unified Lens vocabulary ───────────────────────────────────────────────
-     The chat Lens used to carry its own literal palette, and .pe-ribbon copied a
-     slice of it — three places, hand-kept in sync. It now ALIASES the one base
-     above, so values live in a single spot and dark tracks automatically through
-     the var indirection (no second dark palette). Most map straight to a shadcn
-     token; the few genuine Lens-only tones are the only values defined per-mode. */
-  --paper: var(--background);
-  --paper-2: var(--muted);
-  --paper-3: color-mix(in srgb, var(--background), var(--muted) 50%);
-  --mist: var(--secondary);
-  --basalt: var(--foreground);
-  --ink: var(--foreground);
-  --slate: var(--muted-foreground);
-  --lens-ink-2: var(--muted-foreground);
-  --pe-blue: var(--primary);
-  --lichen: var(--cat-lichen);
-  --clay: var(--cat-clay);
-  --kiln: var(--cat-kiln);
-  --fail: var(--destructive);
-  /* Hairlines as alpha off the foreground — adapts over any surface, flips for free. */
-  --line: color-mix(in srgb, var(--foreground) 12%, transparent);
-  --line-2: color-mix(in srgb, var(--foreground) 20%, transparent);
-  --line-soft: color-mix(in srgb, var(--foreground) 7%, transparent);
   --font-body: var(--font-pe, "Open Sans", system-ui, sans-serif);
   --font-display: var(--font-pe-display, "Spectral", Georgia, serif);
   --font-mono: var(--font-pe-mono, ui-monospace, "SF Mono", Menlo, monospace);
-  /* Lens-only tones — no clean shadcn equivalent, so the only Lens values set twice. */
-  --pe-blue-soft: #1f6fa8;
-  --pe-green: #72c6a2; /* provenance "you" / skills / cache-read */
-  --clay-ink: #8a5e3b;
-  --clay-tint: #f3eae0;
-}
 
-.dark {
-  /* Dark = the same PE anchors on a basalt-green ground. Calm, low-chroma surfaces;
-     PE Blue/Green lifted just enough to stay legible and keep their identity. */
-  --background: #131c19; /* deep basalt-green */
-  --foreground: #e9ece8;
-  --card: #19231f; /* lifted off the ground so cards read as panels */
-  --card-foreground: #e9ece8;
-  --popover: #1d2823;
-  --popover-foreground: #e9ece8;
-  --primary: #4ea3d6; /* PE Blue, lifted for dark */
-  --primary-foreground: #07151f;
-  --secondary: #283430;
-  --secondary-foreground: #e9ece8;
-  --muted: #1f2925; /* sits between background and card */
-  --muted-foreground: #9fada4; /* Slate Field, lightened */
-  --accent: #233a2f; /* PE Green wash, dark */
-  --accent-foreground: #93dcb6;
-  --destructive: oklch(0.62 0.2 25.5);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: #2b3732;
-  --input: #2b3732;
-  --ring: #4ea3d6;
-  --user: var(--cat-slate); /* dark "you" reads slate, not kiln; tint/line derive from :root */
-  /* PE data palette, lightened for legibility on dark tints. */
-  --cat-blue: #6fb4e0;
-  --cat-green: #82d0a8;
-  --cat-slate: #a3b3c0;
-  --cat-lichen: #b3c191;
-  --cat-clay: #ca9d75;
-  --cat-kiln: #c6bba6;
-
-  /* Only the Lens-only tones differ in dark; every alias above tracks the base tokens. */
-  --pe-blue-soft: #8fc6e8;
-  --pe-green: #82d0a8;
-  --clay-ink: #d8b48f;
-  --clay-tint: #2c241c;
+  /* ══ MIGRATION ALIAS SHIM — THE METER READS ZERO ════════════════════════════
+     The entire pre-lang vocabulary (--st- · --act- · --cat- · --pe- · Lens, and finally
+     --line-soft with the 2026-08-16 exhibit cleanup) is DELETED at verified zero consumers.
+     LINE COUNT IS THE PROGRESS METER, and it is 0. Never add a line back. */
 }
 
 @theme inline {
@@ -146,16 +77,18 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  /* Categorical data palette as real utilities (bg-cat-blue/12, text-cat-clay, border-cat-green/25)
-     so consumers stop reaching for bg-[var(--cat-*)] brackets. One hue per category; tint it. */
-  --color-cat-blue: var(--cat-blue);
-  --color-cat-green: var(--cat-green);
-  --color-cat-slate: var(--cat-slate);
-  --color-cat-lichen: var(--cat-lichen);
-  --color-cat-clay: var(--cat-clay);
-  --color-cat-kiln: var(--cat-kiln);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  /* Viz ladder utilities (bg-viz-1/12, text-viz-3, border-viz-5/25) — the parallel
+     palette for taxonomy/series spends. The cat-* shim-era aliases are gone. */
+  --color-viz-1: var(--viz-1);
+  --color-viz-2: var(--viz-2);
+  --color-viz-3: var(--viz-3);
+  --color-viz-4: var(--viz-4);
+  --color-viz-5: var(--viz-5);
+  --color-viz-6: var(--viz-6);
+  /* The 2px-radius law is flat: shadcn's derived steps computed NEGATIVE off a 2px base
+     (calc(2px - 4px)), which browsers drop to 0. One radius, every step. */
+  --radius-sm: var(--radius);
+  --radius-md: var(--radius);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 }
@@ -166,30 +99,58 @@ body,
   min-height: 100%;
 }
 
-/* ── Type tiers ──────────────────────────────────────────────────────────────
-   Two families only. Open Sans for anything a human reads as language; mono for
-   anything the machine measured. The law: "mono means the machine measured this" —
-   states, stats, statuses, timestamps, durations, counts, ids get tele/tele-label;
-   mono is never chrome. Section headers are small-caps tracked SANS (not mono). */
-@utility tele {
-  font-family: var(--font-pe-mono);
+/* ── TYPE TIERS (ruled 2026-08-16 · evidence: docs/features/design-lang/TYPE-COPY-CENSUS.md) ──
+   Three orthogonal axes, so a text spend is three one-word decisions:
+     TIER — size+leading by ROLE, the six utilities below. Arbitrary text-[Npx] and every
+            half-pixel size die; the census shows the first three tiers cover 90% of real use.
+     FACE — font-sans (human language, the default) · face-mono (the machine measured this) ·
+            font-pe-display (the one hero + route titles). Face carries NO size.
+     CASE — t-upper (section heads): t-label + t-upper IS the section head. A case, not a
+            tier — that one decision retires the seven hand-rolled section-head forks.
+   WEIGHT LAW (ruled with it): bold = unsaved on data surfaces, or emphasis inside t-prose —
+   never chrome emphasis. Semibold = t-title and t-upper heads ONLY. Chrome never buys weight.
+   The legacy tele / tele-label / section-label bundles are DELETED (2026-08-16 exhibit
+   cleanup, verified zero consumers); everything composes tier × face × case. */
+@utility t-caption {
+  font-size: 10px;
+  line-height: 1.4;
+}
+@utility t-label {
+  font-size: 11px;
+  line-height: 1.4;
+}
+@utility t-value {
   font-size: 12px;
-  letter-spacing: 0.05em;
-  font-variant-numeric: tabular-nums;
+  line-height: 1.45;
 }
-@utility tele-label {
-  font-family: var(--font-pe-mono);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  font-variant-numeric: tabular-nums;
+@utility t-prose {
+  font-size: 13px;
+  line-height: 1.6;
 }
-@utility section-label {
-  font-size: 11px;
+@utility t-title {
+  font-size: 16px;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  font-weight: 600; /* titles carry their own weight — no hand-written semibold at call sites */
+}
+@utility t-display {
+  font-size: 40px;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
   font-weight: 600;
-  letter-spacing: 0.08em;
+}
+@utility face-mono {
+  font-family: var(--font-pe-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+/* t-upper is declared AFTER face-mono on purpose: at equal specificity the section head's
+   tracking (0.08em) must win the compose — though heads are SANS by law (2026-07-13 ruling:
+   small-caps tracked sans, never mono), so the compose should be rare. */
+@utility t-upper {
   text-transform: uppercase;
-  color: var(--muted-foreground);
+  letter-spacing: 0.08em;
+  font-weight: 600;
 }
 
 /* Centered content column — the one piece of the old shell worth keeping. */

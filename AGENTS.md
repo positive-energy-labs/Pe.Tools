@@ -24,8 +24,8 @@ C# development with the Revit API requires very a specific and fragile tooling s
 
 ### Live Looping
 
-Use the SDK control plane; do not hand-orchestrate Rider/Revit.
-- Use `pe-revit live` to compile-check, Hot Reload, start, or restart RRD.
+Use the SDK control plane; do not hand-orchestrate Revit.
+- Use `pe-revit live` to compile-check, Hot Reload, start, or restart the dev session.
 - Use `pe-revit live status` for read-only state; use `live doctor` only for reported wiring trouble.
 - Use `pe-revit test fresh|attached` for Revit-backed proof lanes.
 - Use pea scripts, host operations, or `pea --prompt` only after SDK freshness when product behavior is the proof target.
@@ -39,7 +39,7 @@ ANY change to repo architecture, tooling, or builds MUST consult these documents
 - `docs/ARCHITECTURE.md` - read before multi module changes, debugging, and code review. Contains target architecture; code should always seek to align and documentation can be future facing.
 - `docs/BUILD.md` - read before changing anything build, deploy, or dev-loop related. Contians repo tooling justification and explanation. Always prove (or disprove) before changing the document. Information and correctness here is mission critical. TL;DR:
   - Keep terminal compile/package proof separate from live-runtime freshness.
-  - Protect the current RRD session aggressively. Breaking it can turn a small edit into a multi-minute restart plus document reopen wait.
+  - Protect the current dev session aggressively. Breaking it can turn a small edit into a multi-minute restart plus document reopen wait.
 
 
 After any large changes, ALWAYS clarify user intent and capture then durable knowledge. Knowledge should be captured to the most granular artifact. For example, FF goals should not exist substantially in the root AGENTS.md. This repo uses `AGENTS.md` as the primary knowledge map, `README.md` as the dev-facing docs/notes, and `GOALS.md` as PRD-like documents capturing intent and direction.
@@ -67,10 +67,10 @@ Write artifacts to `.artifacts/`. Most often `.artifacts/tmp` for python/typescr
 
 ### Runtime / iteration language
 
-| Term    | Meaning                                                                                   | Prefer / Avoid                                                                                 |
-| ------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| **RRD** | The live Rider-driven Revit debug session for `Pe.App`. Treat it as expensive state.      | Prefer this over vague phrases like `live debug`; avoid implying hot reload exists outside RRD |
-| **HR**  | Rider hot reload into the already-running RRD session. Useful, but not fully trustworthy. | Avoid treating HR as proof that Revit is running fresh code                                    |
+| Term            | Meaning                                                                                                                              | Prefer / Avoid                                                                                          |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| **dev session** | The live hot-reload Revit session for `Pe.App` (lane `dev`, driven by `pe-revit live`; formerly "RRD"). Treat it as expensive state. | Prefer this over `RRD`/`live debug`; avoid implying hot reload exists outside the dev session           |
+| **HR**          | SDK hot reload into the already-running dev session. Useful, but not fully trustworthy.                                              | Avoid treating HR as proof that Revit is running fresh code                                             |
 
 ### Repo-wide language
 
@@ -78,9 +78,9 @@ Write artifacts to `.artifacts/`. Most often `.artifacts/tmp` for python/typescr
 | --------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | **FF**                | Family Foundry                                                                           | Prefer `Family Foundry` on first mention in prose                                            |
 | **workflow**          | The operator intent such as build, verify, package, or publish                           | Prefer this over overloading `Configuration` strings to carry every concern                  |
-| **execution policy**  | Whether a workflow is allowed to touch `RRD`                                             | Prefer explicit `NoRrdContact` / `RrdRequired` language over vague safety assumptions        |
-| **AttachedRrd**       | Verification against the already-running Rider-driven desktop Revit session              | Prefer this over vague `live tests` phrasing when the running session itself matters         |
-| **FreshRevitProcess** | Verification in a new dedicated Revit process that must not reuse `RRD`                  | Prefer this over vague `isolated tests` phrasing when freshness and process ownership matter |
+| **execution policy**  | Whether a workflow is allowed to touch the dev session                                   | Prefer the literal policy tokens `NoRrdContact` / `RrdRequired` over vague safety assumptions |
+| **AttachedRrd**       | Verification against the already-running desktop dev session (literal MSBuild token — keeps the legacy name) | Prefer this over vague `live tests` phrasing when the running session itself matters         |
+| **FreshRevitProcess** | Verification in a new dedicated Revit process that must not reuse the dev session        | Prefer this over vague `isolated tests` phrasing when freshness and process ownership matter |
 | **package**           | A repo-local code unit such as `Pe.Host` or `Pe.Revit.FamilyFoundry`                     | Prefer this over `project` when discussing one code area                                     |
 | **app**               | `Pe.App`, the in-proc desktop Revit add-in runtime                                       | Avoid using `app` to mean the whole repo or product                                          |
 | **host**              | `Pe.Host`, the out-of-proc TS-built HTTP/RPC/WebSocket backend                           | Avoid using `host` for the Revit add-in bridge or product identity                           |
@@ -97,18 +97,18 @@ Name the lane before claiming proof:
 
 - **Source compile**: isolated terminal `dotnet build`; NoRrdContact; proves compilation only.
 - **Package/artifact**: build/pack output; NoRrdContact; proves durable output shape only.
-- **AttachedRrd**: SDK-converged runtime packages in the live Rider-driven Revit session; requires behavior proof when freshness is uncertain.
-- **FreshRevitProcess**: SDK `pe-revit test fresh` owns a fresh Revit process; default autonomous Revit-backed proof when current UI/RRD state is not required.
+- **AttachedRrd**: SDK-converged runtime packages in the live dev session; requires behavior proof when freshness is uncertain.
+- **FreshRevitProcess**: SDK `pe-revit test fresh` owns a fresh Revit process; default autonomous Revit-backed proof when current UI/dev-session state is not required.
 - **Installed lane**: MSI/product-root behavior; do not mix with dev host/runtime roots.
 
-If proof depends on user-owned Rider/Revit/Windows state, say so and coordinate the loop instead of pretending autonomy.
+If proof depends on user-owned Revit/Windows state, say so and coordinate the loop instead of pretending autonomy.
 
 ## Routing
 
 Activate the smallest matching skill from natural language:
 
 - **pe-steer**: vague/strategic scope, terminology, philosophy, durable intent, “grill me”, “think this through”.
-- **pe-live-loop**: RRD, Rider, hot reload, active documents, AttachedRrd, visual/manual Revit state, installed-lane coordination.
+- **pe-live-loop**: the dev session, hot reload, active documents, AttachedRrd, visual/manual Revit state, installed-lane coordination.
 - **pe-diagnose**: bugs, regressions, confusing errors, failing build/test/script, source-vs-product mismatch.
 - **pe-tests**: tests-first work, regression tests, public-seam behavior changes.
 - **pe-architecture**: module seams, product boundaries, desktop vs DA, product vs dev surfaces, document-owned vs session-owned.

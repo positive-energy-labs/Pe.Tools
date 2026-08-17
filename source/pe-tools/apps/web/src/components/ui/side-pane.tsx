@@ -117,7 +117,7 @@ export function SidePane({
         data-side={side}
         style={{ width: RAIL }}
         className={cn(
-          "flex shrink-0 flex-col items-center gap-1 border-[var(--line)] bg-[var(--paper)] py-2",
+          "flex shrink-0 flex-col items-center gap-1 border-[var(--r-line)] bg-[var(--r-page)] py-2",
           border,
           className,
         )}
@@ -142,12 +142,12 @@ export function SidePane({
       data-side={side}
       style={{ width }}
       className={cn(
-        "relative flex shrink-0 flex-col border-[var(--line)] bg-[var(--paper)]",
+        "relative flex shrink-0 flex-col border-[var(--r-line)] bg-[var(--r-page)]",
         border,
         className,
       )}
     >
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-[var(--line)] px-2.5">
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-[var(--r-line)] px-2.5">
         <Button
           size="icon-sm"
           variant="ghost"
@@ -169,7 +169,7 @@ export function SidePane({
         onPointerDown={onResizeDown}
         className={cn(
           "absolute inset-y-0 z-10 w-[5px] cursor-col-resize touch-none",
-          "hover:bg-[var(--line-2)] active:bg-[var(--line-2)]",
+          "hover:bg-[var(--r-line-2)] active:bg-[var(--r-line-2)]",
           side === "left" ? "-right-[2px]" : "-left-[2px]",
         )}
       />

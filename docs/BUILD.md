@@ -246,7 +246,7 @@ The acceptance contract and machine proof live in `Pe.Revit.Sdk/RUNTIME_ACCEPTAN
 flowchart LR
   Web["Browser"] --> SourceHost["Worktree Pe.Host<br/>Effect + Vite on one dynamic port"]
   Pea["Pea / MCP / raw caller"] -->|service-file baseUrl + selector| SourceHost
-  SourceHost -->|bridgeSessionId = rrd:*| RRD["Rider/RRD Revit"]
+  SourceHost -->|bridgeSessionId = dev| DevSession["dev-session Revit (hot reload)"]
   SourceHost -->|bridgeSessionId = sandbox:*| RoutedSandbox["source SDK sandbox"]
   InstalledHost["Installed Pe.Host<br/>separate dynamic port"] --> InstalledSandbox["installed SDK sandbox"]
   SDK["pe-revit sandbox<br/>private SDK bridge /status"] --> Sandbox["SDK-ready sandbox Revit"]

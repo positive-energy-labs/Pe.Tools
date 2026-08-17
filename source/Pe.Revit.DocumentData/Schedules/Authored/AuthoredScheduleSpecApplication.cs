@@ -155,7 +155,7 @@ internal static class AuthoredScheduleSpecApplication {
                     filter = new ScheduleFilter(field.FieldId, filterType, doubleValue);
                     storageTypeStr = "Double";
                 } else if (storageType == StorageType.ElementId &&
-                           int.TryParse(value, out var elementIdValue)) {
+                           long.TryParse(value, out var elementIdValue)) {
                     filter = new ScheduleFilter(field.FieldId, filterType, elementIdValue.ToElementId());
                     storageTypeStr = "ElementId";
                 } else {

@@ -68,6 +68,8 @@ public interface IRevitDataService {
     Task<RevitDocumentSessionContextData> GetRevitDocumentSessionContextAsync(CancellationToken cancellationToken);
     Task<OpenRevitDocumentData> OpenRevitDocumentAsync(OpenRevitDocumentRequest request, CancellationToken cancellationToken);
     Task<RevitAgentContextSummaryData> GetRevitAgentContextSummaryAsync(CancellationToken cancellationToken);
+    Task<GlanceModelData> GetGlanceModelAsync(CancellationToken cancellationToken);
+    Task<GlanceAttentionData> GetGlanceAttentionAsync(CancellationToken cancellationToken);
     Task<RevitAgentContextResolveData> ResolveRevitAgentContextAsync(RevitAgentContextResolveRequest request, CancellationToken cancellationToken);
     Task<RevitAgentVisibleContextData> GetRevitAgentVisibleContextAsync(RevitAgentVisibleContextRequest request, CancellationToken cancellationToken);
     Task<RevitAgentViewRenderingStateData> GetRevitAgentViewRenderingStateAsync(
@@ -123,9 +125,21 @@ public sealed class BridgeOp {
         Func<TRequest, IBridgeOperationContext, CancellationToken, Task<TResponse>> handler
     ) {
         async Task<object?> Execute(string payloadJson, IBridgeOperationContext context, CancellationToken ct) {
-            var request = JsonConvert.DeserializeObject<TRequest>(payloadJson, JsonSettings)
-                ?? throw new InvalidOperationException(
-                    $"Bridge op '{definition.Key}': failed to deserialize {typeof(TRequest).Name}."
+            // A payload that doesn't match the request type is the CLIENT's error — surface a 400
+            // naming the op, the expected type, and Newtonsoft's path/position (which pinpoints the
+            // offending field, e.g. a string field sent as an object), never a raw 500.
+            TRequest? request;
+            try {
+                request = JsonConvert.DeserializeObject<TRequest>(payloadJson, JsonSettings);
+            } catch (JsonException ex) {
+                throw BridgeOperationExceptions.BadRequest(
+                    $"Bridge op '{definition.Key}': request does not match {typeof(TRequest).Name}: {ex.Message}"
+                );
+            }
+
+            if (request is null)
+                throw BridgeOperationExceptions.BadRequest(
+                    $"Bridge op '{definition.Key}': request payload is null or empty; expected {typeof(TRequest).Name}."
                 );
             return await handler(request, context, ct).ConfigureAwait(false);
         }

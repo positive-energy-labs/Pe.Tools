@@ -9,11 +9,11 @@ Owner surfaces: FamilyFoundry (FF). Consumers: FFManager, FFMigrator, capture, r
 
 ### 2026-07-16 — /family surface convergence (Phase 10)
 
-- `/family` is THE surface for one authored family.json: anatomy triptych + type flex matrix +
-  grounded spec-sheet pane, replacing `/beta/family-plugin` and the POC routes. `/family-model`
-  redirects there. The legacy `/family-types` route remains, demoted, as the live-family
-  incremental-edit surface until the "where did seeded info come from / where does it push"
-  questions are resolved; `/family` is authored-document-only — live families enter via capture.
+- `/family` is THE surface for one family: the authored lane carries the anatomy triptych, type
+  flex matrix, grounded spec-sheet pane, validation, and build evidence; the live lane edits the
+  family bound in Revit and can capture it into the authored lane. The former POC, `/family-model`,
+  and `/family-types` route surfaces are retired. `route:family-types` remains only as Pea's
+  retained chat/tool protocol until those handlers move onto the consolidated family commands.
 - Sibling slice `route:family` beside `route:settings`: spec doc (markdown blocks + parser image
   ids, geometry stays in the parse cache) and the Revit evidence projection stamped with
   `from { origin: capture|build, capturedAt, target, documentId, documentVersionToken }`. The UI

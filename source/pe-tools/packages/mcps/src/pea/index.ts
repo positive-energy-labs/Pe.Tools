@@ -79,6 +79,12 @@ const hostOperationSearchInputSchema = z.object({
     .boolean()
     .optional()
     .describe("Filter by whether the operation needs an active Revit document."),
+  visibility: z
+    .enum(["DefaultVisible", "EscalationVisible", "ExpertOnly"])
+    .optional()
+    .describe(
+      "Filter by discovery tier. A bare browse (no query, no filters) shows only DefaultVisible orient operations; pass EscalationVisible or ExpertOnly to list a hidden tier explicitly.",
+    ),
   limit: z.number().min(1).max(50).default(8).describe("Maximum ranked matches to return."),
   verbosity: toolVerbositySchema
     .default("compact")

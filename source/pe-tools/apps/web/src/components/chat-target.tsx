@@ -1,9 +1,9 @@
 import { getRouteApi } from "@tanstack/react-router";
 
-import { TargetChip } from "#/components/target-chip";
+import { EmptyState } from "#/components/lang/empty";
 import { mintSelector, sessionLabel, type TargetSelector } from "#/host/target";
 import { CHAT_CONSUMER, readScoped, scopeKey, type TargetScope } from "#/host/target-scope";
-import { chipDescriptor, LaneBadge, LiveDot, resolutionReadout, toneColor } from "#/host/target-ui";
+import { chipDescriptor, LaneBadge, LiveDot, resolutionReadout } from "#/host/target-ui";
 import { useTarget, useWorldLog, type WorldEvent } from "#/host/use-target";
 
 /**
@@ -35,12 +35,6 @@ export function useChatTarget() {
   return { selector, resolution, sessions, worldLog, pin };
 }
 
-/** The composer control-row chip. */
-export function ChatTargetChip() {
-  const { selector, sessions, pin } = useChatTarget();
-  return <TargetChip selector={selector} sessions={sessions} onPin={pin} dropUp />;
-}
-
 /**
  * The world-lane target section — the state inspector grown up: what the chat's actions land on,
  * as raw resolution plus the client-observed world log. Sits above the context layers because
@@ -50,27 +44,14 @@ export function TargetWorld() {
   const { selector, resolution, sessions, worldLog, pin } = useChatTarget();
   const chip = chipDescriptor(resolution);
   return (
-    <div className="px-3 py-3" style={{ borderBottom: "0.5px solid var(--line)" }}>
+    <div className="border-b-[0.5px] border-[var(--r-line)] px-3 py-3">
       <div className="mb-1.5 flex items-baseline justify-between">
-        <span
-          className="font-[var(--font-pe-mono)]"
-          style={{ fontSize: 10, letterSpacing: "0.08em", color: "var(--foreground)" }}
-        >
-          TARGET
-        </span>
-        <span
-          className="font-[var(--font-pe-mono)]"
-          style={{ fontSize: 10, color: toneColor(chip.tone) }}
-        >
-          {chip.tone.toUpperCase()}
-        </span>
+        <span className="t-label t-upper text-[var(--r-ink-2)]">Target</span>
+        <span className="t-caption face-mono text-[var(--r-ink-2)]">{chip.tone}</span>
       </div>
 
       {/* raw resolution — provenance, not decoration */}
-      <div
-        className="mb-2 break-all font-[var(--font-pe-mono)]"
-        style={{ fontSize: 10, lineHeight: 1.5, color: "var(--muted-foreground)" }}
-      >
+      <div className="mb-2 break-all t-caption face-mono leading-[1.5] text-[var(--r-ink-2)]">
         {resolutionReadout(resolution)}
       </div>
 
@@ -82,12 +63,10 @@ export function TargetWorld() {
             key={s.sessionId}
             type="button"
             onClick={() => pin(mintSelector(s, sessions))}
-            className="flex w-full items-center justify-between gap-2 py-1 text-left"
-            style={{
-              borderLeft: isResolved ? "2px solid var(--pe-blue)" : "2px solid transparent",
-              paddingLeft: 6,
-              cursor: "pointer",
-            }}
+            // The resolved session is a SELECTION — the selection fill, never a hue.
+            className={`flex w-full cursor-pointer items-center justify-between gap-2 rounded-sm px-1.5 py-1 text-left hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))] ${
+              isResolved ? "bg-[var(--r-select)] [--r-on:var(--r-select)]" : ""
+            }`}
             title="pin the chat here"
           >
             <span className="inline-flex min-w-0 items-center gap-2">
@@ -95,28 +74,23 @@ export function TargetWorld() {
                 tone={isResolved ? (selector === "" ? "implicit" : "pinned") : "muted"}
                 lane={s.lane}
               />
-              <span className="truncate text-[12px]" style={{ color: "var(--foreground)" }}>
-                {sessionLabel(s)}
-              </span>
+              <span className="truncate t-value text-[var(--r-ink)]">{sessionLabel(s)}</span>
               <LaneBadge lane={s.lane} />
             </span>
-            <span
-              className="whitespace-nowrap font-[var(--font-pe-mono)]"
-              style={{ fontSize: 9, color: "var(--muted-foreground)" }}
-            >
+            <span className="whitespace-nowrap t-caption face-mono text-[var(--r-ink-2)]">
               pid {s.processId}
             </span>
           </button>
         );
       })}
       {sessions.length === 0 ? (
-        <div className="text-[11px]" style={{ color: "var(--muted-foreground)" }}>
+        <EmptyState story="scope" exit="start Revit with the Pe add-in, or launch a sandbox">
           no sessions connected
-        </div>
+        </EmptyState>
       ) : null}
 
       {worldLog.length > 0 ? (
-        <div className="mt-2" style={{ borderTop: "0.5px solid var(--line-soft)", paddingTop: 6 }}>
+        <div className="mt-2 border-t-[0.5px] border-[var(--r-line)] pt-1.5">
           {worldLog.slice(-5).map((event, i) => (
             <WorldLogLine key={`${event.atMs}-${i}`} event={event} />
           ))}
@@ -132,11 +106,8 @@ function WorldLogLine({ event }: { event: WorldEvent }) {
     minute: "2-digit",
   });
   return (
-    <div
-      className="flex items-baseline gap-2 py-0.5 font-[var(--font-pe-mono)]"
-      style={{ fontSize: 9.5, color: "var(--muted-foreground)" }}
-    >
-      <span style={{ opacity: 0.7 }}>{time}</span>
+    <div className="flex items-baseline gap-2 py-0.5 t-caption face-mono text-[var(--r-ink-2)]">
+      <span className="opacity-70">{time}</span>
       <span className="truncate">{event.label}</span>
     </div>
   );

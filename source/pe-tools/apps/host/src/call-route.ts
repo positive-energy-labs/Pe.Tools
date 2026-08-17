@@ -12,14 +12,17 @@ import {
   listBridgeSessions,
   openSettingsDocument,
   openSettingsDocumentWithModule,
+  openShellPath,
   saveSettingsDocument,
   tailLogs,
   validateSettingsDocument,
 } from "./local-ops.ts";
 import { LocalOpError, localOpHttpStatus } from "./local-error.ts";
+import { rhvacAssemblies, rhvacLaunch, rhvacOpen, rhvacSync, rhvacTakeoff } from "./rhvac-ops.ts";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   isTsOnlyOperationKey,
+  tsOnlyOperationCatalog,
   tsOnlyOperationSchemas,
   type TsOnlyOperationKey,
 } from "@pe/host-contracts/operation-types";
@@ -31,11 +34,46 @@ import type { HostErrorKind } from "@pe/host-contracts/contracts";
  * untouched — the Revit side owns validation, so runtime-registered ops need
  * zero host changes. Errors are problem-JSON with a real HTTP status.
  */
+// ponytail: dev-only escape — PE_TOOLS_CALL_FORWARD=<base-url> makes this host a pure
+// /call proxy (e.g. to the installed host that owns the Revit bridge) while still serving
+// the checkout's web UI with HMR. Delete when sandbox-lane sessions can dial a dev host.
+const CALL_FORWARD_BASE = process.env.PE_TOOLS_CALL_FORWARD?.trim().replace(/\/$/, "");
+
 export const callRoute = HttpRouter.add("POST", "/call", (req) => {
   // Set once dispatch begins so the catch below can attribute failures to the op.
   let op: { key: string; request: unknown; tsOnly: boolean; startedAt: number } | undefined;
   return Effect.gen(function* () {
     const body = yield* req.json.pipe(Effect.mapError(() => invalidBody("unreadable JSON body")));
+    if (CALL_FORWARD_BASE) {
+      const sessionHeader = req.headers[HOST_RPC_BRIDGE_SESSION_HEADER]?.trim();
+      const forwarded = yield* Effect.tryPromise({
+        try: async () => {
+          const response = await fetch(`${CALL_FORWARD_BASE}/call`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              ...(sessionHeader ? { [HOST_RPC_BRIDGE_SESSION_HEADER]: sessionHeader } : {}),
+            },
+            body: JSON.stringify(body),
+          });
+          return { status: response.status, json: (await response.json()) as unknown };
+        },
+        catch: (cause) =>
+          new BridgeError(`call forward to ${CALL_FORWARD_BASE} failed: ${String(cause)}`, 503),
+      });
+      // Merge this checkout's TS-only catalog entries into a forwarded catalog so the ops
+      // page lists both surfaces (the forward target may run an older TS-only set).
+      if (isRecord(body) && body.key === "host.ops.catalog" && forwarded.status === 200) {
+        const catalog = forwarded.json as { operations?: { key?: string }[] };
+        if (Array.isArray(catalog.operations)) {
+          const seen = new Set(catalog.operations.map((op) => op.key));
+          catalog.operations.push(
+            ...tsOnlyOperationCatalog.filter((entry) => !seen.has(entry.key)),
+          );
+        }
+      }
+      return Response.jsonUnsafe(forwarded.json ?? null, { status: forwarded.status });
+    }
     if (!isRecord(body) || typeof body.key !== "string")
       return yield* Effect.fail(invalidBody("body must be { key: string, request?: object }"));
     // The /call envelope is exactly { key, request? }. Reject any other top-level key so
@@ -132,12 +170,24 @@ export const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
   switch (key) {
     case "host.status":
       return yield* Effect.flatMap(bridge.snapshot(bridgeSessionId), getHostStatus);
+    case "host.topology": {
+      // The operator's map: host identity + all sessions in one snapshot (ADR 0003).
+      const host = yield* Effect.flatMap(bridge.snapshot(bridgeSessionId), getHostStatus);
+      const sessions = yield* listBridgeSessions(bridge.list);
+      return {
+        observedAtUtc: new Date().toISOString(),
+        host,
+        sessions: sessions.sessions,
+      };
+    }
     case "bridge.sessions.summary":
       return yield* Effect.flatMap(bridge.snapshot(bridgeSessionId), getBridgeSessionSummary);
     case "bridge.sessions.list":
       return yield* listBridgeSessions(bridge.list);
     case "logs.tail":
       return yield* tailLogs(yield* decodeRequest(key, request));
+    case "host.shell.open":
+      return yield* openShellPath(yield* decodeRequest(key, request));
     case "settings.workspaces": {
       const bridgeView = yield* bridge.snapshot(bridgeSessionId);
       return yield* getSettingsWorkspaces({
@@ -178,6 +228,16 @@ export const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
       });
     case "revit.catalog.recent-documents":
       return yield* collectRecentDocuments(yield* decodeRequest(key, request));
+    case "rhvac.open":
+      return yield* rhvacOpen(yield* decodeRequest(key, request));
+    case "rhvac.assemblies":
+      return yield* rhvacAssemblies(yield* decodeRequest(key, request));
+    case "rhvac.sync":
+      return yield* rhvacSync(yield* decodeRequest(key, request));
+    case "rhvac.launch":
+      return yield* rhvacLaunch(yield* decodeRequest(key, request));
+    case "rhvac.takeoff":
+      return yield* rhvacTakeoff(yield* decodeRequest(key, request));
     case "aps.auth.status":
       return yield* apsAuthStatus(yield* decodeRequest(key, request));
     case "aps.auth.login":
@@ -201,7 +261,9 @@ const decodeRequest = Effect.fnUntraced(function* <K extends TsOnlyOperationKey>
 ) {
   const schemas = tsOnlyOperationSchemas[key] as { request?: Schema.Codec<unknown> };
   if (!schemas.request) return {} as never;
-  return (yield* Schema.decodeUnknownEffect(schemas.request)(request ?? {}).pipe(
+  return (yield* Schema.decodeUnknownEffect(schemas.request, { onExcessProperty: "error" })(
+    request ?? {},
+  ).pipe(
     Effect.mapError((error) => new InvalidHostRequest(key, error.message)),
   )) as Schema.Schema.Type<RequestSchemaOf<K>>;
 });
@@ -226,7 +288,9 @@ function toProblem(error: CallError): {
             ? "BridgeBusy"
             : error.statusCode === 503
               ? "Disconnected"
-              : "HostFailure",
+              : error.statusCode === 400
+                ? "InvalidRequest"
+                : "HostFailure",
         message: error.message,
         status: error.statusCode,
       };

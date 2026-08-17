@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+   <title>Percent Sensible Capacity</title>
+   <meta name="generator" content="Help &amp; Manual" />
+   <meta name="keywords" content="Percent Sensible Capacity,Sensible Heat Ratio,SHR" />
+   <meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1" />   
+   
+   <meta http-equiv="X-UA-Compatible" content="IE=10" />
+   <link type="text/css" href="default.css" rel="stylesheet" />
+   <link type="text/css" href="custom.css" rel="stylesheet">
+
+   <style TYPE="text/css" media="screen"> 
+      html, body { margin:0; 
+             padding:0; 
+             overflow: hidden; 
+             background: #FFFFFF; 
+       } 
+
+      div#printheader { display: none; }
+      #idheader { width:100%; 
+                  height:auto; 
+                  padding: 0; 
+                  margin: 0; 
+       } 
+      #idcontent { position:relative }                                               
+      #callout-table, #overview-table {display:block; position:relative; top:0; left:0;}
+      #callout-icon {display:block; position:absolute; top:-11px; left:-11px;}
+      #callout-icon-flag {display:block; position:absolute; top:-11px; left:-8px;}
+      #callout-table a {text-decoration: none; color: blue;}
+      #callout-table a:visited {text-decoration: none; color: blue;}
+      #overview-table a {text-decoration: none; color: black;}
+      #overview-table a:visited {text-decoration: none; color: black;}
+      #callout-table a:hover, #overview-table a:hover {text-decoration: underline;}      
+      #switchtoggles { text-align: right; padding: 0 5px 0 0; font-size: 90%; margin: 0; }  
+      p.help-url { margin: 20px 0 5px 0; text-align: center; font-size: 80%; text-decoration: none }
+      .sync-toc { color: #ffffff; font-size: 8pt; font-weight: bold; display: none; }
+      .sync-toc a { color: #ffffff; text-decoration: none; font-weight: bold;}
+      .sync-toc a:visited { color: #ffffff; }
+      .sync-toc a:hover { text-decoration: underline; }
+
+   </style>
+   <noscript>
+   <style type="text/css">
+   html, body { overflow: auto; }
+   </style> 
+   </noscript>
+   <style type="text/css" media="print">
+      span.f_Heading1 { color: black; }
+      #idheader, #printheader img { display:none; }
+      #printheader { display: block; margin-top: 20px; }
+      #idcontent { margin-top: 10px; position:relative }
+   </style>   
+
+   <script type="text/javascript" src="jquery.js"></script>
+   <script type="text/javascript" src="helpman_settings.js"></script>
+   <script type="text/javascript" src="helpman_topicinit.js"></script>
+   <script type="text/javascript" src="nsh.js"></script>
+<!--[if lt IE 7]>
+<style type="text/css">
+  #idcontent {padding: 0px;} 
+  #innerdiv {padding: 10px 5px 5px 10px ;} 
+</style> 
+<![endif]-->
+
+
+
+</head>
+<body>
+
+
+<div id="printheader"><h1 class="p_Heading1"><span class="f_Heading1">Percent Sensible Capacity (System Data Window)</span></h1>
+</div>
+<div id="idheader">
+<div id="idheaderbg">
+<table style="width:100%;border:none;margin:0px;background:url(background-topic-header.jpg)" cellspacing="0" cellpadding="0"> 
+  <tr valign="bottom">
+    <td align="left" valign="bottom" class="topichead">
+   
+   <p class="crumbs" id="idnav"><b>Navigation:</b>&nbsp;
+   
+   Program Windows &gt; Project Windows &gt; System Data &gt; Inputs&nbsp;&gt;</p>
+   <h1 class="p_Heading1"><span class="f_Heading1">Percent Sensible Capacity (System Data Window)</span></h1>
+
+    </td>
+    <td align="right" width="120" valign="middle" class="topichead" id="idnav">
+    
+     <a href="system_air_type_and_cfm.htm"
+        onmouseover="document.images.prev.src='hm_btn_navigate_prev_orange.png'" 
+        onmouseout="document.images.prev.src='hm_btn_navigate_prev.png'"
+        ><img name="prev" src="hm_btn_navigate_prev.png" border=0 alt="Previous page"
+        ></a><a href="welcome.htm"
+        onmouseover="document.images.main.src='hm_btn_navigate_top_orange.png'" 
+        onmouseout="document.images.main.src='hm_btn_navigate_top.png'"><img name=main src="hm_btn_navigate_top.png" border=0 alt="Return to chapter overview"
+        ></a><a href="duct_load_factors.htm"
+        onmouseover="document.images.next.src='hm_btn_navigate_next_orange.png'" 
+        onmouseout="document.images.next.src='hm_btn_navigate_next.png'"><img name=next src="hm_btn_navigate_next.png" border=0 alt="Next page"
+        ></a>
+    </td>
+  </tr>  
+</table>
+<!-- The following code displays Expand All/Collapse All links  below the header in topics containing toggles -->
+  
+</div>
+</div>  
+
+<div id="idcontent"><div id="innerdiv">
+<!--ZOOMRESTART-->
+<p style="margin: 0.1667in 0 0 0;"><img style="margin:0;width:2.1146in;height:0.2917in;border:none" src="hmfile_hash_2dcf0e40.png"/></p>
+<p style="margin: 0.1667in 0 0 0;"><span style="font-weight: bold;">Percent Sensible Capacity (Pct. sens. capacity):</span> &nbsp;This field allows you to input a percentage that describes what portion of the system&#39;s cooling capacity is its sensible capacity, which is used to calculate the Recommended Cooling Tons.</p>
+<p style="margin: 0.1667in 0 0 0;">The value you enter here will also be used to set the Sensible Capacity and Latent Capacity inputs on the Equipment tab of this window when you select an air conditioner or heat pump for this system using the Find HVAC Equipment window.</p>
+<p style="margin: 0.1667in 0 0 0;">For an example of how Recommended Tonnage is determined, say that you have a building that has calculated cooling loads of 14,760 Btuh sensible and 3,240 Btuh latent. &nbsp;That would produce a 18,000 Btuh net load. &nbsp;Now say that you know that most of your line of air-conditioning units have a split on their capacities of approximately 77% sensible and 23% latent. &nbsp;If you chose a unit with a 18,000 Btuh net capacity (1.5 tons), then the unit would possess 13,860 Btuh sensible capacity (77% of 18,000 Btuh) and 4,140 Btuh latent capacity (23% of 18,000 Btuh). &nbsp;Therefore, the latent portion of your load would be met, but the sensible portion would not.</p>
+<p style="margin: 0.1667in 0 0 0;">Consider the following equations:</p>
+<p style="margin: 0.1667in 0 0 0;"><img style="margin:0;width:6.4271in;height:0.4688in;border:none" src="hmfile_hash_0b49a8c1.png"/></p>
+<p style="margin: 0.1667in 0 0 0;">Likewise:</p>
+<p style="margin: 0.1667in 0 0 0;"><img style="margin:0;width:6.1354in;height:0.4688in;border:none" src="hmfile_hash_9a68c67c.png"/></p>
+<p style="margin: 0.1667in 0 0 0;">By &quot;Percentage&quot;, we mean the fractional number (i.e. 77% = 77/100 = 0.77).</p>
+<p style="margin: 0.1667in 0 0 0;">Now, if we assume that the sensible load is equal to the sensible capacity of the unit, we are basically saying that we assume that 14,760 Btuh is 77% of the total load. &nbsp;Therefore, a total calculated load based on this assumption would be:</p>
+<p style="margin: 0.1667in 0 0 0;"><img style="margin:0;width:2.8125in;height:0.4271in;border:none" src="hmfile_hash_4bb60afd.png"/></p>
+<p style="margin: 0.1667in 0 0 0;">But, if we assume that the latent load is equal to the latent capacity of the unit, we are basically saying that we assume that 3240 Btuh is 23% (100% - 77%) of the total load. &nbsp;Therefore, a total calculated load based on this assumption would be:</p>
+<p style="margin: 0.1667in 0 0 0;"><img style="margin:0;width:2.7083in;height:0.4271in;border:none" src="hmfile_hash_a6ceb9c1.png"/></p>
+<p style="margin: 0.1667in 0 0 0;">Compare the two total loads calculated from the assumed 77%/23% split. &nbsp;As you can see, the highest total load in this case happens to come from the sensible portion. &nbsp;Therefore, you might need a somewhat larger unit than what would be specified from looking strictly at the building loads. &nbsp;You can check that the unit will meet your loads by back calculating. &nbsp;In other words, 77% of 19,168 Btuh (about 1.6 tons) is 14,760 Btuh and 23% of 19,168 Btuh is approximately 4409 Btuh. &nbsp;As you can see, both the sensible and latent portions of the load will be met by a unit that possesses a capacity greater than or equal to 19,168 Btuh.</p>
+<p style="margin: 0.1667in 0 0 0;">This value will NOT change your net loads or your net cooling tons. &nbsp;The net loads and net cooling tons are based strictly on the sensible + latent gain of the building. &nbsp;It will, however, affect your square foot per ton and other check figures that involve cooling tons. &nbsp;This value defaults to 75%. &nbsp;A good general range for the percentage input is between 73% - 78%.</p>
+
+<!--ZOOMSTOP-->
+</div></div>
+<script type="text/javascript">
+
+var lastSlashPos = document.URL.lastIndexOf("/") > document.URL.lastIndexOf("\\") ? document.URL.lastIndexOf("/") : document.URL.lastIndexOf("\\");
+if( document.URL.substring(lastSlashPos + 1, lastSlashPos + 4).toLowerCase() != "~hh" )
+{
+ if (document.all) setTimeout(function() {nsrInit();},20); 
+    else nsrInit();
+ } 
+
+
+</script>
+</body>
+</html>

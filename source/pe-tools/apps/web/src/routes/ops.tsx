@@ -1,6 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
@@ -13,11 +12,18 @@ import {
 } from "#/components/ui/select";
 import { Switch } from "#/components/ui/switch";
 import { Textarea } from "#/components/ui/textarea";
+import { FactChip, type FactTone } from "#/components/lang/chip";
+import { EmptyState } from "#/components/lang/empty";
+import { OutcomeLine } from "#/components/lang/outcome";
+import { Provenance } from "#/components/lang/section";
 import { callHostDynamic } from "#/host/client";
 import { useFieldOptions } from "#/host/field-options";
 import { type HostIssue, HostIssuePanel, toHostIssue } from "#/host/issues";
 import { useBridgeSessionsListQuery, useHostOp } from "#/host/queries";
 import { cn } from "#/lib/utils";
+import { syntheticOps } from "#/ops/glance";
+import { opViews } from "#/ops/op-views";
+import { type SyntheticOp, SyntheticRunner } from "#/ops/synthetic";
 
 export const Route = createFileRoute("/ops")({ component: OpsPlayground });
 
@@ -30,6 +36,7 @@ type HostOperationCatalogEntry = {
   costTier?: string;
   visibility?: string;
   requiresActiveDocument?: boolean;
+  supportedActiveDocumentKind?: string;
   description?: string;
   searchTerms?: readonly string[];
   requestExamples?: readonly { name: string; description: string; json: string }[];
@@ -43,13 +50,55 @@ const DEFAULT_SESSION_VALUE = "__host_default__";
 interface RunResult {
   status: number;
   elapsedMs: number;
+  observedAtMs: number;
+  request: unknown;
   rawBody: unknown;
   data: unknown;
 }
 
+// Sidebar grammar: ops group by key prefix into the domains an operator thinks
+// in. Order is the exploration ladder — orient, discover, inspect, join, act.
+const DOMAIN_ORDER = [
+  "Context",
+  "Catalog",
+  "Detail",
+  "Matrix",
+  "Family",
+  "Apply",
+  "Scripting",
+  "Settings",
+  "Host",
+] as const;
+type Domain = (typeof DOMAIN_ORDER)[number];
+
+function opDomain(key: string): Domain {
+  if (key.startsWith("revit.context.") || key.startsWith("revit.resolve.")) return "Context";
+  if (key.startsWith("revit.catalog.")) return "Catalog";
+  if (key.startsWith("revit.detail.")) return "Detail";
+  if (key.startsWith("revit.matrix.")) return "Matrix";
+  if (key.startsWith("family.") || key === "revit.apply.family-model") return "Family";
+  if (key.startsWith("revit.apply.")) return "Apply";
+  if (key.startsWith("scripting.")) return "Scripting";
+  if (key.startsWith("settings.")) return "Settings";
+  return "Host";
+}
+
+/** Cost tier is STATE (cost-as-risk): expensive earns caution; the word carries the
+ * rest of the ladder — no taxonomy hue is spent on it. */
+function costTone(tier: string | undefined): FactTone {
+  return tier?.toLowerCase() === "expensive" ? "caution" : "meta";
+}
+
+/** Selection is a fill, never a hue — the select rung, ground re-declared. */
+const SELECT_FILL = {
+  background: "var(--r-select)",
+  "--r-on": "var(--r-select)",
+} as React.CSSProperties;
+
 function OpsPlayground() {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<HostOperationCatalogEntry | undefined>();
+  const [selectedGlance, setSelectedGlance] = useState<SyntheticOp | undefined>();
   const [args, setArgs] = useState("{}");
   const [mode, setMode] = useState<"form" | "raw">("raw");
   const [formValues, setFormValues] = useState<Record<string, unknown>>({});
@@ -70,7 +119,7 @@ function OpsPlayground() {
     [catalogQuery.data],
   );
 
-  const filtered = useMemo(() => {
+  const grouped = useMemo(() => {
     const q = query.trim().toLowerCase();
     const matched = q
       ? ops.filter((op) =>
@@ -80,42 +129,85 @@ function OpsPlayground() {
             .includes(q),
         )
       : ops;
-    return [...matched].sort((a, b) => a.key.localeCompare(b.key));
+    const byDomain = new Map<Domain, HostOperationCatalogEntry[]>();
+    for (const op of matched) {
+      const domain = opDomain(op.key);
+      byDomain.set(domain, [...(byDomain.get(domain) ?? []), op]);
+    }
+    return DOMAIN_ORDER.flatMap((domain) => {
+      const members = byDomain.get(domain);
+      if (!members) return [];
+      // Reads first, mutations demoted to the tail of each domain.
+      const sorted = [...members].sort((a, b) => {
+        const mutA = a.intent?.toLowerCase() === "mutate" ? 1 : 0;
+        const mutB = b.intent?.toLowerCase() === "mutate" ? 1 : 0;
+        return mutA - mutB || a.key.localeCompare(b.key);
+      });
+      return [{ domain, ops: sorted }];
+    });
   }, [ops, query]);
+
+  /** Glances match the search exactly like ops do — key, name, and blurb. */
+  const matchedGlances = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return syntheticOps;
+    return syntheticOps.filter((glance) =>
+      [glance.key, glance.displayName, glance.blurb].join(" ").toLowerCase().includes(q),
+    );
+  }, [query]);
 
   function select(op: HostOperationCatalogEntry) {
     const nextSchema = requestJsonSchema(op);
     const nextArgs = op.requestExamples?.[0]?.json ?? op.safeDefaultRequestJson ?? "{}";
     setSelected(op);
+    setSelectedGlance(undefined);
     setRequestSeed(nextArgs, nextSchema);
     setMode(nextSchema ? "form" : "raw");
     setResult(undefined);
     setIssue(undefined);
   }
 
+  // Cheap reads run on select — the route reads as a live surface, not a console.
+  // Anything bounded/expensive/mutating stays behind the explicit Run.
+  const autoRunKey = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!selected) return;
+    const cheapRead =
+      selected.intent?.toLowerCase() !== "mutate" && selected.costTier?.toLowerCase() === "cheap";
+    if (cheapRead && autoRunKey.current !== selected.key) {
+      autoRunKey.current = selected.key;
+      void run(selected);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected]);
+
   function setRequestSeed(json: string, schema?: HostOperationJsonSchema) {
     setArgs(json);
     setFormValues(readFormSeed(json, schema));
   }
 
-  async function run() {
-    if (!selected) return;
+  async function run(op?: HostOperationCatalogEntry) {
+    const target = op ?? selected;
+    if (!target) return;
     setRunning(true);
     setIssue(undefined);
     setResult(undefined);
     const started = performance.now();
     try {
+      const schema = requestJsonSchema(target);
       const parsed =
-        mode === "form" && requestSchema
-          ? buildFormRequest(requestSchema, formValues, requestSchema)
+        mode === "form" && schema
+          ? buildFormRequest(schema, formValues, schema)
           : args.trim()
-            ? JSON.parse(args)
+            ? (JSON.parse(args) as unknown)
             : undefined;
       // The playground calls whatever the live catalog lists — dynamic by nature.
-      const data = await callHostDynamic(selected.key, parsed, { bridgeSessionId });
+      const data = await callHostDynamic(target.key, parsed, { bridgeSessionId });
       setResult({
         status: 200,
         elapsedMs: Math.round(performance.now() - started),
+        observedAtMs: Date.now(),
+        request: parsed,
         rawBody: data,
         data,
       });
@@ -127,10 +219,10 @@ function OpsPlayground() {
   }
 
   return (
-    <main className="grid h-screen grid-cols-[20rem_1fr] gap-0 bg-background text-foreground">
+    <main className="grid h-screen grid-cols-[19rem_1fr] gap-0 bg-background text-foreground">
       {/* Op list */}
-      <aside className="flex min-h-0 flex-col border-r border-border">
-        <div className="border-b border-border p-2">
+      <aside className="flex min-h-0 flex-col border-r border-[var(--r-line-2)]">
+        <div className="border-b border-[var(--r-line)] p-2">
           <Input
             placeholder={
               catalogQuery.isPending ? "Loading op catalog..." : `Search ${ops.length} host ops...`
@@ -139,50 +231,197 @@ function OpsPlayground() {
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
-        <ul className="min-h-0 flex-1 overflow-y-auto p-1">
-          {filtered.map((op) => (
-            <li key={op.key}>
-              <button
-                onClick={() => select(op)}
-                className={cn(
-                  "w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted",
-                  selected?.key === op.key && "bg-muted",
-                )}
-              >
-                <div className="truncate text-xs font-medium">{op.displayName ?? op.key}</div>
-                <div className="truncate font-mono text-[0.625rem] text-muted-foreground">
-                  {op.key}
-                </div>
-              </button>
-            </li>
-          ))}
-          {filtered.length === 0 && (
-            <li className="px-2 py-4 text-center text-xs text-muted-foreground">
-              {catalogQuery.isError
-                ? "Couldn't load the op catalog — is Revit connected?"
-                : "No ops match."}
-            </li>
+        <div className="min-h-0 flex-1 overflow-y-auto pb-4">
+          {/* Glance: synthetic composed surfaces, pinned above the raw op domains. They match
+              the search like ops do (fit reviews, 2026-08-16 — pinning that vanished under any
+              query was search-hostile). */}
+          {matchedGlances.length > 0 && (
+            <section>
+              <h2 className="t-label t-upper sticky top-0 z-10 bg-[var(--r-page)] px-3 pb-1 pt-3 text-[var(--r-ink-2)]">
+                Glance
+                <span className="face-mono t-caption ml-1.5 text-[var(--r-ink-2)]">
+                  {matchedGlances.length}
+                </span>
+              </h2>
+              <ul className="px-1">
+                {matchedGlances.map((glance) => {
+                  const active = selectedGlance?.key === glance.key;
+                  return (
+                    <li key={glance.key}>
+                      <button
+                        onClick={() => {
+                          setSelectedGlance(glance);
+                          setSelected(undefined);
+                        }}
+                        className="w-full rounded-[2px] px-2 py-1 text-left transition-colors hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
+                        style={active ? SELECT_FILL : undefined}
+                      >
+                        <div className="t-value min-w-0 truncate font-medium">
+                          {glance.displayName}
+                        </div>
+                        <div className="face-mono t-caption truncate text-[var(--r-ink-2)]">
+                          {glance.key}
+                        </div>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
           )}
-        </ul>
+          {grouped.map(({ domain, ops: members }) => (
+            <section key={domain}>
+              <h2 className="t-label t-upper sticky top-0 z-10 bg-[var(--r-page)] px-3 pb-1 pt-3 text-[var(--r-ink-2)]">
+                {domain}
+                <span className="face-mono t-caption ml-1.5 text-[var(--r-ink-2)]">
+                  {members.length}
+                </span>
+              </h2>
+              <ul className="px-1">
+                {members.map((op) => {
+                  const mutate = op.intent?.toLowerCase() === "mutate";
+                  const active = selected?.key === op.key;
+                  return (
+                    <li key={op.key}>
+                      <button
+                        onClick={() => select(op)}
+                        className="w-full rounded-[2px] px-2 py-1 text-left transition-colors hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
+                        style={active ? SELECT_FILL : undefined}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={cn(
+                              "t-value min-w-0 truncate",
+                              mutate ? "text-[var(--r-ink-2)]" : "font-medium",
+                            )}
+                          >
+                            {op.displayName ?? op.key}
+                          </span>
+                          {mutate && (
+                            <span
+                              className="face-mono t-caption shrink-0 text-[var(--r-caution)]"
+                              title="mutating op — writes to the model"
+                            >
+                              M
+                            </span>
+                          )}
+                          {opViews[op.key] && (
+                            <span
+                              className="ml-auto size-[5px] shrink-0 rounded-[1px] bg-[var(--r-ink-2)]"
+                              title="curated view"
+                            />
+                          )}
+                        </div>
+                        <div className="face-mono t-caption truncate text-[var(--r-ink-2)]">
+                          {op.key}
+                        </div>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ))}
+          {grouped.length === 0 && (
+            <div className="px-3 py-4">
+              {catalogQuery.isError ? (
+                <EmptyState story="scope" exit="start the host, then reload">
+                  the op catalog is unreachable
+                </EmptyState>
+              ) : (
+                <EmptyState story="filter" exit="clear the search">
+                  no ops match
+                </EmptyState>
+              )}
+            </div>
+          )}
+        </div>
       </aside>
 
       {/* Detail / runner */}
       <section className="min-h-0 overflow-y-auto p-4">
-        {!selected ? (
-          <p className="text-sm text-muted-foreground">
-            Pick a host op. The list is the live session catalog (<code>host.ops.catalog</code>);
-            calls go through <code>/call</code> (default <code>localhost:5180</code>).
-          </p>
-        ) : (
-          <div className="mx-auto flex max-w-3xl flex-col gap-4">
+        {selectedGlance ? (
+          <div className="mx-auto flex max-w-4xl flex-col gap-4">
             <header>
-              <div className="flex items-center gap-2">
-                <h1 className="text-base font-semibold">{selected.displayName ?? selected.key}</h1>
-                {selected.intent && <Badge variant="secondary">{selected.intent}</Badge>}
-                {selected.costTier && <Badge variant="secondary">{selected.costTier}</Badge>}
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="t-title">{selectedGlance.displayName}</h1>
+                {/* a synthetic op IS a stand-in for a contract that doesn't exist —
+                    the dashed seam slot, worn honestly. */}
+                <FactChip
+                  dashed
+                  title="composed client-side from real ops — a prototype of a contract that doesn't exist yet"
+                >
+                  synthetic
+                </FactChip>
               </div>
+              <p className="face-mono t-caption mt-0.5 text-[var(--r-ink-2)]">
+                {selectedGlance.key}
+              </p>
+              <p className="t-prose mt-1 max-w-2xl text-[var(--r-ink-2)]">{selectedGlance.blurb}</p>
+              {selectedGlance.contractNote && (
+                <p className="t-label mt-1 max-w-2xl text-[var(--r-ink-2)]">
+                  <span className="face-mono t-caption t-upper mr-1 text-[var(--r-ink-2)]">
+                    contract
+                  </span>
+                  {selectedGlance.contractNote}
+                </p>
+              )}
+            </header>
+            <SyntheticRunner op={selectedGlance} bridgeSessionId={bridgeSessionId} />
+          </div>
+        ) : !selected ? (
+          <div className="flex flex-col gap-2">
+            <EmptyState story="scope" exit="pick an op from the catalog list">
+              no op selected
+            </EmptyState>
+            <Provenance>
+              list = the live session catalog (host.ops.catalog) · calls go through /call
+            </Provenance>
+          </div>
+        ) : (
+          <div className="mx-auto flex max-w-4xl flex-col gap-4">
+            <header>
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="t-title">{selected.displayName ?? selected.key}</h1>
+                {selected.intent && (
+                  <FactChip
+                    tone={selected.intent.toLowerCase() === "mutate" ? "caution" : "meta"}
+                    title={
+                      selected.intent.toLowerCase() === "mutate"
+                        ? "this op writes to the model"
+                        : "read-only op"
+                    }
+                  >
+                    {selected.intent}
+                  </FactChip>
+                )}
+                {selected.costTier && (
+                  <FactChip
+                    tone={costTone(selected.costTier)}
+                    title="host-declared cost tier — expensive ops can stall a session"
+                  >
+                    {selected.costTier}
+                  </FactChip>
+                )}
+                {selected.requiresActiveDocument && (
+                  <FactChip tone="caution" title="refuses without an active Revit document">
+                    active doc
+                  </FactChip>
+                )}
+                {selected.supportedActiveDocumentKind &&
+                  selected.supportedActiveDocumentKind !== "Any" && (
+                    <FactChip tone="caution" title="refuses on the wrong active document kind">
+                      {selected.supportedActiveDocumentKind === "FamilyOnly"
+                        ? "family only"
+                        : "project only"}
+                    </FactChip>
+                  )}
+              </div>
+              <p className="face-mono t-caption mt-0.5 text-[var(--r-ink-2)]">{selected.key}</p>
               {selected.description && (
-                <p className="mt-1 text-sm text-muted-foreground">{selected.description}</p>
+                <p className="t-prose mt-1 max-w-2xl text-[var(--r-ink-2)]">
+                  {selected.description}
+                </p>
               )}
             </header>
 
@@ -208,9 +447,11 @@ function OpsPlayground() {
               </Select>
             </div>
 
-            <div>
-              <div className="mb-1 flex items-center justify-between">
-                <h2 className="text-xs font-semibold uppercase text-muted-foreground">Request</h2>
+            {/* Request collapses once evidence is on screen; remount per (op, result) so the
+                initial open state is right and user toggles stay free. */}
+            <details key={`${selected.key}:${result ? "ran" : "idle"}`} open={!result}>
+              <summary className="mb-1 flex cursor-pointer select-none list-none items-center justify-between">
+                <h2 className="t-label t-upper text-[var(--r-ink-2)]">Request</h2>
                 <div className="flex gap-1">
                   {selected.requestExamples?.map((ex) => (
                     <Button
@@ -233,7 +474,7 @@ function OpsPlayground() {
                     </Button>
                   )}
                 </div>
-              </div>
+              </summary>
               {requestSchema && mode === "form" ? (
                 <JsonSchemaForm
                   schema={requestSchema}
@@ -251,33 +492,50 @@ function OpsPlayground() {
                   className="min-h-32 font-mono"
                 />
               )}
-            </div>
+            </details>
 
             <div className="flex items-center gap-3">
-              <Button onClick={run} disabled={running}>
+              <Button onClick={() => void run()} disabled={running}>
                 {running ? "Running..." : "Run"}
               </Button>
               {result && (
-                <span className="text-xs text-muted-foreground">
-                  {result.status} / {result.elapsedMs}ms
-                </span>
+                <OutcomeLine
+                  kind="receipt"
+                  label={`${result.status} · ${result.elapsedMs}ms · obs ${new Date(result.observedAtMs).toLocaleTimeString()}`}
+                />
               )}
             </div>
 
             <HostIssuePanel issue={issue} />
-            {result && (
-              <>
-                <ProjectedOutput value={result.data} />
-                <div className="grid gap-3 lg:grid-cols-2">
-                  <OutputBlock title="Validated data" value={result.data} />
-                  <OutputBlock title="Raw response" value={result.rawBody} />
-                </div>
-              </>
-            )}
+            {result && <OpResult opKey={selected.key} result={result} />}
           </div>
         )}
       </section>
     </main>
+  );
+}
+
+/** Curated view when one is registered; otherwise the generic projection. The
+ * raw wire payload stays one disclosure away either way — evidence, demoted. */
+function OpResult({ opKey, result }: { opKey: string; result: RunResult }) {
+  const Curated = opViews[opKey];
+  return (
+    <>
+      {Curated ? (
+        <Curated data={result.data} opKey={opKey} request={result.request} />
+      ) : (
+        <ProjectedOutput value={result.data} />
+      )}
+      <details className="group">
+        <summary className="face-mono t-caption t-upper cursor-pointer select-none list-none text-[var(--r-ink-2)] hover:text-[var(--r-ink)]">
+          <span className="mr-1 inline-block transition-transform group-open:rotate-90">▸</span>
+          raw response
+        </summary>
+        <div className="mt-2">
+          <OutputBlock title="" value={result.rawBody} />
+        </div>
+      </details>
+    </>
   );
 }
 
@@ -337,23 +595,22 @@ function JsonSchemaForm({
   const fields = schemaProperties(schema);
   const required = new Set(readStringArray(schema.required));
   if (fields.length === 0) {
-    return <p className="text-xs text-muted-foreground">This operation has no request fields.</p>;
+    return <p className="t-label text-[var(--r-ink-2)]">This operation has no request fields.</p>;
   }
 
   return (
-    <div className="grid gap-3 rounded-md border border-border p-3">
+    <div className="grid gap-3 rounded-[var(--radius)] border border-[var(--r-line)] p-3">
       {fields.map(([name, fieldSchema]) => {
         const description = readDescription(fieldSchema, root);
         return (
           <div key={name} className="grid gap-1">
             <Label htmlFor={`op-field-${depth}-${name}`}>
-              <span className="font-mono">{name}</span>
-              {required.has(name) && <span className="ml-1 text-destructive">required</span>}
+              <span className="face-mono">{name}</span>
+              {required.has(name) && <span className="ml-1 text-[var(--r-caution)]">required</span>}
             </Label>
-            {description && <p className="text-xs text-muted-foreground">{description}</p>}
+            {description && <p className="t-label text-[var(--r-ink-2)]">{description}</p>}
             <SchemaInput
               id={`op-field-${depth}-${name}`}
-              name={name}
               schema={fieldSchema}
               root={root}
               depth={depth}
@@ -379,7 +636,6 @@ function readDescription(
 
 function SchemaInput({
   id,
-  name,
   schema,
   root,
   depth,
@@ -388,7 +644,6 @@ function SchemaInput({
   bridgeSessionId,
 }: {
   id: string;
-  name: string;
   schema: HostOperationJsonSchema;
   root: HostOperationJsonSchema;
   depth: number;
@@ -445,11 +700,8 @@ function SchemaInput({
 
   if (type === "boolean") {
     return (
-      <div className="flex h-7 items-center gap-2">
+      <div className="flex h-7 items-center">
         <Switch id={id} checked={value === true} onCheckedChange={(checked) => onChange(checked)} />
-        <Label htmlFor={id} className="text-muted-foreground">
-          {name}
-        </Label>
       </div>
     );
   }
@@ -547,12 +799,10 @@ function ProjectedOutput({ value }: { value: unknown }) {
   if (objectRows.length !== rows.length) {
     return (
       <div>
-        <h2 className="mb-1 text-xs font-semibold uppercase text-muted-foreground">
-          {projection.title}
-        </h2>
-        <ul className="max-h-[24rem] overflow-auto rounded-md border border-border text-xs">
+        <h2 className="t-label t-upper mb-1 text-[var(--r-ink-2)]">{projection.title}</h2>
+        <ul className="t-value max-h-[24rem] overflow-auto rounded-[var(--radius)] border border-[var(--r-line)]">
           {rows.map((row, index) => (
-            <li key={index} className="border-b border-border px-2 py-1 last:border-b-0">
+            <li key={index} className="border-b border-[var(--r-line)] px-2 py-1 last:border-b-0">
               {formatCell(row)}
             </li>
           ))}
@@ -568,15 +818,21 @@ function ProjectedOutput({ value }: { value: unknown }) {
 
   return (
     <div>
-      <h2 className="mb-1 text-xs font-semibold uppercase text-muted-foreground">
-        {projection.title}
-      </h2>
-      <div className="max-h-[24rem] overflow-auto rounded-md border border-border">
-        <table className="w-full text-left text-xs">
-          <thead className="sticky top-0 bg-background">
+      <h2 className="t-label t-upper mb-1 text-[var(--r-ink-2)]">{projection.title}</h2>
+      <div className="max-h-[24rem] overflow-auto rounded-[var(--radius)] border border-[var(--r-line)]">
+        <table className="t-value w-full text-left">
+          <thead
+            className="sticky top-0"
+            style={
+              { background: "var(--r-recess)", "--r-on": "var(--r-recess)" } as React.CSSProperties
+            }
+          >
             <tr>
               {columns.map((column) => (
-                <th key={column} className="border-b border-border px-2 py-1 font-mono">
+                <th
+                  key={column}
+                  className="face-mono t-label border-b border-[var(--r-line-2)] px-2 py-1"
+                >
                   {column}
                 </th>
               ))}
@@ -584,7 +840,7 @@ function ProjectedOutput({ value }: { value: unknown }) {
           </thead>
           <tbody>
             {objectRows.map((row, index) => (
-              <tr key={index} className="border-b border-border last:border-b-0">
+              <tr key={index} className="border-b border-[var(--r-line)] last:border-b-0">
                 {columns.map((column) => (
                   <td key={column} className="max-w-64 truncate px-2 py-1">
                     {formatCell(row[column])}
@@ -602,8 +858,13 @@ function ProjectedOutput({ value }: { value: unknown }) {
 function OutputBlock({ title, value }: { title: string; value: unknown }) {
   return (
     <div className="min-w-0">
-      <h2 className="mb-1 text-xs font-semibold uppercase text-muted-foreground">{title}</h2>
-      <pre className="max-h-[32rem] overflow-auto rounded-md border border-border bg-muted/30 p-3 text-xs">
+      {title && <h2 className="t-label t-upper mb-1 text-[var(--r-ink-2)]">{title}</h2>}
+      <pre
+        className="t-value max-h-[32rem] overflow-auto rounded-[var(--radius)] border border-[var(--r-line)] p-3"
+        style={
+          { background: "var(--r-recess)", "--r-on": "var(--r-recess)" } as React.CSSProperties
+        }
+      >
         {typeof value === "string" ? value : JSON.stringify(value, null, 2)}
       </pre>
     </div>

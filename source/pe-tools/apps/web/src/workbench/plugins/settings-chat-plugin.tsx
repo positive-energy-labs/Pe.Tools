@@ -35,7 +35,7 @@ export function SettingsChatPlugin({
 
   return (
     <InlineRoutePlugin
-      title={isFamilyModel ? "Family Model" : "Settings"}
+      title={isFamilyModel ? "Family Model" : settingsRouteState.title}
       action={actionLabel(toolName, args, running)}
     >
       <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
@@ -43,7 +43,7 @@ export function SettingsChatPlugin({
         <Metric value={summary.staged} label="staged" />
         <Metric value={summary.attention} label="need attention" issue />
         <Link
-          className="ml-auto font-medium text-[var(--pe-blue)] hover:underline"
+          className="ml-auto text-[var(--r-nav)] hover:underline"
           to={isFamilyModel ? "/family" : "/chat"}
           search={isFamilyModel ? undefined : (previous) => ({ ...previous, plugin: "settings" })}
         >

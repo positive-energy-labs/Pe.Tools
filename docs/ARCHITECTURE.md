@@ -119,7 +119,7 @@ The same field-options machinery now also annotates the fixed operation surface:
 3. **Keep document-owned and session-owned behavior separate.** If behavior only needs `Document` / `FamilyDocument`, prefer document-centric helpers and DA-safe collectors. If it needs active/open UI state, keep it near `UIApplication`, `DocumentManager`, or session services.
 4. **Do not collapse proof lanes.** Build/runtime/proof claims belong to `BUILD.md`; source compile, package artifacts, AttachedRrd, FreshRevitProcess, and installed behavior are different authorities.
 5. **Make mutation script-first.** Let Pea and developers prove awkward Revit mutation through guarded scripts and artifacts before freezing a host operation or generic apply API.
-6. **Keep Pea out of repo-source posture.** Pea is the deployed operator workbench. SDK `pe-revit` and repo docs own source, build, RRD, and architecture workflows.
+6. **Keep Pea out of repo-source posture.** Pea is the deployed operator workbench. SDK `pe-revit` and repo docs own source, build, dev-session, and architecture workflows.
 7. **Keep web/TUI/protocol shells thin.** Workbench shells should project shared runtime state and contracts. Do not reimplement transcript, tool calls, approvals, thread lists, model/mode/access, inspector, memory, or world/context lifecycle independently per surface.
 8. **Keep hand-authored profiles editor-friendly.** Settings/profile schema changes should preserve useful LSP autocomplete, examples, and validation feedback for developers authoring JSON by hand.
 9. **Prefer bounded projections over bespoke audit sprawl.** Add compact joins, page models, budgets, and diagnostics before creating one-off domain endpoints.

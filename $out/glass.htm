@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+   <title>Glass</title>
+   <meta name="generator" content="Help &amp; Manual" />
+   <meta name="keywords" content="Glass,Glass Entering Custom,Shading Coefficient,SHGC,Solar Heat Gain Coefficient" />
+   <meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1" />   
+   
+   <meta http-equiv="X-UA-Compatible" content="IE=10" />
+   <link type="text/css" href="default.css" rel="stylesheet" />
+   <link type="text/css" href="custom.css" rel="stylesheet">
+
+   <style TYPE="text/css" media="screen"> 
+      html, body { margin:0; 
+             padding:0; 
+             overflow: hidden; 
+             background: #FFFFFF; 
+       } 
+
+      div#printheader { display: none; }
+      #idheader { width:100%; 
+                  height:auto; 
+                  padding: 0; 
+                  margin: 0; 
+       } 
+      #idcontent { position:relative }                                               
+      #callout-table, #overview-table {display:block; position:relative; top:0; left:0;}
+      #callout-icon {display:block; position:absolute; top:-11px; left:-11px;}
+      #callout-icon-flag {display:block; position:absolute; top:-11px; left:-8px;}
+      #callout-table a {text-decoration: none; color: blue;}
+      #callout-table a:visited {text-decoration: none; color: blue;}
+      #overview-table a {text-decoration: none; color: black;}
+      #overview-table a:visited {text-decoration: none; color: black;}
+      #callout-table a:hover, #overview-table a:hover {text-decoration: underline;}      
+      #switchtoggles { text-align: right; padding: 0 5px 0 0; font-size: 90%; margin: 0; }  
+      p.help-url { margin: 20px 0 5px 0; text-align: center; font-size: 80%; text-decoration: none }
+      .sync-toc { color: #ffffff; font-size: 8pt; font-weight: bold; display: none; }
+      .sync-toc a { color: #ffffff; text-decoration: none; font-weight: bold;}
+      .sync-toc a:visited { color: #ffffff; }
+      .sync-toc a:hover { text-decoration: underline; }
+
+   </style>
+   <noscript>
+   <style type="text/css">
+   html, body { overflow: auto; }
+   </style> 
+   </noscript>
+   <style type="text/css" media="print">
+      span.f_Heading1 { color: black; }
+      #idheader, #printheader img { display:none; }
+      #printheader { display: block; margin-top: 20px; }
+      #idcontent { margin-top: 10px; position:relative }
+   </style>   
+
+   <script type="text/javascript" src="jquery.js"></script>
+   <script type="text/javascript" src="helpman_settings.js"></script>
+   <script type="text/javascript" src="helpman_topicinit.js"></script>
+   <script type="text/javascript" src="nsh.js"></script>
+<!--[if lt IE 7]>
+<style type="text/css">
+  #idcontent {padding: 0px;} 
+  #innerdiv {padding: 10px 5px 5px 10px ;} 
+</style> 
+<![endif]-->
+
+
+
+</head>
+<body>
+
+
+<div id="printheader"><h1 class="p_Heading1"><span class="f_Heading1">Glass (Room Data, Default Room Data Windows)</span></h1>
+</div>
+<div id="idheader">
+<div id="idheaderbg">
+<table style="width:100%;border:none;margin:0px;background:url(background-topic-header.jpg)" cellspacing="0" cellpadding="0"> 
+  <tr valign="bottom">
+    <td align="left" valign="bottom" class="topichead">
+   
+   <p class="crumbs" id="idnav"><b>Navigation:</b>&nbsp;
+   
+   Program Windows &gt; Project Windows &gt; Room Data &gt; Inputs &gt; Glass&nbsp;&gt;</p>
+   <h1 class="p_Heading1"><span class="f_Heading1">Glass (Room Data, Default Room Data Windows)</span></h1>
+
+    </td>
+    <td align="right" width="120" valign="middle" class="topichead" id="idnav">
+    
+     <a href="organize_favorites__recent__custom.htm"
+        onmouseover="document.images.prev.src='hm_btn_navigate_prev_orange.png'" 
+        onmouseout="document.images.prev.src='hm_btn_navigate_prev.png'"
+        ><img name="prev" src="hm_btn_navigate_prev.png" border=0 alt="Previous page"
+        ></a><a href="welcome.htm"
+        onmouseover="document.images.main.src='hm_btn_navigate_top_orange.png'" 
+        onmouseout="document.images.main.src='hm_btn_navigate_top.png'"><img name=main src="hm_btn_navigate_top.png" border=0 alt="Return to chapter overview"
+        ></a><a href="glass_material_dialog.htm"
+        onmouseover="document.images.next.src='hm_btn_navigate_next_orange.png'" 
+        onmouseout="document.images.next.src='hm_btn_navigate_next.png'"><img name=next src="hm_btn_navigate_next.png" border=0 alt="Next page"
+        ></a>
+    </td>
+  </tr>  
+</table>
+<!-- The following code displays Expand All/Collapse All links  below the header in topics containing toggles -->
+  
+</div>
+</div>  
+
+<div id="idcontent"><div id="innerdiv">
+<!--ZOOMRESTART-->
+<p style="margin: 0.1667in 0 0 0;"><img style="margin:0;width:8.1458in;height:1.5938in;border:none" src="hmfile_hash_6ff21da0.png"/></p>
+<p style="margin: 0.1667in 0 0 0;">These inputs should be used for windows, skylights, sliding glass doors, and French doors. &nbsp;If the glass is shaded by an overhang, be sure to enter the shading reference here and describe the overhang on the General Project Data window, Design Data folder. &nbsp;Note that each glass section has a wall reference number. &nbsp;This tells Rhvac which direction the window faces and allows the program to subtract the glass area from the appropriate wall. &nbsp;Directly below the word Glass is a column of numbers; these numbers are the numbers of the various glass entries in the room and cannot be changed. &nbsp;Note that the term &quot;double pane&quot; refers to two <span style="font-style: italic;">sheets</span> of glass with dead air space between them, while the term &quot;triple pane&quot; refers to three <span style="font-style: italic;">sheets</span> of glass with dead air space between them. &nbsp;Double pane and triple pane windows are also called double glazed and triple glazed.</p>
+<p style="margin: 0.1667in 0 0 0;"><span style="font-weight: bold;">S Button (Save Material to Default Room):</span> &nbsp;Saves the material to the <a href="default_room_data.htm" class="topiclink">Default Room Data</a> window. &nbsp;If the material is already in the list of default materials it will be updated if needed.</p>
+<p style="margin: 0.1667in 0 0 0;"><span style="font-weight: bold;">D Button (Insert Default Material):</span> &nbsp;Copies the default material from the Default Room Data window to the Room Data window. &nbsp;If more than one default material has been defined, a popup menu will let you select which of your default materials to copy. &nbsp;For row 1, this button works like the <a href="copy_above_or_default_and_room_dimension.htm" class="topiclink">Copy Above or Default and Room Dimension</a> menu item and toolbar button, while on rows 2 and up it works like the <a href="insert_only_default_room_data.htm" class="topiclink">Insert Only Default Room Data</a> menu item and toolbar button.</p>
+<p style="margin: 0.1667in 0 0 0;"><span style="font-weight: bold;">C Button (Copy Above Material):</span> &nbsp;Copies the material from the above row. &nbsp;This button is disabled for material number 1. &nbsp;For rows 2 and up, works the same as the <a href="copy_above_or_default_and_room_dimension.htm" class="topiclink">Copy Above or Default and Room Dimension</a> menu item and toolbar button.</p>
+<p style="margin: 0.1667in 0 0 0;"><span style="font-weight: bold;">Glass Material:</span> &nbsp;This entry corresponds to the nine types of glass allowed by Manual J. &nbsp;Click on the drop-down list arrow to display the <span style="font-size: 12pt;"><a href="glass_material_dialog.htm" class="topiclink">Glass Material dialog</a></span>. &nbsp;Note that when you type or select a valid glass construction code, the reference defaults to 1.</p>
+<p style="margin: 0.1667in 0 0 0;"><span style="font-weight: bold;">U-Value:</span> &nbsp;If you enter one of the standard construction codes and glass types Rhvac will display a suggested U-Value for you. &nbsp;This U-Value corresponds to the U-Values listed in Table 2 (pages 65-67) of Manual J. &nbsp;You also have the option of entering your own U-Value. &nbsp;Rhvac will then use the U-Value you entered when calculating the heat transfer due to glass sections. &nbsp;Note that the U-Value is determined by dividing the number 1 by the R-value. &nbsp;The valid range of inputs for this field is 0.000 to 3.000 Btuh/(sq. ft. F).</p>
+<p style="margin: 0.1667in 0 0 0;"><span style="font-weight: bold;">Width</span> and <span style="font-weight: bold;">Height:</span> &nbsp; The width and height of the window or glass door should be measured from the inside of the frame and should include the material (either wood or metal) that surrounds the glass. &nbsp;In cases where the window is not rectangular and it is not possible to give a single width and height, you should consider entering the height as 1 foot and the width as the actual area. &nbsp;The main point to remember is that the product of the glass height and width entries should be equal to the actual window or glass door area including the frame. &nbsp;The glass length and width can be 0.0 to 999.9 feet each. &nbsp;Note that the area entered here will be subtracted from the wall area of the reference wall.</p>
+<p style="margin: 0.1667in 0 0 0;"><span style="font-weight: bold;">Reference (Ref):</span> &nbsp;This entry is a number that corresponds to one of the walls entered above. &nbsp;Every glass entry should have a wall reference number. &nbsp;This number tells Rhvac what direction the glass faces (which is critical when determining the cooling load) as well as allowing the program to subtract the total glass area from the appropriate wall. &nbsp;(Be sure the area of the glass entry does not exceed the wall area!) &nbsp;Valid wall reference numbers are 1 to 20. &nbsp;Remember that Construction Material types 7A - 7L are skylights and valid roof reference numbers are 1 to 8. &nbsp;Note that when you type or select a valid glass construction code, the reference defaults to 1.</p>
+<p style="margin: 0.1667in 0 0 0;">If you are entering a skylight the wall reference number will actually be a roof reference number. &nbsp;Remember that glass entries will be skylights if the construction type is skylight specific. &nbsp;The area of the skylight will be subtracted from the area of the roof. &nbsp;Note that shading coefficients 49, 53, and 57 correspond to horizontal roofs - so the roof direction for these three shading coefficients must be &quot;UP&quot;. &nbsp;But for other skylight tilt angles, you must specify a roof direction corresponding to the direction the skylight faces. &nbsp;If you do not know which direction the skylight faces you should use northeast to provide a mid range value. &nbsp;East and west facing skylights have the highest HTM values while north facing skylights have the lowest HTM values.</p>
+<p style="margin: 0.1667in 0 0 0;">If you are entering a glass wall, you will still have to define a wall facing the correct direction. &nbsp;When you define this wall, make sure the gross area of the wall exactly equals the gross area of the glass. &nbsp;This will cause the Rhvac program to correctly calculate the solar gain and heat loss of the glass wall. &nbsp;If the glass entry is surrounded by two different wall types then you should enter it in two parts corresponding to each wall type. &nbsp;For example, suppose you entered a sliding glass door on a building that had a four foot high face brick portion. &nbsp;The sliding glass door would then be entered as two glass sections; the first door being a four foot section referencing the face brick wall and the rest of the sliding glass door referencing the wall without the face brick section. &nbsp;Whenever you enter glass doors or windows in sections be sure the total area of the sections adds up to the actual area of the glass window or door.</p>
+<p style="margin: 0.1667in 0 0 0;"><span style="font-weight: bold;">Solar Heat Gain Coefficient (SHGC):</span> &nbsp;Specifies the generic or NFRC-rated solar heat gain characteristic of the glass. &nbsp;Lower numbers mean that the glass produces less solar gain..</p>
+<p style="margin: 0.1667in 0 0 0;"><span style="font-weight: bold;">Occurrences (Occ):</span> &nbsp;Determines the number of times this glass occurs in the wall or roof. &nbsp;The normal value for this input is &quot;1&quot;. &nbsp;But if you have a glass that occurs several times in the same wall or roof you can enter the glass only once and enter the number of occurrences of the glass here. &nbsp;The maximum allowed value is 99.</p>
+<p style="margin: 0.1667in 0 0 0;"><span style="font-weight: bold;">Overhang Projection and Offset (O.Proj and O.Off):</span> &nbsp;These inputs are only used if there is an external overhang installed over the window. &nbsp;The overhang projection represents the maximum horizontal distance in feet that the overhang projects out from the glass. &nbsp;The overhang offset represents the distance that the overhang is above the top of the glass. &nbsp;If the overhang is directly above the window, the offset should be zero. &nbsp;If the glass is a skylight, both of these inputs must be zero.</p>
+<p style="margin: 0.1667in 0 0 0;"><span style="font-weight: bold;">Scrollbar:</span> &nbsp;Use the scrollbar to scroll up and down through the list of glass items for the room.</p>
+<p style="margin: 0.1667in 0 0 0;"><span style="font-weight: bold;">Plus and Minus Buttons:</span> &nbsp;Click the plus and minus buttons to increase or decrease the number of glass items visible at a time.</p>
+<p style="margin: 0.1667in 0 0 0;"><span style="color: #000000;">&nbsp;</span></p>
+
+<!--ZOOMSTOP-->
+</div></div>
+<script type="text/javascript">
+
+var lastSlashPos = document.URL.lastIndexOf("/") > document.URL.lastIndexOf("\\") ? document.URL.lastIndexOf("/") : document.URL.lastIndexOf("\\");
+if( document.URL.substring(lastSlashPos + 1, lastSlashPos + 4).toLowerCase() != "~hh" )
+{
+ if (document.all) setTimeout(function() {nsrInit();},20); 
+    else nsrInit();
+ } 
+
+
+</script>
+</body>
+</html>

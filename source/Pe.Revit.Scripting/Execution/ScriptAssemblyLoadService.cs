@@ -175,11 +175,22 @@ public sealed class ScriptAssemblyLoadService {
         if (alreadyLoaded != null && ShouldUseLoadedCopy(alreadyLoaded, assemblyPath)) {
             assemblyMap[simpleName] = alreadyLoaded.Location;
             if (alreadyLoadedAssemblyNames.Add(simpleName)) {
-                diagnostics.Add(ScriptDiagnosticFactory.Info(
-                    "resolve",
-                    $"Using already-loaded assembly '{simpleName}' from '{alreadyLoaded.Location}'.",
-                    simpleName
-                ));
+                // A pinned assembly whose disk candidate is a newer build cannot hot-reload (its
+                // types cross the script<->host boundary) — but it must never be SILENT about it.
+                diagnostics.Add(IsLoadedCopyStaleVsDisk(alreadyLoaded, assemblyPath)
+                    ? ScriptDiagnosticFactory.Warning(
+                        "resolve",
+                        $"Using already-loaded assembly '{simpleName}' from '{alreadyLoaded.Location}' — "
+                        + $"STALE vs disk: '{assemblyPath}' is a different build. This assembly is host-pinned "
+                        + "(type identity crosses the script<->host boundary), so the loaded copy runs; "
+                        + "restart the Revit session to execute the new build.",
+                        simpleName
+                    )
+                    : ScriptDiagnosticFactory.Info(
+                        "resolve",
+                        $"Using already-loaded assembly '{simpleName}' from '{alreadyLoaded.Location}'.",
+                        simpleName
+                    ));
             }
         } else {
             if (alreadyLoaded != null && alreadyLoadedAssemblyNames.Add(simpleName)) {
@@ -229,19 +240,26 @@ public sealed class ScriptAssemblyLoadService {
         if (string.IsNullOrWhiteSpace(diskCandidatePath) || !File.Exists(diskCandidatePath))
             return true;
 
-        // Same file the host loaded from: Windows keeps a loaded dll locked, so its content
-        // cannot have changed since load. Cheap fast path that skips the MVID read.
-        if (string.Equals(
-                Path.GetFullPath(diskCandidatePath),
-                Path.GetFullPath(loadedAssembly.Location),
-                StringComparison.OrdinalIgnoreCase))
-            return true;
-
+        // NO same-path fast path: "a loaded dll's file cannot have changed" is false — a build can
+        // replace the file at the loaded path (rename-and-write) while the old image stays mapped,
+        // so same path is NOT proof of same bytes. That assumption silently executed a stale
+        // ProjectReference dll in the field (2026-08-10); the MVID read below is the only truth.
         // MVID = a GUID the compiler stamps into every build; equal MVIDs means literally the
         // same build. Different MVID means the disk file is a different (typically rebuilt)
         // binary -> hot-reload it. Unreadable disk file -> keep the safe loaded copy.
         var diskMvid = TryReadDiskMvid(diskCandidatePath);
         return diskMvid == null || diskMvid.Value == loadedAssembly.ManifestModule.ModuleVersionId;
+    }
+
+    /// <summary>True when the loaded copy is being kept even though the disk candidate is a
+    /// different build — only possible for host-pinned assemblies (everything else hot-reloads).
+    /// Surfaced loudly: silently executing code that differs from disk corrupts verification
+    /// verdicts.</summary>
+    private static bool IsLoadedCopyStaleVsDisk(Assembly loadedAssembly, string? diskCandidatePath) {
+        if (string.IsNullOrWhiteSpace(diskCandidatePath) || !File.Exists(diskCandidatePath))
+            return false;
+        var diskMvid = TryReadDiskMvid(diskCandidatePath);
+        return diskMvid != null && diskMvid.Value != loadedAssembly.ManifestModule.ModuleVersionId;
     }
 
     private static Guid? TryReadDiskMvid(string assemblyPath) {

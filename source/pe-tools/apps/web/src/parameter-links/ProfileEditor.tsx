@@ -4,6 +4,9 @@
  * hands it up through `onChange`; the route decides when to persist it to the shared
  * document. Definitions declare the link rule; assignments bind a definition to a set of
  * source elements (by unique-id).
+ *
+ * Each definition renders as an ArtifactFrame: the draft profile is the machine-operated
+ * object pea and the engineer co-edit, so the one enclosure is spent on it (border budget).
  */
 import type { ReactNode } from "react";
 import { Plus, Trash2 } from "lucide-react";
@@ -14,7 +17,9 @@ import type {
   ParameterReference,
 } from "@pe/agent-contracts";
 
-import { Button } from "#/components/ui/button";
+import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { EmptyState } from "#/components/lang/empty";
+import { Verb } from "#/components/lang/verb";
 import {
   FieldOptionMultiSelect,
   FieldOptionSelect,
@@ -47,19 +52,21 @@ export function ProfileEditor({
 }) {
   if (!profile || profile.definitions.length === 0) {
     return (
-      <div className="rounded-[2px] border border-dashed border-[var(--line-2)] px-4 py-8 text-center">
-        <p className="text-xs text-[var(--lichen)]">
-          No draft profile. Add a definition to start linking parameters.
-        </p>
-        <Button
-          size="sm"
-          variant="outline"
-          className="mt-3"
+      <div className="flex flex-col items-center gap-3 px-4 py-8 text-center">
+        <EmptyState story="scope" exit="add a definition to start linking parameters">
+          no draft profile
+        </EmptyState>
+        <Verb
+          label="add definition"
+          icon={Plus}
           disabled={disabled}
           onClick={() => onChange(addDefinition(profile))}
-        >
-          <Plus /> Add definition
-        </Button>
+          reason={
+            disabled
+              ? "the draft is busy — wait for the current command to finish"
+              : "Add a blank link definition to the draft (local until saved)"
+          }
+        />
       </div>
     );
   }
@@ -76,14 +83,17 @@ export function ProfileEditor({
           onChange={onChange}
         />
       ))}
-      <Button
-        size="sm"
-        variant="outline"
+      <Verb
+        label="add definition"
+        icon={Plus}
         disabled={disabled}
         onClick={() => onChange(addDefinition(profile))}
-      >
-        <Plus /> Add definition
-      </Button>
+        reason={
+          disabled
+            ? "the draft is busy — wait for the current command to finish"
+            : "Add a blank link definition to the draft (local until saved)"
+        }
+      />
     </div>
   );
 }
@@ -164,26 +174,27 @@ function DefinitionCard({
   );
 
   return (
-    <div className="rounded-[2px] border border-[var(--line-2)] bg-[var(--paper)]">
-      <div className="flex items-center justify-between gap-2 border-b border-[var(--line-2)] px-3 py-1.5">
-        <input
-          value={definition.id}
-          disabled={disabled}
-          onChange={(event) => patch({ id: event.target.value })}
-          className="min-w-0 flex-1 bg-transparent text-sm font-medium text-[var(--clay-ink)] outline-none"
-          aria-label="definition id"
-        />
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          title="Remove definition"
-          disabled={disabled}
-          onClick={() => onChange(removeDefinition(profile, definition.id))}
-        >
-          <Trash2 />
-        </Button>
-      </div>
-
+    <ArtifactFrame
+      head={
+        <>
+          <input
+            value={definition.id}
+            disabled={disabled}
+            onChange={(event) => patch({ id: event.target.value })}
+            className="t-value face-mono min-w-0 flex-1 bg-transparent text-foreground outline-none"
+            aria-label="definition id"
+            title="The definition's id — how assignments and receipts refer to it"
+          />
+          <Verb
+            label="remove"
+            icon={Trash2}
+            disabled={disabled}
+            onClick={() => onChange(removeDefinition(profile, definition.id))}
+            reason="Remove this definition and its assignments from the draft (local until saved)"
+          />
+        </>
+      }
+    >
       <div className="grid gap-2 px-3 py-2.5 sm:grid-cols-2">
         <Field label="Source category">
           <FieldOptionSelect
@@ -259,7 +270,7 @@ function DefinitionCard({
             onChange={(reducer) => patch({ reducer })}
           />
         </Field>
-        <label className="flex items-center gap-1.5 text-xs text-[var(--slate)] sm:col-span-2">
+        <label className="t-label flex items-center gap-1.5 text-muted-foreground sm:col-span-2">
           <input
             type="checkbox"
             checked={definition.targetOverride != null}
@@ -330,31 +341,31 @@ function DefinitionCard({
         ) : null}
       </div>
 
-      <div className="border-t border-[var(--line-2)] px-3 py-2">
+      <div className="border-t border-border px-3 py-2">
         <div className="mb-1.5 flex items-center justify-between">
-          <span className="tele-label text-[var(--lichen)]">Assignments</span>
-          <Button
-            size="xs"
-            variant="ghost"
+          <span className="t-label t-upper text-muted-foreground">Assignments</span>
+          <Verb
+            label="add assignment"
+            icon={Plus}
             disabled={disabled}
             onClick={() => onChange(addAssignment(profile, definition.id))}
-          >
-            <Plus /> Add assignment
-          </Button>
+            reason="Bind this definition to a set of source elements (empty set = every element in the category)"
+          />
         </div>
         {assignments.length === 0 ? (
-          <p className="py-1 text-[10px] text-[var(--lichen)]">
-            No assignments — this definition links nothing until you bind source elements.
-          </p>
+          <EmptyState
+            story="scope"
+            exit="add an assignment and bind source elements"
+            className="py-1"
+          >
+            no assignments — this definition links nothing
+          </EmptyState>
         ) : (
-          <div className="space-y-2">
+          <div>
             {assignments.map((assignment) => (
-              <div
-                key={assignment.id}
-                className="rounded-[2px] border border-[var(--line-2)] px-2 py-1.5"
-              >
+              <div key={assignment.id} className="border-t border-border py-1.5 first:border-t-0">
                 <div className="mb-1 flex items-center justify-between gap-2">
-                  <label className="flex items-center gap-1.5 text-xs text-[var(--slate)]">
+                  <label className="t-label flex items-center gap-1.5 text-muted-foreground">
                     <input
                       type="checkbox"
                       checked={assignment.enabled}
@@ -369,18 +380,16 @@ function DefinitionCard({
                     />
                     enabled
                   </label>
-                  <span className="truncate font-mono text-[10px] text-[var(--lichen)]">
+                  <span className="t-caption face-mono truncate text-[var(--r-ink-mute)]">
                     {assignment.id}
                   </span>
-                  <Button
-                    size="icon-xs"
-                    variant="ghost"
-                    title="Remove assignment"
+                  <Verb
+                    label="remove"
+                    icon={Trash2}
                     disabled={disabled}
                     onClick={() => onChange(removeAssignment(profile, assignment.id))}
-                  >
-                    <Trash2 />
-                  </Button>
+                    reason="Remove this assignment from the draft (local until saved)"
+                  />
                 </div>
                 <Field label="Source elements">
                   <FieldOptionMultiSelect
@@ -397,7 +406,7 @@ function DefinitionCard({
           </div>
         )}
       </div>
-    </div>
+    </ArtifactFrame>
   );
 }
 
@@ -427,7 +436,7 @@ function parameterLabel(reference: ParameterReference) {
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="tele-label text-[var(--lichen)]">{label}</span>
+      <span className="t-label text-muted-foreground">{label}</span>
       {children}
     </label>
   );
@@ -449,7 +458,7 @@ function Enum<T extends string>({
       value={value}
       disabled={disabled}
       onChange={(event) => onChange(event.target.value as T)}
-      className="h-7 w-full rounded-md border border-input bg-input/20 px-2 text-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-50 dark:bg-input/30"
+      className="t-value h-7 w-full rounded-[var(--radius)] border border-input bg-transparent px-2 outline-none focus-visible:outline-1 focus-visible:outline-[var(--r-line-2)] disabled:italic disabled:text-[var(--r-ink-mute)]"
     >
       {options.map((option) => (
         <option key={option} value={option}>

@@ -101,7 +101,8 @@ public static class FamilyProfileApplicator {
                 resultBuilder?.RunOutputPath,
                 processedFamilyNames,
                 logs.totalMs,
-                logs.contexts.Count
+                logs.contexts.Count,
+                logs.contexts
             );
         } catch (Exception ex) {
             return new FamilyMigrationApplyResult(false, ex.Message, runOutput?.DirectoryPath, [], 0, 0);
@@ -123,5 +124,6 @@ public sealed record FamilyMigrationApplyResult(
     string? OutputFolderPath,
     List<string> ProcessedFamilyNames,
     double TotalMs,
-    int FamilyCount
+    int FamilyCount,
+    IReadOnlyList<FamilyProcessingContext>? Contexts = null
 );

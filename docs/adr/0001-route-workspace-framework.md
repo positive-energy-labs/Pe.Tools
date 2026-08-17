@@ -76,8 +76,9 @@ core model held with zero changes; everything else was hand-rolled four times.
   from it).
 - Open (tracked, not blocking): commit `verb` option (block message says
   "Commit blocked", not the domain verb); binding chip target picker;
-  `useRouteDraft` lift to an Atom family when two components must share one draft;
-  snapshot staleness gates (`freshness` option exists on the commit primitive,
+  a shared-draft primitive if two components ever need one draft (the speculative
+  `useRouteDraft` hook was deleted 2026-08-15 with zero call sites — rebuild against
+  a real second consumer); snapshot staleness gates (`freshness` option exists on the commit primitive,
   unused by routes so far); `route_state` list host-revision provenance (a stale
   host silently serves yesterday's route set); coupling parameter-links
   persist+preview into one command (the "Draft changed; preview again" foot-gun);

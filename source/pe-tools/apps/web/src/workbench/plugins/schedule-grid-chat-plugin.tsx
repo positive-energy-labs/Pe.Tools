@@ -7,6 +7,7 @@ import {
 import { Link } from "@tanstack/react-router";
 
 import { ValueDiff } from "#/components/ui/value-diff";
+import { timeAgo } from "#/lib/utils";
 
 import {
   InlineRoutePlugin,
@@ -61,24 +62,27 @@ export function ScheduleGridChatPlugin({
   };
 
   return (
-    <InlineRoutePlugin title="Schedule Grid" action={actionLabel(toolName, args, running)}>
+    <InlineRoutePlugin
+      title={scheduleGridRouteState.title}
+      action={actionLabel(toolName, args, running)}
+    >
       <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
         {snapshot ? (
-          <span className="min-w-0 truncate font-medium text-[var(--clay-ink)]">
+          <span className="min-w-0 truncate t-value text-[var(--r-ink)]">
             {snapshot.scheduleName}
-            <span className="tele-label ml-1.5 font-normal text-[var(--lichen)]">
+            <span className="ml-1.5 t-caption face-mono text-[var(--r-ink-2)]">
               {snapshot.rows.length}×{snapshot.columns.length}
               {snapshot.takenAt ? ` · read ${timeAgo(snapshot.takenAt)}` : ""}
             </span>
           </span>
         ) : (
-          <span className="text-[var(--slate)]">no schedule read</span>
+          <span className="text-[var(--r-ink-mute)]">no schedule read</span>
         )}
         <Metric value={openProposals} label="open proposals" />
         <Metric value={summary.staged} label="staged" />
         <Metric value={summary.attention} label="need attention" issue />
         <Link
-          className="ml-auto font-medium text-[var(--pe-blue)] hover:underline"
+          className="ml-auto text-[var(--r-nav)] hover:underline"
           to="/chat"
           search={(previous) => ({ ...previous, plugin: "schedule-grid" })}
         >
@@ -99,7 +103,7 @@ export function ScheduleGridChatPlugin({
             return (
               <>
                 {columnLabel(columnNumber)}{" "}
-                <span className="font-normal text-[var(--lichen)]">· row {rowNumber}</span>
+                <span className="text-[var(--r-ink-2)]">· row {rowNumber}</span>
               </>
             );
           }}
@@ -112,13 +116,4 @@ export function ScheduleGridChatPlugin({
       ) : null}
     </InlineRoutePlugin>
   );
-}
-
-function timeAgo(iso: string): string {
-  const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-  if (Number.isNaN(min)) return "";
-  if (min < 1) return "just now";
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.round(min / 60);
-  return hr < 24 ? `${hr}h ago` : `${Math.round(hr / 24)}d ago`;
 }

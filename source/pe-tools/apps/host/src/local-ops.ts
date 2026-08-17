@@ -1,4 +1,5 @@
-import { basename, join, win32 } from "node:path";
+import { spawn } from "node:child_process";
+import { basename, isAbsolute, join, normalize, win32 } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import {
@@ -17,6 +18,8 @@ import {
   type HostLogFileData,
   type HostLogsData,
   type HostLogsRequest,
+  type HostShellOpenData,
+  type HostShellOpenRequest,
   type HostSessionSummaryData,
   type RevitRecentDocumentEntry,
   type RevitRecentDocumentsData,
@@ -140,6 +143,9 @@ export const listBridgeSessions = Effect.fnUntraced(function* (
       .filter((bridge) => bridge.connected && bridge.sessionId)
       .map((bridge) => ({
         activeDocumentTitle: bridge.state?.activeDocumentTitle ?? null,
+        activeDocumentIsFamilyDocument: bridge.state?.activeDocumentIsFamilyDocument ?? null,
+        // Observation time of the active-document facts — an observation, never computed staleness.
+        activeDocumentObservedAtUnixMs: bridge.state?.activeDocumentObservedAtUnixMs ?? null,
         // Observed facts only: the lane/buildStamp the session reported. Never staleness.
         buildStamp: bridge.buildStamp ?? null,
         connected: true,
@@ -188,6 +194,50 @@ export const tailLogs = Effect.fnUntraced(function* (input: HostLogsRequest) {
   const files = yield* readRequestedLogFiles(request);
   return { files } satisfies HostLogsData;
 });
+
+export const openShellPath = Effect.fnUntraced(function* (
+  input: HostShellOpenRequest,
+  launch: (path: string) => Promise<void> = launchWithDefaultHandler,
+) {
+  const requestedPath = input.path.trim();
+  if (!requestedPath || !isAbsolute(requestedPath))
+    return yield* Effect.fail(new LocalOpError("host.shell.open", "path must be absolute", 400));
+
+  const path = normalize(requestedPath);
+  if (!(yield* statOrNull(path, "host.shell.open")))
+    return yield* Effect.fail(
+      new LocalOpError("host.shell.open", `path does not exist: ${path}`, 404),
+    );
+
+  yield* Effect.tryPromise({
+    try: () => launch(path),
+    catch: (error) =>
+      new LocalOpError("host.shell.open", `default handler failed for ${path}: ${String(error)}`),
+  });
+  return { opened: true, path } satisfies HostShellOpenData;
+});
+
+function launchWithDefaultHandler(path: string): Promise<void> {
+  const [command, args] =
+    process.platform === "win32"
+      ? ["explorer.exe", [path]]
+      : process.platform === "darwin"
+        ? ["open", [path]]
+        : ["xdg-open", [path]];
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    child.once("error", reject);
+    child.once("spawn", () => {
+      child.removeAllListeners("error");
+      child.unref();
+      resolve();
+    });
+  });
+}
 
 function normalizeLogsRequest(input: HostLogsRequest): HostLogsRequest {
   return {

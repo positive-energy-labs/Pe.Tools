@@ -73,11 +73,6 @@ export function parseUniqueIds(text: string): string[] {
     .filter((part) => part.length > 0);
 }
 
-/** Render a unique-id array back into the one-per-line textarea form. */
-export function joinUniqueIds(ids: string[]): string {
-  return ids.join("\n");
-}
-
 let sequence = 0;
 /** A short, collision-resistant id for a freshly-created definition/assignment. */
 export function freshId(prefix: string): string {
