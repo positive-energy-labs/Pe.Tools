@@ -91,7 +91,8 @@ import {
 } from "#/components/ui/select";
 import { SidePane } from "#/components/ui/side-pane";
 import { Switch } from "#/components/ui/switch";
-import { Switcher } from "#/components/ui/switcher";
+import { EmptyState } from "#/components/lang/empty";
+import { Switcher } from "#/components/lang/switcher";
 import { Textarea } from "#/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
 import { ValueDiff } from "#/components/ui/value-diff";
@@ -229,8 +230,10 @@ const LANG_FILES = [
   "cell",
   "cell-key",
   "chip",
+  "empty",
   "help",
   "outcome",
+  "switcher",
   "verb",
 ] as const;
 
@@ -252,7 +255,6 @@ const UI_FILES = [
   "select",
   "side-pane",
   "switch",
-  "switcher",
   "textarea",
   "toggle-group",
   "value-diff",
@@ -533,6 +535,13 @@ function LangGroup() {
             </Spec>
           ))}
         </Lane>
+        <Lane>
+          <Spec cap="onCommit · non-number refuses, restores, and says why">
+            <Bound className="w-40">
+              <EditableCellSpec />
+            </Bound>
+          </Spec>
+        </Lane>
         <Note>
           row scale is full-bleed and sized by its container — the boxes above are the bound a table
           column supplies. Its facts read out via title, not a footline.
@@ -577,6 +586,26 @@ function LangGroup() {
         <NarrowChipSpec />
       </Block>
 
+      <Block
+        group="lang"
+        file="empty"
+        name="EmptyState"
+        consumers="promoted 2026-08-16 (R9) — ~24 EMPTY_CLASS sites across families, family, takeoffs migrate onto it"
+      >
+        <Lane>
+          <Spec cap='story="scope" · exit required'>
+            <EmptyState story="scope" exit="run capture on this level to detect rooms">
+              no zones on this level
+            </EmptyState>
+          </Spec>
+          <Spec cap='story="filter"'>
+            <EmptyState story="filter" exit="clear the room-state chip to widen back out">
+              0 of 124 rooms match
+            </EmptyState>
+          </Spec>
+        </Lane>
+      </Block>
+
       <Block group="lang" file="help" name="HelpTip" consumers="1 consumer — design-system">
         <Lane>
           <Spec cap="children">
@@ -602,6 +631,19 @@ function LangGroup() {
             </div>
           ))}
         </div>
+      </Block>
+
+      <Block
+        group="lang"
+        file="switcher"
+        name="Switcher"
+        consumers="3 consumers — family/doc-pane, family/workspace, this page · promoted from ui/ 2026-08-16 (R10)"
+      >
+        <Lane>
+          <Spec cap="options · one disabled">
+            <SwitcherSpec />
+          </Spec>
+        </Lane>
       </Block>
 
       <Block
@@ -1079,19 +1121,6 @@ function UiGroup() {
 
       <Block
         group="ui"
-        file="switcher"
-        name="Switcher"
-        consumers="2 consumers — family/doc-pane, family/workspace"
-      >
-        <Lane>
-          <Spec cap="options · one disabled">
-            <SwitcherSpec />
-          </Spec>
-        </Lane>
-      </Block>
-
-      <Block
-        group="ui"
         file="textarea"
         name="Textarea"
         consumers="3 consumers — composer, ui/input-group, ops"
@@ -1208,6 +1237,22 @@ function SelectSpec() {
 function PickListSpec() {
   const [active, setActive] = useState<string | null>(PICK_ITEMS[0]?.id ?? null);
   return <PickList items={PICK_ITEMS} activeId={active} onPick={setActive} />;
+}
+
+/** The editable cell (R8): commit keeps a number, anything else refuses with a reason. */
+function EditableCellSpec() {
+  const [value, setValue] = useState("24 in");
+  return (
+    <StateCell
+      scale="row"
+      value={value}
+      stage="staged"
+      onCommit={(text) => {
+        if (!/^\d/.test(text.trim())) return "a dimension starts with a number";
+        setValue(text);
+      }}
+    />
+  );
 }
 
 function SwitcherSpec() {

@@ -533,6 +533,43 @@
   height: 9px;
 }
 
+/* ── SWITCHER · switcher.tsx ───────────────────────────────────────────────────────────────
+   Mode is a place you are standing: the active option takes the SELECT fill and the primary
+   ink; inactive options are quiet secondary ink under the one veil on hover. The firm hairline
+   encloses the group because a switch's options only mean anything as a set. */
+.dl-switcher {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  border: 1px solid var(--r-line-2);
+  border-radius: var(--radius);
+}
+.dl-switcher-opt {
+  height: 20px;
+  padding: 0 6px;
+  font-family: var(--font-pe-mono);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  font-variant-numeric: tabular-nums;
+  color: var(--r-ink-2);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.dl-switcher-opt:enabled:hover {
+  background-image: linear-gradient(var(--r-veil), var(--r-veil));
+}
+.dl-switcher-opt[data-on] {
+  background: var(--r-select);
+  --r-on: var(--r-select);
+  color: var(--r-ink);
+}
+.dl-switcher-opt:disabled {
+  cursor: not-allowed;
+  color: var(--r-ink-mute);
+  font-style: italic;
+}
+
 /* ── OUTCOMES · outcome.tsx ────────────────────────────────────────────────────────────────
    Coloured mono text + one icon + decoration. NEVER bold — bold is reserved for unsaved, so an
    outcome gets its punch from colour, its icon and the frame it sits near. No left bars:

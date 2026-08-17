@@ -11,7 +11,7 @@
  */
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
-import { Switcher } from "#/components/ui/switcher";
+import { Switcher } from "#/components/lang/switcher";
 import { EMPTY_CLASS, SPEC, hashOf, type CellVerdict } from "#/family/model";
 import type { ProtoProposal } from "#/family/world";
 import { cn } from "#/lib/utils";

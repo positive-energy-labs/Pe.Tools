@@ -94,21 +94,10 @@
   --cat-clay: var(--viz-5);
   --cat-kiln: var(--viz-6);
 
-  /* role tokens (COLOR-ROLES.md, superseded by the --r-* meaning band).
-     −2 lines, /family promotion 2026-08-16: `--st-derived` and `--st-ground` died with
-     variant-e and have no consumer left anywhere. The seven below all still resolve real
-     spends inside `components/ui/{verb,chip,switcher}.tsx` — whose last PRODUCT consumers this
-     pass removed. What holds them alive now is the design-system's own SUPERSEDED-SPECIMEN
-     exhibits (`/design-system/swatch` imports both `ui/verb` and `ui/chip` to show what the
-     lang components replaced), so retiring these seven lines is that exhibit's call, not a
-     route pass's. */
-  --act-commit: var(--r-commit);
-  --act-hover: color-mix(in srgb, var(--r-ink) 40%, transparent);
-  --st-proposal: var(--r-pea);
-  --st-drift: var(--r-alarm);
-  --st-warn: var(--r-caution);
-  --st-done: var(--r-done);
-  --st-meta: var(--r-ink-2);
+  /* role tokens (COLOR-ROLES.md): GONE. −9 lines total — `--st-derived`/`--st-ground` died
+     with the /family promotion; the remaining seven died 2026-08-16 (R10) when `ui/verb` and
+     `ui/chip` were deleted at zero importers and `Switcher` was promoted to components/lang
+     on real `--r-*` tokens. SHIMS entry 1 is discharged in full. */
 }
 
 @theme inline {

@@ -36,7 +36,7 @@ export interface ParamRow {
   modelValue?: string;
   /** Minutes since the reading behind the value. Absent ⇒ never read. */
   ageMin?: number;
-  fresh: "fresh" | "stale" | "unverified";
+  fresh: "fresh" | "stale" | "unverified" | "never";
   agree: "agree" | "drift";
   stage: "clean" | "proposed" | "staged";
   stagedBy?: "pea" | "you";
@@ -127,6 +127,18 @@ export const PARAM_ROWS: readonly ParamRow[] = [
     scope: "instance",
     value: "26 in",
     fresh: "unverified",
+    agree: "agree",
+    stage: "clean",
+    cap: "editable",
+  },
+  {
+    /* The NEVER rung (ruled 2026-08-16 R2): nothing was ever attempted here — no reading, no
+       value. Distinct from `unverified` (a value exists, never checked). Draws no squiggle. */
+    key: "panelColor",
+    param: "Panel Color",
+    scope: "type",
+    value: "—",
+    fresh: "never",
     agree: "agree",
     stage: "clean",
     cap: "editable",

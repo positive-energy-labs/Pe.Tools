@@ -105,7 +105,7 @@ import { MasterTable } from "#/components/master-table/master-table";
 import type { Column, MasterTableState, Verdict } from "#/components/master-table/model";
 import { Sentence } from "#/components/sentence";
 import { Pane, PaneWorkspace } from "#/components/ui/pane";
-import { Switcher } from "#/components/ui/switcher";
+import { Switcher } from "#/components/lang/switcher";
 import { AnatomyDrawing } from "#/family/anatomy";
 import { ProposalCard, SpecSheet, SpecText } from "#/family/doc-pane";
 import { ProposedCell, RefusalNote } from "#/family/marks";
