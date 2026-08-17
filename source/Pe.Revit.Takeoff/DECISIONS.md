@@ -2,6 +2,53 @@
 
 Dated, append-only. Newest batch first. Each entry: what was decided, and the why that makes it stick. Reopen one only with new evidence — and record the reopening here.
 
+## 2026-08-16 (round 3) — the designer's pen is data: zone edges, slivers, debris chains
+
+Composite of three adoptions lands board savedWork 0.3916 → **0.432**, recall 0.3534 → 0.4052,
+accepted edge-on-ink 0.897, 126/126 green. Superadditive — each unlocks different rooms.
+
+**Adopted: the snap may never sweep a room edge across ink (`SnapToZone` guard, unconditional).**
+kaitpw's round-2 hypothesis confirmed SYSTEMIC: 83% of zone-boundary length has wall ink within
+0.5 ft — designers draw zone edges through walls everywhere. The snap was sweeping room edges
+from the wall's face across its ink onto the declared line, and in UL02 the through-wall snaps
+poisoned zone-fit itself (5 fallbacks, one room dead at scope over 0.05 sf). Guard is a
+restriction, not a relaxation: zone stays authority; the room simply never reached it. UL02
++3 oracle rooms, board +5.4% alone. **Falsified as default, kept as knob: mask-pull to the ink
+face (`ZoneEdgeInkPullFt=0`)** — shaving the working mask moves hybrid-seeder plateaus and
+re-rolls whole partitions (its own wins — ML09 0→3! — are the reopen evidence that round-4
+seeding work pays; reopen condition on the knob: seed placement stable under edge shave).
+
+**Adopted: zone-fit repair composite (`RepairFitArtifacts` — squarer + fenced DeJog + debris-run
+collapse to fixpoint).** The single-edge squarer strands chains of sub-anchor edges it itself
+manufactures (no member ever has an anchor neighbor). The composite repairs whole runs (chord /
+corner / coarse staircase, split at genuine frame corners), fenced off shared linework
+(zone-fit may not edit neighbors — the unfenced variant died at lost-shared-edge), gated on
+didClip (snap-only fits lose nothing by falling back), everything priced by ZoneClipSquareFt
+displacement, unmodified admission judges. ML05 recall 0.333 → 0.583 (R01 654 sf + R16, both
+oracle). Attic00 R01's 598 sf prize remains held (4.53° cluster deadlock, characterized);
+Attic00 R02 now blocked SOLELY by paired coverage.
+
+**Adopted: unbacked-separator absorption (`AbsorbNakedSeparatorFraction=0.6`, wall-ink oracle).**
+kaitpw's LL09 sliver (47 sf, separators 6% on drawn ink, "backed" only by door-head seals — a
+door is an OPENING, not a wall). Census: exactly one delivered room fits board-wide; real
+closets sit ≥43% ink-backed (0.06 vs 0.43 gap makes the rule crisp). Multi-neighbor absorb
+path (majority perimeter split across several neighbors defeated the old single-neighbor 45%
+bar); wall-ink oracle = SeedInkDistance, NOT the evidence oracle (which door-head seals
+inflate).
+
+**Diagnosed, not fixed (R3b): ML09's rooms are MIXED-FRAME** — mostly 45° with orthogonal
+fixture walls and a curved bath; single-frame projection can't express them (gate loosening
+converts 1/5, refusals rotate). Round-4 design: segment-wise frame assignment on the zone's
+declared families; touches the editability contract — canonical treatment required. AND: the
+oracle itself is polluted — 25/118 rooms are phantoms/duplicates (a guest-house PDF registered
+onto the main house; duplicate enlarged-plan pages). Hygiene = eval-side currency v1.1,
+adopted at consolidation with both numbers reported.
+
+**Open kaitpw rulings (batched summon): noise-magnitude for the per-zone honesty bar**
+(R3c/R3d/R3a each trip it at the 2nd–3rd decimal via composition/dilution while making
+geometry visibly more honest — proposed reformulation: no previously-accepted ROOM's own
+edge-on-ink falls; zone/board means diagnostic), plus A/B on ML05 R01/R16, UL02, LL09 squash.
+
 ## 2026-08-16 (round 2, R2b) — projection technicalities die with magnitudes; the gates were mostly right
 
 **Adopted: fragment dissolve + detail repair in the projector (kaitpw-ruled at the round-2

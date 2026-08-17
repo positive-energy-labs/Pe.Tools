@@ -98,6 +98,21 @@ Success = better on every regime, no regime sacrificed.
 
 ## Adversarial backlog
 
+- **Oracle pollution (R3b, 2026-08-16): 25/118 rooms are phantoms/duplicates** — a guest-house
+  takeoff PDF was ingested and registered onto the main house (ML09 carried 4 phantom rooms of
+  9), and floor-2 pages 12/13 duplicate each other 95–100%. Hygiene prototype (drop
+  guest-house-sourced, dedupe >40% same-floor overlaps keyed on ink registration) measured:
+  board savedWork 0.3916→0.3957, recall 0.3534→0.3626. ADOPT during consolidation as currency
+  v1.1 — report both v1 and v1.1 during the transition; falsifier: a dropped room later
+  accepted cleanly at its exact footprint means the dedupe kept the wrong copy. Prototype:
+  R3b scratchpad `score_clean_oracle.py`.
+- **Round-4 design — mixed-frame room projection (ML09's true mechanism)**: rooms speaking two
+  frames (45° + orthogonal fixture walls, curves) cannot be expressed by single-frame
+  projection; segment-wise frame assignment on the zone's declared frame families, unmodified
+  audits. Touches the editability contract (45° corners) — canonical-contract treatment, not a
+  promotion-stage patch. This is the round-1 "24 held oracle rooms" pool's real name. Gate
+  loosening proven useless (1 of 5 converts at drift 6.0; refusals rotate).
+
 - **Door-head sealer manufactures backing evidence over low ceilings (2026-08-16 render
   forensics)**: the lintel predicate has no door-width bound, so duct soffits/low basement
   ceilings seal wholesale (LL08: one 255 sf door-head component), and `EvidenceInkDistance`
