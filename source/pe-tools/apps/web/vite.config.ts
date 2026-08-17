@@ -48,6 +48,26 @@ const config = defineConfig(({ mode }) => {
         consolePiping: { enabled: false },
       }) as never,
     ],
+    // Dev proxy to the Effect host — restored 2026-08-17. Deleted by e88bd26 (worktree-scoped
+    // host takeover), which left direct-vite dev with a dead host lane: /call 404'd, every
+    // host op failed, and /settings targeting silently emptied. Takeover (browsing through
+    // the host's origin) still works; this proxy just makes the plain `vite dev` origin
+    // host-live again. One target for every host-backed path, PE_TOOLS_HOST_BASE_URL overrides.
+    server: {
+      proxy: (() => {
+        const target = process.env.PE_TOOLS_HOST_BASE_URL ?? "http://127.0.0.1:5180";
+        const options = { target, changeOrigin: true } as const;
+        return {
+          "/call": options,
+          "/events": options,
+          "/ops": options,
+          "/schemas": options,
+          "/host": options,
+          "/sessions": options,
+          "/pe": options,
+        };
+      })(),
+    },
     resolve: { tsconfigPaths: true, dedupe: ["react", "react-dom"] },
     // assistant-ui ships React-Compiler output (`useMemoCache`); under TanStack Start's
     // multi-environment optimizer it can bind to a different React prebundle than react-dom's
