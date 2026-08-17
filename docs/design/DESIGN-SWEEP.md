@@ -33,6 +33,16 @@ Working rules: local commits only, explicit paths (concurrent agents clobbered e
 staged index twice); minimize options everywhere — every new state/word/tier is user-facing
 vocabulary; important decisions are answered by prototypes/real code, not prose.
 
+## State (2026-08-16, end of autonomous continuation)
+
+All five delegated passes LANDED (settings/instances/schedule-grid ·
+parameter-links/data-tables/doc-lab/index · workbench · family/families/takeoffs adoption ·
+ops second-system dissolution) — 11 route audits exist, shim meter 40→12 lines, checks and
+111 tests green throughout. Census rerun + two opinionated fit reviews recorded in
+[FIT-REVIEWS-2026-08-16.md](FIT-REVIEWS-2026-08-16.md) — **that file is the next joint
+sitting's agenda**; nothing from it is applied. Enforcement lever (ruled: vitest
+design-guard ratchet) intentionally held until the fit-review sitting settles the surface.
+
 ## State (2026-08-16, autonomous continuation session)
 
 **The joint-review batch is RULED and LANDED** (CLEANROOM "consolidation batch" R1–R14 —
