@@ -103,6 +103,71 @@ def test_interior_swallow_detects_interior_ink_only():
     assert slg.interior_swallow(room, band_ink) == 0.0
 
 
+def test_interior_swallow_exempts_zone_rim():
+    # R3c artifact: a room edge that honestly retreats off a zone wall leaves that wall's
+    # ink deeper than the room-rim band — it must not count as swallow when the ink hugs
+    # the ZONE boundary (declared wall authority), mirroring the edge-on-ink exemption.
+    room = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
+    stripe = _grid_with_ink([(20, c) for c in range(10, 30)])  # y = 5.125 ft, interior
+    near_zone = Polygon([(0, 0), (10, 0), (10, 6), (0, 6)])    # boundary at y=6, 0.875 ft away
+    far_zone = Polygon([(-20, -20), (30, -20), (30, 30), (-20, 30)])
+    assert slg.interior_swallow(room, stripe, near_zone.boundary) == 0.0
+    assert slg.interior_swallow(room, stripe, far_zone.boundary) > 0
+
+
+def _mark_boundary_cells(grid, geometry):
+    xs, ys = slg.edge_sample_points(geometry)
+    for x, y in zip(xs, ys):
+        col, row = int(x / grid.cell), int(y / grid.cell)
+        if 0 <= col < grid.w and 0 <= row < grid.h:
+            grid.mask[row, col] = True
+
+
+def test_clean_oracle_hygiene_rules():
+    square = [[0, 0], [10, 0], [10, 10], [0, 10]]
+    shifted = [[1, 0], [11, 0], [11, 10], [1, 10]]     # 90% overlap with square
+    oracle = {"rooms": {
+        "1": dict(name="GH Kitchen", floor=0, polygonModelFt=square,
+                  sourcePdf="A2 - 1 MAIN LEVEL PLAN Guest House Takeoff.pdf"),
+        "2": dict(name="Room", floor=0, polygonModelFt=square, sourcePdf="main.pdf"),
+        "3": dict(name="Room dup", floor=0, polygonModelFt=shifted, sourcePdf="main.pdf"),
+        "4": dict(name="Disjoint", floor=0, sourcePdf="main.pdf",
+                  polygonModelFt=[[20, 0], [30, 0], [30, 10], [20, 10]]),
+        "5": dict(name="Other floor", floor=1, polygonModelFt=square, sourcePdf="main.pdf"),
+    }}
+    # seed ink registered exactly on the SHIFTED copy's boundary: the dedupe must keep #3
+    grid = slg.Grid(np.zeros((48, 60), dtype=bool), 0.0, 0.0, 0.25)
+    _mark_boundary_cells(grid, Polygon(shifted))
+    cleaned, dropped = slg.clean_oracle(oracle, {0: grid})
+    assert dropped["1"] == "guest-house source"
+    assert dropped["2"].startswith("duplicate of #3")
+    assert set(cleaned["rooms"]) == {"3", "4", "5"}
+    # same footprint on another floor is never a duplicate; disjoint rooms never dedupe
+    assert "5" in cleaned["rooms"] and "4" in cleaned["rooms"]
+
+
+def test_honesty_check_flags_fallen_accepted_rooms():
+    def scores(polys):
+        return {"zones": [{"zone": "Z#00", "polygons": polys}]}
+    a = scores([
+        dict(id="R01", disposition="accepted", edgeOnInk=0.9),
+        dict(id="R02", disposition="accepted", edgeOnInk=0.8),
+        dict(id="R03", disposition="accepted", edgeOnInk=0.7),
+        dict(id="H01", disposition="held", edgeOnInk=0.2),
+    ])
+    b = scores([
+        dict(id="R01", disposition="accepted", edgeOnInk=0.897),  # within 0.005 noise
+        dict(id="R02", disposition="accepted", edgeOnInk=0.7),    # fell 0.1 -> violation
+        dict(id="H01", disposition="held", edgeOnInk=0.1),        # held rooms exempt
+    ])                                                            # R03 departed
+    violations, departed = slg.honesty_check(a, b)
+    assert [v["id"] for v in violations] == ["R02"]
+    assert violations[0]["fell"] == 0.1
+    assert [d["id"] for d in departed] == ["R03"]
+    # baseline vs itself must be silent: empty HONESTY = pass
+    assert slg.honesty_check(a, a) == ([], [])
+
+
 def test_zone_geometry_even_odd():
     outer = [[0, 0], [10, 0], [10, 10], [0, 10]]
     inner = [[3, 3], [7, 3], [7, 7], [3, 7]]

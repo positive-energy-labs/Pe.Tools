@@ -1,14 +1,18 @@
-# Render a curation overlay: the takeoff's persisted ink raster (wall evidence) + candidate room
+# Render a curation overlay: the takeoff's replay seed ink (wall evidence) + candidate room
 # polygons + labels, all in model feet so registration is exact by construction. This is the
 # visual-evidence surface for room-map curation and detection debugging.
 #
-#   python eval/rhvac/overlay.py Level_1_Main_Level                    # fixture TSV + fixture-era ink
-#   python eval/rhvac/overlay.py Level_1_Main_Level --live             # live Documents TSV + ink
+#   python eval/rhvac/overlay.py Level_1_Main_Level                    # fixture TSV + captured replay ink
+#   python eval/rhvac/overlay.py Level_1_Main_Level --live             # live Documents TSV + replay ink
 #   python eval/rhvac/overlay.py Level_1_Main_Level --out out.png --thumb 2000
 #
-# Ink bins live next to the TSVs (Documents\Pe.Tools\takeoff); the eval fixture commits TSVs only,
-# so --live is the norm right after a detection run, and fixture mode needs an ink dir whose run
-# produced the committed TSVs (pass --ink-dir).
+# Evidence comes from replay_<slug>.bin ONLY (the DetectSnapshot the solver partitioned on).
+# The stale ink_*.bin lane was deleted 2026-08-17 — those bins drifted from the replay seed
+# (Attic was missing 51% of seed cells). Replay bins live next to the TSVs
+# (Documents\Pe.Tools\takeoff); the eval fixture commits TSVs only, so --live is the norm right
+# after a detection run, and fixture mode needs a dir whose run produced the committed TSVs
+# (pass --ink-dir). Missing replay = hard error; recapture per
+# docs/features/takeoffs/manual-e2e-runbook.md (Capture step writes replay_<level>.bin).
 import argparse, os, struct
 from PIL import Image, ImageDraw, ImageFont
 from shapely.geometry import GeometryCollection, MultiPolygon, Polygon
@@ -300,8 +304,10 @@ def _font(size):
         return ImageFont.load_default()
 
 
-def render(ink_path, tsv_path, out_path, scale=4, thumb=None, junk_ids=(), quiet=False):
-    w, h, minx, miny, cell, bits = load_ink(ink_path)
+def render(replay_path, tsv_path, out_path, scale=4, thumb=None, junk_ids=(), quiet=False):
+    """CLI overlay renderer. Evidence is the replay snapshot's seed ink only — the raster
+    the solver actually partitioned on (the stale ink_*.bin lane is deleted)."""
+    w, h, minx, miny, cell, bits = load_replay_seed_ink(replay_path)
     rooms, polys = load_tsv(tsv_path)
     img = Image.new("RGB", (w * scale, h * scale), (255, 255, 255))
     px = img.load()
@@ -348,14 +354,21 @@ if __name__ == "__main__":
     ap.add_argument("slug", help="e.g. Level_1_Main_Level")
     ap.add_argument("--project", default="project-a")
     ap.add_argument("--live", action="store_true", help="use live Documents TSV+ink, not fixtures")
-    ap.add_argument("--ink-dir", default=LIVE, help="dir with ink_<slug>.bin")
+    ap.add_argument("--ink-dir", default=LIVE, help="dir with replay_<slug>.bin (seed ink)")
     ap.add_argument("--out", default=None)
     ap.add_argument("--thumb", type=int, default=2000)
     ap.add_argument("--tsv-dir", default=None, help="score any TSV dir (e.g. an offline replay dump)")
     a = ap.parse_args()
     tsv_dir = a.tsv_dir or (a.ink_dir if a.live else os.path.join(REPO, "eval", "rhvac", a.project, "takeoff"))
+    replay = os.path.join(a.ink_dir, f"replay_{a.slug}.bin")
+    if not os.path.isfile(replay):
+        raise SystemExit(
+            f"missing replay seed ink: {replay}\n"
+            "replay_<level>.bin is the only evidence source (stale ink_*.bin lane deleted). "
+            "Recapture: docs/features/takeoffs/manual-e2e-runbook.md "
+            "(Capture step writes replay_<level>.bin)")
     render(
-        os.path.join(a.ink_dir, f"ink_{a.slug}.bin"),
+        replay,
         os.path.join(tsv_dir, f"rooms_{a.slug}.tsv"),
         a.out or os.path.join(os.getcwd(), f"overlay_{a.slug}.png"),
         thumb=a.thumb,

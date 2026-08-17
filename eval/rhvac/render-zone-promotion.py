@@ -152,16 +152,19 @@ def despeckle(mask, cell):
 def render_zone(root, zone, output, padding_cells=12, scale=2):
     ink_path = root / zone["Ink"]
     tsv_path = root / zone["Tsv"]
-    width, height, min_x, min_y, cell, bits = overlay.load_ink(ink_path)
     # Evidence authority: the replay snapshot's seed ink — the raster the solver actually
-    # partitioned on. The persisted ink_*.bin drifts stale (Attic was missing 51% of seed
-    # cells); it is only a last-resort fallback, and the panel says so when it is used.
-    ink_source = "ink STALE-BIN"
+    # partitioned on — and NOTHING else. The stale ink_*.bin fallback was deleted
+    # 2026-08-17 (Attic bin was missing 51% of seed cells); zone["Ink"] is report schema
+    # (C#-owned) and is only used to locate the replay sitting alongside.
     replay_path = ink_path.parent / f"replay_{ink_path.stem.removeprefix('ink_')}.bin"
-    if replay_path.exists():
-        r_width, r_height, *_, r_bits = overlay.load_replay_seed_ink(replay_path)
-        if (r_width, r_height) == (width, height):
-            bits, ink_source = r_bits, "ink replay-seed"
+    if not replay_path.exists():
+        raise SystemExit(
+            f"missing replay seed ink: {replay_path}\n"
+            f"replay_<level>.bin is the only evidence source (stale ink_*.bin lane "
+            f"deleted). Recapture: docs/features/takeoffs/manual-e2e-runbook.md "
+            f"(Capture step writes replay_<level>.bin)")
+    width, height, min_x, min_y, cell, bits = overlay.load_replay_seed_ink(replay_path)
+    ink_source = "ink replay-seed"
     ink_mask = unpack_mask(bits, width, height)
 
     # Optional (schemaVersion 3+) closure rasters. They ride the detection grid, so a mismatch

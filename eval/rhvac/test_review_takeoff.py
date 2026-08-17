@@ -1,3 +1,4 @@
+import gzip
 import hashlib
 import json
 import struct
@@ -19,6 +20,25 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def write_replay_bin(path, w, h, minx, miny, cell, bits, level="Test"):
+    """Minimal gzipped DetectSnapshot (SKAT) matching overlay.load_replay_seed_ink —
+    the only evidence source the renderers accept (stale ink_*.bin lane deleted)."""
+    def prefixed(data):
+        assert len(data) < 128  # single-byte 7-bit length is enough for tests
+        return bytes([len(data)]) + data
+
+    blob = struct.pack("<Ii", 0x54414B53, 1)
+    blob += prefixed(level.encode())
+    blob += struct.pack("<d", 0.0)            # elevation
+    blob += prefixed(b"{}")                   # capture options
+    blob += struct.pack("<ii", w, h)
+    blob += struct.pack("<ddd", minx, miny, cell)
+    blob += b"\x00" * (8 * w * h)             # FloorZ + CeilZ
+    blob += bits
+    with gzip.open(path, "wb") as f:
+        f.write(blob)
+
+
 class ReviewTakeoffTests(unittest.TestCase):
     def test_zone_promotion_renderer_crops_registered_disposition(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -26,9 +46,9 @@ class ReviewTakeoffTests(unittest.TestCase):
             (root / "input").mkdir()
             (root / "zones").mkdir()
             bits = bytes([0b10011001, 0b10011001])
-            (root / "input" / "ink_Test.bin").write_bytes(
-                struct.pack("<Iii", 0x504B4E49, 4, 4)
-                + struct.pack("<ddd", 0, 0, 1) + bits)
+            # zone["Ink"] stays in the report schema (C#-owned) but only locates the
+            # replay alongside; the renderer reads replay_Test.bin exclusively.
+            write_replay_bin(root / "input" / "replay_Test.bin", 4, 4, 0, 0, 1, bits)
             (root / "zones" / "rooms_Test.tsv").write_text(
                 "META\tlevel\tTest\nMETA\telev\t0\n"
                 "ROOM\tR01\t4\t8\t1\t1\t9\n"
@@ -54,6 +74,38 @@ class ReviewTakeoffTests(unittest.TestCase):
             manifest = json.loads((root / "review-manifest.json").read_text(encoding="utf-8"))
             self.assertTrue((root / manifest["contactSheet"]).is_file())
             self.assertEqual(len(manifest["files"]), 3)
+
+    def test_zone_promotion_renderer_refuses_missing_replay(self):
+        # The stale ink_*.bin lane is deleted: no replay seed ink = hard error naming
+        # the recapture runbook, never a silent render on stale evidence.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "input").mkdir()
+            (root / "zones").mkdir()
+            (root / "zones" / "rooms_Test.tsv").write_text(
+                "META\tlevel\tTest\nMETA\telev\t0\n"
+                "ROOM\tR01\t4\t8\t1\t1\t9\n"
+                "POLY\tR01\touter\t0;0|2;0|2;2|0;2\n",
+                encoding="utf-8")
+            zone = {
+                "Level": "Test", "Zone": "Test#00", "MinX": 0, "MinY": 0,
+                "MaxX": 3, "MaxY": 2, "Tsv": "zones/rooms_Test.tsv",
+                "ZoneLoops": [[[0, 0], [3, 0], [3, 2], [0, 2]]],
+                "Ink": "input/ink_Test.bin", "RawRooms": 1, "AcceptedRooms": 1,
+                "HeldRooms": 0, "ExcludedSqft": 0, "ZoneSqft": 6,
+                "SharedEdgePairs": 0, "LostSharedEdgePairs": 0,
+                "InkBackedEdgeFraction": 0.5, "ClosureErrorSqft": 0,
+            }
+            (root / "report.json").write_text(
+                json.dumps({"Zones": [zone]}), encoding="utf-8")
+
+            result = subprocess.run(
+                [sys.executable, str(ZONE_SCRIPT), str(root / "report.json")],
+                cwd=HERE, capture_output=True, text=True)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("missing replay seed ink", result.stderr)
+            self.assertIn("manual-e2e-runbook.md", result.stderr)
 
     def test_bundle_is_blind_hashed_and_verifiable(self):
         with tempfile.TemporaryDirectory() as temporary:

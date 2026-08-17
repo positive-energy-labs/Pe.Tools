@@ -33,6 +33,20 @@
 #   Rationale: an accepted room saves the full trace if its edges stand on evidence and
 #   need no ortho cleanup; a held room saves ~a quarter (it must be reviewed and promoted);
 #   a missing room saves nothing.
+#
+# Currency v1.1 — oracle hygiene (R3b, kaitpw-approved 2026-08-16, landed 2026-08-17):
+#   R3b proved 25/118 oracle rooms are phantoms/duplicates: rooms whose sourcePdf names the
+#   Guest House (a separate building misregistered onto the main model), and same-floor
+#   duplicate pairs from overlapping enlarged-plan pages (floor-2 pages 12/13 overlap
+#   95-100%; a "Great Room West" sits 91% atop Her Bath). clean_oracle() drops the
+#   guest-house-sourced rooms and dedupes same-floor pairs overlapping >40% of the smaller,
+#   keeping the copy whose boundary registers better (lower median boundary-sample distance)
+#   on THIS model's replay seed ink.
+#   TRANSITION RULE (kaitpw-approved): `score` prints BOTH board lines — v1.1 (cleaned)
+#   first and labeled, then v1 (raw oracle) — while the currencies coexist; per-zone tables
+#   and `compare` use v1.1.
+#   FALSIFIER: a dropped room later accepted cleanly at its exact footprint means the
+#   dedupe kept the wrong copy — reopen the hygiene rules, don't patch the solver.
 import argparse
 import json
 import math
@@ -326,11 +340,28 @@ def representative_point(geometry):
     return geometry.representative_point()
 
 
-def interior_swallow(geometry, ink, band_ft=WALL_BAND_FT):
-    """Square feet of ink strictly interior to the polygon, outside a wall-claim band."""
+def interior_swallow(geometry, ink, zone_boundary=None, band_ft=WALL_BAND_FT):
+    """Square feet of ink strictly interior to the polygon, outside a wall-claim band.
+
+    Rim-exemption artifact (R3c, 2026-08-16): the room-rim band (buffer(-band_ft))
+    assumes ink near the room's own edge is that edge's wall claim. When a boundary
+    honestly RETREATS off a wall (the R3c snap guard stops edges crossing ink), the
+    wall's ink that the rim band used to hide now sits deeper than band_ft inside the
+    polygon and starts counting as swallow — the metric punishes the honest move.
+    Fix: ink within band_ft of the ZONE boundary is excluded. The zone line is declared
+    wall authority (zone clip+snap law), so ink hugging it is the zone's own perimeter
+    wall, never a swallowed interior partition — mirroring the edge-on-ink zone-edge
+    exemption. This removes the artifact only where the retreat is toward a zone wall;
+    a retreat off an INTERIOR wall still counts as swallow, which is correct: two room
+    edges disputing one interior wall band is the round-4 parallel-on-ink problem, and
+    hiding it here would silence that signal."""
     core = geometry.buffer(-band_ft)
     if core.is_empty:
         return 0.0
+    if zone_boundary is not None and not zone_boundary.is_empty:
+        core = core.difference(zone_boundary.buffer(band_ft))
+        if core.is_empty:
+            return 0.0
     return ink.ink_inside(core)
 
 
@@ -342,22 +373,31 @@ def load_report(path):
     return report, os.path.dirname(os.path.abspath(path))
 
 
+RECAPTURE_RUNBOOK = ("docs/features/takeoffs/manual-e2e-runbook.md "
+                     "(Capture step writes replay_<level>.bin)")
+
+
 def load_levels(report, base):
-    """token -> dict of Grids (ink, seals, close, evidence=ink|seals) for each level."""
+    """token -> dict of Grids (ink, seals, close, evidence=ink|seals) for each level.
+
+    Seed ink comes from the replay snapshot ONLY. The stale ink_*.bin fallback lane was
+    deleted 2026-08-17 (Attic bin was missing 51% of replay seed cells); a missing replay
+    is a hard error, not a silent downgrade to stale evidence."""
     levels = {}
     for zone in report["Zones"]:
         token, _ = LEVELS[zone["Level"]]
         if token in levels:
             continue
-        ink_path = os.path.join(base, zone["Ink"])
-        if not os.path.isfile(ink_path):
-            continue
-        # The C# scored against the replay snapshot's seed ink; the persisted ink_*.bin
-        # can be stale relative to it, so prefer the replay whenever it sits alongside.
+        # zone["Ink"] is report schema (C#-owned); eval only uses it to locate the replay
+        # snapshot that sits alongside — the ink bin itself is never read.
         replay_path = os.path.join(base, os.path.dirname(zone["Ink"]),
                                    f"replay_{token}.bin")
-        ink = (Grid.load_replay_seed_ink(replay_path) if os.path.isfile(replay_path)
-               else Grid.load(ink_path))
+        if not os.path.isfile(replay_path):
+            raise SystemExit(
+                f"missing replay seed ink: {replay_path}\n"
+                f"replay_<level>.bin is the only evidence source (stale ink_*.bin lane "
+                f"deleted). Recapture: {RECAPTURE_RUNBOOK}")
+        ink = Grid.load_replay_seed_ink(replay_path)
         seals = Grid.load(os.path.join(base, zone["Seals"]))
         close = Grid.load(os.path.join(base, zone["Close"]))
         levels[token] = dict(ink=ink, seals=seals, close=close,
@@ -389,6 +429,89 @@ def load_oracle():
         return json.load(f)
 
 
+# ---- oracle hygiene (currency v1.1) ------------------------------------------
+
+GUEST_HOUSE_MARK = "Guest House"
+DEDUPE_OVERLAP_FRACTION = 0.40
+
+
+def _boundary_median_ink_ft(geometry, grid):
+    """Median boundary-sample distance (ft) to seed ink — the dedupe registration key."""
+    xs, ys = edge_sample_points(geometry)
+    if xs.size == 0:
+        return math.inf
+    dist = grid.distance_ft(xs, ys)
+    dist = dist[np.isfinite(dist)]
+    return float(np.median(dist)) if dist.size else math.inf
+
+
+def clean_oracle(oracle, floor_grids):
+    """Currency v1.1 oracle hygiene (R3b). Returns (cleaned oracle, {number: reason}).
+
+    R1 cross-building: drop rooms whose sourcePdf names the Guest House — a separate
+       building's takeoff pages misregistered onto the main model's floors.
+    R2 duplicate claims: same-floor pairs overlapping > DEDUPE_OVERLAP_FRACTION of the
+       smaller polygon are contradictions (real rooms tile). Keep the copy whose boundary
+       registers better on THIS model's replay seed ink (lower median boundary-sample
+       distance); drop the other.
+
+    FALSIFIER: a dropped room later accepted cleanly at its exact footprint means the
+    dedupe kept the wrong copy."""
+    rooms = oracle["rooms"]
+    dropped = {}
+
+    for number, room in rooms.items():
+        if GUEST_HOUSE_MARK in room.get("sourcePdf", ""):
+            dropped[number] = "guest-house source"
+
+    by_floor = {}
+    for number, room in rooms.items():
+        if number in dropped:
+            continue
+        polygon = room.get("polygonModelFt")
+        if not polygon or len(polygon) < 3:
+            continue
+        geometry = overlay._valid_polygonal(Polygon(polygon))
+        if geometry.is_empty:
+            continue
+        by_floor.setdefault(room["floor"], []).append((number, geometry))
+
+    for floor, entries in by_floor.items():
+        grid = floor_grids.get(floor)
+        registration = {number: (_boundary_median_ink_ft(geometry, grid)
+                                 if grid is not None else 0.0)
+                        for number, geometry in entries}
+        for i in range(len(entries)):
+            for j in range(i + 1, len(entries)):
+                number_a, geometry_a = entries[i]
+                number_b, geometry_b = entries[j]
+                if number_a in dropped or number_b in dropped:
+                    continue
+                smaller = min(geometry_a.area, geometry_b.area)
+                if smaller <= EPS:
+                    continue
+                inter = geometry_a.intersection(geometry_b).area
+                if inter <= DEDUPE_OVERLAP_FRACTION * smaller:
+                    continue
+                loser, winner = ((number_a, number_b)
+                                 if registration[number_a] > registration[number_b]
+                                 else (number_b, number_a))
+                dropped[loser] = (
+                    f"duplicate of #{winner} (overlap {inter / smaller:.0%}, ink-reg "
+                    f"{registration[loser]:.2f} vs {registration[winner]:.2f} ft)")
+
+    cleaned = dict(oracle)
+    cleaned["rooms"] = {number: room for number, room in rooms.items()
+                        if number not in dropped}
+    return cleaned, dropped
+
+
+def _floor_grids(levels):
+    """floor -> seed-ink Grid, for hygiene registration scoring."""
+    return {floor: levels[token]["ink"]
+            for _, (token, floor) in LEVELS.items() if token in levels}
+
+
 def oracle_rooms_by_floor(oracle):
     rooms = {}
     for number, room in oracle["rooms"].items():
@@ -407,10 +530,23 @@ def oracle_rooms_by_floor(oracle):
 
 # ---- score -------------------------------------------------------------------
 
-def score_report(report_path):
+def score_report(report_path, clean=True):
+    """clean=True scores against the v1.1 hygiene-cleaned oracle (the current currency);
+    clean=False keeps the raw v1 oracle for the transition-rule dual board line."""
     report, base = load_report(report_path)
     levels = load_levels(report, base)
-    oracle_rooms = oracle_rooms_by_floor(load_oracle())
+    oracle = load_oracle()
+    hygiene = None
+    if clean:
+        oracle, dropped = clean_oracle(oracle, _floor_grids(levels))
+        hygiene = dict(
+            droppedRooms=dropped,
+            droppedGuestHouse=sum(1 for r in dropped.values()
+                                  if r.startswith("guest-house")),
+            droppedDuplicates=sum(1 for r in dropped.values()
+                                  if r.startswith("duplicate")),
+            rawOracleRooms=len(dropped) + len(oracle["rooms"]))
+    oracle_rooms = oracle_rooms_by_floor(oracle)
 
     zones_out = []
     room_status = {}   # oracle room number -> (status, quality) for board rollup
@@ -445,7 +581,7 @@ def score_report(report_path):
                         agg_no_exempt[0] += int(hits.sum()); agg_no_exempt[1] += hits.size
                         hits_ink = grids["ink"].distance_ft(xs, ys) <= HIT_FT + EPS
                         agg_no_exempt_ink[0] += int(hits_ink.sum()); agg_no_exempt_ink[1] += hits_ink.size
-                    swallow = interior_swallow(geometry, grids["ink"])
+                    swallow = interior_swallow(geometry, grids["ink"], zboundary)
                     row.update(swallowSf=round(swallow, 1),
                                swallowFraction=round(swallow / geometry.area, 4)
                                if geometry.area > EPS else 0.0)
@@ -562,7 +698,9 @@ def score_report(report_path):
                          for b in ("as-is", "nudge", "redraw")},
         unzonedOracleRooms=unzoned)
     return dict(report=os.path.abspath(report_path),
-                generatedUtc=report.get("GeneratedUtc"), board=board, zones=zones_out)
+                generatedUtc=report.get("GeneratedUtc"),
+                currency="v1.1 (cleaned oracle)" if clean else "v1 (raw oracle)",
+                oracleHygiene=hygiene, board=board, zones=zones_out)
 
 
 def _weighted_edge(polys, disposition):
@@ -575,16 +713,30 @@ def _weighted_edge(polys, disposition):
     return round(num / den, 4) if den else None
 
 
-def cmd_score(args):
-    scores = score_report(args.report)
-    board = scores["board"]
-    print(f"report: {scores['report']}  generated {scores['generatedUtc']}")
-    print(f"board: oracleRooms={board['oracleRoomsInZones']} "
+def _print_board(label, board):
+    print(f"{label} oracleRooms={board['oracleRoomsInZones']} "
           f"recall={board['roomRecall']} held={board['heldRecall']} "
           f"missing={board['missing']} savedWork={board['savedWork']}")
-    print(f"       edgeOnInk acc={board['edgeOnInkAccepted']} held={board['edgeOnInkHeld']} "
+    print(f"{' ' * len(label)} edgeOnInk acc={board['edgeOnInkAccepted']} "
+          f"held={board['edgeOnInkHeld']} "
           f"swallowSf={board['swallowSf']} editCost={board['meanEditCostAccepted']} "
           f"buckets={board['distanceBuckets']}")
+
+
+def cmd_score(args):
+    # Transition rule (kaitpw-approved): both currencies print while v1.1 beds in —
+    # v1.1 first and labeled; the per-zone table below is v1.1.
+    scores = score_report(args.report, clean=True)
+    scores_v1 = score_report(args.report, clean=False)
+    board = scores["board"]
+    hygiene = scores["oracleHygiene"]
+    print(f"report: {scores['report']}  generated {scores['generatedUtc']}")
+    _print_board("board v1.1 (cleaned oracle):", board)
+    _print_board("board v1   (raw oracle):    ", scores_v1["board"])
+    print(f"oracle hygiene v1.1: dropped "
+          f"{len(hygiene['droppedRooms'])}/{hygiene['rawOracleRooms']} rooms "
+          f"({hygiene['droppedGuestHouse']} guest-house-sourced, "
+          f"{hygiene['droppedDuplicates']} same-floor duplicates)")
     if board.get("unzonedOracleRooms"):
         names = ", ".join(f"{r['name']} (floor {r['floor']})"
                           for r in board["unzonedOracleRooms"])
@@ -606,6 +758,7 @@ def cmd_score(args):
               f"{z['swallowSf']:>9}{_fmt(z['meanEditCostAccepted']):>6}"
               f"{_fmt(z['savedWork']):>7}")
     if args.out:
+        scores["boardV1RawOracle"] = scores_v1["board"]
         with open(args.out, "w", encoding="utf-8") as f:
             json.dump(scores, f, indent=1)
         print(f"wrote {os.path.abspath(args.out)}")
@@ -771,15 +924,65 @@ def _card_zone_names(zone_names):
 COMPARE_KEYS = ["roomRecall", "heldRecall", "edgeOnInkAccepted", "edgeOnInkHeld",
                 "swallowSf", "meanEditCostAccepted", "savedWork"]
 
+HONESTY_TOL = 0.005  # kaitpw round-3 wording: "beyond ~0.005 noise"
+
+
+def honesty_check(a, b, tol=HONESTY_TOL):
+    """The per-room honesty bar (kaitpw, round-3 2026-08-16): no previously-accepted
+    room's own edgeOnInk may fall beyond ~tol noise; zone/board averages are diagnostic
+    only. Matched by room id + zone across two score dicts.
+
+    Returns (violations, departed): violations = accepted-in-both rooms whose edgeOnInk
+    fell more than tol; departed = rooms accepted in A but no longer accepted in B —
+    a coverage change, judged separately (round-1 verdict: regressed acceptance can be
+    valid when the room was never good), surfaced so it cannot pass silently."""
+    violations, departed = [], []
+    zones_b = {z["zone"]: z for z in b["zones"]}
+    for zone_a in a["zones"]:
+        zone_b = zones_b.get(zone_a["zone"])
+        accepted_b = ({p["id"]: p for p in zone_b["polygons"]
+                       if p["disposition"] == "accepted"} if zone_b else {})
+        for poly_a in zone_a["polygons"]:
+            if poly_a["disposition"] != "accepted" or poly_a.get("edgeOnInk") is None:
+                continue
+            poly_b = accepted_b.get(poly_a["id"])
+            if poly_b is None:
+                departed.append(dict(zone=zone_a["zone"], id=poly_a["id"],
+                                     edgeOnInkWas=poly_a["edgeOnInk"]))
+            elif (poly_b.get("edgeOnInk") is not None
+                  and poly_a["edgeOnInk"] - poly_b["edgeOnInk"] > tol):
+                violations.append(dict(zone=zone_a["zone"], id=poly_a["id"],
+                                       edgeOnInkA=poly_a["edgeOnInk"],
+                                       edgeOnInkB=poly_b["edgeOnInk"],
+                                       fell=round(poly_a["edgeOnInk"]
+                                                  - poly_b["edgeOnInk"], 4)))
+    return violations, departed
+
 
 def cmd_compare(args):
     a = score_report(args.report_a)
     b = score_report(args.report_b)
+    # HONESTY comes FIRST: the bar every candidate must clear before any other number
+    # is worth reading. Empty = pass.
+    violations, departed = honesty_check(a, b)
+    print(f"HONESTY (accepted rooms whose edgeOnInk fell >{HONESTY_TOL}; empty = pass)")
+    if violations:
+        for v in violations:
+            print(f"  FALL {v['zone']:<20}{v['id']:<10}"
+                  f"{v['edgeOnInkA']:.4f} -> {v['edgeOnInkB']:.4f}  (-{v['fell']})")
+    else:
+        print("  pass - no previously-accepted room got less honest")
+    if departed:
+        print(f"  note: {len(departed)} previously-accepted room(s) no longer accepted "
+              f"(coverage change, judge separately): "
+              + ", ".join(f"{d['zone']}/{d['id']}" for d in departed))
+    print()
     za = {z["zone"]: z for z in a["zones"]}
     zb = {z["zone"]: z for z in b["zones"]}
     matches = _card_zone_names(list(za))
     print(f"A: {a['report']} ({a['generatedUtc']})")
     print(f"B: {b['report']} ({b['generatedUtc']})")
+    print(f"currency: {a['currency']} both sides")
     print("report-card zones: " + ", ".join(
         f"{code}->{name or 'NO MATCH'}" for code, name in matches))
     header = f"{'zone':<20}{'metric':<24}{'A':>10}{'B':>10}{'delta':>10}"
