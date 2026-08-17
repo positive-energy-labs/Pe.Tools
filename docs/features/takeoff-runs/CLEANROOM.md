@@ -31,11 +31,37 @@ and until 2026-08-16 the renderer hid what was solver input vs invention.
 - Real fixture: three runs seeded from round-1 tuning snapshots (baseline-fresh, incumbent-r1,
   incumbent-r2d) — real geometry, real rejection records, two optionsHash generations.
 
-## Round 1 — open
+## Round 1 — RULED (kaitpw, 2026-08-16)
 
-The one question: **what is this page — a grid of zones, a table of runs, or a plan?**
+The question was "grid of zones, table of runs, or a plan?" — the answer is **all three, docked**:
+"general idea of all is right. sheet is closest to the contact sheet I imagined, although i'd
+like richer summary info; table is nice for high level 'what improved'; plan is important."
 
-Verdicts: (pending)
+**Winner: the composite.** Sheet is the main feature (the page body); the plan docks collapsible
+at the TOP (like /takeoffs atlas); the ledger docks collapsible at the BOTTOM. No variant won its
+own layout; all three won their product argument — the round retired the idea that this page is
+any ONE of them.
+
+**Donations absorbed into the combo:** sheet → card/panel renderer + level sections + scrubber;
+ledger → delta columns, chronological-predecessor deltas, changed-zones-only A/B materiality;
+light → level canvas at native raster, fixed-frame flip-booking, synced panes, zone peek.
+
+**Structural findings promoted to backlog:** zone identity is positional across runs (stable zone
+key wants to live in report.json); TSV rooms carry no accepted/held flag (convention lives in the
+python renderer); overlay-diff needs per-run room masks (stays deferred).
+
+## Round 2 — the combo (spec from kaitpw, tentative, iterate live)
+
+- Sheet grid = **two columns, not four** (richer cards).
+- **A/B is the default state**: previous-run selector defaults to the latest previous run; each
+  zone card shows A|B with stats + deltas. **Layout never shifts** — no prev run selected is
+  still the same two-column footprint.
+- Plan: copy /takeoffs atlas presentation (collapsible top pane, resizable). Floaters: zone
+  zoom-in, the key (takeoffs' key is bad — do better), level-wise stats relevant to algo tuning.
+- Ledger: collapsible bottom dock.
+- **All plan underlays desaturated/partially grayed** — SVG was impossible to see over full-value
+  ink. SVG color/style rebalanced against the muted underlay. Underlay togglable.
+- Chrome: match the app (light mode); round-1's dark sheet/ledger chrome dies.
 
 ## Fixture silences (write-downs, not guesses)
 
