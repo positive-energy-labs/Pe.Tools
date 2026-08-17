@@ -1,7 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { FlaskConical, X } from "lucide-react";
 
-import { Button } from "#/components/ui/button";
+import { FactChip } from "#/components/lang/chip";
+import { EmptyState } from "#/components/lang/empty";
+import { HelpTip } from "#/components/lang/help";
+import { Verb } from "#/components/lang/verb";
 import { GroundedDocView } from "#/grounded-doc/GroundedDocView";
 import { useGroundedDoc } from "#/grounded-doc/engine";
 import { SAMPLE_DOC } from "#/grounded-doc/sample";
@@ -26,44 +29,63 @@ function DocLabRoute() {
 
   return (
     <main className="flex h-screen flex-col overflow-hidden">
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-2.5">
-        <div>
-          <h1 className="text-base font-semibold tracking-tight text-foreground">Doc Lab</h1>
-          <p className="text-xs text-muted-foreground">
-            Grounded document viewer — hover markdown or the page to link them
-          </p>
-        </div>
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2.5">
         <div className="flex items-center gap-2">
+          <h1 className="t-title font-pe-display tracking-tight text-foreground">Doc Lab</h1>
+          <HelpTip>
+            The grounded-document engine in isolation. Parse a PDF: markdown blocks land on the
+            left, the original pages on the right. Hovering either side highlights (and scrolls) the
+            other; clicking pins the link.
+          </HelpTip>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           {engine.doc && (
             <>
-              <span className="text-xs text-muted-foreground" title={engine.doc.fileName}>
-                {engine.doc.fileName} · {engine.doc.pages.length} page
-                {engine.doc.pages.length !== 1 ? "s" : ""} · {engine.doc.blocks.length} blocks
-                {engine.doc.images.length > 0 ? ` · ${engine.doc.images.length} images` : ""}
-              </span>
-              <Button variant="ghost" size="xs" onClick={engine.clear} title="Remove document">
-                <X className="size-3" />
-              </Button>
+              <FactChip title={`the parsed document — ${engine.doc.fileName}`}>
+                {engine.doc.fileName}
+              </FactChip>
+              <FactChip title="pages · markdown blocks · extracted images the parser returned">
+                {engine.doc.pages.length}p · {engine.doc.blocks.length} blocks
+                {engine.doc.images.length > 0 ? ` · ${engine.doc.images.length} img` : ""}
+              </FactChip>
+              {engine.doc === SAMPLE_DOC && (
+                <FactChip
+                  dashed
+                  title="FIXTURE — the checked-in sample parse (src/grounded-doc/sample.ts). What replaces it: parsing a real PDF through LlamaCloud."
+                >
+                  fixture · sample
+                </FactChip>
+              )}
+              <Verb
+                label="remove"
+                icon={X}
+                onClick={engine.clear}
+                reason="Forget this document and return to the upload surface — the parse cache keeps the result for a re-parse"
+              />
             </>
           )}
         </div>
       </header>
 
-      <div className="flex shrink-0 items-center gap-3 border-b border-border/40 bg-muted/20 px-4 py-1 text-xs text-muted-foreground">
+      <div className="flex min-h-8 shrink-0 items-center gap-3 border-b border-border px-4 py-1">
         {focused ? (
-          <span className="truncate">
-            <span className="font-medium text-[var(--cat-blue)]">
-              {engine.pinned ? "Pinned" : "Focused"}:
-            </span>{" "}
-            page {focused.page} · {focused.kind} · {focused.id}
+          <>
+            <span className="t-label face-mono truncate text-muted-foreground">
+              {engine.pinned ? "pinned" : "focused"} · page {focused.page} · {focused.kind} ·{" "}
+              {focused.id}
+            </span>
             {engine.pinned && (
-              <Button variant="ghost" size="xs" className="ml-1" onClick={engine.clearPin}>
-                unpin
-              </Button>
+              <Verb
+                label="unpin"
+                onClick={engine.clearPin}
+                reason="Release the pin so hover drives the focus again"
+              />
             )}
-          </span>
+          </>
         ) : (
-          <span>Hover a block, image, or page region; click to pin</span>
+          <EmptyState story="scope" exit="hover a block, image, or page region; click to pin">
+            nothing focused
+          </EmptyState>
         )}
       </div>
 
@@ -71,10 +93,12 @@ function DocLabRoute() {
         engine={engine}
         className="min-h-0 flex-1"
         emptyExtra={
-          <Button variant="outline" size="sm" onClick={() => engine.setDoc(SAMPLE_DOC)}>
-            <FlaskConical className="size-3" />
-            Load sample document (no API key needed)
-          </Button>
+          <Verb
+            label="load the sample document"
+            icon={FlaskConical}
+            onClick={() => engine.setDoc(SAMPLE_DOC)}
+            reason="FIXTURE — load the checked-in sample parse; no API key and no network involved"
+          />
         }
       />
     </main>

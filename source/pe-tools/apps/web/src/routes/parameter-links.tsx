@@ -1,18 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Check, Eye, RefreshCw, Save, Sparkles } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Check, Eye, RefreshCw, Save } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { ParameterLinkProfile } from "@pe/agent-contracts";
 import { parameterLinksRouteState } from "@pe/agent-contracts";
 
-import { Button } from "#/components/ui/button";
+import { AddressingBar } from "#/components/lang/addressing-bar";
+import { FactChip } from "#/components/lang/chip";
+import { HelpTip } from "#/components/lang/help";
+import { OutcomeLine, type OutcomeKind } from "#/components/lang/outcome";
+import { Verb, VerbGroup } from "#/components/lang/verb";
 import { SidePane } from "#/components/ui/side-pane";
 import { useHostStatusQuery } from "#/host/queries";
 import { EvaluationView, RuntimeStatusBar } from "#/parameter-links/Evaluation";
 import { ProfileEditor } from "#/parameter-links/ProfileEditor";
 import { canApply, errorIssueCount, isDraftDirty, sameProfile } from "#/parameter-links/model";
 import { useRouteState } from "#/workbench/route-state";
-import { RouteWorkspaceShell } from "#/workbench/route-workspace-shell";
 
 /**
  * /parameter-links — the route-native workspace for cross-element parameter links.
@@ -35,10 +38,11 @@ function ParameterLinksRoute() {
   const status = document?.status ?? null;
 
   const bridgeConnected = useHostStatusQuery().data?.bridgeIsConnected ?? false;
+  const connected = route.connected && bridgeConnected;
 
   const [rightOpen, setRightOpen] = useState(true);
   const [busy, setBusy] = useState<CommandName | "save" | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<{ kind: OutcomeKind; text: string } | null>(null);
   const [previewed, setPreviewed] = useState<ParameterLinkProfile | null>(null);
 
   /**
@@ -73,7 +77,7 @@ function ParameterLinksRoute() {
   const onDraftChange = useCallback((next: ParameterLinkProfile) => {
     setLocalDraft(next);
     setPreviewed((prev) => (sameProfile(prev, next) ? prev : null));
-    setMessage(null);
+    setOutcome(null);
   }, []);
 
   /** Persist the local draft to the shared document (human actor, unmasked). */
@@ -81,7 +85,10 @@ function ParameterLinksRoute() {
     async (profile: ParameterLinkProfile): Promise<boolean> => {
       const result = await route.apply([{ path: ["draftProfile"], value: profile }]);
       if (!result.ok) {
-        setMessage(result.error ?? result.hint ?? "Saving the draft failed.");
+        setOutcome({
+          kind: "error",
+          text: result.error ?? result.hint ?? "saving the draft failed",
+        });
         return false;
       }
       syncedRef.current = JSON.stringify(profile);
@@ -93,11 +100,12 @@ function ParameterLinksRoute() {
   const runCommand = useCallback(
     async (name: CommandName) => {
       setBusy(name);
-      setMessage(null);
+      setOutcome(null);
       try {
         if (name === "refresh") {
           const result = await route.command("refresh", {});
-          if (!result.ok) setMessage(result.error ?? result.hint ?? "Refresh failed.");
+          if (!result.ok)
+            setOutcome({ kind: "error", text: result.error ?? result.hint ?? "refresh failed" });
           return;
         }
         // preview/apply need the reviewed profile persisted first (the command guard
@@ -107,13 +115,25 @@ function ParameterLinksRoute() {
         if (name === "preview" && hasUnsavedEdits && !(await saveDraft(profile))) return;
         const result = await route.command(name, { profile });
         if (!result.ok) {
-          setMessage(result.error ?? result.hint ?? `${name} failed.`);
+          // An op-level rejection is the host refusing the plan, not a broken bridge.
+          setOutcome({
+            kind: "refused",
+            text: result.error ?? result.hint ?? `${name} refused`,
+          });
           return;
         }
-        if (name === "preview") setPreviewed(profile);
-        else setPreviewed(null);
+        if (name === "preview") {
+          setPreviewed(profile);
+          setOutcome({ kind: "receipt", text: "preview landed — projection is current" });
+        } else {
+          setPreviewed(null);
+          setOutcome({ kind: "receipt", text: "applied — target parameters reconciled" });
+        }
       } catch (caught) {
-        setMessage(caught instanceof Error ? caught.message : `${name} failed.`);
+        setOutcome({
+          kind: "error",
+          text: caught instanceof Error ? caught.message : `${name} failed`,
+        });
       } finally {
         setBusy(null);
       }
@@ -121,133 +141,154 @@ function ParameterLinksRoute() {
     [route.command, previewed, editing, hasUnsavedEdits, saveDraft],
   );
 
-  const subline = useMemo(() => {
-    if (message) return { text: message, tone: "clay" as const };
-    if (errorCount > 0)
-      return {
-        text: `${errorCount} blocking error${errorCount === 1 ? "" : "s"} — resolve before applying`,
-        tone: "fail" as const,
-      };
-    if (applyReady)
-      return { text: "Previewed and clean — ready to apply.", tone: "green" as const };
-    if (hasUnsavedEdits) return { text: "Unsaved draft edits.", tone: "clay" as const };
-    if (editing && !reviewed)
-      return {
-        // Apply only trusts a preview run from this pane; an agent's preview renders its
-        // evaluation but deliberately does not arm the human's Apply (defense in depth on
-        // top of the server-side draft-match guard).
-        text:
-          evaluation != null
-            ? "Pea's preview is shown — run Preview to verify it yourself and enable Apply."
-            : "Preview the draft before applying.",
-        tone: "lichen" as const,
-      };
-    return null;
-  }, [message, errorCount, applyReady, hasUnsavedEdits, editing, reviewed, evaluation]);
+  const applyReason = applyReady
+    ? "Store the previewed profile and reconcile the changed target parameters in Revit"
+    : !editing
+      ? "no profile yet — add a definition first"
+      : errorCount > 0
+        ? `resolve ${errorCount} blocking error${errorCount === 1 ? "" : "s"} first`
+        : evaluation != null && !reviewed
+          ? "pea's preview is shown — run Preview yourself to verify it and arm Apply"
+          : "preview the current draft first — Apply only trusts a preview run from this pane";
 
   return (
-    <RouteWorkspaceShell
-      title="Parameter Links"
-      connected={route.connected && bridgeConnected}
-      binding={document?.binding}
-      subtitle={
-        <span className="text-xs text-muted-foreground">
-          {editing
-            ? `${editing.definitions.length} definition${editing.definitions.length === 1 ? "" : "s"} · ${editing.assignments.length} assignment${editing.assignments.length === 1 ? "" : "s"}`
-            : "no profile"}
-          {draftDirty ? " · draft differs from stored" : ""}
-        </span>
-      }
-      actions={
-        <>
-          {route.peaActive && (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--pea-tint)] px-2 py-0.5 text-xs font-medium text-[var(--cat-green)]">
-              <Sparkles className="size-3 animate-pulse" />
-              pea is working…
+    <main className="flex h-screen flex-col overflow-hidden bg-background">
+      <AddressingBar
+        name="PARAMETER LINKS"
+        sentence={
+          <span className="flex items-center gap-2">
+            <span
+              className="t-value face-mono text-foreground"
+              title={
+                document?.binding.target
+                  ? `bound to ${document.binding.target}`
+                  : "no target document bound"
+              }
+            >
+              {document?.binding.target ?? "unbound"}
             </span>
-          )}
-
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={busy != null}
-            onClick={() => void runCommand("refresh")}
-          >
-            <RefreshCw className={busy === "refresh" ? "animate-spin" : ""} />
-            Refresh
-          </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={busy != null || !editing || !hasUnsavedEdits}
-            onClick={() => editing && void saveDraft(editing)}
-            title="Save draft edits to the shared document"
-          >
-            <Save />
-            Save draft
-          </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={busy != null || !editing}
-            onClick={() => void runCommand("preview")}
-          >
-            <Eye className={busy === "preview" ? "animate-pulse" : ""} />
-            Preview
-          </Button>
-
-          <Button
-            size="sm"
+            <HelpTip>
+              Cross-element parameter links: pea and you co-edit one draft profile of link
+              definitions + assignments. Preview evaluates it against Revit into projected target
+              writes without writing anything; Apply is human-only and trusts only a preview run
+              from this pane.
+            </HelpTip>
+          </span>
+        }
+        facts={
+          <>
+            <FactChip
+              tone={connected ? "meta" : "caution"}
+              title={
+                connected
+                  ? "route document and host bridge are connected"
+                  : "route document or host bridge is disconnected — commands will fail until it returns"
+              }
+            >
+              {connected ? "host · connected" : "host · disconnected"}
+            </FactChip>
+            {editing && (
+              <FactChip title="definitions · assignments in the profile being edited">
+                {editing.definitions.length} def · {editing.assignments.length} asn
+              </FactChip>
+            )}
+            {hasUnsavedEdits && (
+              <FactChip
+                tone="caution"
+                title="local edits not yet saved to the shared document — save draft (or preview) persists them"
+              >
+                unsaved edits
+              </FactChip>
+            )}
+            {draftDirty && (
+              <FactChip
+                tone="caution"
+                title="the shared draft differs from what Revit stored — apply reconciles them"
+              >
+                draft ≠ stored
+              </FactChip>
+            )}
+            {route.peaActive && (
+              <FactChip tone="pea" title="pea is editing the shared document right now">
+                pea · working
+              </FactChip>
+            )}
+          </>
+        }
+        verb={
+          <Verb
+            tone="commit"
+            label="apply"
+            icon={Check}
+            busy={busy === "apply"}
             disabled={busy != null || !applyReady}
             onClick={() => void runCommand("apply")}
-            title={
-              applyReady
-                ? undefined
-                : errorCount > 0
-                  ? "Resolve blocking errors first"
-                  : evaluation != null
-                    ? "Pea previewed this draft — run Preview yourself to enable Apply"
-                    : "Preview the current draft first"
-            }
-            className="bg-[var(--cat-green)] text-white hover:bg-[var(--cat-green)]/85 disabled:opacity-50"
-          >
-            <Check className={busy === "apply" ? "animate-pulse" : ""} />
-            Apply
-          </Button>
-        </>
-      }
-      error={message ? null : route.error}
-      subline={
-        subline ? (
-          <span
-            className={
-              subline.tone === "fail"
-                ? "text-[var(--fail)]"
-                : subline.tone === "green"
-                  ? "text-[var(--cat-green)]"
-                  : subline.tone === "clay"
-                    ? "text-[var(--cat-clay)]"
-                    : "text-[var(--lichen)]"
-            }
-          >
-            {subline.text}
-          </span>
-        ) : null
-      }
-    >
+            reason={applyReason}
+          />
+        }
+      />
+
+      {(busy || outcome || route.error) && (
+        <div className="shrink-0 border-b border-border px-4 py-0.5">
+          {busy ? (
+            <OutcomeLine kind="busy" label={busy} />
+          ) : outcome ? (
+            <OutcomeLine kind={outcome.kind} label={outcome.text} />
+          ) : route.error ? (
+            <OutcomeLine kind="error" label={route.error} />
+          ) : null}
+        </div>
+      )}
+
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1 overflow-y-auto px-5 py-4">
           {!route.hydrated ? (
-            <p className="py-10 text-center text-xs text-[var(--lichen)]">Loading route state…</p>
+            <OutcomeLine kind="busy" label="hydrating route state" className="py-10" />
           ) : (
-            <ProfileEditor
-              profile={editing}
-              disabled={busy != null || route.peaActive}
-              target={document?.binding.target ?? undefined}
-              onChange={onDraftChange}
-            />
+            <>
+              <VerbGroup title="draft" radius="shared document · revit read" className="mb-4">
+                <Verb
+                  label="refresh"
+                  icon={RefreshCw}
+                  busy={busy === "refresh"}
+                  disabled={busy != null}
+                  onClick={() => void runCommand("refresh")}
+                  reason="Re-read the stored profile, shared draft, and evaluation from the host"
+                />
+                <Verb
+                  tone="commit"
+                  label="save draft"
+                  icon={Save}
+                  disabled={busy != null || !editing || !hasUnsavedEdits}
+                  onClick={() => {
+                    if (editing) void saveDraft(editing);
+                  }}
+                  reason={
+                    hasUnsavedEdits
+                      ? "Write the local edits onto the shared document, where pea can see them"
+                      : "no unsaved local edits — the shared document already matches"
+                  }
+                />
+                <Verb
+                  label="preview"
+                  icon={Eye}
+                  busy={busy === "preview"}
+                  disabled={busy != null || !editing}
+                  onClick={() => void runCommand("preview")}
+                  reason={
+                    editing
+                      ? "Evaluate the draft against Revit and project its target writes — writes nothing"
+                      : "no profile to preview — add a definition first"
+                  }
+                />
+              </VerbGroup>
+              <ProfileEditor
+                profile={editing}
+                disabled={busy != null || route.peaActive}
+                target={document?.binding.target ?? undefined}
+                onChange={onDraftChange}
+              />
+            </>
           )}
         </div>
 
@@ -259,7 +300,7 @@ function ParameterLinksRoute() {
           minWidth={340}
           defaultWidth={520}
           maxWidth={760}
-          header={<span className="text-sm font-semibold">Evaluation</span>}
+          header={<span className="t-label t-upper text-muted-foreground">Evaluation</span>}
         >
           <div className="flex h-full flex-col gap-4 px-4 py-3">
             <RuntimeStatusBar
@@ -272,6 +313,6 @@ function ParameterLinksRoute() {
           </div>
         </SidePane>
       </div>
-    </RouteWorkspaceShell>
+    </main>
   );
 }
