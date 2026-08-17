@@ -165,6 +165,19 @@ public sealed class TakeoffOptions
     // (trimming instead of rejecting). Both re-run the strict editability audit and fall back to the
     // pre-fit geometry on failure — e.g. a zone edge diagonal to the room's frame.
     public double ZoneSnapFt = 1.0;         // room vertex this close to the zone boundary snaps onto it (0 = off)
+    // Round-4 parallel-on-ink unification (kaitpw UL02 annotation, TASTE 2026-08-16 round-3):
+    // where the declared line and a room edge run PARALLEL and BOTH stand on one wall's ink —
+    // the whole sweep between them on wall ink AND the band continuing past the edge into the
+    // room — they are two authorities for one wall, the room edge sitting offset inside the
+    // wall band. The zone line is the authority, so the edge joins it: a snap ALONG ink. This
+    // is the one sanctioned exception to the R3c snap-never-crosses-ink guard; an edge at the
+    // band's interior FACE (no wall ink on its room side) still refuses — that room genuinely
+    // ends at the wall, and snapping it would swallow the clipped half-wall (the R3c case).
+    // Judged against the seed-ink WALL oracle, never evidence ink (a door-head is an opening).
+    // Value = how far past the edge, into the room, wall ink must continue for the edge to
+    // count as INSIDE the band; 2 cells at 0.25 ft keeps face-hugging edges (whose adjacent
+    // free cell reads within a cell of ink) out. 0 = off.
+    public double ZoneSnapUnifyOnInkFt = 0.5;
     public bool ZoneClipEnabled = true;     // a room overhanging the zone is intersected with it, not rejected
     // Clipping a rail-aligned room against the zone MANUFACTURES edges the detector never proposed:
     // where the zone line crosses a projected corner or runs a fraction of a degree off the room's

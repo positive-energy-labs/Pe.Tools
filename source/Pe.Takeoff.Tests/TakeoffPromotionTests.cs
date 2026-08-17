@@ -555,19 +555,27 @@ public sealed class TakeoffPromotionTests
     public void Zone_fit_snap_refuses_to_sweep_the_edge_across_ink_hugging_the_zone_line()
     {
         // Same room, same zone — but now the 0.4 ft between the room's edge and the declared line
-        // is wall ink (distance 0 everywhere): the designer drew the zone through the wall, and the
-        // room already ends at the wall's face. Snapping onto the line would swallow the clipped
-        // half-wall, so the snap refuses and the room stands accepted exactly where the ink says
-        // it ends. The zone stays authority — the room simply never reached it.
+        // is wall ink: the designer drew the zone through the wall, and the room already ends at
+        // the wall's FACE (free floor on the room side of the edge). Snapping onto the line would
+        // swallow the clipped half-wall, so the snap refuses and the room stands accepted exactly
+        // where the ink says it ends. The zone stays authority — the room simply never reached it.
+        // (The fixture was sharpened for the round-4 parallel-on-ink unification: the old
+        // distance-0-everywhere stub put wall ink INSIDE the room too, which now states the
+        // opposite — an edge standing inside the wall band. Walls ring the room; the interior
+        // is free floor.)
         var source = new TakeoffResult {
             LevelName = "Level 1",
             Rooms = { Room("room", (2, 2), (19.6, 2), (19.6, 18), (2, 18)) },
             DomainSqft = 281.6,
         };
+        double Ink(double x, double y) =>
+            x >= 19.6 || x <= 2.4 || y <= 2.4 || y >= 17.6
+                ? 0
+                : Math.Min(Math.Min(x - 2.4, 19.6 - x), Math.Min(y - 2.4, 17.6 - y));
 
         var promotion = TakeoffPromotion.PromoteZone(
             source, Zone("all", (0, 0), (20, 0), (20, 20), (0, 20)),
-            Options(minimumRoomSqft: 0, boundarySimplifyFt: 0), (_, _) => 0,
+            Options(minimumRoomSqft: 0, boundarySimplifyFt: 0), Ink,
             TestContext.Out.WriteLine);
 
         var room = promotion.Result.Rooms.Single();
@@ -576,6 +584,44 @@ public sealed class TakeoffPromotionTests
                 "the clipped half-wall stays out of the room");
             Assert.That(room.Polygon.Max(point => point[0]), Is.EqualTo(19.6).Within(1e-9));
             Assert.That(promotion.Diagnostics.Rejections.Keys, Has.No.Member("zonefit:snapped"));
+            Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
+            Assert.That(promotion.Diagnostics.IsStrictlyEditable, Is.True);
+        });
+    }
+
+    [Test]
+    public void Zone_fit_snap_unifies_a_room_edge_standing_inside_the_wall_band_onto_the_zone_line()
+    {
+        // Round-4 parallel-on-ink unification (kaitpw UL02 annotation): the wall band runs
+        // 19.0–20.0, the declared line stands on it at x=20, and the detected room edge sits at
+        // x=19.6 — OFFSET INSIDE the band, wall ink continuing past it into the room. Two
+        // authorities for one wall. The zone line is the authority, so the room edge joins it —
+        // a snap ALONG ink the crossing guard used to refuse no differently than a real sweep
+        // across a wall (the sibling test above, where the room side of the edge is free floor,
+        // still refuses).
+        var source = new TakeoffResult {
+            LevelName = "Level 1",
+            Rooms = { Room("room", (2, 2), (19.6, 2), (19.6, 18), (2, 18)) },
+            DomainSqft = 281.6,
+        };
+        double Ink(double x, double y) =>
+            x >= 19.0 || x <= 2.4 || y <= 2.4 || y >= 17.6
+                ? 0
+                : Math.Min(Math.Min(x - 2.4, 19.0 - x), Math.Min(y - 2.4, 17.6 - y));
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, Zone("all", (0, 0), (20, 0), (20, 20), (0, 20)),
+            Options(minimumRoomSqft: 0, boundarySimplifyFt: 0), Ink,
+            TestContext.Out.WriteLine);
+
+        var room = promotion.Result.Rooms.Single();
+        Assert.Multiple(() => {
+            Assert.That(room.RawSqft, Is.EqualTo(288).Within(1e-6),
+                "the room edge joined the declared line along the shared wall band");
+            Assert.That(room.Polygon.Max(point => point[0]), Is.EqualTo(20).Within(1e-9));
+            Assert.That(promotion.Diagnostics.Rejections["zonefit:snapped"], Is.EqualTo(1));
+            Assert.That(promotion.Diagnostics.Rejections["zonefit:snap-unified-on-ink"],
+                Is.EqualTo(1));
             Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
             Assert.That(promotion.Diagnostics.IsStrictlyEditable, Is.True);
         });

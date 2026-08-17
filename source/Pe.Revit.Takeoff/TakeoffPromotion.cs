@@ -445,7 +445,7 @@ public static class TakeoffPromotion
         bool snapping = state.Options.ZoneSnapFt > 0;
         if ((!snapping && !state.Options.ZoneClipEnabled) || state.Result.Rooms.Count == 0) return;
         var zoneBoundary = state.ZoneGeometry.Boundary;
-        int snapped = 0, clipped = 0, fellBack = 0, squared = 0, dissolved = 0;
+        int snapped = 0, clipped = 0, fellBack = 0, squared = 0, dissolved = 0, unified = 0;
         foreach (var room in state.Result.Rooms
                      .OrderBy(item => item.Id, StringComparer.Ordinal).ToList())
         {
@@ -459,18 +459,24 @@ public static class TakeoffPromotion
             // that would have stood on its own: if the combined candidate fails the strict audit,
             // the clip-only candidate gets its own hearing before the room falls back.
             (Polygon Fitted, List<Polygon> Dropped, bool DidSnap, bool DidClip, bool DidSquare,
-                bool DidDissolve)? Attempt(bool withSnap)
+                bool DidDissolve, bool DidUnify)? Attempt(bool withSnap)
             {
                 var fitted = original;
                 bool didSnap = false, didClip = false, didSquare = false, didDissolve = false;
+                bool didUnify = false;
                 if (withSnap && snapping
                     && SnapToZone(fitted, zoneBoundary, neighbors, state.Options.ZoneSnapFt,
                         // Where a wall hugs the declared line, the ink face is where the room
                         // ends, and a snap may not sweep the boundary back across it. The zone
                         // stays authority — the room simply never reached it (kaitpw, round-2
-                        // summon: zone edges often clip walls).
+                        // summon: zone edges often clip walls). One exception: an edge standing
+                        // INSIDE the wall band whose ink the declared line also stands on joins
+                        // the line — two authorities for one wall unify (round-4, kaitpw UL02).
                         state.DistanceToInk,
-                        1.2 * state.Options.CellFt)
+                        1.2 * state.Options.CellFt,
+                        state.DistanceToWallInk,
+                        state.Options.ZoneSnapUnifyOnInkFt,
+                        () => didUnify = true)
                         is { } moved)
                 {
                     fitted = moved;
@@ -504,14 +510,21 @@ public static class TakeoffPromotion
                     didDissolve = repair.Dissolved;
                 }
                 return didSnap || didClip
-                    ? (fitted, dropped, didSnap, didClip, didSquare, didDissolve)
+                    ? (fitted, dropped, didSnap, didClip, didSquare, didDissolve,
+                        didSnap && didUnify)
                     : null;
             }
 
             var attempts = new List<(Polygon Fitted, List<Polygon> Dropped, bool DidSnap,
-                bool DidClip, bool DidSquare, bool DidDissolve)>();
+                bool DidClip, bool DidSquare, bool DidDissolve, bool DidUnify)>();
             if (Attempt(withSnap: true) is { } combined) attempts.Add(combined);
-            if (attempts.Count > 0 && attempts[0].DidSnap && attempts[0].DidClip
+            // The rescue keys on DidSnap alone: a snap can also EAT the overhang (a unified snap
+            // pulls the overhanging edge onto the zone line, so the combined attempt never clips),
+            // and when the audit then refuses the snapped shape, the room must still get the
+            // clip-only hearing it would have gotten had the snap never fired — otherwise a
+            // 209 sf room dies at scope over a 0.11 sf sliver (UL02 R06, round-4). Attempt
+            // returns null when there is nothing to clip, so this adds no new geometry path.
+            if (attempts.Count > 0 && attempts[0].DidSnap
                 && Attempt(withSnap: false) is { } clipOnly) attempts.Add(clipOnly);
             if (attempts.Count == 0) continue;
 
@@ -532,6 +545,7 @@ public static class TakeoffPromotion
                 if (attempt.DidClip) clipped++;
                 if (attempt.DidSquare) squared++;
                 if (attempt.DidDissolve) dissolved++;
+                if (attempt.DidUnify) unified++;
                 state.Log?.Invoke(
                     $"[promotion] zone-fit room={room.Id} snap={attempt.DidSnap} " +
                     $"clip={attempt.DidClip} sqft={original.Area:F0}->{attempt.Fitted.Area:F0} " +
@@ -546,6 +560,7 @@ public static class TakeoffPromotion
             }
         }
         if (snapped > 0) state.Rejections["zonefit:snapped"] = snapped;
+        if (unified > 0) state.Rejections["zonefit:snap-unified-on-ink"] = unified;
         if (clipped > 0) state.Rejections["zonefit:clipped"] = clipped;
         if (squared > 0) state.Rejections["zonefit:squared"] = squared;
         if (dissolved > 0) state.Rejections["zonefit:dissolved"] = dissolved;
@@ -607,7 +622,9 @@ public static class TakeoffPromotion
     private static Polygon? SnapToZone(
         Polygon room, Geometry zoneBoundary,
         List<(string Id, Polygon Geometry)> neighbors, double snapFt,
-        Func<double, double, double>? distanceToInk = null, double inkTolFt = 0)
+        Func<double, double, double>? distanceToInk = null, double inkTolFt = 0,
+        Func<double, double, double>? distanceToWallInk = null, double unifyProbeFt = 0,
+        Action? onUnify = null)
     {
         // Edge-wise, frame-preserving: a room EDGE moves onto the zone line only when a zone
         // segment runs parallel to it (within a few degrees) and both endpoints are within snapFt
@@ -668,17 +685,48 @@ public static class TakeoffPromotion
                     // zone-edge ink pull just kept out of the partition. Midpoints of the sweep
                     // sitting on ink refuse the move; everywhere else the zone line stays the
                     // snap target it has always been.
+                    //
+                    // ONE sanctioned exception (round-4 parallel-on-ink unification, kaitpw UL02
+                    // annotation): when the edge and the declared line BOTH stand on the same
+                    // wall's ink — every sample of the sweep on wall ink, and the band continuing
+                    // unifyProbeFt past the edge into the room — they are two authorities for one
+                    // wall, the edge sitting offset INSIDE the band rather than at its interior
+                    // face. The zone line is the authority, so the edge joins it: a snap ALONG
+                    // ink, not across it. An edge at the band's face (free floor on its room
+                    // side) never qualifies and refuses exactly as before.
                     if (distanceToInk != null)
                     {
-                        bool crossesInk = false;
-                        for (double t = 0; t <= 1 && !crossesInk; t += 0.25)
+                        bool unified = false;
+                        if (unifyProbeFt > 0 && distanceToWallInk != null)
                         {
-                            double px = a.X + (b.X - a.X) * t, py = a.Y + (b.Y - a.Y) * t;
-                            double offset = offsetA + (offsetB - offsetA) * t;
-                            crossesInk = distanceToInk(
-                                px - 0.5 * offset * -uy, py - 0.5 * offset * ux) <= inkTolFt;
+                            double side = offsetA + offsetB >= 0 ? 1 : -1;
+                            unified = true;
+                            for (double t = 0; t <= 1 && unified; t += 0.25)
+                            {
+                                double px = a.X + (b.X - a.X) * t, py = a.Y + (b.Y - a.Y) * t;
+                                double offset = offsetA + (offsetB - offsetA) * t;
+                                for (double s = 0; s <= 1 && unified; s += 0.25)
+                                    unified = distanceToWallInk(
+                                        px - s * offset * -uy, py - s * offset * ux) <= inkTolFt;
+                                if (unified)
+                                    unified = distanceToWallInk(
+                                        px + side * unifyProbeFt * -uy,
+                                        py + side * unifyProbeFt * ux) <= inkTolFt;
+                            }
                         }
-                        if (crossesInk) continue;
+                        if (!unified)
+                        {
+                            bool crossesInk = false;
+                            for (double t = 0; t <= 1 && !crossesInk; t += 0.25)
+                            {
+                                double px = a.X + (b.X - a.X) * t, py = a.Y + (b.Y - a.Y) * t;
+                                double offset = offsetA + (offsetB - offsetA) * t;
+                                crossesInk = distanceToInk(
+                                    px - 0.5 * offset * -uy, py - 0.5 * offset * ux) <= inkTolFt;
+                            }
+                            if (crossesInk) continue;
+                        }
+                        else onUnify?.Invoke();
                     }
                     points[i] = new Coordinate(a.X - offsetA * -uy, a.Y - offsetA * ux);
                     points[(i + 1) % count] = new Coordinate(b.X - offsetB * -uy, b.Y - offsetB * ux);
