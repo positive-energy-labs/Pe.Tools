@@ -86,4 +86,12 @@ design-system ledger, not restated here.
 - Revisit general JSON IntelliSense: through refactors some providers may no longer be wired into local schema writes; may extend to schema generation generally. (folded from repo-backlog-capture.md)
 - Revisit commit `3e3fa88`: shared schedule profile usage appears to break JSON IntelliSense with nullable/type issues, and `SchedulePreviePanel` crashes around `("Order", sg => sg.SortOrder.ToString())`. (folded from repo-backlog-capture.md)
 - Route-workspace deferrals from the 2026-07 migration, still open: grounded-document endpoint rename; loaded-family→Family-Types handoff (blocked on project load-back semantics); dynamic/third-party plugin loading; installed-lane acceptance for the route-plugin substrate. (captured from .artifacts/route-workspace-migration.md, deleted)
+- History-mining root problems 2026-08-18 (evidence: .artifacts/runs/history-mining-20260818/SYNTHESIS.md, 911 sessions):
+  `pea host operations call` needs `--request-file`/stdin — inline JSON dies in shell re-quoting (6-8 wasted attempts per incident);
+  `vp check` should fix-then-check and stop linting generated files (`routeTree.gen.ts`) and `.artifacts/`;
+  `pe-dev codegen sync` doesn't delete stale outputs (not a sync) and self-locks rebuilding the CLI running it;
+  `revit.catalog.recent-documents` returns `{ok:true, documents:[]}` while Revit.ini File1 holds the model;
+  host service-name derives from CWD while clients derive from repo root — hash mismatch strands `vp run @pe/host#dev` starts;
+  `pea` flag dialect split (`--bridgeSessionId` vs `--bridge-session-id`) and `--host dev` token resolution fails inside the checkout.
+- Report upstream to Pe.Revit.Sdk NEXT.md (history-mining 2026-08-18): `install verify` exit 255 vs `[ok]` body; `live converge` exit 0 hiding emit-failed; `sessions` listing pid-reused rows as live; no blocking `live wait`; advisory stderr banners → phantom PowerShell failures; sandbox-requires-project (multi-project same-machine story, asked 3x); ReadOnly script mode persisted a mutation (not containment); `doctor` unbounded (124s timeout).
 - Broad directions this cluster is aimed at: strong AI entrypoints into Revit; portable Revit entities (families, schedules) that move across documents/versions with a merge story; a stable multitenant `Pe.Host` arbitrating between `revit.exe`, local files, the local server/sandbox, and frontend/AI.

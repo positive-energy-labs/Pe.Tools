@@ -50,6 +50,16 @@ After any large changes, ALWAYS clarify user intent and capture the durable know
   the skill is dropped silently — no warning, it simply never loads. Keep `: "` out of skill descriptions.
 - `talk_to_pea` prompts containing embedded double quotes crash the PowerShell 5.1 arg path (exit 255). Reword or use a
   here-string path instead.
+- **Windows shell tax** (top friction source in 2 months of session history — mined 2026-08-18):
+  the shell is PowerShell, not bash. rg alternation/quotes/globs need PS-safe forms (`unclosed group`,
+  `os error 123` = your quoting, not the tool); `$PID`/`$Host` are readonly built-ins; `2>&1` on a
+  native exe fabricates NativeCommandError from advisory stderr — a "failure" wrapping a success;
+  rg exit 1 means "no matches", not an error. Never blind-retry a quoting variant: one failed quote →
+  write the payload to a file or use the harness Read/Grep tools.
+- Never put JSON on a command line (`pea ... --request '{...}'` dies in re-quoting). File-based
+  payloads or the script-file loop — see the `live-loop` skill.
+- Client timeout ≠ server cancel: a killed pe-revit/dotnet call keeps running and blocks the next
+  one. Background + poll for anything minutes-scale; `status` read before any retry.
 
 ### Non-Doc Artifacts
 
