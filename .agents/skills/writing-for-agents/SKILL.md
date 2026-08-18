@@ -7,6 +7,37 @@ Reference for writing any document an agent consumes — a skill, an `AGENTS.md`
 
 When the document you're writing is a skill, read [`SKILL-MECHANICS.md`](SKILL-MECHANICS.md) for frontmatter, invocation choice, and router skills.
 
+## Homes — "I want to provide this to an agent's loop, where do I put it"
+
+Sort by **when the agent needs it**, not by what kind of file feels right. Four tiers:
+
+1. **Always → `AGENTS.md` / `CLAUDE.md`.** Behavior that must hold on every turn without being
+   asked for: invariants, lane ownership, footguns that strike before the agent could know to
+   look. Test: *absent this line, the first tool call does damage or wastes turns.* Pays context
+   load every turn — the hardest pruning bar in the repo; every line evicts attention from another.
+2. **Situation → a skill.** A judgment-heavy *way of working* with a trigger you can state in one
+   description line (live-loop, docs, delegation). The description is the pointer; its wording
+   decides whether the tier fires at all. Test: *procedure with decision points, reached when a
+   recognizable situation arises.*
+3. **On-touch → docs, per the `docs` skill.** Durable *facts and decisions* — a why, a rejected
+   path, a platform truth — greppable from the code they govern. Test: *knowledge, not behavior;
+   the agent reaches it because the work touched it.* Code is the spec; docs only what code can't say.
+4. **Live → generated, never written.** Anything that would be stale within weeks — session state,
+   capability catalogs, ports, versions — must be produced by the system at read time (`--json`
+   envelopes, `pe-revit guide`, host operation metadata). Hand-writing it creates a cache that
+   rots (see Pruning). Pea states the posture exactly: *"Injected context is orientation, not
+   truth. Inspect fresh state when exact current facts matter."*
+
+Pea's context setup is the proven reference implementation of this split: static identity/posture/
+operating-loop in `pea-instructions.ts` (tier 1), capability discovered through
+`host_operation_search` metadata rather than prompt text (tier 4), runtime context entries injected
+per-request and explicitly labeled orientation (tier 4), durable decisions left in the world (tier 3).
+
+Each tier has a distinct failure signature, which is how you diagnose a misfiled piece: re-teaching
+the same rule every session = a tier-1 gap; the human re-pasting the same context block into new
+sessions = a tier-2 gap; a decision re-litigated = tier-3; a confident stale claim = something
+hand-written that belonged in tier 4.
+
 ## Context pointers
 
 A **context pointer** is a reference held in the agent's context that names some out-of-context material and encodes the condition for reaching it. A skill's description is one; a line in `AGENTS.md` naming a doc is the same object. The pointer's _wording_, not its target, decides when the agent reaches the material — and how reliably. A must-have target behind a weakly worded pointer is a variance bug: sharpen the wording first, and inline the material only if sharpening fails.

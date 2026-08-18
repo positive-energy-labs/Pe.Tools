@@ -52,9 +52,15 @@ it, and after any restart give a 10-20s `live watch` buffer before document ops.
 fixed by re-running the bare form.
 
 **Converge exit 0 is not proof.** One compile error anywhere in the project blocks every apply
-while converge stays green. Before claiming a hot reload landed, check the events journal
-(`<project>\bin\<config>\*.hotreload.events.jsonl`, or the path `live status` names) for
-`emit-failed`, then re-run the changed behavior.
+while converge stays green. Before claiming a hot reload landed, check the events journal for
+`emit-failed` (read the journal path from the command's own output — never hunt log directories),
+then re-run the changed behavior. The evidence gradient, weakest to strongest: compile <
+`Applied` < fresh loaded path < changed behavior — `Applied` alone proves delta acceptance, not
+product behavior; report the strongest evidence actually obtained. Which edits hot-reload vs
+require restart is SDK-owned truth: `docs/HOT_RELOAD.md` in Pe.Revit.Sdk (member-shape,
+WPF/BAML/resource, and startup edits restart). After a restart Revit returns to Home — reopening
+the fixture via the host's document-open op is agent-owned, not a reason to hand back. If status
+reports a pending approval dialog, `pe-revit live approve` is the unblock (dev signing is primary).
 
 ## Host ops and scripts
 
@@ -105,6 +111,22 @@ Every `--json` envelope carries `diagnostics[{code,detail,fix}]` and `nextSteps[
 follow the `fix:` line before inventing your own remedy; but know its limits (a selector refusal
 once prescribed the wrong fix for a dev-sign byte mismatch — when the prescribed fix fails once,
 diagnose bytes/signatures, don't re-run the prescription).
+
+## Guardrails (inherited from the original pe-live-loop skill, still binding)
+
+- Never kill Revit/Rider by process name or same-year heuristic — kill only a pid whose command
+  line verifiably matches the orphaned run. Exact descriptors and PIDs route actions; preserve
+  unrelated worktrees and installed sessions.
+- Never treat an open document as implicit — check status or open it via the host op.
+- Never infer freshness from an isolated terminal build, an old log line, or a matching filename.
+- Host/web-only edits use that package's own dev loop; restart Revit only when the in-process
+  add-in boundary or an SDK verdict requires it.
+
+## Measuring the loop itself
+
+`python tools/loop-metrics.py --since <date>` scores real session history (error%, timeouts,
+blind retries per command family). Run it after doctrine or SDK changes; the delta against the
+2026-08 baseline (`.artifacts/runs/history-mining-20260818/`) is the evidence the loop improved.
 
 ## Reporting
 
