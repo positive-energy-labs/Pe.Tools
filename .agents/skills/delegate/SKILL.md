@@ -1,6 +1,6 @@
 ---
-name: delegation
-description: Use to conserve token limits and speed up work. Use especially for prototyping, sprawling requests, or long-haul sessions. Only use if you're Fable 5, GPT-5.6, or Opus 5.
+name: delegate
+description: Use to conserve token limits, work faster, or perform unrelated background tasks. Use especially for prototyping, sprawling requests, or long-haul sessions.
 ---
 
 # Delegation
@@ -16,27 +16,28 @@ The final ruling is always yours. Drive the decisions, rerun verification, and s
 
 ## Why, two reasons
 - Fable token limits are not enough. ~70% usage in a single day is easy. Opus and Codex have separate limits from Fable and are comparatively much cheaper.
-- Optimize a session: parallelize work, get fresh perspective, slow context window bloat during long sessions. 
+- Optimize a session: parallelize work, handle a one-off, get fresh perspective, slow context window bloat during long sessions. 
 
 ## Model Attributes
 
-- Cost: price per task.
-- Taste: Good at pretty code, UI/UX, architecture, and decisions/opinions/judgement. Good "intuition".
-- Intelligence: Will a big and complicated, but unambiguous task be completed with full marks? How likely is complete success? Can they stay on task without derailing on tangents?
+> Cost: Price per task.
+>
+> Taste: Good "intuition", opinions, pretty code, UI/UX, architecture, and decisions.
+>
+> Intelligence: How likely is full marks on a big and complicated, but unambiguous task? On long-hauls, can they resist derailments and stay on task?
 
-| Model | Cost | Taste | Intelligence | Use For | Usage |
+| Model | Cost | Taste | Intelligence | Use For | Usage Notes |
 |--|--|--|--|--|--|
-| Fable 5 | 10 | 9 | 7 | Design, aesthetics, and decision making. Delegate to sparingly, only for unbounded work and requests that require an opinion | low or medium thinking
-| Opus 5 | 6 | 6 | 4 | Most on the ground work, task must be bounded | medium or high thinking, Opus readily overdoes and gets lost, especially at high think and above.
+| Fable 5 | 10 | 9 | 7 | Design, aesthetics, and decision making. Delegate to sparingly, only for unbounded work and requests that require an opinion | low or medium thinking only. Always expensive but always smart.
+| Opus 5 | 6 | 6 | 4 | Most on the ground work, task must be bounded | medium or high thinking, Opus readily overdoes and derails, especially at high think and above.
 | Codex (GPT-5.6) | 3 | 4 | 8 | Brute force; long slogs and compile smashing. Use where the goal is quantifiable and requires little opinion. | `codex exec` handles model and thinking level. GPT-5.6 does the bare minimum in a good way, it does nothing more than its told. Both a blessing and a curse.
 
 ## Tips
-- Revive *recently finished* agents to prevent repeated work and avoid the lossiness of playing Telephone. This may also be cheaper if within token cache TTL.
-- Instrument-first missions ("census before fix; the census is deliverable #1 even if nothing
-  else lands") beat fix-first missions every time.
-- For parallelism, chunk workstreams by what they touch. Fine on disjoint file surfaces; serialize when both touch the same file or produce the same artifacts for feedback.
+- Revive *recently finished* agents to prevent repeated work and avoid the lossiness of playing Telephone. May also be cheaper if within token cache TTL.
+- For parallelism, chunk workstreams by what they touch. Fine on disjoint file surfaces; consider serializing when both touch the same files, read the same base, or produce the same artifacts for feedback.
 - If all subagents need the same base, then provide it to them. ie do the preliminary research, scaffold or make the fixture, etc. 
 - Delegated task length is critical signal. Alarm bells when the task took longer or the complexity was higher than expected. This indicates something should be fixed systemically and should be surfaced to the user.
+- Instrument-first missions ("census before fix; the census is deliverable #1 even if nothing else lands") beat fix-first missions every time.
 
 ## How To - Delegate to Codex
 - Launch: `codex exec "mission prompt" < /dev/null` — the stdin redirect is non-negotiable (blocks forever otherwise). Run as background task, from the target worktree.
