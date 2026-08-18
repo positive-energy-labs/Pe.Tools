@@ -17,3 +17,16 @@ and for a sandbox session the honest answer is "installed". The bridge still att
 as `sandbox` where session identity matters. `BridgeSessionIdentity` emits one `Information` log
 when it reads a sandbox descriptor so the intentional collapse-to-installed is observable rather
 than silent (IPC-SEAM-SPEC D6).
+
+## Consequences
+
+- Sandbox proving is honest: what a sandbox session exercises is the installed host, port, and service
+  file users actually get. There is no second runtime that could pass while the real one fails.
+- A sandbox session's lifecycle is coupled to installed state. If the installed receipts are stale or
+  drifted, sandbox runs fail on selection before they ever reach product behavior — repair the install
+  rather than debugging the sandbox.
+- Only one session can hold the installed host at a time, so sandbox supervisors and host takeover
+  contend for the same claim. Eviction rules are load-bearing, not incidental.
+- Lane is not identity: consumers asking "which binaries am I running" get `Installed` and must read the
+  bridge's session attribution (`sandbox`) when they need to distinguish the two.
+

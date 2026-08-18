@@ -17,6 +17,16 @@ design-system ledger, not restated here.
 - 2026-07-08 — Kept deliberately: `IBridgeOperationContext` (DI seam, not ceremony), Effect *inside* the host process (implementation, off the boundary), Ajv validation of settings docs (settings are TS-owned).
 - 2026-07-08 — Old pipeline deleted outright, no deprecation: `RevitBridgeOps.cs`, per-op `HostOperationDefinition` classes, `HostOperationsCatalog`, `[ExportTsSchema]`, `JsonSchemaDocumentService` disk writes, Pe.Dev.Cli codegen; TS `host-contracts/src/effect/*`, the generated contract files, `rpc.ts`/`rpc-error.ts`, the host RpcServer switchboard, the `.schemas/` mirror.
 
+### The service seam, install lane, and SEA packaging
+
+- 2026-08-17 — Loopback-only bind is a product invariant, not a preference: every release is a new exe path, so any non-loopback bind re-prompts Windows Firewall once per release.
+- 2026-08-17 — Staged-until-restart `VersionedAddin` is correct behavior, not a bug: it never touches locked files (WPF/ILRepack constraint).
+- 2026-08-17 — A Node SEA cannot static-ESM-import a bare specifier (`ERR_UNKNOWN_BUILTIN_MODULE`); only runtime `createRequire` survives — that is why `pe:sea-require-shim` exists in `apps/host/vite.config.ts` and `apps/pea/vite.config.ts`.
+- 2026-08-17 — `packages/host-contracts/src/vendor/pe-service.ts` is never reformatted: it must stay content-identical to the SDK source, and LF normalization is the only permitted delta. Fix the SDK source and re-vendor; never fork the copy.
+- 2026-08-17 — Dev-lane reuse rule: lane `dev` + `executablePath`/`sourceRoot` matching the checkout → reuse the incumbent, never evict. `TsHostLauncher` reads it from the service file.
+- 2026-08-17 — `/host/status` is diagnostics-only; nothing load-bearing reads it (identity comes from the service file, liveness from SDK `ProbeHealth`).
+- 2026-08-17 — 0.6.10 ships on SDK beta.87; the 11-package family is vendored in `eng/sdk-feed` so a fresh checkout needs no NuGet cache.
+
 ### The `/ops` console
 
 - 2026-08-16 — `/ops` ran a parallel design vocabulary (`ops/primitives.tsx`: Chip · MonoNote · EmptyState · OpSection · KVGrid · Provenance · CoverageBar); the sweep dissolved it onto the one language. Only the Revit-familiar shapes survive ops-owned — TreeView (project browser), DataTable (schedule grid), KVGrid (properties palette) — plus a new `VizChip` for taxonomy spends. `CatHue`/`catVar` deleted at zero consumers.
@@ -53,3 +63,26 @@ design-system ledger, not restated here.
 - (/settings) Join validation issues to the rows their field paths name, once the attention axis is ruled.
 - (/settings) Four variants were built on a worktree behind `?variant=` (2026-08-17) awaiting kaitpw verdicts — harvest the winner or drop the worktree. No design-doc corroboration in this dir; the record is the session memory only. (verify)
 - (/settings) If settings ever grows past a few dozen fields, migrate it to `MasterTable` with `state:` columns and the /schedule-grid pending-strip reviewer pattern.
+- Firewall: stale per-version block rules survive on machines that once ran a pre-0.6.5 non-loopback bind — cosmetic, but nothing prunes them.
+- SEA bundle gap: rolldown leaves `playwright-core` / `chromium-bidi` cjs subpaths as unresolved runtime externals and they are not staged beside `pea.exe` — fires only if pea or the host gains a browser tool.
+- `pe-revit live status` is a dev-lane bridge tool, not an installed-product path-identity proof; either scope its output to say "dev lane" or add an installed-aware freshness proof.
+- `TsHostLauncher` still re-broadcasts the host port via the `PE_TOOLS_HOST_BASE_URL` env var; it should become a service-file read once the C# callers use `Deployment.ServiceBaseUrl(name)`.
+- Dev-takeover deviation: with the fixed 5180 listen port the SDK claim runs post-bind, so a dev host cannot take over a **still-listening** same-port incumbent. Needs the ephemeral-port + file-discovery migration; treated as a manual gate today.
+- Report the remaining `S-*` / `S-DEF-*` rows upstream to Pe.Revit.Sdk `NEXT.md` (they are SDK-owned, not Pe.Tools work).
+- Adopt-when-touched contract gaps — see [op-contract-gaps.md](op-contract-gaps.md).
+- `glance.drawing-set` needs a `Thumbnail`-weight projection on `revit.detail.sheets` (titleblock + viewport bounds) plus a first-class sheet series/discipline field before it can be promoted.
+- Review `revit.apply.command.execute` as an ExpertOnly candidate — powerful and unbounded, and scripting already covers the "no op fits" case.
+- `revit.catalog.concept-evidence` / `revit.catalog.parameter-evidence` are script-candidates under ADR 0003 if usage stays rare.
+- Client-side glances in `apps/web/src/ops/glance/` stay UI surfaces regardless of which ones get promoted to first-class ops.
+- Decide how source-package sharing reuses the `Pe.Revit.Scripting` pipeline without weakening the stable single-file lane.
+- Decide where an out-of-proc host-composition runner lives, for scripts needing host RPC joins outside a bridge request.
+- Add the parameter-service cache / `parameters.txt` path to host status or a focused host operation if agents keep needing it.
+- Defer a separate browser resolver, browser field-options endpoint, browser-specific UI activation, and browser filters on unrelated operations until usage proves them.
+- Evaluate dedicated `revit.catalog.views` / `revit.catalog.sheets` only after project-browser/project-index/schedule provenance patterns settle.
+- Promote repeated `host_operation_call` patterns into convenience tools only after usage proves they earn context.
+- `host-contracts codegen:check` targets the untargeted host on 5180, so an SDK sandbox (own bridge, absent from that session list) can silently be compared against RRD; generator accepts `--session` but there is no sandbox-to-host catalog target — never treat an untargeted check as isolated proof. (rehomed from param-tables ledger 2026-08-17)
+- No first-class session target for a second host process doing Family Types calls; host service identity is shared across local hosts. (verify) (rehomed from param-tables ledger 2026-08-17)
+- Pe.Revit.Sdk defects to report upstream, not expand into SDK changes here: `pe-revit test fresh` discovery misses `Pe.Revit.Tests` without `--project` though it resolves as `PeProjectKind=RevitTests`; `sandbox start` materialization failure names a `state.json` never persisted so `status`/`restart` return `unknown-id`; `Pe.RuntimeAcceptance.Addin` duplicate-assembly `FileLoadException` blocks a test behind a manual dialog; beta.66 companion pins not consistently restorable (R24 falls back to `dev.9`, R26 tops out at beta.57) so cross-version proof is source-compatible only. (rehomed from param-tables ledger 2026-08-17)
+- Revisit general JSON IntelliSense: through refactors some providers may no longer be wired into local schema writes; may extend to schema generation generally. (folded from repo-backlog-capture.md)
+- Revisit commit `3e3fa88`: shared schedule profile usage appears to break JSON IntelliSense with nullable/type issues, and `SchedulePreviePanel` crashes around `("Order", sg => sg.SortOrder.ToString())`. (folded from repo-backlog-capture.md)
+- Broad directions this cluster is aimed at: strong AI entrypoints into Revit; portable Revit entities (families, schedules) that move across documents/versions with a merge story; a stable multitenant `Pe.Host` arbitrating between `revit.exe`, local files, the local server/sandbox, and frontend/AI.

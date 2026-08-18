@@ -43,8 +43,25 @@ restated here.
 - 2026-08-16 — An owed approval renders at the tool marker where the evidence is, not in a gutter — the chat has no gutter, and putting the decision beside its evidence is R3's spirit.
 - 2026-08-16 — A dangling target pin wears the ALARM: the pin is a claim ("this chat acts against session X") and the world no longer contains X, so the claim disagrees with reality — the drift family's top rank. Counter-reading (nothing the *model* said is contradicted) would fall back to caution; one line in `TARGET_RAIL_COLOR` (`Lens.tsx`).
 
+### Local runtime / auth shape (promote to ADR only if adopted)
+
+- 2026-08-17 — The browser UI is a controller/view, never the model-call proxy: `local Pea -> browser tab -> Gateway/provider` makes the tab backend infrastructure, and tab close, refresh, throttling, or auth expiry would kill a live Revit-attached run. (folded from pea-beta-local-auth-architecture.md, deleted — git history)
+- 2026-08-17 — Local Pea owns Revit authority plus ACP session/tool/stream lifecycle, reconnect, and cancellation; a hosted web UI reaches it only through a browser-safe loopback gateway. (folded from pea-beta-local-auth-architecture.md, deleted — git history)
+- 2026-08-17 — Hosted web is a lazy login broker and server-side Gateway authority only; it never becomes the running agent backend. (folded from pea-beta-local-auth-architecture.md, deleted — git history)
+- 2026-08-17 — Auth handoff is `WorkOS callback -> Pea Cloud -> localhost callback` with a one-time code (not a durable URL credential), so Pea Cloud holds WorkOS secrets and CORS never becomes a runtime-auth seam. (folded from pea-beta-local-auth-architecture.md, deleted — git history)
+- 2026-08-17 — Loopback transport auth is a per-launch local connection token, not account auth; Gateway `msk_...`/provider keys stay server-side and are never shipped to browser or installed client. (folded from pea-beta-local-auth-architecture.md, deleted — git history)
+
+### Mastra dependency posture
+
+- 2026-08-17 — When Mastra ships a native equivalent, delete the Pe adapter rather than keeping it; precedent is commit `2b96990` (+2,546/−9,195), which deleted the Pe-owned browser/protocol stack for native `AgentController`. (folded from mastra-purge-audit-2026-07-08.md, deleted — git history)
+- 2026-08-17 — Mastra stays a dependency; Pe.Tools never recreates controller/session/thread/model/permission/storage/TUI/ACP mechanics (`@mastra/libsql` `LibSQLStore`/`ThreadStateLibSQL` especially). (folded from mastra-purge-audit-2026-07-08.md, deleted — git history)
+- 2026-08-17 — The keep-list survives every purge because it is Pea product identity, not glue: tool access policy, storage/memory path profiles, prompt/tool transparency capture, `/pe/messages` attachments, and the same-thread `switchThread` guard. (folded from mastra-purge-audit-2026-07-08.md, deleted — git history)
+- 2026-08-17 — Each keep-list item names its own upstream delete-trigger (native `sendMessage({content, files})`, a no-controller model resolver export, same-thread `SessionThread.switch` no-op, native display/inspect state, a native permission hook over AgentController tools). (folded from mastra-purge-audit-2026-07-08.md, deleted — git history)
+
 ## Tried & rejected
 
+- 2026-08-17 — AG-UI as the browser event protocol, evaluated against ACP on a full HarnessEvent-by-event adapter map: its native `STATE_SNAPSHOT`/`STATE_DELTA` and run lifecycle are real wins, but plans, partial tool output, shell output, and tool-error metadata all fall back to `CUSTOM pea.*` events that only a Pea-aware frontend can render. Declined. (folded from acp-agui-mastra-harness-adapter-report.md, deleted — git history)
+- 2026-08-17 — ACP-shaped session/update is the transport Pea speaks: native `tool_call`/`tool_call_update` carry kind, status, and raw input/output in one card, and `plan` is native. Pea-only facts ride ACP `_meta["pe.tools/workbench.update"]`, never new top-level fields. (folded from acp-agui-mastra-harness-adapter-report.md, deleted — git history)
 - 2026-07 — One broad "context dump" operation for Revit orientation: expensive, stale-prone, and it removes the agent's ability to choose a zoom path. Replaced by the bounded-projection ladder.
 - 2026-07 — Exposing raw Revit API object graphs / all-model dumps to Pea: `FilteredElementCollector` rewards native filters before extraction, and a dump path is both slow and architecturally wrong.
 - 2026-07 — A generated TypeScript wrapper per Revit host operation: recreates the context-size problem in code. Metadata-driven discovery + generic execution won.
@@ -69,3 +86,44 @@ restated here.
 - Confidence-threshold auto-routing (Extend's pattern): auto-accept high-confidence cells, flag low-confidence for review.
 - Buy-triggers to re-open the build-vs-buy question, none currently true: 3+ heterogeneous agent backends behind one UI (ag-ui's normalization earns its weight); wanting CopilotKit's managed cloud tier; standardizing the backend on LangGraph.
 - Nothing counts owed approvals in the chat — with three pending in a long thread, nothing outside the transcript says "3". Needs an `owed` outcome kind or a mapdial approval-tick count, both gated on outcomes gaining their verb/target link (design-system ledger, Owed).
+
+### Runtime hardening (Pea/Peco)
+
+- 2026-08-17 — Startup policy still has no settled per-surface default (new draft / continue most recent / explicit load); stock TUI, web, ACP, and beta TUI must not each invent their own semantics. (folded from pea-runtime-review-findings.md, deleted — git history)
+- 2026-08-17 — Pea/Peco product boundary needs tightening until Pea's installed graph is explainable from product intent: product-only imports, CLI exposure, bundled skills, tool profiles, native dependency shape. (folded from pea-runtime-review-findings.md, deleted — git history)
+- 2026-08-17 — Undecided whether Pe needs its own explicit runtime queue (visible state, cancellation, replay) beyond Mastra follow-up for non-running busy/suspended states; current behavior is honest but not single-flight. (folded from pea-runtime-review-findings.md, deleted — git history)
+- 2026-08-17 — Web transport has no exactly-once snapshot/event policy: command responses return full state while SSE also streams non-idempotent transcript deltas. Blocks calling the web workbench a hardened surface. (folded from pea-runtime-review-findings.md, deleted — git history)
+- 2026-08-17 — Keep the runtime test suite sparse; add tests only at high-signal seams (startup/lock policy, ledger replay, continuation boundaries, product policy, transport state consistency). (folded from pea-runtime-review-findings.md, deleted — git history)
+- 2026-08-17 — Promote settled installed-payload requirements (native storage sidecar staging, boot-smoke of the staged executable) into `docs/BUILD.md` once native sidecar policy is final. (folded from pea-runtime-review-findings.md, deleted — git history)
+
+### LSP (deferred, not an approved commitment)
+
+- 2026-08-17 — LSP is deferred exploration: `dotnet format --verify-no-changes --severity info` already covers Peco style/Problems-panel diagnostics, so do not promote LSP as the first-class diagnostics path. (folded from agent-lsp-mvp.md, deleted — git history)
+- 2026-08-17 — If built, the Pea tool surface stays tiny (`script_lsp_status`, `script_lsp_inspect`, `script_lsp_diagnostics`, `script_lsp_signature_help`, later `script_lsp_find_symbol`); broad LSP/refactor tools go to a scoped subagent only, never main context. (folded from agent-lsp-mvp.md, deleted — git history)
+- 2026-08-17 — Proof bar before any installer work: C# server starts from an explicit path with no PATH dependency, loads a generated `.csproj`, resolves Pe + RevitAPI assemblies, and surfaces XML docs from adjacent `.xml` files. Pea would own startup/config/workspace/recovery; no manual user config. (folded from agent-lsp-mvp.md, deleted — git history)
+- 2026-08-17 — Stop condition: pause productization if the C# server needs a full .NET SDK / Rider / VS to package — Pea users are Windows/Revit users, not assumed C# developers. (folded from agent-lsp-mvp.md, deleted — git history)
+
+### Proof and support infrastructure
+
+- 2026-08-17 — No evaluation harness proves Pea got smarter: owed are snapshot tests over generated maps, token-count comparisons (JSON vs compact markdown vs TOON), semantic round-trip tests for TOON shapes, and routing evals asserting the expected operation sequence for realistic operator questions ("what's visible in this view?", "are these elements scheduled?"). (folded from next-steps.md, deleted — git history)
+- 2026-08-17 — Black-box `talk_to_pea` should be a standing product feedback lane: ask normal BIM-manager questions, not tool-shaped prompts, and check whether Pea routes correctly. (folded from next-steps.md, deleted — git history)
+- 2026-08-17 — Operation results do not yet suggest next operations from metadata/projection; the ladder is declared but not self-advertising at the result edge. (folded from next-steps.md, deleted — git history)
+- 2026-08-17 — A DuckDB/Parquet discovery cache (cross-model analytics, persistent inventory, historical snapshots) is deliberately deferred until repeated persisted-data questions exist, and must never sit in the live Revit bridge path. (folded from next-steps.md, deleted — git history)
+- 2026-08-17 — JSON Schema tooling upgrade is support infrastructure to use selectively — settings/profile validation, generated schema docs, schema zoom paths, structured-output fallback — never to replace RevitData DTOs or encode Revit semantics. (folded from next-steps.md, deleted — git history)
+
+### Pea follow-ups (from repo backlog)
+
+- 2026-08-17 — Give Pea a path to SDK session-journal events (investigated 2026-07-13; the SDK owns journal meaning, Pea stays a thin adapter): add `action=logs` to `pe_sandbox` proxying `pe-revit sandbox logs --id X --tail N --json` (~15-25 lines in `sandbox-route.ts` + ~20-30 in the tool); pass the `firstFailureEvent` field through `presentSandboxEnvelope` instead of dropping it (~5 lines); fix the two `pe_status` hints that point at `pe_logs` for disconnect/session causes — those causes live in `events.jsonl`, which `pe_logs` (product Serilog only, correctly) never reads. Do NOT grow a TS journal reader in Pe.Tools and do NOT merge the two log worlds into one tool — two owners, two formats, one capability one path. (folded from repo-backlog-capture.md)
+- 2026-08-17 — Reevaluate a readonly/oracle posture only after real use proves the UX/context cost is worth it. (folded from repo-backlog-capture.md)
+- 2026-08-17 — Pursue small public/upstreamable MastraCode TUI policy seams before considering any Pea TUI fork. (folded from repo-backlog-capture.md)
+- 2026-08-17 — Adapt future Positive Energy auth into MastraCode-compatible env/settings/auth-storage paths before replacing model/auth resolution. (folded from repo-backlog-capture.md)
+- 2026-08-17 — Reenable/use MastraCode hooks under `.pea` before inventing a Pea hook manager. (folded from repo-backlog-capture.md)
+- 2026-08-17 — Add more Pea processors for Revit/operator safety, JSON profile validation feedback, or host-operation steering only after the OpenAI Responses processor is proven. (folded from repo-backlog-capture.md)
+- 2026-08-17 — Keep MCP disabled by default until a concrete Pea runtime use case is not covered by public host operations/tools. (folded from repo-backlog-capture.md)
+- 2026-08-17 — Chat attachments do not hydrate route-owned document state (acceptance PDF was parsed locally); `parse_spec` also needs `LLAMA_CLOUD_API_KEY` and fails opaquely without it. (verify) (rehomed from param-tables ledger)
+- 2026-08-17 — `ask_user` transcript renderer collapses custom questions/options into generic approval buttons; route review stays the human decision surface until it preserves the option contract. (verify) (rehomed from param-tables ledger)
+- 2026-08-17 — Add liteparse, markitdown, or LlamaParse support only if spec-sheet parsing becomes necessary for Family Foundry profile authoring. (folded from repo-backlog-capture.md)
+- 2026-08-17 — Add parameter service cache / `parameters.txt` path to host status or a focused host operation if agents keep needing it. (folded from repo-backlog-capture.md)
+- 2026-08-17 — Defer separate browser resolver, browser field-options endpoint, browser-specific UI activation, and browser filters on unrelated operations until usage proves them. (folded from repo-backlog-capture.md)
+- 2026-08-17 — Evaluate dedicated `revit.catalog.views` and `revit.catalog.sheets` only after project-browser/project-index/schedule provenance patterns settle. (folded from repo-backlog-capture.md)
+- 2026-08-17 — Promote repeated `host_operation_call` patterns into convenience tools only after usage proves they earn context. (folded from repo-backlog-capture.md)

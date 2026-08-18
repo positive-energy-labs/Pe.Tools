@@ -8,5 +8,3 @@ Live-proven Revit MEP placement facts (2026-07) — behaviour observed against r
 - A client-side script timeout does NOT abort the bridge op (PrepHard "timed out" at 120s and completed server-side) — grade before re-running.
 - `document.open` on a heavy linked model holds the bridge ~44 min while the Manage Links dialog is up; it completes the moment it is answered. A fresh Revit process is the DLL-swap window: copy the new Placement DLL into the addin folder BEFORE the first script references it.
 - Fitting APIs are not the hard part: `NewTakeoffFitting` / `NewElbowFitting` / `ConvertDuctPlaceholders` all worked whenever junction geometry was exact-by-construction.
-- Skill loading is silently fragile: a `description:` frontmatter value containing `: "` is parsed by gray-matter as an invalid YAML mapping and the skill is dropped without warning.
-- `talk_to_pea` prompts with embedded double quotes crash the PowerShell 5.1 arg path (exit 255).

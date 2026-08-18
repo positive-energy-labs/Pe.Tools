@@ -58,14 +58,63 @@ Two orthogonal relationship types (both belong in the snapshot):
 22. `ParameterUtils.IsBuiltInParameter(param.Id)` is the reliable built-in test.
 23. Built-ins can't be renamed — backlink instead: set built-in's formula = shared param name
     (IsInstance must match).
-24. (FF-internal) LogEntry is terminal — not relevant to new code.
-25. Collecting per-type values from a PROJECT doc needs temp FamilyInstance + activating each
+24. Collecting per-type values from a PROJECT doc needs temp FamilyInstance + activating each
     symbol in a rolled-back transaction, and cannot get formulas — snapshot from the FAMILY doc.
-26. **Transaction wall:** `EditFamily` throws while the project document is modifiable (an open
+25. **Transaction wall:** `EditFamily` throws while the project document is modifiable (an open
     transaction); `LoadFamily` into a project throws while a transaction is open on it; and
     `LoadFamily` into a family document silently returns false without a transaction open on it.
-27. `RenameParameter` auto-rewrites dependent formulas, and per-type values survive the rename
+26. `RenameParameter` auto-rewrites dependent formulas, and per-type values survive the rename
     (live-proven); this is the basis of rename-as-provenance / `wasNamed` in `FamilyModel` migration.
+27. **Picked reference-line endpoint work planes are not publicly constructible** (2026-08-17, folded
+    from docs/context/family-model-handoff-2026-07-15.md, deleted — git history): every public
+    `SketchPlane.Create` route rejects a reference line's endpoint references as non-planar, so
+    Revit's public API cannot recreate that relationship. `Resources/Native/2025/puck.rfa` is
+    therefore an intentional native compiler resource, not a temporary workaround.
+
+## Authored-parameter scoping (derived from documentation — NOT live-proven)
+
+2026-08-17, folded from `docs/context/rvt-api/REVIT_PARAMETER_METADATA_RESOLUTION.md` (deleted — git
+history). Everything above this heading is live-verified; this section is **not** — it was derived
+from Autodesk docs plus a hand-run project-parameter probe, and it fails the live-proof bar. Treat it
+as a working mental model that tells you which experiment to run, never as a fact you may assert.
+No proof test exists; if a claim here is re-derived or contested, pin it in `Pe.Revit.Tests/Proofs/`.
+
+Four authored parameter kinds, on two scopes (built-ins are adjacent and are none of these four):
+
+- **Project-scoped**, living in the `.rvt`: **Project Parameter (PP)** and **Project Shared
+  Parameter (PSP)**. They do not travel with the family when it is saved out, cannot be associated
+  to geometry/dimensions/formulas, and start empty. They are cheap, keep the family editor
+  uncluttered, and are the only kinds whose model-group behaviour can be controlled
+  (`InternalDefinition.SetAllowVaryBetweenGroups`). Category binding is mandatory for both.
+- **Family-scoped**, living in the `.rfa`: **Shared Parameter (SP)** and **Family Parameter (FP)**.
+  They save and transfer with the family, support instance and type defaults, and are the only kinds
+  that can drive dimensions, arrays, connectors, and formulas. Cost: parameter-count clutter, regen
+  cost from parameter-driven constraints, and no easy cross-family coordination of Type/Instance or
+  properties group.
+
+Decision tree for which to create:
+
+1. **Is it schedulable?** No → `Family Parameter`.
+2. Yes → **is it tag-able** (and will it exist across other families/tags)? No → `Project Parameter`.
+3. Yes → **do you need a default value for it, OR must it persist on the family when saved out?**
+   No → `Project Shared Parameter`. Yes → `Shared Parameter`.
+
+Two shortcuts that reach the same answer: project-specific-only facts (design conditions, an
+architectural name) are project-scoped; anything that must be *associable* (dims, formulas, arrays,
+labels, connectors) is family-scoped.
+
+Merge behaviour when a shared parameter exists BOTH as an SP on the family and a PSP in the project
+— a situation to avoid rather than design for; the merge is a consistency safeguard, not a feature.
+The shared-parameter definition provides `Name` and datatype; the PSP provides category binding and
+group behaviour; the family-side SP provides the Type/Instance designation; the PSP overrides the SP
+for `propertiesGroup` and tooltip. A PSP's Type/Instance setting is ignored outright when the family
+already carries that shared parameter.
+
+One API clarification that IS reliable: once a binding exists, iterating `doc.ParameterBindings`
+yields `InternalDefinition` keys, so shared-ness on the project side resolves through
+`SharedParameterElement`/GUID — never by expecting the binding key to be an `ExternalDefinition`.
+`BindingMap.Insert` returns false when the binding already exists and `ReInsert` returns false when
+it does not; one definition cannot be instance-bound and type-bound at once.
 
 ## FF UX verdicts (keep / kill)
 

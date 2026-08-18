@@ -47,6 +47,9 @@ public static class ElectricalPanelScheduleQueryCollector {
         View? activeView,
         List<RevitDataIssue> issues
     ) {
+        // FOOTGUN: a panel-schedule probe reads empty when Revit is left in template-edit view —
+        // the active view is then the template editor, not a PanelScheduleView instance, so this
+        // resolves to zero schedules even though the user sees a populated schedule on screen.
         if (activeView is PanelScheduleView schedule) {
             return new QueryResolution(
                 ElectricalPanelSchedulesQueryKind.CurrentActiveView,
@@ -231,6 +234,8 @@ public static class ElectricalPanelScheduleQueryCollector {
         List<RevitDataIssue> issues
     ) {
         try {
+            // FOOTGUN: PanelScheduleView.GetPanel() and GetTemplate() return ElementId, not the
+            // element (R25) — they must be resolved through doc.GetElement before use.
             var panel = doc.GetElement(schedule.GetPanel()) as FamilyInstance;
             var template = doc.GetElement(schedule.GetTemplate()) as PanelScheduleTemplate;
 

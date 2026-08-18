@@ -26,15 +26,21 @@
 #     the new row's 105 columns). No sibling row in any other table is required.
 #   * INSERT INTO System by cloning an existing row differs from its source in exactly 3 of 237
 #     columns (Number, Identifier, Description) and changes no other table.
-#   * Room.Identifier and System.Identifier are Jet COUNTERs assigned automatically; the [Number]
-#     of both is the PRIMARY KEY (unique, NOT NULL) and must be supplied.
+#   * FOOTGUN: Room.Identifier and System.Identifier are Jet COUNTERs assigned automatically --
+#     NEVER supply one on INSERT. The PRIMARY KEY of both is [Number] (unique, NOT NULL) and it IS
+#     yours to supply. Getting this backwards is the classic .r10 corruption. Proof:
+#     eval/rhvac/project-a/UPSERT-PROBE.md.
+#   * FOOTGUN: this lane reads its column lists from the schema at RUNTIME, never from a baked list.
+#     Column counts drift across RHVAC releases -- System is 237 columns in the firm template and
+#     240 in projectA. Proof: eval/rhvac/template/SYNC-PROOF.md (residual gap 5).
 #   * The schema declares NO foreign keys, so DELETE cascades to nothing and orphans nothing the
 #     engine enforces -- which is why this lane validates Room.SystemNumber itself.
 #   * Opening the file read-only through the Jet ODBC driver does not alter a single byte.
 #
 # UNPROVEN:
 #   * Whether Elite RHVAC opens a file with SEEDED SYSTEMS and recalculates cleanly. (Surgical
-#     room UPDATE has been confirmed live -- see DECISIONS.md -- the system path has not.)
+#     room UPDATE has been confirmed live -- docs/features/takeoffs/LEDGER.md 2026-08-14 (live
+#     RHVAC) -- the system path has not; see eval/rhvac/template/SYNC-PROOF.md residual gap 1.)
 #   * RHVAC's own invariants (System/Results totals left stale by design, duct-design references)
 #     are not validated here; RHVAC owns recalculation.
 # ---------------------------------------------------------------------------------------------

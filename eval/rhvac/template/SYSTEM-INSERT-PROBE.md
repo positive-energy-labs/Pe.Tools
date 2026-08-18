@@ -101,7 +101,7 @@ project file the engineer must review seeded systems before trusting loads.
 
 1. **Not proven through Elite RHVAC itself.** As with the room UPDATE probe, this is Jet-layer
    integrity only. RHVAC opening a file with a cloned system and recalculating cleanly is a manual
-   check per export. (The room-side equivalent has since been closed live — see `DECISIONS.md` —
+   check per export. (The room-side equivalent has since been closed live — see `docs/features/takeoffs/LEDGER.md` —
    which is weak evidence in the same direction, not proof.)
 2. **`Room.SystemNumber` → `System.Number` stays unenforced.** Jet accepts an orphan room. The sync
    lane validates the reference itself, before writing.

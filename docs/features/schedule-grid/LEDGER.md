@@ -1,6 +1,7 @@
 # schedule-grid ledger
 
 ## Decided
+- 2026-08-17 — electrical panel-schedule lore consolidated to `GROUNDING-REVIT-ELECTRICAL.md` (from 5 `docs/context/rvt-api` files, 1,666→~150 lines; git history has the long forms).
 - 2026-08-16 — Reviewing lives wholly in the pending strip, not in-grid: the cell grammar forbids icons in data cells and `StateCell` row scale is one clipped line, so per-cell approve/deny had nowhere honest to go. Typing in the grid still stages directly.
 - 2026-08-16 — Typing over a pea proposal SEVERS it and stages your value (the old grid *masked*, blocking edits until review) — "typing beats proposing" (SURFACE-PHILOSOPHY §3) made an actual sever here first.
 - 2026-08-16 — Column-level facts (`isCalculated`, `isCombinedParameter`) ride a header suffix (`· ƒ`, `· comb`) plus the column title — `ColumnBase.reason` was already declined for takeoffs; this route is a second data point, not a re-litigation.

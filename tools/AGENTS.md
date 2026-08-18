@@ -7,20 +7,20 @@ Yaak from this repo on Windows.
 
 - This repo does **not** contain the live Yaak workspace data by default.
 - The repo only contains a bootstrap script:
-  [yaak/bootstrap_pe_host_workspace.py](C:/Users/kaitp/source/repos/Pe.Tools/tools/yaak/bootstrap_pe_host_workspace.py)
+  [yaak/bootstrap_pe_host_workspace.py](yaak/bootstrap_pe_host_workspace.py)
 - Running that script creates or updates a workspace in the user's Yaak data
   store.
 
-## Default Yaak Storage On This Machine
+## Default Yaak Storage (per-user, outside the repo)
 
 - Workspace/config database:
-  `C:\Users\kaitp\AppData\Roaming\app.yaak.desktop\db.sqlite`
+  `%APPDATA%\app.yaak.desktop\db.sqlite`
 - Blob store:
-  `C:\Users\kaitp\AppData\Roaming\app.yaak.desktop\blobs.sqlite`
+  `%APPDATA%\app.yaak.desktop\blobs.sqlite`
 - Stored responses:
-  `C:\Users\kaitp\AppData\Roaming\app.yaak.desktop\responses`
+  `%APPDATA%\app.yaak.desktop\responses`
 - App/runtime install:
-  `C:\Users\kaitp\AppData\Local\Yaak`
+  `%LOCALAPPDATA%\Yaak`
 
 Do not assume the workspace exists as a tracked file in the repo unless the
 user has explicitly enabled Yaak Directory/Git Sync.

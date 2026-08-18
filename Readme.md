@@ -1,45 +1,34 @@
 # Pe.Tools
 
-A suite of Revit add-ins and supporting libraries.
+Revit tooling for MEP engineering designers, built around **Pea** — a coding agent that operates Revit.
 
-For build, verify, test, package, install, publish, and environment recovery commands, start with [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md).
+## Surfaces
 
-## Add-ins
+- **Pea** — the agent. `pea agent` is the operator workbench; `pea --prompt` runs one headless turn.
+  Pea drives Revit through typed host operations for quick actions and scripting for real work.
+- **Pods** — shareable add-ins. Pea builds them on top of host operations and the `Pe.Revit.*` packages;
+  users supply intent, share Pods, and ask Pea to adapt them.
+- **Web routes** — the visual surfaces served by the Pe.Tools frontend:
+  - `/family` — family profiles and Family Foundry work
+  - `/takeoffs` — takeoff review and measurement
+  - `/ops` — the live host-operation catalog and glance views
+  - `/design-system` — the executable design authority for the UI language
+- **Revit scripting** — a persistent workspace under `Documents\Pe.Tools\scripting\workspace` for daily API
+  probes and small automation loops. Author single-file scripts under `src/` and run `pea script src\MyProbe.cs`;
+  requests route through `Pe.Host` over the private Host/Revit bridge and execute via `ExternalEvent`.
+  Scripting v1 is single-session and synchronous: no SSE, no cancellation, no multi-file execution.
 
-- Views Palette, browse all the views in a document, open them, and preview information about them.
-- Command Palette, browse all the commands in the document and run them.
-- Family Palette, browse all the families in the document and pick one to place or open.
-- Family Elements Palette, browse all the elements in a family and pick one to edit.
-- FF Manager, a command for managing individual families.
-- FF Migrator, a command for bulk processing families.
-- FF Param Aggregator, a command for aggregating parameter data across an entire project.
+## Building and running
 
-## Revit Scripting
+Everything about build, verify, test, package, install, publish, and the live dev loop lives in
+[`docs/BUILD.md`](docs/BUILD.md). Read it before touching anything build- or dev-loop-related — the Revit
+tooling setup is bespoke, and the live dev session is expensive state.
 
-This repo includes a Revit scripting lane aimed at daily API probes and small automation loops without growing the main
-add-in assembly.
+Use the SDK control plane (`pe-revit live`, `pe-revit test fresh|attached`) rather than hand-orchestrating Revit.
 
-Current supported path:
+## Where to read next
 
-- bootstrap a persistent workspace under `Documents\Pe.Tools\scripting\workspace`
-- author single-file container scripts under `src/`
-- run them from the CLI with `pea script src\MyProbe.cs`
-- or call `Pe.Host` through the shared scripting client/contract
-- receive final buffered output and structured diagnostics in one response
-
-Transport posture:
-
-- `Pe.Host` is the public scripting surface for frontend and CLI callers
-- `pea` posts to host HTTP
-- `Pe.Host` forwards scripting requests over the private Host/Revit WebSocket bridge
-- the Revit runtime executes through `ExternalEvent`
-- scripting v1 requires exactly one connected Revit bridge session
-
-Current non-goals:
-
-- no SSE or async execution sessions
-- no cancellation
-- no multi-session scripting
-- no multi-file execution
-- no source-package execution
-- no arbitrary local file execution outside the workspace
+- [`AGENTS.md`](AGENTS.md) — operating rules and shared vocabulary
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — target architecture and product direction
+- [`docs/adr/`](docs/adr/) — decisions that constrain more than one feature
+- `docs/features/<name>/LEDGER.md` — per-surface decisions, rejected paths, and open work

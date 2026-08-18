@@ -7,9 +7,71 @@ using System.Text.RegularExpressions;
 namespace Pe.Shared.RevitData.Families;
 
 /// <summary>
-///     Portable authored truth for one family. This contract intentionally contains no ElementIds,
-///     Revit API objects, or Family Foundry recovery metadata; capture must reconstruct it from the document.
+///     Portable authored truth for one family — the ONE portable profile schema (`family.json`).
+///     This contract intentionally contains no ElementIds, Revit API objects, or Family Foundry
+///     recovery metadata; capture must reconstruct it from the document.
 /// </summary>
+/// <remarks>
+///     <para>
+///         Locked shape decisions (2026-08-17, folded from docs/features/family/family-model-spec.md,
+///         deleted — git history). These are schema law, not style; each was paid for by a proof.
+///     </para>
+///     <para>
+///         <b>Name-keyed maps, never arrays, and NAMES ARE IDENTITY.</b> Every named section is a
+///         dictionary. There are no raw Revit IDs anywhere in this contract, which is what gives
+///         FFMigrator merge-by-name for free and makes structural dedupe possible.
+///         <see cref="FamilyParameters" />, <see cref="SharedParameters" />, and <see cref="Types" />
+///         are keyed by their EXACT Revit names — never invent a second slug identity for a
+///         parameter like `_conn size` or for a family type. Model constituents
+///         (<see cref="Planes" />, <see cref="Frames" />, <see cref="Solids" />,
+///         <see cref="NestedFamilies" />, <see cref="Connectors" />, <see cref="Arrays" />) use
+///         logical slugs plus an optional Revit/display `label`.
+///     </para>
+///     <para>
+///         <b>value XOR formula</b> per parameter (<see cref="FamilyModelParameter.Value" /> /
+///         <see cref="FamilyModelParameter.Formula" />), schema-enforced. A formula-driven parameter
+///         may not also appear in a per-type value under <see cref="Types" /> — that is an
+///         authoring-time error, deliberately not an apply-time one. Renames ride on the parameter
+///         entry via <see cref="FamilyModelParameter.MappedFrom" />, never a parallel migration block.
+///     </para>
+///     <para>
+///         <b>One reference micro-DSL:</b> `param:`, `plane:`, `frame:`, `face:`, `nested:`,
+///         `dependency:`. Parameter and type references carry exact Revit names; other targets carry
+///         logical slugs. Face refs are `face:&lt;solid&gt;.&lt;FaceName&gt;`. <b>Portable literals</b>
+///         (unit-carrying scalars such as `"1/2in"`, `"0deg"`, and closed axis tokens such as `"-Y"`)
+///         are canonical truth — one grammar, shared by the C# and TypeScript consumers, non-negotiable
+///         because a human has to be able to hand-author this file with only schema/LSP help.
+///     </para>
+///     <para>
+///         <b>Closed v1 geometry vocabulary.</b> Solid kinds are exactly <see cref="FamilySolidKind" />
+///         and their void variants, each enumerating its named faces; reference planes are axis plus
+///         param-driven offset only. New kinds arrive as enum members, never as an open geometry
+///         language. <see cref="FamilyModelFrame" /> is the universal spatial primitive shared by
+///         solids, connectors, nested instances and Revit apply. Every v1 solid is placed on
+///         `frame:family`, centered left/right and front/back, starting at the family bottom plane
+///         and extending toward +Z; other placement and type-conditional constituent existence are
+///         unsupported, not inferred. The resolution order and axis signs are executable in
+///         <see cref="FamilyModelEvaluatorConventions" /> — read them there, not from prose.
+///     </para>
+///     <para>
+///         <b>Honesty over completeness.</b> <see cref="Unmodeled" /> is where captured state the
+///         schema cannot express lands, as raw facts plus a reason code. It is a ledger, not an
+///         executable escape hatch: the compiler refuses to apply it, and behavioural roundtrip
+///         equivalence may be claimed only when it is empty for the tested contract. Nothing may be
+///         persisted in extensible storage, hidden parameters, or `DataStorage` to make capture or a
+///         test succeed. Symmetrically, no resolved value, provenance, confidence, generated array
+///         member, or Revit identifier belongs in this contract — those live in the evidence
+///         projection beside it, which is never accepted as build input.
+///     </para>
+///     <para>
+///         <b>Minimal surface.</b> <see cref="RoomCalculationPoint" />'s entire authored surface is
+///         `{ "enabled": true }` (the PE one-foot convention resolves direction per placement type);
+///         <see cref="Types" /> stay metadata-free, the first in document order being the preview
+///         type; <see cref="FamilyModelParameter.PropertiesGroup" /> is the one parameter grouping
+///         contract and no UI may add a second. Add a knob only when a checked-in family cannot be
+///         expressed without it.
+///     </para>
+/// </remarks>
 [JsonObject(MemberSerialization.OptIn)]
 public sealed class FamilyModel {
     [JsonProperty("family", Required = Required.Always)]
@@ -23,6 +85,13 @@ public sealed class FamilyModel {
     public Dictionary<string, FamilyModelSharedParameter> SharedParameters { get; init; } =
         new(StringComparer.Ordinal);
 
+    /// <summary>
+    ///     Family type name → (exact parameter name → per-type value). Per-type OBJECTS, deliberately
+    ///     not the old parameter-row-plus-dynamic-type-columns shape: empty and uniform types stay
+    ///     visible and are preserved rather than collapsing away. A canonical `family.json` carries no
+    ///     deletion tombstones — patch semantics (omission = unchanged, `null` = delete) belong to the
+    ///     FFMigrator patch, never to this document.
+    /// </summary>
     [JsonProperty("types")]
     public Dictionary<string, Dictionary<string, string>> Types { get; init; } = new(StringComparer.Ordinal);
 

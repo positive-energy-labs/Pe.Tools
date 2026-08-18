@@ -205,6 +205,10 @@ internal static class TsHostLauncher {
     }
 
     // SDK-owned probe (public since beta.98) — one implementation, never re-rolled per consumer.
+    // FOOTGUN (live-verified 2026-07-03): a stale dev-root Pe.Host.exe left over from the deleted C#
+    // ASP.NET host LISTENS but 404s /host/status, so the port is open while product identity is
+    // unprovable. The fix is `vp pack` in apps/host and copying the TS-built Pe.Host.exe into the dev
+    // host root. A source-run `jiti src/index.ts` host or a stale dev root is never lane proof.
     private static bool ProbeHealth(int port) =>
         InstalledProduct.ProbeHealth(port, HostProcessIdentity.HealthPath);
 

@@ -21,7 +21,7 @@ import { defineConfig } from "vite-plus";
  *
  * Copied verbatim from apps/host/vite.config.ts: pea boots the SAME Mastra runtime
  * (createPeaRuntime -> `await import("mastracode")` -> the same drizzle/onnx/get-stream chain),
- * so it needs the SAME SEA treatment (docs/rework/SDK-LEDGER.md T5).
+ * so it needs the SAME SEA treatment (see docs/features/host/LEDGER.md, the SEA/`pe:sea-require-shim` line).
  *
  * Shimmed packages (store prefixes are version-pinned when the store holds several versions):
  * - drizzle-orm: inlining breaks its circular imports (TypedQueryBuilder ReferenceError).
@@ -76,7 +76,7 @@ function seaRequireShimSource(spec: string): string {
 }
 
 /**
- * Throwing stub for onnxruntime-node (T9 decision record, docs/rework/SDK-LEDGER.md).
+ * Throwing stub for onnxruntime-node (decision record: docs/features/host/LEDGER.md).
  *
  * mastracode eagerly imports @mastra/fastembed (chunk-YADYGJS7.js:32) whose
  * `import * as ort from "onnxruntime-node"` drags a 255MB native package into every init — but
@@ -90,7 +90,7 @@ const seaStubSpecifiers = /^onnxruntime-node$/;
 const seaStubVirtualPrefix = "\0pe-sea-stub:";
 const seaStubMessage =
   "onnxruntime-node is stubbed in the installed pea (no embedder configured); " +
-  "if embeddings are enabled, un-stub it — see docs/rework/SDK-LEDGER.md T9";
+  "if embeddings are enabled, un-stub it — see docs/features/host/LEDGER.md";
 
 function seaStubShimSource(): string {
   const storeEntry = readdirSync(pnpmStore).find((entry) =>

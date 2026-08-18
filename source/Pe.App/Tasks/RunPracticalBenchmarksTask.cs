@@ -4,6 +4,12 @@ using Pe.App.Commands.Palette.TaskPalette;
 
 namespace Pe.App.Tasks;
 
+/// <summary>
+///     Runbook: install the matching <c>Pe.Tools</c> MSI, open Revit, run <c>Task Palette</c>, and execute
+///     <c>Run Practical Benchmarks</c>. Output lands in the <c>CmdPltTasks</c> StorageClient module's output
+///     dir under a <c>RunPracticalBenchmarksTask</c> subdir (see <c>TaskOutputExtensions.GetOutput</c>) —
+///     one <c>practical-benchmarks_*</c> folder per run holding the per-benchmark JSON files and <c>run-summary.txt</c>.
+/// </summary>
 public sealed class RunPracticalBenchmarksTask : ITask {
     public string Name => "Run Practical Benchmarks";
 

@@ -40,7 +40,7 @@ That does not make `BUILD.md` a tool manual. The durable decision is: **when the
 
 ## Environment limitations this repo designs around
 
-- **Windows dotnet state can be poisoned.** Missing core Windows environment variables can break NuGet/MSBuild restore with errors such as `Value cannot be null. (Parameter 'path1')`. The build tool detects this and points to `tools/dotnet-sandbox-safe.ps1`; recovery notes live in `docs/ENVIRONMENT.md`.
+- **Windows dotnet state can be poisoned.** Missing core Windows environment variables can break NuGet/MSBuild restore with errors such as `Value cannot be null. (Parameter 'path1')`. The build tool detects this and points to `tools/dotnet-sandbox-safe.ps1`; recovery notes live in that script's comment header.
 - **Revit process startup is expensive.** Avoid touching RRD unless the current UI/session/document state is the subject of proof.
 - **RRD is user-owned state.** A restart can cost minutes and may require reopening a model. Attached proof should be deliberate and evidence-based.
 - **Hot reload is useful but not proof by itself.** Treat sync success as a step toward an attached behavior/log/script/test proof, not as the final freshness claim. The SDK reports exact loaded/deployed paths and requires Rider's direct `Applied` witness for a source edit; `buildStamp` remains provenance only.
@@ -238,7 +238,7 @@ That boundary is deliberately narrower than Revit orchestration:
 - Script execution performs the requested targeted call only. It must not build, converge, or restart a live session. Agents inspect freshness and invoke SDK lifecycle actions explicitly.
 - A clean checkout may launch its checkout-pinned source host without a staged `Pe.Host.exe`, but that launch path is not a build or Revit-convergence path.
 
-The acceptance contract and machine proof live in `Pe.Revit.Sdk/RUNTIME_ACCEPTANCE.md` and `docs/context/runtime-acceptance-2026-07-12.md`.
+The acceptance contract lives in `Pe.Revit.Sdk/RUNTIME_ACCEPTANCE.md`; per-run records are disposable (the surviving pin decision is in `docs/features/host/LEDGER.md`).
 
 ### Runtime topology: readiness is not routing
 

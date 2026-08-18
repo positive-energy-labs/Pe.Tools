@@ -13,9 +13,10 @@ before higher packages copy it.
 
 ## Critical Entry Points
 
-- `Revit/Documents/` - preferred home for document-owned naming, identity, path, and other extension surfaces that only
-  need `Document`.
-- `Revit/Documents/RevitUiSession.cs` and `UIApplicationDocumentSessionExtensions.cs` - explicit current-session and
+- `source/Pe.Revit/Extensions/` - preferred home for document-owned naming, identity, path, and other extension surfaces
+  that only need `Document`.
+- `source/Pe.Revit/Extensions/RvtUiApplication/RevitUiSession.cs` and
+  `source/Pe.Revit/Extensions/RvtUiApplication/UIApplicationDocumentSessionExtensions.cs` - explicit current-session and
   `UIApplication` document-session helpers.
 - `Services/Document/DocumentTrackerAccessor.cs` - process-wide handle to the SDK document tracker
   (`PePayloadContext.Documents`): document identity, lifecycle events, and per-document `State<T>` bags. Subscribe here
@@ -25,7 +26,7 @@ before higher packages copy it.
 - `Services/Host/DocumentCacheMaintenance.cs` - always-on tracker wiring for DocShadow eviction and FamilySnapshotStore.
 - `Services/Host/BridgeDocumentNotifier.cs` - active/open document freshness payloads for the host SSE stream
   (tracker subscriber, bridge-scoped).
-- `Revit/Lib/` - reusable collectors and Revit-domain helpers that should stay broader than one caller.
+- `Lib/` - reusable collectors and Revit-domain helpers that should stay broader than one caller.
 
 ## Validation
 
@@ -45,7 +46,7 @@ before higher packages copy it.
 
 ## Living Memory
 
-- If a helper only needs `Document`, default to a `Document` extension under `Revit/Documents/` before adding more
+- If a helper only needs `Document`, default to a `Document` extension under `source/Pe.Revit/Extensions/` before adding more
   static manager methods.
 - Prefer document-owned entrypoints even when the implementation still lives in a feature package; the feature model can
   move later without callers relearning the seam.

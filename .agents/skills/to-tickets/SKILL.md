@@ -64,7 +64,17 @@ Write the approved tickets as Owed items in `docs/features/<name>/LEDGER.md`, in
 - <NN> <title> — the end-to-end behaviour this delivers. Blocked by: <NN, NN | none>.
 ```
 
-If a ticket genuinely needs more than a line or two (acceptance criteria, a decision-encoding snippet), write `docs/features/<name>/<NN>-<slug>.md` and link it from the Owed line. Default to the line.
+If a ticket genuinely needs more than a line or two (acceptance criteria, a decision-encoding snippet), write `docs/features/<name>/<NN>-<slug>.md` and link it from the Owed line. Default to the line. The spec file is an **agent brief** — five lines, no more:
+
+```markdown
+**What to build:** the end-to-end behaviour, in one or two sentences.
+**Acceptance:** binding and checkable — a reader must be able to say yes or no, not "seems fine".
+**Proof commands:** what to run, verbatim, and what passing looks like.
+**Blocked by:** <NN, NN | none>.
+**Out of scope:** what this ticket deliberately does not touch.
+```
+
+No file paths — they rot. Name identifiers verbatim instead (`FamilyModel`, `build_evidence`) so one grep finds the code.
 
 Work the **frontier**: any ticket with `Blocked by: none`. When a ticket's work lands, delete its Owed line **and scrub its number from every remaining `Blocked by:` list** in the same edit — a dangling blocker number is then always an error, never a completion.
 

@@ -13,7 +13,7 @@ itself.
 
 ## Critical Entry Points
 
-- `Application.cs` - add-in startup/shutdown, event subscriptions, `HostRuntime.Initialize`, optional bridge auto-connect, logger setup.
+- `AppCore.cs` - add-in startup/shutdown, event subscriptions, `HostRuntime.Initialize`, optional bridge auto-connect, logger setup.
 - `ButtonRegistry.cs` - single source of truth for ribbon buttons and top-level command visibility.
 - `Commands/FamilyFoundry/` - Family Foundry, migrator, and schedule-manager command entrypoints.
 - `Commands/PeTools/` - Revit-side host bridge/connect UX and browser launch into the external Pe Tools frontend.
@@ -32,8 +32,8 @@ itself.
 - This package's dependency graph owns the live RRD runtime. Be unusually cautious about builds because they will
   _always_ force a costly Revit restart.
 - Keep `Pe.App` thin. If logic starts looking reusable or testable outside the command shell, move it into the owning
-  domain/shared package.Ok
-- `Application.cs` is the startup truth. If a capability depends on bootstrapping, logging, or event subscription,
+  domain/shared package.
+- `AppCore.cs` is the startup truth. If a capability depends on bootstrapping, logging, or event subscription,
   verify it there first.
 - `ButtonRegistry.cs` is the ribbon truth. Do not scatter command discovery assumptions across docs.
 - When rename-era paths drift, trust the current command files under `source/Pe.App/Commands/...`, not stale docs or

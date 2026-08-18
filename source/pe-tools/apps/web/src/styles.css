@@ -54,7 +54,7 @@
 }
 
 @theme inline {
-  /* PE type system (PE_DESIGN_VIBE.md): Open Sans is the working body/UI default,
+  /* PE type system (docs/features/design-system/LEDGER.md): Open Sans is the working body/UI default,
      Spectral is a selective display garnish. font-sans === font-pe so the whole app
      inherits the PE body font without every element opting in. */
   --font-sans: "Open Sans", system-ui, -apple-system, sans-serif;

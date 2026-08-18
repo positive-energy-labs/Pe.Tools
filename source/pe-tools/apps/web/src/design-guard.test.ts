@@ -5,8 +5,8 @@
  *
  * This test IS the lint. The web app has no CI; `vp test` runs in the `ready` lane, so the
  * token discipline that held by review during the sweep now holds by assertion. It encodes the
- * DESIGN-LANG-HANDOFF §1 census gates that were driven to
- * zero (DESIGN-SWEEP.md, CLOSED 2026-08-16). It walks src/**\/*.{ts,tsx,css} once with plain
+ * census gates driven to zero in the one-system design sweep (closed 2026-08-16; see the
+ * Enforcement lines in docs/features/design-system/LEDGER.md). It walks src/**\/*.{ts,tsx,css} once with plain
  * regexes — no dependencies, no AST.
  *
  * ── HARD ZERO (any occurrence fails) ────────────────────────────────────────────────────────

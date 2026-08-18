@@ -224,8 +224,12 @@ try {
     $systemColumns = @($connection.GetSchema('Columns') |
         Where-Object { $_.TABLE_NAME -eq 'System' -and $_.COLUMN_NAME -like 'Calculated*' -and $_.TYPE_NAME -ne 'LONGBINARY' } |
         ForEach-Object COLUMN_NAME)
-    # Probe fact: the schema has no [Name] column — the System (and Room) name lives in
-    # [Description]. Extractor and sync expose it as `name`.
+    # FOOTGUN: the .r10 schema has NO [Name] column — the System (and Room) name lives in
+    # [Description]. Extractor and sync both expose it as `name`. Proof:
+    # eval/rhvac/project-a/UPSERT-PROBE.md.
+    # FOOTGUN: the column list above is read from the schema at RUNTIME on purpose — column counts
+    # drift across RHVAC releases (System is 240 columns in projectA, 237 in the firm template), so a
+    # baked list silently breaks on the next file. Proof: eval/rhvac/template/SYNC-PROOF.md.
     $systemAdapter = [System.Data.Odbc.OdbcDataAdapter]::new(
         "SELECT Number, Description, $(($systemColumns | ForEach-Object { "[$_]" }) -join ', ') FROM [System] ORDER BY Number", $connection)
     $systemTable = [System.Data.DataTable]::new()

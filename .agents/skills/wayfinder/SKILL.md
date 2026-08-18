@@ -122,6 +122,6 @@ User invokes with a map (feature name or path). A ticket is **optional** — wit
 4. Record the resolution: **delete the ticket section**, **append the gist** to Decisions-so-far, and promote any decision that outlives the effort into the feature `LEDGER.md` (Decided or Tried & rejected).
 5. Add newly-surfaced tickets; graduate any fog the answer has made specifiable, clearing each graduated patch from **Not yet specified** so it lives only as its new ticket. If the answer reveals a ticket — this one or another — sits beyond the destination, **rule it out of scope** rather than resolving it on the route. If the decision invalidates other parts of the map, update or delete those tickets.
 
-When the map is done — no tickets, no fog — fold its Decisions-so-far into the feature `LEDGER.md` and delete `MAP.md`.
+When the map is done — no tickets, no fog — fold its Decisions-so-far into the feature `LEDGER.md`, sweep **Out of scope** once, and delete `MAP.md` in the same commit as the promotions (the `docs` skill's map-death rule; it owns the detail). The sweep is selective by design: promote only what is expensive to re-derive or likely to be re-proposed by a future agent — feature-scoped rulings become a Tried & rejected line, cross-feature ones a rejected-architecture ADR. Everything else dies with the map.
 
 The map is a single shared file with no claim mechanism — one session works it at a time.

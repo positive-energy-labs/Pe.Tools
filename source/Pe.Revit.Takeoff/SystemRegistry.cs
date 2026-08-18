@@ -3,9 +3,15 @@ using Newtonsoft.Json;
 namespace Pe.Revit.Takeoff;
 
 // The identity spine's root: stable GUID <-> mutable user tag for every System (FC-8, UH-1, ...).
-// project-a evidence forced this shape (DECISIONS 2026-08-14): the systemNumber<->tag binding lived
+// project-a evidence forced this shape (LEDGER 2026-08-14): the systemNumber<->tag binding lived
 // only in hand-typed prose, tags were renamed mid-project (IU->WS) leaving the legend stale, and
 // dangling tags (phantom IU-2, unparsed UH-2-4 ranges) went uncaught.
+//
+// FOOTGUN: the registry rides ONE hidden text param on Project Information, so its whole capacity
+// question is "how big can that string be". Live-proven 2026-08-14 on the project-a clone: a
+// 1,048,571-char blob round-trips byte-identical (1 KB / 32 KB / 256 KB / 1 MB all tested) — orders
+// of magnitude above any realistic registry, so serialize freely and never shard. Evidence:
+// docs/features/takeoffs/LEDGER.md 2026-08-14 (live Revit).
 //
 // This file is deliberately Revit-free: pure model + versioned fail-closed codec + reconciliation.
 // The storage adapter (a hidden text param on Project Information, exactly the

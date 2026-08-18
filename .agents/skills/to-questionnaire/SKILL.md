@@ -12,7 +12,7 @@ Turn something the user can't answer alone into a **questionnaire** — a Markdo
 
 2. **What do you need back?** Ask, in one exchange, the specific decisions or facts the user can't resolve alone and needs from this person. Done when you have a concrete list of what the user must walk away able to do or decide.
 
-3. **Write the questionnaire.** Draft questions aimed at the gap from steps 1–2, following the Document structure below. Write it to `to-questionnaire-<slug>.md` in the current directory (slug from the topic) and report the path. Done when the file exists and every item the user named in step 2 is covered by a question.
+3. **Deliver the questionnaire.** Draft questions aimed at the gap from steps 1–2, following the Document structure below. Deliver it **inline in the message** when it fits — that is the default, since the user is going to copy it into an email or doc anyway. Only when it is too substantial to paste, write it to `.artifacts/handoffs/<yyyy-mm-dd>-questionnaire-<slug>.md` (the `docs` skill's handoff home; slug from the topic) and report the path. Either way it is disposable: once the user has sent it, delete the file. Never write it to the current directory or the repo root. Done when every item the user named in step 2 is covered by a question.
 
 ## Document structure
 

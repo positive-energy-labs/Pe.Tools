@@ -44,6 +44,13 @@ ANY change to repo architecture, tooling, or builds MUST consult these documents
 
 After any large changes, ALWAYS clarify user intent and capture the durable knowledge. Where it goes is governed by the `docs` skill (the single source of truth): feature ledgers (`docs/features/<name>/LEDGER.md`), ADRs, scoped grounding docs, or code comments. AGENTS.md holds operating rules only — not feature goals, not session knowledge.
 
+### Tooling Footguns
+
+- A skill whose `description:` frontmatter value contains `: "` is parsed by gray-matter as an invalid YAML mapping, and
+  the skill is dropped silently — no warning, it simply never loads. Keep `: "` out of skill descriptions.
+- `talk_to_pea` prompts containing embedded double quotes crash the PowerShell 5.1 arg path (exit 255). Reword or use a
+  here-string path instead.
+
 ### Non-Doc Artifacts
 
 Write artifacts to `.artifacts/`. Most often `.artifacts/tmp` for python/typescript scripts. Repo-wide, builds and other tooling behaviors route through `.artifacts/`, thus it is git ignored. 
@@ -117,7 +124,3 @@ The `index` skill is the entry point and router for the whole skill set — invo
 - Put document-owned identity, path, binding, and collection helpers on `Document` extensions as close to `Pe.Revit` as possible. Keep open/active/navigation behavior in session-aware services or `UIApplication` extensions.
 - Prefer `Document` / `FamilyDocument` as the public entrypoints for document-owned collect/capture/apply flows, even when the returned models still live in a feature package.
 - When validating DA collection performance, start narrow and bounded. Category filters are a verification tool, not just a product feature.
-
-## Outstanding Guidance to Add
-
-- WPF BAML resolution errors that occasionally happen. This remains a major blocker, but cause and durable mitigation are still unknown.

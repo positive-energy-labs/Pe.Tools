@@ -4,8 +4,15 @@ namespace Pe.Revit.Takeoff;
 
 // The one place that spells takeoff's persistence homes (README data-homes table). Everything
 // above speaks FRs and the registry only through this module — nobody else touches a Parameter.
-// Pattern and proof: live FR write round-trip 2026-08-14 (DECISIONS); mirrors
-// ParameterLinksProfileStorage for the Project Information blob. Extensible storage is banned.
+// Mirrors ParameterLinksProfileStorage for the Project Information blob. Extensible storage is banned.
+//
+// FOOTGUN: OST_FilledRegion.AllowsBoundParameters == false, but a shared param instance-bound to
+// Detail Items IS writable on FR instances — that indirection is the only reason this module works.
+// Live-proven 2026-08-14 on the project-a clone (Revit 2025): a text param bound through our own
+// SharedParameterBinder landed on all 9,212 FilledRegions, set + Regenerate round-tripped
+// in-transaction, and read back identically from a separate later call. Evidence:
+// docs/features/takeoffs/LEDGER.md 2026-08-14 (live Revit); the .r10 side is proven in
+// eval/rhvac/project-a/UPSERT-PROBE.md. Residual: survival across save/sync/reopen is untested.
 public static class TakeoffCarriers
 {
     // Stable carrier identities. Changing any of these orphans deployed models — never reuse.

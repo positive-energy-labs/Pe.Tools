@@ -3,6 +3,23 @@ using Pe.Revit.FamilyFoundry.LookupTables;
 
 namespace Pe.Revit.FamilyFoundry.Operations;
 
+// FOOTGUN: Revit lookup-table matching is POSITIONAL, and the first CSV column is not part of it.
+// (2026-08-17, folded from docs/context/revit-lookup-table-research.md, deleted — git history.)
+// The four traps behind the CSV this operation emits, all of which read wrong from reflex:
+//  1. Revit IGNORES the first CSV column when matching — it is a row label/identifier only.
+//  2. Matching is positional in `size_lookup(...)` argument order: the first lookup value is
+//     matched against CSV column 2, the second against column 3, and so on. Reordering columns
+//     silently changes which key matches what.
+//  3. Header names are IGNORED for key matching, but they are not decorative: the
+//     `ParameterName##ParameterType##ParameterUnits` header carries the unit/type declaration
+//     (NUMBER, LENGTH, AREA, VOLUME, ANGLE, OTHER) and is how a formula names the column it wants
+//     back — `size_lookup(Table, "Opening Width", default, CFM, ESP)`. Revit parses headers into
+//     typed columns (`FamilySizeTableColumn.GetSpecTypeId()`/`GetUnitTypeId()`), so a header the
+//     emitter gets wrong surfaces as an import error, not a bad value.
+//  4. `FamilySizeTableManager` is the ONLY import/export/query door for embedded tables — there is
+//     no other public path to a family's size-table data.
+// One table cannot set several parameters in one call: the working pattern is many parameters each
+// calling `size_lookup(...)` with the same key tuple and a different return column.
 public sealed class SetLookupTables(SetLookupTablesSettings settings)
     : DocOperation<SetLookupTablesSettings>(settings) {
     public override string Description =>

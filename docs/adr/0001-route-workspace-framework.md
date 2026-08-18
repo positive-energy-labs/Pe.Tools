@@ -50,7 +50,7 @@ core model held with zero changes; everything else was hand-rolled four times.
    `Atom.family` over `Stream.concat(hydrate, SSE)` — one shared subscription per
    route spec; drafts are an `Option<T>` override with derived value/dirty
    (clobber-safety is structural); commands are `Atom.fn` with `AsyncResult`
-   pending/error. v3→v4 Atom rename table: `docs/rework/EFFECT-V4-PATTERNS.md` §4c.
+   pending/error. v3→v4 Atom rename table: `docs/features/host/EFFECT-V4-PATTERNS.md` §4c.
 
 5. **Route docs are durable across host restarts** via a file-backed store
    (`packages/runtime/src/route-state-store.ts`): `route:*` session-state keys

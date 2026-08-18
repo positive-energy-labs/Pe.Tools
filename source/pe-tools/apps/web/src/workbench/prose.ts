@@ -16,7 +16,7 @@ export const PROSE_CLASS = [
   "prose-p:my-0 prose-p:mb-[0.45em] last:prose-p:mb-0",
   // Flat heading hierarchy inside answers: chat turns are dense working content, so headings keep
   // the body face and size — weight and spacing carry the structure. (Spectral is a page-title
-  // garnish; PE_DESIGN_VIBE forbids it in dense content, and the density law forbids size jumps.)
+  // garnish; the PE design language forbids it in dense content, and the density law forbids size jumps.)
   "prose-headings:font-sans prose-headings:text-[1em] prose-headings:font-semibold prose-headings:text-[var(--r-ink)] prose-headings:mt-[0.9em] prose-headings:mb-[0.35em]",
   "prose-a:text-[var(--r-nav)] prose-a:underline prose-a:underline-offset-2",
   // Code = data surface: hard corners per the radius law; machine text sits on the artifact rung.

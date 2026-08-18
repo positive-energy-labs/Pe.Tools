@@ -19,7 +19,7 @@ There is no external issue tracker. No GitHub issues, no `.scratch/`, no ticket 
 | Domain vocabulary | `CONTEXT.md` at repo root (created lazily by `domain-modeling`) |
 | Hard-won wide-breadth rationale | Authority docs (registry below) |
 | Session-to-session bridges | `.artifacts/handoffs/<date>-<topic>.md` |
-| Research findings | Feature dir if feature-scoped, else `docs/context/` |
+| Research findings | Feature dir if feature-scoped, else `docs/research/` |
 | Live-verified platform behavior (gotchas, quirks) | Code comments at the site; a scoped grounding doc only when no code site exists |
 | Everything else | Don't write it |
 
@@ -48,6 +48,10 @@ Rules:
 - Deleted Owed lines are not lost — git history is the archive.
 - Legacy feature dirs keep their existing files until touched; when working in one, converge: fold living content into `LEDGER.md`, delete what is stale.
 - **Cross-route rule: design-language and primitive gaps are owned by `docs/features/design-system/LEDGER.md`** — one line there, consumer routes named. Route ledgers record their own application and evidence; they never restate the ruling or the gap. Same shape for any gap that spans surfaces: it lives in one ledger, and the others cite it.
+- Ledgers never grow a fourth section. Reusable *method* belongs in a skill; *schema* belongs in doc-comments on the owning type (plus a showcase fixture beside the data when intent needs prose).
+- **Mid-session discovered gaps** (tooling in active use finds its own hole): a code site in this repo → `TODO:` at the site, never a ledger line. No code site here (SDK defect, upstream dep) → one Owed line in the *owning* surface's ledger — never the ledger of the session that discovered it.
+- When a `MAP.md` is deleted, sweep its Out-of-scope once: promote only what is expensive to re-derive or likely to be re-proposed by an agent (feature-scoped → a Tried & rejected line; cross-feature → a rejected-architecture ADR). Everything else dies with the map — code's growing mass is the real rejection.
+- **Promotion and deletion happen in the same commit.** A HISTORICAL/CLOSED banner on a tracked doc is a failing state, not an archive method (`docs-guard` enforces this).
 - **Merge hygiene:** fold files with `git mv` / append-then-delete so history follows. Git history is the archive only if the path chain is followable — a file that was retyped into its new home instead of moved has no chain, and the archive claim is false. When a doc line's fact belongs at a code seam, move it and delete the line; live-proven platform behaviour is the one exception and is deliberately dual-homed (see Grounding).
 
 ## ADRs
@@ -62,8 +66,8 @@ Expensive-to-derive, slowly-evolving rationale that agents repeatedly fail to in
 
 Current registry:
 - `docs/design/SURFACE-PHILOSOPHY.md` — what UI surfaces are for and how they behave
-- `docs/design/DESIGN-SWEEP.md` — one-system design sweep (goal, loop, frontier)
 - `docs/features/agent/PHILOSOPHY.md` — agent design
+- `docs/features/host/EFFECT-V4-PATTERNS.md` — Effect v4 idioms for the host (v3 reflexes produce wrong code)
 - `docs/ARCHITECTURE.md`, `docs/BUILD.md`, `docs/OBSERVABILITY.md` — repo-wide authority
 
 Creation bar: only after wide-breadth synthesis work that should rarely be repeated. New authority docs live where their scope lives and must be added to this registry.
@@ -78,9 +82,11 @@ Handoffs are disposable by construction: a handoff is *consumed* when anything w
 
 Live-verified behavior of adversarial platforms (Revit API, Jet/RHVAC, DWG export…) — facts proven by real behavior, not metadata. Default home is a **code comment or test at the site the fact governs** — recurring, systemic, or big-picture gotchas especially. Write a grounding doc only when no single code site exists (e.g. a manual runbook that *is* the proof lane, an API-wide gotcha list with no wrapper to annotate), and keep it **scoped to one subject in the feature dir it serves** — never merge subjects (Revit API gotchas, Jet quirks, tooling notes) into one shared doc; that's how facts get lost.
 
+**Proven grounding:** the second time a fact is re-derived or contested, pin it with a proof test in `Pe.Revit.Tests/Proofs/` — the `FOOTGUN:` comment names the test verbatim, the test's comment quotes the `FOOTGUN:` phrase, so one grep connects claim and proof in either direction. Don't pre-prove; the first derivation gets the comment, the second payment is the signal it's load-bearing. Grounding docs with no code site name their proof test the same way.
+
 ## Research
 
-A single cited markdown file. Feature-scoped → the feature dir (link it from an Owed or Decided line). Repo-wide → `docs/context/`. No research branches.
+A single cited markdown file. Feature-scoped → the feature dir (link it from an Owed or Decided line). Repo-wide → `docs/research/`. No research branches.
 
 ## Greppable prose
 
@@ -97,4 +103,4 @@ Docs earn their keep by being findable from code and vice versa. Pragmatic rules
 
 ## Frozen
 
-`docs/context/` is quarantined — do not add new session dumps there; existing files stay until swept; new writing goes to ledgers, handoffs, or (research only) as above. `docs/rework/` is legacy; do not add to it.
+`docs/context/` and `docs/rework/` were swept and deleted on 2026-08-17 (every surviving fact folded into ledgers, grounding docs, ADRs, or code comments — git history holds the long forms). Neither dir may be recreated; `docs-guard.test.ts` enforces this. New writing goes to ledgers, handoffs, or (research only) `docs/research/`.

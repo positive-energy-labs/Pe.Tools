@@ -34,7 +34,7 @@ No external issue tracker. Durable knowledge lives in feature ledgers (`docs/fea
 
 ### Product surfaces
 
-`docs/design/SURFACE-PHILOSOPHY.md` holds what our UI surfaces are for and how they behave; the `find-the-product` skill is the loop that produces and updates it. The one-system design sweep (goal, loop, frontier) lives at `docs/design/DESIGN-SWEEP.md`; the `/design-system` route is the executable design authority.
+`docs/design/SURFACE-PHILOSOPHY.md` holds what our UI surfaces are for and how they behave; the `find-the-product` skill is the loop that produces and updates it. The live design frontier — rulings, gaps, and owed work for the one-system design cluster — lives at `docs/features/design-system/LEDGER.md`; the `/design-system` route is the executable design authority.
 
 ### Domain docs
 

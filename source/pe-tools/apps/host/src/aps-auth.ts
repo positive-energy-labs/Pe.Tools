@@ -540,6 +540,12 @@ const unprotectUserSecret = Effect.fnUntraced(function* (protectedPayload: strin
   return Buffer.from(base64, "base64").toString("utf8");
 });
 
+// FOOTGUN (live-verified 2026-07-03): PowerShell `-Command` argument passing does NOT populate
+// `$args`, so DPAPI protect wrote an EMPTY payload while still returning a token — `aps.auth.status`
+// then reported `exists:false` immediately after a successful acquisition. Failures could also
+// collapse to empty stdout with a zero exit. Hence `-EncodedCommand` with the arguments embedded as
+// a base64 `$inputArgs` prelude, plus the fail-on-empty-output check below. Do not "simplify" this
+// back to `-Command` with argv.
 const runPowershell = Effect.fnUntraced(function* (
   operationKey: string,
   command: string,

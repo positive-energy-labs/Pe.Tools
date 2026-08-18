@@ -9,7 +9,7 @@ Actively build and sharpen the project's domain model as you design. This is the
 
 ## File structure
 
-This repo is single-context: `CONTEXT.md` at the root (glossary only) and ADRs at `docs/adr/NNNN-slug.md`, sequential. See the `docs` skill for the wider conventions — in particular, feature-scoped decisions go in `docs/features/<name>/LEDGER.md`, not ADRs.
+This repo is single-context: `CONTEXT.md` at the root, glossary only. This skill owns `CONTEXT.md`; ADR placement, numbering, and the promotion bar are owned **per the `docs` skill** — read it before writing one. This skill only supplies the ADR template ([ADR-FORMAT.md](./ADR-FORMAT.md)) and the judgement for when to offer one mid-conversation.
 
 Create files lazily — only when you have something to write. If no `CONTEXT.md` exists, create one when the first term is resolved.
 
@@ -39,7 +39,7 @@ When a term is resolved, update `CONTEXT.md` right there. Don't batch these up �
 
 ### Offer ADRs sparingly
 
-Only offer to create an ADR when all three are true:
+The promotion bar is the `docs` skill's: an ADR is for a decision that constrains *other* features. On top of that bar, only offer to create one mid-conversation when all three are true:
 
 1. **Hard to reverse** — the cost of changing your mind later is meaningful
 2. **Surprising without context** — a future reader will wonder "why did they do it this way?"

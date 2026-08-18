@@ -76,6 +76,10 @@ Present the two reports under `## Standards` and `## Spec` headings, verbatim or
 
 End with a one-line summary: total findings per axis, and the worst issue _within each axis_ (if any). Don't pick a single winner across axes — that's the reranking the separation exists to prevent.
 
+### 6. Land the findings
+
+The report is not the resting place. A finding worth keeping becomes an Owed line in the **owning** feature's ledger, or a `TODO:` at the code site if it's small enough to live there — one home each, per the `docs` skill's single-owner rule. A finding not worth a line is dropped on the spot. Nothing gets parked in a handoff, a scratch file, or a "follow-ups" section that nobody owns.
+
 ## Why two axes
 
 A change can pass one axis and fail the other:

@@ -57,14 +57,3 @@ shims behind the run are in `LEDGER.md`.
 - `.r10` locked (RHVAC open on it): sync refuses; close RHVAC first.
 - Exposures: the minimal lane creates floor + roof rows and one wall per Room Region polygon edge.
   Glass and doors remain empty (open shim, see LEDGER Owed).
-
-## First passing proof — 2026-08-15
-
-project-a clone, `Mechanical Zoning Plan - Attic Level`, one adopted zone (`ATTIC-1`): capture and
-partition materialized 2 Room Regions. Browser sync inserted rooms 2 and 3 into a disposable
-template copy and linked both FR blobs. A fresh 32-bit Jet extraction independently confirmed
-system 3; room names, 478/60 sf areas, 8 ft ceilings, people and lighting; and floor, roof, and
-wall exposure rows.
-
-Post-review Jet proof used a disposable copy to seed System 99 with only number/name, update room 2,
-and freshly extract `VentilationCFM = 37`, the System name, and the new file identity.

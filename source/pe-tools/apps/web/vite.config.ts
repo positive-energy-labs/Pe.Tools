@@ -74,7 +74,20 @@ const config = defineConfig(({ mode }) => {
 
 export default config;
 
-// ponytail: remove once TanStack Start registers its dev SSR middleware for Vite+.
+// SHIM: TanStack Start's dev-server plugin silently skips registering its SSR document middleware
+// under Vite 8 / Vite+ (its `isRunnableDevEnvironment` guard rejects the Vite+ ssr environment), so
+// document routes fall through and `GET /` 404s while `GET /@vite/client` still returns 200.
+// Forcing `tanstackStart({ vite: { installDevServerMiddleware: true } })` hits the same guard, so
+// instead this dev-only plugin feature-checks `server.environments.ssr.runner.import`, imports
+// `virtual:tanstack-start-server-entry`, and forwards document requests to its `fetch` handler.
+// `runner.import` must stay bound to `runner` (it needs itself as `this`, else "Cannot read
+// properties of undefined (reading 'cachedModule')"). Upstream: TanStack/router#7614.
+// Related: do NOT set `ssr.noExternal: true` here — it forces React's CJS entry through the Vite+
+// SSR evaluator and SSR dies with "module is not defined" at react/index.js; `resolve.dedupe` above
+// is the correct monorepo guard.
+// Removal condition: upstream TanStack Start registers its dev SSR middleware under Vite+ (or this
+// app stops running Start through Vite+). Then delete this plugin and verify `GET /`, `GET /about`,
+// `GET /@vite/client` all return 200 under `vp dev`, plus `vp check` and `vp build`.
 function tanstackStartVite8DevMiddleware(): Plugin {
   return {
     name: "pe:tanstack-start-vite8-dev-middleware",
