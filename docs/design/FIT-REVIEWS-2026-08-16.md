@@ -34,7 +34,7 @@ the thing preventing the last mile.
 Agreed items 1–4 + 7–8 below: **implement as written**, with two Occam trims — the owed
 marker ships as the MasterTable gutter only (no workbench mapdial twin yet), and of the
 state-model batch only the one-line `partial` kind lands now; outcome links / staged-author /
-freshness thresholds stay queued model work on the CLEANROOM frontier (they are contract
+freshness thresholds stay queued model work in `docs/features/design-lang/LEDGER.md` Owed (they are contract
 work, not token propagation).
 
 Collision rulings:

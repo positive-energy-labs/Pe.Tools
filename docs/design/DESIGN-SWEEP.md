@@ -6,6 +6,9 @@ lives in the documents it points to.
 
 ## CLOSED (2026-08-16)
 
+> "SHIMS entry N" below refers to the numbered stand-in ledger `docs/features/design-system/SHIMS.md`,
+> distilled into that dir's `LEDGER.md` and deleted 2026-08-17; the numbers survive only in git history.
+
 The sweep is done. The [DESIGN-LANG-HANDOFF.md](DESIGN-LANG-HANDOFF.md) §1 exit gates were
 driven to their targets, the ALIAS SHIM meter reads **0 lines**, and the enforcement lever
 landed: **`apps/web/src/design-guard.test.ts` is now the gate** (SHIMS entry 8, closed).
@@ -53,7 +56,8 @@ is lowered in the same commit. Checks + 122 tests green at close.
 
 **Standing rule: the design-guard test is the gate.** New vocabulary, tokens, or exemptions
 go through a ruling first, then the guard changes in the same commit — never the reverse.
-This file is now historical; live work continues on the CLEANROOM frontier and SHIMS ledger.
+This file is now historical; live work continues in `docs/features/design-lang/LEDGER.md`
+(frontier) and `docs/features/design-system/LEDGER.md` (open stand-ins).
 
 ## Goal
 
@@ -72,10 +76,13 @@ Executed only after total alignment — the census gates become the lint rules.
 1. **Per-route pass** (delegated): best-effort upgrade onto lang components + real `--r-*`
    roles. A pass may NEVER change the language unilaterally — where the language can't
    express something, the code stays honest and the gap is filed.
-2. **Findings** land in `docs/features/<route>/DESIGN-AUDIT.md` (state census against the
-   5 axes + outcome lane, numbered findings). Takeoffs and families audits are the format.
+2. **Findings** are worked in-session (state census against the 5 axes + outcome lane,
+   numbered findings) and land as ledger lines in `docs/features/<route>/LEDGER.md` — a
+   ruling with a *why* code can't show goes to Decided, an unresolved one to Owed. The
+   per-route `DESIGN-AUDIT.md` files were distilled into those ledgers and deleted
+   2026-08-17; git history holds the full censuses.
 3. **Joint review** (kaitpw + session) rules on findings. A ruling lands as design-system
-   specimen + code + CLEANROOM verdict **in the same commit** — that is what keeps the route
+   specimen + code + a `design-lang/LEDGER.md` verdict line **in the same commit** — that is what keeps the route
    a spec instead of a museum.
 4. **Meters**: the ALIAS SHIM block in `styles.css` (line count = old vocabulary still
    consumed; passes delete their lines) and the §1 census.
@@ -96,7 +103,7 @@ design-guard ratchet) intentionally held until the fit-review sitting settles th
 
 ## State (2026-08-16, autonomous continuation session)
 
-**The joint-review batch is RULED and LANDED** (CLEANROOM "consolidation batch" R1–R14 —
+**The joint-review batch is RULED and LANDED** (the design-lang "consolidation batch" R1–R14 —
 ruled by the session alone under the "pick up and finish" directive, grilled against docs,
 re-openable): origin squashed to a staging qualifier · `fresh: "never"` rung · row-fact
 ruling for decision-queued/unreachability (gutter marker queued, two consumers named) ·
@@ -113,7 +120,8 @@ DONE: token canon + ground flip (dark = warm charcoal only) · `--viz-1..6` para
 cell-state clause (`Column = ValueColumn | StateColumn`, `word` override) · row-scale ruling
 (one clipped line, full-bleed wash, READOUT BAND) · Verb reason-in-title · chip 34ch clamp ·
 HelpTip primitive + copy boundary · TYPE TIERS (tier × face × case,
-[TYPE-COPY-CENSUS.md](../features/design-lang/TYPE-COPY-CENSUS.md) RULED addendum;
+RULED addendum of the since-deleted TYPE-COPY-CENSUS.md, distilled into
+[design-lang/LEDGER.md](../features/design-lang/LEDGER.md);
 `/design-system` converted as pilot) · `/design-system/swatch` lookup satellite · takeoffs
 pass · families pass · variant-e promoted to `/family` (head = one rail) · philosophy ratchet
 (15 laws live) · reachability fixed.
@@ -139,7 +147,7 @@ pass · families pass · variant-e promoted to `/family` (head = one rail) · ph
 5. **Ops pass, last** — needs new primitives ruled first: Provenance/MonoNote (composed-read
    honesty), OpSection, TreeView/KVGrid dispositions, CoverageBar onto `--viz-*`
    (glance contract notes preserved in
-   [OP-CONTRACT-FEEDBACK.md](../features/design-system/OP-CONTRACT-FEEDBACK.md)).
+   [design-system/LEDGER.md](../features/design-system/LEDGER.md) Owed lines).
 6. **Enforcement lever** (oxlint front-runner — fixAll wiring exists, web has no CI) once
    the token/tier surface stops moving; then run the census as exit gates.
 
@@ -149,15 +157,15 @@ pass · families pass · variant-e promoted to `/family` (head = one rail) · ph
   deferred as too broad — the typed-destination purge is the adopted path.
 - **Skepticism of state growth** is standing policy: overrides (like `StateColumn.word`)
   are accepted only when they *net-shrink* vocabulary (that one buys `stateColumn`'s
-  deletion, queued in [SHIMS.md](../features/design-system/SHIMS.md)).
+  deletion, queued in [design-system/LEDGER.md](../features/design-system/LEDGER.md)).
 - **Unruled and waiting**: the workbench "you" identity hue (shimmed to neutral ink) ·
   SVG `stroke-dasharray` vs the dashed budget (takeoffs audit #9) · pea display-vs-ink as
-  one token or two · wash-strength knob (CLEANROOM frontier).
+  one token or two · wash-strength knob (design-lang ledger, Owed).
 - **Satellites grow, catalogue stays spec, swatch stays lookup** — three roles, kept
   distinct on purpose.
 - **stateColumn deletion** discharges via takeoffs + family migrating onto `state:` + `word`.
 - Doc map: [SURFACE-PHILOSOPHY.md](SURFACE-PHILOSOPHY.md) (unrenderable law) ·
-  [CLEANROOM.md](../features/design-lang/CLEANROOM.md) (verdict ledger + frontier) ·
-  [SHIMS.md](../features/design-system/SHIMS.md) (stand-in ledger, stable numbers) ·
-  per-route `DESIGN-AUDIT.md` (findings + rulings) · this file (the frontier).
+  [design-lang/LEDGER.md](../features/design-lang/LEDGER.md) (verdicts + frontier) ·
+  [design-system/LEDGER.md](../features/design-system/LEDGER.md) (open stand-ins) ·
+  per-route `docs/features/<route>/LEDGER.md` (rulings + owed) · this file (the frontier).
   COLOR-ROLES and DESIGN-LANG-HANDOFF are historical; PE_DESIGN_VIBE is stale.

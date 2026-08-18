@@ -2,7 +2,7 @@
 
 > **HISTORICAL (2026-08-16).** The fresh pass this fed happened the same day: the one-system
 > sweep (see `DESIGN-SWEEP.md`, the living handoff). Everything here was either ruled (see
-> `../features/design-lang/CLEANROOM.md`) or became sweep work. **§1's adoption census
+> `../features/design-lang/LEDGER.md`) or became sweep work. **§1's adoption census
 > CLOSED 2026-08-16** — the numbers reached their targets (final table in `DESIGN-SWEEP.md`
 > "CLOSED") and the living gate is now `apps/web/src/design-guard.test.ts`: hard zeros on
 > the deleted vocabulary, ratcheted baselines on the tails, run by `vp test`.

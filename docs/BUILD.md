@@ -367,7 +367,7 @@ installer/package lane or `pea --installed ...`.
 
 ## Contract decisions (runtime op catalog)
 
-The `pe-dev codegen` tier is gone. The connected Revit session is the source of truth for the whole cross-language contract: C# `BridgeOp` fields/`[BridgeOperation]` methods self-register at startup, and the TS host serves the live catalog — request/response JSON Schemas included — from `GET /ops` (full architecture: `docs/features/host-runtime-ops/SPEC.md`).
+The `pe-dev codegen` tier is gone. The connected Revit session is the source of truth for the whole cross-language contract: C# `BridgeOp` fields/`[BridgeOperation]` methods self-register at startup, and the TS host serves the live catalog — request/response JSON Schemas included — from `GET /ops` (rationale: `docs/features/host-runtime-ops/LEDGER.md`).
 
 TypeScript compile-time types are a checked-in lockfile generated from that live catalog:
 

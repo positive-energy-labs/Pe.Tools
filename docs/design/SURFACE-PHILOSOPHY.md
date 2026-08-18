@@ -123,7 +123,7 @@ most over-subscribed visual in the codebase — dashed also means estimated, not
 needs-attention, held, void, and open-proposal depending on where you look. Do not add a ninth
 meaning; if you need one, take a different slot.
 
-**Keep the ledger of open stand-ins beside the feature** at `docs/features/<surface>/SHIMS.md`, one
+**Keep the ledger of open stand-ins beside the feature** as Owed lines in `docs/features/<surface>/LEDGER.md`, one
 numbered entry per gap naming what discharges it. Two rules make it citable across time: an entry
 leaves the file only when the replacement ships, and numbers are stable — a closed entry is struck
 and named, never renumbered. Other docs cite these by number.
@@ -269,7 +269,7 @@ Type carries meaning on the same terms as colour.
 
 **Extend the shared primitive; do not fork it.** Forks are cheap to start and expensive forever. The
 standing census of forks and what the canon must absorb before it can abolish them is
-[`../features/web-primitives/THEMES.md`](../features/web-primitives/THEMES.md).
+[`../features/web-primitives/LEDGER.md`](../features/web-primitives/LEDGER.md).
 
 **Capability should be presence-based.** A column descriptor where `sort` present means sortable and
 `facet` present means filterable is legible at the call site and cannot desync from a parallel
@@ -298,7 +298,7 @@ to move.
 
 **The second consumer is the evidence** — which speculative seams paid rent, which rotted, and the
 tripwire test for authoring time, in
-[`../features/web-primitives/PURGE-LEARNINGS.md`](../features/web-primitives/PURGE-LEARNINGS.md).
+[`../features/web-primitives/LEDGER.md`](../features/web-primitives/LEDGER.md).
 
 **Generalising at two consumers can cost more than it saves.** A shell abstracted over two similar
 surfaces ended up unable to say anything specific about either, and both died together; the
