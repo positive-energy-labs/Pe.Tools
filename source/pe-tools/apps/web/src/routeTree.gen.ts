@@ -18,6 +18,7 @@ import { Route as FamiliesRouteImport } from "./routes/families";
 import { Route as FamilyRouteImport } from "./routes/family";
 import { Route as InstancesRouteImport } from "./routes/instances";
 import { Route as OpsRouteImport } from "./routes/ops";
+import { Route as ParamTablesRouteImport } from "./routes/param-tables";
 import { Route as ParameterLinksRouteImport } from "./routes/parameter-links";
 import { Route as ScheduleGridRouteImport } from "./routes/schedule-grid";
 import { Route as SettingsRouteImport } from "./routes/settings";
@@ -72,6 +73,11 @@ const InstancesRoute = InstancesRouteImport.update({
 const OpsRoute = OpsRouteImport.update({
   id: "/ops",
   path: "/ops",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const ParamTablesRoute = ParamTablesRouteImport.update({
+  id: "/param-tables",
+  path: "/param-tables",
   getParentRoute: () => rootRouteImport,
 } as any);
 const ParameterLinksRoute = ParameterLinksRouteImport.update({
@@ -136,6 +142,7 @@ export interface FileRoutesByFullPath {
   "/family": typeof FamilyRoute;
   "/instances": typeof InstancesRoute;
   "/ops": typeof OpsRoute;
+  "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
@@ -157,6 +164,7 @@ export interface FileRoutesByTo {
   "/family": typeof FamilyRoute;
   "/instances": typeof InstancesRoute;
   "/ops": typeof OpsRoute;
+  "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
@@ -179,6 +187,7 @@ export interface FileRoutesById {
   "/family": typeof FamilyRoute;
   "/instances": typeof InstancesRoute;
   "/ops": typeof OpsRoute;
+  "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
@@ -202,6 +211,7 @@ export interface FileRouteTypes {
     | "/family"
     | "/instances"
     | "/ops"
+    | "/param-tables"
     | "/parameter-links"
     | "/schedule-grid"
     | "/settings"
@@ -223,6 +233,7 @@ export interface FileRouteTypes {
     | "/family"
     | "/instances"
     | "/ops"
+    | "/param-tables"
     | "/parameter-links"
     | "/schedule-grid"
     | "/settings"
@@ -244,6 +255,7 @@ export interface FileRouteTypes {
     | "/family"
     | "/instances"
     | "/ops"
+    | "/param-tables"
     | "/parameter-links"
     | "/schedule-grid"
     | "/settings"
@@ -266,6 +278,7 @@ export interface RootRouteChildren {
   FamilyRoute: typeof FamilyRoute;
   InstancesRoute: typeof InstancesRoute;
   OpsRoute: typeof OpsRoute;
+  ParamTablesRoute: typeof ParamTablesRoute;
   ParameterLinksRoute: typeof ParameterLinksRoute;
   ScheduleGridRoute: typeof ScheduleGridRoute;
   SettingsRoute: typeof SettingsRoute;
@@ -340,6 +353,13 @@ declare module "@tanstack/react-router" {
       path: "/ops";
       fullPath: "/ops";
       preLoaderRoute: typeof OpsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/param-tables": {
+      id: "/param-tables";
+      path: "/param-tables";
+      fullPath: "/param-tables";
+      preLoaderRoute: typeof ParamTablesRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/parameter-links": {
@@ -436,6 +456,7 @@ const rootRouteChildren: RootRouteChildren = {
   FamilyRoute: FamilyRoute,
   InstancesRoute: InstancesRoute,
   OpsRoute: OpsRoute,
+  ParamTablesRoute: ParamTablesRoute,
   ParameterLinksRoute: ParameterLinksRoute,
   ScheduleGridRoute: ScheduleGridRoute,
   SettingsRoute: SettingsRoute,
