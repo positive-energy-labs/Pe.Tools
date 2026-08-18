@@ -20,7 +20,7 @@ Every map and ticket has a **name** — its title. In everything the human reads
 
 The map is a single file, `docs/features/<name>/MAP.md` — the canonical artifact. Its tickets are `## Ticket:` sections at the bottom of the same file (see the `docs` skill for the wider docs conventions; `MAP.md` is the live-effort file, shared with `find-the-product`).
 
-The map header is an **index**, not a store. It lists the decisions made and points at the ticket sections that hold their detail; a decision lives in exactly one place — its ticket — so the header never restates it, only gists it and links.
+The map header is an **index**, not a store. Resolution is lossy by design: a resolved ticket survives only as its one-line gist in Decisions-so-far; a decision that outlives the effort gets promoted to the feature `LEDGER.md`, and everything else is deliberately dropped — git history is the archive.
 
 ### The map body
 
@@ -37,7 +37,7 @@ The whole map at low resolution, loaded once per session. Open tickets are **not
 
 ## Decisions so far
 
-<!-- the index — one line per closed ticket: enough to judge relevance, then zoom the link for the detail the ticket holds -->
+<!-- one line per resolved ticket — the gist is all that survives here; durable decisions are promoted to LEDGER.md -->
 
 - <closed ticket title> — <one-line gist of the answer>
 
@@ -65,7 +65,7 @@ Blocked by: <titles | none>
 
 A ticket is **unblocked** when every ticket blocking it has been resolved (its section deleted, its gist in Decisions-so-far); the **frontier** is the unblocked open tickets — the edge of the known.
 
-The answer isn't part of the body — it's recorded on resolution (see [Work through the map](#work-through-the-map)). Assets created while resolving a ticket are linked from it, not pasted in.
+The answer isn't part of the body — it's recorded on resolution (see [Work through the map](#work-through-the-map)). Assets created while resolving a ticket are linked, not pasted in — and an asset that outlives the ticket must be re-linked from its Decisions-so-far gist or promoted LEDGER line before the section is deleted.
 
 ## Ticket Types
 
@@ -108,7 +108,7 @@ User invokes with a loose idea.
 1. **Name the destination.** Call the Skill tool twice, for "grilling" and "domain-modeling", to pin down what this map is finding its way to — the spec, decision, or change. The destination fixes the scope, so it's settled first.
 2. **Map the frontier.** Grill again, **breadth-first** this time: fan out across the whole space rather than deep on any one thread, surfacing the open decisions and the first steps takeable now. **If this surfaces no fog** — the way to the destination is already clear, the whole journey small enough for one session — you don't need a map. Stop and ask the user how they'd like to proceed.
 3. **Create the map** at `docs/features/<name>/MAP.md`: Destination and Notes filled in, Decisions-so-far empty, the fog sketched into **Not yet specified**.
-4. **Create the tickets you can specify now** as sections with their `Blocked by:` lines. Wiring sorts them into the frontier and the blocked; everything you can't yet specify stays in the fog — the **Not yet specified** section.
+4. **Create the tickets you can specify now** as sections with their `Blocked by:` lines, which sort them into the frontier and the blocked; everything you can't yet specify stays in the fog — the **Not yet specified** section.
 5. **Fire the research subagents.** For each `research` ticket you just created, spin up a subagent that calls the Skill tool with "research" to resolve it in parallel, saving findings per the `docs` skill's research rule and linking them from the ticket.
 6. Stop — charting is one session's work; it hand-resolves nothing.
 
@@ -124,4 +124,4 @@ User invokes with a map (feature name or path). A ticket is **optional** — wit
 
 When the map is done — no tickets, no fog — fold its Decisions-so-far into the feature `LEDGER.md` and delete `MAP.md`.
 
-The user may run unblocked tickets in parallel, so expect other sessions to be editing the map concurrently.
+The map is a single shared file with no claim mechanism — one session works it at a time.

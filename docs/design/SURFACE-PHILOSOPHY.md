@@ -123,10 +123,10 @@ most over-subscribed visual in the codebase — dashed also means estimated, not
 needs-attention, held, void, and open-proposal depending on where you look. Do not add a ninth
 meaning; if you need one, take a different slot.
 
-**Keep the ledger of open stand-ins beside the feature** as Owed lines in `docs/features/<surface>/LEDGER.md`, one
-numbered entry per gap naming what discharges it. Two rules make it citable across time: an entry
-leaves the file only when the replacement ships, and numbers are stable — a closed entry is struck
-and named, never renumbered. Other docs cite these by number.
+**Keep the ledger of open stand-ins beside the feature** as Owed lines in the owning feature's
+`docs/features/<name>/LEDGER.md`, one entry per gap naming what discharges it. An entry leaves the
+file only when the replacement ships; closed entries are deleted — git history is the archive.
+Other docs cite these by description, never by number.
 
 **Make the claim a function of state, not a maintained flag.** One control can render under two or
 three truth claims computed from whether a live connection exists and whether the record has a real
@@ -248,7 +248,7 @@ say where options come from.
 
 Full rules in the header of `apps/web/src/design-lang.css` — the one place a colour of the
 language is decided — rendered live in `/design-system` §02. (`COLOR-ROLES.md` is the
-superseded ancestor.) Meaning is assigned in one place so that reconsidering a colour is a one-line edit;
+superseded ancestor — deleted, git history only.) Meaning is assigned in one place so that reconsidering a colour is a one-line edit;
 components consume role tokens rather than raw palette. Deliberately alien prototype chrome, such as
 a variant switcher, is exempt — it must not read as part of the design under review.
 

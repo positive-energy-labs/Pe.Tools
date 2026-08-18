@@ -35,8 +35,8 @@ this, so the ruling is not feature-local.
 
 - Routes may not invent a tone for a verdict; a needed tone is a token ruling with a guard update,
   in one commit.
-- Any surviving `StateMeta.tone` free-string must be narrowed to the meaning-role union (owed in
-  the takeoffs and /families ledgers).
+- The `StateMeta.tone` free-string was narrowed to the meaning-role union (done — `StateMeta` is
+  gone and `VerdictTone` is the closed union).
 - Row facts that are *not* verdicts — "a human decision is queued here", unreachability — are still
   homeless; they were ruled row facts wanting the SURFACE-PHILOSOPHY §4 gutter marker, which is not
   built.

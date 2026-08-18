@@ -4,8 +4,7 @@
  * WHY THIS FILE EXISTS AND WHAT IT IS NOT: `/design-system` catalogues real components. It has
  * no host, no session, no document — so the DATA is mocked and every surface that renders it
  * says so with a dashed-seam `FactChip` (the dashed border style is reserved for exactly this
- * meaning). That is SHIMS.md entry 4, which closes only if a satellite is ever promoted to a
- * real route.
+ * meaning). This requirement closes only if a satellite is ever promoted to a real route.
  *
  * PROVENANCE: the rows are the design-lang round's shared fixture (`design-lang/proto/world.ts`),
  * copied rather than imported ON PURPOSE — the proto folds to its snapshot branch at the close of
@@ -17,8 +16,8 @@
  *   · proposed + drift on one cell (`connectedLoad`) — two marks at once, the composition the
  *     precedence order asserts and no fixture had ever forced.
  *   · staged by YOU and staged by PEA on two cells — the square's colour is the only difference,
- *     which is the one thing the state model still cannot supply (CLEANROOM: "staging has no
- *     author"). Here it is a fixture field; in production it is inferred from the wrong fact.
+ *     which is the one thing the state model still cannot supply: staging has no author. Here it
+ *     is a fixture field; in production it is inferred from the wrong fact.
  *   · every capability refusal that renders differently: readonly · excluded · nohome.
  *   · a value long enough to prove the footline clamp and the no-icons-in-cells ruling.
  */

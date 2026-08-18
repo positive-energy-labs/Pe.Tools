@@ -125,10 +125,7 @@ rotated wing. Three independent defects stacked there; each got its own fix, all
 
 ## 2026-08-14 (seam refactor + six-way tuning fan-out) — patterns adopted, axes closed
 
-Full evidence: `docs/features/takeoffs/solver-architecture-reeval.md` and
-`docs/features/takeoffs/zoning-plan-ink-feasibility.md` (both since folded into
-`docs/features/takeoffs/LEDGER.md` + `dwg-ink-recipe.md`; git history has the full A/B appendix
-and composite table). Composite outcome: 31 → 59
+Composite outcome: 31 → 59
 accepted rooms (17% → 27% conversion) on the 45-zone project-a harness, no zone losing a room, all
 laws green, 127 tests.
 

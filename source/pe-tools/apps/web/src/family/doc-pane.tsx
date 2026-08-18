@@ -233,7 +233,7 @@ export function ProposalCard({
         colour: "var(--r-ink-mute)",
         // MUTED, never `--r-done`: nothing of pea's was adopted. Accepted and superseded look
         // different because they ARE different — one is agreement, the other is being overtaken.
-        // The CELL shows nothing at all; the grammar has no `severed` stage (DESIGN-AUDIT #7).
+        // The CELL shows nothing at all; the grammar has no `severed` stage.
         note: `Superseded — you typed your own value into ${target}, so pea's ${proposal.proposed} has nothing left to argue for. There was no accept and no deny; the cell simply moved on. The grounding citation is untouched, because where a number came from is a separate fact from what pea read.`,
       },
     }[verdict];

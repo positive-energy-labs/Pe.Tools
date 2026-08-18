@@ -5,13 +5,13 @@
  * accept/deny. `components/ui/verb.tsx` still serves the unmigrated routes; absorbing it is the
  * per-route normalization phase's job, not this file's.
  *
- * RULINGS EMBODIED (docs/features/design-lang/CLEANROOM.md):
+ * RULINGS EMBODIED:
  * - THE ROUND-1 GAP CENSUS against canon `ui/verb`, all five builders independently:
  *     · no ICON SLOT — the three nav directions are only legible as icons. Fixed: `icon`, and
  *       `direction` supplies nav's arrow for free.
  *     · no FILLED tone — every variant that took a commit position contested the bordered blue.
  *       Fixed: `commit` is a filled blue, and it is the ONLY filled blue in the language.
- *     · no AGENT tone — COLOR-ROLES Law 0 gave the agent's identity no interaction slot, which
+ *     · no AGENT tone — the agent's identity had no interaction slot, which
  *       made pea's own verb illegal (4/5 builders hit this). Fixed: `agent`.
  *     · `reason` is REQUIRED, always. The constructor argument is the enforcement (§3): every
  *       refusal at every call site has an explanation. RULED 2026-08-16 (kaitpw, on the live

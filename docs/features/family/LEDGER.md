@@ -28,7 +28,7 @@
 
 - Restore/finish the live substrate at HEAD (variant-e promotion went fixture-only; recoverable at 4b88ba4^) and run the live-lane e2e proof: snapshot → matrix → staged edits through `family.editor.apply` (incl. a failing edit), dryRun advisory, family slot, capture → authored doc. None of it has met a live host.
 - Live proof of the foundry apply lane: plan → apply → receipts on a sandbox project (FreshRevitProcess); includes proving the profile-picker enumeration (`settings.tree` + per-entry `settings.document.open`) against a live host.
-- Implement FamilyModel patch semantics, then the one-shot legacy-profile converter (MechEquip/ElecEquip/PlumbEquip essential; CustomFams first); `familyfoundry.project` retarget held until then.
+- Implement FamilyModel patch semantics, then the one-shot legacy-profile converter (MechEquip/ElecEquip/PlumbEquip essential; CustomFams first); `familyfoundry.project` retarget held until then. SavedEquip is retained for its hand-extracted parameter tables — do not delete its profiles even where strict parse fails.
 - Materialize-profile-onto-ONE-family op path (foundry apply with familyIds=[one] vs a new op).
 - State-model gaps: grounding link table, canonical drift primitive, evidence receipt shape (capture stamps versionToken null), family-level identity drift, profile dirty fact.
 - `family.editor.apply` concurrency guard (snapshot-token echo), designed after the drift vocabulary — must speak the same agreement language the UI renders.

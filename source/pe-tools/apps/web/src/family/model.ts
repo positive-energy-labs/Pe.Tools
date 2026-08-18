@@ -187,8 +187,8 @@ export const MARK_TITLE: Record<Agreement, string> = {
  * this vocabulary allowed on `--r-alarm`; every other word is either a gap in what the profile
  * claims (caution) or a fact with no urgency (the ink ladder).
  *
- * `derived` deliberately spends NO colour: the language has no role for "a formula computed this"
- * (DESIGN-AUDIT #3), and the `ƒ` glyph plus italic already carry it. Borrowing `--r-done` — which
+ * `derived` deliberately spends NO colour: the language has no role for "a formula computed
+ * this", and the `ƒ` glyph plus italic already carry it. Borrowing `--r-done` — which
  * is what the retired `--st-derived` shim resolved to — would have claimed the value LANDED.
  */
 export const AGREEMENT_TONE: Record<Agreement, VerdictTone> = {
@@ -218,8 +218,8 @@ export const AGREEMENT_RANK: Agreement[] = [
  * to accept or deny. It is deliberately NOT "denied": denying is a judgement about pea's reading,
  * superseding is the user simply having gone first.
  *
- * The cell grammar cannot draw this state at all (SURFACE-PHILOSOPHY §3 owes a specimen for it;
- * DESIGN-AUDIT #7), so it lives only on the sidebar card, muted.
+ * The cell grammar cannot draw this state at all (SURFACE-PHILOSOPHY §3 owes a specimen for it),
+ * so it lives only on the sidebar card, muted.
  */
 export type CellVerdict = ProposalVerdict | "superseded";
 

@@ -5,11 +5,11 @@ description: Find the ideal shape of a product's UI/UX. Use for UI when clean-ro
 
 # Find the product
 
-Help the user find their product. The immediate goal depends on circumstance but the ultimate goal is always the same: make a prod-ready product. A end-user (or you or I) must be able to drive the full workflow through the UI, end to end.
+Help the user find their product. The immediate goal depends on circumstance but the ultimate goal is always the same: make a prod-ready product. An end-user (or you or I) must be able to drive the full workflow through the UI, end to end.
 
 In principle, the ideal product is one that makes a hard and sprawling workflow seamless. Ideal UI shape is best discovered prototyping and should be the first step. This exercise clarifies underlying concepts and their relations, helps craft UX/UI idioms, reveals the actual problem, and uncovers where the backend falls short. Only after the consuming surface settles does creating and composing the backend carry real meaning. 
 
-The find-the-product cycle is roughly: 1) find the UI shape, 2) promote to canon, 3) make the backend, 4) manual E2E test, 5) (later) automated E2E test. In practice shimming allows 2-4 to happen interleaved or out of order. "Code is the spec" is a tenet. Every step nudges canon code closer to the target along its relevant axis, built so shims can be slotted during in the full promotion. If the solution space does not narrow then something went wrong. 
+The find-the-product cycle is roughly: 1) find the UI shape, 2) promote to canon, 3) make the backend, 4) manual E2E test, 5) (later) automated E2E test. In practice shimming allows 2-4 to happen interleaved or out of order. "Code is the spec" is a tenet. Every step nudges canon code closer to the target along its relevant axis, built so shims can be slotted in during the full promotion. If the solution space does not narrow then something went wrong. 
 
 ## Glossary, in context of this skill
 - Product: The UI, backend, and how the wiring feels; the thing being shaped and found.
@@ -20,7 +20,7 @@ The find-the-product cycle is roughly: 1) find the UI shape, 2) promote to canon
 
 ## Process
 
-Run the `grilling` skill on what the product *is*, goals, and scope. If no precendent exists then solving end-user stories and eliminating friction are top priority. 
+Run the `grilling` skill on what the product *is*, goals, and scope. If no precedent exists then solving end-user stories and eliminating friction are top priority. 
 
 Then, drive the `prototype` skill as the main loop and abide by the `delegation` skill's protocol. 
 
@@ -52,5 +52,5 @@ variant could express in its own layout can still be right one level up.
 Gather context from `docs/features/<surface>`, align on the design system and component library, and absorb the precedent when it exists. **Invoke the `prototype` skill (UI branch).** What this skill adds:
 
 - **Dream big, rounds should overreach**, especially round 1. A variant pruned for feasibility teaches nothing. Reframes that retire a UI idiom only come from variants built in ignorance of the current frame. 
-- **Use real data**. Variants that seed their own mock data compare data instead of structure; this may render entire rounds useless. Real data changes verdicts that placeholders can't reach. Scaffold the environment that all threads need. If using fixture data, it should not limit protos, its only a start point. Note where protos seed their data and what this says about the product.
+- **Use real data**. Variants that seed their own mock data compare data instead of structure; this may render entire rounds useless. Real data changes verdicts that placeholders can't reach. Scaffold the environment that all threads need. If using fixture data, it should not limit protos, it's only a start point. Note where protos seed their data and what this says about the product.
 - **Import the real components/primitives** when the primitive itself is not in question. A hermetic prototype proves nothing and variants built on canon primitives audit them for free. Record every gap as a comment at the call site and note where primitives lack.

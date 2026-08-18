@@ -41,8 +41,7 @@ import { useRouteState } from "#/workbench/route-state";
  * Design-language pass 2026-08-16: head is the one `AddressingBar` (this route no longer
  * rides `RouteWorkspaceShell`); the field grid is the machine-operated object and wears the
  * one `ArtifactFrame`; field values render through `StateCell` (proposed / staged / clean);
- * verbs are lang `Verb`s bracketed by `useVerb`. Gaps are recorded in
- * docs/features/settings/DESIGN-AUDIT.md.
+ * verbs are lang `Verb`s bracketed by `useVerb`.
  */
 export const Route = createFileRoute("/settings")({
   component: SettingsRoute,

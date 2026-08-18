@@ -14,7 +14,7 @@
  * The projection lane runs sideways: families picked in the table, dense profile JSON back.
  *
  * All Family Foundry calls go through `#/host/familyfoundry`, fully typed against the checked-in
- * generated clients. The remaining unproven surface is LIVE behavior (SHIMS: step-3 live proof).
+ * generated clients. The remaining unproven surface is LIVE behavior: step-3 live proof.
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQueries } from "@tanstack/react-query";
@@ -278,7 +278,7 @@ function Seam({ op }: { op: string }) {
   return (
     <FactChip
       dashed
-      title={`${op} is a typed bridge op that has never met a live Revit session. It will run — nothing here is a mock — but its live behaviour is unproven, and docs/features/family/SHIMS.md names the step-3 proof that closes this chip.`}
+      title={`${op} is a typed bridge op that has never met a live Revit session. It will run — nothing here is a mock — but its live behaviour remains unproven until the step-3 live proof closes this chip.`}
     >
       unproven · {op}
     </FactChip>
@@ -739,7 +739,7 @@ function FamiliesRoute() {
       /* The plan verdict sits AFTER the identity columns, not among the parameter clusters: the
          plan is a lens over these rows, not a parameter of the family.
 
-         It rides the table's `verdict:` clause (DESIGN-AUDIT #1, re-ruled 2026-08-16 R5): a
+         It rides the table's `verdict:` clause: a
          pipeline verdict about the ROW, whose word the route owns and whose tone union is the
          meaning band by construction. */
       {
@@ -771,7 +771,7 @@ function FamiliesRoute() {
               /* A project binding and a formula are FACTS about where a value lives, not
                  alarms — they get quiet ink and spend no meaning role. Formula-driven was
                  `--cat-lichen`, a TAXONOMY colour carrying a value fact; the language has no
-                 "derived" role to move it to (DESIGN-AUDIT #3), so it drops to the ink ladder
+                 "derived" role to move it to, so it drops to the ink ladder
                  and separates from a project binding by italic rather than by hue. */
               className={cn(
                 unresolved && "text-[var(--r-ink-mute)]/50",
@@ -1093,7 +1093,7 @@ function FamiliesRoute() {
           {/* The kind is DERIVED, never remembered: an apply the op refused is the model
               disagreeing (alarm); anything else that threw is a busy or broken bridge, which
               is not (caution). `useVerb` funnels both into one string, so the discriminator
-              has to come from the payload — see DESIGN-AUDIT #4. */}
+              has to come from the payload. */}
           <OutcomeLine
             kind={applyData?.refused === true ? "refused" : "error"}
             label={applyData?.refused === true ? "apply refused" : "command failed"}

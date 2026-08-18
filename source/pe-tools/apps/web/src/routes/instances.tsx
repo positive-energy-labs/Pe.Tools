@@ -27,8 +27,7 @@ import { useWorldLog } from "#/host/use-target";
  * Design-language pass 2026-08-16: the fleet renders through `MasterTable` with a `verdict:`
  * phase column (live · booting · unresponsive on the meaning band — fleet's old `PHASE_COLOR`
  * map is deleted); lifecycle controls are lang `Verb`s (all commit — every one writes
- * beyond the page); dashed declare buttons lose the seam edge they were squatting on. Gaps in
- * docs/features/instances/DESIGN-AUDIT.md.
+ * beyond the page); dashed declare buttons lose the seam edge they were squatting on.
  */
 
 export const Route = createFileRoute("/instances")({ component: Page });

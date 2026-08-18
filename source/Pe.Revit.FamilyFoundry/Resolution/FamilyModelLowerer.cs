@@ -39,6 +39,8 @@ public static class FamilyModelLowerer {
                 IsInstance = pair.Value.IsInstance,
                 Value = HasTypeOverrides(model, pair.Key) ? null : pair.Value.Value,
                 Formula = pair.Value.Formula,
+                // SourceNames are plain string names today; keep this boundary structured so source
+                // references can later carry optional metadata (for example, data type) without breaking the authored model.
                 SourceNames = pair.Value.MappedFrom.ToList()
             }).ToList(),
             PerTypeAssignmentsTable = LowerTypeAssignments(model),

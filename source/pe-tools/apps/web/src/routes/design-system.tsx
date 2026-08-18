@@ -1,13 +1,13 @@
 ﻿/**
  * /design-system — THE INDEX. The design language, stated and demonstrated.
  *
- * THE INDEX LAW (ruled 2026-08-16, CLEANROOM "cutover"): **nothing exists on this page unless it
+ * THE INDEX LAW (ruled 2026-08-16): **nothing exists on this page unless it
  * is codified as a real component with a real — or soon-to-be — consumer.** The old 1,540-line
- * shadcn exhibit catalogued components nothing consumed; those are evicted (SHIMS entry 6), not
+ * shadcn exhibit catalogued components nothing consumed; those are evicted, not
  * moved. Every specimen below is the production component, imported from where production
  * imports it, rendered under the tokens production runs under.
  *
- * NO SHIMS. Where a component cannot express something the language needs, the page records a
+ * NO STAND-INS. Where a component cannot express something the language needs, the page records a
  * `GAP:` at the call site and, where a reader would otherwise be misled, a visible gap-note. It
  * does NOT fork, wrap, or restyle the component to make the demo look finished. A workaround here
  * is worse than a defect: it is a defect that hides its own signal. The pair principle — this
@@ -18,9 +18,6 @@
  * design-lang proto hand-rolled its table, so nothing had ever proven the grammar survives the
  * real primitive. It mostly does not yet — the gap notes in that section are the deliverable.
  *
- * Sources: docs/features/design-lang/CLEANROOM.md (verdicts + frontier) ·
- * docs/features/design-system/SHIMS.md (the stand-in ledger) · docs/design/COLOR-ROLES.md ·
- * docs/design/SURFACE-PHILOSOPHY.md §5 · src/design-lang.css (the tokens themselves).
  */
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
@@ -759,15 +756,15 @@ function VerbBlock() {
   return (
     <Demo
       label="Verb · VerbGroup"
-      consumers="ArmingStrip (shipping); pea's card accept/deny (/design-system/proposal-flow); soon: the family clean-room verb lane, the takeoff panes. components/ui/verb.tsx still serves the unmigrated routes — SHIMS entry 1"
+      consumers="ArmingStrip (shipping); pea's card accept/deny (/design-system/proposal-flow); soon: the family clean-room verb lane, the takeoff panes. components/ui/verb.tsx still serves the unmigrated routes"
       spec={
         <>
           Four tones, and the tones are the whole colour story: <em>act</em> is neutral,{" "}
-          <em>agent</em> is pea&apos;s own (the slot COLOR-ROLES Law 0 never had, which made
-          pea&apos;s own verb illegal), <em>commit</em> is the one filled blue, <em>nav</em> is blue
-          text with a required direction. Blast radius groups the lane and buys no hue. A refusal
-          always has a reason — the constructor demands it — carried as the title, except a disabled
-          commit verb, which says it on the surface (fit reviews, 2026-08-16).
+          <em>agent</em> is pea&apos;s own (the missing slot that made pea&apos;s own verb illegal),{" "}
+          <em>commit</em> is the one filled blue, <em>nav</em> is blue text with a required
+          direction. Blast radius groups the lane and buys no hue. A refusal always has a reason —
+          the constructor demands it — carried as the title, except a disabled commit verb, which
+          says it on the surface (fit reviews, 2026-08-16).
         </>
       }
     >
@@ -1009,8 +1006,8 @@ function StateCellBlock() {
         <code>stagedBy</code> exists because the RENDERING is ruled, but the state model has no
         author on <code>staged</code> — <code>trichotomy.ts</code> stores <code>by</code> and every
         consumer discards it, so production infers pea-vs-you from <code>origin</code>, which is the
-        author of the VALUE. Both squares above are fixture-supplied. CLEANROOM calls this the
-        round&apos;s strongest signal; SHIMS entry 5 owns it.
+        author of the VALUE. Both squares above are fixture-supplied; this is the round&apos;s
+        strongest signal.
       </GapNote>
       <GapNote>
         <code>readonly</code> and <code>excluded</code> are two different refusals — a formula
@@ -1098,8 +1095,8 @@ function OutcomeBlock() {
       <GapNote>
         an outcome carries no verb, no time, no target and no item list. &ldquo;4 staged for
         retry&rdquo; has nowhere for the 4 to live, and a lane of these cannot say which write
-        produced which receipt. CLEANROOM calls it &ldquo;outcomes are orphans&rdquo;; the state
-        model moves first, then the signature.
+        produced which receipt. Outcomes are orphans; the state model moves first, then the
+        signature.
       </GapNote>
     </Demo>
   );
@@ -1109,7 +1106,7 @@ function ArmingBlock() {
   return (
     <Demo
       label="ArmingStrip"
-      consumers="none yet — SHIMS entry 3. The family apply verb is the intended first consumer; the lifecycle is driven live at /design-system/arming"
+      consumers="none yet. The family apply verb is the intended first consumer; the lifecycle is driven live at /design-system/arming"
       spec={
         <>
           The cell grammar at its largest scale, and the ceremony clause SURFACE-PHILOSOPHY §3 has
@@ -1362,7 +1359,7 @@ const SATELLITES: readonly { to: string; name: string; purpose: string }[] = [
     to: "/design-system/popovers",
     name: "popovers",
     purpose:
-      "the position harness. Every popover-bearing component the app actually ships, mounted nine times at the corners, edges and centre of the viewport. It does not fix flip/clamp/overflow inconsistency — it makes it one visible fact, which is what queues a single popover foundation (SHIMS entry 7).",
+      "the position harness. Every popover-bearing component the app actually ships, mounted nine times at the corners, edges and centre of the viewport. It does not fix flip/clamp/overflow inconsistency — it makes it one visible fact, which is what queues a single popover foundation.",
   },
   {
     to: "/design-system/swatch",
@@ -1395,8 +1392,8 @@ function Satellites() {
       </div>
       <p className="t-label max-w-[80ch] text-[var(--r-ink-mute)]">
         Satellites mock their worlds by construction — null identities, no host calls — and say so
-        on the surface. That is SHIMS entry 4, and it closes only if a satellite is ever promoted to
-        a real route.
+        on the surface. That requirement closes only if a satellite is ever promoted to a real
+        route.
       </p>
     </Section>
   );

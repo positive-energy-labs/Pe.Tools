@@ -4,8 +4,8 @@
  * =============================================================================================
  *
  * This test IS the lint. The web app has no CI; `vp test` runs in the `ready` lane, so the
- * token discipline that held by review during the sweep now holds by assertion. It discharges
- * SHIMS.md entry 8 and encodes the DESIGN-LANG-HANDOFF §1 census gates that were driven to
+ * token discipline that held by review during the sweep now holds by assertion. It encodes the
+ * DESIGN-LANG-HANDOFF §1 census gates that were driven to
  * zero (DESIGN-SWEEP.md, CLOSED 2026-08-16). It walks src/**\/*.{ts,tsx,css} once with plain
  * regexes — no dependencies, no AST.
  *
@@ -19,7 +19,7 @@
  *                        --r-line-2 (design-lang.css); the bare names died with the Lens
  *                        vocabulary. (The regex is literal, so var(--r-line) never matches.)
  *  3. tele classes       tele / tele-label / section-label as class words. The TYPE TIERS
- *                        ruling (TYPE-COPY-CENSUS RULED addendum): tier x face x case replaced
+ *                        ruling: tier x face x case replaced
  *                        the tele bundles, deleted 2026-08-16. Comments are stripped first;
  *                        lang's `dl-section-label` is a different word and stays legal.
  *  4. hex literals       #rrggbb / #rrggbbaa outside design-lang.css. THE LAW in the canon
@@ -32,8 +32,8 @@
  *  textPx           any text-[Npx]: off-tier type. The tier system (t-* classes) is the scale;
  *                   the remaining spends are exhibit chrome + a few audited sites.
  *  rawButton        <button> outside components/ui + components/lang: verbs come from
- *                   lang/Verb (SHIMS entry 1); the tail is non-verb machinery.
- *  uiButtonImports  import sites of ui/button — SHIMS entry 1's still-open half; each route
+ *                   lang/Verb; the tail is non-verb machinery.
+ *  uiButtonImports  import sites of ui/button — the still-open half; each route
  *                   pass that migrates a consumer lowers this until the file is deleted.
  *  dashed           border-dashed / stroke-dasharray / border-style: dashed outside
  *                   components/lang + design-lang.css. R13b: every broken-edge mechanism
@@ -207,7 +207,7 @@ describe("design guard — ratchets (baselines may only fall)", () => {
     );
   });
 
-  it("uiButtonImports — SHIMS entry 1's open tail; falls to 0 when ui/button dies", () => {
+  it("uiButtonImports — open tail; falls to 0 when ui/button dies", () => {
     ratchet("uiButtonImports", scan(FILES, /from\s+["'][^"']*ui\/button["']/g));
   });
 

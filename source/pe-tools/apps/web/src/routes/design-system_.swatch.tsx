@@ -18,7 +18,7 @@
  * what tells you whether the component you are about to restyle has one caller or twenty-two.
  *
  * FIXTURE, ANNOUNCED: `design-system/fixtures.ts` — the same rows the index and the other
- * satellites render, so no surface here can show a cell state the table cannot (SHIMS entry 4).
+ * satellites render, so no surface here can show a cell state the table cannot.
  */
 import { Fragment, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";

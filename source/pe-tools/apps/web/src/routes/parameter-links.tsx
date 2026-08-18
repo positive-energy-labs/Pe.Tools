@@ -158,8 +158,8 @@ function ParameterLinksRoute() {
   );
 
   /**
-   * THE ARMING STRIP'S STATE (fit reviews, ruled 2026-08-16 — SHIMS entry 3's first shipping
-   * consumer): the preview→stale→apply gate IS the arming lifecycle, so it maps onto the
+   * THE ARMING STRIP'S STATE (fit reviews, ruled 2026-08-16): the preview→stale→apply gate IS the
+   * arming lifecycle, so it maps onto the
    * strip's own phases instead of hiding in a hover title —
    *   · no fresh preview (never run, pea's run, or the draft moved since) → `refused`, and
    *     re-plan IS preview: the only way forward is a fresh projection from this pane;
@@ -304,8 +304,8 @@ function ParameterLinksRoute() {
                   }
                 />
               </VerbGroup>
-              {/* SHIMS entry 3's first shipping consumer: the preview→stale→apply gate, ON
-                  the surface. Refused = the plan is stale (re-plan runs preview); arming =
+              {/* The preview→stale→apply gate, ON the surface. Refused = the plan is stale
+                  (re-plan runs preview); arming =
                   the reason input is the last gate before the one commit. */}
               {editing != null ? (
                 <ArmingStrip

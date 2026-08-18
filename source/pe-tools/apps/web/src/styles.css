@@ -99,7 +99,7 @@ body,
   min-height: 100%;
 }
 
-/* ── TYPE TIERS (ruled 2026-08-16 · evidence: docs/features/design-lang/TYPE-COPY-CENSUS.md) ──
+/* ── TYPE TIERS (ruled 2026-08-16) ──────────────────────────────────────────────────────────
    Three orthogonal axes, so a text spend is three one-word decisions:
      TIER — size+leading by ROLE, the six utilities below. Arbitrary text-[Npx] and every
             half-pixel size die; the census shows the first three tiers cover 90% of real use.

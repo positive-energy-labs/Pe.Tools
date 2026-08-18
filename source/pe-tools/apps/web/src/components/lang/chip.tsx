@@ -4,7 +4,7 @@
  * CONSUMERS: `FactChip` — the arming strip's plan hash and count (already, below), soon the
  * master-table header facts; `NarrowChip` — soon, the addressing sentence's narrowing row.
  *
- * RULINGS EMBODIED (docs/features/design-lang/CLEANROOM.md):
+ * RULINGS EMBODIED:
  * - THE ROUND-1 GAP CENSUS: canon `ui/chip` is a STATE FACT — no removal affordance, no count
  *   slot — so a NARROWING chip could not be built from it. Every one of the five builders
  *   hand-rolled the removable form. Splitting them is the fix; merging them would give the fact
@@ -12,7 +12,7 @@
  *   slot ("a promise in the type that misleads the next reader").
  * - TONE COMES FROM THE MEANING TOKENS and nowhere else. A chip may not mint a hue.
  * - `dashed` IS RESERVED FOR SEAM — typed but unproven, a fixture, a stand-in. The border style
- *   IS that meaning; nothing else in the language may use it (COLOR-ROLES shape law).
+ *   IS that meaning; nothing else in the language may use it.
  * - CHIPS NARROW BUT NEVER HIDE. `NarrowChip`'s count is of rows still in scope, and removing
  *   one widens the view back out — it never reveals rows that were being concealed.
  * - `title` is required on both: a chip states a fact; the title says what the fact means and

@@ -112,8 +112,8 @@
  *                  refusal predicates and its receipt live in `#/family/build`.
  *
  * STILL PAGE-LOCAL ON BOTH LANES, and honest about it: `apply` in both its bulk and per-type shapes
- * (`family.editor.apply` is a later phase — the profile-wins direction has no concurrency guard yet,
- * SHIMS shim 8), and the proposals with their accept/deny (they need `route:settings` field
+ * (`family.editor.apply` is a later phase — the profile-wins direction has no concurrency guard yet),
+ * and the proposals with their accept/deny (they need `route:settings` field
  * proposals, which the projection deliberately does not invent), and the doc pane's parse.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -1012,7 +1012,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
                 mark is the only place the representation is visible. Several consumers join here,
                 and that join is the point: editing this row moves all of them at once.
 
-                DERIVED SPENDS NO COLOUR (DESIGN-AUDIT #3): the language has no role for "a formula
+                DERIVED SPENDS NO COLOUR: the language has no role for "a formula
                 computed this", and the leading `=` already says it. Italic carries the rest. */}
             {(isFormula(authored) || drives.length > 0) && (
               <span className="block truncate t-caption leading-[11px]">
@@ -1322,7 +1322,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
   // header rows; a column WITHOUT a group spans both, and a spanning cell distorts the first
   // row's measured height — which is exactly what the sticky offset is measured from, so the
   // group labels end up hidden under the leaf row. Uniform grouping keeps the two rows honest.
-  /* The row's verdict (DESIGN-AUDIT #1, re-ruled 2026-08-16 R5: rides the meaning band via the
+  /* The row's verdict rides the meaning band via the
      narrow tone union — `stateColumn` and its unconstrained CSS-string tone are gone). */
   const rowVerdict = (row: PRow): Verdict => {
     if (row.kind === "ghost")

@@ -1,5 +1,5 @@
 /**
- * SECTION — the page-chrome unit (ruled 2026-08-16, ops-pass batch; SHIMS crusade roster:
+ * SECTION — the page-chrome unit (ruled 2026-08-16, ops-pass batch:
  * "every new route hand-rolled the same Section/SectionHead chrome — three near-identical
  * copies — the most visible thing lang/ is missing").
  *

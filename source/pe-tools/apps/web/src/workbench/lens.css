@@ -4,7 +4,7 @@
  * here; every colour is a real role from design-lang.css. Per the --r-on rule, every rule that
  * sets a ground background re-declares --r-on beside it.
  *
- * Colour decisions this file encodes (see docs/features/workbench/DESIGN-AUDIT.md):
+ * Colour decisions this file encodes:
  *   · THE "YOU" IDENTITY IS NEUTRAL INK (standing question, ruled here by evidence): the user's
  *     turns separate by position (right-aligned block) and the role line; their marks are ink
  *     washes, no hue bought. Pea keeps the agent identity (--r-pea) — asymmetry is the point:

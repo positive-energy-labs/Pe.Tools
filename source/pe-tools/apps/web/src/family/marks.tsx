@@ -5,7 +5,7 @@
  * The consolidation batch delivered the editable `StateCell`, and the ghost literal cell and the
  * inspector's family-value editor now ride it — their refusal (`RefusalNote`, which used to live
  * here) folded into the primitive and was DELETED. `ProposedCell` survives for exactly two
- * reasons, both filed as adoption-pass findings in the DESIGN-AUDIT:
+ * reasons:
  *
  *   1. INHERITED-PLACEHOLDER SEMANTICS (#13). A type cell with no override shows the family
  *      value as a grey placeholder — the inheritance showing through, not a value the type

@@ -4,7 +4,7 @@
  * CONSUMERS (waiting at ship time, counted in the families audit): /families ×12, /family ×8,
  * /takeoffs ×4 — every one currently a per-surface `EMPTY_CLASS` constant that enforces nothing.
  *
- * RULINGS EMBODIED (CLEANROOM consolidation batch R9; SURFACE-PHILOSOPHY §1 + §4):
+ * RULINGS EMBODIED (SURFACE-PHILOSOPHY §1 + §4):
  * - "'Not started' is a state, not a zero" — an entity with nothing yet renders as a LABELLED
  *   empty, never as absence, or the untouched half of the project reads as done.
  * - "Design the empty states. Distinguish 'nothing in scope', which is the route's story, from

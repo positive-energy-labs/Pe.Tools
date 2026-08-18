@@ -61,6 +61,11 @@ Two orthogonal relationship types (both belong in the snapshot):
 24. (FF-internal) LogEntry is terminal — not relevant to new code.
 25. Collecting per-type values from a PROJECT doc needs temp FamilyInstance + activating each
     symbol in a rolled-back transaction, and cannot get formulas — snapshot from the FAMILY doc.
+26. **Transaction wall:** `EditFamily` throws while the project document is modifiable (an open
+    transaction); `LoadFamily` into a project throws while a transaction is open on it; and
+    `LoadFamily` into a family document silently returns false without a transaction open on it.
+27. `RenameParameter` auto-rewrites dependent formulas, and per-type values survive the rename
+    (live-proven); this is the basis of rename-as-provenance / `wasNamed` in `FamilyModel` migration.
 
 ## FF UX verdicts (keep / kill)
 

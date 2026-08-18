@@ -5,7 +5,7 @@
  * (soon — the card's staged values are this same treatment one scale up); `CellStateKey`, which
  * renders its specimens through this component precisely so the key cannot lie about the table.
  *
- * RULINGS EMBODIED (docs/features/design-lang/CLEANROOM.md):
+ * RULINGS EMBODIED:
  * - ROUND 1 WAS WON BY "one cell grammar everywhere" — the chat card's staged values, the table
  *   cells and the arming strip being the same treatment at three scales was named load-bearing.
  *   This component is the first of those three; the other two are built from the same tokens.
@@ -65,8 +65,8 @@ export interface StateCellProps {
    * RULED 2026-08-16 (consolidation batch): authorship is a QUALIFIER of staging, not a fifth
    * axis — it only reads when `stage` is not clean. Census tables count four axes + qualifier.
    *
-   * ponytail: the state model has no author on `staged` (CLEANROOM: "staging has no author",
-   * the round's strongest signal — `trichotomy.ts` stores `by` and every consumer discards it).
+   * ponytail: the state model has no author on `staged`; `trichotomy.ts` stores `by` and every
+   * consumer discards it.
    * The prop exists because the RENDERING is ruled; callers default to "you" until the model
    * carries the fact. Upgrade path: plumb `staged.by` through the trichotomy payload and drop
    * the default.

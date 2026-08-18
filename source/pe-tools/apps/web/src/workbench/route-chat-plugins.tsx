@@ -80,8 +80,8 @@ const workspaceOnlyPlugins: Record<string, string> = {
   instances: "Instances",
 };
 
-/** Registered slices whose ROUTE no longer exists: pea still targets the state (family SHIMS
- * shim 7 retains `route:family-types` for the mcps handlers + inline chat cards), but there is
+/** Registered slices whose ROUTE no longer exists: pea still targets the state
+ * (`route:family-types` remains for the mcps handlers + inline chat cards), but there is
  * no page to iframe — offering it as a workspace would 404. */
 const WORKSPACELESS_ROUTES = new Set(["family-types"]);
 

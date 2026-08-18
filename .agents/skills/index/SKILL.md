@@ -5,7 +5,7 @@ description: The entry point and router for this repo's skill set. Invoke with w
 
 # Index
 
-The single entry point over this repo's skill set. The user states intent; you pick the route and **drive it** — chain skills automatically, stopping only at genuine decision gates (grilling answers, round verdicts, spec approval, commits). Don't recommend-and-halt.
+The single entry point over this repo's skill set. The user states intent; you pick the route and **drive it**: invoke each hop yourself where the skill allows model invocation; where the next hop is user-invocable only (`disable-model-invocation: true`), hand back the exact slash command to run and stop there. Otherwise stop only at genuine decision gates (grilling answers, round verdicts, spec approval, commits). Never recommend a vague direction — name the next command.
 
 Read [FLOWS.md](FLOWS.md) for the flow diagrams. When a route spans sessions, decide continuation per [PHASE-BOUNDARIES.md](PHASE-BOUNDARIES.md). Docs conventions (ledgers, ADRs, MAP.md, grounding, handoffs) live in the `docs` skill — every route persists through it.
 
@@ -36,7 +36,7 @@ Engines the routes drive (rarely invoked alone): `grilling`, `tdd`, `code-review
 
 ## Driving the loop
 
-After a skill completes its phase, proceed to the next hop yourself. Stop for the human only when:
+After a skill completes its phase, proceed to the next hop yourself — or, if the hop is user-invocable only, hand the user its exact slash command. Stop for the human only when:
 
 1. A decision is theirs (grilling rounds, prototype verdicts, spec/ticket approval, scope changes). Exception — **sanctioned autonomous sessions**: when the user explicitly hands over a session (e.g. an AFK find-the-product round), the agent may grill against recorded verdicts and rule in their absence; record such rulings as re-openable and say which were made autonomously.
 2. A destructive or outward-facing action is next (commits are fine on approved work; force-pushes, deletions of unreviewed work are not).

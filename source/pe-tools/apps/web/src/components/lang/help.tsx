@@ -15,8 +15,8 @@
  * Prose inside is SANS — orientation is human language, not a machine measurement.
  *
  * ponytail: CSS-only hover/focus reveal, absolutely positioned — no popover library, no portal.
- * Known ceiling: it clips inside overflow containers; when the shared popover foundation lands
- * (SHIMS entry 7) this rides it. Section heads — its habitat — rarely clip.
+ * Known ceiling: it clips inside overflow containers; when the shared popover foundation lands,
+ * this rides it. Section heads — its habitat — rarely clip.
  */
 import { cn } from "#/lib/utils";
 

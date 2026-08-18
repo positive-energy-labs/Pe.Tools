@@ -66,6 +66,6 @@ Write the approved tickets as Owed items in `docs/features/<name>/LEDGER.md`, in
 
 If a ticket genuinely needs more than a line or two (acceptance criteria, a decision-encoding snippet), write `docs/features/<name>/<NN>-<slug>.md` and link it from the Owed line. Default to the line.
 
-Work the **frontier**: any ticket whose blockers' Owed lines are gone. Delete each Owed line when its work lands — never mark "done".
+Work the **frontier**: any ticket with `Blocked by: none`. When a ticket's work lands, delete its Owed line **and scrub its number from every remaining `Blocked by:` list** in the same edit — a dangling blocker number is then always an error, never a completion.
 
 Avoid specific file paths or code snippets — they go stale fast. Exception: if a prototype produced a snippet that encodes a decision more precisely than prose can (state machine, reducer, schema, type shape), inline it and note briefly that it came from a prototype. Trim to the decision-rich parts — not a working demo, just the important bits.

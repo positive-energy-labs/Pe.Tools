@@ -5,7 +5,7 @@
    Every colour below is `var(--r-…)` from `src/design-lang.css`. There is not one colour
    literal in this file, on purpose: a literal would be invariant against the token layer and
    would quietly un-decide a colour the palette round already decided. That invariance is the
-   exact defect round 2 found in canon `Button`/`Chip` (CLEANROOM, cross-cutting findings) and
+   exact defect round 2 found in canon `Button`/`Chip`, and
    `components/lang` exists partly to not have it.
 
    One file rather than seven: the mechanisms below are genuinely SHARED — the hover law, the
@@ -16,7 +16,7 @@
    these primitives must render correctly anywhere on any route, including routes still on the
    old token vocabulary.
 
-   ══ THE SLOT TABLE (what may say what — CLEANROOM, ruled through two rounds) ═══════════════
+   ══ THE SLOT TABLE (what may say what — ruled through two rounds) ══════════════════════════
      CELL BODY (fill + ring)  → pea's PROPOSAL, and UNEDITABLE/DISABLED. Nothing else. Ever.
      TEXT DECORATION          → the squiggle family: state of the VALUE, ranked by colour.
      TEXT WEIGHT              → BOLD = unsaved. Reserved; no other use anywhere.
@@ -105,7 +105,7 @@
       never floats), a pea ring, the top-right fold — and the bottom-left unsaved square in
       pea's own ink. Fold and square TRAVEL TOGETHER on an open proposal: the fold says pea
       authored it, the square says nothing has been written yet, and they are the same fact seen
-      from two sides (CLEANROOM round-2 ruling note 1). */
+      from two sides. */
 .dl-cell[data-body="proposed"] {
   --dl-cell-fill: color-mix(in srgb, var(--r-pea-ink) 20%, var(--r-on));
   --dl-cell-ring: inset 0 0 0 1.5px color-mix(in srgb, var(--r-pea) 70%, transparent);
@@ -159,7 +159,7 @@
   font-weight: inherit;
 }
 /* ONE square, two authors — the shape is identical, only `--dl-cell-square` differs, so the two
-   can never diverge into two marks (COLOR-ROLES shape law, with the colour axis doing "whose"). */
+   can never diverge into two marks, with the colour axis doing "whose". */
 .dl-cell[data-body="proposed"]::before,
 .dl-cell[data-unsaved]::before {
   content: "";
@@ -274,8 +274,8 @@
 }
 
 /* the footline — one per cell, one line, clamped, so a grid never re-flows.
-   ponytail: the clamp truncates real sentences, including RFI citations. CLEANROOM's frontier
-   asks whether a clamped row needs a disclosure; ceiling accepted until a reader complains. */
+   ponytail: the clamp truncates real sentences, including RFI citations. A clamped row may need
+   a disclosure; ceiling accepted until a reader complains. */
 .dl-foot {
   display: block;
   margin-top: 1px;
@@ -353,12 +353,12 @@
 }
 /* act — safe, page-scoped. Neutral. The mix is against `--r-on`, NOT against the artifact
    token: mixing against the artifact is what made three round-2 buttons land within 1.03:1 of
-   the ground they actually stood on, one of them invisible in dark (CLEANROOM note 4). */
+   the ground they actually stood on, one of them invisible in dark. */
 .dl-verb[data-tone="act"] {
   background: color-mix(in srgb, var(--r-ink) 10%, var(--r-on));
 }
-/* agent — pea's own verb. COLOR-ROLES Law 0 had no interaction slot for the agent's identity,
-   which made pea's own verb illegal; 4 of 5 round-1 builders hit it. This is that slot. */
+/* agent — pea's own verb. The agent's identity had no interaction slot, which made pea's own verb
+   illegal; 4 of 5 round-1 builders hit it. This is that slot. */
 .dl-verb[data-tone="agent"] {
   color: var(--r-pea-ink);
   background: color-mix(in srgb, var(--r-pea-ink) 12%, var(--r-on));
@@ -869,8 +869,8 @@
 }
 
 /* ── THE CELL-STATE KEY · cell-key.tsx ─────────────────────────────────────────────────────
-   A first-class entity, not a legend strip (CLEANROOM round-2 ruling note 2 — the key was
-   instrumental to the table reading at all). Specimens are REAL `StateCell`s with real props,
+   A first-class entity, not a legend strip; the key was instrumental to the table reading at
+   all. Specimens are REAL `StateCell`s with real props,
    grouped BY AXIS, ordered inside a group by the cell's own precedence, so the key cannot teach
    a ranking the cells do not obey. It sits on the recess ground, so specimen washes re-mix. */
 

@@ -91,7 +91,7 @@ export interface AtlasProps {
 //                             until a sync moves them into the .r10.
 //   synced    → --r-done      it landed.
 //
-// NOTE (docs/features/takeoff/DESIGN-AUDIT.md #1, re-ruled 2026-08-16 R5): these four are a
+// NOTE: these four are a
 // row-level PIPELINE VERDICT, not the cell grammar's state axes — the column rides the table's
 // `verdict:` clause, whose tone union is the meaning band by construction.
 
@@ -297,7 +297,7 @@ const hostReason = (live: boolean, busy: string | null, does: string, onFixture:
  *  `opacity-50`. JUDGED during the adoption pass: the column STAYS on `NumberCell` rather than
  *  the editable `StateCell`, because `onCommit(text: string)` would re-implement the numeric
  *  contract (`parseCell`'s integer/min refusal, `inputMode="decimal"`, the right-aligned fmt)
- *  per column for no mark the grammar would add — recorded in DESIGN-AUDIT #5's discharge note. */
+ *  per column for no mark the grammar would add. */
 function ManualJField({
   room,
   field,

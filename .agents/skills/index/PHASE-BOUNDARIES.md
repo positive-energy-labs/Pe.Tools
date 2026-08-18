@@ -10,9 +10,9 @@ The **phase boundary** is the gap between two phases, and it is the only place t
 | ------------ | --------------------------------------------------------------- |
 | **Continue** | Stay in the session. No context switch at all.                    |
 | **`/clear`** | Empty the context window and start from nothing.                  |
-| **`/handoff`** | Write a portable markdown file and seed a session anywhere with it. |
+| **`/handoff`** | Write a handoff (inline by default; a portable file when substantive) and seed a session anywhere with it. |
 | **Subagent** | Send the task to its own context window and get a report back.     |
-| **`/compact`** | Compress this context and seed a fresh session with the summary.  |
+| **`/compact`** | Compress this session's context in place, continuing from the summary. |
 
 ## The tree
 
@@ -31,7 +31,7 @@ The cost of getting this wrong is one-way. Clear a *relevant* context and you lo
 - sending the work to a **colleague**,
 - or forking a side task you found **mid-phase** without derailing what you're doing.
 
-That list is the whole clause. What `/handoff` buys is **portability** — a file that travels. If nothing is travelling, you don't need it.
+That list is the whole clause. What `/handoff` buys is **portability** — a handoff that travels (inline text to paste, or a file when the payload is substantive). If nothing is travelling, you don't need it.
 
 **4. Can the task be done AFK?** Is it scoped tightly enough to run with you away from the keyboard, no steering? Then send it to a **subagent** and leave this session untouched. Automated review is the standard case: the agent reads the diff and reports, and you aren't needed while it does.
 

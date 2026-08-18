@@ -2,8 +2,8 @@
  * /design-system/arming — SATELLITE. What it stress-tests: **a lifecycle, not a specimen.**
  *
  * `ArmingStrip` is the ceremony surface SURFACE-PHILOSOPHY §3 has been owed since the honesty
- * rules were written, and it is the one component in `lang/` with NO live consumer (SHIMS entry
- * 3). Every previous look at it was a frozen frame: the design-lang fixture rendered "armed" and
+ * rules were written, and it is the one component in `lang/` with NO live consumer. Every
+ * previous look at it was a frozen frame: the design-lang fixture rendered "armed" and
  * "refused" and nothing else, which is precisely why round 1 recorded "arming has no lifecycle"
  * as a state-model gap rather than as a rendering one. A component whose whole argument is a
  * sequence cannot be reviewed one frame at a time.
@@ -15,9 +15,9 @@
  *
  * FIXTURE, ANNOUNCED: `design-system/fixtures.ts`. No host, no plan, no model. The refusal is
  * simulated on the first commit because that is the case the ceremony exists for; nothing here
- * asks Revit anything (SHIMS entry 4).
+ * asks Revit anything.
  *
- * NO SHIMS: the strip is mounted with its real props. Everything it cannot say — how old its plan
+ * NO STAND-INS: the strip is mounted with its real props. Everything it cannot say — how old its plan
  * is, who armed it, which verb it arms — is a `GAP:` note, not a prop this page invented.
  */
 import { useState } from "react";

@@ -33,8 +33,8 @@
  * exactly what the viz ladder is for; nothing in this drawing carries a verdict, so nothing in it
  * may wear a meaning role. Material is plain ink; connectors keep their taxonomy hue; the void's
  * dash is the one legal dash AMONG PARTS (declared volume with no material behind it) — the datum
- * crosshair and the room point's leader are annotation, not parts, and DESIGN-AUDIT #19 owes that
- * distinction a ruling. FOCUS is page vocabulary, not drawing vocabulary: a `--r-select` fill and
+ * crosshair and the room point's leader are annotation, not parts; that distinction still needs a
+ * ruling. FOCUS is page vocabulary, not drawing vocabulary: a `--r-select` fill and
  * an ink stroke, exactly as the table's focused row does.
  */
 import { useMemo } from "react";

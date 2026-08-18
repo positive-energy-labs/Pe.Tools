@@ -8,7 +8,7 @@ description: Use to conserve token limits and speed up work. Use especially for 
 Optimize work by delegating to cheaper subagents. First, compress the problem space and anchor yourself. The user is consulting *you*, but not everything needs your eyes or hand. Judgement and liability are yours. Then, if any of the following feels true then delegate: 
 - "requires 20+ tool calls?"
 - "is there an unambiguous goal?"
-- "will it interupt my train of thought?"
+- "will it interrupt my train of thought?"
 - "is a fresh perspective needed?"
 - "will parallel workstreams be faster AND workstreams dont overlap?"
 
@@ -33,9 +33,9 @@ The final ruling is always yours. Drive the decisions, rerun verification, and s
 ## Tips
 - Instrument-first missions ("census before fix; the census is deliverable #1 even if nothing
   else lands") beat fix-first missions every time.
-- For parallelism, chunk workstreams by what the touch. Fine on disjoint file surfaces; serialize when both touch the same file or produce the same artifacts for feedback.
+- For parallelism, chunk workstreams by what they touch. Fine on disjoint file surfaces; serialize when both touch the same file or produce the same artifacts for feedback.
 - If all subagents need the same base, then provide it to them. ie do the preliminary research, scaffold or make the fixture, etc. 
-- Delegated task length is critical signal. Alarms bells when the task took longer or the complexity was higher than expected. This indicates something should be fixed systemically and should be surfaced to the user.
+- Delegated task length is critical signal. Alarm bells when the task took longer or the complexity was higher than expected. This indicates something should be fixed systemically and should be surfaced to the user.
 
 ## How To - Delegate to Codex
 - Launch: `codex exec "mission prompt" < /dev/null` — the stdin redirect is non-negotiable (blocks forever otherwise). Run as background task, from the target worktree.

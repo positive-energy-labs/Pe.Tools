@@ -93,4 +93,4 @@ Docs earn their keep by being findable from code and vice versa. Pragmatic rules
 
 ## Frozen
 
-`docs/context/` is quarantined for new session dumps — existing files stay until swept; new writing goes to ledgers, handoffs, or (research only) as above. `docs/rework/` is legacy; do not add to it.
+`docs/context/` is quarantined — do not add new session dumps there; existing files stay until swept; new writing goes to ledgers, handoffs, or (research only) as above. `docs/rework/` is legacy; do not add to it.

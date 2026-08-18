@@ -12,7 +12,7 @@ Raw findings for a fresh pass. Numbers and patterns only; verdicts deliberately 
 
 **Code**: `apps/web/src/design-lang/proto/{specimen,scopes}.css|tsx`, route `/design-lang?scope=a…h`.
 Byte-identical markup under every scope; only `data-scope` changes. Throwaway.
-**Prior positions**: `docs/design/COLOR-ROLES.md`, `docs/design/SURFACE-PHILOSOPHY.md` (untracked).
+**Prior positions**: `docs/design/COLOR-ROLES.md` (deleted 2026-08-17, git history only), `docs/design/SURFACE-PHILOSOPHY.md` (untracked).
 
 ---
 

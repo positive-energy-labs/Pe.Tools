@@ -10,8 +10,7 @@
 
    PROVENANCE — this is not a fresh opinion. It is palette **p3 · wholistic bands**, which won
    design-lang base 2 round 2 (ruled 2026-08-16) against three rivals plus the unfixed
-   incumbent, judged by flipping each in both modes over one byte-identical base. Every verdict,
-   every honest cost, and the open frontier live in `docs/features/design-lang/CLEANROOM.md`.
+   incumbent, judged by flipping each in both modes over one byte-identical base.
    The prototype that validated this contract still stands at `src/design-lang/proto/` (route
    `/design-lang`) as the validation record; the token PREFIX stays `--r-*` for exactly that
    reason — renaming would orphan the evidence.
@@ -35,9 +34,9 @@
 
    Tints, washes and hairline-over-fill are NOT tokens. Components mix them from these with
    `color-mix()` against `--r-on`. A surface that wants a different wash STRENGTH is proposing a
-   grammar change, not a colour change — take it to CLEANROOM's frontier section.
+   grammar change, not a colour change.
 
-   ── STANDING LAWS THESE TOKENS ENCODE (COLOR-ROLES.md, SURFACE-PHILOSOPHY §5) ──────────────
+   ── STANDING LAWS THESE TOKENS ENCODE (SURFACE-PHILOSOPHY §5) ──────────────────────────────
      · ONE ALARM. `--r-alarm` means "the model disagrees". Nothing else may wear it.
      · PEA IS NEVER BLUE. The agent's proposals wear the agent's identity.
      · SELECTION AND FOCUS ARE A FILL, NEVER A HUE — only ever `--r-select`, which is literally
@@ -72,7 +71,7 @@
      distrusts an existing value; a never-started cell has nothing to distrust. Its value
      sits in --r-ink-mute alone. "Not started is a state, not a zero" — this is the rung.
 
-   ── THE BORDER BUDGET (ruled 2026-08-16, CLEANROOM note 3) ────────────────────────────────
+   ── THE BORDER BUDGET (ruled 2026-08-16) ──────────────────────────────────────────────────
    PLAIN CONTENT IS NEVER ENCLOSED. The artifact frame — one ground shift plus one quiet inset
    hairline — is reserved for a MACHINE-OPERATED OBJECT THAT CARRIES STATE: the table, pea's
    chat card, the arming strip, the addressing sentence. A group of plain controls or receipts

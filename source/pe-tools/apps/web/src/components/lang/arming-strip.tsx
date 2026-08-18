@@ -7,7 +7,7 @@
  * were written (reason supplied before it arms · explicit identity · plan hash · drift
  * refusal · receipt).
  *
- * RULINGS EMBODIED (docs/features/design-lang/CLEANROOM.md):
+ * RULINGS EMBODIED:
  * - ROUND 1's SECOND MECHANICAL FINDING: **only variant e's arming strip read as ceremony rather
  *   than "just another component"**, and that was attributed to BORDER SCARCITY — a tinted
  *   ground plus one edge, inside the artifact frame, doing what an outline box could not. This
@@ -28,8 +28,8 @@
  * - COMMIT IS THE ONLY FILLED BLUE, at every blast radius. Cancel and re-plan are `act`.
  *
  * ponytail: arming has no lifecycle or identity in the state model — no armed-at, no armed-by,
- * no link from the verb it arms, and no link from a refusal to a fresh plan hash (CLEANROOM,
- * "state-model gaps that block grammar work"). The consequence is visible and stated on the
+ * no link from the verb it arms, and no link from a refusal to a fresh plan hash. The consequence
+ * is visible and stated on the
  * surface rather than hidden: the strip cannot say how stale its own plan is, which is the one
  * fact that decides whether to press it. Upgrade path: the arming record grows `armedAt`,
  * `armedBy` and `supersededBy`, then this signature takes them and the caveat line is deleted.

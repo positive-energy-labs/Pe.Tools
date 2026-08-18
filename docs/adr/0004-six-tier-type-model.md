@@ -4,7 +4,7 @@ Date: 2026-08-16. Status: accepted, codified in `apps/web/src/styles.css`.
 
 ## Context
 
-A type census over `apps/web` (163 files, ~32.3k LOC) found 666 type spends across **17 rendered
+A type census over `apps/web` (163 files, ~32.3k LOC) found 666 type spends across **18 rendered
 sizes**, 90.2% of them inside a 9–12.5px band — differences no reader can perceive but every call
 site had to choose. `tele` was overridden at 118 of 240 call sites, section heads had forked seven
 ways, and `lang.css` declared 10 mono font-families against 2 sans, making mono the *unmarked*

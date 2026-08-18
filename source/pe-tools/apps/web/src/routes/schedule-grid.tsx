@@ -36,7 +36,7 @@ import { useRouteState } from "#/workbench/route-state";
  * schedule column — proposal wash, unsaved square, squiggles and the readout band all come from
  * the cell grammar; editing rides `StateCell.onCommit` (typing a proposed cell severs the
  * proposal — §3 "typing beats proposing"). In-cell approve/deny icons died with the hand-rolled
- * table; the pending strip is the reviewer. Gaps in docs/features/schedule-grid/DESIGN-AUDIT.md.
+ * table; the pending strip is the reviewer.
  */
 export const Route = createFileRoute("/schedule-grid")({
   component: ScheduleGridRoute,
