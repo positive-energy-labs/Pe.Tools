@@ -22,11 +22,29 @@
 
 ## Owed
 - Merge or harvest worktree `room-solve-tuning@ead263a` (score suite, oracle v1.1, TASTE.md, TUNING.md round-4 backlog) into main.
-- Round-4 backlog (TUNING.md in that worktree): parallel-on-ink zone/room edge unification (snap ALONG ink); mixed-frame room projection design (ML09); door-head sealer manufactures backing over low ceilings (LL08); persist door-head vs wall-run seals separately (INKP v4); stale `ink_*.bin` lane — repair or delete; knob census (~70 fields); review-takeoff.py still reads ink bins.
-- Promotion shims (ex-SHIMS.md): promote scripting.execute pipeline to installed `takeoffs.*` ops (also owns replacing the dev-only 32-bit script spawn); pre-sync Manual J draft home (session-ephemeral today); evidence-backed exposures (glass/doors empty, coarse roof/wall direction); per-project custom assemblies design (preset catalog is one project's vocabulary); updates-lane sync unwired from panel (insert-only; drift reconciliation by stored Identifier exists at op layer); live `sensibleBtuh` always 0 until a reconcile lane exists; stale-world indicator unwired (`useWorldLog` exists); registry rename-vs-new reconciliation unreachable from UI; `ceilingFt` 0→8 default for regions without a session run; zone loops tessellate arcs to chords (hand-drawn curved boundary silently loses arcs).
-- MaterializeAccepted (one-click accept for unhomed proposals); takeoffs.sync atomic op; geometry+assembly math out of the route; fixture-scaffolding hygiene prunes.
-- Lower Level oracle registration UNTRUSTED (median 1.95 ft chamfer, floor-mapping suspect); Main 10 has 0 in-zone oracle rooms — cheap to resolve.
+- Round-4 tuning: unify zone/room edges that run parallel to ink by snapping ALONG the ink line, not just across it.
+- Round-4 tuning: design segment-wise frame assignment for mixed-frame rooms (ML09) — gate loosening is proven useless here.
+- Round-4 tuning: the door-head sealer manufactures backing over low ceilings (LL08) — bound or condition it.
+- Round-4 tuning: persist door-head seals separately from wall-run seals (INKP v4) so they can be tuned independently.
+- Stale `ink_*.bin` lane — repair it or delete it; `review-takeoff.py` still reads the ink bins.
+- Knob census: ~70 solver knob fields exist with no inventory of which are load-bearing.
+- Promote the `scripting.execute` takeoff pipeline to installed `takeoffs.*` host ops; that also owns replacing the dev-only 32-bit script spawn.
+- Pre-sync Manual J drafts have no persistent home — they are session-ephemeral today.
+- Exposures are not evidence-backed: glass/doors come out empty and roof/wall direction is coarse.
+- Per-project custom assemblies need a design — today's preset catalog is one project's vocabulary hard-coded for everyone.
+- Updates-lane sync is unwired from the panel (insert-only); drift reconciliation by stored Identifier exists at the op layer but no UI reaches it.
+- Live `sensibleBtuh` is always 0 until a reconcile lane exists.
+- Stale-world indicator is unwired — `useWorldLog` exists, nothing renders it.
+- Registry rename-vs-new reconciliation is unreachable from the UI.
+- `ceilingFt` silently defaults 0→8 for regions with no session run.
+- Zone loops tessellate arcs to chords, so a hand-drawn curved boundary silently loses its arcs.
+- MaterializeAccepted: one-click accept for unhomed proposals.
+- `takeoffs.sync` as an atomic op.
+- Move geometry + assembly math out of the route.
+- Fixture-scaffolding hygiene prunes.
+- Lower Level oracle registration is UNTRUSTED (median 1.95 ft chamfer, floor-mapping suspect).
+- Main 10 has 0 in-zone oracle rooms — cheap to resolve.
 - ZoneSnapFt=1.0 buys one room on project-a — re-measure or retire the knob.
-- Design-audit #11 primitive edits (for the cell-scale ruling session): `stateColumn` drop hard-coded `text-cat-clay` for `--r-alarm`; narrow `StateMeta.tone` to a meaning-role union (four-line diff preserved in `b52d891`). Moot if `stateColumn` dies via `StateColumn.word` migration.
-- Design-audit #2: no axis for "a human decision is queued here" — rule it a row fact and build the SURFACE-PHILOSOPHY §4 gutter marker (count + locate), or add an `owed` axis; the flags column stays hand-rolled until then.
+- Primitive edits owed to the cell-scale ruling session: drop `stateColumn`'s hard-coded `text-cat-clay` in favour of `--r-alarm`, and narrow `StateMeta.tone` to a meaning-role union (four-line diff preserved in `b52d891`). Moot if `stateColumn` dies via the `StateColumn.word` migration.
+- No axis for "a human decision is queued here" — rule it a row fact and build the SURFACE-PHILOSOPHY §4 gutter marker (count + locate), or add an `owed` axis; the flags column stays hand-rolled until then.
 - `LevelProfile` region-cores rule silently subsumed by the Hybrid `SeedSource` default — make the rule or the default explicit (comment at the site, LevelProfile.cs).

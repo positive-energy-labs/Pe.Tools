@@ -62,7 +62,7 @@ Scope: shared primitives and cross-route patterns in `source/pe-tools/apps/web/s
 - `/takeoffs` and `/families` have zero state outside the React tree — nothing for a plugin to read; only `/family` is registered. Path is not a rewrite: each route's canonical doc (takeoff's `World` + overlay, families' scope/plan/receipts) becomes a route-state slice with commands, as `/family` did. Blocked by MasterTable-internal filter state and component-local proposal state being invisible to plugins.
 
 ### Noted, not scheduled
-- Takeoffs' inline-C#-via-`scripting.execute` stays until `takeoffs.*` host ops exist (takeoffs SHIMS #1-3); the façade work does not block on it.
+- Takeoffs' inline-C#-via-`scripting.execute` stays until `takeoffs.*` host ops exist (the promotion shims in the takeoffs ledger's Owed); the façade work does not block on it.
 - Mastra/route-state transport vs host-RPC split (two origins, two error models) is real, but a product/architecture call — not a web-primitives cleanup.
 - `workbench/provider.tsx` (670 LOC) + `adapter.ts` (963 LOC) chat internals: untouched.
 - Per-route stale-time literals in `host/queries.ts` are hand-tuned, not a policy — fine for now.

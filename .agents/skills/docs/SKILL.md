@@ -5,7 +5,7 @@ description: Pe.Tools docs conventions — where every kind of durable knowledge
 
 # Docs conventions
 
-Code is the spec. Markdown exists only for what code cannot say: why, what was tried and failed, and what is still owed. Before writing a doc, ask whether the knowledge belongs in code, a test, or a commit message instead — those are preferred.
+Code is the spec. Markdown exists only for what code cannot say: why, what was tried and failed, and what is still owed. Before writing a doc, ask whether the knowledge belongs in code, a test, or a commit message instead — those are preferred. Exception: product/design **verdicts always go to the feature ledger**, never commit messages (the `find-the-product` rule wins).
 
 There is no external issue tracker. No GitHub issues, no `.scratch/`, no ticket files. Open work is an Owed item in a ledger.
 
@@ -59,7 +59,6 @@ Expensive-to-derive, slowly-evolving rationale that agents repeatedly fail to in
 Current registry:
 - `docs/design/SURFACE-PHILOSOPHY.md` — what UI surfaces are for and how they behave
 - `docs/design/DESIGN-SWEEP.md` — one-system design sweep (goal, loop, frontier)
-- `docs/context/PE_DESIGN_VIBE.md` — visual design language
 - `docs/features/agent/PHILOSOPHY.md` — agent design
 - `docs/ARCHITECTURE.md`, `docs/BUILD.md`, `docs/OBSERVABILITY.md` — repo-wide authority
 
@@ -69,7 +68,7 @@ Creation bar: only after wide-breadth synthesis work that should rarely be repea
 
 `.artifacts/handoffs/<yyyy-mm-dd>-<topic>.md` — for passing research, baselines, or tooling/feedback-loop issues to the next agent. Prefer a copy-pasteable inline handoff when it fits in a message; write a file only for substantive payloads.
 
-Handoffs are disposable by construction: a handoff is *consumed* when anything worth keeping has been promoted into a ledger, ADR, or code — then delete it. Recurring tooling issues belong in AGENTS.md, not handoffs. Never park handoffs in the OS temp dir or `docs/context/`.
+Handoffs are disposable by construction: a handoff is *consumed* when anything worth keeping has been promoted into a ledger, ADR, or code — then delete it. `.artifacts/` is gitignored, so deleted handoffs are gone — promote first; git history never applies here. Recurring tooling issues belong in AGENTS.md, not handoffs. Never park handoffs in the OS temp dir or `docs/context/`.
 
 ## Grounding
 
@@ -78,6 +77,19 @@ Live-verified behavior of adversarial platforms (Revit API, Jet/RHVAC, DWG expor
 ## Research
 
 A single cited markdown file. Feature-scoped → the feature dir (link it from an Owed or Decided line). Repo-wide → `docs/context/`. No research branches.
+
+## Greppable prose
+
+Docs earn their keep by being findable from code and vice versa. Pragmatic rules:
+
+- Name code identifiers **verbatim** (`FamilyModel`, `build_evidence`, `w-(--anchor-width)`) — never paraphrase, abbreviate, or synonym them. One grep should connect the doc line to its code.
+- In code, mark durable knowledge with a greppable prefix: `TODO:` (owed, small enough to live in code), `SHIM:` (stand-in — name the replacement condition), `FOOTGUN:` (live-verified platform trap). Prefer these over doc files when a code site exists; a ledger Owed line may point at a `TODO:` rather than restating it.
+- Ledger/doc lines that reference a marked site quote the marker text so grep finds both ends.
+
+## Commits
+
+- No size rules; annotate big commits with rough shape in the subject or body: `(+85/-2098)`.
+- Messages are human-readable and concrete — lead with how **behavior** changes, not abstractions ("family page reads real family.json, fixture becomes fallback" beats "refactor family data layer").
 
 ## Frozen
 

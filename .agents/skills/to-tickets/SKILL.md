@@ -14,7 +14,7 @@ Tickets live in `docs/features/<name>/LEDGER.md` under `## Owed` — read the `d
 
 ### 1. Gather context
 
-Work from whatever is already in the conversation context. If the user passes a reference (a spec path, an issue number or URL) as an argument, fetch it and read its full body and comments.
+Work from whatever is already in the conversation context. If the user passes a reference (a spec path or ledger Owed line) as an argument, read it in full.
 
 ### 2. Explore the codebase (optional)
 

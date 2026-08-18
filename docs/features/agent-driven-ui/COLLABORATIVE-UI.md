@@ -1,6 +1,6 @@
 # Collaborative UI — agent-writable route state through tools/MCP
 
-**Date:** 2026-07-06 · **Supersedes the verdict in [RESEARCH.md](RESEARCH.md)** (which answered "streamed structured output into an audit grid" — the wrong framing).
+**Date:** 2026-07-06 · **Supersedes the verdict in the prior RESEARCH.md** (which answered "streamed structured output into an audit grid" — the wrong framing). RESEARCH.md was deleted 2026-08-17; its findings are distilled into [LEDGER.md](LEDGER.md) and the full text lives in git history.
 
 **The corrected question:** the agent must be able to change a route's underlying state **through tools/MCP** — working on a **semi-persistent, schema'd artifact** that is **reactive in the UI**, editable by the human at the same time. Not generative UI (agent invents UI); **collaborative UI** (agent and human co-edit known-schema state through a shared surface). Write paths must include: pea in-app, external MCP agents (Claude, scripts), and eventually browser-native agents.
 
@@ -68,7 +68,7 @@ Two viable homes; pick per artifact scope:
 - All other tabs/clients: the artifact store broadcasts each accepted patch as a `WorkbenchEvent` (`fill_state_updated`, JSON-Patch) over the **existing SSE wire** — the same discipline that keeps assistant-ui a projection. MCP subscribers get `notifyUpdated` in parallel.
 - This fan-out layer is the one genuinely missing piece in every option evaluated (mastra has no post-stream push; CopilotKit's state channel is run-scoped; MCP notifies MCP clients only). It's ~a day on your wire, and it's the same event the old report already recommended.
 
-### Layer 4 — Approval (unchanged from RESEARCH.md, now with an MCP door)
+### Layer 4 — Approval (unchanged from the deleted RESEARCH.md — see git history, findings in LEDGER.md — now with an MCP door)
 
 Proposals-not-merges still applies: agent tools **stage proposals**, never commit; human approve/edit/reject commits via ordinary optimistic mutation; mastra suspend/resume (`requireApproval`, `listSuspendedRuns`, `sendToolApproval`) gates server-side tools; **MCP elicitation** covers external agents. Push-to-Revit gates on committed cells.
 

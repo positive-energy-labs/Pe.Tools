@@ -25,9 +25,9 @@
 ## Owed
 
 - No axis for "not started": `fresh: "unverified"` means "never checked", which is not the same claim as "no question was asked". R2 ruled a `fresh: "never"` rung in and `/families` was ruled-discharged by riding the `verdict:` column instead — confirm nothing still borrows the wrong rung. (verify)
-- No axis for "a human decision is queued here" (`excluded` in the decision queue) — R3 ruled it a row fact wanting the SURFACE-PHILOSOPHY §4 gutter marker; the marker is not built. Same shape as takeoffs' finding #2.
+- No axis for "a human decision is queued here" (`excluded` in the decision queue) — R3 ruled it a row fact wanting the SURFACE-PHILOSOPHY §4 gutter marker; the marker is not built. Takeoffs owes the same finding (its flags column stays hand-rolled until the marker exists).
 - `outside profile`, `only-live` and "a parameter the family does not carry" remain unmappable/half-mapped: `cap` is about editing, not about claiming. 11 of 30 censused states had no axis.
-- Narrow `StateMeta.tone` to a meaning-role union (takeoffs #11(b)) if `stateColumn` survives as the sanctioned row-verdict form.
+- Narrow `StateMeta.tone` to a meaning-role union (takeoffs owes the same edit, diff preserved in `b52d891`) if `stateColumn` survives as the sanctioned row-verdict form.
 - Rule whether `ProposedCell` is the permanent sanctioned wrapper for inherited-resolution, or `StateCellProps.placeholder?: string` ships — its docblock should say so either way.
 - `onLocate?: () => void` on `StateCellProps` so the proposal fold stays a real hit target; without it, migrating a proposed editable cell silently deletes the cell-level locator and leaves only the rail dot.
 - SVG `stroke-dasharray` vs CSS `border-style: dashed` are different mechanisms in the same reserved slot and were treated as one; `design-guard.test.ts` matches only the kebab form, so JSX `strokeDasharray` dashes are invisible to the ratchet — add the camelCase form plus a baseline entry.

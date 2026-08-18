@@ -8,7 +8,7 @@
 - 2026-08-16 — satellite demos are deliberately mocked (fixture data, null identities, no host calls) and say so. This is not a gap to discharge: satellites exist to show complicated cases a real route cannot reach.
 - 2026-08-16 — shadcn exhibits with zero product consumers are evicted from the index rather than catalogued: the index documents components with a proven consumer, so an un-consumed component is either given one (and re-admitted with the consumer named) or deleted.
 - 2026-08-16 — the per-route crusade runs BEFORE satellite work, deliberately: catalogue entries must be backed by real consumers, so satellites are explicitly not blockers.
-- 2026-08-16 — `stateColumn` replaced by the typed `verdict:` column clause, not by the proposed `state:` + `word` path. Overruled by families #1's evidence: a pipeline verdict is a second legitimate column form, not a pseudo-dimension of a value column.
+- 2026-08-16 — `stateColumn` replaced by the typed `verdict:` column clause, not by the proposed `state:` + `word` path. Overruled by the /families evidence (only 1 of 7 plan-verdict words maps to a cell axis): a pipeline verdict is a second legitimate column form, not a pseudo-dimension of a value column.
 - 2026-08-16 — `ArmingStrip`'s lifecycle is validated against a real gate: `/parameter-links`' preview→stale→apply maps onto it (no fresh preview → `refused` with re-plan; preview verified → `arming`, reason input arms the one commit).
 - 2026-08-16 — ADR 0003 collapsed the glance client fan-outs into first-class host packets: `revit.glance.model` (was 4 calls, 3 truncation dialects) and `revit.glance.attention` (was 3 calls; limits are host-owned and never clamp to the minimum).
 

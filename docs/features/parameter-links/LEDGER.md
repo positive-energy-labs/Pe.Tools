@@ -16,7 +16,7 @@
 - 2026-08-16 — Blue `--pe-blue` dot in a Δ column to mark changed projected writes: column deleted, replaced by bold-means-unsaved on the result cell.
 
 ## Owed
-- No home for page-level "unsaved" beyond a caution `FactChip`: the unsaved thing is a nested *document* edited through selects (`FieldOptionSelect`), and the editable `StateCell` (R8) covers text cells only. Needs a select-shaped editable cell — a component repair, second consumer of evidence after takeoffs #7.
+- No home for page-level "unsaved" beyond a caution `FactChip`: the unsaved thing is a nested *document* edited through selects (`FieldOptionSelect`), and the editable `StateCell` (R8) covers text cells only. Needs a select-shaped editable cell — a component repair, and the second route to want it after takeoffs.
 - Preview freshness (`previewed`/`reviewed`/`applyReady`, incl. "pea previewed, human must re-run") is real state with no visible mark — only a greyed verb + hover title. Candidate home: `ArmingStrip`, still with no shipping consumer; this route is a candidate first consumer.
 - "Host disconnected" has no axis and no kind; three routes now hand-pick a chip tone for it. Rule a standing treatment ("connection state is a caution fact chip named `host ·`").
 - `RouteWorkspaceShell` + `HostConnectionPill` survive only for `/settings` (with their `--paper`/`--clay-ink`/`--line-2`/`--cat-clay` spends). When settings moves to `AddressingBar`, delete them and their shim lines.

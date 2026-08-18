@@ -42,9 +42,7 @@ ANY change to repo architecture, tooling, or builds MUST consult these documents
   - Protect the current dev session aggressively. Breaking it can turn a small edit into a multi-minute restart plus document reopen wait.
 
 
-After any large changes, ALWAYS clarify user intent and capture then durable knowledge. Knowledge should be captured to the most granular artifact. For example, FF goals should not exist substantially in the root AGENTS.md. This repo uses `AGENTS.md` as the primary knowledge map, `README.md` as the dev-facing docs/notes, and `GOALS.md` as PRD-like documents capturing intent and direction.
-
-Other durrable knowledge should be captured to `docs/context` for saved knowledge/ideas/etc and `docs/features` for planned/in-progress work. Context can and should be treated lightly, features should get extra attention to continuity of ideas, calrifying ambiguity, and being practical.
+After any large changes, ALWAYS clarify user intent and capture the durable knowledge. Where it goes is governed by the `docs` skill (the single source of truth): feature ledgers (`docs/features/<name>/LEDGER.md`), ADRs, scoped grounding docs, or code comments. AGENTS.md holds operating rules only — not feature goals, not session knowledge.
 
 ### Non-Doc Artifacts
 
@@ -60,8 +58,7 @@ Write artifacts to `.artifacts/`. Most often `.artifacts/tmp` for python/typescr
 - `source/Pe.Shared.StorageRuntime/` - C# storage roots, module/document identity, runtime state/output/log files, APS settings lookup, and small settings metadata contracts.
 - `source/Pe.Revit.Global/` - document-owned Revit helpers, APS contracts, and DA-safe collector seams that both shells can share.
 - `source/Pe.Revit/Extensions/` - strong primitives such as `FamilyDocument`, value coercion helpers, formula helpers, and parameter lookup helpers.
-- `source/Pe.Revit.FamilyFoundry/OperationProcessor.cs` - main Family Foundry execution orchestrator.
-- `docs/features/family-foundry/_README.md` and `_GOALS.md` - Family Foundry architecture and intent.
+- `source/Pe.Revit.FamilyFoundry/OperationProcessor.cs` - main Family Foundry execution orchestrator; intent and decisions in `docs/features/family/LEDGER.md`.
 
 ## Shared Language
 
@@ -105,16 +102,7 @@ If proof depends on user-owned Revit/Windows state, say so and coordinate the lo
 
 ## Routing
 
-Activate the smallest matching skill from natural language:
-
-- **pe-steer**: vague/strategic scope, terminology, philosophy, durable intent, “grill me”, “think this through”.
-- **pe-live-loop**: the dev session, hot reload, active documents, AttachedRrd, visual/manual Revit state, installed-lane coordination.
-- **pe-diagnose**: bugs, regressions, confusing errors, failing build/test/script, source-vs-product mismatch.
-- **pe-tests**: tests-first work, regression tests, public-seam behavior changes.
-- **pe-architecture**: module seams, product boundaries, desktop vs DA, product vs dev surfaces, document-owned vs session-owned.
-- **pe-codify-work**: PRDs, RFCs, AFK-ready plans, durable briefs/docs.
-- **pe-handoff**: pause/resume/next-agent context.
-- **pe-write-skill**: create or revise skills, triggers, slash-skill behavior, skill boundaries.
+The `index` skill is the entry point and router for the whole skill set — invoke it with intent and it picks the route and drives the loop. The `docs` skill governs where durable knowledge lands. Don't guess at routes; read those two.
 
 
 

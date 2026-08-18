@@ -1,5 +1,5 @@
 ---
-name: delegate
+name: delegation
 description: Use to conserve token limits and speed up work. Use especially for prototyping, sprawling requests, or long-haul sessions. Only use if you're Fable 5, GPT-5.6, or Opus 5.
 ---
 
@@ -26,9 +26,9 @@ The final ruling is always yours. Drive the decisions, rerun verification, and s
 
 | Model | Cost | Taste | Intelligence | Use For | Usage |
 |--|--|--|--|--|--|
-| Fable | 10 | 9 | 7 | Design, aesthetics, and decision making. Delegate sparingly, only for unbounded work and requests that require an opinion | low or medium thinking
-| Opus 5 | 6 | 6 | 4 | Most on the ground work, task must be bounded (Opus tends to over do and get lost). | medium or high thinking.
-| Codex (GPT-5.6) | 3 | 4 | 8 | Brute force; long slogs and compile smashing. Use where the goal is quantifiable and requires little opinion. | `codex exec` handles model and thinking level
+| Fable 5 | 10 | 9 | 7 | Design, aesthetics, and decision making. Delegate sparingly, only for unbounded work and requests that require an opinion | low or medium thinking
+| Opus 5 | 6 | 6 | 4 | Most on the ground work, task must be bounded | medium or high thinking, Opus readily overdoes and gets lost, especially at high think and above.
+| Codex (GPT-5.6) | 3 | 4 | 8 | Brute force; long slogs and compile smashing. Use where the goal is quantifiable and requires little opinion. | `codex exec` handles model and thinking level. GPT-5.6 does the bare minimum in a good way, it does nothing more than its told. Both a blessing and a curse.
 
 ## Tips
 - Instrument-first missions ("census before fix; the census is deliverable #1 even if nothing

@@ -5,7 +5,7 @@
 - 2026-08-16 — Typing over a pea proposal SEVERS it and stages your value (the old grid *masked*, blocking edits until review) — "typing beats proposing" (SURFACE-PHILOSOPHY §3) made an actual sever here first.
 - 2026-08-16 — A severed proposal is deleted, not retired: this route has no proposal ledger, and deleting is honest (nothing renders a false history) even though it is lossy.
 - 2026-08-16 — Empty-string commit is refused: blank is not zero and blank is not a stageable value. The old code refused it too, silently; the refusal is now spoken.
-- 2026-08-16 — Column-level facts (`isCalculated`, `isCombinedParameter`) ride a header suffix (`· ƒ`, `· comb`) plus the column title — `ColumnBase.reason` was already declined for takeoffs #5(b); this route is a second data point, not a re-litigation.
+- 2026-08-16 — Column-level facts (`isCalculated`, `isCombinedParameter`) ride a header suffix (`· ƒ`, `· comb`) plus the column title — `ColumnBase.reason` was already declined for takeoffs; this route is a second data point, not a re-litigation.
 - 2026-08-16 — Snapshot freshness stays a plain fact chip ("read 4m ago"), no invented staleness threshold: freshness has no subject/threshold in the model, so a schedule read yesterday and one read 4s ago must render alike.
 - 2026-08-16 — Every `state:` column getting its own 7-word facet is accepted as the language default even on wide schedules (12 columns = 12 mostly-"clean" dropdowns); suppressing facets per column would lose the clause's counting.
 

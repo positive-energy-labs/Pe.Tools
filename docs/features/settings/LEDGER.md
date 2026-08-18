@@ -13,9 +13,9 @@
 - 2026-08-16 — Hand-rolled busy/error state per command: replaced by `useVerb`, which serializes open/re-read/validate/save.
 
 ## Owed
-- `review: "attention"` has no axis — not `agree: "drift"` (the model holds no other value; the schema objects to this one), not freshness, not capability. /schedule-grid is the second consumer, so rule it: row-fact gutter marker (takeoffs #2 / R3 family) or an `invalid` qualifier on `stage: "staged"`.
+- `review: "attention"` has no axis — not `agree: "drift"` (the model holds no other value; the schema objects to this one), not freshness, not capability. /schedule-grid is the second consumer, so rule it: row-fact gutter marker (the R3 ruling, also owed by takeoffs and /families) or an `invalid` qualifier on `stage: "staged"`.
 - Card-scale `StateCell` should render the struck-current → proposed treatment the chat card owns, once the model grows the proposal's prior value.
-- The route-state command result needs a `refused` marker in its payload before any route can spend the alarm honestly — the R12 `fail(kind, …)` machinery exists, the payload doesn't carry the kind. (Shared with families #4.)
+- The route-state command result needs a `refused` marker in its payload before any route can spend the alarm honestly — the R12 `fail(kind, …)` machinery exists, the payload doesn't carry the kind. (Shared with /families, whose refused-arming state wants structured refusals too.)
 - Join validation issues to the rows their field paths name, once the attention axis is ruled.
 - `workbench/route-workspace-shell.tsx` now has ZERO importers — delete it, and check whether `HostConnectionPill` in `host/issues.tsx` also went to zero. (The audit expected /parameter-links to be the last consumer; it no longer imports the shell.) (verify)
 - Four /settings variants were built on a worktree behind `?variant=` (2026-08-17) awaiting kaitpw verdicts — harvest the winner or drop the worktree. No design-doc corroboration in this dir; the record is the session memory only. (verify)

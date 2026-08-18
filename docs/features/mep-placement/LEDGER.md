@@ -10,6 +10,7 @@ Give Pea a real *ability*: draft collision-free duct/pipe placement from a plain
 - 2026-07-03 — **z is the fix lever**: most collisions resolve by elevation change, not XY rerouting. Skills teach "change elevation first" explicitly.
 - 2026-07-03 — Markers + replace-on-commit give safe iteration: Comments-tagged elements + full relay per run = idempotent commits and surgical cleanup, pixel-diff verified, zero damage across ~56 shared-bridge runs.
 - 2026-07-03 — `Connector.IsConnected` gating + auto-stub-short ("near-connect") is the correct default: finished models have no free terminals. Physical `ConnectTo` remains live-unproven.
+- 2026-07-03 — Live-proven platform facts for this lane (PBP vs `Level.Elevation`, connector selection, stale-state Commit, bridge timeouts) live in [GROUNDING.md](GROUNDING.md), not here.
 - 2026-07-03 — Never trust Pea's self-report: every placement claim is graded by an independent supervisor census/clash script + a PNG read. The unskilled baseline reported "no collisions" while threading 11 joists in *linked* models.
 - 2026-07-03 — The bottleneck is the operating loop, not model judgment. Unskilled Pea places plausibly, samples conventions, and self-corrects — but never thinks to check linked models, doesn't know the elevation convention, and invents an ad-hoc method each turn. Every toolkit surfaced link collisions and convention-matching by construction. This is the empirical case for fat skills carrying the loop.
 - 2026-07-06 — Tool calls are the scarcest resource; the skill says so explicitly. The taught loop is THREE scripts: Scout → one WriteTransaction mega-script (inline intent → MapProbe → Solve → auto-Commit+Keep+ExportPlan when `HARD 0` and not refused) → iterate-or-verify (one `read_image` AFTER commit only). Pea's pace is ~75 s/tool-call with a fat skill + images in context.
@@ -23,17 +24,6 @@ Give Pea a real *ability*: draft collision-free duct/pipe placement from a plain
 - 2026-07-03 — Judging feedback shape by preference: route's improvise loop cost 3 edits + 4 runs on re-elevation (a new band exposes new obstacles — inherent to improvise) vs 1 edit + 2 runs for the two data-driven pods. Improvisation as the primary interface lost on measured loop cost.
 - 2026-07-06 — Stub allowances without a numeric bound: Pea rationalized a whole missing 18.7 ft riser as a "near-connect stub" (48% of GT length). Bound is now ≤ 6 in, and Solve/Commit print an ENDPOINT GAP report with a pasteable fix.
 - 2026-07-06 — Whole-pod ReadOnly mutation policy (3/3 pods hit it): the static scan covers every compiled `src` file, so one mutating library call forces WriteTransaction on pure-read entrypoints. It must be scoped to the executed entrypoint's reachable code or declared per entrypoint in `pod.json`.
-
-## Grounding (live-proven, 2026-07)
-
-- Project Base Point offsets break level banding: on project-a (PBP 348 ft), `Level.Elevation` (348) ≠ element geometry Z (≈0), so Scout saw ZERO geometry on a level holding 991 ducts. Use `Level.ProjectElevation` at every functional site. A PBP=0 model (Snowdon) can never catch this.
-- Equipment connectors are not interchangeable: fans carry ~5 connectors (intake already connected, discharge free, plus `shape=Invalid` non-duct stubs) and `BranchTo` auto-selected the wrong one. Pick by system type + free status + proximity.
-- Stale-state Commit: the persistent state dir survives sessions, so `Commit()` will happily convert yesterday's solve DTO into today's model (observed: a fresh thread re-materialized the previous tier's geometry coordinate-for-coordinate under new ids). Commit must verify the DTO's draft ids exist, or solves must be session-stamped.
-- A client-side script timeout does NOT abort the bridge op (PrepHard "timed out" at 120s and completed server-side) — grade before re-running.
-- `document.open` on a heavy linked model holds the bridge ~44 min while the Manage Links dialog is up; it completes the moment it is answered. A fresh Revit process is the DLL-swap window: copy the new Placement DLL into the addin folder BEFORE the first script references it.
-- Fitting APIs are not the hard part: `NewTakeoffFitting` / `NewElbowFitting` / `ConvertDuctPlaceholders` all worked whenever junction geometry was exact-by-construction.
-- Skill loading is silently fragile: a `description:` frontmatter value containing `: "` is parsed by gray-matter as an invalid YAML mapping and the skill is dropped without warning.
-- `talk_to_pea` prompts with embedded double quotes crash the PowerShell 5.1 arg path (exit 255).
 
 ## Owed
 

@@ -24,10 +24,10 @@ Read [FLOWS.md](FLOWS.md) for the flow diagrams. When a route spans sessions, de
 Match intent to the route; enter mid-route when earlier steps are already done.
 
 - **Find or refine a product surface (UI or the backend it demands)** → `find-the-product`. The most-traveled on-ramp. Its rounds drive `prototype` + `grilling` under `delegation`; verdicts persist per the `docs` skill (MAP.md live, LEDGER settled). When closing the chain outgrows one session, merge onto the main flow at `to-spec`.
-- **An idea, settleable by conversation** → `grill-with-docs`, then: fits one session → `implement` here; multi-session → `to-spec` → `to-tickets` (Owed lines) → `implement` per ticket with `/clear` between.
+- **An idea, settleable by conversation** → `grill-me`, then: fits one session → `implement` here; multi-session → `to-spec` → `to-tickets` (Owed lines) → `implement` per ticket with `/clear` between.
 - **Huge and foggy — can't see the way** → `wayfinder` (MAP.md of decision tickets). A cleared map merges at `to-spec`; it is not a build plan.
 - **Something's broken** → `diagnosing-bugs`. No hypotheses before a red loop. Its "no seam exists" finding routes to `improve-codebase-architecture`.
-- **Upkeep, spare cycle** → `improve-codebase-architecture`; a picked candidate re-enters at `grill-with-docs`.
+- **Upkeep, spare cycle** → `improve-codebase-architecture`; a picked candidate re-enters at `grill-me`.
 - **Reading legwork** → `research` (background agent, cited file per `docs` conventions).
 - **A question only a human elsewhere can answer** → `to-questionnaire`.
 - **Blocked on someone/something, or design question needs runnable proof** → `prototype` directly.
@@ -38,7 +38,7 @@ Engines the routes drive (rarely invoked alone): `grilling`, `tdd`, `code-review
 
 After a skill completes its phase, proceed to the next hop yourself. Stop for the human only when:
 
-1. A decision is theirs (grilling rounds, prototype verdicts, spec/ticket approval, scope changes).
+1. A decision is theirs (grilling rounds, prototype verdicts, spec/ticket approval, scope changes). Exception — **sanctioned autonomous sessions**: when the user explicitly hands over a session (e.g. an AFK find-the-product round), the agent may grill against recorded verdicts and rule in their absence; record such rulings as re-openable and say which were made autonomously.
 2. A destructive or outward-facing action is next (commits are fine on approved work; force-pushes, deletions of unreviewed work are not).
 3. The route itself is ambiguous after reading FLOWS.md — say what you'd pick and why, then proceed unless redirected.
 
