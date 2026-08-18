@@ -76,7 +76,18 @@ Creation bar: only after wide-breadth synthesis work that should rarely be repea
 
 `.artifacts/handoffs/<yyyy-mm-dd>-<topic>.md` — for passing research, baselines, or tooling/feedback-loop issues to the next agent. Prefer a copy-pasteable inline handoff when it fits in a message; write a file only for substantive payloads.
 
-Handoffs are disposable by construction: a handoff is *consumed* when anything worth keeping has been promoted into a ledger, ADR, or code — then delete it. `.artifacts/` is gitignored, so deleted handoffs are gone — promote first; git history never applies here. Recurring tooling issues belong in AGENTS.md, not handoffs. Never park handoffs in the OS temp dir or `docs/context/`.
+Handoffs are disposable by construction: a handoff is *consumed* when anything worth keeping has been promoted into a ledger, ADR, or code — then delete it. `.artifacts/` is gitignored, so deleted handoffs are gone — promote first; git history never applies here. Recurring tooling issues belong in AGENTS.md, not handoffs. Never park handoffs in the OS temp dir or a `docs/` subdir.
+
+### `.artifacts/` layout
+
+Gitignored, so convention is the only structure. Top level holds build-tool-owned dirs (whatever `BuildArtifactLayout` writes — hands off) plus exactly four hand homes:
+
+- `handoffs/` — as above.
+- `runs/<lane>-<yyyymmdd>[-<slug>]/` — dated evidence output; deletable once its verdict is in a ledger.
+- `worktrees/` — every worktree and repo copy, no strays elsewhere.
+- `tmp/` — nothing here may be referenced by anything; anyone may delete any of it at any time.
+
+A probe or spike dir carries a one-line README naming its question. If a file isn't in `handoffs/` or a dated `runs/` dir, it is not part of live work. Third-party repos cloned for research live at `~/source/.explore/<repo>` (see the `research` skill), never in `.artifacts/`.
 
 ## Grounding
 
