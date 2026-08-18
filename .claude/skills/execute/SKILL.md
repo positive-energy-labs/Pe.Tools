@@ -126,25 +126,40 @@ console messages, network requests, or a deterministic test) instead of re-shoot
 Subagents (claude/codex/…) and any process the user might watch — dev servers, long tests — run
 in Herdr panes, never harness Agent/background tools: harness runs can't be observed or
 interjected, their output is obscured, and a user interrupt kills them (Herdr agents survive).
-`herdr --skill` is the version-matched CLI manual; below is only the earned delta.
+`herdr --skill` is the version-matched CLI manual — **discovery stays first-class: read it before
+any Herdr work the scripts below don't cover**, and probe command groups (`herdr agent`, `herdr
+pane`, …) rather than guessing flags. Below is only the earned delta.
 
+- **Launch and prompt through the battle-tested scripts in this skill's directory** — they encode
+  every trap we've hit; don't re-derive the dance by hand:
+  - `herdr-up.sh S CWD name:kind ...` — headless server + workspace + one pane per agent,
+    idempotent (re-run reuses existing agents, never double-splits). claude agents launch with
+    `--dangerously-skip-permissions`: approvals are designed out at launch, never babysat at the
+    dialog. Prints name→pane; immediately tell the user S, the agent names, and
+    `herdr session attach S`.
+  - `herdr-send.sh S NAME PROMPT_FILE` — one-hop delivery: prompt from file, poll to `working`,
+    nudge-enter, one full retry. Exists because prompt acceptance ≠ submission ≠ execution:
+    codex leaves large prompts as unsubmitted `[Pasted Content]` (the nudge submits), and a
+    claude first-launch notice eats prompt #1 (the retry lands). Exit 0 = verified working;
+    nonzero dumps the pane tail. Blank lines are collapsed (they can swallow a prompt).
 - This harness is outside `HERDR_ENV`; the binary is
-  `C:\Users\kaitp\AppData\Local\Programs\Herdr\bin\herdr.exe` (off PATH). Orchestrate only
-  through a dedicated named session: `--session S` on **every** command — never the default
-  session, UI focus, or `--current`. Headless server: background `herdr --session S server`.
-  Immediately tell the user S, the agent names, and `herdr session attach S`. Topology
-  (`workspace create` → `pane split` → `agent start`, all `--cwd <root> --no-focus`) comes from
-  parsed JSON, never guessed IDs. One prompt owner per agent.
-- `agent prompt` acceptance echoes the agent's *current* state — not proof of execution.
-  Ordinary turn: prompt a settled agent with `--wait --timeout MS`. Health poll: `agent list`.
-  `idle|done` both mean complete (focus flips done→idle); `blocked` = needs input (read the pane,
-  answer via `send-keys`); `unknown` proves nothing. A prompt with embedded blank lines can be
-  swallowed without starting a turn — keep prompts single-block, verify state after.
+  `C:\Users\kaitp\AppData\Local\Programs\Herdr\bin\herdr.exe` (off PATH). Dedicated named
+  session, `--session S` on **every** command — never the default session, UI focus, or
+  `--current` (the scripts pin this). `MSYS_NO_PATHCONV=1` before any `send-text` from bash —
+  without it Git Bash rewrites `/quit` into `C:/Program Files/Git/quit`. IDs come from parsed
+  JSON, never guessed. One prompt owner per agent.
+- Health poll: `agent list`. `idle|done` both mean complete (focus flips done→idle); `blocked` =
+  needs input; `unknown` proves nothing. If a permissioned agent still blocks on a dialog, the
+  only sanctioned answer is read-the-pane then `send-keys enter` for the highlighted default —
+  never guess numeric options (a guessed "2" has interrupted a turn and toggled modes).
 - **Wake/chain/queue**: no queue primitive — the orchestrator owns sequencing. Chain by
-  backgrounding `herdr --session S agent wait <name> --timeout MS` as a harness background task;
-  its task-notification is the wake — then `agent get` + `agent read`, then next prompt. Urgent
-  redirect: `send-keys <name> esc` → verify settled → re-prompt. On a group timeout inspect each
-  agent individually.
+  backgrounding `herdr --session S agent wait <name> --until idle --until done --until blocked
+  --timeout MS`; its task-notification is the wake. But **watchers are disposable, disk is
+  durable**: they die with the parent session (proven by fork), while Herdr agents survive.
+  Every mission names a report file; after any resume/fork/doubt, first commands are `agent
+  list` + `ls` the report dir — never assume a watcher fired, and recreate watchers freely.
+  Urgent redirect: `send-keys <name> esc` → verify settled → re-prompt. On a group timeout
+  inspect each agent individually.
 - Reads are terminal snapshots (`recent-unwrapped` for transcripts). Alt-screen rows never reach
   scrollback — if more `--lines` reveals nothing, ask the agent to write Markdown to
   `.artifacts/tmp/` and return the path (fallback only, never the opening ask).
