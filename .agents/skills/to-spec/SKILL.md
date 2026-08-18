@@ -58,7 +58,7 @@ Exception: if a prototype produced a snippet that encodes a decision more precis
 
 ## Proof
 
-Name the proof lane(s) that will demonstrate the feature (source compile / deterministic chain test / FreshRevitProcess / sandbox / installed — per `docs/BUILD.md`), and the seams the chain tests drive. Prior art: name a similar existing test.
+Name the proof lane(s) that will demonstrate the feature (compile / deterministic / fresh (`FreshRevitProcess`) / sandbox / installed — per `docs/BUILD.md`), and the seams the chain tests drive. Prior art: name a similar existing test.
 
 ## Out of Scope
 

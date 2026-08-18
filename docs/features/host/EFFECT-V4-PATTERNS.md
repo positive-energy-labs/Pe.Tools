@@ -7,7 +7,7 @@ Sources of truth (verify against these, never from memory):
 - **Our condoned style:** `source/pe-tools/apps/host/src/` — `index.ts`, `bridge.ts`, `call-route.ts`,
   `host-ownership.ts`, `local-ops.ts`, `local-error.ts`, `product-paths.ts`, and `@pe/host-contracts`.
   Host runs `effect@4.0.0-beta.92`.
-- **The library:** `C:\Users\kaitp\source\.explore\effect-smol` (Effect working repo, currently
+- **The library:** `.explore\effect-smol` (Effect working repo, currently
   `4.0.0-beta.94`). `git pull` it first. Signatures live in `packages/effect/src/...`. Migration guides
   live in `MIGRATION.md` + `migration/*.md` (they are excellent — read the one for whatever you touch).
 

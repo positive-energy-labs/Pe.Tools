@@ -36,7 +36,7 @@ Use a tiny DA manifest before broad APS validation. Data Management and OSS fail
 ## Living Memory
 
 - `Pe.Aps` may know APS appbundles, activities, workitems, OSS buckets/objects, signed URLs, hubs, projects, folders, items, and versions.
-- `Pe.Aps` must not know `ParameterCollectionArtifact`, `ScheduleCollectionArtifact`, manifest formats, receipt formats, repo roots, CLI logging conventions, or local RRD/session behavior.
+- `Pe.Aps` must not know `ParameterCollectionArtifact`, `ScheduleCollectionArtifact`, manifest formats, receipt formats, repo roots, CLI logging conventions, or local dev-session behavior.
 - Revit/domain request-result contracts live in shared Revit data/contracts packages, not here.
 - Keep SDK-specific model quirks near `Core/*ApiClient.cs`; expose slim records or service results to callers.
 - Data Management region normalization maps `EU` to `EMEA`; missing hub region should stay a caller-visible failure unless explicitly overridden.

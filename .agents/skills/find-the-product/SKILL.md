@@ -22,7 +22,7 @@ The find-the-product cycle is roughly: 1) find the UI shape, 2) promote to canon
 
 Run the `grilling` skill on what the product *is*, goals, and scope. If no precedent exists then solving end-user stories and eliminating friction are top priority. 
 
-Then, drive the `prototype` skill as the main loop and abide by the `delegation` skill's protocol. 
+Then, drive the `prototype` skill as the main loop and abide by the `delegate` skill's protocol. 
 
 Adapt the process to the circumstance and user's goals. On grilling: questions a mock can easily answer are cheaper to prototype than to argue about, but a variant built on the wrong boundary or to answer an unasked question is a wasted builder. On prototyping: scope may be whole-route, single component, or an entire package. Be efficient and choose the harness that's closest to the final surface.
 

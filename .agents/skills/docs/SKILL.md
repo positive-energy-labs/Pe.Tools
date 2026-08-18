@@ -22,7 +22,7 @@ There is no external issue tracker. No GitHub issues, no `.scratch/`, no ticket 
 | Hard-won wide-breadth rationale | Authority docs (registry below) |
 | `.artifacts/handoffs/<date>-<topic>.md` |  Session-to-session bridges |
 | relevant `docs/features/<feat>`, else `docs/research/` |  Research findings |
-| Code comments at the site; a scoped grounding doc only when no code site exists |  Live-verified platform behavior (gotchas, quirks) | 
+| Code comments at the site; a scoped grounding doc only when no code site exists |  Behavior-proven platform facts (gotchas, quirks) |
 | X |  Everything else |
 
 ## Ledgers
@@ -54,7 +54,7 @@ Rules:
 - **Mid-session discovered gaps** (tooling in active use finds its own hole): a code site in this repo → `TODO:` at the site, never a ledger line. No code site here (SDK defect, upstream dep) → one Owed line in the *owning* surface's ledger — never the ledger of the session that discovered it.
 - When a `MAP.md` is deleted, sweep its Out-of-scope once: promote only what is expensive to re-derive or likely to be re-proposed by an agent (feature-scoped → a Tried & rejected line; cross-feature → a rejected-architecture ADR). Everything else dies with the map — code's growing mass is the real rejection.
 - **Promotion and deletion happen in the same commit.** A HISTORICAL/CLOSED banner on a tracked doc is a failing state, not an archive method (`docs-guard` enforces this).
-- **Merge hygiene:** fold files with `git mv` / append-then-delete so history follows. Git history is the archive only if the path chain is followable — a file that was retyped into its new home instead of moved has no chain, and the archive claim is false. When a doc line's fact belongs at a code seam, move it and delete the line; live-proven platform behaviour is the one exception and is deliberately dual-homed (see Grounding).
+- **Merge hygiene:** fold files with `git mv` / append-then-delete so history follows. Git history is the archive only if the path chain is followable — a file that was retyped into its new home instead of moved has no chain, and the archive claim is false. When a doc line's fact belongs at a code seam, move it and delete the line; behavior-proven platform facts are the one exception and are deliberately dual-homed (see Grounding).
 
 ## ADRs
 
@@ -88,13 +88,13 @@ Gitignored, so convention is the only structure. Top level holds build-tool-owne
 - `runs/<lane>-<yyyymmdd>[-<slug>]/` — dated evidence output; deletable once its verdict is in a ledger.
 - `tmp/` — nothing here may be referenced by anything; anyone may delete any of it at any time.
 
-Worktrees are NOT an `.artifacts/` home: create them **from the command line** as siblings of the repo at the same root so every session is a peer (`~/source/repos/Pe.Tools-<slug>` on this clone).
+Worktrees are NOT an `.artifacts/` home: create them **from the command line** as siblings of the repo at the same root so every session is a peer (`~/source/repos/Pe.Tools-<slug>` for kaitpw).
 
-A probe or spike dir carries a one-line README naming its question. If a file isn't in `handoffs/` or a dated `runs/` dir, it is not part of live work. Third-party repos cloned for research live at `~/source/.explore/<repo>` (see the `research` skill), never in `.artifacts/`.
+A probe or spike dir carries a one-line README naming its question. If a file isn't in `handoffs/` or a dated `runs/` dir, it is not part of live work. Third-party repos cloned for research live at `./.explore/<repo>` (see the `research` skill), never in `.artifacts/`.
 
 ## Grounding
 
-Live-verified behavior of adversarial platforms (Revit API, Jet/RHVAC, DWG export…) — facts proven by real behavior, not metadata. Default home is a **code comment or test at the site the fact governs** — recurring, systemic, or big-picture gotchas especially. Write a grounding doc only when no single code site exists (e.g. a manual runbook that *is* the proof lane, an API-wide gotcha list with no wrapper to annotate), and keep it **scoped to one subject in the feature dir it serves** — never merge subjects (Revit API gotchas, Jet quirks, tooling notes) into one shared doc; that's how facts get lost.
+Behavior-proven facts about adversarial platforms (Revit API, Jet/RHVAC, DWG export…) are proven by real behavior, not metadata. Default home is a **code comment or test at the site the fact governs** — recurring, systemic, or big-picture gotchas especially. Write a grounding doc only when no single code site exists (e.g. a manual runbook that *is* the proof lane, an API-wide gotcha list with no wrapper to annotate), and keep it **scoped to one subject in the feature dir it serves** — never merge subjects (Revit API gotchas, Jet quirks, tooling notes) into one shared doc; that's how facts get lost.
 
 **Proven grounding:** the second time a fact is re-derived or contested, pin it with a proof test in `Pe.Revit.Tests/Proofs/` — the `FOOTGUN:` comment names the test verbatim, the test's comment quotes the `FOOTGUN:` phrase, so one grep connects claim and proof in either direction. Don't pre-prove; the first derivation gets the comment, the second payment is the signal it's load-bearing. Grounding docs with no code site name their proof test the same way.
 
@@ -108,7 +108,7 @@ Docs earn their keep by being findable from code and vice versa. Pragmatic rules
 
 - ASD-STE100 and disciplined grammar!
 - Name code identifiers **verbatim** (`FamilyModel`, `build_evidence`, `w-(--anchor-width)`) — never paraphrase, abbreviate, or synonym them. One grep should connect the doc line to its code.
-- In code, mark durable knowledge with a greppable prefix: `TODO:` (owed, small enough to live in code), `SHIM:` (stand-in — name the replacement condition), `FOOTGUN:` (live-verified platform trap). Prefer these over doc files when a code site exists; a ledger Owed line may point at a `TODO:` rather than restating it.
+- In code, mark durable knowledge with a greppable prefix: `TODO:` (owed, small enough to live in code), `SHIM:` (stand-in — name the replacement condition), `FOOTGUN:` (behavior-proven platform trap). Prefer these over doc files when a code site exists; a ledger Owed line may point at a `TODO:` rather than restating it.
 - Ledger/doc lines that reference a marked site quote the marker text so grep finds both ends.
 
 ## Commits

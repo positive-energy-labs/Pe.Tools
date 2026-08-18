@@ -30,7 +30,7 @@ before higher packages copy it.
 
 ## Validation
 
-- Do not build unless the user asked; RRD hot reload is too expensive to break casually.
+- Do not build unless the user asked; dev-session hot reload is too expensive to break casually.
 - Prefer proving document-owned refactors by collapsing duplicate logic and updating focused callers before broader
   namespace churn.
 - When a helper only needs `Document`, keep it free of `UIApplication` assumptions so host routes, scripting, tests, and

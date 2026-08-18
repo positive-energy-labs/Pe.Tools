@@ -13,4 +13,4 @@ Its job:
 
 ## Reading third-party source
 
-When the question needs a repo's actual source (not just its docs), **clone it** — grep over a local checkout beats web reading for anything non-trivial, and repeated research on large repos is only cheap if the clone persists. The stable home is `~/source/.explore/<repo>` (machine-local, never inside a project repo, never `.artifacts/`). Before reading an existing clone, **always sync it first** (`git pull` / `git fetch`) — a stale clone silently answers questions about a version that no longer exists.
+Clone if open source `.explore` in root — grep over a local checkout beats web reading for anything non-trivial, and repeated research on large repos is only cheap if the clone persists. Before reading a clone, **always sync it first** (`git pull` / `git fetch`). If no clone exists make one.

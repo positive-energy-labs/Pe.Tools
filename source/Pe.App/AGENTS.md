@@ -29,7 +29,7 @@ itself.
 
 ## Living Memory
 
-- This package's dependency graph owns the live RRD runtime. Be unusually cautious about builds because they will
+- This package's dependency graph owns the dev-session runtime. Be unusually cautious about builds because they will
   _always_ force a costly Revit restart.
 - Keep `Pe.App` thin. If logic starts looking reusable or testable outside the command shell, move it into the owning
   domain/shared package.

@@ -81,3 +81,5 @@ __pycache__/
 .claude/skills/writing-for-agents
 .claude/skills/delegation
 .claude/skills/find-the-product
+.claude/skills/delegate
+.claude/skills/execution

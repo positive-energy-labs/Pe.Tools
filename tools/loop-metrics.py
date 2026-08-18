@@ -1,8 +1,8 @@
 # loop-metrics: rerunnable scorecard over Claude Code + Codex session history.
 #
-# The metric for "is the live loop getting better": error%, timeout%, and blind-retry runs per
+# The metric for "is the execution loop getting better": error%, timeout%, and blind-retry runs per
 # command family (pe-revit, pea, vp, dotnet, ...) per source, over a date window. Run it after a
-# doctrine change (AGENTS.md, live-loop skill) or an SDK bump, compare windows, and the delta is
+# doctrine change (AGENTS.md, execute skill) or an SDK bump, compare windows, and the delta is
 # the evidence. First baseline: 2026-06-15..08-18 in .artifacts/runs/history-mining-20260818/.
 #
 #   python tools/loop-metrics.py --since 2026-08-18 [--until YYYY-MM-DD] [--out DIR]

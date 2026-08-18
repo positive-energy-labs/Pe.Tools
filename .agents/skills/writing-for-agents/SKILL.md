@@ -16,7 +16,7 @@ Sort by **when the agent needs it**, not by what kind of file feels right. Four 
    look. Test: *absent this line, the first tool call does damage or wastes turns.* Pays context
    load every turn — the hardest pruning bar in the repo; every line evicts attention from another.
 2. **Situation → a skill.** A judgment-heavy *way of working* with a trigger you can state in one
-   description line (live-loop, docs, delegation). The description is the pointer; its wording
+   description line (execute, docs, delegate). The description is the pointer; its wording
    decides whether the tier fires at all. Test: *procedure with decision points, reached when a
    recognizable situation arises.*
 3. **On-touch → docs, per the `docs` skill.** Durable *facts and decisions* — a why, a rejected
