@@ -201,6 +201,12 @@ public static class TakeoffPolicy
             profile.Options.StoryCapFt = Math.Ceiling(maxCeilingAboveLevel);
         }
 
+        // COLLISION (2026-08-14 fan-out): TakeoffOptions.SeedSource now defaults to Hybrid, and this
+        // rule only ever upgrades TO Hybrid — it never asks for RegionCores back. So the "below-grade
+        // or non-flat levels use region cores" domain rule is silently subsumed by the default: every
+        // level arrives Hybrid regardless. The composite A/B numbers were measured that way (knob
+        // override forced Hybrid everywhere), so they are honest — but either this rule or the default
+        // should be made explicit rather than left to override order.
         bool regionCores = snap.LevelElevation < 0 || !flat;
         if (!regionCores && profile.CeilingStepInkLift >= thresholds.CeilingStepInkLiftMin)
             profile.Options.SeedSource = TakeoffSeedSource.Hybrid;

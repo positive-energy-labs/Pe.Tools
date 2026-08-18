@@ -2,8 +2,8 @@
 
 The release gate on a new model: adopt preexisting Zone Regions → capture →
 partition → review → enter data → sync (INSERT-dominant) into a copy of the firm template
-`.r10`. Opening the result in RHVAC is useful follow-up, not part of this gate. Decisions behind
-the run are in `SHIMS.md`.
+`.r10`. Opening the result in RHVAC is useful follow-up, not part of this gate. Decisions and open
+shims behind the run are in `LEDGER.md`.
 
 ## Preconditions (check before burning the run)
 
@@ -56,7 +56,7 @@ the run are in `SHIMS.md`.
   blind. A law-break in PromoteZone throws by design.
 - `.r10` locked (RHVAC open on it): sync refuses; close RHVAC first.
 - Exposures: the minimal lane creates floor + roof rows and one wall per Room Region polygon edge.
-  Glass and doors remain empty (SHIMS #5).
+  Glass and doors remain empty (open shim, see LEDGER Owed).
 
 ## First passing proof — 2026-08-15
 

@@ -224,6 +224,8 @@ try {
     $systemColumns = @($connection.GetSchema('Columns') |
         Where-Object { $_.TABLE_NAME -eq 'System' -and $_.COLUMN_NAME -like 'Calculated*' -and $_.TYPE_NAME -ne 'LONGBINARY' } |
         ForEach-Object COLUMN_NAME)
+    # Probe fact: the schema has no [Name] column — the System (and Room) name lives in
+    # [Description]. Extractor and sync expose it as `name`.
     $systemAdapter = [System.Data.Odbc.OdbcDataAdapter]::new(
         "SELECT Number, Description, $(($systemColumns | ForEach-Object { "[$_]" }) -join ', ') FROM [System] ORDER BY Number", $connection)
     $systemTable = [System.Data.DataTable]::new()

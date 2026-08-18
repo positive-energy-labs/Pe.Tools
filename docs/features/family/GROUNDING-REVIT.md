@@ -1,19 +1,15 @@
-# Family editing — Revit API grounding (from OLD-repo Family Foundry)
+# Family editing — Revit API grounding
 
-> SUPERSEDED AS DESIGN PRECEDENT (user steer 2026-07-12): "FF" means
-> `source/Pe.Revit.FamilyFoundry` in THIS repo — the standardized-language surface.
-> This doc remains valid ONLY as Revit API gotcha lore. For input models, parameter
-> identity, snapshots, desired state: see GROUNDING-LANGUAGE.md (in-repo FF index).
+Revit API gotcha lore for family-document editing, live-verified in the old-repo Family
+Foundry era and still governing. Every implementation brief touching Revit-side family
+ops reads this first — you will write some of this wrong from reflex. Where a gotcha is
+already baked into an in-repo wrapper (see paths at bottom), prefer the wrapper; this
+list explains why the wrapper is shaped the way it is.
 
-Source: `C:\Users\kaitp\source\repos\PE_Tools` (old repo, read-only precedent). Every
-implementation brief touching Revit-side family ops reads this first. You will write
-some of this wrong from reflex — verify against the FF source paths listed at bottom.
+## Relationship model
 
-## The data model to carry forward
-
-`ParamSnapshot` — the serializable parameter×type matrix a Types dialog renders:
-`ValuesPerType: Dictionary<TypeName,string>`, `Formula`, `IsInstance`, `DataType`,
-`IsBuiltIn`, `SharedGuid`, `StorageType`. (FF: `Core\Aggregators\Snapshots\ParamSnapshot.cs`)
+The parameter×type matrix snapshot now lives in-repo (`FamilySnapshotExtractor` →
+`FamilyParameterSnapshot`); this section keeps only the API facts behind it.
 
 Two orthogonal relationship types (both belong in the snapshot):
 - **Formula dependencies** (soft, name-based): GetDependencies / GetDependents via
@@ -75,11 +71,9 @@ fallback execution.
 Kill: JSON-profile-as-editing-surface; read-only FlowDocument rendering; WPF palette host.
 No live per-cell editing or undo precedent exists — built new.
 
-## Key FF source paths (for verification)
+## In-repo wrapper paths (prefer these over raw API calls)
 
-- `.cursor\rules\family-foundry-{dev,debug}.mdc`
-- `Library\PeExtensions\FamilyDocument\{SetFormula,SetValue,GetValue,UnwrapFormula,ProcessFamily}.cs`
-- `Library\PeExtensions\FamilyParameter\Formula\{References,Dependencies,CycleDetection,Analysis,Tokenizer}.cs`
-- `Library\PeExtensions\FamilyParameter\GetAssociated.cs`
-- `LibraryAddins\AddinFamilyFoundrySuite\Core\Snapshots\ParamSectionCollector.cs`
-- `LibraryAddins\AddinFamilyFoundrySuite\Core\Operations\{SetParamValues,SetParamValuesPerType,PurgeParams,BacklinkParamsToBuiltIn}.cs`
+- `source/Pe.Revit/Extensions/FamDocument/` — `SetFormula`, `SetValue` (the set-unset trick), `GetValue`, `AddParameter`, `FindParameter`, `ProcessFamily`
+- `source/Pe.Revit.FamilyFoundry/Operations/` — `SetParamValues*`, `PurgeParams`, `BacklinkParamsToBuiltIn`, `CreateFamilyTypes`, …
+- `source/Pe.Revit.FamilyFoundry/Snapshots/` — `ParameterSnapshot`, `FamilySnapshot`
+- `source/Pe.Revit.DocumentData/Families/Extraction/FamilySnapshotExtractor.cs` — the single canonical snapshot producer

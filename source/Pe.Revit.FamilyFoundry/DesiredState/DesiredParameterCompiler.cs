@@ -423,6 +423,8 @@ public static class DesiredParameterCompiler {
         return trimmed;
     }
 
+    // TRAP: this mints a "shared-guid:" Key prefix, diverging from the canonical "shared:" prefix
+    // minted by RevitParameterDefinition.CreateIdentity — a latent dedup hazard when keys meet.
     private static ParameterIdentity CreateSharedGuidIdentity(string name, Guid sharedGuid) {
         var guid = sharedGuid.ToString("D");
         return new ParameterIdentity($"shared-guid:{guid}", ParameterIdentityKind.SharedGuid, name, null, guid, null);
