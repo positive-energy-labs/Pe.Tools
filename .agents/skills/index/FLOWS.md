@@ -6,7 +6,7 @@ The skill set as conditional flows — our fork (no external tracker; ledgers/MA
 
 ```mermaid
 flowchart TD
-    I([An idea, in this repo]) --> G["grill-me<br/>→ CONTEXT.md + ADRs"]
+    I([An idea, in this repo]) --> G["grill-me<br/>→ glossaries + ADRs"]
     G --> Q{"Settleable<br/>by talking?"}
     Q -- no --> PR["prototype<br/>→ verdict to LEDGER"] --> Q
     Q -- yes --> M{"Fits one<br/>session?"}
@@ -24,7 +24,7 @@ flowchart LR
     FTP["find-the-product<br/>UI/product discovery<br/>rounds → MAP.md live, LEDGER settled"] -- "closing the chain<br/>outgrows a session" --> SP2["to-spec"]
     WF["wayfinder<br/>too foggy for one session<br/>→ MAP.md decision tickets"] --> SP2
     DBG["diagnosing-bugs<br/>hard bug or regression"] --> RED["red loop → hypotheses<br/>→ fix + regression test<br/>falsified hypotheses → LEDGER"]
-    ICA["improve-codebase-architecture<br/>periodic upkeep"] -- "pick one candidate" --> GD2["grill-me"]
+    ICA["codebase-design<br/>hot-spot upkeep"] -- "pick one candidate" --> GD2["grill-me"]
     SP2 --> MAIN([main flow])
     GD2 --> MAIN
     DBG -. "no correct seam" .-> ICA
@@ -38,7 +38,7 @@ flowchart TD
       FTPX["find-the-product"]
       GWD["grill-me"]
       WAY["wayfinder"]
-      ARC["improve-codebase-architecture"]
+      ARC["codebase-design"]
       IMPL["implement"]
       PRX["prototype"]
     end

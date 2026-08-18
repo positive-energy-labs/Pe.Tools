@@ -24,14 +24,14 @@ Work top to bottom at the boundary. The first **yes** wins.
 
 The cost of getting this wrong is one-way. Clear a *relevant* context and you lose the **why** behind what you built, and no amount of reading the diff back gets it returned.
 
-**3. Do you need to hand off?** `/handoff` is narrow. You need it only when you are:
+**3. Do you need to hand off?** In practice this is not rare: two months of history show pasted handoffs and auto-compaction continuations are the steady state of long work — plan for the handoff rather than being surprised by the boundary. You need one when you are:
 
 - swapping to a **new harness** (Claude → Codex),
 - moving to a **new directory** or repo,
 - sending the work to a **colleague**,
 - or forking a side task you found **mid-phase** without derailing what you're doing.
 
-That list is the whole clause. What `/handoff` buys is **portability** — a handoff that travels (inline text to paste, or a file when the payload is substantive). If nothing is travelling, you don't need it.
+What `/handoff` buys is **portability** — a handoff that travels (inline text to paste, or a file when the payload is substantive). If nothing is travelling, you don't need it.
 
 **4. Can the task be done AFK?** Is it scoped tightly enough to run with you away from the keyboard, no steering? Then send it to a **subagent** and leave this session untouched. Automated review is the standard case: the agent reads the diff and reports, and you aren't needed while it does.
 

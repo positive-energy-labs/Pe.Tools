@@ -37,11 +37,18 @@ loop shapes, and the lies to defend against.
    by purpose so concurrent worktrees coexist. `PE_SANDBOX_NO_LAUNCH=1` proves the selector gate
    without a 3-minute launch. Prefer two-step `start` then `wait` so failures are attributable.
 4. **Attached** (`test attached`) — only when the RRD session itself is under test AND the payload
-   is proven current. NEVER run raw `dotnet test` in an RRD worktree: the WPF `*_wpftmp.csproj`
-   poisons the emitter and **edits silently stop applying**.
+   is proven current (prefer `--no-build` once warm).
 5. **Installed** — repair recipe when receipts drift: `dotnet tool restore` → `doctor` →
    `service sweep` → `install apply --release latest [--retire-legacy-installers] [--force]` →
    `install verify --json` and read `$j.result.ok` → sandbox with `--installed`.
+
+**Terminal `dotnet build`/`publish` are SAFE beside a live session** — the isolated lane sends
+bin/obj to `.artifacts/` and the SDK errors on any deploy/launch from it (`Pe.Revit.Common.targets`).
+**Raw `dotnet test` is the banned verb**: not output trees — it drives its own Revit open/close
+(Fresh runsettings), or under an IDE resolves Warm and reuses the live session; its long WPF build
+also races the emitter with a transient `Pe.Revit.Ui/*_wpftmp.csproj`, read as added build config →
+`restart-required` (one reproduction, 2026-07-24; benign, recovered by `converge --restart`). Use
+`pe-revit test fresh`, or `attached --no-build` when the payload is proven current.
 
 ## The converge ladder (hot reload)
 
@@ -112,15 +119,14 @@ follow the `fix:` line before inventing your own remedy; but know its limits (a 
 once prescribed the wrong fix for a dev-sign byte mismatch — when the prescribed fix fails once,
 diagnose bytes/signatures, don't re-run the prescription).
 
-## Guardrails (inherited from the original pe-live-loop skill, still binding)
+## Guardrails
 
-- Never kill Revit/Rider by process name or same-year heuristic — kill only a pid whose command
-  line verifiably matches the orphaned run. Exact descriptors and PIDs route actions; preserve
-  unrelated worktrees and installed sessions.
+- Never `Stop-Process`/`Start-Process`/`taskkill` Revit.exe by hand — `pe-revit live stop|converge --restart`, `sandbox`, `sessions`, and `service` own process lifecycle. The one exception is the quarantine-unstick recipe: kill only a pid whose command line verifiably matches the orphaned test run. Exact descriptors and PIDs route actions; preserve unrelated worktrees and installed sessions.
 - Never treat an open document as implicit — check status or open it via the host op.
 - Never infer freshness from an isolated terminal build, an old log line, or a matching filename.
 - Host/web-only edits use that package's own dev loop; restart Revit only when the in-process
   add-in boundary or an SDK verdict requires it.
+- Never use harness-provided worktree creation tools, Windows stability industry-wide is iffy. Create them from the command line (`git worktree add`) as siblings of the repo (`~/source/repos/Pe.Tools-<slug>`), never nested inside it.
 
 ## Measuring the loop itself
 

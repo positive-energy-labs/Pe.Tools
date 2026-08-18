@@ -1,23 +1,26 @@
 ---
 name: domain-modeling
-description: Build and sharpen a project's domain model. Use when discussing codebase terminology, writing or editing a CONTEXT.md, or recording or editing an ADR.
+description: Build and sharpen a project's domain model. Use when discussing codebase terminology, building or editing a glossary (package Shared Language or feature GLOSSARY.md), or recording or editing an ADR.
 ---
 
 # Domain Modeling
 
-Actively build and sharpen the project's domain model as you design. This is the *active* discipline — challenging terms, inventing edge-case scenarios, and writing the glossary and decisions down the moment they crystallise. (Merely *reading* `CONTEXT.md` for vocabulary is not this skill — that's a one-line habit any skill can do. This skill is for when you're changing the model, not just consuming it.)
+Actively build and sharpen the project's domain model as you design. This is the *active* discipline — challenging terms, inventing edge-case scenarios, and writing the glossary and decisions down the moment they crystallise. (Merely *reading* a glossary for vocabulary is not this skill — that's a one-line habit any skill can do. This skill is for when you're changing the model, not just consuming it.)
 
-## File structure
+## Where glossaries live — scoped, never central
 
-This repo is single-context: `CONTEXT.md` at the root, glossary only. This skill owns `CONTEXT.md`; ADR placement, numbering, and the promotion bar are owned **per the `docs` skill** — read it before writing one. This skill only supplies the ADR template ([ADR-FORMAT.md](./ADR-FORMAT.md)) and the judgement for when to offer one mid-conversation.
+A single central glossary was tried and failed: vocabulary matters most in the weeds, and a root file is never open when you're there. Glossaries are **scoped to where the confusion happens**:
 
-Create files lazily — only when you have something to write. If no `CONTEXT.md` exists, create one when the first term is resolved.
+- **Package-scoped terms** → that package's `AGENTS.md` `Shared Language` table (the long-standing house mechanism — extend it, don't invent a sibling).
+- **Feature-scoped / cross-package terms** → `docs/features/<name>/GLOSSARY.md`, created lazily on the first resolved term, format per [CONTEXT-FORMAT.md](./CONTEXT-FORMAT.md). Glossary only — no implementation details, no spec content.
+
+This skill owns building and sharpening both. ADR placement, numbering, and the promotion bar are owned **per the `docs` skill**; this skill supplies the template ([ADR-FORMAT.md](./ADR-FORMAT.md)) and the judgement for when to offer one mid-conversation.
 
 ## During the session
 
 ### Challenge against the glossary
 
-When the user uses a term that conflicts with the existing language in `CONTEXT.md`, call it out immediately. "Your glossary defines 'cancellation' as X, but you seem to mean Y — which is it?"
+When the user uses a term that conflicts with the scoped glossary (nearest `AGENTS.md` Shared Language, or the feature's `GLOSSARY.md`), call it out immediately. "Your glossary defines 'cancellation' as X, but you seem to mean Y — which is it?"
 
 ### Sharpen fuzzy language
 
@@ -31,11 +34,11 @@ When domain relationships are being discussed, stress-test them with specific sc
 
 When the user states how something works, check whether the code agrees. If you find a contradiction, surface it: "Your code cancels entire Orders, but you just said partial cancellation is possible — which is right?"
 
-### Update CONTEXT.md inline
+### Update the glossary inline
 
-When a term is resolved, update `CONTEXT.md` right there. Don't batch these up — capture them as they happen. Use the format in [CONTEXT-FORMAT.md](./CONTEXT-FORMAT.md).
+When a term is resolved, update the owning glossary right there — package terms into that `AGENTS.md` Shared Language row, feature terms into `GLOSSARY.md`. Don't batch these up — capture them as they happen.
 
-`CONTEXT.md` should be totally devoid of implementation details. Do not treat `CONTEXT.md` as a spec, a scratch pad, or a repository for implementation decisions. It is a glossary and nothing else.
+A glossary is totally devoid of implementation details — never a spec, a scratch pad, or a repository for implementation decisions.
 
 ### Offer ADRs sparingly
 

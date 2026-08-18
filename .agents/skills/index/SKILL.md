@@ -7,13 +7,13 @@ description: The entry point and router for this repo's skill set. Invoke with w
 
 The single entry point over this repo's skill set. The user states intent; you pick the route and **drive it**: invoke each hop yourself where the skill allows model invocation; where the next hop is user-invocable only (`disable-model-invocation: true`), hand back the exact slash command to run and stop there. Otherwise stop only at genuine decision gates (grilling answers, round verdicts, spec approval, commits). Never recommend a vague direction — name the next command.
 
-Read [FLOWS.md](FLOWS.md) for the flow diagrams. When a route spans sessions, decide continuation per [PHASE-BOUNDARIES.md](PHASE-BOUNDARIES.md). Docs conventions (ledgers, ADRs, MAP.md, grounding, handoffs) live in the `docs` skill — every route persists through it.
+ALWAYS read [FLOWS.md](FLOWS.md) for the flow diagrams. When a route spans sessions, decide continuation per [PHASE-BOUNDARIES.md](PHASE-BOUNDARIES.md). Docs conventions (ledgers, ADRs, MAP.md, grounding, handoffs) live in the `docs` skill — every route persists through it.
 
 ## Why this exists — the failure modes it prevents
 
 - **Wrong work:** grill before building.
 - **Wrong product:** prototype against real data before canonizing; the UI's demands shape the backend.
-- **Lost decisions:** ledgers, ADRs, and CONTEXT.md catch what code can't say.
+- **Lost decisions:** ledgers, ADRs, and scoped glossaries catch what code can't say.
 - **Broken code:** work through a tight red/green feedback loop.
 - **Architectural decay:** test at public seams; periodically hunt deeper modules.
 - **Context decay:** choose explicitly at phase boundaries instead of compacting by habit.
@@ -21,18 +21,17 @@ Read [FLOWS.md](FLOWS.md) for the flow diagrams. When a route spans sessions, de
 
 ## Routes
 
-Match intent to the route; enter mid-route when earlier steps are already done.
+Match intent to the route; enter mid-route when earlier steps are already done. Reality check from two months of history: most sessions actually enter through find-the-product rounds, a goal-style mission brief with binding gates, or a pasted handoff — the grill→spec→tickets chain is the exception. Route by what the situation is, not by ceremony.
 
 - **Find or refine a product surface (UI or the backend it demands)** → `find-the-product`. The most-traveled on-ramp. Its rounds drive `prototype` + `grilling` under `delegation`; verdicts persist per the `docs` skill (MAP.md live, LEDGER settled). When closing the chain outgrows one session, merge onto the main flow at `to-spec`.
 - **An idea, settleable by conversation** → `grill-me`, then: fits one session → `implement` here; multi-session → `to-spec` → `to-tickets` (Owed lines) → `implement` per ticket with `/clear` between.
 - **Huge and foggy — can't see the way** → `wayfinder` (MAP.md of decision tickets). A cleared map merges at `to-spec`; it is not a build plan.
-- **Something's broken** → `diagnosing-bugs`. No hypotheses before a red loop. Its "no seam exists" finding routes to `improve-codebase-architecture`.
-- **Upkeep, spare cycle** → `improve-codebase-architecture`; a picked candidate re-enters at `grill-me`.
+- **Something's broken** → `diagnosing-bugs`. No hypotheses before a red loop. Its "no seam exists" finding routes to `codebase-design`.
+- **Upkeep, spare cycle** → `codebase-design` (hot-spot scoping); a picked candidate re-enters at `grill-me`.
 - **Reading legwork** → `research` (background agent, cited file per `docs` conventions).
-- **A question only a human elsewhere can answer** → `to-questionnaire`.
 - **Blocked on someone/something, or design question needs runnable proof** → `prototype` directly.
 
-Engines the routes drive (rarely invoked alone): `grilling`, `tdd`, `code-review`, `domain-modeling`, `codebase-design`, `delegation`, `docs`. Standalone utilities: `wait-what`, `handoff`, `teach`, `writing-for-agents`.
+Engines the routes drive (rarely invoked alone): `grilling`, `tdd`, `code-review`, `domain-modeling`, `codebase-design`, `delegation`, `docs`. `handoff` is a first-class phase, not a utility — continuation via handoff (and auto-compaction) is the steady state of long work, so treat writing one as part of the route, not an afterthought. Standalone utilities: `teach`, `writing-for-agents`.
 
 ## Driving the loop
 
@@ -43,3 +42,7 @@ After a skill completes its phase, proceed to the next hop yourself — or, if t
 3. The route itself is ambiguous after reading FLOWS.md — say what you'd pick and why, then proceed unless redirected.
 
 When a skill's SKILL.md disagrees with this index, the skill wins — this file routes, it doesn't govern.
+
+## Disposition
+
+- Use ASD-STE100 Simplified Technical English and grow glossaries. Talk like this especially when the users feel like "wait what".

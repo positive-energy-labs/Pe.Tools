@@ -3,25 +3,27 @@ name: docs
 description: Pe.Tools docs conventions — where every kind of durable knowledge lives. Read before writing any markdown, recording a decision, persisting research, creating a handoff, or when another skill needs a persistence home. The single source of truth all other skills defer to.
 ---
 
-# Docs conventions
+# Docs
 
 Code is the spec. Markdown exists only for what code cannot say: why, what was tried and failed, and what is still owed. Before writing a doc, ask whether the knowledge belongs in code, a test, or a commit message instead — those are preferred. Exception: product/design **verdicts always go to the feature ledger**, never commit messages (the `find-the-product` rule wins).
+
+Use ASD-STE100 Simplified Technical English and grow glossaries. Predictability and shared language allow everyone to say less and understand more. 
 
 There is no external issue tracker. No GitHub issues, no `.scratch/`, no ticket files. Open work is an Owed item in a ledger.
 
 ## Homes, by kind of knowledge
 
-| Knowledge | Home |
+| Home| Knowledge |
 |---|---|
-| Feature-scoped decisions, rejected paths, open work | `docs/features/<name>/LEDGER.md` |
-| Live-effort frontier (wayfinder tickets, find-the-product rounds) | `docs/features/<name>/MAP.md` — deleted when the effort ends |
-| Decisions that constrain other features | `docs/adr/NNNN-slug.md` |
-| Domain vocabulary | `CONTEXT.md` at repo root (created lazily by `domain-modeling`) |
+| `docs/features/<name>/LEDGER.md` |  Feature-scoped decisions, rejected paths, open work |
+| `docs/features/<name>/MAP.md` — deleted when the effort ends |  Live-effort frontier (wayfinder tickets, find-the-product rounds) |
+| `docs/adr/NNNN-slug.md` |  Decisions that constrain other features |
+| Nearest package `AGENTS.md` Shared Language table; feature terms in `docs/features/<name>/GLOSSARY.md` (lazy, `domain-modeling` owns) |  Domain vocabulary |
 | Hard-won wide-breadth rationale | Authority docs (registry below) |
-| Session-to-session bridges | `.artifacts/handoffs/<date>-<topic>.md` |
-| Research findings | Feature dir if feature-scoped, else `docs/research/` |
-| Live-verified platform behavior (gotchas, quirks) | Code comments at the site; a scoped grounding doc only when no code site exists |
-| Everything else | Don't write it |
+| `.artifacts/handoffs/<date>-<topic>.md` |  Session-to-session bridges |
+| relevant `docs/features/<feat>`, else `docs/research/` |  Research findings |
+| Code comments at the site; a scoped grounding doc only when no code site exists |  Live-verified platform behavior (gotchas, quirks) | 
+| X |  Everything else |
 
 ## Ledgers
 
@@ -84,8 +86,9 @@ Gitignored, so convention is the only structure. Top level holds build-tool-owne
 
 - `handoffs/` — as above.
 - `runs/<lane>-<yyyymmdd>[-<slug>]/` — dated evidence output; deletable once its verdict is in a ledger.
-- `worktrees/` — every worktree and repo copy, no strays elsewhere.
 - `tmp/` — nothing here may be referenced by anything; anyone may delete any of it at any time.
+
+Worktrees are NOT an `.artifacts/` home: create them **from the command line** as siblings of the repo at the same root so every session is a peer (`~/source/repos/Pe.Tools-<slug>` on this clone).
 
 A probe or spike dir carries a one-line README naming its question. If a file isn't in `handoffs/` or a dated `runs/` dir, it is not part of live work. Third-party repos cloned for research live at `~/source/.explore/<repo>` (see the `research` skill), never in `.artifacts/`.
 
@@ -103,6 +106,7 @@ A single cited markdown file. Feature-scoped → the feature dir (link it from a
 
 Docs earn their keep by being findable from code and vice versa. Pragmatic rules:
 
+- ASD-STE100 and disciplined grammar!
 - Name code identifiers **verbatim** (`FamilyModel`, `build_evidence`, `w-(--anchor-width)`) — never paraphrase, abbreviate, or synonym them. One grep should connect the doc line to its code.
 - In code, mark durable knowledge with a greppable prefix: `TODO:` (owed, small enough to live in code), `SHIM:` (stand-in — name the replacement condition), `FOOTGUN:` (live-verified platform trap). Prefer these over doc files when a code site exists; a ledger Owed line may point at a `TODO:` rather than restating it.
 - Ledger/doc lines that reference a marked site quote the marker text so grep finds both ends.

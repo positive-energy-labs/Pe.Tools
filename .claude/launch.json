@@ -1,19 +1,33 @@
-{
-  "version": "0.0.1",
-  "configurations": [
-    {
-      "name": "host",
-      "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["-C", "source/pe-tools", "--filter", "@pe/host", "run", "dev"],
-      "port": 61625,
-      "autoPort": true
-    },
-    {
-      "name": "web-only",
-      "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["-C", "source/pe-tools", "--filter", "@pe/web", "run", "dev"],
-      "port": 3000,
-      "autoPort": true
-    }
-  ]
+﻿{
+    "version":  "0.0.1",
+    "configurations":  [
+                           {
+                               "name":  "host",
+                               "runtimeExecutable":  "pnpm",
+                               "runtimeArgs":  [
+                                                   "-C",
+                                                   "source/pe-tools",
+                                                   "--filter",
+                                                   "@pe/host",
+                                                   "run",
+                                                   "dev"
+                                               ],
+                               "port":  61625,
+                               "autoPort":  true
+                           },
+                           {
+                               "name":  "web-only",
+                               "runtimeExecutable":  "pnpm",
+                               "runtimeArgs":  [
+                                                   "-C",
+                                                   "source/pe-tools",
+                                                   "--filter",
+                                                   "@pe/web",
+                                                   "run",
+                                                   "dev"
+                                               ],
+                               "port":  3000,
+                               "autoPort":  true
+                           }
+                       ]
 }

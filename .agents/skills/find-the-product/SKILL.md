@@ -9,14 +9,14 @@ Help the user find their product. The immediate goal depends on circumstance but
 
 In principle, the ideal product is one that makes a hard and sprawling workflow seamless. Ideal UI shape is best discovered prototyping and should be the first step. This exercise clarifies underlying concepts and their relations, helps craft UX/UI idioms, reveals the actual problem, and uncovers where the backend falls short. Only after the consuming surface settles does creating and composing the backend carry real meaning. 
 
-The find-the-product cycle is roughly: 1) find the UI shape, 2) promote to canon, 3) make the backend, 4) manual E2E test, 5) (later) automated E2E test. In practice shimming allows 2-4 to happen interleaved or out of order. "Code is the spec" is a tenet. Every step nudges canon code closer to the target along its relevant axis, built so shims can be slotted in during the full promotion. If the solution space does not narrow then something went wrong. 
+The find-the-product cycle is roughly: 1) find the UI shape, 2) promote to canon, 3) make the backend, 4) manual E2E test, 5) (later) automated E2E test. In practice shimming allows 2-4 to happen interleaved or out of order. "Code is the spec" is a tenet. Every step nudges canon code closer to the target along its relevant axis, built so shim fixes can be slotted in during the full promotion.
 
 ## Glossary, in context of this skill
 - Product: The UI, backend, and how the wiring feels; the thing being shaped and found.
 - Backend: The supporting service/s chained into a pipeline underneath the UI. Not always literally server-side.
 - Precedent: The current UI/s. Precedents indicate what the problem is; its layout is the first thing to discard. Absorb the precedents learnings and push the frontier.
 - Shim: A placeholder/stub/workaround. By its nature prototyping proliferates shims, thus any shim should be made painfully obvious in the code with comments and demo-naming (e.g. "MyLens", "DemoAtlas", etc.). Shims are most deceptive in the frontend, but most painful in the backend.
-- E2E test: first and lowest bar is manually driving the ui through the whole workflow. Codifying as a deterministic test is very final touches; the lift is big and it prevents iteration. When made, it should simply to prevent the chain's linkage from regressing, not cover edges.
+- E2E test: first and lowest bar is manually driving the ui through the whole workflow. Codifying as a deterministic test is very final touches; the lift is big and it prevents iteration. When made, it should simply prevent the chain's linkage from regressing, not cover edges.
 
 ## Process
 
@@ -45,7 +45,7 @@ What lags is the migration into older surfaces, so note in `MAP.md` which surfac
 - User rulings are the most important signal. Interleave grilling to understand what they actually want
 - Losing the layout argument while winning the product argument is a normal outcome — a demotion no
 variant could express in its own layout can still be right one level up.
-- A round that retires nothing produced no information.
+- A round that doesn't narrow the solution space or retired nothing produced no information.
 
 ## Building a UI round
 

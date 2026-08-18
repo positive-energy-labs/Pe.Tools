@@ -38,4 +38,4 @@ No external issue tracker. Durable knowledge lives in feature ledgers (`docs/fea
 
 ### Domain docs
 
-Single-context: one `CONTEXT.md` (glossary, created lazily) + `docs/adr/` at the repo root. The `domain-modeling` skill owns both.
+Glossaries are scoped: package terms in that package's `AGENTS.md` Shared Language table, feature terms in `docs/features/<name>/GLOSSARY.md` (lazy). ADRs in `docs/adr/`. The `domain-modeling` skill owns both.

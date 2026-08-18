@@ -16,6 +16,8 @@ Among other things, this requires Pe.Tools packages to expose good "public" apis
 
 ## Repo Coding Posture
 
+Default to zero edits: a request to look, diagnose, review, or explain is not authorization to change files — propose, then wait.
+
 This entire repo is greenfield: build for ideal long-term shape, and do not preserve compatibility shims unless they are *absolutely necessary* as a temporary compile bridge. Even when shims seem necessary, prefer breaking compile to surface loose ends. Code style should optimize for linear execution flow, fail-fast behavior, composable systems, and wrappers around finicky Revit API behavior.
 
 ## Repo Operating Etiquette
@@ -25,12 +27,20 @@ C# development with the Revit API requires very a specific and fragile tooling s
 ### Live Looping
 
 Use the SDK control plane; do not hand-orchestrate Revit.
+- Terminal `dotnet build`/`publish` are safe beside a live session (isolated lane → `.artifacts/`; deploy/launch from it is a build error). Raw `dotnet test` is not — it launches or reuses Revit itself; use `pe-revit test fresh|attached`.
+- Never `Stop-Process`/`Start-Process`/`taskkill` Revit.exe — `pe-revit live|sandbox|sessions|service` own process lifecycle.
 - Use `pe-revit live` to compile-check, Hot Reload, start, or restart the dev session.
 - Use `pe-revit live status` for read-only state; use `live doctor` only for reported wiring trouble.
 - Use `pe-revit test fresh|attached` for Revit-backed proof lanes.
 - Use pea scripts, host operations, or `pea --prompt` only after SDK freshness when product behavior is the proof target.
 - Prefer FreshRevitProcess tests when Hot Reload risk, stale assembly evidence, member-shape changes, or WPF/BAML/resource changes make AttachedRrd ambiguous.
 - Use Pea product tools (`pe_status`, `pe_logs`, host operations, scripts, Revit API docs) plus the `pea --prompt` CLI probe only for black-box product feedback, not repo source review.
+
+### Session Discipline
+
+- Assume you will be interrupted. Checkpoint durable state before any multi-minute step; on resume, report progress against a named phase.
+- A user interrupt kills every in-flight subagent — after any interruption, check-then-relaunch; never assert a subagent is alive.
+- Delegation shape is user-governed: declare your assumed budget posture (see the `delegate` skill); no review/standards subagents unless asked.
 
 ### Documentation
 
@@ -54,16 +64,15 @@ After any large changes, ALWAYS clarify user intent and capture the durable know
   the shell is PowerShell, not bash. rg alternation/quotes/globs need PS-safe forms (`unclosed group`,
   `os error 123` = your quoting, not the tool); `$PID`/`$Host` are readonly built-ins; `2>&1` on a
   native exe fabricates NativeCommandError from advisory stderr — a "failure" wrapping a success;
-  rg exit 1 means "no matches", not an error. Never blind-retry a quoting variant: one failed quote →
-  write the payload to a file or use the harness Read/Grep tools.
-- Never put JSON on a command line (`pea ... --request '{...}'` dies in re-quoting). File-based
-  payloads or the script-file loop — see the `live-loop` skill.
+  rg exit 1 means "no matches", not an error. Never blind-retry a quoting variant, and never put
+  JSON on a command line (`pea ... --request '{...}'` dies in re-quoting): one failed quote → write
+  the payload/pattern to a file (harness Read/Grep tools where available) — see the `live-loop` skill.
 - Client timeout ≠ server cancel: a killed pe-revit/dotnet call keeps running and blocks the next
   one. Background + poll for anything minutes-scale; `status` read before any retry.
 
 ### Non-Doc Artifacts
 
-Write artifacts to `.artifacts/`. Most often `.artifacts/tmp` for python/typescript scripts. Repo-wide, builds and other tooling behaviors route through `.artifacts/`, thus it is git ignored. 
+`.artifacts/` is deliberately gitignored: disposable evidence, scratch scripts (`.artifacts/tmp`), run outputs, and build tooling live there and never reach git. The routing question is "will a human need this in git?" — anything the user must review, commit, or hand forward is a **doc**, and its home comes from the `docs` skill. Never invent `docs/context/`, `.scratch/`, or repo-root `SHOUTY.md` homes.
 
 
 ## Critical Entry Points
@@ -83,7 +92,7 @@ Write artifacts to `.artifacts/`. Most often `.artifacts/tmp` for python/typescr
 
 | Term            | Meaning                                                                                                                              | Prefer / Avoid                                                                                          |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| **dev session** | The live hot-reload Revit session for `Pe.App` (lane `dev`, driven by `pe-revit live`; formerly "RRD"). Treat it as expensive state. | Prefer this over `RRD`/`live debug`; avoid implying hot reload exists outside the dev session           |
+| **dev session** | The live hot-reload Revit session for `Pe.App` (lane `dev`, driven by `pe-revit live`; formerly "RRD"). Treat it as expensive state. | Avoid implying hot reload exists outside the dev session (`RRD` remains a common alias in chat)           |
 | **HR**          | SDK hot reload into the already-running dev session. Useful, but not fully trustworthy.                                              | Avoid treating HR as proof that Revit is running fresh code                                             |
 
 ### Repo-wide language
@@ -99,11 +108,9 @@ Write artifacts to `.artifacts/`. Most often `.artifacts/tmp` for python/typescr
 | **app**               | `Pe.App`, the in-proc desktop Revit add-in runtime                                       | Avoid using `app` to mean the whole repo or product                                          |
 | **host**              | `Pe.Host`, the out-of-proc TS-built HTTP/RPC/WebSocket backend                           | Avoid using `host` for the Revit add-in bridge or product identity                           |
 | **bridge**            | The private Host/Revit WebSocket connection                                              | Avoid calling HTTP endpoints the bridge                                                      |
-| **automation shell**  | The headless DA runtime rooted in `Pe.Dev.RevitAutomation.Worker`                        | Prefer this over implying `Pe.App` itself runs in DA                                         |
 | **document-owned**    | Behavior that can be derived from a specific `Document` without needing UI session state | Prefer `Document` extensions for this                                                        |
 | **document session**  | Open/active/UI-tab state for documents in the current Revit process                      | Keep this in `UIApplication` or session-aware helpers                                        |
 | **artifact**          | A durable machine-readable output produced by a command or DA workitem                   | Prefer this over vague `report` when the file is the actual output contract                  |
-| **workitem**          | One APS Design Automation job submission                                                 | Prefer one workitem per cloud model for batch collection                                     |
 
 ## Proof Lanes
 

@@ -16,7 +16,7 @@ Specs live in the feature dir — read the `docs` skill for conventions.
 
 Check with the user that these seams match their expectations.
 
-3. Write the spec using the template below to `docs/features/<name>/spec-<slug>.md`, and add an Owed line in the feature's `LEDGER.md` linking it.
+3. Write the spec using the template below to `docs/features/<name>/spec-<slug>.md`, and add an Owed line in the feature's `LEDGER.md` linking it. When the user asks for a reviewable plan, additionally render it as a single self-contained HTML page (the house prototype style) — the spec file stays the source of truth.
 
 <spec-template>
 
@@ -38,7 +38,7 @@ A LONG, numbered list of user stories. Each user story should be in the format o
 1. As a mobile bank customer, I want to see balance on my accounts, so that I can make better informed decisions about my spending
 </user-story-example>
 
-This list of user stories should be extremely extensive and cover all aspects of the feature.
+This list of user stories should be extremely extensive and cover all aspects of the feature. (User-story framing is kept deliberately: it forces find-the-product thinking — actors, verbs, and benefits — before implementation shape.)
 
 ## Implementation Decisions
 
@@ -56,13 +56,9 @@ Do NOT include specific file paths or code snippets. They may end up being outda
 
 Exception: if a prototype produced a snippet that encodes a decision more precisely than prose can (state machine, reducer, schema, type shape), inline it within the relevant decision and note briefly that it came from a prototype. Trim to the decision-rich parts — not a working demo, just the important bits.
 
-## Testing Decisions
+## Proof
 
-A list of testing decisions that were made. Include:
-
-- A description of what makes a good test (only test external behavior, not implementation details)
-- Which modules will be tested
-- Prior art for the tests (i.e. similar types of tests in the codebase)
+Name the proof lane(s) that will demonstrate the feature (source compile / deterministic chain test / FreshRevitProcess / sandbox / installed — per `docs/BUILD.md`), and the seams the chain tests drive. Prior art: name a similar existing test.
 
 ## Out of Scope
 

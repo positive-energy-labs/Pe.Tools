@@ -12,7 +12,9 @@ Optimize work by delegating to cheaper subagents. First, compress the problem sp
 - "is a fresh perspective needed?"
 - "will parallel workstreams be faster AND workstreams dont overlap?"
 
-The final ruling is always yours. Drive the decisions, rerun verification, and spot check hot spots.
+**Declare posture periodically before fan-outs.** State in-chat the posture you are assuming. Optimize for the problem size and remember that limits change by hour and week.
+
+**A user interrupt kills every in-flight subagent.** After any interruption, never assert liveness — check, then relaunch (or explicitly declare the work lost) before continuing.
 
 ## Why, two reasons
 - Fable token limits are not enough. ~70% usage in a single day is easy. Opus and Codex have separate limits from Fable and are comparatively much cheaper.
@@ -28,12 +30,13 @@ The final ruling is always yours. Drive the decisions, rerun verification, and s
 
 | Model | Cost | Taste | Intelligence | Use For | Usage Notes |
 |--|--|--|--|--|--|
-| Fable 5 | 10 | 9 | 7 | Design, aesthetics, and decision making. Delegate to sparingly, only for unbounded work and requests that require an opinion | low or medium thinking only. Always expensive but always smart.
+| Fable 5 | 10 | 9 | 7 | Design, aesthetics, and decision making. Delegate to sparingly, only for unbounded work and requests that require an opinion | low or medium thinking only. Rarely in parallel.
 | Opus 5 | 6 | 6 | 4 | Most on the ground work, task must be bounded | medium or high thinking, Opus readily overdoes and derails, especially at high think and above.
-| Codex (GPT-5.6) | 3 | 4 | 8 | Brute force; long slogs and compile smashing. Use where the goal is quantifiable and requires little opinion. | `codex exec` handles model and thinking level. GPT-5.6 does the bare minimum in a good way, it does nothing more than its told. Both a blessing and a curse.
+| Codex (GPT-5.6) | 3 | 4 | 8 | Foot soldier, brute force, long slogs, and compile smashing. Use when the goal is quantifiable AND all implicit is explicable. | `codex exec` handles model and thinking level (5.6 high). 5.6 does only what you ask, both a blessing and a curse. It has no "intuition" but the job will always get done.
 
 ## Tips
 - Revive *recently finished* agents to prevent repeated work and avoid the lossiness of playing Telephone. May also be cheaper if within token cache TTL.
+- Worktrees for parallel/experimental work: create them from the command line (`git worktree add`) as siblings of the repo (`~/source/repos/Pe.Tools-<slug>`), never nested inside it.
 - For parallelism, chunk workstreams by what they touch. Fine on disjoint file surfaces; consider serializing when both touch the same files, read the same base, or produce the same artifacts for feedback.
 - If all subagents need the same base, then provide it to them. ie do the preliminary research, scaffold or make the fixture, etc. 
 - Delegated task length is critical signal. Alarm bells when the task took longer or the complexity was higher than expected. This indicates something should be fixed systemically and should be surfaced to the user.
