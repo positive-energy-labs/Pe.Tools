@@ -21,10 +21,15 @@ function Hd {
   try { & $H --session $Session @Args 2>$null } finally { $ErrorActionPreference = $eap }
 }
 
-function AgentStatus {
+function AgentInfo {
   $out = Hd agent get $Agent
-  if ($LASTEXITCODE -ne 0) { return 'missing' }
-  (($out -join "`n") | ConvertFrom-Json).result.agent.agent_status
+  if ($LASTEXITCODE -ne 0) { return $null }
+  (($out -join "`n") | ConvertFrom-Json).result.agent
+}
+
+function AgentStatus {
+  $a = AgentInfo
+  if ($null -eq $a) { return 'missing' } else { return $a.agent_status }
 }
 
 $lines = Get-Content -LiteralPath $PromptFile | Where-Object { $_.Trim() -ne '' }
@@ -39,17 +44,25 @@ if ($st -eq 'working' -or $st -eq 'blocked') {
 
 # two full attempts: a first-launch notice (claude) can eat prompt #1; codex can
 # leave a large prompt as unsubmitted pasted content (the nudge-enter submits it).
-# Retry only ever happens while status never left idle, so double-send is impossible.
+# Sampling `working` misses turns that finish inside a poll gap (a status question can
+# complete in <2s), so the turn-happened verdict is state_change_seq movement, not
+# instantaneous status. Retry only ever happens while seq never moved, so double-send
+# is impossible.
+$seq0 = (AgentInfo).state_change_seq
 foreach ($attempt in 1..2) {
   Hd agent prompt $Agent $prompt | Out-Null
   foreach ($i in 1..8) {
     Start-Sleep -Seconds 2
-    if ((AgentStatus) -eq 'working') { "$Agent working"; exit 0 }
+    $a = AgentInfo
+    if ($a.agent_status -eq 'working') { "$Agent working"; exit 0 }
+    if ($a.state_change_seq -gt $seq0) { "$Agent turn observed (seq $seq0 -> $($a.state_change_seq), now $($a.agent_status))"; exit 0 }
   }
   Hd agent send-keys $Agent enter | Out-Null
   foreach ($i in 1..5) {
     Start-Sleep -Seconds 2
-    if ((AgentStatus) -eq 'working') { "$Agent working (after nudge)"; exit 0 }
+    $a = AgentInfo
+    if ($a.agent_status -eq 'working') { "$Agent working (after nudge)"; exit 0 }
+    if ($a.state_change_seq -gt $seq0) { "$Agent turn observed after nudge (seq $seq0 -> $($a.state_change_seq))"; exit 0 }
   }
 }
 

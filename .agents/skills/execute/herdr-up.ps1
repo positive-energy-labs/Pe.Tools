@@ -71,11 +71,17 @@ foreach ($spec in $Specs) {
     continue
   }
 
-  # first agent takes the root pane if it's agent-free; otherwise split right off root
+  # first agent takes the root pane if it's agent-free; otherwise split, alternating
+  # right/down by population so panes stay wide enough to read. Pane width is not
+  # cosmetic: `agent read` only sees visible alt-screen rows, and a strip of narrow
+  # right-splits reduces every transcript read to a ~10-line tail.
+  # ponytail: alternation, not geometry - split the widest pane if this ever matters.
   $pane = $root
-  $occupied = @((HdJson agent list).result.agents | Where-Object { $_.pane_id -eq $root })
+  $agents = @((HdJson agent list).result.agents)
+  $occupied = @($agents | Where-Object { $_.pane_id -eq $root })
   if ($occupied.Count -gt 0) {
-    $pane = (HdJson pane split $root --direction right --cwd $Cwd --no-focus).result.pane.pane_id
+    $dir = if ($agents.Count % 2 -eq 1) { 'right' } else { 'down' }
+    $pane = (HdJson pane split $root --direction $dir --cwd $Cwd --no-focus).result.pane.pane_id
   }
 
   # start exits nonzero while a startup dialog is pending, but the agent IS registered - Settle owns the verdict
