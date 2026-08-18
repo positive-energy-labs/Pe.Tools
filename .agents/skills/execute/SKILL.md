@@ -131,24 +131,26 @@ any Herdr work the scripts below don't cover**, and probe command groups (`herdr
 pane`, …) rather than guessing flags. Below is only the earned delta.
 
 - **Launch and prompt through the battle-tested scripts in this skill's directory** — they encode
-  every trap we've hit; don't re-derive the dance by hand:
-  - `herdr-up.sh S CWD name:kind[:model] ...` — headless server + workspace + one pane per agent,
+  every trap we've hit; don't re-derive the dance by hand. They are PowerShell (the convention
+  shell here; PS 5.1-safe — ASCII-only source, no stderr redirects under EAP=Stop, quote-escaped
+  native args, warnings not throws so callers read exit codes):
+  - `herdr-up.ps1 S CWD name:kind[:model] ...` — headless server + workspace + one pane per agent,
     idempotent (re-run reuses existing agents, never double-splits, and recovers one stuck on a
     startup dialog). claude agents launch with `--dangerously-skip-permissions` (`:model` maps to
     `--model`): approvals are designed out at launch, never babysat at the dialog — the consent
     dialog itself blocks startup and is auto-accepted by the script's settle loop (`agent start`
     exits nonzero there while the agent IS registered; settle owns the verdict). Prints name→pane;
     immediately tell the user S, the agent names, and `herdr session attach S`.
-  - `herdr-send.sh S NAME PROMPT_FILE` — one-hop delivery: prompt from file, poll to `working`,
+  - `herdr-send.ps1 S NAME PROMPT_FILE` — one-hop delivery: prompt from file, poll to `working`,
     nudge-enter, one full retry. Exists because prompt acceptance ≠ submission ≠ execution:
     codex leaves large prompts as unsubmitted `[Pasted Content]` (the nudge submits), and a
     claude first-launch notice eats prompt #1 (the retry lands). Exit 0 = verified working;
     nonzero dumps the pane tail. Blank lines are collapsed (they can swallow a prompt).
-- This harness is outside `HERDR_ENV`; the binary is
-  `C:\Users\kaitp\AppData\Local\Programs\Herdr\bin\herdr.exe` (off PATH). Dedicated named
-  session, `--session S` on **every** command — never the default session, UI focus, or
-  `--current` (the scripts pin this). `MSYS_NO_PATHCONV=1` before any `send-text` from bash —
-  without it Git Bash rewrites `/quit` into `C:/Program Files/Git/quit`. IDs come from parsed
+- This harness is outside `HERDR_ENV`; `herdr` is on PATH in both PowerShell and Git Bash
+  (verified 2026-08-18 — the old "off PATH" claim was stale). Dedicated named session,
+  `--session S` on **every** command — never the default session, UI focus, or `--current`
+  (the scripts pin this). If driving `send-text` from Git Bash: `MSYS_NO_PATHCONV=1` first —
+  without it bash rewrites `/quit` into `C:/Program Files/Git/quit`. IDs come from parsed
   JSON, never guessed. One prompt owner per agent.
 - Health poll: `agent list`. `idle|done` both mean complete (focus flips done→idle); `blocked` =
   needs input; `unknown` proves nothing. If a permissioned agent still blocks on a dialog, the
