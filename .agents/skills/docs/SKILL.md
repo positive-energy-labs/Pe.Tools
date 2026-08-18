@@ -14,11 +14,13 @@ There is no external issue tracker. No GitHub issues, no `.scratch/`, no ticket 
 | Knowledge | Home |
 |---|---|
 | Feature-scoped decisions, rejected paths, open work | `docs/features/<name>/LEDGER.md` |
+| Live-effort frontier (wayfinder tickets, find-the-product rounds) | `docs/features/<name>/MAP.md` — deleted when the effort ends |
 | Decisions that constrain other features | `docs/adr/NNNN-slug.md` |
 | Domain vocabulary | `CONTEXT.md` at repo root (created lazily by `domain-modeling`) |
 | Hard-won wide-breadth rationale | Authority docs (registry below) |
 | Session-to-session bridges | `.artifacts/handoffs/<date>-<topic>.md` |
 | Research findings | Feature dir if feature-scoped, else `docs/context/` |
+| Live-verified platform behavior (gotchas, quirks) | Code comments at the site; a scoped grounding doc only when no code site exists |
 | Everything else | Don't write it |
 
 ## Ledgers
@@ -68,6 +70,10 @@ Creation bar: only after wide-breadth synthesis work that should rarely be repea
 `.artifacts/handoffs/<yyyy-mm-dd>-<topic>.md` — for passing research, baselines, or tooling/feedback-loop issues to the next agent. Prefer a copy-pasteable inline handoff when it fits in a message; write a file only for substantive payloads.
 
 Handoffs are disposable by construction: a handoff is *consumed* when anything worth keeping has been promoted into a ledger, ADR, or code — then delete it. Recurring tooling issues belong in AGENTS.md, not handoffs. Never park handoffs in the OS temp dir or `docs/context/`.
+
+## Grounding
+
+Live-verified behavior of adversarial platforms (Revit API, Jet/RHVAC, DWG export…) — facts proven by real behavior, not metadata. Default home is a **code comment or test at the site the fact governs** — recurring, systemic, or big-picture gotchas especially. Write a grounding doc only when no single code site exists (e.g. a manual runbook that *is* the proof lane, an API-wide gotcha list with no wrapper to annotate), and keep it **scoped to one subject in the feature dir it serves** — never merge subjects (Revit API gotchas, Jet quirks, tooling notes) into one shared doc; that's how facts get lost.
 
 ## Research
 

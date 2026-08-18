@@ -26,10 +26,11 @@ Then, drive the `prototype` skill as the main loop and abide by the `delegation`
 
 Adapt the process to the circumstance and user's goals. On grilling: questions a mock can easily answer are cheaper to prototype than to argue about, but a variant built on the wrong boundary or to answer an unasked question is a wasted builder. On prototyping: scope may be whole-route, single component, or an entire package. Be efficient and choose the harness that's closest to the final surface.
 
-Store/use a living doc in `docs/features/<surface>` — settled decisions, open frontier, one concise
-section per round. It is the single home for verdicts; do not also put them in commit messages. A
-settlement recorded there is design law until explicitly overruled. What lags is the migration into
-older surfaces, so say in the header which surfaces have caught up.
+Persist per the `docs` skill: while the effort runs, the open frontier and per-round verdicts live in
+`docs/features/<surface>/MAP.md`; settled laws promote to the feature's `LEDGER.md` (Decided) as they
+land, and `MAP.md` dies when the effort ends. The ledger is the single home for verdicts; do not also
+put them in commit messages. A settlement recorded there is design law until explicitly overruled.
+What lags is the migration into older surfaces, so note in `MAP.md` which surfaces have caught up.
 
 ### Modalities
 
@@ -37,7 +38,7 @@ older surfaces, so say in the header which surfaces have caught up.
 |--|--|
 | Finding UI | Cleanroom the precedent if it exists, speculatively fan out prototypes if not; radical experiments collapse solution space. 
 | Refining UI | Variant switcher on precedent or prototypes atop a mirrored precedent. 
-| Closing the Chain | Identify the backend required for the UX the UI espouses, plan with user, then build.
+| Closing the Chain | Identify the backend required for the UX the UI espouses, plan with user, then build. If it outgrows one session, merge onto the main flow: `to-spec` → `to-tickets` → `implement` (see the `index` skill). This lane is untested — prefer the proven flow over inventing process here.
 
 ### Notes
 

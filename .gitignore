@@ -58,7 +58,7 @@ lerna-debug.log*
 # local SDK feed - nupkgs are build artifacts, not source (until NuGet publish)
 eng/sdk-feed/*.nupkg
 __pycache__/
-.claude/skills/ask-matt
+.claude/skills/index
 .claude/skills/code-review
 .claude/skills/codebase-design
 .claude/skills/diagnosing-bugs

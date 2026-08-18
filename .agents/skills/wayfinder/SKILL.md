@@ -18,7 +18,7 @@ Every map and ticket has a **name** — its title. In everything the human reads
 
 ## The Map
 
-The map is a single file, `docs/features/<name>/MAP.md` — the canonical artifact. Its tickets are `## Ticket:` sections at the bottom of the same file (see the `docs` skill for the wider docs conventions; the map is the one sanctioned extra file in a feature dir while a wayfinding effort is live).
+The map is a single file, `docs/features/<name>/MAP.md` — the canonical artifact. Its tickets are `## Ticket:` sections at the bottom of the same file (see the `docs` skill for the wider docs conventions; `MAP.md` is the live-effort file, shared with `find-the-product`).
 
 The map header is an **index**, not a store. It lists the decisions made and points at the ticket sections that hold their detail; a decision lives in exactly one place — its ticket — so the header never restates it, only gists it and links.
 
