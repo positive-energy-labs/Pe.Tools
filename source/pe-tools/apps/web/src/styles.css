@@ -1,3 +1,6 @@
+/* TODO: Google Fonts is a REMOTE BLOCKING @import — first paint waits on fonts.googleapis.com,
+   and the app is a local tool that may run with no internet at all. Self-host Open Sans and
+   Spectral (or drop to the system stack) so the page never blocks on a third party. */
 @import url("https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700&family=Spectral:wght@500;600;700&display=swap");
 @import "tailwindcss";
 @plugin '@tailwindcss/typography';

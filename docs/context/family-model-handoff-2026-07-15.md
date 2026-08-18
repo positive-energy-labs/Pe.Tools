@@ -4,7 +4,7 @@
 
 - Worktree: `C:\Users\kaitp\source\repos\Pe.Tools-family-model`
 - Branch: `codex/family-model`
-- Durable spec: `docs/design/family-model-spec.md`
+- Durable spec: `docs/features/family/family-model-spec.md`
 - V1 completed through `da1afcf` plus the final review closure recorded below.
 - V1.1 Phase 9 authoring/evidence convergence is implemented and live-proven as recorded below.
 - The exact `ff-family-model-r25` sandbox was used for proof and is stopped for handoff. The user-owned RRD was never

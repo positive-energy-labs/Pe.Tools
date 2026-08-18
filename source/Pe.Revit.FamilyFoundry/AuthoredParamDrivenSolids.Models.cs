@@ -4,6 +4,26 @@ using Pe.Revit.SettingsRuntime.Json;
 
 namespace Pe.Revit.FamilyFoundry;
 
+/// <summary>
+///     THE public authored/serialized ParamDrivenSolids contract — one shape for hand-authored
+///     profiles, serialized output, snapshots, and replay. Older reference-plane/dimension and
+///     constrained-extrusion concepts survive as internal compile targets or future low-level
+///     primitives, never as peer public authoring models.
+///     <para>
+///         The contract is SEMANTIC and shape-specific: authors work in dimensions and constraints
+///         (rectangles use rectangle semantics; circles/cylinders their own), not low-level Revit
+///         construction detail. Internal helper constructs stay richer than this without leaking
+///         into authored JSON.
+///     </para>
+///     <para>
+///         Sketch placement prefers reference-plane-based placement over face-authored placement,
+///         and shared constraints are expressed once and reused across solids.
+///     </para>
+///     <para>
+///         Rectangle semantics normalize orientation so authored JSON reads consistently;
+///         orientation rules come from deterministic geometric logic, never UI-view assumptions.
+///     </para>
+/// </summary>
 public sealed class AuthoredParamDrivenSolidsSettings : IOperationSettings {
     [JsonConverter(typeof(StringEnumConverter))]
     public ParamDrivenFamilyFrameKind Frame { get; init; } = ParamDrivenFamilyFrameKind.NonHosted;

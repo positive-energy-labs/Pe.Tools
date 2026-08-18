@@ -25,6 +25,8 @@ There is no external issue tracker. No GitHub issues, no `.scratch/`, no ticket 
 
 ## Ledgers
 
+**A feature = a canon product surface — a web-route family or a shipped ability.** Sub-efforts, per-route design sweeps, prototype rounds, and research spikes write into the OWNING cluster's ledger; they never earn a new dir. If you cannot name the shipped surface a dir serves, it is not a feature.
+
 One `LEDGER.md` per `docs/features/<name>/` directory. Features aggregate work spanning multiple packages; the feature dir is the unit of documentation, not the package. Exactly three sections:
 
 ```markdown
@@ -45,6 +47,8 @@ Rules:
 - An Owed item may link a spec file in the same dir if the work genuinely needs one, but default to a line.
 - Deleted Owed lines are not lost — git history is the archive.
 - Legacy feature dirs keep their existing files until touched; when working in one, converge: fold living content into `LEDGER.md`, delete what is stale.
+- **Cross-route rule: design-language and primitive gaps are owned by `docs/features/design-system/LEDGER.md`** — one line there, consumer routes named. Route ledgers record their own application and evidence; they never restate the ruling or the gap. Same shape for any gap that spans surfaces: it lives in one ledger, and the others cite it.
+- **Merge hygiene:** fold files with `git mv` / append-then-delete so history follows. Git history is the archive only if the path chain is followable — a file that was retyped into its new home instead of moved has no chain, and the archive claim is false. When a doc line's fact belongs at a code seam, move it and delete the line; live-proven platform behaviour is the one exception and is deliberately dual-homed (see Grounding).
 
 ## ADRs
 

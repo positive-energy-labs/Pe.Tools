@@ -1,7 +1,7 @@
 /**
  * /family — THE BUILD LANE: the crossing that materializes the open family.json into a real .rfa.
  *
- * CLEANROOM round-2 settlement, verbatim: "Materialize ceremony: foundry-grade — human-readable
+ * SETTLED LAW, verbatim: "Materialize ceremony: foundry-grade — human-readable
  * reason, planHash-style drift refusal, receipts — presented as an arming preview strip. Never
  * hover-height." This module is that ruling, and nothing else lives here.
  *

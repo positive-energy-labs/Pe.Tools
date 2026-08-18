@@ -1856,7 +1856,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
       }
     >
       {/* THE CEREMONY SLOT. It sits inside the pane that owns the crossing, above the table it is
-          about, and it is EMPTY until the verb arms it — "never hover-height" (CLEANROOM round 2)
+          about, and it is EMPTY until the verb arms it — "never hover-height" (settled law)
           means the reason, the refusals and the receipt all get room at strip scale. The build is a
           whole-family write, so the slot is the same in the drill-in: no type is on the plan. */}
       <BuildStrip

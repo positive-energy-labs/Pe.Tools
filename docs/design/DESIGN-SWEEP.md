@@ -56,7 +56,7 @@ is lowered in the same commit. Checks + 122 tests green at close.
 
 **Standing rule: the design-guard test is the gate.** New vocabulary, tokens, or exemptions
 go through a ruling first, then the guard changes in the same commit — never the reverse.
-This file is now historical; live work continues in `docs/features/design-lang/LEDGER.md`
+This file is now historical; live work continues in `docs/features/design-system/LEDGER.md`
 (frontier) and `docs/features/design-system/LEDGER.md` (open stand-ins).
 
 ## Goal
@@ -121,7 +121,7 @@ cell-state clause (`Column = ValueColumn | StateColumn`, `word` override) · row
 (one clipped line, full-bleed wash, READOUT BAND) · Verb reason-in-title · chip 34ch clamp ·
 HelpTip primitive + copy boundary · TYPE TIERS (tier × face × case,
 RULED addendum of the since-deleted TYPE-COPY-CENSUS.md, distilled into
-[design-lang/LEDGER.md](../features/design-lang/LEDGER.md);
+[design-system/LEDGER.md](../features/design-system/LEDGER.md);
 `/design-system` converted as pilot) · `/design-system/swatch` lookup satellite · takeoffs
 pass · families pass · variant-e promoted to `/family` (head = one rail) · philosophy ratchet
 (15 laws live) · reachability fixed.
@@ -165,7 +165,7 @@ pass · families pass · variant-e promoted to `/family` (head = one rail) · ph
   distinct on purpose.
 - **stateColumn deletion** discharges via takeoffs + family migrating onto `state:` + `word`.
 - Doc map: [SURFACE-PHILOSOPHY.md](SURFACE-PHILOSOPHY.md) (unrenderable law) ·
-  [design-lang/LEDGER.md](../features/design-lang/LEDGER.md) (verdicts + frontier) ·
+  [design-system/LEDGER.md](../features/design-system/LEDGER.md) (verdicts + frontier) ·
   [design-system/LEDGER.md](../features/design-system/LEDGER.md) (open stand-ins) ·
   per-route `docs/features/<route>/LEDGER.md` (rulings + owed) · this file (the frontier).
   COLOR-ROLES and DESIGN-LANG-HANDOFF are historical; PE_DESIGN_VIBE is stale.

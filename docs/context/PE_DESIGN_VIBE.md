@@ -3,7 +3,7 @@
 > **STALE (2026-08-16).** A pre-tools first step at a standard; pe-tools is tools-first and
 > the website/portal registers below are out of scope. For tools, authority is the
 > `apps/web/src/design-lang.css` header (rendered live in `/design-system`) +
-> `docs/features/design-lang/LEDGER.md`, which absorbed the durable identity content
+> `docs/features/design-system/LEDGER.md`, which absorbed the durable identity content
 > (warm paper, earthy secondary family, type-before-colour, restraint); the intermediate
 > `docs/design/COLOR-ROLES.md` is deleted (git history only). Do not cite this doc for new work.
 

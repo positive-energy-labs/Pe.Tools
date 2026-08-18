@@ -28,13 +28,13 @@ round-1 demo in every variant.
 
 ## Precedents (what the problem is; layouts already discarded)
 
-- `/parameter-links` ([ledger](../parameter-links/LEDGER.md)) —
+- `/parameter-links` ([ledger](LEDGER.md), "Linkage core") —
   owns the linkage vocabulary: profile / definition / assignment / relationship / reducer /
   evaluation / reconcile, evaluation-before-apply, per-issue refusals, the freshness gate on
   Apply. Its confusion list: the draft/preview/apply state machine is invisible (audit #2), a
   whole-document unsaved state has no grammar (#1), and its UI is definition-cards — nothing
   says "table".
-- `/data-tables` ([ledger](../data-tables/LEDGER.md)) — owns authored-synthetic-table
+- `/data-tables` ([ledger](LEDGER.md), "Authored synthetic tables") — owns authored-synthetic-table
   mechanics: name + row-key upsert, txt/num columns, prune-on-apply. Its confusion list: no
   baseline so no per-cell unsaved state (#1), destructive prune invisible (#2), and its cells
   are inert values — no linkage concept at all.

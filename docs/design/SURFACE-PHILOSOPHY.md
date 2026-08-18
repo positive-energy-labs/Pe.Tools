@@ -269,7 +269,7 @@ Type carries meaning on the same terms as colour.
 
 **Extend the shared primitive; do not fork it.** Forks are cheap to start and expensive forever. The
 standing census of forks and what the canon must absorb before it can abolish them is
-[`../features/web-primitives/LEDGER.md`](../features/web-primitives/LEDGER.md).
+[`../features/design-system/LEDGER.md`](../features/design-system/LEDGER.md).
 
 **Capability should be presence-based.** A column descriptor where `sort` present means sortable and
 `facet` present means filterable is legible at the call site and cannot desync from a parallel
@@ -298,7 +298,7 @@ to move.
 
 **The second consumer is the evidence** — which speculative seams paid rent, which rotted, and the
 tripwire test for authoring time, in
-[`../features/web-primitives/LEDGER.md`](../features/web-primitives/LEDGER.md).
+[`../features/design-system/LEDGER.md`](../features/design-system/LEDGER.md).
 
 **Generalising at two consumers can cost more than it saves.** A shell abstracted over two similar
 surfaces ended up unable to say anything specific about either, and both died together; the

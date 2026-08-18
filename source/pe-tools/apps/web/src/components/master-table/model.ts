@@ -49,6 +49,10 @@ export interface ValueColumn<Row> extends ColumnBase<Row> {
  * 2026-08-16 R5): a consumer physically cannot hand this a viz/taxonomy colour, which is the
  * defect that let one cell draw its dot in alarm and its word in kiln. */
 export type VerdictTone = "alarm" | "caution" | "done" | "ink" | "mute";
+/* `done` ALSO covers healthy/connected/running, as a deliberate stretch. /instances ruled it
+ * 2026-08-16: the meaning band has no running role, `ink` under-states "the bridge connection
+ * landed" against `booting`, and minting a sixth hue for liveness is not worth it. The next
+ * fleet-ish surface reads this line instead of inventing a different answer — DO NOT mint a hue. */
 
 /** A row-level pipeline verdict — what the plan/receipts/pipeline says about the ROW. */
 export interface Verdict {

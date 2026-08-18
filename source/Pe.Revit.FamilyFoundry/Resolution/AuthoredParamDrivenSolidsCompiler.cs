@@ -22,6 +22,20 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
             ["@CenterFB"] = "Center (Front/Back)"
         };
 
+    /// <summary>
+    ///     Compiles the one public authored contract into the runtime-only
+    ///     <see cref="ParamDrivenSolidsPlan" />. Validation fails here, before any Revit mutation
+    ///     begins — every problem leaves an Error/Warning diagnostic on the plan rather than
+    ///     throwing at execution time.
+    ///     <para>
+    ///         Generated reference-plane names are DETERMINISTIC and human-readable so authored
+    ///         diffs stay stable across recompiles.
+    ///     </para>
+    ///     <para>
+    ///         Compiler, inference, validation, and name-synthesis are independently testable
+    ///         seams — keep them separable; do not fuse them into one pass for convenience.
+    ///     </para>
+    /// </summary>
     public static ParamDrivenSolidsPlan Compile(AuthoredParamDrivenSolidsSettings settings) {
         var diagnostics = new List<ParamDrivenSolidsDiagnostic>();
         var planes = new Dictionary<string, PublishedPlane>(StringComparer.OrdinalIgnoreCase);

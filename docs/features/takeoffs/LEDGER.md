@@ -7,7 +7,7 @@
 - 2026-08-15 — FR is the proposal medium (no diff-view proposals); blob-only decision authority, no sidecars; template `.r10` never pipeline-owned, sync targets a copy; adoption is explicit multi-select, legends ignored.
 - 2026-08-15 — `fileIdentity` for `.r10` is sha256 over titles (schema has no GUID); all four parts returned so callers detect drift instead of trusting a match.
 - 2026-08-15 — Unknown assemblies fall back to a zero row + `assemblyFallbacks` report instead of throwing; a zero-wall-load room is a real hazard callers MUST surface.
-- 2026-08-16 — Design-language rulings landed (StateColumn.word, `fresh:"never"` rung, verb refusal in title, `--r-ink` selection mark on plans); Manual J columns stay `NumberCell` by judgment — do not re-litigate unless StateCell grows numeric commit.
+- 2026-08-16 — Manual J columns stay `NumberCell` by judgment — do not re-litigate unless `StateCell` grows numeric commit. (The design-language rulings this pass landed are owned by the design-system ledger.)
 - 2026-08-16 — Tuning honesty bar is per-room: no previously-accepted room's edge-on-ink may fall beyond ~0.005; zone/board averages are diagnostic only. Raise coverage by improving geometry, never by loosening gates.
 - 2026-08-16 — Oracle v1.1 adopted: 25/118 oracle rooms are phantoms/duplicates (guest-house PDF misregistered + duplicated floor-2 pages); dedupe hygiene measured savedWork 0.3916→0.3957.
 - 2026-08-17 — Round-3 tuning complete on worktree `room-solve-tuning@ead263a` (UNMERGED): board savedWork 0.334→0.432; measure suite = score-looks-good.py + conservation gates; kaitpw verdicts in TASTE.md outrank any proxy metric.
@@ -45,6 +45,4 @@
 - Lower Level oracle registration is UNTRUSTED (median 1.95 ft chamfer, floor-mapping suspect).
 - Main 10 has 0 in-zone oracle rooms — cheap to resolve.
 - ZoneSnapFt=1.0 buys one room on project-a — re-measure or retire the knob.
-- Primitive edits owed to the cell-scale ruling session: drop `stateColumn`'s hard-coded `text-cat-clay` in favour of `--r-alarm`, and narrow `StateMeta.tone` to a meaning-role union (four-line diff preserved in `b52d891`). Moot if `stateColumn` dies via the `StateColumn.word` migration.
-- No axis for "a human decision is queued here" — rule it a row fact and build the SURFACE-PHILOSOPHY §4 gutter marker (count + locate), or add an `owed` axis; the flags column stays hand-rolled until then.
 - `LevelProfile` region-cores rule silently subsumed by the Hybrid `SeedSource` default — make the rule or the default explicit (comment at the site, LevelProfile.cs).
