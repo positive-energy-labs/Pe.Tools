@@ -19,6 +19,8 @@
  */
 import { useMemo, useState } from "react";
 
+import { Verb } from "#/components/lang/verb";
+
 import {
   legalRefs,
   nodeValue,
@@ -30,23 +32,36 @@ import type { FamilyModel } from "#/family/family-model";
 // ── the edit channel ────────────────────────────────────────────────────────────────────────────
 
 export interface Editor {
+  /** The document as edited — what a write would land. */
   model: FamilyModel;
+  /** What the `family.json` currently holds. The PENDING WRITE is `model` minus this. */
+  baseline: FamilyModel;
   typeName: string;
   setTypeName: (name: string) => void;
   /** Apply an immutable edit and record what it moved. */
   apply: (fn: (model: FamilyModel) => FamilyModel) => void;
   /** Pointers the LAST action moved — the flash, so the change is findable in a full document. */
   touched: string[];
+  /** Discard the pending write; re-read the json. */
   reset: () => void;
+  /** MOCK write: the edits land in the json and the diff empties. In memory, nowhere else — and
+   *  landing in the json says NOTHING about documents this family was already materialized into. */
+  write: () => void;
+  /** The JSON pointer the reader is on, whichever pane put them there. Drives cross-pane
+   *  highlighting: one focus, two panes, computed both ways — never two synchronised copies. */
+  focus: string | null;
+  setFocus: (pointer: string | null) => void;
 }
 
 export function useEditor(): Editor {
-  const pristine = useMemo(showcaseModel, []);
-  const [model, setModel] = useState(pristine);
+  const [baseline, setBaseline] = useState(showcaseModel);
+  const [model, setModel] = useState(baseline);
   const [typeName, setTypeName] = useState("Standard");
   const [touched, setTouched] = useState<string[]>([]);
+  const [focus, setFocus] = useState<string | null>(null);
   return {
     model,
+    baseline,
     typeName,
     setTypeName,
     apply: (fn) =>
@@ -57,9 +72,15 @@ export function useEditor(): Editor {
       }),
     touched,
     reset: () => {
-      setModel(pristine);
+      setModel(baseline);
       setTouched([]);
     },
+    write: () => {
+      setBaseline(model);
+      setTouched([]);
+    },
+    focus,
+    setFocus,
   };
 }
 
@@ -93,10 +114,22 @@ export function changes(before: unknown, after: unknown): Change[] {
 
 // ── the state panel every paradigm renders ──────────────────────────────────────────────────────
 
-export function StatePanel({ editor }: { editor: Editor }) {
-  const pristine = useMemo(showcaseModel, []);
-  const staged = changes(pristine, editor.model);
-  const text = JSON.stringify(editor.model, null, 2);
+/**
+ * THE PENDING WRITE. Ruled 2026-08-19: edits ALWAYS land in the json — the json is the write
+ * target, period. So this panel is not a scratchpad, it is the write itself, shown before it
+ * happens: a pointer-level diff of the edited document against what the file holds, recomputed
+ * every render. Landing in the json says NOTHING about documents this family was already
+ * materialized into; the no-sync law forbids implying otherwise, and the chrome says so.
+ */
+export function StatePanel({
+  editor,
+  showDocument = true,
+}: {
+  editor: Editor;
+  /** The composed page docks a real json pane, so it turns the read-only mirror off. */
+  showDocument?: boolean;
+}) {
+  const staged = changes(editor.baseline, editor.model);
   const touched = new Set(editor.touched);
 
   return (
@@ -106,37 +139,77 @@ export function StatePanel({ editor }: { editor: Editor }) {
     >
       <div className="border-b px-3 py-2" style={{ borderColor: "var(--r-line)" }}>
         <div className="flex items-baseline justify-between gap-2">
-          <span className="t-label t-upper text-[var(--r-ink-2)]">staged against fixture</span>
+          <span className="t-label t-upper text-[var(--r-ink-2)]">pending write</span>
           <span className="face-mono t-caption text-[var(--r-ink-mute)]">
             {staged.length} pointer{staged.length === 1 ? "" : "s"}
           </span>
         </div>
         {staged.length === 0 ? (
           <p className="t-caption mt-1 text-[var(--r-ink-mute)]">
-            nothing edited yet — every value below is the checked-in family.json
+            nothing to write — the edited document equals the json
           </p>
         ) : (
           <ul className="mt-1 space-y-0.5">
             {staged.map((change) => (
-              <li key={change.path} className="face-mono t-caption">
-                <span
+              <li key={change.path}>
+                <button
+                  type="button"
+                  onClick={() => editor.setFocus(change.path)}
+                  title={`Show ${change.path} in the json pane`}
+                  className="face-mono t-caption w-full text-left"
                   style={{
-                    color: touched.has(change.path) ? "var(--r-caution)" : "var(--r-ink-2)",
+                    background: editor.focus === change.path ? "var(--r-select)" : "transparent",
+                    border: "none",
+                    borderRadius: 2,
+                    cursor: "pointer",
+                    padding: 0,
                   }}
                 >
-                  {change.path}
-                </span>
-                <span className="text-[var(--r-ink-mute)]"> {change.before ?? "∅"} → </span>
-                <span className="text-[var(--r-ink)]">{change.after ?? "∅"}</span>
+                  <span
+                    style={{
+                      color: touched.has(change.path) ? "var(--r-caution)" : "var(--r-ink-2)",
+                    }}
+                  >
+                    {change.path}
+                  </span>
+                  <span className="text-[var(--r-ink-mute)]"> {change.before ?? "∅"} → </span>
+                  <span className="text-[var(--r-ink)]">{change.after ?? "∅"}</span>
+                </button>
               </li>
             ))}
           </ul>
         )}
+        <div className="mt-2 flex flex-wrap items-baseline gap-2">
+          <Verb
+            label="write to family.json"
+            reason={
+              staged.length === 0
+                ? "Nothing differs from the json"
+                : `Land ${staged.length} pointer change(s) in the json. MOCK: in memory only, and it changes nothing in any document this family was already materialized into.`
+            }
+            disabled={staged.length === 0}
+            onClick={editor.write}
+          />
+          <Verb
+            label="discard"
+            reason={
+              staged.length === 0
+                ? "Nothing to discard"
+                : "Throw the pending write away and re-read the json"
+            }
+            disabled={staged.length === 0}
+            onClick={editor.reset}
+          />
+        </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto px-3 py-2">
-        <div className="t-label t-upper mb-1 text-[var(--r-ink-2)]">live document</div>
-        <pre className="face-mono t-caption whitespace-pre-wrap text-[var(--r-ink-2)]">{text}</pre>
-      </div>
+      {showDocument ? (
+        <div className="min-h-0 flex-1 overflow-auto px-3 py-2">
+          <div className="t-label t-upper mb-1 text-[var(--r-ink-2)]">live document</div>
+          <pre className="face-mono t-caption whitespace-pre-wrap text-[var(--r-ink-2)]">
+            {JSON.stringify(editor.model, null, 2)}
+          </pre>
+        </div>
+      ) : null}
     </aside>
   );
 }

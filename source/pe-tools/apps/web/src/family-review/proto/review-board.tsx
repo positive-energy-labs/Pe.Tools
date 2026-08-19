@@ -11,6 +11,8 @@
  *   expanded  — A's content at sidebar scale: six small drawings (the predicted triptych above
  *               the actual one) plus a plain constituent count. Enough to recognise a family
  *               without opening it, never enough to judge one — judging happens in the overlay.
+ *               It hangs off the row to the RIGHT and never reflows the list (ruled 2026-08-19),
+ *               and all six drawings are visible at once — the panel is for SCANNING.
  *   the pane  — C's overlay: ONE triptych per family, the portable document's prediction drawn as
  *               a thin ghost UNDER the ink Revit built. Daylight between them IS the
  *               disagreement, and no hue carries the verdict.
@@ -350,12 +352,20 @@ export function ReviewBoard({
 
   return (
     <div className="flex min-h-0 flex-1">
+      {/* THE LIST NEVER REFLOWS (ruled 2026-08-19). The expanded preview is an overlay hung off
+          the row's RIGHT edge, not a block inserted under it: opening one family used to push
+          every family below it down the page, which is the one thing a library rail may not do —
+          you lose your place in the list you were scanning. */}
       <nav
-        className="w-72 shrink-0 overflow-auto border-r"
+        className="w-72 shrink-0 overflow-y-auto overflow-x-visible border-r"
         style={{ borderColor: "var(--r-line)" }}
       >
         {board.map((entry) => (
-          <div key={entry.key} className="border-b" style={{ borderColor: "var(--r-line)" }}>
+          <div
+            key={entry.key}
+            className="relative border-b"
+            style={{ borderColor: "var(--r-line)" }}
+          >
             <div className="flex items-start">
               <button
                 type="button"
@@ -389,7 +399,19 @@ export function ReviewBoard({
                 {expanded === entry.key ? "hide" : "open"}
               </button>
             </div>
-            {expanded === entry.key ? <FamilySidebar stage={entry} /> : null}
+            {expanded === entry.key ? (
+              <div
+                className="absolute left-full top-0 z-20 w-64"
+                style={{
+                  background: "var(--r-artifact)",
+                  border: "0.5px solid var(--r-line-2)",
+                  borderRadius: 2,
+                  boxShadow: "0 2px 8px color-mix(in srgb, var(--r-ink) 10%, transparent)",
+                }}
+              >
+                <FamilySidebar stage={entry} />
+              </div>
+            ) : null}
           </div>
         ))}
       </nav>

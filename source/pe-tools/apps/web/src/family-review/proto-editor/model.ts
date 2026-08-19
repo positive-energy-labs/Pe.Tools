@@ -39,6 +39,8 @@ export const PRISM_FACES = ["Left", "Right", "Front", "Back", "Bottom", "Top"] a
 export const AXES = ["+X", "-X", "+Y", "-Y", "+Z", "-Z"] as const;
 export const SOLID_KINDS = ["Prism", "Cylinder", "VoidPrism", "VoidCylinder"] as const;
 export const DIRECTIONS = ["In", "Out"] as const;
+export const CONNECTOR_SHAPES = ["Round", "Rectangular"] as const;
+export const CONNECTOR_DOMAINS = ["Duct", "Pipe", "Electrical", "CableTray", "Conduit"] as const;
 
 /** The one family on stage. Every paradigm edits this same document, in memory, no persistence. */
 export const SHOWCASE_SLUG = "family-model-showcase";
@@ -51,7 +53,7 @@ export function showcaseModel(): FamilyModel {
 
 // ── immutable writers ───────────────────────────────────────────────────────────────────────────
 
-type Section = "planes" | "frames" | "solids" | "connectors";
+type Section = "planes" | "frames" | "solids" | "connectors" | "nestedFamilies" | "arrays";
 
 /** One writer for every flat `<section>/<slug>/<field>` reference the schema carries. */
 export function setField(
@@ -97,6 +99,20 @@ export function setStub(
       [slug]: { ...connector, stub: { ...connector.stub, [field]: value } },
     },
   };
+}
+
+/** Retype a parameter. Live on purpose: a parameter that stops being a Length leaves every
+ *  `lengthParam` picker on the page in the same render — the legal-options law, observable. */
+export function setParamDataType(
+  model: FamilyModel,
+  section: "familyParameters" | "sharedParameters",
+  name: string,
+  dataType: string,
+): FamilyModel {
+  const specs = model[section] ?? {};
+  const spec = specs[name];
+  if (!spec) return model;
+  return { ...model, [section]: { ...specs, [name]: { ...spec, dataType } } };
 }
 
 /** Author a new solid with every token UNBOUND — paradigm C's from-scratch case. */
@@ -372,7 +388,10 @@ export type SlotKind =
   | "anchor"
   | "axis"
   | "direction"
-  | "solidKind";
+  | "solidKind"
+  | "shape"
+  | "domain"
+  | "dataType";
 
 /** The legal references for one slot, scoped to what the document actually carries. A picker that
  *  offers an illegal token is the generated-form failure mode wearing a nicer control. */
@@ -404,6 +423,20 @@ export function legalRefs(model: FamilyModel, kind: SlotKind): string[] {
       return [...DIRECTIONS];
     case "solidKind":
       return [...SOLID_KINDS];
+    case "shape":
+      return [...CONNECTOR_SHAPES];
+    case "domain":
+      return [...CONNECTOR_DOMAINS];
+    case "dataType":
+      // Read out of the document, per the legal-options law — the full Revit spec list is not
+      // ours to invent, and offering only what this family already uses is the honest scope.
+      return [
+        ...new Set(
+          Object.values(model.familyParameters)
+            .concat(Object.values(model.sharedParameters ?? {}))
+            .map((spec) => spec.dataType),
+        ),
+      ];
   }
 }
 
