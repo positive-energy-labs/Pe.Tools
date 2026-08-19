@@ -10,7 +10,7 @@ A terminal build, a packaged artifact, a running Rider debug session, and an ins
 
 The practical rule is:
 
-> A successful `dotnet build` proves source compilation. It does not prove that the Rider-driven Revit debug session (dev session; legacy alias RRD survives only in literal tokens) is running fresh code.
+> A successful `dotnet build` proves source compilation. It does not prove that the Rider-driven Revit debug session (dev session) is running fresh code.
 
 This separation exists because Revit, Rider hot reload, package-local outputs, isolated build outputs, installed roots, and test-controlled Revit processes all have different ownership and failure modes. Collapsing them into one “build succeeded” claim creates stale-runtime bugs that are expensive to diagnose.
 
@@ -20,12 +20,12 @@ This separation exists because Revit, Rider hot reload, package-local outputs, i
 | --------------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | **compile**                       | Ordinary terminal `dotnet build` is the safe default.                                      | Most source work should not touch Rider, Revit, installed files, or package-local hot-reload state.       | The selected package compiles into isolated `.artifacts/...` outputs.    |
 | **artifact**                      | `./build` owns bundle, appbundle, MSI, payload, and release artifact shape.                | Packaging needs consistent repo-local topology and generated manifests, not ad hoc project builds.        | Durable artifacts were staged under `.artifacts/packages/...`.           |
-| **fresh (`FreshRevitProcess`)**   | Fresh Revit-backed proof should use SDK `pe-revit test fresh`, not the active UI session. | The current dev session is user-owned, slow to recover, likely stale, and often not the thing under test. | Revit-backed behavior ran in a fresh test-owned process. |
+| **fresh**                         | Fresh Revit-backed proof should use SDK `pe-revit test fresh`, not the active UI session. | The current dev session is user-owned, slow to recover, likely stale, and often not the thing under test. | Revit-backed behavior ran in a fresh test-owned process. |
 | **sandbox**                       | Use `pe-revit sandbox` for a durable agent-owned session. | Worktree and experimental proof must not touch the dev session. | Behavior in an agent-owned session whose evidence authority is source-backed or installed per ADR 0002. |
-| **attached (`AttachedRrd`)**      | Attached proof must be treated as an attached runtime loop, not as normal compilation. | Rider/Revit/Host/session/document state is fragile and cannot be inferred from MSBuild success. | A targeted probe behaved correctly in the currently running dev session. |
+| **attached**                      | Attached proof must be treated as an attached runtime loop, not as normal compilation. | Rider/Revit/Host/session/document state is fragile and cannot be inferred from MSBuild success. | A targeted probe behaved correctly in the currently running dev session. |
 | **installed**                     | Installed behavior must be validated from installed roots. | MSI/product roots and dev/runtime roots intentionally differ. | Installed bootstrap/runtime behavior, not source or attached behavior. |
 
-Contact is `none`, `owned` (agent-owned fresh/sandbox processes), or `dev` (the user-owned dev session). The literal SDK tokens map `NoRrdContact` to contact none/owned and `RrdRequired` to contact dev.
+Contact is `none`, `owned` (agent-owned fresh/sandbox processes), or `dev` (the user-owned dev session) — coordinates per ADR 0007.
 
 ## Product context decision
 
@@ -114,7 +114,7 @@ This proves compile correctness only. It does not refresh the dev session, packa
 
 ### fresh is the preferred autonomous proof lane
 
-Use the fresh lane (`FreshRevitProcess`) when the current UI session is not itself under test. SDK `pe-revit test fresh` plans a safe target year/session and uses the Revit test harness to launch/control Revit rather than reusing the current dev-session process.
+Use the fresh lane when the current UI session is not itself under test. SDK `pe-revit test fresh` plans a safe target year/session and uses the Revit test harness to launch/control Revit rather than reusing the current dev-session process.
 
 ```powershell
 dotnet tool run pe-revit -- test fresh --filter "Name~Reports_runtime_assembly_load_paths" --timeout-seconds 900 --json
@@ -125,7 +125,7 @@ dotnet tool run pe-revit -- test fresh --plan --json --filter "Name~Reports_runt
 
 ### attached is for the currently running Rider/Revit session
 
-Use the attached lane (`AttachedRrd`) only when the active dev session, active document, UI/session state, loaded package-local assemblies, or black-box product behavior is the thing being validated.
+Use the attached lane only when the active dev session, active document, UI/session state, loaded package-local assemblies, or black-box product behavior is the thing being validated.
 
 Do not treat attached proof as “run a build, then trust it.” The attached loop must answer separate questions:
 

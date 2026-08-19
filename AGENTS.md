@@ -27,7 +27,7 @@ C# development with the Revit API requires very a specific and fragile tooling s
 ### Executing code
 
 Use the SDK control plane; do not hand-orchestrate Revit. The `execute` skill is the judgment layer over these rules.
-- Terminal `dotnet build`/`publish` are safe beside a running dev session (isolated lane → `.artifacts/`; deploy/launch from it is a build error). Raw `dotnet test` is banned for Revit-backed projects — it launches or reuses Revit itself; use `pe-revit test fresh|attached`. Year-neutral test projects (no Revit reference, `DeployAddin=false`) are the deterministic rung and raw `dotnet test` is the correct tool there.
+- Terminal `dotnet build`/`publish` are safe beside a running dev session (isolated lane → `.artifacts/`; deploy/launch from it is a build error). Raw `dotnet test` is banned for Revit-backed projects — it launches or reuses Revit itself; use `pe-revit test fresh|attached`. Year-neutral test projects (no Revit reference, `DeployAddin=false`) are the deterministic rung: `pe-revit test deterministic --project <P>`.
 - Never `Stop-Process`/`Start-Process`/`taskkill` Revit.exe — `pe-revit live|sandbox|sessions|service` own process lifecycle.
 - Use `pe-revit live` to compile-check, Hot Reload, start, or restart the dev session.
 - Use `pe-revit live status` for read-only state; use `live doctor` only for reported wiring trouble.
@@ -63,7 +63,7 @@ After any large changes, ALWAYS clarify user intent and capture the durable know
 - **Windows shell tax** (top friction source in 2 months of session history — mined 2026-08-18):
   the shell is PowerShell, not bash. rg alternation/quotes/globs need PS-safe forms (`unclosed group`,
   `os error 123` = your quoting, not the tool); `$PID`/`$Host` are readonly built-ins; `2>&1` on a
-  native exe fabricates NativeCommandError from advisory stderr — a "failure" wrapping a success;
+  native exe fabricates NativeCommandError from benign stderr — a "failure" wrapping a success;
   rg exit 1 means "no matches", not an error. Never blind-retry a quoting variant, and never put
   JSON on a command line (`pea ... --request '{...}'` dies in re-quoting): one failed quote → write
   the payload/pattern to a file (harness Read/Grep tools where available) — see the `execute` skill.
@@ -92,7 +92,7 @@ After any large changes, ALWAYS clarify user intent and capture the durable know
 
 | Term            | Meaning                                                                                                                              | Prefer / Avoid                                                                                          |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| **Dev Session** | The user-owned hot-reload Revit session for `Pe.App` (lane `dev`, driven by the SDK `pe-revit live` command family). Treat it as expensive state. | Avoid implying hot reload exists outside the dev session. `Rrd` survives only inside literal tokens (`AttachedRrd`, `NoRrdContact`, `RrdRequired`); never write standalone `RRD` or `Live` as a session or lane name |
+| **Dev Session** | The user-owned hot-reload Revit session for `Pe.App` (lane `dev`, driven by the SDK `pe-revit live` command family). Treat it as expensive state. | Avoid implying hot reload exists outside the dev session. `Rrd` survives only in `build/ExecutionPolicy.cs` values; never write standalone `RRD` or `Live` as a session or lane name |
 | **HR**          | SDK hot reload into the already-running dev session. *Extremely useful*, but not fully trustworthy. When functional it allows the fastest feedback loop.                                              | Avoid treating HR as proof that Revit is running fresh code                                             |
 
 ### Repo-wide language
@@ -101,8 +101,8 @@ After any large changes, ALWAYS clarify user intent and capture the durable know
 | --------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | **FF**                | Family Foundry                                                                           | Prefer `Family Foundry` on first mention in prose                                            |
 | **workflow**          | The operator intent such as build, verify, package, or publish                           | Prefer this over overloading `Configuration` strings to carry every concern                  |
-| **attached** (token `AttachedRrd`) | The proof lane against the already-running desktop dev session; contact dev (ADR 0007) | Prefer the plain word in prose; the token is the literal MSBuild spelling |
-| **fresh** (token `FreshRevitProcess`) | The proof lane in a new dedicated Revit process that must not reuse the dev session; contact owned | Prefer the plain word in prose; the token is the literal MSBuild spelling |
+| **attached** | The proof lane against the already-running desktop dev session; contact dev (ADR 0007) | The plain word is also the literal MSBuild `PeVerifyTarget` value since SDK beta.117 |
+| **fresh** | The proof lane in a new dedicated Revit process that must not reuse the dev session; contact owned | The plain word is also the literal MSBuild `PeVerifyTarget` value since SDK beta.117 |
 | **package**           | A repo-local code unit such as `Pe.Host` or `Pe.Revit.FamilyFoundry`                     | Prefer this over `project` when discussing one code area                                     |
 | **app**               | `Pe.App`, the in-proc desktop Revit add-in runtime                                       | Avoid using `app` to mean the whole repo or product                                          |
 | **host**              | `Pe.Host`, the out-of-proc TS-built HTTP/RPC/WebSocket backend                           | Avoid using `host` for the Revit add-in bridge or product identity                           |
@@ -118,12 +118,12 @@ Every run claim carries two coordinates (ADR 0007). **Contact** — `none`, `own
 - **deterministic**: no-Revit tests/scorers over saved snapshots; contact none.
 - **compile**: isolated terminal `dotnet build`; contact none; proves compilation only.
 - **artifact**: build/pack output; contact none; proves durable output shape only.
-- **fresh**: SDK `pe-revit test fresh` owns a new Revit process (token `FreshRevitProcess`); contact owned; the default autonomous Revit-backed proof.
+- **fresh**: SDK `pe-revit test fresh` owns a new Revit process; contact owned; the default autonomous Revit-backed proof.
 - **sandbox**: durable agent-owned session via `pe-revit sandbox`; contact owned; session topology — also name its evidence authority (source-backed or installed).
-- **attached**: the user-owned dev session (token `AttachedRrd`); contact dev; requires behavior proof when freshness is uncertain.
+- **attached**: the user-owned dev session; contact dev; requires behavior proof when freshness is uncertain.
 - **installed**: MSI/product-root behavior; never validated against dev roots.
 
-Legacy contact tokens map `NoRrdContact` → contact none/owned and `RrdRequired` → contact dev; the `Rrd` spellings survive only as literal tokens (rename Owed upstream in Pe.Revit.Sdk).
+The SDK's MSBuild tokens are the plain words since beta.117; legacy `Rrd` spellings survive only in Pe.Tools's own `build/ExecutionPolicy.cs` (`NoRrdContact` = contact none/owned, `RrdRequired` = contact dev).
 
 If proof depends on user-owned Revit/Windows state, say so and coordinate the loop instead of pretending autonomy.
 

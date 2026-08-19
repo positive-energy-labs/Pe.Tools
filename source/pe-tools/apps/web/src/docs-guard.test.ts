@@ -23,6 +23,11 @@
  *                       is parsed, not hardcoded, so newly registered docs are checked too.
  *  5. no dangling links  relative .md links from docs/ + the root docs resolve to real files.
  *  6. root allowlist    the repo root carries exactly four .md files and no drive-by additions.
+ *
+ * TODO: greppable-ban from PRUNE-PROTOCOL (sdk-review-20260818): outside docs/adr/0007 and lines
+ * carrying "dies when:", ban SDK mechanics restatements in skills/AGENTS/BUILD — exit-code table
+ * rows and `pe-revit ... --flag` spellings outside cited fenced blocks. Spec shifted at beta.117
+ * (SDK renamed AttachedRrd/FreshRevitProcess to plain words); re-scope before building.
  * =============================================================================================
  */
 import { execFileSync } from "node:child_process";

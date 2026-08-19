@@ -24,14 +24,14 @@ Owns the VSTest-based Revit-backed test harness for this repo. The harness uses 
 
 Two verify targets matter here:
 
-- attached (`AttachedRrd`)
+- attached (MSBuild `PeVerifyTarget=attached`)
   - execution policy:
     `RrdRequired`
   - use when:
     iterating collaboratively against the already-running Rider-driven desktop session
   - required posture:
     prepare package-local/runtime outputs only when the attached runtime needs them, use SDK `pe-revit live` for runtime freshness, then run focused explicit-year `dotnet test` as behavior evidence
-- fresh (`FreshRevitProcess`)
+- fresh (MSBuild `PeVerifyTarget=fresh`)
   - execution policy:
     `NoRrdContact`
   - use when:
@@ -74,7 +74,7 @@ dotnet tool run pe-revit -- test fresh --filter "Name~Reports_runtime_assembly_l
 - Tests run inside real Revit, not a fake host.
 - `ricaun.RevitTest` handles Revit process launching. If Revit is already open for the configured year, RevitTest can reuse it by default. That is not conducive to always-fresh assemblies, particularly when the open Revit instance is the dev session.
 - Prefer explicit-year `dotnet test`, not raw artifact-path `dotnet vstest`.
-- Explicit-year `dotnet test -c Debug.R25.Tests ...` defaults to the `AttachedRrd` verify target and runs against assemblies already loaded in the dev session unless you use SDK `pe-revit test fresh`.
+- Explicit-year `dotnet test -c Debug.R25.Tests ...` defaults to the `attached` verify target and runs against assemblies already loaded in the dev session unless you use SDK `pe-revit test fresh`.
 - `.Tests` build artifacts can be fresh while the already-running dev-session runtime is still stale. The build proves compilation, not loaded-assembly freshness.
 - If the user restarted Revit from Rider by launching the normal `Pe.App` debug configuration, treat the deployed runtime add-in as fresh by default.
 - AGENT GUIDANCE: Attached validation uses assemblies already loaded in the dev session. If runtime code changed, coordinate package-local/runtime refresh through SDK `pe-revit live` before attached-runtime `dotnet test`; an isolated `dotnet build` is not runtime freshness proof.

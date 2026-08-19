@@ -8,9 +8,9 @@ description: How a Pe.Tools coding agent executes and proves its code, across ev
 Every run claim carries two coordinates (ADR 0007). **Contact** — `none`, `owned` (agent-owned
 fresh/sandbox processes), or `dev` (the user-owned dev session) — says whose session the run
 touches. **Proof lane** names which runtime proves the claim: deterministic, compile, artifact,
-fresh, sandbox, attached, or installed. The legacy tokens (`FreshRevitProcess`, `AttachedRrd`,
-`NoRrdContact`, `RrdRequired`) survive only as literal MSBuild/SDK spellings — prose uses the
-plain words. Name lane + contact in every proof claim; "live" is never a lane — it describes
+fresh, sandbox, attached, or installed. Tokens and prose both use the plain words — the SDK
+renamed its MSBuild spellings at beta.117; residual `Rrd` spellings live only in Pe.Tools's own
+`build/ExecutionPolicy.cs`. Name lane + contact in every proof claim; "live" is never a lane — it describes
 connected-model data, not evidence (`live *` is a command spelling, not a lane).
 
 The SDK owns the mechanics: run `pe-revit guide <live-loop|sandbox|targeting|install|doctor>` for
@@ -24,13 +24,11 @@ it, never before.
 - Canonical invocation is `dotnet tool run pe-revit -- <verb>` from the repo/worktree root. Bare
   `pe-revit` resolves the *installed* build — a different binary. From a worktree missing the tool
   manifest, `dotnet tool restore` first (fallback: `pnpm exec pe-revit` from `source/pe-tools`).
-  Manifest-less resolution is also the real source of "help/guide exits non-zero" reports (help
-  exits 0 at beta.116) — check which binary answered before believing any odd exit.
-  (dies when: SDK P1 W2 binary provenance)
-- **`pea` is checkout-pinned and NOT worktree-safe**: its shim holds an absolute path to the main
-  checkout, so from a worktree every `pea` call runs the main tree's source — including another
-  agent's uncommitted edits — and says nothing. From a worktree, treat `pea` results as evidence
-  about that checkout, not yours. (dies when: SDK P1 W5 PathShim disclosure)
+  Every envelope names its answerer in `binary{executable,root,rule}` — read it before believing
+  an odd answer.
+- **`pea` is checkout-pinned, not worktree-safe**: its dev shim routes to the main checkout, and
+  the shim discloses its resolved target — read the disclosure, and from a worktree treat `pea`
+  results as evidence about the tree it names, not yours.
 - **Lane ownership**: the user owns the dev session and arbitration between agents. You own
   restarts and document opens once a lane is yours — do them yourself via the host's document-open
   op, don't hand them back. Worktree/experimental work never touches the dev session: fresh for
@@ -45,10 +43,9 @@ it, never before.
 ## Revit proof lanes, in preference order
 
 1. **deterministic** — contact none. Tests/scorers over saved snapshots, no Revit. Put judgment
-   here; spend Revit time only on proof. No `pe-revit` verb owns this rung: for a year-neutral test
-   project (no Revit reference, `DeployAddin=false`) raw `dotnet test` is the correct tool — the ban
-   below is for Revit-backed projects only.
-2. **fresh** (`test fresh`, token `FreshRevitProcess`) — contact owned; the default autonomous
+   here; spend Revit time only on proof. `test deterministic --project <P>` owns this rung: no
+   year lease, no quarantine.
+2. **fresh** (`test fresh`) — contact owned; the default autonomous
    Revit-backed proof. The grind that works: `test fresh --plan` after any lane change → edit →
    `test fresh --filter "Name~<OneTest>" --no-build --json` → repeat. `--configuration
    Debug.R<yy>.Tests` XOR `--year` — never both. Parameterize probes via env vars
@@ -57,12 +54,11 @@ it, never before.
 3. **sandbox** — contact owned; durable agent-owned session: `sandbox start --project
    <probe>.csproj --year Y --id <purpose>-r25 --wait --timeout-seconds 600 --json` → `status` →
    `logs --tail N`. Ready in ~1 min, and it neither takes nor waits on the fresh-lane year lease.
-   Name ids by purpose so concurrent worktrees coexist — but the CLI does not check: `start` on an
-   existing id silently mints a generation and moves the registry pointer (dies when: SDK P1 W5
-   collision diagnostic). `PE_SANDBOX_NO_LAUNCH=1` proves the selector gate without launching.
+   Name ids by purpose so concurrent worktrees coexist (`start` on an existing id names what it
+   displaces). `PE_SANDBOX_NO_LAUNCH=1` proves the selector gate without launching.
    Prefer two-step `start` then `wait` so failures are attributable. Sandbox is session topology as
    much as a lane: also name its evidence authority — source-backed or installed per the runtime.
-4. **attached** (`test attached`, token `AttachedRrd`) — contact dev; only when the dev session
+4. **attached** (`test attached`) — contact dev; only when the dev session
    itself is under test AND the payload is proven current (prefer `--no-build` once warm).
 5. **installed** — when receipts drift, `install repair` runs the ladder and reports which rung
    fixed it; never hand-roll it. Then sandbox with `--installed`.
@@ -71,10 +67,14 @@ it, never before.
 sends bin/obj to `.artifacts/` and the SDK errors on any deploy/launch from it
 (`Pe.Revit.Common.targets`). **Raw `dotnet test` is banned for Revit-backed projects** — it drives
 its own Revit open/close (or reuses the running session under an IDE) and can race the emitter into
-a spurious `restart-required`. Use `pe-revit test fresh`, or `attached --no-build` when the payload
-is proven current. Year-neutral projects are the exception above.
+a spurious `restart-required`. Use `pe-revit test fresh`, `attached --no-build` when the payload
+is proven current, or `test deterministic` for year-neutral projects.
 
 ## The converge ladder (hot reload)
+
+Converge is dev contact only — no owned-contact hot-reload lane exists (SDK design gap, NEXT.md
+W5). With no dev session present, converge would CREATE one in the user's checkout: autonomous
+runs prove via fresh/sandbox instead.
 
 `live converge` → exit 3 `[restart-required]` is a STATE, not an error; escalate exactly one step
 per attempt: `--restart` → (only if the pid is verifiably stuck) `--restart --force` → poll
@@ -82,10 +82,9 @@ per attempt: `--restart` → (only if the pid is verifiably stuck) `--restart --
 it, and after any restart give a 10-20s `live watch` buffer before document ops. Exit 3 is never
 fixed by re-running the bare form.
 
-**Converge exit 0 is not proof.** One compile error anywhere in the project blocks every apply
-while converge stays green (dies when: SDK P1 W1 `emit-failed` verdict). Before claiming a hot
-reload landed, check the events journal for `emit-failed` (read the journal path from the command's own output — never hunt log directories),
-then re-run the changed behavior. The evidence gradient, weakest to strongest: compile <
+An emitter failure is a non-zero converge (`blocked`/exit 3), not a green one — trust the exit
+contract. Before claiming a hot reload landed, re-run the changed behavior. The evidence
+gradient, weakest to strongest: compile <
 `Applied` < fresh loaded path < changed behavior — `Applied` alone proves delta acceptance, not
 product behavior; report the strongest evidence actually obtained. Which edits hot-reload vs
 require restart is SDK-owned truth: `docs/HOT_RELOAD.md` in Pe.Revit.Sdk (member-shape,
@@ -120,9 +119,9 @@ reports a pending approval dialog, `pe-revit live approve` is the unblock (dev s
   token resolution, which fails even inside the checkout. (dies when: Pe.Tools pea `--request-file`
   + `--host dev` resolution — host ledger)
 - Treat `{ok:true}` with an empty/thin payload as a *suspect* answer, not a fact — cross-check one
-  independent source (Revit.ini, disk, netstat) before reporting it. Know which host answered:
-  the installed shim will happily return green answers about the wrong binary. (dies when: Pe.Tools
-  op-envelope identity + `emptyBecause` — host ledger; wrong-binary half SDK P1 W2)
+  independent source (Revit.ini, disk, netstat) before reporting it, and know which host answered:
+  op envelopes carry no host identity yet. (dies when: Pe.Tools op-envelope identity +
+  `emptyBecause` — host ledger)
 - ReadOnly script mode is NOT containment — a probe has persisted model changes. Treat every
   script as a write until the read-back proves otherwise; end mutation scripts with
   read-back + compare (the only false-success in two months that was caught in-loop carried its
@@ -210,27 +209,20 @@ pane`, …) rather than guessing flags. Below is only the earned delta.
 
 | Signal | Truth |
 |---|---|
-| exit 255 from a `pe-revit`/`pea` run | phantom: SDK exit codes verified honest — you truncated a native pipe mid-write (`Select-Object -First N`) or wrapped advisory stderr. Never `Select-Object -First`/`head` a live native command; tee to a file, then read |
-| `converge` exit 0 | + events journal has no `emit-failed` (dies when: SDK P1 W1 `emit-failed` verdict) |
-| `sessions` rows | fixed in SDK `823c43c` (graveyard + `--all`) — still seeing dead/`[pid-reused]` rows means a pre-beta.100 CLI answered; fix the binary, not the reading |
+| exit 255 from a `pe-revit`/`pea` run | phantom: SDK exit codes verified honest — you truncated a native pipe mid-write (`Select-Object -First N`) or wrapped stderr. Never `Select-Object -First`/`head` a live native command; tee to a file, then read |
 | op `{ok:true}` empty payload | cross-check an independent source (dies when: Pe.Tools `emptyBecause` — host ledger) |
-| `pe-revit.unhandled: TaskCanceledException` stack dump | usually your own `--timeout-seconds` expiring, unhandled: no envelope, no code, exit 1, the word "timeout" absent. Read it as a real timeout first (raise the budget), not as sibling fallout (dies when: SDK P1 W5 typed timeout envelope) |
 | rg exit 1 | "no matches" — a finding, not a failure |
 | robocopy exit 0–7 | success tiers — only ≥8 is failure |
-| native-exe stderr under `2>&1` | PowerShell fabricates NativeCommandError on advisory banners — read the payload, not the wrapper (dies when: SDK P1 W1 advisory banners off stderr) |
-| exit 0 carrying `*.unknown-id` / refusal codes | a refusal — read `diagnostics[].code`, not the exit (dies when: SDK P1 W1 `sandbox status` verdict) |
 | herdr group help exit 2 / server errors exit 1 | help prints to stderr by design; errors are JSON on stderr — read the payload |
 
 Every `--json` envelope carries `diagnostics[{code,detail,fix}]` and `nextSteps[]` — read and
-follow the `fix:` line before inventing your own remedy; but know its limits (a selector refusal
-once prescribed the wrong fix for a dev-sign byte mismatch — when the prescribed fix fails once,
-diagnose bytes/signatures, don't re-run the prescription; dies when: SDK P1 W2 selector refusal
-prints the compared tuple). Judge documented state/payload before the process exit code; Windows shell-tax rules (quoting, globs, one-failure switch) live in
-`AGENTS.md`.
+follow the `fix:` line before inventing your own remedy; when a prescribed fix fails once,
+diagnose — don't re-run the prescription. Judge documented state/payload before the process exit
+code; Windows shell-tax rules (quoting, globs, one-failure switch) live in `AGENTS.md`.
 
 ## Guardrails
 
-- Never `Stop-Process`/`Start-Process`/`taskkill` Revit.exe by hand — `pe-revit live stop|converge --restart`, `sandbox`, `sessions`, and `service` own process lifecycle. The one exception is the quarantine-unstick recipe: kill only a pid whose command line verifiably matches the orphaned test run. Exact descriptors and PIDs route actions; preserve unrelated worktrees and installed sessions.
+- Never `Stop-Process`/`Start-Process`/`taskkill` Revit.exe by hand — `pe-revit live stop|converge --restart`, `sandbox`, `sessions`, and `service` own process lifecycle, and `test fresh --unstick` owns quarantine/lease reclaim. Exact descriptors and PIDs route actions; preserve unrelated worktrees and installed sessions.
 - Never treat an open document as implicit — check status or open it via the host op.
 - Never infer freshness from an isolated terminal build, an old log line, or a matching filename.
 - Never use harness worktree tools. Create worktrees from the command line (`git worktree add`)
