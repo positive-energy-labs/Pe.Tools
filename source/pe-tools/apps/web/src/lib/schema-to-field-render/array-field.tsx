@@ -1,4 +1,4 @@
-import { Button } from "#/components/ui/button";
+import { Verb } from "#/components/lang/verb";
 import {
   Combobox,
   ComboboxChip,
@@ -116,17 +116,14 @@ export function ArrayField({
                         <span className="text-xs font-medium text-muted-foreground">
                           Item {index + 1}
                         </span>
-                        <Button
-                          type="button"
-                          size="xs"
-                          variant="outline"
+                        <Verb
+                          label="remove"
+                          reason={`Drop item ${index + 1} from this list. The change lives in the form until save writes it.`}
                           onClick={() => {
                             clearFieldServerErrors(form, path);
                             field.removeValue(index);
                           }}
-                        >
-                          Remove
-                        </Button>
+                        />
                       </div>
                       {(itemNodeRef?.sortedProperties() ?? []).map(([childKey, childNodeRef]) => (
                         <FieldRenderer
@@ -139,16 +136,14 @@ export function ArrayField({
                   );
                 },
               )}
-              <Button
-                type="button"
-                variant="outline"
+              <Verb
+                label="add item"
+                reason="Append an item built from the schema's own defaults for this list. The change lives in the form until save writes it."
                 onClick={() => {
                   clearFieldServerErrors(form, path);
                   field.pushValue(buildDefaultArrayItem(itemNodeRef) as never);
                 }}
-              >
-                Add item
-              </Button>
+              />
             </div>
           ) : (
             <Textarea

@@ -1,4 +1,4 @@
-import { Button } from "#/components/ui/button";
+import { Verb } from "#/components/lang/verb";
 import { Input } from "#/components/ui/input";
 import type { SchemaNodeRef } from "@pe/schema-core";
 import {
@@ -301,14 +301,11 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
                             onBlur={(event) => renameColumn(columnKey, event.currentTarget.value)}
                             className="h-8 min-w-24 bg-background"
                           />
-                          <Button
-                            type="button"
-                            size="xs"
-                            variant="outline"
+                          <Verb
+                            label="remove"
+                            reason={`Drop the "${columnKey}" column from every row of this table. The change lives in the form until save writes it.`}
                             onClick={() => removeColumn(columnKey)}
-                          >
-                            Remove
-                          </Button>
+                          />
                         </div>
                       </th>
                     ))}
@@ -360,17 +357,14 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
                           );
                         })}
                         <td className="px-3 py-2 text-right">
-                          <Button
-                            type="button"
-                            size="xs"
-                            variant="outline"
+                          <Verb
+                            label="remove"
+                            reason={`Drop row ${rowIndex + 1} from this table. The change lives in the form until save writes it.`}
                             onClick={() => {
                               clearFieldServerErrors(form, path);
                               field.removeValue(rowIndex);
                             }}
-                          >
-                            Remove
-                          </Button>
+                          />
                         </td>
                       </tr>
                     ))
@@ -393,12 +387,16 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
               </span>
               <FieldOptionsMetadata options={primaryColumnOptions} />
               <div className="flex items-center gap-2">
-                <Button type="button" variant="outline" onClick={addColumn}>
-                  Add column
-                </Button>
-                <Button type="button" variant="outline" onClick={addRow}>
-                  Add row
-                </Button>
+                <Verb
+                  label="add column"
+                  reason="Add a dynamic column to this table. Every existing row gains the key, empty. The change lives in the form until save writes it."
+                  onClick={addColumn}
+                />
+                <Verb
+                  label="add row"
+                  reason="Append a row built from the schema's own defaults for this table. The change lives in the form until save writes it."
+                  onClick={addRow}
+                />
               </div>
             </div>
           </div>

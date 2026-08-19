@@ -14,15 +14,12 @@ import {
   type SettingsFileEntry,
   type SettingsValidationResult,
 } from "@pe/host-contracts/operation-types";
-import {
-  applySchemaDefaultsToValue,
-  parseSchema,
-  removeSchemaDefaultsFromValue,
-} from "@pe/schema-core";
+import { removeSchemaDefaultsFromValue } from "@pe/schema-core";
 
 import { SchemaToFieldRender } from "#/lib/schema-to-field-render";
 import { FIXTURE_SCHEMA_JSON, fixtureFiles, fixtureWorkspaces } from "#/settings-panes/fixture";
 import { useFixtureSettingsRoute } from "#/settings-panes/fixture-route";
+import { parseDocumentRaw, schemaFormModel } from "#/settings-panes/schema-form";
 
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { StateCell } from "#/components/lang/cell";
@@ -154,19 +151,14 @@ function SettingsRoute() {
       ? FIXTURE_SCHEMA_JSON
       : undefined
     : (schemaQuery.data?.schemaJson ?? undefined);
-  const renderSchema = useMemo(
-    () => (schemaJson ? parseSchema(schemaJson) : undefined),
-    [schemaJson],
+  // ONE derivation, shared with the test that proves the fixture lane form-generates hostless.
+  const formModel = useMemo(
+    () => schemaFormModel(snapshot?.rawContent, schemaJson),
+    [snapshot?.rawContent, schemaJson],
   );
-  const parsedRaw = useMemo(() => safeParse(snapshot?.rawContent), [snapshot?.rawContent]);
-
-  const formBaseline = useMemo(() => {
-    if (!renderSchema || !parsedRaw) return undefined;
-    const withDefaults = applySchemaDefaultsToValue(renderSchema, parsedRaw, renderSchema);
-    return withDefaults && typeof withDefaults === "object" && !Array.isArray(withDefaults)
-      ? (withDefaults as Record<string, unknown>)
-      : undefined;
-  }, [renderSchema, parsedRaw]);
+  const renderSchema = formModel?.schema;
+  const parsedRaw = formModel?.parsedRaw ?? null;
+  const formBaseline = formModel?.baseline;
 
   const form = useForm({ defaultValues: formBaseline ?? {} });
   const formValues = useStore(form.store, (state) => state.values);
@@ -584,7 +576,7 @@ interface FieldRow {
 }
 
 function buildFieldRows(document: SettingsRouteDocument): FieldRow[] {
-  const parsed = safeParse(document.snapshot?.rawContent);
+  const parsed = parseDocumentRaw(document.snapshot?.rawContent);
   const leafPaths = parsed ? flattenLeafPaths(parsed) : [];
   const paths = new Set<string>([...leafPaths, ...Object.keys(document.fields)]);
   return [...paths]
@@ -775,18 +767,6 @@ function diffLeafPatches(
 }
 
 /* ── json helpers ────────────────────────────────────────────────────────── */
-
-function safeParse(rawContent: string | null | undefined): Record<string, unknown> | null {
-  if (!rawContent?.trim()) return null;
-  try {
-    const parsed = JSON.parse(rawContent);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
-  }
-}
 
 /** Every leaf JSON Pointer. Objects recurse; arrays/primitives are leaves. */
 function flattenLeafPaths(value: Record<string, unknown>, prefix: string[] = []): string[] {

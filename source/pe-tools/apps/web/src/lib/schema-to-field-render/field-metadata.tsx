@@ -87,7 +87,7 @@ function FieldMetadataTooltip({
                 {formattedDefault !== undefined ? (
                   <div className="space-y-1">
                     <div className="font-medium text-foreground">Default</div>
-                    <pre className="whitespace-pre-wrap break-words rounded bg-muted px-2 py-1 font-mono text-[11px] text-foreground">
+                    <pre className="t-label whitespace-pre-wrap break-words rounded-[2px] bg-muted px-2 py-1 face-mono text-foreground">
                       {formattedDefault}
                     </pre>
                   </div>
@@ -129,8 +129,10 @@ export function FieldChangeBadge({ path, compact = false }: { path?: string; com
         <Tooltip.Trigger
           aria-label="View change details"
           className={cn(
-            "inline-flex items-center rounded-full border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300",
-            compact && "px-1 py-0 text-[10px]",
+            "t-caption t-upper inline-flex items-center rounded-[2px] border px-1.5 py-0.5 font-semibold",
+            "border-[var(--r-caution)]/30 bg-[var(--r-caution)]/10 text-[var(--r-caution)]",
+            // Compact buys tighter padding only — the tier already IS the small size.
+            compact && "px-1 py-0",
           )}
         >
           {label}
@@ -147,13 +149,13 @@ export function FieldChangeBadge({ path, compact = false }: { path?: string; com
                 ) : null}
                 <div className="space-y-1">
                   <div className="font-medium text-foreground">Before</div>
-                  <pre className="whitespace-pre-wrap break-words rounded bg-muted px-2 py-1 font-mono text-[11px] text-foreground">
+                  <pre className="t-label whitespace-pre-wrap break-words rounded-[2px] bg-muted px-2 py-1 face-mono text-foreground">
                     {beforeDisplay}
                   </pre>
                 </div>
                 <div className="space-y-1">
                   <div className="font-medium text-foreground">After</div>
-                  <pre className="whitespace-pre-wrap break-words rounded bg-muted px-2 py-1 font-mono text-[11px] text-foreground">
+                  <pre className="t-label whitespace-pre-wrap break-words rounded-[2px] bg-muted px-2 py-1 face-mono text-foreground">
                     {afterDisplay}
                   </pre>
                 </div>
@@ -180,8 +182,9 @@ export function FieldMessages({
   return (
     <div
       className={cn(
-        "rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive",
-        compact && "px-2 py-1.5 text-[11px]",
+        "rounded-[2px] border px-3 py-2 text-xs",
+        "border-[var(--r-alarm)]/30 bg-[var(--r-alarm)]/10 text-[var(--r-alarm)]",
+        compact && "t-label px-2 py-1.5",
       )}
     >
       <ul className="space-y-1">
@@ -203,11 +206,12 @@ function OptionMetadataChip({
   return (
     <span
       className={cn(
-        "inline-flex max-w-full items-center truncate rounded border px-1.5 py-0.5 text-[10px] font-medium",
-        tone === "neutral" && "border-border bg-muted/40 text-muted-foreground",
+        "t-caption inline-flex max-w-full items-center truncate rounded-[2px] border px-1.5 py-0.5 font-medium",
+        tone === "neutral" && "border-[var(--r-line)] bg-muted/40 text-[var(--r-ink-mute)]",
         tone === "warning" &&
           "border-[var(--r-caution)]/30 bg-[var(--r-caution)]/10 text-[var(--r-caution)]",
-        tone === "danger" && "border-destructive/30 bg-destructive/10 text-destructive",
+        tone === "danger" &&
+          "border-[var(--r-alarm)]/30 bg-[var(--r-alarm)]/10 text-[var(--r-alarm)]",
       )}
     >
       {children}
@@ -257,7 +261,7 @@ function RequiredBadge() {
   return (
     <span
       aria-label="Required"
-      className="inline-flex items-center rounded-full bg-destructive/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-destructive"
+      className="t-caption t-upper inline-flex items-center rounded-[2px] bg-[var(--r-alarm)]/10 px-1.5 py-0.5 font-semibold text-[var(--r-alarm)]"
     >
       Required
     </span>
