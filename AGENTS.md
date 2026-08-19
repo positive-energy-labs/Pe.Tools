@@ -27,7 +27,7 @@ C# development with the Revit API requires very a specific and fragile tooling s
 ### Executing code
 
 Use the SDK control plane; do not hand-orchestrate Revit. The `execute` skill is the judgment layer over these rules.
-- Terminal `dotnet build`/`publish` are safe beside a running dev session (isolated lane → `.artifacts/`; deploy/launch from it is a build error). Raw `dotnet test` is not — it launches or reuses Revit itself; use `pe-revit test fresh|attached`.
+- Terminal `dotnet build`/`publish` are safe beside a running dev session (isolated lane → `.artifacts/`; deploy/launch from it is a build error). Raw `dotnet test` is banned for Revit-backed projects — it launches or reuses Revit itself; use `pe-revit test fresh|attached`. Year-neutral test projects (no Revit reference, `DeployAddin=false`) are the deterministic rung and raw `dotnet test` is the correct tool there.
 - Never `Stop-Process`/`Start-Process`/`taskkill` Revit.exe — `pe-revit live|sandbox|sessions|service` own process lifecycle.
 - Use `pe-revit live` to compile-check, Hot Reload, start, or restart the dev session.
 - Use `pe-revit live status` for read-only state; use `live doctor` only for reported wiring trouble.
@@ -67,8 +67,8 @@ After any large changes, ALWAYS clarify user intent and capture the durable know
   rg exit 1 means "no matches", not an error. Never blind-retry a quoting variant, and never put
   JSON on a command line (`pea ... --request '{...}'` dies in re-quoting): one failed quote → write
   the payload/pattern to a file (harness Read/Grep tools where available) — see the `execute` skill.
-- Client timeout ≠ server cancel: a killed pe-revit/dotnet call keeps running and blocks the next
-  one. Background + poll for anything minutes-scale; `status` read before any retry.
+- Background + poll anything minutes-scale, and read `status` before any retry. (Client-kill orphans
+  were field-disproven at beta.118 — the SDK reaps its own children.)
 
 ### Non-Doc Artifacts
 

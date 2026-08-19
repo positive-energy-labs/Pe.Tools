@@ -27,6 +27,10 @@ it, never before.
   Manifest-less resolution is also the real source of "help/guide exits non-zero" reports (help
   exits 0 at beta.116) — check which binary answered before believing any odd exit.
   (dies when: SDK P1 W2 binary provenance)
+- **`pea` is checkout-pinned and NOT worktree-safe**: its shim holds an absolute path to the main
+  checkout, so from a worktree every `pea` call runs the main tree's source — including another
+  agent's uncommitted edits — and says nothing. From a worktree, treat `pea` results as evidence
+  about that checkout, not yours. (dies when: SDK P1 W5 PathShim disclosure)
 - **Lane ownership**: the user owns the dev session and arbitration between agents. You own
   restarts and document opens once a lane is yours — do them yourself via the host's document-open
   op, don't hand them back. Worktree/experimental work never touches the dev session: fresh for
@@ -41,37 +45,34 @@ it, never before.
 ## Revit proof lanes, in preference order
 
 1. **deterministic** — contact none. Tests/scorers over saved snapshots, no Revit. Put judgment
-   here; spend Revit time only on proof.
+   here; spend Revit time only on proof. No `pe-revit` verb owns this rung: for a year-neutral test
+   project (no Revit reference, `DeployAddin=false`) raw `dotnet test` is the correct tool — the ban
+   below is for Revit-backed projects only.
 2. **fresh** (`test fresh`, token `FreshRevitProcess`) — contact owned; the default autonomous
    Revit-backed proof. The grind that works: `test fresh --plan` after any lane change → edit →
    `test fresh --filter "Name~<OneTest>" --no-build --json` → repeat. `--configuration
-   Debug.R<yy>.Tests` XOR `--year` — never both (refusal is named, exit 2; only its `fix` field is
-   empty — dies when: SDK P1 W2 batched honest-output fixes). Parameterize probes via env vars
+   Debug.R<yy>.Tests` XOR `--year` — never both. Parameterize probes via env vars
    (`$env:PE_RHVAC_MODEL=...`) instead of new flags. This is the reliable lane when any Revit
    already owns the machine.
 3. **sandbox** — contact owned; durable agent-owned session: `sandbox start --project
    <probe>.csproj --year Y --id <purpose>-r25 --wait --timeout-seconds 600 --json` → `status` →
-   `logs --tail N`. Name ids by purpose so concurrent worktrees coexist. `PE_SANDBOX_NO_LAUNCH=1`
-   proves the selector gate without a 3-minute launch. Prefer two-step `start` then `wait` so
-   failures are attributable: a failed `start` never persists `state.json`, so `status`/`restart`
-   answer `unknown-id` about a sandbox that verifiably just refused (dies when: SDK P1 W3 sandbox
-   state.json persist). Sandbox is session topology as much as a lane: also name its
-   evidence authority — source-backed or installed per the selected runtime.
+   `logs --tail N`. Ready in ~1 min, and it neither takes nor waits on the fresh-lane year lease.
+   Name ids by purpose so concurrent worktrees coexist — but the CLI does not check: `start` on an
+   existing id silently mints a generation and moves the registry pointer (dies when: SDK P1 W5
+   collision diagnostic). `PE_SANDBOX_NO_LAUNCH=1` proves the selector gate without launching.
+   Prefer two-step `start` then `wait` so failures are attributable. Sandbox is session topology as
+   much as a lane: also name its evidence authority — source-backed or installed per the runtime.
 4. **attached** (`test attached`, token `AttachedRrd`) — contact dev; only when the dev session
    itself is under test AND the payload is proven current (prefer `--no-build` once warm).
-5. **installed** — repair recipe when receipts drift: `dotnet tool restore` → `doctor` →
-   `service sweep` → `install apply --release latest [--retire-legacy-installers] [--force]` →
-   `install verify --json` and read `$j.result.ok` → sandbox with `--installed`. `--retire-legacy-
-   installers` can deadlock on the install lease and misreport as `legacy-installer-registered`
-   (dies when: SDK P1 W3 install lease reentrancy; ladder itself dies when: SDK P1 W4 `install
-   repair`).
+5. **installed** — when receipts drift, `install repair` runs the ladder and reports which rung
+   fixed it; never hand-roll it. Then sandbox with `--installed`.
 
 **Terminal `dotnet build`/`publish` are SAFE beside a running dev session** — the isolated lane
 sends bin/obj to `.artifacts/` and the SDK errors on any deploy/launch from it
-(`Pe.Revit.Common.targets`). **Raw `dotnet test` is the banned verb** — it drives its own Revit
-open/close (or reuses the running session under an IDE) and can race the emitter into a spurious
-`restart-required`. Use `pe-revit test fresh`, or `attached --no-build` when the payload is
-proven current.
+(`Pe.Revit.Common.targets`). **Raw `dotnet test` is banned for Revit-backed projects** — it drives
+its own Revit open/close (or reuses the running session under an IDE) and can race the emitter into
+a spurious `restart-required`. Use `pe-revit test fresh`, or `attached --no-build` when the payload
+is proven current. Year-neutral projects are the exception above.
 
 ## The converge ladder (hot reload)
 
@@ -195,17 +196,11 @@ pane`, …) rather than guessing flags. Below is only the earned delta.
 ## Timeouts, backgrounding, cleanup
 
 - Revit operations are minutes-scale. The shell's default timeout (often 2min, sometimes less)
-  silently overrides `--timeout-seconds` — a killed client does NOT cancel the server: the orphan
-  keeps running, then blocks the next run (`fresh.year-busy`, `converge-busy`). Rule: set the
-  client timeout ≥ the CLI timeout, or run in background with `--json > file` and poll the file /
-  use a Monitor until-loop. Never sleep-then-poll; never re-invoke after a client timeout without
-  a `status` read first. (dies when: SDK P1 W3 client-kill cancellation boundary — also retires the
-  orphan/file-lock and quarantine recipes below)
-- The same applies to build/pack/install parents: a client timeout leaves children holding file
-  locks, and sibling `TaskCanceledException`s are fallout, not the root error. Capture the raw
-  child output, resolve the exact parent/descendant tree, clean only that tree, then rerun.
-- Quarantine unstick (`fresh.year-busy`): `test fresh --plan` → `Get-CimInstance Win32_Process |
-  ? { $_.CommandLine -match 'test fresh|Pe.Revit' }` → kill the orphan → rerun.
+  silently overrides `--timeout-seconds`, so set the client timeout ≥ the CLI timeout, or background
+  with `--json > file` and poll the file / a Monitor until-loop. Never sleep-then-poll; read `status`
+  before any retry. The SDK reaps its own children — a killed client left no orphan and no
+  `fresh.year-busy` in the beta.118 drill; if one appears anyway, `test fresh --unstick` owns it,
+  never hand process surgery.
 - Never probe CLI surface through app-booting wrappers (`pnpm run pea -- --help` boots the app);
   never foreground a smoke suite to read three tail lines — background once, tee, poll.
 - The permission sandbox can block localhost HTTP — indistinguishable from a dead host. Probe
@@ -219,6 +214,7 @@ pane`, …) rather than guessing flags. Below is only the earned delta.
 | `converge` exit 0 | + events journal has no `emit-failed` (dies when: SDK P1 W1 `emit-failed` verdict) |
 | `sessions` rows | fixed in SDK `823c43c` (graveyard + `--all`) — still seeing dead/`[pid-reused]` rows means a pre-beta.100 CLI answered; fix the binary, not the reading |
 | op `{ok:true}` empty payload | cross-check an independent source (dies when: Pe.Tools `emptyBecause` — host ledger) |
+| `pe-revit.unhandled: TaskCanceledException` stack dump | usually your own `--timeout-seconds` expiring, unhandled: no envelope, no code, exit 1, the word "timeout" absent. Read it as a real timeout first (raise the budget), not as sibling fallout (dies when: SDK P1 W5 typed timeout envelope) |
 | rg exit 1 | "no matches" — a finding, not a failure |
 | robocopy exit 0–7 | success tiers — only ≥8 is failure |
 | native-exe stderr under `2>&1` | PowerShell fabricates NativeCommandError on advisory banners — read the payload, not the wrapper (dies when: SDK P1 W1 advisory banners off stderr) |
