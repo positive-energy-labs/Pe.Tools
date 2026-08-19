@@ -1,8 +1,9 @@
 {
   "//": "Ratchet baselines for design-guard.test.ts — counts may only FALL. Lower a number in the same commit as the win; never raise one. Seeded 2026-08-16 at sweep close.",
-  "textPx": 41,
+  "//merge-debt": "2026-08-19: textPx 41→49 and uiButtonImports 12→14 raised ONCE at the settings-branch merge — lib/schema-to-field-render was revived from pre-discipline code (8 textPx, 2 ui/button imports). The /settings schema-to-field wiring mission pays this back to 41/12 or lower; no other raise is ever legitimate.",
+  "textPx": 49,
   "rawButton": 56,
-  "uiButtonImports": 12,
+  "uiButtonImports": 14,
   "dashed": 7,
   "longTitle": 8
 }

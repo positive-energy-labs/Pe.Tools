@@ -130,7 +130,7 @@ export function FieldChangeBadge({ path, compact = false }: { path?: string; com
           aria-label="View change details"
           className={cn(
             "inline-flex items-center rounded-full border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300",
-            compact && "px-1 py-0 text-[9px]",
+            compact && "px-1 py-0 text-[10px]",
           )}
         >
           {label}
@@ -206,7 +206,7 @@ function OptionMetadataChip({
         "inline-flex max-w-full items-center truncate rounded border px-1.5 py-0.5 text-[10px] font-medium",
         tone === "neutral" && "border-border bg-muted/40 text-muted-foreground",
         tone === "warning" &&
-          "border-[var(--cat-clay)]/30 bg-[var(--cat-clay)]/10 text-[var(--cat-clay)]",
+          "border-[var(--r-caution)]/30 bg-[var(--r-caution)]/10 text-[var(--r-caution)]",
         tone === "danger" && "border-destructive/30 bg-destructive/10 text-destructive",
       )}
     >
