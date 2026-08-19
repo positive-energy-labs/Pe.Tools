@@ -40,8 +40,8 @@ and sends to — no implied sync.
 
 1. LANDED 2026-08-19 — variant A folded in as an EXPAND SIDEBAR on the C board (six 80px SVGs +
    constituent breakdown incl. nested/arrays, read off the authored document so it works on the
-   refused wall-sink). `?variant=` and B's code deleted. See `.artifacts/tmp/round2/report-board.md`
-   for the build log and the decisions taken without asking.
+   refused wall-sink). `?variant=` and B's code deleted. The build report died with the
+   worktree; its decisions are inlined here and in the round-2 gate.
 2. LANDED 2026-08-19 — `proto/compact-table.tsx`: `CompactTable`/`CompactColumn`/`CompactEdit`,
    the compact mode of the table language (vs `MasterTable` full mode). Edits go through
    `/family`'s own `NavStateCell` — same caret, refusal, staging behavior — with staging rules as
@@ -52,7 +52,7 @@ and sends to — no implied sync.
 3. LANDED 2026-08-19 — three editing-paradigm prototypes at `/family-editor-proto?paradigm=a|b|c`
    (`family-review/proto-editor/`), all editing the real showcase fixture in memory with a live
    pointer-diff state panel ("what you would SEND", per the no-sync law). Build log + per-paradigm
-   findings: `.artifacts/tmp/round2/report-editor.md`. Findings that outlive the prototypes:
+   findings inlined below (full report died with the worktree). Findings that outlive the prototypes:
    - The relation graph (`familyGraph`, ~200 lines) is the SUBSTRATE, not a paradigm — all three
      surfaces needed it; whichever surface wins, it is the thing to promote.
    - The reverse direction ("what is defined off this") is the product; the forward direction is
@@ -79,7 +79,7 @@ vocabulary-from-sentence, cross-type columns, sort/filter/arrow-nav), triptych +
 sidebar, aligned sentence grids, synced `JsonView`-backed json pane with pointer↔range
 highlighting, edits-land-in-json chrome with mock `write`/`discard`. Board sidebar now overlays
 right (no rail reflow). 232/232 tests. Full findings + the 8 kaitpw items:
-`.artifacts/tmp/round3/report-composed.md`. Key ruling material:
+the report died with the worktree — key ruling material:
 - Hybrid degree is a function of ROW COUNT, not taste: connective words stay in rows while the
   group is small, move to the header when it is not (parameters: header; solids: rows).
 - The JSON pointer is the universal join (diff, highlight, caret→row are one mechanism).
