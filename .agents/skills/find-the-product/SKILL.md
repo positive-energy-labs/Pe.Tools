@@ -38,12 +38,12 @@ What lags is the migration into older surfaces, so note in `MAP.md` which surfac
 |--|--|
 | Finding UI | Cleanroom the precedent if it exists, speculatively fan out prototypes if not; radical experiments collapse solution space. 
 | Refining UI | Variant switcher on precedent or prototypes atop a mirrored precedent. 
-| Closing the Chain | Identify the backend required for the UX the UI espouses, plan with user, then build. If it outgrows one session, merge onto the main flow: `to-spec` → `to-tickets` → `implement` (see the `index` skill). This lane is untested — prefer the proven flow over inventing process here.
+| Closing the Chain | Identify the backend required for the UX the UI espouses, plan with user, then build. If it outgrows one session, merge onto the main flow: `to-spec` → `to-tickets` → `implement` (see the `index` skill). This lane is untested, prefer the proven flow over inventing process here.
 
 ### Notes
 
 - User rulings are the most important signal. Interleave grilling to understand what they actually want
-- Losing the layout argument while winning the product argument is a normal outcome — a demotion no
+- Losing the layout argument while winning the product argument is a normal outcome, a demotion no
 variant could express in its own layout can still be right one level up.
 - A round that doesn't narrow the solution space or retired nothing produced no information.
 
@@ -53,4 +53,4 @@ Gather context from `docs/features/<surface>`, align on the design system and co
 
 - **Dream big, rounds should overreach**, especially round 1. A variant pruned for feasibility teaches nothing. Reframes that retire a UI idiom only come from variants built in ignorance of the current frame. 
 - **Use real data**. Variants that seed their own mock data compare data instead of structure; this may render entire rounds useless. Real data changes verdicts that placeholders can't reach. Scaffold the environment that all threads need. If using fixture data, it should not limit protos, it's only a start point. Note where protos seed their data and what this says about the product.
-- **Import the real components/primitives** when the primitive itself is not in question. A hermetic prototype proves nothing and variants built on canon primitives audit them for free. Record every gap as a comment at the call site — and one Owed line in `docs/features/design-system/LEDGER.md` naming this route (the cross-route rule: the design-system ledger owns primitive gaps; routes cite it).
+- **Import the real components/primitives** when the primitive itself is not in question. A hermetic prototype proves nothing and variants built on canon primitives audit them for free. Record every gap as a comment at the call site, and one Owed line in `docs/features/design-system/LEDGER.md` naming this route (the cross-route rule: the design-system ledger owns primitive gaps; routes cite it).

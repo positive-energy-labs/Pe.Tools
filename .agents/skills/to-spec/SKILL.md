@@ -1,12 +1,12 @@
 ---
 name: to-spec
-description: Turn the current conversation into a spec file in the feature's docs dir — no interview, just synthesis of what you've already discussed.
+description: Turn the current conversation into a spec file in the feature's docs dir, no interview, just synthesis of what you've already discussed.
 disable-model-invocation: true
 ---
 
-This skill takes the current conversation context and codebase understanding and produces a spec. Do NOT interview the user — just synthesize what you already know.
+This skill takes the current conversation context and codebase understanding and produces a spec. Do NOT interview the user, just synthesize what you already know.
 
-Specs live in the feature dir — read the `docs` skill for conventions.
+Specs live in the feature dir, read the `docs` skill for conventions.
 
 ## Process
 
@@ -16,7 +16,7 @@ Specs live in the feature dir — read the `docs` skill for conventions.
 
 Check with the user that these seams match their expectations.
 
-3. Write the spec using the template below to `docs/features/<name>/spec-<slug>.md`, and add an Owed line in the feature's `LEDGER.md` linking it. When the user asks for a reviewable plan, additionally render it as a single self-contained HTML page (the house prototype style) — the spec file stays the source of truth.
+3. Write the spec using the template below to `docs/features/<name>/spec-<slug>.md`, and add an Owed line in the feature's `LEDGER.md` linking it. When the user asks for a reviewable plan, additionally render it as a single self-contained HTML page (the house prototype style), the spec file stays the source of truth.
 
 <spec-template>
 
@@ -38,7 +38,7 @@ A LONG, numbered list of user stories. Each user story should be in the format o
 1. As a mobile bank customer, I want to see balance on my accounts, so that I can make better informed decisions about my spending
 </user-story-example>
 
-This list of user stories should be extremely extensive and cover all aspects of the feature. (User-story framing is kept deliberately: it forces find-the-product thinking — actors, verbs, and benefits — before implementation shape.)
+This list of user stories should be extremely extensive and cover all aspects of the feature. (User-story framing is kept deliberately: it forces find-the-product thinking, actors, verbs, and benefits, before implementation shape.)
 
 ## Implementation Decisions
 
@@ -54,11 +54,11 @@ A list of implementation decisions that were made. This can include:
 
 Do NOT include specific file paths or code snippets. They may end up being outdated very quickly.
 
-Exception: if a prototype produced a snippet that encodes a decision more precisely than prose can (state machine, reducer, schema, type shape), inline it within the relevant decision and note briefly that it came from a prototype. Trim to the decision-rich parts — not a working demo, just the important bits.
+Exception: if a prototype produced a snippet that encodes a decision more precisely than prose can (state machine, reducer, schema, type shape), inline it within the relevant decision and note briefly that it came from a prototype. Trim to the decision-rich parts, not a working demo, just the important bits.
 
 ## Proof
 
-Name the proof lane(s) that will demonstrate the feature (compile / deterministic / fresh / sandbox / installed — per `docs/BUILD.md`), and the seams the chain tests drive. Prior art: name a similar existing test.
+Name the proof lane(s) that will demonstrate the feature (compile / deterministic / fresh / sandbox / installed, per `docs/BUILD.md`), and the seams the chain tests drive. Prior art: name a similar existing test.
 
 ## Out of Scope
 

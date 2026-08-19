@@ -7,10 +7,10 @@ Spin up a **background agent** to do the research, so you keep working while it 
 
 Its job:
 
-1. Investigate the question against **primary sources** — official docs, source code, specs, first-party APIs — not a secondary write-up of them. Follow every claim back to the source that owns it.
+1. Investigate the question against **primary sources**, official docs, source code, specs, first-party APIs, not a secondary write-up of them. Follow every claim back to the source that owns it.
 2. Write the findings to a single Markdown file, citing each claim's source.
 3. Save it per the `docs` skill's research rule: the feature dir (`docs/features/<name>/`) if feature-scoped, else `docs/research/`. Link it from the feature ledger where relevant.
 
 ## Reading third-party source
 
-Clone if open source `.explore` in root — grep over a local checkout beats web reading for anything non-trivial, and repeated research on large repos is only cheap if the clone persists. Before reading a clone, **always sync it first** (`git pull` / `git fetch`). If no clone exists make one.
+Clone if open source `.explore` in root, grep over a local checkout beats web reading for anything non-trivial, and repeated research on large repos is only cheap if the clone persists. Before reading a clone, **always sync it first** (`git pull` / `git fetch`). If no clone exists make one.
