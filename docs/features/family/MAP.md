@@ -67,8 +67,26 @@ and sends to — no implied sync.
    - Builder recommendation (unasked): one page — C's sentences for authoring, A's reverse-
      dependency panel for editing, B's dimension-line click as entry once the drawing is honest;
      `familyGraph` makes the composition cheap.
-4. Low priority: SVG rendering fidelity — `PE GRD Supply` does not look right. Queued, not in
-   this slice (touches `proto/views.tsx`, same surface as piece 1).
+4. NOW BLOCKING (was low priority) — SVG fidelity / the TS frame resolver. Round 3 proved the
+   composed page makes the lying drawing WORSE: the sidebar shows you repointing a solid's frame
+   while the picture does not move. Port the C# frame resolver to TypeScript or refuse to draw,
+   before promotion.
+
+## Round 3 — the composed page, LANDED 2026-08-19 (commit fd5ef4a)
+
+`/family-editor-proto?paradigm=d` — hybrid parameter grid (skeleton-from-table,
+vocabulary-from-sentence, cross-type columns, sort/filter/arrow-nav), triptych + provenance
+sidebar, aligned sentence grids, synced `JsonView`-backed json pane with pointer↔range
+highlighting, edits-land-in-json chrome with mock `write`/`discard`. Board sidebar now overlays
+right (no rail reflow). 232/232 tests. Full findings + the 8 kaitpw items:
+`.artifacts/tmp/round3/report-composed.md`. Key ruling material:
+- Hybrid degree is a function of ROW COUNT, not taste: connective words stay in rows while the
+  group is small, move to the header when it is not (parameters: header; solids: rows).
+- The JSON pointer is the universal join (diff, highlight, caret→row are one mechanism).
+- Known layout defect at 1276px: horizontal overflow (main + 420px json + 320px pending-write);
+  fix at promotion.
+- Pre-ship bugs named in code: JSON pointers unescaped both sides (RFC 6901 — `Center
+  (Front/Back)` collides), `JsonEditor` needs a `decorations` prop for editable-pane highlight.
 
 Merge intent: the other family worktree (json editor + form generator infra) may merge into this
 one so later rounds can use that infra; its prototypes die at the merge.
