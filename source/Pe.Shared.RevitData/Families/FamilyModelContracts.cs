@@ -46,12 +46,19 @@ namespace Pe.Shared.RevitData.Families;
 ///         <b>Closed v1 geometry vocabulary.</b> Solid kinds are exactly <see cref="FamilySolidKind" />
 ///         and their void variants, each enumerating its named faces; reference planes are axis plus
 ///         param-driven offset only. New kinds arrive as enum members, never as an open geometry
-///         language. <see cref="FamilyModelFrame" /> is the universal spatial primitive shared by
-///         solids, connectors, nested instances and Revit apply. Every v1 solid is placed on
-///         `frame:family`, centered left/right and front/back, starting at the family bottom plane
-///         and extending toward +Z; other placement and type-conditional constituent existence are
-///         unsupported, not inferred. The resolution order and axis signs are executable in
-///         <see cref="FamilyModelEvaluatorConventions" /> — read them there, not from prose.
+///         language. `ExtrudedPolygon` is the vocabulary ceiling for shape: a closed ring of
+///         param-drivable points in the frame's XY plane, extruded along its local +Z. Sweeps, blends,
+///         revolves and freeform geometry stay `unmodeled` forever. <see cref="FamilyModelFrame" /> is the universal spatial primitive shared by
+///         solids, connectors, nested instances and Revit apply. A solid or a nested family sits on
+///         `frame:family` or on any declared frame, centered left/right and front/back in that frame,
+///         starting at its bottom plane and extending toward its local +Z. A frame takes its position
+///         from the planes and solid faces it references — including faces of solids in other frames —
+///         so frames form a tree; a cycle is a hard error, never a guess. Orientation is the frame's
+///         `normal`/`up` axis pair plus at most one <see cref="FamilyModelFrameRotation" /> clause,
+///         which is the permanent orientation ceiling: oblique compound orientation stays unmodeled.
+///         Type-conditional constituent existence is unsupported, not inferred. The resolution order
+///         and axis signs are executable in <see cref="FamilyModelEvaluatorConventions" /> — read them
+///         there, not from prose.
 ///     </para>
 ///     <para>
 ///         <b>Honesty over completeness.</b> <see cref="Unmodeled" /> is where captured state the
@@ -113,6 +120,16 @@ public sealed class FamilyModel {
     [JsonProperty("arrays")]
     public Dictionary<string, FamilyModelArray> Arrays { get; init; } = new(StringComparer.Ordinal);
 
+    [JsonProperty("settings", NullValueHandling = NullValueHandling.Ignore)]
+    public FamilyModelSettings? Settings { get; init; }
+
+    /// <summary>
+    ///     Embedded Revit size tables, keyed by their exact table name. The value carries the Revit CSV
+    ///     itself; see <see cref="FamilyModelLookupTable" />.
+    /// </summary>
+    [JsonProperty("lookupTables")]
+    public Dictionary<string, FamilyModelLookupTable> LookupTables { get; init; } = new(StringComparer.Ordinal);
+
     [JsonProperty("roomCalculationPoint", NullValueHandling = NullValueHandling.Ignore)]
     public FamilyModelRoomCalculationPoint? RoomCalculationPoint { get; init; }
 
@@ -124,6 +141,156 @@ public sealed class FamilyModel {
 public sealed class FamilyModelRoomCalculationPoint {
     [JsonProperty("enabled", Required = Required.Always)]
     public bool Enabled { get; init; }
+
+    /// <summary>
+    ///     How far the calculation point sits from the family origin, along the direction the placement type
+    ///     implies (up for `Unhosted`, out of the host face otherwise). Omitted means the PE convention, one
+    ///     foot. This is not a Revit parameter: the point is a `SpatialElementCalculationPoint` element and
+    ///     the offset is its position, which is why the offset lives beside `enabled` rather than in
+    ///     <see cref="FamilyModelSettings" />, where every key is one named Revit parameter.
+    /// </summary>
+    [JsonProperty("offset", NullValueHandling = NullValueHandling.Ignore)]
+    public string? Offset { get; init; }
+}
+
+/// <summary>
+///     The closed set of family-GLOBAL Revit switches. Each key maps to exactly one Revit parameter on the
+///     family element, named in its own doc-comment; there is no open bag, and an unknown key is a hard
+///     parse failure. Omission means "leave whatever the template produced": the authored document speaks
+///     only about what it wants to change.
+/// </summary>
+/// <remarks>
+///     Capture emits <see cref="Shared" />, <see cref="CutWithVoidsWhenLoaded" /> and
+///     <see cref="OmniClass" /> only when they differ from the stated portable default, the rule
+///     <see cref="FamilyModelRoomCalculationPoint" /> already follows. <see cref="AlwaysVertical" /> and
+///     <see cref="PartType" /> have NO stated default: their template value varies by category and by Revit
+///     year, and this contract will not guess one, so capture emits the observed value whenever the
+///     parameter exists at all. The asymmetry is deliberate and is queued for review, not hidden.
+/// </remarks>
+[JsonObject(MemberSerialization.OptIn)]
+public sealed class FamilyModelSettings {
+    /// <summary>
+    ///     Revit `BuiltInParameter.FAMILY_ALWAYS_VERTICAL` (the "Always vertical" checkbox), an integer 0/1
+    ///     on the family element. No portable default: templates disagree.
+    /// </summary>
+    [JsonProperty("alwaysVertical", NullValueHandling = NullValueHandling.Ignore)]
+    public bool? AlwaysVertical { get; init; }
+
+    /// <summary>
+    ///     Revit `BuiltInParameter.FAMILY_SHARED` (the "Shared" checkbox), an integer 0/1. Portable default
+    ///     `false`: a family created from a stock template is not shared.
+    /// </summary>
+    [JsonProperty("shared", NullValueHandling = NullValueHandling.Ignore)]
+    public bool? Shared { get; init; }
+
+    /// <summary>
+    ///     Revit `BuiltInParameter.FAMILY_ALLOW_CUT_WITH_VOIDS` (the "Cut with Voids When Loaded" checkbox),
+    ///     an integer 0/1. Portable default `false`.
+    /// </summary>
+    [JsonProperty("cutWithVoidsWhenLoaded", NullValueHandling = NullValueHandling.Ignore)]
+    public bool? CutWithVoidsWhenLoaded { get; init; }
+
+    /// <summary>
+    ///     Revit `BuiltInParameter.FAMILY_CONTENT_PART_TYPE`, an integer whose values are the
+    ///     `Autodesk.Revit.DB.PartType` enum. <see cref="FamilyPartType" /> mirrors that enum by NAME; the
+    ///     number is not portable and never appears here. Many categories do not carry the parameter at all,
+    ///     and then this key is absent rather than `Undefined`.
+    /// </summary>
+    [JsonProperty("partType", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonConverter(typeof(StringEnumConverter))]
+    public FamilyPartType? PartType { get; init; }
+
+    /// <summary>
+    ///     Revit `BuiltInParameter.OMNICLASS_CODE` ("OmniClass Number"), a string such as `23.80.20.11.14`.
+    ///     Revit derives the sibling `OMNICLASS_DESCRIPTION` from the code, so only the code is authored.
+    ///     Portable default: unset.
+    /// </summary>
+    [JsonProperty("omniClass", NullValueHandling = NullValueHandling.Ignore)]
+    public string? OmniClass { get; init; }
+}
+
+/// <summary>
+///     One embedded Revit size table. The value is the Revit CSV verbatim, because that CSV — including its
+///     `Name##type##unit` header row — is exactly what `FamilySizeTableManager` imports and exports.
+///     Remodelling the columns here would be a second grammar for the same bytes and a second place to get
+///     the header wrong; `LookupTableCsvCodec` stays the one codec, and this contract carries what it reads
+///     and writes. The codec and `LookupTableValidator` run at lowering time, where the Revit-side types
+///     live.
+/// </summary>
+[JsonObject(MemberSerialization.OptIn)]
+public sealed class FamilyModelLookupTable {
+    [JsonProperty("csv", Required = Required.Always)]
+    public string Csv { get; init; } = string.Empty;
+}
+
+/// <summary>
+///     Mirrors `Autodesk.Revit.DB.PartType` by name, verified member-for-member against the Revit 2023 and
+///     2026 API assemblies. Mapping is by name in both directions, so a member Revit renames fails loudly at
+///     capture or apply instead of silently changing meaning.
+/// </summary>
+[JsonConverter(typeof(StringEnumConverter))]
+public enum FamilyPartType {
+    Normal,
+    DuctMounted,
+    JunctionBox,
+    AttachesTo,
+    BreaksInto,
+    Elbow,
+    Tee,
+    Transition,
+    Cross,
+    Cap,
+    TapPerpendicular,
+    TapAdjustable,
+    Offset,
+    Union,
+    PanelBoard,
+    Transformer,
+    SwitchBoard,
+    OtherPanel,
+    EquipmentSwitch,
+    Switch,
+    ValveBreaksInto,
+    SpudPerpendicular,
+    SpudAdjustable,
+    Damper,
+    Wye,
+    LateralTee,
+    LateralCross,
+    Pants,
+    MultiPort,
+    ValveNormal,
+    JunctionBoxTee,
+    JunctionBoxCross,
+    PipeFlange,
+    JunctionBoxElbow,
+    ChannelCableTrayElbow,
+    ChannelCableTrayVerticalElbow,
+    ChannelCableTrayCross,
+    ChannelCableTrayTee,
+    ChannelCableTrayTransition,
+    ChannelCableTrayUnion,
+    ChannelCableTrayOffset,
+    ChannelCableTrayMultiPort,
+    LadderCableTrayElbow,
+    LadderCableTrayVerticalElbow,
+    LadderCableTrayCross,
+    LadderCableTrayTee,
+    LadderCableTrayTransition,
+    LadderCableTrayUnion,
+    LadderCableTrayOffset,
+    LadderCableTrayMultiPort,
+    InlineSensor,
+    Sensor,
+    EndCap,
+    HandrailBracketHardware,
+    PanelBracketHardware,
+    TerminationHardware,
+    Rails,
+    Handrails,
+    TopRails,
+    PipeMechanicalCoupling,
+    Undefined
 }
 
 [JsonObject(MemberSerialization.OptIn)]
@@ -161,6 +328,29 @@ public sealed class FamilyModelFrame {
 
     [JsonProperty("up", Required = Required.Always)]
     public string Up { get; init; } = string.Empty;
+
+    [JsonProperty("rotation", NullValueHandling = NullValueHandling.Ignore)]
+    public FamilyModelFrameRotation? Rotation { get; init; }
+}
+
+/// <summary>
+///     The one orientation delta a frame may carry: a turn about a single named axis through the frame
+///     origin. Two turns, or a turn about an axis this clause cannot name, are `unmodeled` forever —
+///     that ceiling is deliberate, because a symbolic clause stays param-drivable and capturable where a
+///     numeric basis does not.
+/// </summary>
+[JsonObject(MemberSerialization.OptIn)]
+public sealed class FamilyModelFrameRotation {
+    /// <summary>
+    ///     The axis to turn about: a family axis token (`+X` … `-Z`), or `normal`/`up` for the frame's own
+    ///     local axes. Exactly one axis; the right-hand rule gives the sign of the turn.
+    /// </summary>
+    [JsonProperty("about", Required = Required.Always)]
+    public string About { get; init; } = string.Empty;
+
+    /// <summary>A `param:` reference to a declared parameter, or a portable angle literal such as `45deg`.</summary>
+    [JsonProperty("by", Required = Required.Always)]
+    public string By { get; init; } = string.Empty;
 }
 
 [JsonObject(MemberSerialization.OptIn)]
@@ -251,14 +441,37 @@ public sealed class FamilyModelSolid {
 
     [JsonProperty("diameter")]
     public string? Diameter { get; init; }
+
+    /// <summary>
+    ///     The closed profile of an `ExtrudedPolygon`, as an ordered ring of points in the frame's XY
+    ///     plane. The ring closes implicitly: the last point joins the first, and repeating it is an
+    ///     authoring error rather than a second edge.
+    /// </summary>
+    [JsonProperty("profile")]
+    public List<FamilyModelProfilePoint> Profile { get; init; } = [];
+}
+
+/// <summary>
+///     One profile vertex, in the frame's own XY plane. Each coordinate is a portable length — a literal
+///     or a `param:` reference — so the profile stays param-drivable like every other dimension.
+/// </summary>
+[JsonObject(MemberSerialization.OptIn)]
+public sealed class FamilyModelProfilePoint {
+    [JsonProperty("x", Required = Required.Always)]
+    public string X { get; init; } = string.Empty;
+
+    [JsonProperty("y", Required = Required.Always)]
+    public string Y { get; init; } = string.Empty;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
 public enum FamilySolidKind {
     Prism,
     Cylinder,
+    ExtrudedPolygon,
     VoidPrism,
-    VoidCylinder
+    VoidCylinder,
+    VoidExtrudedPolygon
 }
 
 [JsonObject(MemberSerialization.OptIn)]
@@ -403,6 +616,11 @@ public static class FamilyModelDiagnosticCodes {
     public const string InvalidConnector = "invalid-connector";
     public const string InvalidNestedFamily = "invalid-nested-family";
     public const string InvalidArray = "invalid-array";
+    public const string ReferenceCycle = "reference-cycle";
+    public const string UnsupportedSolidKind = "unsupported-solid-kind";
+    public const string InvalidSettings = "invalid-settings";
+    public const string InvalidLookupTable = "invalid-lookup-table";
+    public const string UnsupportedPlacementGeometry = "unsupported-placement-geometry";
 }
 
 public sealed record FamilyModelDiagnostic(string Code, string Path, string Message);
@@ -439,6 +657,10 @@ public static class FamilyModelJson {
 public static class FamilyModelValidator {
     private const string BuiltInFamilyFrame = "frame:family";
 
+    private static readonly Regex OmniClassCode = new(
+        @"^\d+(\.\d+)*$",
+        RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
     public static IReadOnlyList<FamilyModelDiagnostic> Validate(FamilyModel model) {
         var diagnostics = new List<FamilyModelDiagnostic>();
         Require(model.Family.Name, "$.family.name", "Family name", diagnostics);
@@ -464,12 +686,18 @@ public static class FamilyModelValidator {
 
         ValidateTypes(model.Types, parameters, diagnostics);
         ValidatePlanes(model.Planes, model.Solids, new HashSet<string>(parameters.Keys, StringComparer.Ordinal), diagnostics);
-        ValidateFrames(model.Frames, model.Planes, model.Solids, diagnostics);
-        ValidateSolids(model.Solids, new HashSet<string>(parameters.Keys, StringComparer.Ordinal), diagnostics);
+        ValidateFrames(model.Frames, model.Planes, model.Solids,
+            new HashSet<string>(parameters.Keys, StringComparer.Ordinal), diagnostics);
+        ValidateSolids(model.Solids, model.Frames,
+            new HashSet<string>(parameters.Keys, StringComparer.Ordinal), diagnostics);
         ValidateNestedFamilies(model.NestedFamilies, model.Frames,
             new HashSet<string>(parameters.Keys, StringComparer.Ordinal), diagnostics);
+        ValidateReferenceGraph(model, diagnostics);
         ValidateConnectors(model.Connectors, model.Frames, new HashSet<string>(parameters.Keys, StringComparer.Ordinal), diagnostics);
         ValidateArrays(model.Arrays, model.NestedFamilies, model.Planes, model.FamilyParameters, diagnostics);
+        ValidateSettings(model.Settings, diagnostics);
+        ValidateLookupTables(model.LookupTables, diagnostics);
+        ValidateRoomCalculationPointOffset(model.RoomCalculationPoint?.Offset, diagnostics);
         if (model.RoomCalculationPoint is { Enabled: false }) {
             diagnostics.Add(new FamilyModelDiagnostic(
                 FamilyModelDiagnosticCodes.InvalidRoomCalculationPoint,
@@ -503,6 +731,7 @@ public static class FamilyModelValidator {
         IReadOnlyDictionary<string, FamilyModelFrame> frames,
         IReadOnlyDictionary<string, FamilyModelPlane> planes,
         IReadOnlyDictionary<string, FamilyModelSolid> solids,
+        ISet<string> parameterNames,
         ICollection<FamilyModelDiagnostic> diagnostics
     ) {
         foreach (var pair in frames) {
@@ -528,7 +757,116 @@ public static class FamilyModelValidator {
                     path,
                     "Frame normal and up axes must be perpendicular."));
             }
+
+            if (frame.Rotation != null)
+                ValidateRotation(frame.Rotation, $"{path}.rotation", parameterNames, diagnostics);
         }
+    }
+
+    /// <summary>
+    ///     One axis, one driver. The axis vocabulary is closed so that capture can name what it reads back,
+    ///     and the driver stays symbolic so the turn keeps following its parameter.
+    /// </summary>
+    private static void ValidateRotation(
+        FamilyModelFrameRotation rotation,
+        string path,
+        ISet<string> parameterNames,
+        ICollection<FamilyModelDiagnostic> diagnostics
+    ) {
+        if (rotation.About is not ("normal" or "up" or "+X" or "-X" or "+Y" or "-Y" or "+Z" or "-Z")) {
+            diagnostics.Add(new FamilyModelDiagnostic(
+                FamilyModelDiagnosticCodes.InvalidFrame,
+                $"{path}.about",
+                $"Rotation axis '{rotation.About}' must be one axis token (+X … -Z) or 'normal' or 'up'."));
+        }
+
+        if (PortableFamilyReference.TryParse(rotation.By, out var driver)) {
+            if (driver.Kind != PortableFamilyReferenceKind.Parameter || !parameterNames.Contains(driver.Target)) {
+                diagnostics.Add(new FamilyModelDiagnostic(
+                    FamilyModelDiagnosticCodes.InvalidDriver,
+                    $"{path}.by",
+                    $"Rotation driver '{rotation.By}' must reference a declared parameter."));
+            }
+
+            return;
+        }
+
+        if (PortableScalar.TryParse(rotation.By, out var scalar) && scalar.Kind == PortableScalarKind.Angle)
+            return;
+
+        diagnostics.Add(new FamilyModelDiagnostic(
+            FamilyModelDiagnosticCodes.InvalidDriver,
+            $"{path}.by",
+            $"Rotation driver '{rotation.By}' must be a param: reference or a portable angle literal such as '45deg'."));
+    }
+
+    /// <summary>
+    ///     Frames position themselves off planes and off faces of solids, and those solids sit on frames, so
+    ///     the three sections form one reference graph. A cycle in it has no geometry at all; the diagnostic
+    ///     names the whole loop, because a single node tells the author nothing about where to cut it.
+    /// </summary>
+    private static void ValidateReferenceGraph(
+        FamilyModel model,
+        ICollection<FamilyModelDiagnostic> diagnostics
+    ) {
+        var edges = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var pair in model.Frames)
+            edges[$"frame:{pair.Key}"] = pair.Value.Origin.Select(ResolveGraphNode).ToList();
+        foreach (var pair in model.Planes)
+            edges[$"plane:{pair.Key}"] = [ResolveGraphNode(pair.Value.From)];
+        foreach (var pair in model.Solids)
+            edges[$"solid:{pair.Key}"] = [ResolveGraphNode(pair.Value.Frame)];
+        foreach (var pair in model.NestedFamilies)
+            edges[$"nested:{pair.Key}"] = [ResolveGraphNode(pair.Value.Frame)];
+
+        var settled = new HashSet<string>(StringComparer.Ordinal);
+        var reported = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var node in edges.Keys)
+            WalkForCycle(node, edges, settled, [], reported, diagnostics);
+    }
+
+    private static void WalkForCycle(
+        string node,
+        IReadOnlyDictionary<string, List<string>> edges,
+        ISet<string> settled,
+        List<string> stack,
+        ISet<string> reported,
+        ICollection<FamilyModelDiagnostic> diagnostics
+    ) {
+        var onStack = stack.IndexOf(node);
+        if (onStack >= 0) {
+            var cycle = stack.Skip(onStack).Append(node).ToList();
+            var signature = string.Join("|", cycle.OrderBy(item => item, StringComparer.Ordinal).Distinct());
+            if (reported.Add(signature)) {
+                diagnostics.Add(new FamilyModelDiagnostic(
+                    FamilyModelDiagnosticCodes.ReferenceCycle,
+                    $"$.{cycle[0].Replace(':', '.')}",
+                    $"Reference cycle: {string.Join(" → ", cycle)}."));
+            }
+
+            return;
+        }
+
+        if (!settled.Add(node) || !edges.TryGetValue(node, out var next))
+            return;
+
+        stack.Add(node);
+        foreach (var target in next)
+            WalkForCycle(target, edges, settled, stack, reported, diagnostics);
+        stack.RemoveAt(stack.Count - 1);
+    }
+
+    /// <summary>Maps one authored reference to the graph node it depends on; a face depends on its solid.</summary>
+    private static string ResolveGraphNode(string reference) {
+        if (!PortableFamilyReference.TryParse(reference, out var parsed))
+            return reference;
+
+        return parsed.Kind switch {
+            PortableFamilyReferenceKind.Face => $"solid:{parsed.Target}",
+            PortableFamilyReferenceKind.Plane => $"plane:{parsed.Target}",
+            PortableFamilyReferenceKind.Frame => $"frame:{parsed.Target}",
+            _ => reference
+        };
     }
 
     private static void ValidateConnectors(
@@ -618,12 +956,7 @@ public static class FamilyModelValidator {
                     $"Nested family '{pair.Key}' must use the observable dependency identity 'dependency:{pair.Key}'."));
             }
 
-            if (!string.Equals(nested.Frame, BuiltInFamilyFrame, StringComparison.Ordinal)) {
-                diagnostics.Add(new FamilyModelDiagnostic(
-                    FamilyModelDiagnosticCodes.UnsupportedFrame,
-                    $"{path}.frame",
-                    "Centered nested families currently use only frame:family."));
-            }
+            ValidateFrameReference(nested.Frame, $"{path}.frame", frames, diagnostics);
 
             foreach (var binding in nested.ParameterBindings) {
                 if (!PortableFamilyReference.TryParse(binding.Value, out var source) ||
@@ -773,6 +1106,35 @@ public static class FamilyModelValidator {
         }
     }
 
+    /// <summary>
+    ///     A solid or a nested family sits on the built-in family frame or on any declared frame. The frame
+    ///     tree that this allows is closed by <see cref="ValidateReferenceGraph" />, which rejects cycles.
+    /// </summary>
+    private static void ValidateFrameReference(
+        string reference,
+        string path,
+        IReadOnlyDictionary<string, FamilyModelFrame> frames,
+        ICollection<FamilyModelDiagnostic> diagnostics
+    ) {
+        if (!PortableFamilyReference.TryParse(reference, out var frame) ||
+            frame.Kind != PortableFamilyReferenceKind.Frame) {
+            diagnostics.Add(new FamilyModelDiagnostic(
+                FamilyModelDiagnosticCodes.InvalidReference,
+                path,
+                $"Frame '{reference}' must be a frame: reference."));
+            return;
+        }
+
+        if (string.Equals(reference, BuiltInFamilyFrame, StringComparison.Ordinal) ||
+            frames.ContainsKey(frame.Target))
+            return;
+
+        diagnostics.Add(new FamilyModelDiagnostic(
+            FamilyModelDiagnosticCodes.UnsupportedFrame,
+            path,
+            $"Frame '{reference}' must be frame:family or a declared frame."));
+    }
+
     private static void ValidatePlaneOrFaceReference(
         string value,
         string path,
@@ -793,18 +1155,83 @@ public static class FamilyModelValidator {
 
         if (reference.Kind == PortableFamilyReferenceKind.Face &&
             solids.TryGetValue(reference.Target, out var solid) &&
-            GetSolidFaces(solid.Kind).Contains(reference.Member, StringComparer.Ordinal) &&
-            !string.Equals(reference.Member, "Side", StringComparison.Ordinal))
+            IsReferenceableFace(solid, reference.Member))
             return;
 
         diagnostics.Add(new FamilyModelDiagnostic(FamilyModelDiagnosticCodes.InvalidReference, path,
             $"Reference '{value}' does not resolve to a declared plane/solid face."));
     }
 
-    private static IReadOnlyList<string> GetSolidFaces(FamilySolidKind kind) =>
-        kind is FamilySolidKind.Prism or FamilySolidKind.VoidPrism
-            ? ["Front", "Back", "Left", "Right", "Top", "Bottom"]
-            : ["Top", "Bottom", "Side"];
+    /// <summary>
+    ///     The named faces of one solid. A prism has six, a cylinder has two ends plus its curved `Side`,
+    ///     and an extruded polygon has two ends plus one `Edge&lt;N&gt;` per profile segment — edge N joins
+    ///     profile point N to point N+1, and the last edge closes the ring back to point 0.
+    /// </summary>
+    /// <remarks>
+    ///     Enumerating a face is not the same as being able to REFERENCE it:
+    ///     <see cref="IsReferenceableFace" /> is the narrower rule.
+    /// </remarks>
+    private static IReadOnlyList<string> GetSolidFaces(FamilyModelSolid solid) {
+        if (solid.Kind is FamilySolidKind.Prism or FamilySolidKind.VoidPrism)
+            return ["Front", "Back", "Left", "Right", "Top", "Bottom"];
+
+        if (solid.Kind is FamilySolidKind.Cylinder or FamilySolidKind.VoidCylinder)
+            return ["Top", "Bottom", "Side"];
+
+        return ["Top", "Bottom", .. Enumerable.Range(0, solid.Profile.Count).Select(index => $"Edge{index}")];
+    }
+
+    /// <summary>
+    ///     Which faces a plane, a frame, or a connector may stand on. A cylinder's `Side` is curved, so it
+    ///     is not a plane at all. An `Edge&lt;N&gt;` IS planar, but its identity is the authored ordinal
+    ///     and nothing else: Revit gives a sketch-derived face no stable name, so capture would have to
+    ///     guess which planar face is edge 3, and inserting one profile point renumbers every edge after
+    ///     it. A reference that survives neither capture nor an ordinary profile edit is not portable, so
+    ///     v1 refuses it. Top and Bottom stay referenceable because there are exactly two of them,
+    ///     whatever the profile does.
+    /// </summary>
+    private static bool IsReferenceableFace(FamilyModelSolid solid, string? face) =>
+        GetSolidFaces(solid).Contains(face, StringComparer.Ordinal) &&
+        !string.Equals(face, "Side", StringComparison.Ordinal) &&
+        !(face ?? string.Empty).StartsWith("Edge", StringComparison.Ordinal);
+
+    /// <summary>
+    ///     A closed ring of at least three points. Self-intersection is NOT checked here: whether a profile
+    ///     makes a valid sketch is Revit's judgement, reported when the family is built, and a geometry
+    ///     checker in this contract would be a second opinion that can disagree with the only one that
+    ///     matters.
+    /// </summary>
+    private static void ValidateProfile(
+        IReadOnlyList<FamilyModelProfilePoint> profile,
+        string path,
+        FamilySolidKind kind,
+        string slug,
+        ISet<string> parameterNames,
+        ICollection<FamilyModelDiagnostic> diagnostics
+    ) {
+        if (profile.Count < 3) {
+            diagnostics.Add(new FamilyModelDiagnostic(
+                FamilyModelDiagnosticCodes.InvalidSolid,
+                $"{path}.profile",
+                $"{kind} solid '{slug}' requires a profile of at least three points; it has {profile.Count}."));
+            return;
+        }
+
+        for (var index = 0; index < profile.Count; index++) {
+            ValidateLengthDriver(profile[index].X, $"{path}.profile[{index}].x", parameterNames, diagnostics);
+            ValidateLengthDriver(profile[index].Y, $"{path}.profile[{index}].y", parameterNames, diagnostics);
+        }
+
+        var first = profile[0];
+        var last = profile[profile.Count - 1];
+        if (string.Equals(first.X, last.X, StringComparison.Ordinal) &&
+            string.Equals(first.Y, last.Y, StringComparison.Ordinal)) {
+            diagnostics.Add(new FamilyModelDiagnostic(
+                FamilyModelDiagnosticCodes.InvalidSolid,
+                $"{path}.profile[{profile.Count - 1}]",
+                $"{kind} solid '{slug}' closes implicitly; the last point must not repeat the first."));
+        }
+    }
 
     private static void ValidateAxis(
         string axis,
@@ -874,6 +1301,7 @@ public static class FamilyModelValidator {
 
     private static void ValidateSolids(
         IReadOnlyDictionary<string, FamilyModelSolid> solids,
+        IReadOnlyDictionary<string, FamilyModelFrame> frames,
         ISet<string> parameterNames,
         ICollection<FamilyModelDiagnostic> diagnostics
     ) {
@@ -881,26 +1309,28 @@ public static class FamilyModelValidator {
             var slug = pair.Key;
             var solid = pair.Value;
             Require(slug, $"$.solids.{slug}", "Solid slug", diagnostics);
-            if (!PortableFamilyReference.TryParse(solid.Frame, out var frame) ||
-                frame.Kind != PortableFamilyReferenceKind.Frame) {
-                diagnostics.Add(new FamilyModelDiagnostic(
-                    FamilyModelDiagnosticCodes.InvalidReference,
-                    $"$.solids.{slug}.frame",
-                    $"Solid '{slug}' frame must be a frame: reference."));
-            } else if (!string.Equals(solid.Frame, BuiltInFamilyFrame, StringComparison.Ordinal)) {
-                diagnostics.Add(new FamilyModelDiagnostic(
-                    FamilyModelDiagnosticCodes.UnsupportedFrame,
-                    $"$.solids.{slug}.frame",
-                    $"Frame '{solid.Frame}' is not yet supported; Phase 1 starts with the fixed family frame."));
-            }
+            ValidateFrameReference(solid.Frame, $"$.solids.{slug}.frame", frames, diagnostics);
 
             var prism = solid.Kind is FamilySolidKind.Prism or FamilySolidKind.VoidPrism;
-            var requiredDrivers = prism
-                ? new[] { ("width", solid.Width), ("depth", solid.Depth), ("height", solid.Height) }
-                : new[] { ("diameter", solid.Diameter), ("height", solid.Height) };
-            var forbiddenDrivers = prism
-                ? new[] { ("diameter", solid.Diameter) }
-                : new[] { ("width", solid.Width), ("depth", solid.Depth) };
+            var polygon = solid.Kind is FamilySolidKind.ExtrudedPolygon or FamilySolidKind.VoidExtrudedPolygon;
+            var requiredDrivers = polygon
+                ? new[] { ("height", solid.Height) }
+                : prism
+                    ? new[] { ("width", solid.Width), ("depth", solid.Depth), ("height", solid.Height) }
+                    : new[] { ("diameter", solid.Diameter), ("height", solid.Height) };
+            var forbiddenDrivers = polygon
+                ? new[] { ("width", solid.Width), ("depth", solid.Depth), ("diameter", solid.Diameter) }
+                : prism
+                    ? new[] { ("diameter", solid.Diameter) }
+                    : new[] { ("width", solid.Width), ("depth", solid.Depth) };
+            if (polygon)
+                ValidateProfile(solid.Profile, $"$.solids.{slug}", solid.Kind, slug, parameterNames, diagnostics);
+            else if (solid.Profile.Count > 0) {
+                diagnostics.Add(new FamilyModelDiagnostic(
+                    FamilyModelDiagnosticCodes.InvalidSolid,
+                    $"$.solids.{slug}.profile",
+                    $"{solid.Kind} solid '{slug}' cannot define profile."));
+            }
 
             foreach (var (name, value) in requiredDrivers) {
                 if (string.IsNullOrWhiteSpace(value)) {
@@ -919,6 +1349,81 @@ public static class FamilyModelValidator {
                     FamilyModelDiagnosticCodes.InvalidSolid,
                     $"$.solids.{slug}.{name}",
                     $"{solid.Kind} solid '{slug}' cannot define {name}."));
+            }
+        }
+    }
+
+    /// <summary>
+    ///     The settings key set is closed by the schema itself — an unknown key cannot deserialize — so the
+    ///     only semantic rule left is that a key carries a value Revit can accept. An OmniClass code is a
+    ///     dotted number sequence; Revit rejects anything else when the code is set, and rejecting it here
+    ///     keeps that failure at authoring time.
+    /// </summary>
+    private static void ValidateSettings(
+        FamilyModelSettings? settings,
+        ICollection<FamilyModelDiagnostic> diagnostics
+    ) {
+        if (settings?.OmniClass == null)
+            return;
+
+        if (!OmniClassCode.IsMatch(settings.OmniClass)) {
+            diagnostics.Add(new FamilyModelDiagnostic(
+                FamilyModelDiagnosticCodes.InvalidSettings,
+                "$.settings.omniClass",
+                $"OmniClass number '{settings.OmniClass}' must be a dotted number sequence such as '23.80.20.11.14'."));
+        }
+    }
+
+    /// <summary>
+    ///     The offset is a portable length LITERAL, never a `param:` reference. Apply moves a
+    ///     `SpatialElementCalculationPoint` element to that position; an element position does not follow a
+    ///     parameter, so a param-driven offset would look live and be frozen.
+    /// </summary>
+    private static void ValidateRoomCalculationPointOffset(
+        string? offset,
+        ICollection<FamilyModelDiagnostic> diagnostics
+    ) {
+        if (offset == null)
+            return;
+
+        if (!PortableScalar.TryParse(offset, out var scalar) || scalar.Kind != PortableScalarKind.Length) {
+            diagnostics.Add(new FamilyModelDiagnostic(
+                FamilyModelDiagnosticCodes.InvalidRoomCalculationPoint,
+                "$.roomCalculationPoint.offset",
+                $"Room calculation point offset '{offset}' must be a portable length literal such as '1ft'."));
+        }
+    }
+
+    /// <summary>
+    ///     Structural checks only: the table name is its identity, and the CSV must carry a header row plus
+    ///     at least one data row. Whether the CSV is a VALID Revit size table is decided by
+    ///     `LookupTableCsvCodec` and `LookupTableValidator` when the model is lowered — this contract stays
+    ///     year-neutral and does not carry a second CSV parser.
+    /// </summary>
+    private static void ValidateLookupTables(
+        IReadOnlyDictionary<string, FamilyModelLookupTable> lookupTables,
+        ICollection<FamilyModelDiagnostic> diagnostics
+    ) {
+        foreach (var pair in lookupTables) {
+            var path = $"$.lookupTables.{pair.Key}";
+            Require(pair.Key, path, "Lookup table name", diagnostics);
+            if (string.IsNullOrWhiteSpace(pair.Value.Csv)) {
+                diagnostics.Add(new FamilyModelDiagnostic(
+                    FamilyModelDiagnosticCodes.InvalidLookupTable,
+                    $"{path}.csv",
+                    $"Lookup table '{pair.Key}' carries no CSV content."));
+                continue;
+            }
+
+            var lines = pair.Value.Csv
+                .Split('\n')
+                .Where(line => !string.IsNullOrWhiteSpace(line))
+                .ToList();
+            if (lines.Count < 2) {
+                diagnostics.Add(new FamilyModelDiagnostic(
+                    FamilyModelDiagnosticCodes.InvalidLookupTable,
+                    $"{path}.csv",
+                    $"Lookup table '{pair.Key}' needs a header row and at least one data row."));
             }
         }
     }

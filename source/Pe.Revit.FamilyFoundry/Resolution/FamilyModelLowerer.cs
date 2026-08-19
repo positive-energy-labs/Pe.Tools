@@ -1,6 +1,7 @@
 using Newtonsoft.Json.Linq;
 using Pe.Revit.FamilyFoundry.DesiredState;
 using Pe.Revit.FamilyFoundry.Profiles;
+using Pe.Revit.FamilyFoundry.LookupTables;
 using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Shared.RevitData.Families;
 using System.Globalization;
@@ -18,10 +19,19 @@ public sealed record FamilyModelLoweringResult(
 ///     compiled detail here, not a second authored language.
 /// </summary>
 public static class FamilyModelLowerer {
+    private const string BuiltInFamilyFrame = "frame:family";
+
+    /// <summary>The room-calculation-point offset is a literal by contract, so no parameter table applies.</summary>
+    private static readonly Dictionary<string, double> EmptyParameterValues = new(StringComparer.Ordinal);
+
     public static FamilyModelLoweringResult Lower(FamilyModel model) {
         var diagnostics = FamilyModelValidator.Validate(model);
         if (diagnostics.Count != 0)
             return new FamilyModelLoweringResult(null, [], diagnostics);
+
+        var refusals = RefuseWhatTheLegacyPlanCannotExpress(model);
+        if (refusals.Count != 0)
+            return new FamilyModelLoweringResult(null, [], refusals);
 
         var profile = new FFManagerProfile {
             FamilyParameters = model.FamilyParameters.Select(pair => new DesiredFamilyParameterDeclaration {
@@ -45,14 +55,119 @@ public static class FamilyModelLowerer {
             }).ToList(),
             PerTypeAssignmentsTable = LowerTypeAssignments(model),
             ParamDrivenSolids = LowerParamDrivenSolids(model),
+            SetLookupTables = LowerLookupTables(model, out var lookupTableDiagnostics),
             AddRoomDingler = new AddRoomDinglerSettings {
-                Enabled = model.RoomCalculationPoint?.Enabled == true
+                Enabled = model.RoomCalculationPoint?.Enabled == true,
+                // The offset is an element position, so it is resolved to feet once, here — the one length
+                // law in FamilyModelEvaluatorConventions, not a second unit table.
+                OffsetFeet = model.RoomCalculationPoint?.Offset is { } offset
+                    ? FamilyModelEvaluatorConventions.ResolveLengthFeet(offset, EmptyParameterValues)
+                    : 1.0
             }
         };
+
+        if (lookupTableDiagnostics.Count != 0)
+            return new FamilyModelLoweringResult(null, [], lookupTableDiagnostics);
 
         // Empty types are real authored state. Keep their names beside the lowered profile instead of inventing a
         // fake parameter assignment merely because the legacy CreateFamilyTypes operation discovers types by columns.
         return new FamilyModelLoweringResult(profile, model.Types.Keys.ToList(), []);
+    }
+
+    /// <summary>
+    ///     A typed refusal, never a silent approximation. The portable contract carries frame trees and the
+    ///     `rotation` clause; the legacy ParamDrivenSolids plan below this seam does not.
+    /// </summary>
+    /// <remarks>
+    ///     What the legacy plan cannot express: an extrusion sketch is authored as spans about the fixed
+    ///     `@CenterLR` / `@CenterFB` anchors on `@Bottom` (<see cref="AuthoredPrismSpec" />,
+    ///     <see cref="AuthoredCylinderSpec" />), so every solid is centered on the family frame and rises
+    ///     along +Z; those two specs are also the whole sketch vocabulary — a rectangle or a circle, with no
+    ///     list of sketch lines for an arbitrary profile; and <see cref="AuthoredConnectorSpec" /> carries
+    ///     `FrameNormal` / `FrameUp` axis TOKENS, so a connector frame can only be axis-aligned. None of them
+    ///     has a place to put a turned sketch plane or a polygon ring. Lifting this needs new geometry in the
+    ///     plan itself — it is not a mapping problem.
+    /// </remarks>
+    private static List<FamilyModelDiagnostic> RefuseWhatTheLegacyPlanCannotExpress(FamilyModel model) {
+        var refusals = new List<FamilyModelDiagnostic>();
+        foreach (var pair in model.Solids.Where(pair => pair.Value.Frame != BuiltInFamilyFrame)) {
+            refusals.Add(new FamilyModelDiagnostic(
+                FamilyModelDiagnosticCodes.UnsupportedFrame,
+                $"$.solids.{pair.Key}.frame",
+                $"Solid '{pair.Key}' sits on '{pair.Value.Frame}'; the legacy plan anchors every extrusion " +
+                "sketch on @CenterLR/@CenterFB/@Bottom and cannot place a solid on another frame."));
+        }
+
+        foreach (var pair in model.NestedFamilies.Where(pair => pair.Value.Frame != BuiltInFamilyFrame)) {
+            refusals.Add(new FamilyModelDiagnostic(
+                FamilyModelDiagnosticCodes.UnsupportedFrame,
+                $"$.nestedFamilies.{pair.Key}.frame",
+                $"Nested family '{pair.Key}' sits on '{pair.Value.Frame}'; the legacy plan places nested " +
+                "instances centered on the family frame only."));
+        }
+
+        foreach (var pair in model.Solids.Where(pair =>
+                     pair.Value.Kind is FamilySolidKind.ExtrudedPolygon or FamilySolidKind.VoidExtrudedPolygon)) {
+            refusals.Add(new FamilyModelDiagnostic(
+                FamilyModelDiagnosticCodes.UnsupportedSolidKind,
+                $"$.solids.{pair.Key}.kind",
+                $"Solid '{pair.Key}' is a {pair.Value.Kind}; the legacy plan authors a rectangle from two " +
+                "symmetric span pairs or a circle from a centre and a diameter, and has no way to carry an " +
+                "arbitrary ring of sketch lines."));
+        }
+
+        if (model.Family.Placement == FamilyModelPlacement.WallHosted && model.Solids.Count > 0) {
+            refusals.Add(new FamilyModelDiagnostic(
+                FamilyModelDiagnosticCodes.UnsupportedPlacementGeometry,
+                "$.solids",
+                $"'{model.Family.Name}' is WallHosted and authors {model.Solids.Count} solid(s); the legacy " +
+                "plan centres a solid's depth on 'Center (Front/Back)', and a stock wall-based template has " +
+                "no such plane — it exposes 'Center (Left/Right)', 'Back' (the wall face) and " +
+                "'Reference Plane' only. Anchoring depth one-sided on the wall face is the missing piece."));
+        }
+
+        foreach (var pair in model.Frames.Where(pair => pair.Value.Rotation != null)) {
+            refusals.Add(new FamilyModelDiagnostic(
+                FamilyModelDiagnosticCodes.UnsupportedFrame,
+                $"$.frames.{pair.Key}.rotation",
+                $"Frame '{pair.Key}' is rotated about '{pair.Value.Rotation!.About}'; the legacy plan carries " +
+                "axis tokens only and has no rotated sketch plane."));
+        }
+
+        return refusals;
+    }
+
+    /// <summary>
+    ///     Decodes each authored CSV through the ONE codec, `LookupTableCsvCodec`, and hands the decoded
+    ///     tables to the existing `SetLookupTables` operation. A CSV Revit could not read fails here, at
+    ///     lowering, with the table named — not inside a Revit import error three steps later.
+    /// </summary>
+    /// <remarks>
+    ///     The lookup-key count a formula implies is not recoverable from the CSV alone, and the portable
+    ///     document does not carry it: `size_lookup(...)` formulas name their own keys, and capture infers
+    ///     the count from those formulas (`LookupFormulaInspector`). Lowering therefore decodes with a key
+    ///     count of zero, which changes column ROLES only, never the bytes Revit imports.
+    /// </remarks>
+    private static SetLookupTablesSettings LowerLookupTables(
+        FamilyModel model,
+        out List<FamilyModelDiagnostic> diagnostics
+    ) {
+        diagnostics = [];
+        var tables = new List<LookupTableDefinition>();
+        foreach (var pair in model.LookupTables) {
+            try {
+                var table = LookupTableCsvCodec.Decode(pair.Key, pair.Value.Csv);
+                LookupTableValidator.Validate(table);
+                tables.Add(table);
+            } catch (Exception exception) when (exception is InvalidOperationException or ArgumentException) {
+                diagnostics.Add(new FamilyModelDiagnostic(
+                    FamilyModelDiagnosticCodes.InvalidLookupTable,
+                    $"$.lookupTables.{pair.Key}.csv",
+                    exception.Message));
+            }
+        }
+
+        return new SetLookupTablesSettings { Tables = tables };
     }
 
     private static List<DesiredPerTypeAssignmentRow> LowerTypeAssignments(FamilyModel model) {

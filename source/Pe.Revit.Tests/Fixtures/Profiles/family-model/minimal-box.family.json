@@ -6,11 +6,22 @@
     "placement": "Unhosted"
   },
   "familyParameters": {
-    "Width": { "dataType": "Length (Common)", "value": "12in" },
-    "Depth": { "dataType": "Length (Common)", "value": "8in" },
-    "Height": { "dataType": "Length (Common)", "value": "6in" }
+    "Width": {
+      "dataType": "Length (Common)",
+      "value": "12in"
+    },
+    "Depth": {
+      "dataType": "Length (Common)",
+      "value": "8in"
+    },
+    "Height": {
+      "dataType": "Length (Common)",
+      "value": "6in"
+    }
   },
-  "types": { "Default": {} },
+  "types": {
+    "Default": {}
+  },
   "solids": {
     "body": {
       "kind": "Prism",
@@ -20,5 +31,17 @@
       "height": "param:Height"
     }
   },
-  "roomCalculationPoint": { "enabled": true }
+  "roomCalculationPoint": {
+    "enabled": true,
+    "offset": "2ft"
+  },
+  "settings": {
+    "alwaysVertical": false,
+    "cutWithVoidsWhenLoaded": true
+  },
+  "lookupTables": {
+    "FF Minimal Sizes": {
+      "csv": ",Width##length##feet,Height##length##feet\nSmall,1,0.5\nLarge,2,1\n"
+    }
+  }
 }

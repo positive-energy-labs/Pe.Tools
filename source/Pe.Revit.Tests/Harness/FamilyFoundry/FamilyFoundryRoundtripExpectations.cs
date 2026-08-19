@@ -107,13 +107,19 @@ internal sealed record RuntimeDimensionProbe(
     bool AreSegmentsEqual
 );
 
+/// <summary>
+///     One rectangular extrusion as Revit reports it. `IsSolid` is read from the extrusion itself: a
+///     bounding box cannot tell a solid from a void, and the intent oracle must never match a predicted
+///     void against a solid.
+/// </summary>
 internal sealed record RuntimePrismProbe(
     ElementId ElementId,
     string? SketchPlaneName,
     XYZ Min,
     XYZ Max,
     double StartOffset,
-    double EndOffset
+    double EndOffset,
+    bool IsSolid
 );
 
 internal sealed record RuntimeCylinderProbe(
@@ -123,7 +129,8 @@ internal sealed record RuntimeCylinderProbe(
     XYZ Max,
     double StartOffset,
     double EndOffset,
-    double Diameter
+    double Diameter,
+    bool IsSolid
 );
 
 internal sealed record RuntimeConnectorProbe(
@@ -149,10 +156,27 @@ internal sealed record RuntimeStateProbe(
     IReadOnlyList<RuntimePrismProbe> Prisms,
     IReadOnlyList<RuntimeCylinderProbe> Cylinders,
     IReadOnlyList<RuntimeConnectorProbe> Connectors,
+    RuntimeFamilySettingsProbe Settings,
     int ReferencePlaneCount,
     int DimensionCount,
     int ExtrusionCount,
     int ConnectorCount
+);
+
+/// <summary>
+///     The family-global switches as REVIT reports them, read straight off the family element and the size
+///     table manager. Capture reads the same places, so this is the independent second reading that proves a
+///     setting survived build → capture → rebuild rather than merely surviving inside the portable document.
+/// </summary>
+internal sealed record RuntimeFamilySettingsProbe(
+    bool? AlwaysVertical,
+    bool? Shared,
+    bool? CutWithVoidsWhenLoaded,
+    int? PartType,
+    string? OmniClass,
+    bool RoomCalculationPointEnabled,
+    double? RoomCalculationPointOffsetFeet,
+    IReadOnlyList<string> LookupTableNames
 );
 
 internal sealed record ExtrusionVerticalSpan(

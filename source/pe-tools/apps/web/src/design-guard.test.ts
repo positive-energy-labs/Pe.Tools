@@ -42,6 +42,12 @@
  *  longTitle        title= props over 240 characters — the hover-shadow-doc ratchet from fit
  *                   review B·5: prose moved out of sight instead of deleted. May only shrink.
  *
+ *  Prototype code is EXEMPT from the walk (any directory whose name starts with `proto`, and
+ *  any `routes/<name>-proto.tsx`): the
+ *  ratchets cannot tell a prototype from a shipping route, and a guard red from throwaway code
+ *  proves nothing about the change in front of you. The promotion pass moves the winner out of
+ *  `proto/`, which is what re-arms the ratchets for it. Decided 2026-08-19, family review round 1.
+ *
  *  A count ABOVE its baseline fails with the offending files. A count BELOW its baseline also
  *  fails — asking you to lower the baseline — because a ratchet that can silently slacken is
  *  not a ratchet. Update src/design-guard.baseline.json in the same commit as the win.
@@ -65,10 +71,14 @@ const collect = (dir: string, relBase: string, out: Entry[]): Entry[] => {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const rel = relBase === "" ? e.name : `${relBase}/${e.name}`;
     if (e.isDirectory()) {
-      if (!SKIP_DIRS.has(e.name)) collect(join(dir, e.name), rel, out);
+      // Prototype code is exempt (the TODO above): find-the-product rounds may not arm the
+      // ratchets. The promotion pass deletes the proto dir, which re-arms them for the winner.
+      if (!SKIP_DIRS.has(e.name) && !e.name.startsWith("proto"))
+        collect(join(dir, e.name), rel, out);
       continue;
     }
     if (SKIP_FILES.has(e.name)) continue;
+    if (e.name.endsWith("-proto.tsx")) continue;
     if (!/\.(?:tsx?|css)$/.test(e.name)) continue;
     out.push({ rel, text: readFileSync(join(dir, e.name), "utf8") });
   }

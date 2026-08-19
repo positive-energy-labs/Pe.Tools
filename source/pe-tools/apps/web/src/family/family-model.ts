@@ -15,7 +15,11 @@
  * Everything in this module is pure: `FamilyModel` values are immutable and every edit
  * returns a new model, so the route can diff before/after into JSON Pointer patches.
  */
-import { familyModelPlaneOffset, familyModelPrismFaceCoordinate } from "#/family-model/preview";
+import {
+  familyModelFamilyPlane,
+  familyModelPlaneOffset,
+  familyModelPrismFaceCoordinate,
+} from "#/family-model/preview";
 
 /** Every authored construct that reads one parameter, grouped by how it reads it.
  * Inlined here (it used to live on the deleted inspector) because `paramAssociations`
@@ -104,7 +108,17 @@ export interface FamilyModel {
   nestedFamilies?: Record<string, NestedSpec>;
   connectors?: Record<string, ConnectorSpec>;
   arrays?: Record<string, ArraySpec>;
-  roomCalculationPoint?: { enabled: boolean };
+  roomCalculationPoint?: { enabled: boolean; offset?: string };
+  /** The closed family-global key set (wave 3). Each key is exactly one named Revit parameter. */
+  settings?: {
+    alwaysVertical?: boolean;
+    shared?: boolean;
+    cutWithVoidsWhenLoaded?: boolean;
+    partType?: string;
+    omniClass?: string;
+  };
+  /** Revit's own size-table CSV, verbatim — `LookupTableCsvCodec` is the one codec. */
+  lookupTables?: Record<string, { csv: string }>;
   unmodeled?: unknown[];
 }
 
@@ -288,14 +302,26 @@ export interface ConnGeo {
   stubDir: string | undefined;
 }
 
-export const DATUM_AXIS: Record<string, Axis> = {
-  "plane:family.Bottom": "z",
-  "plane:family.CenterFB": "y",
-  "plane:family.CenterLR": "x",
-};
+/** The stock family reference planes, keyed by the reference an authored document writes. */
+export const DATUM_AXIS: Record<string, Axis> = Object.fromEntries(
+  ["Bottom", "CenterFB", "CenterLR"].map((member) => [
+    `plane:family.${member}`,
+    familyModelFamilyPlane(member)!.axis,
+  ]),
+);
+
+/** The direction an `Out` offset travels from a stock family plane: right (+X), FRONT (−Y), up (+Z). */
+function datumOutwardSign(reference: string): number {
+  const member = reference.startsWith("plane:family.")
+    ? familyModelFamilyPlane(reference.slice("plane:family.".length))
+    : null;
+  if (!member) return 1;
+  return member.outward[member.axis === "x" ? 0 : member.axis === "y" ? 1 : 2];
+}
 
 // ponytail: v1 lowering convention — solids centered on the family center planes, sitting ON
-// family.Bottom, +Y is Front (normative dumb-evaluator rules + conformance vectors).
+// family.Bottom. Face names and family-plane directions come from the conformance conventions,
+// which do NOT agree on the Y sign: a solid's Front face is +Y, a family plane's Out is −Y.
 export function solidGeos(model: FamilyModel, typeName: string): SolidGeo[] {
   return Object.entries(model.solids ?? {}).map(([slug, solid]) => ({
     slug,
@@ -319,7 +345,8 @@ export function planeGeos(model: FamilyModel, typeName: string): PlaneGeo[] {
       offset:
         value == null
           ? null
-          : familyModelPlaneOffset(plane.direction === "In" ? "In" : "Out", value),
+          : familyModelPlaneOffset(plane.direction === "In" ? "In" : "Out", value) *
+            datumOutwardSign(plane.from),
       param,
       editable: spec != null && spec.formula == null,
       text: param ? resolveParam(model, typeName, param).text : plane.by,
