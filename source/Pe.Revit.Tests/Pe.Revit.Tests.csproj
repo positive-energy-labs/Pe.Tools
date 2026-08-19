@@ -55,9 +55,9 @@
 
     <PropertyGroup>
         <PeRevitRawDotNetTestWarningSuppressed Condition="'$(PeRevitRawDotNetTestWarningSuppressed)' == ''">false</PeRevitRawDotNetTestWarningSuppressed>
-        <PeVerifyTarget Condition="'$(PeVerifyTarget)' == '' and '$(PeRevitRawDotNetTestWarningSuppressed)' != 'true' and $([System.String]::Copy('$(Configuration)').Contains('.Tests')) == 'True'">AttachedRrd</PeVerifyTarget>
+        <PeVerifyTarget Condition="'$(PeVerifyTarget)' == '' and '$(PeRevitRawDotNetTestWarningSuppressed)' != 'true' and $([System.String]::Copy('$(Configuration)').Contains('.Tests')) == 'True'">attached</PeVerifyTarget>
         <PeWorkflow Condition="'$(PeRevitRawDotNetTestWarningSuppressed)' != 'true' and $([System.String]::Copy('$(Configuration)').Contains('.Tests')) == 'True'">Verify</PeWorkflow>
-        <PeExecutionPolicy Condition="'$(PeVerifyTarget)' == 'AttachedRrd'">RrdRequired</PeExecutionPolicy>
+        <PeExecutionPolicy Condition="'$(PeVerifyTarget)' == 'attached'">RrdRequired</PeExecutionPolicy>
     </PropertyGroup>
     <Target
             Name="ValidateDotNetTestUsage"
