@@ -6,7 +6,6 @@ using System.ComponentModel;
 namespace Pe.Revit.FamilyFoundry.Operations;
 
 public sealed class AddRoomDingler(AddRoomDinglerSettings settings) : DocOperation<AddRoomDinglerSettings>(settings) {
-    private const double OffsetFeet = 1.0;
 
     public override string Description =>
         "Enable the family room calculation point and move it to the host-inferred room-facing default.";
@@ -22,6 +21,7 @@ public sealed class AddRoomDingler(AddRoomDinglerSettings settings) : DocOperati
             return new OperationLog(this.Name, [new LogEntry("Owner family").Error("Family document has no owner family.")]);
 
         var placement = GetRoomDinglerPlacement(family);
+        var offsetFeet = this.Settings.OffsetFeet;
         if (!family.ShowSpatialElementCalculationPoint)
             family.ShowSpatialElementCalculationPoint = true;
         doc.Document.Regenerate();
@@ -42,15 +42,15 @@ public sealed class AddRoomDingler(AddRoomDinglerSettings settings) : DocOperati
         }
 
         foreach (var point in singlePoints) {
-            var target = placement.Direction.Multiply(OffsetFeet);
+            var target = placement.Direction.Multiply(offsetFeet);
             point.Position = target;
             logs.Add(new LogEntry("Room calculation point").Success(
                 $"Set {placement.Kind} point to {Format(target)}."));
         }
 
         foreach (var point in fromToPoints) {
-            var from = placement.Direction.Negate().Multiply(OffsetFeet);
-            var to = placement.Direction.Multiply(OffsetFeet);
+            var from = placement.Direction.Negate().Multiply(offsetFeet);
+            var to = placement.Direction.Multiply(offsetFeet);
             if (!point.IsAcceptableFromPosition(from) || !point.IsAcceptableToPosition(to)) {
                 logs.Add(new LogEntry("From/to room calculation point").Error(
                     $"Family rejected {placement.Kind} from/to points from={Format(from)}, to={Format(to)}."));
@@ -89,4 +89,7 @@ public enum RoomDinglerPlacementKind {
 public sealed class AddRoomDinglerSettings : IOperationSettings {
     [Description("Whether to add or update the room calculation point using Family Foundry host-inferred defaults.")]
     public bool Enabled { get; init; }
+
+    [Description("How far the point sits from the origin along the host-inferred direction, in feet.")]
+    public double OffsetFeet { get; init; } = 1.0;
 }

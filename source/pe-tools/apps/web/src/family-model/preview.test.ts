@@ -5,10 +5,20 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   buildFamilyModelPreview,
   centeredLinearTotal,
+  familyModelAngleDegrees,
+  familyModelApply,
   familyModelCylinderBounds,
+  familyModelFamilyPlane,
+  familyModelFrameBasis,
+  familyModelIntersectPlanes,
+  familyModelLengthFeet,
   familyModelPlaneOffset,
+  familyModelPolygonBounds,
   familyModelPrismFaceCoordinate,
+  familyModelRotate,
+  familyModelRotationAxis,
   parseFamilyModel,
+  type FamilyModelVector,
 } from "./preview";
 
 describe("family model preview", () => {
@@ -133,6 +143,28 @@ describe("family model preview", () => {
         coordinate: Record<"x" | "y" | "z", number>;
       };
       centeredLinear: Array<{ halfCount: number; total: number }>;
+      familyPlanes: Record<string, { axis: string; outward: FamilyModelVector }>;
+      frameOrigin: {
+        planes: Array<{ point: FamilyModelVector; normal: FamilyModelVector }>;
+        point: FamilyModelVector;
+      };
+      frameTransforms: Array<{
+        case: string;
+        origin: FamilyModelVector;
+        normal: string;
+        up: string;
+        rotation?: { about: string; by: string };
+        parametersInRadians?: Record<string, number>;
+        local: FamilyModelVector;
+        world: FamilyModelVector;
+      }>;
+      polygons: Array<{
+        case: string;
+        profile: Array<{ x: string; y: string }>;
+        height: string;
+        parametersInFeet: Record<string, number>;
+        bounds: Record<"x" | "y" | "z", [number, number]>;
+      }>;
     };
 
     for (const vector of vectors.planes) {
@@ -164,5 +196,42 @@ describe("family model preview", () => {
     for (const vector of vectors.centeredLinear) {
       expect(centeredLinearTotal(vector.halfCount)).toBe(vector.total);
     }
+    for (const [member, expected] of Object.entries(vectors.familyPlanes)) {
+      const plane = familyModelFamilyPlane(member);
+      expect(plane?.axis).toBe(expected.axis.toLowerCase());
+      expect(plane?.outward).toEqual(expected.outward);
+    }
+    expectClose(familyModelIntersectPlanes(vectors.frameOrigin.planes), vectors.frameOrigin.point);
+    for (const vector of vectors.frameTransforms) {
+      let frame = familyModelFrameBasis(vector.origin, vector.normal, vector.up);
+      if (vector.rotation) {
+        frame = familyModelRotate(
+          frame,
+          familyModelRotationAxis(vector.rotation.about, frame),
+          familyModelAngleDegrees(vector.rotation.by, vector.parametersInRadians ?? {}),
+        );
+      }
+      expectClose(familyModelApply(frame, vector.local), vector.world, vector.case);
+    }
+    for (const vector of vectors.polygons) {
+      const profile = vector.profile.map((point) => ({
+        x: familyModelLengthFeet(point.x, vector.parametersInFeet),
+        y: familyModelLengthFeet(point.y, vector.parametersInFeet),
+      }));
+      const bounds = familyModelPolygonBounds(
+        profile,
+        familyModelLengthFeet(vector.height, vector.parametersInFeet),
+      );
+      for (const axis of ["x", "y", "z"] as const) {
+        expect(bounds[axis][0], `${vector.case} ${axis} min`).toBeCloseTo(vector.bounds[axis][0], 9);
+        expect(bounds[axis][1], `${vector.case} ${axis} max`).toBeCloseTo(vector.bounds[axis][1], 9);
+      }
+    }
   });
 });
+
+function expectClose(actual: FamilyModelVector, expected: FamilyModelVector, context = "") {
+  for (const component of [0, 1, 2] as const) {
+    expect(actual[component], `${context} [${component}]`).toBeCloseTo(expected[component], 9);
+  }
+}

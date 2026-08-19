@@ -170,6 +170,103 @@ public sealed class FamilyModelLowererTests {
         }
     }
 
+    /// <summary>
+    ///     The frame tree end to end, without Revit: a solid on a rotated frame that stands on the top
+    ///     face of a solid in the family frame. `deck` turns a quarter turn about its own normal, so the
+    ///     vane's local width runs along family +Y and its local depth along family −X.
+    /// </summary>
+    [Test]
+    public void Oracle_predicts_a_solid_on_a_rotated_frame_that_stands_on_another_solid() {
+        var model = new FamilyModel {
+            Family = new FamilyModelHeader {
+                Name = "FF Frame Tree",
+                Category = "Generic Models",
+                Template = "Generic Model",
+                Placement = FamilyModelPlacement.Unhosted
+            },
+            Types = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal) {
+                ["Default"] = new(StringComparer.Ordinal)
+            },
+            Frames = new Dictionary<string, FamilyModelFrame>(StringComparer.Ordinal) {
+                ["deck"] = new() {
+                    Origin = ["face:body.Top", "plane:family.CenterLR", "plane:family.CenterFB"],
+                    Normal = "+Z",
+                    Up = "+Y",
+                    Rotation = new FamilyModelFrameRotation { About = "normal", By = "90deg" }
+                }
+            },
+            Solids = new Dictionary<string, FamilyModelSolid>(StringComparer.Ordinal) {
+                ["body"] = new() {
+                    Kind = FamilySolidKind.Prism, Frame = "frame:family",
+                    Width = "4ft", Depth = "2ft", Height = "1ft"
+                },
+                ["vane"] = new() {
+                    Kind = FamilySolidKind.Prism, Frame = "frame:deck",
+                    Width = "2ft", Depth = "1ft", Height = "1/2ft"
+                }
+            }
+        };
+
+        Assert.That(FamilyModelValidator.Validate(model), Is.Empty);
+        var prediction = FamilyModelEvaluatorOracle.Predict(
+            model,
+            new Dictionary<string, double>(StringComparer.Ordinal));
+
+        var vane = prediction.Solids.Single(solid => solid.Slug == "vane");
+        Assert.That(vane.Min.ToString(), Is.EqualTo("[-0.5, -1, 1]"));
+        Assert.That(vane.Max.ToString(), Is.EqualTo("[0.5, 1, 1.5]"));
+    }
+
+    /// <summary>
+    ///     An extruded polygon predicts the bounds of its own ring, and the same document is REFUSED by the
+    ///     lowerer: the portable contract reaches further than the legacy plan, and the gap is typed.
+    /// </summary>
+    [Test]
+    public void Extruded_polygon_predicts_its_bounds_and_is_refused_by_the_legacy_plan() {
+        var model = new FamilyModel {
+            Family = new FamilyModelHeader {
+                Name = "FF Polygon Plate",
+                Category = "Generic Models",
+                Template = "Generic Model",
+                Placement = FamilyModelPlacement.Unhosted
+            },
+            FamilyParameters = new Dictionary<string, FamilyModelFamilyParameter>(StringComparer.Ordinal) {
+                ["Reach"] = new() { DataType = "Length (Common)", Value = "9in" }
+            },
+            Types = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal) {
+                ["Default"] = new(StringComparer.Ordinal)
+            },
+            Solids = new Dictionary<string, FamilyModelSolid>(StringComparer.Ordinal) {
+                ["plate"] = new() {
+                    Kind = FamilySolidKind.ExtrudedPolygon,
+                    Frame = "frame:family",
+                    Height = "6in",
+                    Profile = [
+                        new FamilyModelProfilePoint { X = "-1ft", Y = "0ft" },
+                        new FamilyModelProfilePoint { X = "param:Reach", Y = "0ft" },
+                        new FamilyModelProfilePoint { X = "0ft", Y = "2ft" }
+                    ]
+                }
+            }
+        };
+
+        Assert.That(FamilyModelValidator.Validate(model), Is.Empty);
+        var prediction = FamilyModelEvaluatorOracle.Predict(
+            model,
+            new Dictionary<string, double>(StringComparer.Ordinal) { ["Reach"] = 0.75 });
+
+        var plate = prediction.Solids.Single(solid => solid.Slug == "plate");
+        Assert.That(plate.Min.ToString(), Is.EqualTo("[-1, 0, 0]"));
+        Assert.That(plate.Max.ToString(), Is.EqualTo("[0.75, 2, 0.5]"));
+
+        var lowered = FamilyModelLowerer.Lower(model);
+
+        Assert.That(lowered.Profile, Is.Null, "a refusal never carries a half-built plan");
+        Assert.That(lowered.Diagnostics.Select(item => item.Code),
+            Is.EqualTo(new[] { FamilyModelDiagnosticCodes.UnsupportedSolidKind }));
+        Assert.That(lowered.Diagnostics[0].Message, Does.Contain("ring of sketch lines"));
+    }
+
     [Test]
     public void Minimal_box_lowers_to_the_existing_param_driven_solids_seam() {
         var model = new FamilyModel {

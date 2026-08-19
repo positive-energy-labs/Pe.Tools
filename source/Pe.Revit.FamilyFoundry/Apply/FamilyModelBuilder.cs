@@ -96,6 +96,7 @@ public static class FamilyModelBuilder {
             }
 
             ConfigureFamily(document, model.Family);
+            ApplyFamilySettings(document, model.Settings);
             SeedFamilyTypes(document, lowering.FamilyTypeNames);
 
             var applyResult = document.ApplyFamilyProfile(lowering.Profile, model.Family.Name);
@@ -199,13 +200,29 @@ public static class FamilyModelBuilder {
         return loaded;
     }
 
+    /// <summary>
+    ///     Maps what Revit reports about a family document onto the portable placement vocabulary.
+    /// </summary>
+    /// <remarks>
+    ///     `OneLevelBasedHosted` is what the stock wall-based templates report — proven, not assumed, by the
+    ///     wall-hosted roundtrip fixture, which builds from `Plumbing Fixture wall based.rft` and would throw
+    ///     on the placement cross-check in <see cref="Build" /> if Revit said anything else. Every other
+    ///     placement type collapses to `Unhosted`, which is honest for the ones the vocabulary does not name
+    ///     yet and is why a ceiling- or floor-based template cannot masquerade as a supported one: its
+    ///     geometry conventions would differ while the placement claim looked ordinary.
+    /// </remarks>
     public static FamilyModelPlacement GetPlacement(FamilyPlacementType placementType) => placementType switch {
         FamilyPlacementType.WorkPlaneBased => FamilyModelPlacement.FaceHosted,
         FamilyPlacementType.OneLevelBasedHosted => FamilyModelPlacement.WallHosted,
         _ => FamilyModelPlacement.Unhosted
     };
 
-    internal static string ResolveTemplatePath(Application application, string template) {
+    /// <summary>
+    ///     Resolves a portable installed-template NAME to the machine path Revit will open. Public because
+    ///     "which template does this document mean on this machine" is a question the apply contract answers,
+    ///     and one a test must be able to ask without rebuilding the probe list.
+    /// </summary>
+    public static string ResolveTemplatePath(Application application, string template) {
         var templateName = template.Trim();
         if (Path.IsPathRooted(templateName) ||
             templateName.IndexOfAny([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]) >= 0) {
@@ -241,6 +258,80 @@ public static class FamilyModelBuilder {
         document.OwnerFamily.FamilyCategory = category;
         document.OwnerFamily.Name = header.Name.Trim();
         _ = transaction.Commit();
+    }
+
+    /// <summary>
+    ///     Writes the closed `settings` key set onto the family element. Every key is one Revit parameter,
+    ///     named in <see cref="FamilyModelSettings" />; an omitted key is left exactly as the template made
+    ///     it. Each write is read back, because a Revit parameter can accept a `Set` and keep its old value
+    ///     — a silent no-op here would become an authored setting the built family does not carry.
+    /// </summary>
+    private static void ApplyFamilySettings(Document document, FamilyModelSettings? settings) {
+        if (settings == null)
+            return;
+
+        using var transaction = new Transaction(document, "Apply family settings");
+        _ = transaction.Start();
+        var family = document.OwnerFamily;
+        SetIntegerSetting(family, BuiltInParameter.FAMILY_ALWAYS_VERTICAL, "alwaysVertical",
+            settings.AlwaysVertical is true ? 1 : 0, settings.AlwaysVertical.HasValue);
+        SetIntegerSetting(family, BuiltInParameter.FAMILY_SHARED, "shared",
+            settings.Shared is true ? 1 : 0, settings.Shared.HasValue);
+        SetIntegerSetting(family, BuiltInParameter.FAMILY_ALLOW_CUT_WITH_VOIDS, "cutWithVoidsWhenLoaded",
+            settings.CutWithVoidsWhenLoaded is true ? 1 : 0, settings.CutWithVoidsWhenLoaded.HasValue);
+        if (settings.PartType.HasValue) {
+            if (!Enum.TryParse<PartType>(settings.PartType.Value.ToString(), out var partType)) {
+                throw new InvalidOperationException(
+                    $"$.settings.partType: '{settings.PartType}' is not an Autodesk.Revit.DB.PartType member in this Revit version.");
+            }
+
+            SetIntegerSetting(family, BuiltInParameter.FAMILY_CONTENT_PART_TYPE, "partType", (int)partType, true);
+        }
+
+        if (settings.OmniClass != null) {
+#if REVIT2026_OR_GREATER
+            // Revit 2026 removed BuiltInParameter.OMNICLASS_CODE in favour of ClassificationEntry. Refuse the
+            // authored key on this year instead of writing it somewhere that only looks equivalent.
+            throw new InvalidOperationException(
+                "$.settings.omniClass: Revit 2026 removed the OmniClass Number parameter; its replacement is the " +
+                "ClassificationEntry model, which the Family Model does not speak yet.");
+#else
+            var parameter = family.get_Parameter(BuiltInParameter.OMNICLASS_CODE)
+                            ?? throw new InvalidOperationException(
+                                "$.settings.omniClass: this family category carries no OmniClass Number parameter.");
+            _ = parameter.Set(settings.OmniClass);
+            var readBack = parameter.AsString();
+            if (!string.Equals(readBack, settings.OmniClass, StringComparison.Ordinal)) {
+                throw new InvalidOperationException(
+                    $"$.settings.omniClass: Revit stored '{readBack}' instead of '{settings.OmniClass}'.");
+            }
+#endif
+        }
+
+        _ = transaction.Commit();
+    }
+
+    private static void SetIntegerSetting(
+        Family family,
+        BuiltInParameter builtInParameter,
+        string key,
+        int value,
+        bool authored
+    ) {
+        if (!authored)
+            return;
+
+        var parameter = family.get_Parameter(builtInParameter)
+                        ?? throw new InvalidOperationException(
+                            $"$.settings.{key}: this family carries no '{builtInParameter}' parameter.");
+        if (parameter.IsReadOnly)
+            throw new InvalidOperationException($"$.settings.{key}: '{builtInParameter}' is read-only here.");
+
+        _ = parameter.Set(value);
+        if (parameter.AsInteger() != value) {
+            throw new InvalidOperationException(
+                $"$.settings.{key}: Revit stored {parameter.AsInteger()} instead of {value}.");
+        }
     }
 
     private static void SeedFamilyTypes(Document document, IReadOnlyList<string> typeNames) {

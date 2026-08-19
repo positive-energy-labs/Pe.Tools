@@ -2,6 +2,7 @@ using Autodesk.Revit.DB.Architecture;
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.FamilyFoundry.Helpers;
+using Pe.Revit.FamilyFoundry.LookupTables;
 using Pe.Shared.RevitData.Families;
 
 namespace Pe.Revit.FamilyFoundry.Capture;
@@ -11,6 +12,9 @@ namespace Pe.Revit.FamilyFoundry.Capture;
 ///     only a Document: the original profile and compiler plan must be unavailable at this boundary.
 /// </summary>
 public static class FamilyModelCaptureExtensions {
+    /// <summary>The PE room-calculation-point convention: one foot along the host-inferred direction.</summary>
+    private const double PeRoomCalculationOffsetFeet = 1.0;
+
     public static FamilyModel CaptureFamilyModel(this Document document) {
         if (document == null)
             throw new ArgumentNullException(nameof(document));
@@ -60,6 +64,8 @@ public static class FamilyModelCaptureExtensions {
             unmodeled);
         var composition = ProjectComposition(document, unmodeled);
         var roomCalculationPoint = ProjectRoomCalculationPoint(document, placement, unmodeled);
+        var settings = ProjectSettings(document, unmodeled);
+        var lookupTables = ProjectLookupTables(snapshot, unmodeled);
         AddUnmodeledObservableState(document, snapshot, unmodeled);
         return new FamilyModel {
             Family = new FamilyModelHeader {
@@ -81,6 +87,8 @@ public static class FamilyModelCaptureExtensions {
             NestedFamilies = composition.NestedFamilies,
             Connectors = connectors,
             Arrays = composition.Arrays,
+            Settings = settings,
+            LookupTables = lookupTables,
             RoomCalculationPoint = roomCalculationPoint,
             Unmodeled = unmodeled
         };
@@ -442,7 +450,6 @@ public static class FamilyModelCaptureExtensions {
             return null;
 
         var direction = placement == FamilyModelPlacement.Unhosted ? XYZ.BasisZ : new XYZ(0, -1, 0);
-        var expected = direction;
         var singlePoints = new FilteredElementCollector(document)
             .OfClass(typeof(SpatialElementCalculationPoint))
             .Cast<SpatialElementCalculationPoint>()
@@ -451,11 +458,13 @@ public static class FamilyModelCaptureExtensions {
             .OfClass(typeof(SpatialElementFromToCalculationPoints))
             .Cast<SpatialElementFromToCalculationPoints>()
             .ToList();
+        // The PE convention fixes the DIRECTION the point travels, not how far: the distance is authored as
+        // `roomCalculationPoint.offset`. A point off that axis is the thing this contract cannot express.
         var isPeConvention = singlePoints.Count + fromToPoints.Count > 0 &&
-                             singlePoints.All(point => point.Position.IsAlmostEqualTo(expected, 1e-6)) &&
+                             singlePoints.All(point => IsAlongDirection(point.Position, direction)) &&
                              fromToPoints.All(point =>
-                                 point.FromPosition.IsAlmostEqualTo(expected.Negate(), 1e-6) &&
-                                 point.ToPosition.IsAlmostEqualTo(expected, 1e-6));
+                                 IsAlongDirection(point.FromPosition, direction.Negate()) &&
+                                 IsAlongDirection(point.ToPosition, direction));
         if (!isPeConvention) {
             unmodeled.Add(new FamilyModelUnmodeledFact {
                 Reason = "non-default-room-calculation-point",
@@ -468,34 +477,192 @@ public static class FamilyModelCaptureExtensions {
             });
         }
 
-        return new FamilyModelRoomCalculationPoint { Enabled = true };
+        // The offset is the point's own distance from the origin. It is emitted only when it is not the PE
+        // one-foot convention, the same "omission means the default" rule the settings keys follow.
+        var observedOffset = singlePoints
+            .Select(point => point.Position.GetLength())
+            .Concat(fromToPoints.Select(point => point.ToPosition.GetLength()))
+            .DefaultIfEmpty(PeRoomCalculationOffsetFeet)
+            .First();
+        return new FamilyModelRoomCalculationPoint {
+            Enabled = true,
+            Offset = Math.Abs(observedOffset - PeRoomCalculationOffsetFeet) < 1e-9
+                ? null
+                : FormatFeet(observedOffset)
+        };
     }
+
+    /// <summary>
+    ///     Reads the closed family-global key set off the family element. Each key is one Revit parameter,
+    ///     named in <see cref="FamilyModelSettings" />. A key whose parameter the category does not carry is
+    ///     absent, not defaulted; a key present with a value the portable vocabulary cannot name becomes a
+    ///     named unmodeled fact rather than a quiet omission.
+    /// </summary>
+    private static FamilyModelSettings? ProjectSettings(
+        Document document,
+        ICollection<FamilyModelUnmodeledFact> unmodeled
+    ) {
+        var family = document.OwnerFamily;
+        // AlwaysVertical and PartType carry no portable default — their template value varies by category
+        // and Revit year — so whatever the document says is emitted. The other three are emitted only when
+        // they differ from the stated default.
+        var alwaysVertical = ReadBooleanSetting(family, BuiltInParameter.FAMILY_ALWAYS_VERTICAL);
+        var shared = ReadBooleanSetting(family, BuiltInParameter.FAMILY_SHARED);
+        var cutWithVoids = ReadBooleanSetting(family, BuiltInParameter.FAMILY_ALLOW_CUT_WITH_VOIDS);
+#if REVIT2026_OR_GREATER
+        // Revit 2026 removed BuiltInParameter.OMNICLASS_CODE and OMNICLASS_DESCRIPTION and replaced the
+        // single OmniClass string with the ClassificationEntry model (several systems, several entries).
+        // That is a different shape, not a renamed parameter, so this year reads no OmniClass at all rather
+        // than inventing one from a model the portable contract does not speak yet.
+        string? omniClass = null;
+#else
+        var omniClass = family.get_Parameter(BuiltInParameter.OMNICLASS_CODE)?.AsString();
+#endif
+        var partType = ProjectPartType(family, unmodeled);
+
+        var settings = new FamilyModelSettings {
+            AlwaysVertical = alwaysVertical,
+            Shared = shared == true ? true : null,
+            CutWithVoidsWhenLoaded = cutWithVoids == true ? true : null,
+            PartType = partType,
+            OmniClass = string.IsNullOrWhiteSpace(omniClass) ? null : omniClass
+        };
+        return settings.AlwaysVertical == null &&
+               settings.Shared == null &&
+               settings.CutWithVoidsWhenLoaded == null &&
+               settings.PartType == null &&
+               settings.OmniClass == null
+            ? null
+            : settings;
+    }
+
+    private static bool? ReadBooleanSetting(Family family, BuiltInParameter builtInParameter) {
+        var parameter = family.get_Parameter(builtInParameter);
+        return parameter == null || parameter.StorageType != StorageType.Integer
+            ? null
+            : parameter.AsInteger() != 0;
+    }
+
+    private static FamilyPartType? ProjectPartType(
+        Family family,
+        ICollection<FamilyModelUnmodeledFact> unmodeled
+    ) {
+        var parameter = family.get_Parameter(BuiltInParameter.FAMILY_CONTENT_PART_TYPE);
+        if (parameter == null || parameter.StorageType != StorageType.Integer)
+            return null;
+
+        var value = parameter.AsInteger();
+        // The stored number is a PartType member. Name it through both enums; a number this Revit version
+        // knows and the portable vocabulary does not is a fact to report, never a silently dropped setting.
+        if (Enum.IsDefined(typeof(PartType), value) &&
+            Enum.TryParse<FamilyPartType>(((PartType)value).ToString(), out var portable))
+            return portable;
+
+        unmodeled.Add(new FamilyModelUnmodeledFact {
+            Reason = "part-type-not-portable",
+            Path = "$.settings.partType",
+            Facts = new Dictionary<string, string>(StringComparer.Ordinal) {
+                ["storedValue"] = value.ToString()
+            }
+        });
+        return null;
+    }
+
+    /// <summary>
+    ///     Re-encodes each captured size table through the ONE codec, so the portable document carries the
+    ///     same CSV grammar Revit imports. `LookupTableSnapshotCollector` has already exported and decoded
+    ///     them from `FamilySizeTableManager`, which is the only door to embedded table data.
+    /// </summary>
+    private static Dictionary<string, FamilyModelLookupTable> ProjectLookupTables(
+        FamilySnapshot snapshot,
+        ICollection<FamilyModelUnmodeledFact> unmodeled
+    ) {
+        var tables = new Dictionary<string, FamilyModelLookupTable>(StringComparer.Ordinal);
+        foreach (var table in snapshot.LookupTables?.Data ?? []) {
+            var name = table.Schema?.Name?.Trim();
+            if (string.IsNullOrWhiteSpace(name)) {
+                unmodeled.Add(new FamilyModelUnmodeledFact {
+                    Reason = "lookup-table-has-no-name",
+                    Path = "$.lookupTables",
+                    Facts = new Dictionary<string, string>(StringComparer.Ordinal) {
+                        ["rows"] = table.Rows.Count.ToString()
+                    }
+                });
+                continue;
+            }
+
+            try {
+                tables[name!] = new FamilyModelLookupTable { Csv = LookupTableCsvCodec.Encode(table) };
+            } catch (InvalidOperationException exception) {
+                unmodeled.Add(new FamilyModelUnmodeledFact {
+                    Reason = "lookup-table-not-portable",
+                    Path = $"$.lookupTables.{name}",
+                    Facts = new Dictionary<string, string>(StringComparer.Ordinal) {
+                        ["reason"] = exception.Message
+                    }
+                });
+            }
+        }
+
+        return tables;
+    }
+
+    /// <summary>True when the point sits on the ray the placement implies, at any distance along it.</summary>
+    private static bool IsAlongDirection(XYZ position, XYZ direction) {
+        var distance = position.GetLength();
+        return distance > 1e-9 && position.Normalize().IsAlmostEqualTo(direction.Normalize(), 1e-6);
+    }
+
+    /// <summary>Feet, printed the way a portable length literal is authored.</summary>
+    private static string FormatFeet(double feet) =>
+        Math.Round(feet, 9).ToString("0.#########", System.Globalization.CultureInfo.InvariantCulture) + "ft";
 
     private static void AddUnmodeledObservableState(
         Document document,
         FamilySnapshot snapshot,
         ICollection<FamilyModelUnmodeledFact> unmodeled
     ) {
-        if (snapshot.LookupTables?.Data is { Count: > 0 } lookupTables) {
-            unmodeled.Add(new FamilyModelUnmodeledFact {
-                Reason = "lookup-tables-not-yet-modeled",
-                Path = "$.unmodeled",
-                Facts = new Dictionary<string, string>(StringComparer.Ordinal) {
-                    ["count"] = lookupTables.Count.ToString()
-                }
-            });
-        }
-
         var authored = snapshot.AuthoredParamDrivenSolids;
         if (authored == null)
             return;
 
-        var observedExtrusions = new FilteredElementCollector(document)
+        var extrusions = new FilteredElementCollector(document)
             .OfClass(typeof(Extrusion))
             .Cast<Extrusion>()
             // Face/work-plane templates carry a category-less 8x8x1 host placeholder extrusion. Match that exact
             // installed-template artifact; ordinary authored extrusions may also have a null Category.
-            .Count(extrusion => !IsFaceHostPlaceholderExtrusion(document, extrusion));
+            .Where(extrusion => !IsFaceHostPlaceholderExtrusion(document, extrusion))
+            .ToList();
+        var observedExtrusions = extrusions.Count;
+        // A turned sketch plane is real geometry the legacy solid collector reads back as nothing, because its
+        // authored spec has no rotation to recover. Name the loss instead of letting the count check imply that
+        // some ordinary extrusion went missing.
+        var turnedExtrusions = extrusions.Count(extrusion => !IsAxisAlignedSketchPlane(extrusion));
+        // A sketch that is neither a four-line rectangle nor a circle is real geometry the legacy solid
+        // collector cannot describe: the portable vocabulary reaches it only as an ExtrudedPolygon, and the
+        // legacy authored spec has no ring of sketch lines to recover one from. Name it instead of leaving it
+        // inside the count mismatch, where it reads as an extrusion that merely went missing.
+        var unportableProfiles = extrusions.Count(extrusion => !IsPortableSketchProfile(extrusion));
+        if (unportableProfiles > 0) {
+            unmodeled.Add(new FamilyModelUnmodeledFact {
+                Reason = "extrusion-profile-not-portable",
+                Path = "$.solids",
+                Facts = new Dictionary<string, string>(StringComparer.Ordinal) {
+                    ["extrusions"] = unportableProfiles.ToString()
+                }
+            });
+        }
+
+        if (turnedExtrusions > 0) {
+            unmodeled.Add(new FamilyModelUnmodeledFact {
+                Reason = "frame-rotation-not-observable",
+                Path = "$.frames",
+                Facts = new Dictionary<string, string>(StringComparer.Ordinal) {
+                    ["turnedExtrusions"] = turnedExtrusions.ToString()
+                }
+            });
+        }
+
         var recognizedConnectorStubs = RawConnectorUnitInference.MatchOwnedStubs(document)
             .Values
             .Select(match => match.Extrusion.Id)
@@ -516,6 +683,43 @@ public static class FamilyModelCaptureExtensions {
                 ["connectorStubs"] = recognizedConnectorStubs.ToString()
             }
         });
+    }
+
+    /// <summary>
+    ///     True when the extrusion's sketch sits on a plane whose axes are the family axes. The portable
+    ///     `rotation` clause is symbolic, so a turned sketch cannot be captured back into it.
+    /// </summary>
+    private static bool IsAxisAlignedSketchPlane(Extrusion extrusion) {
+        var plane = extrusion.Sketch?.SketchPlane?.GetPlane();
+        if (plane == null)
+            return true;
+
+        return IsFamilyAxis(plane.Normal) && IsFamilyAxis(plane.XVec);
+    }
+
+    /// <summary>
+    ///     True when the extrusion's sketch is one of the two shapes the portable vocabulary and the legacy
+    ///     plan agree on: a rectangle authored as four lines, or a circle authored as arcs. Anything else is
+    ///     an `ExtrudedPolygon` at best, and capture cannot author one yet.
+    /// </summary>
+    private static bool IsPortableSketchProfile(Extrusion extrusion) {
+        var profile = extrusion.Sketch?.Profile;
+        if (profile == null)
+            return true;
+
+        var curves = profile.Cast<CurveArray>().SelectMany(loop => loop.Cast<Curve>()).ToList();
+        if (curves.Count == 0)
+            return true;
+
+        return (curves.Count == 4 && curves.TrueForAll(curve => curve is Line)) ||
+               curves.TrueForAll(curve => curve is Arc);
+    }
+
+    private static bool IsFamilyAxis(XYZ vector) {
+        var direction = vector.Normalize();
+        return Math.Abs(Math.Abs(direction.X) - 1) < 1e-6 ||
+               Math.Abs(Math.Abs(direction.Y) - 1) < 1e-6 ||
+               Math.Abs(Math.Abs(direction.Z) - 1) < 1e-6;
     }
 
     private static bool IsFaceHostPlaceholderExtrusion(Document document, Extrusion extrusion) {
@@ -547,6 +751,14 @@ public static class FamilyModelCaptureExtensions {
             (string.Equals(category, "Generic Models", StringComparison.OrdinalIgnoreCase) ||
              string.Equals(category, "Air Terminals", StringComparison.OrdinalIgnoreCase)))
             return "Generic Model face based";
+        // Wall-hosted rows. Revit ships one wall-based template per category, named "<Category> wall based",
+        // and the category is observable while the template path is not — so the pair names the template.
+        if (placement == FamilyModelPlacement.WallHosted &&
+            string.Equals(category, "Plumbing Fixtures", StringComparison.OrdinalIgnoreCase))
+            return "Plumbing Fixture wall based";
+        if (placement == FamilyModelPlacement.WallHosted &&
+            string.Equals(category, "Generic Models", StringComparison.OrdinalIgnoreCase))
+            return "Generic Model wall based";
 
         unmodeled.Add(new FamilyModelUnmodeledFact {
             Reason = "template-convention-unknown",
