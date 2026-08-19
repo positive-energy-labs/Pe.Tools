@@ -1,17 +1,28 @@
 // The takeoff run browser — the one /runs surface. A sheet of two-column zone cards is the page
 // body, grouped into level sections; the PLAN docks collapsible + resizable at the TOP (atlas
-// presentation law); the LEDGER docks collapsible at the BOTTOM, and its row marks ARE the run
-// selector. A/B against the chronological predecessor is the DEFAULT state, not a mode you enter:
-// clearing the baseline never shifts the layout, it only empties the A side of each card.
+// presentation law); the STAGING TRAY docks collapsible at the RIGHT of the A/B section
+// (feedback round-2 ruling: tray won, deck and ledger variants died as chrome); the LEDGER
+// docks collapsible at the BOTTOM, and its row marks ARE the run selector. A/B against the
+// chronological predecessor is the DEFAULT state, not a mode you enter: clearing the baseline
+// never shifts the layout, it only empties the A side of each card.
 //
-// Underlay law: every canvas underlay is DESATURATED — received ink is a solid mid-gray, invented
-// closures are lighter + screened (honesty survives the muting: solid = drawn/received, screened =
-// synthetic/invented). SVG decisions are rebalanced to read against the muted paper. The raster
-// layer is togglable. Chrome is light-mode role tokens.
+// Lens vs pin (feedback round-2 state model): the page's A/B selection is a viewing LENS;
+// staged items PIN their pair at stage time and switching the lens never alters the stage.
+// "Review staged" flips the sheet to a single-column layout of the staged items at their
+// pinned pairs — same ZoneCard, two layouts (the deck's surviving UX).
+//
+// Underlay law (round-2 revision): every canvas underlay is DESATURATED — received ink is the
+// only near-opaque neutral; invented closures are translucent warm tints (the round-1
+// checkerboard screening died: "the dithering is confusing"). Honesty survives the change of
+// treatment: solid dark = drawn/received, pale translucent = synthetic/invented. SVG decisions
+// are rebalanced to read against the muted paper. The raster layer is togglable. Chrome is
+// light-mode role tokens.
 //
 // Promoted from the round-2 `combo` prototype at round close, 2026-08-17 — the three round-1
 // variants (sheet/ledger/light) and the variant switcher are deleted; git history holds them at
-// a26916e/33139e2. Open stand-ins are ledgered in docs/features/takeoff-runs/SHIMS.md.
+// a26916e/33139e2. The feedback round-1 variants (?fb=tray|deck|ledger + switcher) died at the
+// round-2 ruling; history holds them at 34ce188. Open stand-ins are ledgered in
+// docs/features/takeoff-runs/SHIMS.md.
 import {
   type CSSProperties,
   type Dispatch,
@@ -35,6 +46,27 @@ import { cn } from "#/lib/utils";
 // pure presentation — no ops coupling — so /runs borrows it rather than forking a second one.
 import { EmptyState } from "#/ops/primitives";
 
+import { hydrateFromSet } from "./feedback/hydrate";
+import { fb, itemKey, type StagedItem, useFb } from "./feedback/staging";
+import { type Lens, Tray, TrayCollapsed } from "./feedback/tray";
+import {
+  ACCEPT_FILL,
+  ACCEPT_STROKE,
+  HELD_FILL,
+  HELD_STROKE,
+  INK_M,
+  LABEL,
+  MIST,
+  PAPER,
+  roomTone,
+  SEAL_M,
+  UNKNOWN_FILL,
+  UNKNOWN_STROKE,
+  VOID_FILL,
+  VOID_STROKE,
+  ZONE_STROKE,
+  CLOSE_M,
+} from "./palette";
 import {
   boardSummary,
   fetchRunIndex,
@@ -56,7 +88,6 @@ import {
   type RunScores,
   scoreBoards,
   toPx,
-  type TsvRoom,
   type ZoneGeometry,
   type ZonePair,
   type ZoneRecord,
@@ -64,43 +95,13 @@ import {
   zoneViewport,
 } from "./world";
 
-// ---------------------------------------------------------------------------
-// Palette. The canvas is a visual canvas (COLOR-ROLES: its own resting palette), but round 2's
-// underlay law mutes the EVIDENCE so the DECISIONS can be read. Received ink stays the only
-// solid raster; invented closures stay screened — gray vs lighter screened keeps the honesty
-// semantics even desaturated.
-// ---------------------------------------------------------------------------
-
-const PAPER = "#fcfbf9";
-// evidence (muted): solid mid-gray ink; closures lighter, faint residual hue, screened
-const INK_M: [number, number, number, number] = [122, 118, 114, 235];
-const SEAL_M: [number, number, number, number] = [184, 126, 118, 175];
-const CLOSE_M: [number, number, number, number] = [196, 178, 152, 165];
-// decisions (rebalanced UP against the muted paper)
-const ACCEPT_STROKE = "rgb(23,98,135)";
-const ACCEPT_FILL = "rgba(35,118,158,0.12)";
-const HELD_STROKE = "#a97e16";
-const HELD_FILL = "rgba(196,150,44,0.10)";
-const VOID_STROKE = "rgba(146,142,138,0.7)";
-const VOID_FILL = "rgba(146,142,138,0.07)";
-// disposition-unknown rooms: pre-column packages (SHIMS.md #3). Neutral warm gray — deliberately
-// NOT the accepted blue; unknown must never dress as accepted.
-const UNKNOWN_STROKE = "rgba(120,113,108,0.9)";
-const UNKNOWN_FILL = "rgba(120,113,108,0.08)";
-const ZONE_STROKE = "rgb(108,52,140)";
-const MIST = "rgba(100,116,139,0.14)"; // focus-is-mist law, even on the drawing
-const LABEL = "rgba(120,113,108,0.85)";
+// Palette lives in ./palette — shared with the export compositor so the PNGs an agent reads
+// match the screen (round-1 friction #1 resolved). UNKNOWN_STROKE/UNKNOWN_FILL live there too:
+// the export must not dress a disposition-unknown room as accepted either (SHIMS.md #3).
 
 const UNKNOWN_TITLE =
   "Disposition unknown — this package predates the persisted ROOM disposition column. " +
   "Not drawn as accepted; re-run the harness for a package that says which rooms it accepted.";
-
-/** Room tones follow the PERSISTED disposition column only. */
-function roomTone(disposition: TsvRoom["disposition"]): { stroke: string; fill: string } {
-  if (disposition === "accepted") return { stroke: ACCEPT_STROKE, fill: ACCEPT_FILL };
-  if (disposition === "held") return { stroke: HELD_STROKE, fill: HELD_FILL };
-  return { stroke: UNKNOWN_STROKE, fill: UNKNOWN_FILL };
-}
 
 const PX_PER_FT = 4; // plan world px per model foot at scale=1 (1px per 0.25ft cell)
 
@@ -188,6 +189,15 @@ function pairingCaveat(a: Partiality, b: Partiality): string | null {
   return "The current run (B) is a partial (or possibly partial) package paired against a full baseline — the Δs measure the missing zones, not the knobs.";
 }
 
+/** How a STAGED pair was matched. A staged item snapshots the two ZoneRecords, not the pairing
+ * that produced them, so this re-derives it: two v4-keyed sides carrying the SAME zoneKey were
+ * matched by stable identity; anything else came from the positional-name fallback and must say
+ * so on the review card exactly as it does on the sheet (SHIMS.md #2 close). */
+function stagedPairedBy(item: StagedItem): "key" | "name" {
+  const key = item.a?.zoneKey;
+  return key && item.b?.zoneKey === key ? "key" : "name";
+}
+
 /** Did the zone materially move between the two runs? (ledger's materiality donation) */
 function materiallyChanged(a: ZoneRecord | null, b: ZoneRecord | null): boolean {
   if (!a || !b) return true;
@@ -257,14 +267,41 @@ function Delta({
 // SVG: rebalanced decision strokes on top. One shared viewport so layers cannot drift.
 // ---------------------------------------------------------------------------
 
-function ZonePanel(props: {
+/** The instant room-id popover (round-2 change #1): the native <title> tooltip "displays too
+ * slowly to be useful" — this follows the cursor with zero delay whenever it is over a
+ * flaggable element, showing the element id (the DATA) and nothing else. */
+type PanelHover = { label: string; flaggable: boolean; flagged: boolean; x: number; y: number };
+
+export function ZonePanel(props: {
   runId: string;
   zone: ZoneRecord;
   maxW: number;
   maxH: number;
   underlay: boolean;
+  /** Staged-item key — when set AND that exact pair is staged, rooms/residues become
+   * flaggable (click toggles; flagged = alarm family). Flags land on B only. */
+  fbKey?: string;
 }) {
   const { runId, zone, maxW, maxH, underlay } = props;
+  const { items } = useFb();
+  const stagedItem = props.fbKey ? (items.find((i) => i.key === props.fbKey) ?? null) : null;
+  const flags = useMemo(() => new Set(stagedItem?.flags ?? []), [stagedItem]);
+  const toggleFlag = (el: string) => {
+    if (stagedItem) fb.toggleFlag(stagedItem.key, el);
+  };
+  const [hover, setHover] = useState<PanelHover | null>(null);
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const trackHover = (label: string, flagged: boolean) => (e: React.PointerEvent) => {
+    const rect = hostRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setHover({
+      label,
+      flaggable: stagedItem !== null,
+      flagged,
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    });
+  };
   const vp: ZoneViewport = useMemo(() => {
     const pad = 4;
     const wFt = zone.MaxX - zone.MinX + pad * 2;
@@ -318,9 +355,9 @@ function ZonePanel(props: {
       // closure components < 0.25 sf; here single-cell closure speckle paints as-is (muted, at
       // least). The two renderers therefore disagree about what a closure "looks like".
       try {
-        if (close) paintRaster(ctx, close, vp, CLOSE_M, true);
-        if (seals) paintRaster(ctx, seals, vp, SEAL_M, true);
-        if (ink) paintRaster(ctx, ink, vp, INK_M, false);
+        if (close) paintRaster(ctx, close, vp, CLOSE_M);
+        if (seals) paintRaster(ctx, seals, vp, SEAL_M);
+        if (ink) paintRaster(ctx, ink, vp, INK_M);
       } catch {
         // evidence layer failed — the decision fills underneath stay visible
       }
@@ -332,6 +369,7 @@ function ZonePanel(props: {
 
   return (
     <div
+      ref={hostRef}
       className="relative shrink-0 overflow-hidden"
       style={{ width: maxW, height: maxH, background: PAPER, borderRadius: 2 }}
     >
@@ -349,30 +387,52 @@ function ZonePanel(props: {
           {geom?.rooms.map((room) => {
             const rings = geom.polys.get(room.id);
             if (!rings) return null;
+            // A flag is DATA — the element id, not pixels. Hover-id is always live; the click
+            // arms only when this exact pair is staged.
+            const flagged = flags.has(`room:${room.id}`);
+            // Unflagged, the room wears its PERSISTED disposition (SHIMS.md #3): unknown is a
+            // dashed neutral that carries the caveat, never the accepted blue. Flagged, the
+            // alarm overrides — a user's flag is louder than a provenance tint.
             const unknown = room.disposition === null;
+            const tone = roomTone(room.disposition);
             return (
               <path
                 key={room.id}
                 d={ringPath(vp, rings.map((r) => r.points))}
-                fill="none"
-                stroke={roomTone(room.disposition).stroke}
-                strokeWidth={unknown ? 1.25 : 1.75}
-                strokeDasharray={unknown ? "2 2" : undefined}
+                fill={flagged ? "var(--r-alarm)" : "none"}
+                fillOpacity={flagged ? 0.18 : 0}
+                stroke={flagged ? "var(--r-alarm)" : tone.stroke}
+                strokeWidth={flagged ? 2.5 : unknown ? 1.25 : 1.75}
+                strokeDasharray={!flagged && unknown ? "2 2" : undefined}
+                pointerEvents="all"
+                style={{ cursor: stagedItem ? "crosshair" : "default" }}
+                onPointerMove={trackHover(`room ${room.id}`, flagged)}
+                onPointerLeave={() => setHover(null)}
+                onClick={stagedItem ? () => toggleFlag(`room:${room.id}`) : undefined}
               >
                 {unknown ? <title>{UNKNOWN_TITLE}</title> : null}
               </path>
             );
           })}
-          {geom?.residues.map((res) => (
-            <path
-              key={res.id}
-              d={ringPath(vp, res.loops)}
-              fill="none"
-              stroke={res.reason === "rejected" ? HELD_STROKE : VOID_STROKE}
-              strokeWidth={res.reason === "rejected" ? 1.6 : 0.75}
-              strokeDasharray={res.reason === "rejected" ? "4 3" : undefined}
-            />
-          ))}
+          {geom?.residues.map((res) => {
+            const flagged = flags.has(`residue:${res.id}`);
+            return (
+              <path
+                key={res.id}
+                d={ringPath(vp, res.loops)}
+                fill={flagged ? "var(--r-alarm)" : "none"}
+                fillOpacity={flagged ? 0.14 : 0}
+                stroke={flagged ? "var(--r-alarm)" : res.reason === "rejected" ? HELD_STROKE : VOID_STROKE}
+                strokeWidth={flagged ? 2.5 : res.reason === "rejected" ? 1.6 : 0.75}
+                strokeDasharray={!flagged && res.reason === "rejected" ? "4 3" : undefined}
+                pointerEvents="all"
+                style={{ cursor: stagedItem ? "crosshair" : "default" }}
+                onPointerMove={trackHover(`residue ${res.id}`, flagged)}
+                onPointerLeave={() => setHover(null)}
+                onClick={stagedItem ? () => toggleFlag(`residue:${res.id}`) : undefined}
+              />
+            );
+          })}
           <path
             d={ringPath(vp, zone.ZoneLoops as [number, number][][])}
             fill="none"
@@ -383,6 +443,22 @@ function ZonePanel(props: {
           />
         </svg>
       </div>
+      {/* Instant id popover — replaces the slow native tooltip on these elements. */}
+      {hover && (
+        <div
+          className="tele pointer-events-none absolute z-10 whitespace-nowrap border bg-background/95 px-1.5 py-0.5 text-[10px] shadow-sm"
+          style={{
+            left: Math.min(hover.x + 10, maxW - 90),
+            top: Math.min(hover.y + 12, maxH - 22),
+            borderColor: hover.flagged ? "var(--r-alarm)" : "var(--line-2)",
+            color: hover.flagged ? "var(--r-alarm)" : "var(--foreground)",
+            borderRadius: 2,
+          }}
+        >
+          {hover.flagged ? "⚑ " : ""}
+          {hover.label}
+        </div>
+      )}
     </div>
   );
 }
@@ -399,9 +475,72 @@ function MissingPanel(props: { w: number; h: number; label: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// Stage button — pins the card's CURRENT pair into the staging tray. The lens is a view;
+// the stage is a pin (round-2 state model). When the zone is already staged under a
+// different pair, a subtle ⚑ mark says so — clicking it swings the lens to that pair.
+// ---------------------------------------------------------------------------
+
+function StageButton(props: {
+  name: string;
+  runA: string | null;
+  runB: string;
+  a: ZoneRecord | null;
+  b: ZoneRecord | null;
+  onSwing: (item: StagedItem) => void;
+}) {
+  const { items } = useFb();
+  const key = itemKey(props.name, props.runA, props.runB);
+  const staged = items.some((i) => i.key === key);
+  const otherPairs = items.filter((i) => i.zone === props.name && i.key !== key);
+  return (
+    <>
+      {otherPairs.length > 0 && (
+        <button
+          type="button"
+          onClick={() => props.onSwing(otherPairs[0]!)}
+          title={`This zone is staged under ${otherPairs.length} other A/B pair${otherPairs.length === 1 ? "" : "s"} (pinned at stage time; the lens is only a view). Click to swing the lens to the pinned pair.`}
+          className="tele shrink-0 text-[10px]"
+          style={{ color: "var(--st-warn)" }}
+        >
+          ⚑{otherPairs.length}≠
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() =>
+          fb.toggleStage({
+            key,
+            zone: props.name,
+            level: (props.b ?? props.a)?.Level ?? "?",
+            runA: props.runA,
+            runB: props.runB,
+            a: props.a,
+            b: props.b,
+          })
+        }
+        title={
+          staged
+            ? "Staged for export (this exact A/B pair is pinned) — click to unstage. Click rooms/residues on the B panel to flag them."
+            : "Stage this zone's current A/B pair for the feedback export. The pair is pinned at stage time; switching the lens afterwards never alters it."
+        }
+        className="tele shrink-0 border px-1.5 text-[10px]"
+        style={{
+          borderRadius: 2,
+          borderColor: staged ? "var(--r-alarm)" : "var(--line-2)",
+          color: staged ? "var(--r-alarm)" : "var(--st-meta)",
+        }}
+      >
+        {staged ? "staged ✓" : "＋ stage"}
+      </button>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Zone card — the round-2 rich summary. A|B panels side by side by DEFAULT; with the baseline
 // cleared the single panel spans the same footprint (the page grid never shifts). Stats are a
-// fixed-row A/B table so the eye can column-scan the whole sheet.
+// fixed-row A/B table so the eye can column-scan the whole sheet. The SAME component renders
+// the review-staged layout — one card, two layouts (round-2 ruling).
 // ---------------------------------------------------------------------------
 
 type StatRow = {
@@ -469,13 +608,19 @@ function ZoneCard(props: {
   panelHalfW: number;
   panelH: number;
   underlay: boolean;
-  onLocate: (zone: ZoneRecord) => void;
+  /** Round-2 change #3: "focus" died, HIGHLIGHT is a toggle — persistent until clicked again
+   * or another zone is chosen; the button state syncs with the plan's highlight. */
+  highlighted: boolean;
+  onToggleHighlight: (zone: ZoneRecord) => void;
+  onSwing: (item: StagedItem) => void;
 }) {
-  const { name, a, b, pairedBy, runA, runB, panelFullW, panelHalfW, panelH, underlay, onLocate } = props;
+  const { name, a, b, pairedBy, runA, runB, panelFullW, panelHalfW, panelH, underlay } = props;
   const comparing = runA !== null;
   const deltaSf = comparing && a && b ? Math.round(b.AcceptedSqft - a.AcceptedSqft) : null;
   const locatable = b ?? a;
   const knobs = b ? adaptedKnobs(b) : [];
+  // The staged-item key for THIS pair. Flags land on the B side — the run under judgment.
+  const fbKey = itemKey(name, runA, runB);
 
   return (
     <div
@@ -512,17 +657,29 @@ function ZoneCard(props: {
             Δ<Delta value={deltaSf} suffix=" sf" />
           </span>
         ) : null}
-        {locatable ? (
-          <button
-            type="button"
-            onClick={() => onLocate(locatable)}
-            title="Open the plan dock (if closed) and center this zone on its level."
-            className="tele ml-auto shrink-0 border px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
-            style={{ borderColor: "var(--line-2)", borderRadius: 2 }}
-          >
-            ⌖ plan
-          </button>
-        ) : null}
+        <span className="ml-auto flex shrink-0 items-center gap-1.5">
+          <StageButton name={name} runA={runA} runB={runB} a={a} b={b} onSwing={props.onSwing} />
+          {locatable ? (
+            <button
+              type="button"
+              onClick={() => props.onToggleHighlight(locatable)}
+              title={
+                props.highlighted
+                  ? "Highlighted on the plan — click to clear the highlight."
+                  : "Highlight this zone on the plan (opens + centers the plan dock). Stays lit until you click again, pick another zone, or hit esc."
+              }
+              className={cn(
+                "tele shrink-0 border px-1.5 text-[10px]",
+                props.highlighted
+                  ? "bg-secondary text-secondary-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              style={{ borderColor: props.highlighted ? "var(--st-meta)" : "var(--line-2)", borderRadius: 2 }}
+            >
+              ⌖ highlight
+            </button>
+          ) : null}
+        </span>
       </div>
 
       {/* Panel strip: A|B when a baseline is set; the single panel SPANS the same footprint
@@ -536,13 +693,13 @@ function ZoneCard(props: {
               <MissingPanel w={panelHalfW} h={panelH} label="not in baseline" />
             )}
             {b ? (
-              <ZonePanel runId={runB} zone={b} maxW={panelHalfW} maxH={panelH} underlay={underlay} />
+              <ZonePanel runId={runB} zone={b} maxW={panelHalfW} maxH={panelH} underlay={underlay} fbKey={fbKey} />
             ) : (
               <MissingPanel w={panelHalfW} h={panelH} label="not in current" />
             )}
           </>
         ) : b ? (
-          <ZonePanel runId={runB} zone={b} maxW={panelFullW} maxH={panelH} underlay={underlay} />
+          <ZonePanel runId={runB} zone={b} maxW={panelFullW} maxH={panelH} underlay={underlay} fbKey={fbKey} />
         ) : (
           <MissingPanel w={panelFullW} h={panelH} label="not in run" />
         )}
@@ -738,8 +895,8 @@ function loadLevelCanvas(runId: string, zone: ZoneRecord): Promise<{ canvas: HTM
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("2d context unavailable");
       // Paint order is the law: invented closures under, received ink LAST.
-      if (close) paintRaster(ctx, close, vp, CLOSE_M, true);
-      if (seals) paintRaster(ctx, seals, vp, SEAL_M, true);
+      if (close) paintRaster(ctx, close, vp, CLOSE_M);
+      if (seals) paintRaster(ctx, seals, vp, SEAL_M);
       paintRaster(ctx, ink, vp, INK_M);
       return { canvas, ink };
     })();
@@ -790,16 +947,6 @@ function useLevelData(runId: string | null, level: string | null): LevelData | n
     };
   }, [runId, level]);
   return data;
-}
-
-function levelOrder(report: RunReport): string[] {
-  const idx = new Map<string, number>();
-  for (const z of report.Zones) {
-    if (idx.has(z.Level)) continue;
-    const m = /Level_(\d+)_/.exec(z.Ink);
-    idx.set(z.Level, m ? Number(m[1]) : 99);
-  }
-  return [...idx.keys()].sort((a, b) => (idx.get(a) ?? 99) - (idx.get(b) ?? 99));
 }
 
 function rectPath(vp: ZoneViewport, z: ZoneRecord): string {
@@ -1053,8 +1200,8 @@ function PlanPane(props: {
 
 /** The key. Round-2 brief: takeoffs' key is bad — this one says what each mark MEANS, groups
  * evidence (the run's raster) apart from decisions (SVG), and states the honesty rule out
- * loud instead of leaving it to induction. */
-function LegendFloater(props: { underlay: boolean }) {
+ * loud instead of leaving it to induction. Hideable (atlas floater treatment, change #5). */
+function LegendFloater(props: { underlay: boolean; onClose: () => void }) {
   const sw = (bg: string, extra?: CSSProperties) => (
     <span className="inline-block h-2.5 w-4 shrink-0 rounded-[1px]" style={{ background: bg, ...extra }} />
   );
@@ -1075,20 +1222,30 @@ function LegendFloater(props: { underlay: boolean }) {
       className="tele absolute right-2 top-2 flex w-52 flex-col gap-1 border bg-background/95 px-2 py-1.5 text-[10px] text-muted-foreground shadow-sm"
       style={{ borderRadius: 2 }}
     >
-      <span className={cn("font-semibold uppercase tracking-wide", !props.underlay && "line-through opacity-50")}>
-        evidence — the run's raster
+      <span className="flex items-baseline">
+        <span className={cn("font-semibold uppercase tracking-wide", !props.underlay && "line-through opacity-50")}>
+          evidence — the run's raster
+        </span>
+        <button
+          type="button"
+          onClick={props.onClose}
+          title="Hide the key (the plan header's 'key' button brings it back)."
+          className="tele ml-auto text-muted-foreground hover:text-foreground"
+        >
+          ×
+        </button>
       </span>
       <div className={cn("flex flex-col gap-0.5", !props.underlay && "opacity-40")}>
-        {row(sw("rgb(122,118,114)"), "received ink (solid)", "Wall pixels the solver actually received from the DWG. Solid = drawn; muted so decisions stay readable.")}
+        {row(sw("rgb(122,118,114)"), "received ink (solid)", "Wall pixels the solver actually received from the DWG. Solid + dark = drawn; muted so decisions stay readable.")}
         {row(
-          sw("rgba(184,126,118,0.7)", { backgroundImage: "repeating-linear-gradient(45deg, transparent 0 2px, #fff 2px 3px)" }),
+          sw("rgba(187,118,108,0.45)"),
           "door-head seal (invented)",
-          "Closure the solver INVENTED across door openings. Screened = synthetic — it can never read as a drawn wall, even muted.",
+          "Closure the solver INVENTED across door openings. Pale + translucent = synthetic — it can never read as a drawn wall.",
         )}
         {row(
-          sw("rgba(196,178,152,0.7)", { backgroundImage: "repeating-linear-gradient(45deg, transparent 0 2px, #fff 2px 3px)" }),
+          sw("rgba(196,172,128,0.43)"),
           "gap-close (invented)",
-          "Closure the solver INVENTED across wall-run gaps. Screened = synthetic.",
+          "Closure the solver INVENTED across wall-run gaps. Pale + translucent = synthetic.",
         )}
       </div>
       <span className="mt-0.5 font-semibold uppercase tracking-wide">decisions — drawn on top</span>
@@ -1101,15 +1258,20 @@ function LegendFloater(props: { underlay: boolean }) {
         {row(line(ZONE_STROKE, true), "zone — dashed = hold", "Zone boundary. Dashed stroke: triage verdict hold.")}
       </div>
       <span className="mt-0.5 border-t pt-1 text-[9px]" style={{ borderColor: "var(--line-2)" }}>
-        solid = received · screened = invented{props.underlay ? "" : " · underlay hidden"}
+        solid dark = received · pale translucent = invented{props.underlay ? "" : " · underlay hidden"}
       </span>
     </div>
   );
 }
 
 /** Level stats for algo tuning: solved/zones, accepted vs held sf, loudest rejection families
- * on the visible level, and A/B deltas while comparing. */
-function LevelStatsFloater(props: { level: string; cur: LevelData | null; prev: LevelData | null }) {
+ * on the visible level, and A/B deltas while comparing. Hideable (atlas treatment, #5). */
+function LevelStatsFloater(props: {
+  level: string;
+  cur: LevelData | null;
+  prev: LevelData | null;
+  onClose: () => void;
+}) {
   const { level, cur, prev } = props;
   const agg = (data: LevelData | null) => {
     if (!data) return null;
@@ -1134,8 +1296,16 @@ function LevelStatsFloater(props: { level: string; cur: LevelData | null; prev: 
       className="tele absolute bottom-2 right-2 flex w-56 flex-col gap-0.5 border bg-background/95 px-2 py-1.5 text-[11px] shadow-sm"
       style={{ borderRadius: 2 }}
     >
-      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+      <span className="flex items-baseline text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
         {level} — this run
+        <button
+          type="button"
+          onClick={props.onClose}
+          title="Hide the level stats (the plan header's 'stats' button brings them back)."
+          className="tele ml-auto normal-case tracking-normal hover:text-foreground"
+        >
+          ×
+        </button>
       </span>
       <span>
         {b.solved}/{b.zones} zones solve{" "}
@@ -1166,16 +1336,17 @@ function LevelStatsFloater(props: { level: string; cur: LevelData | null; prev: 
   );
 }
 
-/** Zone peek — light.tsx's card plus the closure split and adapted knobs. */
+/** Zone peek — reshaped per round-2 change #6: it sits centered ON the A/B split line, the
+ * zone name centered at top, row labels centered, A values reading toward the A pane and B
+ * values toward the B pane. Single-run (no A) keeps the same centered spine. */
 function ZonePeekFloater(props: {
   zoneName: string;
   b: ZoneRecord;
   a: ZoneRecord | null | undefined;
   comparing: boolean;
-  pinned: boolean;
+  highlighted: boolean;
 }) {
   const { a, b, comparing } = props;
-  const cell = (z: ZoneRecord | null | undefined, f: (z: ZoneRecord) => string) => (z ? f(z) : "—");
   const rows: [string, (z: ZoneRecord) => string][] = [
     ["verdict", (z) => `${z.triage.verdict} (${z.triage.reason})`],
     ["accepted", (z) => `${z.AcceptedRooms}/${z.OracleRooms}r · ${fmtSqft(z.AcceptedSqft)}`],
@@ -1188,52 +1359,53 @@ function ZonePeekFloater(props: {
         `dh ${Math.round(z.closure.doorHeadSqft)} · wall ${Math.round(z.closure.wallRunGapSqft)} · gap ${Math.round(z.closure.gapCloseSqft)} sf`,
     ],
   ];
+  const rejList = (z: ZoneRecord | null | undefined, alignEnd: boolean) =>
+    z ? (
+      <span className={cn("flex flex-col", alignEnd ? "items-end" : "items-start")}>
+        {topRejections(z).map(([k, n]) => (
+          <span key={k}>
+            {k} ×{n}
+          </span>
+        ))}
+        {Object.keys(z.Rejections).length === 0 && <span>none</span>}
+      </span>
+    ) : (
+      "—"
+    );
   const knobs = adaptedKnobs(b);
   return (
     <div
-      className="tele pointer-events-none absolute bottom-2 left-2 w-[26rem] border bg-background/95 p-2 text-[11px] shadow-sm"
+      className="tele pointer-events-none absolute bottom-2 left-1/2 w-[30rem] max-w-[calc(100%-1rem)] -translate-x-1/2 border bg-background/95 p-2 text-[11px] shadow-sm"
       style={{ borderRadius: 2 }}
     >
-      <div className="mb-1 flex items-baseline gap-2">
+      <div className="mb-1 flex flex-col items-center">
         <span className="text-foreground">{props.zoneName}</span>
-        {props.pinned && <span className="text-[10px] text-muted-foreground">pinned · esc</span>}
-        {comparing && <span className="ml-auto text-[10px] text-muted-foreground">A / B</span>}
+        {props.highlighted && <span className="text-[10px] text-muted-foreground">highlighted · esc clears</span>}
       </div>
-      <table className="w-full">
+      <table className="w-full table-fixed">
+        <colgroup>
+          {comparing && <col />}
+          <col className="w-[84px]" />
+          <col />
+        </colgroup>
         <tbody>
           {rows.map(([label, f]) => (
-            <tr key={label}>
-              <td className="pr-2 text-muted-foreground">{label}</td>
-              {comparing && <td className="pr-2 text-foreground">{cell(a, f)}</td>}
-              <td className="text-foreground">{f(b)}</td>
+            <tr key={label} className="align-top">
+              {comparing && <td className="pr-2 text-right text-foreground">{a ? f(a) : "—"}</td>}
+              <td className="text-center text-muted-foreground">{label}</td>
+              <td className={cn("pl-2 text-foreground", comparing ? "text-left" : "text-center")}>{f(b)}</td>
             </tr>
           ))}
-          <tr>
-            <td className="pr-2 align-top text-muted-foreground">rejections</td>
-            {comparing && (
-              <td className="pr-2 align-top text-foreground">
-                {a
-                  ? topRejections(a).map(([k, n]) => (
-                      <span key={k} className="block">
-                        {k} ×{n}
-                      </span>
-                    ))
-                  : "—"}
-              </td>
-            )}
-            <td className="align-top text-foreground">
-              {topRejections(b).map(([k, n]) => (
-                <span key={k} className="block">
-                  {k} ×{n}
-                </span>
-              ))}
-              {Object.keys(b.Rejections).length === 0 && "none"}
-            </td>
+          <tr className="align-top">
+            {comparing && <td className="pr-2 text-right text-foreground">{rejList(a, true)}</td>}
+            <td className="text-center text-muted-foreground">rejections</td>
+            <td className={cn("pl-2 text-foreground", comparing ? "text-left" : "text-center")}>{rejList(b, false)}</td>
           </tr>
           {knobs.length > 0 && (
-            <tr>
-              <td className="pr-2 align-top text-muted-foreground">knobs</td>
-              <td colSpan={comparing ? 2 : 1} className="text-foreground">
+            <tr className="align-top">
+              {comparing && <td />}
+              <td className="text-center text-muted-foreground">knobs</td>
+              <td className={cn("pl-2 text-foreground", comparing ? "text-left" : "text-center")}>
                 {knobs.map(([k, v]) => `${k}=${v}`).join(" · ")}
               </td>
             </tr>
@@ -1253,30 +1425,25 @@ function PlanDock(props: {
   prevId: string | null;
   underlay: boolean;
   focus: FocusRequest | null;
+  /** Round-2 change #4: the level is OWNED by the page (scroll-sync with the sheet body);
+   * the dock renders it and reports tab clicks up. */
+  levels: string[];
+  level: string | null;
+  onPickLevel: (level: string) => void;
+  /** Round-2 change #3: highlight is a page-level toggle shared with the cards. */
+  highlight: string | null;
+  onToggleZone: (zone: string) => void;
 }) {
-  const { curId, prevId, underlay, focus } = props;
+  const { curId, prevId, underlay, focus, levels, level } = props;
   const comparing = prevId !== null;
 
-  const [levels, setLevels] = useState<string[]>([]);
-  const [level, setLevel] = useState<string | null>(null);
   const [view, setView] = useState<View>({ tx: 0, ty: 0, scale: 1 });
   const [hoverZone, setHoverZone] = useState<string | null>(null);
-  const [pinnedZone, setPinnedZone] = useState<string | null>(null);
   const [pendingFocus, setPendingFocus] = useState<FocusRequest | null>(null);
+  // Floaters are hideable, atlas treatment (round-2 change #5): header toggles + × on each.
+  const [showKey, setShowKey] = useState(true);
+  const [showStats, setShowStats] = useState(true);
   const mainRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    let stale = false;
-    void loadRunReport(curId).then((rep) => {
-      if (stale) return;
-      const order = levelOrder(rep);
-      setLevels(order);
-      setLevel((cur) => (cur && order.includes(cur) ? cur : (order.find((l) => l.includes("Main")) ?? order[0] ?? null)));
-    });
-    return () => {
-      stale = true;
-    };
-  }, [curId]);
 
   const dataCur = useLevelData(curId, level);
   const dataPrev = useLevelData(prevId, level);
@@ -1298,12 +1465,10 @@ function PlanDock(props: {
     setView({ scale: s, tx: (paneW - vp.widthPx * s) / 2, ty: (el.clientHeight - vp.heightPx * s) / 2 });
   }, [frame, comparing]);
 
-  // Card → plan linkage (one-directional this round): a locate request switches the level,
-  // pins the zone, and centers the view on its bbox once the level frame is available.
+  // A highlight/locate request centers the view on the zone's bbox once the level frame is
+  // available (the page already switched the level and lit the zone).
   useEffect(() => {
     if (!focus) return;
-    setLevel(focus.zone.Level);
-    setPinnedZone(focus.zone.Zone);
     setPendingFocus(focus);
   }, [focus]);
 
@@ -1327,25 +1492,14 @@ function PlanDock(props: {
     setPendingFocus(null);
   }, [pendingFocus, frame, level, comparing]);
 
-  // esc unpins; input fields keep their keys.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (t && /input|textarea|select/i.test(t.tagName)) return;
-      if (e.key === "Escape") setPinnedZone(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  useEffect(() => {
-    setPinnedZone(null);
     setHoverZone(null);
   }, [level]);
 
-  const onPick = useCallback((z: string) => setPinnedZone((cur) => (cur === z ? null : z)), []);
+  const { onToggleZone } = props;
+  const onPick = useCallback((z: string) => onToggleZone(z), [onToggleZone]);
 
-  const peekZone = hoverZone ?? pinnedZone;
+  const peekZone = hoverZone ?? props.highlight;
   const zoneCur = peekZone ? (dataCur?.zones.find((z) => z.Zone === peekZone) ?? null) : null;
   // A-side twin by the stable zone key when both packages carry it; positional-name matching
   // only as the pre-key fallback (SHIMS.md #2 close).
@@ -1359,7 +1513,8 @@ function PlanDock(props: {
             <button
               key={l}
               type="button"
-              onClick={() => setLevel(l)}
+              onClick={() => props.onPickLevel(l)}
+              title="Show this level on the plan — the sheet scrolls to its section (and scrolling the sheet moves this tab)."
               className={cn(
                 "tele rounded-[2px] px-2 py-0.5 text-[11px]",
                 l === level ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-muted",
@@ -1369,8 +1524,34 @@ function PlanDock(props: {
             </button>
           ))}
         </div>
-        <span className="tele ml-auto text-[10px] text-muted-foreground">
-          drag = pan · wheel = zoom · click zone = pin peek · esc = unpin
+        <span className="ml-auto flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setShowKey((v) => !v)}
+            title="Show/hide the key — what each mark on the plan means."
+            className={cn(
+              "tele rounded-[2px] border px-1.5 py-0.5 text-[10px]",
+              showKey ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-muted",
+            )}
+            style={{ borderColor: "var(--line-2)" }}
+          >
+            key
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowStats((v) => !v)}
+            title="Show/hide the level-stats floater — solve counts, sf, loudest rejections, A/B deltas."
+            className={cn(
+              "tele rounded-[2px] border px-1.5 py-0.5 text-[10px]",
+              showStats ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-muted",
+            )}
+            style={{ borderColor: "var(--line-2)" }}
+          >
+            stats
+          </button>
+          <span className="tele text-[10px] text-muted-foreground">
+            drag = pan · wheel = zoom · click zone = highlight · esc = clear
+          </span>
         </span>
       </div>
       <div ref={mainRef} className="relative flex min-h-0 flex-1">
@@ -1386,7 +1567,7 @@ function PlanDock(props: {
                 setView={setView}
                 underlay={underlay}
                 hoverZone={hoverZone}
-                pinnedZone={pinnedZone}
+                pinnedZone={props.highlight}
                 onHover={setHoverZone}
                 onPick={onPick}
               />
@@ -1401,7 +1582,7 @@ function PlanDock(props: {
                 setView={setView}
                 underlay={underlay}
                 hoverZone={hoverZone}
-                pinnedZone={pinnedZone}
+                pinnedZone={props.highlight}
                 onHover={setHoverZone}
                 onPick={onPick}
               />
@@ -1412,15 +1593,22 @@ function PlanDock(props: {
             loading {level ?? "level"}…
           </div>
         )}
-        <LegendFloater underlay={underlay} />
-        {level && <LevelStatsFloater level={level} cur={dataCur} prev={comparing ? dataPrev : null} />}
+        {showKey && <LegendFloater underlay={underlay} onClose={() => setShowKey(false)} />}
+        {showStats && level && (
+          <LevelStatsFloater
+            level={level}
+            cur={dataCur}
+            prev={comparing ? dataPrev : null}
+            onClose={() => setShowStats(false)}
+          />
+        )}
         {peekZone && zoneCur && (
           <ZonePeekFloater
             zoneName={peekZone}
             b={zoneCur}
             a={zonePrev}
             comparing={comparing}
-            pinned={pinnedZone === peekZone}
+            highlighted={props.highlight === peekZone}
           />
         )}
       </div>
@@ -1941,9 +2129,19 @@ export default function RunBrowser() {
   const [changedOnly, setChangedOnly] = useState(false);
   const [planOpen, setPlanOpen] = useState(true);
   const [ledgerOpen, setLedgerOpen] = useState(false);
+  const [trayOpen, setTrayOpen] = useState(true);
+  /** Review-staged mode (the deck's surviving UX): the sheet flips to single-column staged
+   * items at their PINNED pairs. Same ZoneCard, second layout. */
+  const [review, setReview] = useState(false);
+  /** The page-level zone highlight (change #3) — shared by the plan and every card button. */
+  const [highlight, setHighlight] = useState<string | null>(null);
+  /** The plan's level — page-owned for the sheet↔plan scroll-sync (change #4). */
+  const [planLevel, setPlanLevel] = useState<string | null>(null);
   const [focus, setFocus] = useState<FocusRequest | null>(null);
   const [reportCur, setReportCur] = useState<RunReport | null>(null);
   const [reportPrev, setReportPrev] = useState<RunReport | null>(null);
+  const [linkNote, setLinkNote] = useState<string | null>(null);
+  const { items: stagedItems } = useFb();
   // scores.json per side: undefined = loading, null = the package has no scores.json.
   const [scoresCur, setScoresCur] = useState<RunScores | null | undefined>(undefined);
   const [scoresPrev, setScoresPrev] = useState<RunScores | null | undefined>(undefined);
@@ -1972,6 +2170,35 @@ export default function RunBrowser() {
       })
       .catch((err: unknown) => setError(String(err)));
   }, []);
+
+  // Deep links, applied ONCE against the loaded pool (round-2 state model):
+  //   ?set=<stamp>        — rehydrate staging (editable) from the export manifest. The ONLY
+  //                         persistence lane; re-export mints a new stamp.
+  //   ?a=&b=&zone=        — a STATELESS lens link: sets the A/B lens and highlights/scrolls to
+  //                         the zone. Stages nothing. No multi-pair encoding exists on purpose.
+  const linkApplied = useRef(false);
+  const pendingZone = useRef<string | null>(null);
+  useEffect(() => {
+    if (!runs || linkApplied.current) return;
+    linkApplied.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const set = params.get("set");
+    if (set) {
+      hydrateFromSet(set)
+        .then(() => setTrayOpen(true))
+        .catch((err: unknown) => setLinkNote(`set ${set} did not load: ${String(err)}`));
+    }
+    const b = params.get("b");
+    const a = params.get("a");
+    const has = (id: string | null) => id !== null && runs.some((r) => r.id === id);
+    if (has(b)) setCurId(b);
+    if (has(a) && a !== b) setBaseline(a);
+    const zone = params.get("zone");
+    if (zone) pendingZone.current = zone;
+    if ((b && !has(b)) || (a && !has(a))) {
+      setLinkNote(`deep link run${b && !has(b) ? ` B=${b}` : ""}${a && !has(a) ? ` A=${a}` : ""} is not in the pool`);
+    }
+  }, [runs]);
 
   // A/B is the DEFAULT: "auto" resolves to the run chronologically just before the current one.
   const prevId = useMemo(() => {
@@ -2020,12 +2247,16 @@ export default function RunBrowser() {
     };
   }, [prevId]);
 
-  // ↑/↓ scrub the current run through the pool. (←/→ are free again now that the round-1
-  // variant switcher is gone; left unbound until there is a second axis worth scrubbing.)
+  // ↑/↓ scrub the current run through the pool; esc clears the zone highlight. (←/→ are free
+  // again now that the round-1 switchers are gone.)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && /input|textarea|select/i.test(t.tagName)) return;
+      if (e.key === "Escape") {
+        setHighlight(null);
+        return;
+      }
       if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
       if (!runs || runs.length === 0) return;
       e.preventDefault();
@@ -2050,9 +2281,28 @@ export default function RunBrowser() {
     [],
   );
 
-  const locate = useCallback((zone: ZoneRecord) => {
-    setPlanOpen(true);
-    setFocus((f) => ({ zone, nonce: (f?.nonce ?? 0) + 1 }));
+  /** A staged card's row/mark was clicked: swing the LENS to its pinned pair. The stage is
+   * untouched — the lens is a view (round-2 state model). */
+  const swingLens = useCallback((item: StagedItem) => {
+    setCurId(item.runB);
+    setBaseline(item.runA); // null pin = staged without a baseline → lens comparison off
+  }, []);
+
+  /** Change #3: highlight is a TOGGLE. Activating opens + centers the plan on the zone;
+   * re-clicking (card button or plan polygon) clears it; choosing another zone replaces it. */
+  const toggleHighlight = useCallback((zone: ZoneRecord) => {
+    setHighlight((cur) => {
+      if (cur === zone.Zone) return null;
+      setPlanOpen(true);
+      setPlanLevel(zone.Level);
+      setFocus((f) => ({ zone, nonce: (f?.nonce ?? 0) + 1 }));
+      return zone.Zone;
+    });
+  }, []);
+
+  /** Plan polygon click: same toggle by name (no recentering — the zone is already in view). */
+  const toggleZoneByName = useCallback((zoneName: string) => {
+    setHighlight((cur) => (cur === zoneName ? null : zoneName));
   }, []);
 
   // A/B zone pairing on the stable zone key when both packages carry it (report v4); the
@@ -2076,6 +2326,65 @@ export default function RunBrowser() {
     return order.map((level) => ({ level, zonePairs: byLevel.get(level)! }));
   }, [pairs]);
 
+  // Keep the plan level honest against the current run's levels (and seed it on first load).
+  useEffect(() => {
+    if (levels.length === 0) return;
+    setPlanLevel((cur) => (cur && levels.some((l) => l.level === cur) ? cur : levels[0]!.level));
+  }, [levels]);
+
+  // --- change #4: sheet↔plan scroll-sync (bidirectional, loop-guarded) --------------------
+  // The level section in view drives the plan's level tab; a tab click scrolls the sheet to
+  // that section. `suppressUntil` keeps the programmatic scroll from echoing back as a
+  // tab change mid-flight.
+  const mainScrollRef = useRef<HTMLElement | null>(null);
+  const sectionRefs = useRef(new Map<string, HTMLElement>());
+  const cardRefs = useRef(new Map<string, HTMLElement>());
+  const suppressUntil = useRef(0);
+
+  const onSheetScroll = useCallback(() => {
+    if (review) return; // review mode has no level sections
+    if (Date.now() < suppressUntil.current) return;
+    const main = mainScrollRef.current;
+    if (!main) return;
+    const mainTop = main.getBoundingClientRect().top;
+    let active: string | null = null;
+    for (const [level, el] of sectionRefs.current) {
+      if (el.getBoundingClientRect().top - mainTop <= 90) active = level;
+    }
+    if (active) setPlanLevel((cur) => (cur === active ? cur : active));
+  }, [review]);
+
+  const pickLevel = useCallback((level: string) => {
+    setPlanLevel(level);
+    const el = sectionRefs.current.get(level);
+    if (el) {
+      suppressUntil.current = Date.now() + 900;
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, []);
+
+  // ?zone= deep-link tail: once the current report is in, light the zone, center the plan on
+  // it, and scroll its card into view. Stages nothing.
+  useEffect(() => {
+    const name = pendingZone.current;
+    if (!name || !reportCur) return;
+    pendingZone.current = null;
+    const zone = reportCur.Zones.find((z) => z.Zone === name);
+    if (!zone) {
+      setLinkNote(`deep link zone "${name}" is not in run ${curId ?? "?"}`);
+      return;
+    }
+    toggleHighlight(zone);
+    // After paint: the card grid must exist before the card can be scrolled to.
+    requestAnimationFrame(() => {
+      const el = cardRefs.current.get(name);
+      if (el) {
+        suppressUntil.current = Date.now() + 900;
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    });
+  }, [reportCur, curId, toggleHighlight]);
+
   const board = reportCur ? boardSummary(reportCur) : null;
   const boardPrev = comparing && reportPrev ? boardSummary(reportPrev) : null;
   const prevMeta = runs?.find((r) => r.id === prevId)?.meta ?? null;
@@ -2086,11 +2395,15 @@ export default function RunBrowser() {
   const abCaveat = partCur && partPrev ? pairingCaveat(partPrev, partCur) : null;
 
   // Sheet geometry: measured once at the scroll container, cards derive their panel boxes.
+  // Review mode is the SAME card at single-column width with taller panels — layout, not
+  // mechanics (round-2 ruling).
   const [sheetRef, sheetW] = useElementWidth();
   const cardInnerW = sheetW > 0 ? Math.max(280, Math.floor((sheetW - 32 - 12) / 2) - 18) : 560;
-  const panelFullW = cardInnerW;
-  const panelHalfW = Math.floor((cardInnerW - 8) / 2);
-  const panelH = 220;
+  const reviewInnerW = sheetW > 0 ? Math.max(280, sheetW - 32 - 18) : 1120;
+  const panelFullW = review ? reviewInnerW : cardInnerW;
+  const panelHalfW = Math.floor(((review ? reviewInnerW : cardInnerW) - 8) / 2);
+  const panelH = review ? 440 : 220;
+  const lens: Lens = { curId, prevId };
 
   if (error) {
     return (
@@ -2128,41 +2441,143 @@ export default function RunBrowser() {
     );
   }
 
-  const sheetAndLedger = (
-    <div className="flex size-full min-h-0 flex-col">
-      <main ref={sheetRef} className="min-h-0 flex-1 overflow-y-auto">
-        {reportCur === null ? (
-          <div className="tele p-8 text-sm text-muted-foreground">loading run…</div>
-        ) : (
-          <div className="flex flex-col gap-5 p-4">
-            {levels.map(({ level, zonePairs }) => {
-              const visible = zonePairs.filter((pair) => {
-                if (!comparing || !changedOnly) return true;
-                return materiallyChanged(pair.a, pair.b);
-              });
-              const hidden = zonePairs.length - visible.length;
-              const solved = zonePairs.filter((pair) => pair.b?.triage.verdict === "solve").length;
-              const sf = zonePairs.reduce((sum, pair) => sum + (pair.b?.AcceptedSqft ?? 0), 0);
-              return (
-                <section key={level}>
-                  <div
-                    className="sticky top-0 z-10 -mx-4 mb-2 flex items-baseline gap-3 border-b bg-background px-4 py-1"
-                    style={{ borderColor: "var(--line-2)" }}
+  const setMainRefs = (el: HTMLElement | null) => {
+    sheetRef.current = el as HTMLDivElement | null;
+    mainScrollRef.current = el;
+  };
+
+  // The A/B sheet — normal layout: two-column zone cards under the current lens, grouped into
+  // level sections. Review layout (round-2 ruling): the SAME card, single column at full
+  // width, staged items only, each rendered at its PINNED pair.
+  //
+  // Cards come from `levels`, i.e. from world.pairZones — the stable zoneKey pairing (report v4)
+  // with the positional-name fallback surfaced per card as `pairedBy`. The sheet never re-derives
+  // an A side by name; a keyed miss stays an honest orphan (SHIMS.md #2 close).
+  const sheetBody = (
+    <main ref={setMainRefs} onScroll={onSheetScroll} className="size-full min-h-0 overflow-y-auto">
+      {reportCur === null ? (
+        <div className="tele p-8 text-sm text-muted-foreground">loading run…</div>
+      ) : review ? (
+        <div className="flex flex-col gap-4 p-4">
+          <div className="flex items-baseline gap-3">
+            <h2 className="tele text-xs font-semibold uppercase tracking-wide">
+              review — {stagedItems.length} staged
+            </h2>
+            <span className="tele text-[11px] text-muted-foreground">
+              each item at its pinned A/B pair · the lens is untouched
+            </span>
+            <button
+              type="button"
+              onClick={() => setReview(false)}
+              title="Back to the normal sheet."
+              className="tele ml-auto border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground"
+              style={{ borderColor: "var(--line-2)", borderRadius: 2 }}
+            >
+              ✕ exit review
+            </button>
+          </div>
+          {stagedItems.length === 0 && (
+            <p className="tele text-[11px] text-muted-foreground">
+              Nothing staged anymore — stage zone cards from the normal sheet.
+            </p>
+          )}
+          {stagedItems.map((item) => {
+            const onLens = item.runB === curId && item.runA === prevId;
+            return (
+              <div key={item.key} className="flex flex-col gap-1">
+                <div className="flex items-baseline gap-2">
+                  <button
+                    type="button"
+                    onClick={() => swingLens(item)}
+                    title={
+                      onLens
+                        ? "This item's pinned pair IS the current lens."
+                        : "Pinned pair ≠ current lens — click to swing the lens to this pair (the stage is untouched)."
+                    }
+                    className="tele flex items-baseline gap-2 text-[11px] text-muted-foreground hover:text-foreground"
                   >
-                    <h2 className="tele text-xs font-semibold uppercase tracking-wide">{level}</h2>
-                    <span className="tele text-[11px] text-muted-foreground">
-                      {solved}/{zonePairs.length} solved · {fmtSqft(sf)}
+                    <span>
+                      pinned A {item.runA ?? "(none)"} → B {item.runB}
                     </span>
-                    {hidden > 0 && (
-                      <Chip tone="meta" title="Zones with no material A/B change, hidden by the 'changed only' filter.">
-                        {hidden} unchanged hidden
-                      </Chip>
+                    {!onLens && (
+                      <span style={{ color: "var(--st-warn)" }} title="Pinned pair differs from the page lens.">
+                        ≠ lens
+                      </span>
                     )}
-                  </div>
-                  <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
-                    {visible.map((pair) => (
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => fb.unstage(item.key)}
+                    title="Remove this item from the staged set."
+                    className="tele ml-auto text-[10px] text-muted-foreground hover:text-foreground"
+                  >
+                    ✕ unstage
+                  </button>
+                </div>
+                <ZoneCard
+                  name={item.zone}
+                  a={item.a}
+                  b={item.b}
+                  pairedBy={stagedPairedBy(item)}
+                  runA={item.runA}
+                  runB={item.runB}
+                  panelFullW={panelFullW}
+                  panelHalfW={panelHalfW}
+                  panelH={panelH}
+                  underlay={underlay}
+                  highlighted={highlight === item.zone}
+                  onToggleHighlight={toggleHighlight}
+                  onSwing={swingLens}
+                />
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-5 p-4">
+          {levels.map(({ level, zonePairs }) => {
+            const visible = zonePairs.filter((pair) => {
+              if (!comparing || !changedOnly) return true;
+              return materiallyChanged(pair.a, pair.b);
+            });
+            const hidden = zonePairs.length - visible.length;
+            const solved = zonePairs.filter((pair) => pair.b?.triage.verdict === "solve").length;
+            const sf = zonePairs.reduce((sum, pair) => sum + (pair.b?.AcceptedSqft ?? 0), 0);
+            return (
+              <section
+                key={level}
+                ref={(el) => {
+                  if (el) sectionRefs.current.set(level, el);
+                  else sectionRefs.current.delete(level);
+                }}
+              >
+                <div
+                  className="sticky top-0 z-10 -mx-4 mb-2 flex items-baseline gap-3 border-b bg-background px-4 py-1"
+                  style={{ borderColor: "var(--line-2)" }}
+                >
+                  <h2 className="tele text-xs font-semibold uppercase tracking-wide">{level}</h2>
+                  <span className="tele text-[11px] text-muted-foreground">
+                    {solved}/{zonePairs.length} solved · {fmtSqft(sf)}
+                  </span>
+                  {hidden > 0 && (
+                    <Chip tone="meta" title="Zones with no material A/B change, hidden by the 'changed only' filter.">
+                      {hidden} unchanged hidden
+                    </Chip>
+                  )}
+                </div>
+                <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
+                  {visible.map((pair) => (
+                    <div
+                      key={pair.id}
+                      className="min-w-0"
+                      // Card refs stay NAME-keyed: the ?zone= deep link and the scroll-sync both
+                      // address cards by zone name, which is what a human reads off the plan.
+                      ref={(el) => {
+                        if (el) cardRefs.current.set(pair.name, el);
+                        else cardRefs.current.delete(pair.name);
+                      }}
+                    >
                       <ZoneCard
-                        key={pair.id}
                         name={pair.name}
                         a={comparing ? pair.a : null}
                         b={pair.b}
@@ -2173,16 +2588,56 @@ export default function RunBrowser() {
                         panelHalfW={panelHalfW}
                         panelH={panelH}
                         underlay={underlay}
-                        onLocate={locate}
+                        highlighted={highlight === pair.name}
+                        onToggleHighlight={toggleHighlight}
+                        onSwing={swingLens}
                       />
-                    ))}
-                  </div>
-                </section>
-              );
-            })}
-          </div>
-        )}
-      </main>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
+    </main>
+  );
+
+  const sheetAndLedger = (
+    <div className="flex size-full min-h-0 flex-col">
+      {/* The staging tray — a collapsible right side pane of the A/B section (round-2 ruling:
+          the tray won; it is NOT page-height chrome). */}
+      <PaneSplit
+        axis="horizontal"
+        className="min-h-0 flex-1"
+        resize={{
+          target: "end",
+          defaultSize: 340,
+          minSize: 260,
+          minOtherSize: 360,
+          persist: "pe-runs-tray-w",
+          collapse: {
+            collapsed: !trayOpen,
+            onCollapsedChange: (c) => setTrayOpen(!c),
+            collapsedSize: 30,
+            collapseBelow: 140,
+          },
+        }}
+        start={sheetBody}
+        end={
+          trayOpen ? (
+            <Tray
+              pool={pool}
+              lens={lens}
+              onSwing={swingLens}
+              review={review}
+              onToggleReview={() => setReview((r) => !r)}
+            />
+          ) : (
+            <TrayCollapsed count={stagedItems.length} onExpand={() => setTrayOpen(true)} />
+          )
+        }
+      />
       <LedgerDock
         runs={runs}
         pool={pool}
@@ -2204,6 +2659,11 @@ export default function RunBrowser() {
       >
         <div className="flex flex-wrap items-baseline gap-3">
           <h1 className="tele text-sm font-semibold">runs</h1>
+          {linkNote && (
+            <span className="tele text-[11px]" style={{ color: "var(--st-warn)" }} title="The URL's deep link could not be fully applied.">
+              {linkNote}
+            </span>
+          )}
           {board && (
             <span className="tele text-xs text-muted-foreground">
               B: {board.solved}/{board.zones} solved · {board.acceptedRooms} rooms ·{" "}
@@ -2334,7 +2794,19 @@ export default function RunBrowser() {
                 </button>
               }
             >
-              {planOpen && <PlanDock curId={curId} prevId={prevId} underlay={underlay} focus={focus} />}
+              {planOpen && (
+                <PlanDock
+                  curId={curId}
+                  prevId={prevId}
+                  underlay={underlay}
+                  focus={focus}
+                  levels={levels.map((l) => l.level)}
+                  level={planLevel}
+                  onPickLevel={pickLevel}
+                  highlight={highlight}
+                  onToggleZone={toggleZoneByName}
+                />
+              )}
             </Pane>
           }
           end={sheetAndLedger}

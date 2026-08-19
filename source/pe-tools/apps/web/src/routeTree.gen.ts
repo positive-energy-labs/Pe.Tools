@@ -23,6 +23,7 @@ import { Route as RunsRouteImport } from "./routes/runs";
 import { Route as ScheduleGridRouteImport } from "./routes/schedule-grid";
 import { Route as SettingsRouteImport } from "./routes/settings";
 import { Route as TakeoffsRouteImport } from "./routes/takeoffs";
+import { Route as ApiRunsExportRouteImport } from "./routes/api/runs-export";
 import { Route as DesignSystemArmingRouteImport } from "./routes/design-system_.arming";
 import { Route as DesignSystemPopoversRouteImport } from "./routes/design-system_.popovers";
 import { Route as DesignSystemProposalFlowRouteImport } from "./routes/design-system_.proposal-flow";
@@ -101,6 +102,11 @@ const TakeoffsRoute = TakeoffsRouteImport.update({
   path: "/takeoffs",
   getParentRoute: () => rootRouteImport,
 } as any);
+const ApiRunsExportRoute = ApiRunsExportRouteImport.update({
+  id: "/api/runs-export",
+  path: "/api/runs-export",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const DesignSystemArmingRoute = DesignSystemArmingRouteImport.update({
   id: "/design-system_/arming",
   path: "/design-system/arming",
@@ -153,6 +159,7 @@ export interface FileRoutesByFullPath {
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
   "/takeoffs": typeof TakeoffsRoute;
+  "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
   "/design-system/proposal-flow": typeof DesignSystemProposalFlowRoute;
@@ -176,6 +183,7 @@ export interface FileRoutesByTo {
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
   "/takeoffs": typeof TakeoffsRoute;
+  "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
   "/design-system/proposal-flow": typeof DesignSystemProposalFlowRoute;
@@ -200,6 +208,7 @@ export interface FileRoutesById {
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
   "/takeoffs": typeof TakeoffsRoute;
+  "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system_/arming": typeof DesignSystemArmingRoute;
   "/design-system_/popovers": typeof DesignSystemPopoversRoute;
   "/design-system_/proposal-flow": typeof DesignSystemProposalFlowRoute;
@@ -225,6 +234,7 @@ export interface FileRouteTypes {
     | "/schedule-grid"
     | "/settings"
     | "/takeoffs"
+    | "/api/runs-export"
     | "/design-system/arming"
     | "/design-system/popovers"
     | "/design-system/proposal-flow"
@@ -248,6 +258,7 @@ export interface FileRouteTypes {
     | "/schedule-grid"
     | "/settings"
     | "/takeoffs"
+    | "/api/runs-export"
     | "/design-system/arming"
     | "/design-system/popovers"
     | "/design-system/proposal-flow"
@@ -271,6 +282,7 @@ export interface FileRouteTypes {
     | "/schedule-grid"
     | "/settings"
     | "/takeoffs"
+    | "/api/runs-export"
     | "/design-system_/arming"
     | "/design-system_/popovers"
     | "/design-system_/proposal-flow"
@@ -295,6 +307,7 @@ export interface RootRouteChildren {
   ScheduleGridRoute: typeof ScheduleGridRoute;
   SettingsRoute: typeof SettingsRoute;
   TakeoffsRoute: typeof TakeoffsRoute;
+  ApiRunsExportRoute: typeof ApiRunsExportRoute;
   DesignSystemArmingRoute: typeof DesignSystemArmingRoute;
   DesignSystemPopoversRoute: typeof DesignSystemPopoversRoute;
   DesignSystemProposalFlowRoute: typeof DesignSystemProposalFlowRoute;
@@ -403,6 +416,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof TakeoffsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/api/runs-export": {
+      id: "/api/runs-export";
+      path: "/api/runs-export";
+      fullPath: "/api/runs-export";
+      preLoaderRoute: typeof ApiRunsExportRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/design-system_/arming": {
       id: "/design-system_/arming";
       path: "/design-system/arming";
@@ -481,6 +501,7 @@ const rootRouteChildren: RootRouteChildren = {
   ScheduleGridRoute: ScheduleGridRoute,
   SettingsRoute: SettingsRoute,
   TakeoffsRoute: TakeoffsRoute,
+  ApiRunsExportRoute: ApiRunsExportRoute,
   DesignSystemArmingRoute: DesignSystemArmingRoute,
   DesignSystemPopoversRoute: DesignSystemPopoversRoute,
   DesignSystemProposalFlowRoute: DesignSystemProposalFlowRoute,

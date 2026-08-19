@@ -444,15 +444,19 @@ export function ringPath(vp: ZoneViewport, rings: [number, number][][]): string 
 
 /**
  * Paint a raster's set cells into an ImageData-backed canvas, cropped to the viewport.
- * `screen` skips every other cell in a checkerboard — the "invented, not received" treatment
- * from the contact-sheet color law (render forensics 2026-08-16).
+ *
+ * Underlay-law revision (feedback round 2, kaitpw 2026-08-17): the checkerboard "screening"
+ * this function used to apply to invented closures is DELETED — the dithering read as
+ * confusion, not honesty. The received-vs-invented distinction now lives entirely in the
+ * caller's rgba (palette.ts): received ink is the only near-opaque neutral, invented closures
+ * are translucent warm tints. Solid dark = received/drawn; pale translucent = invented. The
+ * honesty claim survives; only its volume treatment changed.
  */
 export function paintRaster(
   ctx: CanvasRenderingContext2D,
   raster: Raster,
   vp: ZoneViewport,
   rgba: [number, number, number, number],
-  screen = false,
 ): void {
   const image = ctx.getImageData(0, 0, vp.widthPx, vp.heightPx);
   const cellPx = raster.cellFt * vp.pxPerFt;
@@ -462,7 +466,6 @@ export function paintRaster(
   const y1 = Math.min(raster.h, Math.ceil((vp.maxY - raster.minY) / raster.cellFt));
   for (let cy = y0; cy < y1; cy++) {
     for (let cx = x0; cx < x1; cx++) {
-      if (screen && (cx + cy) % 2 === 1) continue;
       if (!rasterBit(raster, cx, cy)) continue;
       const ftX = raster.minX + cx * raster.cellFt;
       const ftY = raster.minY + (cy + 1) * raster.cellFt;
