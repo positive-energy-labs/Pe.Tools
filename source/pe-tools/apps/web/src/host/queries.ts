@@ -14,11 +14,16 @@ import type {
   LoadedFamiliesRequest,
 } from "#/host/loaded-families-view";
 import type {
+  HostOpRequest,
   HostSessionScope,
   OpCallArgs,
   OpKey,
   SettingsTreeRequest,
 } from "@pe/host-contracts/operation-types";
+
+type SchemaRequest = HostOpRequest<"settings.schema">;
+type FieldOptionsRequest = HostOpRequest<"settings.field-options">;
+type ParameterCatalogRequest = HostOpRequest<"settings.parameter-catalog">;
 
 export const HOST_QUERY_KEY = ["pe-host"] as const;
 
@@ -138,5 +143,45 @@ export function useTreeQuery(request: SettingsTreeRequest | undefined, options?:
     ...options,
     enabled: (options?.enabled ?? true) && Boolean(request?.moduleKey && request?.rootKey),
     staleTime: 60_000,
+  });
+}
+
+/* Restored 2026-08-17 (deleted with the settings prototype in 1647344; the ops
+   themselves never left the host catalog). These feed the schema→form pipeline:
+   the module schema shapes the form, field-options populate enums/examples from
+   the connected Revit session. */
+
+export function useSchemaQuery(request: SchemaRequest | undefined, options?: HostQueryOptions) {
+  // The op requires moduleKey/rootKey; while unset the query is disabled and the
+  // placeholder never reaches the wire.
+  return useHostOp("settings.schema", request ?? { moduleKey: "", rootKey: "" }, {
+    ...options,
+    enabled: (options?.enabled ?? true) && Boolean(request?.moduleKey && request?.rootKey),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useFieldOptionsQuery(request: FieldOptionsRequest, options?: HostQueryOptions) {
+  return useHostOp("settings.field-options", request, {
+    ...options,
+    enabled:
+      (options?.enabled ?? true) &&
+      Boolean(request.moduleKey && request.propertyPath && request.sourceKey),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    refetchOnMount: false,
+  });
+}
+
+export function useParameterCatalogQuery(
+  request: ParameterCatalogRequest,
+  options?: HostQueryOptions,
+) {
+  return useHostOp("settings.parameter-catalog", request, {
+    ...options,
+    enabled: (options?.enabled ?? true) && Boolean(request.moduleKey),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    refetchOnMount: false,
   });
 }
