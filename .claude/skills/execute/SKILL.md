@@ -102,10 +102,11 @@ reports a pending approval dialog, `pe-revit live approve` is the unblock (dev s
 - **`vp check` is a gate, not a poll**: `vp check --fix <targets>` once, then `vp check <targets>`
   once. Never loop it (history: one identical check blind-retried 71 times). When diagnosing,
   separate formatter noise from type/lint output.
-- Typegen is session-scoped: `pnpm --filter @pe/host-contracts codegen -- --session
-  <bridgeSessionId>` with the exact target session connected. An untargeted `codegen:check` on
-  5180 can silently compare against the wrong session — never treat it as isolated proof.
-  (dies when: Pe.Tools codegen session target — host ledger)
+- Typegen is two lanes (`7af1eba`): `codegen`/`codegen:check` are OFFLINE projections from
+  `pe-dev ops-catalog` — deterministic, no session involved, and they silently swallow a
+  `--session` arg (drive B-10); `codegen:verify-live -- --session <bridgeSessionId>` is the
+  session-targeted parity check against a running host. Name the lane in any typegen proof
+  claim. (dies when: Pe.Tools offline codegen refuses unused `--session` — host ledger)
 
 ## Host ops and scripts
 

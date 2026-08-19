@@ -370,17 +370,17 @@ installer/package lane or `pea --installed ...`.
 
 ## Contract decisions (runtime op catalog)
 
-The `pe-dev codegen` tier is gone. The connected Revit session is the source of truth for the whole cross-language contract: C# `BridgeOp` fields/`[BridgeOperation]` methods self-register at startup, and the TS host serves the live catalog — request/response JSON Schemas included — from `GET /ops` (rationale: `docs/features/host/LEDGER.md`).
-
-TypeScript compile-time types are a checked-in lockfile generated from that live catalog:
+The runtime contract self-registers: C# `BridgeOp` fields/`[BridgeOperation]` methods register at startup, and the TS host serves the live catalog — request/response JSON Schemas included — from `GET /ops` (rationale: `docs/features/host/LEDGER.md`). Typegen runs two lanes (`7af1eba`):
 
 ```powershell
-# with the exact target session connected — the generator lives in the package it writes
-pnpm --filter @pe/host-contracts codegen -- --session <bridgeSessionId>
-pnpm --filter @pe/host-contracts codegen:check -- --session <bridgeSessionId>
+# offline lane (deterministic; catalog projected from C# source via pe-dev ops-catalog)
+pnpm --filter @pe/host-contracts codegen
+pnpm --filter @pe/host-contracts codegen:check
+# live lane: session-targeted parity check against a running host
+pnpm --filter @pe/host-contracts codegen:verify-live -- --session <bridgeSessionId>
 ```
 
-The generator is `packages/host-contracts/scripts/host-typegen.ts`; root `pnpm typegen:check` delegates to `codegen:check` and runs inside `pnpm ready`. Regenerate after changing a C# request/response DTO or adding an op, and commit the result like a lockfile. Schema required-ness is honest per direction: response properties are required exactly when non-nullable in C#; request properties are required only when non-nullable *and* their constructor parameter has no default (`BridgeOpSchemaGenerator`).
+The generator is `packages/host-contracts/scripts/host-typegen.ts`; root `pnpm typegen:check` delegates to the offline `codegen:check` and runs inside `pnpm ready`. Regenerate after changing a C# request/response DTO or adding an op, and commit the result like a lockfile. Schema required-ness is honest per direction: response properties are required exactly when non-nullable in C#; request properties are required only when non-nullable *and* their constructor parameter has no default (`BridgeOpSchemaGenerator`).
 
 What lives in `@pe/host-contracts`:
 
@@ -388,7 +388,7 @@ What lives in `@pe/host-contracts`:
 - `src/operation-types.ts` — hand-authored TS-only op schemas (settings runtime, APS auth, logs), key guards, `OpKey`/`OpRequestOf`/`OpResponseOf`.
 - `src/contracts/` — hand-authored bridge protocol, product constants, and operation vocabulary.
 
-Session selection is caller scope, not operation payload: `HostSessionScope.bridgeSessionId` travels as the `x-pe-bridge-session-id` header on `POST /call` and `GET /ops`. The catalog response echoes `bridgeSessionId`; typegen refuses an untargeted live catalog or a mismatched echo.
+Session selection is caller scope, not operation payload: `HostSessionScope.bridgeSessionId` travels as the `x-pe-bridge-session-id` header on `POST /call` and `GET /ops`. The catalog response echoes `bridgeSessionId`; the live verify lane refuses a mismatched echo. The offline lane involves no session at all — and today it silently swallows a `--session` arg (host ledger, drive B-10).
 
 ### Field options, examples, and the registration gate
 
@@ -456,4 +456,4 @@ adapter; a future Pea/host workflow can replace it when product use proves the r
 | Link source CLI shims             | `pe-revit path ensure` (once), `pe-revit dev link`, then `pea` / `pe-dev automation`                                              |
 | Run source web dev explicitly     | `pnpm --dir source/pe-tools dev`                                                                                                  |
 | Validate installed `pea` lane     | `pea --installed ...`                                                                                                            |
-| Regenerate host op types          | `pnpm --filter @pe/host-contracts codegen -- --session <bridgeSessionId>`; `codegen:check` uses the same exact selector          |
+| Regenerate host op types          | `pnpm --filter @pe/host-contracts codegen` (offline); `codegen:verify-live -- --session <id>` for live parity                    |
