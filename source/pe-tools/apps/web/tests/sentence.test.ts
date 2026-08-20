@@ -1,7 +1,7 @@
 import { expect, test } from "vite-plus/test";
 
 import { sentenceText } from "../src/components/chat-sentence";
-import { fuseFleet, worldClause, type SandboxRegistryEntry } from "../src/host/fleet";
+import { fuseFleet, worldClause, type SessionRow } from "../src/host/fleet";
 import type { SessionFacts } from "../src/host/target";
 
 const NOW = Date.parse("2026-07-16T12:00:00Z");
@@ -95,27 +95,58 @@ function failedSnapshotAt(completedMs: number) {
 const session = (over: Partial<SessionFacts>): SessionFacts => ({
   sessionId: "s1",
   processId: 100,
-  lane: "sandbox",
-  sandboxId: "sbx-a",
+  lane: "installed",
+  custody: "controlled",
+  sdkSessionId: "sbx-a",
   openDocumentCount: 1,
   ...over,
 });
 
-test("fleet fusion: bridge sessions win, registry fills boot/death; world clause speaks phases", () => {
-  const registry: SandboxRegistryEntry[] = [
-    { id: "sbx-a", state: "ready" }, // bridge-connected — must not double
-    { id: "sbx-b", state: "booting", year: "26" },
-    { id: "sbx-c", state: "dead" },
-  ];
-  const worlds = fuseFleet([session({})], registry);
-  expect(worlds.map((world) => [world.id, world.phase])).toEqual([
-    ["sbx-a", "live"],
-    ["sbx-b", "booting"],
-    ["sbx-c", "dead"],
-  ]);
+/** A `pe-revit session status` row, with only the fields the fusion actually reads set. */
+const row = (over: Partial<SessionRow>): SessionRow =>
+  ({
+    id: "sbx-a",
+    custody: "controlled",
+    phase: "ready",
+    state: "ready",
+    detail: "",
+    lane: "installed",
+    origin: "cli",
+    legs: [],
+    documents: null,
+    activeDocument: null,
+    observedAtUtc: "2026-07-16T12:00:00Z",
+    pid: null,
+    year: null,
+    ...over,
+  }) as SessionRow;
 
-  expect(worldClause(worlds, "sandbox:sbx-a")).toBe(" in a live world (sbx-a)");
-  expect(worldClause(worlds, "sandbox:sbx-b")).toBe(" in a world that is still booting");
-  expect(worldClause(worlds, "sandbox:sbx-c")).toBe(" — its world is gone");
-  expect(worldClause(fuseFleet([], []), "user")).toBe(" — no world is running");
+test("fleet fusion: status rows are the fleet, a bridge session joins its own row; world clause speaks phases", () => {
+  const rows: SessionRow[] = [
+    row({ id: "sbx-a", phase: "ready", state: "ready" }), // bridge-connected — must not double
+    row({ id: "sbx-b", phase: "booting", state: "booting", year: "26" }),
+    row({ id: "sbx-c", phase: "gone", state: "dead" }),
+  ];
+  const worlds = fuseFleet(rows, [session({})]);
+  expect(worlds.map((world) => [world.id, world.phase])).toEqual([
+    ["sbx-a", "ready"],
+    ["sbx-b", "booting"],
+    ["sbx-c", "gone"],
+  ]);
+  // The bridge session joined sbx-a by its reported pe-revit session id; it did not become a
+  // fourth world. That de-duplication is the whole point of the join key.
+  expect(worlds.filter((world) => world.session).map((world) => world.id)).toEqual(["sbx-a"]);
+
+  expect(worldClause(worlds, "session:sbx-a")).toBe(" in a live world (sbx-a)");
+  expect(worldClause(worlds, "session:sbx-b")).toBe(" in a world that is still booting");
+  expect(worldClause(worlds, "session:sbx-c")).toBe(" — its world is gone");
+  expect(worldClause(fuseFleet([], []), "observed")).toBe(" — no world is running");
+});
+
+test("a bridge session with no status row stands alone as its own world", () => {
+  // The user's own Revit: connected to the bridge, absent from the pe-revit registry.
+  const yours = session({ sessionId: "s2", custody: "observed", sdkSessionId: undefined });
+  const worlds = fuseFleet([], [yours]);
+  expect(worlds).toHaveLength(1);
+  expect(worlds[0]).toMatchObject({ id: "s2", custody: "observed", phase: "ready" });
 });

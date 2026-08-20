@@ -391,7 +391,10 @@ export function Sentence({
               }}
             >
               <span className="face-mono t-caption" style={{ color: "var(--r-ink)" }}>
-                {worldName(session)}
+                {worldName({
+                  id: session.sdkSessionId ?? session.sessionId,
+                  custody: session.custody,
+                })}
               </span>{" "}
               <span className="face-mono t-caption" style={{ color: "var(--r-ink-2)" }}>
                 {sessionLabel(session)} · pid {session.processId}

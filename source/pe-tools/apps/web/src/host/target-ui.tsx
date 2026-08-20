@@ -1,9 +1,4 @@
-import {
-  selectorLabel,
-  type SessionFacts,
-  type SessionLane,
-  type TargetResolution,
-} from "#/host/target";
+import { selectorLabel, type Lane, type SessionFacts, type TargetResolution } from "#/host/target";
 
 /**
  * The shared visual vocabulary for targets. One tone per resolution state, used identically
@@ -18,14 +13,15 @@ import {
  * is authorship, and authorship never buys the commit hue.
  */
 
-export const LANE_VIZ: Record<SessionLane, string> = {
+// Keyed by the SDK's `Lane` union, so a lane the SDK adds is a compile error here rather than an
+// undefined viz rung. A session that reported no lane has no lane badge at all — the honest
+// rendering of "not reported", and the reason there is no "unknown" member to colour.
+export const LANE_VIZ: Record<Lane, string> = {
   installed: "3", // slate's viz rung — series identity carried over from cat-slate
   dev: "2",
-  sandbox: "4",
-  unknown: "6", // the label says "unknown"; the taxonomy colour just separates it
 };
 
-export function laneVar(lane: SessionLane): string {
+export function laneVar(lane: Lane): string {
   return `var(--viz-${LANE_VIZ[lane]})`;
 }
 
@@ -64,7 +60,7 @@ export function chipDescriptor(r: TargetResolution): {
   }
 }
 
-export function LiveDot({ tone, lane }: { tone: ChipTone; lane?: SessionLane }) {
+export function LiveDot({ tone, lane }: { tone: ChipTone; lane?: Lane | null }) {
   const color =
     tone === "pinned"
       ? "var(--r-done)"
@@ -85,7 +81,7 @@ export function LiveDot({ tone, lane }: { tone: ChipTone; lane?: SessionLane }) 
   );
 }
 
-export function LaneBadge({ lane }: { lane: SessionLane }) {
+export function LaneBadge({ lane }: { lane: Lane }) {
   return (
     <span
       className="face-mono t-caption"

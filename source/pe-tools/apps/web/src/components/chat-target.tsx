@@ -75,7 +75,8 @@ export function TargetWorld() {
                 lane={s.lane}
               />
               <span className="truncate t-value text-[var(--r-ink)]">{sessionLabel(s)}</span>
-              <LaneBadge lane={s.lane} />
+              {/* A session that reported no lane gets no badge — "not reported" rendered honestly. */}
+              {s.lane ? <LaneBadge lane={s.lane} /> : null}
             </span>
             <span className="whitespace-nowrap t-caption face-mono text-[var(--r-ink-2)]">
               pid {s.processId}

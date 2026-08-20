@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { Provenance, Section } from "#/components/lang/section";
-import type { SessionLane } from "#/host/target";
+import type { Lane } from "#/host/target";
 import { LaneBadge, LiveDot } from "#/host/target-ui";
 import {
   type Column,
@@ -30,10 +30,12 @@ import {
  * not controls: every surface renders observed facts with honest empty states.
  */
 
-const LANES: readonly SessionLane[] = ["dev", "sandbox", "installed", "unknown"];
+// The SDK's lane union, verbatim. A value outside it is NOT a lane — there is no "unknown"
+// member to fall back to, so the badge simply does not render.
+const LANES: readonly Lane[] = ["dev", "installed"];
 
-function laneOf(value: unknown): SessionLane {
-  return LANES.find((lane) => lane === value) ?? "unknown";
+function laneOf(value: unknown): Lane | null {
+  return LANES.find((lane) => lane === value) ?? null;
 }
 
 function MonoAside({ children }: { children: ReactNode }) {
@@ -53,7 +55,7 @@ function HostStatusView({ data }: OpViewProps) {
       label="host"
       aside={
         <span className="flex items-center gap-1.5">
-          <LiveDot tone="implicit" lane={connected ? "dev" : "unknown"} />
+          <LiveDot tone="implicit" lane={connected ? "dev" : null} />
           <FactChip
             tone={connected ? "done" : "caution"}
             title={
@@ -110,7 +112,7 @@ function SessionRow({
   openDocumentCount,
 }: {
   connected: boolean;
-  lane: SessionLane;
+  lane: Lane | null;
   title: string | undefined;
   processId: number | undefined;
   sessionId: string | undefined;
@@ -120,7 +122,7 @@ function SessionRow({
   return (
     <div className="flex min-w-0 items-center gap-2 border-b border-[var(--r-line)] px-2 py-1.5">
       <LiveDot tone={connected ? "implicit" : "dangling"} lane={lane} />
-      <LaneBadge lane={lane} />
+      {lane ? <LaneBadge lane={lane} /> : null}
       <span className="t-value min-w-0 truncate font-medium" title={title}>
         {title ?? <span className="italic text-[var(--r-ink-mute)]">no active document</span>}
       </span>

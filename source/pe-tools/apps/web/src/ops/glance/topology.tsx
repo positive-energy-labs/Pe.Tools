@@ -3,7 +3,7 @@ import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { Provenance } from "#/components/lang/section";
 import { callHostDynamic } from "#/host/client";
-import type { SessionLane } from "#/host/target";
+import type { Lane } from "#/host/target";
 import { LaneBadge, LiveDot } from "#/host/target-ui";
 import { UnrecognizedShape, asNumber, asRecord, asRecords, asString, text } from "#/ops/registry";
 import type { SyntheticOp, SyntheticViewProps } from "#/ops/synthetic";
@@ -16,8 +16,10 @@ import type { SyntheticOp, SyntheticViewProps } from "#/ops/synthetic";
 
 const DOC_FETCH_BOUND = 12;
 
-function asLane(value: unknown): SessionLane {
-  return value === "dev" || value === "sandbox" || value === "installed" ? value : "unknown";
+// The SDK's lane union, verbatim: payload SOURCE only. A value outside it is not a lane, and
+// renders as no lane badge rather than an invented "unknown" one.
+function asLane(value: unknown): Lane | null {
+  return value === "dev" || value === "installed" ? value : null;
 }
 
 /* ── staged per-session document fetch ────────────────────────────────────── */
@@ -96,7 +98,7 @@ function HostNode({ host }: { host: Record<string, unknown> }) {
       <div className="flex items-center gap-1.5">
         <LiveDot tone={connected ? "pinned" : "dangling"} lane={lane} />
         <span className="t-value font-medium">host</span>
-        <LaneBadge lane={lane} />
+        {lane ? <LaneBadge lane={lane} /> : null}
       </div>
       <div className="face-mono t-caption text-[var(--r-ink-2)]" title={exePath}>
         {text(host.runtimeIdentity) || "∅"} · pid {text(host.processId) || "∅"}
@@ -161,7 +163,8 @@ function SessionNode({
 }) {
   const connected = session.connected === true;
   const lane = asLane(session.lane);
-  const sandboxId = asString(session.sandboxId);
+  const sdkSessionId = asString(session.sdkSessionId);
+  const custody = asString(session.custody);
   const openCount = asNumber(session.openDocumentCount);
   return (
     <div
@@ -170,8 +173,19 @@ function SessionNode({
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         <LiveDot tone={connected ? "implicit" : "muted"} lane={lane} />
         <span className="face-mono t-label min-w-0 truncate">{text(session.sessionId)}</span>
-        <LaneBadge lane={lane} />
-        {sandboxId && <FactChip title="sandbox id">{sandboxId}</FactChip>}
+        {lane ? <LaneBadge lane={lane} /> : null}
+        {custody && (
+          <FactChip
+            title={
+              custody === "controlled"
+                ? "pe-revit holds this session's registry receipt and owns its lifecycle"
+                : "pe-revit holds no receipt for this session; it can read status and documents only"
+            }
+          >
+            {custody}
+          </FactChip>
+        )}
+        {sdkSessionId && <FactChip title="pe-revit session id">{sdkSessionId}</FactChip>}
         {!connected && (
           <FactChip tone="caution" title="last seen by the bridge; not reachable now">
             disconnected
