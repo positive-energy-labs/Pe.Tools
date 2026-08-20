@@ -6,7 +6,7 @@ using Pe.Shared.HostContracts.SettingsStorage;
 namespace Pe.Shared.HostContracts.Bridge;
 
 public static class BridgeProtocol {
-    public const int ContractVersion = 19;
+    public const int ContractVersion = 20;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
@@ -42,9 +42,13 @@ public sealed record BridgeStateSnapshot(
 
 // Vocabulary: a SESSION is one Revit process incarnation; a CONNECTION is one WS attachment to it.
 // The broker (TS host) derives the universal session id from hash(pid + processStartUtc); the
-// optional fields below are selectors/metadata (lane, sandboxId, buildStamp), never identity.
-// They are additive optionals — absent fields decode fine on the TS side, so ContractVersion
-// deliberately stays unbumped (the 19→20 bump + mandatory identity is later hardening).
+// optional fields below are selectors/metadata (lane, sdkSessionId, buildStamp), never identity.
+//
+// SdkSessionId is the id `pe-revit session status` prints for this session (SessionRow.id) — the
+// name is QUALIFIED because the unqualified `sessionId` on this wire already means the BROKER's
+// hash. It replaced `sandboxId` at SDK beta.121, which retired the sandbox noun everywhere and
+// renamed the receipt field to `sessionId`. That is a wire rename, not an additive optional, and
+// the version gate is exact-match — hence 19 -> 20.
 public sealed record BridgeRegistrationRequest(
     int ContractVersion,
     int ProcessId,
@@ -52,7 +56,7 @@ public sealed record BridgeRegistrationRequest(
     long? ProcessStartUtcUnixMs = null,
     string? SessionDescriptorPath = null,
     string? Lane = null,
-    string? SandboxId = null,
+    string? SdkSessionId = null,
     string? BuildStamp = null
 );
 

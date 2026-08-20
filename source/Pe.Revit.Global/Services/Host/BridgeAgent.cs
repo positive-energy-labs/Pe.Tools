@@ -12,6 +12,7 @@ using Pe.Shared.Product;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
 using Pe.Shared.StorageRuntime.Modules;
+using Pe.Revit.Loader;
 using Pe.Revit.Tasks;
 using Serilog;
 using System.Net.WebSockets;
@@ -238,6 +239,11 @@ internal sealed class BridgeAgent : IDisposable {
         var startedAt = Stopwatch.GetTimestamp();
         var requestBytes = Encoding.UTF8.GetByteCount(request.PayloadJson);
         var ownsInFlightMarker = false;
+        // Begin BEFORE the busy check and before any response frame: the receipt is what makes this
+        // product op recoverable with `pe-revit op result <requestId>` when the caller dies mid-flight
+        // (a bridge frame reaches exactly one live socket and is gone). A rejected/busy request is a
+        // real request the caller made, so it gets a receipt too.
+        var receipt = BeginOpReceipt(request);
 
         try {
             lock (this._requestExecutionSync) {
@@ -316,6 +322,7 @@ internal sealed class BridgeAgent : IDisposable {
                 request.RequestId,
                 responseBytes
             );
+            CompleteOpReceipt(receipt, "ok", payloadJson);
             await this.WriteFrameAsync(frame, cancellationToken).ConfigureAwait(false);
             Log.Information(
                 "Host bridge wrote response frame: OperationKey={OperationKey}, RequestId={RequestId}",
@@ -348,6 +355,11 @@ internal sealed class BridgeAgent : IDisposable {
                 request.OperationKey,
                 request.RequestId
             );
+            // 423 is Revit already executing something else — the op never ran, so it is `rejected`,
+            // not `failed`. `op result` reads the verdict; conflating them would tell an agent its
+            // op broke when it was simply refused.
+            CompleteOpReceipt(receipt, ex.StatusCode == 423 ? "rejected" : "failed",
+                JsonConvert.SerializeObject(new { error = ex.Message, statusCode = ex.StatusCode }, this._serializerSettings));
             await this.WriteFrameAsync(errorFrame, cancellationToken).ConfigureAwait(false);
         } catch (Exception ex) {
             var totalMs = GetElapsedMilliseconds(startedAt);
@@ -375,12 +387,65 @@ internal sealed class BridgeAgent : IDisposable {
                 request.OperationKey,
                 request.RequestId
             );
+            CompleteOpReceipt(receipt, "failed",
+                JsonConvert.SerializeObject(new { error = ex.Message }, this._serializerSettings));
             await this.WriteFrameAsync(errorFrame, cancellationToken).ConfigureAwait(false);
         } finally {
             lock (this._requestExecutionSync) {
                 if (ownsInFlightMarker)
                     this._inFlightOperationKey = null;
             }
+        }
+    }
+
+    /// <summary>
+    /// Opens an SDK operation receipt for one product bridge request. Best-effort by construction:
+    /// a receipt is diagnostics, and a diagnostics failure must never become a second Revit failure
+    /// on top of the op the user actually asked for. A null handle simply means this op is not
+    /// recoverable through `pe-revit op result`; every other behaviour is unchanged.
+    /// </summary>
+    private static OpReceiptHandle? BeginOpReceipt(BridgeRequest request) {
+        try {
+            using var process = Process.GetCurrentProcess();
+            return OpReceipt.Begin(
+                request.RequestId,
+                request.OperationKey,
+                process.Id,
+                new DateTimeOffset(process.StartTime.ToUniversalTime(), TimeSpan.Zero)
+            );
+        } catch (Exception ex) {
+            // Includes the duplicate-requestId collision Begin throws on: a receipt already exists
+            // for this (requestId, incarnation), so the recoverable record is there either way.
+            Log.Warning(ex, "Operation receipt could not be opened for RequestId={RequestId}.", request.RequestId);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Writes the response payload beside the started receipt and stamps the terminal verdict. The
+    /// SDK writes a terminal record ONLY in roots where the response file already landed, so the
+    /// payload goes to every receipts root first; `pe-revit op result` then answers with the real
+    /// response instead of `response-missing`.
+    /// </summary>
+    private static void CompleteOpReceipt(OpReceiptHandle? receipt, string verdict, string responseJson) {
+        if (receipt is null)
+            return;
+        try {
+            string? written = null;
+            foreach (var directory in SessionFiles.ReceiptDirectories()) {
+                var path = Path.Combine(directory, receipt.ResponseFileName);
+                try {
+                    Directory.CreateDirectory(directory);
+                    File.WriteAllText(path, responseJson);
+                    written ??= path;
+                } catch (Exception ex) {
+                    Log.Warning(ex, "Operation response payload could not be written to '{ResponsePath}'.", path);
+                }
+            }
+            if (written is not null)
+                receipt.TryComplete(verdict, written);
+        } catch (Exception ex) {
+            Log.Warning(ex, "Operation receipt could not be completed with verdict '{Verdict}'.", verdict);
         }
     }
 
@@ -408,10 +473,10 @@ internal sealed class BridgeAgent : IDisposable {
         // derives the session id and returns it in the ack — no client-side id derivation.
         var identity = BridgeSessionIdentity.Resolve();
         Log.Information(
-            "Host bridge session identity: ProcessStartUtcUnixMs={ProcessStartUtcUnixMs}, Lane={Lane}, SandboxId={SandboxId}, BuildStamp={BuildStamp}, SessionDescriptorPath={SessionDescriptorPath}",
+            "Host bridge session identity: ProcessStartUtcUnixMs={ProcessStartUtcUnixMs}, Lane={Lane}, SdkSessionId={SdkSessionId}, BuildStamp={BuildStamp}, SessionDescriptorPath={SessionDescriptorPath}",
             identity.ProcessStartUtcUnixMs,
             identity.Lane,
-            identity.SandboxId,
+            identity.SdkSessionId,
             identity.BuildStamp,
             identity.SessionDescriptorPath
         );
@@ -422,7 +487,7 @@ internal sealed class BridgeAgent : IDisposable {
             identity.ProcessStartUtcUnixMs > 0 ? identity.ProcessStartUtcUnixMs : null,
             identity.SessionDescriptorPath,
             identity.Lane,
-            identity.SandboxId,
+            identity.SdkSessionId,
             identity.BuildStamp
         );
         this._transportSession.Write(new BridgeFrame(

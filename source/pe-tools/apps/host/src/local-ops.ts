@@ -95,7 +95,8 @@ export function getBridgeSessionSummary(bridge: BridgeSessionView) {
   return Effect.succeed({
     buildStamp: bridge.buildStamp ?? null,
     lane: bridge.lane ?? null,
-    sandboxId: bridge.sandboxId ?? null,
+    custody: bridge.custody ?? null,
+    sdkSessionId: bridge.sdkSessionId ?? null,
     activeDocument:
       s?.hasActiveDocument === true
         ? {
@@ -155,7 +156,8 @@ export const listBridgeSessions = Effect.fnUntraced(function* (
         processId: bridge.processId ?? null,
         revitVersion: bridge.state?.revitVersion ?? null,
         runtimeFramework: bridge.state?.runtimeFramework ?? null,
-        sandboxId: bridge.sandboxId ?? null,
+        custody: bridge.custody ?? null,
+        sdkSessionId: bridge.sdkSessionId ?? null,
         sessionId: bridge.sessionId!,
       })),
   };

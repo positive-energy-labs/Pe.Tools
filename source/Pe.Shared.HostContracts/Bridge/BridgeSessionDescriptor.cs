@@ -1,4 +1,4 @@
-using Newtonsoft.Json.Linq;
+﻿using Newtonsoft.Json.Linq;
 
 namespace Pe.Shared.HostContracts.Bridge;
 
@@ -6,9 +6,11 @@ namespace Pe.Shared.HostContracts.Bridge;
 /// Tolerant reader for the two descriptor shapes a Revit session can find beside (or pointed at by)
 /// its loaded payload:
 /// <list type="bullet">
-/// <item>The SDK session/runtime descriptor (<c>&lt;Assembly&gt;.runtime.json</c>, also the file
-/// <c>PE_REVIT_SESSION_DESCRIPTOR</c> points at): <c>assembly</c>/<c>lane</c>/<c>path</c>/
-/// <c>buildStamp</c>(/<c>sandboxId</c> once the sandbox lane exists).</item>
+/// <item>The SDK session receipt / runtime descriptor (<c>&lt;Assembly&gt;.runtime.json</c>, also
+/// the file <c>PE_REVIT_SESSION_DESCRIPTOR</c> points at): <c>assembly</c>/<c>lane</c>/
+/// <c>path</c>/<c>buildStamp</c>/<c>sessionId</c>. Lane is <c>dev</c> or <c>installed</c> — payload
+/// SOURCE only. A launch receipt always carries <c>sessionId</c>; a build-emitted runtime
+/// descriptor never does.</item>
 /// <item>Pe.App's installed runtime deployment descriptor (<c>Pe.App.runtime.json</c> written by
 /// WritePeAppRuntimeDescriptor): <c>runtimeLane</c> only.</item>
 /// </list>
@@ -18,7 +20,7 @@ namespace Pe.Shared.HostContracts.Bridge;
 public sealed record BridgeSessionDescriptor(
     string? Assembly,
     string? Lane,
-    string? SandboxId,
+    string? SessionId,
     string? BuildStamp,
     string? PayloadPath
 ) {
@@ -37,7 +39,7 @@ public sealed record BridgeSessionDescriptor(
         return new BridgeSessionDescriptor(
             ReadString(root, "assembly"),
             NormalizeLane(ReadString(root, "lane") ?? ReadString(root, "runtimeLane")),
-            ReadString(root, "sandboxId"),
+            ReadString(root, "sessionId"),
             ReadString(root, "buildStamp"),
             ReadString(root, "path")
         );

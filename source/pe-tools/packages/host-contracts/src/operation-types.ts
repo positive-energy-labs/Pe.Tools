@@ -426,17 +426,21 @@ export const bridgeSessionsListSchema = Schema.Struct({
       activeDocumentIsFamilyDocument: Schema.optional(Schema.NullOr(Schema.Boolean)),
       // Observation time of the active-document facts — an observation, never computed staleness.
       activeDocumentObservedAtUnixMs: Schema.optional(Schema.NullOr(Schema.Number)),
-      // Observed facts reported at registration: normalized lane (dev | sandbox | installed),
-      // logical sandbox id, and the LOADED payload's build stamp. The host never computes
-      // staleness from these — the SDK owns desired-state/freshness.
+      // Observed facts reported at registration: the SDK's lane (dev | installed — payload SOURCE
+      // only), the pe-revit session id when this payload was launched by pe-revit, and the LOADED
+      // payload's build stamp. The host never computes staleness from these — the SDK owns
+      // desired-state/freshness. `custody` is the broker's disclosure of the SDK's own word:
+      // `controlled` (pe-revit holds a receipt) or `observed` (it does not). Disclosure, not a gate.
       buildStamp: Schema.optional(Schema.NullOr(Schema.String)),
       connected: Schema.Boolean,
+      custody: Schema.optional(Schema.NullOr(Schema.String)),
       lane: Schema.optional(Schema.NullOr(Schema.String)),
       openDocumentCount: Schema.Number,
       processId: Schema.optional(Schema.NullOr(Schema.Number)),
       revitVersion: Schema.optional(Schema.NullOr(Schema.String)),
       runtimeFramework: Schema.optional(Schema.NullOr(Schema.String)),
-      sandboxId: Schema.optional(Schema.NullOr(Schema.String)),
+      sdkSessionId: Schema.optional(Schema.NullOr(Schema.String)),
+      // The BROKER's id: hash(pid + processStartUtc). Not the pe-revit session id.
       sessionId: Schema.String,
     }),
   ),
@@ -530,15 +534,18 @@ export const hostSessionSummaryDataSchema = Schema.Struct({
   activeDocument: Schema.optional(Schema.NullOr(hostActiveDocumentSummarySchema)),
   availableModules: Schema.Array(hostModuleDescriptorSchema),
   bridgeIsConnected: Schema.Boolean,
-  // Observed session metadata (lane/sandboxId/buildStamp) — facts as reported, never staleness.
+  // Observed session metadata (custody/lane/sdkSessionId/buildStamp) — facts as reported, never
+  // staleness.
   buildStamp: Schema.optional(Schema.NullOr(Schema.String)),
+  custody: Schema.optional(Schema.NullOr(Schema.String)),
   lane: Schema.optional(Schema.NullOr(Schema.String)),
   openDocumentCount: Schema.Number,
   processId: Schema.optional(Schema.NullOr(Schema.Number)),
   revitVersion: Schema.optional(Schema.NullOr(Schema.String)),
   runtimeAssemblies: Schema.Array(hostRuntimeAssemblyDataSchema),
   runtimeFramework: Schema.optional(Schema.NullOr(Schema.String)),
-  sandboxId: Schema.optional(Schema.NullOr(Schema.String)),
+  sdkSessionId: Schema.optional(Schema.NullOr(Schema.String)),
+  // The BROKER's id: hash(pid + processStartUtc). Not the pe-revit session id.
   sessionId: Schema.optional(Schema.NullOr(Schema.String)),
   workbenchResources: hostWorkbenchResourcesDataSchema,
 });
@@ -1131,7 +1138,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     origin: "host-local",
     displayName: "Session Topology",
     description:
-      "The operator's map in one snapshot: host identity/health plus every connected Revit session (lane, sandbox id, pid, open documents). Replaces the host.status + bridge.sessions.list join; observedAtUtc stamps freshness (host clock).",
+      "The operator's map in one snapshot: host identity/health plus every connected Revit session (custody, lane, pe-revit session id, pid, open documents). Replaces the host.status + bridge.sessions.list join; observedAtUtc stamps freshness (host clock).",
     intent: "Read",
     visibility: "DefaultVisible",
     costTier: "Cheap",
