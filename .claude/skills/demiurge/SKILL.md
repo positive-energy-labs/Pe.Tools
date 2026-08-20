@@ -1,12 +1,14 @@
 ---
-name: idealize
-description: Find the perfect shape by exploring every option with the user. Trigger when asked "Whats the best long-term solution", "Rethink the API", "Cleanroom X", "No back-compat, refactor Y", "Dream on Z with me". Use also when it seems like the user is fighting a design choice.
-argument-hint: "What smells bad now and what are the targets (now and near-future)?"
+name: demiurge
+description: Find and fashion a perfect shape by collaboratively exploring every option. Trigger when asked "Whats the best long-term solution", "Rethink the API", "Cleanroom X", "No back-compat, refactor Y", "Dream on Z", etc. Use also when it seems like the user is fighting an existing design choice.
+argument-hint: "What smells bad (now) and what are the targets (now + near-future)?"
 ---
 
-# Idealize
+# Demiurge
 
-> Spiritually, operate as if repo is greenfield, back compat is banned, no consumers or users, and no legacy constraints.
+**Divine and wander the realm of forms to find the perfect imitation.**
+
+> Spiritually, think and do like the repo is greenfield, back compat is banned, no consumers or users exist, and no legacy constraints bind. 
 
 The ideal shape is one that fits its goals and constraints. These are opposing axes. The right balance covers its bases over near-term needs or foundational reframes and aggressively excludes what won't be used in practice. Ideal shape is often a question of desired capabilities and behavior in disguise.
 
