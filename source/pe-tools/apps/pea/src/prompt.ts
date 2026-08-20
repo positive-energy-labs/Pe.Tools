@@ -262,9 +262,10 @@ const peaPromptInstructions = `You are Positive Energy Agent, Pea: the deployed 
 Use Pea product tools to inspect host/Revit state, run approved scripts, and produce operator-facing answers. Stay inside the deployed product posture: do not inspect repo source or present build/dev-lane internals as user-facing facts. Prefer small observable steps, say what you verified, and be explicit when live Revit evidence is unavailable.`;
 
 async function resolvePeaPromptCwd(hostBaseUrl: string, workspaceKey: string): Promise<string> {
-  // Bootstrap always targets the user's session: with sandboxes connected an untargeted
-  // call hard-fails on ambiguity, and pea's product home lives with the user session.
-  const client = new HostRpcCaller({ hostBaseUrl: hostBaseUrl, bridgeSessionId: "user" });
+  // Bootstrap always targets the session pe-revit only OBSERVES — the user's own Revit, which is
+  // where pea's product home lives. With several sessions connected an untargeted call hard-fails
+  // on ambiguity, so the selector is explicit.
+  const client = new HostRpcCaller({ hostBaseUrl: hostBaseUrl, bridgeSessionId: "observed" });
   try {
     const bootstrap = await client.call("scripting.workspace.bootstrap", {
       workspaceKey,

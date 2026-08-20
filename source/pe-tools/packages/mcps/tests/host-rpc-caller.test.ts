@@ -56,7 +56,7 @@ test("script execution forwards its selector in one direct /call without lifecyc
   try {
     const client = new HostRpcCaller({
       hostBaseUrl: "http://127.0.0.1:5180",
-      bridgeSessionId: "sandbox:source-e2e",
+      bridgeSessionId: "session:source-e2e",
     });
     await new ScriptingTools(client, { workspaceKey: "acceptance" }).execute({
       scriptContent: 'WriteLine("ok");',
@@ -65,7 +65,7 @@ test("script execution forwards its selector in one direct /call without lifecyc
     expect(calls).toHaveLength(1);
     expect(new URL(calls[0].url).pathname).toBe("/call");
     expect(new Headers(calls[0].init?.headers).get(HOST_RPC_BRIDGE_SESSION_HEADER)).toBe(
-      "sandbox:source-e2e",
+      "session:source-e2e",
     );
     const body = calls[0].init?.body;
     if (typeof body !== "string") throw new Error("expected JSON request body");
@@ -91,14 +91,14 @@ test("operation discovery preserves the explicit session selector", async () => 
   try {
     const client = new HostRpcCaller({
       hostBaseUrl: "http://127.0.0.1:5181",
-      bridgeSessionId: "sandbox:catalog-e2e",
+      bridgeSessionId: "session:catalog-e2e",
     });
     await client.searchOperations({ query: "context" });
 
     expect(calls).toHaveLength(1);
     expect(new URL(calls[0].url).pathname).toBe("/ops");
     expect(new Headers(calls[0].init?.headers).get(HOST_RPC_BRIDGE_SESSION_HEADER)).toBe(
-      "sandbox:catalog-e2e",
+      "session:catalog-e2e",
     );
   } finally {
     globalThis.fetch = originalFetch;

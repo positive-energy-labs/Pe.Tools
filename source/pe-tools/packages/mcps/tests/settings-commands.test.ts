@@ -87,7 +87,7 @@ test("open maps the host snapshot into the route document, flattening the versio
 
 test("settings commands target the route binding when module discovery needs a Revit session", async () => {
   const document = emptyDocument();
-  document.binding.target = "sandbox:family-model";
+  document.binding.target = "session:family-model";
   let targeted = "";
   await withHost(
     (_key, _request, headers) => {
@@ -101,7 +101,7 @@ test("settings commands target the route binding when module discovery needs a R
       );
     },
   );
-  expect(targeted).toBe("sandbox:family-model");
+  expect(targeted).toBe("session:family-model");
 });
 
 test("open preserves existing fields (proposals/staged survive a re-open)", async () => {

@@ -22,7 +22,6 @@
     "ready": "vp check && vp run -r test && vp run -r build && pnpm typegen:check",
     "typegen:check": "pnpm --filter @pe/host-contracts codegen:check",
     "test": "vp run -r test",
-    "acceptance": "pnpm --filter @pe/runtime-acceptance acceptance",
     "dev": "pnpm --filter @pe/host dev"
   },
   "devDependencies": {

@@ -24,7 +24,6 @@ import { requestAccess } from "../shared/request-access.ts";
 import { revitApiFetch, revitApiSearch } from "../shared/rvt-api.ts";
 import { resolveHostBaseUrl, resolveWorkspaceKey } from "../shared/host-config.ts";
 import { peaProductToolCatalog } from "../tool-metadata.ts";
-import { createPeSandboxTool, presentSessionKind } from "./sandbox.ts";
 import { routeStateTools } from "./route-state.ts";
 import { PeaCliCommands, type PeaCliCommandOptions } from "./PeaCliCommands.ts";
 export { type RouteRegistration, createRouteRegistrations } from "./routes.ts";
@@ -59,7 +58,7 @@ const bridgeSessionIdSchema = z
   .string()
   .optional()
   .describe(
-    "Optional target selector for a connected Revit session: 'user' (the user's own session — their live docs), 'sandbox:<id>' (a pea-owned sandbox from pe_sandbox), a pid, or a raw session id from pe_status sessions. With one session connected it may be omitted; with several, untargeted Revit operations hard-fail with the session listing.",
+    "Optional target selector for a connected Revit session: 'observed' (a session pe-revit holds no receipt for — the user's own Revit, holding their live docs), 'controlled' (a session pe-revit launched and owns the lifecycle of), 'dev'/'installed' (payload source), 'session:<id>' by pe-revit session id, a pid, or a raw bridge session id from pe_status sessions. With one session connected it may be omitted; with several, untargeted Revit operations hard-fail with the session listing.",
   );
 
 const hostOperationSearchInputSchema = z.object({
@@ -148,9 +147,11 @@ export const peStatus = createTool({
 });
 
 /**
- * Compact pe_status presentation. Pea's world is "the user's session + pea-owned sandboxes":
- * every session presents as kind=user or kind=sandbox (with its id) — broker/SDK lane
- * vocabulary never reaches compact output. verbosity=full keeps the raw DTOs.
+ * Compact pe_status presentation. Every session presents with the SDK's own `custody` word —
+ * `observed` (pe-revit holds no receipt: the user's own Revit, reads only) or `controlled` (it
+ * does: full lifecycle) — plus the pe-revit session id when there is one. Lifecycle itself is not
+ * here and never was pea's: the SDK's `session_*` MCP tools own it. verbosity=full keeps the raw
+ * DTOs.
  */
 export function presentCompactStatus(
   probe: HostOpResponse<"host.status">,
@@ -171,7 +172,9 @@ export function presentCompactStatus(
       isConnected: sessionSummary.bridgeIsConnected,
       sessionId: sessionSummary.sessionId,
       processId: sessionSummary.processId,
-      ...presentSessionKind(sessionSummary.lane, sessionSummary.sandboxId),
+      custody: sessionSummary.custody,
+      sdkSessionId: sessionSummary.sdkSessionId,
+      lane: sessionSummary.lane,
       buildStamp: sessionSummary.buildStamp,
       revitVersion: sessionSummary.revitVersion,
       openDocumentCount: sessionSummary.openDocumentCount,
@@ -185,7 +188,9 @@ export function presentCompactStatus(
     sessions: sessions.map((session) => ({
       sessionId: session.sessionId,
       processId: session.processId,
-      ...presentSessionKind(session.lane, session.sandboxId),
+      custody: session.custody,
+      sdkSessionId: session.sdkSessionId,
+      lane: session.lane,
       buildStamp: session.buildStamp,
       revitVersion: session.revitVersion,
       openDocumentCount: session.openDocumentCount,
@@ -316,16 +321,14 @@ export const captureView = createCaptureViewTool((bridgeSessionId) =>
   createCurrentHostRpcCaller(bridgeSessionId),
 );
 
-// Dedicated control-plane tool (pe_status class); sandbox lifecycle is fleet management and
-// never appears in host_operation_search.
-export const peSandbox = createPeSandboxTool(() =>
-  resolveHostBaseUrl(peaProductToolContext.hostBaseUrl),
-);
+// Session lifecycle is deliberately absent from this tool set: the SDK owns it and exposes it as
+// `session_start|status|stop|restart|converge|watch|logs|gc` over `pe-revit mcp`. Pe.Tools WRAPS SDK
+// capability and never duplicates it — a second MCP surface for one lifecycle is exactly the
+// hand-registered switch case the verb catalog exists to prevent.
 
 export const peaProductTools = {
   [peStatus.id]: peStatus,
   [peLogs.id]: peLogs,
-  [peSandbox.id]: peSandbox,
   [hostOperationSearch.id]: hostOperationSearch,
   [hostOperationCall.id]: hostOperationCall,
   [requestAccess.id]: requestAccess,
