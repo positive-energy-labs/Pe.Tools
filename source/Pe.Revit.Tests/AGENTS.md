@@ -22,45 +22,29 @@ Owns the VSTest-based Revit-backed test harness for this repo. The harness uses 
 
 ## Validation
 
-Two verify targets matter here:
+`pe-revit test --project <P>` is the whole test surface. It reads the project and picks the rung; there are no test sub-verbs. This package is `PeProjectKind=RevitTests`, so it never takes the deterministic rung — a year-neutral project (no referenced add-in project, not `RevitTests`) does, and that is where a non-Revit contract test belongs instead of here.
 
-- attached (MSBuild `PeVerifyTarget=attached`)
-  - execution policy:
-    `RrdRequired`
-  - use when:
-    iterating collaboratively against the already-running Rider-driven desktop session
-  - required posture:
-    prepare package-local/runtime outputs only when the attached runtime needs them, use SDK `pe-revit live` for runtime freshness, then run focused explicit-year `dotnet test` as behavior evidence
-- fresh (MSBuild `PeVerifyTarget=fresh`)
-  - execution policy:
-    `NoRrdContact`
-  - use when:
-    you need a dedicated fresh Revit process that must not reuse the dev session
-  - current helper:
-    `dotnet tool run pe-revit -- test fresh ...`
-
-Canonical attached-runtime loop:
-
-1. Prepare any package-local/runtime outputs only when the attached runtime actually needs them. Do not treat that build as the freshness proof.
-2. Use SDK `pe-revit live` to establish/refresh/restart runtime state; use `live_loop_context` when Pea status/log evidence should accompany the proof.
-3. Run the SDK-owned attached test lane as behavior evidence:
+Default: the **fresh** rung. One ephemeral controlled Revit on the installed payload, the year's add-in quarantine leased, the process stopped at the end.
 
 ```powershell
-dotnet tool run pe-revit -- test attached --sync --filter "Name~SomeFocusedTest" --timeout-seconds 900 --json
+dotnet tool run pe-revit -- test --project .\source\Pe.Revit.Tests\Pe.Revit.Tests.csproj --filter "Name~Reports_runtime_assembly_load_paths" --timeout-seconds 900 --json
 ```
 
-Current dedicated fresh-process helper (routes tests to Revit years based on execution policy):
+Override with **attached** only when the running session's documents, UI state, or loaded assemblies are the thing under test. `--attach` converges that session first, so the code under test is the code you just saved:
 
 ```powershell
-dotnet tool run pe-revit -- test fresh --filter "Name~Reports_runtime_assembly_load_paths" --timeout-seconds 900 --json
+dotnet tool run pe-revit -- test --project .\source\Pe.Revit.Tests\Pe.Revit.Tests.csproj --attach --id pe.app-25 --filter "Name~SomeFocusedTest" --timeout-seconds 900 --json
 ```
+
+For freshness outside a test run, `pe-revit session converge` attaches the hot-reload emitter to a live session and `pe-revit session restart` is the mechanism that actually reloads. Run `pe-revit test --plan --project <P>` when the rung is not obvious, and `pe-revit guide test` for the refusal table.
 
 ## Shared Language
 
 | Term                  | Meaning                                                                            | Prefer / Avoid                                                     |
 | --------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| **attached**          | Verification against the already-running Rider-driven desktop Revit debug session  | Prefer this for proof against the running dev session              |
-| **fresh**             | Verification in a newly launched dedicated Revit process that must not reuse the dev session | Prefer this over vague `isolated test` phrasing              |
+| **rung**              | One branch of the `pe-revit test` ladder — deterministic, fresh, attached — chosen by the verb from the project and disclosed | Prefer this over "lane" for a test mode; never write `test fresh` as a verb |
+| **attached**          | The rung that runs inside a controlled session that already exists (MSBuild `PeVerifyTarget=attached`) | Prefer this for proof against the running dev session              |
+| **fresh**             | The rung that owns one ephemeral controlled Revit (MSBuild `PeVerifyTarget=fresh`) | Prefer this over vague `isolated test` phrasing              |
 | **test harness**      | `Pe.Revit.Tests` owns verification orchestration, not a deployable product         | Avoid talking about this package as if it were a shipping artifact |
 
 ## Living Memory
@@ -74,20 +58,20 @@ dotnet tool run pe-revit -- test fresh --filter "Name~Reports_runtime_assembly_l
 - Tests run inside real Revit, not a fake host.
 - `ricaun.RevitTest` handles Revit process launching. If Revit is already open for the configured year, RevitTest can reuse it by default. That is not conducive to always-fresh assemblies, particularly when the open Revit instance is the dev session.
 - Prefer explicit-year `dotnet test`, not raw artifact-path `dotnet vstest`.
-- Explicit-year `dotnet test -c Debug.R25.Tests ...` defaults to the `attached` verify target and runs against assemblies already loaded in the dev session unless you use SDK `pe-revit test fresh`.
-- `.Tests` build artifacts can be fresh while the already-running dev-session runtime is still stale. The build proves compilation, not loaded-assembly freshness.
-- If the user restarted Revit from Rider by launching the normal `Pe.App` debug configuration, treat the deployed runtime add-in as fresh by default.
-- AGENT GUIDANCE: Attached validation uses assemblies already loaded in the dev session. If runtime code changed, coordinate package-local/runtime refresh through SDK `pe-revit live` before attached-runtime `dotnet test`; an isolated `dotnet build` is not runtime freshness proof.
+- Explicit-year `dotnet test -c Debug.R25.Tests ...` defaults to the `attached` verify target and runs against assemblies already loaded in a running session. Raw `dotnet test` is banned for this package; `pe-revit test --project <P>` is the sanctioned path.
+- `.Tests` build artifacts can be fresh while a running session's loaded assemblies are still stale. The build proves compilation, not loaded-assembly freshness.
+- After `pe-revit session restart`, treat the session's payload as fresh: restart materializes a new generation before stopping the old process.
+- AGENT GUIDANCE: the attached rung uses assemblies already loaded in the session. If runtime code changed, let `--attach` converge it (or `pe-revit session restart` for a rude edit) before reading the result; an isolated `dotnet build` is not runtime freshness proof.
 - Explicit-year raw `.Tests` runs are intentionally modeled as attached verification, not ordinary `Build`.
-- The pre-`VSTest` hook is an attached session check only. It is not proof of runtime freshness and not a substitute for the explicit sync step.
-- Raw `dotnet test` still inherits the adapter defaults unless you override them. If you need the runner-opened Revit process to behave like a dedicated fresh controlled host, use SDK `pe-revit test fresh` instead of assuming the adapter will do the right thing.
-- SDK `pe-revit test fresh` intentionally avoids the dev session, quarantines the deployed desktop add-in for the target year, launches a fresh test-owned Revit process, and closes that process after the run.
-- Do not assume an already-open test-owned Revit instance is safe to reuse for runtime freshness. If a stale owned process survives a failure or timeout, recycle it before another run.
+- The pre-`VSTest` hook is an attached session check only. It is not proof of runtime freshness and not a substitute for converging or restarting the session.
+- Raw `dotnet test` still inherits the adapter defaults unless you override them. If you need a dedicated Revit the run owns and stops, use `pe-revit test --project <P>` instead of assuming the adapter will do the right thing.
+- The fresh rung intentionally avoids every existing session: it quarantines the deployed desktop add-in for the target year, launches one exact descendant Revit under an ephemeral session receipt, and stops only that incarnation. `session status` shows the row while it runs; `session gc` sweeps it if a run dies badly.
+- Do not assume an already-open test-owned Revit is safe to reuse for runtime freshness. If a stale one survives a failure or timeout, `pe-revit session gc` sweeps its ephemeral row; `--unstick` reclaims a verifiably orphaned year lease.
 - Apply the correct code fix first; do not narrow the implementation just to stay hot-reload-safe.
 - Hot reload is not trustworthy after runtime member-shape changes such as added or removed members, method signature changes, constructor changes, enum shape changes, record shape changes, or new nested/private runtime types.
-- When those changes happen, treat the Rider/Revit session as restart-required.
-- A repo-specific HR failure mode can show up as `ENC0003` against generated `*.AssemblyInfo.cs` metadata. Treat that as restart-required and verify non-release informational-version stability before retrying.
-- Another repo-specific HR failure mode can show up as `ENC2014` or missing output assembly state for an `MVID`. Treat that as lost HR baseline state and suspect build-mode collisions or replaced interactive outputs before blaming the code change itself.
+- When those changes happen, treat the session as restart-required — that is what converge reports as `session.restart-required`.
+- A repo-specific hot-reload failure mode can show up as `ENC0003` against generated `*.AssemblyInfo.cs` metadata. Treat that as restart-required and verify non-release informational-version stability before retrying.
+- Another repo-specific hot-reload failure mode can show up as `ENC2014` or missing output assembly state for an `MVID`. Treat that as a lost emitter baseline and suspect build-mode collisions or replaced interactive outputs before blaming the code change itself.
 - If a fix appears missing, verify a new targeted runtime log line or output artifact before concluding the logic is wrong.
 - Prefer focused `dotnet test --filter ...` runs while iterating. Use the full suite after the local change is stable.
 - The pre-`VSTest` session check still runs for filtered `dotnet test` and `dotnet test --no-build`, but it remains validation only.

@@ -27,13 +27,13 @@ C# development with the Revit API requires very a specific and fragile tooling s
 ### Executing code
 
 Use the SDK control plane; do not hand-orchestrate Revit. The `execute` skill is the judgment layer over these rules.
-- Terminal `dotnet build`/`publish` are safe beside a running dev session (isolated lane → `.artifacts/`; deploy/launch from it is a build error). Raw `dotnet test` is banned for Revit-backed projects — it launches or reuses Revit itself; use `pe-revit test fresh|attached`. Year-neutral test projects (no Revit reference, `DeployAddin=false`) are the deterministic rung: `pe-revit test deterministic --project <P>`.
-- Never `Stop-Process`/`Start-Process`/`taskkill` Revit.exe — `pe-revit live|sandbox|sessions|service` own process lifecycle.
-- Use `pe-revit live` to compile-check, Hot Reload, start, or restart the dev session.
-- Use `pe-revit live status` for read-only state; use `live doctor` only for reported wiring trouble.
-- Use `pe-revit test fresh|attached` for Revit-backed proof lanes.
+- Terminal `dotnet build`/`publish` are safe beside a running session (isolated lane → `.artifacts/`; deploy/launch from it is a build error). Raw `dotnet test` is banned for Revit-backed projects — it launches or reuses Revit itself. `pe-revit test --project <P>` is the whole test surface: it picks the rung from the project and says which and why (`--plan` prints the choice and runs nothing).
+- Never `Stop-Process`/`Start-Process`/`taskkill` Revit.exe — `pe-revit session` owns Revit process lifecycle, and `pe-revit service` owns companion hosts.
+- `pe-revit session start|status|converge|watch|restart|stop|logs|gc` is the one lifecycle family; `pe-revit doc *` acts on that session's documents and `pe-revit op list|result` re-reads its durable receipts.
+- `pe-revit session converge` is hot reload as an attach; it never restarts. `session restart` is the freshness mechanism. `session status` is the read-only machine-wide state; `pe-revit doctor [--fix]` is for reported wiring trouble.
+- Custody decides what a verb may do, and the SDK resolver enforces it before the verb runs: `controlled` (pe-revit holds the session receipt) permits the full lifecycle and document operations, `observed` permits status and document reads only. Never re-implement that guard here.
+- Read `pe-revit guide session|test|install` for mechanics; repo docs never restate them. The vendored `pe-revit-contract.ts` is the consumer contract — never hand-sync a selector grammar or argv shape beside it.
 - Use pea scripts, host operations, or `pea --prompt` only after SDK freshness when product behavior is the proof target.
-- Prefer fresh-lane tests when Hot Reload risk, stale assembly evidence, member-shape changes, or WPF/BAML/resource changes make the attached lane ambiguous.
 - Use Pea product tools (`pe_status`, `pe_logs`, host operations, scripts, Revit API docs) plus the `pea --prompt` CLI probe only for black-box product feedback, not repo source review.
 
 ### Session Discipline
@@ -92,8 +92,8 @@ After any large changes, ALWAYS clarify user intent and capture the durable know
 
 | Term            | Meaning                                                                                                                              | Prefer / Avoid                                                                                          |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| **Dev Session** | The user-owned hot-reload Revit session for `Pe.App` (lane `dev`, driven by the SDK `pe-revit live` command family). Treat it as expensive state. | Avoid implying hot reload exists outside the dev session. `Rrd` survives only in `build/ExecutionPolicy.cs` values; never write standalone `RRD` or `Live` as a session or lane name |
-| **HR**          | SDK hot reload into the already-running dev session. *Extremely useful*, but not fully trustworthy. When functional it allows the fastest feedback loop.                                              | Avoid treating HR as proof that Revit is running fresh code                                             |
+| **dev session** | The controlled session on the `dev` lane for `Pe.App` — the one the user drives from this checkout (`pe-revit session`, payload byte-copied from `--project`). Treat it as expensive state. | Avoid implying hot reload exists outside a converged dev-lane session. Never write `live`, `sandbox`, `Rrd`, or `owner` for a session, a lane, or a custody value |
+| **HR**          | Hot reload into a converged session: `pe-revit session converge` attaches the emitter and never restarts. *Extremely useful*, but not fully trustworthy. When functional it allows the fastest feedback loop. | Avoid treating HR as proof that Revit is running fresh code — `session restart` or a fresh test is what proves it |
 
 ### Repo-wide language
 
@@ -101,8 +101,8 @@ After any large changes, ALWAYS clarify user intent and capture the durable know
 | --------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | **FF**                | Family Foundry                                                                           | Prefer `Family Foundry` on first mention in prose                                            |
 | **workflow**          | The operator intent such as build, verify, package, or publish                           | Prefer this over overloading `Configuration` strings to carry every concern                  |
-| **attached** | The proof lane against the already-running desktop dev session; contact dev (ADR 0007) | The plain word is also the literal MSBuild `PeVerifyTarget` value since SDK beta.117 |
-| **fresh** | The proof lane in a new dedicated Revit process that must not reuse the dev session; contact owned | The plain word is also the literal MSBuild `PeVerifyTarget` value since SDK beta.117 |
+| **rung** | One branch of the `pe-revit test` ladder — deterministic, fresh, attached — chosen by the verb from the project and disclosed (ADR 0008) | Prefer `--plan` to learn a project's rung; avoid writing `test fresh` as though it were a verb you type |
+| **custody** | Whether pe-revit holds a session's receipt: `controlled` (full lifecycle and doc ops) or `observed` (status and doc reads only) | Replaces the retired `contact` axis and the `owner: agent\|user` values |
 | **package**           | A repo-local code unit such as `Pe.Host` or `Pe.Revit.FamilyFoundry`                     | Prefer this over `project` when discussing one code area                                     |
 | **app**               | `Pe.App`, the in-proc desktop Revit add-in runtime                                       | Avoid using `app` to mean the whole repo or product                                          |
 | **host**              | `Pe.Host`, the out-of-proc TS-built HTTP/RPC/WebSocket backend                           | Avoid using `host` for the Revit add-in bridge or product identity                           |
@@ -113,17 +113,17 @@ After any large changes, ALWAYS clarify user intent and capture the durable know
 
 ## Proof Lanes
 
-Every run claim carries two coordinates (ADR 0007). **Contact** — `none`, `owned` (agent-owned fresh/sandbox processes), or `dev` (the user-owned dev session) — says whose session the run touches. The **proof lane** names which runtime proves the claim:
+Every run claim names the lane that proves it, and a Revit-backed claim also names the session's **custody** (ADR 0008): `controlled` (pe-revit holds the session receipt — full lifecycle and document operations) or `observed` (no receipt — status and document reads only). The proof lane names which runtime proves the claim:
 
-- **deterministic**: no-Revit tests/scorers over saved snapshots; contact none.
-- **compile**: isolated terminal `dotnet build`; contact none; proves compilation only.
-- **artifact**: build/pack output; contact none; proves durable output shape only.
-- **fresh**: SDK `pe-revit test fresh` owns a new Revit process; contact owned; the default autonomous Revit-backed proof.
-- **sandbox**: durable agent-owned session via `pe-revit sandbox`; contact owned; session topology — also name its evidence authority (source-backed or installed).
-- **attached**: the user-owned dev session; contact dev; requires behavior proof when freshness is uncertain.
+- **deterministic**: no-Revit tests/scorers over saved snapshots; also the `pe-revit test` rung a year-neutral project takes.
+- **compile**: isolated terminal `dotnet build`; proves compilation only.
+- **artifact**: build/pack output; proves durable output shape only.
+- **fresh**: the `pe-revit test` rung that owns one ephemeral controlled Revit; the default autonomous Revit-backed proof.
+- **attached**: the `pe-revit test --attach` rung, running inside a controlled session that already exists; requires behavior proof when freshness is uncertain.
+- **session**: a durable controlled Revit under `pe-revit session` — also name its payload lane, `dev` (byte copy of this checkout's build, from `--project`) or `installed`, because they prove different bytes.
 - **installed**: MSI/product-root behavior; never validated against dev roots.
 
-The SDK's MSBuild tokens are the plain words since beta.117; legacy `Rrd` spellings survive only in Pe.Tools's own `build/ExecutionPolicy.cs` (`NoRrdContact` = contact none/owned, `RrdRequired` = contact dev).
+Deterministic, fresh, and attached are rungs `pe-revit test` picks from the project and discloses — never verbs you type, and never facts about the machine. `pe-revit test --plan --project <P>` prints the rung and the reason.
 
 If proof depends on user-owned Revit/Windows state, say so and coordinate the loop instead of pretending autonomy.
 

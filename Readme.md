@@ -24,7 +24,7 @@ Everything about build, verify, test, package, install, publish, and the live de
 [`docs/BUILD.md`](docs/BUILD.md). Read it before touching anything build- or dev-loop-related — the Revit
 tooling setup is bespoke, and the live dev session is expensive state.
 
-Use the SDK control plane (`pe-revit live`, `pe-revit test fresh|attached`) rather than hand-orchestrating Revit.
+Use the SDK control plane (`pe-revit session`, `pe-revit test`) rather than hand-orchestrating Revit.
 
 ## Where to read next
 
