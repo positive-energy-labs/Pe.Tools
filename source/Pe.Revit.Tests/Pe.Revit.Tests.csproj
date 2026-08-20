@@ -56,8 +56,6 @@
     <PropertyGroup>
         <PeRevitRawDotNetTestWarningSuppressed Condition="'$(PeRevitRawDotNetTestWarningSuppressed)' == ''">false</PeRevitRawDotNetTestWarningSuppressed>
         <PeVerifyTarget Condition="'$(PeVerifyTarget)' == '' and '$(PeRevitRawDotNetTestWarningSuppressed)' != 'true' and $([System.String]::Copy('$(Configuration)').Contains('.Tests')) == 'True'">attached</PeVerifyTarget>
-        <PeWorkflow Condition="'$(PeRevitRawDotNetTestWarningSuppressed)' != 'true' and $([System.String]::Copy('$(Configuration)').Contains('.Tests')) == 'True'">Verify</PeWorkflow>
-        <PeExecutionPolicy Condition="'$(PeVerifyTarget)' == 'attached'">RrdRequired</PeExecutionPolicy>
     </PropertyGroup>
     <Target
             Name="ValidateDotNetTestUsage"
@@ -66,15 +64,16 @@
     >
         <Error
                 Condition="$([System.String]::Copy('$(Configuration)').Contains('.Tests')) != 'True'"
-                Text="`dotnet test` for `Pe.Revit.Tests` requires an explicit `.Tests` configuration such as `Debug.R25.Tests`. AGENT GUIDANCE: AttachedRrd validation uses assemblies already loaded in RRD. If runtime code changed, coordinate runtime refresh through SDK `pe-revit live` before attached `.Tests`; an isolated dotnet build is not runtime freshness proof. Use SDK `pe-revit test fresh ...` when RRD freshness is uncertain or current document state does not matter."
+                Text="`dotnet test` for `Pe.Revit.Tests` requires an explicit `.Tests` configuration such as `Debug.R25.Tests`. AGENT GUIDANCE: the attached lane validates against assemblies already loaded in the controlled session. If runtime code changed, coordinate runtime refresh through SDK `pe-revit session converge` before attached `.Tests`; an isolated dotnet build is not runtime freshness proof. Use SDK `pe-revit test --project &lt;csproj&gt;` (the fresh rung) when attached freshness is uncertain or current document state does not matter."
         />
     </Target>
     <!--
       Do not confuse isolated `.Tests` build outputs with isolated test execution.
       The build artifacts under `.artifacts/...` are safe to produce without touching
-      RRD, but explicit-year VSTest execution is Revit-backed and defaults to the
-      AttachedRrd verify target unless the repo guardrails are intentionally suppressed.
-      SDK `pe-revit test attached` owns attached session health checks. After
-      runtime edits, coordinate runtime refresh before attached `.Tests` validation.
+      any Revit session, but explicit-year VSTest execution is Revit-backed and defaults
+      to the `attached` verify target unless the repo guardrails are intentionally suppressed.
+      SDK `pe-revit test` with the attach flag owns attached session health checks. After runtime
+      edits, coordinate runtime refresh (`pe-revit session converge`) before attached
+      `.Tests` validation.
     -->
 </Project>
