@@ -1,7 +1,7 @@
 # Op-contract gaps
 
 Adopt-when-touched. Harvested while building curated readonly views for every host op, live-verified
-against a 2025 sandbox with the MEP template. The forcing function: a UI can only render what the
+against a 2025 session with the MEP template. The forcing function: a UI can only render what the
 contract returns. Every gap below is a place where a view had to guess, join across ops, or quote
 the request instead of the response. Landed gaps have been stripped — what remains is open.
 Envelope law and glance tier: [ADR 0003](../../adr/0003-read-envelope-and-glance-tier.md).

@@ -21,8 +21,8 @@ are re-openable. Anything needing kaitpw's opinion lands in "Needs kaitpw", not 
   CONFIRMED live, root frame convention measured, fixture authored, geometry REFUSED. Wall-hosted
   solids need a one-sided depth span on the wall face that the legacy plan cannot author.
 
-Gate per wave: compile all four years + deterministic contract tests + `test fresh` roundtrip
-suite green, oracle assertions included. No wave weakens an existing assertion.
+Gate per wave: compile all four years + deterministic contract tests + a fresh-rung roundtrip
+suite green (`pe-revit test --project <P> --filter ...`), oracle assertions included. No wave weakens an existing assertion.
 
 ## Family review board — find-the-product round 1 (2026-08-19)
 
