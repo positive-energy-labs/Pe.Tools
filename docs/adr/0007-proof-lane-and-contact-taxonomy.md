@@ -1,5 +1,10 @@
 # 0007 — Proof-lane and contact taxonomy
 
+Date: 2026-08-18. Status: superseded by [ADR 0008](0008-session-custody-and-test-rungs.md) on
+2026-08-20, when Pe.Revit.Sdk beta.121 retired the `sandbox` lane, the `live` family, and the
+`Rrd` tokens, and began disclosing custody itself. The taxonomy below records what this repo
+decided in August 2026; it does not describe the current surface.
+
 ## Context
 
 The repo's execution vocabulary grew in layers: "Live" as the central session paradigm, then the

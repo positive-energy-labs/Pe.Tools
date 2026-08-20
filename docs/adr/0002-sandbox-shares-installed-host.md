@@ -1,6 +1,10 @@
 # ADR 0002 — A sandbox session shares the one installed host
 
-Date: 2026-07-14. Status: accepted, implemented.
+Date: 2026-07-14. Status: superseded by [ADR 0008](0008-session-custody-and-test-rungs.md) on
+2026-08-20. Pe.Revit.Sdk beta.121 deleted the `sandbox` lane, so the mapping question this ADR
+answered no longer arises: lane is payload source (`dev` | `installed`) and a controlled session on
+the installed lane runs the installed payload by construction. The record below is what this repo
+decided in July 2026.
 
 ## Context
 
