@@ -20,6 +20,8 @@ design-system ledger, not restated here.
 
 ### The service seam, install lane, and SEA packaging
 
+- 2026-08-20 — SDK beta.121 cutover field verdict (W5-A drive + BB-1 black-box drive, Opus, from `--help`/`guide`/the execute skill only): the SDK session/doc/op surface worked first try almost everywhere (start 40 s, restart-with-doc 73 s, `op result` replay, `keep-doc`); the route relays the SDK envelope untouched; the host leg proves `up how=health`. The product path was dead for the whole drive because the installed loader shim predates beta.121 (see Owed). Evidence: `Pe.Revit.Sdk/.artifacts/review-20260820/{w5a,bb}-report.md` (disposable).
+
 - 2026-08-17 — Loopback-only bind is a product invariant, not a preference: every release is a new exe path, so any non-loopback bind re-prompts Windows Firewall once per release.
 - 2026-08-17 — Staged-until-restart `VersionedAddin` is correct behavior, not a bug: it never touches locked files (WPF/ILRepack constraint).
 - 2026-08-17 — A Node SEA cannot static-ESM-import a bare specifier (`ERR_UNKNOWN_BUILTIN_MODULE`); only runtime `createRequire` survives — that is why `pe:sea-require-shim` exists in `apps/host/vite.config.ts` and `apps/pea/vite.config.ts`.
@@ -60,6 +62,12 @@ design-system ledger, not restated here.
 
 ## Owed
 
+- **Ship a product release on SDK beta.121.** The installed `Pe.Revit.Loader` shim (0.6.25 and 0.6.23) accepts receipt lanes `(dev, sandbox)` and rejects beta.121's `installed` receipt, so `pe-revit session start --year 25` boots a Revit with no `Pe.App` in it while the CLI says `ready` (BB-1 F-1). Until the payload is rebuilt and released, the installed lane — the end-user path — is dead; the dev lane is fine.
+- Host eviction by a route-launched session (BB-1 F-4): `POST /sessions start` on a dev-lane host spawned a competing `@pe/host` (`--take-over-host`), the incumbent's claim was refused, the Herdr pane died and `node --watch` does not return without a file change; the service file ended owned by an orphan pid nobody can stop. One owner per `sourceRoot` service name; a lost claim must be a retryable restart. Sibling defect (W5-A): Pe.App's host supervisor spawns its own host before trying the healthy incumbent and its 45 s spawn budget is shorter than a dev-host cold start — so no bridge ever connects, `announceServedSession` never writes `sessionId`, and the `BridgeAgent` op receipts stay field-unproven.
+- `/sessions` route lane choice (BB-1 F-14): a bare `start {year}` on a dev-lane host injects this checkout's `--project` (dev lane, 46 s build) while the same bare CLI verb means installed lane; there is no way to ask the route for installed. Decide: default like the CLI and take an explicit project, or name the lane in the body.
+- `pea --prompt` cannot start a turn without a bridged Revit (`scripting.workspace.bootstrap: No observed session is connected`) and reuses `observed` to mean "bridged" (BB-1 F-3/F-12); `pea host status` prints `session none` beside a ready controlled session (F-11) — read the SDK registry and say "not bridged".
+- `/instances` has no text-level proof path: SSR ships a client-only shell with zero session strings, so a drive without a browser tool cannot verify the page (BB-1 F-25) — SSR the fleet list or name the preview tool in the execute skill (done for t3-code).
+- `pea host operations search` `fetch failed` re-confirmed 2026-08-20 (BB-1 F-2) with the host answering `call` seconds either side; a CLI failure also prescribes an MCP tool name (`host_operation_search`, F-22).
 - Queue provenance: build the ruled spec at [queue-provenance.md](queue-provenance.md) — `x-pe-origin`, `QueueLedger`, response stamps, `revit.queue.snapshot`.
 - **Deferred wire surfaces** (spec'd, not built): `/ops` effect-smol MultiDocument shape (shared dialect-normalized `definitions` pool); `?session=` selection on `/schemas/settings/...` (single-session is today's reality); `GET /options/<domainKey>` returning `{enum:[...]}` so schemas can remote-`$ref` them and VSCode/Zed give live Revit completions — needs Revit-thread marshaling, judge the editor UX before building. Context-dependent domains stay on `settings.field-options` (web form only).
 - (/settings) Join validation issues to the rows their field paths name, once the attention axis is ruled.

@@ -23,8 +23,8 @@ checkout/clone type is immense**, and every axis affects the others. Don't sugge
 know enough about the broader implications, and leverage conventional patterns where possible
 (e.g. `dotnet build`/`publish`).
 
-The SDK owns the mechanics: `pe-revit guide <session|test|install|doctor>` are the authoritative
-walkthroughs; never guess flags (`--help` per family). This skill is the Pe.Tools judgment layer:
+The SDK owns the mechanics: `pe-revit guide <topic>` (`guide` lists them; `session` and `test`
+first) are the authoritative walkthroughs; never guess flags (`--help` per family). This skill is the Pe.Tools judgment layer:
 lane choice, the proven loop shapes, and the lies to defend against. Defensive lines carry
 `(dies when: …)`, the queued fix that retires them; delete them with the change that ships it.
 
@@ -41,7 +41,10 @@ lane choice, the proven loop shapes, and the lies to defend against. Defensive l
   controlled session is yours, restarts and document opens are yours too — do them, don't hand back.
   If SDK output, machine state, and your expectations misalign: STOP and let the user reconcile.
 - Preflight before any mutation: `session status --json` (custody, origin, lane, buildStamp,
-  legs[], documents[] per row; `resolved` tells you what a bare verb would pick).
+  legs[], documents[] per row; `resolved` is null on `status` — read `sessions[]` yourself).
+  **`ready` means the SDK bridge answered, not that the product loaded**: `session logs --id N`
+  is the only witness for `LoaderStartupFailed Pe.App` (dies when: start/status surface loader
+  failures as diagnostics, SDK).
 - Preflight the boundary too: explicit workdir on every compound command; prove a guessed path with
   `rg --files -g <pattern>` before building on it.
 
@@ -111,11 +114,19 @@ read `doc current`.
 
 - Host/web-only edits use this lane's own loop; restart Revit only when the in-process add-in
   boundary or an SDK verdict requires it.
-- Run host+web in a Herdr pane: `vp run dev` for `@pe/host` (single dynamic port breaks
-  launch.jsons and hardcoded ports). Plain `@pe/web` `vp run dev` is fine when no host contact is
-  needed. The service file is the URL authority (`state/service/<name>.json`, schema v3 with
-  `health` + `sessionId`); `session status` shows the host as a `leg` of its session (`up|down`,
-  `how: health|tcp|pid`, `legBecause`). Never assume 5180.
+- Run host+web in a Herdr pane: `vp run @pe/host#dev` from `source/pe-tools` (single dynamic
+  port breaks launch.jsons and hardcoded ports). Plain `vp run @pe/web#dev` is fine when no host
+  contact is needed. The service file is the URL authority (`%LOCALAPPDATA%\Positive
+  Energy\Pe.Tools\state\service\<name>.json`, schema v3 with `health`; `sessionId` is written
+  only after a bridge connects and is absent until then, so a `legBecause: lane:dev` leg is a
+  lane match, not proof). `session status` shows the host as a `leg` of its session (`up|down`,
+  `how: health|tcp|pid`, `legBecause`). Never assume 5180. A session start through the route can
+  spawn a competing host that evicts this pane and `node --watch` does not come back without a
+  file change — re-run the pane (dies when: one owner per service name, host ledger).
+- The host relays session lifecycle for the browser at `GET /sessions` and `POST /sessions
+  {action: start|stop|restart|converge, id?, year?, doc?}` — the SDK envelope passed through
+  untouched. On a dev-lane host a bare `start` injects this checkout's `--project` (dev lane),
+  unlike the bare CLI verb (installed lane).
 - **`vp check` is a gate, not a poll**: `vp check --fix <targets>` once, then `vp check <targets>`
   once. Never loop it. Separate formatter noise from type/lint output when diagnosing.
 - Typegen is two lanes: `codegen`/`codegen:check` are OFFLINE projections from `pe-dev ops-catalog`
@@ -128,7 +139,8 @@ read `doc current`.
 ## Host ops and scripts
 
 - Discover, then call: `pea host operations search --query "..."` against the connected session's
-  catalog; never guess op keys or shapes.
+  catalog; never guess op keys or shapes. (dies when: `search` reports its URL and envelope — today
+  it fails `fetch failed` with the host up; take keys from `pea host --help` EXAMPLES meanwhile.)
 - **Never put JSON on the command line.** `--request '{...}'` dies in PowerShell/pnpm re-quoting.
   Write a `.cs` to `.artifacts/tmp/<run>/`, then `pea script execute --host http://127.0.0.1:<port>
   --bridge-session-id <id> --permission-mode <ReadOnly|WriteTransaction> --file x.cs`, ending with
@@ -142,8 +154,9 @@ read `doc current`.
 
 ## Browser verification
 
-Readiness is a ladder, not a retry: pane open → `read_page`/console → navigate → screenshot. A
-hidden pane cannot produce a screenshot. **One identical failure is the ceiling** — after it,
+Use the harness's preview tool (t3-code `preview_*` here); with none available, say the UI half
+is unproven and prove the route/data path instead. Readiness is a ladder, not a retry: pane open →
+snapshot/console → navigate → screenshot. A hidden pane cannot produce a screenshot. **One identical failure is the ceiling** — after it,
 switch proof (read_page text, console, network, or a deterministic test) instead of re-shooting.
 
 ## Herdr, subagents and observable background work
@@ -189,6 +202,7 @@ than guessing flags. Below is only the earned delta.
 
 - Revit operations are minutes-scale. The shell's default timeout silently overrides
   `--timeout-seconds`; set the client timeout ≥ the CLI timeout, or `--no-wait` + `session watch`.
+  `doc open` takes no `--timeout-seconds` — background it and read `op result`.
   Never sleep-then-poll; read `session status` before any retry. Leases and quarantine: `test
   --unstick` owns reclaim; never hand process surgery.
 - Never probe CLI surface through app-booting wrappers (`pnpm run pea -- --help` boots the app);
@@ -208,7 +222,11 @@ than guessing flags. Below is only the earned delta.
 
 Every `--json` envelope carries `diagnostics[{code,detail,fix}]` and `nextSteps[]`; branch on the
 diagnostic `code` (never on exit 3 alone), follow `fix:` before inventing a remedy, and when a
-prescribed fix fails once, diagnose — don't re-run the prescription. Windows shell-tax rules live
+prescribed fix fails once, diagnose — don't re-run the prescription. When `diagnostics` is empty
+but the verdict is bad, read `result`: `doctor` exits 0 with `ok:false` checks, `test --attach`
+nests the real code under `result.liveSync[0].json.diagnostics`, `install verify` puts the remedy
+in `result.next`, and `install repair --release latest` can silently downgrade below
+`product.payloads.json` (dies when: each lifts its failure to the top level, SDK). Windows shell-tax rules live
 in `AGENTS.md`.
 
 ## Guardrails

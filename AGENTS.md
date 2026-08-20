@@ -28,7 +28,7 @@ C# development with the Revit API requires very a specific and fragile tooling s
 
 Use the SDK control plane; do not hand-orchestrate Revit. The `execute` skill is the judgment layer over these rules.
 - Terminal `dotnet build`/`publish` are safe beside a running session (isolated lane → `.artifacts/`; deploy/launch from it is a build error). Raw `dotnet test` is banned for Revit-backed projects — it launches or reuses Revit itself. `pe-revit test --project <P>` is the whole test surface: it picks the rung from the project and says which and why (`--plan` prints the choice and runs nothing).
-- Never `Stop-Process`/`Start-Process`/`taskkill` Revit.exe — `pe-revit session` owns Revit process lifecycle, and `pe-revit service` owns companion hosts.
+- Never `Stop-Process`/`Start-Process`/`taskkill` Revit.exe — `pe-revit session` owns Revit process lifecycle; companion hosts belong to the product that owns them (`pe-revit service` only lists and sweeps their files).
 - `pe-revit session start|status|converge|watch|restart|stop|logs|gc` is the one lifecycle family; `pe-revit doc *` acts on that session's documents and `pe-revit op list|result` re-reads its durable receipts.
 - `pe-revit session converge` is hot reload as an attach; it never restarts. `session restart` is the freshness mechanism. `session status` is the read-only machine-wide state; `pe-revit doctor [--fix]` is for reported wiring trouble.
 - Custody decides what a verb may do, and the SDK resolver enforces it before the verb runs: `controlled` (pe-revit holds the session receipt) permits the full lifecycle and document operations, `observed` permits status and document reads only. Never re-implement that guard here.
@@ -80,7 +80,7 @@ After any large changes, ALWAYS clarify user intent and capture the durable know
 - `source/Pe.App/AppCore.cs` - desktop Revit payload startup, host bridge bootstrap, ribbon/task initialization; the SDK generates the Revit application adapter.
 - `source/Pe.App/ButtonRegistry.cs` - top-level desktop command and ribbon exposure.
 - `source/pe-tools/apps/host/src/index.ts` - TS-built `Pe.Host.exe` HTTP/RPC/WebSocket host entrypoint.
-- `source/pe-tools/apps/pea/` - TypeScript Pea CLI/runtime surface. `pea agent` is the deployed Revit/operator workbench; `pea --prompt` runs one headless Pea turn for black-box product probes.
+- `source/pe-tools/apps/pea/` - TypeScript Pea CLI/runtime surface. `pea host` and `pea script` are the operator surface; `pea --prompt` runs one headless Pea turn for black-box product probes.
 - `source/Pe.Shared.StorageRuntime/` - C# storage roots, module/document identity, runtime state/output/log files, APS settings lookup, and small settings metadata contracts.
 - `source/Pe.Revit.Global/` - document-owned Revit helpers, APS contracts, and DA-safe collector seams that both shells can share.
 - `source/Pe.Revit/Extensions/` - strong primitives such as `FamilyDocument`, value coercion helpers, formula helpers, and parameter lookup helpers.
