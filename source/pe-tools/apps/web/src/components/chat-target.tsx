@@ -85,7 +85,10 @@ export function TargetWorld() {
         );
       })}
       {sessions.length === 0 ? (
-        <EmptyState story="scope" exit="start Revit with the Pe add-in, or launch a sandbox">
+        <EmptyState
+          story="scope"
+          exit="start Revit with the Pe add-in, or start a session from /instances"
+        >
           no sessions connected
         </EmptyState>
       ) : null}

@@ -73,8 +73,8 @@ const routeChatPlugins = Object.fromEntries(
 
 /**
  * Workspace-only plugins: iframed routes with NO route-state slice and NO inline tool card —
- * pea has no route tools for them by design (instances lifecycle is user-click or pe_sandbox
- * MCP only, never a route command).
+ * pea has no route tools for them by design (session lifecycle is user-click or the SDK's own
+ * `session_*` MCP tools, never a route command).
  */
 const workspaceOnlyPlugins: Record<string, string> = {
   instances: "Instances",

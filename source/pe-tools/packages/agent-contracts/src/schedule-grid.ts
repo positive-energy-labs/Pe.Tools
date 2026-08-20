@@ -133,7 +133,7 @@ export const scheduleGridRouteState = defineRouteState({
     },
     push: {
       description:
-        "HUMAN ONLY. Redeem every staged cell's binding handle through revit.apply.parameter-values in one transaction, fold successes into the snapshot, and clear those cells. Failed edits stay staged. With multiple Revit sessions connected, pass target (e.g. 'sandbox:<id>' or 'user').",
+        "HUMAN ONLY. Redeem every staged cell's binding handle through revit.apply.parameter-values in one transaction, fold successes into the snapshot, and clear those cells. Failed edits stay staged. With multiple Revit sessions connected, pass target (e.g. 'session:<id>' for a pe-revit session, or 'observed' for the user's own Revit).",
       input: z.object({ target: z.string().optional() }),
       actor: "human",
       mutatesExternal: true,

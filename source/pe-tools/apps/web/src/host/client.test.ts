@@ -13,8 +13,8 @@ test("web host calls preserve the explicit bridge session selector", async () =>
     });
   };
   try {
-    await callHostDynamic("revit.context.summary", {}, { bridgeSessionId: "sandbox:source-e2e" });
-    expect(headers.get(HOST_RPC_BRIDGE_SESSION_HEADER)).toBe("sandbox:source-e2e");
+    await callHostDynamic("revit.context.summary", {}, { bridgeSessionId: "session:source-e2e" });
+    expect(headers.get(HOST_RPC_BRIDGE_SESSION_HEADER)).toBe("session:source-e2e");
   } finally {
     globalThis.fetch = originalFetch;
   }

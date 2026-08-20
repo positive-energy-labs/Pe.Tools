@@ -8,7 +8,11 @@ import {
   type WorkbenchToolCall,
 } from "../src/index.ts";
 
-const call = (title: string, rawInput?: unknown, extra?: Partial<WorkbenchToolCall>): WorkbenchToolCall => ({
+const call = (
+  title: string,
+  rawInput?: unknown,
+  extra?: Partial<WorkbenchToolCall>,
+): WorkbenchToolCall => ({
   id: "t1",
   title,
   rawInput,
@@ -38,11 +42,19 @@ test("tool map is total and parses string rawInput", () => {
     gerund: "suggesting",
     target: "family",
   });
-  expect(deriveActivity(call("route_command", { route: "settings", command: "save" })).verb).toBe("editing");
-  expect(deriveActivity(call("route_command", { route: "family", command: "open" })).verb).toBe("navigating");
-  expect(deriveActivity(call("pe_sandbox", { action: "start" })).gerund).toBe("booting a world");
+  expect(deriveActivity(call("route_command", { route: "settings", command: "save" })).verb).toBe(
+    "editing",
+  );
+  expect(deriveActivity(call("route_command", { route: "family", command: "open" })).verb).toBe(
+    "navigating",
+  );
+  // pe_sandbox is deleted: session lifecycle is the SDK's `session_*` tools. An unlisted
+  // tool falls back to "working", which is the honest thing to say about a tool we do not own.
+  expect(deriveActivity(call("pe_sandbox", { action: "start" })).verb).toBe("working");
   // streamed args arrive as a JSON string
-  expect(deriveActivity(call("host_operation_call", '{"key":"revit.context.summary"}')).verb).toBe("looking");
+  expect(deriveActivity(call("host_operation_call", '{"key":"revit.context.summary"}')).verb).toBe(
+    "looking",
+  );
   // unparseable / unknown fall back to working
   expect(deriveActivity(call("host_operation_call", '{"key":')).verb).toBe("working");
   expect(deriveActivity(call("mystery_tool")).verb).toBe("working");
@@ -57,7 +69,11 @@ test("sentence snapshot: idle → working(active tool) → asking(approval) → 
   const base = createWorkbenchState();
   expect(selectSentenceSnapshot(base).phase).toBe("idle");
 
-  const active = call("host_operation_call", { key: "revit.apply.document.open" }, { status: "in_progress" });
+  const active = call(
+    "host_operation_call",
+    { key: "revit.apply.document.open" },
+    { status: "in_progress" },
+  );
   const working = withRun(base, {
     uiStatus: { ...base.uiStatus, overall: { status: "running", activeToolCallId: "t1" } },
     tools: { ...base.tools, calls: [active], activeToolCallIds: ["t1"], recentToolCallIds: [] },
@@ -83,7 +99,10 @@ test("sentence snapshot: idle → working(active tool) → asking(approval) → 
   expect(selectSentenceSnapshot(asking).phase).toBe("asking");
   expect(selectSentenceSnapshot(asking).activity?.gerund).toContain("scripting");
 
-  const failed = call("script_execute", undefined, { status: "failed", completedAt: "2026-07-16T00:00:00Z" });
+  const failed = call("script_execute", undefined, {
+    status: "failed",
+    completedAt: "2026-07-16T00:00:00Z",
+  });
   const afterFail = withRun(base, {
     tools: { ...base.tools, calls: [failed], activeToolCallIds: [], recentToolCallIds: ["t1"] },
   });

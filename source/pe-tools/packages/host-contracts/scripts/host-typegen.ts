@@ -119,7 +119,7 @@ if (catalogPath) {
   }
 
   // Verification is a contract assertion, not a status display. An untargeted host may select RRD
-  // while the operator intends a sandbox; accepting that catalog makes a wrong-lane check look
+  // while the operator intends another session; accepting that catalog makes a wrong-lane check look
   // green.
   if (!session) {
     console.error(

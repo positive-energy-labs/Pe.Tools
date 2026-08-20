@@ -131,20 +131,20 @@ export const parameterLinksRouteState = defineRouteState({
   commands: {
     refresh: {
       description:
-        "Refresh the stored profile, evaluation, issues, and runtime status from Revit. With multiple Revit sessions connected, pass target (e.g. 'sandbox:<id>' or 'user').",
+        "Refresh the stored profile, evaluation, issues, and runtime status from Revit. With multiple Revit sessions connected, pass target (e.g. 'session:<id>' for a pe-revit session, or 'observed' for the user's own Revit).",
       input: z.object({ target: z.string().optional() }),
       actor: "any",
       recoversExternal: true,
     },
     preview: {
       description:
-        "Evaluate the draft profile without storing it or writing target parameters. With multiple Revit sessions connected, pass target (e.g. 'sandbox:<id>' or 'user').",
+        "Evaluate the draft profile without storing it or writing target parameters. With multiple Revit sessions connected, pass target (e.g. 'session:<id>' for a pe-revit session, or 'observed' for the user's own Revit).",
       input: z.object({ profile: parameterLinkProfileSchema, target: z.string().optional() }),
       actor: "any",
     },
     apply: {
       description:
-        "HUMAN ONLY. Store the draft profile and reconcile its changed target parameter values. With multiple Revit sessions connected, pass target (e.g. 'sandbox:<id>' or 'user').",
+        "HUMAN ONLY. Store the draft profile and reconcile its changed target parameter values. With multiple Revit sessions connected, pass target (e.g. 'session:<id>' for a pe-revit session, or 'observed' for the user's own Revit).",
       // The dispatcher hands the handler safeParse(...).data; zod strips undeclared keys, so the
       // reviewed profile MUST be declared here or apply always fails its draft-freshness check.
       input: z.object({ profile: parameterLinkProfileSchema, target: z.string().optional() }),

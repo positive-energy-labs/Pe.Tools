@@ -224,7 +224,7 @@ const TOOLS = [
     label: "Fleet",
     icon: Server,
     description:
-      "Every Revit world the bridge and sandbox registry know about — your own session, pea-owned sandboxes you start and stop, and the ledger of what happened.",
+      "Every Revit world pe-revit and the bridge know about — the sessions pea controls and starts and stops, the one it only observes (your own Revit), each session's companion legs, and the ledger of what happened.",
   },
   {
     to: "/design-system",

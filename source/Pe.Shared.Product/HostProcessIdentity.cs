@@ -1,4 +1,4 @@
-using Pe.Revit.ServiceClient;
+﻿using Pe.Revit.ServiceClient;
 
 namespace Pe.Shared.Product;
 
@@ -33,7 +33,7 @@ public static class HostProcessIdentity {
     ///     Process-local service-name pin set by the lane-aware launcher (TsHostLauncher) so the
     ///     platform-neutral callers here (bridge, /call client) read THIS runtime's service file.
     ///     Deliberately a static, NOT an environment variable: env vars leak to child processes
-    ///     (e.g. an installed sandbox spawned from a dev session) and would pin them to the wrong
+    ///     (e.g. an installed-lane session spawned from a dev session) and would pin them to the wrong
     ///     worktree. Only the stable NAME is pinned — the port is re-read from the service file on
     ///     every resolve, so a host takeover/restart can never leave a stale address behind.
     /// </summary>
