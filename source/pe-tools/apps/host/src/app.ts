@@ -1,4 +1,4 @@
-import { Effect, Layer, Stream } from "effect";
+import { Deferred, Effect, Layer, Stream } from "effect";
 import { HttpRouter, HttpServer, HttpServerResponse as Response } from "effect/unstable/http";
 import { NodeHttpClient, NodeHttpServer, NodeServices } from "@effect/platform-node";
 import { spawn } from "node:child_process";
@@ -14,9 +14,15 @@ import {
   tsOnlyOperationCatalog,
 } from "@pe/host-contracts/operation-types";
 import { callRoute } from "./call-route.ts";
+import { productRoot } from "./host-ownership.ts";
 import { installRoot, peRevitLauncher } from "./pe-revit-launch.ts";
-import { sandboxesRoute } from "./sandbox-route.ts";
-import { adminShutdownRoute, HostLifecycle, ServiceFileLive } from "./host-lifecycle.ts";
+import { sessionsRoute } from "./session-route.ts";
+import {
+  adminShutdownRoute,
+  announceServedSession,
+  HostLifecycle,
+  ServiceFileLive,
+} from "./host-lifecycle.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { MastraMountLive, MastraRuntime, withMastraDegrade } from "./mastra-runtime.ts";
 import { staticSpaLayer } from "./static-spa.ts";
@@ -277,6 +283,41 @@ const runInstallGc = Effect.gen(function* () {
   );
 });
 
+/**
+ * Service-file schema 3, second half: once a Revit payload registers on the bridge and reports the
+ * pe-revit session it belongs to, amend this host's service file to name that session. That is what
+ * turns `session status`'s companion leg from a lane guess into a real association — the SDK reads
+ * the file, and the file now says which session this host serves.
+ *
+ * A host serves at most one Revit session in practice, but nothing enforces it; the LAST session to
+ * connect wins, which is the same "current session" rule the rest of this broker already uses.
+ * Best-effort by construction: the announcement never gates registration.
+ */
+const ServedSessionLive = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const bridge = yield* RevitBridge;
+    const { handle: handleDeferred } = yield* HostLifecycle;
+    yield* Effect.forkScoped(
+      Stream.fromPubSub(bridge.events).pipe(
+        Stream.filter((event) => event.kind === "connected"),
+        Stream.runForEach((event) =>
+          Effect.gen(function* () {
+            const views = yield* bridge.list;
+            const sdkSessionId = views.find(
+              (view) => view.sessionId === event.sessionId,
+            )?.sdkSessionId;
+            // No sdkSessionId means this Revit was not launched by pe-revit (custody `observed`);
+            // there is no session to name, and claiming one would be an invention.
+            if (!sdkSessionId) return;
+            const handle = yield* Deferred.await(handleDeferred);
+            yield* Effect.promise(() => announceServedSession(productRoot(), handle, sdkSessionId));
+          }),
+        ),
+      ),
+    );
+  }),
+);
+
 const InstallGcLive = Layer.effectDiscard(
   Effect.gen(function* () {
     yield* Effect.forkScoped(runInstallGc);
@@ -339,9 +380,10 @@ export function makeHttpLive(options: HttpLiveOptions) {
     hostUpdateStatusRoute,
     hostInstallRoute,
     adminShutdownRoute,
-    sandboxesRoute,
+    sessionsRoute,
     callRoute,
     MastraMountLive,
+    ServedSessionLive,
     options.viteServer ? viteWebLayer(options.viteServer) : staticSpaLayer(options.webRoot),
     ...(options.includeInstallGc === false ? [] : [InstallGcLive]),
   );

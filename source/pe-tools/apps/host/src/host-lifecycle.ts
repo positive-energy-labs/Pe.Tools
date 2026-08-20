@@ -7,6 +7,7 @@ import {
   isRecordedOwnerAlive,
   readServiceFile,
   sweepDeadServiceFiles,
+  writeServiceFile,
 } from "@pe/host-contracts/pe-service";
 import {
   authorizeShutdownFor,
@@ -76,8 +77,42 @@ function buildHostDescriptor(port: number): ServiceHostDescriptor {
     executablePath: hostOwnership.executablePath,
     sourceRoot: hostOwnership.lane === "dev" ? (hostOwnership.sourceRoot ?? undefined) : undefined,
     shutdown: hostProcessIdentity.shutdownPath,
+    // Service-file schema 3: the relative path a READER may probe to decide this host is UP.
+    // `pe-revit session status` narrates companion legs and never starts them, so without this it
+    // can only infer liveness from a TCP accept — and a reused port makes a stranger look like us.
+    // Declaring the health path is what gets this leg the `health` rung instead of the `tcp` one.
+    health: hostProcessIdentity.healthPath,
     policy: hostReplacementPolicy(hostOwnership.lane, process.argv.includes(DEV_TAKEOVER_ARGUMENT)),
   };
+}
+
+/**
+ * Schema-3 `sessionId`: record WHICH pe-revit session this host serves, once a Revit payload
+ * registers on the bridge and tells us. It cannot be written at claim time — the claim happens on
+ * bind, long before any Revit process connects — so this is an in-place amendment of our OWN file.
+ *
+ * Why it matters: without it, `session status` can only match this host to a session by LANE, and
+ * it says so in as many words (`legBecause: "lane match and NOT proof that this host serves this
+ * session"`). With it, the leg is an association the SDK can actually stand behind.
+ *
+ * Compare-and-swap on `instanceId`: if the file no longer names this launch, a successor claimed
+ * it and writing would clobber a live identity. Best-effort throughout — a leg is narration, and
+ * failing to improve it must never take the host down.
+ */
+export async function announceServedSession(
+  appBase: string,
+  handle: ServiceHostHandle,
+  sessionId: string,
+): Promise<void> {
+  try {
+    const current = await readServiceFile(appBase, hostOwnership.serviceName);
+    if (!current || current.instanceId !== handle.serviceFile.instanceId) return;
+    if (current.sessionId === sessionId) return;
+    await writeServiceFile(appBase, hostOwnership.serviceName, { ...current, sessionId });
+    console.log(`pe-host service file now names pe-revit session ${sessionId}`);
+  } catch (error) {
+    console.warn(`pe-host could not record the served session id: ${String(error)}`);
+  }
 }
 
 /**
