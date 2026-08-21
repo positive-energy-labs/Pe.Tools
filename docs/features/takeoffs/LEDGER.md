@@ -69,6 +69,7 @@
 - 2026-08-16 — Unbacked-separator absorption uses `AbsorbNakedSeparatorFraction = 0.6` and seed wall ink, not seal-inflated evidence; it removes the LL09 sliver without treating a door as a wall.
 - 2026-08-17 — LL08’s “cray polygons” are correct fail-closed output from capture starvation: 163 sf seed ink over 3,272 sf, 73% in the zone-edge band, 48 floating clusters. Fix capture in the LL06/LL08 quadrant; do not tune promotion around the evidence vacuum.
 - 2026-08-21 — The tuning honesty rail now matches `DetectSnapshot.EvidenceInkDistance`: replay seed ink plus INKC class 2 (`SealDoorHead`) only; wall-run, gap-close, and oversize-fringe closure never back an edge. This corrects the reported r0 currency from savedWork 0.4205 / accepted edge-on-ink 0.8970 to 0.3660 / 0.7511 without changing geometry, and supersedes the stated ML05 R02 mechanism in the r2/r3 tombstones: on the lawful rail R02 is 0.5321→0.5321, not an honesty fall.
+- 2026-08-21 — Bounded joint clipping is admitted only when the room being rescued has no contiguous lawful-ink gap longer than 1.0 ft (quarter-foot endpoint samples; zone-authority samples reset the run). This keeps ML05 R05 held at 4.25 ft while promoting Upper 00 R04 at 0.75 ft: 143/143 tests and honesty passed, savedWork rose 0.3660→0.3736, +1 oracle room/+98.6 accepted sf, swallow stayed flat, and the strict reviewer found B better with “no edge floats in white” and no new bad wall.
 
 ## Tried & rejected
 - 2026-08-14 — Vector wall harvest: 47.7% recall vs raster 51.9%.

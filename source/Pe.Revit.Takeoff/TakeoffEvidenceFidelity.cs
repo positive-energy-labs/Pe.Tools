@@ -51,6 +51,36 @@ internal static class TakeoffEvidenceFidelity
         return sampled == 0 ? null : (double)supported / sampled;
     }
 
+    /// <summary>
+    /// Longest contiguous run of non-exempt boundary samples without lawful backing. Runs reset at
+    /// segment boundaries; segments shorter than two samples are intentionally ignored.
+    /// </summary>
+    internal static double WorstUnbackedRunFt(
+        RoomResult room,
+        Func<double, double, double> distanceToInk,
+        Geometry? exemptBoundary,
+        double exemptFt)
+    {
+        int worst = 0;
+        foreach (var edge in Edges(ToPolygon(room)))
+        {
+            if (edge.Length < 2 * SampleStepFt) continue;
+            int count = Math.Max(2, (int)(edge.Length / SampleStepFt) + 1);
+            int run = 0;
+            for (int index = 0; index < count; index++)
+            {
+                double distance = edge.Length * index / (count - 1);
+                var point = PointAlong(edge, distance);
+                bool exempt = exemptBoundary != null
+                    && exemptBoundary.Distance(Factory.CreatePoint(point)) <= exemptFt + Epsilon;
+                bool backed = distanceToInk(point.X, point.Y) <= 0.25 + Epsilon;
+                run = exempt || backed ? 0 : run + 1;
+                worst = Math.Max(worst, run);
+            }
+        }
+        return worst * SampleStepFt;
+    }
+
     internal static double BoundarySupportFraction(
         IReadOnlyList<RoomResult> rooms,
         Func<double, double, double> distanceToInk)

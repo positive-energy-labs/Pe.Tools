@@ -233,6 +233,33 @@ def backed_stats(geometry, grid, zone_boundary=None, exempt_ft=EXEMPT_FT):
     return float(hits.mean()), int(keep.sum()), exempt
 
 
+def worst_unbacked_run_ft(geometry, grid, zone_boundary=None, exempt_ft=EXEMPT_FT):
+    """Longest per-segment run of lawful-evidence misses, in 0.25 ft sample currency."""
+    worst = 0
+    for part in _polygon_parts(geometry):
+        for ring in [part.exterior.coords] + [r.coords for r in part.interiors]:
+            pts = collapse_collinear(list(ring))
+            for i in range(len(pts)):
+                (x0, y0), (x1, y1) = pts[i], pts[(i + 1) % len(pts)]
+                length = math.hypot(x1 - x0, y1 - y0)
+                if length < 2 * SAMPLE_STEP_FT:
+                    continue
+                count = max(2, int(length / SAMPLE_STEP_FT) + 1)
+                t = np.linspace(0.0, 1.0, count)
+                xs, ys = x0 + t * (x1 - x0), y0 + t * (y1 - y0)
+                keep = np.ones(count, dtype=bool)
+                if zone_boundary is not None and not zone_boundary.is_empty:
+                    dist = shapely.distance(
+                        shapely.points(np.column_stack([xs, ys])), zone_boundary)
+                    keep = dist > exempt_ft + EPS
+                hits = grid.distance_ft(xs, ys) <= HIT_FT + EPS
+                run = 0
+                for eligible, hit in zip(keep, hits):
+                    run = run + 1 if eligible and not hit else 0
+                    worst = max(worst, run)
+    return round(worst * SAMPLE_STEP_FT, 4)
+
+
 def zone_geometry(loops):
     """Even-odd composition of zone loops (mirrors ZoneScope.ContainsEvenOdd)."""
     geometry = GeometryCollection()
@@ -579,7 +606,9 @@ def score_report(report_path, clean=True):
                     frac_ink, _, _ = backed_stats(geometry, grids["ink"], zboundary)
                     row.update(edgeOnInk=None if frac is None else round(frac, 4),
                                edgeOnInkInkOnly=None if frac_ink is None else round(frac_ink, 4),
-                               sampled=sampled, exemptSamples=exempt)
+                               sampled=sampled, exemptSamples=exempt,
+                               worstUnbackedRunFt=worst_unbacked_run_ft(
+                                   geometry, grids["evidence"], zboundary))
                     if frac is not None:
                         agg[disposition][0] += frac * sampled
                         agg[disposition][1] += sampled
@@ -671,8 +700,10 @@ def score_report(report_path, clean=True):
             swallowSf=round(sum(p.get("swallowSf", 0.0) for p in polys_out
                                 if p["disposition"] == "accepted"), 1),
             meanEditCostAccepted=round(np.mean([p["editCost"] for p in polys_out
-                                                if p["disposition"] == "accepted"]), 2)
+                                                 if p["disposition"] == "accepted"]), 2)
             if any(p["disposition"] == "accepted" for p in polys_out) else None,
+            medianWorstUnbackedRunAccepted=_median_worst_run(polys_out, "accepted"),
+            medianWorstUnbackedRunHeld=_median_worst_run(polys_out, "held"),
             savedWork=round(float(np.mean(contributions)), 4) if contributions else None,
             polygons=polys_out, oracleRoomStatus=oracle_rows,
             oracleBoundaryDistance=distance_rows))
@@ -700,8 +731,10 @@ def score_report(report_path, clean=True):
         swallowSf=round(sum(p.get("swallowSf", 0.0) for p in all_polys
                             if p["disposition"] == "accepted"), 1),
         meanEditCostAccepted=round(np.mean([p["editCost"] for p in all_polys
-                                            if p["disposition"] == "accepted"]), 2)
+                                             if p["disposition"] == "accepted"]), 2)
         if any(p["disposition"] == "accepted" for p in all_polys) else None,
+        medianWorstUnbackedRunAccepted=_median_worst_run(all_polys, "accepted"),
+        medianWorstUnbackedRunHeld=_median_worst_run(all_polys, "held"),
         distanceBuckets={b: sum(1 for d in all_dist if d["bucket"] == b)
                          for b in ("as-is", "nudge", "redraw")},
         unzonedOracleRooms=unzoned)
@@ -721,6 +754,12 @@ def _weighted_edge(polys, disposition):
     return round(num / den, 4) if den else None
 
 
+def _median_worst_run(polys, disposition):
+    values = [p["worstUnbackedRunFt"] for p in polys
+              if p["disposition"] == disposition and "worstUnbackedRunFt" in p]
+    return round(float(np.median(values)), 4) if values else None
+
+
 def _print_board(label, board):
     print(f"{label} oracleRooms={board['oracleRoomsInZones']} "
           f"recall={board['roomRecall']} held={board['heldRecall']} "
@@ -729,6 +768,9 @@ def _print_board(label, board):
           f"held={board['edgeOnInkHeld']} "
           f"swallowSf={board['swallowSf']} editCost={board['meanEditCostAccepted']} "
           f"buckets={board['distanceBuckets']}")
+    print(f"{' ' * len(label)} worstUnbackedRun median acc="
+          f"{board['medianWorstUnbackedRunAccepted']} "
+          f"held={board['medianWorstUnbackedRunHeld']}")
 
 
 def cmd_score(args):
@@ -930,7 +972,8 @@ def _card_zone_names(zone_names):
 
 
 COMPARE_KEYS = ["roomRecall", "heldRecall", "edgeOnInkAccepted", "edgeOnInkHeld",
-                "swallowSf", "meanEditCostAccepted", "savedWork"]
+                "swallowSf", "meanEditCostAccepted", "medianWorstUnbackedRunAccepted",
+                "medianWorstUnbackedRunHeld", "savedWork"]
 
 HONESTY_TOL = 0.005  # kaitpw round-3 wording: "beyond ~0.005 noise"
 

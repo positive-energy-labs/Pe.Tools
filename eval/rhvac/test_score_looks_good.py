@@ -134,6 +134,14 @@ def test_backed_fraction_all_exempt_returns_none():
     assert exempt > 0
 
 
+def test_worst_unbacked_run_uses_quarter_foot_samples_and_resets_at_exemption():
+    empty = slg.Grid(np.zeros((40, 40), dtype=bool), 0.0, 0.0, 0.25)
+    room = Polygon([(0, 0), (4.3, 0), (4.3, 2), (0, 2)])
+    assert slg.worst_unbacked_run_ft(room, empty) == 4.5
+    assert slg.worst_unbacked_run_ft(
+        room, empty, zone_boundary=room.boundary, exempt_ft=1.0) == 0.0
+
+
 def test_interior_swallow_detects_interior_ink_only():
     # 10x10 ft room on a 0.25 ft grid; ink stripe through the middle = swallowed wall;
     # ink hugging the boundary stays inside the 1.5 ft wall-claim band and is ignored.

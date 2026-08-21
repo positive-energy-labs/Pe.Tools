@@ -45,6 +45,7 @@ public static class TakeoffPromotion
 {
     private const double Epsilon = 1e-7;
     private const double AccountingEpsilonSqft = 1e-6;
+    private const double JointClipMaximumUnbackedRunFt = 1.0;
     private static readonly GeometryFactory GeometryFactory = TakeoffGeometry.Factory;
 
     /// <summary>
@@ -451,7 +452,7 @@ public static class TakeoffPromotion
         bool snapping = state.Options.ZoneSnapFt > 0;
         if ((!snapping && !state.Options.ZoneClipEnabled) || state.Result.Rooms.Count == 0) return;
         var zoneBoundary = state.ZoneGeometry.Boundary;
-        int snapped = 0, clipped = 0, fellBack = 0, squared = 0, dissolved = 0;
+        int snapped = 0, clipped = 0, jointClipped = 0, fellBack = 0, squared = 0, dissolved = 0;
         foreach (var room in state.Result.Rooms
                      .OrderBy(item => item.Id, StringComparer.Ordinal).ToList())
         {
@@ -528,7 +529,19 @@ public static class TakeoffPromotion
                 candidate.Flags = candidate.Flags.Append("zone-fit")
                     .Distinct(StringComparer.Ordinal).OrderBy(value => value, StringComparer.Ordinal)
                     .ToList();
-                if (!Fits(state, candidate, attempt.Fitted, original, neighbors)) continue;
+                if (!Fits(state, candidate, attempt.Fitted, original, neighbors,
+                        out var coverageRooms))
+                {
+                    if (attempt.DidClip && TryJointClip(state, candidate, attempt.Dropped,
+                            coverageRooms, out int jointlyClipped))
+                    {
+                        clipped += jointlyClipped;
+                        jointClipped += jointlyClipped;
+                        committed = true;
+                        break;
+                    }
+                    continue;
+                }
 
                 state.Result.Rooms[index] = candidate;
                 foreach (var part in attempt.Dropped)
@@ -553,6 +566,7 @@ public static class TakeoffPromotion
         }
         if (snapped > 0) state.Rejections["zonefit:snapped"] = snapped;
         if (clipped > 0) state.Rejections["zonefit:clipped"] = clipped;
+        if (jointClipped > 0) state.Rejections["zonefit:joint-clipped"] = jointClipped;
         if (squared > 0) state.Rejections["zonefit:squared"] = squared;
         if (dissolved > 0) state.Rejections["zonefit:dissolved"] = dissolved;
         if (fellBack > 0) state.Rejections["zonefit:fallback"] = fellBack;
@@ -565,8 +579,10 @@ public static class TakeoffPromotion
     /// </summary>
     private static bool Fits(
         PromotionState state, RoomResult candidate, Polygon fitted, Polygon original,
-        List<(string Id, Polygon Geometry)> neighbors)
+        List<(string Id, Polygon Geometry)> neighbors,
+        out IReadOnlyList<string> coverageRooms)
     {
+        coverageRooms = [];
         // Each refusal names itself in RejectionDetails: a fallback whose cause is invisible is a
         // dead end for tuning, and the zone-fit stage is where diagonal zones go to die quietly.
         string Refuse(string why)
@@ -592,6 +608,8 @@ public static class TakeoffPromotion
             .Select(room => room.Id == candidate.Id ? candidate : room).ToList();
         var audit = TakeoffEditability.Evaluate(ToLevel(state.Result, together));
         if (audit.IsStrictlyEditable) return true;
+        coverageRooms = audit.CoverageViolations.Select(violation => violation.RoomId)
+            .Distinct(StringComparer.Ordinal).OrderBy(id => id, StringComparer.Ordinal).ToList();
         var kinds = audit.Rooms.Where(room => !room.IsStrictlyEditable)
             .SelectMany(room => room.Violations.Select(violation => $"{room.RoomId}:{violation.Kind}"))
             .Distinct().Take(6);
@@ -603,6 +621,100 @@ public static class TakeoffPromotion
             .Take(8);
         Refuse($"editability {string.Join(",", kinds)} [{string.Join(" ", where)}]");
         return false;
+    }
+
+    /// <summary>
+    /// A one-room zone clip can invalidate a shared coverage only because its named partners still
+    /// carry the uncut side of the same edge. Retry that exact, bounded component as one motion;
+    /// every ordinary admission law still judges the complete partition before anything commits.
+    /// </summary>
+    private static bool TryJointClip(
+        PromotionState state, RoomResult firstCandidate, IReadOnlyList<Polygon> firstDropped,
+        IReadOnlyList<string> coverageRooms, out int clipped)
+    {
+        clipped = 0;
+        if (coverageRooms.Count is < 2 or > 3 || !coverageRooms.Contains(firstCandidate.Id))
+            return false;
+
+        var ids = coverageRooms.ToHashSet(StringComparer.Ordinal);
+        var originals = state.Result.Rooms.Where(room => ids.Contains(room.Id))
+            .ToDictionary(room => room.Id, StringComparer.Ordinal);
+        if (originals.Count != ids.Count) return false;
+
+        var polygons = new Dictionary<string, Polygon>(StringComparer.Ordinal) {
+            [firstCandidate.Id] = ToPolygon(firstCandidate),
+        };
+        var dropped = new Dictionary<string, IReadOnlyList<Polygon>>(StringComparer.Ordinal) {
+            [firstCandidate.Id] = firstDropped,
+        };
+        foreach (var room in originals.Values.Where(room => room.Id != firstCandidate.Id))
+        {
+            var original = ToPolygon(room);
+            var parts = PolygonParts(PolygonIntersection(original, state.ZoneGeometry))
+                .Where(part => part.Area > Epsilon)
+                .OrderByDescending(part => part.Area)
+                .ThenBy(part => part.InteriorPoint.X).ThenBy(part => part.InteriorPoint.Y)
+                .ToList();
+            if (parts.Count == 0) return false;
+            polygons[room.Id] = parts[0];
+            dropped[room.Id] = parts.Skip(1).ToList();
+        }
+
+        foreach (var id in coverageRooms)
+            polygons[id] = RenodeAgainstNeighbors(polygons[id], coverageRooms
+                .Where(other => other != id)
+                .Select(other => (other, polygons[other])).ToList());
+
+        var replacements = originals.Values.Select(room => {
+            var candidate = Clone(room, polygons[room.Id]);
+            candidate.Flags = candidate.Flags.Append("zone-fit")
+                .Distinct(StringComparer.Ordinal).OrderBy(value => value, StringComparer.Ordinal)
+                .ToList();
+            return candidate;
+        }).ToDictionary(room => room.Id, StringComparer.Ordinal);
+        if (replacements.Values.Any(room => ToPolygon(room) is var polygon
+                && (!polygon.IsValid || polygon.Area < state.Options.MinimumPromotedRoomSqft
+                    || PolygonDifference(polygon, state.ZoneGeometry).Area > Epsilon)))
+            return false;
+
+        double worst = TakeoffEvidenceFidelity.WorstUnbackedRunFt(
+            replacements[firstCandidate.Id], state.DistanceToInk, state.ZoneGeometry.Boundary,
+            state.Options.InkBackedZoneEdgeExemptFt);
+        if (worst > JointClipMaximumUnbackedRunFt + Epsilon)
+        {
+            state.RejectionDetails[$"zonefit/{firstCandidate.Id}"] =
+                $"unbacked-run {worst:F2}ft > {JointClipMaximumUnbackedRunFt:F2}ft";
+            return false;
+        }
+
+        var together = state.Result.Rooms
+            .Select(room => replacements.GetValueOrDefault(room.Id, room)).ToList();
+        if (!TakeoffEditability.Evaluate(ToLevel(state.Result, together)).IsStrictlyEditable)
+            return false;
+
+        foreach (var room in originals.Values)
+        foreach (var other in state.Result.Rooms.Where(other => other.Id != room.Id))
+        {
+            if (Intersection(ToPolygon(room).Boundary, ToPolygon(other).Boundary).Length <= Epsilon)
+                continue;
+            if (Intersection(ToPolygon(replacements[room.Id]).Boundary,
+                    ToPolygon(replacements.GetValueOrDefault(other.Id, other)).Boundary).Length
+                <= Epsilon)
+                return false;
+        }
+
+        foreach (var room in replacements.Values)
+        {
+            int index = state.Result.Rooms.FindIndex(item => item.Id == room.Id);
+            state.Result.Rooms[index] = room;
+            foreach (var part in dropped[room.Id])
+                AddResidues(state.Result.Residues, $"{room.Id}~zonefit",
+                    ResidueReason.Rejected, part, room.MeanCeilingFt);
+            if (PolygonDifference(ToPolygon(originals[room.Id]), state.ZoneGeometry).Area > Epsilon)
+                clipped++;
+        }
+        state.Log?.Invoke($"[promotion] zone-fit joint clip rooms={string.Join(",", coverageRooms)}");
+        return true;
     }
 
     /// <summary>

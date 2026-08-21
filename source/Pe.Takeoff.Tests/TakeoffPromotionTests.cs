@@ -607,6 +607,45 @@ public sealed class TakeoffPromotionTests
     }
 
     [Test]
+    public void Zone_fit_clips_coverage_partners_in_one_motion_when_the_new_edge_is_backed()
+    {
+        var source = new TakeoffResult {
+            LevelName = "Level 1",
+            Rooms = {
+                Room("lower", (0, 0), (12, 0), (12, 5), (0, 5)),
+                Room("upper", (0, 5), (12, 5), (12, 10), (0, 10)),
+            },
+            DomainSqft = 120,
+        };
+        var options = Options(minimumRoomSqft: 0, boundarySimplifyFt: 0);
+        options.EdgeBandFt = 0;
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, Zone("all", (0, 0), (10, 0), (10, 10), (0, 10)),
+            options, (_, _) => 0, TestContext.Out.WriteLine);
+
+        Assert.Multiple(() => {
+            Assert.That(promotion.Result.Rooms, Has.Count.EqualTo(2));
+            Assert.That(promotion.Result.Rooms.Select(room => room.RawSqft),
+                Is.All.EqualTo(50).Within(1e-6));
+            Assert.That(promotion.Diagnostics.Rejections["zonefit:joint-clipped"], Is.EqualTo(2));
+            Assert.That(promotion.Diagnostics.Rejections.Keys, Has.No.Member("scope:outside"));
+            Assert.That(promotion.Diagnostics.IsStrictlyEditable, Is.True);
+            Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
+        });
+    }
+
+    [Test]
+    public void Worst_unbacked_run_is_counted_per_segment_in_quarter_foot_samples()
+    {
+        var room = Room("room", (0, 0), (4.3, 0), (4.3, 2), (0, 2));
+        double worst = TakeoffEvidenceFidelity.WorstUnbackedRunFt(
+            room, (x, y) => y < 1e-6 && x > 1e-6 ? 1 : 0, null, 0);
+
+        Assert.That(worst, Is.EqualTo(4.25).Within(1e-9));
+    }
+
+    [Test]
     public void Zone_fit_falls_back_when_the_zone_edge_runs_diagonal_to_the_room_frame()
     {
         // The zone's top edge slopes relative to the room's frame. Edge-wise snapping refuses the
