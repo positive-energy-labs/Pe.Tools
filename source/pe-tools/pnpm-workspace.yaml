@@ -9,8 +9,8 @@ catalog:
   "@assistant-ui/react": ^0.14.23
   "@assistant-ui/react-markdown": ^0.14.4
   "@base-ui/react": ^1.6.0
-  '@tanstack/highlight': 0.0.10
-  '@tanstack/react-form': ^1.33.5
+  "@tanstack/highlight": 0.0.10
+  "@tanstack/react-form": ^1.33.5
   "@tanstack/react-hotkeys": ^0.10.0
   "@types/node": ^24
   ajv: ^8.20.0

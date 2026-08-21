@@ -63,8 +63,10 @@ const DOCS_MD = MD.filter((p) => p.startsWith("docs/"));
 const ROOT_MD = MD.filter((p) => !p.includes("/"));
 
 const list = (items: string[], cap = 40): string =>
-  items.slice(0, cap).map((s) => `  ${s}`).join("\n") +
-  (items.length > cap ? `\n  … +${items.length - cap} more` : "");
+  items
+    .slice(0, cap)
+    .map((s) => `  ${s}`)
+    .join("\n") + (items.length > cap ? `\n  … +${items.length - cap} more` : "");
 
 // ── 1. ledger shape ──────────────────────────────────────────────────────────────────────────
 

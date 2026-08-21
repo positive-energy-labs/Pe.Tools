@@ -100,8 +100,20 @@ interface Fact {
 type Facts = Record<FactKey, Fact>;
 
 const INITIAL_FACTS: Facts = {
-  heatEwt: { label: "Heating EWT", unit: "°F", value: 110, committed: 110, target: "PE_M_PerfHeat_FluidEWT" },
-  heatLwt: { label: "Heating LWT", unit: "°F", value: 100, committed: 100, target: "PE_M_PerfHeat_FluidLWT" },
+  heatEwt: {
+    label: "Heating EWT",
+    unit: "°F",
+    value: 110,
+    committed: 110,
+    target: "PE_M_PerfHeat_FluidEWT",
+  },
+  heatLwt: {
+    label: "Heating LWT",
+    unit: "°F",
+    value: 100,
+    committed: 100,
+    target: "PE_M_PerfHeat_FluidLWT",
+  },
   // Real BOD fact with no PE_* target in this model — renders as the reserved seam, honestly.
   odtWinter: { label: "Outdoor design temp (winter DB)", unit: "°F", value: 9.4, committed: 9.4 },
 };
@@ -120,8 +132,18 @@ const param = (name: string): ParamMeta => {
 };
 
 const LINKS: Link[] = [
-  { factKey: "heatEwt", param: param("PE_M_PerfHeat_FluidEWT"), get: (v) => v.ewt, set: (v, n) => ({ ...v, ewt: n }) },
-  { factKey: "heatLwt", param: param("PE_M_PerfHeat_FluidLWT"), get: (v) => v.lwt, set: (v, n) => ({ ...v, lwt: n }) },
+  {
+    factKey: "heatEwt",
+    param: param("PE_M_PerfHeat_FluidEWT"),
+    get: (v) => v.ewt,
+    set: (v, n) => ({ ...v, ewt: n }),
+  },
+  {
+    factKey: "heatLwt",
+    param: param("PE_M_PerfHeat_FluidLWT"),
+    get: (v) => v.lwt,
+    set: (v, n) => ({ ...v, lwt: n }),
+  },
 ];
 
 const isFormulaOwned = (link: Link, typeName: string): boolean =>
@@ -200,7 +222,11 @@ export function VariantE() {
     const lines: Outcome[] = [];
     for (const w of writes) {
       if (w.refusal != null) {
-        lines.push({ kind: "refused", label: `${w.link.param.name} · ${w.group.name}`, says: w.refusal });
+        lines.push({
+          kind: "refused",
+          label: `${w.link.param.name} · ${w.group.name}`,
+          says: w.refusal,
+        });
         continue;
       }
       const vals = next[w.group.name];
@@ -225,10 +251,11 @@ export function VariantE() {
             says: "mock apply — in-memory only in this prototype",
           };
     setModel(next);
-    setFacts((f) =>
-      Object.fromEntries(
-        Object.entries(f).map(([k, v]) => [k, { ...v, committed: v.value }]),
-      ) as Facts,
+    setFacts(
+      (f) =>
+        Object.fromEntries(
+          Object.entries(f).map(([k, v]) => [k, { ...v, committed: v.value }]),
+        ) as Facts,
     );
     setOutcomes([summary, ...lines]);
   };
@@ -344,7 +371,10 @@ export function VariantE() {
   );
 
   const gridLens = (
-    <table className="w-full border-collapse text-xs" style={{ ["--r-on" as string]: "var(--r-artifact)" }}>
+    <table
+      className="w-full border-collapse text-xs"
+      style={{ ["--r-on" as string]: "var(--r-artifact)" }}
+    >
       <thead>
         <tr
           style={{
@@ -375,21 +405,30 @@ export function VariantE() {
             <Fragment key={group.name}>
               {/* LANG GAP (4): no primitive for a type group-header row — this hand-rolled band
                   is what makes "one type write = N rows stage together" legible. */}
-              <tr style={{ background: "var(--r-recess)", ["--r-on" as string]: "var(--r-recess)" }}>
+              <tr
+                style={{ background: "var(--r-recess)", ["--r-on" as string]: "var(--r-recess)" }}
+              >
                 <td colSpan={COLS} className="px-2 py-1" style={{ borderTop: hairline }}>
                   <span className="font-mono text-[11px]">{group.name}</span>
                   <span className="ml-2 text-[11px]" style={muted}>
-                    {group.rows.length} row{group.rows.length === 1 ? "" : "s"} · perf params at type scope
+                    {group.rows.length} row{group.rows.length === 1 ? "" : "s"} · perf params at
+                    type scope
                   </span>
                   {groupWrites.length > 0 ? (
                     <span className="ml-2 text-[11px]" style={{ color: "var(--r-caution)" }}>
-                      one type write — {groupWrites.map((w) => w.link.param.name.replace("PE_M_PerfHeat_Fluid", "")).join(" + ")} stage
-                      {" "}{group.rows.length} row{group.rows.length === 1 ? "" : "s"} together
+                      one type write —{" "}
+                      {groupWrites
+                        .map((w) => w.link.param.name.replace("PE_M_PerfHeat_Fluid", ""))
+                        .join(" + ")}{" "}
+                      stage {group.rows.length} row{group.rows.length === 1 ? "" : "s"} together
                     </span>
                   ) : null}
                   {groupRefusals.length > 0 ? (
                     <span className="ml-2 text-[11px]" style={{ color: "var(--r-alarm)" }}>
-                      {groupRefusals.map((w) => w.link.param.name.replace("PE_M_PerfHeat_Fluid", "")).join(" + ")} refuses — formula-owned
+                      {groupRefusals
+                        .map((w) => w.link.param.name.replace("PE_M_PerfHeat_Fluid", ""))
+                        .join(" + ")}{" "}
+                      refuses — formula-owned
                     </span>
                   ) : null}
                 </td>
@@ -432,25 +471,41 @@ export function VariantE() {
   const fomLens = (
     <div className="p-6">
       <div className="mb-2 text-[11px]" style={secondary}>
-        <span className="font-mono">SXL - FOM HWCH Plant</span> → sheet exhibit · a saved projection of the
-        same {FC_UNITS.length}-row substrate — switching lens re-projects, nothing is retyped
+        <span className="font-mono">SXL - FOM HWCH Plant</span> → sheet exhibit · a saved projection
+        of the same {FC_UNITS.length}-row substrate — switching lens re-projects, nothing is retyped
       </div>
       <table className="border-collapse text-xs" style={{ border: hairline }}>
         <tbody>
           <tr>
-            <td colSpan={3} className="px-3 py-1 text-center" style={{ border: hairline, ...secondary }}>
+            <td
+              colSpan={3}
+              className="px-3 py-1 text-center"
+              style={{ border: hairline, ...secondary }}
+            >
               {FOM_HWCH_PLANT.groupRow[0]}
             </td>
-            <td colSpan={4} className="px-3 py-1 text-center" style={{ border: hairline, ...secondary }}>
+            <td
+              colSpan={4}
+              className="px-3 py-1 text-center"
+              style={{ border: hairline, ...secondary }}
+            >
               {FOM_HWCH_PLANT.groupRow[3]}
             </td>
-            <td colSpan={4} className="px-3 py-1 text-center" style={{ border: hairline, ...secondary }}>
+            <td
+              colSpan={4}
+              className="px-3 py-1 text-center"
+              style={{ border: hairline, ...secondary }}
+            >
               {FOM_HWCH_PLANT.groupRow[7]}
             </td>
           </tr>
           <tr>
             {FOM_HWCH_PLANT.headRow.map((head, i) => (
-              <td key={i} className="px-3 py-1 text-center text-[11px]" style={{ border: hairline, ...secondary }}>
+              <td
+                key={i}
+                className="px-3 py-1 text-center text-[11px]"
+                style={{ border: hairline, ...secondary }}
+              >
                 {head}
               </td>
             ))}
@@ -459,7 +514,11 @@ export function VariantE() {
             {FOM_HWCH_PLANT.dataRow.map((cell, i) =>
               i === 9 ? (
                 // LANG GAP (2): the inbound cell has no reserved mark either — hover carries it.
-                <td key={i} className="px-3 py-1 text-center font-mono" style={{ border: hairline }}>
+                <td
+                  key={i}
+                  className="px-3 py-1 text-center font-mono"
+                  style={{ border: hairline }}
+                >
                   <StateCell
                     scale="row"
                     value={HEAT_CAP_SUM.toLocaleString()}
@@ -472,7 +531,11 @@ export function VariantE() {
                   key={i}
                   className={`px-3 py-1 text-center ${i >= 3 ? "font-mono" : ""}`}
                   style={{ border: hairline }}
-                  title={i >= 3 ? "dead text in the SXL exhibit — would become an authored fact or an inbound reading" : undefined}
+                  title={
+                    i >= 3
+                      ? "dead text in the SXL exhibit — would become an authored fact or an inbound reading"
+                      : undefined
+                  }
                 >
                   {cell}
                 </td>
@@ -480,14 +543,19 @@ export function VariantE() {
             )}
           </tr>
           <tr>
-            <td colSpan={11} className="px-3 py-1 text-left italic text-[11px]" style={{ border: hairline, ...muted }}>
+            <td
+              colSpan={11}
+              className="px-3 py-1 text-left italic text-[11px]"
+              style={{ border: hairline, ...muted }}
+            >
               {FOM_HWCH_PLANT.footnote}
             </td>
           </tr>
         </tbody>
       </table>
       <div className="mt-2 text-[11px]" style={muted}>
-        heating Load reads live from the grid's rows — the printed exhibit disagreed, and the squiggle says so
+        heating Load reads live from the grid's rows — the printed exhibit disagreed, and the
+        squiggle says so
       </div>
     </div>
   );
@@ -495,8 +563,8 @@ export function VariantE() {
   const bodLens = (
     <div className="p-6">
       <div className="mb-2 text-[11px]" style={secondary}>
-        <span className="font-mono">SXL - M_BOD_MainHouse</span> (sheet M001) · label × value projection of the
-        same substrate — authored facts render through the same editor as the lane
+        <span className="font-mono">SXL - M_BOD_MainHouse</span> (sheet M001) · label × value
+        projection of the same substrate — authored facts render through the same editor as the lane
       </div>
       <table className="border-collapse text-xs">
         <tbody>
@@ -504,8 +572,14 @@ export function VariantE() {
             <tr key={entry.key} style={{ borderTop: hairline }}>
               <td className="max-w-xl px-2 py-1 pr-6">{entry.label}</td>
               <td className="px-2 py-1 font-mono">
-                {entry.key === "odt-winter" ? factCell("odtWinter") : entry.numeric != null ? entry.value : (
-                  <span className="font-sans" style={secondary}>{entry.value}</span>
+                {entry.key === "odt-winter" ? (
+                  factCell("odtWinter")
+                ) : entry.numeric != null ? (
+                  entry.value
+                ) : (
+                  <span className="font-sans" style={secondary}>
+                    {entry.value}
+                  </span>
                 )}
               </td>
               <td className="px-2 py-1 text-[11px]" style={muted}>
@@ -571,7 +645,10 @@ export function VariantE() {
           />
         }
         seam={
-          <FactChip dashed title="prototype fixture lane — pulled from ProjectA_Clone_Aug_11 on 2026-08-17; a live host session would replace this">
+          <FactChip
+            dashed
+            title="prototype fixture lane — pulled from ProjectA_Clone_Aug_11 on 2026-08-17; a live host session would replace this"
+          >
             fixture · ProjectA_Clone_Aug_11
           </FactChip>
         }
@@ -603,9 +680,23 @@ export function VariantE() {
                 value={lens}
                 onChange={setLens}
                 options={[
-                  { value: "grid", label: "Grid", title: "Every fan coil × every attribute — the substrate itself" },
-                  { value: "fom", label: "FOM exhibit", title: "The print-shaped FOM HWCH Plant projection — same substrate, 5×11 sheet layout" },
-                  { value: "bod", label: "BOD", title: "The M001 Basis of Design projection — label × value over the same authored facts" },
+                  {
+                    value: "grid",
+                    label: "Grid",
+                    title: "Every fan coil × every attribute — the substrate itself",
+                  },
+                  {
+                    value: "fom",
+                    label: "FOM exhibit",
+                    title:
+                      "The print-shaped FOM HWCH Plant projection — same substrate, 5×11 sheet layout",
+                  },
+                  {
+                    value: "bod",
+                    label: "BOD",
+                    title:
+                      "The M001 Basis of Design projection — label × value over the same authored facts",
+                  },
                 ]}
               />
             </span>

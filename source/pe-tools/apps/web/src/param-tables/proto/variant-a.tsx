@@ -221,7 +221,9 @@ function pendingWrites(grids: Record<TableKey, Cell[][]>, model: Model): Pending
             cur,
             next,
             ...(meta.readOnlyOn?.includes(ty.type)
-              ? { refusal: `formula-owned on this type — the family formula computes ${meta.name}; retype the formula in the family editor instead` }
+              ? {
+                  refusal: `formula-owned on this type — the family formula computes ${meta.name}; retype the formula in the family editor instead`,
+                }
               : {}),
           });
         }
@@ -266,7 +268,12 @@ function LinkMark({ dir, title }: { dir: LinkDir; title: string }) {
       {dir === "out" ? (
         <path d="M8 0 L8 8 L0 8 Z" fill="var(--r-ink-2)" />
       ) : (
-        <path d="M7.3 1.4 L7.3 7.3 L1.4 7.3 Z" fill="none" stroke="var(--r-ink-2)" strokeWidth={1.2} />
+        <path
+          d="M7.3 1.4 L7.3 7.3 L1.4 7.3 Z"
+          fill="none"
+          stroke="var(--r-ink-2)"
+          strokeWidth={1.2}
+        />
       )}
     </svg>
   );
@@ -485,7 +492,10 @@ export function VariantA() {
           />
         }
         seam={
-          <FactChip dashed title="prototype fixture pulled live 2026-08-17 — a connected host session replaces this lane">
+          <FactChip
+            dashed
+            title="prototype fixture pulled live 2026-08-17 — a connected host session replaces this lane"
+          >
             fixture · ProjectA_Clone_Aug_11
           </FactChip>
         }
@@ -501,11 +511,10 @@ export function VariantA() {
                   {TABLES.find((x) => x.key === active)!.name}
                 </span>
                 <HelpTip>
-                  An authored table. Every cell is yours to type; a cell becomes LINKED through
-                  the inspector — outbound cells drive a parameter on the fan-coil types,
-                  inbound cells read one. Link state is drawn on the cell itself (corner tab,
-                  squiggle for model disagreement, bold + square for your unsaved edit) — never
-                  as extra columns.
+                  An authored table. Every cell is yours to type; a cell becomes LINKED through the
+                  inspector — outbound cells drive a parameter on the fan-coil types, inbound cells
+                  read one. Link state is drawn on the cell itself (corner tab, squiggle for model
+                  disagreement, bold + square for your unsaved edit) — never as extra columns.
                 </HelpTip>
                 <FactChip title="authored grid dimensions">
                   {grid.length} × {cols}
@@ -653,9 +662,9 @@ export function VariantA() {
                     staged fan-out
                   </span>
                   <HelpTip>
-                    The far side of Apply. Writes land on TYPES, not tags — one row per type,
-                    and every tag of that type moves with it. A formula-owned target refuses
-                    here, per target, before anything is committed.
+                    The far side of Apply. Writes land on TYPES, not tags — one row per type, and
+                    every tag of that type moves with it. A formula-owned target refuses here, per
+                    target, before anything is committed.
                   </HelpTip>
                   <FactChip title="type-level writes ready to commit, and the scheduled tags they move">
                     {writes.length} writes · {tagsMoved} tags
@@ -756,9 +765,9 @@ export function VariantA() {
               </span>
             ) : null}
             <HelpTip>
-              Everything a cell IS, and where a link is made or removed. An outbound link makes
-              this cell the author of a parameter across the fan-coil types; an inbound link
-              makes it a live reading. The write itself always goes through Apply, up top.
+              Everything a cell IS, and where a link is made or removed. An outbound link makes this
+              cell the author of a parameter across the fan-coil types; an inbound link makes it a
+              live reading. The write itself always goes through Apply, up top.
             </HelpTip>
           </div>
 
@@ -768,8 +777,8 @@ export function VariantA() {
             </EmptyState>
           ) : selected.kind != null ? (
             <div className="t-label" style={{ color: "var(--r-ink-2)" }}>
-              a {selected.kind === "head" ? "heading" : "caption"} cell — authored chrome, not
-              data. It cannot carry a link.
+              a {selected.kind === "head" ? "heading" : "caption"} cell — authored chrome, not data.
+              It cannot carry a link.
             </div>
           ) : (
             <>
@@ -806,11 +815,12 @@ export function VariantA() {
                         link
                       </div>
                       <div className="t-label" style={{ color: "var(--r-ink)" }}>
-                        {selected.link.dir === "out"
-                          ? "this cell drives"
-                          : "this cell reads (Σ)"}
+                        {selected.link.dir === "out" ? "this cell drives" : "this cell reads (Σ)"}
                       </div>
-                      <div className="face-mono t-label break-all" style={{ color: "var(--r-ink)" }}>
+                      <div
+                        className="face-mono t-label break-all"
+                        style={{ color: "var(--r-ink)" }}
+                      >
                         {selected.link.param}
                       </div>
                       <div className="flex flex-wrap gap-1">
@@ -914,8 +924,8 @@ export function VariantA() {
                     />
                   </div>
                   <div className="t-caption" style={{ color: "var(--r-ink-mute)" }}>
-                    target set is fixed in this proto: the {FC_UNITS.length} scheduled fan coils,
-                    by type
+                    target set is fixed in this proto: the {FC_UNITS.length} scheduled fan coils, by
+                    type
                   </div>
                 </div>
               )}

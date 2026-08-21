@@ -76,8 +76,7 @@ const LOOP_PARAMS = [
 type LoopParam = (typeof LOOP_PARAMS)[number];
 const CAP_PARAM = "PE_M_PerfHeat_CapacityDesignTotal";
 
-const paramLabel = (name: string): string =>
-  PARAM_META.find((p) => p.name === name)?.label ?? name;
+const paramLabel = (name: string): string => PARAM_META.find((p) => p.name === name)?.label ?? name;
 const isReadOnly = (param: string, typeName: string): boolean =>
   PARAM_META.find((p) => p.name === param)?.readOnlyOn?.includes(typeName) ?? false;
 
@@ -112,12 +111,64 @@ interface FactDef {
  * ("50°F"/"30°F"); everything else is the 18 BOD entries verbatim.
  */
 const FACTS: FactDef[] = [
-  { key: "heat-ewt", label: "Heating loop EWT", unit: "°F", numeric: { digits: 1 }, origin: "authored", target: "PE_M_PerfHeat_FluidEWT", tableCells: 1, seed: "110" },
-  { key: "heat-lwt", label: "Heating loop LWT", unit: "°F", numeric: { digits: 1 }, origin: "authored", target: "PE_M_PerfHeat_FluidLWT", tableCells: 1, seed: "100" },
-  { key: "cool-ewt", label: "Cooling loop EWT", unit: "°F", numeric: { digits: 1 }, origin: "authored", target: "PE_M_PerfCool_FluidEWT", tableCells: 1, seed: "45" },
-  { key: "cool-lwt", label: "Cooling loop LWT", unit: "°F", numeric: { digits: 1 }, origin: "authored", target: "PE_M_PerfCool_FluidLWT", tableCells: 1, seed: "55" },
-  { key: "src-cool", label: "Cooling source temp (WWHP)", unit: "°F", numeric: { digits: 0 }, origin: "authored", tableCells: 1, seed: "50" },
-  { key: "src-heat", label: "Heating source temp (WWHP)", unit: "°F", numeric: { digits: 0 }, origin: "authored", tableCells: 1, seed: "30" },
+  {
+    key: "heat-ewt",
+    label: "Heating loop EWT",
+    unit: "°F",
+    numeric: { digits: 1 },
+    origin: "authored",
+    target: "PE_M_PerfHeat_FluidEWT",
+    tableCells: 1,
+    seed: "110",
+  },
+  {
+    key: "heat-lwt",
+    label: "Heating loop LWT",
+    unit: "°F",
+    numeric: { digits: 1 },
+    origin: "authored",
+    target: "PE_M_PerfHeat_FluidLWT",
+    tableCells: 1,
+    seed: "100",
+  },
+  {
+    key: "cool-ewt",
+    label: "Cooling loop EWT",
+    unit: "°F",
+    numeric: { digits: 1 },
+    origin: "authored",
+    target: "PE_M_PerfCool_FluidEWT",
+    tableCells: 1,
+    seed: "45",
+  },
+  {
+    key: "cool-lwt",
+    label: "Cooling loop LWT",
+    unit: "°F",
+    numeric: { digits: 1 },
+    origin: "authored",
+    target: "PE_M_PerfCool_FluidLWT",
+    tableCells: 1,
+    seed: "55",
+  },
+  {
+    key: "src-cool",
+    label: "Cooling source temp (WWHP)",
+    unit: "°F",
+    numeric: { digits: 0 },
+    origin: "authored",
+    tableCells: 1,
+    seed: "50",
+  },
+  {
+    key: "src-heat",
+    label: "Heating source temp (WWHP)",
+    unit: "°F",
+    numeric: { digits: 0 },
+    origin: "authored",
+    tableCells: 1,
+    seed: "30",
+  },
   {
     key: "cap-installed",
     label: "Installed FC heating capacity (Σ schedule)",
@@ -236,9 +287,7 @@ export function VariantD() {
   };
 
   const commitStaged = (): void => {
-    const next = Object.fromEntries(
-      Object.entries(model).map(([t, params]) => [t, { ...params }]),
-    );
+    const next = Object.fromEntries(Object.entries(model).map(([t, params]) => [t, { ...params }]));
     for (const w of landing) {
       const params = next[w.typeName];
       if (params != null) params[w.param] = w.to;
@@ -474,7 +523,9 @@ export function VariantD() {
   const commitReason = commitDisabled
     ? "nothing staged — edit a fact in the registry first"
     : `writes ${landing.length} staged type-params to the model (mock) and settles ${stagedKeys.length} fact${stagedKeys.length === 1 ? "" : "s"}${
-        refusing.length > 0 ? ` — ${refusing.length} target${refusing.length === 1 ? "" : "s"} will refuse (formula-owned)` : ""
+        refusing.length > 0
+          ? ` — ${refusing.length} target${refusing.length === 1 ? "" : "s"} will refuse (formula-owned)`
+          : ""
       }`;
 
   return (
@@ -541,9 +592,9 @@ export function VariantD() {
             label="Tables — subscribers"
             help={
               <HelpTip>
-                Authored tables are projections of the fact registry. A ⌁ cell renders the
-                fact it subscribes to and cannot be edited in place — click it to locate its
-                fact in the spine. Muted cells are today&apos;s SXL dead text, not yet linked.
+                Authored tables are projections of the fact registry. A ⌁ cell renders the fact it
+                subscribes to and cannot be edited in place — click it to locate its fact in the
+                spine. Muted cells are today&apos;s SXL dead text, not yet linked.
               </HelpTip>
             }
           >
@@ -618,7 +669,11 @@ export function VariantD() {
                       <tr className="border-t" style={{ borderColor: "var(--r-line)" }}>
                         {FOM_HWCH_PLANT.dataRow.map((v, i) => (
                           <td key={i} className="px-1 py-1">
-                            {i === 3 ? factRef("src-cool") : i === 7 ? factRef("src-heat") : deadCell(v)}
+                            {i === 3
+                              ? factRef("src-cool")
+                              : i === 7
+                                ? factRef("src-heat")
+                                : deadCell(v)}
                           </td>
                         ))}
                       </tr>
@@ -664,10 +719,10 @@ export function VariantD() {
             label="Design facts"
             help={
               <HelpTip>
-                The registry is the source of truth. Edit a fact here and every subscriber —
-                table cells left, typed parameters right — shows its staged value until the
-                one Commit writes beyond the page. → flows out to subscribers; ← flows in
-                from the model and refuses editing here.
+                The registry is the source of truth. Edit a fact here and every subscriber — table
+                cells left, typed parameters right — shows its staged value until the one Commit
+                writes beyond the page. → flows out to subscribers; ← flows in from the model and
+                refuses editing here.
               </HelpTip>
             }
             aside={
@@ -681,8 +736,8 @@ export function VariantD() {
             <ArtifactFrame
               foot={
                 <span className="font-mono text-[10px]" style={MUTE}>
-                  {FACTS.length} facts · {FACTS.filter((f) => f.target != null).length} drive
-                  params · 1 model-sourced
+                  {FACTS.length} facts · {FACTS.filter((f) => f.target != null).length} drive params
+                  · 1 model-sourced
                 </span>
               }
             >
@@ -697,10 +752,9 @@ export function VariantD() {
             label="Model parameters — subscribers"
             help={
               <HelpTip>
-                The far side of every write. PE_* perf params live at TYPE scope: one staged
-                write on a type moves every tag below it. A formula-owned param refuses per
-                type with its reason; a squiggle means the type already disagrees with the
-                fact — the one alarm.
+                The far side of every write. PE_* perf params live at TYPE scope: one staged write
+                on a type moves every tag below it. A formula-owned param refuses per type with its
+                reason; a squiggle means the type already disagrees with the fact — the one alarm.
               </HelpTip>
             }
             aside={
@@ -768,8 +822,8 @@ export function VariantD() {
               </div>
             </ArtifactFrame>
             <Provenance>
-              read live 2026-08-17 from ProjectA_Clone_Aug_11 · perf params at type scope · 23
-              of 36 FC instances appear in the Main House schedule (fixture note)
+              read live 2026-08-17 from ProjectA_Clone_Aug_11 · perf params at type scope · 23 of 36
+              FC instances appear in the Main House schedule (fixture note)
             </Provenance>
           </Section>
         </div>

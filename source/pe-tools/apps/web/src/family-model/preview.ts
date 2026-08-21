@@ -56,7 +56,8 @@ export function familyModelPolygonBounds(
   profile: ReadonlyArray<FamilyModelProfilePointValue>,
   height: number,
 ): Record<FamilyModelAxis, [number, number]> {
-  if (profile.length < 3) throw new Error("An extruded polygon needs at least three profile points");
+  if (profile.length < 3)
+    throw new Error("An extruded polygon needs at least three profile points");
   const xs = profile.map((point) => point.x);
   const ys = profile.map((point) => point.y);
   return {
@@ -87,11 +88,14 @@ export function familyModelLengthFeet(
   const parameter = /^param:(.+)$/.exec(driver);
   if (parameter) {
     const value = parameterValuesInFeet[parameter[1]];
-    if (value === undefined) throw new Error(`Length driver '${driver}' has no resolved parameter value`);
+    if (value === undefined)
+      throw new Error(`Length driver '${driver}' has no resolved parameter value`);
     return value;
   }
 
-  const literal = /^\s*([+-]?(?:\d+(?:\.\d+)?|\d+\s+\d+\/\d+|\d+\/\d+))\s*(mm|cm|in|ft|m)\s*$/.exec(driver);
+  const literal = /^\s*([+-]?(?:\d+(?:\.\d+)?|\d+\s+\d+\/\d+|\d+\/\d+))\s*(mm|cm|in|ft|m)\s*$/.exec(
+    driver,
+  );
   if (!literal) throw new Error(`Length driver '${driver}' is not a portable length literal`);
   const [whole, fraction] = literal[1].split(/\s+/);
   const magnitude = fraction ? Number(whole) + evaluateFraction(fraction) : evaluateFraction(whole);
@@ -168,7 +172,10 @@ export function familyModelFrameBasis(
 }
 
 /** `normal` and `up` name the frame's own axes; an axis token names a family axis. */
-export function familyModelRotationAxis(about: string, frame: FamilyModelTransform): FamilyModelVector {
+export function familyModelRotationAxis(
+  about: string,
+  frame: FamilyModelTransform,
+): FamilyModelVector {
   if (about === "normal") return frame.basisZ;
   if (about === "up") return frame.basisY;
   return familyModelAxis(about);
@@ -197,12 +204,14 @@ export function familyModelAngleDegrees(
   const parameter = /^param:(.+)$/.exec(by);
   if (parameter) {
     const radians = parameterValuesInRadians[parameter[1]];
-    if (radians === undefined) throw new Error(`Rotation driver '${by}' has no resolved parameter value`);
+    if (radians === undefined)
+      throw new Error(`Rotation driver '${by}' has no resolved parameter value`);
     return (radians * 180) / Math.PI;
   }
 
   const literal = /^\s*([+-]?\d+(?:\.\d+)?)\s*deg\s*$/.exec(by);
-  if (!literal) throw new Error(`Rotation driver '${by}' is not a param: reference or an angle literal`);
+  if (!literal)
+    throw new Error(`Rotation driver '${by}' is not a param: reference or an angle literal`);
   return Number(literal[1]);
 }
 
@@ -212,7 +221,10 @@ export function familyModelApply(
 ): FamilyModelVector {
   return add(
     frame.origin,
-    add(add(scale(frame.basisX, local[0]), scale(frame.basisY, local[1])), scale(frame.basisZ, local[2])),
+    add(
+      add(scale(frame.basisX, local[0]), scale(frame.basisY, local[1])),
+      scale(frame.basisZ, local[2]),
+    ),
   );
 }
 

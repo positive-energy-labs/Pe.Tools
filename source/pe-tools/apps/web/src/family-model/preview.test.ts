@@ -223,8 +223,14 @@ describe("family model preview", () => {
         familyModelLengthFeet(vector.height, vector.parametersInFeet),
       );
       for (const axis of ["x", "y", "z"] as const) {
-        expect(bounds[axis][0], `${vector.case} ${axis} min`).toBeCloseTo(vector.bounds[axis][0], 9);
-        expect(bounds[axis][1], `${vector.case} ${axis} max`).toBeCloseTo(vector.bounds[axis][1], 9);
+        expect(bounds[axis][0], `${vector.case} ${axis} min`).toBeCloseTo(
+          vector.bounds[axis][0],
+          9,
+        );
+        expect(bounds[axis][1], `${vector.case} ${axis} max`).toBeCloseTo(
+          vector.bounds[axis][1],
+          9,
+        );
       }
     }
   });

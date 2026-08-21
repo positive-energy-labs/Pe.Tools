@@ -107,10 +107,34 @@ interface OutDef {
 }
 
 const OUT_DEFS: OutDef[] = [
-  { id: "hewt", addr: "FOM!F6", label: `${DEMO_LINK.sourceLabel} — EWT`, key: "heatEwt", paramName: "PE_M_PerfHeat_FluidEWT" },
-  { id: "hlwt", addr: "FOM!G6", label: `${DEMO_LINK.sourceLabel} — LWT`, key: "heatLwt", paramName: "PE_M_PerfHeat_FluidLWT" },
-  { id: "cewt", addr: "FOM!F7", label: "Cooling loop supply/return (design) — EWT", key: "coolEwt", paramName: "PE_M_PerfCool_FluidEWT" },
-  { id: "clwt", addr: "FOM!G7", label: "Cooling loop supply/return (design) — LWT", key: "coolLwt", paramName: "PE_M_PerfCool_FluidLWT" },
+  {
+    id: "hewt",
+    addr: "FOM!F6",
+    label: `${DEMO_LINK.sourceLabel} — EWT`,
+    key: "heatEwt",
+    paramName: "PE_M_PerfHeat_FluidEWT",
+  },
+  {
+    id: "hlwt",
+    addr: "FOM!G6",
+    label: `${DEMO_LINK.sourceLabel} — LWT`,
+    key: "heatLwt",
+    paramName: "PE_M_PerfHeat_FluidLWT",
+  },
+  {
+    id: "cewt",
+    addr: "FOM!F7",
+    label: "Cooling loop supply/return (design) — EWT",
+    key: "coolEwt",
+    paramName: "PE_M_PerfCool_FluidEWT",
+  },
+  {
+    id: "clwt",
+    addr: "FOM!G7",
+    label: "Cooling loop supply/return (design) — LWT",
+    key: "coolLwt",
+    paramName: "PE_M_PerfCool_FluidLWT",
+  },
 ];
 
 /** The one INBOUND binding: the model feeds a table cell. Direction is a binding property. */
@@ -388,7 +412,10 @@ export function VariantB() {
               </FactChip>
             ) : null}
             {nStale + nStagedStale > 0 ? (
-              <FactChip tone="caution" title="a source cell moved; verdicts are missing or outdated">
+              <FactChip
+                tone="caution"
+                title="a source cell moved; verdicts are missing or outdated"
+              >
                 {nStale + nStagedStale} stale
               </FactChip>
             ) : null}
@@ -409,7 +436,10 @@ export function VariantB() {
           />
         }
         seam={
-          <FactChip dashed title="in-memory fixture pulled from ProjectA_Clone_Aug_11 on 2026-08-17 — a live lane would replace this">
+          <FactChip
+            dashed
+            title="in-memory fixture pulled from ProjectA_Clone_Aug_11 on 2026-08-17 — a live lane would replace this"
+          >
             fixture · 2026-08-17
           </FactChip>
         }
@@ -428,9 +458,9 @@ export function VariantB() {
               source substrate
             </span>
             <HelpTip>
-              The tables are where values are authored; the ledger owns what they mean. A
-              marked cell feeds (or is fed by) a binding — click its marker to find the
-              binding. Unmarked values are authored-only and never leave the page.
+              The tables are where values are authored; the ledger owns what they mean. A marked
+              cell feeds (or is fed by) a binding — click its marker to find the binding. Unmarked
+              values are authored-only and never leave the page.
             </HelpTip>
           </div>
 
@@ -470,7 +500,10 @@ export function VariantB() {
                   </tr>
                 </tbody>
               </table>
-              <div className="mt-1 px-1.5 italic text-[10px]" style={{ color: "var(--r-ink-mute)" }}>
+              <div
+                className="mt-1 px-1.5 italic text-[10px]"
+                style={{ color: "var(--r-ink-mute)" }}
+              >
                 {FOM_HWCH_PLANT.footnote}
               </div>
             </div>
@@ -567,7 +600,9 @@ export function VariantB() {
             <div className="max-h-64 overflow-y-auto px-2 py-1">
               {BOD_MAIN_HOUSE.map((e) => {
                 const current = bodVals[e.key] ?? (e.numeric != null ? fmtNum(e.numeric) : e.value);
-                const edited = bodVals[e.key] != null && bodVals[e.key] !== (e.numeric != null ? fmtNum(e.numeric) : e.value);
+                const edited =
+                  bodVals[e.key] != null &&
+                  bodVals[e.key] !== (e.numeric != null ? fmtNum(e.numeric) : e.value);
                 return (
                   <div key={e.key} className="flex items-baseline gap-2 py-px">
                     <span className="w-9 shrink-0" />
@@ -587,7 +622,10 @@ export function VariantB() {
                       note="no binding — authored value only; never leaves the page"
                       className="w-24 shrink-0 text-right"
                     />
-                    <span className="w-9 shrink-0 text-[10px]" style={{ color: "var(--r-ink-mute)" }}>
+                    <span
+                      className="w-9 shrink-0 text-[10px]"
+                      style={{ color: "var(--r-ink-mute)" }}
+                    >
                       {e.unit ?? ""}
                     </span>
                   </div>
@@ -606,11 +644,10 @@ export function VariantB() {
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium">Binding ledger</span>
                 <HelpTip>
-                  One row per linkage. Direction is a property of the binding: → writes the
-                  model from the table, ← feeds the table from the model. A binding moves
-                  through the stations above the table; the verbs live between stations, and
-                  Apply refuses while any evaluation is stale — the gate is visible, not
-                  implied.
+                  One row per linkage. Direction is a property of the binding: → writes the model
+                  from the table, ← feeds the table from the model. A binding moves through the
+                  stations above the table; the verbs live between stations, and Apply refuses while
+                  any evaluation is stale — the gate is visible, not implied.
                 </HelpTip>
                 <span className="flex-1" />
                 <span className="font-mono text-[10px]" style={{ color: "var(--r-ink-mute)" }}>
@@ -656,7 +693,12 @@ export function VariantB() {
                 }
               />
               <Arrow />
-              <Station word="staged" n={nStaged} ink="var(--r-caution)" title={STATUS_TITLE.staged} />
+              <Station
+                word="staged"
+                n={nStaged}
+                ink="var(--r-caution)"
+                title={STATUS_TITLE.staged}
+              />
               {nStagedStale > 0 ? (
                 <Station
                   word="staged·stale"
@@ -706,7 +748,10 @@ export function VariantB() {
                         onClick={() => setSelected(isSel ? null : def.id)}
                         title={STATUS_TITLE[status]}
                       >
-                        <td className="px-3 py-1.5 font-mono" title="outbound — the table writes the model">
+                        <td
+                          className="px-3 py-1.5 font-mono"
+                          title="outbound — the table writes the model"
+                        >
                           →
                         </td>
                         <td className="px-2 py-1.5">
@@ -768,7 +813,10 @@ export function VariantB() {
                     onClick={() => setSelected(selected === IN_DEF.id ? null : IN_DEF.id)}
                     title="inbound — the model feeds the table cell; recomputed every render, fresh by construction"
                   >
-                    <td className="px-3 py-1.5 font-mono" title="inbound — the model feeds the table">
+                    <td
+                      className="px-3 py-1.5 font-mono"
+                      title="inbound — the model feeds the table"
+                    >
                       ←
                     </td>
                     <td className="px-2 py-1.5">
@@ -812,17 +860,7 @@ function FragmentRow({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function Station({
-  word,
-  n,
-  ink,
-  title,
-}: {
-  word: string;
-  n: number;
-  ink: string;
-  title: string;
-}) {
+function Station({ word, n, ink, title }: { word: string; n: number; ink: string; title: string }) {
   return (
     <span
       className="flex items-baseline gap-1 border px-1.5 py-0.5"
@@ -868,14 +906,11 @@ function FarSide({
   unit: string;
 }) {
   return (
-    <div
-      className="ml-5 border-l pl-3"
-      style={{ borderColor: "var(--r-line-2)" }}
-    >
+    <div className="ml-5 border-l pl-3" style={{ borderColor: "var(--r-line-2)" }}>
       {stagedStale ? (
         <div className="py-1 text-[11px]" style={{ color: "var(--r-alarm)" }}>
-          these verdicts were computed against a source value that has since moved — they will
-          not be applied; re-evaluate
+          these verdicts were computed against a source value that has since moved — they will not
+          be applied; re-evaluate
         </div>
       ) : null}
       <table className="text-[11px]" style={{ borderCollapse: "collapse" }}>
@@ -916,7 +951,11 @@ function FarSide({
                   {fmtNum(v.current)} {unit}
                 </td>
                 <td className="py-0.5 pr-4 font-mono">
-                  {staged && v.verdict !== "noop" ? `→ ${fmtNum(v.proposed)} ${unit}` : staged ? "—" : ""}
+                  {staged && v.verdict !== "noop"
+                    ? `→ ${fmtNum(v.proposed)} ${unit}`
+                    : staged
+                      ? "—"
+                      : ""}
                 </td>
                 <td className="py-0.5">
                   {staged ? (

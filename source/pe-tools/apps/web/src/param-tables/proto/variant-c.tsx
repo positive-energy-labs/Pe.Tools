@@ -34,12 +34,7 @@ import { EmptyState } from "#/components/lang/empty";
 import { HelpTip } from "#/components/lang/help";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
-import {
-  BOD_MAIN_HOUSE,
-  FC_UNITS,
-  FOM_HWCH_PLANT,
-  PARAM_META,
-} from "#/param-tables/proto/fixture";
+import { BOD_MAIN_HOUSE, FC_UNITS, FOM_HWCH_PLANT, PARAM_META } from "#/param-tables/proto/fixture";
 
 // ---------------------------------------------------------------------------
 // Derived world — everything computed from the fixture, nothing remembered.
@@ -331,7 +326,10 @@ export function VariantC() {
         // panel, because "a bulk verb is disabled unless you can see its far side" (§2) — the
         // panel IS the far side, so the verb only exists where the fan-out is visible.
         seam={
-          <FactChip dashed title="Fixture lane — ProjectA_Clone_Aug_11, pulled live 2026-08-17. A connected host would replace this chip with the live document.">
+          <FactChip
+            dashed
+            title="Fixture lane — ProjectA_Clone_Aug_11, pulled live 2026-08-17. A connected host would replace this chip with the live document."
+          >
             fixture · 2026-08-17
           </FactChip>
         }
@@ -351,9 +349,7 @@ export function VariantC() {
 
               {/* Exhibit A — the BOD list, today a dead SXL header-cell paste; here, authored. */}
               <section>
-                <h2 className="ptc-exh">
-                  EXHIBIT A — BASIS OF DESIGN · MAIN HOUSE
-                </h2>
+                <h2 className="ptc-exh">EXHIBIT A — BASIS OF DESIGN · MAIN HOUSE</h2>
                 <table className="ptc-bod">
                   <tbody>
                     {BOD_MAIN_HOUSE.map((e) => (
@@ -410,10 +406,10 @@ export function VariantC() {
                 <h2 className="ptc-exh">
                   EXHIBIT C — FIGURES OF MERIT · HYDRONIC TERMINAL UNITS
                   <HelpTip>
-                    This exhibit is alive. Marked values are linked: ¹ ² are authored here and
-                    flow out to type-scope parameters on the fan coils; ᵃ ᵇ are read from the
-                    model&apos;s parameters. Click any marked value — outbound ones edit in
-                    place and show their fan-out; inbound ones show their derivation.
+                    This exhibit is alive. Marked values are linked: ¹ ² are authored here and flow
+                    out to type-scope parameters on the fan coils; ᵃ ᵇ are read from the
+                    model&apos;s parameters. Click any marked value — outbound ones edit in place
+                    and show their fan-out; inbound ones show their derivation.
                   </HelpTip>
                 </h2>
                 <table className="ptc-bod">
@@ -480,7 +476,10 @@ export function VariantC() {
               <section className="ptc-revs">
                 <h3 className="ptc-legendhead">REVISIONS</h3>
                 {revisions.length === 0 ? (
-                  <EmptyState story="scope" exit="edit a linked value, then commit from the binding panel">
+                  <EmptyState
+                    story="scope"
+                    exit="edit a linked value, then commit from the binding panel"
+                  >
                     no revisions this session
                   </EmptyState>
                 ) : (
