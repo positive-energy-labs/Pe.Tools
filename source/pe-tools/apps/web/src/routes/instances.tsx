@@ -64,7 +64,7 @@ function yearLabel(year: string | undefined): string | undefined {
  * The id a start would mint, when this page can know it. The SDK mints `{installed |
  * project-stem}-{yy}`, and only the installed lane's stem is a constant the browser holds — a dev
  * start's stem comes from the HOST's checkout project, which is not on the wire. So a dev start
- * never pre-empts; it posts, and the route relays `session.id-collision` plus its nextSteps.
+ * never pre-empts; it posts, and the route relays whatever the SDK answers plus its nextSteps.
  */
 function mintedSessionId(lane: "installed" | "dev", year: string): string | null {
   return lane === "installed" ? `installed-${year}` : null;
@@ -72,7 +72,10 @@ function mintedSessionId(lane: "installed" | "dev", year: string): string | null
 
 /**
  * A registry row already owns the id this start would mint, so `start` is the wrong verb —
- * `restart` is (the SDK answers `session.id-collision` otherwise). Graveyard rows are the ones
+ * `restart` is. Beta.122 does not refuse the start: it answers `session.generation-displaced`,
+ * mints a NEW generation, boots a whole Revit and moves the pointer off the old one (its own
+ * `fix:` names restart). So pre-empting here is not politeness, it is the difference between
+ * refreshing a session and silently orphaning a generation. Graveyard rows are the ones
  * `phase === "gone"` names: stopped, dead, crashed. Restart is what the graveyard's own per-row
  * verb already does to them.
  */
@@ -189,8 +192,8 @@ function Page() {
         nextSteps?: string[];
       };
       // The SDK's own words, both halves. A diagnostic without its nextSteps is half a verdict:
-      // `session.id-collision` (start on a STOPPED row — restart is the verb) is only actionable
-      // because the SDK says so in nextSteps, and this page must not paraphrase it.
+      // `session.generation-displaced` (start on a row that already exists) is only actionable
+      // because the SDK says so in its fix/nextSteps, and this page must not paraphrase it.
       const says = body.nextSteps?.length ? body.nextSteps.join(" · ") : undefined;
       if (!response.ok)
         setOutcome({
@@ -504,7 +507,7 @@ function Page() {
               className="face-mono t-caption w-52 rounded-[var(--radius)] border border-[var(--r-line-2)] bg-transparent px-1 py-0.5 text-[var(--r-ink)] placeholder:text-[var(--r-ink-mute)]"
             />
             {/* A stopped row still owns its id, so the honest verb here is `restart`, not
-                `start` — the same swap the SDK would force with `session.id-collision`. The
+                `start` — the swap the SDK's own `fix:` names. The
                 document field has no say in a restart (the SDK's keep-doc leg reopens what the
                 dead process had), so it is not passed. */}
             {twin ? (

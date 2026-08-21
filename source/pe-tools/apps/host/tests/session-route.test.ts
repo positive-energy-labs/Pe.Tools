@@ -180,49 +180,67 @@ test("CLI stdout (the JSON envelope) relays verbatim, even for failed verdicts",
   expect(outcome).toEqual({ status: 200, bodyJson: envelope });
 });
 
-test("a start that collides with a stopped row relays the SDK's verdict byte-for-byte", async () => {
-  // A start whose minted id (`{installed|project-stem}-{yy}`) already belongs to a STOPPED
-  // registry row: the SDK refuses with `session.id-collision` and names restart as the verb. The
-  // CLI exits non-zero for it, and stdout still carries the envelope — this route relays THAT,
-  // and never maps a bad verdict onto a hand-made error body. The /instances start form reads
-  // `diagnostics[0].detail` + `nextSteps` straight off this response.
-  const envelope = JSON.stringify({
-    result: null,
-    resolved: { sessionId: "installed-25", year: "2025" },
-    diagnostics: [
-      {
-        code: "session.id-collision",
-        detail: "Session id 'installed-25' is already registered (state stopped).",
-        fix: "pe-revit session restart --id installed-25",
-      },
+// A start whose minted id (`{installed|project-stem}-{yy}`) already names a registry row. WHICH
+// verdict that earns is the SDK's to decide and it has moved: `session.id-collision` refused it
+// outright, beta.122 answers `session.generation-displaced` — an ADVISORY on a start that
+// SUCCEEDS, minting a new generation and moving the pointer off the old one (field-observed
+// 2026-08-20, installed lane, id installed-25, custody controlled). The first shape is the
+// captured beta.122 envelope; the second is the refusal shape. The route must relay both the
+// same way, because it is not the route's business which one the SDK chose. /instances reads
+// `diagnostics[0].detail` + `nextSteps` straight off this response.
+const existingIdVerdicts = [
+  {
+    code: "session.generation-displaced",
+    detail:
+      "id 'installed-25' is already registered: generation 20260821010410920 [stopped] stopped at 2026-08-21T01:05:12.4896453Z (installed payload); this start mints a NEW generation and moves the current pointer off it",
+    fix: "`pe-revit session restart --id installed-25` refreshes that session in place; pass a different --id to keep both",
+    nextSteps: [
+      "pe-revit doc current --id installed-25",
+      "pe-revit session stop --id installed-25  (when done)",
     ],
+  },
+  {
+    code: "session.id-collision",
+    detail: "Session id 'installed-25' is already registered (state stopped).",
+    fix: "pe-revit session restart --id installed-25",
     nextSteps: [
       "pe-revit session restart --id installed-25 — boot a fresh process under the same id",
       "pe-revit session gc --id installed-25 --forget — retire the row and free the id",
     ],
-    guide: "session",
-    related: [],
-    binary: null,
-  });
-  const outcome = await Effect.runPromise(
-    executeSessionCli(
-      sessionCliArgs(parsed({ action: "start", year: "25" }), undefined),
-      () => Effect.succeed(envelope),
-      1_000,
-      { action: "start" },
-    ),
-  );
+  },
+];
 
-  expect(outcome.status).toBe(200);
-  expect(outcome.bodyJson).toBe(envelope); // untouched — not re-serialized, not re-shaped
-  const body = JSON.parse(outcome.bodyJson) as {
-    diagnostics: { code: string; detail: string }[];
-    nextSteps: string[];
-  };
-  expect(body.diagnostics[0].code).toBe("session.id-collision");
-  expect(body.nextSteps).toHaveLength(2);
-  expect(body.nextSteps[0]).toContain("session restart --id installed-25");
-});
+for (const verdict of existingIdVerdicts) {
+  test(`a start on an existing id relays ${verdict.code} byte-for-byte`, async () => {
+    const envelope = JSON.stringify({
+      result: null,
+      resolved: { id: "installed-25", how: "minted", lane: "installed" },
+      diagnostics: [{ code: verdict.code, detail: verdict.detail, fix: verdict.fix }],
+      nextSteps: verdict.nextSteps,
+      guide: "session",
+      related: [],
+      binary: null,
+    });
+    const outcome = await Effect.runPromise(
+      executeSessionCli(
+        sessionCliArgs(parsed({ action: "start", year: "25" }), undefined),
+        () => Effect.succeed(envelope),
+        1_000,
+        { action: "start" },
+      ),
+    );
+
+    expect(outcome.status).toBe(200);
+    expect(outcome.bodyJson).toBe(envelope); // untouched — not re-serialized, not re-shaped
+    const body = JSON.parse(outcome.bodyJson) as {
+      diagnostics: { code: string; detail: string }[];
+      nextSteps: string[];
+    };
+    expect(body.diagnostics[0].code).toBe(verdict.code);
+    expect(body.diagnostics[0].detail).toBe(verdict.detail);
+    expect(body.nextSteps).toEqual(verdict.nextSteps);
+  });
+}
 
 test("a spawn failure is a plain 500", async () => {
   const outcome = await Effect.runPromise(
