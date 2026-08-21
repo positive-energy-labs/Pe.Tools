@@ -113,6 +113,113 @@ public static class TakeoffPromotion
         return Close(state);
     }
 
+    /// <summary>Adds only residual rooms that stitch into the frozen incumbent partition.</summary>
+    public static ZonePromotionResult AddResidual(
+        ZonePromotionResult incumbent,
+        ZonePromotionResult residual,
+        ZoneScope wholeZone,
+        Func<double, double, double> distanceToInk,
+        double stitchFt)
+    {
+        if (incumbent == null) throw new ArgumentNullException(nameof(incumbent));
+        if (residual == null) throw new ArgumentNullException(nameof(residual));
+        if (wholeZone == null) throw new ArgumentNullException(nameof(wholeZone));
+        if (distanceToInk == null) throw new ArgumentNullException(nameof(distanceToInk));
+
+        var result = Clone(incumbent.Result);
+        result.Residues = Clone(residual.Result).Residues;
+        var incumbentGeometry = result.Rooms
+            .Select(room => (room.Id, Geometry: ToPolygon(room))).ToList();
+        var zoneGeometry = wholeZone.ExactGeometry();
+        var residualDomain = incumbentGeometry.Count == 0 ? zoneGeometry
+            : PolygonDifference(zoneGeometry, OverlayNGRobust.Union(
+                incumbentGeometry.Select(item => (Geometry)item.Geometry)));
+        var stitchBoundary = residualDomain.Boundary;
+        var usedIds = result.Rooms.Select(room => room.Id).ToHashSet(StringComparer.Ordinal);
+        var stitchDrops = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var room in residual.Result.Rooms.OrderBy(item => item.Id, StringComparer.Ordinal))
+        {
+            var polygon = ToPolygon(room);
+            Polygon? stitched = null;
+            if (stitchFt > 0 && SnapToZone(polygon, stitchBoundary, [], stitchFt) != null)
+            {
+                var fill = PolygonIntersection(residualDomain,
+                    PolygonIntersection(stitchBoundary.Buffer(stitchFt), polygon.Buffer(stitchFt)));
+                stitched = PolygonParts(OverlayNGRobust.Overlay(
+                        polygon, fill, SpatialFunction.Union))
+                    .OrderByDescending(part => part.Intersection(polygon).Area)
+                    .FirstOrDefault();
+            }
+            if (stitched == null
+                || Intersection(stitched.Boundary, stitchBoundary).Length <= Epsilon)
+            {
+                stitchDrops[room.Id] = "no shared incumbent edge after stitching";
+                MoveToRejectedResidue(result, [room]);
+                continue;
+            }
+            stitched = RenodeAgainstNeighbors(stitched, incumbentGeometry);
+            var addition = Clone(room, stitched);
+            string stem = $"A-{addition.Id}";
+            addition.Id = stem;
+            for (int suffix = 2; !usedIds.Add(addition.Id); suffix++) addition.Id = $"{stem}-{suffix}";
+            result.Rooms.Add(addition);
+            var stitchAudit = TakeoffEditability.Evaluate(ToLevel(result, result.Rooms));
+            if (!stitchAudit.IsStrictlyEditable)
+            {
+                result.Rooms.Remove(addition);
+                double edgeOnInk = TakeoffEvidenceFidelity.BoundarySupportFraction(
+                    [addition], distanceToInk);
+                stitchDrops[room.Id] = $"stitched edgeOnInk={edgeOnInk:F4}; " +
+                    "combined network is not strictly editable: " +
+                    string.Join(",", stitchAudit.Rooms.Where(item => !item.IsStrictlyEditable)
+                        .SelectMany(item => item.Violations.Select(violation =>
+                            $"{item.RoomId}:{violation.Kind}")));
+                MoveToRejectedResidue(result, [room]);
+            }
+        }
+
+        RebuildResiduesInsideZone(result, zoneGeometry);
+        double acceptedSqft = result.Rooms.Sum(room => room.RawSqft);
+        double heldSqft = result.Residues.Where(item => item.Reason == ResidueReason.Rejected).Sum(item => item.RawSqft);
+        double voidSqft = result.Residues.Where(item => item.Reason is ResidueReason.Border or ResidueReason.Crumb).Sum(item => item.RawSqft);
+        double excludedSqft = result.Residues.Where(item => item.Reason == ResidueReason.Excluded).Sum(item => item.RawSqft);
+        double closureError = Math.Abs(acceptedSqft + heldSqft + voidSqft + excludedSqft - zoneGeometry.Area);
+        bool strict = TakeoffEditability.Evaluate(ToLevel(result, result.Rooms)).IsStrictlyEditable;
+        bool contained = result.Rooms.All(room => PolygonDifference(ToPolygon(room), zoneGeometry).Area <= Epsilon);
+        if (!strict || !contained || closureError > AccountingEpsilonSqft)
+            throw new InvalidOperationException(
+                $"additive promotion violated a binding law: strict={strict} contained={contained} closure={closureError:F9}sf");
+
+        result.TotalSqft = acceptedSqft;
+        result.DomainSqft = zoneGeometry.Area;
+        result.ClaimedWallSqft = 0;
+        result.ExcludedResidueSqft = excludedSqft;
+        result.DispositionsResolved = true;
+        var rejections = incumbent.Diagnostics.Rejections
+            .Concat(residual.Diagnostics.Rejections.Select(item =>
+                new KeyValuePair<string, int>($"additive/{item.Key}", item.Value)))
+            .GroupBy(item => item.Key, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Sum(item => item.Value), StringComparer.Ordinal);
+        var details = incumbent.Diagnostics.RejectionDetails
+            .Concat(residual.Diagnostics.RejectionDetails.Select(item =>
+                new KeyValuePair<string, string>($"additive/{item.Key}", item.Value)))
+            .Concat(stitchDrops.Select(item =>
+                new KeyValuePair<string, string>($"additive/stitch/{item.Key}", item.Value)))
+            .ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal);
+        return new ZonePromotionResult(result, new ZonePromotionDiagnostics(
+            incumbent.Diagnostics.SourceRooms + residual.Diagnostics.SourceRooms,
+            incumbent.Diagnostics.SharedNetworkStrictRooms + residual.Diagnostics.SharedNetworkStrictRooms,
+            result.Rooms.Count,
+            result.Residues.Count(item => item.Reason == ResidueReason.Rejected),
+            incumbent.Diagnostics.TinyMerged + residual.Diagnostics.TinyMerged,
+            zoneGeometry.Area, zoneGeometry.Area, acceptedSqft, heldSqft, voidSqft, excludedSqft,
+            TakeoffEvidenceFidelity.BoundarySupportFraction(result.Rooms, distanceToInk),
+            closureError, strict, contained,
+            incumbent.Diagnostics.SharedEdgePairs + residual.Diagnostics.SharedEdgePairs,
+            incumbent.Diagnostics.LostSharedEdgePairs + residual.Diagnostics.LostSharedEdgePairs,
+            rejections, details, incumbent.Diagnostics.Census, incumbent.Diagnostics.Triage));
+    }
+
     /// <summary>Everything one promotion run reads and mutates as it walks <see cref="Stages"/>.</summary>
     private sealed class PromotionState(
         TakeoffResult source,

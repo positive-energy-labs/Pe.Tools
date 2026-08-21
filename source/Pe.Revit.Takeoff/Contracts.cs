@@ -98,6 +98,8 @@ public sealed class TakeoffOptions
                                             // 17 of 19 such project-a zones never produced an accepted room
     // ---- Pre-solve ink hygiene (InkHygiene.cs) ----
     public int InkClusterWhiteoutCells = 100; // drop floating in-zone ink clusters smaller than this (0 = off)
+    public bool AdditiveWhiteoutCandidateLane = false; // keep the promoted partition; retry only its residue with whiteout off
+    public double AdditiveStitchFt = 1.0; // residual edge this close to an incumbent edge adopts its exact line (0 = off)
     // ---- Zone-edge ink pull (PartitionFormulation.Run) ----
     // Designers draw zone edges THROUGH walls (2026-08-16 survey: 83% of all project-a zone-boundary
     // length has ink within 0.5 ft), so the mask clips a wall-thickness band of ink — and, raster-
