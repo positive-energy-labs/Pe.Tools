@@ -184,6 +184,7 @@ public sealed class TakeoffOptions
     // pre-fit geometry on failure — e.g. a zone edge diagonal to the room's frame.
     // TODO: ZoneSnapFt = 1.0 buys exactly one room on project-a — re-measure it or retire the knob.
     public double ZoneSnapFt = 1.0;         // room vertex this close to the zone boundary snaps onto it (0 = off)
+    public double ParallelOnInkDepthFt = 1.5; // wall ink must continue this far into the room (0 = off)
     public bool ZoneClipEnabled = true;     // a room overhanging the zone is intersected with it, not rejected
     // Clipping a rail-aligned room against the zone MANUFACTURES edges the detector never proposed:
     // where the zone line crosses a projected corner or runs a fraction of a degree off the room's
