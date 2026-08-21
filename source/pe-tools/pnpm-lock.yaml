@@ -90,7 +90,7 @@ importers:
     dependencies:
       '@mastra/core':
         specifier: 1.50.1
-        version: 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+        version: 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
       '@pe/host-contracts':
         specifier: workspace:*
         version: link:../../packages/host-contracts
@@ -106,6 +106,9 @@ importers:
       mastracode:
         specifier: 0.30.0
         version: 0.30.0(@babel/runtime@7.29.7)(@bufbuild/protobuf@2.12.0)(@codemirror/lint@6.9.7)(@codemirror/theme-one-dark@6.1.3)(@libsql/client@0.17.4(bufferutil@4.1.0))(@opentelemetry/api@1.9.1)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(bufferutil@4.1.0)(codemirror@6.0.2)(express@5.2.1)(immer@11.1.11)(playwright-core@1.60.0)(react-dom@19.2.7(react@19.2.7))(react-is@17.0.2)(react@19.2.7)(redux@5.0.1)(rxjs@7.8.1)(tailwindcss@4.3.1)(typescript@6.0.3)(use-sync-external-store@1.6.0(react@19.2.7))(ws@8.21.0(bufferutil@4.1.0))
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@types/node':
         specifier: ^25.6.2
@@ -142,7 +145,7 @@ importers:
         version: 2.10.0
       '@mastra/client-js':
         specifier: 1.31.1
-        version: 1.31.1(bufferutil@4.1.0)(zod@4.4.3)
+        version: 1.31.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
       '@pe/agent-contracts':
         specifier: workspace:*
         version: link:../../packages/agent-contracts
@@ -7832,14 +7835,6 @@ snapshots:
       '@vercel/oidc': 3.1.0
       zod: 4.4.3
 
-  '@ai-sdk/gateway@3.0.127(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.10
-      '@ai-sdk/provider-utils': 4.0.27(zod@3.25.76)
-      '@vercel/oidc': 3.2.0
-      zod: 3.25.76
-    optional: true
-
   '@ai-sdk/gateway@3.0.127(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 3.0.10
@@ -7934,14 +7929,6 @@ snapshots:
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.1.0
       zod: 4.4.3
-
-  '@ai-sdk/provider-utils@4.0.27(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.10
-      '@standard-schema/spec': 1.1.0
-      eventsource-parser: 3.1.0
-      zod: 3.25.76
-    optional: true
 
   '@ai-sdk/provider-utils@4.0.27(zod@4.4.3)':
     dependencies:
@@ -9128,9 +9115,9 @@ snapshots:
 
   '@marijn/find-cluster-break@1.0.3': {}
 
-  '@mastra/agent-browser@0.4.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(bufferutil@4.1.0)(zod@4.4.3)':
+  '@mastra/agent-browser@0.4.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(bufferutil@4.1.0)(zod@4.4.3)':
     dependencies:
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
       agent-browser: 0.19.0(bufferutil@4.1.0)
       zod: 4.4.3
     transitivePeerDependencies:
@@ -9160,28 +9147,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@mastra/client-js@1.31.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)':
-    dependencies:
-      '@ai-sdk/ui-utils': 1.2.11(zod@4.4.3)
-      '@lukeed/uuid': 2.0.1
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
-      '@mastra/schema-compat': 1.3.3(zod@4.4.3)
-      canonicalize: 1.0.8
-      jose: 6.2.3
-      json-schema: 0.4.0
-      zod: 4.4.3
-    transitivePeerDependencies:
-      - '@bufbuild/protobuf'
-      - '@cfworker/json-schema'
-      - '@grpc/grpc-js'
-      - ai
-      - bufferutil
-      - express
-      - rxjs
-      - supports-color
-      - utf-8-validate
-
-  '@mastra/client-js@1.31.1(bufferutil@4.1.0)(zod@4.4.3)':
+  '@mastra/client-js@1.31.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)':
     dependencies:
       '@ai-sdk/ui-utils': 1.2.11(zod@4.4.3)
       '@lukeed/uuid': 2.0.1
@@ -9190,52 +9156,6 @@ snapshots:
       canonicalize: 1.0.8
       jose: 6.2.3
       json-schema: 0.4.0
-      zod: 4.4.3
-    transitivePeerDependencies:
-      - '@bufbuild/protobuf'
-      - '@cfworker/json-schema'
-      - '@grpc/grpc-js'
-      - ai
-      - bufferutil
-      - express
-      - rxjs
-      - supports-color
-      - utf-8-validate
-
-  '@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)':
-    dependencies:
-      '@a2a-js/sdk': 0.3.13(@bufbuild/protobuf@2.12.0)(express@5.2.1)
-      '@ai-sdk/provider-utils-v5': '@ai-sdk/provider-utils@3.0.25(zod@4.4.3)'
-      '@ai-sdk/provider-utils-v6': '@ai-sdk/provider-utils@4.0.27(zod@4.4.3)'
-      '@ai-sdk/provider-utils-v7': '@ai-sdk/provider-utils@5.0.0(zod@4.4.3)'
-      '@ai-sdk/provider-v5': '@ai-sdk/provider@2.0.3'
-      '@ai-sdk/provider-v6': '@ai-sdk/provider@3.0.10'
-      '@ai-sdk/provider-v7': '@ai-sdk/provider@4.0.0'
-      '@ai-sdk/ui-utils-v5': '@ai-sdk/ui-utils@1.2.11(zod@4.4.3)'
-      '@isaacs/ttlcache': 2.1.5
-      '@lukeed/uuid': 2.0.1
-      '@mastra/schema-compat': 1.3.3(zod@4.4.3)
-      '@modelcontextprotocol/sdk': 1.29.0(zod@4.4.3)
-      '@sindresorhus/slugify': 2.2.1
-      '@standard-schema/spec': 1.1.0
-      ajv: 8.20.0
-      chat: 4.30.0(ai@6.0.199(zod@3.25.76))(zod@4.4.3)
-      croner: 10.0.1
-      dotenv: 17.4.2
-      execa: 9.6.1
-      fastq: 1.20.1
-      gray-matter: 4.0.3
-      ignore: 7.0.5
-      jpeg-js: 0.4.4
-      json-schema: 0.4.0
-      lru-cache: 11.5.1
-      p-map: 7.0.4
-      p-retry: 7.1.1
-      picomatch: 4.0.4
-      posthog-node: 5.38.3(rxjs@7.8.1)
-      tokenx: 1.3.0
-      ws: 8.21.0(bufferutil@4.1.0)
-      xxhash-wasm: 1.1.0
       zod: 4.4.3
     transitivePeerDependencies:
       - '@bufbuild/protobuf'
@@ -9294,10 +9214,10 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@mastra/duckdb@1.5.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))':
+  '@mastra/duckdb@1.5.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))':
     dependencies:
       '@duckdb/node-api': 1.5.2-r.2
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
 
   '@mastra/fastembed@1.2.0':
     dependencies:
@@ -9307,24 +9227,10 @@ snapshots:
       progress: 2.0.3
       tar: 7.5.16
 
-  '@mastra/github-signals@0.2.2(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)':
+  '@mastra/github-signals@0.2.2(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)':
     dependencies:
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
       zod: 4.4.3
-
-  '@mastra/hono@1.5.6(@hono/node-server@1.19.14(hono@4.12.24))(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(bufferutil@4.1.0)(hono@4.12.24)(zod@4.4.3)':
-    dependencies:
-      '@hono/node-ws': 1.3.1(@hono/node-server@1.19.14(hono@4.12.24))(bufferutil@4.1.0)(hono@4.12.24)
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
-      '@mastra/server': 1.50.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)
-      fetch-to-node: 2.1.0
-      hono: 4.12.24
-      ws: 8.21.0(bufferutil@4.1.0)
-    transitivePeerDependencies:
-      - '@hono/node-server'
-      - bufferutil
-      - utf-8-validate
-      - zod
 
   '@mastra/hono@1.5.6(@hono/node-server@1.19.14(hono@4.12.24))(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(bufferutil@4.1.0)(hono@4.12.24)(zod@4.4.3)':
     dependencies:
@@ -9340,14 +9246,6 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@mastra/libsql@1.15.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(bufferutil@4.1.0)':
-    dependencies:
-      '@libsql/client': 0.17.4(bufferutil@4.1.0)
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
   '@mastra/libsql@1.15.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(bufferutil@4.1.0)':
     dependencies:
       '@libsql/client': 0.17.4(bufferutil@4.1.0)
@@ -9355,20 +9253,6 @@ snapshots:
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
-
-  '@mastra/mcp@1.13.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.4.3)':
-    dependencies:
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
-      '@modelcontextprotocol/ext-apps': 1.7.4(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.4.3)
-      '@modelcontextprotocol/sdk': 1.29.0(zod@4.4.3)
-      exit-hook: 5.1.0
-      fast-deep-equal: 3.1.3
-    transitivePeerDependencies:
-      - '@cfworker/json-schema'
-      - react
-      - react-dom
-      - supports-color
-      - zod
 
   '@mastra/mcp@1.13.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.4.3)':
     dependencies:
@@ -9383,22 +9267,6 @@ snapshots:
       - react-dom
       - supports-color
       - zod
-
-  '@mastra/memory@1.22.2(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))':
-    dependencies:
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
-      '@mastra/schema-compat': 1.3.3(zod@4.4.3)
-      async-mutex: 0.5.0
-      diff: 8.0.4
-      image-size: 1.2.1
-      json-schema: 0.4.0
-      lru-cache: 11.5.1
-      probe-image-size: 7.3.0
-      tokenx: 1.3.0
-      xxhash-wasm: 1.1.0
-      zod: 4.4.3
-    transitivePeerDependencies:
-      - supports-color
 
   '@mastra/memory@1.22.2(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))':
     dependencies:
@@ -9416,14 +9284,14 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@mastra/observability@1.16.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)':
+  '@mastra/observability@1.16.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)':
     dependencies:
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
       zod: 4.4.3
 
-  '@mastra/pg@1.15.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))':
+  '@mastra/pg@1.15.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))':
     dependencies:
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
       async-mutex: 0.5.0
       pg: 8.21.0
       pg-connection-string: 2.13.0
@@ -9431,7 +9299,7 @@ snapshots:
     transitivePeerDependencies:
       - pg-native
 
-  '@mastra/playground-ui@40.0.1(76107874cf0f46073261024daa502d77)':
+  '@mastra/playground-ui@40.0.1(f6d04caa9365c19240bacf49ec4e574b)':
     dependencies:
       '@base-ui/react': 1.6.0(@types/react@19.2.17)(date-fns@4.4.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@codemirror/autocomplete': 6.20.3
@@ -9446,10 +9314,10 @@ snapshots:
       '@codemirror/view': 6.43.6
       '@hello-pangea/dnd': 18.0.1(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@lezer/highlight': 1.2.3
-      '@mastra/client-js': 1.31.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
-      '@mastra/memory': 1.22.2(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))
-      '@mastra/react': 1.2.4(@bufbuild/protobuf@2.12.0)(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/client-js': 1.31.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/memory': 1.22.2(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))
+      '@mastra/react': 1.2.4(@bufbuild/protobuf@2.12.0)(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.1)(zod@4.4.3)
       '@radix-ui/react-visually-hidden': 1.2.6(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@tanstack/react-query': 5.101.2(react@19.2.7)
       '@tanstack/react-virtual': 3.14.5(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -9485,16 +9353,16 @@ snapshots:
       - supports-color
       - use-sync-external-store
 
-  '@mastra/railway@0.3.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))':
+  '@mastra/railway@0.3.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))':
     dependencies:
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
       railway: 3.4.2
 
-  '@mastra/react@1.2.4(@bufbuild/protobuf@2.12.0)(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.1)(zod@4.4.3)':
+  '@mastra/react@1.2.4(@bufbuild/protobuf@2.12.0)(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.1)(zod@4.4.3)':
     dependencies:
       '@lukeed/uuid': 2.0.1
-      '@mastra/client-js': 1.31.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/client-js': 1.31.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
       '@radix-ui/react-tooltip': 1.2.10(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       hast-util-to-jsx-runtime: 2.3.6
       lucide-react: 0.522.0(react@19.2.7)
@@ -9524,22 +9392,16 @@ snapshots:
       zod-from-json-schema-v3: zod-from-json-schema@0.0.5
       zod-to-json-schema: 3.25.2(zod@4.4.3)
 
-  '@mastra/server@1.50.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)':
-    dependencies:
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
-      hono: 4.12.24
-      zod: 4.4.3
-
   '@mastra/server@1.50.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)':
     dependencies:
       '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
       hono: 4.12.24
       zod: 4.4.3
 
-  '@mastra/stagehand@0.3.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(playwright-core@1.60.0)(zod@4.4.3)':
+  '@mastra/stagehand@0.3.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(playwright-core@1.60.0)(zod@4.4.3)':
     dependencies:
       '@browserbasehq/stagehand': 3.5.0(playwright-core@1.60.0)(zod@4.4.3)
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
       zod: 4.4.3
     transitivePeerDependencies:
       - '@cfworker/json-schema'
@@ -9550,9 +9412,9 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@mastra/tavily@1.1.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)':
+  '@mastra/tavily@1.1.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)':
     dependencies:
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
       '@tavily/core': 0.7.6
       zod: 4.4.3
     transitivePeerDependencies:
@@ -11971,15 +11833,6 @@ snapshots:
       '@opentelemetry/api': 1.9.0
       zod: 4.4.3
 
-  ai@6.0.199(zod@3.25.76):
-    dependencies:
-      '@ai-sdk/gateway': 3.0.127(zod@3.25.76)
-      '@ai-sdk/provider': 3.0.10
-      '@ai-sdk/provider-utils': 4.0.27(zod@3.25.76)
-      '@opentelemetry/api': 1.9.1
-      zod: 3.25.76
-    optional: true
-
   ai@6.0.199(zod@4.4.3):
     dependencies:
       '@ai-sdk/gateway': 3.0.127(zod@4.4.3)
@@ -12267,21 +12120,6 @@ snapshots:
   character-entities@2.0.2: {}
 
   character-reference-invalid@2.0.1: {}
-
-  chat@4.30.0(ai@6.0.199(zod@3.25.76))(zod@4.4.3):
-    dependencies:
-      '@workflow/serde': 4.1.0-beta.2
-      mdast-util-to-string: 4.0.0
-      remark-gfm: 4.0.1
-      remark-parse: 11.0.0
-      remark-stringify: 11.0.0
-      remend: 1.3.0
-      unified: 11.0.5
-    optionalDependencies:
-      ai: 6.0.199(zod@3.25.76)
-      zod: 4.4.3
-    transitivePeerDependencies:
-      - supports-color
 
   chat@4.30.0(ai@6.0.199(zod@4.4.3))(zod@4.4.3):
     dependencies:
@@ -13681,26 +13519,26 @@ snapshots:
       '@aws-sdk/credential-providers': 3.1075.0
       '@earendil-works/pi-tui': 0.79.10
       '@hono/node-server': 1.19.14(hono@4.12.24)
-      '@mastra/agent-browser': 0.4.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(bufferutil@4.1.0)(zod@4.4.3)
+      '@mastra/agent-browser': 0.4.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(bufferutil@4.1.0)(zod@4.4.3)
       '@mastra/auth-workos': 1.6.2(hono@4.12.24)(typescript@6.0.3)
-      '@mastra/client-js': 1.31.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
-      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
-      '@mastra/duckdb': 1.5.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))
+      '@mastra/client-js': 1.31.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/core': 1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/duckdb': 1.5.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))
       '@mastra/fastembed': 1.2.0
-      '@mastra/github-signals': 0.2.2(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)
-      '@mastra/hono': 1.5.6(@hono/node-server@1.19.14(hono@4.12.24))(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(bufferutil@4.1.0)(hono@4.12.24)(zod@4.4.3)
-      '@mastra/libsql': 1.15.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(bufferutil@4.1.0)
-      '@mastra/mcp': 1.13.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.4.3)
-      '@mastra/memory': 1.22.2(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))
-      '@mastra/observability': 1.16.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)
-      '@mastra/pg': 1.15.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))
-      '@mastra/playground-ui': 40.0.1(76107874cf0f46073261024daa502d77)
-      '@mastra/railway': 0.3.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))
-      '@mastra/react': 1.2.4(@bufbuild/protobuf@2.12.0)(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.1)(zod@4.4.3)
+      '@mastra/github-signals': 0.2.2(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)
+      '@mastra/hono': 1.5.6(@hono/node-server@1.19.14(hono@4.12.24))(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(bufferutil@4.1.0)(hono@4.12.24)(zod@4.4.3)
+      '@mastra/libsql': 1.15.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(bufferutil@4.1.0)
+      '@mastra/mcp': 1.13.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.4.3)
+      '@mastra/memory': 1.22.2(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))
+      '@mastra/observability': 1.16.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)
+      '@mastra/pg': 1.15.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))
+      '@mastra/playground-ui': 40.0.1(f6d04caa9365c19240bacf49ec4e574b)
+      '@mastra/railway': 0.3.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))
+      '@mastra/react': 1.2.4(@bufbuild/protobuf@2.12.0)(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(rxjs@7.8.1)(zod@4.4.3)
       '@mastra/schema-compat': 1.3.3(zod@4.4.3)
-      '@mastra/server': 1.50.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)
-      '@mastra/stagehand': 0.3.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(playwright-core@1.60.0)(zod@4.4.3)
-      '@mastra/tavily': 1.1.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@3.25.76))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)
+      '@mastra/server': 1.50.1(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)
+      '@mastra/stagehand': 0.3.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(playwright-core@1.60.0)(zod@4.4.3)
+      '@mastra/tavily': 1.1.0(@mastra/core@1.50.1(@bufbuild/protobuf@2.12.0)(ai@6.0.199(zod@4.4.3))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.4.3))(zod@4.4.3)
       '@mastra/voice-deepgram': 0.13.0(bufferutil@4.1.0)(zod@4.4.3)
       '@mastra/voice-openai': 0.13.0(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3)
       '@octokit/auth-app': 8.2.0

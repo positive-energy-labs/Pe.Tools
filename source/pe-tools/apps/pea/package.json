@@ -40,7 +40,8 @@
     "@pe/mcps": "workspace:*",
     "@pe/runtime": "workspace:*",
     "gunshi": "^0.29.5",
-    "mastracode": "0.30.0"
+    "mastracode": "0.30.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",
