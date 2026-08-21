@@ -130,7 +130,13 @@ read `doc current`.
   untouched. `start` takes `lane: installed` (default, the bare CLI meaning) or `dev` (this
   checkout's Pe.App; 400 on a host with no checkout).
 - **`vp check` is a gate, not a poll**: `vp check --fix <targets>` once, then `vp check <targets>`
-  once. Never loop it. Separate formatter noise from type/lint output when diagnosing.
+  once. Never loop it. Separate formatter noise from type/lint output when diagnosing. Targets are
+  PATHS (`apps/host/src`), never package names: `vp check @pe/host` prints `pass` having checked
+  nothing, and a generated-only target (`**/generated/*.ts`) fails "all matched files excluded" —
+  neither is a verdict on your code.
+- Tests run per package: `vp run @pe/host#test`. `vp test <path>` from the workspace root skips
+  the package's `vite.config.ts` test env and fails 6 host files with `PE_LANE must be 'dev' or
+  'installed'` — that is the runner, not your edit.
 - Typegen is two lanes: `codegen`/`codegen:check` are OFFLINE projections from `pe-dev ops-catalog`
   (no session; they silently swallow `--session`); `codegen:verify-live -- --session <id>` is the
   session-targeted parity check. Name the lane in any typegen claim. (dies when: offline codegen
@@ -186,6 +192,9 @@ than guessing flags. Below is only the earned delta.
   `Pe.Revit.Sdk-w2`). Sibling worktrees are created from the CLI as repo siblings, each on its own
   branch; the orchestrator merges in dependency order and runs the deterministic harness after
   every merge. Stop the Herdr session before removing its worktree (the pane holds the directory).
+  In the main checkout `.claude/skills/**` and `.agents/skills/**` are hardlinked (one edit shows in
+  both); `git worktree add` checks out two independent files, so in a worktree edit both and `diff`
+  them before committing.
 - `--session S` on **every** command, never the default session or `--current`. Never drive slash
   commands through `send-text` from Git Bash (MSYS rewrites `/quit`); `agent prompt` owns `/`.
   IDs come from parsed JSON. One prompt owner per agent.

@@ -66,6 +66,9 @@ design-system ledger, not restated here.
 
 ## Owed
 
+- Headless `pea --prompt` without `--workspace-root` refuses before the Mastra runtime exists: `scripting.workspace.bootstrap` answers "No Revit session is connected to the bridge" (2026-08-20, installed host 5180, zero Revit). A prompt that needs no Revit must not need Revit to bootstrap a workspace; `--workspace-root <dir>` bypasses it today.
+- `pea` workspace bootstrap writes the product skills (`packages/mcps/src/pea/skills.ts`) into `<workspace-root>/.agents/skills/`; pointed at this checkout it pollutes the repo's own skill dir (7 untracked dirs, 2026-08-20). Write them under a product-owned dir or exclude them from the checkout.
+- `vp run @pe/host#test` is 459 s, 453 s of it one RHVAC `open -> assemblies` Jet smoke (2026-08-20): a machine-gated test in the default unit gate. Move it behind an env opt-in so a metadata change does not pay a 7-minute toll.
 - `/instances` cannot pre-empt an id clash on the DEV lane: the SDK mints `{installed | project-stem}-{yy}` and only the installed stem is knowable from the browser — a dev start's stem is the host's checkout project and never reaches the wire. A dev start therefore posts and reads the relayed advisory. Fix when the route discloses the id it would mint (a `GET /sessions/mint?lane=&year=` or the same string on the 400 path), not by guessing the stem client-side.
 - `/instances` has no text-level proof path: SSR ships a client-only shell with zero session strings, so a drive without a browser tool cannot verify the page (BB-1 F-25) — SSR the fleet list or name the preview tool in the execute skill (done for t3-code).
 - Queue provenance: build the ruled spec at [queue-provenance.md](queue-provenance.md) — `x-pe-origin`, `QueueLedger`, response stamps, `revit.queue.snapshot`.
