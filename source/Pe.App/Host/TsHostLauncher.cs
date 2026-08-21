@@ -31,6 +31,16 @@ internal static class TsHostLauncher {
                         false,
                         $"Sharing this checkout's running dev host: {DescribeFile(file)}"
                     );
+                // Say WHY we are about to spawn — the 2026-08-20 livelock was undiagnosable because
+                // this branch fell through silently against a healthy incumbent.
+                Serilog.Log.Information(
+                    "Dev host not shared: file={File} health={Health} match={Match} (want lane=dev exe={Exe} sourceRoot={Root})",
+                    file is null ? "missing" : DescribeFile(file),
+                    file is not null && ProbeHealth(file.Port),
+                    file is not null && MatchesDevTarget(file, runtime),
+                    runtime.HostExecutablePath,
+                    runtime.SourceHostWorkingDirectory
+                );
             }
 
             return PeRuntimeContext.Deployment is { } deployment
@@ -164,7 +174,7 @@ internal static class TsHostLauncher {
     ) {
         var appBase = ResolveAppBase();
         var process = Process.Start(startInfo);
-        var timeout = TimeSpan.FromSeconds(45);
+        var timeout = TimeSpan.FromSeconds(90); // a vite dev host cold-starts in 40-60 s; 45 s false-failed 2026-08-20
         var deadlineUtc = DateTime.UtcNow + timeout;
         while (DateTime.UtcNow < deadlineUtc) {
             Thread.Sleep(250);

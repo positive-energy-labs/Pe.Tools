@@ -38,7 +38,7 @@ import { useWorldLog } from "#/host/use-target";
 export const Route = createFileRoute("/instances")({ component: Page });
 
 type SessionAction =
-  | { action: "start"; year: string; doc?: string }
+  | { action: "start"; year: string; lane: "installed" | "dev"; doc?: string }
   | { action: "stop"; id: string; force?: boolean }
   | { action: "restart"; id: string }
   | { action: "converge"; id: string };
@@ -137,6 +137,7 @@ function Page() {
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [startYear, setStartYear] = useState("25");
   const [startDoc, setStartDoc] = useState("");
+  const [startLane, setStartLane] = useState<"installed" | "dev">("installed");
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNowMs(Date.now()), 1000);
@@ -419,8 +420,8 @@ function Page() {
       <div className="mx-auto flex min-h-[85vh] max-w-6xl gap-0 px-6 py-6">
         <div className="flex flex-1 flex-col border-r border-[var(--r-line)] pr-5">
           {/* declare a new world — the only way a session comes to exist from this surface.
-              No payload choice: the HOST's lane decides whether this starts the checkout's Pe.App
-              or the installed one, and a project-less start IS the installed session. */}
+              The payload is an explicit choice, same words as the CLI: `installed` is a
+              project-less start; `dev` asks a source-linked host for its checkout's Pe.App. */}
           <VerbGroup
             title="declare a new world"
             radius="boots a Revit process on this machine"
@@ -442,6 +443,19 @@ function Page() {
                 ))}
               </select>
             </label>
+            <label className="flex items-center gap-1.5">
+              <span className="t-caption t-upper text-[var(--r-ink-2)]">payload</span>
+              <select
+                value={startLane}
+                onChange={(e) => setStartLane(e.target.value as "installed" | "dev")}
+                disabled={busy != null}
+                title="installed: the product on this machine (a project-less start, the end-user case). dev: this checkout's Pe.App, built by the host first — refused on a host that has no checkout."
+                className="face-mono t-caption cursor-pointer rounded-[var(--radius)] border border-[var(--r-line-2)] bg-transparent px-1 py-0.5 text-[var(--r-ink)]"
+              >
+                <option value="installed">installed</option>
+                <option value="dev">dev (this checkout)</option>
+              </select>
+            </label>
             <input
               value={startDoc}
               onChange={(e) => setStartDoc(e.target.value)}
@@ -461,6 +475,7 @@ function Page() {
                   {
                     action: "start",
                     year: startYear,
+                    lane: startLane,
                     ...(startDoc.trim() ? { doc: startDoc.trim() } : {}),
                   },
                   `start a 20${startYear} session`,

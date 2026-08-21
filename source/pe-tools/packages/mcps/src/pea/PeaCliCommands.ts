@@ -138,6 +138,8 @@ export class PeaCliCommands {
       name: "search",
       description: "Search generated public host operations by capability and filters.",
       args: {
+        host: commonArgs.host,
+        bridgeSessionId: commonArgs.bridgeSessionId,
         query: { type: "string", description: "Optional search query." },
         domain: { type: "string", description: "Optional top-level domain filter." },
         intent: { type: "string", description: "Optional intent filter: Read or Mutate." },
@@ -149,7 +151,9 @@ export class PeaCliCommands {
         },
       },
       run: async (ctx) => {
-        const results = await new HostRpcCaller().searchOperations({
+        // Same host resolution as `call` (service file, never the 5180 default): a bare
+        // `new HostRpcCaller()` was the `fetch failed` with no URL seen 2026-08-19/20.
+        const results = await this.createHostRpcCaller(ctx.values).searchOperations({
           query: firstNonBlank(ctx.values.query),
           domain: firstNonBlank(ctx.values.domain),
           intent: parseOperationIntent(ctx.values.intent),

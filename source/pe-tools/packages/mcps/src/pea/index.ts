@@ -238,7 +238,7 @@ export const hostOperationSearch = createTool({
   description:
     "Discover host operations by capability. Start with projection=capability-map for broad orientation, then projection=matches (default) to rank candidates for a task; verbosity=hints adds examples and call guidance. Host admin status/logs are excluded here — use pe_status and pe_logs for those. Scripting is not in the catalog either — use the script_execute tool.",
   inputSchema: hostOperationSearchInputSchema,
-  execute: async (input) => new HostRpcCaller().searchOperations(input),
+  execute: async (input) => createCurrentHostRpcCaller().searchOperations(input),
 });
 
 export const hostOperationCall = createTool({

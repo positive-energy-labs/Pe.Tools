@@ -1,4 +1,4 @@
-using Pe.Revit.Global.Services.Host;
+﻿using Pe.Revit.Global.Services.Host;
 using Pe.Revit.Tasks;
 using Serilog;
 using System.Threading.Channels;
@@ -90,10 +90,16 @@ internal sealed class BridgeConnectionSupervisor : IDisposable {
 
         var hostLaunchResult = HostBridgeConnector.EnsureTsHostRunning();
         if (!hostLaunchResult.Success)
-            return new RuntimeActionResult(false, hostLaunchResult.Message);
+            Log.Warning("Host bridge supervisor could not ensure a TS host; trying the service file's address anyway: {Message}", hostLaunchResult.Message);
 
         cancellationToken.ThrowIfCancellationRequested();
-        return await this.ConnectRuntimeAsync(cancellationToken).ConfigureAwait(false);
+        // The WebSocket connect is the real proof of a host. EnsureRunning's share predicate and its
+        // spawn can both fail against a healthy incumbent (refused claim, slow probe, worktree
+        // mismatch); refusing to connect on that evidence is the livelock seen 2026-08-20.
+        var connect = await this.ConnectRuntimeAsync(cancellationToken).ConfigureAwait(false);
+        return connect.Success || hostLaunchResult.Success
+            ? connect
+            : new RuntimeActionResult(false, $"{connect.Message} (host launch: {hostLaunchResult.Message})");
     }
 
     private async Task<RuntimeActionResult> ConnectRuntimeAsync(CancellationToken cancellationToken) {

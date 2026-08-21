@@ -21,17 +21,12 @@ internal static class HostBridgeConnector {
             );
         }
 
+        // A failed EnsureRunning is advice, not a verdict: connect to whatever the service file
+        // names and let the socket decide (see BridgeConnectionSupervisor.TryConnectAsync).
         var hostLaunchResult = EnsureTsHostRunning();
-        if (!hostLaunchResult.Success) {
-            return new HostBridgeConnectResult(
-                false,
-                false,
-                hostLaunchResult,
-                new RuntimeActionResult(false, hostLaunchResult.Message)
-            );
-        }
-
         var connectResult = ConnectRuntime();
+        if (!connectResult.Success && !hostLaunchResult.Success)
+            connectResult = new RuntimeActionResult(false, $"{connectResult.Message} (host launch: {hostLaunchResult.Message})");
         return new HostBridgeConnectResult(
             connectResult.Success,
             false,

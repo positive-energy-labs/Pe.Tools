@@ -31,10 +31,19 @@ import { peRevitLauncher, validatePeRevitEnvelope } from "./pe-revit-launch.ts";
 
 export type SessionAction = "start" | "stop" | "restart" | "converge";
 
+export type SessionLane = "installed" | "dev";
+
 export type SessionActionRequest = {
   readonly action: SessionAction;
   readonly id?: string;
   readonly year?: string;
+  /**
+   * Payload source for `start`, the CLI's own words: `installed` (default, a project-less start —
+   * the end-user case) or `dev` (this host's checkout Pe.App; refused on a host with no checkout).
+   * Explicit, never inferred from the host's lane: the same `{year}` must mean the same thing on
+   * the route as on the CLI (BB-1 F-14).
+   */
+  readonly lane?: SessionLane;
   readonly doc?: string;
   readonly force?: boolean;
   readonly timeoutSeconds?: number;
@@ -63,6 +72,9 @@ export function parseSessionActionRequest(
   const year =
     typeof record.year === "number" ? String(record.year) : readOptionalString(record.year);
   if (action === "start" && !year) return { ok: false, error: 'start requires year (e.g. "25")' };
+  const lane = record.lane === undefined ? "installed" : record.lane;
+  if (action === "start" && lane !== "installed" && lane !== "dev")
+    return { ok: false, error: 'lane must be "installed" (default) or "dev"' };
   if ((action === "stop" || action === "restart") && !id)
     return { ok: false, error: `${action} requires id` };
   return {
@@ -71,6 +83,7 @@ export function parseSessionActionRequest(
       action: action as SessionAction,
       id,
       year,
+      lane: action === "start" ? (lane as SessionLane) : undefined,
       doc: readOptionalString(record.doc),
       force: record.force === true,
       timeoutSeconds:
@@ -230,10 +243,19 @@ const sessionsActionRoute = HttpRouter.add("POST", "/sessions", (req) =>
     const parsed = parseSessionActionRequest(body._tag === "Success" ? body.success : null);
     if (!parsed.ok) return Response.jsonUnsafe({ ok: false, error: parsed.error }, { status: 400 });
     const request = parsed.request;
-    const args = sessionCliArgs(
-      request,
-      resolveStartProject(hostOwnership.lane, hostOwnership.sourceRoot),
-    );
+    const project =
+      request.lane === "dev"
+        ? resolveStartProject(hostOwnership.lane, hostOwnership.sourceRoot)
+        : undefined;
+    if (request.lane === "dev" && project === undefined)
+      return Response.jsonUnsafe(
+        {
+          ok: false,
+          error: `lane "dev" needs a source-linked host; this host (lane ${hostOwnership.lane}) has no checkout to build Pe.App from — start with lane "installed" or run the host from a checkout`,
+        },
+        { status: 400 },
+      );
+    const args = sessionCliArgs(request, project);
     const outcome = yield* executeSessionCli(args, runPeRevitCli, sessionActionTimeoutMs(request), {
       action: request.action,
       id: request.id,

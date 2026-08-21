@@ -24,7 +24,9 @@ test("start on a source-linked (dev) host uses the checkout's Pe.App project", (
   const project = resolveStartProject("dev", "C:\\repo\\Pe.Tools\\source\\pe-tools");
   expect(project).toBe(join("C:\\repo\\Pe.Tools", "source", "Pe.App", "Pe.App.csproj"));
 
-  const args = sessionCliArgs(parsed({ action: "start", year: 25, id: "scratch" }), project);
+  const request = parsed({ action: "start", year: 25, id: "scratch", lane: "dev" });
+  expect(request.lane).toBe("dev");
+  const args = sessionCliArgs(request, project);
   expect(args).toEqual([
     "session",
     "start",
@@ -45,8 +47,16 @@ test("start on an installed-lane host passes NO --project: project-less start IS
   // A dev host with no resolvable source root also falls back to the installed payload.
   expect(resolveStartProject("dev", null)).toBeUndefined();
 
-  const args = sessionCliArgs(parsed({ action: "start", year: "25" }), undefined);
+  // lane defaults to installed — the same bare `{year}` the CLI reads as installed (BB-1 F-14).
+  const request = parsed({ action: "start", year: "25" });
+  expect(request.lane).toBe("installed");
+  const args = sessionCliArgs(request, undefined);
   expect(args).toEqual(["session", "start", "--year", "25", "--origin", "web", "--json"]);
+  expect(parseSessionActionRequest({ action: "start", year: "25", lane: "sandbox" })).toMatchObject(
+    {
+      ok: false,
+    },
+  );
   // The retired flags must never reappear: lane is derived from the payload source, and start
   // blocks to ready by default (the opt-out is --no-wait, which this route never wants).
   expect(args).not.toContain("--installed");
