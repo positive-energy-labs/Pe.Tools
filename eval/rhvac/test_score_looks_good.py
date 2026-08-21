@@ -1,9 +1,13 @@
-# Synthetic-geometry unit checks for score-looks-good.py — no replay-bin dependency.
+# Synthetic geometry and artifact checks for score-looks-good.py.
 # Run: python -m pytest eval/rhvac/test_score_looks_good.py  (or python <this file>)
 import importlib.util
+import gzip
 import math
 import os
+import struct
 import sys
+import tempfile
+from pathlib import Path
 
 import numpy as np
 from shapely.geometry import Polygon
@@ -68,6 +72,44 @@ def _grid_with_ink(cells, w=40, h=40, cell=0.25):
     for r, c in cells:
         mask[r, c] = True
     return slg.Grid(mask, 0.0, 0.0, cell)
+
+
+def _write_replay(path, mask):
+    h, w = mask.shape
+    bits = np.packbits(mask.ravel(), bitorder="little").tobytes()
+    level, options = b"Main Level", b"{}"
+    blob = (struct.pack("<IiB", 0x54414B53, 1, len(level)) + level
+            + struct.pack("<dB", 0.0, len(options)) + options
+            + struct.pack("<ii3d", w, h, 0.0, 0.0, 1.0)
+            + bytes(8 * w * h) + bits)
+    with gzip.open(path, "wb") as stream:
+        stream.write(blob)
+
+
+def test_load_levels_only_door_head_class_backs_edges():
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        input_dir = root / "input"
+        input_dir.mkdir()
+        mask = np.zeros((1, 4), dtype=bool)
+        _write_replay(input_dir / "replay_Level_1_Main_Level.bin", mask)
+        header = struct.pack("<Iii3d", 0x504B4E49, 4, 1, 0.0, 0.0, 1.0)
+        (input_dir / "seals_Level_1_Main_Level.bin").write_bytes(header + bytes([0b1111]))
+        (input_dir / "close_Level_1_Main_Level.bin").write_bytes(header + bytes([0]))
+        classes = struct.pack("<Iii3d", 0x434B4E49, 4, 1, 0.0, 0.0, 1.0)
+        (input_dir / "classes_Level_1_Main_Level.bin").write_bytes(classes + bytes([1, 2, 3, 4]))
+        report = {"Zones": [{
+            "Level": "Main Level", "Ink": "input/ink_Level_1_Main_Level.bin",
+            "Seals": "input/seals_Level_1_Main_Level.bin",
+            "Close": "input/close_Level_1_Main_Level.bin",
+        }]}
+
+        grids = slg.load_levels(report, str(root))["Level_1_Main_Level"]
+        centers = np.array([0.5, 1.5, 2.5, 3.5])
+        backed = grids["evidence"].distance_ft(centers, np.full(4, 0.5)) <= slg.HIT_FT
+
+        assert backed.tolist() == [False, True, False, False]
+        assert not grids["ink"].mask.any()
 
 
 def test_backed_fraction_full_and_empty():

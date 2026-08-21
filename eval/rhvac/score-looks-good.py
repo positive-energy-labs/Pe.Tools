@@ -11,12 +11,10 @@
 # oracle first. audit-registration exists to put evidence behind that suspicion.
 #
 # Evidence semantics mirrored from C# (TakeoffEvidenceFidelity / DetectSnapshot):
-#   - backing evidence = seed ink OR door-head seal cells. The persisted seals_*.bin holds
-#     doorHead|wallRunGap MERGED (ZoneBoundedDetectTests.cs:303), close_*.bin holds gapClose
-#     only — pure door-head cells are NOT recoverable from bins. We therefore report edge
-#     backing against two rails: ink-only (under-counts door-heads) and ink|seals
-#     (over-counts wall-run plugs). C# truth sits between; the agreement check tells which
-#     rail is closer per zone.
+#   - backing evidence = replay seed ink OR INKC class 2 (door-head) cells. Gap-close (1),
+#     wall-run (3), and oversize door-head fringe (4) are closure only and never back an edge.
+#     Current classes_<token>.bin attribution is required; lossy merged seals_*.bin is not truth.
+#     The ink-only rail remains a separate diagnostic.
 #   - sampling: collinear-collapsed edges (0.25 deg), step 0.25 ft, endpoints included,
 #     hit when grid distance-to-evidence <= 0.25 ft, zone-edge samples exempt within
 #     InkBackedZoneEdgeExemptFt (1.0 ft) of the zone boundary. The C#-emitted zone-level
@@ -378,11 +376,11 @@ RECAPTURE_RUNBOOK = ("docs/features/takeoffs/manual-e2e-runbook.md "
 
 
 def load_levels(report, base):
-    """token -> dict of Grids (ink, seals, close, evidence=ink|seals) for each level.
+    """token -> ink-only and C#-lawful evidence Grids for each level.
 
     Seed ink comes from the replay snapshot ONLY. The stale ink_*.bin fallback lane was
     deleted 2026-08-17 (Attic bin was missing 51% of replay seed cells); a missing replay
-    is a hard error, not a silent downgrade to stale evidence."""
+    is a hard error. Current INKC attribution is also required; merged seals are lossy."""
     levels = {}
     for zone in report["Zones"]:
         token, _ = LEVELS[zone["Level"]]
@@ -398,10 +396,20 @@ def load_levels(report, base):
                 f"replay_<level>.bin is the only evidence source (stale ink_*.bin lane "
                 f"deleted). Recapture: {RECAPTURE_RUNBOOK}")
         ink = Grid.load_replay_seed_ink(replay_path)
-        seals = Grid.load(os.path.join(base, zone["Seals"]))
-        close = Grid.load(os.path.join(base, zone["Close"]))
-        levels[token] = dict(ink=ink, seals=seals, close=close,
-                             evidence=Grid.union(ink, seals))
+        seals_path = os.path.join(base, zone["Seals"])
+        classes_path = os.path.join(os.path.dirname(seals_path),
+                                    os.path.basename(seals_path).replace("seals_", "classes_", 1))
+        if not os.path.isfile(classes_path):
+            raise SystemExit(f"missing INKC seal attribution: {classes_path}")
+        w, h, minx, miny, cell, data = overlay.load_classes(classes_path)
+        classes = np.frombuffer(data, dtype=np.uint8)
+        if classes.size != w * h:
+            raise SystemExit(f"truncated INKC seal attribution: {classes_path}")
+        door_heads = Grid((classes == 2).reshape(h, w), minx, miny, cell)
+        if (ink.h, ink.w, ink.minx, ink.miny, ink.cell) \
+                != (door_heads.h, door_heads.w, door_heads.minx, door_heads.miny, door_heads.cell):
+            raise SystemExit(f"INKC seal attribution disagrees with replay grid: {classes_path}")
+        levels[token] = dict(ink=ink, evidence=Grid.union(ink, door_heads))
     return levels
 
 
