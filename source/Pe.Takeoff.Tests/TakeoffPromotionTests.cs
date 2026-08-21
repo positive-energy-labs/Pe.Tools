@@ -582,6 +582,36 @@ public sealed class TakeoffPromotionTests
     }
 
     [Test]
+    public void Parallel_on_ink_requires_the_moved_edge_to_keep_its_lawful_support()
+    {
+        var source = new TakeoffResult {
+            LevelName = "Level 1",
+            Rooms = { Room("room", (2, 2), (19.6, 2), (19.6, 18), (2, 18)) },
+            DomainSqft = 281.6,
+        };
+        double Wall(double x, double _) => x >= 18 ? 0 : 5;
+        double LosingEvidence(double x, double _) => x <= 19.85 ? 0 : 5;
+        var options = Options(minimumRoomSqft: 0, boundarySimplifyFt: 0);
+        options.InkBackedAcceptMin = 0;
+
+        var refused = TakeoffPromotion.PromoteZone(
+            source, Zone("all", (0, 0), (20, 0), (20, 20), (0, 20)),
+            options, LosingEvidence, distanceToWallInk: Wall);
+        var admitted = TakeoffPromotion.PromoteZone(
+            source, Zone("all", (0, 0), (20, 0), (20, 20), (0, 20)),
+            options, Wall, distanceToWallInk: Wall);
+
+        Assert.Multiple(() => {
+            Assert.That(refused.Result.Rooms.Single().Polygon.Max(point => point[0]),
+                Is.EqualTo(19.6).Within(1e-9));
+            Assert.That(admitted.Result.Rooms.Single().Polygon.Max(point => point[0]),
+                Is.EqualTo(20).Within(1e-9));
+            Assert.That(admitted.Result.Rooms.Single().Flags, Contains.Item("parallel-on-ink"));
+            Assert.That(admitted.Diagnostics.Rejections["parallel-on-ink:unified"], Is.EqualTo(1));
+        });
+    }
+
+    [Test]
     public void Zone_fit_clips_an_overhanging_room_instead_of_the_scope_gate_rejecting_it()
     {
         var source = new TakeoffResult {

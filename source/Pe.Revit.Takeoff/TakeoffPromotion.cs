@@ -68,6 +68,7 @@ public static class TakeoffPromotion
         ("edge-band", RunEdgeBand),
         ("frame-projector", RunFrameProjector),
         ("zone-fit", RunZoneFit),
+        ("parallel-on-ink", RunParallelOnInk),
         ("tiny", RunTiny),
         ("evidence", RunEvidence),
         ("scope", RunScope),
@@ -95,8 +96,11 @@ public static class TakeoffPromotion
         if (zone == null) throw new ArgumentNullException(nameof(zone));
         if (options == null) throw new ArgumentNullException(nameof(options));
         if (distanceToInk == null) throw new ArgumentNullException(nameof(distanceToInk));
-        var state = new PromotionState(source, zone, options, distanceToInk, log)
-            { Census = census, DistanceToWallInk = distanceToWallInk ?? distanceToInk };
+        var state = new PromotionState(source, zone, options, distanceToInk, log) {
+            Census = census,
+            DistanceToWallInk = distanceToWallInk ?? distanceToInk,
+            HasWallInk = distanceToWallInk != null,
+        };
         var timer = System.Diagnostics.Stopwatch.StartNew();
         long lastMilliseconds = 0;
         foreach (var stage in Stages)
@@ -129,6 +133,7 @@ public static class TakeoffPromotion
         // door is an opening, not a wall). Falls back to the evidence oracle when the caller has
         // no raw-ink oracle to give.
         internal Func<double, double, double> DistanceToWallInk = distanceToInk;
+        internal bool HasWallInk;
         internal readonly Action<string>? Log = log;
 
         internal readonly TakeoffResult Result = Clone(source);
@@ -424,6 +429,39 @@ public static class TakeoffPromotion
                     $"boundary={item.BoundaryDriftFt ?? double.NaN:F3}ft";
         }
         ApplyFrameLocal(state.Result, projection, state.Log);
+    }
+
+    private static void RunParallelOnInk(PromotionState state)
+    {
+        if (!state.HasWallInk || state.Options.ParallelOnInkDepthFt <= 0
+            || state.Options.ZoneSnapFt <= 0) return;
+        int unified = 0, refused = 0;
+        foreach (var room in state.Result.Rooms.OrderBy(item => item.Id, StringComparer.Ordinal).ToList())
+        {
+            int index = state.Result.Rooms.IndexOf(room);
+            if (index < 0) continue;
+            var original = ToPolygon(room);
+            var neighbors = state.Result.Rooms.Where(other => !ReferenceEquals(other, room))
+                .Select(other => (other.Id, Geometry: ToPolygon(other))).ToList();
+            if (SnapToZone(original, state.ZoneGeometry.Boundary, neighbors,
+                    state.Options.ZoneSnapFt, state.DistanceToInk, 1.2 * state.Options.CellFt,
+                    state.DistanceToWallInk, state.Options.ParallelOnInkDepthFt,
+                    unifyOnly: true) is not { } fitted)
+                continue;
+            var candidate = Clone(room, fitted);
+            candidate.Flags = candidate.Flags.Append("parallel-on-ink")
+                .Distinct(StringComparer.Ordinal).OrderBy(value => value, StringComparer.Ordinal).ToList();
+            if (!Fits(state, candidate, fitted, original, neighbors, out _))
+            {
+                refused++;
+                continue;
+            }
+            state.Result.Rooms[index] = candidate;
+            unified++;
+        }
+        if (unified > 0) state.Rejections["parallel-on-ink:unified"] = unified;
+        if (refused > 0) state.Rejections["parallel-on-ink:refused"] = refused;
+        state.Result.TotalSqft = state.Result.Rooms.Sum(item => item.RawSqft);
     }
 
     /// <summary>
@@ -725,7 +763,9 @@ public static class TakeoffPromotion
     private static Polygon? SnapToZone(
         Polygon room, Geometry zoneBoundary,
         List<(string Id, Polygon Geometry)> neighbors, double snapFt,
-        Func<double, double, double>? distanceToInk = null, double inkTolFt = 0)
+        Func<double, double, double>? distanceToInk = null, double inkTolFt = 0,
+        Func<double, double, double>? distanceToWallInk = null, double inkDepthFt = 0,
+        bool unifyOnly = false)
     {
         // Edge-wise, frame-preserving: a room EDGE moves onto the zone line only when a zone
         // segment runs parallel to it (within a few degrees) and both endpoints are within snapFt
@@ -786,9 +826,9 @@ public static class TakeoffPromotion
                     // zone-edge ink pull just kept out of the partition. Midpoints of the sweep
                     // sitting on ink refuse the move; everywhere else the zone line stays the
                     // snap target it has always been.
+                    bool crossesInk = false;
                     if (distanceToInk != null)
                     {
-                        bool crossesInk = false;
                         for (double t = 0; t <= 1 && !crossesInk; t += 0.25)
                         {
                             double px = a.X + (b.X - a.X) * t, py = a.Y + (b.Y - a.Y) * t;
@@ -796,16 +836,49 @@ public static class TakeoffPromotion
                             crossesInk = distanceToInk(
                                 px - 0.5 * offset * -uy, py - 0.5 * offset * ux) <= inkTolFt;
                         }
-                        if (crossesInk) continue;
                     }
-                    points[i] = new Coordinate(a.X - offsetA * -uy, a.Y - offsetA * ux);
-                    points[(i + 1) % count] = new Coordinate(b.X - offsetB * -uy, b.Y - offsetB * ux);
+                    bool unified = crossesInk && distanceToWallInk != null && inkDepthFt > 0;
+                    double side = offsetA + offsetB >= 0 ? 1 : -1;
+                    for (double t = 0; t <= 1 && unified; t += 0.25)
+                    {
+                        double px = a.X + (b.X - a.X) * t, py = a.Y + (b.Y - a.Y) * t;
+                        double offset = offsetA + (offsetB - offsetA) * t;
+                        for (double s = 0; s <= 1 && unified; s += 0.25)
+                            unified = distanceToWallInk!(
+                                px - s * offset * -uy, py - s * offset * ux) <= inkTolFt;
+                        if (unified)
+                            unified = distanceToWallInk!(px + side * inkDepthFt * -uy,
+                                py + side * inkDepthFt * ux) <= inkTolFt;
+                    }
+                    var movedA = new Coordinate(a.X - offsetA * -uy, a.Y - offsetA * ux);
+                    var movedB = new Coordinate(b.X - offsetB * -uy, b.Y - offsetB * ux);
+                    if (unified && EdgeInkSupport(movedA, movedB) + Epsilon < EdgeInkSupport(a, b))
+                        unified = false;
+                    if (crossesInk != unified || (unifyOnly && !unified)) continue;
+                    points[i] = movedA;
+                    points[(i + 1) % count] = movedB;
                     moved = true;
                     break;
                 }
             }
             points.Add(new Coordinate(points[0].X, points[0].Y));
             return GeometryFactory.CreateLinearRing(points.ToArray());
+
+            double EdgeInkSupport(Coordinate from, Coordinate to)
+            {
+                if (distanceToInk == null) return 0;
+                double length = from.Distance(to);
+                int samples = Math.Max(1, (int)Math.Ceiling(length / 0.25));
+                int backed = 0;
+                for (int sample = 0; sample <= samples; sample++)
+                {
+                    double t = (double)sample / samples;
+                    if (distanceToInk(from.X + (to.X - from.X) * t,
+                            from.Y + (to.Y - from.Y) * t) <= inkTolFt)
+                        backed++;
+                }
+                return (double)backed / (samples + 1);
+            }
         }
 
         bool Pinned(Coordinate point)
