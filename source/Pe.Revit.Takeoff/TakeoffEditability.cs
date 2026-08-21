@@ -35,6 +35,7 @@ public sealed record RoomEditabilityAudit(
     string RoomId,
     bool IsStrictlyEditable,
     double FrameDegrees,
+    IReadOnlyList<double> Frames,
     double FrameSupport,
     int CornerCount,
     double MinimumEdgeFt,
@@ -138,42 +139,61 @@ public static class TakeoffEditability
             .ToList();
         var edges = loops.SelectMany(loop => Edges(loop.Name, loop.Points)).ToList();
         if (edges.Count == 0)
-            return new RoomEditabilityAudit(room.Id, false, 0, 0, 0, 0, malformed.Concat([
+            return new RoomEditabilityAudit(room.Id, false, 0, [], 0, 0, 0, malformed.Concat([
                 Violation(EditabilityViolationKind.NoCoherentFrame, room.Id, "outer", 0,
                     new Point(0, 0), new Point(0, 0), 0, "room has no usable boundary edges"),
             ]).ToList());
 
         var anchors = edges.Where(edge => edge.Length >= FrameAnchorMinFt).ToList();
         if (anchors.Count == 0) anchors = edges;
-        var candidates = anchors.Select(edge => Normalize90(edge.Angle)).Distinct()
-            .OrderBy(angle => angle).ToList();
-        double frame = 0, supportLength = -1;
-        foreach (var candidate in candidates)
-        {
-            double support = edges.Where(edge => Difference90(edge.Angle, candidate) <= AngleTolerance)
-                .Sum(edge => edge.Length);
-            if (support > supportLength + Epsilon)
-            {
-                frame = candidate;
-                supportLength = support;
-            }
-        }
+        var frames = SegmentFrames(anchors, edges);
+        double frame = frames.Count == 0 ? 0 : frames[0];
+        double supportLength = edges.Where(edge => frames.Any(candidate =>
+                Difference90(edge.Angle, candidate) <= AngleTolerance)).Sum(edge => edge.Length);
         double frameSupport = supportLength / edges.Sum(edge => edge.Length);
         var violations = new List<EditabilityViolation>(malformed);
         if (frameSupport < FrameMinSupport)
             violations.Add(Violation(EditabilityViolationKind.NoCoherentFrame, room.Id,
                 "outer", 0, edges[0].From, edges[0].To, frameSupport,
                 $"only {frameSupport.ToString("P1", CultureInfo.InvariantCulture)} of the boundary " +
-                "belongs to one orthogonal frame"));
+                "belongs to at most two orthogonal segment frames"));
 
         foreach (var loop in loops)
-            AuditLoop(room.Id, loop.Name, loop.Points, frame, violations);
+            AuditLoop(room.Id, loop.Name, loop.Points, frames, violations);
 
         double minimumEdge = edges.Min(edge => edge.Length);
         int corners = loops.Sum(loop => loop.Points.Count);
         return new RoomEditabilityAudit(
-            room.Id, violations.Count == 0, frame * 180 / Math.PI, frameSupport,
+            room.Id, violations.Count == 0, frame * 180 / Math.PI,
+            frames.Select(value => value * 180 / Math.PI).ToList(), frameSupport,
             corners, minimumEdge, violations);
+    }
+
+    private static List<double> SegmentFrames(IReadOnlyList<Edge> anchors, IReadOnlyList<Edge> edges)
+    {
+        var candidates = anchors.Select(edge => Normalize90(edge.Angle)).ToList();
+        var ranked = candidates.Select(candidate => new {
+                Angle = candidate,
+                Support = edges.Where(edge => Difference90(edge.Angle, candidate) <= AngleTolerance)
+                    .Sum(edge => edge.Length),
+                Axis0 = edges.Where(edge => Difference90(edge.Angle, candidate) <= AngleTolerance
+                        && FrameAxis(edge.Angle, candidate) == 0).Sum(edge => edge.Length),
+                Axis1 = edges.Where(edge => Difference90(edge.Angle, candidate) <= AngleTolerance
+                        && FrameAxis(edge.Angle, candidate) == 1).Sum(edge => edge.Length),
+            })
+            .Where(candidate => candidate.Axis0 >= FrameAnchorMinFt
+                && candidate.Axis1 >= FrameAnchorMinFt)
+            .OrderByDescending(candidate => candidate.Support)
+            .ThenBy(candidate => candidate.Angle)
+            .ToList();
+        var frames = new List<double>();
+        foreach (var candidate in ranked)
+        {
+            if (frames.Any(frame => Difference90(frame, candidate.Angle) <= AngleTolerance)) continue;
+            if (frames.Count == 2 || candidate.Support < 0.10 * edges.Sum(edge => edge.Length)) break;
+            frames.Add(candidate.Angle);
+        }
+        return frames;
     }
 
     private static IReadOnlyList<EditabilityViolation> InvalidLoops(TakeoffRoomShape room)
@@ -234,23 +254,26 @@ public static class TakeoffEditability
     }
 
     private static void AuditLoop(
-        string roomId, string loopName, IReadOnlyList<Point> points, double frame,
+        string roomId, string loopName, IReadOnlyList<Point> points, IReadOnlyList<double> frames,
         List<EditabilityViolation> violations)
     {
         var edges = Edges(loopName, points).ToList();
         for (var index = 0; index < edges.Count; index++)
         {
             var edge = edges[index];
-            if (Difference90(edge.Angle, frame) <= AngleTolerance) continue;
+            if (frames.Any(frame => Difference90(edge.Angle, frame) <= AngleTolerance)) continue;
             violations.Add(Violation(EditabilityViolationKind.OffFrameEdge, roomId,
-                loopName, index, edge.From, edge.To, Difference90(edge.Angle, frame) * 180 / Math.PI,
-                "edge is not on the room's orthogonal frame"));
+                loopName, index, edge.From, edge.To,
+                frames.Count == 0 ? 90 : frames.Min(frame => Difference90(edge.Angle, frame)) * 180 / Math.PI,
+                "edge is not on one of the room's segment frames"));
 
             var previous = edges[(index + edges.Count - 1) % edges.Count];
             var next = edges[(index + 1) % edges.Count];
-            if (Difference90(previous.Angle, frame) <= AngleTolerance
-                && Difference90(next.Angle, frame) <= AngleTolerance
-                && FrameAxis(previous.Angle, frame) != FrameAxis(next.Angle, frame))
+            var commonFrame = frames.FirstOrDefault(frame =>
+                Difference90(previous.Angle, frame) <= AngleTolerance
+                && Difference90(next.Angle, frame) <= AngleTolerance, double.NaN);
+            if (!double.IsNaN(commonFrame)
+                && FrameAxis(previous.Angle, commonFrame) != FrameAxis(next.Angle, commonFrame))
                 violations.Add(Violation(EditabilityViolationKind.DiagonalShortcut, roomId,
                     loopName, index, edge.From, edge.To, edge.Length,
                     "diagonal replaces the intersection of two frame-aligned edges"));
@@ -272,7 +295,11 @@ public static class TakeoffEditability
                     "boundary reverses direction at the vertex", point));
                 continue;
             }
-            if (Math.Abs(turnMagnitude - Math.PI / 2) <= AngleTolerance) continue;
+            int incomingFrame = NearestFrame(Math.Atan2(incoming.Y, incoming.X), frames);
+            int outgoingFrame = NearestFrame(Math.Atan2(outgoing.Y, outgoing.X), frames);
+            if (Math.Abs(turnMagnitude - Math.PI / 2) <= AngleTolerance
+                || incomingFrame >= 0 && outgoingFrame >= 0 && incomingFrame != outgoingFrame)
+                continue;
 
             violations.Add(Violation(EditabilityViolationKind.NonRightCorner, roomId,
                 loopName, index, previous, next, turnMagnitude * 180 / Math.PI,
@@ -324,6 +351,13 @@ public static class TakeoffEditability
                 $"{count} consecutive short turn edges create avoidable edit handles"));
         }
 
+    }
+
+    private static int NearestFrame(double angle, IReadOnlyList<double> frames)
+    {
+        for (int i = 0; i < frames.Count; i++)
+            if (Difference90(angle, frames[i]) <= AngleTolerance) return i;
+        return -1;
     }
 
     private static IReadOnlyList<Point> CleanLoop(IReadOnlyList<double[]> source)

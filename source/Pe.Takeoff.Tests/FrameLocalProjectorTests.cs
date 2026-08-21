@@ -92,25 +92,24 @@ public sealed class FrameLocalProjectorTests
     }
 
     [Test]
-    public void Holds_mixed_frame_room_instead_of_falling_back_to_raw_geometry()
+    public void Projects_each_mixed_frame_segment_run_without_falling_back_to_raw_geometry()
     {
         var frameA = Rect("a", -30, -10, -10, 10, 0, -20, 0);
-        var frameB = Rect("b", 20, -10, 40, 10, 31, 30, 0);
-        double radians = 31 * Math.PI / 180;
+        var frameB = Rect("b", 20, -10, 40, 10, 45, 30, 0);
         var mixed = Room("mixed", new[]
         {
-            (0d, 20d), (10, 20),
-            (10 + 10 * Math.Cos(radians), 20 + 10 * Math.Sin(radians)),
-            (10 * Math.Cos(radians), 20 + 10 * Math.Sin(radians))
-        }, 5 + 5 * Math.Cos(radians), 20 + 5 * Math.Sin(radians));
+            (0d, 0d), (10, 0), (10, 5), (15, 10), (10, 15), (5, 10), (0, 10)
+        }, 5, 5);
 
         var result = FrameLocalProjector.Project(Takeoff(frameA, frameB, mixed));
 
         Assert.Multiple(() =>
         {
-            Assert.That(result.Accepted.Rooms.Select(x => x.Id), Does.Not.Contain("mixed"));
-            Assert.That(result.Rejected.Single(x => x.Room.Id == "mixed").Reason,
-                Is.AnyOf(FrameLocalRejectionReason.MixedFrame, FrameLocalRejectionReason.NoCoherentFrame));
+            Assert.That(result.Accepted.Rooms.Select(x => x.Id), Does.Contain("mixed"),
+                string.Join("; ", result.Rejected.Select(x => $"{x.Room.Id}:{x.Reason}:{x.Detail}")));
+            Assert.That(result.Rejected.Select(x => x.Room.Id), Does.Not.Contain("mixed"));
+            Assert.That(Editability(result.Accepted.Rooms.Single(x => x.Id == "mixed"))
+                .IsStrictlyEditable, Is.True);
         });
     }
 

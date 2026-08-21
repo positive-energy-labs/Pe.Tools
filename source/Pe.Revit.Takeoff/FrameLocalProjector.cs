@@ -135,6 +135,7 @@ internal static class FrameLocalProjector
                 originals.OfType<SourceRoom>().Select(x => x.Geometry), knobs.DeStaircaseFt),
             declaredZone, knobs.ZoneSnapDeg);
         var assigned = new List<Assignment>();
+        var projected = new Dictionary<int, ProjectedRoom>();
 
         for (int i = 0; i < originals.Count; i++)
         {
@@ -154,10 +155,33 @@ internal static class FrameLocalProjector
                 continue;
             }
 
-            if (scores.Count > 1 && scores[0].score - scores[1].score < MixedFrameMargin)
+            bool overlapsSource = originals.Where((_, index) => index != i).OfType<SourceRoom>()
+                .Any(other => sourceRoom.Geometry.Intersection(other.Geometry).Area > Epsilon);
+            bool secondaryFrameDeclared = scores.Count > 1 && (
+                declaredZone != null && FrameSupport(
+                    declaredZone, scores[1].frame, knobs.DeStaircaseFt) >= MixedFrameMargin
+                || originals.Where((_, index) => index != i).OfType<SourceRoom>().Any(other =>
+                    FrameSupport(other.Geometry, scores[1].frame, knobs.DeStaircaseFt)
+                        >= knobs.MinFrameSupport));
+            bool mixedFrameTie = scores.Count > 1
+                && scores[0].score - scores[1].score < MixedFrameMargin;
+            string segmentFailure = "segment projection was not admitted";
+            if (!overlapsSource && (mixedFrameTie || secondaryFrameDeclared)
+                && scores.Count > 1 && scores[1].score >= MixedFrameMargin)
+            {
+                var segmentProjected = TryProjectSegmentFrames(
+                    sourceRoom, frames, knobs, out segmentFailure);
+                if (segmentProjected != null)
+                {
+                    projected.Add(i, new ProjectedRoom(
+                        i, -1, sourceRoom, segmentProjected, scores[0].frame));
+                    continue;
+                }
+            }
+            if (mixedFrameTie)
             {
                 Reject(i, FrameLocalRejectionReason.MixedFrame,
-                    $"frame support margin {scores[0].score - scores[1].score:P1}");
+                    $"frame support margin {scores[0].score - scores[1].score:P1}; {segmentFailure}");
                 continue;
             }
 
@@ -182,7 +206,6 @@ internal static class FrameLocalProjector
                 "source geometry overlaps another room in the same frame");
         assigned.RemoveAll(room => ambiguousSourceOverlap.Contains(room.Index));
 
-        var projected = new Dictionary<int, ProjectedRoom>();
         foreach (var frameGroup in assigned.GroupBy(x => x.FrameIndex))
         {
             foreach (var component in ConnectedComponents(frameGroup.ToList(), knobs))
@@ -336,6 +359,102 @@ internal static class FrameLocalProjector
 
         void Reject(int index, FrameLocalRejectionReason reason, string detail) =>
             rejected.TryAdd(index, new FrameLocalRejectedRoom(CloneRoom(source.Rooms[index]), reason, detail));
+    }
+
+    private static Polygon? TryProjectSegmentFrames(
+        SourceRoom sourceRoom, IReadOnlyList<double> frames, FrameLocalKnobs knobs,
+        out string failure)
+    {
+        failure = "segment projection was not attempted";
+        if (sourceRoom.Geometry.NumInteriorRings > 0 || frames.Count < 2) return null;
+        var reference = DeStaircase(sourceRoom.Geometry, knobs.DeStaircaseFt);
+        if (reference is not Polygon polygon) { failure = "de-staircase was not a polygon"; return null; }
+        var points = polygon.ExteriorRing.Coordinates.Take(polygon.ExteriorRing.NumPoints - 1).ToList();
+        if (points.Count < 3) { failure = "de-staircase had fewer than three corners"; return null; }
+
+        var lines = new List<SegmentLine?>();
+        for (int i = 0; i < points.Count; i++)
+        {
+            var a = points[i];
+            var b = points[(i + 1) % points.Count];
+            double angle = Math.Atan2(b.Y - a.Y, b.X - a.X);
+            var direction = frames.SelectMany(frame => new[] { frame, frame + Math.PI / 2 })
+                .OrderBy(candidate => AngleDifference180(angle, candidate))
+                .First();
+            if (AngleDifference180(angle, direction) > AxisToleranceRad)
+            {
+                lines.Add(null);
+                continue;
+            }
+            double nx = -Math.Sin(direction), ny = Math.Cos(direction);
+            lines.Add(new SegmentLine(nx, ny,
+                nx * (a.X + b.X) / 2 + ny * (a.Y + b.Y) / 2, a.Distance(b)));
+        }
+
+        var fittedLines = lines.OfType<SegmentLine>().ToList();
+        while (fittedLines.Count >= 3)
+        {
+            int parallel = Enumerable.Range(0, fittedLines.Count).FirstOrDefault(i =>
+                Math.Abs(fittedLines[i].Nx * fittedLines[(i + 1) % fittedLines.Count].Ny
+                    - fittedLines[i].Ny * fittedLines[(i + 1) % fittedLines.Count].Nx) <= Epsilon,
+                -1);
+            if (parallel < 0) break;
+            int next = (parallel + 1) % fittedLines.Count;
+            var first = fittedLines[parallel];
+            var second = fittedLines[next];
+            var merged = first with {
+                Offset = (first.Offset * first.Weight + second.Offset * second.Weight)
+                    / (first.Weight + second.Weight),
+                Weight = first.Weight + second.Weight,
+            };
+            if (next == 0)
+            {
+                fittedLines[0] = merged;
+                fittedLines.RemoveAt(parallel);
+            }
+            else
+            {
+                fittedLines[parallel] = merged;
+                fittedLines.RemoveAt(next);
+            }
+        }
+        if (fittedLines.Count < 3)
+        {
+            failure = "fewer than three boundary segments fit the declared frames";
+            return null;
+        }
+
+        var corners = new List<Coordinate>();
+        for (int i = 0; i < fittedLines.Count; i++)
+        {
+            var previous = fittedLines[(i + fittedLines.Count - 1) % fittedLines.Count];
+            var current = fittedLines[i];
+            double determinant = previous.Nx * current.Ny - previous.Ny * current.Nx;
+            if (Math.Abs(determinant) <= Epsilon)
+            {
+                failure = $"segments {i - 1} and {i} were parallel";
+                return null;
+            }
+            corners.Add(new Coordinate(
+                (previous.Offset * current.Ny - previous.Ny * current.Offset) / determinant,
+                (previous.Nx * current.Offset - previous.Offset * current.Nx) / determinant));
+        }
+        corners.Add(corners[0].Copy());
+        Geometry candidate = NetTopologySuite.Precision.GeometryPrecisionReducer.Reduce(
+            Factory.CreatePolygon(Factory.CreateLinearRing(corners.ToArray())),
+            Factory.PrecisionModel);
+        if (candidate is not Polygon result || !result.IsValid || result.IsEmpty)
+        {
+            failure = "closed segments did not make a valid polygon";
+            return null;
+        }
+        if (!PassesRoomGates(sourceRoom, result, knobs))
+        {
+            failure = "closed segments failed the unchanged room drift/detail gates";
+            return null;
+        }
+        failure = "";
+        return result;
     }
 
     private static void SolveComponent(
@@ -1107,6 +1226,12 @@ internal static class FrameLocalProjector
         return Math.Min(difference, Math.PI / 2 - difference);
     }
 
+    private static double AngleDifference180(double a, double b)
+    {
+        double difference = Math.Abs((a - b) % Math.PI);
+        return Math.Min(difference, Math.PI - difference);
+    }
+
     private static RoomResult CloneRoom(
         RoomResult room, Geometry? replacement = null, bool collapseCollinear = false)
     {
@@ -1255,4 +1380,5 @@ internal static class FrameLocalProjector
     private sealed record Assignment(int Index, int FrameIndex, double Frame, SourceRoom Source);
     private sealed record ProjectedRoom(
         int Index, int FrameIndex, SourceRoom Source, Polygon Geometry, double Frame);
+    private readonly record struct SegmentLine(double Nx, double Ny, double Offset, double Weight);
 }
