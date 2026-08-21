@@ -180,6 +180,50 @@ test("CLI stdout (the JSON envelope) relays verbatim, even for failed verdicts",
   expect(outcome).toEqual({ status: 200, bodyJson: envelope });
 });
 
+test("a start that collides with a stopped row relays the SDK's verdict byte-for-byte", async () => {
+  // A start whose minted id (`{installed|project-stem}-{yy}`) already belongs to a STOPPED
+  // registry row: the SDK refuses with `session.id-collision` and names restart as the verb. The
+  // CLI exits non-zero for it, and stdout still carries the envelope — this route relays THAT,
+  // and never maps a bad verdict onto a hand-made error body. The /instances start form reads
+  // `diagnostics[0].detail` + `nextSteps` straight off this response.
+  const envelope = JSON.stringify({
+    result: null,
+    resolved: { sessionId: "installed-25", year: "2025" },
+    diagnostics: [
+      {
+        code: "session.id-collision",
+        detail: "Session id 'installed-25' is already registered (state stopped).",
+        fix: "pe-revit session restart --id installed-25",
+      },
+    ],
+    nextSteps: [
+      "pe-revit session restart --id installed-25 — boot a fresh process under the same id",
+      "pe-revit session gc --id installed-25 --forget — retire the row and free the id",
+    ],
+    guide: "session",
+    related: [],
+    binary: null,
+  });
+  const outcome = await Effect.runPromise(
+    executeSessionCli(
+      sessionCliArgs(parsed({ action: "start", year: "25" }), undefined),
+      () => Effect.succeed(envelope),
+      1_000,
+      { action: "start" },
+    ),
+  );
+
+  expect(outcome.status).toBe(200);
+  expect(outcome.bodyJson).toBe(envelope); // untouched — not re-serialized, not re-shaped
+  const body = JSON.parse(outcome.bodyJson) as {
+    diagnostics: { code: string; detail: string }[];
+    nextSteps: string[];
+  };
+  expect(body.diagnostics[0].code).toBe("session.id-collision");
+  expect(body.nextSteps).toHaveLength(2);
+  expect(body.nextSteps[0]).toContain("session restart --id installed-25");
+});
+
 test("a spawn failure is a plain 500", async () => {
   const outcome = await Effect.runPromise(
     executeSessionCli(
